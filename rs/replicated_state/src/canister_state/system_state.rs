@@ -973,9 +973,14 @@ impl SystemState {
             .split_input_schedules(own_canister_id, local_canisters);
     }
 
-    /// Increments 'cycles_balance'.
-    pub fn add_cycles(&mut self, amount: Cycles) {
+    /// Increments 'cycles_balance' and in case of refund for consumed cycles
+    /// decrements the metric `consumed_cycles_since_replica_started`.
+    pub fn add_cycles(&mut self, amount: Cycles, use_case: CyclesUseCase) {
         self.cycles_balance += amount;
+        if use_case != CyclesUseCase::NonConsumed {
+            self.canister_metrics.consumed_cycles_since_replica_started -=
+                NominalCycles::from_cycles(amount);
+        }
     }
 
     /// Decreases 'cycles_balance' for 'amount'.
@@ -994,18 +999,6 @@ impl SystemState {
     /// number of cycles consumed.
     pub fn observe_consumed_cycles(&mut self, cycles: Cycles) {
         self.canister_metrics.consumed_cycles_since_replica_started +=
-            NominalCycles::from_cycles(cycles);
-    }
-
-    /// Add cycles to the balance and decrements the metric `consumed_cycles_since_replica_started`
-    /// with the number of cycles refunded.
-    pub fn increment_balance_and_decrement_consumed_cycles(
-        &mut self,
-        cycles: Cycles,
-        _use_case: CyclesUseCase,
-    ) {
-        self.add_cycles(cycles);
-        self.canister_metrics.consumed_cycles_since_replica_started -=
             NominalCycles::from_cycles(cycles);
     }
 }

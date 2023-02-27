@@ -191,15 +191,12 @@ impl ResponseHelper {
     fn apply_initial_refunds(&mut self) {
         self.canister
             .system_state
-            .add_cycles(self.refund_for_sent_cycles);
-        // The `refund_cycles()` is similar to `add_cycles()` but it
-        // additionally fixes up the cycles-burned metric.
-        self.canister
-            .system_state
-            .increment_balance_and_decrement_consumed_cycles(
-                self.refund_for_response_transmission,
-                CyclesUseCase::RequestTransmissionAndProcessing,
-            );
+            .add_cycles(self.refund_for_sent_cycles, CyclesUseCase::NonConsumed);
+
+        self.canister.system_state.add_cycles(
+            self.refund_for_response_transmission,
+            CyclesUseCase::RequestTransmissionAndProcessing,
+        );
     }
 
     /// Checks that the canister has not been uninstalled:

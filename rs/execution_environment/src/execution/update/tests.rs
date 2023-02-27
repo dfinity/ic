@@ -7,6 +7,7 @@ use ic_config::subnet_config::SchedulerConfig;
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use ic_replicated_state::testing::SystemStateTesting;
 use ic_replicated_state::{
     canister_state::{NextExecution, WASM_PAGE_SIZE_IN_BYTES},
@@ -361,7 +362,7 @@ fn dts_update_resume_fails_due_to_cycles_change() {
     let balance = test.canister_state(a_id).system_state.balance();
     test.canister_state_mut(a_id)
         .system_state
-        .add_cycles(balance + Cycles::new(1));
+        .add_cycles(balance + Cycles::new(1), CyclesUseCase::NonConsumed);
 
     test.execute_slice(a_id);
 

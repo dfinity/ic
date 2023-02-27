@@ -52,6 +52,7 @@ use ic_registry_routing_table::{
 };
 use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use ic_replicated_state::metadata_state::subnet_call_context_manager::SignWithEcdsaContext;
 use ic_replicated_state::page_map::Buffer;
 use ic_replicated_state::{
@@ -1615,7 +1616,9 @@ impl StateMachine {
         let canister_state = state
             .canister_state_mut(&canister_id)
             .unwrap_or_else(|| panic!("Canister {} not found", canister_id));
-        canister_state.system_state.add_cycles(Cycles::from(amount));
+        canister_state
+            .system_state
+            .add_cycles(Cycles::from(amount), CyclesUseCase::NonConsumed);
         let balance = canister_state.system_state.balance().get();
         self.state_manager
             .commit_and_certify(state, height.increment(), CertificationScope::Full);

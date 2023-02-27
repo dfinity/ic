@@ -34,7 +34,9 @@ use ic_metrics::MetricsRegistry;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::testing::SystemStateTesting;
+use ic_replicated_state::{
+    canister_state::system_state::CyclesUseCase, testing::SystemStateTesting,
+};
 use ic_replicated_state::{
     page_map, testing::CanisterQueuesTesting, CallContextManager, CallOrigin, CanisterState,
     CanisterStatus, NumWasmPages, PageMap, ReplicatedState,
@@ -2287,7 +2289,9 @@ fn deposit_cycles_succeeds_with_enough_cycles() {
         let cycles_balance_before = canister.system_state.balance();
         let cycles = Cycles::new(100);
 
-        canister.system_state.add_cycles(cycles);
+        canister
+            .system_state
+            .add_cycles(cycles, CyclesUseCase::NonConsumed);
 
         // Assert that state has changed
         assert_eq!(

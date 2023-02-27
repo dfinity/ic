@@ -546,8 +546,7 @@ fn update_balance_and_consumed_cycles_correctly() {
         .consumed_cycles_since_replica_started = initial_consumed_cycles;
 
     let cycles = Cycles::new(100);
-    system_state
-        .increment_balance_and_decrement_consumed_cycles(cycles, CyclesUseCase::NonConsumed);
+    system_state.add_cycles(cycles, CyclesUseCase::Memory);
     assert_eq!(system_state.balance(), INITIAL_CYCLES + cycles);
     assert_eq!(
         system_state
