@@ -27,6 +27,7 @@ const EXCLUDED: &[&str] = &[
     // the replica does not yet check that the effective canister id is valid in all cases
     "$0 ~ /wrong effective canister id.in mangement call/",
     "$0 ~ /access denied two status to different canisters/",
+    "$0 ~ /access denied with different effective canister id/",
     // the replica does not implement proofs of path non-existence
     "$0 ~ /non-existence proofs for non-existing request id/",
     "$0 ~ /module_hash of empty canister/",

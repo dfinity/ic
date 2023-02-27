@@ -5,6 +5,8 @@ use universal_canister::Ops;
 
 mod api;
 
+const ONE_WAY_CALL: u32 = u32::MAX;
+
 // Canister http_request types
 
 #[derive(CandidType, Deserialize)]
@@ -372,6 +374,24 @@ fn eval(ops_bytes: OpsBytes) {
                     api::trap_with_blob(&c)
                 }
             }
+            Ops::MintCycles => {
+                let amount = stack.pop_int64();
+                stack.push_int64(api::mint_cycles(amount));
+            }
+            Ops::OneWayCallNew => {
+                // pop in reverse order!
+                let method = stack.pop_blob();
+                let callee = stack.pop_blob();
+
+                api::call_new(
+                    &callee,
+                    &method,
+                    callback,
+                    ONE_WAY_CALL,
+                    callback,
+                    ONE_WAY_CALL,
+                );
+            }
         }
     }
 }
@@ -535,7 +555,9 @@ fn get_callback(idx: u32) -> Vec<u8> {
 }
 
 fn callback(env: u32) {
-    eval(&get_callback(env));
+    if env != ONE_WAY_CALL {
+        eval(&get_callback(env));
+    }
 }
 
 /* Panic setup */
