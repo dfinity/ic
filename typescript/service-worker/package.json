@@ -20,6 +20,7 @@
     "@dfinity/principal": "~0.13.3",
     "base64-arraybuffer": "^1.0.2",
     "idb": "^7.1.1",
+    "lit": "^2.6.1",
     "pako": "^2.0.3"
   },
   "devDependencies": {
@@ -30,6 +31,7 @@
     "@typescript-eslint/parser": "^5.16.0",
     "assert": "^2.0.0",
     "browser-cache-mock": "^0.1.7",
+    "copy-webpack-plugin": "^11.0.0",
     "eslint": "^8.11.0",
     "fake-indexeddb": "^4.0.1",
     "html-webpack-plugin": "^5.5.0",
@@ -49,15 +51,15 @@
   },
   "scripts": {
     "clean": "rm -fr dist dist-dev dist-prod coverage",
-    "build": "./bin/portable-webpack --output-clean",
-    "build-dev": "./bin/portable-webpack --env development --output-clean",
+    "build": "webpack --output-clean",
+    "build-dev": "webpack --env development --output-clean",
     "create-ssl-certs": "mkdir -p certs && mkcert -cert-file certs/cert.pem -key-file certs/key.pem ic0.local \"*.ic0.local\" ic.local \"*.ic.local\" localhost 127.0.0.1 ::1",
-    "lint": "npx eslint src",
-    "lint:fix": "npx eslint --fix src",
+    "lint": "eslint src",
+    "lint:fix": "eslint --fix src",
     "test:coverage": "jest --verbose --collectCoverage",
     "test": "jest",
-    "prettier:check": "npx prettier --check src",
-    "prettier:format": "npx prettier --write src",
+    "prettier:check": "prettier --check src",
+    "prettier:format": "prettier --write src",
     "format:check": "npm run prettier:check",
     "format:fix": "npm run prettier:format",
     "format": "npm run prettier:format"
