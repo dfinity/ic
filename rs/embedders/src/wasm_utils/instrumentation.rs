@@ -633,7 +633,6 @@ fn export_additional_symbols<'a>(
         // function to count clean pages in a given range
         // Arg 0 - start of the range
         // Arg 1 - end of the range
-        // Arg 1 must be strictly bigger than arg 0
         // Return index 0 is the number of pages that haven't been written to in the given range
         // Return index 1 is the number of pages that haven't been accessed in the given range.
         let func_type = Type::Func(FuncType::new(
@@ -645,6 +644,17 @@ fn export_additional_symbols<'a>(
         let acc_w = 4; // accumulator index
         let acc_a = 5; // accumulator index
         let instructions = vec![
+            LocalGet { local_index: 0 },
+            LocalGet { local_index: 1 },
+            I32GeU,
+            If {
+                blockty: BlockType::Empty,
+            },
+            // If range is empty, return early
+            I32Const { value: 0 },
+            I32Const { value: 0 },
+            Return,
+            End,
             LocalGet { local_index: 0 },
             LocalSet { local_index: it },
             Loop {
