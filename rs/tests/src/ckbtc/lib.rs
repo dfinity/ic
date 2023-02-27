@@ -21,6 +21,7 @@ use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_btc_types::Network;
 use ic_canister_client::Sender;
 use ic_cdk::export::Principal;
+use ic_ckbtc_minter::lifecycle::init::MinterArg;
 use ic_ckbtc_minter::lifecycle::init::{InitArgs as CkbtcMinterInitArgs, Mode};
 use ic_config::subnet_config::ECDSA_SIGNATURE_FEE;
 use ic_ic00_types::CanisterIdRecord;
@@ -296,10 +297,12 @@ pub(crate) async fn install_minter(
         mode: Mode::GeneralAvailability,
     };
 
+    let minter_arg = MinterArg::Init(args);
+
     install_rust_canister_from_path(
         canister,
         env.get_dependency_path("rs/bitcoin/ckbtc/minter/ckbtc_minter_debug.wasm"),
-        Some(Encode!(&args).unwrap()),
+        Some(Encode!(&minter_arg).unwrap()),
     )
     .await;
     canister.canister_id()

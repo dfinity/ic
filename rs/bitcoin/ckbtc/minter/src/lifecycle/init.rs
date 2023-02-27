@@ -1,3 +1,4 @@
+use crate::lifecycle::upgrade::UpgradeArgs;
 pub use crate::state::Mode;
 use crate::state::{replace_state, CkBtcMinterState};
 use candid::{CandidType, Deserialize};
@@ -6,6 +7,12 @@ use ic_btc_types::Network;
 use serde::Serialize;
 
 pub const DEFAULT_MIN_CONFIRMATIONS: u32 = 6;
+
+#[derive(CandidType, serde::Deserialize)]
+pub enum MinterArg {
+    Init(InitArgs),
+    Upgrade(Option<UpgradeArgs>),
+}
 
 #[derive(CandidType, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct InitArgs {
