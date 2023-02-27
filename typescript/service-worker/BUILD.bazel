@@ -12,15 +12,17 @@ pkg_npm(
 webpack(
     name = "bundle",
     outs = [
+        "favicon.png",
         "index.html",
         "install-script.js",
         "install-script.js.map",
+        "style.css",
         "sw.js",
         "sw.js.map",
     ],
     args = [
         "--config",
-        "webpack.config.js",
+        "webpack.config.ts",
         "--env",
         "development",
         "-o",
@@ -28,7 +30,7 @@ webpack(
     ],
     chdir = "typescript/service-worker",
     data = glob(["src/**"]) + [
-        "webpack.config.js",
+        "webpack.config.ts",
         "@sw_npm//:node_modules",
         "package.json",
         "tsconfig.json",

@@ -1,9 +1,10 @@
-const path = require('path');
-const HtmlWebpackPlugin = require('html-webpack-plugin');
-const webpack = require('webpack');
-const package = require('./package.json');
+import path from 'path';
+import HtmlWebpackPlugin from 'html-webpack-plugin';
+import webpack, { Configuration } from 'webpack';
+import packageJson from './package.json';
+import CopyPlugin from 'copy-webpack-plugin';
 
-module.exports = (env) => {
+const webpackConfig = (env: NodeJS.ProcessEnv): Configuration => {
   const isDevelopment = Boolean(env.development);
 
   return {
@@ -46,8 +47,9 @@ module.exports = (env) => {
     },
     plugins: [
       new HtmlWebpackPlugin({
-        template: 'src/index.html',
+        template: 'src/assets/index.html',
         filename: 'index.html',
+        inject: 'body',
         chunks: ['install-script'],
         minify: isDevelopment
           ? false
@@ -63,13 +65,25 @@ module.exports = (env) => {
               minifyCSS: true,
             },
       }),
+      new CopyPlugin({
+        patterns: [
+          {
+            from: path.join(__dirname, 'src', 'assets'),
+            filter: (resourcePath) => {
+              return !resourcePath.endsWith('.html');
+            },
+          },
+        ],
+      }),
       new webpack.ProvidePlugin({
         process: require.resolve('process/browser'),
       }),
       new webpack.EnvironmentPlugin({
         FORCE_FETCH_ROOT_KEY: isDevelopment,
-        VERSION: package.version,
+        VERSION: packageJson.version,
       }),
     ],
   };
 };
+
+export default webpackConfig;

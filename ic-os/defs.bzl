@@ -481,9 +481,11 @@ def icos_build(name, mode = None, malicious = False, visibility = None):
 def _boundary_node_image_deps(mode, sev = False):
     extra_rootfs_deps = {
         "dev": {
+            "//typescript/service-worker:favicon.png": "/var/www/html/favicon.png:0644",
             "//typescript/service-worker:index.html": "/var/www/html/index.html:0644",
             "//typescript/service-worker:install-script.js": "/var/www/html/install-script.js:0644",
             "//typescript/service-worker:install-script.js.map": "/var/www/html/install-script.js.map:0644",
+            "//typescript/service-worker:style.css": "/var/www/html/style.css:0644",
             "//typescript/service-worker:sw.js": "/var/www/html/sw.js:0644",
             "//typescript/service-worker:sw.js.map": "/var/www/html/sw.js.map:0644",
         },
