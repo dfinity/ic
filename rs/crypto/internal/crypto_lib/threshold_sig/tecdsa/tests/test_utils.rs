@@ -850,12 +850,12 @@ impl SignatureProtocolExecution {
         // If verification succeeded, check with RustCrypto's ECDSA also
         let pk = self.setup.public_key(&self.derivation_path)?;
 
-        use k256::ecdsa::signature::{Signature, Verifier};
+        use k256::ecdsa::signature::Verifier;
 
         let vk = k256::ecdsa::VerifyingKey::from_sec1_bytes(&pk.public_key)
             .expect("Failed to parse public key");
 
-        let sig = k256::ecdsa::Signature::from_bytes(&sig.serialize())
+        let sig = k256::ecdsa::Signature::try_from(sig.serialize().as_ref())
             .expect("Failed to parse signature");
 
         assert!(vk.verify(&self.signed_message, &sig).is_ok());

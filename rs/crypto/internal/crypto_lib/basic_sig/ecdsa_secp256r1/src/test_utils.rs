@@ -26,11 +26,9 @@ use openssl::ec::{EcGroup, EcKey, EcPoint};
 pub fn new_keypair(
     rng: &mut (impl rand::RngCore + rand::CryptoRng),
 ) -> CryptoResult<(types::SecretKeyBytes, types::PublicKeyBytes)> {
-    use p256::elliptic_curve::sec1::ToEncodedPoint;
-
     let (sk, pk) = {
         let sk = p256::ecdsa::SigningKey::random(rng);
-        let encoded_pk = p256::PublicKey::from(&sk.verifying_key()).to_encoded_point(false);
+        let encoded_pk = sk.verifying_key().to_encoded_point(false);
         let serialized_pk: [u8; 65] = encoded_pk
             .as_bytes()
             .try_into()

@@ -337,8 +337,7 @@ pub(crate) async fn get_signature_with_logger(
     };
     info!(logger, "sign_with_ecdsa returns {:?}", signature);
 
-    use k256::ecdsa::signature::Signature;
-    Ok(Signature::from_bytes(&signature).expect("Response is not a valid signature"))
+    Ok(Signature::try_from(signature.as_ref()).expect("Response is not a valid signature"))
 }
 
 pub(crate) fn verify_signature(

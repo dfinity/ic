@@ -814,7 +814,7 @@ checksum = "b30ed1d6f8437a487a266c8293aeb95b61a23261273e3e02912cdb8b68bf798b"
 dependencies = [
  "bs58",
  "hmac 0.12.1",
- "k256",
+ "k256 0.11.6",
  "once_cell",
  "pbkdf2",
  "rand_core 0.6.4",
@@ -2869,7 +2869,19 @@ dependencies = [
  "der 0.6.1",
  "elliptic-curve",
  "rfc6979",
- "signature",
+ "signature 1.6.4",
+]
+
+[[package]]
+name = "ecdsa"
+version = "0.15.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "12844141594ad74185a926d030f3b605f6a903b4e3fec351f3ea338ac5b7637e"
+dependencies = [
+ "der 0.6.1",
+ "elliptic-curve",
+ "rfc6979",
+ "signature 2.0.0",
 ]
 
 [[package]]
@@ -4169,7 +4181,7 @@ dependencies = [
  "hyper",
  "hyper-rustls",
  "ic-verify-bls-signature",
- "k256",
+ "k256 0.11.6",
  "leb128",
  "mime",
  "pem 1.1.1",
@@ -5043,7 +5055,7 @@ name = "ic-crypto-ecdsa-secp256k1"
 version = "0.1.0"
 dependencies = [
  "hex",
- "k256",
+ "k256 0.12.0",
  "lazy_static",
  "pem 1.1.1",
  "rand 0.8.5",
@@ -5128,7 +5140,7 @@ dependencies = [
  "ic-crypto-secrets-containers",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-types",
- "k256",
+ "k256 0.12.0",
  "openssl",
  "proptest",
  "proptest-derive",
@@ -5485,7 +5497,7 @@ dependencies = [
  "ic-crypto-sha",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-types",
- "k256",
+ "k256 0.12.0",
  "lazy_static",
  "num-traits",
  "p256",
@@ -10181,10 +10193,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72c1e0b51e7ec0a97369623508396067a486bd0cbed95a2659a4b863d28cfc8b"
 dependencies = [
  "cfg-if 1.0.0",
- "ecdsa",
+ "ecdsa 0.14.8",
  "elliptic-curve",
  "sha2 0.10.6",
  "sha3 0.10.6",
+]
+
+[[package]]
+name = "k256"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "92a55e0ff3b72c262bcf041d9e97f1b84492b68f1c1a384de2323d3dc9403397"
+dependencies = [
+ "cfg-if 1.0.0",
+ "ecdsa 0.15.1",
+ "elliptic-curve",
+ "once_cell",
+ "sha2 0.10.6",
+ "signature 2.0.0",
 ]
 
 [[package]]
@@ -11820,12 +11846,13 @@ checksum = "b15813163c1d831bf4a13c3610c05c0d03b39feb07f7e09fa234dac9b15aaf39"
 
 [[package]]
 name = "p256"
-version = "0.11.1"
+version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "51f44edd08f51e2ade572f141051021c5af22677e42b7dd28a88155151c33594"
+checksum = "49c124b3cbce43bcbac68c58ec181d98ed6cc7e6d0aa7c3ba97b2563410b0e55"
 dependencies = [
- "ecdsa",
+ "ecdsa 0.15.1",
  "elliptic-curve",
+ "primeorder",
  "sha2 0.10.6",
 ]
 
@@ -12365,6 +12392,15 @@ checksum = "e97e3215779627f01ee256d2fad52f3d95e8e1c11e9fc6fd08f7cd455d5d5c78"
 dependencies = [
  "proc-macro2 1.0.51",
  "syn 1.0.107",
+]
+
+[[package]]
+name = "primeorder"
+version = "0.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0b54f7131b3dba65a2f414cf5bd25b66d4682e4608610668eae785750ba4c5b2"
+dependencies = [
+ "elliptic-curve",
 ]
 
 [[package]]
@@ -14074,6 +14110,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "signature"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8fe458c98333f9c8152221191a77e2a44e8325d0193484af2e9421a53019e57d"
+dependencies = [
+ "digest 0.10.6",
+ "rand_core 0.6.4",
+]
+
+[[package]]
 name = "simba"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -14357,7 +14403,6 @@ dependencies = [
  "icp-ledger",
  "itertools",
  "json5",
- "k256",
  "lazy_static",
  "leb128",
  "lifeline",
@@ -14987,7 +15032,7 @@ dependencies = [
  "icp-ledger",
  "itertools",
  "json5",
- "k256",
+ "k256 0.12.0",
  "lazy_static",
  "leb128",
  "lifeline",
