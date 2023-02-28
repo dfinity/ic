@@ -1,8 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
-SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
-source "$SCRIPT_DIR/functions.sh"
+NNS_TOOLS_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
+source "$NNS_TOOLS_DIR/lib/include.sh"
 
 help() {
     print_green "
@@ -23,22 +23,6 @@ fi
 PROPOSAL_FILE=$1
 NEURON_ID=$2
 
-value_from_proposal_text() {
-    local FILE=$1
-    local FIELD=$2
-    cat $FILE | grep "### $FIELD" | sed "s/.*$FIELD[[:space:]]*//"
-}
-
-check_or_set_dfx_hsm_pin() {
-    VALUE=${DFX_HSM_PIN:-}
-    if [ -z "$VALUE" ]; then
-        echo -n "Enter your HSM_PIN":
-        read -s DFX_HSM_PIN
-        export DFX_HSM_PIN
-        echo
-    fi
-}
-
 extract_versions_to_publish() {
     PROPOSAL_FILE=$1
 
@@ -51,12 +35,9 @@ submit_insert_upgrade_path_proposal_mainnet() {
     PROPOSAL_FILE=$1
     NEURON_ID=$2
 
-    TARGET_SNS_GOVERNANCE_CANISTER=$(value_from_proposal_text $PROPOSAL_FILE "Target SNS Governance Canister:")
+    TARGET_SNS_GOVERNANCE_CANISTER=$(proposal_header_field_value $PROPOSAL_FILE "Target SNS Governance Canister:")
 
-    if grep -q -i TODO "$PROPOSAL_FILE"; then
-        echo "Cannot submit proposal with 'TODO' items"
-        exit 1
-    fi
+    validate_no_todos "$PROPOSAL_FILE"
 
     echo
     print_green "Proposal Text To Submit"
@@ -85,16 +66,7 @@ submit_insert_upgrade_path_proposal_mainnet() {
         cmd+=("$V")
     done
 
-    echo "Going to run command: "
-    echo ${cmd[@]} | sed 's/pin=[0-9]*/pin=\*\*\*\*\*\*/' | fold -w 100 -s | sed -e "s|^|     |g"
-
-    echo "Type 'yes' to confirm, anything else, or Ctrl+C to cancel"
-    read CONFIRM
-
-    if [ "$CONFIRM" != "yes" ]; then
-        echo "Aborting proposal execution..."
-        exit 1
-    fi
+    confirm_submit_proposal_command "${cmd[@]}"
 
     "${cmd[@]}"
 }

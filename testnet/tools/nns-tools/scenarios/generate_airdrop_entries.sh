@@ -2,8 +2,8 @@
 
 set -eo pipefail
 
-SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
-source "$SCRIPT_DIR/functions.sh"
+NNS_TOOLS_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
+source "$NNS_TOOLS_DIR/lib/include.sh"
 
 ensure_variable_set SNS_QUILL
 

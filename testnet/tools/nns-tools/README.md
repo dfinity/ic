@@ -2,6 +2,28 @@
 
 A small collection of tools for testing NNS canisters and upgrades on testnets.
 
+## Developing scripts / tools
+
+Most functionality should be written in small self-contained functions that do not reference any global state.
+This makes the entire library more composable and functions can be easily used in other contexts where the conventions
+for naming are different, or conventions for what variables mean. 
+
+To add documentation to a particular function so that it shows up in `./cmd.sh` output, Use the following structure and put
+your function in a file inside of `./lib`.
+
+```
+##: my_useful_function
+## Usage: $1 <PARAM1> <PARAM2> (<OPTTIONAL_PARAM1> <OPTIONAL_PARAM2>)
+## My function does something very very useful
+##   PARAM1: Param 1 description...
+##   PARAM2: You get the idea...
+##   OPTTIONAL_PARAM1: that you should document how to use parameters 
+##   OPTTIONAL_PARAM2: if it is going to be exposed 
+my_useful_function() {
+ ...
+}
+```
+
 ## Spinning up a testnet
 
 ### nns_dev_testnet.sh
