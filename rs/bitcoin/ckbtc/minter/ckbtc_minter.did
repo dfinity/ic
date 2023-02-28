@@ -218,8 +218,8 @@ service : (minter_arg : MinterArg) -> {
 
     // Section "Convert ckBTC to BTC" {{{
 
-    /// Returns an estimation of the user's fee (in Satoshi) for a
-    /// retrive_btc request based on the current status of the Bitcoin network.
+    /// Returns an estimate of the user's fee (in Satoshi) for a
+    /// retrieve_btc request based on the current status of the Bitcoin network.
     estimate_fee : (record { amount : opt nat64 }) -> (nat64) query;
 
     // Returns the account to which the caller should deposit ckBTC

@@ -547,15 +547,15 @@ proptest! {
         main_pkhash in uniform20(any::<u8>()),
         fee_per_vbyte in 1000..2000u64,
     ) {
-        let value_by_outpoint: HashMap<_, _> = utxos
-            .iter()
-            .map(|utxo| (utxo.outpoint.clone(), utxo.value))
-            .collect();
+        prop_assume!(dst_pkhash != main_pkhash);
 
         let utxo_count = utxos.len();
         let total_value = utxos.iter().map(|u| u.value).sum::<u64>();
 
         let target = total_value / 2;
+
+        let fee_estimate = estimate_fee(&utxos, Some(target), fee_per_vbyte);
+
         let (unsigned_tx, _, _) = build_unsigned_transaction(
             &mut utxos,
             vec![(BitcoinAddress::P2wpkhV0(dst_pkhash), target)],
@@ -564,15 +564,23 @@ proptest! {
         )
         .expect("failed to build transaction");
 
-        let fee = fake_sign(&unsigned_tx).vsize() as u64 * fee_per_vbyte / 1000;
+        let vsize = fake_sign(&unsigned_tx).vsize() as u64;
 
-        let inputs_value = unsigned_tx.inputs
-            .iter()
-            .map(|input| value_by_outpoint.get(&input.previous_output).unwrap())
-            .sum::<u64>();
+        prop_assert_eq!(
+            vsize,
+            crate::tx_vsize_estimate(unsigned_tx.inputs.len() as u64, unsigned_tx.outputs.len() as u64),
+            "incorrect transaction vsize estimate"
+        );
+
+        let inputs_value = unsigned_tx.inputs.iter().map(|input| input.value).sum::<u64>();
+        let outputs_value = unsigned_tx.outputs.iter().map(|output| output.value).sum::<u64>();
+
+        let tx_fee = inputs_value - outputs_value;
+        let caller_fee = target - unsigned_tx.outputs[0].value;
 
         prop_assert!(inputs_value >= target);
-        prop_assert!(fee < target);
+        prop_assert!(tx_fee < target);
+        prop_assert_eq!(caller_fee, fee_estimate, "incorrect transaction fee estimate");
         prop_assert_eq!(utxo_count, unsigned_tx.inputs.len() + utxos.len());
         prop_assert_eq!(utxos.iter().map(|u| u.value).sum::<u64>(), total_value - inputs_value);
     }
@@ -623,7 +631,10 @@ proptest! {
         .expect("failed to build transaction");
 
         let fee = fake_sign(&unsigned_tx).vsize() as u64 * fee_per_vbyte / 1000;
-        let minter_fee =crate::MINTER_FEE_PER_INPUT * unsigned_tx.inputs.len() as u64 + crate::MINTER_FEE_PER_OUTPUT * unsigned_tx.outputs.len() as u64 + MINTER_FEE_CONSTANT;
+        let minter_fee =
+            crate::MINTER_FEE_PER_INPUT * unsigned_tx.inputs.len() as u64 +
+            crate::MINTER_FEE_PER_OUTPUT * unsigned_tx.outputs.len() as u64 +
+            MINTER_FEE_CONSTANT;
 
         let inputs_value = unsigned_tx.inputs
             .iter()
@@ -866,13 +877,13 @@ proptest! {
     fn test_fee_range(
         utxos in btree_set(arb_utxo(5_000u64..1_000_000_000), 0..20),
         amount in option::of(any::<u64>()),
-        fee_per_vbyte in 2..100u64,
+        fee_per_vbyte in 2000..10000u64,
     ) {
         const SMALLEST_TX_SIZE_VBYTES: u64 = 140; // one input, two outputs
         const MIN_MINTER_FEE: u64 = 312;
 
         let estimate = estimate_fee(&utxos, amount, fee_per_vbyte);
-        let lower_bound = MIN_MINTER_FEE + SMALLEST_TX_SIZE_VBYTES * fee_per_vbyte;
+        let lower_bound = MIN_MINTER_FEE + SMALLEST_TX_SIZE_VBYTES * fee_per_vbyte / 1000;
 
         prop_assert!(
             estimate >= lower_bound,
