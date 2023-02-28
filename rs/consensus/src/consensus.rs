@@ -739,6 +739,10 @@ mod tests {
             .return_const(Height::from(0));
         state_manager
             .get_mut()
+            .expect_latest_state_height()
+            .return_const(Height::from(0));
+        state_manager
+            .get_mut()
             .expect_get_state_hash_at()
             .return_const(Ok(CryptoHashOfState::from(CryptoHash(Vec::new()))));
 
