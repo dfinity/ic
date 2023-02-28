@@ -879,11 +879,13 @@ impl HasGroupSetup for TestEnv {
                 vm_allocation: None,
                 required_host_features: vec![],
                 preferred_network: None,
+                metadata: None,
             };
             farm.create_group(
                 &group_setup.farm_group_name,
                 group_setup.group_timeout,
                 group_spec,
+                self,
             )
             .unwrap();
             group_setup.write_attribute(self);

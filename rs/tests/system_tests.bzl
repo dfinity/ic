@@ -24,7 +24,10 @@ def _run_system_test(ctx):
         ),
     )
 
-    runtime_deps = []
+    # we pass the volatile_status.txt file as a runtime dependency, so the
+    # test driver binary can read metadata from this file and pass it to farm.
+    # volatile_status.txt is written by bazel/workspace_status.sh.
+    runtime_deps = [depset([ctx.version_file])]
     for target in ctx.attr.runtime_deps:
         runtime_deps.append(target.files)
 

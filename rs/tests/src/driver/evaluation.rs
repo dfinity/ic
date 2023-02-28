@@ -185,7 +185,9 @@ fn create_group_for_pot_and_spawn_keepalive_thread(
             required_host_features: pot.required_host_features.clone(),
             // TODO: retrieve this value dynamically, based on the runner IPv6.
             preferred_network: None,
+            metadata: None,
         },
+        env,
     )?;
 
     // keep the group alive using a background thread
