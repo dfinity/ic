@@ -11,6 +11,7 @@ from model.user import User
 from model.vulnerability import Vulnerability
 from notification.notification_config import NotificationConfig
 from notification.slack_api import SlackApi
+from notification.slack_notification import APP_OWNERS
 from notification.slack_notification import SlackNotifier
 from scanner.scanner_job_type import ScannerJobType
 
@@ -81,7 +82,7 @@ def test_on_merge_request_blocked_notify_if_enabled():
     config = NotificationConfig(notify_on_merge_request_blocked=True)
     notifier = SlackNotifier(config, api)
 
-    notifier.on_merge_request_blocked("job_id", "merge_request_id")
+    notifier.on_merge_request_blocked("scanner_id", "job_id", "merge_request_id")
 
     assert len(api.messages) == 1
     assert f"{config.ci_pipeline_base_url}job_id" in api.messages[0]
@@ -93,7 +94,7 @@ def test_on_merge_request_blocked_dont_notify_if_disabled():
     config = NotificationConfig(notify_on_merge_request_blocked=False)
     notifier = SlackNotifier(config, api)
 
-    notifier.on_merge_request_blocked("job_id", "merge_request_id")
+    notifier.on_merge_request_blocked("scanner_id", "job_id", "merge_request_id")
 
     assert len(api.messages) == 0
 
@@ -103,7 +104,7 @@ def test_on_release_build_blocked_notify_if_enabled():
     config = NotificationConfig(notify_on_release_build_blocked=True)
     notifier = SlackNotifier(config, api)
 
-    notifier.on_release_build_blocked("job_id")
+    notifier.on_release_build_blocked("scanner_id", "job_id")
 
     assert len(api.messages) == 1
     assert f"{config.ci_pipeline_base_url}job_id" in api.messages[0]
@@ -115,7 +116,7 @@ def test_on_release_build_blocked_dont_notify_if_disabled():
     config = NotificationConfig(notify_on_release_build_blocked=False)
     notifier = SlackNotifier(config, api)
 
-    notifier.on_release_build_blocked("job_id")
+    notifier.on_release_build_blocked("scanner_id", "job_id")
 
     assert len(api.messages) == 0
 
@@ -131,10 +132,11 @@ def test_on_scan_job_succeeded_notify_if_enabled(selected_job_type):
     config = NotificationConfig(notify_on_scan_job_succeeded=notify_on_scan_job_succeeded)
     notifier = SlackNotifier(config, api)
 
-    notifier.on_scan_job_succeeded(selected_job_type, "job_id")
+    notifier.on_scan_job_succeeded("scanner_id", selected_job_type, "job_id")
 
     assert len(api.messages) == 1
     assert "succeeded" in api.messages[0]
+    assert "scanner_id" in api.messages[0]
     assert selected_job_type.name in api.messages[0]
     assert f"{config.ci_pipeline_base_url}job_id" in api.messages[0]
 
@@ -150,7 +152,7 @@ def test_on_scan_job_succeeded_dont_notify_if_disabled(selected_job_type):
     config = NotificationConfig(notify_on_scan_job_succeeded=notify_on_scan_job_succeeded)
     notifier = SlackNotifier(config, api)
 
-    notifier.on_scan_job_succeeded(selected_job_type, "job_id")
+    notifier.on_scan_job_succeeded("scanner_id", selected_job_type, "job_id")
 
     assert len(api.messages) == 0
 
@@ -166,13 +168,15 @@ def test_on_scan_job_failed_notify_if_enabled(selected_job_type):
     config = NotificationConfig(notify_on_scan_job_failed=notify_on_scan_job_failed)
     notifier = SlackNotifier(config, api)
 
-    notifier.on_scan_job_failed(selected_job_type, "job_id", "some error reason")
+    notifier.on_scan_job_failed("scanner_id", selected_job_type, "job_id", "some error reason")
 
     assert len(api.messages) == 1
     assert "failed" in api.messages[0]
+    assert "scanner_id" in api.messages[0]
     assert "some error reason" in api.messages[0]
     assert selected_job_type.name in api.messages[0]
     assert f"{config.ci_pipeline_base_url}job_id" in api.messages[0]
+    assert APP_OWNERS in api.messages[0]
 
 
 @pytest.mark.parametrize(
@@ -186,7 +190,7 @@ def test_on_scan_job_failed_dont_notify_if_disabled(selected_job_type):
     config = NotificationConfig(notify_on_scan_job_failed=notify_on_scan_job_failed)
     notifier = SlackNotifier(config, api)
 
-    notifier.on_scan_job_failed(selected_job_type, "job_id", "some error reason")
+    notifier.on_scan_job_failed("scanner_id", selected_job_type, "job_id", "some error reason")
 
     assert len(api.messages) == 0
 
@@ -418,6 +422,28 @@ def test_on_finding_created_or_updated_notify_channel_if_risk_assessor_ids_are_u
     for user in finding.risk_assessor:
         assert user.name in api.messages[0]
     assert "<!channel>" in api.messages[0]
+
+
+def test_on_finding_deleted():
+    api = MockSlackApi()
+    notifier = SlackNotifier(NotificationConfig(), api)
+
+    notifier.on_finding_deleted(FINDING_WITH_RISK_NO_PATCH_NO)
+
+    assert len(api.messages) == 1
+    assert FINDING_WITH_RISK_NO_PATCH_NO.more_info in api.messages[0]
+    assert "resolved" in api.messages[0]
+
+
+def test_send_notification_to_app_owners():
+    api = MockSlackApi()
+    notifier = SlackNotifier(NotificationConfig(), api)
+
+    notifier.send_notification_to_app_owners("some message")
+
+    assert len(api.messages) == 1
+    assert APP_OWNERS in api.messages[0]
+    assert "some message" in api.messages[0]
 
 
 class MockSlackApi(SlackApi):

@@ -4,7 +4,6 @@ from unittest.mock import Mock
 from unittest.mock import patch
 
 import pytest
-from data_source.jira_finding_data_source import JiraFinding
 from model.dependency import Dependency
 from model.finding import Finding
 from model.repository import Project
@@ -71,6 +70,7 @@ class FakeBazel(BazelRustDependencyManager):
 
 def test_on_periodic_job_no_findings(jira_lib_mock):
     # No findings
+    jira_lib_mock.get_open_findings_for_repo_and_scanner.return_value = {}
     sub1 = Mock()
     sub2 = Mock()
     scanner_job = DependencyScanner(FakeBazel(1), jira_lib_mock, [sub1, sub2])
@@ -78,6 +78,7 @@ def test_on_periodic_job_no_findings(jira_lib_mock):
 
     scanner_job.do_periodic_scan(repos)
 
+    jira_lib_mock.get_open_findings_for_repo_and_scanner.assert_called_once()
     jira_lib_mock.get_open_finding.assert_not_called()
     jira_lib_mock.create_or_update_open_finding.assert_not_called()
     sub1.on_scan_job_succeeded.assert_called_once()
@@ -86,9 +87,36 @@ def test_on_periodic_job_no_findings(jira_lib_mock):
     sub2.on_scan_job_failed.assert_not_called()
 
 
+def test_on_periodic_job_delete_finding(jira_lib_mock):
+    # no findings, 1 present in JIRA
+    repos = [Repository("ic", "https://gitlab.com/dfinity-lab/public/ic", [Project("ic", "ic")])]
+    jira_finding = Finding(
+        repository=repos[0].name,
+        scanner="BAZEL_RUST",
+        vulnerable_dependency=Dependency("VDID1", "chrono", "1.0", {"VID1": ["1.1", "2.0"]}),
+        vulnerabilities=[Vulnerability("VID1", "CVE-123", "huuughe vuln", 100)],
+        first_level_dependencies=[Dependency("VDID2", "fl dep", "0.1 beta", {"VID1": ["3.0 alpha"]})],
+        projects=["foo", "bar", "bear"],
+        risk_assessor=[User("mickey", "Mickey Mouse")],
+        risk=SecurityRisk.INFORMATIONAL,
+        patch_responsible=[],
+        due_date=100,
+        score=100,
+    )
+    jira_lib_mock.get_open_findings_for_repo_and_scanner.return_value = {jira_finding.id(): jira_finding}
+    scanner_job = DependencyScanner(FakeBazel(1), jira_lib_mock, [])
+
+    scanner_job.do_periodic_scan(repos)
+
+    jira_lib_mock.get_open_findings_for_repo_and_scanner.assert_called_once()
+    jira_lib_mock.delete_finding.assert_called_once()
+    jira_lib_mock.get_open_finding.assert_not_called()
+    jira_lib_mock.create_or_update_open_finding.assert_not_called()
+
+
 def test_on_periodic_job_one_finding(jira_lib_mock):
     # one finding, not present in JIRA
-    jira_lib_mock.get_open_finding.return_value = []
+    jira_lib_mock.get_open_findings_for_repo_and_scanner.return_value = {}
     jira_lib_mock.get_risk_assessor.return_value = [User("mickey", "Mickey Mouse")]
 
     sub1 = Mock()
@@ -102,7 +130,8 @@ def test_on_periodic_job_one_finding(jira_lib_mock):
 
     scanner_job.do_periodic_scan([repository])
 
-    jira_lib_mock.get_open_finding.assert_called_once()
+    jira_lib_mock.get_open_findings_for_repo_and_scanner.assert_called_once()
+    jira_lib_mock.get_open_finding.assert_not_called()
     jira_lib_mock.get_risk_assessor.assert_called_once()
 
     jira_lib_mock.create_or_update_open_finding.assert_called_once()
@@ -116,9 +145,9 @@ def test_on_periodic_job_one_finding(jira_lib_mock):
 
 def test_on_periodic_job_one_finding_in_jira(jira_lib_mock):
     # one finding, present in JIRA
-    scanner = "BAZEL_IC"
+    scanner = "BAZEL_RUST"
     repository = Repository("ic", "https://gitlab.com/dfinity-lab/public/ic", [Project("ic", "ic")])
-    jira_finding = JiraFinding(
+    jira_finding = Finding(
         repository=repository.name,
         scanner=scanner,
         vulnerable_dependency=Dependency("VDID1", "chrono", "1.0", {"VID1": ["1.1", "2.0"]}),
@@ -131,7 +160,7 @@ def test_on_periodic_job_one_finding_in_jira(jira_lib_mock):
         due_date=100,
         score=100,
     )
-    jira_lib_mock.get_open_finding.return_value = jira_finding
+    jira_lib_mock.get_open_findings_for_repo_and_scanner.return_value = {jira_finding.id(): jira_finding}
 
     sub1 = Mock()
     sub2 = Mock()
@@ -149,8 +178,10 @@ def test_on_periodic_job_one_finding_in_jira(jira_lib_mock):
     jira_finding.risk = None
     jira_finding.score = finding.score
 
-    jira_lib_mock.get_open_finding.assert_called_once()
+    jira_lib_mock.get_open_findings_for_repo_and_scanner.assert_called_once()
+    jira_lib_mock.get_open_finding.assert_not_called()
     jira_lib_mock.get_risk_assessor.assert_not_called()
+    jira_lib_mock.delete_finding.assert_not_called()
 
     jira_lib_mock.create_or_update_open_finding.assert_called_once()
     jira_lib_mock.create_or_update_open_finding.assert_called_once_with(jira_finding)
@@ -265,7 +296,7 @@ def test_on_merge_request_changes_no_findings(jira_lib_mock):
 
 
 def test_on_merge_request_changes_all_findings_have_jira_findings(jira_lib_mock):
-    scanner = "BAZEL_IC"
+    scanner = "BAZEL_RUST"
     repository = "ic"
     sub1 = Mock()
     sub2 = Mock()
@@ -285,7 +316,7 @@ def test_on_merge_request_changes_all_findings_have_jira_findings(jira_lib_mock)
         )
     ]
 
-    jira_finding = JiraFinding(
+    jira_finding = Finding(
         repository=repository,
         scanner=scanner,
         vulnerable_dependency=Dependency("VDID1", "chrono", "1.0", {"VID1": ["1.1", "2.0"]}),
@@ -316,7 +347,7 @@ def test_on_merge_request_changes_all_findings_have_jira_findings(jira_lib_mock)
 
 @patch("gitlab_api.gitlab_comment.GitlabComment.comment_on_gitlab")
 def test_on_merge_request_changes_with_findings_to_flag_and_commit_exception(gitlab_comment_mock, jira_lib_mock):
-    scanner = "BAZEL_IC"
+    scanner = "BAZEL_RUST"
     repository = "ic"
     sub1 = Mock()
     sub2 = Mock()
@@ -355,7 +386,7 @@ def test_on_merge_request_changes_with_findings_to_flag_and_commit_exception(git
 
 @patch("gitlab_api.gitlab_comment.GitlabComment.comment_on_gitlab")
 def test_on_merge_request_changes_with_findings_to_flag_no_commit_exception(gitlab_comment_mock, jira_lib_mock):
-    scanner = "BAZEL_IC"
+    scanner = "BAZEL_RUST"
     repository = "ic"
     sub1 = Mock()
     sub2 = Mock()
@@ -444,7 +475,7 @@ def test_on_release_scan_no_findings(jira_lib_mock):
 
 
 def test_on_release_scan_findings_have_jira_findings_with_no_risk(jira_lib_mock):
-    scanner = "BAZEL_IC"
+    scanner = "BAZEL_RUST"
     repository = "ic"
 
     sub1 = Mock()
@@ -464,7 +495,7 @@ def test_on_release_scan_findings_have_jira_findings_with_no_risk(jira_lib_mock)
         )
     ]
 
-    jira_finding = JiraFinding(
+    jira_finding = Finding(
         repository=repository,
         scanner=scanner,
         vulnerable_dependency=Dependency("VDID1", "chrono", "1.0", {"VID1": ["1.1", "2.0"]}),
@@ -495,7 +526,7 @@ def test_on_release_scan_findings_have_jira_findings_with_no_risk(jira_lib_mock)
 
 
 def test_on_release_scan_findings_have_jira_findings_with_no_risk_with_exception(jira_lib_mock):
-    scanner = "BAZEL_IC"
+    scanner = "BAZEL_RUST"
     repository = "ic"
 
     sub1 = Mock()
@@ -515,7 +546,7 @@ def test_on_release_scan_findings_have_jira_findings_with_no_risk_with_exception
         )
     ]
 
-    jira_finding = JiraFinding(
+    jira_finding = Finding(
         repository=repository,
         scanner=scanner,
         vulnerable_dependency=Dependency("VDID1", "chrono", "1.0", {"VID1": ["1.1", "2.0"]}),
@@ -546,7 +577,7 @@ def test_on_release_scan_findings_have_jira_findings_with_no_risk_with_exception
 
 
 def test_on_release_scan_findings_have_jira_findings_with_high_risk_but_no_due_date(jira_lib_mock):
-    scanner = "BAZEL_IC"
+    scanner = "BAZEL_RUST"
     repository = "ic"
 
     sub1 = Mock()
@@ -566,7 +597,7 @@ def test_on_release_scan_findings_have_jira_findings_with_high_risk_but_no_due_d
         )
     ]
 
-    jira_finding = JiraFinding(
+    jira_finding = Finding(
         repository=repository,
         scanner=scanner,
         vulnerable_dependency=Dependency("VDID1", "chrono", "1.0", {"VID1": ["1.1", "2.0"]}),
@@ -597,7 +628,7 @@ def test_on_release_scan_findings_have_jira_findings_with_high_risk_but_no_due_d
 
 
 def test_on_release_scan_findings_have_jira_findings_with_high_risk_but_valid_due_date(jira_lib_mock):
-    scanner = "BAZEL_IC"
+    scanner = "BAZEL_RUST"
     repository = "ic"
 
     sub1 = Mock()
@@ -617,7 +648,7 @@ def test_on_release_scan_findings_have_jira_findings_with_high_risk_but_valid_du
         )
     ]
 
-    jira_finding = JiraFinding(
+    jira_finding = Finding(
         repository=repository,
         scanner=scanner,
         vulnerable_dependency=Dependency("VDID1", "chrono", "1.0", {"VID1": ["1.1", "2.0"]}),
@@ -644,7 +675,7 @@ def test_on_release_scan_findings_have_jira_findings_with_high_risk_but_valid_du
 
 
 def test_on_release_scan_findings_have_jira_findings_with_high_risk_but_expired_due_date(jira_lib_mock):
-    scanner = "BAZEL_IC"
+    scanner = "BAZEL_RUST"
     repository = "ic"
 
     sub1 = Mock()
@@ -664,7 +695,7 @@ def test_on_release_scan_findings_have_jira_findings_with_high_risk_but_expired_
         )
     ]
 
-    jira_finding = JiraFinding(
+    jira_finding = Finding(
         repository=repository,
         scanner=scanner,
         vulnerable_dependency=Dependency("VDID1", "chrono", "1.0", {"VID1": ["1.1", "2.0"]}),
@@ -695,7 +726,7 @@ def test_on_release_scan_findings_have_jira_findings_with_high_risk_but_expired_
 
 
 def test_on_release_scan_findings_have_jira_findings_with_high_risk_but_expired_due_date_with_exception(jira_lib_mock):
-    scanner = "BAZEL_IC"
+    scanner = "BAZEL_RUST"
     repository = "ic"
 
     sub1 = Mock()
@@ -715,7 +746,7 @@ def test_on_release_scan_findings_have_jira_findings_with_high_risk_but_expired_
         )
     ]
 
-    jira_finding = JiraFinding(
+    jira_finding = Finding(
         repository=repository,
         scanner=scanner,
         vulnerable_dependency=Dependency("VDID1", "chrono", "1.0", {"VID1": ["1.1", "2.0"]}),
@@ -746,7 +777,7 @@ def test_on_release_scan_findings_have_jira_findings_with_high_risk_but_expired_
 
 
 def test_on_release_scan_new_findings(jira_lib_mock):
-    scanner = "BAZEL_IC"
+    scanner = "BAZEL_RUST"
     repository = "ic"
 
     sub1 = Mock()
@@ -783,7 +814,7 @@ def test_on_release_scan_new_findings(jira_lib_mock):
 
 
 def test_on_release_scan_new_findings_with_exception(jira_lib_mock):
-    scanner = "BAZEL_IC"
+    scanner = "BAZEL_RUST"
     repository = "ic"
 
     sub1 = Mock()

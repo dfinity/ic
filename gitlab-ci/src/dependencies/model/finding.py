@@ -51,6 +51,12 @@ class Finding:
         assert self.score >= -1
         assert self.more_info is None or len(self.more_info) > 0
 
+    @staticmethod
+    def id_for(
+        repository: str, scanner: str, vulnerable_dependency_id: str, vulnerable_dependency_version: str
+    ) -> Tuple[str, str, str, str]:
+        return repository, scanner, vulnerable_dependency_id, vulnerable_dependency_version
+
     def id(self) -> Tuple[str, str, str, str]:
         return self.repository, self.scanner, self.vulnerable_dependency.id, self.vulnerable_dependency.version
 
@@ -83,3 +89,65 @@ class Finding:
                 ):
                     return True
         return False
+
+    def merge_with(self, other: "Finding"):
+        """Merges the other finding into this finding"""
+
+        # first check if the findings can be merged (everything except projects and 1st level deps must be the same)
+        if self.repository != other.repository:
+            raise RuntimeError(
+                f"trying to merge two findings from different repos: {self.repository} and {other.repository}"
+            )
+        if self.scanner != other.scanner:
+            raise RuntimeError(
+                f"trying to merge two findings from different scanners: {self.scanner} and {other.scanner}"
+            )
+        if self.vulnerable_dependency != other.vulnerable_dependency:
+            raise RuntimeError(
+                f"trying to merge two findings with different vulnerable dep: {self.vulnerable_dependency} and {other.vulnerable_dependency}"
+            )
+        if self.vulnerabilities != other.vulnerabilities:
+            raise RuntimeError(
+                f"trying to merge two findings with different vulnerabilities: {self.vulnerabilities} and {other.vulnerabilities}"
+            )
+        if self.risk_assessor != other.risk_assessor:
+            raise RuntimeError(
+                f"trying to merge two findings with different risk assessors: {self.risk_assessor} and {other.risk_assessor}"
+            )
+        if self.risk != other.risk:
+            raise RuntimeError(f"trying to merge two findings with different risk: {self.risk} and {other.risk}")
+        if self.patch_responsible != other.patch_responsible:
+            raise RuntimeError(
+                f"trying to merge two findings with different patch responsibles: {self.patch_responsible} and {other.patch_responsible}"
+            )
+        if self.due_date != other.due_date:
+            raise RuntimeError(
+                f"trying to merge two findings with different due dates: {self.due_date} and {other.due_date}"
+            )
+        if self.score != other.score:
+            raise RuntimeError(
+                f"trying to merge two findings with different risk scores: {self.score} and {other.score}"
+            )
+        if self.more_info != other.more_info:
+            raise RuntimeError(
+                f"trying to merge two findings with different infos: {self.more_info} and {other.more_info}"
+            )
+
+        for project in other.projects:
+            if project not in self.projects:
+                self.projects.append(project)
+
+        dep_by_id_version = {}
+        for first_lvl_dep in self.first_level_dependencies:
+            dep_by_id_version[first_lvl_dep.id + first_lvl_dep.version] = first_lvl_dep
+
+        for first_lvl_dep in other.first_level_dependencies:
+            id_version = first_lvl_dep.id + first_lvl_dep.version
+            if id_version in dep_by_id_version:
+                if first_lvl_dep != dep_by_id_version[id_version]:
+                    raise RuntimeError(
+                        f"trying to merge two findings with different 1st level deps: {dep_by_id_version[first_lvl_dep.id]} and {first_lvl_dep}"
+                    )
+            else:
+                self.first_level_dependencies.append(first_lvl_dep)
+                dep_by_id_version[id_version] = first_lvl_dep

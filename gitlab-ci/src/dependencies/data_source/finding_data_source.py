@@ -1,6 +1,8 @@
 import abc
+from typing import Dict
 from typing import List
 from typing import Optional
+from typing import Tuple
 
 from data_source.commit_type import CommitType
 from model.finding import Finding
@@ -14,10 +16,14 @@ class FindingDataSource(metaclass=abc.ABCMeta):
         return (
             hasattr(subclass, "get_open_finding")
             and callable(subclass.get_open_finding)
+            and hasattr(subclass, "get_open_findings_for_repo_and_scanner")
+            and callable(subclass.get_open_findings_for_repo_and_scanner)
             and hasattr(subclass, "commit_has_block_exception")
             and callable(subclass.commit_has_block_exception)
             and hasattr(subclass, "create_or_update_open_finding")
             and callable(subclass.create_or_update_open_finding)
+            and hasattr(subclass, "delete_finding")
+            and callable(subclass.delete_finding)
             and hasattr(subclass, "get_risk_assessor")
             and callable(subclass.get_risk_assessor)
         )
@@ -30,6 +36,13 @@ class FindingDataSource(metaclass=abc.ABCMeta):
         raise NotImplementedError
 
     @abc.abstractmethod
+    def get_open_findings_for_repo_and_scanner(
+        self, repository: str, scanner: str
+    ) -> Dict[Tuple[str, str, str, str], Finding]:
+        """Get all open findings for the given (repository, scanner) combination, returned in a dict by finding id"""
+        raise NotImplementedError
+
+    @abc.abstractmethod
     def commit_has_block_exception(self, commit_type: CommitType, commit_hash: str) -> bool:
         """Returns true if the data source contains a block exception for the commit of the given type and hash."""
         raise NotImplementedError
@@ -37,6 +50,10 @@ class FindingDataSource(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def create_or_update_open_finding(self, finding: Finding):
         """Updates the given finding or creates a new one if none exists yet."""
+        raise NotImplementedError
+
+    def delete_finding(self, finding: Finding):
+        """Deletes the given finding from the data source."""
         raise NotImplementedError
 
     @abc.abstractmethod

@@ -5,12 +5,14 @@ from typing import Optional
 from data_source.finding_data_source_subscriber import FindingDataSourceSubscriber
 from model.finding import Finding
 from notification.notification_config import NotificationConfig
+from notification.notifier import Notifier
 from notification.slack_api import SlackApi
 from scanner.scanner_job_type import ScannerJobType
 from scanner.scanner_subscriber import ScannerSubscriber
 
 SLACK_CHANNEL = "#security-vulnerability-management"
 SLACK_LOG_TO_CONSOLE = False
+APP_OWNERS = "<@U03JGGJBM7V> <@U02EFHJA8D9>"  # Thomas, Venkkatesh
 
 SLACK_WEBHOOK = os.environ.get("SLACK_WEBHOOK_URL_PSEC_VULN_MGT")
 if SLACK_WEBHOOK is None:
@@ -20,7 +22,7 @@ if SLACK_OAUTH_TOKEN is None:
     logging.error("SLACK_OAUTH_TOKEN not set, can't retrieve slack user IDs")
 
 
-class SlackNotifier(ScannerSubscriber, FindingDataSourceSubscriber):
+class SlackNotifier(ScannerSubscriber, FindingDataSourceSubscriber, Notifier):
     config: NotificationConfig
     slack_api: SlackApi
 
@@ -33,32 +35,32 @@ class SlackNotifier(ScannerSubscriber, FindingDataSourceSubscriber):
         self.config = config
         self.slack_api = slack_api
 
-    def on_merge_request_blocked(self, job_id: str, merge_request_id: str):
-        logging.debug(f"on_merge_request_blocked({job_id},{merge_request_id})")
+    def on_merge_request_blocked(self, scanner_id: str, job_id: str, merge_request_id: str):
+        logging.debug(f"on_merge_request_blocked({scanner_id},{job_id},{merge_request_id})")
         if self.config.notify_on_merge_request_blocked:
             self.slack_api.send_message(
                 f"Merge Request blocked {self.config.merge_request_base_url}{merge_request_id} by CI Pipeline {self.config.ci_pipeline_base_url}{job_id}"
             )
 
-    def on_release_build_blocked(self, job_id: str):
-        logging.debug(f"on_release_build_blocked({job_id})")
+    def on_release_build_blocked(self, scanner_id: str, job_id: str):
+        logging.debug(f"on_release_build_blocked({scanner_id},{job_id})")
         if self.config.notify_on_release_build_blocked:
             self.slack_api.send_message(
                 f"Release Build blocked by CI Pipeline {self.config.ci_pipeline_base_url}{job_id} <!channel>"
             )
 
-    def on_scan_job_succeeded(self, job_type: ScannerJobType, job_id: str):
-        logging.debug(f"on_scan_job_succeeded({job_type},{job_id})")
+    def on_scan_job_succeeded(self, scanner_id: str, job_type: ScannerJobType, job_id: str):
+        logging.debug(f"on_scan_job_succeeded({scanner_id},{job_type},{job_id})")
         if self.config.notify_on_scan_job_succeeded[job_type]:
             self.slack_api.send_message(
-                f"Scan Job with type {job_type.name} succeeded in CI Pipeline {self.config.ci_pipeline_base_url}{job_id}"
+                f"Scan Job with type {job_type.name} and ID {scanner_id} succeeded in CI Pipeline {self.config.ci_pipeline_base_url}{job_id}"
             )
 
-    def on_scan_job_failed(self, job_type: ScannerJobType, job_id: str, reason: str):
-        logging.debug(f"on_scan_job_failed({job_type},{job_id},{reason})")
+    def on_scan_job_failed(self, scanner_id: str, job_type: ScannerJobType, job_id: str, reason: str):
+        logging.debug(f"on_scan_job_failed({scanner_id},{job_type},{job_id},{reason})")
         if self.config.notify_on_scan_job_failed[job_type]:
             self.slack_api.send_message(
-                f'Scan Job with type {job_type.name} failed with reason "{reason}" in CI Pipeline {self.config.ci_pipeline_base_url}{job_id} <@U03JGGJBM7V> <@U02EFHJA8D9>'
+                f'Scan Job with type {job_type.name} and ID {scanner_id} failed with reason "{reason}" in CI Pipeline {self.config.ci_pipeline_base_url}{job_id} {APP_OWNERS}'
             )
 
     def __get_risk_assessors(self, finding: Finding) -> str:
@@ -115,3 +117,11 @@ class SlackNotifier(ScannerSubscriber, FindingDataSourceSubscriber):
     def on_finding_updated(self, finding_before: Finding, finding_after: Finding):
         logging.debug(f"on_finding_updated({finding_before},{finding_after}")
         self.__notify_if_risk_assessment_needed_or_patch_version_available(finding_before, finding_after)
+
+    def on_finding_deleted(self, finding: Finding):
+        logging.debug(f"on_finding_deleted({finding}")
+        self.slack_api.send_message(f"Finding {SlackNotifier.__get_finding_info(finding)} was resolved :tada:")
+
+    def send_notification_to_app_owners(self, message: str):
+        logging.debug(f"send_notification_to_owners({message}")
+        self.slack_api.send_message(message + " " + APP_OWNERS)

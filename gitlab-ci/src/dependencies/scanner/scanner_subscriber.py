@@ -19,21 +19,21 @@ class ScannerSubscriber(metaclass=abc.ABCMeta):
         )
 
     @abc.abstractmethod
-    def on_merge_request_blocked(self, job_id: str, merge_request_id: str):
+    def on_merge_request_blocked(self, scanner_id: str, job_id: str, merge_request_id: str):
         """A merge request with the given IDs was blocked."""
         raise NotImplementedError
 
     @abc.abstractmethod
-    def on_release_build_blocked(self, job_id: str):
+    def on_release_build_blocked(self, scanner_id: str, job_id: str):
         """A release build with the given ID was blocked."""
         raise NotImplementedError
 
     @abc.abstractmethod
-    def on_scan_job_succeeded(self, job_type: ScannerJobType, job_id: str):
+    def on_scan_job_succeeded(self, scanner_id: str, job_type: ScannerJobType, job_id: str):
         """The scan job of the given type and ID was successfully completed."""
         raise NotImplementedError
 
     @abc.abstractmethod
-    def on_scan_job_failed(self, job_type: ScannerJobType, job_id: str, reason: str):
+    def on_scan_job_failed(self, scanner_id: str, job_type: ScannerJobType, job_id: str, reason: str):
         """The scan job of the given type and ID failed because of the given reason."""
         raise NotImplementedError

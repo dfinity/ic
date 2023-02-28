@@ -8,6 +8,7 @@ from typing import Any
 from typing import Dict
 from typing import List
 from typing import Optional
+from typing import Set
 from typing import Tuple
 
 from data_source.commit_type import CommitType
@@ -65,14 +66,12 @@ JIRA_LABEL_PATCH_VULNDEP_PUBLISHED = "patch_published_vulndep"
 JIRA_LABEL_PATCH_ALLDEP_PUBLISHED = "patch_published_alldep"
 
 
-class JiraFinding(Finding):
-    jira_issue_id: str
-
-
 class JiraFindingDataSource(FindingDataSource):
     jira: JIRA
     subscribers: List[FindingDataSourceSubscriber]
-    findings: Dict[str, Tuple[Finding, Issue]] = {}
+    findings: Dict[Tuple[str, str, str, str], Tuple[Finding, Issue]]
+    findings_cached_for_scanner: Set[str]
+    risk_assessors: List[User]
 
     def __init__(self, subscribers: List[FindingDataSourceSubscriber], custom_jira: Optional[JIRA] = None):
         logging.debug(f"JiraFindingDataSource({subscribers},{custom_jira})")
@@ -80,6 +79,9 @@ class JiraFindingDataSource(FindingDataSource):
         self.jira = (
             JIRA(server=JIRA_SERVER, basic_auth=(JIRA_USER, JIRA_API_KEY)) if custom_jira is None else custom_jira
         )
+        self.findings = {}
+        self.findings_cached_for_scanner = set()
+        self.risk_assessors = []
 
     @staticmethod
     def __finding_to_jira_vulnerabilities(vulnerabilities: List[Vulnerability]) -> str:
@@ -289,7 +291,7 @@ class JiraFindingDataSource(FindingDataSource):
 
     @staticmethod
     def __finding_diff_to_jira(finding_old: Optional[Finding], finding_new: Finding) -> Dict[str, Any]:
-        res: Dict[str, Any] = {"project": JIRA_BOARD_KEY, "issuetype": JIRA_FINDING_ISSUE_TYPE}
+        res: Dict[str, Any] = {}
         summary_update_needed: bool = False
         dep_update_needed: bool = False
         patch_version_update_needed: bool = False
@@ -342,7 +344,9 @@ class JiraFindingDataSource(FindingDataSource):
         if summary_update_needed:
             res[
                 "summary"
-            ] = f"[{finding_new.repository}][{finding_new.scanner}] Vulnerability in {finding_new.vulnerable_dependency.name} {finding_new.vulnerable_dependency.version}"
+            ] = f"[{finding_new.repository}][{finding_new.scanner}] Vulnerability in {finding_new.vulnerable_dependency.name} {finding_new.vulnerable_dependency.version}"[
+                :100
+            ]
         all_deps: List[Dependency] = [finding_new.vulnerable_dependency] + finding_new.first_level_dependencies
         if dep_update_needed:
             res[
@@ -354,10 +358,14 @@ class JiraFindingDataSource(FindingDataSource):
                 res["labels"],
             ) = JiraFindingDataSource.__finding_to_jira_patch_version_labels(all_deps, finding_new.vulnerabilities)
 
+        if len(res) > 0:
+            res["project"] = JIRA_BOARD_KEY
+            res["issuetype"] = JIRA_FINDING_ISSUE_TYPE
         return res
 
     @staticmethod
-    def __jira_to_finding(issue: Issue) -> JiraFinding:
+    def __jira_to_finding(issue: Issue) -> Finding:
+        # noinspection PyDictCreation
         res: Dict[str, Any] = {}
         res["repository"] = issue.get_field(JIRA_FINDING_TO_CUSTOM_FIELD.get("repository")[0])
         res["scanner"] = issue.get_field(JIRA_FINDING_TO_CUSTOM_FIELD.get("scanner")[0])
@@ -415,53 +423,51 @@ class JiraFindingDataSource(FindingDataSource):
         res["more_info"] = issue.permalink()
         score = issue.get_field(JIRA_FINDING_TO_CUSTOM_FIELD.get("score")[0])
         res["score"] = -1 if score is None else int(score)
-        finding = JiraFinding(**res)
-        finding.jira_issue_id = issue.id
+        finding = Finding(**res)
         return finding
+
+    def __load_findings_for_scanner(self, scanner: str):
+        if scanner in self.findings_cached_for_scanner:
+            return
+        logging.debug(f"__load_findings_for_scanner({scanner})")
+        jql_query: str = (
+            f'project = "{JIRA_BOARD_KEY}" and '
+            f"issuetype = {JIRA_FINDING_ISSUE_TYPE['id']} and "
+            f"status = open and "
+            f"\"{JIRA_FINDING_TO_CUSTOM_FIELD.get('scanner')[1]}\" ~ \"{scanner}\""
+        )
+        logging.debug(f"calling jira.search_issues({jql_query})")
+        issues: ResultList[Issue] = self.jira.search_issues(jql_str=jql_query, maxResults=False)
+        logging.debug(f"received {len(issues)} issue(s) for query ({scanner})")
+        for issue in issues:
+            finding: Finding = self.__jira_to_finding(issue)
+            if finding.id() in self.findings:
+                self.findings.clear()
+                raise RuntimeError(f"finding with id {finding.id()} exists twice")
+            self.findings[finding.id()] = (finding, issue)
+        self.findings_cached_for_scanner.add(scanner)
 
     def get_open_finding(
         self, repository: str, scanner: str, dependency_id: str, dependency_version: str
     ) -> Optional[Finding]:
         logging.debug(f"get_open_finding({repository}, {scanner}, {dependency_id}, {dependency_version})")
-        if '"' in repository or '"' in scanner or '"' in dependency_id or '"' in dependency_version:
-            raise RuntimeError(
-                f"detected double quotes in query ({repository},{scanner},{dependency_id},{dependency_version})"
-            )
-        jql_query: str = (
-            f'project = "{JIRA_BOARD_KEY}" and '
-            f"issuetype = {JIRA_FINDING_ISSUE_TYPE['id']} and "
-            f"status = open and "
-            f"\"{JIRA_FINDING_TO_CUSTOM_FIELD.get('repository')[1]}\" ~ \"{repository}\" and "
-            f"\"{JIRA_FINDING_TO_CUSTOM_FIELD.get('scanner')[1]}\" ~ \"{scanner}\" and "
-            f"\"{JIRA_FINDING_TO_CUSTOM_FIELD.get('vulnerable_dependency_id')[1]}\" ~ \"{dependency_id}\" and "
-            f"\"{JIRA_FINDING_TO_CUSTOM_FIELD.get('vulnerable_dependency_version')[1]}\" ~ \"{dependency_version}\""
-        )
-        logging.debug(f"calling jira.search_issues({jql_query})")
-        issues: ResultList[Issue] = self.jira.search_issues(jql_query)
-        logging.debug(
-            f"received {len(issues)} issue(s) for query ({repository},{scanner},{dependency_id},{dependency_version})"
-        )
-        if len(issues) > 1:
-            raise RuntimeError(
-                f"got {len(issues)} findings for query ({repository},{scanner},{dependency_id},{dependency_version})"
-            )
-        elif len(issues) == 1:
-            finding: JiraFinding = self.__jira_to_finding(issues[0])
-            if (
-                finding.repository != repository
-                or finding.scanner != scanner
-                or finding.vulnerable_dependency.id != dependency_id
-                or finding.vulnerable_dependency.version != dependency_version
-            ):
-                raise RuntimeError(
-                    f"finding primary key does not match expected primary key, expected: ({repository},{scanner},{dependency_id},{dependency_version}), actual: ({finding.repository, finding.scanner, finding.vulnerable_dependency.id, finding.vulnerable_dependency.version})"
-                )
-            self.findings[finding.jira_issue_id] = (finding, issues[0])
-            logging.debug(
-                f"returning finding {finding} for query ({repository},{scanner},{dependency_id},{dependency_version})"
-            )
-            return deepcopy(finding)
+        self.__load_findings_for_scanner(scanner)
+        finding_id = Finding.id_for(repository, scanner, dependency_id, dependency_version)
+        if finding_id in self.findings:
+            return deepcopy(self.findings[finding_id][0])
         return None
+
+    def get_open_findings_for_repo_and_scanner(
+        self, repository: str, scanner: str
+    ) -> Dict[Tuple[str, str, str, str], Finding]:
+        logging.debug(f"get_open_findings_for_repo_and_scanner({repository}, {scanner})")
+        self.__load_findings_for_scanner(scanner)
+        res: Dict[Tuple[str, str, str, str], Finding] = {}
+        for finding_and_issue in self.findings.values():
+            finding = finding_and_issue[0]
+            if finding.repository == repository and finding.scanner == scanner:
+                res[finding.id()] = deepcopy(finding)
+        return res
 
     def commit_has_block_exception(self, commit_type: CommitType, commit_hash: str) -> bool:
         logging.debug(f"commit_has_block_exception({commit_type}, {commit_hash})")
@@ -480,17 +486,18 @@ class JiraFindingDataSource(FindingDataSource):
         return False
 
     def create_or_update_open_finding(self, finding: Finding):
-        logging.debug(f"update_open_finding({finding})")
+        logging.debug(f"create_or_update_open_finding({finding})")
+        self.__load_findings_for_scanner(finding.scanner)
         finding_new: Finding = deepcopy(finding)
-        if isinstance(finding, JiraFinding):
+        if finding.id() in self.findings:
             # update finding if it has changed
             logging.debug(f"calculating diff for finding {finding}")
-            finding_old, jira_issue = self.findings[finding.jira_issue_id]
+            finding_old, jira_issue = self.findings[finding.id()]
             fields_to_update = self.__finding_diff_to_jira(finding_old, finding)
             if len(fields_to_update) > 0:
                 logging.debug(f"updating finding fields {fields_to_update}")
                 jira_issue.update(fields_to_update)
-                self.findings[finding.jira_issue_id] = (finding_new, jira_issue)
+                self.findings[finding.id()] = (finding_new, jira_issue)
                 for sub in self.subscribers:
                     sub.on_finding_updated(deepcopy(finding_old), deepcopy(finding))
             else:
@@ -501,15 +508,26 @@ class JiraFindingDataSource(FindingDataSource):
             fields_to_update = self.__finding_diff_to_jira(None, finding)
             logging.debug(f"creating finding fields {fields_to_update}")
             jira_issue = self.jira.create_issue(fields_to_update)
-            finding.__class__ = JiraFinding
-            finding.jira_issue_id = jira_issue.id
             finding.more_info = jira_issue.permalink()
-            self.findings[jira_issue.id] = (finding_new, jira_issue)
+            self.findings[finding.id()] = (finding_new, jira_issue)
             for sub in self.subscribers:
                 sub.on_finding_created(deepcopy(finding))
 
+    def delete_finding(self, finding: Finding):
+        logging.debug(f"delete_finding({finding})")
+        self.__load_findings_for_scanner(finding.scanner)
+
+        if finding.id() in self.findings:
+            finding_stored, jira_issue = self.findings[finding.id()]
+            self.jira.transition_issue(jira_issue.id, "41")
+            for sub in self.subscribers:
+                sub.on_finding_deleted(finding_stored)
+
     def get_risk_assessor(self) -> List[User]:
         logging.debug("get_risk_assessor()")
+        if len(self.risk_assessors) > 0:
+            return self.risk_assessors
+
         try:
             incident_responder_tickets: List[Issue] = self.jira.search_issues(
                 f'"Epic Link" = {JIRA_INCIDENT_RESPONDER_EPIC} AND status != Done'
@@ -525,7 +543,8 @@ class JiraFindingDataSource(FindingDataSource):
             if assessors is None or len(assessors) == 0:
                 raise RuntimeError(f"found no assignees in incident responder tickets {incident_responder_ticket_keys}")
             logging.debug(f"read current risk assessors from tickets {incident_responder_ticket_keys}: {assessors}")
-            return self.__jira_to_finding_users(assessors)
+            self.risk_assessors = self.__jira_to_finding_users(assessors)
+            return self.risk_assessors
         except RuntimeError:
             logging.error(
                 f"could not determine risk assessors by ticket, reason:\n{traceback.format_exc()}\nusing default risk assessors instead"
