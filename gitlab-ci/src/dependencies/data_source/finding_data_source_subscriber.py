@@ -12,6 +12,8 @@ class FindingDataSourceSubscriber(metaclass=abc.ABCMeta):
             and callable(subclass.on_finding_created)
             and hasattr(subclass, "on_finding_updated")
             and callable(subclass.on_finding_updated)
+            and hasattr(subclass, "on_finding_deleted")
+            and callable(subclass.on_finding_deleted)
         )
 
     @abc.abstractmethod
@@ -22,4 +24,9 @@ class FindingDataSourceSubscriber(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def on_finding_updated(self, finding_before: Finding, finding_after: Finding):
         """A finding was successfully updated in the data source. Provided is the finding before and after the update."""
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def on_finding_deleted(self, finding: Finding):
+        """The provided finding was deleted successfully from the data source."""
         raise NotImplementedError
