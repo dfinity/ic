@@ -43,10 +43,12 @@ echo "Making certs directory in $(pwd)"
 docker run \
     -v "$(pwd)":/output \
     registry.gitlab.com/dfinity-lab/open/public-docker-registry/ryantk/minica \
-    -ip-addresses="$ipv6"
+    -ip-addresses="$ipv6,$ipv4"
 
 mv $ipv6 ipv6 # updateing service certificate folder name so it can be fed to ssl-proxy container
 chmod -R 755 ipv6
+mv $ipv4 ipv4
+chmod -R 755 ipv4
 
 # 3 - setting up httpbin on port 20443
 docker run \
