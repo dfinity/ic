@@ -94,6 +94,6 @@ mod unformatted {
 //!
 }
 
-pub mod clients;
+mod clients;
 pub mod manager;
 pub mod processors;

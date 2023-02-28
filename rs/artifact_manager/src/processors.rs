@@ -1,6 +1,7 @@
 //! The tokio thread based implementation of `ArtifactProcessor`
 
 use crate::clients;
+use crate::manager::ArtifactManagerBackendImpl;
 use crossbeam_channel::{Receiver, RecvTimeoutError, Sender};
 use ic_interfaces::{
     artifact_manager::{ArtifactPoolDescriptor, ArtifactProcessor, ProcessingResult},
@@ -14,6 +15,7 @@ use ic_interfaces::{
     ecdsa::{Ecdsa, EcdsaChangeAction, MutableEcdsaPool},
     gossip_pool::GossipPool,
     ingress_manager::IngressHandler,
+    ingress_pool::IngressPoolThrottler,
     ingress_pool::{ChangeAction as IngressAction, MutableIngressPool},
     time_source::{SysTimeSource, TimeSource},
 };
@@ -210,8 +212,9 @@ pub struct ConsensusProcessor<PoolConsensus> {
     log: ReplicaLogger,
 }
 
-impl<PoolConsensus: MutableConsensusPool + Send + Sync + 'static>
-    ConsensusProcessor<PoolConsensus>
+impl<
+        PoolConsensus: MutableConsensusPool + Send + Sync + GossipPool<ConsensusArtifact> + 'static,
+    > ConsensusProcessor<PoolConsensus>
 {
     #[allow(clippy::too_many_arguments)]
     pub fn build<
@@ -225,10 +228,7 @@ impl<PoolConsensus: MutableConsensusPool + Send + Sync + 'static>
         consensus_pool: Arc<RwLock<PoolConsensus>>,
         log: ReplicaLogger,
         metrics_registry: MetricsRegistry,
-    ) -> (
-        clients::ConsensusClient<PoolConsensus, G>,
-        ArtifactProcessorManager<ConsensusArtifact>,
-    ) {
+    ) -> ArtifactManagerBackendImpl<ConsensusArtifact> {
         let client = Self {
             consensus_pool: consensus_pool.clone(),
             client: Box::new(consensus),
@@ -239,15 +239,19 @@ impl<PoolConsensus: MutableConsensusPool + Send + Sync + 'static>
             log,
         };
         let manager = ArtifactProcessorManager::new(
-            time_source,
+            time_source.clone(),
             metrics_registry,
             Box::new(client),
             send_advert,
         );
-        (
-            clients::ConsensusClient::new(consensus_pool, consensus_gossip),
-            manager,
-        )
+        ArtifactManagerBackendImpl::<ConsensusArtifact> {
+            processor: manager,
+            client: Box::new(clients::ConsensusClient::new(
+                consensus_pool,
+                consensus_gossip,
+            )),
+            time_source,
+        }
     }
 }
 
@@ -354,7 +358,15 @@ pub struct IngressProcessor<PoolIngress> {
     node_id: NodeId,
 }
 
-impl<PoolIngress: MutableIngressPool + Send + Sync + 'static> IngressProcessor<PoolIngress> {
+impl<
+        PoolIngress: MutableIngressPool
+            + Send
+            + Sync
+            + GossipPool<IngressArtifact>
+            + IngressPoolThrottler
+            + 'static,
+    > IngressProcessor<PoolIngress>
+{
     #[allow(clippy::too_many_arguments)]
     pub fn build<S: Fn(AdvertSendRequest<IngressArtifact>) + Send + 'static>(
         send_advert: S,
@@ -365,10 +377,7 @@ impl<PoolIngress: MutableIngressPool + Send + Sync + 'static> IngressProcessor<P
         metrics_registry: MetricsRegistry,
         node_id: NodeId,
         malicious_flags: MaliciousFlags,
-    ) -> (
-        clients::IngressClient<PoolIngress>,
-        ArtifactProcessorManager<IngressArtifact>,
-    ) {
+    ) -> ArtifactManagerBackendImpl<IngressArtifact> {
         let client = Self {
             ingress_pool: ingress_pool.clone(),
             client: ingress_handler,
@@ -380,10 +389,17 @@ impl<PoolIngress: MutableIngressPool + Send + Sync + 'static> IngressProcessor<P
             Box::new(client),
             send_advert,
         );
-        (
-            clients::IngressClient::new(time_source, ingress_pool, log, malicious_flags),
-            manager,
-        )
+
+        ArtifactManagerBackendImpl::<IngressArtifact> {
+            processor: manager,
+            client: Box::new(clients::IngressClient::new(
+                time_source.clone(),
+                ingress_pool,
+                log,
+                malicious_flags,
+            )),
+            time_source,
+        }
     }
 }
 
@@ -456,8 +472,9 @@ pub struct CertificationProcessor<PoolCertification> {
     log: ReplicaLogger,
 }
 
-impl<PoolCertification: MutableCertificationPool + Send + Sync + 'static>
-    CertificationProcessor<PoolCertification>
+impl<
+        PoolCertification: MutableCertificationPool + GossipPool<CertificationArtifact> + Send + Sync + 'static,
+    > CertificationProcessor<PoolCertification>
 {
     #[allow(clippy::too_many_arguments)]
     pub fn build<
@@ -472,10 +489,7 @@ impl<PoolCertification: MutableCertificationPool + Send + Sync + 'static>
         certification_pool: Arc<RwLock<PoolCertification>>,
         log: ReplicaLogger,
         metrics_registry: MetricsRegistry,
-    ) -> (
-        clients::CertificationClient<PoolCertification, G>,
-        ArtifactProcessorManager<CertificationArtifact>,
-    ) {
+    ) -> ArtifactManagerBackendImpl<CertificationArtifact> {
         let client = Self {
             consensus_pool_cache: consensus_pool_cache.clone(),
             certification_pool: certification_pool.clone(),
@@ -487,15 +501,19 @@ impl<PoolCertification: MutableCertificationPool + Send + Sync + 'static>
             log,
         };
         let manager = ArtifactProcessorManager::new(
-            time_source,
+            time_source.clone(),
             metrics_registry,
             Box::new(client),
             send_advert,
         );
-        (
-            clients::CertificationClient::new(certification_pool, certifier_gossip),
-            manager,
-        )
+        ArtifactManagerBackendImpl::<CertificationArtifact> {
+            processor: manager,
+            client: Box::new(clients::CertificationClient::new(
+                certification_pool,
+                certifier_gossip,
+            )),
+            time_source,
+        }
     }
 }
 
@@ -573,7 +591,9 @@ pub struct DkgProcessor<PoolDkg> {
     log: ReplicaLogger,
 }
 
-impl<PoolDkg: MutableDkgPool + Send + Sync + 'static> DkgProcessor<PoolDkg> {
+impl<PoolDkg: MutableDkgPool + Send + Sync + GossipPool<DkgArtifact> + 'static>
+    DkgProcessor<PoolDkg>
+{
     #[allow(clippy::too_many_arguments)]
     pub fn build<
         C: Dkg + 'static,
@@ -586,10 +606,7 @@ impl<PoolDkg: MutableDkgPool + Send + Sync + 'static> DkgProcessor<PoolDkg> {
         dkg_pool: Arc<RwLock<PoolDkg>>,
         log: ReplicaLogger,
         metrics_registry: MetricsRegistry,
-    ) -> (
-        clients::DkgClient<PoolDkg, G>,
-        ArtifactProcessorManager<DkgArtifact>,
-    ) {
+    ) -> ArtifactManagerBackendImpl<DkgArtifact> {
         let client = Self {
             dkg_pool: dkg_pool.clone(),
             client: Box::new(dkg),
@@ -600,12 +617,16 @@ impl<PoolDkg: MutableDkgPool + Send + Sync + 'static> DkgProcessor<PoolDkg> {
             log,
         };
         let manager = ArtifactProcessorManager::new(
-            time_source,
+            time_source.clone(),
             metrics_registry,
             Box::new(client),
             send_advert,
         );
-        (clients::DkgClient::new(dkg_pool, dkg_gossip), manager)
+        ArtifactManagerBackendImpl::<DkgArtifact> {
+            processor: manager,
+            client: Box::new(clients::DkgClient::new(dkg_pool, dkg_gossip)),
+            time_source,
+        }
     }
 }
 
@@ -670,7 +691,9 @@ pub struct EcdsaProcessor<PoolEcdsa> {
     log: ReplicaLogger,
 }
 
-impl<PoolEcdsa: MutableEcdsaPool + Send + Sync + 'static> EcdsaProcessor<PoolEcdsa> {
+impl<PoolEcdsa: MutableEcdsaPool + Send + Sync + GossipPool<EcdsaArtifact> + 'static>
+    EcdsaProcessor<PoolEcdsa>
+{
     #[allow(clippy::too_many_arguments)]
     pub fn build<
         C: Ecdsa + 'static,
@@ -683,10 +706,7 @@ impl<PoolEcdsa: MutableEcdsaPool + Send + Sync + 'static> EcdsaProcessor<PoolEcd
         ecdsa_pool: Arc<RwLock<PoolEcdsa>>,
         metrics_registry: MetricsRegistry,
         log: ReplicaLogger,
-    ) -> (
-        clients::EcdsaClient<PoolEcdsa, G>,
-        ArtifactProcessorManager<EcdsaArtifact>,
-    ) {
+    ) -> ArtifactManagerBackendImpl<EcdsaArtifact> {
         let ecdsa_pool_update_duration = metrics_registry.register(
             Histogram::with_opts(histogram_opts!(
                 "ecdsa_pool_update_duration_seconds",
@@ -706,12 +726,16 @@ impl<PoolEcdsa: MutableEcdsaPool + Send + Sync + 'static> EcdsaProcessor<PoolEcd
             log,
         };
         let manager = ArtifactProcessorManager::new(
-            time_source,
+            time_source.clone(),
             metrics_registry,
             Box::new(client),
             send_advert,
         );
-        (clients::EcdsaClient::new(ecdsa_pool, ecdsa_gossip), manager)
+        ArtifactManagerBackendImpl::<EcdsaArtifact> {
+            processor: manager,
+            client: Box::new(clients::EcdsaClient::new(ecdsa_pool, ecdsa_gossip)),
+            time_source,
+        }
     }
 }
 
@@ -806,10 +830,7 @@ impl<
         canister_http_pool: Arc<RwLock<PoolCanisterHttp>>,
         log: ReplicaLogger,
         metrics_registry: MetricsRegistry,
-    ) -> (
-        clients::CanisterHttpClient<PoolCanisterHttp, G>,
-        ArtifactProcessorManager<CanisterHttpArtifact>,
-    ) {
+    ) -> ArtifactManagerBackendImpl<CanisterHttpArtifact> {
         let client = Self {
             consensus_pool_cache: consensus_pool_cache.clone(),
             canister_http_pool: canister_http_pool.clone(),
@@ -817,15 +838,19 @@ impl<
             log,
         };
         let manager = ArtifactProcessorManager::new(
-            time_source,
+            time_source.clone(),
             metrics_registry,
             Box::new(client),
             send_advert,
         );
-        (
-            clients::CanisterHttpClient::new(canister_http_pool, canister_http_gossip),
-            manager,
-        )
+        ArtifactManagerBackendImpl::<CanisterHttpArtifact> {
+            processor: manager,
+            client: Box::new(clients::CanisterHttpClient::new(
+                canister_http_pool,
+                canister_http_gossip,
+            )),
+            time_source,
+        }
     }
 }
 
