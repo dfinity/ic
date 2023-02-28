@@ -67,7 +67,7 @@ fn process_ingress(
     time_limit: Duration,
 ) -> Result<WasmResult, UserError> {
     let msg_id = msg.id();
-
+    #[allow(clippy::disallowed_methods)]
     tokio::task::block_in_place(move || {
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(async move {

@@ -36,6 +36,7 @@ impl RegistryDataProvider for NnsDataProvider {
         version: RegistryVersion,
     ) -> Result<Vec<RegistryTransportRecord>, RegistryDataProviderError> {
         let rt_handle = self.rt_handle.clone();
+        #[allow(clippy::disallowed_methods)]
         tokio::task::block_in_place(|| {
             rt_handle.block_on({
                 let registry_canister = Arc::clone(&self.registry_canister);
@@ -96,6 +97,7 @@ impl RegistryDataProvider for CertifiedNnsDataProvider {
         version: RegistryVersion,
     ) -> Result<Vec<RegistryTransportRecord>, RegistryDataProviderError> {
         let rt_handle = self.rt_handle.clone();
+        #[allow(clippy::disallowed_methods)]
         let (records, _version, _time) = tokio::task::block_in_place(|| {
             rt_handle.block_on({
                 let registry_canister = Arc::clone(&self.registry_canister);

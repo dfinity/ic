@@ -275,6 +275,7 @@ impl TestClient {
 
     // Reads the next message from the channel
     fn receive(&self) -> Result<TestMessage, TestClientErrorCode> {
+        #[allow(clippy::disallowed_methods)]
         match tokio::task::block_in_place(move || {
             self.receiver
                 .recv_timeout(time::Duration::from_millis(RECV_TIMEOUT_MS))
@@ -338,6 +339,7 @@ impl TestClientEventHandler {
         peer_id: NodeId,
         message: TransportPayload,
     ) -> Option<TransportPayload> {
+        #[allow(clippy::disallowed_methods)]
         tokio::task::block_in_place(move || {
             sender
                 .send(TestMessage {
