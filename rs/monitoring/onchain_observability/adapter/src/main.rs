@@ -213,6 +213,10 @@ async fn create_canister_client(crypto: Arc<CryptoComponent>, url: Url, node_id:
     .unwrap();
 
     let sign_cmd = move |msg: &MessageId| {
+        // Implementation of 'sign_basic' uses Tokio's 'block_on' when issuing a RPC
+        // to the crypto service. 'block_on' panics when called from async context
+        // that's why we need to wrap 'sign_basic' in 'block_in_place'.
+        #[allow(clippy::disallowed_methods)]
         tokio::task::block_in_place(|| {
             crypto_clone
                 .sign_basic(msg, node_id, latest_version)

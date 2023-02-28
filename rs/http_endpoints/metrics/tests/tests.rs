@@ -173,6 +173,7 @@ impl Collector for BlockingCollector {
     fn collect(&self) -> Vec<MetricFamily> {
         self.collect_calls.fetch_add(1, Ordering::SeqCst);
         let tx = self.sender.clone();
+        #[allow(clippy::disallowed_methods)]
         tokio::task::block_in_place(|| {
             tx.blocking_send(()).unwrap();
         });

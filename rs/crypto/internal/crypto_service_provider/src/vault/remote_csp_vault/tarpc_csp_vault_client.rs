@@ -489,6 +489,7 @@ impl TlsHandshakeCspVault for RemoteCspVault {
         // trait) from the async function `tokio_rustls::TlsAcceptor::accept`,
         // which in turn is called from our async function
         // `TlsHandshake::perform_tls_server_handshake`.
+        #[allow(clippy::disallowed_methods)]
         tokio::task::block_in_place(|| {
             self.tokio_block_on(self.tarpc_csp_client.tls_sign(
                 context_with_timeout(self.rpc_timeout),

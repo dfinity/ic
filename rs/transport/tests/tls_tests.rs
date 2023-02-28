@@ -61,7 +61,7 @@ fn test_single_transient_failure_of_tls_client_handshake_impl(use_h2: bool) {
                               registry_version: RegistryVersion| {
                             let rt_handle = rt_handle.clone();
                             let crypto = crypto.clone();
-
+                            #[allow(clippy::disallowed_methods)]
                             tokio::task::block_in_place(move || {
                                 let rt_handle = rt_handle.clone();
 
@@ -198,7 +198,7 @@ fn test_single_transient_failure_of_tls_server_handshake_impl(use_h2: bool) {
                               registry_version: RegistryVersion| {
                             let rt_handle = rt_handle.clone();
                             let crypto = crypto.clone();
-
+                            #[allow(clippy::disallowed_methods)]
                             tokio::task::block_in_place(move || {
                                 let rt_handle = rt_handle.clone();
 
