@@ -548,9 +548,6 @@ impl StateLayout {
         let scratchpad = layout.raw_path();
         let checkpoints_path = self.checkpoints();
         let cp_path = checkpoints_path.join(self.checkpoint_name(height));
-        if cp_path.exists() {
-            return Err(LayoutError::AlreadyExists(height));
-        }
         sync_and_mark_files_readonly(scratchpad, thread_pool).map_err(|err| {
             LayoutError::IoError {
                 path: scratchpad.to_path_buf(),
@@ -561,10 +558,16 @@ impl StateLayout {
                 io_err: err,
             }
         })?;
-        std::fs::rename(scratchpad, &cp_path).map_err(|err| LayoutError::IoError {
-            path: scratchpad.to_path_buf(),
-            message: format!("Failed to rename scratchpad to checkpoint {}", height),
-            io_err: err,
+        std::fs::rename(scratchpad, cp_path).map_err(|err| {
+            if is_already_exists_err(&err) {
+                LayoutError::AlreadyExists(height)
+            } else {
+                LayoutError::IoError {
+                    path: scratchpad.to_path_buf(),
+                    message: format!("Failed to rename scratchpad to checkpoint {}", height),
+                    io_err: err,
+                }
+            }
         })?;
         sync_path(&checkpoints_path).map_err(|err| LayoutError::IoError {
             path: checkpoints_path,
@@ -578,10 +581,16 @@ impl StateLayout {
         let src = self.checkpoints().join(self.checkpoint_name(from));
         let dst = self.checkpoints().join(self.checkpoint_name(to));
         self.copy_and_sync_checkpoint(&self.checkpoint_name(to), &src, &dst, None)
-            .map_err(|io_err| LayoutError::IoError {
-                path: dst,
-                message: format!("Failed to clone checkpoint {} to {}", from, to),
-                io_err,
+            .map_err(|io_err| {
+                if is_already_exists_err(&io_err) {
+                    LayoutError::AlreadyExists(to)
+                } else {
+                    LayoutError::IoError {
+                        path: dst,
+                        message: format!("Failed to clone checkpoint {} to {}", from, to),
+                        io_err,
+                    }
+                }
             })?;
         Ok(())
     }
@@ -1095,6 +1104,12 @@ impl StateLayout {
         std::mem::drop(drop_after_rename);
         std::fs::remove_dir_all(tmp_path)
     }
+}
+
+fn is_already_exists_err(err: &std::io::Error) -> bool {
+    // On Unix, if from is a directory, to must also be an (empty) directory.
+    // So error code is either EEXISTS or ENOTEMPTY according to man 2 rename.
+    err.kind() == std::io::ErrorKind::AlreadyExists || err.raw_os_error() == Some(libc::ENOTEMPTY)
 }
 
 /// Collects all the direct children of the specified directory into a
