@@ -21,14 +21,14 @@ use ic_interfaces_state_manager::StateManager;
 use ic_logger::{trace, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
-use std::cell::RefCell;
-use std::sync::Arc;
+use std::{cell::RefCell, sync::Arc};
 
 /// The Purger sub-component.
 pub struct Purger {
     prev_expected_batch_height: RefCell<Height>,
     prev_finalized_certified_height: RefCell<Height>,
     prev_maximum_cup_height: RefCell<Height>,
+    prev_latest_state_height: RefCell<Height>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     message_routing: Arc<dyn MessageRouting>,
     log: ReplicaLogger,
@@ -47,6 +47,7 @@ impl Purger {
             prev_expected_batch_height: RefCell::new(Height::from(1)),
             prev_finalized_certified_height: RefCell::new(Height::from(1)),
             prev_maximum_cup_height: RefCell::new(Height::from(1)),
+            prev_latest_state_height: RefCell::new(Height::from(1)),
             state_manager,
             message_routing,
             log,
@@ -67,17 +68,23 @@ impl Purger {
 
         let certified_height_increased = self.update_finalized_certified_height(pool);
         let cup_height_increased = self.update_cup_height(pool);
+        let latest_state_height_increased = self.update_latest_state_height();
 
-        if certified_height_increased {
+        // During normal operation we need to purge when the finalized tip increases.
+        // However, when a number of nodes just restarted and are recomputing the state until
+        // the certified height, we also want to purge when the lastest state height increases,
+        // otherwise we might not purge all the recomputed states until the nodes have caught up.
+        if certified_height_increased || latest_state_height_increased {
             self.purge_replicated_state_by_finalized_certified_height(pool);
         }
         // If we observe a new CUP with a larger height than the previous max
         // OR the finalized certified height increases(see: CON-930), purge
-        if cup_height_increased || certified_height_increased {
+        if cup_height_increased || certified_height_increased || latest_state_height_increased {
             self.purge_checkpoints_below_cup_height(pool);
         }
         changeset
     }
+
     /// Updates the purger's copy of the finalized certified height, and returns true if
     /// if the height increased. Otherwise returns false.
     fn update_finalized_certified_height(&self, pool: &PoolReader<'_>) -> bool {
@@ -87,6 +94,7 @@ impl Purger {
             .replace(finalized_certified_height);
         finalized_certified_height > prev_finalized_certified_height
     }
+
     /// Updates the purger's copy of the cup height, and returns true if the height
     /// increased.
     fn update_cup_height(&self, pool: &PoolReader<'_>) -> bool {
@@ -94,6 +102,15 @@ impl Purger {
         let prev_cup_height = self.prev_maximum_cup_height.replace(cup_height);
         cup_height > prev_cup_height
     }
+
+    /// Updates the purger's copy of the latest state height, and returns true if the height
+    /// increased
+    fn update_latest_state_height(&self) -> bool {
+        let latest_state_height = self.state_manager.latest_state_height();
+        let prev_latest_state_height = self.prev_latest_state_height.replace(latest_state_height);
+        latest_state_height > prev_latest_state_height
+    }
+
     /// Unvalidated pool below or equal to the latest expected batch height can
     /// be purged from the pool.
     ///
@@ -202,7 +219,12 @@ impl Purger {
 
     /// Ask state manager to purge all states below the given height
     fn purge_replicated_state_by_finalized_certified_height(&self, pool: &PoolReader<'_>) {
-        let height = pool.get_finalized_tip().context.certified_height;
+        let height = pool
+            .get_finalized_tip()
+            .context
+            .certified_height
+            .min(self.state_manager.latest_state_height());
+
         self.state_manager.remove_inmemory_states_below(height);
         trace!(
             self.log,
