@@ -11,7 +11,7 @@ use ic_replicated_state::{
     page_map::PageIndex, testing::ReplicatedStateTesting, Memory, NumWasmPages, PageMap,
     ReplicatedState, Stream,
 };
-use ic_state_machine_tests::StateMachine;
+use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_state_manager::{BitcoinPageMap, DirtyPageMap, FileType, PageMapType, StateManagerImpl};
 use ic_sys::PAGE_SIZE;
 use ic_test_utilities::{
@@ -77,11 +77,17 @@ fn label<T: Into<Label>>(t: T) -> Label {
 }
 
 /// This is a canister that keeps a counter on the heap and allows to increment it.
+/// The counter can also be read and persisted to and loaded from stable memory
 const TEST_CANISTER: &str = r#"
 (module
     (import "ic0" "msg_reply" (func $msg_reply))
     (import "ic0" "msg_reply_data_append"
     (func $msg_reply_data_append (param i32 i32)))
+    (import "ic0" "stable_read"
+    (func $stable_read (param $dst i32) (param $offset i32) (param $size i32)))
+    (import "ic0" "stable_write"
+    (func $stable_write (param $offset i32) (param $src i32) (param $size i32)))
+    (import "ic0" "stable_grow" (func $stable_grow (param i32) (result i32)))
 
     (func $inc
 
@@ -114,12 +120,37 @@ const TEST_CANISTER: &str = r#"
     (call $msg_reply)
     )
 
+    (func $persist
+    (call $stable_write
+        (i32.const 0) ;; offset
+        (i32.const 0) ;; src
+        (i32.const 4) ;; length
+    )
+    (call $msg_reply)
+    )
+
+    (func $load
+    (call $stable_read
+        (i32.const 0) ;; dst
+        (i32.const 0) ;; offset
+        (i32.const 4) ;; length
+    )
+    (call $msg_reply)
+    )
+
+    (func $grow_page
+    (drop (call $stable_grow (i32.const 1)))
+    (call $msg_reply)
+    )
+
+
     (memory $memory 1)
     (export "memory" (memory $memory))
     (export "canister_update inc" (func $inc))
     (export "canister_query read" (func $read))
-
-    
+    (export "canister_update persist" (func $persist))
+    (export "canister_update load" (func $load))
+    (export "canister_update grow_page" (func $grow_page))
 )"#;
 
 fn to_int(v: Vec<u8>) -> i32 {
@@ -3418,6 +3449,56 @@ fn can_reset_memory() {
 }
 
 #[test]
+fn can_reset_memory_state_machine() {
+    let env = StateMachineBuilder::new().build();
+    env.set_checkpoints_enabled(false);
+
+    let canister_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
+    read_and_assert_eq(&env, canister_id, 0);
+
+    env.execute_ingress(canister_id, "inc", vec![]).unwrap();
+    read_and_assert_eq(&env, canister_id, 1);
+
+    env.execute_ingress(canister_id, "inc", vec![]).unwrap();
+    read_and_assert_eq(&env, canister_id, 2);
+
+    env.execute_ingress(canister_id, "grow_page", vec![])
+        .unwrap();
+    env.execute_ingress(canister_id, "persist", vec![]).unwrap();
+    read_and_assert_eq(&env, canister_id, 2);
+
+    env.upgrade_canister_wat(canister_id, TEST_CANISTER, vec![]);
+    read_and_assert_eq(&env, canister_id, 0);
+
+    env.execute_ingress(canister_id, "load", vec![]).unwrap();
+    read_and_assert_eq(&env, canister_id, 2);
+
+    env.execute_ingress(canister_id, "inc", vec![]).unwrap();
+    read_and_assert_eq(&env, canister_id, 3);
+
+    // Checkpoints should not affect the data even after a recent upgrade
+    env.set_checkpoints_enabled(true);
+    env.tick();
+    env.set_checkpoints_enabled(false);
+    read_and_assert_eq(&env, canister_id, 3);
+
+    env.execute_ingress(canister_id, "inc", vec![]).unwrap();
+    read_and_assert_eq(&env, canister_id, 4);
+
+    env.set_checkpoints_enabled(true);
+    env.upgrade_canister_wat(canister_id, TEST_CANISTER, vec![]);
+    env.set_checkpoints_enabled(false);
+    read_and_assert_eq(&env, canister_id, 0);
+
+    env.execute_ingress(canister_id, "inc", vec![]).unwrap();
+    read_and_assert_eq(&env, canister_id, 1);
+
+    env.set_checkpoints_enabled(true);
+    env.tick();
+    read_and_assert_eq(&env, canister_id, 1);
+}
+
+#[test]
 fn can_delete_canister() {
     state_manager_test(|metrics, state_manager| {
         let (_height, mut state) = state_manager.take_tip();
@@ -3551,6 +3632,65 @@ fn can_uninstall_code() {
 
         assert_error_counters(metrics);
     });
+}
+
+#[test]
+fn can_uninstall_code_state_machine() {
+    let env = StateMachineBuilder::new().build();
+    let layout = env.state_manager.state_layout();
+    env.set_checkpoints_enabled(false);
+
+    let canister_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
+    read_and_assert_eq(&env, canister_id, 0);
+
+    env.execute_ingress(canister_id, "inc", vec![]).unwrap();
+    read_and_assert_eq(&env, canister_id, 1);
+    env.execute_ingress(canister_id, "grow_page", vec![])
+        .unwrap();
+    env.execute_ingress(canister_id, "persist", vec![]).unwrap();
+
+    env.set_checkpoints_enabled(true);
+    env.tick();
+
+    let canister_layout = layout
+        .checkpoint(*layout.checkpoint_heights().unwrap().last().unwrap())
+        .unwrap()
+        .canister(&canister_id)
+        .unwrap();
+    assert_ne!(
+        std::fs::metadata(canister_layout.vmemory_0())
+            .unwrap()
+            .len(),
+        0
+    );
+    assert_ne!(
+        std::fs::metadata(canister_layout.stable_memory_blob())
+            .unwrap()
+            .len(),
+        0
+    );
+    assert!(canister_layout.wasm().raw_path().exists());
+
+    env.uninstall_code(canister_id).unwrap();
+
+    let canister_layout = layout
+        .checkpoint(*layout.checkpoint_heights().unwrap().last().unwrap())
+        .unwrap()
+        .canister(&canister_id)
+        .unwrap();
+    assert_eq!(
+        std::fs::metadata(canister_layout.vmemory_0())
+            .unwrap()
+            .len(),
+        0
+    );
+    assert_eq!(
+        std::fs::metadata(canister_layout.stable_memory_blob())
+            .unwrap()
+            .len(),
+        0
+    );
+    assert!(!canister_layout.wasm().raw_path().exists());
 }
 
 proptest! {

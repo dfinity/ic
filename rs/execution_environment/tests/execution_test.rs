@@ -161,6 +161,31 @@ fn test_canister_reinstall_restart() {
     assert_eq!(to_int(val), 0);
 }
 
+// The test checks that canisters cannot be called after unistall_code
+// and it stays so after restart.
+#[test]
+fn test_canister_uninstall_restart() {
+    let env = StateMachine::new();
+    env.set_checkpoints_enabled(true);
+
+    let canister_id = env.install_canister_wat(TEST_CANISTER, vec![], None);
+    let val = env.query(canister_id, "read", vec![]).unwrap().bytes();
+    assert_eq!(to_int(val), 0);
+
+    env.uninstall_code(canister_id).unwrap();
+    assert_eq!(
+        env.query(canister_id, "read", vec![]).unwrap_err().code(),
+        ErrorCode::CanisterWasmModuleNotFound
+    );
+
+    let env = env.restart_node();
+
+    assert_eq!(
+        env.query(canister_id, "read", vec![]).unwrap_err().code(),
+        ErrorCode::CanisterWasmModuleNotFound
+    );
+}
+
 /// Same test as above, but checks the upgrade path when no upgrade
 /// hooks are present instead of the re-install path.
 #[test]
