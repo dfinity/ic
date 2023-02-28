@@ -9,9 +9,10 @@ use ic_test_utilities::{
     consensus::{fake::*, make_genesis, MockConsensus},
     types::ids::subnet_test_id,
 };
-use ic_types::artifact::{ConsensusMessageId, PriorityFn};
+use ic_types::artifact::{ArtifactKind, ArtifactTag, ConsensusMessageId, PriorityFn};
 use ic_types::artifact_kind::ConsensusArtifact;
 use ic_types::consensus::ConsensusMessageAttribute;
+use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
 struct UnimplementedConsensusPoolDescriptor {}
@@ -32,8 +33,6 @@ fn setup_manager(artifact_pool_config: ArtifactPoolConfig) -> Arc<dyn ArtifactMa
     let metrics_registry = MetricsRegistry::new();
     let replica_logger = no_op_logger();
 
-    let mut artifact_manager_maker = manager::ArtifactManagerMaker::new(time_source.clone());
-
     let consensus_pool = init_artifact_pools(
         artifact_pool_config,
         metrics_registry.clone(),
@@ -43,18 +42,22 @@ fn setup_manager(artifact_pool_config: ArtifactPoolConfig) -> Arc<dyn ArtifactMa
     let mut consensus = MockConsensus::new();
     consensus.expect_on_state_change().return_const(vec![]);
     let consensus_gossip = UnimplementedConsensusPoolDescriptor {};
+    let mut backends: HashMap<ArtifactTag, Box<dyn manager::ArtifactManagerBackend>> =
+        HashMap::new();
 
-    // Create consensus client
-    let (consensus_client, actor) = processors::ConsensusProcessor::build(
-        |_| {},
-        (consensus, consensus_gossip),
-        Arc::clone(&time_source) as Arc<_>,
-        Arc::clone(&consensus_pool),
-        replica_logger,
-        metrics_registry,
+    backends.insert(
+        ConsensusArtifact::TAG,
+        Box::new(processors::ConsensusProcessor::build(
+            |_| {},
+            (consensus, consensus_gossip),
+            Arc::clone(&time_source) as Arc<_>,
+            Arc::clone(&consensus_pool),
+            replica_logger,
+            metrics_registry,
+        )),
     );
-    artifact_manager_maker.add_client(Box::new(consensus_client), actor);
-    artifact_manager_maker.finish()
+
+    Arc::new(manager::ArtifactManagerImpl::new(backends))
 }
 
 fn init_artifact_pools(

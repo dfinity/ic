@@ -42,6 +42,12 @@ pub struct ArtifactManagerImpl {
     clients: HashMap<ArtifactTag, Box<dyn ArtifactManagerBackend>>,
 }
 
+impl ArtifactManagerImpl {
+    pub fn new(clients: HashMap<ArtifactTag, Box<dyn ArtifactManagerBackend>>) -> Self {
+        Self { clients }
+    }
+}
+
 impl ArtifactManager for ArtifactManagerImpl {
     /// When a new artifact is received by *Gossip*, it is forwarded to
     /// the artifact manager via an `on_artifact` call, which then forwards it
@@ -149,62 +155,6 @@ impl ArtifactManager for ArtifactManagerImpl {
     }
 }
 
-/// The `ArtifactManagerMaker` is a helper to create an `ArtifactManager` after
-/// adding each client. It is separated from the `ArtifactManager` interface to
-/// ensure that all clients are added only once, and that the `ArtifactManager`
-/// can not be modified after creation.
-#[allow(clippy::type_complexity)]
-pub struct ArtifactManagerMaker {
-    time_source: Arc<dyn TimeSource>,
-    clients: HashMap<ArtifactTag, Box<dyn ArtifactManagerBackend>>,
-}
-
-impl ArtifactManagerMaker {
-    /// The constructor creates an `ArtifactManagerMaker` instance.
-    pub fn new(time_source: Arc<dyn TimeSource>) -> Self {
-        Self {
-            time_source,
-            clients: HashMap::new(),
-        }
-    }
-
-    /// The method adds a new `ArtifactClient` to be managed.
-    pub fn add_client<Artifact: ArtifactKind + 'static>(
-        &mut self,
-        client: Box<dyn ArtifactClient<Artifact>>,
-        processor: ArtifactProcessorManager<Artifact>,
-    ) where
-        Artifact::Message:
-            ChunkableArtifact + Send + TryFrom<artifact::Artifact, Error = artifact::Artifact>,
-        Advert<Artifact>:
-            Into<p2p::GossipAdvert> + TryFrom<p2p::GossipAdvert, Error = p2p::GossipAdvert> + Eq,
-        for<'b> &'b Artifact::Id:
-            TryFrom<&'b artifact::ArtifactId, Error = &'b artifact::ArtifactId>,
-        artifact::ArtifactFilter: AsMut<Artifact::Filter> + AsRef<Artifact::Filter>,
-        for<'b> &'b Artifact::Attribute:
-            TryFrom<&'b artifact::ArtifactAttribute, Error = &'b artifact::ArtifactAttribute>,
-        Artifact::Attribute: 'static,
-    {
-        let tag = Artifact::TAG;
-        self.clients.insert(
-            tag,
-            Box::new(ArtifactManagerBackendImpl {
-                client,
-                processor,
-                time_source: self.time_source.clone(),
-            }),
-        );
-    }
-
-    /// The method finishes the collection of `ArtifactClient` components and
-    /// creates an `ArtifactManager` component that manages all clients.
-    pub fn finish(self) -> Arc<dyn ArtifactManager> {
-        Arc::new(ArtifactManagerImpl {
-            clients: self.clients,
-        })
-    }
-}
-
 /// In order to let the artifact manager manage artifact clients, which can be
 /// parameterized by different artifact types, it has to use trait objects.
 /// Consequently, there has to be a translation between various artifact
@@ -217,7 +167,7 @@ impl ArtifactManagerMaker {
 /// translation is mostly handled via `From/Into`, `TryFrom/Into`, `AsMut` and
 /// `AsRef` traits that are automatically derived between artifact subtypes and
 /// the top-level types.
-pub(crate) trait ArtifactManagerBackend: Send + Sync {
+pub trait ArtifactManagerBackend: Send + Sync {
     /// The method is called when an artifact is received.
     fn on_artifact(
         &self,
@@ -255,7 +205,7 @@ pub(crate) trait ArtifactManagerBackend: Send + Sync {
 }
 
 /// Implementation struct for `ArtifactManagerBackend`.
-pub(crate) struct ArtifactManagerBackendImpl<Artifact: ArtifactKind + 'static> {
+pub struct ArtifactManagerBackendImpl<Artifact: ArtifactKind + 'static> {
     /// Reference to the artifact client.
     pub client: Box<dyn ArtifactClient<Artifact>>,
     /// The artifact processor front end.
