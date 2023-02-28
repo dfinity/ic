@@ -1396,6 +1396,15 @@ impl StateMachine {
         )
     }
 
+    /// Uninstalls the canister with the specified ID.
+    pub fn uninstall_code(&self, canister_id: CanisterId) -> Result<WasmResult, UserError> {
+        self.execute_ingress(
+            CanisterId::ic_00(),
+            "uninstall_code",
+            (CanisterIdRecord::from(canister_id)).encode(),
+        )
+    }
+
     /// Updates the routing table so that a range of canisters is assigned to
     /// the specified destination subnet.
     pub fn reroute_canister_range(
