@@ -12,7 +12,6 @@ use super::farm::Farm;
 use super::test_env_api::HasIcDependencies;
 
 const ASYNC_CHAN_SIZE: usize = 8192;
-
 pub const SSH_AUTHORIZED_PUB_KEYS_DIR: &str = "ssh/authorized_pub_keys";
 pub const SSH_AUTHORIZED_PRIV_KEYS_DIR: &str = "ssh/authorized_priv_keys";
 

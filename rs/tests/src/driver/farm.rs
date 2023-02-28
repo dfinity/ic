@@ -18,7 +18,7 @@ use std::io::Write;
 use thiserror::Error;
 use url::Url;
 
-use super::ic::ImageSizeGiB;
+use super::{ic::ImageSizeGiB, test_env::TestEnv};
 
 pub type FarmResult<T> = Result<T, FarmError>;
 
@@ -67,9 +67,16 @@ impl Farm {
         Ok(playnet_cert)
     }
 
-    pub fn create_group(&self, group_name: &str, ttl: Duration, spec: GroupSpec) -> FarmResult<()> {
+    pub fn create_group(
+        &self,
+        group_name: &str,
+        ttl: Duration,
+        spec: GroupSpec,
+        env: &TestEnv,
+    ) -> FarmResult<()> {
         let path = format!("group/{}", group_name);
         let ttl = ttl.as_secs() as u32;
+        let spec = spec.add_meta(env);
         let body = CreateGroupRequest { ttl, spec };
         let rb = Self::json(self.post(&path), &body);
         let _resp = self.retry_until_success(rb)?;
@@ -359,6 +366,60 @@ pub struct GroupSpec {
     pub required_host_features: Vec<HostFeature>,
     #[serde(rename = "preferredNetwork")]
     pub preferred_network: Option<String>,
+    #[serde(rename = "metadata")]
+    pub metadata: Option<GroupMetadata>,
+}
+
+impl GroupSpec {
+    pub fn add_meta(mut self, env: &TestEnv) -> Self {
+        use crate::driver::test_env_api::HasDependencies;
+        let mut metadata = GroupMetadata {
+            user: None,
+            job_schedule: None,
+        };
+
+        let volatile_status = env.read_dependency_to_string("volatile-status.txt");
+        let runtime_args_map = match volatile_status {
+            Ok(content) => parse_volatile_status_file(content),
+            _ => {
+                warn!(env.logger(), "Failed to read volatile status file. Farm group metadata will be populated with default keys.");
+                HashMap::new()
+            }
+        };
+
+        if let Some(user) = runtime_args_map.get("USER") {
+            metadata.user = Some(String::from(user));
+        } else {
+            metadata.user = Some(String::from("unknown_user"));
+        }
+
+        if let Some(ci_job_name) = runtime_args_map.get("CI_JOB_NAME") {
+            metadata.job_schedule = Some(String::from(ci_job_name));
+        } else {
+            metadata.job_schedule = Some(String::from("manual"));
+        }
+        self.metadata = Some(metadata);
+        self
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+pub struct GroupMetadata {
+    #[serde(rename = "user")]
+    pub user: Option<String>,
+    #[serde(rename = "jobSchedule")]
+    pub job_schedule: Option<String>,
+}
+
+fn parse_volatile_status_file(input: String) -> HashMap<String, String> {
+    let mut map = HashMap::new();
+    let lines = input.split('\n');
+    for line in lines {
+        if let Some((key, value)) = line.split_once(' ') {
+            map.insert(String::from(key), String::from(value));
+        }
+    }
+    map
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]

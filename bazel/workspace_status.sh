@@ -20,5 +20,15 @@ echo "GIT_TREE_STATUS $git_tree_status"
 
 echo "HOME ${HOME}"
 
+if [[ -n "${CI_JOB_NAME:-}" ]]; then
+    echo "CI_JOB_NAME ${CI_JOB_NAME}"
+fi
+
+if [[ -n "${USER:-}" ]]; then
+    echo "USER ${USER}"
+elif [[ -n "${HOSTUSER:-}" ]]; then
+    echo "USER ${HOSTUSER}"
+fi
+
 # Generate a file that changes every time bazel runs. It can be used as dependency for targets we want to always rebuild.
 date '+%s' >"$(git rev-parse --show-toplevel)/bazel-timestamp.txt"
