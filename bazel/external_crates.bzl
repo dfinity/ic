@@ -82,6 +82,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             ),
             "addr": crate.spec(
                 version = "=0.15.6",
+                default_features = False,
                 features = [
                     "idna",
                 ],
