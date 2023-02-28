@@ -34,6 +34,11 @@ function clone_config() {
         log_and_reboot_on_error "1" "Cloned 'config.ini' configuration file does not exist."
     fi
 
+    if [ -f "${CONFIG_DIR}/node_operator_private_key.pem" ]; then
+        cp ${CONFIG_DIR}/node_operator_private_key.pem ${CONFIG_TMP}/node_operator_private_key.pem
+        log_and_reboot_on_error "${?}" "Unable to copy 'node_operator_private_key.pem' configuration file."
+    fi
+
     if [ -d "${SSH_AUTHORIZED_KEYS}" ]; then
         cp -r "${SSH_AUTHORIZED_KEYS}" "${CONFIG_TMP}"
         log_and_reboot_on_error "${?}" "Unable to copy 'ssh_authorized_keys' directory."

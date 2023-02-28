@@ -19,14 +19,14 @@ fi
 
 if [[ -e /dev/sev ]]; then
     # Get ark.pem and ask.pem, and convert ask.pem to ask.dir
-    wget -O "${DIR}/cert_chain.pem" "https://kdsintf.amd.com/vcek/v1/Milan/cert_chain"
+    curl -6 --output "${DIR}/cert_chain.pem" "https://kdsintf.amd.com/vcek/v1/Milan/cert_chain"
     csplit -z -f "${DIR}/cert-chain-" "${DIR}/cert_chain.pem" '/-----BEGIN CERTIFICATE-----/' '{*}'
     mv "${DIR}/cert-chain-00" "${DIR}/ask.pem"
     mv "${DIR}/cert-chain-01" "${DIR}/ark.pem"
     openssl x509 -in "${DIR}/ark.pem" -inform PEM -out "${DIR}/ark.der" -outform DER
     # Get vcek.der and convert to vcek.pem
     vcek_url=$("${VCEKURL}")
-    wget -O "${DIR}/vcek.der" "${vcek_url}"
+    curl -6 --output "${DIR}/vcek.der" "${vcek_url}"
     openssl x509 -in "${DIR}/vcek.der" -inform DER -out "${DIR}/vcek.pem" -outform PEM
 else
     echo "/dev/sev not available, exiting..."
