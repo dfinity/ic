@@ -6,8 +6,8 @@ source "$NNS_TOOLS_DIR/lib/include.sh"
 
 help() {
     print_green "
-Usage: $0 <CANISTER_NAME> <TARGET_VERSION> (<OUTPUT_FILE>)
-  CANISTER_NAME: Canister name to be deployed (from rs/nns/canister_ids.json)
+Usage: $0 <SWAP_CANISTER_ID> <TARGET_VERSION> (<OUTPUT_FILE>)
+  SWAP_CANISTER_ID: Canister name to be deployed (from rs/nns/canister_ids.json)
   TARGET_VERSION: Git hash of version to be deployed to production
   OUTPUT_FILE: File to write contents to (otherwise stdout is used)
 
@@ -25,9 +25,9 @@ if [ $# -lt 2 ]; then
     help
 fi
 
-CANISTER_NAME=$1
+SWAP_CANISTER_ID=$1
 NEXT=$2
-LAST=${PREVIOUS_COMMIT:-$(nns_canister_git_version ic "$CANISTER_NAME")}
+LAST=${PREVIOUS_COMMIT:-$(canister_git_version ic "$SWAP_CANISTER_ID")}
 OUTPUT_FILE=${3:-}
 
 IC_ROOT=$(repo_root)
@@ -46,4 +46,4 @@ current_branch_has_commit $NEXT || (
     exit 1
 )
 
-generate_nns_proposal_text "$LAST" "$NEXT" "$CANISTER_NAME" "$OUTPUT_FILE"
+generate_sale_canister_upgrade_proposal_text "$LAST" "$NEXT" "$SWAP_CANISTER_ID" "$OUTPUT_FILE"

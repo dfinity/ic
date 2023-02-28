@@ -1,8 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
-SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
-source "$SCRIPT_DIR/functions.sh"
+NNS_TOOLS_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
+source "$NNS_TOOLS_DIR/lib/include.sh"
 
 # Note, see functions.sh for examples
 # This function will print help text where the first line is `##> function_name` and
@@ -12,7 +12,7 @@ help() {
 
     OLDIFS=$IFS
     IFS=''
-    cat "$SCRIPT_DIR/functions.sh" \
+    cat "$LIB_DIR"/* \
         | sed -n "/##: $CMD\w*$/, /.*$CMD\(\)/{ /.*$CMD()/!p; }" \
         | sed "s/\$1/$CMD/" \
         | sed "s/##:/  /" \
@@ -39,7 +39,7 @@ Usage: $0 <FUNCTION> (<ARG1> <ARG2> ... <ARGN>)
 
 Known Commands:
 "
-    for cmd in $(cat "$SCRIPT_DIR/functions.sh" | grep "##: " | sed 's/##: //'); do
+    for cmd in $(cat "$LIB_DIR"/* | grep "##: " | sed 's/##: //'); do
         help $cmd
     done
 }

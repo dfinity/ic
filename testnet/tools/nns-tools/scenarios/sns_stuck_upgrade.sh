@@ -5,7 +5,7 @@ source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"/../func
 
 ensure_variable_set SNS_CLI IC_ADMIN SNS_QUILL IDL2JSON
 
-PEM=$SCRIPT_DIR/nns_test_user_dfx_identity
+PEM=$NNS_TOOLS_DIR/nns_test_user_dfx_identity
 
 # Upgrade SNS-W to the version we had when we did the original deploy (sns init parameters need to match)
 propose_upgrade_canister_to_version_pem "$NNS_URL" "$NEURON_ID" "$PEM" "sns-wasm" "090276896af7c5eaa9d9dcbb9af45fe957d0a99b"
@@ -20,7 +20,7 @@ upload_canister_wasm_to_sns_wasm "$NNS_URL" "$NEURON_ID" "$PEM" index c9b2f9653a
 
 echo "Trying to install the SNS (this could take some time...)"
 # Install the new sns
-DEPLOY_OUTPUT=$(deploy_new_sns $SUBNET_URL $WALLET_CANISTER $SCRIPT_DIR/scenarios/sns_lots_of_airdrops.yml)
+DEPLOY_OUTPUT=$(deploy_new_sns $SUBNET_URL $WALLET_CANISTER $NNS_TOOLS_DIR/scenarios/sns_lots_of_airdrops.yml)
 SWAP_CANISTER_ID=$(echo "$DEPLOY_OUTPUT" | grep 1_281_239_699 | sed 's/.*"\(.*\)";/\1/')
 ROOT_CANISTER_ID=$(echo "$DEPLOY_OUTPUT" | grep 1_269_755_426 | sed 's/.*"\(.*\)";/\1/')
 GOVERNANCE_CANISTER_ID=$(echo "$DEPLOY_OUTPUT" | grep 3_306_137_890 | sed 's/.*"\(.*\)";/\1/')

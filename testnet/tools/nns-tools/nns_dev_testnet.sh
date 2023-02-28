@@ -2,8 +2,8 @@
 
 set -eo pipefail
 
-SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
-source "$SCRIPT_DIR/functions.sh"
+NNS_TOOLS_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
+source "$NNS_TOOLS_DIR/lib/include.sh"
 TESTNET_TOOLS="$(repo_root)/testnet/tools"
 DEPLOYMENT_STEPS=${DEPLOYMENT_STEPS:-''}
 
@@ -40,7 +40,7 @@ if ! which dfx >/dev/null; then
     exit 1
 fi
 
-PEM=$SCRIPT_DIR/nns_test_user_dfx_identity
+PEM=$NNS_TOOLS_DIR/nns_test_user_dfx_identity
 dfx identity import --force --disable-encryption nns_test_user_dfx_identity $PEM
 dfx identity use nns_test_user_dfx_identity
 PRINCIPAL=$(dfx identity get-principal)

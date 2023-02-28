@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
-source "$SCRIPT_DIR/functions.sh"
+NNS_TOOLS_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
+source "$NNS_TOOLS_DIR/lib/include.sh"
 
 help() {
     print_green "
@@ -32,7 +32,7 @@ OUTPUT_FILE=${4:-}
 IC_ROOT=$(repo_root)
 
 if [ "$LAST_PUBLISHED_VERSION" == "use_log" ]; then
-    LAST_PUBLISHED_VERSION=$(cat $SCRIPT_DIR/sns_publish_log.txt | grep $SNS_CANISTER_TYPE \
+    LAST_PUBLISHED_VERSION=$(cat $NNS_TOOLS_DIR/sns_publish_log.txt | grep $SNS_CANISTER_TYPE \
         | tail -n1 | awk '{ print $3 }')
 fi
 

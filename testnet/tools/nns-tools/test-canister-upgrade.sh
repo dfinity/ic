@@ -1,8 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
-SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
-source "$SCRIPT_DIR/functions.sh"
+NNS_TOOLS_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
+source "$NNS_TOOLS_DIR/lib/include.sh"
 
 help() {
     echo "
@@ -35,7 +35,7 @@ ensure_variable_set NNS_URL || help
 ensure_variable_set NEURON_ID || help
 
 # Allow overriding PEM file, but default to shared identity
-export PEM=${PEM:-$SCRIPT_DIR/nns_test_user_dfx_identity}
+export PEM=${PEM:-$NNS_TOOLS_DIR/nns_test_user_dfx_identity}
 
 propose_upgrade_canister_to_version_pem "$NNS_URL" "$NEURON_ID" "$PEM" "$CANISTER_NAME" "$VERSION"
 
