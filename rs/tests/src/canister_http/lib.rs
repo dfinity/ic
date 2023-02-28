@@ -9,7 +9,7 @@ use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 pub use ic_types::{CanisterId, PrincipalId};
 use slog::info;
-use std::net::Ipv6Addr;
+use std::net::{Ipv4Addr, Ipv6Addr};
 use std::time::Duration;
 
 pub const UNIVERSAL_VM_NAME: &str = "httpbin";
@@ -111,11 +111,28 @@ pub fn get_universal_vm_address(env: &TestEnv) -> Ipv6Addr {
     webserver_ipv6
 }
 
+pub fn get_universal_vm_ipv4_address(env: &TestEnv) -> Ipv4Addr {
+    let deployed_universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
+    let webserver_ipv4 = deployed_universal_vm
+        .block_on_ipv4()
+        .expect("Universal VM IPv4 not found.");
+    info!(&env.logger(), "Webserver has IPv4 {:?}", webserver_ipv4);
+    webserver_ipv4
+}
+
 pub fn get_node_snapshots(env: &TestEnv) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {
     env.topology_snapshot()
         .subnets()
         .find(|subnet| subnet.subnet_type() == SubnetType::Application)
         .expect("there is no application subnet")
+        .nodes()
+}
+
+pub fn get_system_subnet_node_snapshots(env: &TestEnv) -> Box<dyn Iterator<Item = IcNodeSnapshot>> {
+    env.topology_snapshot()
+        .subnets()
+        .find(|subnet| subnet.subnet_type() == SubnetType::System)
+        .expect("there is no system subnet")
         .nodes()
 }
 
