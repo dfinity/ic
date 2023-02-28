@@ -162,7 +162,10 @@ function query_nns_nodes() {
         verify=$(awk "BEGIN {printf \"%.0f\n\", ${nodes}*0.20}")
     fi
     for url in $(echo $NNS_URL_LIST); do
-        curl --head --connect-timeout 3 --silent ${url} >/dev/null 2>&1
+        # When running against testnets, we need to ignore self signed certs
+        # with `--insecure`. This check is only meant to confirm from SetupOS
+        # that NNS urls are reachable, so we do not mind that it is "weak".
+        curl --insecure --head --connect-timeout 3 --silent ${url} >/dev/null 2>&1
         if [ "${?}" -ne 0 ]; then
             echo "  fail: ${url}"
         else

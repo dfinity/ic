@@ -104,7 +104,8 @@ function assemble_config_media() {
     cmd+=(--name_servers "$(/opt/ic/bin/fetch-property.sh --key=.dns.name_servers --metric=hostos_dns_name_servers --config=${DEPLOYMENT})")
     cmd+=(--hostname "guest-$(/opt/ic/bin/fetch-mgmt-mac.sh | sed 's/://g')")
     cmd+=(--nns_url "$(/opt/ic/bin/fetch-property.sh --key=.nns.url --metric=hostos_nns_url --config=${DEPLOYMENT})")
-    cmd+=(--get_sev_certs)
+    # AMDs cert download links do not support IPv6; NODE-817
+    # cmd+=(--get_sev_certs)
     if [ -f "/boot/config/node_operator_private_key.pem" ]; then
         cmd+=(--node_operator_private_key "/boot/config/node_operator_private_key.pem")
     fi

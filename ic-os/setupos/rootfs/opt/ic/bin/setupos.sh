@@ -20,7 +20,7 @@ function start_setupos() {
 
 function reboot_setupos() {
     echo -e "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
-    echo "          Please do NOT unplug the Nitrokey HSM USB device just yet."
+    echo "          If a Nitrokey HSM USB device is in use, please do NOT unplug it just yet."
     echo -e "\n\n"
     echo "                 Wait for the message after the first boot..."
     echo -e "\n\n\n\n"
