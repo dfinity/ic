@@ -2,6 +2,7 @@ use std::{collections::BTreeSet, sync::Arc};
 
 use crossbeam::select;
 use crossbeam_channel::Receiver;
+use service_discovery::metrics::Metrics;
 use service_discovery::{jobs::Job, IcServiceDiscovery, TargetGroup};
 use slog::{info, warn};
 
@@ -18,6 +19,7 @@ pub fn config_updater_loop(
     update_signal_recv: Receiver<()>,
     mut config_builder: impl ConfigBuilder,
     config_updater: impl ConfigUpdater,
+    metrics: Metrics,
 ) -> impl FnMut() {
     move || loop {
         for job in &jobs {
@@ -36,6 +38,11 @@ pub fn config_updater_loop(
                 .into_iter()
                 .filter(|tg| TargetGroupFilter::filter(filters.as_ref(), tg.clone()))
                 .collect();
+
+            metrics
+                .total_targets
+                .with_label_values(&[job._type.to_string().as_str()])
+                .set(target_groups.len().try_into().unwrap());
 
             let config = config_builder.build(filtered_target_groups, job.clone());
             let config_binding = config.as_ref();

@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::net::SocketAddr;
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use anyhow::{bail, Result};
@@ -8,6 +9,8 @@ use config_writer_common::filters::{NodeIDRegexFilter, TargetGroupFilter, Target
 use futures_util::FutureExt;
 use humantime::parse_duration;
 use ic_async_utils::shutdown_signal;
+use ic_config::metrics::{Config as MetricsConfig, Exporter};
+use ic_http_endpoints_metrics::MetricsHttpEndpoint;
 use ic_metrics::MetricsRegistry;
 use regex::Regex;
 use service_discovery::registry_sync::sync_local_registry;
@@ -110,6 +113,22 @@ fn main() -> Result<()> {
         jobs.clone(),
     )?);
 
+    let metrics = Metrics::new(metrics_registry.clone());
+    info!(
+        log,
+        "Metrics are exposed on {}.", cli_args.metrics_listen_addr
+    );
+    let exporter_config = MetricsConfig {
+        exporter: Exporter::Http(cli_args.metrics_listen_addr),
+        ..Default::default()
+    };
+    let _metrics_endpoint = MetricsHttpEndpoint::new_insecure(
+        rt.handle().clone(),
+        exporter_config,
+        metrics_registry,
+        &log,
+    );
+
     let (stop_signal_sender, stop_signal_rcv) = crossbeam::channel::bounded::<()>(0);
     let (update_signal_sender, update_signal_rcv) = crossbeam::channel::bounded::<()>(0);
     let loop_fn = make_poll_loop(
@@ -118,7 +137,7 @@ fn main() -> Result<()> {
         ic_discovery.clone(),
         stop_signal_rcv.clone(),
         cli_args.poll_interval,
-        Metrics::new(metrics_registry),
+        metrics.clone(),
         Some(update_signal_sender),
     );
     let join_handle = std::thread::spawn(loop_fn);
@@ -152,6 +171,7 @@ fn main() -> Result<()> {
             cli_args.scrape_interval,
             get_jobs_parameters(),
         ),
+        metrics,
     );
     let config_join_handle = std::thread::spawn(config_writer_loop);
     handles.push(config_join_handle);
@@ -267,6 +287,16 @@ Possible only if the version is not a ZERO_REGISTRY_VERSION
 "#
     )]
     skip_sync: bool,
+
+    #[clap(
+        long = "metrics-listen-addr",
+        default_value = "[::]:9099",
+        help = r#"
+The listen address on which metrics for this service should be exposed.
+
+"#
+    )]
+    metrics_listen_addr: SocketAddr,
 }
 impl CliArgs {
     fn validate(self) -> Result<Self> {
