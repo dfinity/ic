@@ -211,46 +211,41 @@ pub struct ConsensusProcessor<PoolConsensus> {
     log: ReplicaLogger,
 }
 
-impl<
-        PoolConsensus: MutableConsensusPool + Send + Sync + GossipPool<ConsensusArtifact> + 'static,
-    > ConsensusProcessor<PoolConsensus>
-{
-    #[allow(clippy::too_many_arguments)]
-    pub fn build<
-        C: Consensus + 'static,
-        G: ArtifactPoolDescriptor<ConsensusArtifact, PoolConsensus> + 'static,
-        S: Fn(AdvertSendRequest<ConsensusArtifact>) + Send + 'static,
-    >(
-        send_advert: S,
-        (consensus, consensus_gossip): (C, G),
-        time_source: Arc<SysTimeSource>,
-        consensus_pool: Arc<RwLock<PoolConsensus>>,
-        log: ReplicaLogger,
-        metrics_registry: MetricsRegistry,
-    ) -> ArtifactClientHandle<ConsensusArtifact> {
-        let client = Self {
-            consensus_pool: consensus_pool.clone(),
-            client: Box::new(consensus),
-            invalidated_artifacts: metrics_registry.int_counter(
-                "consensus_invalidated_artifacts",
-                "The number of invalidated consensus artifacts",
-            ),
-            log,
-        };
-        let manager = ArtifactProcessorManager::new(
-            time_source.clone(),
-            metrics_registry,
-            Box::new(client),
-            send_advert,
-        );
-        ArtifactClientHandle::<ConsensusArtifact> {
-            processor_handle: manager,
-            pool_reader: Box::new(pool_readers::ConsensusClient::new(
-                consensus_pool,
-                consensus_gossip,
-            )),
-            time_source,
-        }
+pub fn create_consensus_handlers<
+    PoolConsensus: MutableConsensusPool + Send + Sync + GossipPool<ConsensusArtifact> + 'static,
+    C: Consensus + 'static,
+    G: ArtifactPoolDescriptor<ConsensusArtifact, PoolConsensus> + 'static,
+    S: Fn(AdvertSendRequest<ConsensusArtifact>) + Send + 'static,
+>(
+    send_advert: S,
+    (consensus, consensus_gossip): (C, G),
+    time_source: Arc<SysTimeSource>,
+    consensus_pool: Arc<RwLock<PoolConsensus>>,
+    log: ReplicaLogger,
+    metrics_registry: MetricsRegistry,
+) -> ArtifactClientHandle<ConsensusArtifact> {
+    let client = ConsensusProcessor {
+        consensus_pool: consensus_pool.clone(),
+        client: Box::new(consensus),
+        invalidated_artifacts: metrics_registry.int_counter(
+            "consensus_invalidated_artifacts",
+            "The number of invalidated consensus artifacts",
+        ),
+        log,
+    };
+    let manager = ArtifactProcessorManager::new(
+        time_source.clone(),
+        metrics_registry,
+        Box::new(client),
+        send_advert,
+    );
+    ArtifactClientHandle::<ConsensusArtifact> {
+        processor_handle: manager,
+        pool_reader: Box::new(pool_readers::ConsensusClient::new(
+            consensus_pool,
+            consensus_gossip,
+        )),
+        time_source,
     }
 }
 
@@ -357,48 +352,40 @@ pub struct IngressProcessor<PoolIngress> {
     node_id: NodeId,
 }
 
-impl<
-        PoolIngress: MutableIngressPool
-            + Send
-            + Sync
-            + GossipPool<IngressArtifact>
-            + IngressPoolThrottler
-            + 'static,
-    > IngressProcessor<PoolIngress>
-{
-    #[allow(clippy::too_many_arguments)]
-    pub fn build<S: Fn(AdvertSendRequest<IngressArtifact>) + Send + 'static>(
-        send_advert: S,
-        time_source: Arc<SysTimeSource>,
-        ingress_pool: Arc<RwLock<PoolIngress>>,
-        ingress_handler: Arc<dyn IngressHandler + Send + Sync>,
-        log: ReplicaLogger,
-        metrics_registry: MetricsRegistry,
-        node_id: NodeId,
-        malicious_flags: MaliciousFlags,
-    ) -> ArtifactClientHandle<IngressArtifact> {
-        let client = Self {
-            ingress_pool: ingress_pool.clone(),
-            client: ingress_handler,
-            node_id,
-        };
-        let manager = ArtifactProcessorManager::new(
-            time_source.clone(),
-            metrics_registry,
-            Box::new(client),
-            send_advert,
-        );
+pub fn create_ingress_handlers<
+    PoolIngress: MutableIngressPool + Send + Sync + GossipPool<IngressArtifact> + IngressPoolThrottler + 'static,
+    S: Fn(AdvertSendRequest<IngressArtifact>) + Send + 'static,
+>(
+    send_advert: S,
+    time_source: Arc<SysTimeSource>,
+    ingress_pool: Arc<RwLock<PoolIngress>>,
+    ingress_handler: Arc<dyn IngressHandler + Send + Sync>,
+    log: ReplicaLogger,
+    metrics_registry: MetricsRegistry,
+    node_id: NodeId,
+    malicious_flags: MaliciousFlags,
+) -> ArtifactClientHandle<IngressArtifact> {
+    let client = IngressProcessor {
+        ingress_pool: ingress_pool.clone(),
+        client: ingress_handler,
+        node_id,
+    };
+    let manager = ArtifactProcessorManager::new(
+        time_source.clone(),
+        metrics_registry,
+        Box::new(client),
+        send_advert,
+    );
 
-        ArtifactClientHandle::<IngressArtifact> {
-            processor_handle: manager,
-            pool_reader: Box::new(pool_readers::IngressClient::new(
-                time_source.clone(),
-                ingress_pool,
-                log,
-                malicious_flags,
-            )),
-            time_source,
-        }
+    ArtifactClientHandle::<IngressArtifact> {
+        processor_handle: manager,
+        pool_reader: Box::new(pool_readers::IngressClient::new(
+            time_source.clone(),
+            ingress_pool,
+            log,
+            malicious_flags,
+        )),
+        time_source,
     }
 }
 
@@ -471,48 +458,43 @@ pub struct CertificationProcessor<PoolCertification> {
     log: ReplicaLogger,
 }
 
-impl<
-        PoolCertification: MutableCertificationPool + GossipPool<CertificationArtifact> + Send + Sync + 'static,
-    > CertificationProcessor<PoolCertification>
-{
-    #[allow(clippy::too_many_arguments)]
-    pub fn build<
-        C: Certifier + 'static,
-        G: ArtifactPoolDescriptor<CertificationArtifact, PoolCertification> + 'static,
-        S: Fn(AdvertSendRequest<CertificationArtifact>) + Send + 'static,
-    >(
-        send_advert: S,
-        (certifier, certifier_gossip): (C, G),
-        time_source: Arc<SysTimeSource>,
-        consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
-        certification_pool: Arc<RwLock<PoolCertification>>,
-        log: ReplicaLogger,
-        metrics_registry: MetricsRegistry,
-    ) -> ArtifactClientHandle<CertificationArtifact> {
-        let client = Self {
-            consensus_pool_cache: consensus_pool_cache.clone(),
-            certification_pool: certification_pool.clone(),
-            client: Box::new(certifier),
-            invalidated_artifacts: metrics_registry.int_counter(
-                "certification_invalidated_artifacts",
-                "The number of invalidated certification artifacts",
-            ),
-            log,
-        };
-        let manager = ArtifactProcessorManager::new(
-            time_source.clone(),
-            metrics_registry,
-            Box::new(client),
-            send_advert,
-        );
-        ArtifactClientHandle::<CertificationArtifact> {
-            processor_handle: manager,
-            pool_reader: Box::new(pool_readers::CertificationClient::new(
-                certification_pool,
-                certifier_gossip,
-            )),
-            time_source,
-        }
+pub fn create_certification_handlers<
+    PoolCertification: MutableCertificationPool + GossipPool<CertificationArtifact> + Send + Sync + 'static,
+    C: Certifier + 'static,
+    G: ArtifactPoolDescriptor<CertificationArtifact, PoolCertification> + 'static,
+    S: Fn(AdvertSendRequest<CertificationArtifact>) + Send + 'static,
+>(
+    send_advert: S,
+    (certifier, certifier_gossip): (C, G),
+    time_source: Arc<SysTimeSource>,
+    consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
+    certification_pool: Arc<RwLock<PoolCertification>>,
+    log: ReplicaLogger,
+    metrics_registry: MetricsRegistry,
+) -> ArtifactClientHandle<CertificationArtifact> {
+    let client = CertificationProcessor {
+        consensus_pool_cache: consensus_pool_cache.clone(),
+        certification_pool: certification_pool.clone(),
+        client: Box::new(certifier),
+        invalidated_artifacts: metrics_registry.int_counter(
+            "certification_invalidated_artifacts",
+            "The number of invalidated certification artifacts",
+        ),
+        log,
+    };
+    let manager = ArtifactProcessorManager::new(
+        time_source.clone(),
+        metrics_registry,
+        Box::new(client),
+        send_advert,
+    );
+    ArtifactClientHandle::<CertificationArtifact> {
+        processor_handle: manager,
+        pool_reader: Box::new(pool_readers::CertificationClient::new(
+            certification_pool,
+            certifier_gossip,
+        )),
+        time_source,
     }
 }
 
@@ -590,42 +572,38 @@ pub struct DkgProcessor<PoolDkg> {
     log: ReplicaLogger,
 }
 
-impl<PoolDkg: MutableDkgPool + Send + Sync + GossipPool<DkgArtifact> + 'static>
-    DkgProcessor<PoolDkg>
-{
-    #[allow(clippy::too_many_arguments)]
-    pub fn build<
-        C: Dkg + 'static,
-        G: ArtifactPoolDescriptor<DkgArtifact, PoolDkg> + 'static,
-        S: Fn(AdvertSendRequest<DkgArtifact>) + Send + 'static,
-    >(
-        send_advert: S,
-        (dkg, dkg_gossip): (C, G),
-        time_source: Arc<SysTimeSource>,
-        dkg_pool: Arc<RwLock<PoolDkg>>,
-        log: ReplicaLogger,
-        metrics_registry: MetricsRegistry,
-    ) -> ArtifactClientHandle<DkgArtifact> {
-        let client = Self {
-            dkg_pool: dkg_pool.clone(),
-            client: Box::new(dkg),
-            invalidated_artifacts: metrics_registry.int_counter(
-                "dkg_invalidated_artifacts",
-                "The number of invalidated DKG artifacts",
-            ),
-            log,
-        };
-        let manager = ArtifactProcessorManager::new(
-            time_source.clone(),
-            metrics_registry,
-            Box::new(client),
-            send_advert,
-        );
-        ArtifactClientHandle::<DkgArtifact> {
-            processor_handle: manager,
-            pool_reader: Box::new(pool_readers::DkgClient::new(dkg_pool, dkg_gossip)),
-            time_source,
-        }
+pub fn create_dkg_handlers<
+    PoolDkg: MutableDkgPool + Send + Sync + GossipPool<DkgArtifact> + 'static,
+    C: Dkg + 'static,
+    G: ArtifactPoolDescriptor<DkgArtifact, PoolDkg> + 'static,
+    S: Fn(AdvertSendRequest<DkgArtifact>) + Send + 'static,
+>(
+    send_advert: S,
+    (dkg, dkg_gossip): (C, G),
+    time_source: Arc<SysTimeSource>,
+    dkg_pool: Arc<RwLock<PoolDkg>>,
+    log: ReplicaLogger,
+    metrics_registry: MetricsRegistry,
+) -> ArtifactClientHandle<DkgArtifact> {
+    let client = DkgProcessor {
+        dkg_pool: dkg_pool.clone(),
+        client: Box::new(dkg),
+        invalidated_artifacts: metrics_registry.int_counter(
+            "dkg_invalidated_artifacts",
+            "The number of invalidated DKG artifacts",
+        ),
+        log,
+    };
+    let manager = ArtifactProcessorManager::new(
+        time_source.clone(),
+        metrics_registry,
+        Box::new(client),
+        send_advert,
+    );
+    ArtifactClientHandle::<DkgArtifact> {
+        processor_handle: manager,
+        pool_reader: Box::new(pool_readers::DkgClient::new(dkg_pool, dkg_gossip)),
+        time_source,
     }
 }
 
@@ -690,51 +668,47 @@ pub struct EcdsaProcessor<PoolEcdsa> {
     log: ReplicaLogger,
 }
 
-impl<PoolEcdsa: MutableEcdsaPool + Send + Sync + GossipPool<EcdsaArtifact> + 'static>
-    EcdsaProcessor<PoolEcdsa>
-{
-    #[allow(clippy::too_many_arguments)]
-    pub fn build<
-        C: Ecdsa + 'static,
-        G: ArtifactPoolDescriptor<EcdsaArtifact, PoolEcdsa> + 'static,
-        S: Fn(AdvertSendRequest<EcdsaArtifact>) + Send + 'static,
-    >(
-        send_advert: S,
-        (ecdsa, ecdsa_gossip): (C, G),
-        time_source: Arc<SysTimeSource>,
-        ecdsa_pool: Arc<RwLock<PoolEcdsa>>,
-        metrics_registry: MetricsRegistry,
-        log: ReplicaLogger,
-    ) -> ArtifactClientHandle<EcdsaArtifact> {
-        let ecdsa_pool_update_duration = metrics_registry.register(
-            Histogram::with_opts(histogram_opts!(
-                "ecdsa_pool_update_duration_seconds",
-                "Time to apply changes to ECDSA artifact pool, in seconds",
-                vec![
-                    0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.8, 1.0, 1.2, 1.5, 2.0, 2.2, 2.5, 5.0, 8.0,
-                    10.0, 15.0, 20.0, 50.0,
-                ]
-            ))
-            .unwrap(),
-        );
+pub fn create_ecdsa_handlers<
+    PoolEcdsa: MutableEcdsaPool + Send + Sync + GossipPool<EcdsaArtifact> + 'static,
+    C: Ecdsa + 'static,
+    G: ArtifactPoolDescriptor<EcdsaArtifact, PoolEcdsa> + 'static,
+    S: Fn(AdvertSendRequest<EcdsaArtifact>) + Send + 'static,
+>(
+    send_advert: S,
+    (ecdsa, ecdsa_gossip): (C, G),
+    time_source: Arc<SysTimeSource>,
+    ecdsa_pool: Arc<RwLock<PoolEcdsa>>,
+    metrics_registry: MetricsRegistry,
+    log: ReplicaLogger,
+) -> ArtifactClientHandle<EcdsaArtifact> {
+    let ecdsa_pool_update_duration = metrics_registry.register(
+        Histogram::with_opts(histogram_opts!(
+            "ecdsa_pool_update_duration_seconds",
+            "Time to apply changes to ECDSA artifact pool, in seconds",
+            vec![
+                0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.8, 1.0, 1.2, 1.5, 2.0, 2.2, 2.5, 5.0, 8.0,
+                10.0, 15.0, 20.0, 50.0,
+            ]
+        ))
+        .unwrap(),
+    );
 
-        let client = Self {
-            ecdsa_pool: ecdsa_pool.clone(),
-            client: Box::new(ecdsa),
-            ecdsa_pool_update_duration,
-            log,
-        };
-        let manager = ArtifactProcessorManager::new(
-            time_source.clone(),
-            metrics_registry,
-            Box::new(client),
-            send_advert,
-        );
-        ArtifactClientHandle::<EcdsaArtifact> {
-            processor_handle: manager,
-            pool_reader: Box::new(pool_readers::EcdsaClient::new(ecdsa_pool, ecdsa_gossip)),
-            time_source,
-        }
+    let client = EcdsaProcessor {
+        ecdsa_pool: ecdsa_pool.clone(),
+        client: Box::new(ecdsa),
+        ecdsa_pool_update_duration,
+        log,
+    };
+    let manager = ArtifactProcessorManager::new(
+        time_source.clone(),
+        metrics_registry,
+        Box::new(client),
+        send_advert,
+    );
+    ArtifactClientHandle::<EcdsaArtifact> {
+        processor_handle: manager,
+        pool_reader: Box::new(pool_readers::EcdsaClient::new(ecdsa_pool, ecdsa_gossip)),
+        time_source,
     }
 }
 
@@ -813,43 +787,39 @@ pub struct CanisterHttpProcessor<PoolCanisterHttp> {
     log: ReplicaLogger,
 }
 
-impl<
-        PoolCanisterHttp: MutableCanisterHttpPool + GossipPool<CanisterHttpArtifact> + Send + Sync + 'static,
-    > CanisterHttpProcessor<PoolCanisterHttp>
-{
-    pub fn build<
-        C: CanisterHttpPoolManager + Sync + 'static,
-        G: ArtifactPoolDescriptor<CanisterHttpArtifact, PoolCanisterHttp> + Send + Sync + 'static,
-        S: Fn(AdvertSendRequest<CanisterHttpArtifact>) + Send + 'static,
-    >(
-        send_advert: S,
-        (pool_manager, canister_http_gossip): (C, G),
-        time_source: Arc<SysTimeSource>,
-        consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
-        canister_http_pool: Arc<RwLock<PoolCanisterHttp>>,
-        log: ReplicaLogger,
-        metrics_registry: MetricsRegistry,
-    ) -> ArtifactClientHandle<CanisterHttpArtifact> {
-        let client = Self {
-            consensus_pool_cache: consensus_pool_cache.clone(),
-            canister_http_pool: canister_http_pool.clone(),
-            client: Arc::new(RwLock::new(pool_manager)),
-            log,
-        };
-        let manager = ArtifactProcessorManager::new(
-            time_source.clone(),
-            metrics_registry,
-            Box::new(client),
-            send_advert,
-        );
-        ArtifactClientHandle::<CanisterHttpArtifact> {
-            processor_handle: manager,
-            pool_reader: Box::new(pool_readers::CanisterHttpClient::new(
-                canister_http_pool,
-                canister_http_gossip,
-            )),
-            time_source,
-        }
+pub fn create_https_outcalls_handlers<
+    PoolCanisterHttp: MutableCanisterHttpPool + GossipPool<CanisterHttpArtifact> + Send + Sync + 'static,
+    C: CanisterHttpPoolManager + Sync + 'static,
+    G: ArtifactPoolDescriptor<CanisterHttpArtifact, PoolCanisterHttp> + Send + Sync + 'static,
+    S: Fn(AdvertSendRequest<CanisterHttpArtifact>) + Send + 'static,
+>(
+    send_advert: S,
+    (pool_manager, canister_http_gossip): (C, G),
+    time_source: Arc<SysTimeSource>,
+    consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
+    canister_http_pool: Arc<RwLock<PoolCanisterHttp>>,
+    log: ReplicaLogger,
+    metrics_registry: MetricsRegistry,
+) -> ArtifactClientHandle<CanisterHttpArtifact> {
+    let client = CanisterHttpProcessor {
+        consensus_pool_cache: consensus_pool_cache.clone(),
+        canister_http_pool: canister_http_pool.clone(),
+        client: Arc::new(RwLock::new(pool_manager)),
+        log,
+    };
+    let manager = ArtifactProcessorManager::new(
+        time_source.clone(),
+        metrics_registry,
+        Box::new(client),
+        send_advert,
+    );
+    ArtifactClientHandle::<CanisterHttpArtifact> {
+        processor_handle: manager,
+        pool_reader: Box::new(pool_readers::CanisterHttpClient::new(
+            canister_http_pool,
+            canister_http_gossip,
+        )),
+        time_source,
     }
 }
 
