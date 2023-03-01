@@ -6,7 +6,6 @@ use certificate_orchestrator_interface::{
     EncryptedPair, Id, Name, NameError, Registration, State, UpdateType,
 };
 use ic_cdk::caller;
-use ic_stable_structures::StableBTreeMap;
 use mockall::automock;
 use priority_queue::PriorityQueue;
 use prometheus::labels;
@@ -22,7 +21,7 @@ cfg_if::cfg_if! {
 use crate::{
     acl::{Authorize, AuthorizeError, WithAuthorize},
     id::Generate,
-    LocalRef, Memory, WithMetrics, REGISTRATION_EXPIRATION_TTL,
+    LocalRef, StableMap, WithMetrics, REGISTRATION_EXPIRATION_TTL,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -43,16 +42,16 @@ pub trait Create {
 
 pub struct Creator {
     id_generator: LocalRef<Box<dyn Generate>>,
-    registrations: LocalRef<StableBTreeMap<Memory, Id, Registration>>,
-    names: LocalRef<StableBTreeMap<Memory, Name, Id>>,
+    registrations: LocalRef<StableMap<Id, Registration>>,
+    names: LocalRef<StableMap<Name, Id>>,
     expirations: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
 }
 
 impl Creator {
     pub fn new(
         id_generator: LocalRef<Box<dyn Generate>>,
-        registrations: LocalRef<StableBTreeMap<Memory, Id, Registration>>,
-        names: LocalRef<StableBTreeMap<Memory, Name, Id>>,
+        registrations: LocalRef<StableMap<Id, Registration>>,
+        names: LocalRef<StableMap<Name, Id>>,
         expirations: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
     ) -> Self {
         Self {
@@ -163,11 +162,11 @@ pub trait Get {
 }
 
 pub struct Getter {
-    registrations: LocalRef<StableBTreeMap<Memory, Id, Registration>>,
+    registrations: LocalRef<StableMap<Id, Registration>>,
 }
 
 impl Getter {
-    pub fn new(registrations: LocalRef<StableBTreeMap<Memory, Id, Registration>>) -> Self {
+    pub fn new(registrations: LocalRef<StableMap<Id, Registration>>) -> Self {
         Self { registrations }
     }
 }
@@ -207,14 +206,14 @@ pub trait Update {
 }
 
 pub struct Updater {
-    registrations: LocalRef<StableBTreeMap<Memory, Id, Registration>>,
+    registrations: LocalRef<StableMap<Id, Registration>>,
     expirations: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
     retries: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
 }
 
 impl Updater {
     pub fn new(
-        registrations: LocalRef<StableBTreeMap<Memory, Id, Registration>>,
+        registrations: LocalRef<StableMap<Id, Registration>>,
         expirations: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
         retries: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
     ) -> Self {
@@ -337,22 +336,22 @@ pub trait Remove {
 }
 
 pub struct Remover {
-    registrations: LocalRef<StableBTreeMap<Memory, Id, Registration>>,
-    names: LocalRef<StableBTreeMap<Memory, Name, Id>>,
+    registrations: LocalRef<StableMap<Id, Registration>>,
+    names: LocalRef<StableMap<Name, Id>>,
     tasks: LocalRef<PriorityQueue<String, Reverse<u64>>>,
     expirations: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
     retries: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
-    encrypted_certificates: LocalRef<StableBTreeMap<Memory, Id, EncryptedPair>>,
+    encrypted_certificates: LocalRef<StableMap<Id, EncryptedPair>>,
 }
 
 impl Remover {
     pub fn new(
-        registrations: LocalRef<StableBTreeMap<Memory, Id, Registration>>,
-        names: LocalRef<StableBTreeMap<Memory, Name, Id>>,
+        registrations: LocalRef<StableMap<Id, Registration>>,
+        names: LocalRef<StableMap<Name, Id>>,
         tasks: LocalRef<PriorityQueue<String, Reverse<u64>>>,
         expirations: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
         retries: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
-        encrypted_certificates: LocalRef<StableBTreeMap<Memory, Id, EncryptedPair>>,
+        encrypted_certificates: LocalRef<StableMap<Id, EncryptedPair>>,
     ) -> Self {
         Self {
             registrations,

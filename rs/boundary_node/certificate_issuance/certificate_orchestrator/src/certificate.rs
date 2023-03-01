@@ -1,12 +1,11 @@
 use anyhow::anyhow;
 use certificate_orchestrator_interface::{EncryptedPair, ExportPackage, Id, Registration};
 use ic_cdk::caller;
-use ic_stable_structures::StableBTreeMap;
 use prometheus::labels;
 
 use crate::{
     acl::{Authorize, AuthorizeError, WithAuthorize},
-    LocalRef, Memory, WithMetrics,
+    LocalRef, StableMap, WithMetrics,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -24,14 +23,14 @@ pub trait Upload {
 }
 
 pub struct Uploader {
-    pairs: LocalRef<StableBTreeMap<Memory, Id, EncryptedPair>>,
-    registrations: LocalRef<StableBTreeMap<Memory, Id, Registration>>,
+    pairs: LocalRef<StableMap<Id, EncryptedPair>>,
+    registrations: LocalRef<StableMap<Id, Registration>>,
 }
 
 impl Uploader {
     pub fn new(
-        pairs: LocalRef<StableBTreeMap<Memory, Id, EncryptedPair>>,
-        registrations: LocalRef<StableBTreeMap<Memory, Id, Registration>>,
+        pairs: LocalRef<StableMap<Id, EncryptedPair>>,
+        registrations: LocalRef<StableMap<Id, Registration>>,
     ) -> Self {
         Self {
             pairs,
@@ -107,14 +106,14 @@ pub trait Export {
 }
 
 pub struct Exporter {
-    pairs: LocalRef<StableBTreeMap<Memory, Id, EncryptedPair>>,
-    registrations: LocalRef<StableBTreeMap<Memory, Id, Registration>>,
+    pairs: LocalRef<StableMap<Id, EncryptedPair>>,
+    registrations: LocalRef<StableMap<Id, Registration>>,
 }
 
 impl Exporter {
     pub fn new(
-        pairs: LocalRef<StableBTreeMap<Memory, Id, EncryptedPair>>,
-        registrations: LocalRef<StableBTreeMap<Memory, Id, Registration>>,
+        pairs: LocalRef<StableMap<Id, EncryptedPair>>,
+        registrations: LocalRef<StableMap<Id, Registration>>,
     ) -> Self {
         Self {
             pairs,

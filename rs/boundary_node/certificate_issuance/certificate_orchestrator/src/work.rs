@@ -2,7 +2,6 @@ use std::cmp::Reverse;
 
 use certificate_orchestrator_interface::{Id, Registration};
 use ic_cdk::caller;
-use ic_stable_structures::StableBTreeMap;
 use priority_queue::PriorityQueue;
 use prometheus::labels;
 
@@ -16,7 +15,7 @@ cfg_if::cfg_if! {
 
 use crate::{
     acl::{Authorize, AuthorizeError, WithAuthorize},
-    LocalRef, Memory, WithMetrics, IN_PROGRESS_TTL,
+    LocalRef, StableMap, WithMetrics, IN_PROGRESS_TTL,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -35,13 +34,13 @@ pub trait Queue {
 
 pub struct Queuer {
     tasks: LocalRef<PriorityQueue<String, Reverse<u64>>>,
-    registrations: LocalRef<StableBTreeMap<Memory, Id, Registration>>,
+    registrations: LocalRef<StableMap<Id, Registration>>,
 }
 
 impl Queuer {
     pub fn new(
         tasks: LocalRef<PriorityQueue<String, Reverse<u64>>>,
-        registrations: LocalRef<StableBTreeMap<Memory, Id, Registration>>,
+        registrations: LocalRef<StableMap<Id, Registration>>,
     ) -> Self {
         Self {
             tasks,
