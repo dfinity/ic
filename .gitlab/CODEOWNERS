@@ -92,13 +92,16 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/canister_client/                    @dfinity-lab/teams/networking-team
 /rs/canister_sandbox/                   @dfinity-lab/teams/runtime-owners
 /rs/canonical_state/                    @dfinity-lab/teams/message-routing-owners
-/rs/certification/                      @dfinity-lab/teams/message-routing-owners
+/rs/canonical_state/src/hash_tree/      @dfinity-lab/teams/message-routing-owners @dfinity-lab/teams/crypto-owners
+/rs/canonical_state/src/hash_tree.rs    @dfinity-lab/teams/message-routing-owners @dfinity-lab/teams/crypto-owners
+/rs/certification/                      @dfinity-lab/teams/message-routing-owners @dfinity-lab/teams/crypto-owners
 /rs/config/                             @dfinity-lab/teams/interface-owners
 /rs/config/src/embedders.rs             @dfinity-lab/teams/runtime-owners
 /rs/config/src/execution_environment.rs @dfinity-lab/teams/execution-owners @dfinity-lab/teams/runtime-owners
 /rs/consensus/                          @dfinity-lab/teams/consensus-owners
 /rs/constants/                          @dfinity-lab/teams/interface-owners
 /rs/crypto/                             @dfinity-lab/teams/crypto-owners
+/rs/crypto/tree_hash/                   @dfinity-lab/teams/message-routing-owners @dfinity-lab/teams/crypto-owners
 /rs/cup_explorer                        @dfinity-lab/teams/consensus-owners
 /rs/cycles_account_manager/             @dfinity-lab/teams/execution-owners
 /rs/depcheck/                           @dfinity-lab/teams/interface-owners
