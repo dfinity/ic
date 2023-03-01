@@ -1,5 +1,6 @@
 use super::test_fixtures::*;
 use super::*;
+use crate::certified_slice_pool::CertifiedSliceError;
 use assert_matches::assert_matches;
 use ic_interfaces::messaging::{InvalidXNetPayload, XNetTransientValidationError};
 use ic_interfaces_state_manager::StateManagerError;
@@ -377,6 +378,32 @@ async fn validate_state_not_yet_committed() {
             ),
             Err(ValidationError::Transient(XNetTransientValidationError::StateNotCommittedYet(h)))
             if h == CERTIFIED_HEIGHT
+        );
+    });
+}
+
+/// Have `count_bytes_fn` return an error while validating a payload. This is
+/// unexpected behavior, so ensure that the relevant critical error counter is
+/// bumped accordingly.
+#[tokio::test]
+async fn validate_broken_count_bytes_fn() {
+    with_test_replica_logger(|log| {
+        let fixture = PayloadBuilderTestFixture::with_xnet_state(0);
+        let xnet_payload_builder = fixture
+            .new_xnet_payload_builder_impl(log)
+            .with_count_bytes_fn(|_| Err(CertifiedSliceError::TakeBeforeSliceBegin));
+
+        // Validate newest `XNetPayload` in `payloads` against previous ones + state.
+        let payloads = fixture.past_payloads();
+        let (payload, past_payloads) = payloads.split_first().unwrap();
+
+        assert!(xnet_payload_builder
+            .validate_xnet_payload(payload, &fixture.validation_context, past_payloads)
+            .is_err());
+
+        assert_eq!(
+            metric_vec(&[(&[("error", &CRITICAL_ERROR_SLICE_COUNT_BYTES_FAILED)], 1)]),
+            fetch_int_counter_vec(&fixture.metrics, "critical_errors")
         );
     });
 }
