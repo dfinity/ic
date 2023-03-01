@@ -107,8 +107,8 @@ def write_partition_image_from_tar(gpt_entry, image_file, partition_tf):
                 continue
             if member.size > gpt_entry["size"] * 512:
                 raise RuntimeError("Image too large for partition %s" % gpt_entry["name"])
+            source = partition_tf.extractfile(member)
             if member.type == tarfile.GNUTYPE_SPARSE:
-                source = partition_tf.extractfile(member)
                 for offset, size in member.sparse:
                     if size == 0:
                         continue
