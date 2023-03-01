@@ -335,8 +335,8 @@ async fn validate_slice() {
         let certified_slice = make_certified_stream_slice(
             SUBNET_1,
             StreamConfig {
-                message_begin: EXPECTED.message_index.get(),
-                message_end: EXPECTED.message_index.get() + 1,
+                message_begin: expected_message,
+                message_end: expected_message + 1,
                 signal_end: EXPECTED.signal_index.get() - 1,
             },
         );
@@ -502,6 +502,104 @@ async fn validate_slice_above_msg_limit() {
                 byte_size: 1
             },
             validate_slice(expected_message, expected_message + 1, signal_index, &state),
+        );
+    });
+}
+
+/// `validate_slice()` should reject a loopback stream slice. The loopback
+/// stream is inducted separately, within the DSM, not via blocks.
+#[tokio::test]
+async fn validate_slice_loopback_stream() {
+    with_test_replica_logger(|log| {
+        let state_manager = FakeStateManager::new();
+        let xnet_payload_builder = get_xnet_payload_builder_for_test(state_manager, log);
+        let validation_context = get_validation_context_for_test();
+
+        // Message and slice begin and end indices for loopback stream.
+        const MESSAGE_BEGIN: StreamIndex = StreamIndex::new(4);
+        const MESSAGE_END: StreamIndex = StreamIndex::new(7);
+        const SIGNAL_END: StreamIndex = StreamIndex::new(107);
+
+        // Expected indices for loopback stream messages and signals.
+        const EXPECTED: ExpectedIndices = ExpectedIndices {
+            message_index: SIGNAL_END,   // Assume no intervening payloads.
+            signal_index: MESSAGE_BEGIN, // Assume we no signals for existing messages.
+        };
+
+        // State with loopback stream.
+        let mut state = ReplicatedState::new(OWN_SUBNET_ID, SubnetType::Application);
+        state.with_streams(btreemap! {
+            OWN_SUBNET_ID => generate_stream(&StreamConfig {
+                message_begin: MESSAGE_BEGIN.get(),
+                message_end: MESSAGE_END.get(),
+                signal_end: SIGNAL_END.get(),
+            }),
+        });
+
+        // Helper for generating a loopback stream slice with valid signals; and with
+        // messages between the given indices indices; and validating it.
+        let validate_slice_with_messages = |message_begin, message_end| {
+            let certified_slice = make_certified_stream_slice(
+                OWN_SUBNET_ID,
+                StreamConfig {
+                    message_begin,
+                    message_end,
+                    signal_end: EXPECTED.signal_index.get(),
+                },
+            );
+            xnet_payload_builder.validate_slice(
+                OWN_SUBNET_ID,
+                &certified_slice,
+                &EXPECTED,
+                &validation_context,
+                &state,
+            )
+        };
+
+        let expected_message = EXPECTED.message_index.get();
+
+        // Attempting to validate an otherwise valid loopback stream slice should fail.
+        assert_eq!(
+            SliceValidationResult::Invalid("Loopback stream is inducted separately".to_string()),
+            validate_slice_with_messages(expected_message, expected_message + 1),
+        );
+
+        // As should validating all kinds of invalid loopback stream slices.
+        assert_eq!(
+            SliceValidationResult::Invalid("Loopback stream is inducted separately".to_string()),
+            validate_slice_with_messages(expected_message - 1, expected_message),
+        );
+        assert_eq!(
+            SliceValidationResult::Invalid("Loopback stream is inducted separately".to_string()),
+            validate_slice_with_messages(expected_message, expected_message),
+        );
+        assert_eq!(
+            SliceValidationResult::Invalid("Loopback stream is inducted separately".to_string()),
+            validate_slice_with_messages(expected_message + 1, expected_message + 1),
+        );
+        assert_eq!(
+            SliceValidationResult::Invalid("Loopback stream is inducted separately".to_string()),
+            validate_slice_with_messages(expected_message + 1, expected_message + 2),
+        );
+
+        // A slice with invalid signals (signals end before expected index).
+        let certified_slice = make_certified_stream_slice(
+            OWN_SUBNET_ID,
+            StreamConfig {
+                message_begin: expected_message,
+                message_end: expected_message + 1,
+                signal_end: EXPECTED.signal_index.get() - 1,
+            },
+        );
+        assert_eq!(
+            SliceValidationResult::Invalid("Loopback stream is inducted separately".to_string()),
+            xnet_payload_builder.validate_slice(
+                OWN_SUBNET_ID,
+                &certified_slice,
+                &EXPECTED,
+                &validation_context,
+                &state,
+            ),
         );
     });
 }
