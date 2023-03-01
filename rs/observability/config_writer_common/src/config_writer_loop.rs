@@ -10,13 +10,13 @@ use slog::{info, warn};
 use service_discovery::{job_types::JobType, IcServiceDiscovery};
 
 use crate::config_writer::ConfigWriter;
-use crate::filters::TargetGroupFilterList;
+use crate::filters::TargetGroupFilter;
 use crate::vector_config_structure::VectorConfigBuilder;
 
 pub fn config_writer_loop(
     log: slog::Logger,
     discovery: Arc<dyn IcServiceDiscovery>,
-    filters: TargetGroupFilterList,
+    filters: Arc<dyn TargetGroupFilter>,
     shutdown_signal: Receiver<()>,
     jobs: Vec<JobType>,
     update_signal_recv: Receiver<()>,
@@ -24,7 +24,8 @@ pub fn config_writer_loop(
     vector_config_builder: impl VectorConfigBuilder,
 ) -> impl FnMut() {
     move || {
-        let mut config_writer = ConfigWriter::new(vector_config_dir.clone(), &filters, log.clone());
+        let mut config_writer =
+            ConfigWriter::new(vector_config_dir.clone(), filters.clone(), log.clone());
         loop {
             for job in &jobs {
                 let targets = match discovery.get_target_groups(*job) {

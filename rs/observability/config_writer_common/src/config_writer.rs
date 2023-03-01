@@ -1,28 +1,30 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
+    error::Error,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use service_discovery::{job_types::JobType, TargetGroup};
 
 use crate::{
-    filters::{TargetGroupFilter, TargetGroupFilterList},
+    config_builder::Config, config_updater::ConfigUpdater, filters::TargetGroupFilter,
     vector_config_structure::VectorConfigBuilder,
 };
 use slog::{debug, Logger};
 
 #[derive(Debug)]
-pub struct ConfigWriter<'a> {
+pub struct ConfigWriter {
     base_directory: PathBuf,
     last_targets: BTreeMap<String, BTreeSet<TargetGroup>>,
-    filters: &'a TargetGroupFilterList,
+    filters: Arc<dyn TargetGroupFilter>,
     log: slog::Logger,
 }
 
-impl<'a> ConfigWriter<'a> {
+impl ConfigWriter {
     pub fn new<P: AsRef<Path>>(
         write_path: P,
-        filters: &'a TargetGroupFilterList,
+        filters: Arc<dyn TargetGroupFilter>,
         log: Logger,
     ) -> Self {
         ConfigWriter {
@@ -75,6 +77,33 @@ impl<'a> ConfigWriter<'a> {
             })
         })?;
         self.last_targets.insert(job.to_string(), target_groups);
+        Ok(())
+    }
+}
+
+impl ConfigUpdater for ConfigWriter {
+    fn update(&self, config: &dyn Config) -> Result<(), Box<dyn Error>> {
+        if !config.updated() {
+            debug!(
+                self.log,
+                "Targets didn't change, skipped regenerating config"
+            );
+            return Ok(());
+        }
+        debug!(
+            self.log,
+            "Targets changed, proceeding with regenerating config"
+        );
+        let target_path = self.base_directory.join(format!("{}.json", config.name()));
+
+        ic_utils::fs::write_atomically(target_path.as_path(), |f| {
+            serde_json::to_writer_pretty(f, &config).map_err(|e| {
+                std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Serialization error: {:?}", e),
+                )
+            })
+        })?;
         Ok(())
     }
 }

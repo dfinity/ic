@@ -1,9 +1,10 @@
 [package]
-name = "vector_config_generator"
+name = "prometheus_config_updater"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+actix-web = "4"
 anyhow = "1.0.31"
 clap = { version = "3.1.6", features = ["derive"] }
 crossbeam = "0.8.0"
@@ -30,5 +31,5 @@ config_writer_common = { path = "../config_writer_common" }
 tokio-test = "*"
 
 [[bin]]
-name = "vector_config_generator"
+name = "prometheus_config_updater"
 path = "src/main.rs"

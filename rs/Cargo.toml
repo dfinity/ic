@@ -159,6 +159,7 @@ members = [
   "observability/service_discovery",
   "observability/config_writer_common",
   "observability/vector_config_generator",
+  "observability/prometheus_config_updater",
   "orchestrator",
   "orchestrator/dashboard",
   "orchestrator/registry_replicator",
