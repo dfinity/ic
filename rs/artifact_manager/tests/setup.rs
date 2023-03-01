@@ -47,7 +47,7 @@ fn setup_manager(artifact_pool_config: ArtifactPoolConfig) -> Arc<dyn ArtifactMa
 
     backends.insert(
         ConsensusArtifact::TAG,
-        Box::new(processors::ConsensusProcessor::build(
+        Box::new(processors::create_consensus_handlers(
             |_| {},
             (consensus, consensus_gossip),
             Arc::clone(&time_source) as Arc<_>,
