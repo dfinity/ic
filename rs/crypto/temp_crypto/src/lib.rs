@@ -2,12 +2,14 @@ use async_trait::async_trait;
 use ic_base_types::PrincipalId;
 use ic_config::crypto::{CryptoConfig, CspVaultType};
 use ic_crypto::{CryptoComponent, CryptoComponentImpl};
-use ic_crypto_internal_csp::vault::remote_csp_vault::TarpcCspVaultServerImpl;
 use ic_crypto_internal_csp::{CryptoServiceProvider, Csp};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_node_key_generation::{
     derive_node_id, generate_committee_signing_keys, generate_dkg_dealing_encryption_keys,
     generate_idkg_dealing_encryption_keys, generate_node_signing_keys, generate_tls_keys,
+};
+use ic_crypto_temp_crypto_vault::{
+    RemoteVaultEnvironment, TempCspVaultServer, TokioRuntimeOrHandle,
 };
 use ic_crypto_tls_interfaces::{
     AllowedClients, AuthenticatedPeer, TlsClientHandshakeError, TlsHandshake, TlsPublicKeyCert,
@@ -68,7 +70,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 use tempfile::TempDir;
-use tokio::net::{TcpStream, UnixListener};
+use tokio::net::TcpStream;
 
 /// A crypto component set up in a temporary directory. The directory is
 /// automatically deleted when this component goes out of scope.
@@ -85,34 +87,6 @@ pub struct TempCryptoComponentGeneric<C: CryptoServiceProvider> {
     crypto_component: CryptoComponentImpl<C>,
     remote_vault_environment: Option<RemoteVaultEnvironment>,
     temp_dir: TempDir,
-}
-
-struct RemoteVaultEnvironment {
-    vault_server: Arc<TempCspVaultServer>,
-    vault_client_runtime: TokioRuntimeOrHandle,
-}
-
-enum TokioRuntimeOrHandle {
-    Runtime(tokio::runtime::Runtime),
-    Handle(tokio::runtime::Handle),
-}
-
-impl TokioRuntimeOrHandle {
-    fn new(option_handle: Option<tokio::runtime::Handle>) -> Self {
-        if let Some(handle) = option_handle {
-            Self::Handle(handle)
-        } else {
-            let multi_thread_rt = tokio::runtime::Runtime::new().expect("failed to create runtime");
-            Self::Runtime(multi_thread_rt)
-        }
-    }
-
-    fn handle(&self) -> &tokio::runtime::Handle {
-        match &self {
-            TokioRuntimeOrHandle::Runtime(runtime) => runtime.handle(),
-            TokioRuntimeOrHandle::Handle(handle) => handle,
-        }
-    }
 }
 
 impl<C: CryptoServiceProvider> Deref for TempCryptoComponentGeneric<C> {
@@ -339,8 +313,10 @@ impl TempCryptoBuilder {
         });
 
         let opt_remote_vault_environment = if self.start_remote_vault {
-            let vault_server =
-                TempCspVaultServer::start(&config.crypto_root, self.vault_server_runtime_handle);
+            let vault_server = TempCspVaultServer::start_from_crypto_root(
+                config.crypto_root.clone(),
+                self.vault_server_runtime_handle,
+            );
             config.csp_vault_type = CspVaultType::UnixSocket(vault_server.vault_socket_path());
             Some(RemoteVaultEnvironment {
                 vault_server: Arc::new(vault_server),
@@ -381,72 +357,6 @@ impl TempCryptoBuilder {
 
     pub fn build_arc(self) -> Arc<TempCryptoComponent> {
         Arc::new(self.build())
-    }
-}
-
-/// A struct combining a temporary directory with a CSP vault server that is
-/// listening on a unix socket that lives in this temporary directory. The
-/// directory is automatically deleted when this struct goes out of scope.
-pub struct TempCspVaultServer {
-    tokio_runtime: TokioRuntimeOrHandle,
-    join_handle: tokio::task::JoinHandle<()>,
-    temp_dir: TempDir,
-}
-
-impl Drop for TempCspVaultServer {
-    fn drop(&mut self) {
-        // Aborts the tokio task that runs the vault server. This drops
-        // the server and thus the unix listener and thus the server-side
-        // handle to the file acting as unix domain socket used for
-        // communication with the server.
-        // If also all client-side handles to the socket file are dropped,
-        // then nothing should prevent the deletion (=cleanup) of the
-        // directory behind `temp_dir` when `temp_dir` is dropped.
-        // Note that [the fields of a struct are dropped in declaration order]
-        // (https://doc.rust-lang.org/reference/destructors.html#destructors).
-        self.join_handle.abort();
-    }
-}
-
-impl TempCspVaultServer {
-    pub fn start(crypto_root: &Path, opt_tokio_rt_handle: Option<tokio::runtime::Handle>) -> Self {
-        let temp_dir = tempfile::Builder::new()
-            .prefix("ic_crypto_csp_vault_")
-            .tempdir()
-            .expect("failed to create temporary directory");
-        let vault_socket_path = Self::vault_socket_path_in(temp_dir.path());
-        let tokio_runtime = TokioRuntimeOrHandle::new(opt_tokio_rt_handle);
-        let listener = {
-            let _enter_guard = tokio_runtime.handle().enter();
-            UnixListener::bind(vault_socket_path).expect("failed to bind")
-        };
-        let server = TarpcCspVaultServerImpl::new(
-            crypto_root,
-            listener,
-            no_op_logger(),
-            Arc::new(CryptoMetrics::none()),
-        );
-        let join_handle = tokio_runtime.handle().spawn(server.run());
-
-        Self {
-            tokio_runtime,
-            join_handle,
-            temp_dir,
-        }
-    }
-
-    pub fn vault_socket_path(&self) -> PathBuf {
-        Self::vault_socket_path_in(self.temp_dir.path())
-    }
-
-    pub fn tokio_runtime_handle(&self) -> &tokio::runtime::Handle {
-        self.tokio_runtime.handle()
-    }
-
-    fn vault_socket_path_in(directory: &Path) -> PathBuf {
-        let mut path = directory.to_path_buf();
-        path.push("ic-crypto-csp.socket");
-        path
     }
 }
 
