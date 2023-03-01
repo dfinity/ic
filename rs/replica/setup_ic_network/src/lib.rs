@@ -5,7 +5,7 @@
 
 mod setup_ingress;
 
-use ic_artifact_manager::{manager, processors};
+use ic_artifact_manager::{manager, processors, ArtifactClientHandle};
 use ic_artifact_pool::{
     canister_http_pool::CanisterHttpPoolImpl, certification_pool::CertificationPoolImpl,
     consensus_pool::ConsensusPoolImpl, dkg_pool::DkgPoolImpl, ecdsa_pool::EcdsaPoolImpl,
@@ -238,10 +238,11 @@ fn setup_artifact_manager(
         .unwrap()
         .get_block_cache();
 
-    if let P2PStateSyncClient::TestChunkingPool(client, client_on_state_change) = state_sync_client
+    if let P2PStateSyncClient::TestChunkingPool(pool_reader, client_on_state_change) =
+        state_sync_client
     {
         let advert_broadcaster = advert_broadcaster;
-        let processor = processors::ArtifactProcessorManager::new(
+        let processor_handle = processors::ArtifactProcessorManager::new(
             Arc::clone(&time_source) as Arc<_>,
             metrics_registry,
             client_on_state_change,
@@ -250,9 +251,9 @@ fn setup_artifact_manager(
 
         backends.insert(
             TestArtifact::TAG,
-            Box::new(manager::ArtifactManagerBackendImpl {
-                client,
-                processor,
+            Box::new(ArtifactClientHandle {
+                pool_reader,
+                processor_handle,
                 time_source,
             }),
         );
@@ -260,7 +261,7 @@ fn setup_artifact_manager(
     }
     if let P2PStateSyncClient::Client(client) = state_sync_client {
         let advert_broadcaster = advert_broadcaster.clone();
-        let processor = processors::ArtifactProcessorManager::new(
+        let processor_handle = processors::ArtifactProcessorManager::new(
             Arc::clone(&time_source) as Arc<_>,
             metrics_registry.clone(),
             Box::new(client.clone()) as Box<_>,
@@ -269,9 +270,9 @@ fn setup_artifact_manager(
 
         backends.insert(
             StateSyncArtifact::TAG,
-            Box::new(manager::ArtifactManagerBackendImpl {
-                client: Box::new(client),
-                processor,
+            Box::new(ArtifactClientHandle {
+                pool_reader: Box::new(client),
+                processor_handle,
                 time_source: time_source.clone(),
             }),
         );

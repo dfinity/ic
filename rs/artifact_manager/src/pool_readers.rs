@@ -1,5 +1,5 @@
-//! The module contains implementations of the artifact client trait for all
-//! consensus clients.
+//! The module contains implementations of the 'ArtifactClient' trait for all
+//! P2P clients that require consensus over their artifacts.
 
 use ic_constants::{MAX_INGRESS_TTL, PERMITTED_DRIFT_AT_ARTIFACT_MANAGER};
 use ic_interfaces::{
@@ -30,17 +30,17 @@ use std::sync::{Arc, RwLock};
 pub struct ConsensusClient<Pool, T> {
     /// The *Consensus* pool, protected by a read-write lock and automatic
     /// reference counting.
-    consensus_pool: Arc<RwLock<Pool>>,
+    pool: Arc<RwLock<Pool>>,
     /// The `ConsensusGossip` client.
-    client: T,
+    priority_fn_and_filter: T,
 }
 
 impl<Pool, T> ConsensusClient<Pool, T> {
     /// The constructor creates a `ConsensusClient` instance.
-    pub fn new(consensus_pool: Arc<RwLock<Pool>>, client: T) -> Self {
+    pub fn new(pool: Arc<RwLock<Pool>>, priority_fn_and_filter: T) -> Self {
         Self {
-            consensus_pool,
-            client,
+            pool,
+            priority_fn_and_filter,
         }
     }
 }
@@ -82,13 +82,13 @@ impl<
     /// The method returns `true` if and only if the *Consensus* pool contains
     /// the given *Consensus* message ID.
     fn has_artifact(&self, msg_id: &ConsensusMessageId) -> bool {
-        self.consensus_pool.read().unwrap().contains(msg_id)
+        self.pool.read().unwrap().contains(msg_id)
     }
 
     /// The method returns the *Consensus* message with the given ID from the
     /// *Consensus* pool if available.
     fn get_validated_by_identifier(&self, msg_id: &ConsensusMessageId) -> Option<ConsensusMessage> {
-        self.consensus_pool
+        self.pool
             .read()
             .unwrap()
             .get_validated_by_identifier(msg_id)
@@ -96,7 +96,7 @@ impl<
 
     /// The method returns the *Consensus* message filter.
     fn get_filter(&self) -> ConsensusMessageFilter {
-        self.client.get_filter()
+        self.priority_fn_and_filter.get_filter()
     }
 
     /// The method returns all adverts for validated *Consensus* artifacts.
@@ -104,7 +104,7 @@ impl<
         &self,
         filter: &ConsensusMessageFilter,
     ) -> Vec<Advert<ConsensusArtifact>> {
-        self.consensus_pool
+        self.pool
             .read()
             .unwrap()
             .get_all_validated_by_filter(filter)
@@ -114,8 +114,8 @@ impl<
 
     /// The method returns the priority function.
     fn get_priority_function(&self) -> PriorityFn<ConsensusMessageId, ConsensusMessageAttribute> {
-        let consensus_pool = &*self.consensus_pool.read().unwrap();
-        self.client.get_priority_function(consensus_pool)
+        let pool = &*self.pool.read().unwrap();
+        self.priority_fn_and_filter.get_priority_function(pool)
     }
 
     /// The method returns the chunk tracker for the given *Consensus* message
@@ -131,7 +131,7 @@ pub struct IngressClient<Pool> {
     time_source: Arc<dyn TimeSource>,
     /// The ingress pool, protected by a read-write lock and automatic reference
     /// counting.
-    ingress_pool: Arc<RwLock<Pool>>,
+    pool: Arc<RwLock<Pool>>,
     /// The logger.
     log: ReplicaLogger,
 
@@ -143,13 +143,13 @@ impl<Pool> IngressClient<Pool> {
     /// The constructor creates an `IngressClient` instance.
     pub fn new(
         time_source: Arc<dyn TimeSource>,
-        ingress_pool: Arc<RwLock<Pool>>,
+        pool: Arc<RwLock<Pool>>,
         log: ReplicaLogger,
         malicious_flags: MaliciousFlags,
     ) -> Self {
         Self {
             time_source,
-            ingress_pool,
+            pool,
             log,
             malicious_flags,
         }
@@ -200,10 +200,7 @@ impl<
             );
             Err(ArtifactPoolError::MessageExpiryTooLong)
         } else {
-            self.ingress_pool
-                .read()
-                .unwrap()
-                .check_quota(msg, peer_id)?;
+            self.pool.read().unwrap().check_quota(msg, peer_id)?;
             Ok(())
         }
     }
@@ -211,13 +208,13 @@ impl<
     /// The method checks if the ingress pool contains an ingress message with
     /// the given ID.
     fn has_artifact(&self, msg_id: &IngressMessageId) -> bool {
-        self.ingress_pool.read().unwrap().contains(msg_id)
+        self.pool.read().unwrap().contains(msg_id)
     }
 
     /// The method returns the `SignedIngress` message with the given ingress
     /// message ID from the ingress pool (if available).
     fn get_validated_by_identifier(&self, msg_id: &IngressMessageId) -> Option<SignedIngress> {
-        self.ingress_pool
+        self.pool
             .read()
             .unwrap()
             .get_validated_by_identifier(msg_id)
@@ -227,7 +224,7 @@ impl<
     fn get_priority_function(&self) -> PriorityFn<IngressMessageId, IngressMessageAttribute> {
         let start = self.time_source.get_relative_time();
         let range = start..=start + MAX_INGRESS_TTL;
-        let pool = self.ingress_pool.clone();
+        let pool = self.pool.clone();
         Box::new(move |ingress_id, _| {
             // EXPLANATION: Because ingress messages are included in blocks, consensus
             // does not rely on ingress gossip for correctness. Ingress gossip exists to
@@ -260,17 +257,17 @@ impl<
 pub struct CertificationClient<Pool, T> {
     /// The certification pool, protected by a read-write lock and automatic
     /// reference counting.
-    certification_pool: Arc<RwLock<Pool>>,
+    pool: Arc<RwLock<Pool>>,
     /// The `ArtifactPoolDescriptor` client.
-    client: T,
+    priority_fn_and_filter: T,
 }
 
 impl<Pool, T> CertificationClient<Pool, T> {
     /// The constructor creates a `CertificationClient` instance.
-    pub fn new(certification_pool: Arc<RwLock<Pool>>, client: T) -> Self {
+    pub fn new(pool: Arc<RwLock<Pool>>, priority_fn_and_filter: T) -> Self {
         Self {
-            certification_pool,
-            client,
+            pool,
+            priority_fn_and_filter,
         }
     }
 }
@@ -283,7 +280,7 @@ impl<
     /// The method checks if the certification pool contains a certification
     /// message with the given ID.
     fn has_artifact(&self, msg_id: &CertificationMessageId) -> bool {
-        self.certification_pool.read().unwrap().contains(msg_id)
+        self.pool.read().unwrap().contains(msg_id)
     }
 
     /// The method returns the `CertificationMessage` for the given
@@ -292,7 +289,7 @@ impl<
         &self,
         msg_id: &CertificationMessageId,
     ) -> Option<CertificationMessage> {
-        self.certification_pool
+        self.pool
             .read()
             .unwrap()
             .get_validated_by_identifier(msg_id)
@@ -300,7 +297,7 @@ impl<
 
     /// The method returns the certification message filter.
     fn get_filter(&self) -> CertificationMessageFilter {
-        self.client.get_filter()
+        self.priority_fn_and_filter.get_filter()
     }
 
     /// The method returns all adverts for validated certification messages.
@@ -308,7 +305,7 @@ impl<
         &self,
         filter: &CertificationMessageFilter,
     ) -> Vec<Advert<CertificationArtifact>> {
-        self.certification_pool
+        self.pool
             .read()
             .unwrap()
             .get_all_validated_by_filter(filter)
@@ -320,8 +317,8 @@ impl<
     fn get_priority_function(
         &self,
     ) -> PriorityFn<CertificationMessageId, CertificationMessageAttribute> {
-        let certification_pool = &*self.certification_pool.read().unwrap();
-        self.client.get_priority_function(certification_pool)
+        let pool = &*self.pool.read().unwrap();
+        self.priority_fn_and_filter.get_priority_function(pool)
     }
 
     /// The method returns a new (single-chunked) certification tracker,
@@ -335,15 +332,18 @@ impl<
 pub struct DkgClient<Pool, T> {
     /// The DKG pool, protected by a read-write lock and automatic reference
     /// counting.
-    dkg_pool: Arc<RwLock<Pool>>,
+    pool: Arc<RwLock<Pool>>,
     /// The `DkgGossip` client.
-    client: T,
+    priority_fn_and_filter: T,
 }
 
 impl<Pool, T> DkgClient<Pool, T> {
     /// The constructor creates a `DkgClient` instance.
-    pub fn new(dkg_pool: Arc<RwLock<Pool>>, client: T) -> Self {
-        Self { dkg_pool, client }
+    pub fn new(pool: Arc<RwLock<Pool>>, priority_fn_and_filter: T) -> Self {
+        Self {
+            pool,
+            priority_fn_and_filter,
+        }
     }
 }
 
@@ -368,13 +368,13 @@ impl<
     /// The method checks if the DKG pool contains a DKG message with the given
     /// ID.
     fn has_artifact(&self, msg_id: &DkgMessageId) -> bool {
-        self.dkg_pool.read().unwrap().contains(msg_id)
+        self.pool.read().unwrap().contains(msg_id)
     }
 
     /// The method returns the validated DKG message for the given DKG message
     /// if available.
     fn get_validated_by_identifier(&self, msg_id: &DkgMessageId) -> Option<DkgMessage> {
-        self.dkg_pool
+        self.pool
             .read()
             .unwrap()
             .get_validated_by_identifier(msg_id)
@@ -382,8 +382,8 @@ impl<
 
     /// The method returns the priority function.
     fn get_priority_function(&self) -> PriorityFn<DkgMessageId, DkgMessageAttribute> {
-        let dkg_pool = &*self.dkg_pool.read().unwrap();
-        self.client.get_priority_function(dkg_pool)
+        let pool = &*self.pool.read().unwrap();
+        self.priority_fn_and_filter.get_priority_function(pool)
     }
 
     /// The method returns a new (single-chunked) DKG message tracker.
@@ -394,13 +394,16 @@ impl<
 
 /// The ECDSA client.
 pub struct EcdsaClient<Pool, T> {
-    ecdsa_pool: Arc<RwLock<Pool>>,
-    gossip: T,
+    pool: Arc<RwLock<Pool>>,
+    priority_fn_and_filter: T,
 }
 
 impl<Pool, T> EcdsaClient<Pool, T> {
-    pub fn new(ecdsa_pool: Arc<RwLock<Pool>>, gossip: T) -> Self {
-        Self { ecdsa_pool, gossip }
+    pub fn new(pool: Arc<RwLock<Pool>>, priority_fn_and_filter: T) -> Self {
+        Self {
+            pool,
+            priority_fn_and_filter,
+        }
     }
 }
 
@@ -410,19 +413,19 @@ impl<
     > ArtifactClient<EcdsaArtifact> for EcdsaClient<Pool, T>
 {
     fn has_artifact(&self, msg_id: &EcdsaMessageId) -> bool {
-        self.ecdsa_pool.read().unwrap().contains(msg_id)
+        self.pool.read().unwrap().contains(msg_id)
     }
 
     fn get_validated_by_identifier(&self, msg_id: &EcdsaMessageId) -> Option<EcdsaMessage> {
-        self.ecdsa_pool
+        self.pool
             .read()
             .unwrap()
             .get_validated_by_identifier(msg_id)
     }
 
     fn get_priority_function(&self) -> PriorityFn<EcdsaMessageId, EcdsaMessageAttribute> {
-        let ecdsa_pool = &*self.ecdsa_pool.read().unwrap();
-        self.gossip.get_priority_function(ecdsa_pool)
+        let pool = &*self.pool.read().unwrap();
+        self.priority_fn_and_filter.get_priority_function(pool)
     }
 
     fn get_chunk_tracker(&self, _id: &EcdsaMessageId) -> Box<dyn Chunkable + Send + Sync> {
@@ -433,12 +436,15 @@ impl<
 /// The CanisterHttp Client
 pub struct CanisterHttpClient<Pool, T> {
     pool: Arc<RwLock<Pool>>,
-    gossip: T,
+    priority_fn_and_filter: T,
 }
 
 impl<Pool, T> CanisterHttpClient<Pool, T> {
-    pub fn new(pool: Arc<RwLock<Pool>>, gossip: T) -> Self {
-        Self { pool, gossip }
+    pub fn new(pool: Arc<RwLock<Pool>>, priority_fn_and_filter: T) -> Self {
+        Self {
+            pool,
+            priority_fn_and_filter,
+        }
     }
 }
 
@@ -465,7 +471,7 @@ impl<
         &self,
     ) -> PriorityFn<CanisterHttpResponseId, CanisterHttpResponseAttribute> {
         let pool = &*self.pool.read().unwrap();
-        self.gossip.get_priority_function(pool)
+        self.priority_fn_and_filter.get_priority_function(pool)
     }
 
     fn get_chunk_tracker(&self, _id: &CanisterHttpResponseId) -> Box<dyn Chunkable + Send + Sync> {
