@@ -1,8 +1,8 @@
 //! The crypto service provider API for querying public and secret keys in combination.
 use crate::vault::api::{
     ExternalPublicKeyError, LocalPublicKeyError, NodeKeysError, NodeKeysErrors,
-    PksAndSksCompleteError, PksAndSksContainsErrors, PublicAndSecretKeyStoreCspVault,
-    SecretKeyError,
+    PksAndSksContainsErrors, PublicAndSecretKeyStoreCspVault, SecretKeyError,
+    ValidatePksAndSksError,
 };
 use crate::vault::local_csp_vault::LocalCspVault;
 use crate::{CspPublicKey, ExternalPublicKeys, KeyId, SecretKeyStore};
@@ -12,10 +12,17 @@ use crate::keygen::utils::{mega_public_key_from_proto, MEGaPublicKeyFromProtoErr
 use crate::public_key_store::PublicKeyStore;
 use crate::types::conversions::CspPopFromPublicKeyProtoError;
 use crate::types::CspPop;
+use crate::vault::api::ValidatePksAndSksKeyPairError::{
+    PublicKeyInvalid, PublicKeyNotFound, SecretKeyNotFound,
+};
 use ic_crypto_internal_types::encrypt::forward_secure::{
     CspFsEncryptionPop, CspFsEncryptionPublicKey,
 };
-use ic_crypto_node_key_validation::ValidNodePublicKeys;
+use ic_crypto_node_key_validation::{
+    ValidCommitteeSigningPublicKey, ValidDkgDealingEncryptionPublicKey,
+    ValidIDkgDealingEncryptionPublicKey, ValidNodePublicKeys, ValidNodeSigningPublicKey,
+    ValidTlsCertificate,
+};
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_protobuf::registry::crypto::v1::{PublicKey as PublicKeyProto, X509PublicKeyCert};
 use ic_types::crypto::AlgorithmId;
@@ -36,7 +43,7 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore, P: 
         let (local_public_keys, secret_key_errors_result) = {
             let (sks_read_lock, pks_read_lock) = self.sks_and_pks_read_locks();
             (
-                read_local_public_keys(pks_read_lock),
+                LocalNodePublicKeys::from_public_key_store(pks_read_lock),
                 check_secret_keys_existence(sks_read_lock, &key_ids),
             )
         }; // drop read locks on SKS and PKS
@@ -57,9 +64,18 @@ impl<R: Rng + CryptoRng + Send + Sync, S: SecretKeyStore, C: SecretKeyStore, P: 
         }
     }
 
-    fn pks_and_sks_complete(&self) -> Result<ValidNodePublicKeys, PksAndSksCompleteError> {
-        //TODO CRP-1772: provide actual implementation
-        Err(PksAndSksCompleteError::EmptyPublicKeyStore)
+    fn validate_pks_and_sks(&self) -> Result<ValidNodePublicKeys, ValidatePksAndSksError> {
+        let required_public_keys = {
+            let (sks_read_lock, pks_read_lock) = self.sks_and_pks_read_locks();
+            let all_local_public_keys = LocalNodePublicKeys::from_public_key_store(pks_read_lock);
+            let required_public_keys = RequiredNodePublicKeys::try_from(all_local_public_keys)?;
+            let key_ids = required_public_keys.compute_key_ids()?;
+            key_ids.verify_contained_in_sks(sks_read_lock)?;
+            required_public_keys
+        };
+        // Release both locks on SKS and PKS
+        // before doing expensive computation (validation of public keys)
+        required_public_keys.validate()
     }
 }
 
@@ -131,7 +147,7 @@ fn compute_node_signing_key_id(
             AlgorithmId::from(external_node_signing_public_key.algorithm),
         ))));
     }
-    let csp_key = CspPublicKey::try_from(external_node_signing_public_key.clone())
+    let csp_key = CspPublicKey::try_from(external_node_signing_public_key)
         .map_err(|err| ExternalPublicKeyError(Box::new(format!("{:?}", err))))?;
     Ok(KeyId::try_from(&csp_key)?)
 }
@@ -235,6 +251,7 @@ fn compute_tls_certificate_key_id(
     Ok(KeyId::try_from(&public_key_cert)?)
 }
 
+#[derive(Debug, Clone)]
 struct LocalNodePublicKeys {
     pub node_signing_public_key: Option<PublicKeyProto>,
     pub committee_signing_public_key: Option<PublicKeyProto>,
@@ -243,15 +260,210 @@ struct LocalNodePublicKeys {
     pub idkg_dealing_encryption_public_keys: Vec<PublicKeyProto>,
 }
 
-fn read_local_public_keys<P: PublicKeyStore>(
-    pks_read_lock: RwLockReadGuard<'_, P>,
-) -> LocalNodePublicKeys {
-    LocalNodePublicKeys {
-        node_signing_public_key: pks_read_lock.node_signing_pubkey(),
-        committee_signing_public_key: pks_read_lock.committee_signing_pubkey(),
-        tls_certificate: pks_read_lock.tls_certificate().cloned(),
-        dkg_dealing_encryption_public_key: pks_read_lock.ni_dkg_dealing_encryption_pubkey(),
-        idkg_dealing_encryption_public_keys: pks_read_lock.idkg_dealing_encryption_pubkeys(),
+impl LocalNodePublicKeys {
+    fn from_public_key_store<P: PublicKeyStore>(pks_read_lock: RwLockReadGuard<'_, P>) -> Self {
+        LocalNodePublicKeys {
+            node_signing_public_key: pks_read_lock.node_signing_pubkey(),
+            committee_signing_public_key: pks_read_lock.committee_signing_pubkey(),
+            tls_certificate: pks_read_lock.tls_certificate(),
+            dkg_dealing_encryption_public_key: pks_read_lock.ni_dkg_dealing_encryption_pubkey(),
+            idkg_dealing_encryption_public_keys: pks_read_lock.idkg_dealing_encryption_pubkeys(),
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.node_signing_public_key.is_none()
+            && self.committee_signing_public_key.is_none()
+            && self.tls_certificate.is_none()
+            && self.dkg_dealing_encryption_public_key.is_none()
+            && self.idkg_dealing_encryption_public_keys.is_empty()
+    }
+}
+
+#[derive(Debug)]
+struct RequiredNodePublicKeys {
+    node_signing_public_key: PublicKeyProto,
+    committee_signing_public_key: PublicKeyProto,
+    tls_certificate: X509PublicKeyCert,
+    dkg_dealing_encryption_public_key: PublicKeyProto,
+    /// Guaranteed to be non-empty
+    idkg_dealing_encryption_public_keys: Vec<PublicKeyProto>,
+}
+
+impl TryFrom<LocalNodePublicKeys> for RequiredNodePublicKeys {
+    type Error = ValidatePksAndSksError;
+
+    fn try_from(local_public_keys: LocalNodePublicKeys) -> Result<Self, Self::Error> {
+        if local_public_keys.is_empty() {
+            return Err(ValidatePksAndSksError::EmptyPublicKeyStore);
+        }
+        let node_signing_public_key = local_public_keys.node_signing_public_key.ok_or(
+            ValidatePksAndSksError::NodeSigningKeyError(PublicKeyNotFound),
+        )?;
+        let committee_signing_public_key = local_public_keys.committee_signing_public_key.ok_or(
+            ValidatePksAndSksError::CommitteeSigningKeyError(PublicKeyNotFound),
+        )?;
+        let tls_certificate = local_public_keys.tls_certificate.ok_or(
+            ValidatePksAndSksError::TlsCertificateError(PublicKeyNotFound),
+        )?;
+        let dkg_dealing_encryption_public_key =
+            local_public_keys.dkg_dealing_encryption_public_key.ok_or(
+                ValidatePksAndSksError::DkgDealingEncryptionKeyError(PublicKeyNotFound),
+            )?;
+        let idkg_dealing_encryption_public_keys =
+            local_public_keys.idkg_dealing_encryption_public_keys;
+        if idkg_dealing_encryption_public_keys.is_empty() {
+            return Err(ValidatePksAndSksError::IdkgDealingEncryptionKeyError(
+                PublicKeyNotFound,
+            ));
+        }
+        Ok(RequiredNodePublicKeys {
+            node_signing_public_key,
+            committee_signing_public_key,
+            tls_certificate,
+            dkg_dealing_encryption_public_key,
+            idkg_dealing_encryption_public_keys,
+        })
+    }
+}
+
+impl RequiredNodePublicKeys {
+    fn compute_key_ids(&self) -> Result<RequiredKeyIds, ValidatePksAndSksError> {
+        let node_signing_key_id = compute_node_signing_key_id(&self.node_signing_public_key)
+            .map_err(|error| {
+                ValidatePksAndSksError::NodeSigningKeyError(PublicKeyInvalid(error.0.to_string()))
+            })?;
+        let committee_signing_key_id = compute_committee_signing_key_id(
+            &self.committee_signing_public_key,
+        )
+        .map_err(|error| {
+            ValidatePksAndSksError::CommitteeSigningKeyError(PublicKeyInvalid(error.0.to_string()))
+        })?;
+        let tls_secret_key_id =
+            compute_tls_certificate_key_id(&self.tls_certificate).map_err(|error| {
+                ValidatePksAndSksError::TlsCertificateError(PublicKeyInvalid(error.0.to_string()))
+            })?;
+        let dkg_dealing_encryption_key_id =
+            compute_dkg_dealing_encryption_key_id(&self.dkg_dealing_encryption_public_key)
+                .map_err(|error| {
+                    ValidatePksAndSksError::DkgDealingEncryptionKeyError(PublicKeyInvalid(
+                        error.0.to_string(),
+                    ))
+                })?;
+        let idkg_dealing_encryption_key_ids = self
+            .idkg_dealing_encryption_public_keys
+            .iter()
+            .map(|public_key| {
+                compute_idkg_dealing_encryption_key_id(public_key).map_err(|error| {
+                    ValidatePksAndSksError::IdkgDealingEncryptionKeyError(PublicKeyInvalid(
+                        error.0.to_string(),
+                    ))
+                })
+            })
+            .collect::<Result<Vec<KeyId>, ValidatePksAndSksError>>()?;
+        Ok(RequiredKeyIds {
+            node_signing_key_id,
+            committee_signing_key_id,
+            tls_secret_key_id,
+            dkg_dealing_encryption_key_id,
+            idkg_dealing_encryption_key_ids,
+        })
+    }
+
+    fn validate(self) -> Result<ValidNodePublicKeys, ValidatePksAndSksError> {
+        let node_signing_public_key =
+            ValidNodeSigningPublicKey::try_from(self.node_signing_public_key).map_err(|e| {
+                ValidatePksAndSksError::NodeSigningKeyError(PublicKeyInvalid(e.error))
+            })?;
+        let node_id = node_signing_public_key.derived_node_id();
+        let committee_signing_public_key = ValidCommitteeSigningPublicKey::try_from(
+            self.committee_signing_public_key,
+        )
+        .map_err(|e| ValidatePksAndSksError::CommitteeSigningKeyError(PublicKeyInvalid(e.error)))?;
+        let tls_certificate = ValidTlsCertificate::try_from((self.tls_certificate, *node_id))
+            .map_err(|e| ValidatePksAndSksError::TlsCertificateError(PublicKeyInvalid(e.error)))?;
+        let dkg_dealing_encryption_public_key = ValidDkgDealingEncryptionPublicKey::try_from((
+            self.dkg_dealing_encryption_public_key,
+            *node_id,
+        ))
+        .map_err(|e| {
+            ValidatePksAndSksError::DkgDealingEncryptionKeyError(PublicKeyInvalid(e.error))
+        })?;
+        let idkg_dealing_encryption_public_keys = self
+            .idkg_dealing_encryption_public_keys
+            .into_iter()
+            .map(|pk| {
+                ValidIDkgDealingEncryptionPublicKey::try_from(pk).map_err(|e| {
+                    ValidatePksAndSksError::IdkgDealingEncryptionKeyError(PublicKeyInvalid(e.error))
+                })
+            })
+            .collect::<Result<Vec<ValidIDkgDealingEncryptionPublicKey>, ValidatePksAndSksError>>(
+            )?;
+        let last_idkg_public_key = idkg_dealing_encryption_public_keys.last().cloned().ok_or(
+            ValidatePksAndSksError::IdkgDealingEncryptionKeyError(PublicKeyNotFound),
+        )?;
+        Ok(ValidNodePublicKeys::from((
+            node_signing_public_key,
+            committee_signing_public_key,
+            tls_certificate,
+            dkg_dealing_encryption_public_key,
+            last_idkg_public_key,
+        )))
+    }
+}
+
+#[derive(Debug)]
+struct RequiredKeyIds {
+    node_signing_key_id: KeyId,
+    committee_signing_key_id: KeyId,
+    tls_secret_key_id: KeyId,
+    dkg_dealing_encryption_key_id: KeyId,
+    idkg_dealing_encryption_key_ids: Vec<KeyId>,
+}
+
+impl RequiredKeyIds {
+    fn verify_contained_in_sks<S: SecretKeyStore>(
+        &self,
+        sks_read_lock: RwLockReadGuard<'_, S>,
+    ) -> Result<(), ValidatePksAndSksError> {
+        if !sks_read_lock.contains(&self.node_signing_key_id) {
+            return Err(ValidatePksAndSksError::NodeSigningKeyError(
+                SecretKeyNotFound {
+                    key_id: self.node_signing_key_id.to_string(),
+                },
+            ));
+        }
+        if !sks_read_lock.contains(&self.committee_signing_key_id) {
+            return Err(ValidatePksAndSksError::CommitteeSigningKeyError(
+                SecretKeyNotFound {
+                    key_id: self.committee_signing_key_id.to_string(),
+                },
+            ));
+        }
+        if !sks_read_lock.contains(&self.tls_secret_key_id) {
+            return Err(ValidatePksAndSksError::TlsCertificateError(
+                SecretKeyNotFound {
+                    key_id: self.tls_secret_key_id.to_string(),
+                },
+            ));
+        }
+        if !sks_read_lock.contains(&self.dkg_dealing_encryption_key_id) {
+            return Err(ValidatePksAndSksError::DkgDealingEncryptionKeyError(
+                SecretKeyNotFound {
+                    key_id: self.dkg_dealing_encryption_key_id.to_string(),
+                },
+            ));
+        }
+        for idkg_key_id in &self.idkg_dealing_encryption_key_ids {
+            if !sks_read_lock.contains(idkg_key_id) {
+                return Err(ValidatePksAndSksError::IdkgDealingEncryptionKeyError(
+                    SecretKeyNotFound {
+                        key_id: idkg_key_id.to_string(),
+                    },
+                ));
+            }
+        }
+        Ok(())
     }
 }
 

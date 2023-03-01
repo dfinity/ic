@@ -39,7 +39,7 @@ mock! {
             cert: X509PublicKeyCert,
         ) -> Result<(), PublicKeySetOnceError>;
 
-        fn tls_certificate<'a>(&'a self) -> Option<&'a X509PublicKeyCert>;
+        fn tls_certificate(&self) -> Option<X509PublicKeyCert>;
 
         fn add_idkg_dealing_encryption_pubkey(&mut self, key: PublicKey) -> Result<(), PublicKeyAddError>;
 

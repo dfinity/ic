@@ -71,6 +71,40 @@ pub struct ValidNodePublicKeys {
     idkg_dealing_encryption_public_key: ValidIDkgDealingEncryptionPublicKey,
 }
 
+impl
+    From<(
+        ValidNodeSigningPublicKey,
+        ValidCommitteeSigningPublicKey,
+        ValidTlsCertificate,
+        ValidDkgDealingEncryptionPublicKey,
+        ValidIDkgDealingEncryptionPublicKey,
+    )> for ValidNodePublicKeys
+{
+    fn from(
+        (
+            node_signing_public_key,
+            committee_signing_public_key,
+            tls_certificate,
+            dkg_dealing_encryption_public_key,
+            idkg_dealing_encryption_public_key,
+        ): (
+            ValidNodeSigningPublicKey,
+            ValidCommitteeSigningPublicKey,
+            ValidTlsCertificate,
+            ValidDkgDealingEncryptionPublicKey,
+            ValidIDkgDealingEncryptionPublicKey,
+        ),
+    ) -> Self {
+        Self {
+            node_signing_public_key,
+            committee_signing_public_key,
+            tls_certificate,
+            dkg_dealing_encryption_public_key,
+            idkg_dealing_encryption_public_key,
+        }
+    }
+}
+
 impl ValidNodePublicKeys {
     /// Determines if the given node public key material is valid.
     ///

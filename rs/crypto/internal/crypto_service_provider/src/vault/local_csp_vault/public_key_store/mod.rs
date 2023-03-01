@@ -70,7 +70,7 @@ fn current_node_public_keys_internal<P: PublicKeyStore>(
     CurrentNodePublicKeys {
         node_signing_public_key: pks_lock.node_signing_pubkey(),
         committee_signing_public_key: pks_lock.committee_signing_pubkey(),
-        tls_certificate: pks_lock.tls_certificate().cloned(),
+        tls_certificate: pks_lock.tls_certificate(),
         dkg_dealing_encryption_public_key: pks_lock.ni_dkg_dealing_encryption_pubkey(),
         idkg_dealing_encryption_public_key: last_idkg_dealing_encryption_public_key,
     }

@@ -33,7 +33,7 @@ use crate::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
 use crate::secret_key_store::SecretKeyStore;
 use crate::types::{CspPublicKey, ExternalPublicKeys};
 use crate::vault::api::{
-    CspPublicKeyStoreError, CspVault, PksAndSksCompleteError, PksAndSksContainsErrors,
+    CspPublicKeyStoreError, CspVault, PksAndSksContainsErrors, ValidatePksAndSksError,
 };
 use ic_config::crypto::{CryptoConfig, CspVaultType};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
@@ -283,8 +283,8 @@ impl CspPublicAndSecretKeyStoreChecker for Csp {
         self.csp_vault.pks_and_sks_contains(external_public_keys)
     }
 
-    fn pks_and_sks_complete(&self) -> Result<ValidNodePublicKeys, PksAndSksCompleteError> {
-        self.csp_vault.pks_and_sks_complete()
+    fn validate_pks_and_sks(&self) -> Result<ValidNodePublicKeys, ValidatePksAndSksError> {
+        self.csp_vault.validate_pks_and_sks()
     }
 }
 
