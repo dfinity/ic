@@ -2063,6 +2063,10 @@ pub mod test_helpers {
         fn canister_version(&self) -> Option<u64> {
             None
         }
+
+        fn set_time_warp(&mut self, new_time_warp: TimeWarp) {
+            self.now += new_time_warp.delta_s as u64
+        }
     }
 }
 

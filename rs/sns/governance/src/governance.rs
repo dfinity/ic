@@ -4125,6 +4125,10 @@ impl Governance {
     pub async fn run_periodic_tasks(&mut self) {
         self.process_proposals();
 
+        if self.should_check_upgrade_status() {
+            self.check_upgrade_status().await;
+        }
+
         // Getting the total governance token supply from the ledger is expensive enough
         // that we don't want to do it on every call to `run_periodic_tasks`. So
         // we only fetch it when it's needed, which is when rewards should be
@@ -4141,8 +4145,6 @@ impl Governance {
                     GovernanceError::from(e)
                 ),
             }
-        } else if self.should_check_upgrade_status() {
-            self.check_upgrade_status().await;
         }
 
         if self.can_finalize_disburse_maturity() {
@@ -4861,6 +4863,7 @@ fn get_neuron_id_from_memo_and_controller(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::ONE_DAY_SECONDS;
     use crate::{
         pb::v1::{
             governance::SnsMetadata,
@@ -6559,6 +6562,132 @@ mod tests {
                 canister_id: Some(index_canister_id.get()),
             }),
         }
+    }
+
+    #[test]
+    fn test_distribute_rewards_does_not_block_upgrades() {
+        // Setup the canister ids for the test
+        let root_canister_id = canister_test_id(500);
+        let governance_canister_id = canister_test_id(501);
+
+        // Create the environment and add mocked responses from root
+        let mut env = NativeEnvironment::new(Some(governance_canister_id));
+
+        let mut canisters_summary_response = std_sns_canisters_summary_response();
+        if let Some(ref mut canister_summary) = canisters_summary_response.governance {
+            canister_summary.status = Some(canister_status_for_test(
+                vec![2, 3, 4],
+                CanisterStatusType::Running,
+            ));
+        }
+        env.set_call_canister_response(
+            root_canister_id,
+            "get_sns_canisters_summary",
+            Encode!(&GetSnsCanistersSummaryRequest {
+                update_canister_list: Some(true)
+            })
+            .unwrap(),
+            Ok(Encode!(&canisters_summary_response).unwrap()),
+        );
+
+        // Create the versions that will be used to exercise the test
+        let next_version = SnsVersion {
+            root_wasm_hash: vec![1, 2, 3],
+            governance_wasm_hash: vec![2, 3, 4],
+            ledger_wasm_hash: vec![3, 4, 5],
+            swap_wasm_hash: vec![4, 5, 6],
+            archive_wasm_hash: vec![5, 6, 7],
+            index_wasm_hash: vec![6, 7, 8],
+        };
+
+        let current_version = {
+            let mut version = next_version.clone();
+            version.governance_wasm_hash = vec![1, 1, 1];
+            version
+        };
+
+        // Create the governance struct with voting reward parameters that require rewards
+        // to be distributed once a day. There is no pending version at initialization
+        let mut governance = Governance::new(
+            GovernanceProto {
+                root_canister_id: Some(root_canister_id.get()),
+                deployed_version: Some(current_version.clone().into()),
+                parameters: Some(NervousSystemParameters {
+                    voting_rewards_parameters: Some(VotingRewardsParameters {
+                        round_duration_seconds: Some(ONE_DAY_SECONDS),
+                        reward_rate_transition_duration_seconds: Some(0),
+                        initial_reward_rate_basis_points: Some(250),
+                        final_reward_rate_basis_points: Some(250),
+                    }),
+                    ..NervousSystemParameters::with_default_values()
+                }),
+                ..basic_governance_proto()
+            }
+            .try_into()
+            .unwrap(),
+            Box::new(env),
+            Box::new(AlwaysSucceedingLedger {}),
+            Box::new(DoNothingLedger {}),
+        );
+
+        // Get the initial reward event for comparison later
+        let initial_reward_event = governance.latest_reward_event();
+
+        // Advance time such that a reward event should be distributed
+        governance.env.set_time_warp(TimeWarp {
+            delta_s: (ONE_DAY_SECONDS + 1) as i64,
+        });
+
+        // Assert that the rewards should be distributed, and trigger the periodic tasks to
+        // distribute them.
+        assert!(governance.should_distribute_rewards());
+        governance.run_periodic_tasks().now_or_never();
+
+        // Get the latest reward event and assert that its equal to the initial reward event. This
+        // puts governance in the state that the OC-SNS was in for NNS1-2105.
+        let latest_reward_event = governance.latest_reward_event();
+        assert_eq!(initial_reward_event, latest_reward_event);
+
+        // Now set the pending_version in Governance such that the period_task to check upgrade
+        // status is triggered.
+        let mark_failed_at_seconds = governance.env.now() + ONE_DAY_SECONDS;
+        governance.proto.pending_version = Some(UpgradeInProgress {
+            target_version: Some(next_version.clone().into()),
+            mark_failed_at_seconds,
+            checking_upgrade_lock: 0,
+            proposal_id: 0,
+        });
+
+        // Make sure Governance state is correctly set
+        assert_eq!(
+            governance.proto.pending_version.clone().unwrap(),
+            UpgradeInProgress {
+                target_version: Some(next_version.clone().into()),
+                mark_failed_at_seconds,
+                checking_upgrade_lock: 0,
+                proposal_id: 0,
+            }
+        );
+        assert_eq!(
+            governance.proto.deployed_version.clone().unwrap(),
+            current_version.into()
+        );
+
+        // Check that both conditions in `run_periodic_tasks` will be triggered on this heartbeat
+        // and run the tasks.
+        assert!(governance.should_distribute_rewards());
+        assert!(governance.should_check_upgrade_status());
+        governance.run_periodic_tasks().now_or_never();
+
+        // These asserts would fail before the change in NNS1-2105. Now, even though
+        // there was an attempt to distribute rewards, the status of the upgrade was still checked.
+        let latest_reward_event = governance.latest_reward_event();
+        assert_eq!(initial_reward_event, latest_reward_event);
+        assert!(governance.proto.pending_version.is_none());
+        assert_eq!(
+            governance.proto.deployed_version.unwrap(),
+            next_version.into()
+        );
     }
 
     #[test]
