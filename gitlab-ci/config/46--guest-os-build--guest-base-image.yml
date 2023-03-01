@@ -12,6 +12,12 @@
       -f Dockerfile.base .
   docker build -q -t dfinity/boundaryos-base-snp:"$TAG" -t dfinity/boundaryos-base-snp:latest \
       --build-arg CPU_SUPPORT="snp" -f Dockerfile.base .
+  # boundary-api-guestos-base & boundary-api-guestos-base-snp
+  cd "${CI_PROJECT_DIR}/ic-os/boundary-api-guestos/rootfs"
+  docker build -q -t dfinity/boundary-api-guestos-base:"$TAG" -t dfinity/boundary-api-guestos-base:latest \
+      -f Dockerfile.base .
+  docker build -q -t dfinity/boundary-api-guestos-base-snp:"$TAG" -t dfinity/boundary-api-guestos-base-snp:latest \
+      --build-arg CPU_SUPPORT="snp" -f Dockerfile.base .
   # hostos-base & hostos-base-dev
   cd "${CI_PROJECT_DIR}/ic-os/hostos/rootfs"
   docker build -q -t dfinity/hostos-base:"$TAG" -t dfinity/hostos-base:latest \
@@ -52,6 +58,8 @@ build-push-base-images:
          ic-os/guestos/rootfs/docker-base.dev
          ic-os/boundary-guestos/rootfs/docker-base.prod
          ic-os/boundary-guestos/rootfs/docker-base.snp
+         ic-os/boundary-api-guestos/rootfs/docker-base.prod
+         ic-os/boundary-api-guestos/rootfs/docker-base.snp
          ic-os/hostos/rootfs/docker-base.prod
          ic-os/hostos/rootfs/docker-base.dev
          ic-os/setupos/rootfs/docker-base.prod
