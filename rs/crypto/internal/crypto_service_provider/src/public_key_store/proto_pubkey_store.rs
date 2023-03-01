@@ -138,8 +138,8 @@ impl PublicKeyStore for ProtoPublicKeyStore {
             .map_err(|io_error| PublicKeySetOnceError::Io(io_error))
     }
 
-    fn tls_certificate(&self) -> Option<&X509PublicKeyCert> {
-        self.keys.tls_certificate.as_ref()
+    fn tls_certificate(&self) -> Option<X509PublicKeyCert> {
+        self.keys.tls_certificate.clone()
     }
 
     fn add_idkg_dealing_encryption_pubkey(

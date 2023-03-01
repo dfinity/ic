@@ -6,9 +6,9 @@ use crate::vault::api::{
     CspMultiSignatureError, CspMultiSignatureKeygenError, CspPublicKeyStoreError,
     CspSecretKeyStoreContainsError, CspThresholdSignatureKeygenError, CspTlsKeygenError,
     CspTlsSignError, IDkgProtocolCspVault, MultiSignatureCspVault, NiDkgCspVault,
-    PksAndSksCompleteError, PksAndSksContainsErrors, PublicAndSecretKeyStoreCspVault,
-    PublicKeyStoreCspVault, PublicRandomSeedGenerator, PublicRandomSeedGeneratorError,
-    SecretKeyStoreCspVault, ThresholdEcdsaSignerCspVault, ThresholdSignatureCspVault,
+    PksAndSksContainsErrors, PublicAndSecretKeyStoreCspVault, PublicKeyStoreCspVault,
+    PublicRandomSeedGenerator, PublicRandomSeedGeneratorError, SecretKeyStoreCspVault,
+    ThresholdEcdsaSignerCspVault, ThresholdSignatureCspVault, ValidatePksAndSksError,
 };
 use crate::vault::remote_csp_vault::codec::{CspVaultClientObserver, ObservableCodec};
 use crate::vault::remote_csp_vault::{remote_vault_codec_builder, TarpcCspVaultClient};
@@ -344,13 +344,13 @@ impl PublicAndSecretKeyStoreCspVault for RemoteCspVault {
         })
     }
 
-    fn pks_and_sks_complete(&self) -> Result<ValidNodePublicKeys, PksAndSksCompleteError> {
+    fn validate_pks_and_sks(&self) -> Result<ValidNodePublicKeys, ValidatePksAndSksError> {
         self.tokio_block_on(
             self.tarpc_csp_client
-                .pks_and_sks_complete(context_with_timeout(self.rpc_timeout)),
+                .validate_pks_and_sks(context_with_timeout(self.rpc_timeout)),
         )
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
-            Err(PksAndSksCompleteError::TransientInternalError(
+            Err(ValidatePksAndSksError::TransientInternalError(
                 rpc_error.to_string(),
             ))
         })

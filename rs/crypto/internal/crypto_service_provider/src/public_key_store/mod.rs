@@ -114,7 +114,7 @@ pub trait PublicKeyStore: Send + Sync {
     ) -> Result<(), PublicKeySetOnceError>;
 
     /// Gets the TLS certificate.
-    fn tls_certificate(&self) -> Option<&X509PublicKeyCert>;
+    fn tls_certificate(&self) -> Option<X509PublicKeyCert>;
 
     /// Adds a new iDKG dealing encryption public key.
     fn add_idkg_dealing_encryption_pubkey(

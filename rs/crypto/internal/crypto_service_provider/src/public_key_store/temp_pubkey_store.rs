@@ -83,7 +83,7 @@ impl PublicKeyStore for TempPublicKeyStore {
         self.store.set_once_tls_certificate(cert)
     }
 
-    fn tls_certificate(&self) -> Option<&X509PublicKeyCert> {
+    fn tls_certificate(&self) -> Option<X509PublicKeyCert> {
         self.store.tls_certificate()
     }
 

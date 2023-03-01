@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)]
 use crate::vault::test_utils;
 use crate::LocalCspVault;
 
@@ -559,15 +560,611 @@ mod pks_and_sks_contains {
     }
 }
 
-mod pks_and_sks_complete {
-    use crate::vault::api::{PksAndSksCompleteError, PublicAndSecretKeyStoreCspVault};
+mod validate_pks_and_sks {
+    use crate::key_id::KeyId;
+    use crate::keygen::utils::mega_public_key_from_proto;
+    use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
+    use crate::public_key_store::PublicKeyStore;
+    use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
+    use crate::secret_key_store::SecretKeyStore;
+    use crate::types::CspPublicKey;
+    use crate::vault::api::ValidatePksAndSksKeyPairError::{
+        PublicKeyInvalid, PublicKeyNotFound, SecretKeyNotFound,
+    };
+    use crate::vault::api::{PublicAndSecretKeyStoreCspVault, ValidatePksAndSksError};
+    use crate::vault::local_csp_vault::public_and_secret_key_store::LocalNodePublicKeys;
     use crate::LocalCspVault;
     use assert_matches::assert_matches;
+    use ic_crypto_internal_types::encrypt::forward_secure::CspFsEncryptionPublicKey;
+    use ic_crypto_tls_interfaces::TlsPublicKeyCert;
+    use ic_protobuf::registry::crypto::v1::{PublicKey, X509PublicKeyCert};
+    use ic_types::crypto::AlgorithmId;
+    use std::collections::HashSet;
 
     #[test]
-    fn should_return_empty_public_key_store() {
+    fn should_return_empty_public_key_store_when_no_keys() {
         let vault = LocalCspVault::builder().build();
-        let result = vault.pks_and_sks_complete();
-        assert_matches!(result, Err(error) if error == PksAndSksCompleteError::EmptyPublicKeyStore)
+        let result = vault.validate_pks_and_sks();
+        assert_matches!(result, Err(ValidatePksAndSksError::EmptyPublicKeyStore))
+    }
+
+    #[test]
+    fn should_return_public_key_not_found() {
+        let tests = vec![
+            ParameterizedTest {
+                input: LocalNodePublicKeys {
+                    node_signing_public_key: None,
+                    ..required_node_public_keys()
+                },
+                expected: ValidatePksAndSksError::NodeSigningKeyError(PublicKeyNotFound),
+            },
+            ParameterizedTest {
+                input: LocalNodePublicKeys {
+                    committee_signing_public_key: None,
+                    ..required_node_public_keys()
+                },
+                expected: ValidatePksAndSksError::CommitteeSigningKeyError(PublicKeyNotFound),
+            },
+            ParameterizedTest {
+                input: LocalNodePublicKeys {
+                    tls_certificate: None,
+                    ..required_node_public_keys()
+                },
+                expected: ValidatePksAndSksError::TlsCertificateError(PublicKeyNotFound),
+            },
+            ParameterizedTest {
+                input: LocalNodePublicKeys {
+                    dkg_dealing_encryption_public_key: None,
+                    ..required_node_public_keys()
+                },
+                expected: ValidatePksAndSksError::DkgDealingEncryptionKeyError(PublicKeyNotFound),
+            },
+            ParameterizedTest {
+                input: LocalNodePublicKeys {
+                    idkg_dealing_encryption_public_keys: vec![],
+                    ..required_node_public_keys()
+                },
+                expected: ValidatePksAndSksError::IdkgDealingEncryptionKeyError(PublicKeyNotFound),
+            },
+        ];
+
+        for test in tests {
+            let vault = LocalCspVault::builder()
+                .with_mock_stores()
+                .with_public_key_store(public_key_store_containing_exactly(test.input))
+                .build();
+
+            let result = vault.validate_pks_and_sks();
+
+            assert_matches!(result, Err(error) if error == test.expected, "where expected error {:?}", &test.expected)
+        }
+    }
+
+    #[test]
+    fn should_return_public_key_invalid() {
+        let tests = vec![
+            ParameterizedTest {
+                input: LocalNodePublicKeys {
+                    node_signing_public_key: Some(invalid_public_key()),
+                    ..required_node_public_keys()
+                },
+                expected: ValidatePksAndSksError::NodeSigningKeyError(PublicKeyInvalid(
+                    "expected public key algorithm Ed25519".to_string(),
+                )),
+            },
+            ParameterizedTest {
+                input: LocalNodePublicKeys {
+                    committee_signing_public_key: Some(invalid_public_key()),
+                    ..required_node_public_keys()
+                },
+                expected: ValidatePksAndSksError::CommitteeSigningKeyError(PublicKeyInvalid(
+                    "expected public key algorithm MultiBls12_381".to_string(),
+                )),
+            },
+            ParameterizedTest {
+                input: LocalNodePublicKeys {
+                    tls_certificate: Some(invalid_tls_certificate()),
+                    ..required_node_public_keys()
+                },
+                expected: ValidatePksAndSksError::TlsCertificateError(PublicKeyInvalid(
+                    "Malformed certificate".to_string(),
+                )),
+            },
+            ParameterizedTest {
+                input: LocalNodePublicKeys {
+                    dkg_dealing_encryption_public_key: Some(invalid_public_key()),
+                    ..required_node_public_keys()
+                },
+                expected: ValidatePksAndSksError::DkgDealingEncryptionKeyError(PublicKeyInvalid(
+                    "Malformed public key: Expected public key algorithm Groth20_Bls12_381"
+                        .to_string(),
+                )),
+            },
+            ParameterizedTest {
+                input: LocalNodePublicKeys {
+                    idkg_dealing_encryption_public_keys: vec![invalid_public_key()],
+                    ..required_node_public_keys()
+                },
+                expected: ValidatePksAndSksError::IdkgDealingEncryptionKeyError(PublicKeyInvalid(
+                    "Malformed public key: unsupported algorithm".to_string(),
+                )),
+            },
+        ];
+
+        for test in tests {
+            let vault = LocalCspVault::builder()
+                .with_mock_stores()
+                .with_public_key_store(public_key_store_containing_exactly(test.input))
+                .build();
+
+            let result = vault.validate_pks_and_sks();
+
+            assert_matches!((result, test.expected),
+                (Err(ValidatePksAndSksError::NodeSigningKeyError(PublicKeyInvalid(actual))),
+                    ValidatePksAndSksError::NodeSigningKeyError(PublicKeyInvalid(expected)),
+                )
+                | (Err(ValidatePksAndSksError::CommitteeSigningKeyError(PublicKeyInvalid(actual))),
+                    ValidatePksAndSksError::CommitteeSigningKeyError(PublicKeyInvalid(expected)),
+                )
+                | (Err(ValidatePksAndSksError::TlsCertificateError(PublicKeyInvalid(actual))),
+                    ValidatePksAndSksError::TlsCertificateError(PublicKeyInvalid(expected)),
+                )
+                | (Err(ValidatePksAndSksError::DkgDealingEncryptionKeyError(PublicKeyInvalid(actual))),
+                    ValidatePksAndSksError::DkgDealingEncryptionKeyError(PublicKeyInvalid(expected)),
+                )
+                | (Err(ValidatePksAndSksError::IdkgDealingEncryptionKeyError(PublicKeyInvalid(actual))),
+                    ValidatePksAndSksError::IdkgDealingEncryptionKeyError(PublicKeyInvalid(expected)),
+                )
+                if actual.starts_with(&expected)
+            );
+        }
+    }
+
+    #[test]
+    fn should_return_public_key_invalid_when_a_single_idkg_public_key_is_invalid() {
+        let vault = LocalCspVault::builder()
+            .with_mock_stores()
+            .with_public_key_store(public_key_store_containing_exactly(LocalNodePublicKeys {
+                idkg_dealing_encryption_public_keys: vec![
+                    valid_idkg_dealing_encryption_public_key(),
+                    invalid_public_key(),
+                    valid_idkg_dealing_encryption_public_key_2(),
+                ],
+                ..required_node_public_keys()
+            }))
+            .build();
+
+        let result = vault.validate_pks_and_sks();
+
+        assert_matches!(
+            result,
+            Err(ValidatePksAndSksError::IdkgDealingEncryptionKeyError(
+                PublicKeyInvalid(_)
+            ))
+        )
+    }
+
+    #[test]
+    fn should_return_secret_key_not_found() {
+        let (required_public_keys, required_key_ids) =
+            required_node_public_keys_and_their_key_ids();
+
+        let tests = vec![
+            ParameterizedTest {
+                input: LocalKeyIds {
+                    node_signing_key_id: None,
+                    ..required_key_ids.clone()
+                },
+                expected: ValidatePksAndSksError::NodeSigningKeyError(SecretKeyNotFound {
+                    key_id: node_signing_secret_key_id().to_string(),
+                }),
+            },
+            ParameterizedTest {
+                input: LocalKeyIds {
+                    committee_signing_key_id: None,
+                    ..required_key_ids.clone()
+                },
+                expected: ValidatePksAndSksError::CommitteeSigningKeyError(SecretKeyNotFound {
+                    key_id: committee_signing_secret_key_id().to_string(),
+                }),
+            },
+            ParameterizedTest {
+                input: LocalKeyIds {
+                    tls_secret_key_id: None,
+                    ..required_key_ids.clone()
+                },
+                expected: ValidatePksAndSksError::TlsCertificateError(SecretKeyNotFound {
+                    key_id: tls_certificate_key_id().to_string(),
+                }),
+            },
+            ParameterizedTest {
+                input: LocalKeyIds {
+                    dkg_dealing_encryption_key_id: None,
+                    ..required_key_ids.clone()
+                },
+                expected: ValidatePksAndSksError::DkgDealingEncryptionKeyError(SecretKeyNotFound {
+                    key_id: dkg_dealing_encryption_key_id().to_string(),
+                }),
+            },
+            ParameterizedTest {
+                input: LocalKeyIds {
+                    idkg_dealing_encryption_key_ids: vec![],
+                    ..required_key_ids
+                },
+                expected: ValidatePksAndSksError::IdkgDealingEncryptionKeyError(
+                    SecretKeyNotFound {
+                        key_id: idkg_dealing_encryption_key_id().to_string(),
+                    },
+                ),
+            },
+        ];
+
+        for test in tests {
+            let vault = LocalCspVault::builder()
+                .with_mock_stores()
+                .with_public_key_store(public_key_store_containing_exactly(
+                    required_public_keys.clone(),
+                ))
+                .with_node_secret_key_store(secret_key_store_containing_exactly(test.input))
+                .build();
+
+            let result = vault.validate_pks_and_sks();
+
+            assert_matches!(result, Err(error) if error == test.expected, "where expected error {:?}", &test.expected)
+        }
+    }
+
+    #[test]
+    fn should_return_secret_key_not_found_when_single_idkg_secret_key_missing() {
+        let idkg_pk_1 = valid_idkg_dealing_encryption_public_key();
+        let idkg_pk_with_no_secret_key = valid_idkg_dealing_encryption_public_key_2();
+        let idkg_pk_3 = valid_idkg_dealing_encryption_public_key_3();
+        let idkg_key_id_1 = idkg_dealing_encryption_key_id_from(&idkg_pk_1);
+        let idkg_missing_key_id = idkg_dealing_encryption_key_id_from(&idkg_pk_with_no_secret_key);
+        let idkg_key_id_3 = idkg_dealing_encryption_key_id_from(&idkg_pk_3);
+        let vault = LocalCspVault::builder()
+            .with_mock_stores()
+            .with_public_key_store(public_key_store_containing_exactly(LocalNodePublicKeys {
+                idkg_dealing_encryption_public_keys: vec![
+                    idkg_pk_1,
+                    idkg_pk_with_no_secret_key,
+                    idkg_pk_3,
+                ],
+                ..required_node_public_keys()
+            }))
+            .with_node_secret_key_store(secret_key_store_containing_exactly(LocalKeyIds {
+                idkg_dealing_encryption_key_ids: vec![idkg_key_id_1, idkg_key_id_3],
+                ..required_key_ids()
+            }))
+            .build();
+
+        let result = vault.validate_pks_and_sks();
+
+        assert_matches!(result, Err(ValidatePksAndSksError::IdkgDealingEncryptionKeyError(SecretKeyNotFound {key_id}))
+            if key_id == idkg_missing_key_id.to_string());
+    }
+
+    #[test]
+    fn should_return_valid_node_public_keys() {
+        let (required_public_keys, required_key_ids) =
+            required_node_public_keys_and_their_key_ids();
+
+        let vault = LocalCspVault::builder()
+            .with_mock_stores()
+            .with_public_key_store(public_key_store_containing_exactly(
+                required_public_keys.clone(),
+            ))
+            .with_node_secret_key_store(secret_key_store_containing_exactly(required_key_ids))
+            .build();
+
+        let result = vault.validate_pks_and_sks();
+
+        assert_matches!(result, Ok(public_keys)
+            if public_keys.node_signing_key() == &required_public_keys.node_signing_public_key.unwrap()
+            && public_keys.committee_signing_key() == &required_public_keys.committee_signing_public_key.unwrap()
+            && public_keys.tls_certificate() == &required_public_keys.tls_certificate.unwrap()
+            && public_keys.dkg_dealing_encryption_key() == &required_public_keys.dkg_dealing_encryption_public_key.unwrap()
+            && public_keys.idkg_dealing_encryption_key() == &required_public_keys.idkg_dealing_encryption_public_keys[0]
+        )
+    }
+
+    #[test]
+    fn should_return_valid_node_public_keys_with_last_idkg_public_key() {
+        let idkg_pk_1 = valid_idkg_dealing_encryption_public_key();
+        let idkg_pk_2 = valid_idkg_dealing_encryption_public_key_2();
+        let idkg_pk_3 = valid_idkg_dealing_encryption_public_key_3();
+        let idkg_key_id_1 = idkg_dealing_encryption_key_id_from(&idkg_pk_1);
+        let idkg_key_id_2 = idkg_dealing_encryption_key_id_from(&idkg_pk_2);
+        let idkg_key_id_3 = idkg_dealing_encryption_key_id_from(&idkg_pk_3);
+        let vault = LocalCspVault::builder()
+            .with_mock_stores()
+            .with_public_key_store(public_key_store_containing_exactly(LocalNodePublicKeys {
+                idkg_dealing_encryption_public_keys: vec![idkg_pk_1, idkg_pk_2, idkg_pk_3.clone()],
+                ..required_node_public_keys()
+            }))
+            .with_node_secret_key_store(secret_key_store_containing_exactly(LocalKeyIds {
+                idkg_dealing_encryption_key_ids: vec![idkg_key_id_1, idkg_key_id_2, idkg_key_id_3],
+                ..required_key_ids()
+            }))
+            .build();
+
+        let result = vault.validate_pks_and_sks();
+
+        assert_matches!(result, Ok(public_keys)
+            if public_keys.node_signing_key() == &valid_node_signing_public_key()
+            && public_keys.committee_signing_key() == & valid_committee_signing_public_key()
+            && public_keys.tls_certificate() == & valid_tls_certificate()
+            && public_keys.dkg_dealing_encryption_key() == & valid_dkg_dealing_encryption_public_key()
+            && public_keys.idkg_dealing_encryption_key() == & idkg_pk_3
+        )
+    }
+
+    #[derive(Debug)]
+    struct ParameterizedTest<U, V> {
+        input: U,
+        expected: V,
+    }
+
+    fn public_key_store_containing_exactly(
+        public_keys: LocalNodePublicKeys,
+    ) -> impl PublicKeyStore {
+        let mut public_key_store = MockPublicKeyStore::new();
+        public_key_store
+            .expect_node_signing_pubkey()
+            .times(1)
+            .return_const(public_keys.node_signing_public_key);
+        public_key_store
+            .expect_committee_signing_pubkey()
+            .times(1)
+            .return_const(public_keys.committee_signing_public_key);
+        public_key_store
+            .expect_tls_certificate()
+            .times(1)
+            .return_const(public_keys.tls_certificate);
+        public_key_store
+            .expect_ni_dkg_dealing_encryption_pubkey()
+            .times(1)
+            .return_const(public_keys.dkg_dealing_encryption_public_key);
+        public_key_store
+            .expect_idkg_dealing_encryption_pubkeys()
+            .times(1)
+            .return_const(public_keys.idkg_dealing_encryption_public_keys);
+        public_key_store
+    }
+
+    fn secret_key_store_containing_exactly(key_ids: LocalKeyIds) -> impl SecretKeyStore {
+        let mut secret_key_store = MockSecretKeyStore::new();
+        let mut key_ids_to_insert = HashSet::new();
+        if let Some(key_id) = key_ids.node_signing_key_id {
+            assert!(
+                key_ids_to_insert.insert(key_id),
+                "duplicated key ID {:?}",
+                key_id
+            );
+        }
+        if let Some(key_id) = key_ids.committee_signing_key_id {
+            assert!(
+                key_ids_to_insert.insert(key_id),
+                "duplicated key ID {:?}",
+                key_id
+            );
+        }
+        if let Some(key_id) = key_ids.tls_secret_key_id {
+            assert!(
+                key_ids_to_insert.insert(key_id),
+                "duplicated key ID {:?}",
+                key_id
+            );
+        }
+        if let Some(key_id) = key_ids.dkg_dealing_encryption_key_id {
+            assert!(
+                key_ids_to_insert.insert(key_id),
+                "duplicated key ID {:?}",
+                key_id
+            );
+        }
+        for key_id in key_ids.idkg_dealing_encryption_key_ids {
+            assert!(
+                key_ids_to_insert.insert(key_id),
+                "duplicated key ID {:?}",
+                key_id
+            );
+        }
+        for key_id in key_ids_to_insert {
+            secret_key_store
+                .expect_contains()
+                .times(..=1)
+                .withf(move |actual_key_id| *actual_key_id == key_id)
+                .return_const(true);
+        }
+        secret_key_store.expect_contains().return_const(false);
+        secret_key_store
+    }
+
+    fn required_node_public_keys() -> LocalNodePublicKeys {
+        LocalNodePublicKeys {
+            node_signing_public_key: Some(valid_node_signing_public_key()),
+            committee_signing_public_key: Some(valid_committee_signing_public_key()),
+            tls_certificate: Some(valid_tls_certificate()),
+            dkg_dealing_encryption_public_key: Some(valid_dkg_dealing_encryption_public_key()),
+            idkg_dealing_encryption_public_keys: vec![valid_idkg_dealing_encryption_public_key()],
+        }
+    }
+
+    fn valid_node_signing_public_key() -> PublicKey {
+        PublicKey {
+            version: 0,
+            algorithm: AlgorithmId::Ed25519 as i32,
+            key_value: hex_decode(
+                "58d558c7586efb32f4667ee9a302877da97aa1136cda92af4d7a4f8873f9434f",
+            ),
+            proof_data: None,
+            timestamp: None,
+        }
+    }
+
+    fn node_signing_secret_key_id() -> KeyId {
+        KeyId::try_from(
+            &CspPublicKey::try_from(&valid_node_signing_public_key()).expect("invalid public key"),
+        )
+        .expect("invalid public key")
+    }
+
+    fn valid_committee_signing_public_key() -> PublicKey {
+        PublicKey {
+            version: 0,
+            algorithm: AlgorithmId::MultiBls12_381 as i32,
+            key_value: hex_decode(
+                "8dab94740858cc96e8df512d8d81730a94d0f3534f30\
+                cebd35ee2006ce4a449cad611dd7d97bbc44256932da4d4a76a70b9f347e4a989a3073fc7\
+                c2d51bf30804ebbc5c3c6da08b8392d2482473290aff428868caabbc26eec4e7bc59209eb0a",
+            ),
+            proof_data: Some(hex_decode(
+                "afc3038c06223258a14af7c942428fe42f89f8d733e4f\
+                5ea8d34a90c0df142697802a6f22633df890a1ce5b774b23aed",
+            )),
+            timestamp: None,
+        }
+    }
+
+    fn committee_signing_secret_key_id() -> KeyId {
+        KeyId::try_from(
+            &CspPublicKey::try_from(&valid_committee_signing_public_key())
+                .expect("invalid public key"),
+        )
+        .expect("invalid public key")
+    }
+
+    fn valid_tls_certificate() -> X509PublicKeyCert {
+        X509PublicKeyCert {
+            certificate_der: hex_decode(
+                "3082015630820108a00302010202140098d074\
+                7d24ca04a2f036d8665402b4ea784830300506032b6570304a3148304606035504030\
+                c3f34696e71622d327a63766b2d663679716c2d736f776f6c2d76673365732d7a3234\
+                6a642d6a726b6f772d6d686e73642d756b7666702d66616b35702d6161653020170d3\
+                232313130343138313231345a180f39393939313233313233353935395a304a314830\
+                4606035504030c3f34696e71622d327a63766b2d663679716c2d736f776f6c2d76673\
+                365732d7a32346a642d6a726b6f772d6d686e73642d756b7666702d66616b35702d61\
+                6165302a300506032b6570032100246acd5f38372411103768e91169dadb7370e9990\
+                9a65639186ac6d1c36f3735300506032b6570034100d37e5ccfc32146767e5fd73343\
+                649f5b5564eb78e6d8d424d8f01240708bc537a2a9bcbcf6c884136d18d2b475706d7\
+                bb905f52faf28707735f1d90ab654380b",
+            ),
+        }
+    }
+
+    fn tls_certificate_key_id() -> KeyId {
+        KeyId::try_from(
+            &TlsPublicKeyCert::new_from_der(valid_tls_certificate().certificate_der)
+                .expect("invalid certificate"),
+        )
+        .expect("invalid certificate")
+    }
+
+    fn valid_dkg_dealing_encryption_public_key() -> PublicKey {
+        PublicKey {
+            version: 0,
+            algorithm: AlgorithmId::Groth20_Bls12_381 as i32,
+            key_value: hex_decode(
+                "ad36a01cbd40dcfa36ec21a96bedcab17372a9cd2b9eba6171ebeb28dd041a\
+                    d5cbbdbb4bed55f59938e8ffb3dd69e386",
+            ),
+            proof_data: Some(hex_decode(
+                "a1781847726f7468323057697468506f705f42\
+                6c7331325f333831a367706f705f6b65795830b751c9585044139f80abdebf38d7f30\
+                aeb282f178a5e8c284f279eaad1c90d9927e56cac0150646992bce54e08d317ea6963\
+                68616c6c656e676558203bb20c5e9c75790f63aae921316912ffc80d6d03946dd21f8\
+                5c35159ca030ec668726573706f6e7365582063d6cf189635c0f3111f97e69ae0af8f\
+                1594b0f00938413d89dbafc326340384",
+            )),
+            timestamp: None,
+        }
+    }
+
+    fn dkg_dealing_encryption_key_id() -> KeyId {
+        KeyId::try_from(
+            &CspFsEncryptionPublicKey::try_from(&valid_dkg_dealing_encryption_public_key())
+                .expect("invalid public key"),
+        )
+        .expect("invalid public key")
+    }
+
+    fn valid_idkg_dealing_encryption_public_key() -> PublicKey {
+        PublicKey {
+            version: 0,
+            algorithm: AlgorithmId::MegaSecp256k1 as i32,
+            key_value: hex_decode(
+                "03e1e1f76e9d834221a26c4a080b65e60d3b6f9c1d6e5b880abf916a364893da2e",
+            ),
+            proof_data: None,
+            timestamp: None,
+        }
+    }
+
+    fn valid_idkg_dealing_encryption_public_key_2() -> PublicKey {
+        PublicKey {
+            version: 0,
+            algorithm: AlgorithmId::MegaSecp256k1 as i32,
+            key_value: hex_decode(
+                "02a649d6d5982b7d1b5f512db959995b8df73e3a09e64d38ad2c0eb8beb7f6fbc9",
+            ),
+            proof_data: None,
+            timestamp: None,
+        }
+    }
+    fn valid_idkg_dealing_encryption_public_key_3() -> PublicKey {
+        PublicKey {
+            version: 0,
+            algorithm: AlgorithmId::MegaSecp256k1 as i32,
+            key_value: hex_decode(
+                "033e771eceae50f124d589e3adb914c009b129a2e36a2f23e4ddf70f9911a53424",
+            ),
+            proof_data: None,
+            timestamp: None,
+        }
+    }
+
+    fn idkg_dealing_encryption_key_id() -> KeyId {
+        idkg_dealing_encryption_key_id_from(&valid_idkg_dealing_encryption_public_key())
+    }
+
+    fn idkg_dealing_encryption_key_id_from(idkg_pk: &PublicKey) -> KeyId {
+        KeyId::try_from(&mega_public_key_from_proto(idkg_pk).expect("invalid public key"))
+            .expect("invalid public key")
+    }
+
+    fn invalid_public_key() -> PublicKey {
+        PublicKey::default()
+    }
+
+    fn invalid_tls_certificate() -> X509PublicKeyCert {
+        X509PublicKeyCert::default()
+    }
+
+    fn hex_decode<T: AsRef<[u8]>>(data: T) -> Vec<u8> {
+        hex::decode(data).expect("failed to decode hex")
+    }
+
+    #[derive(Debug, Clone)]
+    struct LocalKeyIds {
+        node_signing_key_id: Option<KeyId>,
+        committee_signing_key_id: Option<KeyId>,
+        dkg_dealing_encryption_key_id: Option<KeyId>,
+        tls_secret_key_id: Option<KeyId>,
+        idkg_dealing_encryption_key_ids: Vec<KeyId>,
+    }
+
+    fn required_key_ids() -> LocalKeyIds {
+        LocalKeyIds {
+            node_signing_key_id: Some(node_signing_secret_key_id()),
+            committee_signing_key_id: Some(committee_signing_secret_key_id()),
+            dkg_dealing_encryption_key_id: Some(dkg_dealing_encryption_key_id()),
+            tls_secret_key_id: Some(tls_certificate_key_id()),
+            idkg_dealing_encryption_key_ids: vec![idkg_dealing_encryption_key_id()],
+        }
+    }
+
+    fn required_node_public_keys_and_their_key_ids() -> (LocalNodePublicKeys, LocalKeyIds) {
+        (required_node_public_keys(), required_key_ids())
     }
 }

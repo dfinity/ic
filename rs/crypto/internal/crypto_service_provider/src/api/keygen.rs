@@ -5,7 +5,7 @@ use ic_crypto_node_key_validation::ValidNodePublicKeys;
 
 use super::super::types::{CspPop, CspPublicKey};
 use crate::key_id::KeyId;
-use crate::vault::api::PksAndSksCompleteError;
+use crate::vault::api::ValidatePksAndSksError;
 use crate::{ExternalPublicKeys, PksAndSksContainsErrors};
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_types::crypto::{CryptoError, CurrentNodePublicKeys};
@@ -107,7 +107,8 @@ pub trait CspPublicAndSecretKeyStoreChecker {
         external_public_keys: ExternalPublicKeys,
     ) -> Result<(), PksAndSksContainsErrors>;
 
-    fn pks_and_sks_complete(&self) -> Result<ValidNodePublicKeys, PksAndSksCompleteError>;
+    /// See documentation in [`crate::vault::api::PublicAndSecretKeyStoreCspVault::validate_pks_and_sks`].
+    fn validate_pks_and_sks(&self) -> Result<ValidNodePublicKeys, ValidatePksAndSksError>;
 }
 
 /// A trait that exposes the information about the node public key store.

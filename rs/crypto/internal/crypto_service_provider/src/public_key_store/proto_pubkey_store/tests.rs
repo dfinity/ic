@@ -63,10 +63,7 @@ fn should_contain_correct_keys_after_opening_existing_pubkey_store() {
         &store.idkg_dealing_encryption_pubkeys(),
         &generated_keys.idkg_dealing_encryption_pks
     ));
-    assert_eq!(
-        store.tls_certificate(),
-        generated_keys.tls_certificate.as_ref()
-    );
+    assert_eq!(store.tls_certificate(), generated_keys.tls_certificate);
 }
 
 #[test]
@@ -111,10 +108,7 @@ fn should_set_pubkeys_if_not_set() {
         store.set_once_tls_certificate(generated_keys.tls_certificate.clone().unwrap()),
         Ok(())
     );
-    assert_eq!(
-        store.tls_certificate(),
-        generated_keys.tls_certificate.as_ref()
-    );
+    assert_eq!(store.tls_certificate(), generated_keys.tls_certificate);
 
     assert!(store.idkg_dealing_encryption_pubkeys().is_empty());
     assert_matches!(
@@ -224,7 +218,7 @@ fn should_persist_pubkeys_to_disk_when_setting_them() {
         .is_ok());
     assert_eq!(
         public_key_store(&temp_dir).tls_certificate(),
-        generated_keys.tls_certificate.as_ref()
+        generated_keys.tls_certificate
     );
 
     let generated_idkg_pk = generated_keys
@@ -388,7 +382,7 @@ fn should_deserialize_existing_public_key_store() {
     );
     assert_eq!(
         store.tls_certificate(),
-        Some(&X509PublicKeyCert {
+        Some(X509PublicKeyCert {
             certificate_der: hex_decode(
                 "3082015630820108a00302010202140098d074\
                 7d24ca04a2f036d8665402b4ea784830300506032b6570304a3148304606035504030\
