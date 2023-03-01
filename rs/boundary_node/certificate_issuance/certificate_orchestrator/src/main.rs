@@ -42,8 +42,9 @@ mod work;
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
 type LocalRef<T> = &'static LocalKey<RefCell<T>>;
-type StableSet<T> = StableBTreeMap<Memory, T, ()>;
-type StableValue<T> = StableBTreeMap<Memory, (), T>;
+type StableMap<K, V> = StableBTreeMap<Memory, K, V>;
+type StableSet<T> = StableMap<T, ()>;
+type StableValue<T> = StableMap<(), T>;
 
 const BYTE: u32 = 1;
 const KB: u32 = 1024 * BYTE;
@@ -283,24 +284,24 @@ thread_local! {
 
 // Registrations
 thread_local! {
-    static REGISTRATIONS: RefCell<StableBTreeMap<Memory, Id, Registration>> = RefCell::new(
-        StableBTreeMap::init(
+    static REGISTRATIONS: RefCell<StableMap<Id, Registration>> = RefCell::new(
+        StableMap::init(
             MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(MEMORY_ID_REGISTRATIONS))),
             REGISTRATION_ID_LEN, // MAX_KEY_SIZE,
             REGISTRATION_LEN,    // MAX_VALUE_SIZE
         )
     );
 
-    static NAMES: RefCell<StableBTreeMap<Memory, Name, Id>> = RefCell::new(
-        StableBTreeMap::init(
+    static NAMES: RefCell<StableMap<Name, Id>> = RefCell::new(
+        StableMap::init(
             MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(MEMORY_ID_NAMES))),
             NAME_MAX_LEN,        // MAX_KEY_SIZE,
             REGISTRATION_ID_LEN, // MAX_VALUE_SIZE
         )
     );
 
-    static ENCRYPTED_CERTIFICATES: RefCell<StableBTreeMap<Memory, Id, EncryptedPair>> = RefCell::new(
-        StableBTreeMap::init(
+    static ENCRYPTED_CERTIFICATES: RefCell<StableMap<Id, EncryptedPair>> = RefCell::new(
+        StableMap::init(
             MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(MEMORY_ID_ENCRYPTED_CERTIFICATES))),
             REGISTRATION_ID_LEN, // MAX_KEY_SIZE,
             ENCRYPTED_PAIR_LEN,  // MAX_VALUE_SIZE
