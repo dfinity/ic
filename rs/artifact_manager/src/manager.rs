@@ -5,11 +5,10 @@
 //!
 //! It provides an interface to *Gossip* enabling it to interact with all the
 //! pools without knowing artifact-related details.
-use crate::processors::ArtifactProcessorManager;
+use crate::ArtifactClientHandle;
 use ic_interfaces::{
-    artifact_manager::{AdvertMismatchError, ArtifactClient, ArtifactManager, OnArtifactError},
+    artifact_manager::{AdvertMismatchError, ArtifactManager, OnArtifactError},
     artifact_pool::UnvalidatedArtifact,
-    time_source::TimeSource,
 };
 use ic_types::{
     artifact,
@@ -19,7 +18,6 @@ use ic_types::{
 };
 use std::collections::HashMap;
 use std::convert::TryFrom;
-use std::sync::Arc;
 
 /// The artifact manager maintains a list of artifact clients, and is generic in
 /// the client type. It mostly just forwards function calls to each client
@@ -204,17 +202,8 @@ pub trait ArtifactManagerBackend: Send + Sync {
     ) -> Option<Box<dyn Chunkable + Send + Sync>>;
 }
 
-/// Implementation struct for `ArtifactManagerBackend`.
-pub struct ArtifactManagerBackendImpl<Artifact: ArtifactKind + 'static> {
-    /// Reference to the artifact client.
-    pub client: Box<dyn ArtifactClient<Artifact>>,
-    /// The artifact processor front end.
-    pub processor: ArtifactProcessorManager<Artifact>,
-    pub time_source: Arc<dyn TimeSource>,
-}
-
 /// Trait implementation for `ArtifactManagerBackend`.
-impl<Artifact: ArtifactKind> ArtifactManagerBackend for ArtifactManagerBackendImpl<Artifact>
+impl<Artifact: ArtifactKind> ArtifactManagerBackend for ArtifactClientHandle<Artifact>
 where
     Artifact::Message: ChunkableArtifact
         + Send
@@ -244,9 +233,10 @@ where
                         expected: expected.into(),
                     }
                 })?;
-                self.client.check_artifact_acceptance(&message, &peer_id)?;
+                self.pool_reader
+                    .check_artifact_acceptance(&message, &peer_id)?;
                 // this sends to an unbounded channel, which is what we want here
-                self.processor.on_artifact(UnvalidatedArtifact {
+                self.processor_handle.on_artifact(UnvalidatedArtifact {
                     message,
                     peer_id,
                     timestamp: self.time_source.get_relative_time(),
@@ -262,7 +252,7 @@ where
     /// The method checks if the artifact with the given ID is available.
     fn has_artifact(&self, msg_id: &artifact::ArtifactId) -> bool {
         match msg_id.try_into() {
-            Ok(id) => self.client.as_ref().has_artifact(id),
+            Ok(id) => self.pool_reader.as_ref().has_artifact(id),
             Err(_) => false,
         }
     }
@@ -274,7 +264,7 @@ where
     ) -> Option<Box<dyn ChunkableArtifact>> {
         match msg_id.try_into() {
             Ok(id) => self
-                .client
+                .pool_reader
                 .as_ref()
                 .get_validated_by_identifier(id)
                 .map(|x| Box::new(x) as Box<dyn ChunkableArtifact>),
@@ -284,7 +274,7 @@ where
 
     /// The method gets the client's filter and adds it to the artifact filter.
     fn get_filter(&self, filter: &mut artifact::ArtifactFilter) {
-        *filter.as_mut() = self.client.as_ref().get_filter()
+        *filter.as_mut() = self.pool_reader.as_ref().get_filter()
     }
 
     /// The method returns all validated adverts.
@@ -292,7 +282,7 @@ where
         &self,
         filter: &artifact::ArtifactFilter,
     ) -> Vec<p2p::GossipAdvert> {
-        self.client
+        self.pool_reader
             .as_ref()
             .get_all_validated_by_filter(filter.as_ref())
             .into_iter()
@@ -303,7 +293,7 @@ where
     /// The method returns the priority function.
     fn get_priority_function(&self, tag: artifact::ArtifactTag) -> ArtifactPriorityFn {
         if tag == Artifact::TAG {
-            let func = self.client.as_ref().get_priority_function();
+            let func = self.pool_reader.as_ref().get_priority_function();
             Box::new(
                 move |id: &'_ artifact::ArtifactId, attribute: &'_ artifact::ArtifactAttribute| {
                     match (id.try_into(), attribute.try_into()) {
@@ -328,7 +318,7 @@ where
         artifact_id: &artifact::ArtifactId,
     ) -> Option<Box<dyn Chunkable + Send + Sync>> {
         match artifact_id.try_into() {
-            Ok(artifact_id) => Some(self.client.as_ref().get_chunk_tracker(artifact_id)),
+            Ok(artifact_id) => Some(self.pool_reader.as_ref().get_chunk_tracker(artifact_id)),
             Err(_) => None,
         }
     }

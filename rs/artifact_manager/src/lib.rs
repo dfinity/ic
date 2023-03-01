@@ -94,6 +94,19 @@ mod unformatted {
 //!
 }
 
-mod clients;
 pub mod manager;
+mod pool_readers;
 pub mod processors;
+
+use ic_interfaces::{artifact_manager::ArtifactClient, time_source::TimeSource};
+use ic_types::artifact::ArtifactKind;
+use std::sync::Arc;
+
+/// The struct contains all relevant interfaces for P2P to operate.
+pub struct ArtifactClientHandle<Artifact: ArtifactKind + 'static> {
+    /// Reference to the artifact client.
+    pub pool_reader: Box<dyn ArtifactClient<Artifact>>,
+    /// The artifact processor front end.
+    pub processor_handle: processors::ArtifactProcessorManager<Artifact>,
+    pub time_source: Arc<dyn TimeSource>,
+}

@@ -1,7 +1,6 @@
 //! The tokio thread based implementation of `ArtifactProcessor`
 
-use crate::clients;
-use crate::manager::ArtifactManagerBackendImpl;
+use crate::{pool_readers, ArtifactClientHandle};
 use crossbeam_channel::{Receiver, RecvTimeoutError, Sender};
 use ic_interfaces::{
     artifact_manager::{ArtifactPoolDescriptor, ArtifactProcessor, ProcessingResult},
@@ -228,7 +227,7 @@ impl<
         consensus_pool: Arc<RwLock<PoolConsensus>>,
         log: ReplicaLogger,
         metrics_registry: MetricsRegistry,
-    ) -> ArtifactManagerBackendImpl<ConsensusArtifact> {
+    ) -> ArtifactClientHandle<ConsensusArtifact> {
         let client = Self {
             consensus_pool: consensus_pool.clone(),
             client: Box::new(consensus),
@@ -244,9 +243,9 @@ impl<
             Box::new(client),
             send_advert,
         );
-        ArtifactManagerBackendImpl::<ConsensusArtifact> {
-            processor: manager,
-            client: Box::new(clients::ConsensusClient::new(
+        ArtifactClientHandle::<ConsensusArtifact> {
+            processor_handle: manager,
+            pool_reader: Box::new(pool_readers::ConsensusClient::new(
                 consensus_pool,
                 consensus_gossip,
             )),
@@ -377,7 +376,7 @@ impl<
         metrics_registry: MetricsRegistry,
         node_id: NodeId,
         malicious_flags: MaliciousFlags,
-    ) -> ArtifactManagerBackendImpl<IngressArtifact> {
+    ) -> ArtifactClientHandle<IngressArtifact> {
         let client = Self {
             ingress_pool: ingress_pool.clone(),
             client: ingress_handler,
@@ -390,9 +389,9 @@ impl<
             send_advert,
         );
 
-        ArtifactManagerBackendImpl::<IngressArtifact> {
-            processor: manager,
-            client: Box::new(clients::IngressClient::new(
+        ArtifactClientHandle::<IngressArtifact> {
+            processor_handle: manager,
+            pool_reader: Box::new(pool_readers::IngressClient::new(
                 time_source.clone(),
                 ingress_pool,
                 log,
@@ -489,7 +488,7 @@ impl<
         certification_pool: Arc<RwLock<PoolCertification>>,
         log: ReplicaLogger,
         metrics_registry: MetricsRegistry,
-    ) -> ArtifactManagerBackendImpl<CertificationArtifact> {
+    ) -> ArtifactClientHandle<CertificationArtifact> {
         let client = Self {
             consensus_pool_cache: consensus_pool_cache.clone(),
             certification_pool: certification_pool.clone(),
@@ -506,9 +505,9 @@ impl<
             Box::new(client),
             send_advert,
         );
-        ArtifactManagerBackendImpl::<CertificationArtifact> {
-            processor: manager,
-            client: Box::new(clients::CertificationClient::new(
+        ArtifactClientHandle::<CertificationArtifact> {
+            processor_handle: manager,
+            pool_reader: Box::new(pool_readers::CertificationClient::new(
                 certification_pool,
                 certifier_gossip,
             )),
@@ -606,7 +605,7 @@ impl<PoolDkg: MutableDkgPool + Send + Sync + GossipPool<DkgArtifact> + 'static>
         dkg_pool: Arc<RwLock<PoolDkg>>,
         log: ReplicaLogger,
         metrics_registry: MetricsRegistry,
-    ) -> ArtifactManagerBackendImpl<DkgArtifact> {
+    ) -> ArtifactClientHandle<DkgArtifact> {
         let client = Self {
             dkg_pool: dkg_pool.clone(),
             client: Box::new(dkg),
@@ -622,9 +621,9 @@ impl<PoolDkg: MutableDkgPool + Send + Sync + GossipPool<DkgArtifact> + 'static>
             Box::new(client),
             send_advert,
         );
-        ArtifactManagerBackendImpl::<DkgArtifact> {
-            processor: manager,
-            client: Box::new(clients::DkgClient::new(dkg_pool, dkg_gossip)),
+        ArtifactClientHandle::<DkgArtifact> {
+            processor_handle: manager,
+            pool_reader: Box::new(pool_readers::DkgClient::new(dkg_pool, dkg_gossip)),
             time_source,
         }
     }
@@ -706,7 +705,7 @@ impl<PoolEcdsa: MutableEcdsaPool + Send + Sync + GossipPool<EcdsaArtifact> + 'st
         ecdsa_pool: Arc<RwLock<PoolEcdsa>>,
         metrics_registry: MetricsRegistry,
         log: ReplicaLogger,
-    ) -> ArtifactManagerBackendImpl<EcdsaArtifact> {
+    ) -> ArtifactClientHandle<EcdsaArtifact> {
         let ecdsa_pool_update_duration = metrics_registry.register(
             Histogram::with_opts(histogram_opts!(
                 "ecdsa_pool_update_duration_seconds",
@@ -731,9 +730,9 @@ impl<PoolEcdsa: MutableEcdsaPool + Send + Sync + GossipPool<EcdsaArtifact> + 'st
             Box::new(client),
             send_advert,
         );
-        ArtifactManagerBackendImpl::<EcdsaArtifact> {
-            processor: manager,
-            client: Box::new(clients::EcdsaClient::new(ecdsa_pool, ecdsa_gossip)),
+        ArtifactClientHandle::<EcdsaArtifact> {
+            processor_handle: manager,
+            pool_reader: Box::new(pool_readers::EcdsaClient::new(ecdsa_pool, ecdsa_gossip)),
             time_source,
         }
     }
@@ -830,7 +829,7 @@ impl<
         canister_http_pool: Arc<RwLock<PoolCanisterHttp>>,
         log: ReplicaLogger,
         metrics_registry: MetricsRegistry,
-    ) -> ArtifactManagerBackendImpl<CanisterHttpArtifact> {
+    ) -> ArtifactClientHandle<CanisterHttpArtifact> {
         let client = Self {
             consensus_pool_cache: consensus_pool_cache.clone(),
             canister_http_pool: canister_http_pool.clone(),
@@ -843,9 +842,9 @@ impl<
             Box::new(client),
             send_advert,
         );
-        ArtifactManagerBackendImpl::<CanisterHttpArtifact> {
-            processor: manager,
-            client: Box::new(clients::CanisterHttpClient::new(
+        ArtifactClientHandle::<CanisterHttpArtifact> {
+            processor_handle: manager,
+            pool_reader: Box::new(pool_readers::CanisterHttpClient::new(
                 canister_http_pool,
                 canister_http_gossip,
             )),
