@@ -1,0 +1,18 @@
+[package]
+name = "ic-crypto-internal-csp-proptest-utils"
+description = "Proptest strategies to generate values for types in the ic-crypto-internal-csp crate and its internal dependencies"
+version = "0.8.0"
+authors = ["The Internet Computer Project Developers"]
+edition = "2021"
+
+[dependencies]
+hex = "0.4.2"
+ic-crypto-internal-basic-sig-ecdsa-secp256k1 = { path = "../../crypto_lib/basic_sig/ecdsa_secp256k1" }
+ic-crypto-internal-basic-sig-ecdsa-secp256r1 = { path = "../../crypto_lib/basic_sig/ecdsa_secp256r1" }
+ic-crypto-internal-basic-sig-ed25519 = { path = "../../crypto_lib/basic_sig/ed25519" }
+ic-crypto-internal-basic-sig-rsa-pkcs1 = { path = "../../crypto_lib/basic_sig/rsa_pkcs1" }
+ic-crypto-internal-csp = { path = "../../crypto_service_provider" }
+ic-crypto-internal-multi-sig-bls12381 = { path = "../../crypto_lib/multi_sig/bls12_381" }
+ic-crypto-internal-threshold-sig-bls12381 = { path = "../../crypto_lib/threshold_sig/bls12_381" }
+ic-types = { path = "../../../../types/types" }
+proptest = "1.0"

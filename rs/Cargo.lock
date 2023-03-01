@@ -5289,6 +5289,7 @@ dependencies = [
  "ic-crypto-internal-basic-sig-ed25519",
  "ic-crypto-internal-basic-sig-iccsa",
  "ic-crypto-internal-basic-sig-rsa-pkcs1",
+ "ic-crypto-internal-csp-proptest-utils",
  "ic-crypto-internal-csp-protobuf-generator",
  "ic-crypto-internal-csp-test-utils",
  "ic-crypto-internal-logmon",
@@ -5303,6 +5304,7 @@ dependencies = [
  "ic-crypto-node-key-validation",
  "ic-crypto-secrets-containers",
  "ic-crypto-sha",
+ "ic-crypto-temp-crypto-vault",
  "ic-crypto-test-utils",
  "ic-crypto-test-utils-local-csp-vault",
  "ic-crypto-test-utils-reproducible-rng",
@@ -5342,6 +5344,22 @@ dependencies = [
  "tokio-serde",
  "tokio-util",
  "zeroize",
+]
+
+[[package]]
+name = "ic-crypto-internal-csp-proptest-utils"
+version = "0.8.0"
+dependencies = [
+ "hex",
+ "ic-crypto-internal-basic-sig-ecdsa-secp256k1",
+ "ic-crypto-internal-basic-sig-ecdsa-secp256r1",
+ "ic-crypto-internal-basic-sig-ed25519",
+ "ic-crypto-internal-basic-sig-rsa-pkcs1",
+ "ic-crypto-internal-csp",
+ "ic-crypto-internal-multi-sig-bls12381",
+ "ic-crypto-internal-threshold-sig-bls12381",
+ "ic-types",
+ "proptest",
 ]
 
 [[package]]
@@ -5656,6 +5674,7 @@ dependencies = [
  "ic-crypto-internal-csp",
  "ic-crypto-internal-logmon",
  "ic-crypto-node-key-generation",
+ "ic-crypto-temp-crypto-vault",
  "ic-crypto-test-utils",
  "ic-crypto-tls-interfaces",
  "ic-crypto-utils-time",
@@ -5668,6 +5687,17 @@ dependencies = [
  "ic-registry-proto-data-provider",
  "ic-types",
  "ic-types-test-utils",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
+name = "ic-crypto-temp-crypto-vault"
+version = "0.1.0"
+dependencies = [
+ "ic-crypto-internal-csp",
+ "ic-crypto-internal-logmon",
+ "ic-logger",
  "tempfile",
  "tokio",
 ]
