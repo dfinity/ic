@@ -7,6 +7,7 @@ use dfn_protobuf::{protobuf, ProtoBuf};
 use futures::future::{join_all, select_all, try_join_all};
 use futures::FutureExt;
 use ic_agent::export::Principal;
+use ic_agent::identity::BasicIdentity;
 use ic_agent::{
     agent::http_transport::ReqwestHttpReplicaV2Transport, Agent, AgentError, Identity, RequestId,
 };
@@ -46,6 +47,8 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Lines};
 use tokio::net::{TcpSocket, TcpStream};
 use tokio::runtime::Runtime as TRuntime;
 use url::Url;
+
+pub mod delegations;
 
 pub const CANISTER_FREEZE_BALANCE_RESERVE: Cycles = Cycles::new(5_000_000_000_000);
 pub const CYCLES_LIMIT_PER_CANISTER: Cycles = Cycles::new(100_000_000_000_000);
@@ -791,12 +794,12 @@ pub async fn agent_with_client_identity(
 }
 
 // Creates an identity to be used with `Agent`.
-pub fn random_ed25519_identity() -> impl Identity {
+pub fn random_ed25519_identity() -> BasicIdentity {
     let rng = ring::rand::SystemRandom::new();
     let key_pair = ring::signature::Ed25519KeyPair::generate_pkcs8(&rng)
         .expect("Could not generate a key pair.");
 
-    ic_agent::identity::BasicIdentity::from_key_pair(
+    BasicIdentity::from_key_pair(
         ring::signature::Ed25519KeyPair::from_pkcs8(key_pair.as_ref())
             .expect("Could not read the key pair."),
     )

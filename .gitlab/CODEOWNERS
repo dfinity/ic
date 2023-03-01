@@ -217,6 +217,7 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/tests/bin/boundary_node_update_workload_test.rs @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/boundarynode-team @dfinity-lab/teams/networking-team
 /rs/tests/bin/btc_get_balance_test.rs     @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/execution-owners
 /rs/tests/bin/canister_http_test.rs       @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/networking-team
+/rs/tests/bin/canister_sig_verification_cache_test.rs       @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/crypto-owners
 /rs/tests/bin/ckbtc_minter_basics_test.rs @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/financial-integrations
 /rs/tests/bin/ckbtc_minter_batching.rs @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/financial-integrations
 /rs/tests/bin/ckbtc_minter_heartbeat.rs @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/financial-integrations
@@ -257,6 +258,7 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/tests/src/btc_integration/          @dfinity-lab/teams/execution-owners
 /rs/tests/src/canister_http/       @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/networking-team
 /rs/tests/src/canister_http/basic_http.rs  @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/consensus-owners
+/rs/tests/src/canister_sig_verification_cache_test       @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/crypto-owners
 /rs/tests/src/ckbtc/                    @dfinity-lab/teams/financial-integrations  @dfinity-lab/teams/ic-testing-verification
 /rs/tests/src/consensus/                @dfinity-lab/teams/consensus-owners @dfinity-lab/teams/ic-testing-verification
 /rs/tests/src/execution/                @dfinity-lab/teams/execution-owners @dfinity-lab/teams/runtime-owners

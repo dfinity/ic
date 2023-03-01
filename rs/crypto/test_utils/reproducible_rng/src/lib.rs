@@ -2,7 +2,7 @@ use rand::{CryptoRng, Error, Rng, RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
 /// Provides a seeded RNG, where the randomly chosen seed is printed on standard output.
-pub fn reproducible_rng() -> impl Rng + CryptoRng {
+pub fn reproducible_rng() -> ReproducibleRng {
     ReproducibleRng::new()
 }
 
@@ -14,27 +14,48 @@ pub fn reproducible_rng() -> impl Rng + CryptoRng {
 /// (See [impl trait type](https://doc.rust-lang.org/reference/types/impl-trait.html)).
 pub struct ReproducibleRng {
     rng: ChaCha20Rng,
+    seed: [u8; 32],
 }
 
 impl ReproducibleRng {
+    /// Verbose constructor. Randomly generates a seed and prints it to `stdout`.
     pub fn new() -> Self {
-        let mut thread_rng = rand::thread_rng();
-        let mut seed = [0u8; 32];
-        thread_rng.fill(&mut seed);
-        Self::from_seed(seed)
+        let rng = Self::silent_new();
+        println!("{rng:?}");
+        rng
     }
 
-    pub fn from_seed(seed: [u8; 32]) -> Self {
-        println!("Copy the seed below to reproduce the failed test.");
-        println!("let seed: [u8; 32] = {:?};", &seed);
+    /// Silent constructor. Randomly generates a seed but doesn't automatically print it to `stdout`.
+    pub fn silent_new() -> Self {
+        let mut seed = [0u8; 32];
+        rand::thread_rng().fill(&mut seed);
+        Self::from_seed(seed)
+    }
+}
+
+impl rand::SeedableRng for ReproducibleRng {
+    type Seed = [u8; 32];
+    #[inline]
+    fn from_seed(seed: Self::Seed) -> Self {
         let rng = ChaCha20Rng::from_seed(seed);
-        Self { rng }
+        Self { rng, seed }
+    }
+}
+
+impl std::fmt::Debug for ReproducibleRng {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Copy the seed below to reproduce the failed test.\n
+    let seed: [u8; 32] = {:?};",
+            self.seed
+        )
     }
 }
 
 impl Default for ReproducibleRng {
     fn default() -> Self {
-        ReproducibleRng::new()
+        Self::new()
     }
 }
 

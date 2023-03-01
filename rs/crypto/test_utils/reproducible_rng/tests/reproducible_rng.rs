@@ -12,3 +12,20 @@ fn no_trivial_output() {
     // remark: generating a random `0u64` is unlikely (Pr = 1 / 2^64)
     assert_ne!(rng.next_u64(), 0);
 }
+
+#[test]
+fn outputs_are_distinct() {
+    const NUM_OUTPUTS: usize = 1000;
+    let mut rng = reproducible_rng();
+    let mut outputs = std::collections::HashSet::<[u8; 16]>::new();
+
+    for _ in 0..NUM_OUTPUTS {
+        let mut random_bytes = [0u8; 16];
+        rng.fill_bytes(&mut random_bytes);
+        let no_collision = outputs.insert(random_bytes);
+        assert!(
+            no_collision,
+            "generated random_bytes={random_bytes:?} twice"
+        );
+    }
+}
