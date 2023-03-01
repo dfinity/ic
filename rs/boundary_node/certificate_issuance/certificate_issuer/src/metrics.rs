@@ -88,7 +88,7 @@ impl<T: Create> Create for WithMetrics<T> {
 
 #[async_trait]
 impl<T: Update> Update for WithMetrics<T> {
-    async fn update(&self, id: &str, typ: &UpdateType) -> Result<(), UpdateError> {
+    async fn update(&self, id: &Id, typ: &UpdateType) -> Result<(), UpdateError> {
         let start_time = Instant::now();
 
         let out = self.0.update(id, typ).await;
@@ -125,7 +125,7 @@ impl<T: Update> Update for WithMetrics<T> {
         counter.add(&cx, 1, labels);
         recorder.record(&cx, duration, labels);
 
-        info!(action = action.as_str(), id = id.to_string(), typ = ?typ, status, duration, error = ?out.as_ref().err());
+        info!(action = action.as_str(), id = %id, typ = ?typ, status, duration, error = ?out.as_ref().err());
 
         out
     }
@@ -133,7 +133,7 @@ impl<T: Update> Update for WithMetrics<T> {
 
 #[async_trait]
 impl<T: Remove> Remove for WithMetrics<T> {
-    async fn remove(&self, id: &str) -> Result<(), RemoveError> {
+    async fn remove(&self, id: &Id) -> Result<(), RemoveError> {
         let start_time = Instant::now();
 
         let out = self.0.remove(id).await;
@@ -161,7 +161,7 @@ impl<T: Remove> Remove for WithMetrics<T> {
         counter.add(&cx, 1, labels);
         recorder.record(&cx, duration, labels);
 
-        info!(action = action.as_str(), id = id.to_string(), status, duration, error = ?out.as_ref().err());
+        info!(action = action.as_str(), id = %id, status, duration, error = ?out.as_ref().err());
 
         out
     }
@@ -169,7 +169,7 @@ impl<T: Remove> Remove for WithMetrics<T> {
 
 #[async_trait]
 impl<T: Get> Get for WithMetrics<T> {
-    async fn get(&self, id: &str) -> Result<Registration, GetError> {
+    async fn get(&self, id: &Id) -> Result<Registration, GetError> {
         let start_time = Instant::now();
 
         let out = self.0.get(id).await;
@@ -197,7 +197,7 @@ impl<T: Get> Get for WithMetrics<T> {
         counter.add(&cx, 1, labels);
         recorder.record(&cx, duration, labels);
 
-        info!(action = action.as_str(), id = id.to_string(), status, duration, error = ?out.as_ref().err());
+        info!(action = action.as_str(), id = %id, status, duration, error = ?out.as_ref().err());
 
         out
     }
@@ -233,7 +233,7 @@ impl<T: Queue> Queue for WithMetrics<T> {
         counter.add(&cx, 1, labels);
         recorder.record(&cx, duration, labels);
 
-        info!(action = action.as_str(), id = id.to_string(), t, status, duration, error = ?out.as_ref().err());
+        info!(action = action.as_str(), id = %id, t, status, duration, error = ?out.as_ref().err());
 
         out
     }
@@ -530,7 +530,7 @@ impl<T: acme::Finalize> acme::Finalize for WithMetrics<T> {
 
 #[async_trait]
 impl<T: certificate::Upload> certificate::Upload for WithMetrics<T> {
-    async fn upload(&self, id: &str, pair: certificate::Pair) -> Result<(), UploadError> {
+    async fn upload(&self, id: &Id, pair: certificate::Pair) -> Result<(), UploadError> {
         let start_time = Instant::now();
 
         let out = self.0.upload(id, pair).await;
@@ -558,7 +558,7 @@ impl<T: certificate::Upload> certificate::Upload for WithMetrics<T> {
         counter.add(&cx, 1, labels);
         recorder.record(&cx, duration, labels);
 
-        info!(action = action.as_str(), id, status, duration, error = ?out.as_ref().err());
+        info!(action = action.as_str(), id = %id, status, duration, error = ?out.as_ref().err());
 
         out
     }

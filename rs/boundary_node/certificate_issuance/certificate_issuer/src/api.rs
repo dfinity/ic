@@ -15,19 +15,20 @@ use crate::{
     certificate::Export,
     check::{Check, CheckError},
     registration::{
-        Create, CreateError, Get, GetError, Remove, RemoveError, Update, UpdateError, UpdateType,
+        Create, CreateError, Get, GetError, Id, Remove, RemoveError, Update, UpdateError,
+        UpdateType,
     },
     work::Queue,
 };
 
 #[derive(Deserialize)]
 pub struct CreateHandlerRequest {
-    pub name: String,
+    pub name: Id,
 }
 
 #[derive(Serialize)]
 pub struct CreateHandlerResponse {
-    pub id: String,
+    pub id: Id,
 }
 
 #[allow(clippy::type_complexity)]
@@ -102,7 +103,7 @@ pub async fn create_handler(
 
 pub async fn get_handler(
     Extension(g): Extension<Arc<dyn Get>>,
-    Path(id): Path<String>,
+    Path(id): Path<Id>,
     _: Request<Body>,
 ) -> Response<Body> {
     let reg = match g.get(&id).await {
@@ -142,7 +143,7 @@ pub async fn get_handler(
 #[allow(clippy::type_complexity)]
 pub async fn update_handler(
     Extension((ck, g, u)): Extension<(Arc<dyn Check>, Arc<dyn Get>, Arc<dyn Update>)>,
-    Path(id): Path<String>,
+    Path(id): Path<Id>,
     _: Request<Body>,
 ) -> Response<Body> {
     let reg = match g.get(&id).await {
@@ -206,7 +207,7 @@ pub async fn update_handler(
 #[allow(clippy::type_complexity)]
 pub async fn remove_handler(
     Extension((ck, g, r)): Extension<(Arc<dyn Check>, Arc<dyn Get>, Arc<dyn Remove>)>,
-    Path(id): Path<String>,
+    Path(id): Path<Id>,
     _: Request<Body>,
 ) -> Response<Body> {
     let reg = match g.get(&id).await {
@@ -312,7 +313,7 @@ mod tests {
         getter
             .expect_get()
             .times(1)
-            .with(predicate::eq("id"))
+            .with(predicate::eq(Id::from("id")))
             .returning(|_| {
                 Ok(Registration {
                     name: String::from("name"),
@@ -333,7 +334,7 @@ mod tests {
             .expect_update()
             .times(1)
             .with(
-                predicate::eq("id"),
+                predicate::eq(Id::from("id")),
                 predicate::eq(UpdateType::Canister(
                     Principal::from_text("2ibo7-dia").unwrap(),
                 )),
@@ -358,7 +359,7 @@ mod tests {
         getter
             .expect_get()
             .times(1)
-            .with(predicate::eq("id"))
+            .with(predicate::eq(Id::from("id")))
             .returning(|_| {
                 Ok(Registration {
                     name: String::from("name"),
@@ -395,7 +396,7 @@ mod tests {
         getter
             .expect_get()
             .times(1)
-            .with(predicate::eq("id"))
+            .with(predicate::eq(Id::from("id")))
             .returning(|_| {
                 Ok(Registration {
                     name: String::from("name"),
@@ -420,7 +421,7 @@ mod tests {
         remover
             .expect_remove()
             .times(1)
-            .with(predicate::eq("id"))
+            .with(predicate::eq(Id::from("id")))
             .returning(|_| Ok(()));
 
         let resp = remove_handler(
@@ -441,7 +442,7 @@ mod tests {
         getter
             .expect_get()
             .times(1)
-            .with(predicate::eq("id"))
+            .with(predicate::eq(Id::from("id")))
             .returning(|_| {
                 Ok(Registration {
                     name: String::from("name"),

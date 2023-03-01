@@ -3,11 +3,10 @@ use std::{sync::Arc, time::Duration};
 use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use candid::{Decode, Encode, Principal};
-use certificate_orchestrator_interface as ifc;
+use certificate_orchestrator_interface::{self as ifc, EncryptedPair, Id};
 use futures::{stream, StreamExt, TryStreamExt};
 use garcon::Delay;
 use ic_agent::Agent;
-use ifc::EncryptedPair;
 use mockall::automock;
 use serde::Serialize;
 
@@ -30,7 +29,7 @@ pub enum UploadError {
 #[automock]
 #[async_trait]
 pub trait Upload: Sync + Send {
-    async fn upload(&self, id: &str, pair: Pair) -> Result<(), UploadError>;
+    async fn upload(&self, id: &Id, pair: Pair) -> Result<(), UploadError>;
 }
 
 #[derive(Serialize)]
@@ -69,7 +68,7 @@ impl CanisterUploader {
 
 #[async_trait]
 impl Upload for CanisterUploader {
-    async fn upload(&self, id: &str, pair: Pair) -> Result<(), UploadError> {
+    async fn upload(&self, id: &Id, pair: Pair) -> Result<(), UploadError> {
         use ifc::{UploadCertificateError as Error, UploadCertificateResponse as Response};
 
         let waiter = Delay::builder()

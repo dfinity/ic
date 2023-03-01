@@ -158,7 +158,7 @@ pub enum GetError {
 }
 
 pub trait Get {
-    fn get(&self, id: &str) -> Result<Registration, GetError>;
+    fn get(&self, id: &Id) -> Result<Registration, GetError>;
 }
 
 pub struct Getter {
@@ -172,14 +172,14 @@ impl Getter {
 }
 
 impl Get for Getter {
-    fn get(&self, id: &str) -> Result<Registration, GetError> {
+    fn get(&self, id: &Id) -> Result<Registration, GetError> {
         self.registrations
             .with(|regs| regs.borrow().get(&id.into()).ok_or(GetError::NotFound))
     }
 }
 
 impl<T: Get, A: Authorize> Get for WithAuthorize<T, A> {
-    fn get(&self, id: &str) -> Result<Registration, GetError> {
+    fn get(&self, id: &Id) -> Result<Registration, GetError> {
         if let Err(err) = self.1.authorize(&caller()) {
             return Err(match err {
                 AuthorizeError::Unauthorized => GetError::Unauthorized,
@@ -202,7 +202,7 @@ pub enum UpdateError {
 }
 
 pub trait Update {
-    fn update(&self, id: &str, typ: UpdateType) -> Result<(), UpdateError>;
+    fn update(&self, id: &Id, typ: UpdateType) -> Result<(), UpdateError>;
 }
 
 pub struct Updater {
@@ -226,7 +226,7 @@ impl Updater {
 }
 
 impl Update for Updater {
-    fn update(&self, id: &str, typ: UpdateType) -> Result<(), UpdateError> {
+    fn update(&self, id: &Id, typ: UpdateType) -> Result<(), UpdateError> {
         match typ {
             // Update canister ID
             UpdateType::Canister(canister) => {
@@ -271,11 +271,9 @@ impl Update for Updater {
 
                 // Successful registrations should not be expired or retried
                 if state == State::Available {
-                    self.expirations
-                        .with(|exps| exps.borrow_mut().remove(&id.to_string()));
+                    self.expirations.with(|exps| exps.borrow_mut().remove(id));
 
-                    self.retries
-                        .with(|rets| rets.borrow_mut().remove(&id.to_string()));
+                    self.retries.with(|rets| rets.borrow_mut().remove(id));
                 }
             }
         }
@@ -285,7 +283,7 @@ impl Update for Updater {
 }
 
 impl<T: Update, A: Authorize> Update for WithAuthorize<T, A> {
-    fn update(&self, id: &str, typ: UpdateType) -> Result<(), UpdateError> {
+    fn update(&self, id: &Id, typ: UpdateType) -> Result<(), UpdateError> {
         if let Err(err) = self.1.authorize(&caller()) {
             return Err(match err {
                 AuthorizeError::Unauthorized => UpdateError::Unauthorized,
@@ -298,7 +296,7 @@ impl<T: Update, A: Authorize> Update for WithAuthorize<T, A> {
 }
 
 impl<T: Update> Update for WithMetrics<T> {
-    fn update(&self, id: &str, typ: UpdateType) -> Result<(), UpdateError> {
+    fn update(&self, id: &Id, typ: UpdateType) -> Result<(), UpdateError> {
         let out = self.0.update(id, typ);
 
         self.1.with(|c| {
@@ -332,13 +330,13 @@ pub enum RemoveError {
 
 #[automock]
 pub trait Remove {
-    fn remove(&self, id: &str) -> Result<(), RemoveError>;
+    fn remove(&self, id: &Id) -> Result<(), RemoveError>;
 }
 
 pub struct Remover {
     registrations: LocalRef<StableMap<Id, Registration>>,
     names: LocalRef<StableMap<Name, Id>>,
-    tasks: LocalRef<PriorityQueue<String, Reverse<u64>>>,
+    tasks: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
     expirations: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
     retries: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
     encrypted_certificates: LocalRef<StableMap<Id, EncryptedPair>>,
@@ -348,7 +346,7 @@ impl Remover {
     pub fn new(
         registrations: LocalRef<StableMap<Id, Registration>>,
         names: LocalRef<StableMap<Name, Id>>,
-        tasks: LocalRef<PriorityQueue<String, Reverse<u64>>>,
+        tasks: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
         expirations: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
         retries: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
         encrypted_certificates: LocalRef<StableMap<Id, EncryptedPair>>,
@@ -365,32 +363,31 @@ impl Remover {
 }
 
 impl Remove for Remover {
-    fn remove(&self, id: &str) -> Result<(), RemoveError> {
+    fn remove(&self, id: &Id) -> Result<(), RemoveError> {
         let Registration { name, .. } = self
             .registrations
             .with(|regs| regs.borrow().get(&id.into()).ok_or(RemoveError::NotFound))?;
 
         // remove registration
-        self.registrations
-            .with(|regs| regs.borrow_mut().remove(&id.to_string()));
+        self.registrations.with(|regs| regs.borrow_mut().remove(id));
 
         // remove name mapping
         self.names.with(|names| names.borrow_mut().remove(&name));
 
         // remove task/retry/expiry if present
         [self.tasks, self.retries, self.expirations]
-            .map(|pq| pq.with(|pq| pq.borrow_mut().remove(&id.to_string())));
+            .map(|pq| pq.with(|pq| pq.borrow_mut().remove(id)));
 
         // remove certificate
         self.encrypted_certificates
-            .with(|certs| certs.borrow_mut().remove(&id.to_string()));
+            .with(|certs| certs.borrow_mut().remove(id));
 
         Ok(())
     }
 }
 
 impl<T: Remove, A: Authorize> Remove for WithAuthorize<T, A> {
-    fn remove(&self, id: &str) -> Result<(), RemoveError> {
+    fn remove(&self, id: &Id) -> Result<(), RemoveError> {
         if let Err(err) = self.1.authorize(&caller()) {
             return Err(match err {
                 AuthorizeError::Unauthorized => RemoveError::Unauthorized,
@@ -403,7 +400,7 @@ impl<T: Remove, A: Authorize> Remove for WithAuthorize<T, A> {
 }
 
 impl<T: Remove> Remove for WithMetrics<T> {
-    fn remove(&self, id: &str) -> Result<(), RemoveError> {
+    fn remove(&self, id: &Id) -> Result<(), RemoveError> {
         let out = self.0.remove(id);
 
         self.1.with(|c| {
@@ -506,7 +503,7 @@ mod tests {
     fn get_empty() {
         let getter = Getter::new(&REGISTRATIONS);
 
-        match getter.get(&String::from("id")) {
+        match getter.get(&Id::from("id")) {
             Err(GetError::NotFound) => {}
             other => panic!("expected NotFound but got {other:?}"),
         };
@@ -526,7 +523,7 @@ mod tests {
 
         let getter = Getter::new(&REGISTRATIONS);
 
-        let out = match getter.get(&String::from("id")) {
+        let out = match getter.get(&Id::from("id")) {
             Ok(reg) => reg,
             other => panic!("expected registration but got {other:?}"),
         };
@@ -592,13 +589,13 @@ mod tests {
             .expect("failed to insert");
 
         Updater::new(&REGISTRATIONS, &EXPIRATIONS, &RETRIES).update(
-            "id",
+            &Id::from("id"),
             UpdateType::Canister(Principal::from_text("2ibo7-dia")?),
         )?;
 
         // Check registration
         let reg = REGISTRATIONS
-            .with(|regs| regs.borrow().get(&String::from("id")))
+            .with(|regs| regs.borrow().get(&Id::from("id")))
             .expect("expected registration to exist but none found");
 
         assert_eq!(
@@ -625,12 +622,14 @@ mod tests {
             .with(|regs| regs.borrow_mut().insert("id".into(), reg))
             .expect("failed to insert");
 
-        Updater::new(&REGISTRATIONS, &EXPIRATIONS, &RETRIES)
-            .update("id", UpdateType::State(State::PendingChallengeResponse))?;
+        Updater::new(&REGISTRATIONS, &EXPIRATIONS, &RETRIES).update(
+            &Id::from("id"),
+            UpdateType::State(State::PendingChallengeResponse),
+        )?;
 
         // Check registration
         let reg = REGISTRATIONS
-            .with(|regs| regs.borrow().get(&String::from("id")))
+            .with(|regs| regs.borrow().get(&Id::from("id")))
             .expect("expected registration to exist but none found");
 
         assert_eq!(
@@ -656,7 +655,7 @@ mod tests {
             &ENCRYPTED_CERTIFICATES,
         );
 
-        match r.remove("id") {
+        match r.remove(&Id::from("id")) {
             Err(RemoveError::NotFound) => {}
             other => panic!("expected RemoveError::NotFound but got {:?}", other),
         };
@@ -725,7 +724,7 @@ mod tests {
             &ENCRYPTED_CERTIFICATES,
         );
 
-        match r.remove("id") {
+        match r.remove(&Id::from("id")) {
             Ok(()) => {}
             other => panic!("expected Ok but got {:?}", other),
         };
@@ -787,7 +786,7 @@ mod tests {
             &ENCRYPTED_CERTIFICATES,
         );
 
-        match r.remove("id") {
+        match r.remove(&Id::from("id")) {
             Ok(()) => {}
             other => panic!("expected Ok but got {:?}", other),
         };
@@ -813,7 +812,7 @@ mod tests {
 
         thread_local!(static REMOVER: RefCell<Box<dyn Remove>> = RefCell::new(Box::new({
             let mut r = MockRemove::new();
-            r.expect_remove().times(1).with(predicate::eq("id-1")).returning(|_| Ok(()));
+            r.expect_remove().times(1).with(predicate::eq(String::from("id-1"))).returning(|_| Ok(()));
             r
         })));
 

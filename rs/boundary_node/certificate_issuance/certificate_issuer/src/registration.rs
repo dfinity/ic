@@ -118,7 +118,7 @@ pub enum UpdateError {
 #[automock]
 #[async_trait]
 pub trait Update: Send + Sync {
-    async fn update(&self, id: &str, typ: &UpdateType) -> Result<(), UpdateError>;
+    async fn update(&self, id: &Id, typ: &UpdateType) -> Result<(), UpdateError>;
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -132,7 +132,7 @@ pub enum RemoveError {
 #[automock]
 #[async_trait]
 pub trait Remove: Send + Sync {
-    async fn remove(&self, id: &str) -> Result<(), RemoveError>;
+    async fn remove(&self, id: &Id) -> Result<(), RemoveError>;
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -146,14 +146,14 @@ pub enum GetError {
 #[automock]
 #[async_trait]
 pub trait Get: Send + Sync {
-    async fn get(&self, id: &str) -> Result<Registration, GetError>;
+    async fn get(&self, id: &Id) -> Result<Registration, GetError>;
 }
 
 pub struct CanisterGetter(pub Arc<Agent>, pub Principal);
 
 #[async_trait]
 impl Get for CanisterGetter {
-    async fn get(&self, id: &str) -> Result<Registration, GetError> {
+    async fn get(&self, id: &Id) -> Result<Registration, GetError> {
         use ifc::{GetRegistrationError as Error, GetRegistrationResponse as Response};
 
         let args = Encode!(&id).context("failed to encode arg")?;
@@ -219,7 +219,7 @@ pub struct CanisterUpdater(pub Arc<Agent>, pub Principal);
 
 #[async_trait]
 impl Update for CanisterUpdater {
-    async fn update(&self, id: &str, typ: &UpdateType) -> Result<(), UpdateError> {
+    async fn update(&self, id: &Id, typ: &UpdateType) -> Result<(), UpdateError> {
         use ifc::{UpdateRegistrationError as Error, UpdateRegistrationResponse as Response};
 
         let waiter = Delay::builder()
@@ -255,7 +255,7 @@ pub struct CanisterRemover(pub Arc<Agent>, pub Principal);
 
 #[async_trait]
 impl Remove for CanisterRemover {
-    async fn remove(&self, id: &str) -> Result<(), RemoveError> {
+    async fn remove(&self, id: &Id) -> Result<(), RemoveError> {
         use ifc::{RemoveRegistrationError as Error, RemoveRegistrationResponse as Response};
 
         let waiter = Delay::builder()

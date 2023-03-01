@@ -29,17 +29,17 @@ pub enum QueueError {
 }
 
 pub trait Queue {
-    fn queue(&self, id: String, timestamp: u64) -> Result<(), QueueError>;
+    fn queue(&self, id: Id, timestamp: u64) -> Result<(), QueueError>;
 }
 
 pub struct Queuer {
-    tasks: LocalRef<PriorityQueue<String, Reverse<u64>>>,
+    tasks: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
     registrations: LocalRef<StableMap<Id, Registration>>,
 }
 
 impl Queuer {
     pub fn new(
-        tasks: LocalRef<PriorityQueue<String, Reverse<u64>>>,
+        tasks: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
         registrations: LocalRef<StableMap<Id, Registration>>,
     ) -> Self {
         Self {
@@ -50,7 +50,7 @@ impl Queuer {
 }
 
 impl Queue for Queuer {
-    fn queue(&self, id: String, timestamp: u64) -> Result<(), QueueError> {
+    fn queue(&self, id: Id, timestamp: u64) -> Result<(), QueueError> {
         self.registrations.with(|regs| {
             let regs = regs.borrow();
             regs.get(&id).ok_or(QueueError::NotFound)
