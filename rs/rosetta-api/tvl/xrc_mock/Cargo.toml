@@ -1,0 +1,15 @@
+[package]
+name = "xrc-mock"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "xrc-mock"
+path = "main.rs"
+
+[dependencies]
+candid = "0.8.4"
+ic-base-types = { path = "../../../types/base_types" }
+ic-cdk-macros = "0.6.8"
+ic-cdk = "0.7.0"
+serde = "1.0"
