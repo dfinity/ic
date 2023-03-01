@@ -15,6 +15,7 @@ DEPENDENCIES = [
     "//rs/constants",
     "//rs/crypto",
     "//rs/crypto/sha",
+    "//rs/crypto/test_utils/reproducible_rng",
     "//rs/crypto/tree_hash",
     "//rs/cup_explorer",
     "//rs/http_utils",

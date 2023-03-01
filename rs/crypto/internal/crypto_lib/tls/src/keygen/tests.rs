@@ -5,6 +5,7 @@ use assert_matches::assert_matches;
 use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
 use openssl::pkey::{Id, Public};
 use openssl::x509::X509VerifyResult;
+use rand::SeedableRng;
 
 const VALIDITY_DAYS: u32 = 365;
 

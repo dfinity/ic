@@ -44,6 +44,7 @@ ic-config = { path = "../config" }
 ic-constants = { path = "../constants" }
 ic-crypto = { path = "../crypto" }
 ic-crypto-sha = { path = "../crypto/sha" }
+ic-crypto-test-utils-reproducible-rng = { path = "../crypto/test_utils/reproducible_rng" }
 ic-crypto-tree-hash = { path = "../crypto/tree_hash" }
 ic-cup-explorer = { path = "../cup_explorer" }
 ic-http-utils = { path = "../http_utils" }
@@ -475,3 +476,7 @@ path = "bin/update_workload_long_test.rs"
 [[bin]]
 name = "ic-systest-update-workload-large-payload"
 path = "bin/update_workload_large_payload.rs"
+
+[[bin]]
+name = "ic-systest-canister-sig-verification-cache-test"
+path = "bin/canister_sig_verification_cache_test.rs"

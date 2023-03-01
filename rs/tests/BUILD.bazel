@@ -1207,6 +1207,23 @@ system_test(
     deps = DEPENDENCIES + [":tests"],
 )
 
+system_test(
+    name = "canister_sig_verification_cache_test",
+    flaky = False,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "system_test_pre_master",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = GUESTOS_RUNTIME_DEPS + [
+        ":src/counter.wat",
+        "@ii_test_canister//file",
+    ],
+    deps = DEPENDENCIES + [
+        ":tests",
+    ],
+)
+
 # Replicable tests
 
 # The target is used for testing the following scenarios:
