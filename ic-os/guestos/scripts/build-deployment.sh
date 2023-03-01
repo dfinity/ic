@@ -80,6 +80,9 @@ Arguments:
         -x | --debug)
             DEBUG=1
             ;;
+        --deploy-local)
+            DEPLOY_LOCAL=true
+            ;;
         --with-testnet-keys)
             TESTNET_KEYS="${REPO_ROOT}/testnet/config/ssh_authorized_keys/admin"
             ;;
@@ -101,6 +104,7 @@ WHITELIST="${WHITELIST:=}"
 DKG_INTERVAL_LENGTH="${DKG_INTERVAL_LENGTH:=-1}"
 # Negative value means unset (default will be used)
 MAX_INGRESS_BYTES_PER_MESSAGE="${MAX_INGRESS_BYTES_PER_MESSAGE:=-1}"
+DEPLOY_LOCAL=${DEPLOY_LOCAL:-false}
 
 if [[ -z "$GIT_REVISION" ]]; then
     echo "Please provide the GIT_REVISION as env. variable or the command line with --git-revision=<value>"
@@ -179,20 +183,26 @@ function cleanup_rootfs() {
 }
 
 function download_registry_canisters() {
-#    "${REPO_ROOT}"/gitlab-ci/src/artifacts/rclone_download.py \
-#        --git-rev "$GIT_REVISION" --remote-path=canisters --out="${IC_PREP_DIR}/canisters"
+    if ${DEPLOY_LOCAL} ; then
+        cp -r "${REPO_ROOT}"/bazel-bin/publish/canisters/  "${IC_PREP_DIR}/canisters"
+    else
+       "${REPO_ROOT}"/gitlab-ci/src/artifacts/rclone_download.py \
+           --git-rev "$GIT_REVISION" --remote-path=canisters --out="${IC_PREP_DIR}/canisters"
+    fi
 
-    cp -r "${REPO_ROOT}"/bazel-bin/publish/canisters/  "${IC_PREP_DIR}/canisters"
     find "${IC_PREP_DIR}/canisters/" -name "*.gz" -print0 | xargs -P100 -0I{} bash -c "gunzip -f {}"
 
     rsync -a --delete "${IC_PREP_DIR}/canisters/" "$OUTPUT/canisters/"
 }
 
 function download_binaries() {
-#    "${REPO_ROOT}"/gitlab-ci/src/artifacts/rclone_download.py \
-#        --git-rev "$GIT_REVISION" --remote-path=release --out="${IC_PREP_DIR}/bin"
+    if ${DEPLOY_LOCAL} ; then
+       cp -r "${REPO_ROOT}"/bazel-bin/publish/binaries/  "${IC_PREP_DIR}/bin"
+    else
+       "${REPO_ROOT}"/gitlab-ci/src/artifacts/rclone_download.py \
+         --git-rev "$GIT_REVISION" --remote-path=release --out="${IC_PREP_DIR}/bin"
+    fi
 
-    cp -r "${REPO_ROOT}"/bazel-bin/publish/binaries/  "${IC_PREP_DIR}/bin"
     find "${IC_PREP_DIR}/bin/" -name "*.gz" -print0 | xargs -P100 -0I{} bash -c "gunzip -f {} && basename {} .gz | xargs -I[] chmod +x ${IC_PREP_DIR}/bin/[]"
 
     mkdir -p "$OUTPUT/bin"

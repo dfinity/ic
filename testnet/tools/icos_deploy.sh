@@ -103,6 +103,9 @@ while [ $# -gt 0 ]; do
         --no-boundary-nodes)
             USE_BOUNDARY_NODES="false"
             ;;
+	--deploy-local)
+            DEPLOY_LOCAL="true"
+            ;;
         --with-testnet-keys)
             WITH_TESTNET_KEYS="--with-testnet-keys"
             ;;
@@ -122,6 +125,14 @@ if [[ -z "${deployment:-}" ]]; then
     echo "ERROR: No deployment specified."
     exit_usage
 fi
+
+DEPLOY_LOCAL=${DEPLOY_LOCAL=:-false}
+DEPLOY_LOCAL_ARGS=""
+if [[ ${DEPLOY_LOCAL} ]]; then
+    deployment=localhost
+    DEPLOY_LOCAL_ARGS=" --deploy-local "
+fi
+
 
 # Negative DKG value means unset (default will be used)
 DKG_INTERVAL_LENGTH="${DKG_INTERVAL_LENGTH:=-1}"
@@ -235,7 +246,8 @@ pushd "${REPO_ROOT}/ic-os/guestos"
     --dkg-interval-length=${DKG_INTERVAL_LENGTH} \
     --max-ingress-bytes-per-message=${MAX_INGRESS_BYTES_PER_MESSAGE} \
     --output-nns-public-key="${MEDIA_PATH}/nns-public-key.pem" \
-    ${WITH_TESTNET_KEYS:-}
+    ${WITH_TESTNET_KEYS:-} \
+    ${DEPLOY_LOCAL_ARGS:-}
 popd
 
 if [[ "${USE_BOUNDARY_NODES}" == "true" ]]; then

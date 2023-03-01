@@ -50,4 +50,4 @@ fi
 cd "$(dirname "$0")"
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 ${REPO_ROOT}/gitlab-ci/container/build-ic.sh -i -b -c
-${REPO_ROOT}/testnet/tools/icos_deploy.sh localhost --git-revision $(gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh master)
+bash -x ${REPO_ROOT}/testnet/tools/icos_deploy.sh localhost --deploy-local --git-revision $(${REPO_ROOT}/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh master)
