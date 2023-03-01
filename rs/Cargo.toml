@@ -125,6 +125,7 @@ members = [
   "monitoring/logger",
   "monitoring/metrics",
   "monitoring/onchain_observability/adapter",
+  "monitoring/onchain_observability/service",
   "monitoring/pprof",
   "nervous_system/common",
   "nervous_system/common/build_metadata",
