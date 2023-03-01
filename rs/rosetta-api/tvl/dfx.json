@@ -1,11 +1,11 @@
 {
   "canisters": {
-    "xrc": {
+    "xrc_mock": {
       "type": "custom",
-      "candid": "xrc/xrc.did",
-      "wasm": "xrc/xrc.wasm.gz",
+      "candid": "xrc_mock/xrc.did",
+      "wasm": "../../../bazel-bin/rs/rosetta-api/tvl/xrc_mock.wasm",
       "remote": {
-        "candid": "xrc/xrc.did",
+        "candid": "xrc_mock/xrc.did",
         "id": {
           "ic": "uf6dk-hyaaa-aaaaq-qaaaq-cai"
         }

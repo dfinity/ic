@@ -23,11 +23,20 @@ MACRO_DEPENDENCIES = [
     "@crate_index//:ic-cdk-macros",
 ]
 
+rust_canister(
+    name = "xrc_mock",
+    srcs = ["xrc_mock/main.rs"],
+    crate_name = "xrc_mock_canister",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    service_file = ":xrc_mock/xrc.did",
+    deps = DEPENDENCIES,
+)
+
 rust_library(
     name = "tvl",
     srcs = glob(["src/**/*.rs"]),
     crate_name = "ic_tvl_canister",
-    edition = "2018",
+    edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )
@@ -36,7 +45,7 @@ rust_canister(
     name = "tvl_canister",
     srcs = ["src/main.rs"],
     crate_name = "ic_tvl_canister",
-    edition = "2018",
+    edition = "2021",
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":tvl.did",
     deps = [":tvl"] + DEPENDENCIES,

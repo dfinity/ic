@@ -217,6 +217,7 @@ members = [
   "rosetta-api/hardware_wallet_tests",
   "rosetta-api/test_utils",
   "rosetta-api/tvl",
+  "rosetta-api/tvl/xrc_mock",
   "rust_canisters/call_tree_test",
   "rust_canisters/canister_creator",
   "rust_canisters/canister_log",

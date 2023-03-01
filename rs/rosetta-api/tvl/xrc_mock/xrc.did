@@ -78,6 +78,6 @@ type GetExchangeRateResult = variant {
     Err: ExchangeRateError;
 };
 
-service : {
+service : (nat64) -> {
     "get_exchange_rate": (GetExchangeRateRequest) -> (GetExchangeRateResult);
 }

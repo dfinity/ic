@@ -16822,6 +16822,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "xrc-mock"
+version = "0.1.0"
+dependencies = [
+ "candid",
+ "ic-base-types",
+ "ic-cdk 0.7.1",
+ "ic-cdk-macros",
+ "serde",
+]
+
+[[package]]
 name = "xz2"
 version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
