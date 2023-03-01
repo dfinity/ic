@@ -19,3 +19,4 @@ erased-serde = "0.3.23"
 serde_derive = "1.0.150"
 crossbeam = "0.8.0"
 crossbeam-channel = "0.5.5"
+url = { version = "2.1.1", features = ["serde"] }

@@ -37,11 +37,13 @@ use ic_types::{
     NodeId, PrincipalId, RegistryVersion, SubnetId,
 };
 use job_types::{JobType, NodeOS};
+use serde::Serialize;
 use slog::{warn, Logger};
 use thiserror::Error;
 
 pub mod file_sd;
 pub mod job_types;
+pub mod jobs;
 pub mod mainnet_registry;
 pub mod metrics;
 pub mod poll_loop;
@@ -64,7 +66,7 @@ pub trait IcServiceDiscovery: Send + Sync {
 
 /// A [TargetGroup] associates a set of scrape targets with
 /// a set of labels.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 pub struct TargetGroup {
     pub node_id: NodeId,
     pub ic_name: String,

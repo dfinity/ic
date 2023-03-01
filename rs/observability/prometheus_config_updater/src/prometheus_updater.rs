@@ -2,16 +2,17 @@ use std::collections::{BTreeSet, HashMap};
 
 use serde::Serialize;
 
-use config_writer_common::{
-    labels_keys,
-    vector_config_structure::{
-        VectorConfigBuilder, VectorConfigEnriched, VectorSource, VectorTransform,
-    },
+use config_writer_common::vector_config_structure::{
+    VectorConfigBuilder, VectorConfigEnriched, VectorSource, VectorTransform,
 };
 use service_discovery::{job_types::JobType, TargetGroup};
 use url::Url;
 
 use crate::JobParameters;
+
+const IC_NAME: &str = "ic";
+const IC_NODE: &str = "ic_node";
+const IC_SUBNET: &str = "ic_subnet";
 
 pub struct VectorConfigBuilderImpl {
     proxy_url: Option<Url>,
@@ -151,12 +152,12 @@ impl VectorTransform for VectorPrometheusScrapeTransform {
 impl VectorPrometheusScrapeTransform {
     fn from_target_group_with_job(tg: TargetGroup, job: &JobType) -> Self {
         let mut labels: HashMap<String, String> = HashMap::new();
-        labels.insert(labels_keys::IC_NAME.into(), tg.ic_name);
-        labels.insert(labels_keys::IC_NODE.into(), tg.node_id.to_string());
+        labels.insert(IC_NAME.into(), tg.ic_name);
+        labels.insert(IC_NODE.into(), tg.node_id.to_string());
         if let Some(subnet_id) = tg.subnet_id {
-            labels.insert(labels_keys::IC_SUBNET.into(), subnet_id.to_string());
+            labels.insert(IC_SUBNET.into(), subnet_id.to_string());
         }
-        labels.insert(labels_keys::JOB.into(), job.to_string());
+        labels.insert("job".into(), job.to_string());
         Self {
             _type: "remap".into(),
             inputs: tg

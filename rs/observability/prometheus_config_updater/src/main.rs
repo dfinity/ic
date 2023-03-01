@@ -1,9 +1,9 @@
-use std::collections::HashMap;
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use anyhow::{bail, Result};
 use clap::Parser;
-use config_writer_common::config_writer_loop::config_writer_loop;
+use config_writer_common::config_updater_loop::config_updater_loop;
+use config_writer_common::config_writer::ConfigWriter;
 use config_writer_common::filters::{NodeIDRegexFilter, TargetGroupFilter, TargetGroupFilterList};
 use futures_util::FutureExt;
 use humantime::parse_duration;
@@ -11,76 +11,22 @@ use ic_async_utils::shutdown_signal;
 use ic_metrics::MetricsRegistry;
 use regex::Regex;
 use service_discovery::registry_sync::sync_local_registry;
-use service_discovery::{
-    job_types::{JobType, NodeOS},
-    metrics::Metrics,
-    poll_loop::make_poll_loop,
-    IcServiceDiscoveryImpl,
-};
+use service_discovery::{metrics::Metrics, poll_loop::make_poll_loop, IcServiceDiscoveryImpl};
 use slog::{info, o, Drain, Logger};
 use url::Url;
 
 use crate::custom_filters::OldMachinesFilter;
-use crate::vector_configuration::VectorConfigBuilderImpl;
+use crate::prometheus_config::PrometheusConfigBuilder;
 
 mod custom_filters;
-mod vector_configuration;
+mod jobs;
+mod prometheus_config;
+// mod prometheus_updater;
 
 #[derive(Clone, Debug)]
 pub struct JobParameters {
     pub port: u16,
     pub endpoint: String,
-}
-
-#[derive(Clone)]
-struct Job {
-    _type: JobType,
-    port: u16,
-    endpoint: String,
-}
-
-fn jobs() -> Vec<Job> {
-    vec![
-        Job {
-            _type: JobType::NodeExporter(NodeOS::Guest),
-            port: 9100,
-            endpoint: "/metrics".into(),
-        },
-        Job {
-            _type: JobType::NodeExporter(NodeOS::Host),
-            port: 9100,
-            endpoint: "/metrics".into(),
-        },
-        Job {
-            _type: JobType::Orchestrator,
-            port: 9091,
-            endpoint: "/".into(),
-        },
-        Job {
-            _type: JobType::Replica,
-            port: 9090,
-            endpoint: "/".into(),
-        },
-    ]
-}
-
-fn get_jobs() -> HashMap<JobType, u16> {
-    jobs().iter().map(|job| (job._type, job.port)).collect()
-}
-
-fn get_jobs_parameters() -> HashMap<JobType, JobParameters> {
-    jobs()
-        .iter()
-        .map(|job| {
-            (
-                job._type,
-                JobParameters {
-                    port: job.port,
-                    endpoint: job.endpoint.clone(),
-                },
-            )
-        })
-        .collect()
 }
 
 fn main() -> Result<()> {
@@ -91,7 +37,7 @@ fn main() -> Result<()> {
     let shutdown_signal = shutdown_signal(log.clone()).shared();
     let mut handles = vec![];
 
-    info!(log, "Starting vector-config-generator");
+    info!(log, "Starting prometheus-config-updater");
     let mercury_dir = cli_args.targets_dir.join("mercury");
     rt.block_on(sync_local_registry(
         log.clone(),
@@ -100,14 +46,14 @@ fn main() -> Result<()> {
         cli_args.skip_sync,
     ));
 
-    let jobs = get_jobs();
+    let jobs = jobs::get_jobs();
 
     info!(log, "Starting IcServiceDiscovery ...");
     let ic_discovery = Arc::new(IcServiceDiscoveryImpl::new(
         log.clone(),
         cli_args.targets_dir,
         cli_args.registry_query_timeout,
-        jobs.clone(),
+        jobs,
     )?);
 
     let (stop_signal_sender, stop_signal_rcv) = crossbeam::channel::bounded::<()>(0);
@@ -138,22 +84,19 @@ fn main() -> Result<()> {
     filters_vec.push(Box::new(OldMachinesFilter {}));
 
     let filters = Arc::new(TargetGroupFilterList::new(filters_vec));
-
-    let config_writer_loop = config_writer_loop(
+    let config_builder = PrometheusConfigBuilder::new();
+    let config_updater_loop = config_updater_loop(
         log.clone(),
         ic_discovery,
-        filters,
+        filters.clone(),
         stop_signal_rcv,
-        jobs.into_keys().collect(),
+        // jobs.into_iter().map(|(job, _)| job).collect(),
+        jobs::jobs_list(),
         update_signal_rcv,
-        cli_args.generation_dir,
-        VectorConfigBuilderImpl::new(
-            cli_args.proxy_url,
-            cli_args.scrape_interval,
-            get_jobs_parameters(),
-        ),
+        config_builder,
+        ConfigWriter::new(cli_args.generation_dir, filters, log),
     );
-    let config_join_handle = std::thread::spawn(config_writer_loop);
+    let config_join_handle = std::thread::spawn(config_updater_loop);
     handles.push(config_join_handle);
 
     rt.block_on(shutdown_signal);
@@ -230,25 +173,6 @@ Regex used to filter the node IDs
 "#
     )]
     filter_node_id_regex: Option<Regex>,
-
-    #[clap(
-        long = "scrape-interval",
-        default_value = "30",
-        help = r#"
-Interval for metrics scraping in the generated configuration
-
-"#
-    )]
-    scrape_interval: u64,
-
-    #[clap(
-        long = "proxy-url",
-        help = r#"
-URL of the proxy to use in the generated config
-
-"#
-    )]
-    proxy_url: Option<Url>,
 
     #[clap(
         long = "nns-url",

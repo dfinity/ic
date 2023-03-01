@@ -72,7 +72,7 @@ fn main() -> Result<()> {
         )));
     };
 
-    let filters = TargetGroupFilterList::new(filters_vec);
+    let filters = Arc::new(TargetGroupFilterList::new(filters_vec));
 
     let config_generator_loop = config_writer_loop(
         log.clone(),
