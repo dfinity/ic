@@ -159,7 +159,6 @@ NODES=${!__RAW_NODE_@}
 
 function prepare_build_directories() {
     TEMPDIR=$(mktemp -d /tmp/build-deployment.sh.XXXXXXXXXX)
-    TEMPDIR="/home/faraz/wrk/apk/build-deployment/"
 
     IC_PREP_DIR="$TEMPDIR/IC_PREP"
     CONFIG_DIR="$TEMPDIR/CONFIG"
@@ -183,7 +182,8 @@ function download_registry_canisters() {
 #    "${REPO_ROOT}"/gitlab-ci/src/artifacts/rclone_download.py \
 #        --git-rev "$GIT_REVISION" --remote-path=canisters --out="${IC_PREP_DIR}/canisters"
 
-#    find "${IC_PREP_DIR}/canisters/" -name "*.gz" -print0 | xargs -P100 -0I{} bash -c "gunzip -f {}"
+    cp -r "${REPO_ROOT}"/bazel-bin/publish/canisters/  "${IC_PREP_DIR}/canisters"
+    find "${IC_PREP_DIR}/canisters/" -name "*.gz" -print0 | xargs -P100 -0I{} bash -c "gunzip -f {}"
 
     rsync -a --delete "${IC_PREP_DIR}/canisters/" "$OUTPUT/canisters/"
 }
@@ -192,7 +192,8 @@ function download_binaries() {
 #    "${REPO_ROOT}"/gitlab-ci/src/artifacts/rclone_download.py \
 #        --git-rev "$GIT_REVISION" --remote-path=release --out="${IC_PREP_DIR}/bin"
 
-#    find "${IC_PREP_DIR}/bin/" -name "*.gz" -print0 | xargs -P100 -0I{} bash -c "gunzip -f {} && basename {} .gz | xargs -I[] chmod +x ${IC_PREP_DIR}/bin/[]"
+    cp -r "${REPO_ROOT}"/bazel-bin/publish/binaries/  "${IC_PREP_DIR}/bin"
+    find "${IC_PREP_DIR}/bin/" -name "*.gz" -print0 | xargs -P100 -0I{} bash -c "gunzip -f {} && basename {} .gz | xargs -I[] chmod +x ${IC_PREP_DIR}/bin/[]"
 
     mkdir -p "$OUTPUT/bin"
     rsync -a --delete "${IC_PREP_DIR}/bin/" "$OUTPUT/bin/"

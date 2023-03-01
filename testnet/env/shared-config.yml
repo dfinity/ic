@@ -45,6 +45,11 @@ data_centers:
     vars:
       ipv6_prefix: "2a00:fb01:400:42"
       ipv6_subnet: "/64"
+  localhost:
+    vars:
+      ipv6_prefix: "2a00:fb01:400:42"
+      ipv6_subnet: "/64"
+
 
 physical_hosts:
   vars:

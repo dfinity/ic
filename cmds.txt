@@ -1,0 +1,1 @@
+export LD_LIBRARY_PATH=:/home/faraz/wrk/apk/openssl1_1_1/openssl-1.1.1o/lib:/home/faraz/wrk/apk/openssl1_1_1/openssl-1.1.1o/lib
