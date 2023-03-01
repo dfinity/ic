@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Duration};
+use std::{fmt, sync::Arc, time::Duration};
 
 use anyhow::{anyhow, Context};
 use async_trait::async_trait;
@@ -23,9 +23,9 @@ pub enum Action {
     Certificate,
 }
 
-impl ToString for Action {
-    fn to_string(&self) -> String {
-        serde_json::ser::to_string(self).unwrap_or_else(|_| "N/A".into())
+impl fmt::Display for Action {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{self:?}")
     }
 }
 
@@ -565,7 +565,7 @@ mod tests {
             .expect_upload()
             .times(1)
             .with(
-                predicate::eq("id"),
+                predicate::eq(Id::from("id")),
                 predicate::eq(Pair("key".into(), "cert".into())),
             )
             .returning(|_, _| Ok(()));

@@ -532,7 +532,7 @@ fn create_registration(name: String, canister: Principal) -> CreateRegistrationR
 }
 
 #[query(name = "getRegistration")]
-fn get_registration(id: String) -> GetRegistrationResponse {
+fn get_registration(id: Id) -> GetRegistrationResponse {
     match GETTER.with(|g| g.borrow().get(&id)) {
         Ok(reg) => GetRegistrationResponse::Ok(reg),
         Err(err) => GetRegistrationResponse::Err(match err {
@@ -546,7 +546,7 @@ fn get_registration(id: String) -> GetRegistrationResponse {
 }
 
 #[update(name = "updateRegistration")]
-fn update_registration(id: String, typ: UpdateType) -> UpdateRegistrationResponse {
+fn update_registration(id: Id, typ: UpdateType) -> UpdateRegistrationResponse {
     match UPDATER.with(|u| u.borrow().update(&id, typ)) {
         Ok(()) => UpdateRegistrationResponse::Ok(()),
         Err(err) => UpdateRegistrationResponse::Err(match err {
@@ -560,7 +560,7 @@ fn update_registration(id: String, typ: UpdateType) -> UpdateRegistrationRespons
 }
 
 #[update(name = "removeRegistration")]
-fn remove_registration(id: String) -> RemoveRegistrationResponse {
+fn remove_registration(id: Id) -> RemoveRegistrationResponse {
     match REMOVER.with(|r| r.borrow().remove(&id)) {
         Ok(()) => RemoveRegistrationResponse::Ok(()),
         Err(err) => RemoveRegistrationResponse::Err(match err {
