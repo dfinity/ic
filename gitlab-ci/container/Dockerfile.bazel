@@ -15,7 +15,7 @@ RUN export DEBIAN_FRONTEND=noninteractive && ln -snf /usr/share/zoneinfo/$TZ /et
     # Test \
     rsync \
     # RUST \
-    gcc lld pkg-config libssl-dev libunwind-dev libsqlite3-dev zlib1g-dev libclang-10-dev \
+    gcc lld pkg-config libssl-dev libunwind-dev libusb-1.0-0-dev libsqlite3-dev zlib1g-dev libclang-10-dev \
     # IC-OS \
     python3 python-is-python3 fakeroot android-sdk-ext4-utils cryptsetup-bin zstd lsb-release grub-efi-amd64-bin libsystemd-dev faketime dosfstools libselinux-dev mtools
 
