@@ -17,7 +17,9 @@ Runbook::
 end::catalog[] */
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::test_env::{HasIcPrepDir, TestEnv};
-use crate::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
+use crate::driver::test_env_api::{
+    GetFirstHealthyNodeSnapshot, HasGroupSetup, HasPublicApiUrl, NnsCanisterEnvVars,
+};
 use crate::util::{block_on, runtime_from_url};
 use hyper::{
     service::{make_service_fn, service_fn},
@@ -41,7 +43,8 @@ use slog::info;
 use std::convert::Infallible;
 use std::net::SocketAddr;
 
-pub fn config(env: TestEnv) {
+pub fn setup(env: TestEnv) {
+    env.ensure_group_setup_created();
     InternetComputer::new()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
         .setup_and_start(&env)
@@ -49,6 +52,9 @@ pub fn config(env: TestEnv) {
 }
 
 pub fn test(env: TestEnv) {
+    // setup the REGISTRY_CANISTER_WASM_PATH environment variable which is read by the installation
+    // procedure.
+    env.set_nns_canisters_env_vars().unwrap();
     let logger = env.logger();
     let root_node = env.get_first_healthy_nns_node_snapshot();
     let pk_bytes = env

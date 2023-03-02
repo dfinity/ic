@@ -2,8 +2,8 @@ use clap::Parser;
 use ic_tests::boundary_nodes_integration::boundary_nodes::BoundaryNodeHttpsConfig;
 use ic_tests::{
     api_test, basic_health_test, boundary_nodes_integration, boundary_nodes_snp_tests,
-    canister_http, driver::driver_setup::initialize_env, execution, ledger_tests, message_routing,
-    networking, nns_tests, orchestrator, wasm_generator_test, workload_counter_canister_test,
+    canister_http, driver::driver_setup::initialize_env, ledger_tests, message_routing, networking,
+    nns_tests, orchestrator, wasm_generator_test, workload_counter_canister_test,
 };
 use ic_tests::{
     driver::{
@@ -348,14 +348,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     par(vec![sys_t(
                         "global_reboot_test",
                         message_routing::global_reboot_test::test,
-                    )]),
-                ),
-                pot_with_setup(
-                    "certified_registry_pot",
-                    execution::registry_authentication_test::config,
-                    par(vec![sys_t(
-                        "registry_authentication_test",
-                        execution::registry_authentication_test::test,
                     )]),
                 ),
                 pot_with_setup(
