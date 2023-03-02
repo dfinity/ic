@@ -34,7 +34,7 @@ use ic_protobuf::registry::{
 use ic_protobuf::types::v1::{PrincipalId as PrincipalIdProto, SubnetId as SubnetIdProto};
 use ic_registry_client::client::RegistryDataProviderError;
 use ic_registry_keys::{
-    make_blessed_replica_version_key, make_node_operator_record_key,
+    make_blessed_replica_versions_key, make_node_operator_record_key,
     make_provisional_whitelist_record_key, make_replica_version_key, make_routing_table_record_key,
     make_subnet_list_record_key, make_unassigned_nodes_config_record_key, ROOT_SUBNET_ID_KEY,
 };
@@ -519,7 +519,7 @@ impl IcConfig {
         write_registry_entry(
             &data_provider,
             self.target_dir.as_path(),
-            &make_blessed_replica_version_key(),
+            &make_blessed_replica_versions_key(),
             version,
             blessed_replica_versions_record,
         );

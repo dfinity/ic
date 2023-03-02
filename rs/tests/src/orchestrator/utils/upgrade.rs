@@ -13,7 +13,7 @@ use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nns_common::types::NeuronId;
 use ic_nns_test_utils::ids::TEST_NEURON_1_ID;
 use ic_protobuf::registry::replica_version::v1::BlessedReplicaVersions;
-use ic_registry_keys::make_blessed_replica_version_key;
+use ic_registry_keys::make_blessed_replica_versions_key;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_types::{messages::ReplicaHealthStatus, ReplicaVersion, SubnetId};
 use prost::Message;
@@ -101,7 +101,10 @@ pub(crate) async fn get_blessed_replica_versions(
     registry_canister: &RegistryCanister,
 ) -> BlessedReplicaVersions {
     let blessed_vers_result = registry_canister
-        .get_value(make_blessed_replica_version_key().as_bytes().to_vec(), None)
+        .get_value(
+            make_blessed_replica_versions_key().as_bytes().to_vec(),
+            None,
+        )
         .await
         .unwrap();
     BlessedReplicaVersions::decode(&*blessed_vers_result.0).unwrap()

@@ -13,7 +13,7 @@ use ic_protobuf::registry::{
     subnet::v1::SubnetRecord,
 };
 use ic_registry_keys::{
-    make_blessed_replica_version_key, make_replica_version_key, make_subnet_record_key,
+    make_blessed_replica_versions_key, make_replica_version_key, make_subnet_record_key,
 };
 use ic_test_utilities::types::ids::subnet_test_id;
 
@@ -60,7 +60,7 @@ fn test_the_anonymous_user_cannot_bless_a_version() {
         assert_eq!(
             get_value_or_panic::<BlessedReplicaVersions>(
                 &registry,
-                make_blessed_replica_version_key().as_bytes()
+                make_blessed_replica_versions_key().as_bytes()
             )
             .await,
             BlessedReplicaVersions {
@@ -78,7 +78,7 @@ fn test_the_anonymous_user_cannot_bless_a_version() {
         assert_eq!(
             get_value_or_panic::<BlessedReplicaVersions>(
                 &registry,
-                make_blessed_replica_version_key().as_bytes()
+                make_blessed_replica_versions_key().as_bytes()
             )
             .await,
             BlessedReplicaVersions {
@@ -135,7 +135,7 @@ fn test_a_canister_other_than_the_proposals_canister_cannot_bless_a_version() {
         assert_eq!(
             get_value_or_panic::<BlessedReplicaVersions>(
                 &registry,
-                make_blessed_replica_version_key().as_bytes()
+                make_blessed_replica_versions_key().as_bytes()
             )
             .await,
             BlessedReplicaVersions {
@@ -190,7 +190,7 @@ fn test_accepted_proposal_mutates_the_registry() {
         assert_eq!(
             get_value_or_panic::<BlessedReplicaVersions>(
                 &registry,
-                make_blessed_replica_version_key().as_bytes()
+                make_blessed_replica_versions_key().as_bytes()
             )
             .await,
             BlessedReplicaVersions {
