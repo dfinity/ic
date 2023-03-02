@@ -25,12 +25,12 @@ Coverage::
 Authentication checks in block validation.
 end::catalog[] */
 
+use crate::crypto::request_signature_test::{expiry_time, random_ecdsa_identity, sign_update};
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::test_env::{SshKeyGen, TestEnv};
 use crate::driver::test_env_api::{
     HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, ADMIN,
 };
-use crate::execution::request_signature_test::{expiry_time, random_ecdsa_identity, sign_update};
 use crate::util::*;
 use ic_agent::export::Principal;
 use ic_agent::Identity;

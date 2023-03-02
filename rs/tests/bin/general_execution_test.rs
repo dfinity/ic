@@ -14,7 +14,6 @@ use ic_tests::execution::ingress_rate_limiting::*;
 use ic_tests::execution::malicious_input::malicious_input_test;
 use ic_tests::execution::nns_shielding::*;
 use ic_tests::execution::queries::query_reply_sizes;
-use ic_tests::execution::request_signature_test::request_signature_test;
 use ic_tests::systest;
 
 fn main() -> Result<()> {
@@ -22,7 +21,6 @@ fn main() -> Result<()> {
         .with_setup(config_system_verified_application_subnets)
         .add_parallel(
             SystemTestSubGroup::new()
-                .add_test(systest!(request_signature_test))
                 .add_test(systest!(malicious_input_test))
                 .add_test(systest!(test_raw_rand_api))
                 .add_test(systest!(can_access_big_heap_and_big_stable_memory))

@@ -7,6 +7,7 @@ pub mod canister_http;
 pub mod canister_sig_verification_cache_test;
 pub mod ckbtc;
 pub mod consensus;
+pub mod crypto;
 pub mod distributed_tests;
 pub mod driver;
 pub mod execution;
