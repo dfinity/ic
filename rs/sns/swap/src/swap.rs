@@ -975,7 +975,23 @@ impl Swap {
             )
             .await;
 
-        // Release the lock. Note,
+        if finalize_swap_response.has_error_message() {
+            log!(
+                ERROR,
+                "The sale did not finalize successfully. \n\
+                finalize_swap_response: {finalize_swap_response:?}"
+            );
+        } else {
+            log!(
+                INFO,
+                "The sale finalized successfully. \n\
+                finalize_swap_response: {finalize_swap_response:?}"
+            );
+        }
+
+        // Release the lock. Note, if there is a panic, the lock will
+        // not be released. In that case, the Sale canister will need
+        // to be upgraded to release the lock.
         self.unlock_finalize_swap();
 
         finalize_swap_response
