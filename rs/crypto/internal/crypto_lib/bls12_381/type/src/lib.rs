@@ -391,7 +391,7 @@ impl Scalar {
     /// If self < other returns -1
     /// If self == other returns 0
     /// If self > other returns 1
-    pub(crate) fn ct_compare(&self, other: &Self) -> i8 {
+    pub fn ct_compare(&self, other: &Self) -> i8 {
         use subtle::{ConditionallySelectable, ConstantTimeEq, ConstantTimeLess};
 
         const IS_LT: u8 = 0xff; // -1i8 as u8

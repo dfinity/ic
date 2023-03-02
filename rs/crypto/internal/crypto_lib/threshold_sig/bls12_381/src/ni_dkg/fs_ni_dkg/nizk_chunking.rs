@@ -211,6 +211,9 @@ pub fn prove_chunking<R: RngCore + CryptoRng>(
 
     let g1 = &instance.g1_gen;
 
+    let y0_g1_tbl =
+        G1Projective::compute_mul2_tbl(&G1Projective::from(&y0), &G1Projective::from(g1));
+
     // sigma = replicateM NUM_ZK_REPETITIONS $ getRandom [-S..Z-1]
     // beta = replicateM NUM_ZK_REPETITIONS $ getRandom [0..p-1]
     // bb = map (g1^) beta
@@ -222,40 +225,53 @@ pub fn prove_chunking<R: RngCore + CryptoRng>(
         let sigma: Vec<Scalar> = (0..NUM_ZK_REPETITIONS)
             .map(|_| Scalar::random_within_range(rng, range as u64) + &p_sub_s)
             .collect();
-        let tbl = G1Projective::compute_mul2_tbl(&G1Projective::from(&y0), &G1Projective::from(g1));
-        let cc: Vec<G1Affine> = beta
+        let cc: Vec<G1Projective> = beta
             .iter()
             .zip(&sigma)
-            .map(|(beta_i, sigma_i)| tbl.mul2(beta_i, sigma_i).to_affine())
+            .map(|(beta_i, sigma_i)| y0_g1_tbl.mul2(beta_i, sigma_i))
             .collect();
+
+        let cc = G1Projective::batch_normalize(&cc);
 
         let first_move = FirstMoveChunking::from(&y0, &bb, &cc);
         // Verifier's challenge.
         let first_challenge = ChunksOracle::new(instance, &first_move).get_all_chunks(n, m);
 
         // z_s = [sum [e_ijk * s_ij | i <- [1..n], j <- [1..m]] + sigma_k | k <- [1..l]]
-        let z_s: Result<Vec<Scalar>, ()> = (0..NUM_ZK_REPETITIONS)
-            .map(|k| {
-                let mut acc = Scalar::zero();
-                first_challenge
-                    .iter()
-                    .zip(witness.scalars_s.iter())
-                    .for_each(|(e_i, s_i)| {
-                        e_i.iter().zip(s_i.iter()).for_each(|(e_ij, s_ij)| {
-                            acc += Scalar::from_usize(e_ij[k]) * s_ij;
-                        });
+
+        let mut z_s = Vec::with_capacity(NUM_ZK_REPETITIONS);
+
+        for k in 0..NUM_ZK_REPETITIONS {
+            let mut acc = Scalar::zero();
+            first_challenge
+                .iter()
+                .zip(witness.scalars_s.iter())
+                .for_each(|(e_i, s_i)| {
+                    e_i.iter().zip(s_i.iter()).for_each(|(e_ij, s_ij)| {
+                        acc += Scalar::from_usize(e_ij[k]) * s_ij;
                     });
-                acc += &sigma[k];
+                });
+            acc += &sigma[k];
 
-                if acc > zz_big {
-                    Err(())
-                } else {
-                    Ok(acc)
-                }
-            })
-            .collect();
+            z_s.push(acc);
+        }
 
-        if let Ok(z_s) = z_s {
+        // Now check if our z_s is valid. Our control flow reveals if we retry
+        // but in the event of a retry it should ideally not reveal *which* z_s
+        // caused us to retry, since that may reveal information about the witness.
+        //
+        // Perform the check by using ct_compare with zz_big. This function
+        // returns 1 if the zz_big is greater than its argument. If for any
+        // input it returns 0 or -1 (indicating z was == or > zz_big) then the
+        // sum will not match the overall length of z_s.
+
+        let zs_in_range = z_s
+            .iter()
+            .map(|z| zz_big.ct_compare(z) as isize)
+            .sum::<isize>() as usize
+            == NUM_ZK_REPETITIONS;
+
+        if zs_in_range {
             break (first_move, first_challenge, z_s);
         }
     };
@@ -369,9 +385,9 @@ pub fn verify_chunking(
             let rj_e_ijk =
                 G1Projective::muln_affine_vartime(&instance.randomizers_r, &e_ijk_polynomials);
 
-            lhs.push(G1Affine::from(rj_e_ijk + &nizk.dd[i + 1]));
+            lhs.push(rj_e_ijk + &nizk.dd[i + 1]);
         }
-        lhs
+        G1Projective::batch_normalize(&lhs)
     };
 
     if lhs != rhs {
