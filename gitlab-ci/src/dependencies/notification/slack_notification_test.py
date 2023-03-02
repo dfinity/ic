@@ -212,7 +212,7 @@ def test_on_finding_created_notify_if_risk_not_set_if_enabled(on_create, finding
     if on_create:
         notifier.on_finding_created(finding)
     else:
-        notifier.on_finding_updated(FINDING_WITH_RISK_YES_PATCH_NO, finding)
+        notifier.on_finding_refreshed(FINDING_WITH_RISK_YES_PATCH_NO, finding)
 
     assert len(api.messages) == 1
     assert "risk assessment" in api.messages[0]
@@ -238,7 +238,7 @@ def test_on_finding_created_or_updated_dont_notify_if_risk_not_set_if_disabled(o
     if on_create:
         notifier.on_finding_created(finding)
     else:
-        notifier.on_finding_updated(FINDING_WITH_RISK_NO_PATCH_NO, finding)
+        notifier.on_finding_refreshed(FINDING_WITH_RISK_NO_PATCH_NO, finding)
 
     assert len(api.messages) == 0
 
@@ -260,7 +260,7 @@ def test_on_finding_created_or_updated_dont_notify_if_risk_set_if_enabled(on_cre
     if on_create:
         notifier.on_finding_created(finding)
     else:
-        notifier.on_finding_updated(FINDING_WITH_RISK_NO_PATCH_NO, finding)
+        notifier.on_finding_refreshed(FINDING_WITH_RISK_NO_PATCH_NO, finding)
 
     assert len(api.messages) == 0
 
@@ -282,7 +282,7 @@ def test_on_finding_created_or_updated_notify_if_patch_set_if_enabled(on_create,
     if on_create:
         notifier.on_finding_created(finding)
     else:
-        notifier.on_finding_updated(FINDING_WITH_RISK_NO_PATCH_NO, finding)
+        notifier.on_finding_refreshed(FINDING_WITH_RISK_NO_PATCH_NO, finding)
 
     assert len(api.messages) == 1
     assert "patch version" in api.messages[0]
@@ -308,7 +308,7 @@ def test_on_finding_created_or_updated_dont_notify_if_patch_set_if_disabled(on_c
     if on_create:
         notifier.on_finding_created(finding)
     else:
-        notifier.on_finding_updated(FINDING_WITH_RISK_NO_PATCH_NO, finding)
+        notifier.on_finding_refreshed(FINDING_WITH_RISK_NO_PATCH_NO, finding)
 
     assert len(api.messages) == 0
 
@@ -330,7 +330,7 @@ def test_on_finding_created_or_updated_dont_notify_if_patch_not_set_if_enabled(o
     if on_create:
         notifier.on_finding_created(finding)
     else:
-        notifier.on_finding_updated(FINDING_WITH_RISK_NO_PATCH_NO, finding)
+        notifier.on_finding_refreshed(FINDING_WITH_RISK_NO_PATCH_NO, finding)
 
     assert len(api.messages) == 0
 
@@ -341,7 +341,7 @@ def test_on_finding_updated_dont_notify_if_patch_already_set_if_enabled(finding)
     config = NotificationConfig(notify_on_finding_patch_version_available=True)
     notifier = SlackNotifier(config, api)
 
-    notifier.on_finding_updated(FINDING_WITH_RISK_NO_PATCH_YES, finding)
+    notifier.on_finding_refreshed(FINDING_WITH_RISK_NO_PATCH_YES, finding)
 
     assert len(api.messages) == 0
 
@@ -358,7 +358,7 @@ def test_on_finding_created_or_updated_notify_if_risk_not_set_and_patch_set_if_e
     if on_create:
         notifier.on_finding_created(finding)
     else:
-        notifier.on_finding_updated(FINDING_WITH_RISK_YES_PATCH_NO, finding)
+        notifier.on_finding_refreshed(FINDING_WITH_RISK_YES_PATCH_NO, finding)
 
     assert len(api.messages) == 1
     assert "risk assessment" in api.messages[0]
@@ -379,7 +379,7 @@ def test_on_finding_created_or_updated_notify_with_finding_primary_key_if_more_i
     if on_create:
         notifier.on_finding_created(finding)
     else:
-        notifier.on_finding_updated(FINDING_WITH_RISK_YES_PATCH_NO, finding)
+        notifier.on_finding_refreshed(FINDING_WITH_RISK_YES_PATCH_NO, finding)
 
     assert len(api.messages) == 1
     assert (
@@ -399,7 +399,7 @@ def test_on_finding_created_or_updated_notify_channel_if_risk_assessor_is_missin
     if on_create:
         notifier.on_finding_created(finding)
     else:
-        notifier.on_finding_updated(FINDING_WITH_RISK_YES_PATCH_NO, finding)
+        notifier.on_finding_refreshed(FINDING_WITH_RISK_YES_PATCH_NO, finding)
 
     assert len(api.messages) == 1
     assert "no risk assessors" in api.messages[0]
@@ -416,7 +416,7 @@ def test_on_finding_created_or_updated_notify_channel_if_risk_assessor_ids_are_u
     if on_create:
         notifier.on_finding_created(finding)
     else:
-        notifier.on_finding_updated(FINDING_WITH_RISK_YES_PATCH_NO, finding)
+        notifier.on_finding_refreshed(FINDING_WITH_RISK_YES_PATCH_NO, finding)
 
     assert len(api.messages) == 1
     for user in finding.risk_assessor:

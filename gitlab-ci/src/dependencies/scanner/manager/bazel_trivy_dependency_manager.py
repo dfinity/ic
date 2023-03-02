@@ -34,7 +34,7 @@ class TrivyResultParser(abc.ABC):
         file_to_hash: typing.Dict[str, str],
         repository: str,
         scanner: str,
-        project: str,
+        project: Project,
     ) -> typing.List[Finding]:
         """Return list of dependency diffs for modified packages"""
         raise NotImplementedError
@@ -95,6 +95,10 @@ class TrivyResultParser(abc.ABC):
             vulnerabilities_by_vuln_dep[vulnerable_dependency_id] = [vulnerable_dependency, vulnerabilities]
         return [*vulnerabilities_by_vuln_dep.values()]
 
+    @staticmethod
+    def convert_project_for_finding(project: Project):
+        return project.path if project.link is None else f"{project.path} ({project.link})"
+
 
 class OSPackageTrivyResultParser(TrivyResultParser):
     def is_supported_type(self, result_class: str, result_type: typing.Optional[str]) -> bool:
@@ -107,7 +111,7 @@ class OSPackageTrivyResultParser(TrivyResultParser):
         file_to_hash: typing.Dict[str, str],
         repository: str,
         scanner: str,
-        project: str,
+        project: Project,
     ) -> typing.List[Finding]:
         """For OS packages one finding is created for all packages that have the same vulnerabilities and the OS is listed as first level dependency"""
         vulnerabilities_by_vuln_dep = self.trivy_result_to_dependencies_and_vulnerabilities(trivy_data, result_index)
@@ -137,7 +141,7 @@ class OSPackageTrivyResultParser(TrivyResultParser):
                     vulnerable_dependency=vulnerable_dependency,
                     vulnerabilities=vulnerabilities,
                     first_level_dependencies=[],
-                    projects=[project],
+                    projects=[self.convert_project_for_finding(project)],
                     risk_assessor=[],
                     score=max_score,
                 )
@@ -163,7 +167,7 @@ class BinaryTrivyResultParser(TrivyResultParser):
         file_to_hash: typing.Dict[str, str],
         repository: str,
         scanner: str,
-        project: str,
+        project: Project,
     ) -> typing.List[Finding]:
         """For binaries only one finding is created, where the vulnerable dependency is the binary and the vulnerable dependencies of the binary are listed as 1st level dependencies"""
         vulnerabilities_by_vuln_dep = self.trivy_result_to_dependencies_and_vulnerabilities(trivy_data, result_index)
@@ -197,7 +201,7 @@ class BinaryTrivyResultParser(TrivyResultParser):
                 vulnerable_dependency=vulnerable_dependency,
                 vulnerabilities=sum([*map(lambda x: x[1], vulnerabilities_by_vuln_dep)], []),
                 first_level_dependencies=[*map(lambda x: x[0], vulnerabilities_by_vuln_dep)],
-                projects=[project],
+                projects=[self.convert_project_for_finding(project)],
                 risk_assessor=[],
                 score=max_score,
             )
@@ -215,7 +219,7 @@ class SecretTrivyResultParser(TrivyResultParser):
         file_to_hash: typing.Dict[str, str],
         repository: str,
         scanner: str,
-        project: str,
+        project: Project,
     ) -> typing.List[Finding]:
         """For secrets one finding is created"""
         secret_id: str = trivy_data["Results"][result_index]["Target"]
@@ -233,7 +237,7 @@ class SecretTrivyResultParser(TrivyResultParser):
                 vulnerable_dependency=vulnerable_dependency,
                 vulnerabilities=vulnerabilities,
                 first_level_dependencies=[],
-                projects=[project],
+                projects=[self.convert_project_for_finding(project)],
                 risk_assessor=[],
             )
         ]
@@ -308,7 +312,7 @@ class BazelTrivyContainer(DependencyManager):
                 if parser.is_supported_type(result_class, result_type):
                     findings.extend(
                         parser.trivy_result_to_finding(
-                            trivy_data, i, file_to_hash, repository_name, self.get_scanner_id(), project.path
+                            trivy_data, i, file_to_hash, repository_name, self.get_scanner_id(), project
                         )
                     )
                     result_parsed = True

@@ -114,8 +114,8 @@ class SlackNotifier(ScannerSubscriber, FindingDataSourceSubscriber, Notifier):
         logging.debug(f"on_finding_created({finding}")
         self.__notify_if_risk_assessment_needed_or_patch_version_available(None, finding)
 
-    def on_finding_updated(self, finding_before: Finding, finding_after: Finding):
-        logging.debug(f"on_finding_updated({finding_before},{finding_after}")
+    def on_finding_refreshed(self, finding_before: Finding, finding_after: Finding):
+        logging.debug(f"on_finding_refreshed({finding_before},{finding_after}")
         self.__notify_if_risk_assessment_needed_or_patch_version_available(finding_before, finding_after)
 
     def on_finding_deleted(self, finding: Finding):

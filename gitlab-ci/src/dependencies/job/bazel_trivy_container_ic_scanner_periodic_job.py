@@ -14,9 +14,21 @@ REPOS_TO_SCAN = [
         "ic",
         "https://gitlab.com/dfinity-lab/public/ic",
         [
-            Project("boundary-guestos", "ic/ic-os/boundary-guestos/envs/prod"),
-            Project("boundary-guestos", "ic/ic-os/boundary-guestos/envs/prod-sev"),
-            Project("guestos", "ic/ic-os/guestos/prod"),
+            Project(
+                "boundary-guestos",
+                "ic/ic-os/boundary-guestos/envs/prod",
+                "https://gitlab.com/dfinity-lab/public/ic/-/tree/master/ic-os/boundary-guestos/rootfs",
+            ),
+            Project(
+                "boundary-guestos",
+                "ic/ic-os/boundary-guestos/envs/prod-sev",
+                "https://gitlab.com/dfinity-lab/public/ic/-/tree/master/ic-os/boundary-guestos/rootfs",
+            ),
+            Project(
+                "guestos",
+                "ic/ic-os/guestos/prod",
+                "https://gitlab.com/dfinity-lab/public/ic/-/tree/master/ic-os/guestos/rootfs",
+            ),
         ],
     )
 ]

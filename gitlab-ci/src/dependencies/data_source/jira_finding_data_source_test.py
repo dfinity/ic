@@ -407,9 +407,9 @@ def test_create_query_update_finding():
     assert finding_in == finding_out
     jira_lib_mock.create_issue.assert_called_once()
     sub1.on_finding_created.assert_called_once()
-    sub1.on_finding_updated.assert_not_called()
+    sub1.on_finding_refreshed.assert_not_called()
     sub2.on_finding_created.assert_called_once()
-    sub2.on_finding_updated.assert_not_called()
+    sub2.on_finding_refreshed.assert_not_called()
 
     finding_out.vulnerabilities.append(Vulnerability("VID2", "CVE-456", "CRITICAL VULN o.O"))
     finding_out.risk = None
@@ -422,9 +422,9 @@ def test_create_query_update_finding():
     assert finding_out == finding_out2
     jira_lib_mock.create_issue.assert_called_once()
     sub1.on_finding_created.assert_called_once()
-    sub1.on_finding_updated.assert_called_once()
+    sub1.on_finding_refreshed.assert_called_once()
     sub2.on_finding_created.assert_called_once()
-    sub2.on_finding_updated.assert_called_once()
+    sub2.on_finding_refreshed.assert_called_once()
 
 
 def test_create_finding_special_character_escaping(jira_ds, jira_lib_mock):
