@@ -21,7 +21,7 @@ use ic_protobuf::registry::{
 };
 use ic_registry_client_helpers::subnet::get_node_ids_from_subnet_record;
 use ic_registry_keys::{
-    make_blessed_replica_version_key, make_replica_version_key, make_subnet_record_key,
+    make_blessed_replica_versions_key, make_replica_version_key, make_subnet_record_key,
 };
 use ic_registry_transport::{
     pb::v1::{registry_mutation, Precondition, RegistryMutation},
@@ -434,7 +434,7 @@ pub fn bless_replica_version(
 ) -> Result<SignedIngress, String> {
     let mut mutation = RegistryMutation::default();
     mutation.set_mutation_type(registry_mutation::Type::Upsert);
-    mutation.key = make_blessed_replica_version_key().into_bytes();
+    mutation.key = make_blessed_replica_versions_key().into_bytes();
     let mut blessed_versions = player.get_blessed_replica_versions(context_time)?;
     blessed_versions
         .blessed_version_ids

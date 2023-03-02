@@ -76,8 +76,7 @@ pub fn make_replica_version_key<S: AsRef<str>>(replica_version_id: S) -> String 
 }
 
 /// Returns the only key whose payload is the list of blessed replica versions.
-/// TODO(NNS1-2101): Rename to `make_blessed_replica_versions_key`
-pub fn make_blessed_replica_version_key() -> String {
+pub fn make_blessed_replica_versions_key() -> String {
     "blessed_replica_versions".to_string()
 }
 

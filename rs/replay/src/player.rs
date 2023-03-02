@@ -39,7 +39,7 @@ use ic_protobuf::registry::{
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_client_helpers::deserialize_registry_value;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
-use ic_registry_keys::{make_blessed_replica_version_key, make_subnet_record_key};
+use ic_registry_keys::{make_blessed_replica_versions_key, make_subnet_record_key};
 use ic_registry_local_store::{
     Changelog, ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreWriter,
 };
@@ -777,7 +777,7 @@ impl Player {
         &self,
         ingress_expiry: Time,
     ) -> Result<BlessedReplicaVersions, String> {
-        let key = make_blessed_replica_version_key();
+        let key = make_blessed_replica_versions_key();
         let query = UserQuery {
             source: UserId::from(PrincipalId::new_anonymous()),
             receiver: REGISTRY_CANISTER_ID,

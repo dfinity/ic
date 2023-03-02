@@ -24,7 +24,7 @@ use ic_protobuf::registry::{
     subnet::v1::{CatchUpPackageContents, SubnetListRecord, SubnetRecord},
 };
 use ic_registry_keys::{
-    make_blessed_replica_version_key, make_catch_up_package_contents_key, make_crypto_node_key,
+    make_blessed_replica_versions_key, make_catch_up_package_contents_key, make_crypto_node_key,
     make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key,
     make_node_operator_record_key, make_node_record_key, make_replica_version_key,
     make_routing_table_record_key, make_subnet_list_record_key, make_subnet_record_key,
@@ -262,7 +262,7 @@ pub fn invariant_compliant_mutation() -> Vec<RegistryMutation> {
             encode_or_panic(&replica_version),
         ),
         insert(
-            make_blessed_replica_version_key().as_bytes(),
+            make_blessed_replica_versions_key().as_bytes(),
             encode_or_panic(&blessed_replica_version),
         ),
     ]
@@ -377,7 +377,7 @@ pub fn initial_mutations_for_a_multinode_nns_subnet() -> Vec<RegistryMutation> {
             encode_or_panic(&replica_version),
         ),
         insert(
-            make_blessed_replica_version_key().as_bytes(),
+            make_blessed_replica_versions_key().as_bytes(),
             encode_or_panic(&blessed_replica_version),
         ),
     ];

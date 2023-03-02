@@ -76,7 +76,7 @@ use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_client_helpers::ecdsa_keys::EcdsaKeysRegistry;
 use ic_registry_client_helpers::{crypto::CryptoRegistry, subnet::SubnetRegistry};
 use ic_registry_keys::{
-    get_node_record_node_id, is_node_record_key, make_blessed_replica_version_key,
+    get_node_record_node_id, is_node_record_key, make_blessed_replica_versions_key,
     make_canister_migrations_record_key, make_crypto_node_key,
     make_crypto_threshold_signing_pubkey_key, make_crypto_tls_cert_key,
     make_data_center_record_key, make_firewall_config_record_key, make_firewall_rules_record_key,
@@ -3818,7 +3818,7 @@ async fn main() {
         }
         SubCommand::GetBlessedReplicaVersions => {
             print_and_get_last_value::<BlessedReplicaVersions>(
-                make_blessed_replica_version_key().as_bytes().to_vec(),
+                make_blessed_replica_versions_key().as_bytes().to_vec(),
                 &registry_canister,
             )
             .await;

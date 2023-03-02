@@ -14,7 +14,7 @@ use ic_protobuf::registry::{
     unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
 };
 use ic_registry_keys::{
-    make_blessed_replica_version_key, make_replica_version_key, make_subnet_record_key,
+    make_blessed_replica_versions_key, make_replica_version_key, make_subnet_record_key,
     make_unassigned_nodes_config_record_key,
 };
 
@@ -44,7 +44,7 @@ pub(crate) fn check_replica_version_invariants(
     }
 
     let blessed_version_ids = snapshot
-        .get(make_blessed_replica_version_key().as_bytes())
+        .get(make_blessed_replica_versions_key().as_bytes())
         .map(|bytes| {
             let version_list = decode_or_panic::<BlessedReplicaVersions>(bytes.clone());
             version_list.blessed_version_ids
@@ -148,7 +148,7 @@ mod tests {
     fn check_bless_version(versions: Vec<String>) {
         let registry = invariant_compliant_registry();
 
-        let key = make_blessed_replica_version_key();
+        let key = make_blessed_replica_versions_key();
         let value = encode_or_panic(&BlessedReplicaVersions {
             blessed_version_ids: versions,
         });
@@ -229,7 +229,7 @@ mod tests {
                 encode_or_panic(&replica_version),
             ),
             upsert(
-                make_blessed_replica_version_key().as_bytes(),
+                make_blessed_replica_versions_key().as_bytes(),
                 encode_or_panic(&blessed_replica_version),
             ),
             insert(
@@ -239,7 +239,7 @@ mod tests {
         ];
         registry.maybe_apply_mutation_internal(init);
 
-        let key = make_blessed_replica_version_key();
+        let key = make_blessed_replica_versions_key();
 
         let value = encode_or_panic(&BlessedReplicaVersions {
             blessed_version_ids: vec![ReplicaVersion::default().into()],

@@ -18,7 +18,7 @@ use ic_protobuf::registry::{
     unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
 };
 use ic_registry_keys::{
-    make_blessed_replica_version_key, make_replica_version_key, make_subnet_list_record_key,
+    make_blessed_replica_versions_key, make_replica_version_key, make_subnet_list_record_key,
     make_subnet_record_key, make_unassigned_nodes_config_record_key,
 };
 use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation};
@@ -89,7 +89,7 @@ impl Registry {
             // Update the list of blessed versions
             RegistryMutation {
                 mutation_type: registry_mutation::Type::Upsert as i32,
-                key: make_blessed_replica_version_key().as_bytes().to_vec(),
+                key: make_blessed_replica_versions_key().as_bytes().to_vec(),
                 value: encode_or_panic(&BlessedReplicaVersions {
                     blessed_version_ids: versions,
                 }),
@@ -109,7 +109,7 @@ impl Registry {
     ) -> Vec<String> {
         let version = self.latest_version();
         // Get the current list
-        let blessed_key = make_blessed_replica_version_key();
+        let blessed_key = make_blessed_replica_versions_key();
         let before_removal = self
             .get(blessed_key.as_bytes(), version)
             .map(|reg_value| {

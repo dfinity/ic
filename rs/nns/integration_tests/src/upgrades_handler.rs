@@ -16,7 +16,7 @@ use ic_nns_test_utils::{
     registry::get_value_or_panic,
 };
 use ic_protobuf::registry::replica_version::v1::BlessedReplicaVersions;
-use ic_registry_keys::make_blessed_replica_version_key;
+use ic_registry_keys::make_blessed_replica_versions_key;
 use ic_types::ReplicaVersion;
 use registry_canister::mutations::{
     do_update_elected_replica_versions::UpdateElectedReplicaVersionsPayload,
@@ -107,7 +107,7 @@ fn test_submit_and_accept_update_elected_replica_versions_proposal() {
         assert_eq!(
             get_value_or_panic::<BlessedReplicaVersions>(
                 &nns_canisters.registry,
-                make_blessed_replica_version_key().as_bytes()
+                make_blessed_replica_versions_key().as_bytes()
             )
             .await,
             BlessedReplicaVersions {
@@ -201,7 +201,7 @@ fn test_submit_and_accept_update_elected_replica_versions_proposal() {
         assert_eq!(
             get_value_or_panic::<BlessedReplicaVersions>(
                 &nns_canisters.registry,
-                make_blessed_replica_version_key().as_bytes()
+                make_blessed_replica_versions_key().as_bytes()
             )
             .await,
             BlessedReplicaVersions {

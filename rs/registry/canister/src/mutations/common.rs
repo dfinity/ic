@@ -4,7 +4,7 @@ use ic_base_types::{PrincipalId, SubnetId};
 use ic_protobuf::registry::{
     replica_version::v1::BlessedReplicaVersions, subnet::v1::SubnetListRecord,
 };
-use ic_registry_keys::make_blessed_replica_version_key;
+use ic_registry_keys::make_blessed_replica_versions_key;
 use ic_registry_transport::pb::v1::RegistryValue;
 use prost::Message;
 
@@ -34,7 +34,7 @@ fn blessed_versions_to_string(blessed: &BlessedReplicaVersions) -> String {
 }
 
 pub(crate) fn check_replica_version_is_blessed(registry: &Registry, replica_version_id: &str) {
-    let blessed_replica_key = make_blessed_replica_version_key();
+    let blessed_replica_key = make_blessed_replica_versions_key();
     // Get the current list of blessed replica versions
     if let Some(RegistryValue {
         value: blessed_list_vec,
