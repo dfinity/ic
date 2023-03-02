@@ -498,10 +498,10 @@ class JiraFindingDataSource(FindingDataSource):
                 logging.debug(f"updating finding fields {fields_to_update}")
                 jira_issue.update(fields_to_update)
                 self.findings[finding.id()] = (finding_new, jira_issue)
-                for sub in self.subscribers:
-                    sub.on_finding_updated(deepcopy(finding_old), deepcopy(finding))
             else:
                 logging.debug(f"no fields were changed for finding {finding}")
+            for sub in self.subscribers:
+                sub.on_finding_refreshed(deepcopy(finding_old), deepcopy(finding))
         else:
             # create finding
             logging.debug(f"creating finding {finding}")

@@ -60,7 +60,7 @@ def test_return_os_finding():
     executor.run_trivy_and_parse_data.return_value = os_finding, {}
     manager = BazelTrivyContainer(executor=executor)
 
-    res = manager.get_findings("repo", Project(name="proj", path="/some/path"), None)
+    res = manager.get_findings("repo", Project(name="proj", path="/some/path", link="https://some.link"), None)
 
     assert len(res) == 1
     assert res[0].repository == "repo"
@@ -84,7 +84,7 @@ def test_return_os_finding():
         ),
         Dependency(id="ubuntu", name="ubuntu", version="ubuntu 20.04"),
     ]
-    assert res[0].projects == ["/some/path"]
+    assert res[0].projects == ["/some/path (https://some.link)"]
     assert res[0].risk_assessor == []
     assert res[0].risk is None
     assert res[0].patch_responsible == ()

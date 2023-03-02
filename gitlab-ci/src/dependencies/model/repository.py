@@ -10,11 +10,14 @@ class Project:
     name: str
     """relative path to the project from the root of the repository"""
     path: str
+    """link to project"""
+    link: typing.Optional[str] = None
 
     def __post_init__(self):
         """Validate field values after initialization"""
         assert self.name is not None and len(self.name) > 0
         assert self.path is not None and len(self.path) > 0
+        assert self.link is None or len(self.link) > 0
 
 
 @dataclass
