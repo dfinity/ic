@@ -101,7 +101,7 @@ dfx canister --network ic call ledger icrc1_transfer "(record {from=null; to=$cl
 +
 4. Call the `retrieve_btc` endpoint with the desired BTC destination address where you want to receive your Bitcoin.
    Replace BTC_ADDRESS with your BTC address (the minter supports P2WPKH, P2PKH, and P2SH addresses).
-   Replace AMOUNT with the amount that you transferred minus the transfer fee of 10 ckSatoshi.
+   Replace AMOUNT with the amount that you transferred minus the transfer fee of 0.0000001 ckBTC (the equivalent of 10 Satoshi).
 +
 ----
 dfx canister --network ic call minter retrieve_btc "(record {address=\"BTC_ADDRESS\"; amount=AMOUNT})"
