@@ -8,7 +8,7 @@ use std::time::Duration;
 fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(config)
-        .with_timeout_per_test(Duration::from_secs(20 * 60))
+        .with_timeout_per_test(Duration::from_secs(15 * 60))
         .add_test(systest!(test))
         .execute_from_args()?;
 

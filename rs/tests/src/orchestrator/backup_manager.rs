@@ -26,7 +26,8 @@ end::catalog[] */
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::test_env::HasIcPrepDir;
 use crate::driver::{test_env::TestEnv, test_env_api::*};
-use crate::util::UniversalCanister;
+use crate::orchestrator::utils::subnet_recovery::{enable_ecdsa_on_nns, run_ecdsa_signature_test};
+use crate::util::{MessageCanister, UniversalCanister};
 use crate::{
     orchestrator::utils::{
         rw_message::install_nns_and_check_progress,
@@ -129,10 +130,24 @@ pub fn test(env: TestEnv) {
         .expect("chmod command failed");
     chmod.wait_with_output().expect("chmod execution failed");
 
-    let node = env.get_first_healthy_nns_node_snapshot();
-    let agent = node.build_default_agent();
+    let nns_node = env.get_first_healthy_nns_node_snapshot();
+    let agent = nns_node.build_default_agent();
+    let nns_canister = block_on(MessageCanister::new(
+        &agent,
+        nns_node.effective_canister_id(),
+    ));
+    let key = enable_ecdsa_on_nns(
+        &nns_node,
+        &nns_canister,
+        env.topology_snapshot().root_subnet_id(),
+        None,
+        true,
+        &log,
+    );
+    run_ecdsa_signature_test(&nns_canister, &log, key);
+
     let log2 = log.clone();
-    let id = node.effective_canister_id();
+    let id = nns_node.effective_canister_id();
     let canister_id_hex: String = block_on({
         async move {
             let canister = UniversalCanister::new_with_retries(&agent, id, &log2).await;
