@@ -21,6 +21,10 @@ Build in debug mode to get debug output.
 - 11: update send failed
 - 33: update request status rejected
 - 44: timed out before update request status rejected or replied
+- 950: GoAway Error - The server does not accept any further requests over that HTTP2 connection.
+- 951: REFUSED_STREAM - The server reached the maximum number of concurrent HTTP2 connections. The client should retry.
+- 952: Runtime dropped the dispatch task.
+- 953: The request timed out.
 
 # Setup
 
