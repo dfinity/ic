@@ -270,7 +270,20 @@ impl Engine {
 
                 // This is broken. The issue is that the Error type returned by execute_query is
                 // not nicely structured, it's just a string.
-                let http_status = 0_u16;
+
+                let http_status = if err.ends_with("502 Bad Gateway</h1></center>\\\\r\\\\n<hr><center>nginx/1.21.3</center>\\\\r\\\\n</body>\\\\r\\\\n</html>\\\\r\\\\n\\\")\"") {
+                    502_u16
+                } else if err.ends_with("GoAway(b\\\"\\\", NO_ERROR, Remote) })\"") {
+                    950_u16
+                } else if err.ends_with("REFUSED_STREAM, Remote) })\"") {
+                    951_u16
+                } else if err.ends_with("runtime dropped the dispatch task\\\")\"") {
+                    952_u16
+                } else if err.starts_with("\"HttpClient: Request timed out") {
+                    953_u16
+                } else {
+                    0_u16
+                };
 
                 tx.send(CallResult {
                     fact: Fact::record(
