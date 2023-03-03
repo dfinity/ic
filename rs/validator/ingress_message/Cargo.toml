@@ -22,6 +22,15 @@ ic-validator = { path = "../../validator" }
 [dev-dependencies]
 assert_matches = "1.5.0"
 ic-canister-client-sender = { path = "../../canister_client/sender" }
-ic-crypto-test-utils-reproducible-rng = {path = "../../crypto/test_utils/reproducible_rng" }
+ic-certification-test-utils = { path = "../../certification/test-utils" }
+ic-crypto-iccsa = { path = "../../crypto/iccsa" }
+ic-crypto-internal-basic-sig-der-utils = { path = "../../crypto/internal/crypto_lib/basic_sig/der_utils" }
+ic-crypto-internal-seed = { path = "../../crypto/internal/crypto_lib/seed" }
+ic-crypto-internal-threshold-sig-bls12381 = { path = "../../crypto/internal/crypto_lib/threshold_sig/bls12_381" }
+ic-crypto-internal-types = { path = "../../crypto/internal/crypto_lib/types" }
+ic-crypto-test-utils = { path = "../../crypto/test_utils" }
+ic-crypto-test-utils-canister-sigs = { path = "../../crypto/test_utils/canister_sigs" }
+ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
 rand = "0.8"
+simple_asn1 = "0.6.1"

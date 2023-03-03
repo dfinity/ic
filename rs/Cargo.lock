@@ -9611,8 +9611,16 @@ dependencies = [
  "base64 0.13.1",
  "hex",
  "ic-canister-client-sender",
+ "ic-certification-test-utils",
  "ic-crypto",
+ "ic-crypto-iccsa",
+ "ic-crypto-internal-basic-sig-der-utils",
+ "ic-crypto-internal-seed",
+ "ic-crypto-internal-threshold-sig-bls12381",
+ "ic-crypto-internal-types",
  "ic-crypto-temp-crypto",
+ "ic-crypto-test-utils",
+ "ic-crypto-test-utils-canister-sigs",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-utils-threshold-sig-der",
  "ic-interfaces",
@@ -9625,6 +9633,7 @@ dependencies = [
  "ic-types",
  "ic-validator",
  "rand 0.8.5",
+ "simple_asn1 0.6.2",
 ]
 
 [[package]]

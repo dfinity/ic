@@ -68,7 +68,7 @@ pub fn new_valid_sig_and_crypto_component<R: Rng + RngCore + CryptoRng>(
     }
 }
 
-struct CanisterState {
+pub struct CanisterState {
     /// Public key seed
     pub seed: Vec<u8>,
     /// Signed message
@@ -104,7 +104,7 @@ fn random_bytes<R: Rng + RngCore + CryptoRng>(rng: &mut R, size: usize) -> Vec<u
     buffer
 }
 
-fn new_canister_state_tree(
+pub fn new_canister_state_tree(
     canister_sig_seed: &[u8],
     canister_sig_message: &[u8],
 ) -> LabeledTree<Vec<u8>> {
@@ -120,14 +120,14 @@ fn new_canister_state_tree(
     ])
 }
 
-fn witness_from_tree(tree: LabeledTree<Vec<u8>>) -> MixedHashTree {
+pub fn witness_from_tree(tree: LabeledTree<Vec<u8>>) -> MixedHashTree {
     let mut b = HashTreeBuilderImpl::new();
     hash_full_tree(&mut b, &tree);
     let witness_gen = b.witness_generator().unwrap();
     witness_gen.mixed_hash_tree(&tree).unwrap()
 }
 
-fn encode_sig(sig: Signature) -> Vec<u8> {
+pub fn encode_sig(sig: Signature) -> Vec<u8> {
     let cbor_tag = vec![0xd9, 0xd9, 0xf7];
     cbor_tag
         .into_iter()
@@ -144,7 +144,7 @@ fn derive_canister_pk(canister_seed: &[u8]) -> UserPublicKey {
     }
 }
 
-struct CanisterCertificate {
+pub struct CanisterCertificate {
     pub root_pk: ThresholdSigPublicKey,
     /// CBOR-encoded certificate
     pub cbor: Vec<u8>,
