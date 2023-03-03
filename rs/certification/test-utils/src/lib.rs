@@ -108,22 +108,11 @@ impl CertificateBuilder {
     }
 
     pub fn new_with_rng<R: Rng + RngCore + CryptoRng>(data: CertificateData, rng: &mut R) -> Self {
-        let mut seed: [u8; 32] = [0; 32];
-        rng.fill(&mut seed);
-
-        let (public_coefficients, secret_key_bytes) = generate_threshold_key(
-            Seed::from_bytes(&seed),
-            NumberOfNodes::new(1),
-            NumberOfNodes::new(1),
-        )
-        .unwrap();
-        let public_key = ThresholdSigPublicKey::from(CspThresholdSigPublicKey::from(
-            combined_public_key(&public_coefficients).unwrap(),
-        ));
+        let (public_key, secret_key) = generate_root_of_trust(rng);
 
         CertificateBuilder {
             public_key,
-            secret_key: secret_key_bytes.get(0).unwrap().clone(),
+            secret_key,
             data,
             delegatee_pub_key: None,
             override_sig: None,
@@ -131,6 +120,16 @@ impl CertificateBuilder {
             delegation: None,
             time: None,
         }
+    }
+
+    pub fn with_root_of_trust(
+        mut self,
+        public_key: ThresholdSigPublicKey,
+        secret_key: SecretKeyBytes,
+    ) -> Self {
+        self.public_key = public_key;
+        self.secret_key = secret_key;
+        self
     }
 
     pub fn with_time(mut self, time: u64) -> Self {
@@ -224,6 +223,24 @@ impl CertificateBuilder {
                 subnet_id: Blob(self.get_subnet_id().get().to_vec()),
             })
     }
+}
+
+pub fn generate_root_of_trust<R: Rng + CryptoRng>(
+    rng: &mut R,
+) -> (ThresholdSigPublicKey, SecretKeyBytes) {
+    let mut seed: [u8; 32] = [0; 32];
+    rng.fill(&mut seed);
+
+    let (public_coefficients, secret_key_bytes) = generate_threshold_key(
+        Seed::from_bytes(&seed),
+        NumberOfNodes::new(1),
+        NumberOfNodes::new(1),
+    )
+    .unwrap();
+    let public_key = ThresholdSigPublicKey::from(CspThresholdSigPublicKey::from(
+        combined_public_key(&public_coefficients).unwrap(),
+    ));
+    (public_key, secret_key_bytes.get(0).unwrap().clone())
 }
 
 pub fn serialize_to_cbor<T: Serialize>(payload: &T) -> Vec<u8> {

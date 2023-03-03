@@ -5,6 +5,7 @@ package(default_visibility = [
     "//rs/crypto:__subpackages__",
     "//rs/rosetta-api:__pkg__",
     "//rs/state_machine_tests:__pkg__",
+    "//rs/validator:__subpackages__",
 ])
 
 DEPENDENCIES = [
