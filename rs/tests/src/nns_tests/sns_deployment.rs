@@ -275,7 +275,7 @@ pub fn setup_static_testnet(env: TestEnv) {
     SnsClient::get_sns_client_for_static_testnet(&env);
 }
 
-pub fn workload_static_testnet(env: TestEnv) {
+pub fn workload_static_testnet_fe_users(env: TestEnv) {
     let log = env.logger();
     let duration =
         std::env::var("DURATION_MINUTES").expect("variable DURATION_MINUTES not specified");
@@ -327,6 +327,83 @@ pub fn workload_static_testnet(env: TestEnv) {
             nns_dapp_http_request(nns_dapp_canister_id, little_asset_name.clone());
         plan.push(little_asset_req);
     }
+
+    // Compute the raw RPS based on the effective RPS specified by the user
+    let effective_rps = std::env::var("WORKLOAD_RPS").expect("variable WORKLOAD_RPS not specified");
+    let effective_rps: usize = effective_rps
+        .parse()
+        .unwrap_or_else(|_| panic!("cannot parse as usize: `{effective_rps}`"));
+    let raw_rps = effective_rps * (plan.len());
+
+    // --- Generate workload ---
+    let workload = Workload::new(
+        vec![agent],
+        raw_rps,
+        duration,
+        RoundRobinPlan::new(plan),
+        log.clone(),
+    )
+    .with_responses_collection_extra_timeout(RESPONSES_COLLECTION_EXTRA_TIMEOUT)
+    .increase_requests_dispatch_timeout(REQUESTS_DISPATCH_EXTRA_TIMEOUT);
+
+    let metrics = block_on(workload.execute()).expect("Workload execution has failed.");
+    env.emit_report(format!("{metrics}"));
+}
+
+pub fn workload_static_testnet_get_account(env: TestEnv) {
+    let log = env.logger();
+    let duration =
+        std::env::var("DURATION_MINUTES").expect("variable DURATION_MINUTES not specified");
+    let duration: usize = duration
+        .parse()
+        .unwrap_or_else(|_| panic!("cannot parse as usize: `{duration}`"));
+    let duration = Duration::from_secs(duration as u64 * 60);
+
+    let static_testnet_name = std::env::var("TESTNET").expect("variable TESTNET not specified");
+    let static_testnet_bn_url = &format!("https://{static_testnet_name}.testnet.dfinity.network/");
+    let agent = block_on(assert_create_agent(static_testnet_bn_url));
+    let request_provider = SnsRequestProvider::from_env(&env);
+    let nns_dapp_canister_id =
+        std::env::var("NNS_DAPP_CANISTER").expect("variable NNS_DAPP_CANISTER not specified");
+    let nns_dapp_canister_id = Principal::from_text(nns_dapp_canister_id).unwrap();
+    let plan = vec![request_provider.get_account(CallMode::Update, nns_dapp_canister_id)];
+
+    // Compute the raw RPS based on the effective RPS specified by the user
+    let effective_rps = std::env::var("WORKLOAD_RPS").expect("variable WORKLOAD_RPS not specified");
+    let effective_rps: usize = effective_rps
+        .parse()
+        .unwrap_or_else(|_| panic!("cannot parse as usize: `{effective_rps}`"));
+    let raw_rps = effective_rps * (plan.len());
+
+    // --- Generate workload ---
+    let workload = Workload::new(
+        vec![agent],
+        raw_rps,
+        duration,
+        RoundRobinPlan::new(plan),
+        log.clone(),
+    )
+    .with_responses_collection_extra_timeout(RESPONSES_COLLECTION_EXTRA_TIMEOUT)
+    .increase_requests_dispatch_timeout(REQUESTS_DISPATCH_EXTRA_TIMEOUT);
+
+    let metrics = block_on(workload.execute()).expect("Workload execution has failed.");
+    env.emit_report(format!("{metrics}"));
+}
+
+pub fn workload_static_testnet_sale_bot(env: TestEnv) {
+    let log = env.logger();
+    let duration =
+        std::env::var("DURATION_MINUTES").expect("variable DURATION_MINUTES not specified");
+    let duration: usize = duration
+        .parse()
+        .unwrap_or_else(|_| panic!("cannot parse as usize: `{duration}`"));
+    let duration = Duration::from_secs(duration as u64 * 60);
+
+    let static_testnet_name = std::env::var("TESTNET").expect("variable TESTNET not specified");
+    let static_testnet_bn_url = &format!("https://{static_testnet_name}.testnet.dfinity.network/");
+    let agent = block_on(assert_create_agent(static_testnet_bn_url));
+    let request_provider = SnsRequestProvider::from_env(&env);
+    let plan = vec![request_provider.refresh_buyer_tokens(None)];
 
     // Compute the raw RPS based on the effective RPS specified by the user
     let effective_rps = std::env::var("WORKLOAD_RPS").expect("variable WORKLOAD_RPS not specified");
