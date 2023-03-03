@@ -119,6 +119,32 @@ That particular call also requires `--wallet-canister-override $WALLET_CANISTER`
 sns deploy --network $SUBNET_URL --wallet-canister-override $WALLET_CANISTER --init-config-file "<your_config_file>"
 ```
 
+## Running Your Latest and Greatest Changes
+
+You can see what it would be like if we tried to upgrade a canister (e.g. NNS
+governance) to whatever you have in your working copy. Assuming you have done
+the above to load mainnet state into a testnet, you can try running whatever
+code you have (even if it's not committed) by running one simple command:
+
+```bash
+# Assuming you have sourced the various *.sh files mentioned above,
+# and you are currently in this directory,
+canister=governance ./upgrade-canister-to-working-tree.sh "$(nns_canister_id "${canister}")"
+```
+
+If all goes well, you should see "Upgrade was successful." on the last line (or
+something to that effect). Now, you can start hitting your shiny new
+code. E.g. if you added a method, you would now be able to call it like so:
+
+```bash
+canister=governance dfx canister \
+  --network "${NNS_URL}" \
+  call \
+  "$(nns_canister_id "${canister}")" \
+  new_method \
+  '(record {})'
+```
+
 ## NNS Canister Upgrade Testing Process
 
 In order to test a canister upgrade, you will first need to spin up a testnet.  See [Spinning up a testnet](#spinning-up-a-testnet) above.

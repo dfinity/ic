@@ -23,6 +23,52 @@ propose_upgrade_canister_to_version_pem() {
     propose_upgrade_canister_wasm_file_pem "$NNS_URL" "$NEURON_ID" "$PEM" "$CANISTER_NAME" "$WASM_FILE"
 }
 
+build_canister_and_propose_upgrade_pem() {
+    local NNS_URL=$1
+    local NEURON_ID=$2
+    local PEM=$3
+    local CANISTER_NAME=$4
+
+    # TODO: Figure out a way to require that the result already be cached.
+    bazel build "$(canister_bazel_label "${CANISTER_NAME}")"
+
+    WASM_FILE="$(repo_root)/bazel-bin/$(canister_bazel_artifact_path "${CANISTER_NAME}")"
+
+    propose_upgrade_canister_wasm_file_pem "$NNS_URL" "$NEURON_ID" "$PEM" "$CANISTER_NAME" "$WASM_FILE"
+}
+
+canister_bazel_label() {
+    local CANISTER_NAME=$1
+
+    # A more authoritative place where these values are listed is the following:
+    # https://sourcegraph.com/github.com/dfinity/ic@7f7f77e025ed16b58b4bae564eb27bc429d8063d/-/blob/publish/canisters/BUILD.bazel?L5&subtree=true
+    case "$CANISTER_NAME" in
+        "governance")
+            echo "//rs/nns/governance:governance-canister"
+            ;;
+        "root")
+            echo "//rs/nns/handlers/root:root-canister"
+            ;;
+        "sns-wasm")
+            echo "//rs/nns/sns-wasm:sns-wasm-canister"
+            ;;
+        # TODO cycles-minting, genesis-token, identity, ledger, lifeline, nns-ui, registry
+        *)
+            echo "Sorry. I do not know how to build ${CANISTER_NAME}."
+            exit 1
+            ;;
+    esac
+}
+
+canister_bazel_artifact_path() {
+    local CANISTER_NAME=$1
+
+    canister_bazel_label "${CANISTER_NAME}" \
+        | sed 's!^//!!' \
+        | sed 's!:!/!' \
+        | sed 's/$/.wasm/'
+}
+
 propose_upgrade_canister_wasm_file_pem() {
     ensure_variable_set IC_ADMIN
 
