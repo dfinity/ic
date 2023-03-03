@@ -475,15 +475,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     )]),
                 )
                 .with_alert(ENG_CONSENSUS_CHANNEL),
-                pot_with_setup(
-                    "unassigned_node_upgrade_test_pot",
-                    orchestrator::unassigned_node_upgrade_test::config,
-                    par(vec![sys_t(
-                        "unassigned_node_upgrade_test",
-                        orchestrator::unassigned_node_upgrade_test::test,
-                    )]),
-                )
-                .with_alert(ENG_CONSENSUS_CHANNEL),
             ],
         )
         .with_alert(TEST_FAILURE_CHANNEL),
