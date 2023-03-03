@@ -51,7 +51,6 @@ use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::ops::Bound::{Included, Unbounded};
 use std::{
-    mem,
     num::{NonZeroU128, NonZeroU64},
     ops::Div,
     str::FromStr,
@@ -63,11 +62,6 @@ use crate::pb::v1::{
     NotifyPaymentFailureResponse, SetDappControllersRequest, SetDappControllersResponse,
     SettleCommunityFundParticipation,
 };
-
-// The number of bytes that the contents of a ClaimSwapNeuronsRequest can safely consume. This
-// is configured to be 75% of a Xnet message size, or roughly 1.5MB. This is equivalent to
-// (1024 * 1024) * 1.5
-pub const CLAIM_SWAP_NEURONS_MESSAGE_SIZE_LIMIT_BYTES: usize = 1572864_usize;
 
 /// The maximum count of participants that can be returned by ListDirectParticipants
 pub const MAX_LIST_DIRECT_PARTICIPANTS_LIMIT: u32 = 30_000;
@@ -1286,12 +1280,7 @@ impl Swap {
         neuron_parameters: &mut Vec<NeuronParameters>,
         claimable_neurons_index: &mut BTreeMap<NeuronId, &mut SnsNeuronRecipe>,
     ) -> SweepResult {
-        // Compute the number of NeuronParameters that can be packed into a xnet message.
-        // In this version, the message size is 75% of its maximum size to make room for
-        // any additional overhead is associated with the Request object.
-        let neuron_parameters_size = mem::size_of::<NeuronParameters>();
-        let batch_limit =
-            CLAIM_SWAP_NEURONS_MESSAGE_SIZE_LIMIT_BYTES.saturating_div(neuron_parameters_size);
+        let batch_limit = 500_usize;
 
         log!(
             INFO,
