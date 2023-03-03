@@ -209,3 +209,33 @@ fn query_scheduler_drains_leftover_queue_before_new_queries() {
         assert_eq!(q.execute(), std::time::Duration::from_millis(i as u64));
     }
 }
+
+#[test]
+fn query_scheduler_properly_reads_leftover_queries() {
+    let scheduler = QuerySchedulerInternal::new(2, Duration::from_millis(100));
+
+    scheduler.push(
+        canister_test_id(0),
+        Query(Box::new(move || std::time::Duration::from_millis(100))),
+    );
+
+    scheduler.push(
+        canister_test_id(0),
+        Query(Box::new(move || std::time::Duration::from_millis(100))),
+    );
+
+    let (_, mut queries) = scheduler.pop().unwrap();
+
+    assert_eq!(queries.len(), 2);
+    queries.remove(0);
+
+    scheduler.notify_finished_execution(
+        canister_test_id(0),
+        std::time::Duration::from_millis(100),
+        queries,
+    );
+
+    let (_, queries) = scheduler.pop().unwrap();
+
+    assert_eq!(queries.len(), 1);
+}
