@@ -13,6 +13,10 @@ use rand::{CryptoRng, Rng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use std::{error::Error, sync::Arc};
 
+// TODO: migrate the two closures to async closures when supported by Rust.
+// The closures are called within async context. So putting the signing function in
+// an async closure signals the intent that the duration of running the closure
+// should be small - O(milliseconds).
 pub type SignBytes = Arc<dyn Fn(&[u8]) -> Result<Vec<u8>, Box<dyn Error>> + Send + Sync>;
 pub type SignMessageId = Arc<dyn Fn(&MessageId) -> Result<Vec<u8>, Box<dyn Error>> + Send + Sync>;
 
