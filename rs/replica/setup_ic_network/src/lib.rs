@@ -242,7 +242,7 @@ fn setup_artifact_manager(
         state_sync_client
     {
         let advert_broadcaster = advert_broadcaster;
-        let processor_handle = ArtifactProcessorManager::new(
+        let processor_handle = ArtifactProcessorHandle::new(
             Arc::clone(&time_source) as Arc<_>,
             metrics_registry,
             client_on_state_change,
@@ -261,7 +261,7 @@ fn setup_artifact_manager(
     }
     if let P2PStateSyncClient::Client(client) = state_sync_client {
         let advert_broadcaster = advert_broadcaster.clone();
-        let processor_handle = ArtifactProcessorManager::new(
+        let processor_handle = ArtifactProcessorHandle::new(
             Arc::clone(&time_source) as Arc<_>,
             metrics_registry.clone(),
             Box::new(client.clone()) as Box<_>,

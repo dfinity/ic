@@ -85,7 +85,7 @@ mod unformatted {
 //!        queued to a background worker thread. The thread runs a loop that calls into the
 //!        per-client ArtifactProcessor implementation with the newly received artifacts
 //!
-//!        a. processors::ArtifactProcessorManager manages the life cycle of these back ground
+//!        a. processors::ArtifactProcessorHandle manages the life cycle of these back ground
 //!           threads, and queues the requests to the background thread via a crossbeam channel
 //!        b. processors::ConsensusProcessor, etc implement the per-client ArtifactProcessor
 //!           logic called by the threads. These roughly perform the sequence: add the new
@@ -184,7 +184,7 @@ impl ArtifactProcessorMetrics {
 
 /// Manages the life cycle of the client specific artifact processor thread.
 /// Also serves as the front end to enqueue requests to the processor thread.
-pub struct ArtifactProcessorManager<Artifact: ArtifactKind + 'static> {
+pub struct ArtifactProcessorHandle<Artifact: ArtifactKind + 'static> {
     /// To send the process requests
     sender: Sender<UnvalidatedArtifact<Artifact::Message>>,
     /// Handle for the processing thread
@@ -194,7 +194,7 @@ pub struct ArtifactProcessorManager<Artifact: ArtifactKind + 'static> {
     shutdown: Arc<AtomicBool>,
 }
 
-impl<Artifact: ArtifactKind + 'static> ArtifactProcessorManager<Artifact> {
+impl<Artifact: ArtifactKind + 'static> ArtifactProcessorHandle<Artifact> {
     pub fn new<S: Fn(AdvertSendRequest<Artifact>) + Send + 'static>(
         time_source: Arc<SysTimeSource>,
         metrics_registry: MetricsRegistry,
@@ -277,7 +277,7 @@ impl<Artifact: ArtifactKind + 'static> ArtifactProcessorManager<Artifact> {
     }
 }
 
-impl<Artifact: ArtifactKind + 'static> Drop for ArtifactProcessorManager<Artifact> {
+impl<Artifact: ArtifactKind + 'static> Drop for ArtifactProcessorHandle<Artifact> {
     fn drop(&mut self) {
         if let Some(handle) = self.handle.take() {
             self.shutdown.store(true, SeqCst);
@@ -294,7 +294,7 @@ pub struct ArtifactClientHandle<Artifact: ArtifactKind + 'static> {
     /// Reference to the artifact client.
     pub pool_reader: Box<dyn ArtifactClient<Artifact>>,
     /// The artifact processor front end.
-    pub processor_handle: ArtifactProcessorManager<Artifact>,
+    pub processor_handle: ArtifactProcessorHandle<Artifact>,
     pub time_source: Arc<dyn TimeSource>,
 }
 
@@ -311,12 +311,8 @@ pub fn create_ingress_handlers<
     node_id: NodeId,
     malicious_flags: MaliciousFlags,
 ) -> ArtifactClientHandle<IngressArtifact> {
-    let client = processors::IngressProcessor {
-        ingress_pool: ingress_pool.clone(),
-        client: ingress_handler,
-        node_id,
-    };
-    let manager = ArtifactProcessorManager::new(
+    let client = processors::IngressProcessor::new(ingress_pool.clone(), ingress_handler, node_id);
+    let manager = ArtifactProcessorHandle::new(
         time_source.clone(),
         metrics_registry,
         Box::new(client),
@@ -348,16 +344,13 @@ pub fn create_consensus_handlers<
     log: ReplicaLogger,
     metrics_registry: MetricsRegistry,
 ) -> ArtifactClientHandle<ConsensusArtifact> {
-    let client = processors::ConsensusProcessor {
-        consensus_pool: consensus_pool.clone(),
-        client: Box::new(consensus),
-        invalidated_artifacts: metrics_registry.int_counter(
-            "consensus_invalidated_artifacts",
-            "The number of invalidated consensus artifacts",
-        ),
+    let client = processors::ConsensusProcessor::new(
+        consensus_pool.clone(),
+        Box::new(consensus),
         log,
-    };
-    let manager = ArtifactProcessorManager::new(
+        &metrics_registry,
+    );
+    let manager = ArtifactProcessorHandle::new(
         time_source.clone(),
         metrics_registry,
         Box::new(client),
@@ -387,17 +380,14 @@ pub fn create_certification_handlers<
     log: ReplicaLogger,
     metrics_registry: MetricsRegistry,
 ) -> ArtifactClientHandle<CertificationArtifact> {
-    let client = processors::CertificationProcessor {
-        consensus_pool_cache: consensus_pool_cache.clone(),
-        certification_pool: certification_pool.clone(),
-        client: Box::new(certifier),
-        invalidated_artifacts: metrics_registry.int_counter(
-            "certification_invalidated_artifacts",
-            "The number of invalidated certification artifacts",
-        ),
+    let client = processors::CertificationProcessor::new(
+        consensus_pool_cache.clone(),
+        certification_pool.clone(),
+        Box::new(certifier),
         log,
-    };
-    let manager = ArtifactProcessorManager::new(
+        &metrics_registry,
+    );
+    let manager = ArtifactProcessorHandle::new(
         time_source.clone(),
         metrics_registry,
         Box::new(client),
@@ -426,16 +416,9 @@ pub fn create_dkg_handlers<
     log: ReplicaLogger,
     metrics_registry: MetricsRegistry,
 ) -> ArtifactClientHandle<DkgArtifact> {
-    let client = processors::DkgProcessor {
-        dkg_pool: dkg_pool.clone(),
-        client: Box::new(dkg),
-        invalidated_artifacts: metrics_registry.int_counter(
-            "dkg_invalidated_artifacts",
-            "The number of invalidated DKG artifacts",
-        ),
-        log,
-    };
-    let manager = ArtifactProcessorManager::new(
+    let client =
+        processors::DkgProcessor::new(dkg_pool.clone(), Box::new(dkg), log, &metrics_registry);
+    let manager = ArtifactProcessorHandle::new(
         time_source.clone(),
         metrics_registry,
         Box::new(client),
@@ -461,25 +444,13 @@ pub fn create_ecdsa_handlers<
     metrics_registry: MetricsRegistry,
     log: ReplicaLogger,
 ) -> ArtifactClientHandle<EcdsaArtifact> {
-    let ecdsa_pool_update_duration = metrics_registry.register(
-        Histogram::with_opts(histogram_opts!(
-            "ecdsa_pool_update_duration_seconds",
-            "Time to apply changes to ECDSA artifact pool, in seconds",
-            vec![
-                0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.8, 1.0, 1.2, 1.5, 2.0, 2.2, 2.5, 5.0, 8.0,
-                10.0, 15.0, 20.0, 50.0,
-            ]
-        ))
-        .unwrap(),
-    );
-
-    let client = processors::EcdsaProcessor {
-        ecdsa_pool: ecdsa_pool.clone(),
-        client: Box::new(ecdsa),
-        ecdsa_pool_update_duration,
+    let client = processors::EcdsaProcessor::new(
+        ecdsa_pool.clone(),
+        Box::new(ecdsa),
         log,
-    };
-    let manager = ArtifactProcessorManager::new(
+        &metrics_registry,
+    );
+    let manager = ArtifactProcessorHandle::new(
         time_source.clone(),
         metrics_registry,
         Box::new(client),
@@ -506,13 +477,13 @@ pub fn create_https_outcalls_handlers<
     log: ReplicaLogger,
     metrics_registry: MetricsRegistry,
 ) -> ArtifactClientHandle<CanisterHttpArtifact> {
-    let client = processors::CanisterHttpProcessor {
-        consensus_pool_cache: consensus_pool_cache.clone(),
-        canister_http_pool: canister_http_pool.clone(),
-        client: Arc::new(RwLock::new(pool_manager)),
+    let client = processors::CanisterHttpProcessor::new(
+        consensus_pool_cache.clone(),
+        canister_http_pool.clone(),
+        Arc::new(RwLock::new(pool_manager)),
         log,
-    };
-    let manager = ArtifactProcessorManager::new(
+    );
+    let manager = ArtifactProcessorHandle::new(
         time_source.clone(),
         metrics_registry,
         Box::new(client),
