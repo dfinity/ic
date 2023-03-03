@@ -3,7 +3,7 @@ use ic_tests::boundary_nodes_integration::boundary_nodes::BoundaryNodeHttpsConfi
 use ic_tests::{
     api_test, basic_health_test, boundary_nodes_integration, boundary_nodes_snp_tests,
     canister_http, driver::driver_setup::initialize_env, ledger_tests, message_routing, networking,
-    nns_tests, orchestrator, wasm_generator_test, workload_counter_canister_test,
+    orchestrator, wasm_generator_test, workload_counter_canister_test,
 };
 use ic_tests::{
     driver::{
@@ -445,11 +445,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         "token_fault_tolerance_test",
                         ledger_tests::token_fault_tolerance::test,
                     )]),
-                ),
-                pot_with_setup(
-                    "create_subnet",
-                    nns_tests::create_subnet::hourly_config,
-                    par(vec![sys_t("create_subnet", nns_tests::create_subnet::test)]),
                 ),
                 pot_with_setup(
                     "rejoin",
