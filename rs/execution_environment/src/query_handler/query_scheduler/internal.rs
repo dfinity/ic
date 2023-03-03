@@ -38,6 +38,11 @@ pub(crate) struct CanisterData {
 
     // The current number of threads executing queries of this canister.
     active_threads: usize,
+
+    // Indicates whether this canister has been added to the `scheduled`
+    // canister queue of the scheduler. This flag is needed to ensure that a
+    // canister is not added multiple times to the queue.
+    has_been_scheduled: bool,
 }
 
 impl CanisterData {
@@ -47,6 +52,7 @@ impl CanisterData {
             leftover: Default::default(),
             average_query_duration: DEFAULT_QUERY_DURATION,
             active_threads: 0,
+            has_been_scheduled: false,
         }
     }
 
@@ -58,6 +64,12 @@ impl CanisterData {
     // and cannot execute new queries until the pending executions finish.
     fn is_waiting_for_pending_executions(&self, max_threads_per_canister: usize) -> bool {
         self.active_threads >= max_threads_per_canister
+    }
+
+    // Returns true if the canister should be added to the `scheduled` canister
+    // queue of the scheduler.
+    fn should_be_scheduled(&self, max_threads_per_canister: usize) -> bool {
+        self.has_queries() && !self.is_waiting_for_pending_executions(max_threads_per_canister)
     }
 
     // Returns the number of queries that can be executed in one batch based on
@@ -83,6 +95,7 @@ struct QuerySchedulerCore {
 
     // The round-robin queue of canisters.
     // Invariant: if a canister is in this queue, then:
+    // - its `has_been_scheduled` flag is set.
     // - it has at least one query to execute.
     // - the number of currently running threads of this canister is below
     //   the `max_threads_per_canister` limit.
@@ -113,20 +126,18 @@ impl QuerySchedulerCore {
     /// Adds the given query to the `incoming` queue of the given canister.
     /// It also adds the canister to the round-robin queue if needed.
     fn push(&mut self, canister_id: CanisterId, query: Query) {
-        let entry = self
+        let canister = self
             .canisters
             .entry(canister_id)
             .or_insert_with(CanisterData::new);
-        if !entry.has_queries() {
-            debug_assert!(!self.scheduled.contains(&canister_id));
-            // The canister did not have any queries before and now we are
-            // adding a new query, so we need to add the canister to the
-            // round-robin queue if it is not blocked by pending executions.
-            if !entry.is_waiting_for_pending_executions(self.max_threads_per_canister) {
-                self.scheduled.push_back(canister_id);
-            }
+        canister.incoming.push_back(query);
+
+        if !canister.has_been_scheduled
+            && canister.should_be_scheduled(self.max_threads_per_canister)
+        {
+            canister.has_been_scheduled = true;
+            self.scheduled.push_back(canister_id);
         }
-        entry.incoming.push_back(query);
 
         #[cfg(debug_assertions)]
         self.verify_invariants();
@@ -139,6 +150,9 @@ impl QuerySchedulerCore {
         // `validate_invariants()`: each canister in the round-robin list must
         // be present in the canister table.
         let canister = self.canisters.get_mut(&canister_id).unwrap();
+        debug_assert!(canister.has_been_scheduled);
+        canister.has_been_scheduled = false;
+
         let total = canister.queries_per_time_slice(self.time_slice_per_canister);
 
         // Collect queries from the `leftover` queue first.
@@ -153,15 +167,13 @@ impl QuerySchedulerCore {
         debug_assert!(!result.is_empty());
 
         canister.active_threads += 1;
-        if canister.has_queries() {
-            debug_assert!(!self.scheduled.contains(&canister_id));
-            // We removed the canister from the round-robin queue at the start
-            // of this function. Since canister has queries, we need to add the
-            // it to the end of the round-robin queue if it is not blocked by
-            // pending executions.
-            if !canister.is_waiting_for_pending_executions(self.max_threads_per_canister) {
-                self.scheduled.push_back(canister_id);
-            }
+
+        // We removed the canister from the schedule at the beginning of this
+        // method and cleared `has_been_scheduled`.
+        debug_assert!(!canister.has_been_scheduled);
+        if canister.should_be_scheduled(self.max_threads_per_canister) {
+            canister.has_been_scheduled = true;
+            self.scheduled.push_back(canister_id);
         }
 
         #[cfg(debug_assertions)]
@@ -181,20 +193,14 @@ impl QuerySchedulerCore {
         let canister = self.canisters.get_mut(&canister_id).unwrap();
         canister.average_query_duration =
             (canister.average_query_duration + average_query_duration) / 2;
+
         canister.leftover.extend(leftover.into_iter());
-
-        let has_been_scheduled = canister.has_queries()
-            && !canister.is_waiting_for_pending_executions(self.max_threads_per_canister);
-
         canister.active_threads -= 1;
 
-        let should_be_scheduled = canister.has_queries()
-            && !canister.is_waiting_for_pending_executions(self.max_threads_per_canister);
-
-        // Add the canister to the `scheduled` list only if it is not
-        // already in that list.
-        if !has_been_scheduled && should_be_scheduled {
-            debug_assert!(!self.scheduled.contains(&canister_id));
+        if !canister.has_been_scheduled
+            && canister.should_be_scheduled(self.max_threads_per_canister)
+        {
+            canister.has_been_scheduled = true;
             self.scheduled.push_back(canister_id);
         }
 
@@ -214,16 +220,16 @@ impl QuerySchedulerCore {
     fn verify_invariants(&self) {
         for canister_id in self.scheduled.iter() {
             let canister = self.canisters.get(canister_id).unwrap();
-            debug_assert!(canister.has_queries());
-            debug_assert!(
-                !canister.is_waiting_for_pending_executions(self.max_threads_per_canister)
-            );
+            debug_assert!(canister.has_been_scheduled);
+            debug_assert!(canister.should_be_scheduled(self.max_threads_per_canister));
         }
         for (canister_id, canister) in self.canisters.iter() {
-            if canister.has_queries()
-                && !canister.is_waiting_for_pending_executions(self.max_threads_per_canister)
-            {
+            if canister.should_be_scheduled(self.max_threads_per_canister) {
+                debug_assert!(canister.has_been_scheduled);
                 debug_assert!(self.scheduled.contains(canister_id))
+            } else {
+                debug_assert!(!canister.has_been_scheduled);
+                debug_assert!(!self.scheduled.contains(canister_id))
             }
         }
     }
@@ -292,9 +298,8 @@ impl QuerySchedulerInternal {
         leftover: Vec<Query>,
     ) {
         let mut core = self.core.lock().unwrap();
-        let was_empty = core.scheduled.is_empty();
         core.notify_finished_execution(canister_id, average_query_duration, leftover);
-        if was_empty && !core.scheduled.is_empty() {
+        if !core.scheduled.is_empty() {
             self.work_is_available.notify_one();
         }
     }
