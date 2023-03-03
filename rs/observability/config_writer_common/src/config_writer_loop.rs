@@ -1,6 +1,7 @@
 //! An experimental component that allows scraping logs using the http-endpoint
 //! exposed by systemd-journal-gatewayd.
 use crossbeam::select;
+use service_discovery::metrics::Metrics;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -22,6 +23,7 @@ pub fn config_writer_loop(
     update_signal_recv: Receiver<()>,
     vector_config_dir: PathBuf,
     vector_config_builder: impl VectorConfigBuilder,
+    metrics: Metrics,
 ) -> impl FnMut() {
     move || {
         let mut config_writer =
@@ -35,6 +37,10 @@ pub fn config_writer_loop(
                         continue;
                     }
                 };
+                metrics
+                    .total_targets
+                    .with_label_values(&[job.to_string().as_str()])
+                    .set(targets.len().try_into().unwrap());
                 if let Err(e) = config_writer.write_config(*job, targets, &vector_config_builder) {
                     warn!(
                         log,
