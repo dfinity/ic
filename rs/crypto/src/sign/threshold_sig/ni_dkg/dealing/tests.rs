@@ -1,7 +1,6 @@
 #![allow(clippy::unwrap_used)]
 
 use super::*;
-use crate::common::test_utils::mockall_csp::MockAllCryptoServiceProvider;
 use crate::sign::tests::{
     dealing_encryption_pk_record_with, registry_with_records, REG_V1, REG_V2,
 };
@@ -18,6 +17,7 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
     CspFsEncryptionPublicKey, CspNiDkgDealing, Epoch,
 };
 use ic_crypto_test_utils::set_of;
+use ic_crypto_test_utils_csp::MockAllCryptoServiceProvider;
 use ic_types::crypto::error::InvalidArgumentError;
 use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgConfigData;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::{

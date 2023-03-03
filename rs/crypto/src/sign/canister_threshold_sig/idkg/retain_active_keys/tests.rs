@@ -1,7 +1,7 @@
-use crate::common::test_utils::mockall_csp::MockAllCryptoServiceProvider;
 use crate::sign::canister_threshold_sig::idkg::retain_active_keys::oldest_public_key;
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_crypto_internal_threshold_sig_ecdsa::MEGaPublicKey;
+use ic_crypto_test_utils_csp::MockAllCryptoServiceProvider;
 use ic_interfaces_registry::RegistryClient;
 use ic_types::crypto::canister_threshold_sig::error::IDkgRetainKeysError;
 use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscript;

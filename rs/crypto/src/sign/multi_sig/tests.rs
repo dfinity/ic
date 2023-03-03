@@ -34,12 +34,12 @@ mod test_multi_sig_verification {
     use super::*;
     use crate::common::test_utils::crypto_component::crypto_component_with_csp;
     use crate::common::test_utils::hex_to_byte_vec;
-    use crate::common::test_utils::mockall_csp::MockAllCryptoServiceProvider;
     use crate::common::test_utils::multi_bls12_381;
     use crate::common::test_utils::multi_bls12_381::MultiBls12381TestVector::{
         STABILITY_1, STABILITY_2,
     };
     use ic_crypto_internal_test_vectors::multi_bls12_381::TESTVEC_MULTI_BLS12_381_COMB_SIG_1_2;
+    use ic_crypto_test_utils_csp::MockAllCryptoServiceProvider;
     use ic_types::crypto::SignableMock;
 
     #[test]

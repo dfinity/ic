@@ -1,6 +1,5 @@
 #![allow(clippy::unwrap_used)]
 
-use crate::common::test_utils::mockall_csp::MockAllCryptoServiceProvider;
 use crate::sign::tests::{REG_V1, REG_V2};
 use crate::sign::threshold_sig::ni_dkg::retain_active_keys::retain_only_active_keys;
 use crate::sign::threshold_sig::ni_dkg::utils::epoch;
@@ -12,6 +11,7 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_
 };
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::CspNiDkgTranscript;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
+use ic_crypto_test_utils_csp::MockAllCryptoServiceProvider;
 use ic_types::crypto::threshold_sig::ni_dkg::errors::key_removal_error::DkgKeyRemovalError;
 use ic_types::crypto::threshold_sig::ni_dkg::transcripts_to_retain::TranscriptsToRetain;
 use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript};

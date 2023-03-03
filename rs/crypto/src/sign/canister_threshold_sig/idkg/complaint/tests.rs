@@ -1,6 +1,5 @@
 #![allow(clippy::unwrap_used)]
 use super::*;
-use crate::common::test_utils::mockall_csp::MockAllCryptoServiceProvider;
 use crate::common::test_utils::{CryptoRegistryKey, CryptoRegistryRecord};
 use crate::sign::tests::{
     mega_encryption_pk_record_with, registry_returning, registry_returning_none, registry_with,
@@ -9,6 +8,7 @@ use crate::sign::tests::{
 use assert_matches::assert_matches;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_ecdsa::{EccCurveType, IDkgDealingInternal, MEGaPublicKey};
+use ic_crypto_test_utils_csp::MockAllCryptoServiceProvider;
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_types::crypto::canister_threshold_sig::idkg::IDkgDealing;

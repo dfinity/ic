@@ -1,7 +1,6 @@
 #![allow(clippy::unwrap_used)]
 
 use super::*;
-use crate::common::test_utils::mockall_csp::MockAllCryptoServiceProvider;
 use crate::sign::tests::REG_V2;
 use crate::sign::threshold_sig::ni_dkg::test_utils::{
     csp_dealing, dkg_config, map_of, minimal_dkg_config_data_without_resharing, nodes, DKG_ID,
@@ -15,6 +14,7 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
 };
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::PublicKeyBytes;
 use ic_crypto_test_utils::set_of;
+use ic_crypto_test_utils_csp::MockAllCryptoServiceProvider;
 use ic_types::crypto::threshold_sig::ni_dkg::config::receivers::NiDkgReceivers;
 use ic_types::crypto::threshold_sig::ni_dkg::config::{NiDkgConfigData, NiDkgThreshold};
 use ic_types::crypto::threshold_sig::ni_dkg::errors::create_transcript_error::DkgCreateTranscriptError;
