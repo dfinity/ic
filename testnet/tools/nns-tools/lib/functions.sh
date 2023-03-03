@@ -596,6 +596,24 @@ EOF
 
 }
 
+##: sns_list_proposals
+## Lists all proposals for an SNS with no filters
+## Usage: $1 <SNS_URL> <SNS_GOVERNANCE_CANISTER_ID>
+##   SNS_URL: URL of replica or boundary node that can send messages to SNS canisters
+##   SNS_GOVERNANCE_CANISTER_ID: CanisterID of the SNS Governance canister
+sns_list_proposals() {
+
+    local SNS_URL=$1
+    local SNS_GOVERNANCE_CANISTER_ID=$2
+
+    local IC=$(repo_root)
+    local GOV_DID="$IC/rs/sns/governance/canister/governance.did"
+
+    dfx canister --network $SNS_URL \
+        call --candid "$GOV_DID" \
+        $SNS_GOVERNANCE_CANISTER_ID list_proposals "( record { include_reward_status = vec {}; limit = 0; exclude_type = vec {}; include_status = vec {}; })"
+}
+
 sns_get_proposal() {
     local SNS_URL=$1
     local SNS_GOVERNANCE_CANISTER_ID=$2
