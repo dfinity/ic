@@ -251,15 +251,32 @@ impl SchedulerImpl {
             // De-facto compute allocation includes bonus allocation
             let factual =
                 rs.compute_allocation.as_percent() as i64 * multiplier + free_capacity_per_canister;
-            let canister = canister_states.get_mut(&rs.canister_id).unwrap();
             // Increase accumulated priority by de-facto compute allocation.
             rs.accumulated_priority += factual.into();
-            canister.scheduler_state.accumulated_priority = rs.accumulated_priority;
             // Count long executions and sum up their compute allocation.
             if rs.has_aborted_or_paused_execution {
                 // Note: factual compute allocation is multiplied by `multiplier`
                 long_executions_compute_allocation += factual;
                 number_of_long_executions += 1;
+            }
+        }
+
+        // Optimization that makes use of accessing a canister state without an extra canister id lookup.
+        // IMPORTANT! Optimization relies on the fact that elements in `canister_states` and `round_states` follow in the same order.
+        for ((&_, canister), rs) in canister_states.iter_mut().zip(round_states.iter()) {
+            debug_assert!(
+                canister.canister_id() == rs.canister_id,
+                "Elements in canister_states and round_states must follow in the same order",
+            );
+            // Update canister state with a new accumulated_priority.
+            canister.scheduler_state.accumulated_priority = rs.accumulated_priority;
+
+            // Record a canister metric.
+            if !canister.has_input() {
+                canister
+                    .system_state
+                    .canister_metrics
+                    .skipped_round_due_to_no_messages += 1;
             }
         }
 
@@ -1469,17 +1486,6 @@ impl Scheduler for SchedulerImpl {
                     self.config.accumulated_priority_reset_interval,
                     &mut canisters,
                 );
-
-                for canister_id in round_schedule.iter() {
-                    let canister_state = canisters.get_mut(canister_id).unwrap();
-                    if !canister_state.has_input() {
-                        canister_state
-                            .system_state
-                            .canister_metrics
-                            .skipped_round_due_to_no_messages += 1;
-                    }
-                }
-
                 state.put_canister_states(canisters);
                 round_schedule
             };
