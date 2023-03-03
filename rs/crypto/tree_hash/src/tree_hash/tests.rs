@@ -2054,6 +2054,94 @@ fn prune_witness_prune_inexistent_leaf_from_empty_subtree() {
     );
 }
 
+/// Ensures that an invalid witness, with a partially pruned node (leaf pruned
+/// but node/label not pruned) causes both `prune_witness()` and
+/// `recompute_digest()` to fail with an error.
+#[test]
+fn prune_witness_prune_partially_pruned_node() {
+    let label = Label::from("label");
+    let value = "value";
+
+    // A `LabeledTree` consisting of a single label and value:
+    //
+    // ```
+    // (root)
+    //    +-- label
+    //         \__ "value"
+    // ```
+    let labeled_tree = LabeledTree::SubTree(flatmap! {
+        label.clone() => LabeledTree::Leaf(value.into())
+    });
+
+    // An invalid witness with only the leaf pruned, but not the node/label.
+    //
+    // ```
+    // (root)
+    //    +-- label
+    //         \__ [Pruned]
+    // ```
+    //
+    // A valid witness would need to have the label and a `Known` node under it.
+    //
+    // More generally, we should never accept a witness having `Pruned` under a
+    // `Node`: either both are pruned (and we have a single `Pruned` node) or
+    // there's a `Known` or `Fork` under the `Node`.
+    let invalid_witness = Witness::Node {
+        label: label.clone(),
+        sub_witness: Box::new(Witness::Pruned {
+            digest: compute_leaf_digest(value.as_bytes()),
+        }),
+    };
+
+    // Inconsistency at `/label`.
+    let expected_err = TreeHashError::InconsistentPartialTree {
+        offending_path: vec![label],
+    };
+    assert_eq!(
+        Err(expected_err.clone()),
+        prune_witness(&invalid_witness, &labeled_tree)
+    );
+    assert_eq!(
+        Err(expected_err),
+        recompute_digest(&labeled_tree, &invalid_witness)
+    );
+}
+
+/// Ensures that a witness with a pruned leaf causes both `prune_witness()` and
+/// `recompute_digest()` to fail if trying to prune the leaf again.
+#[test]
+fn prune_witness_prune_already_pruned_leaf_only() {
+    let value = "value";
+
+    // A `LabeledTree` consisting of a single label and value:
+    //
+    // ```
+    // (root)
+    //    \__ "value"
+    // ```
+    let labeled_tree = LabeledTree::Leaf(value.into());
+
+    // An witness with the leaf already pruned.
+    //
+    // ```
+    // (root)
+    //    \__ [Pruned]
+    // ```
+    let witness = Witness::Pruned {
+        digest: compute_leaf_digest(value.as_bytes()),
+    };
+
+    // Inconsistency in the root.
+    let expected_err = TreeHashError::InconsistentPartialTree {
+        offending_path: vec![],
+    };
+    assert_eq!(
+        Err(expected_err.clone()),
+        prune_witness(&witness, &labeled_tree)
+    );
+    assert_eq!(Err(expected_err), recompute_digest(&labeled_tree, &witness));
+}
+
 #[test]
 fn sub_witness_test() {
     let l1 = Label::from("1");
