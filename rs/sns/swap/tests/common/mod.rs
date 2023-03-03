@@ -13,7 +13,6 @@ use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
 use ic_sns_governance::types::DEFAULT_TRANSFER_FEE;
 use ic_sns_governance::{
     pb::v1::{
-        claim_swap_neurons_request::NeuronParameters,
         claim_swap_neurons_response::{ClaimSwapNeuronsResult, ClaimedSwapNeurons, SwapNeuron},
         ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus, NeuronId,
     },
@@ -36,10 +35,8 @@ use ic_sns_swap::{
         SetModeCallResult, SettleCommunityFundParticipationResult, SnsNeuronRecipe, Swap,
         TransferableAmount,
     },
-    swap::CLAIM_SWAP_NEURONS_MESSAGE_SIZE_LIMIT_BYTES,
 };
 use std::{
-    mem,
     str::FromStr,
     sync::{Arc, Mutex},
 };
@@ -219,9 +216,7 @@ pub fn compute_single_successful_claim_swap_neurons_response(
 pub fn compute_multiple_successful_claim_swap_neurons_response(
     neuron_recipes: &[SnsNeuronRecipe],
 ) -> Vec<ClaimSwapNeuronsResponse> {
-    let neuron_parameters_size = mem::size_of::<NeuronParameters>();
-    let current_batch_limit =
-        CLAIM_SWAP_NEURONS_MESSAGE_SIZE_LIMIT_BYTES.saturating_div(neuron_parameters_size);
+    let current_batch_limit = 500_usize;
 
     let swap_neurons: Vec<SwapNeuron> = neuron_recipes
         .iter()
