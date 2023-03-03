@@ -152,6 +152,7 @@ class OSPackageTrivyResultParser(TrivyResultParser):
             dependencies.sort(key=lambda x: x.id)
             finding.vulnerable_dependency = dependencies[0]
             finding.first_level_dependencies = dependencies[1:] + [os_dependency]
+            finding.vulnerabilities.sort(key=lambda x: x.id)
             findings.append(finding)
         return findings
 
@@ -194,13 +195,17 @@ class BinaryTrivyResultParser(TrivyResultParser):
             for vulnerability_id in all_vulnerability_ids.difference(dep_vulnerability_ids):
                 dependency.fix_version_for_vulnerability[vulnerability_id] = ["n/a"]  # not affected
 
+        vulnerabilities: typing.List[Vulnerability] = sum([*map(lambda x: x[1], vulnerabilities_by_vuln_dep)], [])
+        vulnerabilities.sort(key=lambda x: x.id)
+        first_level_deps: typing.List[Dependency] = [*map(lambda x: x[0], vulnerabilities_by_vuln_dep)]
+        first_level_deps.sort(key=lambda x: x.id)
         return [
             Finding(
                 repository=repository,
                 scanner=scanner,
                 vulnerable_dependency=vulnerable_dependency,
-                vulnerabilities=sum([*map(lambda x: x[1], vulnerabilities_by_vuln_dep)], []),
-                first_level_dependencies=[*map(lambda x: x[0], vulnerabilities_by_vuln_dep)],
+                vulnerabilities=vulnerabilities,
+                first_level_dependencies=first_level_deps,
                 projects=[self.convert_project_for_finding(project)],
                 risk_assessor=[],
                 score=max_score,
@@ -230,6 +235,7 @@ class SecretTrivyResultParser(TrivyResultParser):
             vulnerabilities.append(
                 Vulnerability(id=secret["RuleID"], name=secret["RuleID"], description=secret["Title"])
             )
+        vulnerabilities.sort(key=lambda x: x.id)
         return [
             Finding(
                 repository=repository,

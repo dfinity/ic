@@ -435,7 +435,18 @@ class FakeNPM:
                                 "cwe": ["CWE-400"],
                                 "cvss": {"score": 0, "vectorString": ""},
                                 "range": "<3.1.0",
-                            }
+                            },
+                            {
+                                "source": 1088594,
+                                "name": "d2-color",
+                                "dependency": "d2-color",
+                                "title": "d2-color vulnerable to ReDoS",
+                                "url": "https://github.com/advisories/GHSA-36jr-mh4h-2g57",
+                                "severity": "high",
+                                "cwe": ["CWE-400"],
+                                "cvss": {"score": 0, "vectorString": ""},
+                                "range": "<3.1.0",
+                            },
                         ],
                         "effects": ["d3-interpolate"],
                         "range": "<3.1.0",
@@ -544,11 +555,17 @@ def test_findings_helper_one_finding(npm_test):
         ),
         vulnerabilities=[
             Vulnerability(
+                id="https://github.com/advisories/GHSA-36jr-mh4h-2g57",
+                name="GHSA-36jr-mh4h-2g57",
+                description="d2-color vulnerable to ReDoS",
+                score=-1,
+            ),
+            Vulnerability(
                 id="https://github.com/advisories/GHSA-36jr-mh4h-2g58",
                 name="GHSA-36jr-mh4h-2g58",
                 description="d3-color vulnerable to ReDoS",
                 score=-1,
-            )
+            ),
         ],
         first_level_dependencies=[
             Dependency(
