@@ -1,4 +1,4 @@
-use ic_artifact_manager::{manager, processors};
+use ic_artifact_manager::manager;
 use ic_artifact_pool::consensus_pool::ConsensusPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_interfaces::artifact_manager::{ArtifactPoolDescriptor, *};
@@ -47,7 +47,7 @@ fn setup_manager(artifact_pool_config: ArtifactPoolConfig) -> Arc<dyn ArtifactMa
 
     backends.insert(
         ConsensusArtifact::TAG,
-        Box::new(processors::create_consensus_handlers(
+        Box::new(ic_artifact_manager::create_consensus_handlers(
             |_| {},
             (consensus, consensus_gossip),
             Arc::clone(&time_source) as Arc<_>,
