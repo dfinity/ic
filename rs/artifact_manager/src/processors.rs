@@ -4,9 +4,10 @@
 use ic_interfaces::{
     artifact_manager::{ArtifactProcessor, ProcessingResult},
     artifact_pool::UnvalidatedArtifact,
-    canister_http::*,
-    certification,
-    certification::{Certifier, MutableCertificationPool},
+    canister_http::{CanisterHttpChangeAction, CanisterHttpPoolManager, MutableCanisterHttpPool},
+    certification::{
+        Certifier, ChangeAction as CertificationChangeAction, MutableCertificationPool,
+    },
     consensus::Consensus,
     consensus_pool::{ChangeAction as ConsensusAction, ConsensusPoolCache, MutableConsensusPool},
     dkg::{ChangeAction as DkgChangeAction, Dkg, MutableDkgPool},
@@ -16,6 +17,7 @@ use ic_interfaces::{
     time_source::TimeSource,
 };
 use ic_logger::{debug, warn, ReplicaLogger};
+use ic_metrics::MetricsRegistry;
 use ic_types::{
     artifact::*,
     artifact_kind::*,
@@ -24,19 +26,38 @@ use ic_types::{
     NodeId,
 };
 use ic_types::{canister_http::CanisterHttpResponseShare, consensus::HasRank};
-use prometheus::{Histogram, IntCounter};
+use prometheus::{histogram_opts, Histogram, IntCounter};
 use std::sync::{Arc, RwLock};
 
 /// *Consensus* `OnStateChange` client.
 pub struct ConsensusProcessor<PoolConsensus> {
     /// The *Consensus* pool.
-    pub(crate) consensus_pool: Arc<RwLock<PoolConsensus>>,
+    consensus_pool: Arc<RwLock<PoolConsensus>>,
     /// The *Consensus* client.
-    pub(crate) client: Box<dyn Consensus>,
+    client: Box<dyn Consensus>,
     /// The invalidated artifacts counter.
-    pub(crate) invalidated_artifacts: IntCounter,
+    invalidated_artifacts: IntCounter,
     /// The logger.
-    pub(crate) log: ReplicaLogger,
+    log: ReplicaLogger,
+}
+
+impl<PoolConsensus> ConsensusProcessor<PoolConsensus> {
+    pub fn new(
+        consensus_pool: Arc<RwLock<PoolConsensus>>,
+        client: Box<dyn Consensus>,
+        log: ReplicaLogger,
+        metrics_registry: &MetricsRegistry,
+    ) -> Self {
+        Self {
+            consensus_pool,
+            client,
+            log,
+            invalidated_artifacts: metrics_registry.int_counter(
+                "consensus_invalidated_artifacts",
+                "The number of invalidated consensus artifacts",
+            ),
+        }
+    }
 }
 
 impl<PoolConsensus: MutableConsensusPool + Send + Sync + 'static>
@@ -135,11 +156,25 @@ impl<PoolConsensus: MutableConsensusPool + Send + Sync + 'static>
 pub struct IngressProcessor<PoolIngress> {
     /// The ingress pool, protected by a read-write lock and automatic reference
     /// counting.
-    pub(crate) ingress_pool: Arc<RwLock<PoolIngress>>,
+    ingress_pool: Arc<RwLock<PoolIngress>>,
     /// The ingress handler.
-    pub(crate) client: Arc<dyn IngressHandler + Send + Sync>,
+    client: Arc<dyn IngressHandler + Send + Sync>,
     /// Our node id
-    pub(crate) node_id: NodeId,
+    node_id: NodeId,
+}
+
+impl<PoolIngress> IngressProcessor<PoolIngress> {
+    pub fn new(
+        ingress_pool: Arc<RwLock<PoolIngress>>,
+        client: Arc<dyn IngressHandler + Send + Sync>,
+        node_id: NodeId,
+    ) -> Self {
+        Self {
+            ingress_pool,
+            client,
+            node_id,
+        }
+    }
 }
 
 impl<PoolIngress: MutableIngressPool + Send + Sync + 'static> ArtifactProcessor<IngressArtifact>
@@ -200,15 +235,36 @@ impl<PoolIngress: MutableIngressPool + Send + Sync + 'static> ArtifactProcessor<
 /// Certification `OnStateChange` client.
 pub struct CertificationProcessor<PoolCertification> {
     /// The *Consensus* pool cache.
-    pub(crate) consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
+    consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
     /// The certification pool.
-    pub(crate) certification_pool: Arc<RwLock<PoolCertification>>,
+    certification_pool: Arc<RwLock<PoolCertification>>,
     /// The certifier.
-    pub(crate) client: Box<dyn Certifier>,
+    client: Box<dyn Certifier>,
     /// The invalidated artifacts counter.
-    pub(crate) invalidated_artifacts: IntCounter,
+    invalidated_artifacts: IntCounter,
     /// The logger.
-    pub(crate) log: ReplicaLogger,
+    log: ReplicaLogger,
+}
+
+impl<PoolCertification> CertificationProcessor<PoolCertification> {
+    pub fn new(
+        consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
+        certification_pool: Arc<RwLock<PoolCertification>>,
+        client: Box<dyn Certifier>,
+        log: ReplicaLogger,
+        metrics_registry: &MetricsRegistry,
+    ) -> Self {
+        Self {
+            consensus_pool_cache,
+            certification_pool,
+            client,
+            log,
+            invalidated_artifacts: metrics_registry.int_counter(
+                "certification_invalidated_artifacts",
+                "The number of invalidated certification artifacts",
+            ),
+        }
+    }
 }
 
 impl<PoolCertification: MutableCertificationPool + Send + Sync + 'static>
@@ -242,19 +298,19 @@ impl<PoolCertification: MutableCertificationPool + Send + Sync + 'static>
 
         for action in change_set.iter() {
             match action {
-                certification::ChangeAction::AddToValidated(msg) => {
+                CertificationChangeAction::AddToValidated(msg) => {
                     adverts.push(CertificationArtifact::message_to_advert_send_request(
                         msg,
                         ArtifactDestination::AllPeersInSubnet,
                     ))
                 }
-                certification::ChangeAction::MoveToValidated(msg) => {
+                CertificationChangeAction::MoveToValidated(msg) => {
                     adverts.push(CertificationArtifact::message_to_advert_send_request(
                         msg,
                         ArtifactDestination::AllPeersInSubnet,
                     ))
                 }
-                certification::ChangeAction::HandleInvalid(msg, reason) => {
+                CertificationChangeAction::HandleInvalid(msg, reason) => {
                     self.invalidated_artifacts.inc();
                     warn!(
                         self.log,
@@ -276,13 +332,32 @@ impl<PoolCertification: MutableCertificationPool + Send + Sync + 'static>
 pub struct DkgProcessor<PoolDkg> {
     /// The DKG pool, protected by a read-write lock and automatic reference
     /// counting.
-    pub(crate) dkg_pool: Arc<RwLock<PoolDkg>>,
+    dkg_pool: Arc<RwLock<PoolDkg>>,
     /// The DKG client.
-    pub(crate) client: Box<dyn Dkg>,
+    client: Box<dyn Dkg>,
     /// The invalidated artifacts counter.
-    pub(crate) invalidated_artifacts: IntCounter,
+    invalidated_artifacts: IntCounter,
     /// The logger.
-    pub(crate) log: ReplicaLogger,
+    log: ReplicaLogger,
+}
+
+impl<PoolDkg> DkgProcessor<PoolDkg> {
+    pub fn new(
+        dkg_pool: Arc<RwLock<PoolDkg>>,
+        client: Box<dyn Dkg>,
+        log: ReplicaLogger,
+        metrics_registry: &MetricsRegistry,
+    ) -> Self {
+        Self {
+            dkg_pool,
+            client,
+            log,
+            invalidated_artifacts: metrics_registry.int_counter(
+                "dkg_invalidated_artifacts",
+                "The number of invalidated DKG artifacts",
+            ),
+        }
+    }
 }
 
 impl<PoolDkg: MutableDkgPool + Send + Sync + 'static> ArtifactProcessor<DkgArtifact>
@@ -340,10 +415,36 @@ impl<PoolDkg: MutableDkgPool + Send + Sync + 'static> ArtifactProcessor<DkgArtif
 
 /// ECDSA `OnStateChange` client.
 pub struct EcdsaProcessor<PoolEcdsa> {
-    pub(crate) ecdsa_pool: Arc<RwLock<PoolEcdsa>>,
-    pub(crate) client: Box<dyn Ecdsa>,
-    pub(crate) ecdsa_pool_update_duration: Histogram,
-    pub(crate) log: ReplicaLogger,
+    ecdsa_pool: Arc<RwLock<PoolEcdsa>>,
+    client: Box<dyn Ecdsa>,
+    ecdsa_pool_update_duration: Histogram,
+    log: ReplicaLogger,
+}
+
+impl<PoolEcdsa> EcdsaProcessor<PoolEcdsa> {
+    pub fn new(
+        ecdsa_pool: Arc<RwLock<PoolEcdsa>>,
+        client: Box<dyn Ecdsa>,
+        log: ReplicaLogger,
+        metrics_registry: &MetricsRegistry,
+    ) -> Self {
+        Self {
+            ecdsa_pool,
+            client,
+            log,
+            ecdsa_pool_update_duration: metrics_registry.register(
+                Histogram::with_opts(histogram_opts!(
+                    "ecdsa_pool_update_duration_seconds",
+                    "Time to apply changes to ECDSA artifact pool, in seconds",
+                    vec![
+                        0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.8, 1.0, 1.2, 1.5, 2.0, 2.2, 2.5, 5.0,
+                        8.0, 10.0, 15.0, 20.0, 50.0,
+                    ]
+                ))
+                .unwrap(),
+            ),
+        }
+    }
 }
 
 impl<PoolEcdsa: MutableEcdsaPool + Send + Sync + 'static> ArtifactProcessor<EcdsaArtifact>
@@ -415,10 +516,26 @@ impl<PoolEcdsa: MutableEcdsaPool + Send + Sync + 'static> ArtifactProcessor<Ecds
 }
 
 pub struct CanisterHttpProcessor<PoolCanisterHttp> {
-    pub(crate) consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
-    pub(crate) canister_http_pool: Arc<RwLock<PoolCanisterHttp>>,
-    pub(crate) client: Arc<RwLock<dyn CanisterHttpPoolManager + Sync + 'static>>,
-    pub(crate) log: ReplicaLogger,
+    consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
+    canister_http_pool: Arc<RwLock<PoolCanisterHttp>>,
+    client: Arc<RwLock<dyn CanisterHttpPoolManager + Sync + 'static>>,
+    log: ReplicaLogger,
+}
+
+impl<PoolCanisterHttp> CanisterHttpProcessor<PoolCanisterHttp> {
+    pub fn new(
+        consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
+        canister_http_pool: Arc<RwLock<PoolCanisterHttp>>,
+        client: Arc<RwLock<dyn CanisterHttpPoolManager + Sync + 'static>>,
+        log: ReplicaLogger,
+    ) -> Self {
+        Self {
+            consensus_pool_cache,
+            canister_http_pool,
+            client,
+            log,
+        }
+    }
 }
 
 impl<PoolCanisterHttp: MutableCanisterHttpPool + Send + Sync + 'static>
