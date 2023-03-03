@@ -1,5 +1,5 @@
-use ic_metrics::MetricsRegistry;
-use prometheus::{IntCounter, IntCounterVec, IntGauge};
+use ic_metrics::{buckets::linear_buckets, MetricsRegistry};
+use prometheus::{Histogram, IntCounter, IntCounterVec, IntGauge};
 
 pub(crate) const LABEL_GET_SUCCESSOR: &str = "get_successor";
 pub(crate) const LABEL_REQUEST_TYPE: &str = "type";
@@ -78,6 +78,28 @@ impl BlockchainStateMetrics {
                 "Number of headers stored in the adapter.",
             ),
             tips: metrics_registry.int_gauge("blockchain_tips", "Number of active tips."),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct TransactionMetrics {
+    pub tx_peer_requests: Histogram,
+    pub tx_store_size: IntGauge,
+}
+
+impl TransactionMetrics {
+    pub fn new(metrics_registry: &MetricsRegistry) -> Self {
+        Self {
+            tx_peer_requests: metrics_registry.histogram(
+                "tx_peer_requests",
+                "Number of times a transaction is requested.",
+                linear_buckets(0.0, 1.0, 10),
+            ),
+            tx_store_size: metrics_registry.int_gauge(
+                "tx_store_size",
+                "Number of transactions that are stored in the adapter and are made available to peers.",
+            ),
         }
     }
 }

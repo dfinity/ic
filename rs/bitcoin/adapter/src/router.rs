@@ -42,7 +42,7 @@ pub fn start_router(
 
     let mut blockchain_manager =
         BlockchainManager::new(blockchain_state, logger.clone(), router_metrics.clone());
-    let mut transaction_manager = TransactionManager::new(logger.clone());
+    let mut transaction_manager = TransactionManager::new(logger.clone(), metrics_registry);
     let mut connection_manager = ConnectionManager::new(
         config,
         logger,
