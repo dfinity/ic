@@ -8,7 +8,6 @@ use strum_macros::EnumIter;
 
 pub mod basic_sig;
 pub mod crypto_component;
-pub mod mockall_csp;
 pub mod multi_bls12_381;
 
 // Indirections to delete:

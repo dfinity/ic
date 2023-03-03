@@ -4995,6 +4995,7 @@ dependencies = [
  "ic-crypto-test-utils",
  "ic-crypto-test-utils-canister-sigs",
  "ic-crypto-test-utils-canister-threshold-sigs",
+ "ic-crypto-test-utils-csp",
  "ic-crypto-test-utils-keygen",
  "ic-crypto-test-utils-local-csp-vault",
  "ic-crypto-test-utils-metrics",
@@ -5762,6 +5763,21 @@ dependencies = [
  "ic-registry-proto-data-provider",
  "ic-types",
  "rand 0.8.5",
+]
+
+[[package]]
+name = "ic-crypto-test-utils-csp"
+version = "0.1.0"
+dependencies = [
+ "ic-base-types",
+ "ic-crypto-internal-csp",
+ "ic-crypto-internal-threshold-sig-bls12381",
+ "ic-crypto-internal-threshold-sig-ecdsa",
+ "ic-crypto-internal-types",
+ "ic-crypto-node-key-validation",
+ "ic-crypto-tls-interfaces",
+ "ic-types",
+ "mockall 0.7.2",
 ]
 
 [[package]]

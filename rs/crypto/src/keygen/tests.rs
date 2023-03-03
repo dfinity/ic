@@ -29,11 +29,11 @@ const NODE_ID: u64 = 42;
 
 mod check_keys_with_registry {
     use super::*;
-    use crate::common::test_utils::mockall_csp::MockAllCryptoServiceProvider;
     use ic_base_types::SubnetId;
     use ic_crypto_internal_csp::api::NodePublicKeyDataError;
     use ic_crypto_internal_csp::vault::api::ExternalPublicKeyError;
     use ic_crypto_internal_logmon::metrics::CryptoMetrics;
+    use ic_crypto_test_utils_csp::MockAllCryptoServiceProvider;
     use ic_crypto_test_utils_metrics::assertions::MetricsObservationsAssert;
     use ic_interfaces::crypto::KeyManager;
     use ic_logger::replica_logger::no_op_logger;
@@ -1918,8 +1918,8 @@ mod rotate_idkg_dealing_encryption_keys {
     #[test]
     fn should_have_rotate_idkg_dealing_encryption_keys_returning_transient_error_if_csp_fails_to_get_current_node_public_keys(
     ) {
-        use crate::common::test_utils::mockall_csp::MockAllCryptoServiceProvider;
         use ic_crypto_internal_csp::api::NodePublicKeyDataError;
+        use ic_crypto_test_utils_csp::MockAllCryptoServiceProvider;
         use ic_interfaces::crypto::KeyManager;
         use ic_logger::replica_logger::no_op_logger;
         use ic_protobuf::registry::subnet::v1::SubnetListRecord;
@@ -1977,7 +1977,7 @@ mod rotate_idkg_dealing_encryption_keys {
     #[test]
     fn should_log_warning_if_rotated_local_idkg_public_key_is_too_old_but_not_in_registry_with_mocked_csp(
     ) {
-        use crate::common::test_utils::mockall_csp::MockAllCryptoServiceProvider;
+        use ic_crypto_test_utils_csp::MockAllCryptoServiceProvider;
         use ic_interfaces::crypto::KeyManager;
         use ic_protobuf::registry::subnet::v1::SubnetListRecord;
         use ic_registry_keys::{make_subnet_list_record_key, make_subnet_record_key};
@@ -2278,8 +2278,8 @@ mod idkg_dealing_encryption_pubkeys_count {
     #[test]
     fn should_have_idkg_dealing_encryption_pubkeys_count_returning_transient_error_if_csp_call_fails(
     ) {
-        use crate::common::test_utils::mockall_csp::MockAllCryptoServiceProvider;
         use ic_crypto_internal_csp::api::NodePublicKeyDataError;
+        use ic_crypto_test_utils_csp::MockAllCryptoServiceProvider;
         use ic_interfaces::crypto::KeyManager;
         use ic_logger::replica_logger::no_op_logger;
 

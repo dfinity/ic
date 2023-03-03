@@ -2,10 +2,10 @@
 
 use super::*;
 use crate::common::test_utils::crypto_component::crypto_component_with_csp;
-use crate::common::test_utils::mockall_csp::MockAllCryptoServiceProvider;
 use crate::sign::tests::*;
 use assert_matches::assert_matches;
 use ic_crypto_internal_csp::key_id::KeyId;
+use ic_crypto_test_utils_csp::MockAllCryptoServiceProvider;
 use ic_types::crypto::{AlgorithmId, SignableMock};
 use ic_types::messages::MessageId;
 use ic_types::registry::RegistryClientError;

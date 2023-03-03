@@ -1,9 +1,3 @@
-// Including this clippy allow to circumvent clippy errors spawned by MockAll
-// internal expansion.  Should be removed when DFN-860 is resolved.
-// Specifically relevant to the Vec<> parameter.
-#![allow(clippy::ptr_arg)]
-#![allow(clippy::too_many_arguments)]
-
 use ic_base_types::RegistryVersion;
 use ic_crypto_internal_csp::api::NodePublicKeyDataError;
 use ic_crypto_internal_csp::api::{
