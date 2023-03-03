@@ -8,7 +8,7 @@ pub struct EcdsaSigningSubnetList {
     pub subnets: ::prost::alloc::vec::Vec<super::super::super::types::v1::SubnetId>,
 }
 /// A public key. Described by its `AlgorithmId`, the key's value and proof data holding, e.g., a proof of possession (PoP).
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize, Eq, Hash, PartialOrd, Ord)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PublicKey {
@@ -25,7 +25,7 @@ pub struct PublicKey {
     pub timestamp: ::core::option::Option<u64>,
 }
 /// DER-encoded X509 public key certificate
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize, Eq, Hash, PartialOrd, Ord)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct X509PublicKeyCert {

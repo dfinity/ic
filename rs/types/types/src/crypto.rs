@@ -23,7 +23,6 @@ use core::fmt::Formatter;
 use ic_crypto_internal_types::sign::threshold_sig::public_coefficients::CspPublicCoefficients;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381::ThresholdSigPublicKeyBytesConversionError;
 use ic_crypto_internal_types::sign::threshold_sig::public_key::CspThresholdSigPublicKey;
-use ic_protobuf::crypto::v1::NodePublicKeys;
 use ic_protobuf::registry::crypto::v1::{PublicKey, X509PublicKeyCert};
 use phantom_newtype::Id;
 #[cfg(all(test, not(target_arch = "wasm32")))]
@@ -721,7 +720,7 @@ impl fmt::Debug for CanisterSig {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct CurrentNodePublicKeys {
     pub node_signing_public_key: Option<PublicKey>,
     pub committee_signing_public_key: Option<PublicKey>,
@@ -749,20 +748,5 @@ impl CurrentNodePublicKeys {
             count += 1;
         }
         count
-    }
-}
-
-impl From<CurrentNodePublicKeys> for NodePublicKeys {
-    fn from(current_node_public_keys: CurrentNodePublicKeys) -> Self {
-        NodePublicKeys {
-            version: 1,
-            node_signing_pk: current_node_public_keys.node_signing_public_key,
-            committee_signing_pk: current_node_public_keys.committee_signing_public_key,
-            tls_certificate: current_node_public_keys.tls_certificate,
-            dkg_dealing_encryption_pk: current_node_public_keys.dkg_dealing_encryption_public_key,
-            idkg_dealing_encryption_pks: current_node_public_keys
-                .idkg_dealing_encryption_public_key
-                .map_or(vec![], |public_key| vec![public_key]),
-        }
     }
 }
