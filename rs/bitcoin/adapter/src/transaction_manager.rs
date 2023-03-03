@@ -6,8 +6,10 @@ use bitcoin::{
     blockdata::transaction::Transaction, hash_types::Txid, network::message::NetworkMessage,
     network::message_blockdata::Inventory,
 };
-use ic_logger::{debug, trace, ReplicaLogger};
+use ic_logger::{debug, trace, warn, ReplicaLogger};
+use ic_metrics::MetricsRegistry;
 
+use crate::metrics::TransactionMetrics;
 use crate::ProcessBitcoinNetworkMessageError;
 use crate::{Channel, Command};
 
@@ -61,14 +63,16 @@ pub struct TransactionManager {
     logger: ReplicaLogger,
     /// This field contains the transactions being tracked by the manager.
     transactions: HashMap<Txid, TransactionInfo>,
+    metrics: TransactionMetrics,
 }
 
 impl TransactionManager {
     /// This function creates a new transaction manager.
-    pub fn new(logger: ReplicaLogger) -> Self {
+    pub fn new(logger: ReplicaLogger, metrics_registry: &MetricsRegistry) -> Self {
         TransactionManager {
             logger,
             transactions: HashMap::new(),
+            metrics: TransactionMetrics::new(metrics_registry),
         }
     }
 
@@ -77,6 +81,9 @@ impl TransactionManager {
     pub fn tick(&mut self, channel: &mut impl Channel) {
         self.advertise_txids(channel);
         self.reap();
+        self.metrics
+            .tx_store_size
+            .set(self.transactions.len() as i64);
     }
 
     /// This method is used to send a single transaction.
@@ -100,7 +107,16 @@ impl TransactionManager {
     /// Clear out transactions that have been held on to for more than the transaction timeout period.
     fn reap(&mut self) {
         let now = SystemTime::now();
-        self.transactions.retain(|_, info| info.timeout_at > now);
+        self.transactions
+            .retain(|tx, info| {
+                if info.timeout_at < now {
+                    warn!(self.logger, "Advertising bitcoin transaction {} timed out, meaning it was not picked up by any bitcoin peer.", tx);
+                    false
+                }
+                else {
+                    true
+                }
+            });
     }
 
     /// This method is used to broadcast known transaction IDs to connected peers.
@@ -168,6 +184,9 @@ impl TransactionManager {
                             address: Some(addr),
                             message: NetworkMessage::Tx(transaction.clone()),
                         });
+                        // We remove the transaction as soon as one peer requests it.
+                        // Since each node in the subnet performs this step,
+                        // the transaction is probably sent to #subnet_nodes distinct Bitcoin peers.
                         if result.is_ok() {
                             self.transactions.remove(txid);
                         }
@@ -191,7 +210,7 @@ mod test {
 
     /// This function creates a new transaction manager with a test logger.
     fn make_transaction_manager() -> TransactionManager {
-        TransactionManager::new(no_op_logger())
+        TransactionManager::new(no_op_logger(), &MetricsRegistry::default())
     }
 
     /// This function pulls a transaction out of the `regtest` genesis block.

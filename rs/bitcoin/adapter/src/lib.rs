@@ -73,6 +73,7 @@ pub enum ProcessBitcoinNetworkMessageError {
 }
 
 /// This enum is used to represent errors that  
+#[derive(Debug)]
 pub enum ChannelError {
     /// This variant is used to indicate that the send failed to push
     /// the outgoing message to the BTC node.
