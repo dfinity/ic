@@ -376,7 +376,18 @@ impl GroupSpec {
         let mut metadata = GroupMetadata {
             user: None,
             job_schedule: None,
+            test_name: None,
         };
+
+        let exec_path = std::env::current_exe().expect("could not acquire path of executable");
+        let test_name = exec_path
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .strip_suffix("_bin")
+            .unwrap_or("unknown_test");
+        metadata.test_name = Some(test_name.to_string());
 
         let volatile_status = env.read_dependency_to_string("volatile-status.txt");
         let runtime_args_map = match volatile_status {
@@ -390,7 +401,7 @@ impl GroupSpec {
         if let Some(user) = runtime_args_map.get("USER") {
             metadata.user = Some(String::from(user));
         } else {
-            metadata.user = Some(String::from("unknown_user"));
+            metadata.user = Some(String::from("CI"));
         }
 
         if let Some(ci_job_name) = runtime_args_map.get("CI_JOB_NAME") {
@@ -409,6 +420,8 @@ pub struct GroupMetadata {
     pub user: Option<String>,
     #[serde(rename = "jobSchedule")]
     pub job_schedule: Option<String>,
+    #[serde(rename = "testName")]
+    pub test_name: Option<String>,
 }
 
 fn parse_volatile_status_file(input: String) -> HashMap<String, String> {
