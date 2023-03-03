@@ -382,8 +382,23 @@ fn crypto_with_node_keys_generation(
     let current_node_public_keys = temp_crypto
         .current_node_public_keys()
         .expect("Failed to retrieve node public keys");
-    let node_public_keys = NodePublicKeys::from(current_node_public_keys);
+    let node_public_keys = node_public_keys_from_current_node_public_keys(current_node_public_keys);
     (temp_crypto, node_public_keys)
+}
+
+fn node_public_keys_from_current_node_public_keys(
+    current_node_public_keys: CurrentNodePublicKeys,
+) -> NodePublicKeys {
+    NodePublicKeys {
+        version: 1,
+        node_signing_pk: current_node_public_keys.node_signing_public_key,
+        committee_signing_pk: current_node_public_keys.committee_signing_public_key,
+        tls_certificate: current_node_public_keys.tls_certificate,
+        dkg_dealing_encryption_pk: current_node_public_keys.dkg_dealing_encryption_public_key,
+        idkg_dealing_encryption_pks: current_node_public_keys
+            .idkg_dealing_encryption_public_key
+            .map_or(vec![], |public_key| vec![public_key]),
+    }
 }
 
 mod tls {

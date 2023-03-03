@@ -11,18 +11,16 @@ use thiserror::Error;
 use crate::util::{write_proto_to_file_raw, write_registry_entry};
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_node_key_generation::get_node_keys_or_generate_if_missing;
-use ic_protobuf::{
-    crypto::v1::NodePublicKeys,
-    registry::{
-        crypto::v1::{PublicKey, X509PublicKeyCert},
-        node::v1::{
-            connection_endpoint::Protocol, ConnectionEndpoint as pbConnectionEndpoint,
-            FlowEndpoint as pbFlowEndpoint, NodeRecord as pbNodeRecord,
-        },
+use ic_protobuf::registry::{
+    crypto::v1::{PublicKey, X509PublicKeyCert},
+    node::v1::{
+        connection_endpoint::Protocol, ConnectionEndpoint as pbConnectionEndpoint,
+        FlowEndpoint as pbFlowEndpoint, NodeRecord as pbNodeRecord,
     },
 };
 use ic_registry_keys::{make_crypto_node_key, make_crypto_tls_cert_key, make_node_record_key};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+use ic_types::crypto::CurrentNodePublicKeys;
 use ic_types::{
     crypto::KeyPurpose,
     registry::connection_endpoint::{ConnectionEndpoint, ConnectionEndpointTryFromError},
@@ -371,18 +369,16 @@ impl NodeConfiguration {
             NodeSecretKeyStore::new(crypto_path)?
         };
 
-        use prost::Message;
         let node_id = sks.node_id;
-        let node_pks = NodePublicKeys::decode(sks.node_pks.as_slice()).unwrap();
         Ok(InitializedNode {
             node_id,
-            pk_committee_signing: node_pks.committee_signing_pk.unwrap(),
-            pk_node_signing: node_pks.node_signing_pk.unwrap(),
-            tls_certificate: node_pks.tls_certificate.unwrap(),
+            pk_committee_signing: sks.node_pks.committee_signing_public_key.unwrap(),
+            pk_node_signing: sks.node_pks.node_signing_public_key.unwrap(),
+            tls_certificate: sks.node_pks.tls_certificate.unwrap(),
             node_path: PathBuf::from(node_path.as_ref()),
             node_config: self,
-            dkg_dealing_encryption_pubkey: node_pks.dkg_dealing_encryption_pk.unwrap(),
-            idkg_mega_encryption_pubkey: node_pks.idkg_dealing_encryption_pks.last().cloned(),
+            dkg_dealing_encryption_pubkey: sks.node_pks.dkg_dealing_encryption_public_key.unwrap(),
+            idkg_mega_encryption_pubkey: sks.node_pks.idkg_dealing_encryption_public_key,
         })
     }
 }
@@ -390,9 +386,7 @@ impl NodeConfiguration {
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NodeSecretKeyStore {
     pub node_id: NodeId,
-    /// Serialized protobuf of node public keys. The serialized version of the
-    /// buffer is trivially (Partial)Eq + (Partial)Ord
-    pub node_pks: Vec<u8>,
+    pub node_pks: CurrentNodePublicKeys,
     pub path: PathBuf,
 }
 
@@ -412,10 +406,6 @@ impl NodeSecretKeyStore {
         Self::set_permissions(&path)?;
         let config = CryptoConfig::new(path.clone());
         let (node_pks, node_id) = get_node_keys_or_generate_if_missing(&config, None);
-        let node_pks = NodePublicKeys::from(node_pks);
-
-        use prost::Message;
-        let node_pks = node_pks.encode_to_vec();
 
         Ok(Self {
             node_id,

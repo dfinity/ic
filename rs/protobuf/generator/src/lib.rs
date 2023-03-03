@@ -209,6 +209,14 @@ fn build_registry_proto(def: &Path, out: &Path) {
         "#[derive(serde::Serialize, serde::Deserialize)]",
     );
     config.type_attribute(
+        ".registry.crypto.v1.PublicKey",
+        "#[derive(Eq, Hash, PartialOrd, Ord)]",
+    );
+    config.type_attribute(
+        ".registry.crypto.v1.X509PublicKeyCert",
+        "#[derive(Eq, Hash, PartialOrd, Ord)]",
+    );
+    config.type_attribute(
         ".registry.crypto.v1.EcdsaCurve",
         "#[derive(candid::CandidType)]",
     );
