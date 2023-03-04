@@ -4722,6 +4722,44 @@ impl Governance {
             .ok_or_else(|| Self::neuron_not_found_error(nid))
     }
 
+    /// Updates a neuron in the list of neurons.
+    ///
+    /// Preconditions:
+    /// - the given `neuron_id` already exists in `self.proto.neurons`
+    /// - the followees are not changed (it's easy to update followees
+    ///   via existing code paths and doing it here would require updating
+    ///   function followee indices)
+    pub fn update_neuron(&mut self, neuron: Neuron) -> Result<(), GovernanceError> {
+        let neuron_id = &neuron.id.as_ref().expect("Neuron must have a NeuronId");
+
+        // Must clobber an existing neuron.
+        let old_neuron = match self.proto.neurons.get_mut(&neuron_id.to_string()) {
+            Some(n) => n,
+            None => {
+                return Err(GovernanceError::new_with_message(
+                    ErrorType::PreconditionFailed,
+                    format!(
+                        "Cannot update neuron. There is no neuron with id: {}",
+                        neuron_id
+                    ),
+                ));
+            }
+        };
+
+        // Must NOT clobber followees.
+        if old_neuron.followees != neuron.followees {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "Cannot update neuron's followees via update_neuron.".to_string(),
+            ));
+        }
+
+        // Now that neuron has been validated, update old_neuron.
+        *old_neuron = neuron;
+
+        Ok(())
+    }
+
     /// Gets the metadata describing the SNS.
     pub fn get_metadata(&self, _request: &GetMetadataRequest) -> GetMetadataResponse {
         let sns_metadata = self
