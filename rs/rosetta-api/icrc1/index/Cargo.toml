@@ -10,12 +10,13 @@ async-trait = "0.1.53"
 candid = "0.8.1"
 ciborium = "0.2"
 ic-base-types = { path = "../../../types/base_types" }
+ic-canister-profiler = { path = "../../../rust_canisters/canister_profiler" }
 ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
 ic-cdk = "0.6.0"
 ic-cdk-macros = "0.6.0"
 ic-icrc1 = { path = ".." }
 ic-icrc1-ledger = { path = "../ledger" }
-ic-metrics-encoder = "1"
+ic-metrics-encoder = "1.1"
 num-traits = "0.2.14"
 serde = "1.0.139"
 

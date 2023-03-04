@@ -1,8 +1,6 @@
-use std::cell::RefCell;
-use std::collections::{btree_map, BTreeMap};
-
 use candid::{CandidType, Nat};
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_canister_profiler::{measure_span, SpanStats};
 use ic_cdk::api::stable::{StableReader, StableWriter};
 use ic_icrc1::endpoints::{ArchivedRange, QueryTxArchiveFn, TransactionRange};
 use ic_icrc1::{
@@ -11,6 +9,8 @@ use ic_icrc1::{
 };
 use num_traits::cast::ToPrimitive;
 use serde::{Deserialize, Serialize};
+use std::cell::RefCell;
+use std::collections::{btree_map, BTreeMap};
 use std::ops::Bound::{Included, Unbounded};
 
 // Maximum number of subaccounts that can be returned
@@ -65,7 +65,8 @@ impl Index {
 }
 
 thread_local! {
-    static INDEX: RefCell<Option<Index>>  = RefCell::new(None);
+    static INDEX: RefCell<Option<Index>> = RefCell::new(None);
+    static PROFILING_DATA: RefCell<SpanStats> = RefCell::new(SpanStats::default());
 }
 
 fn with_index<R>(f: impl FnOnce(&Index) -> R) -> R {
@@ -310,20 +311,22 @@ fn index_transaction(txid: u64, transaction: Transaction) -> Result<(), String> 
 }
 
 fn add_tx(txid: u64, account: Account) {
-    with_index_mut(|idx| {
-        let account_index = match idx.account_index.entry(account.owner) {
-            btree_map::Entry::Vacant(v) => v.insert(BTreeMap::new()),
-            btree_map::Entry::Occupied(o) => o.into_mut(),
-        };
-        match account_index.entry(*account.effective_subaccount()) {
-            btree_map::Entry::Vacant(v) => {
-                idx.accounts_num += 1;
-                let _ = v.insert(vec![txid]);
-            }
-            btree_map::Entry::Occupied(o) => o.into_mut().push(txid),
-        };
-        idx.next_txid = txid + 1;
-    });
+    measure_span(&PROFILING_DATA, "add_tx", move || {
+        with_index_mut(|idx| {
+            let account_index = match idx.account_index.entry(account.owner) {
+                btree_map::Entry::Vacant(v) => v.insert(BTreeMap::new()),
+                btree_map::Entry::Occupied(o) => o.into_mut(),
+            };
+            match account_index.entry(*account.effective_subaccount()) {
+                btree_map::Entry::Vacant(v) => {
+                    idx.accounts_num += 1;
+                    let _ = v.insert(vec![txid]);
+                }
+                btree_map::Entry::Occupied(o) => o.into_mut().push(txid),
+            };
+            idx.next_txid = txid + 1;
+        });
+    })
 }
 
 /// Returns args.max_results transactions ids of the account args.account
@@ -462,6 +465,13 @@ pub fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> st
         with_index(|idx| idx.accounts_num) as f64,
         "Total number of accounts indexed.",
     )?;
+    PROFILING_DATA.with(|cell| -> std::io::Result<()> {
+        cell.borrow().record_metrics(w.histogram_vec(
+            "index_profile_instructions",
+            "Statistics for how many instructions index operations require.",
+        )?)?;
+        Ok(())
+    })?;
     Ok(())
 }
 

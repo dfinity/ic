@@ -1,5 +1,5 @@
 {
-  "checksum": "0649d5f0ab2b137e5cb6860796a874e58bbe3217f171c05df28de48226fb4726",
+  "checksum": "599a9a63769f0e14951af60282f0ebe6b1d327bfb63f7a928ea46c27bc6ed41d",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -202,7 +202,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.25.0",
+              "id": "tokio 1.26.0",
               "target": "tokio"
             },
             {
@@ -217,13 +217,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "actix-http 3.3.0": {
+    "actix-http 3.3.1": {
       "name": "actix-http",
-      "version": "3.3.0",
+      "version": "3.3.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/actix-http/3.3.0/download",
-          "sha256": "0070905b2c4a98d184c4e81025253cb192aa8a73827553f38e9410801ceb35bb"
+          "url": "https://crates.io/api/v1/crates/actix-http/3.3.1/download",
+          "sha256": "c2079246596c18b4a33e274ae10c0e50613f4d32a4198e09c7b93771013fed74"
         }
       },
       "targets": [
@@ -281,7 +281,7 @@
               "target": "actix_utils"
             },
             {
-              "id": "ahash 0.7.6",
+              "id": "ahash 0.8.3",
               "target": "ahash"
             },
             {
@@ -369,7 +369,7 @@
               "target": "smallvec"
             },
             {
-              "id": "tokio 1.25.0",
+              "id": "tokio 1.26.0",
               "target": "tokio"
             },
             {
@@ -397,7 +397,7 @@
           ],
           "selects": {}
         },
-        "version": "3.3.0"
+        "version": "3.3.1"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -549,7 +549,7 @@
               "target": "futures_core"
             },
             {
-              "id": "tokio 1.25.0",
+              "id": "tokio 1.26.0",
               "target": "tokio"
             }
           ],
@@ -635,7 +635,7 @@
               "target": "socket2"
             },
             {
-              "id": "tokio 1.25.0",
+              "id": "tokio 1.26.0",
               "target": "tokio"
             },
             {
@@ -798,7 +798,7 @@
               "target": "actix_codec"
             },
             {
-              "id": "actix-http 3.3.0",
+              "id": "actix-http 3.3.1",
               "target": "actix_http"
             },
             {
@@ -2550,7 +2550,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.25.0",
+              "id": "tokio 1.26.0",
               "target": "tokio"
             }
           ],
@@ -3007,7 +3007,7 @@
               "target": "sync_wrapper"
             },
             {
-              "id": "tokio 1.25.0",
+              "id": "tokio 1.26.0",
               "target": "tokio"
             },
             {
@@ -5750,13 +5750,13 @@
       },
       "license": "MIT"
     },
-    "bytemuck 1.13.0": {
+    "bytemuck 1.13.1": {
       "name": "bytemuck",
-      "version": "1.13.0",
+      "version": "1.13.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/bytemuck/1.13.0/download",
-          "sha256": "c041d3eab048880cb0b86b256447da3f18859a163c3b8d8893f4e6368abe6393"
+          "url": "https://crates.io/api/v1/crates/bytemuck/1.13.1/download",
+          "sha256": "17febce684fd15d89027105661fec94afb475cb995fbc59d2865198446ba2eea"
         }
       },
       "targets": [
@@ -5779,7 +5779,7 @@
           "**"
         ],
         "edition": "2018",
-        "version": "1.13.0"
+        "version": "1.13.1"
       },
       "license": "Zlib OR Apache-2.0 OR MIT"
     },
@@ -8223,7 +8223,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.25.0",
+              "id": "tokio 1.26.0",
               "target": "tokio",
               "alias": "tokio_dep"
             },
@@ -9907,7 +9907,7 @@
               "target": "tinytemplate"
             },
             {
-              "id": "tokio 1.25.0",
+              "id": "tokio 1.26.0",
               "target": "tokio"
             },
             {
@@ -12620,15 +12620,15 @@
               "target": "ic_btc_validation"
             },
             {
-              "id": "ic-cdk 0.7.1",
+              "id": "ic-cdk 0.7.3",
               "target": "ic_cdk"
             },
             {
-              "id": "ic-cdk-timers 0.1.1",
+              "id": "ic-cdk-timers 0.1.2",
               "target": "ic_cdk_timers"
             },
             {
-              "id": "ic-certified-map 0.3.3",
+              "id": "ic-certified-map 0.3.4",
               "target": "ic_certified_map"
             },
             {
@@ -13222,7 +13222,7 @@
               "target": "tiny_http"
             },
             {
-              "id": "tokio 1.25.0",
+              "id": "tokio 1.26.0",
               "target": "tokio"
             },
             {
@@ -13424,7 +13424,7 @@
               "target": "gflags_derive"
             },
             {
-              "id": "ic-cdk-macros 0.6.9",
+              "id": "ic-cdk-macros 0.6.10",
               "target": "ic_cdk_macros"
             },
             {
@@ -17567,7 +17567,7 @@
               "target": "slab"
             },
             {
-              "id": "tokio 1.25.0",
+              "id": "tokio 1.26.0",
               "target": "tokio"
             },
             {
@@ -18752,7 +18752,7 @@
               "target": "serde_urlencoded"
             },
             {
-              "id": "tokio 1.25.0",
+              "id": "tokio 1.26.0",
               "target": "tokio"
             }
           ],
@@ -18967,7 +18967,7 @@
               "target": "socket2"
             },
             {
-              "id": "tokio 1.25.0",
+              "id": "tokio 1.26.0",
               "target": "tokio"
             },
             {
@@ -19053,7 +19053,7 @@
               "target": "rustls_native_certs"
             },
             {
-              "id": "tokio 1.25.0",
+              "id": "tokio 1.26.0",
               "target": "tokio"
             },
             {
@@ -19132,7 +19132,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.25.0",
+              "id": "tokio 1.26.0",
               "target": "tokio"
             }
           ],
@@ -19182,7 +19182,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.25.0",
+              "id": "tokio 1.26.0",
               "target": "tokio"
             },
             {
@@ -19240,7 +19240,7 @@
               "target": "native_tls"
             },
             {
-              "id": "tokio 1.25.0",
+              "id": "tokio 1.26.0",
               "target": "tokio"
             },
             {
@@ -19555,13 +19555,13 @@
       },
       "license": "Apache-2.0"
     },
-    "ic-cdk 0.7.1": {
+    "ic-cdk 0.7.3": {
       "name": "ic-cdk",
-      "version": "0.7.1",
+      "version": "0.7.3",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/ic-cdk/0.7.1/download",
-          "sha256": "3e5b73294ba9d7b2c01bd677505c7eee8dd48dff9aa663bec0f168a0c6cc5dc8"
+          "url": "https://crates.io/api/v1/crates/ic-cdk/0.7.3/download",
+          "sha256": "774b653cecdd15b6ae0731cce9e655b9cb2489b88458fd80a5b48aace55dfc1d"
         }
       },
       "targets": [
@@ -19608,23 +19608,23 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "ic-cdk-macros 0.6.9",
+              "id": "ic-cdk-macros 0.6.10",
               "target": "ic_cdk_macros"
             }
           ],
           "selects": {}
         },
-        "version": "0.7.1"
+        "version": "0.7.3"
       },
       "license": "Apache-2.0"
     },
-    "ic-cdk-macros 0.6.9": {
+    "ic-cdk-macros 0.6.10": {
       "name": "ic-cdk-macros",
-      "version": "0.6.9",
+      "version": "0.6.10",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/ic-cdk-macros/0.6.9/download",
-          "sha256": "70973af84e5dbc2d967257c22dae31d6f876801541aa741d8cfec1e95d205560"
+          "url": "https://crates.io/api/v1/crates/ic-cdk-macros/0.6.10/download",
+          "sha256": "ebf50458685a0fc6b0e414cdba487610aeb199ac94db52d9fd76270565debee7"
         }
       },
       "targets": [
@@ -19676,17 +19676,17 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.6.9"
+        "version": "0.6.10"
       },
       "license": "Apache-2.0"
     },
-    "ic-cdk-timers 0.1.1": {
+    "ic-cdk-timers 0.1.2": {
       "name": "ic-cdk-timers",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/ic-cdk-timers/0.1.1/download",
-          "sha256": "77a18aaa8ebf89a301ad22ed2a2d1dfc105b746f48cd47180a057ef136a9f52c"
+          "url": "https://crates.io/api/v1/crates/ic-cdk-timers/0.1.2/download",
+          "sha256": "c739e7c592cb66df4f15c6b6c4859b1195782f63923e2fb1b29553d9c0819bd4"
         }
       },
       "targets": [
@@ -19715,7 +19715,7 @@
               "target": "futures"
             },
             {
-              "id": "ic-cdk 0.7.1",
+              "id": "ic-cdk 0.7.3",
               "target": "ic_cdk"
             },
             {
@@ -19738,17 +19738,17 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.1.1"
+        "version": "0.1.2"
       },
       "license": "Apache-2.0"
     },
-    "ic-certified-map 0.3.3": {
+    "ic-certified-map 0.3.4": {
       "name": "ic-certified-map",
-      "version": "0.3.3",
+      "version": "0.3.4",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/ic-certified-map/0.3.3/download",
-          "sha256": "a9b93051c20e5019d2f71bcc34a5bd86918870240df76b549a203b4b26074514"
+          "url": "https://crates.io/api/v1/crates/ic-certified-map/0.3.4/download",
+          "sha256": "6adc65afeffc619a7cd19553c66c79820908c12f42191af90cfb39e2e93c4431"
         }
       },
       "targets": [
@@ -19788,7 +19788,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.3.3"
+        "version": "0.3.4"
       },
       "license": "Apache-2.0"
     },
@@ -20062,7 +20062,7 @@
               "target": "ciborium"
             },
             {
-              "id": "ic-cdk 0.7.1",
+              "id": "ic-cdk 0.7.3",
               "target": "ic_cdk"
             },
             {
@@ -23181,7 +23181,7 @@
               "target": "parking_lot"
             },
             {
-              "id": "tokio 1.25.0",
+              "id": "tokio 1.26.0",
               "target": "tokio"
             },
             {
@@ -36212,7 +36212,7 @@
               "target": "sha1_smol"
             },
             {
-              "id": "tokio 1.25.0",
+              "id": "tokio 1.26.0",
               "target": "tokio"
             },
             {
@@ -36885,7 +36885,7 @@
                 "target": "rustls_pemfile"
               },
               {
-                "id": "tokio 1.25.0",
+                "id": "tokio 1.26.0",
                 "target": "tokio"
               },
               {
@@ -37113,7 +37113,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytemuck 1.13.0",
+              "id": "bytemuck 1.13.1",
               "target": "bytemuck"
             }
           ],
@@ -44084,7 +44084,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.25.0",
+              "id": "tokio 1.26.0",
               "target": "tokio"
             },
             {
@@ -45513,13 +45513,13 @@
       },
       "license": "MIT OR Apache-2.0 OR Zlib"
     },
-    "tokio 1.25.0": {
+    "tokio 1.26.0": {
       "name": "tokio",
-      "version": "1.25.0",
+      "version": "1.26.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/tokio/1.25.0/download",
-          "sha256": "c8e00990ebabbe4c14c08aca901caed183ecd5c09562a12c824bb53d3c3fd3af"
+          "url": "https://crates.io/api/v1/crates/tokio/1.26.0/download",
+          "sha256": "03201d01c3c27a29c8a5cee5b55a93ddae1ccf6f08f65365c2c918f8c1b76f64"
         }
       },
       "targets": [
@@ -45606,14 +45606,14 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.25.0",
+              "id": "tokio 1.26.0",
               "target": "build_script_build"
             }
           ],
           "selects": {
             "cfg(docsrs)": [
               {
-                "id": "windows-sys 0.42.0",
+                "id": "windows-sys 0.45.0",
                 "target": "windows_sys"
               }
             ],
@@ -45635,7 +45635,7 @@
             ],
             "cfg(windows)": [
               {
-                "id": "windows-sys 0.42.0",
+                "id": "windows-sys 0.45.0",
                 "target": "windows_sys"
               }
             ]
@@ -45651,7 +45651,7 @@
           ],
           "selects": {}
         },
-        "version": "1.25.0"
+        "version": "1.26.0"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -45704,7 +45704,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.25.0",
+              "id": "tokio 1.26.0",
               "target": "tokio"
             }
           ],
@@ -45800,7 +45800,7 @@
               "target": "native_tls"
             },
             {
-              "id": "tokio 1.25.0",
+              "id": "tokio 1.26.0",
               "target": "tokio"
             }
           ],
@@ -45866,7 +45866,7 @@
               "target": "openssl_sys"
             },
             {
-              "id": "tokio 1.25.0",
+              "id": "tokio 1.26.0",
               "target": "tokio"
             },
             {
@@ -45924,7 +45924,7 @@
               "target": "rustls"
             },
             {
-              "id": "tokio 1.25.0",
+              "id": "tokio 1.26.0",
               "target": "tokio"
             },
             {
@@ -45979,7 +45979,7 @@
               "target": "rustls"
             },
             {
-              "id": "tokio 1.25.0",
+              "id": "tokio 1.26.0",
               "target": "tokio"
             },
             {
@@ -46121,7 +46121,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.25.0",
+              "id": "tokio 1.26.0",
               "target": "tokio"
             }
           ],
@@ -46175,7 +46175,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tokio 1.25.0",
+              "id": "tokio 1.26.0",
               "target": "tokio"
             }
           ],
@@ -46229,7 +46229,7 @@
               "target": "futures_core"
             },
             {
-              "id": "tokio 1.25.0",
+              "id": "tokio 1.26.0",
               "target": "tokio"
             },
             {
@@ -46288,7 +46288,7 @@
               "target": "log"
             },
             {
-              "id": "tokio 1.25.0",
+              "id": "tokio 1.26.0",
               "target": "tokio"
             },
             {
@@ -46362,7 +46362,7 @@
               "target": "slab"
             },
             {
-              "id": "tokio 1.25.0",
+              "id": "tokio 1.26.0",
               "target": "tokio"
             },
             {
@@ -46613,7 +46613,7 @@
               "alias": "prost1"
             },
             {
-              "id": "tokio 1.25.0",
+              "id": "tokio 1.26.0",
               "target": "tokio"
             },
             {
@@ -46814,7 +46814,7 @@
               "target": "slab"
             },
             {
-              "id": "tokio 1.25.0",
+              "id": "tokio 1.26.0",
               "target": "tokio"
             },
             {
@@ -47121,7 +47121,7 @@
               "target": "pin_project"
             },
             {
-              "id": "tokio 1.25.0",
+              "id": "tokio 1.26.0",
               "target": "tokio"
             },
             {
@@ -47799,7 +47799,7 @@
               "target": "tinyvec"
             },
             {
-              "id": "tokio 1.25.0",
+              "id": "tokio 1.26.0",
               "target": "tokio"
             },
             {
@@ -47902,7 +47902,7 @@
               "target": "thiserror"
             },
             {
-              "id": "tokio 1.25.0",
+              "id": "tokio 1.26.0",
               "target": "tokio"
             },
             {
@@ -49690,7 +49690,7 @@
               "target": "serde_urlencoded"
             },
             {
-              "id": "tokio 1.25.0",
+              "id": "tokio 1.26.0",
               "target": "tokio"
             },
             {
@@ -52272,7 +52272,6 @@
           "Win32_Security",
           "Win32_Security_Authentication",
           "Win32_Security_Authentication_Identity",
-          "Win32_Security_Authorization",
           "Win32_Security_Credentials",
           "Win32_Security_Cryptography",
           "Win32_Storage",
@@ -52283,11 +52282,8 @@
           "Win32_System_Diagnostics_Debug",
           "Win32_System_Kernel",
           "Win32_System_Memory",
-          "Win32_System_Pipes",
           "Win32_System_SystemInformation",
-          "Win32_System_SystemServices",
           "Win32_System_Threading",
-          "Win32_System_WindowsProgramming",
           "Win32_UI",
           "Win32_UI_Input",
           "Win32_UI_Input_KeyboardAndMouse",
@@ -52411,6 +52407,7 @@
           "Win32_Networking",
           "Win32_Networking_WinSock",
           "Win32_Security",
+          "Win32_Security_Authorization",
           "Win32_Storage",
           "Win32_Storage_FileSystem",
           "Win32_System",
