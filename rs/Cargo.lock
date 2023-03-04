@@ -4557,6 +4557,14 @@ name = "ic-canister-log"
 version = "0.8.0"
 
 [[package]]
+name = "ic-canister-profiler"
+version = "0.8.0"
+dependencies = [
+ "ic-metrics-encoder",
+ "ic0",
+]
+
+[[package]]
 name = "ic-canister-sandbox-backend-lib"
 version = "0.8.0"
 dependencies = [
@@ -6595,6 +6603,7 @@ dependencies = [
  "candid",
  "ciborium",
  "ic-base-types",
+ "ic-canister-profiler",
  "ic-canisters-http-types",
  "ic-cdk 0.6.10",
  "ic-cdk-macros",

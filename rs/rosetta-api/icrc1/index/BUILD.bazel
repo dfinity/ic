@@ -29,7 +29,9 @@ rust_library(
     crate_name = "ic_icrc1_index",
     edition = "2018",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES,
+    deps = DEPENDENCIES + [
+        "//rs/rust_canisters/canister_profiler",
+    ],
 )
 
 rust_canister(

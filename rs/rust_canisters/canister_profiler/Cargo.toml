@@ -1,0 +1,8 @@
+[package]
+name = "ic-canister-profiler"
+version = "0.8.0"
+edition = "2021"
+
+[dependencies]
+ic0 = "0.18.9"
+ic-metrics-encoder = "1.1.0"
