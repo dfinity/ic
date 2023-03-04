@@ -44,15 +44,6 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
         allow_symlink = True,
     )
 
-    copy_file(
-        name = "copy_ic_version_id",
-        src = ":version.txt",
-        out = "ic_version_id",
-        allow_symlink = True,
-        visibility = ["//visibility:public"],
-        tags = ["manual"],
-    )
-
     native.genrule(
         name = "test_version_txt",
         srcs = [":copy_version_txt"],
