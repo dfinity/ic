@@ -54,7 +54,7 @@ ALIASES = {}
 
 rust_library(
     name = "recovery",
-    srcs = glob(["src/**"]),
+    srcs = glob(["src/**/*.rs"]),
     aliases = ALIASES,
     crate_name = "ic_recovery",
     data = ["ic_public_key.pem"],
