@@ -12,7 +12,7 @@ When run on the master branch, the YAML config always builds and tests all crate
 
 Typical example usage:
 
-    python gen_pipeline.py ../../rs/ --out=child-pipeline.yml
+    python gen_pipeline.py ../../ --out=child-pipeline.yml
 """
 import argparse
 import io
@@ -413,7 +413,7 @@ def _generate_tests_may_raise_exception(
     #
     #   Strictly at root of the rust workspace, e.g. don't belong to a crate.
     #
-    # Note: Unhandled minor edge case where rs/Cargo.toml changes to add a crate to the workspace,
+    # Note: Unhandled minor edge case where Cargo.toml changes to add a crate to the workspace,
     # but the PR does not add or change any files in the crate subdir.
     # https://gitlab.com/dfinity-lab/infra-group/infra/-/issues/321
     changed_files = [item for item in changed_files if os.path.dirname(item) != rust_workspace]

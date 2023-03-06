@@ -6,12 +6,12 @@ cargo-lock-generate:
     - |
       echo "Running a tiny cargo check (should always succeed), just to make sure Cargo.lock is up to date"
       set -exuo pipefail
-      cd "${CI_PROJECT_DIR}/rs"
+      cd "${CI_PROJECT_DIR}"
       cargo check -p ic-sys
       cd "${CI_PROJECT_DIR}"
     - |
       set -exuo pipefail
-      git add rs/Cargo.lock
+      git add Cargo.lock
       git status
       if ! git diff --cached --quiet; then
         # If a merge request and not on a merge train then update the Cargo.lock file in the MR automatically.
@@ -22,7 +22,7 @@ cargo-lock-generate:
           git remote set-url origin "https://gitlab-ci-token:${GITLAB_API_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git" || true
           git config --global user.email "infra+gitlab-automation@dfinity.org"
           git config --global user.name "IDX GitLab Automation"
-          git commit -m"Automatically updated rs/Cargo.lock"
+          git commit -m"Automatically updated Cargo.lock"
           git push origin HEAD:"${CI_COMMIT_REF_NAME}"
         fi
 
