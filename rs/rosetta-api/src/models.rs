@@ -22,6 +22,7 @@ use ic_types::{
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 use serde::{Deserialize, Serialize};
+
 use std::sync::Arc;
 use std::{
     convert::{TryFrom, TryInto},
@@ -437,6 +438,48 @@ pub struct CoinIdentifier {
 impl CoinIdentifier {
     pub fn new(identifier: String) -> CoinIdentifier {
         CoinIdentifier { identifier }
+    }
+}
+
+/// CallRequest is the input to the `/call`
+/// endpoint. It contains the method name the user wants to call and some parameters specific for the method call.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+pub struct CallRequest {
+    #[serde(rename = "network_identifier")]
+    pub network_identifier: NetworkIdentifier,
+
+    #[serde(rename = "method_name")]
+    pub method_name: String,
+
+    #[serde(rename = "parameters")]
+    pub parameters: Object,
+}
+
+impl CallRequest {
+    pub fn new(
+        network_identifier: NetworkIdentifier,
+        method_name: String,
+        parameters: Object,
+    ) -> CallRequest {
+        CallRequest {
+            network_identifier,
+            method_name,
+            parameters,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[cfg_attr(feature = "conversion", derive(LabelledGeneric))]
+pub struct CallResponse {
+    #[serde(rename = "result")]
+    pub result: Object,
+}
+
+impl CallResponse {
+    pub fn new(result: Object) -> CallResponse {
+        CallResponse { result }
     }
 }
 

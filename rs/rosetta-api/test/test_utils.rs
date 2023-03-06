@@ -5,6 +5,7 @@ use ic_ledger_canister_blocks_synchronizer_test_utils::sample_data::{acc_id, Scr
 use ic_ledger_canister_core::ledger::LedgerTransaction;
 use ic_ledger_core::block::BlockType;
 use ic_ledger_core::timestamp::TimeStamp;
+use ic_nns_governance::pb::v1::ProposalInfo;
 use ic_rosetta_api::errors::ApiError;
 use ic_rosetta_api::models::{
     AccountBalanceRequest, EnvelopePair, PartialBlockIdentifier, SignedTransaction,
@@ -120,7 +121,9 @@ impl LedgerAccess for TestLedger {
     async fn read_blocks<'a>(&'a self) -> Box<dyn Deref<Target = Blocks> + 'a> {
         Box::new(self.blockchain.read().await)
     }
-
+    async fn proposal_info(&self, _proposal_id: u64) -> Result<ProposalInfo, ApiError> {
+        Err(ApiError::InternalError(false, Default::default()))
+    }
     async fn cleanup(&self) {}
 
     fn token_symbol(&self) -> &str {

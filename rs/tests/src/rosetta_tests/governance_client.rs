@@ -9,7 +9,7 @@ use ic_nns_common::pb::v1::ProposalId;
 use ic_nns_common::types::NeuronId;
 use ic_nns_governance::pb::v1::manage_neuron_response::MakeProposalResponse;
 use ic_nns_governance::pb::v1::{
-    manage_neuron_response, proposal, ManageNeuronResponse, Motion, Proposal,
+    manage_neuron_response, ManageNeuronResponse, Proposal, ProposalInfo,
 };
 use ic_nns_governance::proposal_submission::create_make_proposal_payload;
 use slog::{debug, Logger};
@@ -46,18 +46,14 @@ impl GovernanceClient {
         self.governance_principal
     }
 
-    pub async fn make_proposal(&self, neuron_details: &NeuronDetails) -> ProposalId {
+    pub async fn make_proposal(
+        &self,
+        neuron_details: &NeuronDetails,
+        proposal: &Proposal,
+    ) -> ProposalId {
         debug!(&self.logger, "[governance_client] Making Proposal");
-        let proposal = Proposal {
-            title: Some("dummy title".to_string()),
-            summary: "test".to_string(),
-            action: Some(proposal::Action::Motion(Motion {
-                motion_text: "dummy text".to_string(),
-            })),
-            ..Default::default()
-        };
         let neuron_id: NeuronId = neuron_details.neuron.id.clone().unwrap().into();
-        let manage_neuron = create_make_proposal_payload(proposal, &neuron_id);
+        let manage_neuron = create_make_proposal_payload(proposal.clone(), &neuron_id);
         let arg = &Encode!(&manage_neuron).expect("Error while encoding arg.");
         let res = self
             .agent
@@ -80,9 +76,29 @@ impl GovernanceClient {
                 })),
         } = manage_neuron_res
         {
+            assert!(proposal_id.is_some());
             debug!(
                 &self.logger,
-                "[governance_client] Making Proposal was succesfull"
+                "[governance_client] Making Proposal was succesfull proposal ID is {}",
+                proposal_id.unwrap().id
+            );
+            let arg = &Encode!(&proposal_id.unwrap().id).expect("Error while encoding arg.");
+            let res = self
+                .agent
+                .query(&self.governance_principal, "get_proposal_info")
+                .with_arg(arg)
+                .call()
+                .await
+                .expect("Error while calling endpoint.");
+            let proposal_info = Decode!(res.as_slice(), Option<ProposalInfo>)
+                .expect("Error while decoding response.");
+            debug!(
+                &self.logger,
+                "{}",
+                format!(
+                    "Proposal Info Response from Governance Canister is : {:?}",
+                    proposal_info.unwrap().proposal
+                )
             );
             proposal_id.unwrap()
         } else {

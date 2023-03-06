@@ -7,12 +7,17 @@ mod construction_payloads;
 mod construction_preprocess;
 mod construction_submit;
 
+use crate::ledger_client::proposal_info_response::ProposalInfoResponse;
+use crate::models::{CallResponse, Object};
+use crate::request_types::GetProposalInfo;
 use crate::{convert, models, API_VERSION, NODE_VERSION};
 use ic_ledger_canister_blocks_synchronizer::blocks::Blocks;
 use ic_ledger_canister_blocks_synchronizer::blocks::HashedBlock;
 use ic_ledger_core::block::BlockType;
 use ic_nns_common::pb::v1::NeuronId;
+
 use ic_nns_governance::pb::v1::manage_neuron::NeuronIdOrSubaccount;
+
 use ic_types::crypto::DOMAIN_IC_REQUEST;
 use ic_types::messages::MessageId;
 use ic_types::CanisterId;
@@ -22,7 +27,7 @@ use std::sync::Arc;
 use strum::IntoEnumIterator;
 
 use crate::convert::{from_model_account_identifier, neuron_account_from_public_key};
-use crate::errors::ApiError;
+use crate::errors::{ApiError, Details};
 use crate::ledger_client::LedgerAccess;
 use crate::models::amount::tokens_to_amount;
 use crate::models::{
@@ -153,6 +158,29 @@ impl RosettaRequestHandler {
             balances: vec![amount],
             metadata: neuron_info,
         })
+    }
+
+    /// Get a Block
+    pub async fn call(&self, msg: models::CallRequest) -> Result<CallResponse, ApiError> {
+        verify_network_id(self.ledger.ledger_canister_id(), &msg.network_identifier)?;
+        match msg.method_name.as_str() {
+            "get_proposal_info" => {
+                let get_proposal_info_object = GetProposalInfo::try_from(Some(msg.parameters))?;
+                let proposal_info = self
+                    .ledger
+                    .proposal_info(get_proposal_info_object.proposal_id)
+                    .await?;
+                let proposal_info_response = ProposalInfoResponse::from(proposal_info);
+                Ok(CallResponse::new(Object::from(proposal_info_response)))
+            }
+            _ => Err(ApiError::InvalidRequest(
+                false,
+                Details::from(format!(
+                    " Rosetta does not support the method name {} on its call endpoint ",
+                    msg.method_name
+                )),
+            )),
+        }
     }
 
     /// Get a Block

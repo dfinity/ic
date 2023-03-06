@@ -588,6 +588,58 @@ pub fn create_governance_client(env: &TestEnv, client: &RosettaApiClient) -> Gov
     GovernanceClient::new(env, governance_principal)
 }
 
+pub fn create_custom_neuron(
+    id: u64,
+    neuron_setup: impl FnOnce(&mut Neuron),
+    ledger_balances: &mut HashMap<AccountIdentifier, Tokens>,
+    kp: &EdKeypair,
+) -> NeuronDetails {
+    let neuron_subaccount_identifier = rand::random();
+    let pid = kp.generate_principal_id().unwrap();
+    let aid: AccountIdentifier = pid.into();
+    let pb = to_public_key(kp);
+    let created_timestamp_seconds = (SystemTime::now().duration_since(UNIX_EPOCH).unwrap()
+        - Duration::from_secs(60 * 60 * 24 * 365))
+    .as_secs();
+    let mut neuron = Neuron {
+        id: Some(NeuronId { id }),
+        account: neuron_subaccount_bytes_from_public_key(&pb, neuron_subaccount_identifier)
+            .unwrap()
+            .to_vec(),
+        controller: Some(pid),
+        created_timestamp_seconds,
+        aging_since_timestamp_seconds: created_timestamp_seconds + 10,
+        dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(0)),
+        cached_neuron_stake_e8s: Tokens::new(10, 0).unwrap().get_e8s(),
+        kyc_verified: true,
+        ..Default::default()
+    };
+
+    // Apply neuron customization here (setup function).
+    neuron_setup(&mut neuron);
+
+    let neuron_account =
+        neuron_account_from_public_key(&GOVERNANCE_CANISTER_ID, &pb, neuron_subaccount_identifier)
+            .unwrap();
+    let neuron_account = from_model_account_identifier(&neuron_account).unwrap();
+    // Add the neuron balance to the ledger.
+    ledger_balances.insert(
+        neuron_account,
+        Tokens::from_e8s(neuron.cached_neuron_stake_e8s),
+    );
+
+    // Create neuron info.
+    NeuronDetails {
+        account_id: aid,
+        key_pair: *kp,
+        public_key: pb,
+        principal_id: pid,
+        neuron_subaccount_identifier,
+        neuron,
+        neuron_account,
+    }
+}
+
 pub fn create_neuron(
     seed: u64,
     neuron_setup: impl FnOnce(&mut Neuron),

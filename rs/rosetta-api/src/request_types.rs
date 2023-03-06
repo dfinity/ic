@@ -218,6 +218,33 @@ impl Status {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
+pub struct GetProposalInfo {
+    #[serde(default)]
+    pub proposal_id: u64,
+}
+
+impl From<GetProposalInfo> for Object {
+    fn from(m: GetProposalInfo) -> Self {
+        match serde_json::to_value(m) {
+            Ok(Value::Object(o)) => o,
+            _ => unreachable!(),
+        }
+    }
+}
+
+impl TryFrom<Option<Object>> for GetProposalInfo {
+    type Error = ApiError;
+    fn try_from(o: Option<Object>) -> Result<Self, Self::Error> {
+        serde_json::from_value(serde_json::Value::Object(o.unwrap_or_default())).map_err(|e| {
+            ApiError::internal_error(format!(
+                "Could not parse a `proposal_id` from metadata JSON object: {}",
+                e
+            ))
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct SetDissolveTimestamp {
     pub account: icp_ledger::AccountIdentifier,
     #[serde(default)]
