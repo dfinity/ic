@@ -97,7 +97,7 @@ impl<'a> ConsensusDriver<'a> {
                 for change_action in &changeset {
                     if let DkgChangeAction::AddToValidated(to_add) = change_action {
                         debug!(self.logger, "Deliver {:?}", to_add);
-                        to_deliver.push(InputMessage::Dkg(to_add.clone()));
+                        to_deliver.push(InputMessage::Dkg(Box::new(to_add.clone())));
                     }
                 }
                 let dkg_pool = &mut self.dkg_pool.write().unwrap();

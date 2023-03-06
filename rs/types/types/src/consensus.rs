@@ -659,7 +659,6 @@ pub type RandomTapeShare = Signed<RandomTapeContent, ThresholdSignatureShare<Ran
 
 /// The enum encompassing all of the consensus artifacts exchanged between
 /// replicas.
-#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub enum ConsensusMessage {
     RandomBeacon(RandomBeacon),

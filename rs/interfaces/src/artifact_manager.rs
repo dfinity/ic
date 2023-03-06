@@ -19,7 +19,6 @@ pub trait ArtifactPoolDescriptor<Artifact: ArtifactKind, Pool>: Send + Sync {
     }
 }
 
-#[allow(clippy::large_enum_variant)]
 #[derive(From, Debug)]
 /// An error type that combines 'NotProcessed' status with an actual
 /// error that might be returned by artifact pools. It is used as

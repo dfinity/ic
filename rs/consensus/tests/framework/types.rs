@@ -55,7 +55,6 @@ pub const POLLING_INTERVAL: u64 = 100;
 /// Messages from a consensus instance are either artifacts to be
 /// delivered to peers, or to a timer expired event that should trigger
 /// consensus on_state_change.
-#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Input {
     Message(Message),
@@ -89,10 +88,9 @@ impl PartialOrd for Input {
 pub type Output = Message;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-#[allow(clippy::large_enum_variant)]
 pub enum InputMessage {
     Consensus(ConsensusMessage),
-    Dkg(DkgMessage),
+    Dkg(Box<DkgMessage>),
     Certification(CertificationMessage),
 }
 

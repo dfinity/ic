@@ -79,7 +79,6 @@ const TAGS: [NiDkgTag; 2] = [NiDkgTag::LowThreshold, NiDkgTag::HighThreshold];
 /// Transient Dkg message validation errors.
 #[allow(missing_docs)]
 #[derive(Debug)]
-#[allow(clippy::large_enum_variant)]
 pub enum PermanentError {
     CryptoError(CryptoError),
     DkgCreateTranscriptError(DkgCreateTranscriptError),

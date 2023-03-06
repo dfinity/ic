@@ -37,7 +37,6 @@ pub trait MutableDkgPool: DkgPool {
 }
 
 /// Various actions that can be perfomed in DKG.
-#[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
 pub enum ChangeAction {
     AddToValidated(dkg::Message),

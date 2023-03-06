@@ -47,7 +47,6 @@ impl SummaryPayload {
 }
 
 /// Block payload is either summary or a data payload).
-#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub enum BlockPayload {
     /// A BlockPayload::Summary contains only a DKG Summary

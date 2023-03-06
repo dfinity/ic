@@ -95,7 +95,6 @@ pub struct PersistentHeightIndexedPool<T> {
 /// Without directly persisting the original protobuf, it might become
 /// impossible to verify the CUP signature across versions of the replica with
 /// difference in the way the cup struct is structured.
-#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub enum PersistedConsensusMessage {
     OriginalCUPBytes(pb::CatchUpPackage),
