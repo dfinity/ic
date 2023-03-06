@@ -3,7 +3,7 @@ use ic_tests::boundary_nodes_integration::boundary_nodes::BoundaryNodeHttpsConfi
 use ic_tests::{
     api_test, basic_health_test, boundary_nodes_integration, boundary_nodes_snp_tests,
     canister_http, driver::driver_setup::initialize_env, ledger_tests, message_routing, networking,
-    orchestrator, wasm_generator_test, workload_counter_canister_test,
+    wasm_generator_test, workload_counter_canister_test,
 };
 use ic_tests::{
     driver::{
@@ -461,15 +461,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                 )
                 .with_alert(TEST_FAILURE_CHANNEL)
                 .with_alert(ENG_TESTING_CHANNEL),
-                pot_with_setup(
-                    "nns_backup_pot",
-                    orchestrator::nns_backup::config,
-                    par(vec![sys_t(
-                        "nns_backup_test",
-                        orchestrator::nns_backup::test,
-                    )]),
-                )
-                .with_alert(ENG_CONSENSUS_CHANNEL),
             ],
         )
         .with_alert(TEST_FAILURE_CHANNEL),

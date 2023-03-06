@@ -1,6 +1,5 @@
 pub mod backup_manager;
 pub mod downgrade_with_ecdsa;
-pub mod nns_backup;
 pub mod node_assign_test;
 pub mod node_reassignment_test;
 pub mod node_registration_test;

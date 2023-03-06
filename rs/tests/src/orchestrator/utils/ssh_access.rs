@@ -20,7 +20,6 @@ use reqwest::Url;
 use ssh2::Session;
 use std::io::{Read, Write};
 use std::net::{IpAddr, TcpStream};
-use std::path::Path;
 use std::time::Duration;
 
 pub(crate) fn generate_key_strings() -> (String, String) {
@@ -82,27 +81,6 @@ impl SshSession {
         }
         .map_err(|err| err.to_string())
     }
-
-    pub fn scp_recv(&mut self, path: &Path, buf: &mut Vec<u8>) -> Result<usize, String> {
-        let mut result = self
-            .session
-            .scp_recv(path)
-            .map_err(|err| err.message().to_string())?;
-        result.0.read_to_end(buf).map_err(|err| err.to_string())
-    }
-}
-
-pub(crate) fn read_remote_file(
-    ip: &IpAddr,
-    username: &str,
-    mean: &AuthMean,
-    path: &Path,
-) -> Result<String, String> {
-    let mut buffer = Vec::new();
-    let mut sess = SshSession::new();
-    sess.login(ip, username, mean)?;
-    sess.scp_recv(path, &mut buffer)?;
-    Ok(String::from_utf8_lossy(&buffer).to_string())
 }
 
 pub(crate) fn assert_authentication_works(ip: &IpAddr, username: &str, mean: &AuthMean) {
