@@ -21,7 +21,7 @@ rust_library(
         "//rs/test_utilities:__pkg__",
         "//rs/test_utilities/identity:__pkg__",
         "//rs/types/types:__pkg__",
-        "//rs/validator:__subpackages__",
+        "//rs/validator/http_request_test_utils:__subpackages__",
     ],
     deps = [
         "//rs/phantom_newtype",
