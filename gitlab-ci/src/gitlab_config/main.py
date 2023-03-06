@@ -109,10 +109,8 @@ if __name__ == "__main__":
         with open(f"{repo.repo_root()}/.gitlab-ci.yml") as f:
             gitlab.ci_cfg_load_from_file(f)
 
-    gitlab.ci_cfg_load(
-        gen_pipeline.generate_gitlab_yaml_for_all_crates(rust_workspace=os.path.join(repo.repo_root(), "rs"))
-    )
-    gitlab.ci_cfg_load(gen_pipeline.generate_gitlab_yaml_for_noop(rust_workspace=os.path.join(repo.repo_root(), "rs")))
+    gitlab.ci_cfg_load(gen_pipeline.generate_gitlab_yaml_for_all_crates(rust_workspace=repo.repo_root()))
+    gitlab.ci_cfg_load(gen_pipeline.generate_gitlab_yaml_for_noop(rust_workspace=repo.repo_root()))
 
     if args.cfg_validate:
         gitlab.ci_cfg_lint()
@@ -165,7 +163,7 @@ if __name__ == "__main__":
             f.write(yaml.dump(gitlab.ci_cfg_jobs_divided_to_stages(), sort_keys=False))
 
     if args.job_list_validate:
-        file_name = os.path.join(repo.repo_root(), "rs/gitlab-ci-config.yml")
+        file_name = os.path.join(repo.repo_root(), "gitlab-ci-config.yml")
         with open(file_name) as fin:
             yaml.add_multi_constructor("!reference", lambda loader, suffix, node: "", Loader=yaml.FullLoader)
             parsed_yml = yaml.load(fin, Loader=yaml.FullLoader)

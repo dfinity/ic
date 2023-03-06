@@ -23,8 +23,8 @@ def gitlab_ci_cfg_load(orig_ci_cfg_path):
     gitlab_cfg = dfinity_gitlab_config.DfinityGitLabConfig(repo_root)
     gitlab_cfg.ci_cfg_load_from_file(open(orig_ci_cfg_path))
 
-    gitlab_cfg.ci_cfg_load(generate_gitlab_yaml_for_all_crates(rust_workspace=repo_root / "rs"))
-    gitlab_cfg.ci_cfg_load(generate_gitlab_yaml_for_noop(rust_workspace=repo_root / "rs"))
+    gitlab_cfg.ci_cfg_load(generate_gitlab_yaml_for_all_crates(rust_workspace=repo_root))
+    gitlab_cfg.ci_cfg_load(generate_gitlab_yaml_for_noop(rust_workspace=repo_root))
     return gitlab_cfg
 
 

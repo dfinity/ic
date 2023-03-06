@@ -22,11 +22,11 @@ Verify the following before deploying locally:
 * You have installed [nix](https://nixos.org/manual/nix/stable/installation/installing-binary.html) and can run `nix-shell`.
 
 ### Building `sns` and the SNS canisters
-Within the `ic` repo, `cd` into `rs/` and enter `nix-shell`:
+Within the `ic` repo, enter the `nix-shell`:
 ```shell
-cd rs; nix-shell
+nix-shell
 ```
-`cd` into `sns/cli/`:
+`cd` into `rs/sns/cli/`:
 ```shell
 cd sns/cli
 ```
@@ -41,11 +41,11 @@ make
 The rest of this demo assumes that the `sns` binary is on your `PATH`. The location of the
 `sns` depends on your environment, but it may be at a location similar to:
 ```shell
-ic/rs/target/x86_64-apple-darwin/debug/sns
+ic/target/x86_64-apple-darwin/debug/sns
 ```
 Add this location to your `PATH`. For example on Mac OS:
 ```shell
-export PATH="<PATH_TO_PROJECT>/ic/rs/target/x86_64-apple-darwin/debug:$PATH"
+export PATH="<PATH_TO_PROJECT>/ic/target/x86_64-apple-darwin/debug:$PATH"
 ```
 
 ### Deployment Arguments 
@@ -94,14 +94,13 @@ sns deploy --help
 ```
 
 ### IC Deployment
-To deploy to the public Internet Computer (IC) network, `cd` into `rs/` and enter `nix-shell`:
+To deploy to the public Internet Computer (IC) network, enter the `nix-shell`:
 ```shell
-cd rs;
 nix-shell
 ```
 cd to `rs/sns/cli` and build `sns` CLI and the SNS canisters (skip this step if canisters and `sns` CLI are already built):
 ```shell
-cd sns/cli;
+cd rs/sns/cli;
 make
 ```
 Ensure there are cycles in your cycles wallet. If you don't have any cycles, follow 

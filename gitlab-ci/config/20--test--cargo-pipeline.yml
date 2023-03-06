@@ -19,7 +19,7 @@ gen-cargo-pipeline:
       # set-up python dev
       pip3 install -r requirements.txt
       $SHELL_WRAPPER python3 gen_gitlab_cargo_pipeline/gen_pipeline.py \
-        ../../rs/ ../../ic-os -v --out=../../child-pipeline.yml
+        ../../ ../../ic-os -v --out=../../child-pipeline.yml
       
       cd -
       # Parse list of tags from current runner and return the first one that is two symbols.

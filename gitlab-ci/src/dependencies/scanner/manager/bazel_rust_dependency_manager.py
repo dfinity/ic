@@ -121,7 +121,7 @@ class BazelRustDependencyManager(DependencyManager):
 
     def __get_cargo_audit_output(self, cargo_home=None) -> typing.Dict:
         environment = {}
-        cwd = self.root / "rs"
+        cwd = self.root
 
         if cargo_home is not None:
             # Custom cargo home. For testing
@@ -219,19 +219,19 @@ class BazelRustDependencyManager(DependencyManager):
         # and the delta between the results will be logged for now.
         # TODO : Remove when cargo is completely out of the system.
 
-        logging.info("Performing cargo audit on old rs/Cargo.lock")
+        logging.info("Performing cargo audit on old Cargo.lock")
         old_cargo_audit = self.__get_cargo_audit_output()
         logging.info("Old cargo audit output %s", old_cargo_audit)
 
-        # move Cargo.Bazel.toml.lock to rs/Cargo.lock
-        logging.info("Moving Cargo.Bazel.toml.lock to rs/Cargo.lock")
+        # move Cargo.Bazel.toml.lock to Cargo.lock
+        logging.info("Moving Cargo.Bazel.toml.lock to Cargo.lock")
         src = self.root / "Cargo.Bazel.toml.lock"
-        dst = self.root / "rs" / "Cargo.lock"
+        dst = self.root / "Cargo.lock"
 
         if src.is_file() and dst.is_file():
             shutil.copy(src, dst)
 
-        logging.info("Performing cargo audit on new rs/Cargo.lock")
+        logging.info("Performing cargo audit on new Cargo.lock")
         new_cargo_audit = self.__get_cargo_audit_output()
 
         # cargo_audit_diff = jsondiff.diff(old_cargo_audit, new_cargo_audit)

@@ -1,9 +1,9 @@
 { system ? builtins.currentSystem
-, pkgs ? import ../nix { inherit system; }
+, pkgs ? import ./nix { inherit system; }
 }:
 
 let
-  crateEnv = import ./crate-environment.nix { inherit pkgs; };
+  crateEnv = import ./rs/crate-environment.nix { inherit pkgs; };
 
   honeycomb-beeline =
     with pkgs.python3Packages;

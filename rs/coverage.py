@@ -58,7 +58,7 @@ def check_executables_and_get_workdir():
 
 def get_paths_from_toml(base_dir):
     """Return workspace member paths."""
-    parsed_toml = toml.load(os.path.join(base_dir, "rs/Cargo.toml"))
+    parsed_toml = toml.load(os.path.join(base_dir, "Cargo.toml"))
 
     if "workspace" not in parsed_toml or "members" not in parsed_toml["workspace"]:
         raise Exception("Cargo.toml does not represent a workspace")

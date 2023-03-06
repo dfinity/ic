@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -xeuo pipefail
 
-cd "$CI_PROJECT_DIR/rs"
+cd "$CI_PROJECT_DIR"
 cargo fmt -- --check
 cargo clippy --locked --all-features --tests --benches -- \
     -D warnings \
