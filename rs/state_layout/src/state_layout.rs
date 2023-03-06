@@ -9,13 +9,15 @@ use ic_protobuf::{
     bitcoin::v1 as pb_bitcoin,
     proxy::{try_from_option_field, ProxyDecodeError},
     state::{
-        canister_state_bits::v1 as pb_canister_state_bits, queues::v1 as pb_queues,
+        canister_state_bits::v1::{self as pb_canister_state_bits, ConsumedCyclesByUseCase},
+        queues::v1 as pb_queues,
         system_metadata::v1 as pb_metadata,
     },
 };
 use ic_replicated_state::{
-    bitcoin_state, canister_state::execution_state::WasmMetadata, CallContextManager,
-    CanisterStatus, ExecutionTask, ExportedFunctions, Global, NumWasmPages,
+    bitcoin_state,
+    canister_state::{execution_state::WasmMetadata, system_state::CyclesUseCase},
+    CallContextManager, CanisterStatus, ExecutionTask, ExportedFunctions, Global, NumWasmPages,
 };
 use ic_sys::mmap::ScopedMmap;
 use ic_types::{
@@ -138,6 +140,7 @@ pub struct CanisterStateBits {
     pub time_of_last_allocation_charge_nanos: u64,
     pub global_timer_nanos: Option<u64>,
     pub canister_version: u64,
+    pub consumed_cycles_since_replica_started_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
 }
 
 /// This struct contains bits of the `BitcoinState` that are not already
@@ -1593,6 +1596,14 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
             task_queue: item.task_queue.iter().map(|v| v.into()).collect(),
             global_timer_nanos: item.global_timer_nanos,
             canister_version: item.canister_version,
+            consumed_cycles_since_replica_started_by_use_cases: item
+                .consumed_cycles_since_replica_started_by_use_cases
+                .into_iter()
+                .map(|entry| ConsumedCyclesByUseCase {
+                    use_case: entry.0.into(),
+                    cycles: Some((&entry.1).into()),
+                })
+                .collect(),
         }
     }
 }
@@ -1678,6 +1689,16 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
             task_queue,
             global_timer_nanos: value.global_timer_nanos,
             canister_version: value.canister_version,
+            consumed_cycles_since_replica_started_by_use_cases: value
+                .consumed_cycles_since_replica_started_by_use_cases
+                .into_iter()
+                .map(|ConsumedCyclesByUseCase { use_case, cycles }| {
+                    (
+                        CyclesUseCase::from(use_case),
+                        NominalCycles::try_from(cycles.unwrap_or_default()).unwrap_or_default(),
+                    )
+                })
+                .collect(),
         })
     }
 }
@@ -2110,6 +2131,7 @@ mod test {
             task_queue: vec![],
             global_timer_nanos: None,
             canister_version: 0,
+            consumed_cycles_since_replica_started_by_use_cases: BTreeMap::new(),
         }
     }
 

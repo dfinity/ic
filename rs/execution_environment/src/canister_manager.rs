@@ -1030,17 +1030,37 @@ impl CanisterManager {
         // Take out the canister from `ReplicatedState`.
         let canister_to_delete = state.take_canister_state(&canister_id_to_delete).unwrap();
         // Leftover cycles in the balance are considered `consumed`.
-        let consumed_cycles_by_canister_to_delete =
-            NominalCycles::from(canister_to_delete.system_state.balance())
-                + canister_to_delete
-                    .system_state
-                    .canister_metrics
-                    .consumed_cycles_since_replica_started;
+        let leftover_cycles = NominalCycles::from(canister_to_delete.system_state.balance());
+        let consumed_cycles_by_canister_to_delete = leftover_cycles
+            + canister_to_delete
+                .system_state
+                .canister_metrics
+                .consumed_cycles_since_replica_started;
+
+        state
+            .metadata
+            .subnet_metrics
+            .observe_consumed_cycles_with_use_case(
+                CyclesUseCase::DeletedCanisters,
+                leftover_cycles,
+            );
 
         state
             .metadata
             .subnet_metrics
             .consumed_cycles_by_deleted_canisters += consumed_cycles_by_canister_to_delete;
+
+        for (use_case, cycles) in canister_to_delete
+            .system_state
+            .canister_metrics
+            .get_consumed_cycles_since_replica_started_by_use_cases()
+            .iter()
+        {
+            state
+                .metadata
+                .subnet_metrics
+                .observe_consumed_cycles_with_use_case(*use_case, *cycles);
+        }
 
         // The canister has now been removed from `ReplicatedState` and is dropped
         // once the function is out of scope.
@@ -1163,7 +1183,7 @@ impl CanisterManager {
             self.config.default_freeze_threshold,
         );
 
-        system_state.remove_cycles(creation_fee, CyclesUseCase::CreationFee);
+        system_state.remove_cycles(creation_fee, CyclesUseCase::CanisterCreation);
         system_state.observe_consumed_cycles(creation_fee);
         let scheduler_state = SchedulerState::new(state.metadata.batch_time);
         let mut new_canister = CanisterState::new(system_state, None, scheduler_state);

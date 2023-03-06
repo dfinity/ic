@@ -527,11 +527,19 @@ fn canister_state_ingress_induction_cycles_debit() {
         system_state.debited_balance()
     );
     // Check that 'ingress_induction_cycles_debit' is added
-    // to 'consumed_cycles_since_replica_started'.
+    // to consumed cycles.
     assert_eq!(
         system_state
             .canister_metrics
             .consumed_cycles_since_replica_started,
+        ingress_induction_debit.into()
+    );
+    assert_eq!(
+        *system_state
+            .canister_metrics
+            .get_consumed_cycles_since_replica_started_by_use_cases()
+            .get(&CyclesUseCase::IngressInduction)
+            .unwrap(),
         ingress_induction_debit.into()
     );
 }
@@ -553,6 +561,28 @@ fn update_balance_and_consumed_cycles_correctly() {
             .canister_metrics
             .consumed_cycles_since_replica_started,
         initial_consumed_cycles - NominalCycles::from(cycles)
+    );
+}
+
+#[test]
+fn update_balance_and_consumed_cycles_by_use_case_correctly() {
+    let mut system_state = CanisterStateFixture::new().canister_state.system_state;
+    let cycles_to_consume = Cycles::from(1000u128);
+    system_state.remove_cycles(cycles_to_consume, CyclesUseCase::Memory);
+
+    let cycles_to_add = Cycles::from(100u128);
+    system_state.add_cycles(cycles_to_add, CyclesUseCase::Memory);
+    assert_eq!(
+        system_state.balance(),
+        INITIAL_CYCLES - cycles_to_consume + cycles_to_add
+    );
+    assert_eq!(
+        *system_state
+            .canister_metrics
+            .get_consumed_cycles_since_replica_started_by_use_cases()
+            .get(&CyclesUseCase::Memory)
+            .unwrap(),
+        NominalCycles::from(cycles_to_consume - cycles_to_add)
     );
 }
 
