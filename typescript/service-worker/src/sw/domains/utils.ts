@@ -76,14 +76,17 @@ export function maybeResolveCanisterIdFromSearchParam(
   return null;
 }
 
-export function isRawDomain(hostname: string): boolean {
+export function isRawDomain(hostname: string, mainNet = isMainNet): boolean {
   // For security reasons the match is only made for ic[0-9].app, ic[0-9].dev and icp[0-9].io domains. This makes
   // the match less permissive and prevents unwanted matches for domains that could include raw
   // but still serve as a normal dapp domain that should go through response verification.
   const isIcAppRaw = !!hostname.match(new RegExp(/\.raw\.ic[0-9]+\.app/));
   const isIcDevRaw = !!hostname.match(new RegExp(/\.raw\.ic[0-9]+\.dev/));
   const isIcpIoRaw = !!hostname.match(new RegExp(/\.raw\.icp[0-9]+\.io/));
-  return isIcAppRaw || isIcDevRaw || isIcpIoRaw;
+  const isTestnetRaw =
+    !mainNet &&
+    !!hostname.match(new RegExp(/\.raw\.[\w-]+\.testnet\.[\w-]+\.network/));
+  return isIcAppRaw || isIcDevRaw || isIcpIoRaw || isTestnetRaw;
 }
 
 /**

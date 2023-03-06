@@ -49,6 +49,15 @@ describe('Match raw url', () => {
     expect(isRawDomain('example.raw.ic0.dev')).toBeTruthy();
     expect(isRawDomain('example.raw.ic1.dev')).toBeTruthy();
     expect(isRawDomain('example.raw.icp0.io')).toBeTruthy();
+    expect(
+      isRawDomain('example.raw.some.testnet.ic1.network', false)
+    ).toBeTruthy();
+    expect(
+      isRawDomain('example.raw.another-1.testnet.ic1.network', false)
+    ).toBeTruthy();
+    expect(
+      isRawDomain('example.raw.another_1.testnet.ic1.network', false)
+    ).toBeTruthy();
   });
 
   it('should not match raw url', async () => {
@@ -58,6 +67,10 @@ describe('Match raw url', () => {
     expect(isRawDomain('raw.example.icp0.io')).toBeFalsy();
     expect(isRawDomain('example.raw.icp0.app')).toBeFalsy();
     expect(isRawDomain('example.raw.icp0.dev')).toBeFalsy();
+    expect(
+      isRawDomain('raw.example.some.testnet.ic1.network', false)
+    ).toBeFalsy();
+    expect(isRawDomain('example.raw.some.testnet.network', false)).toBeFalsy();
   });
 });
 
