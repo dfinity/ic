@@ -4729,6 +4729,7 @@ impl Governance {
     /// - the followees are not changed (it's easy to update followees
     ///   via existing code paths and doing it here would require updating
     ///   function followee indices)
+    #[cfg(feature = "test")]
     pub fn update_neuron(&mut self, neuron: Neuron) -> Result<(), GovernanceError> {
         let neuron_id = &neuron.id.as_ref().expect("Neuron must have a NeuronId");
 
