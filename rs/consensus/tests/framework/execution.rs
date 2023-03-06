@@ -43,7 +43,7 @@ fn execute_instance<'a, 'b>(
                 InputMessage::Dkg(msg) => {
                     let mut dkg_pool = instance.driver.dkg_pool.write().unwrap();
                     dkg_pool.insert(UnvalidatedArtifact {
-                        message: msg,
+                        message: *msg,
                         peer_id: node_test_id(0),
                         timestamp,
                     });

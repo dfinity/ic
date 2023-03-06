@@ -152,10 +152,9 @@ impl From<Vec<SignedIngress>> for IngressPayload {
 /// Possible errors when converting from an [`IngressPayload`] to a
 /// `Vec<SignedIngress>`.
 #[derive(Debug)]
-#[allow(clippy::large_enum_variant)]
 pub enum InvalidIngressPayload {
     DeserializationError(MessageId, bincode::Error),
-    MismatchedMessageId(MessageId, SignedIngress),
+    MismatchedMessageId(MessageId, Box<SignedIngress>),
 }
 
 impl TryFrom<IngressPayload> for Vec<SignedIngress> {
@@ -169,7 +168,7 @@ impl TryFrom<IngressPayload> for Vec<SignedIngress> {
             if id != &IngressMessageId::from(&ingress) {
                 return Err(InvalidIngressPayload::MismatchedMessageId(
                     id.into(),
-                    ingress,
+                    Box::new(ingress),
                 ));
             } else {
                 msgs.push(ingress);

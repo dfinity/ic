@@ -70,7 +70,6 @@ enum TransientError {
 }
 
 /// Possible validator permanent errors.
-#[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
 enum PermanentError {
     CryptoError(CryptoError),
