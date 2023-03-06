@@ -70,8 +70,11 @@ pub fn construct_ic_stack(
             )
         };
         match catch_up_package {
-            // The orchestrator has persisted a CUP for the replica.
+            // The replica was started on a CUP persisted by the orchestrator.
             Some(cup_from_orc) => {
+                // The CUP passed by the orchestrator can be signed or unsigned. If it's signed, it
+                // was created and signed by the subnet. An unsigned CUP was created by the orchestrator
+                // from the registry CUP contents and can only happen during a subnet recovery or subnet genesis.
                 let signed = !cup_from_orc
                     .cup
                     .signature
@@ -80,25 +83,16 @@ pub fn construct_ic_stack(
                     .get()
                     .0
                     .is_empty();
-                if signed {
-                    // The CUP persisted by the orchestrator is safe to use because it's signed.
-                    info!(
-                        &replica_logger,
-                        "Using the signed CUP with height {}",
-                        cup_from_orc.cup.height()
-                    );
-                } else {
-                    // The CUP persisted by the orchestrator is unsigned and hence it was created
-                    // from the registry CUP contents.
-                    info!(
-                        &replica_logger,
-                        "Using the unsigned CUP with height {} passed from the orchestrator",
-                        cup_from_orc.cup.height()
-                    );
-                }
+                info!(
+                    &replica_logger,
+                    "Using the {} CUP with height {}",
+                    if signed { "signed" } else { "unsigned" },
+                    cup_from_orc.cup.height()
+                );
                 cup_from_orc
             }
-            // No CUP was persisted by the orchestrator, which is usually the case for fresh nodes.
+            // This case is only possible if the replica is started without an orchestrator which
+            // is currently only possible in the local development mode with `dfx`.
             None => {
                 let registry_cup = make_registry_cup();
                 info!(
