@@ -2,20 +2,22 @@ use crate::driver::resource::AllocatedVm;
 use ic_base_types::CanisterId;
 use ic_ledger_core::block::BlockIndex;
 use ic_rosetta_api::convert::to_model_account_identifier;
+
 use ic_rosetta_api::models::operation::Operation;
 use ic_rosetta_api::models::{
     AccountBalanceMetadata, AccountBalanceRequest, AccountBalanceResponse, AccountType,
-    BalanceAccountType, Block, BlockRequest, BlockResponse, ConstructionCombineRequest,
-    ConstructionCombineResponse, ConstructionDeriveRequest, ConstructionDeriveRequestMetadata,
-    ConstructionDeriveResponse, ConstructionHashRequest, ConstructionHashResponse,
-    ConstructionMetadataRequest, ConstructionMetadataRequestOptions, ConstructionMetadataResponse,
-    ConstructionParseRequest, ConstructionParseResponse, ConstructionPayloadsRequest,
-    ConstructionPayloadsRequestMetadata, ConstructionPayloadsResponse,
+    BalanceAccountType, Block, BlockRequest, BlockResponse, CallRequest, CallResponse,
+    ConstructionCombineRequest, ConstructionCombineResponse, ConstructionDeriveRequest,
+    ConstructionDeriveRequestMetadata, ConstructionDeriveResponse, ConstructionHashRequest,
+    ConstructionHashResponse, ConstructionMetadataRequest, ConstructionMetadataRequestOptions,
+    ConstructionMetadataResponse, ConstructionParseRequest, ConstructionParseResponse,
+    ConstructionPayloadsRequest, ConstructionPayloadsRequestMetadata, ConstructionPayloadsResponse,
     ConstructionPreprocessRequest, ConstructionPreprocessResponse, ConstructionSubmitRequest,
     ConstructionSubmitResponse, Error, MetadataRequest, NetworkIdentifier, NetworkListResponse,
-    NetworkRequest, NetworkStatusResponse, NeuronSubaccountComponents, PartialBlockIdentifier,
-    PublicKey, Signature, SignedTransaction,
+    NetworkRequest, NetworkStatusResponse, NeuronSubaccountComponents, Object,
+    PartialBlockIdentifier, PublicKey, Signature, SignedTransaction,
 };
+use ic_rosetta_api::request_types::GetProposalInfo;
 use icp_ledger::AccountIdentifier;
 use rand::{seq::SliceRandom, thread_rng};
 use reqwest::Client as HttpClient;
@@ -66,7 +68,7 @@ impl RosettaApiClient {
     ) -> RosettaApiClient {
         let api_url = format!("http://[{}]:{}", vm.ipv6, port);
         debug!(&logger, "API url: {}", api_url);
-        let http_client = HttpClient::new();
+        let http_client = reqwest::Client::builder().build().unwrap();
         RosettaApiClient {
             http_client,
             api_url,
@@ -99,6 +101,7 @@ impl RosettaApiClient {
             .http_client
             .post(url)
             .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .timeout(Duration::from_secs(100))
             .body(body)
             .send()
             .await
@@ -246,12 +249,11 @@ impl RosettaApiClient {
             operations,
             public_keys,
         };
+        let url = &format!("{}/construction/payloads", self.api_url);
+        info!(&self.logger, "Payloads, url: {}", url.clone());
         to_rosetta_response(
-            self.post_json_request(
-                &format!("{}/construction/payloads", self.api_url),
-                serde_json::to_vec(&req).unwrap(),
-            )
-            .await,
+            self.post_json_request(url, serde_json::to_vec(&req).unwrap())
+                .await,
         )
     }
 
@@ -384,6 +386,30 @@ impl RosettaApiClient {
         to_rosetta_response(
             self.post_json_request(
                 &format!("{}/block", self.api_url),
+                serde_json::to_vec(&req).unwrap(),
+            )
+            .await,
+        )
+    }
+
+    pub async fn get_proposal_info(
+        &self,
+        proposal_id: u64,
+    ) -> Result<Result<CallResponse, Error>, String> {
+        let req = CallRequest::new(
+            self.network_id(),
+            "get_proposal_info".to_owned(),
+            Object::from(GetProposalInfo { proposal_id }),
+        );
+        debug!(&self.logger, "[Rosetta client] Call Request: {:?}", req);
+        debug!(
+            &self.logger,
+            "[Rosetta client] Call: {}",
+            &format!("{}/call", self.api_url)
+        );
+        to_rosetta_response(
+            self.post_json_request(
+                &format!("{}/call", self.api_url),
                 serde_json::to_vec(&req).unwrap(),
             )
             .await,

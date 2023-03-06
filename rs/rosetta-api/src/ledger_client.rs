@@ -14,8 +14,12 @@ mod handle_stake_maturity;
 mod handle_start_dissolve;
 mod handle_stop_dissolve;
 mod neuron_response;
+pub mod proposal_info_response;
 
 use core::ops::Deref;
+
+use candid::Decode;
+use ic_nns_governance::pb::v1::ProposalInfo;
 use std::convert::TryFrom;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
@@ -61,6 +65,8 @@ use crate::request::Request;
 use crate::request_types::{RequestType, Status};
 use crate::transaction_id::TransactionIdentifier;
 
+use self::proposal_info_response::ProposalInfoResponse;
+
 fn waiter() -> garcon::Delay {
     garcon::Delay::builder()
         .throttle(std::time::Duration::from_millis(500))
@@ -99,6 +105,7 @@ pub trait LedgerAccess {
         acc_id: NeuronIdOrSubaccount,
         verified: bool,
     ) -> Result<NeuronInfo, ApiError>;
+    async fn proposal_info(&self, proposal_id: u64) -> Result<ProposalInfo, ApiError>;
     async fn transfer_fee(&self) -> Result<TransferFee, ApiError>;
 }
 
@@ -117,6 +124,7 @@ pub enum OperationOutput {
     BlockIndex(BlockIndex),
     NeuronId(u64),
     NeuronResponse(NeuronResponse),
+    ProposalInfoResponse(ProposalInfoResponse),
 }
 
 fn public_key_to_der(key: ThresholdSigPublicKey) -> Result<Vec<u8>, ApiError> {
@@ -286,6 +294,42 @@ impl LedgerAccess for LedgerClient {
     async fn cleanup(&self) {
         if let Some(ca) = &self.canister_access {
             ca.clear_outstanding_queries().await;
+        }
+    }
+
+    async fn proposal_info(&self, proposal_id: u64) -> Result<ProposalInfo, ApiError> {
+        if self.offline {
+            return Err(ApiError::NotAvailableOffline(false, Details::default()));
+        }
+        let agent = &self.canister_access.as_ref().unwrap().agent;
+
+        let arg = CandidOne(proposal_id)
+            .into_bytes()
+            .map_err(|e| ApiError::internal_error(format!("Serialization failed: {:?}", e)))?;
+        let bytes = agent
+            .query(&self.governance_canister_id.get().0, "get_proposal_info")
+            .with_arg(arg)
+            .call()
+            .await
+            .map_err(|e| ApiError::invalid_request(format!("{}", e)))?;
+        let proposal_info_response =
+            Decode!(bytes.as_slice(), Option<ProposalInfo>).map_err(|err| {
+                ApiError::InvalidRequest(
+                    false,
+                    Details::from(format!(
+                        "Could not decode dissolve timestamp response: {}",
+                        err
+                    )),
+                )
+            })?;
+        match proposal_info_response {
+            Some(pinf) => Ok(pinf),
+            None => Err(ApiError::InvalidRequest(
+                false,
+                Details::from(
+                    "Get Proposal Info returned no ProposalInfo --> No Proposal Info found by that Id",
+                ),
+            )),
         }
     }
 
@@ -525,6 +569,9 @@ impl LedgerClient {
                         result.neuron_id = Some(neuron_id);
                     }
                     OperationOutput::NeuronResponse(response) => {
+                        result.response = Some(Object::from(response));
+                    }
+                    OperationOutput::ProposalInfoResponse(response) => {
                         result.response = Some(Object::from(response));
                     }
                 }

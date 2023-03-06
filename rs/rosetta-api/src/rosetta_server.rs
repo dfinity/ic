@@ -96,6 +96,15 @@ async fn account_balance(
     to_rosetta_response(res)
 }
 
+#[post("/call")]
+async fn call(
+    msg: web::Json<CallRequest>,
+    req_handler: web::Data<RosettaRequestHandler>,
+) -> HttpResponse {
+    let res = req_handler.call(msg.into_inner()).await;
+    to_rosetta_response(res)
+}
+
 #[post("/block")]
 async fn block(
     msg: web::Json<BlockRequest>,
@@ -350,6 +359,7 @@ impl RosettaApiServer {
                 .app_data(web::Data::new(req_handler.clone()))
                 .service(account_balance)
                 .service(block)
+                .service(call)
                 .service(block_transaction)
                 .service(construction_combine)
                 .service(construction_derive)
