@@ -447,7 +447,7 @@ impl BackupHelper {
             .arg("--subnet-id")
             .arg(&self.subnet_id.to_string())
             .arg(&self.ic_config_file_local(replica_version))
-            .arg("restore-from-backup2")
+            .arg("restore-from-backup")
             .arg(&self.local_store_dir())
             .arg(&self.spool_root_dir())
             .arg(&replica_version.to_string())
