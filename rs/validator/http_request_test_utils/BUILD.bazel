@@ -1,0 +1,44 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "//rs/canister_client/sender",
+    "//rs/certification/test-utils",
+    "//rs/crypto/iccsa",
+    "//rs/crypto/internal/crypto_lib/basic_sig/der_utils",
+    "//rs/crypto/internal/crypto_lib/threshold_sig/bls12_381",
+    "//rs/crypto/test_utils",
+    "//rs/crypto/test_utils/canister_sigs",
+    "//rs/types/types",
+    "@crate_index//:simple_asn1",
+]
+
+DEV_DEPENDENCIES = [
+    "//rs/crypto/internal/crypto_lib/basic_sig/ed25519",
+    "//rs/crypto/test_utils/reproducible_rng",
+    "@crate_index//:assert_matches",
+]
+
+MACRO_DEPENDENCIES = []
+
+DEV_MACRO_DEPENDENCIES = []
+
+ALIASES = {}
+
+rust_library(
+    name = "http_request_test_utils",
+    srcs = glob(["src/**/*.rs"]),
+    aliases = ALIASES,
+    crate_name = "ic_validator_http_request_test_utils",
+    edition = "2021",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "http_request_test_utils_test",
+    crate = ":http_request_test_utils",
+    proc_macro_deps = DEV_MACRO_DEPENDENCIES,
+    deps = DEV_DEPENDENCIES,
+)
