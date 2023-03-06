@@ -325,14 +325,14 @@ pub fn load_canister_state<P: ReadPolicy>(
             })?;
     durations.insert("canister_queues", starting_time.elapsed());
 
-    let canister_metrics = CanisterMetrics {
-        scheduled_as_first: canister_state_bits.scheduled_as_first,
-        skipped_round_due_to_no_messages: canister_state_bits.skipped_round_due_to_no_messages,
-        executed: canister_state_bits.executed,
-        interruped_during_execution: canister_state_bits.interruped_during_execution,
-        consumed_cycles_since_replica_started: canister_state_bits
-            .consumed_cycles_since_replica_started,
-    };
+    let canister_metrics = CanisterMetrics::new(
+        canister_state_bits.scheduled_as_first,
+        canister_state_bits.skipped_round_due_to_no_messages,
+        canister_state_bits.executed,
+        canister_state_bits.interruped_during_execution,
+        canister_state_bits.consumed_cycles_since_replica_started,
+        canister_state_bits.consumed_cycles_since_replica_started_by_use_cases,
+    );
     let system_state = SystemState::new_from_checkpoint(
         canister_state_bits.controllers,
         *canister_id,

@@ -1,5 +1,6 @@
 use assert_matches::assert_matches;
 use candid::{Decode, Encode};
+use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use ic_types::nominal_cycles::NominalCycles;
 
 use ic_base_types::{NumBytes, NumSeconds};
@@ -1445,11 +1446,6 @@ fn execute_canister_http_request() {
         .with_caller(own_subnet, caller_canister)
         .build();
     test.state_mut().metadata.own_subnet_features.http_requests = true;
-    let burned_http_cycles_before = test
-        .state()
-        .metadata
-        .subnet_metrics
-        .consumed_cycles_http_outcalls;
 
     // Create payload of the request.
     let url = "https://".to_string();
@@ -1502,14 +1498,24 @@ fn execute_canister_http_request() {
         Some(NumBytes::from(response_size_limit)),
     );
     assert_eq!(http_request_context.request.payment, payment - fee);
-    let burned_http_cycles_after = test
-        .state()
-        .metadata
-        .subnet_metrics
-        .consumed_cycles_http_outcalls;
+
     assert_eq!(
-        burned_http_cycles_before + NominalCycles::from(fee),
-        burned_http_cycles_after
+        NominalCycles::from(fee),
+        test.state()
+            .metadata
+            .subnet_metrics
+            .consumed_cycles_http_outcalls
+    );
+
+    assert_eq!(
+        NominalCycles::from(fee),
+        *test
+            .state()
+            .metadata
+            .subnet_metrics
+            .get_consumed_cycles_by_use_case()
+            .get(&CyclesUseCase::HTTPOutcalls)
+            .unwrap()
     );
 }
 
@@ -1683,11 +1689,7 @@ fn ecdsa_signature_fee_charged() {
         .with_ecdsa_signature_fee(fee)
         .with_ecdsa_key(ecdsa_key.clone())
         .build();
-    let burned_ecdsa_cycles_before = test
-        .state()
-        .metadata
-        .subnet_metrics
-        .consumed_cycles_ecdsa_outcalls;
+
     let canister_id = test.universal_canister().unwrap();
     let esda_args = ic00::SignWithECDSAArgs {
         message_hash: [1; 32],
@@ -1724,14 +1726,24 @@ fn ecdsa_signature_fee_charged() {
         .next()
         .unwrap();
     assert_eq!(context.request.payment.get(), payment as u128 - fee);
-    let burned_ecdsa_cycles_after = test
-        .state()
-        .metadata
-        .subnet_metrics
-        .consumed_cycles_ecdsa_outcalls;
+
     assert_eq!(
-        burned_ecdsa_cycles_before + NominalCycles::from(fee),
-        burned_ecdsa_cycles_after
+        test.state()
+            .metadata
+            .subnet_metrics
+            .consumed_cycles_ecdsa_outcalls,
+        NominalCycles::from(fee)
+    );
+
+    assert_eq!(
+        *test
+            .state()
+            .metadata
+            .subnet_metrics
+            .get_consumed_cycles_by_use_case()
+            .get(&CyclesUseCase::ECDSAOutcalls)
+            .unwrap(),
+        NominalCycles::from(fee)
     );
 }
 
@@ -1855,11 +1867,7 @@ fn ecdsa_signature_fee_ignored_for_nns() {
         .with_ecdsa_signature_fee(1_000_000)
         .with_ecdsa_key(ecdsa_key.clone())
         .build();
-    let burned_ecdsa_cycles_before = test
-        .state()
-        .metadata
-        .subnet_metrics
-        .consumed_cycles_ecdsa_outcalls;
+
     let canister_id = test.universal_canister().unwrap();
     let esda_args = ic00::SignWithECDSAArgs {
         message_hash: [1; 32],
@@ -1895,12 +1903,22 @@ fn ecdsa_signature_fee_ignored_for_nns() {
         .next()
         .unwrap();
     assert_eq!(context.request.payment, Cycles::zero());
-    let burned_ecdsa_cycles_after = test
-        .state()
-        .metadata
-        .subnet_metrics
-        .consumed_cycles_ecdsa_outcalls;
-    assert_eq!(burned_ecdsa_cycles_before, burned_ecdsa_cycles_after);
+
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_metrics
+            .consumed_cycles_ecdsa_outcalls,
+        NominalCycles::from(0)
+    );
+    assert_eq!(
+        test.state()
+            .metadata
+            .subnet_metrics
+            .get_consumed_cycles_by_use_case()
+            .get(&CyclesUseCase::ECDSAOutcalls),
+        None
+    );
 }
 
 #[test]

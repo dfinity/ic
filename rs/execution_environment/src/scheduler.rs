@@ -1848,6 +1848,7 @@ fn observe_replicated_state_metrics(
     let mut num_aborted_install = 0;
 
     let mut consumed_cycles_total = NominalCycles::new(0);
+    let mut consumed_cycles_total_by_use_case = BTreeMap::new();
 
     let mut ingress_queue_message_count = 0;
     let mut ingress_queue_size_bytes = 0;
@@ -1885,6 +1886,13 @@ fn observe_replicated_state_metrics(
             .system_state
             .canister_metrics
             .consumed_cycles_since_replica_started;
+        join_consumed_cycles_by_use_case(
+            &mut consumed_cycles_total_by_use_case,
+            canister
+                .system_state
+                .canister_metrics
+                .get_consumed_cycles_since_replica_started_by_use_cases(),
+        );
         let queues = canister.system_state.queues();
         ingress_queue_message_count += queues.ingress_queue_message_count();
         ingress_queue_size_bytes += queues.ingress_queue_size_bytes();
@@ -1942,6 +1950,14 @@ fn observe_replicated_state_metrics(
         .subnet_metrics
         .consumed_cycles_by_deleted_canisters;
 
+    join_consumed_cycles_by_use_case(
+        &mut consumed_cycles_total_by_use_case,
+        state
+            .metadata
+            .subnet_metrics
+            .get_consumed_cycles_by_use_case(),
+    );
+
     // Add the consumed cycles in ecdsa outcalls.
     consumed_cycles_total += state.metadata.subnet_metrics.consumed_cycles_ecdsa_outcalls;
 
@@ -1949,6 +1965,8 @@ fn observe_replicated_state_metrics(
     consumed_cycles_total += state.metadata.subnet_metrics.consumed_cycles_http_outcalls;
 
     metrics.observe_consumed_cycles(consumed_cycles_total);
+
+    metrics.observe_consumed_cycles_by_use_case(&consumed_cycles_total_by_use_case);
 
     metrics
         .ecdsa_signature_agreements
@@ -1997,6 +2015,17 @@ fn observe_replicated_state_metrics(
     metrics
         .canisters_not_in_routing_table
         .set(canisters_not_in_routing_table);
+}
+
+fn join_consumed_cycles_by_use_case(
+    destination_map: &mut BTreeMap<CyclesUseCase, NominalCycles>,
+    source_map: &BTreeMap<CyclesUseCase, NominalCycles>,
+) {
+    for (use_case, cycles) in source_map.iter() {
+        *destination_map
+            .entry(*use_case)
+            .or_insert_with(|| NominalCycles::from(0)) += *cycles;
+    }
 }
 
 /// Helper function that checks if a message can be executed:

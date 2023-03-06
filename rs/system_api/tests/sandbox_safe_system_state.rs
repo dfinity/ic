@@ -21,6 +21,7 @@ use ic_test_utilities::{
         messages::{RequestBuilder, ResponseBuilder},
     },
 };
+use ic_types::nominal_cycles::NominalCycles;
 use ic_types::{
     messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, ComputeAllocation, Cycles, NumInstructions,
 };
@@ -354,6 +355,14 @@ fn call_increases_cycles_consumed_metric() {
             .consumed_cycles_since_replica_started
             .get()
             > 0
+    );
+    assert_ne!(
+        *system_state
+            .canister_metrics
+            .get_consumed_cycles_since_replica_started_by_use_cases()
+            .get(&CyclesUseCase::RequestTransmissionAndProcessing)
+            .unwrap(),
+        NominalCycles::from(0)
     );
 }
 

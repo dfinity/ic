@@ -2,7 +2,10 @@ pub mod subnet_call_context_manager;
 #[cfg(test)]
 mod tests;
 
-use crate::metadata_state::subnet_call_context_manager::SubnetCallContextManager;
+use crate::{
+    canister_state::system_state::CyclesUseCase,
+    metadata_state::subnet_call_context_manager::SubnetCallContextManager,
+};
 use ic_base_types::CanisterId;
 use ic_btc_types::Network as BitcoinNetwork;
 use ic_btc_types_internal::BlockBlob;
@@ -13,6 +16,7 @@ use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     registry::subnet::v1 as pb_subnet,
     state::{
+        canister_state_bits::v1::ConsumedCyclesByUseCase,
         ingress::v1 as pb_ingress,
         queues::v1 as pb_queues,
         system_metadata::v1::{self as pb_metadata},
@@ -418,7 +422,25 @@ pub struct SubnetMetrics {
     pub consumed_cycles_by_deleted_canisters: NominalCycles,
     pub consumed_cycles_http_outcalls: NominalCycles,
     pub consumed_cycles_ecdsa_outcalls: NominalCycles,
+    consumed_cycles_by_use_case: BTreeMap<CyclesUseCase, NominalCycles>,
     pub ecdsa_signature_agreements: u64,
+}
+
+impl SubnetMetrics {
+    pub fn observe_consumed_cycles_with_use_case(
+        &mut self,
+        use_case: CyclesUseCase,
+        cycles: NominalCycles,
+    ) {
+        *self
+            .consumed_cycles_by_use_case
+            .entry(use_case)
+            .or_insert_with(|| NominalCycles::from(0)) += cycles;
+    }
+
+    pub fn get_consumed_cycles_by_use_case(&self) -> &BTreeMap<CyclesUseCase, NominalCycles> {
+        &self.consumed_cycles_by_use_case
+    }
 }
 
 impl From<&SubnetMetrics> for pb_metadata::SubnetMetrics {
@@ -430,6 +452,15 @@ impl From<&SubnetMetrics> for pb_metadata::SubnetMetrics {
             consumed_cycles_http_outcalls: Some((&item.consumed_cycles_http_outcalls).into()),
             consumed_cycles_ecdsa_outcalls: Some((&item.consumed_cycles_ecdsa_outcalls).into()),
             ecdsa_signature_agreements: Some(item.ecdsa_signature_agreements),
+            consumed_cycles_by_use_case: item
+                .consumed_cycles_by_use_case
+                .clone()
+                .into_iter()
+                .map(|entry| ConsumedCyclesByUseCase {
+                    use_case: entry.0.into(),
+                    cycles: Some((&entry.1).into()),
+                })
+                .collect(),
         }
     }
 }
@@ -453,6 +484,16 @@ impl TryFrom<pb_metadata::SubnetMetrics> for SubnetMetrics {
             )
             .unwrap_or_else(|_| NominalCycles::from(0_u128)),
             ecdsa_signature_agreements: item.ecdsa_signature_agreements.unwrap_or_default(),
+            consumed_cycles_by_use_case: item
+                .consumed_cycles_by_use_case
+                .into_iter()
+                .map(|ConsumedCyclesByUseCase { use_case, cycles }| {
+                    (
+                        CyclesUseCase::from(use_case),
+                        NominalCycles::try_from(cycles.unwrap_or_default()).unwrap_or_default(),
+                    )
+                })
+                .collect(),
         })
     }
 }

@@ -37,11 +37,12 @@ use ic_test_utilities::{
     },
 };
 use ic_test_utilities_metrics::{
-    fetch_counter, fetch_gauge, fetch_int_gauge, fetch_int_gauge_vec, metric_vec,
+    fetch_counter, fetch_gauge, fetch_gauge_vec, fetch_int_gauge, fetch_int_gauge_vec, metric_vec,
 };
 use ic_types::messages::{CallbackId, Payload, RejectContext, Response, MAX_RESPONSE_COUNT_BYTES};
 use ic_types::methods::SystemMethod;
 use ic_types::{time::UNIX_EPOCH, ComputeAllocation, Cycles, NumBytes};
+use ic_types_test_utils::ids::user_test_id;
 use proptest::prelude::*;
 use std::collections::HashMap;
 use std::{cmp::min, ops::Range};
@@ -3033,6 +3034,14 @@ fn consumed_cycles_ecdsa_outcalls_are_added_to_consumed_cycles_total() {
         consumed_cycles_since_replica_started_before + NominalCycles::from(fee),
         consumed_cycles_since_replica_started_after
     );
+
+    assert_eq!(
+        fetch_gauge_vec(
+            test.metrics_registry(),
+            "consumed_cycles_since_replica_started",
+        ),
+        metric_vec(&[(&[("use_case", "ECDSAOutcalls")], fee.get() as f64),]),
+    );
 }
 
 #[test]
@@ -3125,6 +3134,99 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
     assert_eq!(
         consumed_cycles_since_replica_started_before + NominalCycles::from(fee),
         consumed_cycles_since_replica_started_after
+    );
+
+    assert_eq!(
+        fetch_gauge_vec(
+            test.metrics_registry(),
+            "consumed_cycles_since_replica_started",
+        ),
+        metric_vec(&[(&[("use_case", "HTTPOutcalls")], fee.get() as f64),]),
+    );
+}
+
+#[test]
+fn consumed_cycles_since_replica_started_are_updated_from_valid_canisters() {
+    let mut test = SchedulerTestBuilder::new().build();
+
+    let canister_id = test.create_canister_with(
+        Cycles::from(5_000_000_000_000u128),
+        ComputeAllocation::zero(),
+        MemoryAllocation::BestEffort,
+        None,
+        None,
+        None,
+    );
+
+    let removed_cycles = Cycles::from(1000u128);
+    test.canister_state_mut(canister_id)
+        .system_state
+        .remove_cycles(removed_cycles, CyclesUseCase::Instructions);
+
+    observe_replicated_state_metrics(
+        test.scheduler().own_subnet_id,
+        test.state(),
+        0.into(),
+        &test.scheduler().metrics,
+        &no_op_logger(),
+    );
+
+    assert_eq!(
+        fetch_gauge_vec(
+            test.metrics_registry(),
+            "consumed_cycles_since_replica_started",
+        ),
+        metric_vec(&[(&[("use_case", "Instructions")], removed_cycles.get() as f64),]),
+    );
+}
+
+#[test]
+fn consumed_cycles_since_replica_started_are_updated_from_deleted_canisters() {
+    let mut test = SchedulerTestBuilder::new().build();
+    let initial_balance = Cycles::from(5_000_000_000_000u128);
+    let canister_id = test.create_canister_with(
+        initial_balance,
+        ComputeAllocation::zero(),
+        MemoryAllocation::BestEffort,
+        None,
+        None,
+        Some(CanisterStatusType::Stopped),
+    );
+
+    let removed_cycles = Cycles::from(1000u128);
+    test.canister_state_mut(canister_id)
+        .system_state
+        .remove_cycles(removed_cycles, CyclesUseCase::Instructions);
+
+    test.inject_call_to_ic00(
+        Method::DeleteCanister,
+        CanisterIdRecord::from(canister_id).encode(),
+        Cycles::from(1_000_000_000_000u128),
+        CanisterId::try_from(user_test_id(1).get()).unwrap(),
+        InputQueueType::RemoteSubnet,
+    );
+    test.execute_round(ExecutionRoundType::OrdinaryRound);
+
+    observe_replicated_state_metrics(
+        test.scheduler().own_subnet_id,
+        test.state(),
+        0.into(),
+        &test.scheduler().metrics,
+        &no_op_logger(),
+    );
+
+    assert_eq!(
+        fetch_gauge_vec(
+            test.metrics_registry(),
+            "consumed_cycles_since_replica_started",
+        ),
+        metric_vec(&[
+            (&[("use_case", "Instructions")], removed_cycles.get() as f64),
+            (
+                &[("use_case", "DeletedCanisters")],
+                (initial_balance.get() - removed_cycles.get()) as f64
+            )
+        ]),
     );
 }
 

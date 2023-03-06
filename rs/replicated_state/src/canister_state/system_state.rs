@@ -36,7 +36,7 @@ lazy_static! {
 }
 
 /// Enumerates use cases of consumed cycles.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CyclesUseCase {
     Memory,
     ComputeAllocation,
@@ -44,8 +44,73 @@ pub enum CyclesUseCase {
     Instructions,
     RequestTransmissionAndProcessing,
     Uninstall,
-    CreationFee,
+    CanisterCreation,
+    ECDSAOutcalls,
+    HTTPOutcalls,
+    DeletedCanisters,
     NonConsumed,
+}
+
+impl CyclesUseCase {
+    /// Returns a string slice representation of the enum variant name for use
+    /// e.g. as a metric label.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Memory => "Memory",
+            Self::ComputeAllocation => "ComputeAllocation",
+            Self::IngressInduction => "IngressInduction",
+            Self::Instructions => "Instructions",
+            Self::RequestTransmissionAndProcessing => "RequestTransmissionAndProcessing",
+            Self::Uninstall => "Uninstall",
+            Self::CanisterCreation => "CanisterCreation",
+            Self::ECDSAOutcalls => "ECDSAOutcalls",
+            Self::HTTPOutcalls => "HTTPOutcalls",
+            Self::DeletedCanisters => "DeletedCanisters",
+            Self::NonConsumed => "NonConsumed",
+        }
+    }
+}
+
+impl From<CyclesUseCase> for i32 {
+    fn from(item: CyclesUseCase) -> Self {
+        match item {
+            CyclesUseCase::Memory => 1,
+            CyclesUseCase::ComputeAllocation => 2,
+            CyclesUseCase::IngressInduction => 3,
+            CyclesUseCase::Instructions => 4,
+            CyclesUseCase::RequestTransmissionAndProcessing => 5,
+            CyclesUseCase::Uninstall => 6,
+            CyclesUseCase::CanisterCreation => 7,
+            CyclesUseCase::ECDSAOutcalls => 8,
+            CyclesUseCase::HTTPOutcalls => 9,
+            CyclesUseCase::DeletedCanisters => 10,
+            CyclesUseCase::NonConsumed => 11,
+        }
+    }
+}
+
+impl From<i32> for CyclesUseCase {
+    fn from(item: i32) -> Self {
+        match item {
+            1 => Self::Memory,
+            2 => Self::ComputeAllocation,
+            3 => Self::IngressInduction,
+            4 => Self::Instructions,
+            5 => Self::RequestTransmissionAndProcessing,
+            6 => Self::Uninstall,
+            7 => Self::CanisterCreation,
+            8 => Self::ECDSAOutcalls,
+            9 => Self::HTTPOutcalls,
+            10 => Self::DeletedCanisters,
+            11 => Self::NonConsumed,
+            _ => panic!("Unsupported value"),
+        }
+    }
+}
+
+enum ConsumingCycles {
+    Yes,
+    No,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -59,6 +124,33 @@ pub struct CanisterMetrics {
     pub executed: u64,
     pub interruped_during_execution: u64,
     pub consumed_cycles_since_replica_started: NominalCycles,
+    consumed_cycles_since_replica_started_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
+}
+
+impl CanisterMetrics {
+    pub fn new(
+        scheduled_as_first: u64,
+        skipped_round_due_to_no_messages: u64,
+        executed: u64,
+        interruped_during_execution: u64,
+        consumed_cycles_since_replica_started: NominalCycles,
+        consumed_cycles_since_replica_started_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
+    ) -> Self {
+        Self {
+            scheduled_as_first,
+            skipped_round_due_to_no_messages,
+            executed,
+            interruped_during_execution,
+            consumed_cycles_since_replica_started,
+            consumed_cycles_since_replica_started_by_use_cases,
+        }
+    }
+
+    pub fn get_consumed_cycles_since_replica_started_by_use_cases(
+        &self,
+    ) -> &BTreeMap<CyclesUseCase, NominalCycles> {
+        &self.consumed_cycles_since_replica_started_by_use_cases
+    }
 }
 
 /// State that is controlled and owned by the system (IC).
@@ -977,6 +1069,7 @@ impl SystemState {
     /// decrements the metric `consumed_cycles_since_replica_started`.
     pub fn add_cycles(&mut self, amount: Cycles, use_case: CyclesUseCase) {
         self.cycles_balance += amount;
+        self.observe_consumed_cycles_with_use_case(amount, use_case, ConsumingCycles::No);
         if use_case != CyclesUseCase::NonConsumed {
             self.canister_metrics.consumed_cycles_since_replica_started -=
                 NominalCycles::from_cycles(amount);
@@ -984,8 +1077,9 @@ impl SystemState {
     }
 
     /// Decreases 'cycles_balance' for 'amount'.
-    pub fn remove_cycles(&mut self, amount: Cycles, _use_case: CyclesUseCase) {
+    pub fn remove_cycles(&mut self, amount: Cycles, use_case: CyclesUseCase) {
         self.cycles_balance -= amount;
+        self.observe_consumed_cycles_with_use_case(amount, use_case, ConsumingCycles::Yes);
     }
 
     /// Removes all cycles from 'cycles_balance'.
@@ -1000,6 +1094,36 @@ impl SystemState {
     pub fn observe_consumed_cycles(&mut self, cycles: Cycles) {
         self.canister_metrics.consumed_cycles_since_replica_started +=
             NominalCycles::from_cycles(cycles);
+    }
+
+    fn observe_consumed_cycles_with_use_case(
+        &mut self,
+        amount: Cycles,
+        use_case: CyclesUseCase,
+        consuming_cycles: ConsumingCycles,
+    ) {
+        // The three CyclesUseCase below are not valid on the canister
+        // level, they should only appear on the subnet level.
+        debug_assert_ne!(use_case, CyclesUseCase::ECDSAOutcalls);
+        debug_assert_ne!(use_case, CyclesUseCase::HTTPOutcalls);
+        debug_assert_ne!(use_case, CyclesUseCase::DeletedCanisters);
+
+        if use_case == CyclesUseCase::NonConsumed || amount == Cycles::from(0u128) {
+            return;
+        }
+
+        let metric: &mut BTreeMap<CyclesUseCase, NominalCycles> = &mut self
+            .canister_metrics
+            .consumed_cycles_since_replica_started_by_use_cases;
+
+        let use_case_cocnsumption = metric
+            .entry(use_case)
+            .or_insert_with(|| NominalCycles::from(0));
+
+        match consuming_cycles {
+            ConsumingCycles::Yes => *use_case_cocnsumption += amount.into(),
+            ConsumingCycles::No => *use_case_cocnsumption -= amount.into(),
+        }
     }
 }
 

@@ -437,6 +437,11 @@ fn serialize_canister_to_tip(
                     .global_timer
                     .to_nanos_since_unix_epoch(),
                 canister_version: canister_state.system_state.canister_version,
+                consumed_cycles_since_replica_started_by_use_cases: canister_state
+                    .system_state
+                    .canister_metrics
+                    .get_consumed_cycles_since_replica_started_by_use_cases()
+                    .clone(),
             }
             .into(),
         )

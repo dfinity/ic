@@ -1,11 +1,12 @@
-use std::time::Duration;
+use std::{collections::BTreeMap, time::Duration};
 
 use ic_metrics::{
     buckets::{decimal_buckets, decimal_buckets_with_zero, linear_buckets},
     MetricsRegistry,
 };
+use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use ic_types::nominal_cycles::NominalCycles;
-use prometheus::{Gauge, Histogram, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
+use prometheus::{Gauge, GaugeVec, Histogram, IntCounter, IntCounterVec, IntGauge, IntGaugeVec};
 
 use crate::metrics::{
     cycles_histogram, dts_pause_or_abort_histogram, duration_histogram, instructions_histogram,
@@ -38,6 +39,7 @@ pub(super) struct SchedulerMetrics {
     pub(super) registered_canisters: IntGaugeVec,
     pub(super) available_canister_ids: IntGauge,
     pub(super) consumed_cycles_since_replica_started: Gauge,
+    pub(super) consumed_cycles_since_replica_started_by_use_case: GaugeVec,
     pub(super) input_queue_messages: IntGaugeVec,
     pub(super) input_queues_size_bytes: IntGaugeVec,
     pub(super) queues_response_bytes: IntGauge,
@@ -199,6 +201,11 @@ impl SchedulerMetrics {
             consumed_cycles_since_replica_started: metrics_registry.gauge(
                 "replicated_state_consumed_cycles_since_replica_started",
                 "Number of cycles consumed since replica started",
+            ),
+            consumed_cycles_since_replica_started_by_use_case: metrics_registry.gauge_vec(
+                "consumed_cycles_since_replica_started",
+                "Number of cycles consumed since replica started by use cases.",
+                &["use_case"],
             ),
             ecdsa_signature_agreements: metrics_registry.int_gauge(
                 "replicated_state_ecdsa_signature_agreements_total",
@@ -575,6 +582,17 @@ impl SchedulerMetrics {
     pub(super) fn observe_consumed_cycles(&self, consumed_cycles: NominalCycles) {
         self.consumed_cycles_since_replica_started
             .set(consumed_cycles.get() as f64);
+    }
+
+    pub(super) fn observe_consumed_cycles_by_use_case(
+        &self,
+        consumed_cycles_by_use_case: &BTreeMap<CyclesUseCase, NominalCycles>,
+    ) {
+        for (use_case, cycles) in consumed_cycles_by_use_case.iter() {
+            self.consumed_cycles_since_replica_started_by_use_case
+                .with_label_values(&[use_case.as_str()])
+                .set(cycles.get() as f64);
+        }
     }
 
     pub(super) fn observe_input_messages(&self, kind: &str, message_count: usize) {

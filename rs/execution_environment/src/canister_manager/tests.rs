@@ -35,7 +35,7 @@ use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable, CANISTER_IDS_PER_SUBNET};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::system_state::CyclesUseCase, testing::SystemStateTesting,
+    canister_state::system_state::CyclesUseCase, testing::SystemStateTesting, SystemState,
 };
 use ic_replicated_state::{
     page_map, testing::CanisterQueuesTesting, CallContextManager, CallOrigin, CanisterState,
@@ -1250,6 +1250,16 @@ fn create_canister_updates_consumed_cycles_metric_correctly() {
             creation_fee.get()
         );
         assert_eq!(
+            canister
+                .system_state
+                .canister_metrics
+                .get_consumed_cycles_since_replica_started_by_use_cases()
+                .get(&CyclesUseCase::CanisterCreation)
+                .unwrap()
+                .get(),
+            creation_fee.get()
+        );
+        assert_eq!(
             canister.system_state.balance(),
             *INITIAL_CYCLES - creation_fee
         )
@@ -1286,6 +1296,14 @@ fn provisional_create_canister_has_no_creation_fee() {
                 .consumed_cycles_since_replica_started
                 .get(),
             NominalCycles::default().get()
+        );
+        assert_eq!(
+            canister
+                .system_state
+                .canister_metrics
+                .get_consumed_cycles_since_replica_started_by_use_cases()
+                .get(&CyclesUseCase::CanisterCreation),
+            None
         );
         assert_eq!(canister.system_state.balance(), *INITIAL_CYCLES)
     });
@@ -2236,6 +2254,68 @@ fn delete_stopped_canister_succeeds() {
 
         // Canister should no longer be there.
         assert_eq!(state.canister_state(&canister_id), None);
+    });
+}
+
+#[test]
+fn delete_canister_consumed_cycles_observed() {
+    with_setup(|canister_manager, mut state, _| {
+        let canister_id = canister_test_id(0);
+        let controller_id = canister_test_id(1);
+        let initial_cycles = Cycles::new(5_000_000_000_000);
+
+        let mut canister = CanisterState {
+            system_state: SystemState::new_stopped(
+                canister_id,
+                controller_id.get(),
+                initial_cycles,
+                NumSeconds::new(1 << 30),
+            ),
+            execution_state: None,
+            scheduler_state: Default::default(),
+        };
+
+        let controller_canister = get_running_canister(controller_id);
+
+        let cycles_to_consume = Cycles::from(100_000u128);
+        canister
+            .system_state
+            .remove_cycles(cycles_to_consume, CyclesUseCase::Memory);
+
+        let cycles_to_add = Cycles::from(10_000u128);
+        canister
+            .system_state
+            .add_cycles(cycles_to_add, CyclesUseCase::Memory);
+
+        state.put_canister_state(canister);
+        state.put_canister_state(controller_canister);
+
+        assert_eq!(
+            canister_manager.delete_canister(controller_id.get(), canister_id, &mut state),
+            Ok(())
+        );
+
+        let cycles_difference = cycles_to_consume - cycles_to_add;
+
+        assert_eq!(
+            *state
+                .metadata
+                .subnet_metrics
+                .get_consumed_cycles_by_use_case()
+                .get(&CyclesUseCase::Memory)
+                .unwrap(),
+            NominalCycles::from(cycles_difference)
+        );
+
+        assert_eq!(
+            *state
+                .metadata
+                .subnet_metrics
+                .get_consumed_cycles_by_use_case()
+                .get(&CyclesUseCase::DeletedCanisters)
+                .unwrap(),
+            NominalCycles::from(initial_cycles - cycles_difference)
+        );
     });
 }
 

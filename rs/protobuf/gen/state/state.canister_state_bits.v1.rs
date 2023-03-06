@@ -365,6 +365,14 @@ pub mod execution_task {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ConsumedCyclesByUseCase {
+    #[prost(enumeration = "CyclesUseCase", tag = "1")]
+    pub use_case: i32,
+    #[prost(message, optional, tag = "2")]
+    pub cycles: ::core::option::Option<super::super::super::types::v1::NominalCycles>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterStateBits {
     #[prost(uint64, tag = "2")]
     pub last_full_execution_round: u64,
@@ -425,6 +433,9 @@ pub struct CanisterStateBits {
     /// Canister version.
     #[prost(uint64, tag = "34")]
     pub canister_version: u64,
+    #[prost(message, repeated, tag = "35")]
+    pub consumed_cycles_since_replica_started_by_use_cases:
+        ::prost::alloc::vec::Vec<ConsumedCyclesByUseCase>,
     #[prost(oneof = "canister_state_bits::CanisterStatus", tags = "11, 12, 13")]
     pub canister_status: ::core::option::Option<canister_state_bits::CanisterStatus>,
 }
@@ -459,6 +470,47 @@ impl CustomSectionType {
             CustomSectionType::Unspecified => "CUSTOM_SECTION_TYPE_UNSPECIFIED",
             CustomSectionType::Public => "CUSTOM_SECTION_TYPE_PUBLIC",
             CustomSectionType::Private => "CUSTOM_SECTION_TYPE_PRIVATE",
+        }
+    }
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum CyclesUseCase {
+    Unspecified = 0,
+    Memory = 1,
+    ComputeAllocation = 2,
+    IngressInduction = 3,
+    Instructions = 4,
+    RequestTransmissionAndProcessing = 5,
+    Uninstall = 6,
+    CanisterCreation = 7,
+    EcdsaOutcalls = 8,
+    HttpOutcalls = 9,
+    DeletedCanisters = 10,
+    NonConsumed = 11,
+}
+impl CyclesUseCase {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            CyclesUseCase::Unspecified => "CYCLES_USE_CASE_UNSPECIFIED",
+            CyclesUseCase::Memory => "CYCLES_USE_CASE_MEMORY",
+            CyclesUseCase::ComputeAllocation => "CYCLES_USE_CASE_COMPUTE_ALLOCATION",
+            CyclesUseCase::IngressInduction => "CYCLES_USE_CASE_INGRESS_INDUCTION",
+            CyclesUseCase::Instructions => "CYCLES_USE_CASE_INSTRUCTIONS",
+            CyclesUseCase::RequestTransmissionAndProcessing => {
+                "CYCLES_USE_CASE_REQUEST_TRANSMISSION_AND_PROCESSING"
+            }
+            CyclesUseCase::Uninstall => "CYCLES_USE_CASE_UNINSTALL",
+            CyclesUseCase::CanisterCreation => "CYCLES_USE_CASE_CANISTER_CREATION",
+            CyclesUseCase::EcdsaOutcalls => "CYCLES_USE_CASE_ECDSA_OUTCALLS",
+            CyclesUseCase::HttpOutcalls => "CYCLES_USE_CASE_HTTP_OUTCALLS",
+            CyclesUseCase::DeletedCanisters => "CYCLES_USE_CASE_DELETED_CANISTERS",
+            CyclesUseCase::NonConsumed => "CYCLES_USE_CASE_NON_CONSUMED",
         }
     }
 }
