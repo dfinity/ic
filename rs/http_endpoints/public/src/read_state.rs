@@ -34,7 +34,7 @@ use tower::{
     limit::concurrency::GlobalConcurrencyLimitLayer, util::BoxCloneService, Service, ServiceBuilder,
 };
 
-const MAX_READ_STATE_REQUEST_IDS: u8 = 100;
+const MAX_READ_STATE_REQUEST_IDS: u8 = 1;
 const MAX_READ_STATE_CONCURRENT_REQUESTS: usize = 100;
 
 #[derive(Clone)]
@@ -287,7 +287,7 @@ async fn verify_paths(
                     return Err(HttpError {
                         status: StatusCode::TOO_MANY_REQUESTS,
                         message: format!(
-                            "Can only request up to {} request IDs.",
+                            "Can only request up to {} paths for request_status.",
                             MAX_READ_STATE_REQUEST_IDS
                         ),
                     });
