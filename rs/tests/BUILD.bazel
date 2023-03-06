@@ -1229,6 +1229,14 @@ system_test(
     ],
 )
 
+system_test(
+    name = "request_signature_test",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = GUESTOS_RUNTIME_DEPS,
+    deps = DEPENDENCIES + [":tests"],
+)
+
 # Replicable tests
 
 # The target is used for testing the following scenarios:

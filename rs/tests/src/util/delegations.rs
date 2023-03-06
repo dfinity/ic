@@ -1,4 +1,4 @@
-use crate::execution::request_signature_test::{expiry_time, sign_query, sign_update};
+use crate::crypto::request_signature_test::{expiry_time, sign_query, sign_update};
 use crate::util::delay;
 
 use candid::{CandidType, Deserialize, Principal};
