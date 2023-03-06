@@ -143,7 +143,7 @@ rust_binary(
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [
         ":build_script",
-        ":governance",
+        ":governance_test_feature",
     ],
 )
 
@@ -168,7 +168,7 @@ rust_canister(
     crate_features = ["test"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     service_file = ":canister/governance_test.did",
-    deps = DEPENDENCIES + [":governance"] + [":build_script"],
+    deps = DEPENDENCIES + [":governance_test_feature"] + [":build_script"],
 )
 
 rust_test(
@@ -199,7 +199,7 @@ rust_test(
         "CARGO_MANIFEST_DIR": "rs/sns/governance",
     },
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
-    deps = [":governance"] + DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
+    deps = [":governance_test_feature"] + DEPENDENCIES + DEV_DEPENDENCIES + [":build_script"],
 )
 
 rust_test_suite_with_extra_srcs(
