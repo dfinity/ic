@@ -4,12 +4,26 @@ use std::{
     time::{Duration, Instant},
 };
 
+use serde::{Deserialize, Serialize};
+
 use crate::driver::test_setup::GroupSetup;
 
 use super::event::TaskId;
 
 pub trait TargetFunctionOutcome {
     fn task_id(&self) -> TaskId;
+    fn runtime_duration(&self) -> Duration;
+    fn message(&self) -> Option<String> {
+        None
+    }
+
+    fn to_summary(&self) -> TestResultSummary {
+        TestResultSummary {
+            name: self.task_id().to_string(),
+            runtime: self.runtime_duration().as_secs_f64(),
+            message: self.message(),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -21,6 +35,9 @@ pub struct TargetFunctionSuccess {
 impl TargetFunctionOutcome for TargetFunctionSuccess {
     fn task_id(&self) -> TaskId {
         self.task_id.clone()
+    }
+    fn runtime_duration(&self) -> Duration {
+        self.runtime
     }
 }
 
@@ -42,6 +59,18 @@ impl TargetFunctionOutcome for TargetFunctionFailure {
         match self {
             TargetFunctionFailure::Panicked { task_id, .. } => task_id.clone(),
             TargetFunctionFailure::TimedOut { task_id, .. } => task_id.clone(),
+        }
+    }
+    fn runtime_duration(&self) -> Duration {
+        match self {
+            TargetFunctionFailure::Panicked { runtime, .. } => *runtime,
+            TargetFunctionFailure::TimedOut { timeout, .. } => *timeout,
+        }
+    }
+    fn message(&self) -> Option<String> {
+        match self {
+            TargetFunctionFailure::Panicked { message, .. } => Some(message.clone()),
+            TargetFunctionFailure::TimedOut { .. } => None,
         }
     }
 }
@@ -257,6 +286,44 @@ impl SystemTestGroupReport {
             panic!("sub-reports should be unique per task, but {test_id} emitted two: {old_sub_report} and {sub_report}");
         }
     }
+
+    pub fn to_summary(&self) -> SystemTestGroupReportSummary {
+        SystemTestGroupReportSummary {
+            success: self
+                .successes
+                .iter()
+                .filter(|x| !self.skips.contains(&x.task_id()))
+                .map(|x| x.to_summary())
+                .collect(),
+            failure: self.failures.iter().map(|x| x.to_summary()).collect(),
+            skipped: self
+                .successes
+                .iter()
+                .filter(|x| self.skips.contains(&x.task_id()))
+                .map(|x| x.to_summary())
+                .collect(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SystemTestGroupReportSummary {
+    pub success: Vec<TestResultSummary>,
+    pub failure: Vec<TestResultSummary>,
+    pub skipped: Vec<TestResultSummary>,
+}
+
+impl Display for SystemTestGroupReportSummary {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        write!(f, "{}", serde_json::to_string(self).unwrap())
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct TestResultSummary {
+    pub name: String,
+    pub runtime: f64,
+    pub message: Option<String>,
 }
 
 fn compute_min_width<T>(xs: &[T]) -> Option<usize>

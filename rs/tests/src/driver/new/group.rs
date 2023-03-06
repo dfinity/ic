@@ -15,8 +15,8 @@ use crate::driver::{
         plan::{EvalOrder, Plan},
         process::ProcessEventPayload,
         report::{
-            FarmGroupReport, Outcome, SystemTestGroupError, SystemTestGroupReport,
-            TargetFunctionFailure, TargetFunctionSuccess,
+            Outcome, SystemTestGroupError, SystemTestGroupReport, TargetFunctionFailure,
+            TargetFunctionSuccess,
         },
         subprocess_ipc::LogServer,
         task::{DebugKeepaliveTask, EmptyTask},
@@ -898,6 +898,7 @@ impl SystemTestGroup {
                                 debug!(group_ctx.log(), "Detected root completion {:?} (awaiting all running tasks to complete)", event);
                                 is_root_completed = true;
                                 debug!(group_ctx.log(), "All test events completed.");
+                                info!(group_ctx.log(), "JSON Report:\n{}", report.to_summary());
                                 info!(group_ctx.log(), "\n{report}");
                                 if let Ok(group_setup) = GroupSetup::try_read_attribute(&group_ctx.get_setup_env().unwrap()) {
                                     info!(
@@ -924,7 +925,7 @@ impl SystemTestGroup {
                 });
 
                 // await root task's final event and produce appropriate return code
-                let mut report = terminal_event_receiver.recv().unwrap();
+                let report = terminal_event_receiver.recv().unwrap();
 
                 if let Err(e) = log_server.shutdown() {
                     warn!(
@@ -941,15 +942,6 @@ impl SystemTestGroup {
                 }
 
                 if report.is_failure_free() {
-                    let setup_env = group_ctx.get_setup_env()?;
-                    match GroupSetup::try_read_attribute(&setup_env) {
-                        Ok(group_setup) => {
-                            report.farm_group_report = Some(FarmGroupReport { group_setup });
-                        }
-                        Err(error) => {
-                            debug!(group_ctx.log(), "Could not read group setup: {:?}", error);
-                        }
-                    };
                     Ok(Outcome::FromParentProcess(report))
                 } else {
                     bail!(SystemTestGroupError::SystemTestFailure(report))
@@ -970,15 +962,11 @@ impl SystemTestGroup {
     pub fn execute_from_args(self) -> Result<()> {
         let outcome = self.execute();
 
-        // this logger is only used in the parent process
-        let logger = super::logger::new_stdout_logger();
-
         match outcome {
             Ok(Outcome::FromSubProcess) => Ok(()),
             Ok(Outcome::FromParentProcess(_)) => Ok(()),
-            Err(failure_mode) => {
+            Err(_) => {
                 // TODO: also print Kibana link in case of failure. This requires that the dyncamic group name (e.g., distributed_mainnet_test_bin--1673213252002) is made available to all SystemTestGroup instances, not only those used with Farm.
-                warn!(logger, "{failure_mode}");
                 bail!("Tests failed.")
             }
         }
