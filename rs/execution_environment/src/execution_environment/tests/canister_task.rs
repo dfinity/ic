@@ -693,14 +693,14 @@ fn global_timer_resumes_after_canister_is_being_stopped_and_started_again() {
     let env = StateMachine::new();
 
     // Install a canister with a periodic timer.
-    let set_global_timer_in_post_upgrade = wasm()
+    let set_global_timer_in_canister_init = wasm()
         .set_global_timer_method(wasm().inc_global_counter().api_global_timer_set(1))
         .api_global_timer_set(1)
         .build();
     let canister_id = env
         .install_canister(
             UNIVERSAL_CANISTER_WASM.to_vec(),
-            set_global_timer_in_post_upgrade,
+            set_global_timer_in_canister_init,
             None,
         )
         .unwrap();
@@ -711,9 +711,11 @@ fn global_timer_resumes_after_canister_is_being_stopped_and_started_again() {
         env.tick();
     }
 
-    // Assert the global timer is running.
     let get_global_counter = wasm().get_global_counter().reply_int64().build();
-    let result = env.query(canister_id, "query", get_global_counter).unwrap();
+    // Assert the global timer is running.
+    let result = env
+        .query(canister_id, "query", get_global_counter.clone())
+        .unwrap();
     assert_eq!(result, WasmResult::Reply(5_u64.to_le_bytes().into()));
 
     // Stop the canister.
@@ -721,12 +723,20 @@ fn global_timer_resumes_after_canister_is_being_stopped_and_started_again() {
     assert_matches!(result, Ok(_));
 
     // The timer should not be triggered as the canister is stopped.
-    env.advance_time(Duration::from_secs(1));
-    env.tick();
+    for _ in 0..20 {
+        env.advance_time(Duration::from_secs(1));
+        env.tick();
+    }
 
     // Start the canister.
     let result = env.start_canister(canister_id);
     assert_matches!(result, Ok(_));
+    // Assert the global timer was not running.
+    let result = env
+        .query(canister_id, "query", get_global_counter.clone())
+        .unwrap();
+    // Note, there is one timer execution that comes from the `env.start_canister()`
+    assert_eq!(result, WasmResult::Reply(6_u64.to_le_bytes().into()));
 
     // The timer should be triggered and reactivated each round.
     for _ in 6..10 {
@@ -735,7 +745,6 @@ fn global_timer_resumes_after_canister_is_being_stopped_and_started_again() {
     }
 
     // Assert the global timer is running.
-    let get_global_counter = wasm().get_global_counter().reply_int64().build();
     let result = env.query(canister_id, "query", get_global_counter).unwrap();
     assert_eq!(result, WasmResult::Reply(10_u64.to_le_bytes().into()));
 }
