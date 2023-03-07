@@ -218,7 +218,7 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/tests/bin/btc_get_balance_test.rs     @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/execution-owners
 /rs/tests/bin/canister_http_test.rs       @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/networking-team
 /rs/tests/bin/canister_sig_verification_cache_test.rs       @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/crypto-owners
-/rs/tests/bin/certified_registry_test.rs       @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/execution-owners
+/rs/tests/bin/certified_registry_test.rs       @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/nns-team
 /rs/tests/bin/ckbtc_minter_basics_test.rs @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/financial-integrations
 /rs/tests/bin/ckbtc_minter_batching.rs @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/financial-integrations
 /rs/tests/bin/ckbtc_minter_heartbeat.rs @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/financial-integrations
