@@ -1268,6 +1268,12 @@ impl Dkg for DkgImpl {
     }
 }
 
+// The NiDKG component does not implement custom `get_filter` function
+// because it doesn't require artifact retransmission. Nodes participating
+// in NiDKG would create artifacts depending on their own consensus state.
+// If a node happens to disconnect, it would send out dealings based on
+// its previous state after it reconnects, regardless of whether it has sent
+// them before.
 impl<Pool: DkgPool> ArtifactPoolDescriptor<DkgArtifact, Pool> for DkgGossipImpl {
     fn get_priority_function(
         &self,
