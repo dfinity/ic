@@ -25,6 +25,11 @@ REPOS_TO_SCAN = [
                 "https://gitlab.com/dfinity-lab/public/ic/-/tree/master/ic-os/boundary-guestos/rootfs",
             ),
             Project(
+                "boundary-api-guestos",
+                "ic/ic-os/boundary-api-guestos/envs/prod",
+                "https://gitlab.com/dfinity-lab/public/ic/-/tree/master/ic-os/boundary-api-guestos/rootfs",
+            ),
+            Project(
                 "guestos",
                 "ic/ic-os/guestos/prod",
                 "https://gitlab.com/dfinity-lab/public/ic/-/tree/master/ic-os/guestos/rootfs",

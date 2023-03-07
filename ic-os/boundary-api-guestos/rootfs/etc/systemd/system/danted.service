@@ -1,0 +1,19 @@
+[Unit]
+Description=SOCKS (v4 and v5) proxy daemon (danted)
+Documentation=man:danted(8) man:danted.conf(5)
+Wants=network-online.target
+After=network-online.target
+# We must wait for IC bootstrap to complete: It writes various
+# state files and may also be needed to obtain network config.
+After=bootstrap-ic-node.service
+Wants=bootstrap-ic-node.service
+# Only start if configuration file exists
+ConditionPathExists=/etc/danted.conf
+
+[Service]
+User=socks
+Group=socks
+ExecStart=/usr/sbin/danted
+
+[Install]
+WantedBy=multi-user.target

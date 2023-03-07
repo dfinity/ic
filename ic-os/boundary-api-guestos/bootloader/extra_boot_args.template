@@ -1,0 +1,1 @@
+EXTRA_BOOT_ARGS="root_hash=ROOT_HASH"
