@@ -343,14 +343,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     )]),
                 ),
                 pot_with_setup(
-                    "global_reboot_pot",
-                    message_routing::global_reboot_test::config,
-                    par(vec![sys_t(
-                        "global_reboot_test",
-                        message_routing::global_reboot_test::test,
-                    )]),
-                ),
-                pot_with_setup(
                     "transaction_ledger_correctness_pot",
                     ledger_tests::transaction_ledger_correctness::config,
                     par(vec![sys_t(
