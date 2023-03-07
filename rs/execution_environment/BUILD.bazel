@@ -124,6 +124,8 @@ rust_test_suite(
     aliases = ALIASES,
     data = DATA,
     env = ENV,
+    # https://dfinity.atlassian.net/browse/EXC-1349
+    flaky = True,
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = [":execution_environment"] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
