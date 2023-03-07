@@ -12,8 +12,10 @@ use ic_sns_governance::{
         get_neuron_response, get_proposal_response,
         governance::{Mode, SnsMetadata},
         manage_neuron,
-        manage_neuron::{AddNeuronPermissions, MergeMaturity, RemoveNeuronPermissions},
-        manage_neuron_response,
+        manage_neuron::{
+            AddNeuronPermissions, MergeMaturity, RegisterVote, RemoveNeuronPermissions,
+        },
+        manage_neuron_response::{self, RegisterVoteResponse},
         manage_neuron_response::{
             AddNeuronPermissionsResponse, MergeMaturityResponse, RemoveNeuronPermissionsResponse,
         },
@@ -21,7 +23,7 @@ use ic_sns_governance::{
         proposal::Action,
         GetNeuron, GetProposal, Governance as GovernanceProto, GovernanceError, ManageNeuron,
         ManageNeuronResponse, NervousSystemParameters, Neuron, NeuronId, NeuronPermission,
-        NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData, ProposalId,
+        NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData, ProposalId, Vote,
     },
     types::Environment,
 };
@@ -523,7 +525,7 @@ impl GovernanceCanisterFixture {
         &mut self,
         target_neuron: &NeuronId,
         manage_neuron_command: manage_neuron::Command,
-        caller: &PrincipalId,
+        caller: PrincipalId,
     ) -> ManageNeuronResponse {
         self.governance
             .manage_neuron(
@@ -531,7 +533,7 @@ impl GovernanceCanisterFixture {
                     subaccount: target_neuron.clone().id,
                     command: Some(manage_neuron_command),
                 },
-                caller,
+                &caller,
             )
             .now_or_never()
             .unwrap()
@@ -550,7 +552,7 @@ impl GovernanceCanisterFixture {
                 principal_id: Some(target_principal),
                 permissions_to_add: Some(permissions_to_add),
             }),
-            &caller,
+            caller,
         );
         match response.command {
             Some(manage_neuron_response::Command::AddNeuronPermission(a)) => Ok(a),
@@ -572,7 +574,7 @@ impl GovernanceCanisterFixture {
                 principal_id: Some(target_principal),
                 permissions_to_remove: Some(permissions_to_add),
             }),
-            &caller,
+            caller,
         );
 
         match response.command {
@@ -639,7 +641,7 @@ impl GovernanceCanisterFixture {
         &mut self,
         target_neuron: &NeuronId,
         operation: manage_neuron::configure::Operation,
-        caller: &PrincipalId,
+        caller: PrincipalId,
     ) -> Result<manage_neuron_response::ConfigureResponse, GovernanceError> {
         let command = manage_neuron::Command::Configure(manage_neuron::Configure {
             operation: Some(operation),
@@ -656,7 +658,7 @@ impl GovernanceCanisterFixture {
         &mut self,
         target_neuron: &NeuronId,
         proposal: Proposal,
-        caller: &PrincipalId,
+        caller: PrincipalId,
     ) -> Result<(ProposalId, ProposalData), GovernanceError> {
         let manage_neuron_command = manage_neuron::Command::MakeProposal(proposal);
         let manage_neuron_response =
@@ -665,7 +667,7 @@ impl GovernanceCanisterFixture {
         match manage_neuron_response.command.unwrap() {
             manage_neuron_response::Command::MakeProposal(make_proposal_response) => {
                 let proposal_id = make_proposal_response.proposal_id.unwrap();
-                let proposal = self.get_proposal_or_panic(&proposal_id);
+                let proposal = self.get_proposal_or_panic(proposal_id);
                 Ok((proposal_id, proposal))
             }
             manage_neuron_response::Command::Error(governance_error) => Err(governance_error),
@@ -673,11 +675,25 @@ impl GovernanceCanisterFixture {
         }
     }
 
+    /// Unlike `make_proposal`, this function bypasses the `MakeProposal`
+    /// manage_neuron API and directly inserts the proposal into the governance
+    /// state. This is useful when you want to have manual control over the
+    /// ProposalData.
+    pub fn directly_insert_proposal_data(&mut self, proposal_data: ProposalData) {
+        self.governance.proto.proposals.insert(
+            proposal_data
+                .id
+                .expect("proposal_data must contain a proposal id")
+                .id,
+            proposal_data,
+        );
+    }
+
     pub fn make_default_proposal(
         &mut self,
         target_neuron: &NeuronId,
         proposal: impl Into<Action>,
-        caller: &PrincipalId,
+        caller: PrincipalId,
     ) -> Result<(ProposalId, ProposalData), GovernanceError> {
         self.make_proposal(
             target_neuron,
@@ -689,11 +705,11 @@ impl GovernanceCanisterFixture {
         )
     }
 
-    pub fn get_proposal_or_panic(&mut self, proposal_id: &ProposalId) -> ProposalData {
+    pub fn get_proposal_or_panic(&mut self, proposal_id: ProposalId) -> ProposalData {
         match self
             .governance
             .get_proposal(&GetProposal {
-                proposal_id: Some(*proposal_id),
+                proposal_id: Some(proposal_id),
             })
             .result
             .unwrap()
@@ -710,6 +726,29 @@ impl GovernanceCanisterFixture {
             .proto
             .swap_canister_id
             .expect("Expected the swap_canister_id to be set in the GovernanceCanisterFixture")
+    }
+
+    pub fn vote(
+        &mut self,
+        target_neuron: &NeuronId,
+        proposal_id: ProposalId,
+        vote: Vote,
+        caller: PrincipalId,
+    ) -> Result<RegisterVoteResponse, GovernanceError> {
+        let manage_neuron_command = manage_neuron::Command::RegisterVote(RegisterVote {
+            proposal: Some(proposal_id),
+            vote: vote as i32,
+        });
+        let manage_neuron_response =
+            self.manage_neuron(target_neuron, manage_neuron_command, caller);
+
+        match manage_neuron_response.command.unwrap() {
+            manage_neuron_response::Command::RegisterVote(register_vote_response) => {
+                Ok(register_vote_response)
+            }
+            manage_neuron_response::Command::Error(governance_error) => Err(governance_error),
+            _ => panic!("Unexpected command response when making a proposal"),
+        }
     }
 }
 

@@ -1786,6 +1786,14 @@ impl From<DeregisterDappCanisters> for SetDappControllersRequest {
     }
 }
 
+impl Motion {
+    pub fn new(text: &str) -> Self {
+        Motion {
+            motion_text: text.to_string(),
+        }
+    }
+}
+
 impl From<Motion> for Action {
     fn from(motion: Motion) -> Action {
         Action::Motion(motion)

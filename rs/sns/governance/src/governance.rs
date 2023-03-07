@@ -3025,12 +3025,15 @@ impl Governance {
     /// - the neuron is allowed to vote on this proposal (i.e., there is a ballot for this proposal
     ///   included in the proposal information)
     /// - the neuron has not voted already on this proposal
+    /// - the proposal deadline (as extended by wait-for-quiet) has not yet been reached
     fn register_vote(
         &mut self,
         neuron_id: &NeuronId,
         caller: &PrincipalId,
         pb: &manage_neuron::RegisterVote,
     ) -> Result<(), GovernanceError> {
+        let now_seconds = self.env.now();
+
         let neuron = self
             .proto
             .neurons
@@ -3043,9 +3046,9 @@ impl Governance {
         let proposal_id = pb.proposal.as_ref().ok_or_else(||
             // Proposal not specified.
             GovernanceError::new_with_message(ErrorType::PreconditionFailed, "Registering of vote must include a proposal id."))?;
-        let proposal = &mut (self.proto.proposals.get_mut(&proposal_id.id).ok_or_else(||
+        let proposal = self.proto.proposals.get_mut(&proposal_id.id).ok_or_else(||
             // Proposal not found.
-            GovernanceError::new_with_message(ErrorType::NotFound, "Can't find proposal."))?);
+            GovernanceError::new_with_message(ErrorType::NotFound, "Can't find proposal."))?;
         let action = proposal
             .proposal
             .as_ref()
@@ -3073,6 +3076,22 @@ impl Governance {
             ));
         }
 
+        // Check if the proposal is still open for voting.
+        let wait_for_quiet_state = proposal.wait_for_quiet_state.as_ref().ok_or_else(|| {
+            GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                "ProposalData must have wait_for_quiet_state.",
+            )
+        })?;
+        if now_seconds > wait_for_quiet_state.current_deadline_timestamp_seconds {
+            // Deadline has passed, so the proposal cannot be voted on
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "Proposal deadline has passed.",
+            ));
+        }
+
+        // Cast the vote
         let function_id = u64::from(action);
         Governance::cast_vote_and_cascade_follow(
             // Actually update the ballot, including following.
@@ -3082,7 +3101,7 @@ impl Governance {
             function_id,
             &self.function_followee_index,
             &mut self.proto.neurons,
-            self.env.now(),
+            now_seconds,
         );
 
         self.process_proposal(proposal_id.id);
@@ -5131,7 +5150,7 @@ mod tests {
                 // Step 1: Prepare the world.
                 let user = UserInfo::new(Sender::from_keypair(&TEST_USER1_KEYPAIR));
                 let principal_id = user.sender.get_principal_id();
-                // Not sure why user.neuron_id can't be used...
+                // work around the fact that the type inside UserInfo is not the same as the type in this crate
                 let neuron_id = crate::pb::v1::NeuronId {
                     id: user.subaccount.to_vec(),
                 };

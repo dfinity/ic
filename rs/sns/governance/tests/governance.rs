@@ -12,10 +12,11 @@ use ic_sns_governance::pb::v1::claim_swap_neurons_request::NeuronParameters;
 use ic_sns_governance::pb::v1::claim_swap_neurons_response::{
     ClaimSwapNeuronsResult, ClaimedSwapNeurons, SwapNeuron,
 };
+use ic_sns_governance::pb::v1::manage_neuron_response::RegisterVoteResponse;
 use ic_sns_governance::pb::v1::neuron::DissolveState;
 use ic_sns_governance::pb::v1::{
-    ClaimSwapNeuronsError, ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse,
-    ClaimedSwapNeuronStatus,
+    Ballot, ClaimSwapNeuronsError, ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse,
+    ClaimedSwapNeuronStatus, ProposalData, Vote, WaitForQuietState,
 };
 use ic_sns_governance::{
     account_to_proto,
@@ -45,7 +46,8 @@ use ic_sns_governance::{
     },
     types::{ONE_DAY_SECONDS, ONE_MONTH_SECONDS},
 };
-use std::collections::HashSet;
+use maplit::btreemap;
+use std::collections::{BTreeMap, HashSet};
 use strum::IntoEnumIterator;
 
 pub mod fixtures;
@@ -89,7 +91,7 @@ async fn test_disburse_succeeds() {
                 subaccount: None,
             }),
         }),
-        &user_principal,
+        user_principal,
     );
     match manage_neuron_response.command.unwrap() {
         CommandResponse::Disburse(response) => println!("Successfully disbursed: {:?}", response),
@@ -147,7 +149,7 @@ async fn test_disburse_fails_when_state_is_not_dissolving() {
                 additional_dissolve_delay_seconds: (6 * ONE_MONTH_SECONDS) as u32,
             })),
         }),
-        &user_principal,
+        user_principal,
     );
 
     // Assert that the neuron state is NotDissolving
@@ -165,7 +167,7 @@ async fn test_disburse_fails_when_state_is_not_dissolving() {
                 subaccount: None,
             }),
         }),
-        &user_principal,
+        user_principal,
     );
 
     // This should fail with error_type as PreconditionFailed
@@ -231,7 +233,7 @@ fn test_disburse_maturity_fails_while_disabled() {
                 percentage_to_disburse: 100,
                 to_account: None,
             }),
-            &env.controller,
+            env.controller,
         )
         .command
         .expect("missing response from manage_neuron operation");
@@ -266,7 +268,7 @@ fn test_disburse_maturity_succeeds_to_self() {
                 percentage_to_disburse: 100,
                 to_account: None,
             }),
-            &env.controller,
+            env.controller,
         )
         .command
         .expect("missing response from manage_neuron operation");
@@ -372,7 +374,7 @@ fn test_disburse_maturity_succeeds_to_other() {
                 percentage_to_disburse: 100,
                 to_account: Some(destination_account_proto.clone()),
             }),
-            &env.controller,
+            env.controller,
         )
         .command
         .expect("missing response from manage_neuron operation");
@@ -477,7 +479,7 @@ fn test_disburse_maturity_succeeds_with_multiple_operations() {
                     percentage_to_disburse: *percentage,
                     to_account: Some(destination_account_proto.clone()),
                 }),
-                &env.controller,
+                env.controller,
             )
             .command
             .expect("missing response from manage_neuron operation");
@@ -558,7 +560,7 @@ fn test_disburse_maturity_fails_if_maturity_too_low() {
                 percentage_to_disburse: 100,
                 to_account: None,
             }),
-            &env.controller,
+            env.controller,
         )
         .command
         .expect("missing response from manage_neuron operation");
@@ -584,7 +586,7 @@ fn test_disburse_maturity_fails_if_not_authorized() {
                 percentage_to_disburse: 100,
                 to_account: None,
             }),
-            &unauthorized_caller,
+            unauthorized_caller,
         )
         .command
         .expect("missing response from manage_neuron operation");
@@ -611,7 +613,7 @@ fn test_disburse_maturity_fails_on_non_existing_neuron() {
                 percentage_to_disburse: 100,
                 to_account: None,
             }),
-            &env.controller,
+            env.controller,
         )
         .command
         .expect("missing response from manage_neuron operation");
@@ -638,7 +640,7 @@ fn test_disburse_maturity_fails_if_invalid_percentage_to_disburse() {
                     percentage_to_disburse: *percentage,
                     to_account: None,
                 }),
-                &env.controller,
+                env.controller,
             )
             .command
             .expect("missing response from manage_neuron operation");
@@ -821,14 +823,14 @@ fn test_vesting_neuron_manage_neuron_operations() {
     ];
 
     for (command, expected_response) in requests_and_expected_responses {
-        let actual_response = gov.manage_neuron(&neuron_id1, command, &user_principal1);
+        let actual_response = gov.manage_neuron(&neuron_id1, command, user_principal1);
         assert_eq!(expected_response, actual_response);
     }
 
     // RegisterVote needs to be tested with different neuron (neuron1 submitted the proposal)
     let command = Command::RegisterVote(register_vote);
     let expected_response = ManageNeuronResponse::register_vote_response();
-    let actual_response = gov.manage_neuron(&neuron_id2, command, &user_principal2);
+    let actual_response = gov.manage_neuron(&neuron_id2, command, user_principal2);
     assert_eq!(expected_response, actual_response);
 }
 
@@ -1422,7 +1424,7 @@ fn test_validate_and_execute_register_dapp_proposal() {
     // Make the proposal. Since there is only one neuron, it expected to immediately pass and
     // execute.
     let (_proposal_id, proposal_data) = canister_fixture
-        .make_default_proposal(&neuron_id, proposal, &user_principal)
+        .make_default_proposal(&neuron_id, proposal, user_principal)
         .unwrap();
 
     // Proposal should not have failed execution
@@ -1465,7 +1467,7 @@ fn test_register_dapp_canister_proposal_root_failure() {
     // Make the proposal. Since there is only one neuron, it expected to immediately pass and
     // execute. The execution will fail, but that is observed in the ProposalData.
     let (_proposal_id, proposal_data) = canister_fixture
-        .make_default_proposal(&neuron_id, proposal, &user_principal)
+        .make_default_proposal(&neuron_id, proposal, user_principal)
         .unwrap();
 
     // Proposal should have failed execution
@@ -1517,7 +1519,7 @@ fn test_validate_and_execute_deregister_dapp_proposal() {
     // Make the proposal. Since there is only one neuron, it expected to immediately pass and
     // execute.
     let (_proposal_id, proposal_data) = canister_fixture
-        .make_default_proposal(&neuron_id, proposal, &user_principal)
+        .make_default_proposal(&neuron_id, proposal, user_principal)
         .unwrap();
 
     // Proposal should not have failed execution
@@ -1565,7 +1567,7 @@ fn test_validate_and_execute_deregister_dapp_proposal_failure() {
     // Make the proposal. Since there is only one neuron, it expected to immediately pass and
     // execute.
     let (_proposal_id, proposal_data) = canister_fixture
-        .make_default_proposal(&neuron_id, proposal, &user_principal)
+        .make_default_proposal(&neuron_id, proposal, user_principal)
         .unwrap();
 
     // Proposal should have failed execution
@@ -1618,7 +1620,7 @@ fn test_validate_and_execute_deregister_dapp_proposal_fails_when_cant_set_all_co
     // Make the proposal. Since there is only one neuron, it expected to immediately pass and
     // execute.
     let (_proposal_id, proposal_data) = canister_fixture
-        .make_default_proposal(&neuron_id, proposal, &user_principal)
+        .make_default_proposal(&neuron_id, proposal, user_principal)
         .unwrap();
 
     // Proposal should have failed execution
@@ -1666,7 +1668,7 @@ fn test_validate_and_execute_register_dapp_proposal_fails_when_no_canisters_pass
         error_type: _,
         error_message,
     } = canister_fixture
-        .make_default_proposal(&neuron_id, proposal, &user_principal)
+        .make_default_proposal(&neuron_id, proposal, user_principal)
         .unwrap_err();
 
     // Proposal should not have failed execution
@@ -1984,4 +1986,218 @@ fn test_claim_swap_neurons_succeeds() {
     for followees in cf_participant_neuron.followees.values() {
         assert_eq!(followees.followees, cf_participant_neuron_params.followees);
     }
+}
+
+// If the proposal ID doesn't map to any proposal, we should not be able to vote on that ID.
+#[test]
+fn test_register_vote_fails_if_proposal_not_found() {
+    // Set up the test environment with a single neuron
+    let proposal_deadline = 10;
+    let (mut canister_fixture, user_principal, neuron_id) = GovernanceCanisterFixtureBuilder::new()
+        .set_start_time(proposal_deadline - 1)
+        .create_with_test_neuron();
+
+    // Don't insert a proposal (because that's what we're testing)
+    let proposal_id = ProposalId::from(1);
+
+    // Register a vote
+    let error = canister_fixture
+        .vote(&neuron_id, proposal_id, Vote::Yes, user_principal)
+        .unwrap_err();
+
+    // Inspect results
+    assert!(
+        error.to_string().contains("Can't find proposal."),
+        "{error:?}"
+    );
+}
+
+// If the ProposalData's ballots field doesn't contain the neuron, the neuron
+// should not be able to vote. This happens when the neuron was created after
+// the proposal was created.
+#[test]
+fn test_register_vote_fails_if_neuron_not_present_in_proposal() {
+    // Set up the test environment with a single neuron
+    let proposal_deadline = 10;
+    let (mut canister_fixture, user_principal, neuron_id) = GovernanceCanisterFixtureBuilder::new()
+        .set_start_time(proposal_deadline - 1)
+        .create_with_test_neuron();
+
+    // Insert a proposal
+    let proposal_id = ProposalId::from(1);
+    let proposal = ProposalData {
+        id: Some(proposal_id),
+        wait_for_quiet_state: Some(WaitForQuietState {
+            current_deadline_timestamp_seconds: proposal_deadline,
+        }),
+        proposal: Some(Proposal {
+            action: Some(Action::Motion(Motion::new("Test"))),
+            ..Proposal::default()
+        }),
+        // The `ballots` will be initialized to an empty map.
+        // Only neurons with an entry in `ballots` should be able to vote.
+        ..ProposalData::default()
+    };
+
+    canister_fixture.directly_insert_proposal_data(proposal);
+
+    // Register a vote
+    let error = canister_fixture
+        .vote(&neuron_id, proposal_id, Vote::Yes, user_principal)
+        .unwrap_err();
+
+    // Inspect results
+    assert!(error.to_string().contains("not eligible"), "{error:?}");
+    let proposal = canister_fixture.get_proposal_or_panic(proposal_id);
+    assert_eq!(proposal.ballots, BTreeMap::new());
+}
+
+// If the neuron has already voted, it should not be able to vote again.
+#[test]
+fn test_register_vote_fails_if_neuron_already_voted() {
+    // Set up the test environment with a single neuron
+    let proposal_deadline = 10;
+    let (mut canister_fixture, user_principal, neuron_id) = GovernanceCanisterFixtureBuilder::new()
+        .set_start_time(proposal_deadline - 1)
+        .create_with_test_neuron();
+
+    // Insert a proposal
+    let proposal_id = ProposalId::from(1);
+    let proposal = ProposalData {
+        id: Some(proposal_id),
+        wait_for_quiet_state: Some(WaitForQuietState {
+            current_deadline_timestamp_seconds: proposal_deadline,
+        }),
+        proposal: Some(Proposal {
+            action: Some(Action::Motion(Motion::new("Test"))),
+            ..Proposal::default()
+        }),
+        ballots: btreemap! {
+            neuron_id.to_string() => Ballot {
+                vote: Vote::No as i32, // Here, the neuron already voted `no`,
+                                       // so it should not be able to vote again.
+                ..Ballot::default()
+            }
+        },
+        ..ProposalData::default()
+    };
+
+    canister_fixture.directly_insert_proposal_data(proposal);
+
+    // Register a vote
+    let error = canister_fixture
+        .vote(&neuron_id, proposal_id, Vote::Yes, user_principal)
+        .unwrap_err();
+
+    // Inspect results
+    assert!(error.to_string().contains("already voted"), "{error:?}");
+    let proposal = canister_fixture.get_proposal_or_panic(proposal_id);
+    assert_eq!(
+        proposal.ballots,
+        btreemap! {
+            neuron_id.clone().to_string() => Ballot {
+                vote: Vote::No as i32,
+                ..Ballot::default()
+            }
+        }
+    );
+}
+
+// If the deadline has passed, the neuron should not be able to vote.
+#[test]
+fn test_register_vote_fails_if_past_deadline() {
+    // Set up the test environment with a single neuron
+    let proposal_deadline = 10;
+    let (mut canister_fixture, user_principal, neuron_id) = GovernanceCanisterFixtureBuilder::new()
+        // Set the start time to be after the proposal deadline, so attempts to
+        // vote on the proposal should fail.
+        .set_start_time(proposal_deadline + 1)
+        .create_with_test_neuron();
+
+    let proposal_id = ProposalId::from(1);
+    let proposal = ProposalData {
+        id: Some(proposal_id),
+        wait_for_quiet_state: Some(WaitForQuietState {
+            current_deadline_timestamp_seconds: proposal_deadline,
+        }),
+        proposal: Some(Proposal {
+            action: Some(Action::Motion(Motion::new("Test"))),
+            ..Proposal::default()
+        }),
+        ballots: btreemap! {
+            neuron_id.to_string() => Ballot {
+                vote: Vote::Unspecified as i32,
+                ..Ballot::default()
+            }
+        },
+        ..ProposalData::default()
+    };
+
+    // Register a vote
+    canister_fixture.directly_insert_proposal_data(proposal);
+    let error = canister_fixture
+        .vote(&neuron_id, proposal_id, Vote::Yes, user_principal)
+        .unwrap_err();
+
+    // Inspect results
+    assert!(error.to_string().contains("deadline"), "{error:?}");
+    let proposal = canister_fixture.get_proposal_or_panic(proposal_id);
+    assert_eq!(
+        proposal.ballots,
+        btreemap! {
+            neuron_id.clone().to_string() => Ballot {
+                vote: Vote::Unspecified as i32,
+                ..Ballot::default()
+            }
+        }
+    );
+}
+
+#[test]
+fn test_register_vote_happy() {
+    // Set up the test environment with a single neuron
+    let proposal_deadline = 10;
+    let (mut canister_fixture, user_principal, neuron_id) = GovernanceCanisterFixtureBuilder::new()
+        .set_start_time(proposal_deadline - 1)
+        .create_with_test_neuron();
+
+    // Insert a proposal
+    let proposal_id = ProposalId::from(1);
+    let proposal = ProposalData {
+        id: Some(proposal_id),
+        wait_for_quiet_state: Some(WaitForQuietState {
+            current_deadline_timestamp_seconds: proposal_deadline,
+        }),
+        proposal: Some(Proposal {
+            action: Some(Action::Motion(Motion::new("Test"))),
+            ..Proposal::default()
+        }),
+        ballots: btreemap! {
+            neuron_id.to_string() => Ballot {
+                vote: Vote::Unspecified as i32,
+                ..Ballot::default()
+            }
+        },
+        ..ProposalData::default()
+    };
+
+    canister_fixture.directly_insert_proposal_data(proposal);
+
+    // Register a vote
+    let RegisterVoteResponse {} = canister_fixture
+        .vote(&neuron_id, proposal_id, Vote::Yes, user_principal)
+        .unwrap();
+
+    // Inspect results
+    let proposal = canister_fixture.get_proposal_or_panic(proposal_id);
+    assert_eq!(
+        proposal.ballots,
+        btreemap! {
+            neuron_id.clone().to_string() => Ballot {
+                vote: Vote::Yes as i32,
+                cast_timestamp_seconds: proposal_deadline - 1,
+                ..Ballot::default()
+            }
+        }
+    );
 }
