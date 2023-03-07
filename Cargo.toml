@@ -1,6 +1,7 @@
 [workspace]
 
 members = [
+  "packages/icrc-ledger-types",
   "rs/artifact_manager",
   "rs/artifact_pool",
   "rs/async_utils",

@@ -30,6 +30,9 @@ go_deps.bzl               @dfinity-lab/teams/idx
 # [Publishing-Artifacts]
 /publish/ @dfinity-lab/teams/idx
 
+# [Packages]
+/packages/icrc-ledger-types         @dfinity-lab/teams/financial-integrations
+
 # [Documentation]
 /docs/                                                     @dfinity-lab/teams/docs-owners
 /docs/spec/replica/protocol/consensus_layer/               @dfinity-lab/teams/consensus-owners

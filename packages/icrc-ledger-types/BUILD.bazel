@@ -1,0 +1,25 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+rust_library(
+    name = "icrc_ledger_types",
+    srcs = [
+        "src/lib.rs",
+        "src/value.rs",
+    ],
+    deps = [
+        "@crate_index//:candid",
+        "@crate_index//:ic-cdk",
+        "@crate_index//:num-traits",
+        "@crate_index//:serde",
+        "@crate_index//:serde_bytes",
+        "@crate_index//:sha2",
+    ],
+)
+
+rust_test(
+    name = "test",
+    crate = ":icrc_ledger_types",
+    deps = [
+        "@crate_index//:hex",
+    ],
+)
