@@ -1,0 +1,14 @@
+[Unit]
+Description=Process Exporter
+After=syslog.target network.target
+
+[Service]
+User=root
+Group=root
+Restart=always
+ExecStart=/usr/local/bin/process-exporter \
+    -config.path "/etc/process-exporter/config.yaml" \
+    -web.listen-address "[::]:9319"
+
+[Install]
+WantedBy=multi-user.target

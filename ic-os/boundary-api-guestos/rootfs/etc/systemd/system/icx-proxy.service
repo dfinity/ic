@@ -1,0 +1,35 @@
+[Unit]
+Description=ICX Proxy Service
+After=network-online.target
+Wants=network-online.target
+After=setup-icx-proxy.service
+BindsTo=setup-icx-proxy.service
+
+[Service]
+User=root
+Group=root
+LimitNOFILE=524288
+Environment="RUST_BACKTRACE=1"
+EnvironmentFile=/run/ic-node/etc/icx-proxy/env
+ExecStart=/opt/ic/bin/icx-proxy                                  \
+    --address 127.0.0.1:9500                                     \
+    --canister-alias "personhood:g3wsl-eqaaa-aaaan-aaaaa-cai"    \
+    --canister-alias "identity:rdmx6-jaaaa-aaaaa-aaadq-cai"      \
+    --canister-alias "nns:qoctq-giaaa-aaaaa-aaaea-cai"           \
+    --canister-alias "dscvr:h5aet-waaaa-aaaab-qaamq-cai"         \
+    --ignore-url-canister-param                                  \
+    --metrics-addr "[::]:9314"                                   \
+    --root-key "/run/ic-node/etc/icx-proxy/root_key.der"         \
+    # DO NOT ADD CURLY BRACES (they prevent n-arg expansion)     \
+    $REPLICA_DOMAIN_ADDRS                                        \
+    $DOMAINS                                                     \
+    $SSL_OPTIONS
+
+Restart=always
+RestartSec=10
+KillSignal=SIGINT
+StartLimitBurst=5
+StartLimitInterval=0
+
+[Install]
+WantedBy=multi-user.target

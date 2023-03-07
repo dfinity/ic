@@ -71,6 +71,8 @@ BINARIES = {
     name = name,
     binary = BINARIES[name],
     visibility = [
+        "//ic-os/boundary-api-guestos/envs/dev:__pkg__",
+        "//ic-os/boundary-api-guestos/envs/prod:__pkg__",
         "//ic-os/boundary-guestos/envs/dev:__pkg__",
         "//ic-os/boundary-guestos/envs/dev-sev:__pkg__",
         "//ic-os/boundary-guestos/envs/prod:__pkg__",

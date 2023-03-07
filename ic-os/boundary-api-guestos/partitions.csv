@@ -1,0 +1,23 @@
+# Partitions specification
+#
+# Each row takes the form:
+#   name,start,size,type,uuid,comment
+# where
+#   name: identifier used for the partition (see design doc)
+#   start: start of partition in sector units (512 bytes)
+#   size: size of partition in sector units (512 bytes)
+#   type: a typecode recognized by sfdisk
+#   uuid: uuid for partition (to ensure that the build is deterministic)
+#   comment: free-form field explaining the partition
+#
+# Note that "start" and "size" need to match up correctly, otherwise
+# partition table building will fail.
+esp   ,    2048,  204800,U,B78084E2-3363-1346-8C25-D426F26B8928,EFI system partition
+grub  ,  206848,  204800,L,6788E4CF-F456-104E-9A34-A2C58CFB0EE6,Grub bootloader modules and config
+config,  411648,  204800,L,A5BA3816-BEAA-D74D-993E-CFA5AA6BA1F6,System config store
+A_boot,  616448, 2097152,L,DDF618FE-7244-B446-A175-3296E6B9D02E,Boot partition for system A
+A_root, 2713600,20971520,L,7C0A626E-E5EA-E543-B5C5-300EB8304DB7,Root partition for system A
+A_var ,23685120,20971520,L,22D2F5A6-1E39-D247-81CF-90C95C113E21,Mutable data partition for system A
+B_boot,44656640, 2097152,L,D5214E4F-F7B0-B945-9A9B-52B9188DF4C5,Boot partition for system B
+B_root,46753792,20971520,L,A78BC3A8-376C-054A-96E7-3904B915D0C5,Root partition for system B
+B_var ,67725312,20971520,L,2237D1D1-CE96-584E-8EC5-8AE6661FAAE9,Mutable data partition for system B

@@ -1,0 +1,36 @@
+#!/bin/sh
+
+# Set up a machine-id during early boot to ensure that it is stable across
+# reboots.
+
+set -e
+
+prereqs() {
+    echo ""
+}
+
+case $1 in
+    prereqs)
+        prereqs
+        exit 0
+        ;;
+esac
+
+. /scripts/functions
+
+# Mount the config partition
+mkdir -p /mnt
+mount -t ext4 /dev/vda3 /mnt
+
+# If it contains a saved machine-id, then use it. Bind-mount it over the rootfs
+# that we are about to boot, systemd will take it as the given machine-id.
+if [ -f "/mnt/machine-id" ]; then
+    # Note that at this stage, /run has not been move-mounted to be
+    # below /root -- that will happen right afterwards before booting
+    # init.
+    cp /mnt/machine-id /run/machine-id
+    mount --bind /run/machine-id /root/etc/machine-id
+fi
+umount /mnt
+
+exit 0

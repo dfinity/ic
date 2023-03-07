@@ -1,0 +1,11 @@
+[Unit]
+Description=Setup Certificate Syncer
+DefaultDependencies=no
+After=bootstrap-ic-node.service
+Requires=bootstrap-ic-node.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecCondition=/opt/ic/bin/setup-certificate-syncer.sh
+ExecStart=/usr/bin/true
