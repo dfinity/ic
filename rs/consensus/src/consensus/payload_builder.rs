@@ -344,14 +344,23 @@ pub(crate) mod test {
                 context_version: subnet_record,
             };
 
-            let (ingress_msgs, stream_msgs, responses_from_adapter) = payload_builder
+            let batch_messages = payload_builder
                 .get_payload(Height::from(1), &prev_payloads, &context, &subnet_records)
                 .into_messages()
                 .unwrap();
 
-            assert_eq!(ingress_msgs, provided_ingress_messages);
-            assert_eq!(stream_msgs, provided_certified_streams);
-            assert_eq!(responses_from_adapter, provided_responses_from_adapter);
+            assert_eq!(
+                batch_messages.signed_ingress_msgs,
+                provided_ingress_messages
+            );
+            assert_eq!(
+                batch_messages.certified_stream_slices,
+                provided_certified_streams
+            );
+            assert_eq!(
+                batch_messages.bitcoin_adapter_responses,
+                provided_responses_from_adapter
+            );
         })
     }
 

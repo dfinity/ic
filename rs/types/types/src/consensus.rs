@@ -1245,28 +1245,28 @@ impl TryFrom<pb::Block> for Block {
                 .dkg_payload
                 .ok_or_else(|| String::from("Error: Block missing dkg_payload"))?,
         )?;
-        let batch = BatchPayload::new(
-            block
+        let batch = BatchPayload {
+            ingress: block
                 .ingress_payload
                 .map(crate::batch::IngressPayload::try_from)
                 .transpose()?
                 .unwrap_or_default(),
-            block
+            xnet: block
                 .xnet_payload
                 .map(crate::batch::XNetPayload::try_from)
                 .transpose()?
                 .unwrap_or_default(),
-            block
+            self_validating: block
                 .self_validating_payload
                 .map(crate::batch::SelfValidatingPayload::try_from)
                 .transpose()?
                 .unwrap_or_default(),
-            block
+            canister_http: block
                 .canister_http_payload
                 .map(crate::batch::CanisterHttpPayload::try_from)
                 .transpose()?
                 .unwrap_or_default(),
-        );
+        };
         let payload = match dkg_payload {
             dkg::Payload::Summary(summary) => {
                 assert!(

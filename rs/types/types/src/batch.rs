@@ -80,37 +80,23 @@ pub struct BatchPayload {
 }
 
 /// Return ingress messages, xnet messages, and responses from the bitcoin adapter.
-pub type BatchMessages = (
-    Vec<SignedIngress>,
-    BTreeMap<SubnetId, CertifiedStreamSlice>,
-    Vec<BitcoinAdapterResponse>,
-);
+pub struct BatchMessages {
+    pub signed_ingress_msgs: Vec<SignedIngress>,
+    pub certified_stream_slices: BTreeMap<SubnetId, CertifiedStreamSlice>,
+    pub bitcoin_adapter_responses: Vec<BitcoinAdapterResponse>,
+}
 
 impl BatchPayload {
-    pub fn new(
-        ingress: IngressPayload,
-        xnet: XNetPayload,
-        self_validating: SelfValidatingPayload,
-        canister_http: CanisterHttpPayload,
-    ) -> Self {
-        BatchPayload {
-            ingress,
-            xnet,
-            self_validating,
-            canister_http,
-        }
-    }
-
     /// Extract and return the set of ingress and xnet messages in a
     /// BatchPayload.
     /// Return error if deserialization of ingress payload fails.
     #[allow(clippy::result_large_err)]
     pub fn into_messages(self) -> Result<BatchMessages, InvalidIngressPayload> {
-        Ok((
-            self.ingress.try_into()?,
-            self.xnet.stream_slices,
-            self.self_validating.0,
-        ))
+        Ok(BatchMessages {
+            signed_ingress_msgs: self.ingress.try_into()?,
+            certified_stream_slices: self.xnet.stream_slices,
+            bitcoin_adapter_responses: self.self_validating.0,
+        })
     }
 
     pub fn is_empty(&self) -> bool {

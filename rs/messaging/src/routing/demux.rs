@@ -44,16 +44,15 @@ impl<'a> Demux for DemuxImpl<'a> {
     fn process_payload(&self, state: ReplicatedState, payload: BatchPayload) -> ReplicatedState {
         trace!(self.log, "Processing Payload");
 
-        let (signed_ingress_msgs, certified_stream_slices, bitcoin_adapter_responses) =
-            payload.into_messages().unwrap_or_else(|err| {
-                unreachable!(
-                    "Failed to retrieve messages from validated batch payload: {:?}",
-                    err
-                )
-            });
+        let batch_messages = payload.into_messages().unwrap_or_else(|err| {
+            unreachable!(
+                "Failed to retrieve messages from validated batch payload: {:?}",
+                err
+            )
+        });
 
         let mut decoded_slices = BTreeMap::new();
-        for (subnet_id, certified_slice) in certified_stream_slices {
+        for (subnet_id, certified_slice) in batch_messages.certified_stream_slices {
             let slice = self
                 .certified_stream_store
                 .decode_valid_certified_stream_slice(&certified_slice)
@@ -65,7 +64,8 @@ impl<'a> Demux for DemuxImpl<'a> {
             .stream_handler
             .process_stream_slices(state, decoded_slices);
 
-        let ingress_msgs: Vec<_> = signed_ingress_msgs
+        let ingress_msgs: Vec<_> = batch_messages
+            .signed_ingress_msgs
             .into_iter()
             .map(SignedIngressContent::from)
             .collect();
@@ -73,7 +73,7 @@ impl<'a> Demux for DemuxImpl<'a> {
         self.valid_set_rule
             .induct_messages(&mut state, ingress_msgs);
 
-        for response in bitcoin_adapter_responses.into_iter() {
+        for response in batch_messages.bitcoin_adapter_responses.into_iter() {
             state.push_response_bitcoin(response).unwrap_or_else(|err| {
                 debug!(
                     self.log,
