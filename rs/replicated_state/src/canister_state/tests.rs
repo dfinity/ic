@@ -1,4 +1,9 @@
+use std::collections::BTreeMap;
+use std::path::PathBuf;
+
 use super::*;
+use crate::canister_state::execution_state::CustomSection;
+use crate::canister_state::execution_state::CustomSectionType;
 use crate::canister_state::execution_state::WasmMetadata;
 use crate::canister_state::system_state::CyclesUseCase;
 use crate::CallOrigin;
@@ -607,4 +612,97 @@ fn canister_state_callback_round_trip() {
     let round_trip = Callback::try_from(pb_callback).unwrap();
 
     assert_eq!(callback, round_trip);
+}
+
+#[test]
+fn execution_state_test_partial_eq() {
+    let state_1 = ExecutionState::new(
+        Default::default(),
+        execution_state::WasmBinary::new(CanisterModule::new(vec![1, 2, 3])),
+        ExportedFunctions::new(Default::default()),
+        Memory::new_for_testing(),
+        Memory::new_for_testing(),
+        vec![Global::I64(14)],
+        WasmMetadata::default(),
+    );
+
+    assert_eq!(state_1, state_1.clone());
+
+    assert_eq!(
+        ExecutionState {
+            canister_root: PathBuf::new(),
+            ..state_1.clone()
+        },
+        state_1
+    );
+
+    assert_eq!(
+        ExecutionState {
+            session_nonce: Some(([11; 32], 10)),
+            ..state_1.clone()
+        },
+        state_1
+    );
+
+    assert_ne!(
+        ExecutionState {
+            wasm_binary: execution_state::WasmBinary::new(CanisterModule::new(vec![1, 2, 4])),
+            ..state_1.clone()
+        },
+        state_1
+    );
+
+    assert_ne!(
+        ExecutionState {
+            exports: ExportedFunctions::new(BTreeSet::from([WasmMethod::System(
+                SystemMethod::CanisterGlobalTimer
+            )])),
+            ..state_1.clone()
+        },
+        state_1
+    );
+    let mut memory = Memory::new_for_testing();
+    memory.size = NumWasmPages::from(1);
+    assert_ne!(
+        ExecutionState {
+            wasm_memory: memory.clone(),
+            ..state_1.clone()
+        },
+        state_1
+    );
+    assert_ne!(
+        ExecutionState {
+            stable_memory: memory,
+            ..state_1.clone()
+        },
+        state_1
+    );
+
+    assert_ne!(
+        ExecutionState {
+            exported_globals: vec![Global::I64(13)],
+            ..state_1.clone()
+        },
+        state_1
+    );
+    let mut custom_sections: BTreeMap<String, CustomSection> = BTreeMap::new();
+    custom_sections.insert(
+        String::from("candid"),
+        CustomSection::new(CustomSectionType::Private, vec![0; 10 * 1024]),
+    );
+    assert_ne!(
+        ExecutionState {
+            metadata: WasmMetadata::new(custom_sections),
+            ..state_1.clone()
+        },
+        state_1
+    );
+
+    assert_ne!(
+        ExecutionState {
+            last_executed_round: ExecutionRound::from(12345),
+            ..state_1.clone()
+        },
+        state_1
+    );
 }

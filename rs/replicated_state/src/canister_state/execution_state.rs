@@ -410,16 +410,37 @@ pub struct ExecutionState {
 // equality (and doesn't need to be).
 impl PartialEq for ExecutionState {
     fn eq(&self, rhs: &Self) -> bool {
+        // Destruction is done on purpose, to ensure if the new
+        // field is added to 'ExecutionState' compiler will throw
+        // an error. Hence pointing to appropriate change here.
+        let &ExecutionState {
+            canister_root: _,
+            session_nonce: _,
+            ref wasm_binary,
+            ref wasm_memory,
+            ref stable_memory,
+            ref exported_globals,
+            ref exports,
+            ref metadata,
+            ref last_executed_round,
+        } = rhs;
+
         (
             &self.wasm_binary.binary,
             &self.wasm_memory,
+            &self.stable_memory,
             &self.exported_globals,
             &self.exports,
+            &self.metadata,
+            &self.last_executed_round,
         ) == (
-            &rhs.wasm_binary.binary,
-            &rhs.wasm_memory,
-            &rhs.exported_globals,
-            &rhs.exports,
+            &wasm_binary.binary,
+            wasm_memory,
+            stable_memory,
+            exported_globals,
+            exports,
+            metadata,
+            last_executed_round,
         )
     }
 }
