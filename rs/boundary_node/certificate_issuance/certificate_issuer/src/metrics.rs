@@ -125,7 +125,7 @@ impl<T: Update> Update for WithMetrics<T> {
         counter.add(&cx, 1, labels);
         recorder.record(&cx, duration, labels);
 
-        info!(action = action.as_str(), id = %id, typ = ?typ, status, duration, error = ?out.as_ref().err());
+        info!(action = action.as_str(), %id, typ = ?typ, status, duration, error = ?out.as_ref().err());
 
         out
     }
@@ -161,7 +161,7 @@ impl<T: Remove> Remove for WithMetrics<T> {
         counter.add(&cx, 1, labels);
         recorder.record(&cx, duration, labels);
 
-        info!(action = action.as_str(), id = %id, status, duration, error = ?out.as_ref().err());
+        info!(action = action.as_str(), %id, status, duration, error = ?out.as_ref().err());
 
         out
     }
@@ -197,7 +197,7 @@ impl<T: Get> Get for WithMetrics<T> {
         counter.add(&cx, 1, labels);
         recorder.record(&cx, duration, labels);
 
-        info!(action = action.as_str(), id = %id, status, duration, error = ?out.as_ref().err());
+        info!(action = action.as_str(), %id, status, duration, error = ?out.as_ref().err());
 
         out
     }
@@ -233,7 +233,7 @@ impl<T: Queue> Queue for WithMetrics<T> {
         counter.add(&cx, 1, labels);
         recorder.record(&cx, duration, labels);
 
-        info!(action = action.as_str(), id = %id, t, status, duration, error = ?out.as_ref().err());
+        info!(action = action.as_str(), %id, t, status, duration, error = ?out.as_ref().err());
 
         out
     }
@@ -558,7 +558,7 @@ impl<T: certificate::Upload> certificate::Upload for WithMetrics<T> {
         counter.add(&cx, 1, labels);
         recorder.record(&cx, duration, labels);
 
-        info!(action = action.as_str(), id = %id, status, duration, error = ?out.as_ref().err());
+        info!(action = action.as_str(), %id, status, duration, error = ?out.as_ref().err());
 
         out
     }

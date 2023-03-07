@@ -8,7 +8,7 @@ use ic_stable_structures::Storable;
 
 pub type Id = String;
 
-#[derive(CandidType, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct EncryptedPair(
     pub Vec<u8>, // PrivateKey
     pub Vec<u8>, // Certificate
@@ -140,14 +140,14 @@ impl Storable for Registration {
     }
 }
 
-#[derive(CandidType, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct ExportPackage {
     pub name: Name,
     pub canister: Principal,
     pub pair: EncryptedPair,
 }
 
-#[derive(CandidType, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize)]
 pub enum CreateRegistrationError {
     Duplicate(Id),
     NameError(String),
@@ -155,151 +155,159 @@ pub enum CreateRegistrationError {
     UnexpectedError(String),
 }
 
-#[derive(CandidType, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize)]
 pub enum CreateRegistrationResponse {
     Ok(Id),
     Err(CreateRegistrationError),
 }
 
-#[derive(CandidType, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize)]
 pub enum GetRegistrationError {
     NotFound,
     Unauthorized,
     UnexpectedError(String),
 }
 
-#[derive(CandidType, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize)]
 pub enum GetRegistrationResponse {
     Ok(Registration),
     Err(GetRegistrationError),
 }
 
-#[derive(CandidType, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize)]
 pub enum UpdateType {
     Canister(Principal),
     State(State),
 }
 
-#[derive(CandidType, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize)]
 pub enum UpdateRegistrationError {
     NotFound,
     Unauthorized,
     UnexpectedError(String),
 }
 
-#[derive(CandidType, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize)]
 pub enum UpdateRegistrationResponse {
     Ok(()),
     Err(UpdateRegistrationError),
 }
 
-#[derive(CandidType, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize)]
 pub enum RemoveRegistrationError {
     NotFound,
     Unauthorized,
     UnexpectedError(String),
 }
 
-#[derive(CandidType, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize)]
 pub enum RemoveRegistrationResponse {
     Ok(()),
     Err(RemoveRegistrationError),
 }
 
-#[derive(CandidType, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize)]
 pub enum UploadCertificateError {
     NotFound,
     Unauthorized,
     UnexpectedError(String),
 }
 
-#[derive(CandidType, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize)]
 pub enum UploadCertificateResponse {
     Ok(()),
     Err(UploadCertificateError),
 }
 
-#[derive(CandidType, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize)]
 pub enum ExportCertificatesError {
     Unauthorized,
     UnexpectedError(String),
 }
 
-#[derive(CandidType, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize)]
 pub enum ExportCertificatesResponse {
     Ok(Vec<ExportPackage>),
     Err(ExportCertificatesError),
 }
 
-#[derive(CandidType, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize)]
 pub enum QueueTaskError {
     NotFound,
     Unauthorized,
     UnexpectedError(String),
 }
 
-#[derive(CandidType, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize)]
 pub enum QueueTaskResponse {
     Ok(()),
     Err(QueueTaskError),
 }
 
-#[derive(CandidType, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize)]
 pub enum PeekTaskError {
     NoTasksAvailable,
     Unauthorized,
     UnexpectedError(String),
 }
 
-#[derive(CandidType, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize)]
 pub enum PeekTaskResponse {
     Ok(Id),
     Err(PeekTaskError),
 }
 
-#[derive(CandidType, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize)]
 pub enum DispenseTaskError {
     NoTasksAvailable,
     Unauthorized,
     UnexpectedError(String),
 }
 
-#[derive(CandidType, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize)]
 pub enum DispenseTaskResponse {
     Ok(Id),
     Err(DispenseTaskError),
 }
 
-#[derive(CandidType, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize)]
 pub enum ModifyAllowedPrincipalError {
     Unauthorized,
     UnexpectedError(String),
 }
 
-#[derive(CandidType, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize)]
 pub enum ModifyAllowedPrincipalResponse {
     Ok(()),
     Err(ModifyAllowedPrincipalError),
 }
 
-#[derive(CandidType, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize)]
 pub enum ListAllowedPrincipalsError {
     Unauthorized,
     UnexpectedError(String),
 }
 
-#[derive(CandidType, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize)]
 pub enum ListAllowedPrincipalsResponse {
     Ok(Vec<Principal>),
     Err(ListAllowedPrincipalsError),
 }
 
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct InitArg {
+    #[serde(rename = "rootPrincipals")]
+    pub root_principals: Vec<Principal>,
+    #[serde(rename = "idSeed")]
+    pub id_seed: u128,
+}
+
 // Http Interface (for metrics)
 
-#[derive(CandidType, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct HeaderField(pub String, pub String);
 
-#[derive(CandidType, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct HttpRequest {
     pub method: String,
     pub url: String,
@@ -307,7 +315,7 @@ pub struct HttpRequest {
     pub body: Vec<u8>,
 }
 
-#[derive(CandidType, Deserialize)]
+#[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct HttpResponse {
     pub status_code: u16,
     pub headers: Vec<HeaderField>,
