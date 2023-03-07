@@ -381,7 +381,7 @@ impl<'de> Deserialize<'de> for EccScalar {
 
 #[derive(Clone, Eq, PartialEq, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
 pub enum EccScalarBytes {
-    K256([u8; 32]),
+    K256(Box<[u8; 32]>),
 }
 
 impl TryFrom<&EccScalarBytes> for EccScalar {
@@ -389,7 +389,7 @@ impl TryFrom<&EccScalarBytes> for EccScalar {
 
     fn try_from(bytes: &EccScalarBytes) -> ThresholdEcdsaResult<Self> {
         match bytes {
-            EccScalarBytes::K256(raw) => EccScalar::deserialize(EccCurveType::K256, raw),
+            EccScalarBytes::K256(raw) => EccScalar::deserialize(EccCurveType::K256, raw.as_ref()),
         }
     }
 }

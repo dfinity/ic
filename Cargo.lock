@@ -5522,6 +5522,7 @@ dependencies = [
  "ic-crypto-internal-hmac",
  "ic-crypto-internal-seed",
  "ic-crypto-internal-types",
+ "ic-crypto-secrets-containers",
  "ic-crypto-sha",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-types",

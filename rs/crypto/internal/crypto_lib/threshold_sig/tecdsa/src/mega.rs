@@ -1,6 +1,7 @@
 use crate::group::*;
 use crate::*;
 use core::fmt::{self, Debug};
+use ic_crypto_secrets_containers::SecretArray;
 use paste::paste;
 use rand::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
@@ -750,13 +751,12 @@ macro_rules! generate_serializable_keyset {
                 type Error = ThresholdEcdsaError;
 
                 fn try_from(raw: &[<MEGaPrivateKey $curve Bytes>]) -> ThresholdEcdsaResult<Self> {
-                    Self::deserialize(EccCurveType::$curve, &raw.0)
+                    Self::deserialize(EccCurveType::$curve, raw.0.expose_secret().as_ref())
                 }
             }
 
-            #[derive(Clone, Eq, PartialEq, Zeroize, ZeroizeOnDrop)]
-            pub struct [<MEGaPrivateKey $curve Bytes>]([u8; Self::SIZE]);
-            ic_crypto_internal_types::derive_serde!([<MEGaPrivateKey $curve Bytes>], [<MEGaPrivateKey $curve Bytes>]::SIZE);
+            #[derive(Clone, Eq, PartialEq, Zeroize, ZeroizeOnDrop, Serialize, Deserialize)]
+            pub struct [<MEGaPrivateKey $curve Bytes>](SecretArray<{ $priv_size }>);
 
             impl [<MEGaPrivateKey $curve Bytes>] {
                 pub const SIZE: usize = $priv_size;
@@ -774,9 +774,13 @@ macro_rules! generate_serializable_keyset {
                 fn try_from(key: &MEGaPrivateKey) -> ThresholdEcdsaResult<Self> {
                     match key.curve_type() {
                         EccCurveType::$curve => {
-                            Ok(Self(key.serialize().try_into().map_err(|e| {
+                            let mut bits: [u8; Self::SIZE] = key.serialize().try_into().map_err(|e| {
                                 ThresholdEcdsaError::SerializationError(format!("{:?}", e))
-                            })?))
+                            })?;
+
+                            let arr = SecretArray::new_and_zeroize_argument(&mut bits);
+
+                            Ok(Self(arr))
                         }
                         _ => Err(ThresholdEcdsaError::SerializationError(
                             "Wrong curve".to_string(),

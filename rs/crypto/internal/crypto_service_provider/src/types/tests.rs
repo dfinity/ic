@@ -170,7 +170,7 @@ fn should_return_correct_enum_variant() {
     assert_eq!(key.enum_variant(), "MEGaEncryptionK256");
 
     let key = CspSecretKey::IDkgCommitmentOpening(CommitmentOpeningBytes::Simple(
-        EccScalarBytes::K256([0u8; 32]),
+        EccScalarBytes::K256(Box::new([0u8; 32])),
     ));
     assert_eq!(key.enum_variant(), "IDkgCommitmentOpening");
 
