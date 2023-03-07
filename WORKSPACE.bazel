@@ -52,8 +52,11 @@ git_repository(
 )
 
 load("@rules_rust//rust:repositories.bzl", "rules_rust_dependencies", "rust_register_toolchains")
+load("@rules_rust//tools/rust_analyzer:deps.bzl", "rust_analyzer_dependencies")
 
 rules_rust_dependencies()
+
+rust_analyzer_dependencies()
 
 rust_register_toolchains(
     edition = "2021",
