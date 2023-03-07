@@ -299,11 +299,11 @@ pub fn arbitrary_threshold_ecdsa_opening() -> CspSecretKey {
     let mut rng = rand::thread_rng();
     match rng.gen::<bool>() {
         true => CspSecretKey::IDkgCommitmentOpening(CommitmentOpeningBytes::Simple(
-            EccScalarBytes::K256(rng.gen::<[u8; 32]>()),
+            EccScalarBytes::K256(Box::new(rng.gen::<[u8; 32]>())),
         )),
         false => CspSecretKey::IDkgCommitmentOpening(CommitmentOpeningBytes::Pedersen(
-            EccScalarBytes::K256(rng.gen::<[u8; 32]>()),
-            EccScalarBytes::K256(rng.gen::<[u8; 32]>()),
+            EccScalarBytes::K256(Box::new(rng.gen::<[u8; 32]>())),
+            EccScalarBytes::K256(Box::new(rng.gen::<[u8; 32]>())),
         )),
     }
 }

@@ -11,6 +11,7 @@ ic-crypto-sha = { path = "../../../../sha" }
 ic-crypto-internal-seed = { path = "../../seed" }
 ic-crypto-internal-types = { path = "../../types" }
 ic-crypto-internal-hmac = { path = "../../hmac" }
+ic-crypto-secrets-containers = { path = "../../../../secrets_containers" }
 ic-types = { path = "../../../../../types/types" }
 k256 = { version = "0.12", default-features = false, features = ["arithmetic"] }
 p256 = { version = "0.12", default-features = false, features = ["arithmetic"] }
