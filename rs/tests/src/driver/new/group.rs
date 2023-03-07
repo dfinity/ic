@@ -897,22 +897,16 @@ impl SystemTestGroup {
                             {
                                 debug!(group_ctx.log(), "Detected root completion {:?} (awaiting all running tasks to complete)", event);
                                 is_root_completed = true;
-                                debug!(group_ctx.log(), "All test events completed.");
-                                info!(group_ctx.log(), "JSON Report:\n{}", report.to_summary());
-                                info!(group_ctx.log(), "\n{report}");
-                                if let Ok(group_setup) = GroupSetup::try_read_attribute(&group_ctx.get_setup_env().unwrap()) {
-                                    info!(
-                                        group_ctx.log(),
-                                        "See replica logs in Kibana: {}\n",
-                                        kibana_link(&group_setup.farm_group_name)
-                                    );
-                                };
+                                if group_ctx.debug_keepalive {
+                                    print_report(&group_ctx, &report);
+                                }
                             }
                             _ => (),
                         };
                         if is_root_completed && report.all_tasks_finished() {
                             // No more running tasks ==> send the report
                             debug!(group_ctx.log(), "All events completed. Sending the report ...");
+                            print_report(&group_ctx, &report);
                             terminal_event_sender.send(report.clone()).unwrap();
                         }
                     }
@@ -971,6 +965,18 @@ impl SystemTestGroup {
             }
         }
     }
+}
+
+fn print_report(ctx: &GroupContext, report: &SystemTestGroupReport) {
+    info!(ctx.log(), "JSON Report:\n{}", report.to_summary());
+    info!(ctx.log(), "\n{report}");
+    if let Ok(group_setup) = GroupSetup::try_read_attribute(&ctx.get_setup_env().unwrap()) {
+        info!(
+            ctx.log(),
+            "See replica logs in Kibana: {}\n",
+            kibana_link(&group_setup.farm_group_name)
+        );
+    };
 }
 
 #[inline]
