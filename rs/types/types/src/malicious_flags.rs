@@ -30,6 +30,9 @@ pub struct MaliciousFlags {
     pub maliciously_delay_execution: Option<Duration>,
     /// Delay state sync such that it takes at least [`Duration`] time
     pub maliciously_delay_state_sync: Option<Duration>,
+    /// Alter the signed hash in the certification before verifying a
+    /// stream slice's signature.
+    pub maliciously_alter_certified_hash: bool,
 }
 
 impl MaliciousFlags {

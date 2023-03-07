@@ -100,6 +100,12 @@ const LABEL_COPY_CHUNKS: &str = "copy_chunks";
 const LABEL_PREALLOCATE: &str = "preallocate";
 const LABEL_STATE_SYNC_MAKE_CHECKPOINT: &str = "state_sync_make_checkpoint";
 
+/// Labels for slice validation metrics
+const LABEL_VERIFY_SIG: &str = "verify";
+const LABEL_CMP_HASH: &str = "compare";
+const LABEL_VALUE_SUCCESS: &str = "success";
+const LABEL_VALUE_FAILURE: &str = "failure";
+
 #[derive(Clone)]
 pub struct StateManagerMetrics {
     state_manager_error_count: IntCounterVec,
@@ -118,6 +124,7 @@ pub struct StateManagerMetrics {
     checkpoint_metrics: CheckpointMetrics,
     manifest_metrics: ManifestMetrics,
     tip_handler_queue_length: IntGauge,
+    decode_slice_status: IntCounterVec,
 }
 
 #[derive(Clone)]
@@ -293,6 +300,20 @@ impl StateManagerMetrics {
             "Length of TipChannel queue.",
         );
 
+        let decode_slice_status = metrics_registry.int_counter_vec(
+            "state_manager_decode_slice",
+            "Statuses of slice decoding.",
+            &["op", "status"],
+        );
+
+        // Initialize all `decode_slice_status` counters with zero, so they are all
+        // exported from process start (`IntCounterVec` is really a map).
+        for op in &[LABEL_VERIFY_SIG, LABEL_CMP_HASH] {
+            for status in &[LABEL_VALUE_SUCCESS, LABEL_VALUE_FAILURE] {
+                decode_slice_status.with_label_values(&[op, status]);
+            }
+        }
+
         Self {
             state_manager_error_count,
             checkpoint_op_duration,
@@ -310,7 +331,31 @@ impl StateManagerMetrics {
             checkpoint_metrics: CheckpointMetrics::new(metrics_registry),
             manifest_metrics: ManifestMetrics::new(metrics_registry),
             tip_handler_queue_length,
+            decode_slice_status,
         }
+    }
+
+    /// Records a decode slice status for `label`.
+    fn observe_decode_slice(&self, operation: &str, success: bool) {
+        let status = if success {
+            LABEL_VALUE_SUCCESS
+        } else {
+            LABEL_VALUE_FAILURE
+        };
+        self.decode_slice_status
+            .with_label_values(&[operation, status])
+            .inc();
+    }
+
+    /// Records a decode slice status for a signature verification.
+    fn observe_decode_slice_signature_verification(&self, success: bool) {
+        self.observe_decode_slice(LABEL_VERIFY_SIG, success);
+    }
+
+    /// Records a decode slice status for a comparison of a tree's root
+    /// hash and the hash in the corresponding certification.
+    fn observe_decode_slice_hash_comparison(&self, success: bool) {
+        self.observe_decode_slice(LABEL_CMP_HASH, success);
     }
 }
 
@@ -3133,11 +3178,28 @@ impl CertifiedStreamStore for StateManagerImpl {
             certification: &Certification,
             registry_version: RegistryVersion,
             digest: Digest,
+            metrics: &StateManagerMetrics,
+            #[allow(unused_variables)] log: &ReplicaLogger,
+            #[allow(unused_variables)] malicious_flags: &MaliciousFlags,
         ) -> bool {
-            crypto_hash_of_partial_state(&digest) == certification.signed.content.hash
-                && verifier
-                    .validate(remote_subnet, certification, registry_version)
-                    .is_ok()
+            #[cfg(feature = "malicious_code")]
+            let certification = &maliciously_alter_certified_hash(
+                certification.clone(),
+                malicious_flags,
+                &remote_subnet,
+                log,
+            );
+
+            let hash_matches =
+                crypto_hash_of_partial_state(&digest) == certification.signed.content.hash;
+            let verification_status =
+                verifier.validate(remote_subnet, certification, registry_version);
+            let signature_verifies = verification_status.is_ok();
+
+            metrics.observe_decode_slice_hash_comparison(hash_matches);
+            metrics.observe_decode_slice_signature_verification(signature_verifies);
+
+            hash_matches && signature_verifies
         }
 
         let tree = stream_encoding::decode_labeled_tree(&certified_slice.payload)?;
@@ -3167,6 +3229,9 @@ impl CertifiedStreamStore for StateManagerImpl {
             &certified_slice.certification,
             registry_version,
             digest,
+            &self.metrics,
+            &self.log,
+            &self.malicious_flags,
         ) {
             return Err(DecodeStreamError::InvalidSignature(remote_subnet));
         }
@@ -3187,6 +3252,25 @@ impl CertifiedStreamStore for StateManagerImpl {
             .get_ref()
             .subnets_with_available_streams()
     }
+}
+
+#[cfg(feature = "malicious_code")]
+fn maliciously_alter_certified_hash(
+    mut certification: Certification,
+    malicious_flags: &MaliciousFlags,
+    remote_subnet: &SubnetId,
+    log: &ReplicaLogger,
+) -> Certification {
+    if malicious_flags.maliciously_alter_certified_hash {
+        info!(
+            log,
+            "[MALICIOUS] Corrupting root hash of certification at height {} in stream slice from {}",
+            certification.height,
+            remote_subnet
+        );
+        certification.signed.content.hash = CryptoHashOfPartialState::from(CryptoHash(vec![0; 32]));
+    }
+    certification
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]

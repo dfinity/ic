@@ -500,6 +500,18 @@ system_test(
 )
 
 system_test(
+    name = "xnet_malicious_slices",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "system_test_nightly",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    test_timeout = "long",
+    runtime_deps = GUESTOS_MALICIOUS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + ["//rs/rust_canisters/xnet_test:xnet-test-canister"],
+    deps = DEPENDENCIES + [":tests"],
+)
+
+system_test(
     name = "sr_app_same_nodes_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [

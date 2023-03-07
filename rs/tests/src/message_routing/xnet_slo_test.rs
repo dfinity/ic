@@ -23,23 +23,22 @@ If the NNS canisters are not deployed, the subnets will stop making progress aft
 
 end::catalog[] */
 
+use super::common::{install_canisters, parallel_async, start_all_canisters};
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::pot_dsl::{PotSetupFn, SysTestFn};
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
-    HasDependencies, HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-    NnsInstallationExt,
+    HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt,
 };
 use crate::util::{block_on, runtime_from_url};
-use canister_test::{Canister, Runtime, Wasm};
+use canister_test::{Canister, Runtime};
 use dfn_candid::candid;
 use futures::future::join_all;
-use futures::Future;
 use ic_registry_subnet_type::SubnetType;
 use slog::info;
 use std::fmt::Display;
 use std::time::Duration;
-use xnet_test::{CanisterId, Metrics};
+use xnet_test::Metrics;
 
 // Constants for all xnet tests.
 const PAYLOAD_SIZE_BYTES: u64 = 1024;
@@ -371,37 +370,6 @@ pub async fn test_async(env: TestEnv, config: Config) {
     assert!(success, "Test failed.");
 }
 
-pub async fn start_all_canisters(
-    canisters: &[Vec<Canister<'_>>],
-    payload_size_bytes: u64,
-    canister_to_subnet_rate: u64,
-) {
-    let topology: Vec<Vec<CanisterId>> = canisters
-        .iter()
-        .map(|x| x.iter().map(|y| y.canister_id_vec8()).collect())
-        .collect();
-    let mut futures = vec![];
-    for (subnet_idx, canister_idx, canister) in canisters
-        .iter()
-        .enumerate()
-        .flat_map(|(x, v)| v.iter().enumerate().map(move |(y, v)| (x, y, v)))
-    {
-        let input = (&topology, canister_to_subnet_rate, payload_size_bytes);
-        futures.push(async move {
-            let _: String = canister
-                .update_("start", candid, input)
-                .await
-                .unwrap_or_else(|_| {
-                    panic!(
-                        "Starting canister_idx={} on subnet_idx={}",
-                        canister_idx, subnet_idx
-                    )
-                });
-        });
-    }
-    futures::future::join_all(futures).await;
-}
-
 pub async fn stop_all_canister(canisters: &[Vec<Canister<'_>>]) {
     let mut futures = vec![];
     for (subnet_idx, canister_idx, canister) in canisters
@@ -447,64 +415,4 @@ pub async fn collect_metrics(canisters: &[Vec<Canister<'_>>]) -> Vec<Vec<Metrics
         });
     }
     join_all(futures.into_iter().map(|x| async { join_all(x).await })).await
-}
-
-pub async fn install_canisters(
-    env: TestEnv,
-    endpoints_runtime: &[Runtime],
-    subnets: usize,
-    canisters_per_subnet: usize,
-) -> Vec<Vec<Canister>> {
-    let logger = env.logger();
-    let wasm = Wasm::from_file(
-        env.get_dependency_path("rs/rust_canisters/xnet_test/xnet-test-canister.wasm"),
-    );
-    let mut futures: Vec<Vec<_>> = Vec::new();
-    for subnet_idx in 0..subnets {
-        futures.push(vec![]);
-        for canister_idx in 0..canisters_per_subnet {
-            let new_wasm = wasm.clone();
-            let new_logger = logger.clone();
-            futures[subnet_idx].push(async move {
-                let canister = new_wasm
-                    .clone()
-                    .install_(&endpoints_runtime[subnet_idx], vec![])
-                    .await
-                    .unwrap_or_else(|_| {
-                        panic!(
-                            "Installation of the canister_idx={} on subnet_idx={} failed.",
-                            canister_idx, subnet_idx
-                        )
-                    });
-                info!(
-                    new_logger,
-                    "Installed canister (#{:?}) {} on subnet #{:?}",
-                    canister_idx,
-                    canister.canister_id(),
-                    subnet_idx
-                );
-                canister
-            });
-        }
-    }
-    join_all(futures.into_iter().map(|x| async { join_all(x).await })).await
-}
-
-/// Concurrently executes the `call` async closure for every item in `targets`,
-/// postprocessing each result with `post` and collecting them.
-pub async fn parallel_async<I, F, Pre, Post, P, O>(targets: I, call: Pre, post: Post) -> O
-where
-    I: IntoIterator,
-    F: Future,
-    Pre: Fn(I::Item) -> F,
-    Post: Fn(usize, F::Output) -> P,
-    O: FromIterator<P>,
-{
-    let futures = targets.into_iter().map(call);
-    join_all(futures)
-        .await
-        .into_iter()
-        .enumerate()
-        .map(|(i, res)| post(i, res))
-        .collect()
 }
