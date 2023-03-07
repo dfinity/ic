@@ -9904,6 +9904,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "icrc-ledger-types"
+version = "0.1.0"
+dependencies = [
+ "candid",
+ "hex",
+ "num-traits",
+ "serde",
+ "serde_bytes",
+ "sha2 0.10.6",
+]
+
+[[package]]
 name = "icx-proxy"
 version = "0.10.1"
 dependencies = [
