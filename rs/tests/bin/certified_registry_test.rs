@@ -1,7 +1,7 @@
 use anyhow::Result;
 
 use ic_tests::driver::new::group::SystemTestGroup;
-use ic_tests::execution::registry_authentication_test::{setup, test};
+use ic_tests::nns_tests::registry_authentication_test::{setup, test};
 use ic_tests::systest;
 
 fn main() -> Result<()> {

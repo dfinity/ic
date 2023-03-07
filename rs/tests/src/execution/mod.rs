@@ -9,7 +9,6 @@ pub mod inter_canister_queries;
 pub mod malicious_input;
 pub mod nns_shielding;
 pub mod queries;
-pub mod registry_authentication_test;
 pub mod system_api_security_test;
 
 use crate::driver::{
