@@ -157,18 +157,6 @@ system-tests-hourly:
   script:
     - *run-farm-based-test
 
-system-tests-short-nightly:
-  extends:
-    - .system-tests
-    - .with-monitoring
-  variables:
-    SUITE_NAME: "nightly_short_duration"
-    cd_target_env: "NIGHTLY"
-    SYSTEM_TESTS_TIMEOUT: "3000"  # 50 mins
-  timeout: 60 minutes # this CI job timeout should be a bit larger than internal SYSTEM_TESTS_TIMEOUT
-  script:
-    - *run-farm-based-test
-
 # Stress tests: Run given job sequence every N minutes so we can easily collect failure data
 icos-deploy-stress:
   extends: .prod-stress-test

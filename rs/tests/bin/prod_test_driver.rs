@@ -2,8 +2,8 @@ use clap::Parser;
 use ic_tests::boundary_nodes_integration::boundary_nodes::BoundaryNodeHttpsConfig;
 use ic_tests::{
     api_test, basic_health_test, boundary_nodes_integration, boundary_nodes_snp_tests,
-    canister_http, driver::driver_setup::initialize_env, ledger_tests, message_routing, networking,
-    wasm_generator_test, workload_counter_canister_test,
+    driver::driver_setup::initialize_env, ledger_tests, message_routing, wasm_generator_test,
+    workload_counter_canister_test,
 };
 use ic_tests::{
     driver::{
@@ -318,30 +318,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                         ),
                     ]),
                 ),
-                /*
-                pot_with_setup(
-                    "boundary_nodes_pot",
-                    boundary_nodes_integration::boundary_nodes::config,
-                    par(vec![
-                        sys_t(
-                            "boundary_nodes_test",
-                            boundary_nodes_integration::boundary_nodes::test,
-                        ),
-                        sys_t(
-                            "boundary_nodes_nginx_valid_config_test",
-                            boundary_nodes_integration::boundary_nodes::nginx_valid_config_test,
-                        ),
-                    ]),
-                ),
-                 */
-                pot_with_setup(
-                    "firewall_priority_pot",
-                    networking::firewall_priority::config,
-                    par(vec![sys_t(
-                        "firewall_priority",
-                        networking::firewall_priority::override_firewall_rules_with_priority,
-                    )]),
-                ),
                 pot_with_setup(
                     "transaction_ledger_correctness_pot",
                     ledger_tests::transaction_ledger_correctness::config,
@@ -396,28 +372,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
         )
         .with_alert(TEST_FAILURE_CHANNEL),
     );
-
-    m.add_suite(suite(
-        "nightly_short_duration",
-        vec![
-            pot_with_setup(
-                "canister_http_remote",
-                canister_http::lib::config,
-                par(vec![sys_t(
-                    "http_basic_remote",
-                    canister_http::http_basic_remote::test,
-                )]),
-            ),
-            pot_with_setup(
-                "canister_http_time_out",
-                canister_http::lib::config,
-                seq(vec![sys_t(
-                    "http_time_out",
-                    canister_http::http_time_out::test,
-                )]),
-            ),
-        ],
-    ));
 
     m.add_suite(
         suite(
@@ -474,39 +428,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
         )
         .with_alert(TEST_FAILURE_CHANNEL),
     );
-
-    let network_robustness_loss = networking::network_robustness::loss_config();
-    let network_robustness_delay = networking::network_robustness::delay_config();
-    let network_robustness_bandwidth = networking::network_robustness::bandwidth_config();
-    m.add_suite(suite(
-        "network_robustness",
-        vec![
-            pot_with_setup(
-                "network_robustness_loss_pot",
-                network_robustness_loss.build(),
-                par(vec![sys_t(
-                    "network_robustness_loss_test",
-                    network_robustness_loss.test(),
-                )]),
-            ),
-            pot_with_setup(
-                "network_robustness_delay_pot",
-                network_robustness_delay.build(),
-                par(vec![sys_t(
-                    "network_robustness_delay_test",
-                    network_robustness_delay.test(),
-                )]),
-            ),
-            pot_with_setup(
-                "network_robustness_bandwidth_pot",
-                network_robustness_bandwidth.build(),
-                par(vec![sys_t(
-                    "network_robustness_bandwidth_test",
-                    network_robustness_bandwidth.test(),
-                )]),
-            ),
-        ],
-    ));
     m
 }
 
