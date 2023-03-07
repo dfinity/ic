@@ -66,10 +66,10 @@ alias(
 # Builds python dependencies
 compile_pip_requirements(
     name = "python-requirements",
+    timeout = "moderate",
     requirements_in = "requirements.in",
     requirements_txt = "requirements.txt",
     tags = [
-        "allow_to_fail",  # https://dfinity.atlassian.net/browse/IDX-2711
         "requires-network",
     ],
 )
