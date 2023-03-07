@@ -1,10 +1,9 @@
 use std::{cell::RefCell, cmp::Reverse, mem::size_of, thread::LocalKey, time::Duration};
 
-use candid::{CandidType, Deserialize};
 use certificate_orchestrator_interface::{
     CreateRegistrationError, CreateRegistrationResponse, DispenseTaskError, DispenseTaskResponse,
     EncryptedPair, ExportCertificatesError, ExportCertificatesResponse, GetRegistrationError,
-    GetRegistrationResponse, HeaderField, HttpRequest, HttpResponse, Id,
+    GetRegistrationResponse, HeaderField, HttpRequest, HttpResponse, Id, InitArg,
     ListAllowedPrincipalsError, ListAllowedPrincipalsResponse, ModifyAllowedPrincipalError,
     ModifyAllowedPrincipalResponse, Name, PeekTaskError, PeekTaskResponse, QueueTaskError,
     QueueTaskResponse, Registration, RemoveRegistrationError, RemoveRegistrationResponse, State,
@@ -425,14 +424,6 @@ fn init_timers_fn() {
 }
 
 // Init / Upgrade
-
-#[derive(Clone, Debug, CandidType, Deserialize)]
-struct InitArg {
-    #[serde(rename = "rootPrincipals")]
-    root_principals: Vec<Principal>,
-    #[serde(rename = "idSeed")]
-    id_seed: u128,
-}
 
 #[init]
 fn init_fn(
