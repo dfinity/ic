@@ -1,10 +1,5 @@
 use clap::Parser;
-use ic_tests::boundary_nodes_integration::boundary_nodes::BoundaryNodeHttpsConfig;
-use ic_tests::{
-    api_test, basic_health_test, boundary_nodes_integration, boundary_nodes_snp_tests,
-    driver::driver_setup::initialize_env, ledger_tests, message_routing,
-    workload_counter_canister_test,
-};
+use ic_tests::{driver::driver_setup::initialize_env, ledger_tests, message_routing};
 use ic_tests::{
     driver::{
         cli::{CliArgs, DriverSubCommand, ValidatedCliProcessTestsArgs, ValidatedCliRunTestsArgs},
@@ -14,7 +9,6 @@ use ic_tests::{
         pot_dsl::*,
         test_env::TestEnv,
     },
-    par, seq,
     test_suites::test_suite::get_e2e_suites,
 };
 use regex::Regex;
@@ -204,129 +198,15 @@ fn get_test_suites() -> HashMap<String, Suite> {
 
     m.add_suite(
         suite(
-            "boundary_nodes_pre_master",
-            vec![pot_with_setup(
-                "boundary_nodes_pot",
-                boundary_nodes_integration::boundary_nodes::mk_setup(BoundaryNodeHttpsConfig::AcceptInvalidCertsAndResolveClientSide),
-                seq!(
-                    par!(
-                        sys_t(
-                            "boundary_nodes_canister_test",
-                            boundary_nodes_integration::boundary_nodes::canister_test,
-                        ),
-                        sys_t(
-                            "boundary_nodes_http_canister_test",
-                            boundary_nodes_integration::boundary_nodes::http_canister_test,
-                        ),
-                        sys_t(
-                            "boundary_nodes_nginx_valid_config_test",
-                            boundary_nodes_integration::boundary_nodes::nginx_valid_config_test,
-                        ),
-                        sys_t(
-                            "boundary_nodes_redirect_http_to_https_test",
-                            boundary_nodes_integration::boundary_nodes::redirect_http_to_https_test,
-                        ),
-                        sys_t(
-                            "boundary_nodes_redirect_to_dashboard_test",
-                            boundary_nodes_integration::boundary_nodes::redirect_to_dashboard_test,
-                        ),
-                        sys_t(
-                            "boundary_nodes_redirect_to_non_raw_test",
-                            boundary_nodes_integration::boundary_nodes::redirect_to_non_raw_test,
-                        ),
-                        sys_t(
-                            "boundary_nodes_sw_test",
-                            boundary_nodes_integration::boundary_nodes::sw_test,
-                        ),
-                        sys_t(
-                            "boundary_nodes_icx_proxy_test",
-                            boundary_nodes_integration::boundary_nodes::icx_proxy_test,
-                        ),
-                        sys_t(
-                            "boundary_nodes_direct_to_replica_test",
-                            boundary_nodes_integration::boundary_nodes::direct_to_replica_test,
-                        ),
-                        sys_t(
-                            "boundary_nodes_direct_to_replica_rosetta_test",
-                            boundary_nodes_integration::boundary_nodes::direct_to_replica_rosetta_test,
-                        ),
-                        sys_t(
-                            "boundary_nodes_direct_to_replica_options_test",
-                            boundary_nodes_integration::boundary_nodes::direct_to_replica_options_test,
-                        ),
-                        sys_t(
-                            "boundary_nodes_seo_test",
-                            boundary_nodes_integration::boundary_nodes::seo_test,
-                        ),
-                    ),
-                    sys_t(
-                        "boundary_nodes_denylist_test",
-                        boundary_nodes_integration::boundary_nodes::denylist_test,
-                    ),
-                    sys_t(
-                        "boundary_nodes_canister_allowlist_test",
-                        boundary_nodes_integration::boundary_nodes::canister_allowlist_test,
-                    ),
-                    sys_t(
-                        "boundary_nodes_reboot_test",
-                        boundary_nodes_integration::boundary_nodes::reboot_test,
-                    )
-                ),
-            )],
-        )
-        .with_alert(TEST_FAILURE_CHANNEL),
-    );
-
-    m.add_suite(
-        suite(
-            "boundary_nodes_sev_snp_pre_master",
-            vec![pot_with_setup(
-                "boundary_nodes_sev_snp_pot",
-                boundary_nodes_snp_tests::boundary_nodes_snp::config,
-                par(vec![
-                    sys_t(
-                        "boundary_nodes_sev_snp_kernel_test",
-                        boundary_nodes_snp_tests::boundary_nodes_snp::snp_kernel_test,
-                    ),
-                    sys_t(
-                        "boundary_nodes_sev_snp_basic_test",
-                        boundary_nodes_snp_tests::boundary_nodes_snp::snp_basic_test,
-                    ),
-                ]),
-            )
-            .with_alert(ENG_NODE_CHANNEL)],
-        )
-        .with_alert(TEST_FAILURE_CHANNEL),
-    );
-
-    m.add_suite(
-        suite(
             "pre_master",
-            vec![
-                pot_with_setup(
-                    "api_test",
-                    api_test::setup_two_ics,
-                    par(vec![
-                        sys_t(
-                            "ics_have_correct_subnet_count",
-                            api_test::ics_have_correct_subnet_count,
-                        ),
-                        // sys_t("vm_control", api_test::vm_control), disabled due to flakiness
-                        sys_t(
-                            "install_counter_canister",
-                            api_test::install_counter_canister,
-                        ),
-                    ]),
-                ),
-                pot_with_setup(
-                    "transaction_ledger_correctness_pot",
-                    ledger_tests::transaction_ledger_correctness::config,
-                    par(vec![sys_t(
-                        "transaction_ledger_correctness_test",
-                        ledger_tests::transaction_ledger_correctness::test,
-                    )]),
-                ),
-            ],
+            vec![pot_with_setup(
+                "transaction_ledger_correctness_pot",
+                ledger_tests::transaction_ledger_correctness::config,
+                par(vec![sys_t(
+                    "transaction_ledger_correctness_test",
+                    ledger_tests::transaction_ledger_correctness::test,
+                )]),
+            )],
         )
         .with_alert(TEST_FAILURE_CHANNEL),
     );
@@ -378,13 +258,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
             "hourly",
             vec![
                 pot_with_setup(
-                    "basic_health_pot_single_host",
-                    basic_health_test::config_single_host,
-                    par(vec![sys_t("basic_health_test", basic_health_test::test)]),
-                )
-                .with_alert(TEST_FAILURE_CHANNEL)
-                .with_alert(ENG_TESTING_CHANNEL),
-                pot_with_setup(
                     "token_fault_tolerance_pot",
                     ledger_tests::token_fault_tolerance::config,
                     par(vec![sys_t(
@@ -397,16 +270,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
                     message_routing::rejoin_test::config,
                     par(vec![sys_t("rejoin", message_routing::rejoin_test::test)]),
                 ),
-                pot_with_setup(
-                    "workload_counter_canister_pot",
-                    workload_counter_canister_test::config,
-                    par(vec![sys_t(
-                        "workload_counter_canister_test",
-                        workload_counter_canister_test::short_test,
-                    )]),
-                )
-                .with_alert(TEST_FAILURE_CHANNEL)
-                .with_alert(ENG_TESTING_CHANNEL),
             ],
         )
         .with_alert(TEST_FAILURE_CHANNEL),
