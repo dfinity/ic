@@ -52,6 +52,7 @@ jest_test(
         "test-setup.ts",
         "@sw_npm//:node_modules",
         "tsconfig.json",
+        "test/html-loader.js",
         "test_utils/fixtures.json",
     ],
 )

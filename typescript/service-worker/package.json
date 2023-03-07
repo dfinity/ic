@@ -34,6 +34,7 @@
     "copy-webpack-plugin": "^11.0.0",
     "eslint": "^8.11.0",
     "fake-indexeddb": "^4.0.1",
+    "html-loader": "^4.2.0",
     "html-webpack-plugin": "^5.5.0",
     "jest-cli": "^27.5.1",
     "jest-environment-node": "^27.5.1",

@@ -1,10 +1,9 @@
 import { ServiceWorkerEvents } from '../typings';
 import { CanisterResolver } from './domains';
+import { handleErrorResponse } from './views/error';
 import { RequestProcessor } from './requests';
 
 declare const self: ServiceWorkerGlobalScope;
-
-const DEBUG = true;
 
 // Always install updated SW immediately
 self.addEventListener('install', (event) => {
@@ -18,20 +17,21 @@ self.addEventListener('activate', (event) => {
 
 // Intercept and proxy all fetch requests made by the browser or DOM on this scope.
 self.addEventListener('fetch', (event) => {
+  const isNavigation = event.request.mode === 'navigate';
   try {
     const request = new RequestProcessor(event.request);
-    event.respondWith(request.perform());
+    event.respondWith(
+      request
+        .perform()
+        .catch((e) => handleErrorResponse({ isNavigation, error: e }))
+    );
   } catch (e) {
-    const error_message = String(e);
-    console.error(error_message);
-    if (DEBUG) {
-      return event.respondWith(
-        new Response(error_message, {
-          status: 501,
-        })
-      );
-    }
-    event.respondWith(new Response('Internal Error', { status: 502 }));
+    return event.respondWith(
+      handleErrorResponse({
+        isNavigation,
+        error: e,
+      })
+    );
   }
 });
 

@@ -6,7 +6,6 @@ export class RootElement extends LitElement {
   static styles = css`
     :host {
       margin: 0;
-      padding: 0;
       min-height: 100vh;
       text-align: center;
       font-size: 14px;
