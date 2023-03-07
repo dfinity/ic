@@ -332,6 +332,7 @@ pub const SAMPLE_CONFIG: &str = r#"
          maliciously_corrupt_own_state_at_heights: [],
          maliciously_disable_ingress_validation: false,
          maliciously_corrupt_ecdsa_dealings: false,
+         maliciously_alter_certified_hash: false,
        },
     },
 
