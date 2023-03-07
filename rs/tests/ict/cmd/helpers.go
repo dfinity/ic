@@ -15,7 +15,7 @@ var CYAN = "\033[0;36m"
 var NC = "\033[0m"
 
 // see https://github.com/schollz/closestmatch
-var FUZZY_SEARCH_BAG_SIZES = []int{2, 3, 4}
+var FUZZY_SEARCH_BAG_SIZES = []int{3, 4}
 
 func filter(vs []string, f func(string) bool) []string {
 	filtered := make([]string, 0)

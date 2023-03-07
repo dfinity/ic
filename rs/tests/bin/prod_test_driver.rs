@@ -2,7 +2,7 @@ use clap::Parser;
 use ic_tests::boundary_nodes_integration::boundary_nodes::BoundaryNodeHttpsConfig;
 use ic_tests::{
     api_test, basic_health_test, boundary_nodes_integration, boundary_nodes_snp_tests,
-    driver::driver_setup::initialize_env, ledger_tests, message_routing, wasm_generator_test,
+    driver::driver_setup::initialize_env, ledger_tests, message_routing,
     workload_counter_canister_test,
 };
 use ic_tests::{
@@ -412,22 +412,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
         .with_alert(TEST_FAILURE_CHANNEL),
     );
 
-    // The tests in this suite require canisters to be build prior to
-    // running the tests which is why we separate it out.
-    m.add_suite(
-        suite(
-            "wasm_generator",
-            vec![pot_with_setup(
-                "wasm_generator_pot",
-                wasm_generator_test::config,
-                par(vec![sys_t(
-                    "wasm_generator_test",
-                    wasm_generator_test::test,
-                )]),
-            )],
-        )
-        .with_alert(TEST_FAILURE_CHANNEL),
-    );
     m
 }
 
