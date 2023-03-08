@@ -211,48 +211,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
         .with_alert(TEST_FAILURE_CHANNEL),
     );
 
-    let xnet_slo_3_subnets = message_routing::xnet_slo_test::config_hotfix_slo_3_subnets();
-    m.add_suite(suite(
-        "hotfix",
-        vec![pot_with_setup(
-            "xnet_slo_3_subnets_pot",
-            xnet_slo_3_subnets.clone().build(),
-            par(vec![sys_t(
-                "xnet_slo_3_subnets_test",
-                xnet_slo_3_subnets.test(),
-            )]),
-        )],
-    ));
-
-    let xnet_slo_3_subnets = message_routing::xnet_slo_test::config_prod_slo_3_subnets();
-    m.add_suite(suite(
-        "prod_slo",
-        vec![pot_with_setup(
-            "xnet_slo_3_subnets_pot",
-            xnet_slo_3_subnets.clone().build(),
-            par(vec![sys_t(
-                "xnet_slo_3_subnets_test",
-                xnet_slo_3_subnets.test(),
-            )]),
-        )],
-    ));
-
-    let xnet_nightly_120_subnets = message_routing::xnet_slo_test::config_nightly_120_subnets();
-    m.add_suite(
-        suite(
-            "staging", //runs nightly, allowed to fail
-            vec![pot_with_setup(
-                "xnet_120_subnets_pot",
-                xnet_nightly_120_subnets.clone().build(),
-                par(vec![sys_t(
-                    "xnet_slo_120_subnets_test",
-                    xnet_nightly_120_subnets.test(),
-                )]),
-            )],
-        )
-        .with_alert(TEST_FAILURE_CHANNEL),
-    );
-
     m.add_suite(
         suite(
             "hourly",

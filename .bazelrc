@@ -68,7 +68,7 @@ build --build_tag_filters="-system_test,-upload"
 test --test_tag_filters="-system_test,-post_master,-allow_to_fail"
 test:alltests --test_tag_filters=""
 test:paritytests --test_tag_filters="-system_test,-allow_to_fail"
-test:ci --test_tag_filters="-post_master,-system_test_hourly,-system_test_nightly,-allow_to_fail"
+test:ci --test_tag_filters="-post_master,-system_test_hourly,-system_test_nightly,-system_test_staging,-system_test_hotfix,-allow_to_fail"
 
 test --test_output=errors
 test --test_env=RUST_BACKTRACE=full
