@@ -92,7 +92,7 @@ async fn fetch_main_utxos(main_account: &Account, main_address: &BitcoinAddress)
         Err(e) => {
             log!(
                 P0,
-                "[heartbeat]: failed to fetch UTXOs for the main address {}: {}",
+                "[fetch_main_utxos]: failed to fetch UTXOs for the main address {}: {}",
                 main_address.display(btc_network),
                 e
             );
@@ -129,7 +129,7 @@ async fn estimate_fee_per_vbyte() -> Option<MillisatoshiPerByte> {
             } else {
                 log!(
                     P0,
-                    "[heartbeat]: not enough data points ({}) to compute the fee",
+                    "[estimate_fee_per_vbyte]: not enough data points ({}) to compute the fee",
                     fees.len()
                 );
                 None
@@ -138,7 +138,7 @@ async fn estimate_fee_per_vbyte() -> Option<MillisatoshiPerByte> {
         Err(err) => {
             log!(
                 P0,
-                "[heartbeat]: failed to get median fee per vbyte: {}",
+                "[estimate_fee_per_vbyte]: failed to get median fee per vbyte: {}",
                 err
             );
             None
@@ -225,7 +225,7 @@ async fn submit_pending_requests() {
             }
             Err(BuildTxError::AmountTooLow) => {
                 log!(P0,
-                    "[heartbeat]: dropping requests for total BTC amount {} to addresses {} (too low to cover the fees)",
+                    "[submit_pending_requests]: dropping requests for total BTC amount {} to addresses {} (too low to cover the fees)",
                     tx::DisplayAmount(batch.iter().map(|req| req.amount).sum::<u64>()),
                     batch.iter().map(|req| req.address.display(s.btc_network)).collect::<Vec<_>>().join(",")
                 );
@@ -239,7 +239,7 @@ async fn submit_pending_requests() {
             }
             Err(BuildTxError::ZeroOutput { address, amount }) => {
                 log!(P0,
-                    "[heartbeat]: dropping a request for BTC amount {} to {} (too low to cover the fees)",
+                    "[submit_pending_requests]: dropping a request for BTC amount {} to {} (too low to cover the fees)",
                      tx::DisplayAmount(amount), address.display(s.btc_network)
                 );
 
@@ -250,7 +250,7 @@ async fn submit_pending_requests() {
                         state::audit::remove_retrieve_btc_request(s, request);
                     } else {
                         // Keep the rest of the requests in the batch, we will
-                        // try to build a new transaction on the next heartbeat.
+                        // try to build a new transaction on the next iteration.
                         requests_to_put_back.push(request);
                     }
                 }
@@ -261,7 +261,7 @@ async fn submit_pending_requests() {
             }
             Err(BuildTxError::NotEnoughFunds) => {
                 log!(P0,
-                    "[heartbeat]: not enough funds to unsigned transaction for requests at block indexes [{}]",
+                    "[submit_pending_requests]: not enough funds to unsigned transaction for requests at block indexes [{}]",
                     batch.iter().map(|req| req.block_index.to_string()).collect::<Vec<_>>().join(",")
                 );
 
@@ -274,7 +274,7 @@ async fn submit_pending_requests() {
     if let Some(req) = maybe_sign_request {
         log!(
             P1,
-            "[heartbeat]: signing a new transaction: {}",
+            "[submit_pending_requests]: signing a new transaction: {}",
             hex::encode(tx::encode_into(&req.unsigned_tx, Vec::new()))
         );
 
@@ -306,14 +306,14 @@ async fn submit_pending_requests() {
 
                 log!(
                     P1,
-                    "[heartbeat]: sending a signed transaction {}",
+                    "[submit_pending_requests]: sending a signed transaction {}",
                     hex::encode(tx::encode_into(&signed_tx, Vec::new()))
                 );
                 match management::send_transaction(&signed_tx, req.network).await {
                     Ok(()) => {
                         log!(
                             P1,
-                            "[heartbeat]: successfully sent transaction {}",
+                            "[submit_pending_requests]: successfully sent transaction {}",
                             tx::DisplayTxid(&txid),
                         );
 
@@ -337,14 +337,18 @@ async fn submit_pending_requests() {
                     Err(err) => {
                         log!(
                             P0,
-                            "[heartbeat]: failed to send a bitcoin transaction: {}",
+                            "[submit_pending_requests]: failed to send a bitcoin transaction: {}",
                             err
                         );
                     }
                 }
             }
             Err(err) => {
-                log!(P0, "[heartbeat]: failed to sign a BTC transaction: {}", err);
+                log!(
+                    P0,
+                    "[submit_pending_requests]: failed to sign a BTC transaction: {}",
+                    err
+                );
             }
         }
     }

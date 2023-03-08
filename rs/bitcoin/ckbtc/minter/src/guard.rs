@@ -166,7 +166,7 @@ mod tests {
         init(test_state_args());
         assert!(!read_state(|s| s.is_timer_running));
 
-        let guard = TimerLogicGuard::new().expect("could not grab heartbeat guard");
+        let guard = TimerLogicGuard::new().expect("could not grab timer logic guard");
         assert!(TimerLogicGuard::new().is_none());
         assert!(read_state(|s| s.is_timer_running));
 

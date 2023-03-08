@@ -62,7 +62,7 @@ fn check_invariants() -> Result<(), String> {
 
         recovered_state.check_invariants()?;
 
-        // A running heartbeat can temporarily violate invariants.
+        // A running timer can temporarily violate invariants.
         if !s.is_timer_running {
             s.check_semantically_eq(&recovered_state)?;
         }
