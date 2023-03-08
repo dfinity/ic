@@ -25,7 +25,7 @@ use ic_interfaces::{
     execution_environment::{IngressHistoryReader, QueryHandler},
     messaging::{MessageRouting, MessageRoutingError},
 };
-use ic_interfaces_registry::{RegistryClient, RegistryDataProvider, RegistryTransportRecord};
+use ic_interfaces_registry::{RegistryClient, RegistryTransportRecord};
 use ic_interfaces_state_manager::{
     PermanentStateHashError, StateHashError, StateManager, StateReader,
 };
@@ -142,25 +142,6 @@ impl Player {
         start_height: u64,
     ) -> Self {
         let (log, _async_log_guard) = new_replica_logger_from_config(&cfg.logger);
-        let DataProviderConfig::LocalStore(local_store_from_config) = cfg
-            .registry_client
-            .data_provider
-            .as_ref()
-            .expect("No registry provider found");
-
-        if start_height == 0 {
-            let data_provider = Arc::new(LocalStoreImpl::new(registry_local_store_path));
-            // Because we use the LocalStoreImpl, we know that we get the
-            // registry in one chunk when calling get_update_since().
-            let records = data_provider
-                .get_updates_since(RegistryVersion::from(0))
-                .expect("Couldn't get the initial registry contents");
-            write_records_to_local_store(
-                local_store_from_config,
-                RegistryVersion::from(0),
-                records,
-            );
-        }
 
         let data_provider = Arc::new(LocalStoreImpl::new(registry_local_store_path));
         let registry = Arc::new(RegistryClientImpl::new(data_provider, None));
