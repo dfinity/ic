@@ -19,8 +19,8 @@ mod tests;
 // This flag selects between the new and the old scheduling algorithms.
 // It will be removed once the new scheduling algorithm is rolled out.
 pub(crate) enum QuerySchedulerFlag {
-    #[allow(dead_code)]
     UseNewSchedulingAlgorithm,
+    #[allow(dead_code)]
     UseOldSchedulingAlgorithm,
 }
 
