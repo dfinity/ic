@@ -595,9 +595,29 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         "The number of Community Fund participants in the sale",
     )?;
     w.encode_gauge(
+        "sale_cf_neurons_count",
+        swap().cf_neurons_count() as f64,
+        "The number of Community Fund NNS Neurons in the sale",
+    )?;
+    w.encode_gauge(
         "sale_neuron_recipes_count",
         swap().neuron_recipes.len() as f64,
         "The current number of Neuron Recipes created by the sale",
+    )?;
+    w.encode_gauge(
+        "sale_participant_total_icp_e8s",
+        swap().participant_total_icp_e8s() as f64,
+        "The total amount of ICP contributed by direct investors and the Community Fund",
+    )?;
+    w.encode_gauge(
+        "sale_direct_investor_total_icp_e8s",
+        swap().direct_investor_total_icp_e8s() as f64,
+        "The total amount of ICP contributed by direct investors",
+    )?;
+    w.encode_gauge(
+        "sale_cf_total_icp_e8s",
+        swap().cf_total_icp_e8s() as f64,
+        "The total amount of ICP contributed by the Community Fund",
     )?;
 
     Ok(())
