@@ -13,10 +13,12 @@ pub mod eventlog;
 
 use crate::lifecycle::init::InitArgs;
 use crate::lifecycle::upgrade::UpgradeArgs;
+use crate::logs::P0;
 use crate::{address::BitcoinAddress, ECDSAPublicKey};
 use candid::{Deserialize, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_btc_types::{Network, OutPoint, Utxo};
+use ic_canister_log::log;
 use ic_icrc1::Account;
 use serde::Serialize;
 
@@ -295,7 +297,16 @@ impl CkBtcMinterState {
             self.max_time_in_queue_nanos = max_time_in_queue_nanos;
         }
         if let Some(min_conf) = min_confirmations {
-            self.min_confirmations = min_conf;
+            if min_conf < self.min_confirmations {
+                self.min_confirmations = min_conf;
+            } else {
+                log!(
+                    P0,
+                    "Didn't increase min_confirmations to {} (current value: {})",
+                    min_conf,
+                    self.min_confirmations
+                );
+            }
         }
         if let Some(mode) = mode {
             self.mode = mode;
