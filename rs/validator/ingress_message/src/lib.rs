@@ -115,6 +115,9 @@ pub enum AuthenticationError {
 
     /// Canister ID provided in delegation target is invalid and cannot be parsed.
     DelegationTargetError(String),
+
+    /// Delegation chain is too long.
+    DelegationTooLongError { length: usize, maximum: usize },
 }
 
 impl Display for AuthenticationError {
@@ -129,6 +132,11 @@ impl Display for AuthenticationError {
             AuthenticationError::InvalidPublicKey(err) => write!(f, "Invalid public key: {}", err),
             AuthenticationError::WebAuthnError(msg) => write!(f, "{}", msg),
             AuthenticationError::DelegationTargetError(msg) => write!(f, "{}", msg),
+            AuthenticationError::DelegationTooLongError { length, maximum } => write!(
+                f,
+                "Chain of delegations is too long: got {} delegations, but at most {} are allowed",
+                length, maximum
+            ),
         }
     }
 }

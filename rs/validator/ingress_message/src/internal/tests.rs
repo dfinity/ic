@@ -48,3 +48,114 @@ mod registry {
             .expect("error retrieving root public key")
     }
 }
+
+mod delegations {
+    use super::*;
+    use crate::RequestValidationError::InvalidDelegation;
+    use crate::{HttpRequestVerifier, IngressMessageVerifier, TimeProvider};
+    use ic_canister_client_sender::Ed25519KeyPair;
+    use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+    use ic_types::time::GENESIS;
+    use ic_types::Time;
+    use ic_validator_http_request_test_utils::DirectAuthenticationScheme::UserKeyPair;
+    use ic_validator_http_request_test_utils::{
+        AuthenticationScheme, DelegationChain, DirectAuthenticationScheme, HttpRequestBuilder,
+    };
+    use rand::{CryptoRng, Rng};
+
+    const MAXIMUM_NUMBER_OF_DELEGATIONS: usize = 20; // !changing this number might be breaking!//
+    const CURRENT_TIME: Time = GENESIS;
+
+    //TODO CRP-1944: add positive test for delegation chain of length 0
+
+    #[test]
+    fn should_allow_delegation_chains_of_length_up_to_20() {
+        let mut rng = reproducible_rng();
+        let mut chain_builder = DelegationChain::rooted_at(random_user_key_pair(&mut rng));
+        for number_of_delegations in 1..=20 {
+            chain_builder = chain_builder.delegate_to(random_user_key_pair(&mut rng), CURRENT_TIME);
+            let chain = chain_builder.clone().build();
+            assert_eq!(chain.len(), number_of_delegations);
+
+            let request = HttpRequestBuilder::default()
+                .with_ingress_expiry_at(CURRENT_TIME)
+                .with_authentication(AuthenticationScheme::Delegation(chain.clone()))
+                .build();
+
+            let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
+
+            assert_eq!(
+                result,
+                Ok(()),
+                "verification of delegation chain {:?} of length {} failed",
+                chain,
+                number_of_delegations
+            );
+        }
+    }
+
+    #[test]
+    fn should_fail_when_delegation_chain_length_just_above_boundary() {
+        let mut rng = reproducible_rng();
+        let request = HttpRequestBuilder::default()
+            .with_ingress_expiry_at(CURRENT_TIME)
+            .with_authentication(AuthenticationScheme::Delegation(
+                delegation_chain_of_length(
+                    MAXIMUM_NUMBER_OF_DELEGATIONS + 1,
+                    CURRENT_TIME,
+                    &mut rng,
+                ),
+            ))
+            .build();
+
+        let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
+
+        assert_matches!(result, Err(InvalidDelegation(_)))
+    }
+
+    #[test]
+    fn should_fail_when_delegation_chain_too_long() {
+        let mut rng = reproducible_rng();
+        let number_of_delegations =
+            rng.gen_range(MAXIMUM_NUMBER_OF_DELEGATIONS + 2..=2 * MAXIMUM_NUMBER_OF_DELEGATIONS);
+        let request = HttpRequestBuilder::default()
+            .with_ingress_expiry_at(CURRENT_TIME)
+            .with_authentication(AuthenticationScheme::Delegation(
+                delegation_chain_of_length(number_of_delegations, CURRENT_TIME, &mut rng),
+            ))
+            .build();
+
+        let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
+
+        assert_matches!(result, Err(InvalidDelegation(_)))
+    }
+
+    fn delegation_chain_of_length<R: Rng + CryptoRng>(
+        number_of_delegations: usize,
+        delegation_expiration: Time,
+        rng: &mut R,
+    ) -> DelegationChain {
+        assert!(
+            number_of_delegations > 0,
+            "expected a positive number of delegations"
+        );
+        let mut chain_builder = DelegationChain::rooted_at(random_user_key_pair(rng));
+        for _ in 0..number_of_delegations {
+            chain_builder =
+                chain_builder.delegate_to(random_user_key_pair(rng), delegation_expiration);
+        }
+        let chain = chain_builder.build();
+        assert_eq!(chain.len(), number_of_delegations);
+        chain
+    }
+
+    fn random_user_key_pair<R: Rng + CryptoRng>(rng: &mut R) -> DirectAuthenticationScheme {
+        UserKeyPair(Ed25519KeyPair::generate(rng))
+    }
+
+    fn verifier_at_time(current_time: Time) -> IngressMessageVerifier {
+        IngressMessageVerifier::builder()
+            .with_time_provider(TimeProvider::Constant(current_time))
+            .build()
+    }
+}

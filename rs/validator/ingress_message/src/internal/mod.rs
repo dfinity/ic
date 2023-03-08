@@ -255,6 +255,9 @@ fn to_authentication_lib_error(error: ic_validator::AuthenticationError) -> Auth
         ic_validator::AuthenticationError::DelegationTargetError(msg) => {
             AuthenticationError::DelegationTargetError(msg)
         }
+        ic_validator::AuthenticationError::DelegationTooLongError { length, maximum } => {
+            AuthenticationError::DelegationTooLongError { length, maximum }
+        }
     }
 }
 
