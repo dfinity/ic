@@ -2,7 +2,7 @@
 # description of the TLA+ command-line tools.
 
 COMMON_DEPS = [
-    "@tlaplus//jar",
+    "//third_party/tlaplus-1.8.0:tla2tools",
     "@tlaplus_community_modules//jar",
     "@tlaplus_community_modules_deps//jar",
 ]

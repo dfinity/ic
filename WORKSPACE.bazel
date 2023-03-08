@@ -331,12 +331,6 @@ aspect_bazel_lib_dependencies()
 
 # TLA+ tools
 http_jar(
-    name = "tlaplus",
-    sha256 = "6bd4b937968f7f80ea61891e79d171d3cccdf1f4e409fb841986656976ab9d32",
-    url = "https://github.com/tlaplus/tlaplus/releases/download/v1.8.0/tla2tools.jar",
-)
-
-http_jar(
     name = "tlaplus_community_modules",
     sha256 = "109e0828d192c33703d5cbc50b5b6e128acd816565616e27b3855949c7baba9c",
     url = "https://github.com/tlaplus/CommunityModules/releases/download/202302091937/CommunityModules-202302091937.jar",

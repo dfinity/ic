@@ -1,4 +1,4 @@
-load("//tlaplus:defs.bzl", "sany_test", "tla_module", "tlc_test")
+load("//bazel/tlaplus:defs.bzl", "sany_test", "tla_module", "tlc_test")
 
 tla_module(
     name = "tla_hash",

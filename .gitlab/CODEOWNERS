@@ -14,7 +14,6 @@
 
 # [Bazel]
 /bazel/                   @dfinity-lab/teams/idx
-/tlaplus/                 @dfinity-lab/teams/idx
 /third_party/             @dfinity-lab/teams/idx
 /toolchains/              @dfinity-lab/teams/idx
 /WORKSPACE.bazel          @dfinity-lab/teams/idx
