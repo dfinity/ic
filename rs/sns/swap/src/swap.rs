@@ -66,8 +66,16 @@ use crate::pb::v1::{
 /// The maximum count of participants that can be returned by ListDirectParticipants
 pub const MAX_LIST_DIRECT_PARTICIPANTS_LIMIT: u32 = 30_000;
 
+/// The default count of community fund participants that can be returned
+/// by ListCommunityFundParticipants
 const DEFAULT_LIST_COMMUNITY_FUND_PARTICIPANTS_LIMIT: u32 = 10_000;
+
+/// The maximum count of community fund participants that can be returned
+/// by ListCommunityFundParticipants
 const LIST_COMMUNITY_FUND_PARTICIPANTS_LIMIT_CAP: u32 = 10_000;
+
+/// The default count of sns neuron recipes that can be returned
+/// by ListSnsNeuronRecipes
 const DEFAULT_LIST_SNS_NEURON_RECIPES_LIMIT: u32 = 10_000;
 
 /// Range of allowed memos for neurons distributed via an SNS sale. This range is used to choose
@@ -76,11 +84,17 @@ const DEFAULT_LIST_SNS_NEURON_RECIPES_LIMIT: u32 = 10_000;
 pub const SALE_NEURON_MEMO_RANGE_START: u64 = 1_000_000;
 pub const SALE_NEURON_MEMO_RANGE_END: u64 = 10_000_000;
 
-// The principal with all bytes set to zero. The main property
-// of this principal is that for any principal p != FIRST_PRINCIPAL_BYTES
-// then p.as_slice() < FIRST_PRINCIPAL_BYTES.as_slice().
+/// The principal with all bytes set to zero. The main property
+/// of this principal is that for any principal p != FIRST_PRINCIPAL_BYTES
+/// then p.as_slice() < FIRST_PRINCIPAL_BYTES.as_slice().
 pub const FIRST_PRINCIPAL_BYTES: [u8; PrincipalId::MAX_LENGTH_IN_BYTES] =
     [0; PrincipalId::MAX_LENGTH_IN_BYTES];
+
+/// The maximum batch size of NeuronParameters included in a ClaimSwapNeuronsRequest. This
+/// value was discovered empirically and was set to 500 to:
+/// 1. Avoid the XNET message size limit of 2mb
+/// 2. Avoid having the SNS Governance canister hit the instruction limit per message.
+pub const CLAIM_SWAP_NEURONS_BATCH_SIZE: usize = 500;
 
 impl From<(Option<i32>, String)> for CanisterCallError {
     fn from((code, description): (Option<i32>, String)) -> Self {
@@ -1280,19 +1294,18 @@ impl Swap {
         neuron_parameters: &mut Vec<NeuronParameters>,
         claimable_neurons_index: &mut BTreeMap<NeuronId, &mut SnsNeuronRecipe>,
     ) -> SweepResult {
-        let batch_limit = 500_usize;
-
         log!(
             INFO,
             "Attempting to claim {} Neurons in SNS Governance. Batch size is {}",
             neuron_parameters.len(),
-            batch_limit
+            CLAIM_SWAP_NEURONS_BATCH_SIZE
         );
 
         let mut sweep_result = SweepResult::default();
 
         while !neuron_parameters.is_empty() {
-            let current_batch_limit = std::cmp::min(batch_limit, neuron_parameters.len());
+            let current_batch_limit =
+                std::cmp::min(CLAIM_SWAP_NEURONS_BATCH_SIZE, neuron_parameters.len());
 
             let batch: Vec<NeuronParameters> =
                 neuron_parameters.drain(0..current_batch_limit).collect();

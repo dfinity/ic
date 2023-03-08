@@ -22,7 +22,7 @@ use ic_sns_swap::pb::v1::{
     error_refund_icp_response, CfNeuron, CfParticipant, ErrorRefundIcpRequest,
     ErrorRefundIcpResponse, OpenRequest, Params, SweepResult,
 };
-use ic_sns_swap::swap::principal_to_subaccount;
+use ic_sns_swap::swap::{principal_to_subaccount, CLAIM_SWAP_NEURONS_BATCH_SIZE};
 use ic_sns_swap::{
     memory,
     pb::v1::{
@@ -216,8 +216,6 @@ pub fn compute_single_successful_claim_swap_neurons_response(
 pub fn compute_multiple_successful_claim_swap_neurons_response(
     neuron_recipes: &[SnsNeuronRecipe],
 ) -> Vec<ClaimSwapNeuronsResponse> {
-    let current_batch_limit = 500_usize;
-
     let swap_neurons: Vec<SwapNeuron> = neuron_recipes
         .iter()
         .map(|recipe| {
@@ -238,7 +236,7 @@ pub fn compute_multiple_successful_claim_swap_neurons_response(
         .collect();
 
     swap_neurons
-        .chunks(current_batch_limit)
+        .chunks(CLAIM_SWAP_NEURONS_BATCH_SIZE)
         .map(|chunk| ClaimSwapNeuronsResponse {
             claim_swap_neurons_result: Some(ClaimSwapNeuronsResult::Ok(ClaimedSwapNeurons {
                 swap_neurons: chunk.to_vec(),
