@@ -979,8 +979,7 @@ system_test(
     name = "canister_http_socks_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
-        "manual",
-        # "system_test_hourly",
+        "system_test_hourly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
