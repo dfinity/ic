@@ -15,6 +15,10 @@ import common.misc as misc  # noqa
 import common.workload_experiment as workload_experiment  # noqa
 
 FLAGS = gflags.FLAGS
+gflags.DEFINE_integer("initial_kb", 250, "Initial response payload size in kb.")
+gflags.DEFINE_integer("increment_kb", 250, "Increment of response payload size in kb per iteration.")
+gflags.DEFINE_integer("max_kb", 2 * 1024, "Maximum response payload size to test.")
+
 CANISTER = "response-payload-test-canister.wasm"
 
 
@@ -106,4 +110,14 @@ class ResponsePayloadExperiment(workload_experiment.WorkloadExperiment):
 if __name__ == "__main__":
 
     exp = ResponsePayloadExperiment()
-    res = exp.run_iterations([2 * 1024])
+
+    def KB(x):
+        return x * 1024
+
+    curr = FLAGS.initial_kb
+    iterations = []
+    while curr <= FLAGS.max_kb:
+        iterations.append(KB(curr))
+        curr += FLAGS.increment_kb
+
+    res = exp.run_iterations(exp.get_datapoints(iterations))

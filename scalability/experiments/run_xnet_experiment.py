@@ -39,6 +39,10 @@ gflags.DEFINE_integer(
     1,
     "Start installing canisters on subnet with given index. Useful to avoid installing in NNS.",
 )
+gflags.DEFINE_integer("initial_rps", 500, "Initial total rate at which to send Xnet messages")
+gflags.DEFINE_integer("increment_rps", 250, "Increment for total rate in each iteration")
+gflags.DEFINE_integer("max_iterations", 25, "Maximum number of iterations")
+
 
 CANISTER = "xnet-test-canister.wasm"
 
@@ -317,39 +321,46 @@ class XnetExperiment(base_experiment.BaseExperiment):
 if __name__ == "__main__":
     exp = XnetExperiment()
 
-    total_rate = FLAGS.target_rps
-    subnet_to_subnet_rate = int(math.ceil(FLAGS.target_rps / (exp.num_subnets - 1)))
-    canister_to_subnet_rate = int(math.ceil(subnet_to_subnet_rate / FLAGS.num_canisters_per_subnet))
-    print(
-        f"🚀 Running with total rate of {total_rate} ({subnet_to_subnet_rate} per subnet, {canister_to_subnet_rate} per canister)"
-    )
+    rps_iterations = []
+    config_per_iteration = []
 
-    config = {
-        "duration": FLAGS.iter_duration,
-        "payload_size": FLAGS.payload_size,
-        "num_subnets": exp.num_subnets,
-        "total_rate": total_rate,
-        "subnet_to_subnet_rate": subnet_to_subnet_rate,
-        "canister_to_subnet_rate": canister_to_subnet_rate,
-    }
+    max_capacity = None
+    iterations = exp.get_datapoints([FLAGS.initial_rps + i * FLAGS.increment_rps for i in range(FLAGS.max_iterations)])
 
-    metrics = exp.run_experiment(config)
-    output = exp.run_accepted(metrics, config)
+    for total_rate in iterations:
+        subnet_to_subnet_rate = int(math.ceil(total_rate / (exp.num_subnets - 1)))
+        canister_to_subnet_rate = int(math.ceil(subnet_to_subnet_rate / FLAGS.num_canisters_per_subnet))
+        print(
+            f"🚀 Running iteration with total rate of {total_rate} ({subnet_to_subnet_rate} per subnet, {canister_to_subnet_rate} per canister)"
+        )
+
+        config = {
+            "duration": FLAGS.iter_duration,
+            "payload_size": FLAGS.payload_size,
+            "num_subnets": exp.num_subnets,
+            "total_rate": total_rate,
+            "subnet_to_subnet_rate": subnet_to_subnet_rate,
+            "canister_to_subnet_rate": canister_to_subnet_rate,
+        }
+
+        config_per_iteration.append(config)
+        metrics = exp.run_experiment(config)
+
+        if exp.run_accepted(metrics, config):
+            max_capacity = total_rate
+            rps_iterations.append(total_rate)
 
     exp.write_summary_file(
         "run_xnet_experiment",
         {
-            "rps": total_rate,
-            "rps_max": total_rate,
-            "iter_duration": config["duration"],
+            "rps": rps_iterations,
+            "rps_max": max_capacity,
+            "config": config_per_iteration,
             "metrics": metrics,
-            "target_load": FLAGS.target_rps,
-            "t_median": 0,  # TODO correction
-            "failure_rate": 0,  # TODO correction
             "is_update": True,
+            "iter_duration": FLAGS.iter_duration,
         },
-        [FLAGS.payload_size],
-        "payload size [bytes]",
+        rps_iterations,
+        "request rate [/s]",
     )
-
     exp.end_experiment()

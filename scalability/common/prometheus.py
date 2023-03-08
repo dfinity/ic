@@ -122,21 +122,14 @@ def parse(result):
 
 
 def get_http_request_rate_for_timestamp(testnet, load_hosts, timestamp):
-    query = 'job_instance_ic_icsubnet_type_requesttype_status:http_request:rate1m{{{}, request_type=~"query"}}'.format(
+
+    # Query from: https://github.com/dfinity-lab/pfops/blob/master/environments/mainnet/prometheus-rules/rules.yaml
+    query = 'rate(replica_http_request_duration_seconds_count{{{}, request_type=~"query"}}[1m])'.format(
         get_common(load_hosts, testnet)
     )
 
     payload = {"time": timestamp, "query": query}
-
-    r = get_prometheus(payload)
-    j = json.loads(r.text)
-
-    # Ensure the returned data's timestamp matches
-    assert (
-        int(j["data"]["result"][0]["value"][0]) == timestamp
-    ), f"Timestamp incorrect in Prometheus data: {j} with query {query}"
-
-    return j
+    return json.loads(get_prometheus(payload).text)
 
 
 def get_http_request_rate(testnet, load_hosts, t_start, t_end, request_type="query"):

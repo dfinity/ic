@@ -85,7 +85,7 @@ maximum-capacity-system-baseline-query:
       
       $SHELL_WRAPPER pip3 install -r requirements.txt
 
-      $SHELL_WRAPPER python3 experiments/max_capacity_system_baseline.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --initial_rps=100 --increment_rps=50 --target_rps=4400 --max_rps=40000
+      $SHELL_WRAPPER python3 experiments/run_system_baseline_experiment.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --initial_rps=100 --increment_rps=50 --target_rps=4400 --max_rps=40000
 
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
@@ -114,7 +114,7 @@ maximum-capacity-system-baseline-update:
 
       $SHELL_WRAPPER pip3 install -r requirements.txt
       
-      $SHELL_WRAPPER python3 experiments/max_capacity_system_baseline.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --use_updates=True --initial_rps=100 --increment_rps=20 --target_rps=800 --max_rps=2000
+      $SHELL_WRAPPER python3 experiments/run_system_baseline_experiment.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --use_updates=True --initial_rps=100 --increment_rps=20 --target_rps=800 --max_rps=2000
 
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
@@ -145,7 +145,7 @@ maximum-capacity-large-memory-query:
 
       $SHELL_WRAPPER pip3 install -r requirements.txt
 
-      $SHELL_WRAPPER python3 experiments/max_capacity_large_memory.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --initial_rps=20 --increment_rps=5 --target_rps=160 --max_rps=1000
+      $SHELL_WRAPPER python3 experiments/run_large_memory_experiment.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --initial_rps=20 --increment_rps=5 --target_rps=160 --max_rps=1000
 
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
@@ -174,7 +174,7 @@ maximum-capacity-large-memory-update:
 
       $SHELL_WRAPPER pip3 install -r requirements.txt
 
-      $SHELL_WRAPPER python3 experiments/max_capacity_large_memory.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --use_updates=True --initial_rps=10 --increment_rps=3 --target_rps=25 --max_rps=500
+      $SHELL_WRAPPER python3 experiments/run_large_memory_experiment.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --use_updates=True --initial_rps=10 --increment_rps=3 --target_rps=25 --max_rps=500
 
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
@@ -203,7 +203,7 @@ maximum-capacity-multiple-large-memory-update:
 
       $SHELL_WRAPPER pip3 install -r requirements.txt
 
-      $SHELL_WRAPPER python3 experiments/max_capacity_large_memory.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --use_updates=True --initial_rps=20 --increment_rps=10 --target_rps=25 --max_rps=100 --num_canisters 15 --payload_size 5000000 --use_updates=True --iter_duration 900
+      $SHELL_WRAPPER python3 experiments/run_large_memory_experiment.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --use_updates=True --initial_rps=20 --increment_rps=10 --target_rps=25 --max_rps=100 --num_canisters 15 --payload_size 5000000 --use_updates=True --iter_duration 900
 
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
@@ -349,7 +349,7 @@ benchmark-response-payload:
 
       $SHELL_WRAPPER pip3 install -r requirements.txt
 
-      $SHELL_WRAPPER timeout 90m python3 experiments/max_capacity_response_payload_size.py --testnet "$TESTNET" --wg_testnet "$TESTNET" --wg_subnet 2
+      $SHELL_WRAPPER timeout 90m python3 experiments/run_large_payload_experiment.py --testnet "$TESTNET" --wg_testnet "$TESTNET" --wg_subnet 2
 
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
@@ -379,7 +379,7 @@ benchmark-xnet:
 
       $SHELL_WRAPPER pip3 install -r requirements.txt
 
-      $SHELL_WRAPPER python3 experiments/max_capacity_xnet.py --testnet $TESTNET --hosts_ini_filename=hosts_single_node_subnets.ini
+      $SHELL_WRAPPER python3 experiments/run_xnet_experiment.py --testnet $TESTNET --hosts_ini_filename=hosts_single_node_subnets.ini
             
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
@@ -565,7 +565,7 @@ large-response-downloading-nightly:
 
       $SHELL_WRAPPER pip3 install -r requirements.txt
       
-      $SHELL_WRAPPER timeout 1h python3 experiments/run_large_payload_experiment.py --testnet "$TESTNET" --wg_testnet "$TESTNET" --wg_subnet 2 --iter_duration 300 --target_rps=15
+      $SHELL_WRAPPER timeout 1h python3 experiments/run_large_payload_experiment.py --testnet "$TESTNET" --wg_testnet "$TESTNET" --wg_subnet 2 --iter_duration 300 --datapoints 2048
 
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       
@@ -600,7 +600,7 @@ xnet-nightly:
 
       $SHELL_WRAPPER pip3 install -r requirements.txt
       
-      $SHELL_WRAPPER timeout 1h python3 experiments/run_xnet_experiment.py --testnet "$TESTNET" --iter_duration 300 --target_rps=500
+      $SHELL_WRAPPER timeout 1h python3 experiments/run_xnet_experiment.py --testnet "$TESTNET" --iter_duration 300 --datapoints=500
 
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       

@@ -124,11 +124,7 @@ def get_iterations(target_rps=500, rps_min=50, rps_max=20000, increment=50, expo
         r = target_rps + inc
         rps.append(r)
 
-    datapoints = sorted(set([x for x in rps if x >= rps_min and x <= rps_max]))
-    num = len(datapoints)
-
-    print(f"Measuring {num} datapoints {datapoints}")
-    return datapoints
+    return sorted(set([x for x in rps if x >= rps_min and x <= rps_max]))
 
 
 def get_equally_distributed_datapoints(rps_min, rps_max, increment):
@@ -208,6 +204,7 @@ def evaluate_stop_latency_failure_iter(latency, latency_threshold, failure, fail
 
 def distribute_load_to_n(load: float, n: int):
     """Distribute the given load to n entities."""
+    assert load > 0, f"Requested to distribute load of {load} to {n} generators"
     return [math.floor(100 * load / n) / 100] * n
 
 
@@ -248,7 +245,7 @@ def load_artifacts(artifacts_path: str):
 
 def parse_datapoints(datapoints: str) -> [float]:
     """Determine the request rate to run from the given string."""
-    if re.match(r"^[0-9\-:]*$", datapoints):
+    if re.match(r"^[0-9\-:]+-[0-9\-:]+:?[0-9\-:]*$", datapoints):
         entries = datapoints.split(":")
         start, stop = tuple(map(int, entries[0].split("-")))
         steps = int(entries[1]) if len(entries) > 1 else int(math.ceil((stop - start) / 10))

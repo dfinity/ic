@@ -153,7 +153,7 @@ Make sure you have *two* testnets reserved, then:
 - Run the python script corresponding to your benchmark. A good starting point is the following, which benchmarks system overhead by stressing with query and update calls. Default are queries, use `--use_updates=True` for update calls:
 
   ```
-  $  pipenv run experiments/max_capacity_system_baseline.py --testnet $TESTNET --wg_testnet $WG_TESTNET
+  $  pipenv run experiments/run_system_baseline_experiment.py --testnet $TESTNET --wg_testnet $WG_TESTNET
   ```
 - You can observe the benchmark on the following dashboard: https://grafana.dfinity.systems/d/u016YUeGz/workload-generator-metrics?orgId=1&refresh=5s - make sure to select the target subnetwork *as well as* the subnetwork with workload generators under "IC" and "IC workload generator" at the top respectively.
 - Create the report `pipenv run generate_report.py --base_dir {your_artifacts_root_dir} --git_revision {IC_revision_your_experiment_ran_on} --timestamp {the_timestamp_marker_of_your_experiment}`. This is normally called from the suite automatically, so in many cases you won't to manually run it.
@@ -207,6 +207,8 @@ However, when running manually, it is sometimes desireable to skip some of those
 
  - Use `--iter_duration=60` or `--scale_duration=0.2` (for workload experiments) for shorter measurement duration
  - Set `--no_prometheus=True --no_instrument=True` to disable some extra steps for acquiering more data
+ - Use `--wg_testnet localhost --workload_generator_machines localhost` to run the workload generator on the local machine. While this is easier to setup (no second testnet is neede), the quality of the results might be degraded due to load generation becoming the bottleneck
+ - Use `--cache_path=/tmp/cache` to use caching for some of the lookups (e.g. the IC topology). The cache has to be manually deleted when the testnet is redeployed, as cached data in that case will be incorrect and the suite will fail with an incorrect cache.
 
 ## Trouble shooting
 
@@ -234,6 +236,7 @@ Run the following command:
 
 ```
 cd scalability
+rm -rf prometheus_vm
 pipenv run python3 common/tests/e2e-scalability-tests.py --ic_os_version $(../gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh origin/master)  --artifacts_path ../artifacts/release/ --nns_canisters ../artifacts/canisters/ --install_nns_bin ../artifacts/release/ic-nns-init
 ```
 

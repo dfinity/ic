@@ -4,6 +4,7 @@ import itertools
 import os
 import subprocess
 import sys
+import time
 import uuid
 
 import gflags
@@ -21,13 +22,14 @@ gflags.DEFINE_string("artifacts_path", "", "Path to the artifacts directory")
 
 def run(args):
     print("Running ", args)
+    t_start = time.time()
     proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     # Fetch stdout and stderr from the running process immediate to avoid
     # output appearing in an incorrect order.
     for c in iter(lambda: proc.stdout.read(1), b""):
         sys.stdout.buffer.write(c)
     proc.wait()
-    print(f"Benchmarked {args} returned with {proc.returncode}")
+    print(f"Benchmarked {args} returned with {proc.returncode} after {time.time()-t_start}s")
     assert proc.returncode == 0
 
 
@@ -63,7 +65,7 @@ def main(argv):
         base_arguments = [
             "--nns_url",
             ic_url,
-            "--no_instrument=True",
+            "--cache_path=/tmp/cache" "--no_instrument=True",
             "--no_prometheus=True",
             f"--prometheus_url=http://[{farm_instance.prometheus_ipv6}]:9090",
             f"--testnet={farm_instance.group_name}",
@@ -90,7 +92,7 @@ def main(argv):
             run(
                 [
                     "python3",
-                    "experiments/max_capacity_xnet.py",
+                    "experiments/run_xnet_experiment.py",
                     "--iter_duration",
                     "20",
                     "--tests_first_subnet_index",
@@ -110,6 +112,8 @@ def main(argv):
                     "2",
                     "--iter_duration",
                     "20",
+                    "--rps",
+                    "5",
                 ]
                 + base_arguments
             )
@@ -122,7 +126,7 @@ def main(argv):
                     "experiments/run_system_baseline_experiment.py",
                     "--iter_duration",
                     "10",
-                    "--target_rps",
+                    "--datapoints",
                     "50",
                     "--num_workload_generators",
                     "1",
@@ -150,13 +154,15 @@ def main(argv):
             run(
                 [
                     "python3",
-                    "experiments/max_capacity_response_payload_size.py",
+                    "experiments/run_large_payload_experiment.py",
                     "--iter_duration",
                     "10",
                     "--initial_kb",
                     "250",
                     "--max_kb",
                     "250",
+                    "--datapoints",
+                    "64",
                 ]
                 + base_arguments_load_test
             )
@@ -168,7 +174,7 @@ def main(argv):
                     "experiments/run_system_baseline_experiment.py",
                     "--iter_duration",
                     "10",
-                    "--target_rps",
+                    "--datapoints",
                     "50",
                     "--num_workload_generators",
                     "1",
@@ -183,7 +189,7 @@ def main(argv):
                     "experiments/run_system_baseline_experiment.py",
                     "--iter_duration",
                     "10",
-                    "--target_rps",
+                    "--datapoints",
                     "5",
                     "--use_updates=True",
                     "--num_workload_generators",
@@ -196,12 +202,10 @@ def main(argv):
             run(
                 [
                     "python3",
-                    "experiments/max_capacity_system_baseline.py",
+                    "experiments/run_system_baseline_experiment.py",
                     "--iter_duration",
                     "20",
-                    "--initial_rps",
-                    "20",
-                    "--max_rps",
+                    "--datapoints",
                     "20",
                     "--num_workload_generators",
                     "1",
@@ -213,12 +217,10 @@ def main(argv):
             run(
                 [
                     "python3",
-                    "experiments/max_capacity_system_baseline.py",
+                    "experiments/run_system_baseline_experiment.py",
                     "--iter_duration",
                     "20",
-                    "--initial_rps",
-                    "20",
-                    "--max_rps",
+                    "--datapoints",
                     "20",
                     "--num_workload_generators",
                     "1",
@@ -252,7 +254,7 @@ def main(argv):
                     "experiments/run_large_memory_experiment.py",
                     "--iter_duration",
                     "10",
-                    "--target_rps",
+                    "--datapoints",
                     "5",
                     "--use_updates=True",
                 ]
@@ -263,12 +265,10 @@ def main(argv):
             run(
                 [
                     "python3",
-                    "experiments/max_capacity_large_memory.py",
+                    "experiments/run_large_memory_experiment.py",
                     "--iter_duration",
                     "20",
-                    "--initial_rps",
-                    "20",
-                    "--max_rps",
+                    "--datapoints",
                     "20",
                 ]
                 + base_arguments_load_test
@@ -278,12 +278,10 @@ def main(argv):
             run(
                 [
                     "python3",
-                    "experiments/max_capacity_large_memory.py",
+                    "experiments/run_large_memory_experiment.py",
                     "--iter_duration",
                     "20",
-                    "--initial_rps",
-                    "20",
-                    "--max_rps",
+                    "--datapoints",
                     "20",
                 ]
                 + base_arguments_load_test
@@ -296,9 +294,7 @@ def main(argv):
                     "experiments/run_mixed_workload_experiment.py",
                     "--workload",
                     "workloads/tiny.toml",
-                    "--initial_rps",
-                    "20",
-                    "--max_rps",
+                    "--datapoints",
                     "20",
                 ]
                 + base_arguments_load_test

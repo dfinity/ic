@@ -4,6 +4,7 @@ Purpose: Measure IC performance give a complex workload.
 
 The workload configuration to use is being read from a seperate workload description file.
 """
+import math
 import os
 import shutil
 import sys
@@ -80,7 +81,7 @@ class MixedWorkloadExperiment(workload_experiment.WorkloadExperiment):
         curr_workload_generator_index = 0
         for wl_idx, wl in enumerate(self.workload_description):
             print(wl)
-            rps = int(config["load_total"] * wl.rps_ratio)
+            rps = int(math.ceil(config["load_total"] * wl.rps_ratio))
             if FLAGS.scale_duration > 0:
                 scaled_duration = int(wl.duration * FLAGS.scale_duration)
                 wl = wl._replace(duration=scaled_duration)
@@ -157,7 +158,9 @@ class MixedWorkloadExperiment(workload_experiment.WorkloadExperiment):
 
 if __name__ == "__main__":
     exp = MixedWorkloadExperiment()
-    iterations = misc.get_iterations(FLAGS.target_rps, FLAGS.initial_rps, FLAGS.max_rps, FLAGS.increment_rps, 2)
+    iterations = exp.get_datapoints(
+        misc.get_iterations(FLAGS.target_rps, FLAGS.initial_rps, FLAGS.max_rps, FLAGS.increment_rps, 2)
+    )
     print(f"🚀 Running with iterations: {iterations}")
     exp.run_iterations(iterations)
     exp.end_experiment()

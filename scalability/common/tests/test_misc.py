@@ -33,6 +33,7 @@ class Test_Misc(unittest.TestCase):
             print(f"{s} -> {r}")
             return r
 
+        assert call("42") == [42.0]
         assert call("1-10") == [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]
         assert call("1-10:2") == [1.0, 3.0, 5.0, 7.0, 9.0]
         assert call("1,42,1337") == [1.0, 42.0, 1337.0]

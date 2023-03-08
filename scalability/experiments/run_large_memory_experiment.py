@@ -45,6 +45,11 @@ CANISTER = "memory-test-canister"
 FLAGS = gflags.FLAGS
 gflags.DEFINE_integer("payload_size", 5000000, "Payload size to pass to memory test canister")
 gflags.DEFINE_integer("num_canisters", 1, "Number of canisters to install and benchmark against.")
+gflags.DEFINE_integer("initial_rps", 20, "Starting number for requests per second.")
+gflags.DEFINE_integer(
+    "max_rps", 1000, "Maximum requests per second to be sent. Experiment will wrap up beyond this number."
+)
+gflags.DEFINE_integer("increment_rps", 5, "Increment of requests per second per round.")
 
 
 class LargeMemoryExperiment(workload_experiment.WorkloadExperiment):
@@ -184,5 +189,7 @@ class LargeMemoryExperiment(workload_experiment.WorkloadExperiment):
 if __name__ == "__main__":
     misc.parse_command_line_args()
     exp = LargeMemoryExperiment()
-    iterations = [FLAGS.target_rps]
+    iterations = exp.get_datapoints(
+        misc.get_iterations(FLAGS.target_rps, FLAGS.initial_rps, FLAGS.max_rps, FLAGS.increment_rps, 1.5)
+    )
     exp.run_iterations(iterations)
