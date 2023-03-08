@@ -5882,6 +5882,9 @@ impl Governance {
         caller: &PrincipalId,
         pb: &manage_neuron::RegisterVote,
     ) -> Result<(), GovernanceError> {
+        let now_seconds = self.env.now();
+        let voting_period_seconds = self.voting_period_seconds();
+
         let neuron = self.proto.neurons.get_mut(&neuron_id.id).ok_or_else(||
             // The specified neuron is not present.
             GovernanceError::new_with_message(ErrorType::NotFound, "Neuron not found"))?;
@@ -5896,14 +5899,15 @@ impl Governance {
         let proposal_id = pb.proposal.as_ref().ok_or_else(||
             // Proposal not specified.
             GovernanceError::new_with_message(ErrorType::PreconditionFailed, "Vote must include a proposal id."))?;
-        let proposal = &mut (self.proto.proposals.get_mut(&proposal_id.id).ok_or_else(||
+        let proposal = self.proto.proposals.get_mut(&proposal_id.id).ok_or_else(||
             // Proposal not found.
-            GovernanceError::new_with_message(ErrorType::NotFound, "Can't find proposal."))?);
+            GovernanceError::new_with_message(ErrorType::NotFound, "Can't find proposal."))?;
         let topic = proposal
             .proposal
             .as_ref()
             .map(|p| p.topic())
             .unwrap_or(Topic::Unspecified);
+
         let vote = Vote::from_i32(pb.vote).unwrap_or(Vote::Unspecified);
         if vote == Vote::Unspecified {
             // Invalid vote specified, i.e., not yes or no.
@@ -5912,6 +5916,18 @@ impl Governance {
                 "Invalid vote specified.",
             ));
         }
+
+        // Check if the proposal is still open for voting.
+        let voting_period_seconds = voting_period_seconds(topic);
+        let accepts_vote = proposal.accepts_vote(now_seconds, voting_period_seconds);
+        if !accepts_vote {
+            // Deadline has passed, so the proposal cannot be voted on
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "Proposal deadline has passed.",
+            ));
+        }
+
         let mut neuron_ballot = proposal.ballots.get_mut(&neuron_id.id).ok_or_else(||
             // This neuron is not eligible to vote on this proposal.
             GovernanceError::new_with_message(ErrorType::NotAuthorized, "Neuron not authorized to vote on proposal."))?;
@@ -5922,6 +5938,7 @@ impl Governance {
                 "Neuron already voted on proposal.",
             ));
         }
+
         if topic == Topic::NeuronManagement {
             // No following for manage neuron proposals.
             neuron_ballot.vote = vote as i32

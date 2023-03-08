@@ -55,9 +55,9 @@ use ic_nns_governance::{
         settle_community_fund_participation, swap_background_information, AddOrRemoveNodeProvider,
         ApproveGenesisKyc, Ballot, BallotInfo, DerivedProposalInformation, Empty,
         ExecuteNnsFunction, Governance as GovernanceProto, GovernanceError, KnownNeuron,
-        KnownNeuronData, ListNeurons, ListNeuronsResponse, ListProposalInfo, ManageNeuron, Motion,
-        NetworkEconomics, Neuron, NeuronState, NnsFunction, NodeProvider, OpenSnsTokenSwap,
-        Proposal, ProposalData,
+        KnownNeuronData, ListNeurons, ListNeuronsResponse, ListProposalInfo, ManageNeuron,
+        ManageNeuronResponse, Motion, NetworkEconomics, Neuron, NeuronState, NnsFunction,
+        NodeProvider, OpenSnsTokenSwap, Proposal, ProposalData,
         ProposalRewardStatus::{self, AcceptVotes, ReadyToSettle},
         ProposalStatus::{self, Rejected},
         RewardEvent, RewardNodeProvider, RewardNodeProviders, SetDefaultFollowees,
@@ -1706,6 +1706,72 @@ async fn test_no_default_follow_for_governance() {
         gov.get_proposal_data(ProposalId { id: 1 })
             .unwrap()
             .status()
+    );
+}
+
+/// Here we test that following doesn't apply to the Governance topic.
+///
+/// Neuron 1 makes a proposal.
+///
+/// Neurons 5, 6, 7, 8 vote yes.
+///
+/// As no following applies, the proposal should not be adopted until
+/// neuron 8 votes yes as default following is disabled for governance
+/// proposals.
+#[tokio::test]
+async fn test_no_voting_after_deadline() {
+    let mut driver = fake::FakeDriver::default();
+    // current time is assumed to be DEFAULT_TEST_START_TIMESTAMP_SECONDS
+    let mut gov = Governance::new(
+        fixture_for_following(),
+        driver.get_fake_env(),
+        driver.get_fake_ledger(),
+        driver.get_fake_cmc(),
+    );
+    let proposal_id = gov
+        .make_proposal(
+            &NeuronId { id: 1 },
+            // Must match neuron 1's serialized_id.
+            &principal(1),
+            &Proposal {
+                title: Some("dummy title".to_string()),
+                summary: "test".to_string(),
+                action: Some(proposal::Action::Motion(Motion {
+                    motion_text: "dummy text".to_string(),
+                })),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    let proposal_data = gov.get_proposal_data(proposal_id).unwrap();
+    let deadline_seconds = proposal_data
+        .wait_for_quiet_state
+        .as_ref()
+        .unwrap()
+        .current_deadline_timestamp_seconds;
+    driver.advance_time_by(deadline_seconds + 1 - DEFAULT_TEST_START_TIMESTAMP_SECONDS);
+
+    // 2. Cast vote
+    let result = fake::register_vote(
+        &mut gov,
+        principal(5),
+        NeuronId { id: 5 },
+        ProposalId { id: 1 },
+        Vote::Yes,
+    );
+
+    // 3. Inspect results
+    assert_eq!(
+        result,
+        ManageNeuronResponse {
+            command: Some(manage_neuron_response::Command::Error(
+                GovernanceError::new_with_message(
+                    PreconditionFailed,
+                    "Proposal deadline has passed.",
+                )
+            ))
+        }
     );
 }
 
@@ -9715,13 +9781,31 @@ fn wait_for_quiet_test_helper(
         if let Some(vote_and_time) = neuron_vote.vote_and_time {
             fake_driver.advance_time_by(vote_and_time.1 - time_since_proposal_seconds);
             time_since_proposal_seconds = vote_and_time.1;
-            fake::register_vote_assert_success(
+            let result = fake::register_vote(
                 &mut gov,
                 principal(i as u64),
                 NeuronId { id: i as u64 },
                 pid,
                 vote_and_time.0,
             );
+            let successful_response = ManageNeuronResponse {
+                command: Some(manage_neuron_response::Command::RegisterVote(
+                    manage_neuron_response::RegisterVoteResponse {},
+                )),
+            };
+            let deadline_passed_response = ManageNeuronResponse {
+                command: Some(manage_neuron_response::Command::Error(
+                    GovernanceError::new_with_message(
+                        PreconditionFailed,
+                        "Proposal deadline has passed.",
+                    ),
+                )),
+            };
+            if result == successful_response || result == deadline_passed_response {
+                // Vote was successful or the deadline has passed
+            } else {
+                panic!("Unexpected response: {:?}", result);
+            }
         } else {
             break;
         }

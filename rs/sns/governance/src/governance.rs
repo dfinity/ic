@@ -3077,13 +3077,8 @@ impl Governance {
         }
 
         // Check if the proposal is still open for voting.
-        let wait_for_quiet_state = proposal.wait_for_quiet_state.as_ref().ok_or_else(|| {
-            GovernanceError::new_with_message(
-                ErrorType::InvalidProposal,
-                "ProposalData must have wait_for_quiet_state.",
-            )
-        })?;
-        if now_seconds > wait_for_quiet_state.current_deadline_timestamp_seconds {
+        let deadline = proposal.get_deadline_timestamp_seconds();
+        if now_seconds > deadline {
             // Deadline has passed, so the proposal cannot be voted on
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
