@@ -40,7 +40,7 @@ tla_module = rule(
 Declares a single TLA+ module.
 
 ```python
-load("//tlaplus:defs.bzl", "tla_module")
+load("//bazel/tlaplus:defs.bzl", "tla_module")
 
 tla_module(
     name = "spec",
@@ -81,14 +81,14 @@ tlc_test = rule(
     attrs = {
         "spec": attr.label(providers = [TlaModuleInfo]),
         "config": attr.label(allow_single_file = [".cfg"]),
-        "_tlc": attr.label(default = "//tlaplus:tlc", executable = True, cfg = "exec"),
+        "_tlc": attr.label(default = "//bazel/tlaplus:tlc", executable = True, cfg = "exec"),
     },
     test = True,
     doc = """\
 Defines a test that runs TLC on a specification.
 
 ```python
-load("//tlaplus:defs.bzl", "tla_module", "tlc_test")
+load("//bazel/tlaplus:defs.bzl", "tla_module", "tlc_test")
 
 tla_module(
     name = "spec",
@@ -133,7 +133,7 @@ sany_test = rule(
     attrs = {
         "module": attr.label(providers = [TlaModuleInfo]),
         "_sany": attr.label(
-            default = Label("//tlaplus:sany"),
+            default = Label("//bazel/tlaplus:sany"),
             executable = True,
             cfg = "exec",
         ),

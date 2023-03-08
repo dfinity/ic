@@ -1,0 +1,16 @@
+"""
+This package provides a stable version of the TLA+ tools.
+Visit https://github.com/tlaplus/tlaplus/releases if you need to update the jar file.
+"""
+
+package(default_visibility = ["//visibility:public"])
+
+# NOTE: we committed the jar to the repo because version 1.8.0 is
+# in pre-release stage so its artifact hash keeps changing.
+# We should switch to the official 1.8.0 release once it's available.
+java_import(
+    name = "tla2tools",
+    jars = [
+        ":tla2tools.jar",
+    ],
+)
