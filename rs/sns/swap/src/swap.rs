@@ -277,11 +277,19 @@ impl Swap {
     }
 
     /// The total amount of ICP contributed by direct investors.
-    fn direct_investor_total_icp_e8s(&self) -> u64 {
+    pub fn direct_investor_total_icp_e8s(&self) -> u64 {
         self.buyers
             .values()
             .map(|x| x.amount_icp_e8s())
             .fold(0, |sum, v| sum.saturating_add(v))
+    }
+
+    /// The count of unique CommunityFund Neurons.
+    pub fn cf_neurons_count(&self) -> u64 {
+        self.cf_participants
+            .iter()
+            .flat_map(|cf_participant| &cf_participant.cf_neurons)
+            .count() as u64
     }
 
     /// Determines if the Sale is in it's terminal state
@@ -3848,5 +3856,58 @@ mod tests {
                 .unwrap()
                 .is_some());
         }
+    }
+
+    #[test]
+    fn test_cf_neuron_count() {
+        let cf_participants = vec![
+            CfParticipant {
+                hotkey_principal: PrincipalId::new_user_test_id(992899).to_string(),
+                cf_neurons: vec![
+                    CfNeuron {
+                        nns_neuron_id: 1,
+                        amount_icp_e8s: 698047,
+                    },
+                    CfNeuron {
+                        nns_neuron_id: 2,
+                        amount_icp_e8s: 303030,
+                    },
+                ],
+            },
+            CfParticipant {
+                hotkey_principal: PrincipalId::new_user_test_id(800257).to_string(),
+                cf_neurons: vec![CfNeuron {
+                    nns_neuron_id: 3,
+                    amount_icp_e8s: 678574,
+                }],
+            },
+            CfParticipant {
+                hotkey_principal: PrincipalId::new_user_test_id(818371).to_string(),
+                cf_neurons: vec![
+                    CfNeuron {
+                        nns_neuron_id: 4,
+                        amount_icp_e8s: 305256,
+                    },
+                    CfNeuron {
+                        nns_neuron_id: 5,
+                        amount_icp_e8s: 100000,
+                    },
+                    CfNeuron {
+                        nns_neuron_id: 6,
+                        amount_icp_e8s: 1010101,
+                    },
+                    CfNeuron {
+                        nns_neuron_id: 7,
+                        amount_icp_e8s: 102123,
+                    },
+                ],
+            },
+        ];
+        let swap = Swap {
+            cf_participants,
+            ..Default::default()
+        };
+
+        assert_eq!(7, swap.cf_neurons_count());
     }
 }
