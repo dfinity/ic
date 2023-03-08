@@ -45,6 +45,7 @@ ic-artifact-pool = { path = "../artifact_pool" }
 ic-btc-types-internal = { path = "../bitcoin/types/internal" }
 ic-config = { path = "../config" }
 ic-crypto-test-utils-canister-threshold-sigs = { path = "../crypto/test_utils/canister_threshold_sigs" }
+ic-crypto-temp-crypto = { path = "../crypto/temp_crypto" }
 ic-execution-environment = { path = "../execution_environment" }
 ic-ingress-manager = { path = "../ingress_manager" }
 ic-interfaces-certified-stream-store = { path = "../interfaces/certified_stream_store" }
