@@ -8,16 +8,6 @@ use ic_nervous_system_common::E8;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
 };
-use ic_sns_governance::pb::v1::claim_swap_neurons_request::NeuronParameters;
-use ic_sns_governance::pb::v1::claim_swap_neurons_response::{
-    ClaimSwapNeuronsResult, ClaimedSwapNeurons, SwapNeuron,
-};
-use ic_sns_governance::pb::v1::manage_neuron_response::RegisterVoteResponse;
-use ic_sns_governance::pb::v1::neuron::DissolveState;
-use ic_sns_governance::pb::v1::{
-    Ballot, ClaimSwapNeuronsError, ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse,
-    ClaimedSwapNeuronStatus, ProposalData, Vote, WaitForQuietState,
-};
 use ic_sns_governance::{
     account_to_proto,
     neuron::NeuronState,
@@ -27,6 +17,8 @@ use ic_sns_governance::{
             SetDappControllersResponse,
         },
         v1::{
+            claim_swap_neurons_request::NeuronParameters,
+            claim_swap_neurons_response::{ClaimSwapNeuronsResult, ClaimedSwapNeurons, SwapNeuron},
             governance_error::ErrorType,
             manage_neuron,
             manage_neuron::claim_or_refresh,
@@ -35,16 +27,21 @@ use ic_sns_governance::{
                 DisburseMaturity, Follow, IncreaseDissolveDelay, MergeMaturity, RegisterVote,
                 RemoveNeuronPermissions, Split, StakeMaturity,
             },
+            manage_neuron_response::RegisterVoteResponse,
             manage_neuron_response::{
                 Command as CommandResponse, MergeMaturityResponse, StakeMaturityResponse,
             },
+            neuron,
+            neuron::DissolveState,
             proposal::Action,
-            Account as AccountProto, DeregisterDappCanisters, Empty, GovernanceError,
-            ManageNeuronResponse, Motion, Neuron, NeuronId, NeuronPermission, NeuronPermissionList,
-            NeuronPermissionType, Proposal, ProposalId, RegisterDappCanisters,
+            Account as AccountProto, Ballot, ClaimSwapNeuronsError, ClaimSwapNeuronsRequest,
+            ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus, DeregisterDappCanisters, Empty,
+            GovernanceError, ManageNeuronResponse, Motion, Neuron, NeuronId, NeuronPermission,
+            NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData, ProposalId,
+            RegisterDappCanisters, Vote, WaitForQuietState,
         },
     },
-    types::{ONE_DAY_SECONDS, ONE_MONTH_SECONDS},
+    types::{native_action_ids, ONE_DAY_SECONDS, ONE_MONTH_SECONDS},
 };
 use maplit::btreemap;
 use std::collections::{BTreeMap, HashSet};
@@ -2250,6 +2247,169 @@ fn test_register_vote_happy() {
             }
         }
     );
+}
+
+/// Test that a neuron can follow itself on a specific Action and effectively
+/// override the "catch-all" follow relationship defined by Action::Unspecified
+#[test]
+fn test_neurons_can_follow_themselves() {
+    // Create the various neurons needed for this test
+    let followee_principal_id = PrincipalId::new_user_test_id(1000);
+    let followee_neuron_id = neuron_id(followee_principal_id, /*memo*/ 0);
+
+    let follower_principal_id = PrincipalId::new_user_test_id(1001);
+    let follower_neuron_id = neuron_id(follower_principal_id, /*memo*/ 0);
+
+    let proposer_principal_id = PrincipalId::new_user_test_id(1002);
+    let proposer_neuron_id = neuron_id(proposer_principal_id, /*memo*/ 0);
+
+    // Set up the test environment with neurons that can vote
+    let mut canister_fixture = GovernanceCanisterFixtureBuilder::new()
+        .add_neuron(
+            NeuronBuilder::new(
+                followee_neuron_id.clone(),
+                E8,
+                NeuronPermission::all(&followee_principal_id),
+            )
+            .set_dissolve_delay(15778801),
+        )
+        .add_neuron(
+            NeuronBuilder::new(
+                follower_neuron_id.clone(),
+                E8,
+                NeuronPermission::all(&follower_principal_id),
+            )
+            .set_dissolve_delay(15778801),
+        )
+        .add_neuron(
+            NeuronBuilder::new(
+                proposer_neuron_id.clone(),
+                E8,
+                NeuronPermission::all(&proposer_principal_id),
+            )
+            .set_dissolve_delay(15778801),
+        )
+        .create();
+
+    // Set up the following relationships
+
+    // The follower neuron will follow the followee neuron for all actions
+    assert!(canister_fixture
+        .follow(
+            &follower_neuron_id,
+            native_action_ids::UNSPECIFIED,
+            vec![followee_neuron_id.clone()],
+            follower_principal_id
+        )
+        .is_ok());
+
+    // The follower neuron will follow themselves on a single Action, effectively overriding
+    // the catch all follow.
+    assert!(canister_fixture
+        .follow(
+            &follower_neuron_id,
+            native_action_ids::MOTION,
+            vec![follower_neuron_id.clone()],
+            follower_principal_id,
+        )
+        .is_ok());
+
+    // Assert that the following has been setup correctly and no errors were thrown.
+    let follower_neuron = canister_fixture.get_neuron(&follower_neuron_id);
+    assert_eq!(
+        follower_neuron.followees,
+        btreemap! {
+            native_action_ids::UNSPECIFIED => neuron::Followees {
+                followees: vec![followee_neuron_id.clone()]
+            },
+            native_action_ids::MOTION => neuron::Followees {
+                followees: vec![follower_neuron_id.clone()]
+            }
+        }
+    );
+
+    // Submit a motion proposal
+    let (proposal_id, _) = canister_fixture
+        .make_default_proposal(
+            &proposer_neuron_id,
+            Motion {
+                motion_text: "Test self following".to_string(),
+            },
+            proposer_principal_id,
+        )
+        .unwrap();
+
+    // Vote with the followee neuron, this should not result in the follower neuron voting
+    assert!(canister_fixture
+        .vote(
+            &followee_neuron_id,
+            proposal_id,
+            Vote::Yes,
+            followee_principal_id
+        )
+        .is_ok());
+
+    let proposal_data = canister_fixture.get_proposal_or_panic(proposal_id);
+    let follower_ballot = proposal_data
+        .ballots
+        .get(&follower_neuron_id.to_string())
+        .expect("Expected the follower neuron to have a ballot");
+    assert_eq!(follower_ballot.vote, Vote::Unspecified as i32);
+
+    // Vote with the follower neuron, this should result in casting a vote
+    assert!(canister_fixture
+        .vote(
+            &follower_neuron_id,
+            proposal_id,
+            Vote::No,
+            follower_principal_id
+        )
+        .is_ok());
+    let proposal_data = canister_fixture.get_proposal_or_panic(proposal_id);
+    let follower_ballot = proposal_data
+        .ballots
+        .get(&follower_neuron_id.to_string())
+        .expect("Expected the follower neuron to have a ballot");
+    assert_eq!(follower_ballot.vote, Vote::No as i32);
+
+    // Submit a covered by the "catch-all" follow
+    let (proposal_id, _) = canister_fixture
+        .make_default_proposal(
+            &proposer_neuron_id,
+            RegisterDappCanisters {
+                canister_ids: vec![PrincipalId::new_user_test_id(1)],
+            },
+            proposer_principal_id,
+        )
+        .unwrap();
+
+    // Vote with the followee neuron. This should result in the follower neuron casting a vote
+    assert!(canister_fixture
+        .vote(
+            &followee_neuron_id,
+            proposal_id,
+            Vote::No,
+            followee_principal_id
+        )
+        .is_ok());
+
+    let proposal_data = canister_fixture.get_proposal_or_panic(proposal_id);
+    let follower_ballot = proposal_data
+        .ballots
+        .get(&follower_neuron_id.to_string())
+        .expect("Expected the follower neuron to have a ballot");
+    assert_eq!(follower_ballot.vote, Vote::No as i32);
+
+    // An error should occur if the follower neuron now tries to vote as their vote has
+    // already been cast
+    assert!(canister_fixture
+        .vote(
+            &follower_neuron_id,
+            proposal_id,
+            Vote::No,
+            follower_principal_id
+        )
+        .is_err());
 }
 
 // Same as the previous test, but wait_for_quiet_state is None.
