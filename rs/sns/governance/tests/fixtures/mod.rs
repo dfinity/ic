@@ -15,9 +15,9 @@ use ic_sns_governance::{
         manage_neuron::{
             AddNeuronPermissions, MergeMaturity, RegisterVote, RemoveNeuronPermissions,
         },
-        manage_neuron_response::{self, RegisterVoteResponse},
         manage_neuron_response::{
-            AddNeuronPermissionsResponse, MergeMaturityResponse, RemoveNeuronPermissionsResponse,
+            self, AddNeuronPermissionsResponse, FollowResponse, MergeMaturityResponse,
+            RegisterVoteResponse, RemoveNeuronPermissionsResponse,
         },
         neuron::{DissolveState, Followees},
         proposal::Action,
@@ -726,6 +726,29 @@ impl GovernanceCanisterFixture {
             .proto
             .swap_canister_id
             .expect("Expected the swap_canister_id to be set in the GovernanceCanisterFixture")
+    }
+
+    pub fn follow(
+        &mut self,
+        target_neuron: &NeuronId,
+        function_id: u64,
+        followees: Vec<NeuronId>,
+        caller: PrincipalId,
+    ) -> Result<FollowResponse, GovernanceError> {
+        let response = self.manage_neuron(
+            target_neuron,
+            manage_neuron::Command::Follow(manage_neuron::Follow {
+                function_id,
+                followees,
+            }),
+            caller,
+        );
+
+        match response.command.unwrap() {
+            manage_neuron_response::Command::Follow(follow_response) => Ok(follow_response),
+            manage_neuron_response::Command::Error(governance_error) => Err(governance_error),
+            _ => panic!("Unexpected command response when setting a follow relationship"),
+        }
     }
 
     pub fn vote(
