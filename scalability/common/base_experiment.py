@@ -226,7 +226,7 @@ class BaseExperiment:
 
     def run_experiment_internal(self, config):
         """Run a single iteration of the experiment."""
-        raise Exception("Needs to be implemented by each experiment")
+        raise NotImplementedError()
 
     def __init_metrics(self):
         """Initialize metrics to collect for experiment."""
@@ -657,6 +657,8 @@ class BaseExperiment:
     def get_datapoints(default: [float]) -> [float]:
         """Parse datapoints given as arguments or otherwise return default."""
         if len(FLAGS.datapoints) > 0:
-            return misc.parse_datapoints(FLAGS.datapoints)
+            d = misc.parse_datapoints(FLAGS.datapoints)
         else:
-            return default
+            d = default
+        print(f"Using datapoints: {d}")
+        return d

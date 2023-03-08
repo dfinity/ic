@@ -7,6 +7,7 @@ import tempfile
 import time
 import uuid
 from statistics import mean
+from statistics import StatisticsError
 from typing import List
 
 import gflags
@@ -62,6 +63,7 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
     def __init__(self, num_workload_gen=NUM_WORKLOAD_GEN, request_type="query"):
         """Init."""
         self.num_workload_gen = num_workload_gen
+        self.kill_pids = []
 
         super().__init__(request_type)
 
@@ -71,7 +73,6 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
         if self.use_updates:
             self.request_type = "call"
         self.experiment_initialized = False
-        self.kill_pids = []
         print(f"Update calls: {self.use_updates} {self.request_type}")
 
         print(
@@ -160,10 +161,16 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
         super().init()
         self.init_experiment()
 
+    def run_locally(self):
+        return self.machines == ["localhost"]
+
     def init_experiment(self):
         """Initialize the experiment."""
         if self.experiment_initialized:
             raise Exception("Experiment is already initialized")
+        if self.run_locally():
+            print(colored("Running workload generators from local machine", "green"))
+            return
         self.experiment_initialized = True
         if not self.__check_workload_generator_installed(self.machines):
             rcs = self.__install_workload_generator(self.machines)
@@ -176,22 +183,18 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
 
     def __kill_workload_generator(self, machines):
         """Kill all workload generators on the given machine."""
-        self.kill_pids = ssh.spawn_ssh_in_parallel(
-            machines,
-            "sudo systemctl stop ic-replica",
-            f_stdout=tempfile.NamedTemporaryFile().name,
-            f_stderr=tempfile.NamedTemporaryFile().name,
-        )
+        if not self.run_locally():
+            self.kill_pids = ssh.spawn_ssh_in_parallel(
+                machines,
+                "sudo systemctl stop ic-replica",
+                f_stdout=tempfile.NamedTemporaryFile().name,
+                f_stderr=tempfile.NamedTemporaryFile().name,
+            )
         for _, s in self.kill_pids:
             s.wait()
         self.kill_pids = []
 
-    def __restart_services(self, machines):
-        """Kill all workload generators on the given machine."""
-        print("Removed for now")
-
     def end_experiment(self):
-        self.__restart_services(self.machines)
         super().end_experiment()
 
     def __check_workload_generator_installed(self, machines):
@@ -270,14 +273,17 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
         recovered = False
         curr_i = 0
 
-        if FLAGS.no_prometheus:
+        if FLAGS.no_prometheus and self.iteration != 1:
+            print(f"Waiting for quiet for iteration {self.iteration}")
             time.sleep(60)
             return
 
         while not recovered and curr_i < max_num_iterations:
             curr_i += 1
+            r = None
             try:
                 r = prometheus.get_http_request_rate_for_timestamp(self.testnet, [], int(time.time()))
+                print(r)
                 v = [float(value[1]) for (value, _) in prometheus.parse(r)]
                 rate_rps = mean(v)
 
@@ -291,9 +297,8 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
                 if rate_rps <= self.quiet_rate_rps:
                     recovered = True
 
-            except Exception as ex:
-                print(f"Failed to query http request rate from targets: {ex}")
-                logging.error(logging.traceback.format_exc())
+            except StatisticsError:
+                logging.error(f"Failed to parse prometheus response {r} - {logging.traceback.format_exc()}")
 
             time.sleep(sleep_per_iteration_s)
 

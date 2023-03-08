@@ -18,5 +18,7 @@ gflags.DEFINE_integer(
 
 if __name__ == "__main__":
     exp = {{benchmark_fname}}.{{benchmark_name}}()
-    datapoints = misc.get_iterations(FLAGS.target_rps, FLAGS.initial_rps, FLAGS.max_rps, FLAGS.increment_rps, 1)
+    datapoints = exp.get_datapoints(
+        misc.get_iterations(FLAGS.target_rps, FLAGS.initial_rps, FLAGS.max_rps, FLAGS.increment_rps, 1)
+    )
     exp.run_iterations(datapoints)

@@ -41,6 +41,11 @@ import common.workload_experiment as workload_experiment  # noqa
 
 FLAGS = gflags.FLAGS
 gflags.DEFINE_integer("num_workload_generators", -1, "Number of workload generators to run")
+gflags.DEFINE_integer("initial_rps", 100, "Starting number for requests per second.")
+gflags.DEFINE_integer("increment_rps", 50, "Increment of requests per second per round.")
+gflags.DEFINE_integer(
+    "max_rps", 40000, "Maximum requests per second to be sent. Experiment will wrap up beyond this number."
+)
 
 
 class BaselineExperiment(workload_experiment.WorkloadExperiment):
@@ -199,4 +204,7 @@ class BaselineExperiment(workload_experiment.WorkloadExperiment):
 if __name__ == "__main__":
     misc.parse_command_line_args()
     exp = BaselineExperiment()
-    exp.run_iterations([FLAGS.target_rps])
+    iterations = exp.get_datapoints(
+        misc.get_iterations(FLAGS.target_rps, FLAGS.initial_rps, FLAGS.max_rps, FLAGS.increment_rps, 2)
+    )
+    exp.run_iterations(iterations)

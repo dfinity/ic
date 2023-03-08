@@ -91,7 +91,7 @@ class Mainnet:
     def get_query_command(self, canister, subnet, wg_testnet, wg_subnet, subnet_prefix):
         """Return query command."""
         return [
-            "experiments/max_capacity_system_baseline.py",
+            "experiments/run_system_baseline_experiment.py",
             "--testnet",
             "mercury",
             "--canister_id",
@@ -124,7 +124,7 @@ class Mainnet:
         """Retrun update command."""
         LOAD = 600
         return [
-            "experiments/max_capacity_system_baseline.py",
+            "experiments/run_system_baseline_experiment.py",
             "--testnet",
             "mercury",
             "--canister_id",

@@ -1,6 +1,9 @@
 import codecs
 import json
+import logging
 import os
+import shlex
+import subprocess
 import sys
 import threading
 import time
@@ -154,11 +157,13 @@ class Workload(threading.Thread):
         for _rps in rps_per_machine:
             assert _rps < 8000, f"Not enough workload generator machines: {num_load_generators} which {_rps} rps each"
 
+        logging.debug(f"generating load for {self.load_generators} using canister IDs: {self.workload.canister_ids}")
         # Each workload generator instance can target only a single canister ID currently.
         # In the case of multiple canisters, select a different canister for each machine.
         canister_ids = [
             self.workload.canister_ids[i % len(self.workload.canister_ids)] for i in range(num_load_generators)
         ]
+        logging.debug(f"canister IDs: {canister_ids} and {rps_per_machine}")
         commands = [
             "{} --canister-id {} -r {rps} --summary-file wg_summary_{wg_summary} ".format(
                 cmd, canister_id, rps=rps, wg_summary=self.uuids[i]
@@ -211,12 +216,28 @@ class Workload(threading.Thread):
         """Start running the given workloads as a thread."""
         time.sleep(self.workload.start_delay)
         commands = self.get_commands()
-        rc = ssh.run_all_ssh_in_parallel(self.load_generators, commands, self.f_stdout, self.f_stderr)
+        if self.is_local_run():
+            assert len(commands) == 1, f"More than 1 command, cannot currently execute this locally: {commands}"
+            cmd = shlex.split(commands[0])
+            cmd = [os.path.join(FLAGS.artifacts_path, "ic-workload-generator")] + cmd[1:]
+            print(f"Running command: {cmd}")
+            rc = [subprocess.run(cmd).returncode]
+        else:
+            rc = ssh.run_all_ssh_in_parallel(self.load_generators, commands, self.f_stdout, self.f_stderr)
         # Note: error code 255 indicates an issue with SSH rather than the workload generator
         print("Return codes of workload generators are: ", rc, list(zip(self.load_generators, rc)))
 
+    def is_local_run(self):
+        """True if workload generators should be running locall"""
+        return self.load_generators == ["localhost"]
+
     def fetch_results(self):
         """Fetch results from workload generators."""
+
+        if self.is_local_run():
+            return ["wg_summary_{}".format(self.uuids[i]) for i, m_ in enumerate(self.load_generators)]
+            return
+
         sources = ["admin@[{}]:wg_summary_{}".format(m, self.uuids[i]) for i, m in enumerate(self.load_generators)]
 
         assert len(self.uuids) == len(self.load_generators)
