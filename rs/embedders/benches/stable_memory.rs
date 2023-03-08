@@ -1,13 +1,20 @@
 use candid::Encode;
 use criterion::{criterion_group, criterion_main, Criterion};
-use embedders_bench::{query_bench, update_bench};
 use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
 use ic_sys::PAGE_SIZE;
 
-const INITIAL_NUMBER_OF_ENTRIES: u64 = 128 * 1024;
-const ENTRIES_TO_CHANGE: u64 = 8 * 1024;
-const KB: usize = 1024;
-const NUM_OS_PAGES: usize = (512 * KB * KB) / PAGE_SIZE;
+/// Each entry should have a pair of u64's for the key and value so that makes
+/// 256 entries be 4KiB page. So with these numbers each new lookup should
+/// roughly touch a new page.
+const BTREE_U64_INITIAL_NUMBER_OF_ENTRIES: u32 = 256 * 1024;
+const BTREE_U64_ENTRIES_TO_HANDLE: u32 = 1024;
+
+/// Again this should let each entry touched trigger a new page fault.
+const VEC_U64_INITIAL_NUMBER_OF_ENTRIES: u32 = 32 * 1024 * 1024;
+const VEC_U64_ENTRIES_TO_HANDLE: u32 = 64 * 1024;
+
+const DIRECT_U64_INITIAL_NUMBER_OF_PAGES: u32 = 128 * 1024;
+const DIRECT_U64_ENTRIES_TO_HANDLE: u32 = 128 * 1024;
 
 lazy_static::lazy_static! {
     static ref STABLE_STRUCTURES_CANISTER: Vec<u8> =
@@ -15,73 +22,42 @@ lazy_static::lazy_static! {
 
 }
 
-fn stable_read_write_wat() -> String {
+fn direct_wat() -> String {
     format!(
         r#"
         (module
             (import "ic0" "msg_reply" (func $msg_reply))
-            (import "ic0" "stable_grow"
-                (func $stable_grow (param $pages i32) (result i32)))
+            (import "ic0" "stable64_grow"
+                (func $stable_grow (param $pages i64) (result i64)))
             (import "ic0" "stable64_read"
                 (func $stable_read (param $dst i64) (param $offset i64) (param $size i64)))
             (import "ic0" "stable64_write"
                 (func $stable_write (param $offset i64) (param $src i64) (param $size i64)))
 
-            (func $init (export "canister_init")
-                (drop (call $stable_grow (i32.const {wasm_pages})))
-            )
-
-            (func $test (local $counter i64) (local $val i32)
+            (func $sparse_write (local $counter i64)
+                (local.set $counter (i64.const 0))
+                (i64.store (i32.const 0) (i64.const 55))
                 (loop $main
-                    ;; read i32 from stable memory to address 0
-                    (call $stable_read (i64.const 0) (local.get $counter) (i64.const 4))
-                    ;; increment the value at address 0
-                    (i32.store (i32.const 0) (i32.add (i32.const 1) (i32.load (i32.const 0))))
-                    ;; write it back to stable memory
-                    (call $stable_write (local.get $counter) (i64.const 0) (i64.const 4))
-                    ;; increment the counter by the OS page size
-                    (local.set $counter (i64.add (i64.const {page_size}) (local.get $counter)))
+                    ;; write value at address 0 back to a new page in stable memory
+                    (call $stable_write (i64.mul (local.get $counter) (i64.const {PAGE_SIZE})) (i64.const 0) (i64.const 8))
+                    ;; increment the counter by one
+                    (local.set $counter (i64.add (i64.const 1) (local.get $counter)))
                     ;; go back to loop if counter is less than bound.
-                    (br_if $main (i64.lt_s (local.get $counter) (i64.const {last_address})))
-                    ;; reply to message
-                    (call $msg_reply)
+                    (br_if $main (i64.lt_s (local.get $counter) (i64.const {loop_count})))
                 )
             )
 
-            (func (export "canister_update update_test") (call $test))
-            (func (export "canister_query query_test") (call $test))
-            (memory (export "memory") 1)
-        )
-    "#,
-        wasm_pages = NUM_OS_PAGES / (WASM_PAGE_SIZE_IN_BYTES / PAGE_SIZE),
-        page_size = PAGE_SIZE,
-        last_address = NUM_OS_PAGES * PAGE_SIZE - 1,
-    )
-}
-
-fn stable_write_repeat() -> String {
-    format!(
-        r#"
-        (module
-            (import "ic0" "msg_reply" (func $msg_reply))
-            (import "ic0" "stable_grow"
-                (func $stable_grow (param $pages i32) (result i32)))
-            (import "ic0" "stable64_read"
-                (func $stable_read (param $dst i64) (param $offset i64) (param $size i64)))
-            (import "ic0" "stable64_write"
-                (func $stable_write (param $offset i64) (param $src i64) (param $size i64)))
-
             (func $init (export "canister_init")
-                (drop (call $stable_grow (i32.const {wasm_pages})))
-                ;; store a constant value at address 0.
-                (i32.store (i32.const 0) (i32.const 123))
+                (drop (call $stable_grow (i64.const {wasm_pages})))
+                ;; initialize the pages we will access with some data.
+                (call $sparse_write)
             )
 
-            (func $test (local $counter i64)
+            (func (export "canister_query single_read") (local $counter i64)
                 (local.set $counter (i64.const 0))
                 (loop $main
-                    ;; write value at address 0 back to stable memory
-                    (call $stable_write (i64.const 0) (i64.const 0) (i64.const 4))
+                    ;; read value at address 0 from stable memory
+                    (call $stable_read (i64.const 0) (i64.const 0) (i64.const 8))
                     ;; increment the counter by one
                     (local.set $counter (i64.add (i64.const 1) (local.get $counter)))
                     ;; go back to loop if counter is less than bound.
@@ -91,142 +67,277 @@ fn stable_write_repeat() -> String {
                 )
             )
 
-            (func (export "canister_update update_test") (call $test))
-            (func (export "canister_query query_test") (call $test))
-            (memory (export "memory") 1)
+            (func (export "canister_query sparse_read") (local $counter i64)
+                (local.set $counter (i64.const 0))
+                (loop $main
+                    ;; read value at address 0 from a new page in stable memory
+                    (call $stable_read (i64.const 0) (i64.mul (local.get $counter) (i64.const {PAGE_SIZE})) (i64.const 8))
+                    ;; increment the counter by one
+                    (local.set $counter (i64.add (i64.const 1) (local.get $counter)))
+                    ;; go back to loop if counter is less than bound.
+                    (br_if $main (i64.lt_s (local.get $counter) (i64.const {loop_count})))
+                    ;; reply to message
+                    (call $msg_reply)
+                )
+            )
+
+            (func (export "canister_update single_write") (local $counter i64)
+                (local.set $counter (i64.const 0))
+                (i64.store (i32.const 0) (i64.const 55))
+                (loop $main
+                    ;; write value at address 0 back to stable memory
+                    (call $stable_write (i64.const 0) (i64.const 0) (i64.const 8))
+                    ;; increment the counter by one
+                    (local.set $counter (i64.add (i64.const 1) (local.get $counter)))
+                    ;; go back to loop if counter is less than bound.
+                    (br_if $main (i64.lt_s (local.get $counter) (i64.const {loop_count})))
+                    ;; reply to message
+                    (call $msg_reply)
+                )
+            )
+
+            (func (export "canister_update sparse_write") (local $counter i64)
+                (call $sparse_write)
+                ;; reply to message
+                (call $msg_reply)
+            )
+
+            (func (export "canister_query large_read")
+                (call $stable_read (i64.const 0) (i64.const 0) (i64.const {large_data_size}))
+                (call $msg_reply)
+            )
+
+            (func (export "canister_update large_write")
+                (call $stable_write (i64.const 0) (i64.const 0) (i64.const {large_data_size}))
+                (call $msg_reply)
+            )
+
+            (func (export "canister_update update_empty") (call $msg_reply))
+            (memory (export "memory") {initial_memory})
         )
     "#,
-        wasm_pages = 4,
-        loop_count = 10_000_000,
+        wasm_pages = DIRECT_U64_INITIAL_NUMBER_OF_PAGES / 16 + 1, // 16 OS pages in a wasm page
+        loop_count = DIRECT_U64_ENTRIES_TO_HANDLE,
+        large_data_size = 2 * 1024 * 1024, // 2 MiB
+        initial_memory = 2 * 1024 * 1024 / WASM_PAGE_SIZE_IN_BYTES,
     )
 }
 
-fn update_direct_read_write(c: &mut Criterion) {
-    let wasm = wat::parse_str(stable_read_write_wat()).unwrap();
-    update_bench(c, wasm, "direct_read_write", "update_test", &[], None);
-}
-
-fn update_direct_write_single(c: &mut Criterion) {
-    let wasm = wat::parse_str(stable_write_repeat()).unwrap();
-    update_bench(c, wasm, "direct_write_single", "update_test", &[], None);
-}
-
-fn update_btree_seq(c: &mut Criterion) {
-    update_bench(
+fn query_bench(
+    c: &mut Criterion,
+    name: &str,
+    wasm: &[u8],
+    structure: &str,
+    initial_count: u32,
+    method: &str,
+    payload: &[u8],
+) {
+    embedders_bench::query_bench(
         c,
-        STABLE_STRUCTURES_CANISTER.clone(),
-        "btree_seq",
-        "update_increment_values_seq",
-        &Encode!(&ENTRIES_TO_CHANGE).unwrap(),
+        name,
+        wasm,
+        &Encode!(&structure, &initial_count).unwrap(),
+        method,
+        payload,
         None,
-    );
+    )
 }
 
-fn update_btree_sparse(c: &mut Criterion) {
-    update_bench(
+fn update_bench(
+    c: &mut Criterion,
+    name: &str,
+    wasm: &[u8],
+    structure: &str,
+    initial_count: u32,
+    method: &str,
+    payload: &[u8],
+) {
+    embedders_bench::update_bench(
         c,
-        STABLE_STRUCTURES_CANISTER.clone(),
-        "btree_sparse",
-        "update_increment_values_sparse",
-        &Encode!(
-            &ENTRIES_TO_CHANGE,
-            &(INITIAL_NUMBER_OF_ENTRIES / ENTRIES_TO_CHANGE)
-        )
-        .unwrap(),
+        name,
+        wasm,
+        &Encode!(&structure, &initial_count).unwrap(),
+        method,
+        payload,
         None,
-    );
+    )
 }
 
-fn update_btree_single(c: &mut Criterion) {
-    update_bench(
-        c,
-        STABLE_STRUCTURES_CANISTER.clone(),
-        "btree_single",
-        "update_increment_one_value",
-        &Encode!(&(ENTRIES_TO_CHANGE as u32)).unwrap(),
-        None,
-    );
-}
-
-fn update_empty(c: &mut Criterion) {
-    update_bench(
-        c,
-        STABLE_STRUCTURES_CANISTER.clone(),
-        "empty",
-        "update_empty",
-        &Encode!(&()).unwrap(),
-        None,
-    );
-}
-
-fn query_direct_read_write(c: &mut Criterion) {
-    let wasm = wat::parse_str(stable_read_write_wat()).unwrap();
-    query_bench(c, wasm, "direct_read_write", "query_test", &[], None);
-}
-
-fn query_direct_write_single(c: &mut Criterion) {
-    let wasm = wat::parse_str(stable_read_write_wat()).unwrap();
-    query_bench(c, wasm, "direct_write_single", "query_test", &[], None);
-}
-
-fn query_btree_seq(c: &mut Criterion) {
+fn direct_u64_single_read(c: &mut Criterion) {
     query_bench(
         c,
-        STABLE_STRUCTURES_CANISTER.clone(),
-        "btree_seq",
-        "query_increment_values_seq",
-        &Encode!(&ENTRIES_TO_CHANGE).unwrap(),
-        None,
+        "direct_u64_single_read",
+        &wat::parse_str(direct_wat()).unwrap(),
+        "",
+        0,
+        "single_read",
+        &[],
     );
 }
 
-fn query_btree_sparse(c: &mut Criterion) {
+fn direct_u64_sparse_read(c: &mut Criterion) {
+    query_bench(
+        c,
+        "direct_u64_sparse_read",
+        &wat::parse_str(direct_wat()).unwrap(),
+        "",
+        0,
+        "sparse_read",
+        &[],
+    );
+}
+
+fn direct_u64_single_write(c: &mut Criterion) {
     update_bench(
         c,
-        STABLE_STRUCTURES_CANISTER.clone(),
-        "btree_sparse",
-        "query_increment_values_sparse",
-        &Encode!(
-            &ENTRIES_TO_CHANGE,
-            &(INITIAL_NUMBER_OF_ENTRIES / ENTRIES_TO_CHANGE)
-        )
-        .unwrap(),
-        None,
+        "direct_u64_single_write",
+        &wat::parse_str(direct_wat()).unwrap(),
+        "",
+        0,
+        "single_write",
+        &[],
     );
 }
 
-fn query_btree_single(c: &mut Criterion) {
-    query_bench(
+fn direct_u64_sparse_write(c: &mut Criterion) {
+    update_bench(
         c,
-        STABLE_STRUCTURES_CANISTER.clone(),
-        "btree_single",
-        "query_increment_one_value",
-        &Encode!(&(ENTRIES_TO_CHANGE as u32)).unwrap(),
-        None,
+        "direct_u64_sparse_write",
+        &wat::parse_str(direct_wat()).unwrap(),
+        "",
+        0,
+        "sparse_write",
+        &[],
     );
 }
 
-fn query_empty(c: &mut Criterion) {
+fn direct_2mb_write(c: &mut Criterion) {
+    update_bench(
+        c,
+        "direct_2mb_write",
+        &wat::parse_str(direct_wat()).unwrap(),
+        "",
+        0,
+        "large_write",
+        &[],
+    );
+}
+
+fn direct_2mb_read(c: &mut Criterion) {
     query_bench(
         c,
-        STABLE_STRUCTURES_CANISTER.clone(),
-        "empty",
-        "query_empty",
-        &Encode!(&()).unwrap(),
-        None,
+        "direct_2mb_read",
+        &wat::parse_str(direct_wat()).unwrap(),
+        "",
+        0,
+        "large_read",
+        &[],
+    );
+}
+
+fn btree_u64_single_read(c: &mut Criterion) {
+    query_bench(
+        c,
+        "btree_u64_single_read",
+        &STABLE_STRUCTURES_CANISTER.clone(),
+        "btree_u64",
+        BTREE_U64_INITIAL_NUMBER_OF_ENTRIES,
+        "query_btree_u64_single_read",
+        &Encode!(&BTREE_U64_ENTRIES_TO_HANDLE).unwrap(),
+    );
+}
+
+fn btree_u64_sparse_read(c: &mut Criterion) {
+    query_bench(
+        c,
+        "btree_u64_sparse_read",
+        &STABLE_STRUCTURES_CANISTER.clone(),
+        "btree_u64",
+        BTREE_U64_INITIAL_NUMBER_OF_ENTRIES,
+        "query_btree_u64_sparse_read",
+        &Encode!(&BTREE_U64_ENTRIES_TO_HANDLE).unwrap(),
+    );
+}
+
+fn btree_u64_single_write(c: &mut Criterion) {
+    update_bench(
+        c,
+        "btree_u64_single_write",
+        &STABLE_STRUCTURES_CANISTER.clone(),
+        "btree_u64",
+        BTREE_U64_INITIAL_NUMBER_OF_ENTRIES,
+        "update_btree_u64_single_write",
+        &Encode!(&BTREE_U64_ENTRIES_TO_HANDLE).unwrap(),
+    );
+}
+
+fn btree_u64_sparse_write(c: &mut Criterion) {
+    update_bench(
+        c,
+        "btree_u64_sparse_write",
+        &STABLE_STRUCTURES_CANISTER.clone(),
+        "btree_u64",
+        BTREE_U64_INITIAL_NUMBER_OF_ENTRIES,
+        "update_btree_u64_sparse_write",
+        &Encode!(&BTREE_U64_ENTRIES_TO_HANDLE).unwrap(),
+    );
+}
+
+fn vec_u64_single_read(c: &mut Criterion) {
+    query_bench(
+        c,
+        "vec_u64_single_read",
+        &STABLE_STRUCTURES_CANISTER.clone(),
+        "vec_u64",
+        VEC_U64_INITIAL_NUMBER_OF_ENTRIES,
+        "query_vec_u64_single_read",
+        &Encode!(&VEC_U64_ENTRIES_TO_HANDLE).unwrap(),
+    );
+}
+
+fn vec_u64_sparse_read(c: &mut Criterion) {
+    query_bench(
+        c,
+        "vec_u64_sparse_read",
+        &STABLE_STRUCTURES_CANISTER.clone(),
+        "vec_u64",
+        VEC_U64_INITIAL_NUMBER_OF_ENTRIES,
+        "query_vec_u64_sparse_read",
+        &Encode!(&VEC_U64_ENTRIES_TO_HANDLE).unwrap(),
+    );
+}
+
+fn vec_u64_single_write(c: &mut Criterion) {
+    update_bench(
+        c,
+        "vec_u64_single_write",
+        &STABLE_STRUCTURES_CANISTER.clone(),
+        "vec_u64",
+        VEC_U64_INITIAL_NUMBER_OF_ENTRIES,
+        "update_vec_u64_single_write",
+        &Encode!(&VEC_U64_ENTRIES_TO_HANDLE).unwrap(),
+    );
+}
+
+fn vec_u64_sparse_write(c: &mut Criterion) {
+    update_bench(
+        c,
+        "vec_u64_sparse_write",
+        &STABLE_STRUCTURES_CANISTER.clone(),
+        "vec_u64",
+        VEC_U64_INITIAL_NUMBER_OF_ENTRIES,
+        "update_vec_u64_sparse_write",
+        &Encode!(&VEC_U64_ENTRIES_TO_HANDLE).unwrap(),
     );
 }
 
 criterion_group!(
-    name = update_benches;
+    name = benches;
     config = Criterion::default().sample_size(10);
-    targets = update_direct_read_write, update_direct_write_single, update_btree_single, update_btree_seq, update_btree_sparse, update_empty
+    targets = direct_u64_single_read, direct_u64_sparse_read, direct_u64_single_write, direct_u64_sparse_write,
+            direct_2mb_read, direct_2mb_write,
+            btree_u64_single_read, btree_u64_sparse_read, btree_u64_single_write, btree_u64_sparse_write,
+            vec_u64_single_read, vec_u64_sparse_read, vec_u64_single_write, vec_u64_sparse_write,
 );
 
-criterion_group!(
-    name = query_benches;
-    config = Criterion::default().sample_size(10);
-    targets = query_direct_read_write, query_direct_write_single, query_btree_single, query_btree_seq, query_btree_sparse, query_empty
-);
-
-criterion_main!(update_benches, query_benches);
+criterion_main!(benches);

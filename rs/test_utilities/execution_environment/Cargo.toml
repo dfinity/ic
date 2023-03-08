@@ -27,4 +27,5 @@ ic-types-test-utils = { path = "../../types/types_test_utils" }
 ic-universal-canister = { path = "../../universal_canister/lib" }
 ic-wasm-types = { path = "../../types/wasm_types" }
 maplit = "1.0.2"
+tempfile = "3.4.0"
 wat = "1.0.52"

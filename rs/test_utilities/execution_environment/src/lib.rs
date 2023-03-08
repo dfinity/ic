@@ -42,13 +42,14 @@ use ic_registry_routing_table::{
 };
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::page_map::TestPageAllocatorFileDescriptorImpl;
 use ic_replicated_state::{
-    canister_state::NextExecution,
+    canister_state::{execution_state::SandboxMemory, NextExecution},
+    page_map::PAGE_SIZE,
     testing::{CanisterQueuesTesting, ReplicatedStateTesting},
     CallContext, CanisterState, ExecutionState, ExecutionTask, InputQueueType, Memory,
-    NetworkTopology, NodeTopology, ReplicatedState, SubnetTopology,
+    NetworkTopology, NodeTopology, PageIndex, ReplicatedState, SubnetTopology,
 };
+use ic_replicated_state::{page_map::TestPageAllocatorFileDescriptorImpl, PageMap};
 use ic_system_api::InstructionLimits;
 use ic_types::{
     crypto::{canister_threshold_sig::MasterEcdsaPublicKey, AlgorithmId},
@@ -57,7 +58,7 @@ use ic_types::{
         AnonymousQuery, CallbackId, MessageId, RequestOrResponse, Response, UserQuery,
         MAX_INTER_CANISTER_PAYLOAD_IN_BYTES,
     },
-    CanisterId, Cycles, NumInstructions, NumPages, Time, UserId,
+    CanisterId, Cycles, Height, NumInstructions, NumPages, Time, UserId,
 };
 use ic_types_test_utils::ids::{node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::UNIVERSAL_CANISTER_WASM;
@@ -66,8 +67,9 @@ use ic_wasm_types::BinaryEncodedWasm;
 use maplit::btreemap;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::convert::TryFrom;
-use std::str::FromStr;
 use std::sync::Arc;
+use std::{os::unix::prelude::FileExt, str::FromStr};
+use tempfile::NamedTempFile;
 
 const INITIAL_CANISTER_CYCLES: Cycles = Cycles::new(1_000_000_000_000);
 
@@ -214,6 +216,10 @@ pub struct ExecutionTest {
     metrics_registry: MetricsRegistry,
     ingress_history_writer: Arc<dyn IngressHistoryWriter<State = ReplicatedState>>,
     log: ReplicaLogger,
+
+    // Temporary files created to fake checkpoints. They are only stored so that
+    // they can be properly cleaned up on test completion.
+    checkpoint_files: Vec<NamedTempFile>,
 }
 
 impl ExecutionTest {
@@ -1333,6 +1339,53 @@ impl ExecutionTest {
     pub fn query_handler_mut(&mut self) -> &mut dyn std::any::Any {
         &mut self.query_handler
     }
+
+    pub fn checkpoint_canister_memories(&mut self) {
+        let fd_factory = Arc::new(TestPageAllocatorFileDescriptorImpl::new());
+        let mut new_checkpoint_files = vec![];
+        for canister_state in self.state_mut().canisters_iter_mut() {
+            let es = match canister_state.execution_state.as_mut() {
+                Some(es) => es,
+                None => break,
+            };
+
+            // Handle heap memory
+            let mut checkpoint_file = NamedTempFile::new().unwrap();
+            let path = checkpoint_file.path().to_owned();
+            let num_pages = es.wasm_memory.size.get() * 16;
+            for i in 0..num_pages {
+                let contents = es.wasm_memory.page_map.get_page(PageIndex::from(i as u64));
+                checkpoint_file
+                    .as_file_mut()
+                    .write_at(contents, (i * PAGE_SIZE) as u64)
+                    .unwrap();
+            }
+            let factory = Arc::clone(&fd_factory);
+            es.wasm_memory.page_map = PageMap::open(&path, Height::new(0), factory).unwrap();
+            *es.wasm_memory.sandbox_memory.lock().unwrap() = SandboxMemory::Unsynced;
+            new_checkpoint_files.push(checkpoint_file);
+
+            // Handle stable memory
+            let mut checkpoint_file = NamedTempFile::new().unwrap();
+            let path = checkpoint_file.path().to_owned();
+            let num_pages = es.stable_memory.size.get() * 16;
+            for i in 0..num_pages {
+                let contents = es
+                    .stable_memory
+                    .page_map
+                    .get_page(PageIndex::from(i as u64));
+                checkpoint_file
+                    .as_file_mut()
+                    .write_at(contents, (i * PAGE_SIZE) as u64)
+                    .unwrap();
+            }
+            let factory = Arc::clone(&fd_factory);
+            es.stable_memory.page_map = PageMap::open(&path, Height::new(0), factory).unwrap();
+            *es.stable_memory.sandbox_memory.lock().unwrap() = SandboxMemory::Unsynced;
+            new_checkpoint_files.push(checkpoint_file);
+        }
+        self.checkpoint_files.extend(new_checkpoint_files);
+    }
 }
 
 /// A builder for `ExecutionTest`.
@@ -1847,6 +1900,7 @@ impl ExecutionTestBuilder {
             manual_execution: self.manual_execution,
             ecdsa_subnet_public_keys,
             log: self.log,
+            checkpoint_files: vec![],
         }
     }
 }
