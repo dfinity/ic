@@ -1,3 +1,4 @@
+mod advert_view;
 mod client;
 mod p2p;
 
