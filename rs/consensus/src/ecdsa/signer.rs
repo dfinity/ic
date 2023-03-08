@@ -293,7 +293,7 @@ impl EcdsaSignerImpl {
                     // Defer in case of transient errors
                     debug!(
                         self.log,
-                        "Share validation(permanent error): {}, error = {:?}", share, error
+                        "Share validation(transient error): {}, error = {:?}", share, error
                     );
                     self.metrics.sign_errors_inc("verify_sig_share_transient");
                     None
@@ -614,6 +614,7 @@ fn resolve_sig_inputs_refs(
 mod tests {
     use super::*;
     use crate::ecdsa::utils::test_utils::*;
+    use assert_matches::assert_matches;
     use ic_crypto_test_utils_canister_threshold_sigs::{
         generate_key_transcript, generate_tecdsa_protocol_inputs,
         CanisterThresholdSigTestEnvironment,
@@ -690,58 +691,57 @@ mod tests {
 
         // Messages for signatures currently requested
         let action = Action::action(&block_reader, &requested, &id_1);
-        match action {
-            Action::Process(_) => {}
-            _ => panic!("Unexpected action: {:?}", action),
-        }
+        assert_matches!(action, Action::Process(_));
 
         let action = Action::action(&block_reader, &requested, &id_2);
-        match action {
-            Action::Process(_) => {}
-            _ => panic!("Unexpected action: {:?}", action),
-        }
+        assert_matches!(action, Action::Process(_));
     }
 
     // Tests that signature shares are sent for new requests, and requests already
     // in progress are filtered out.
     #[test]
     fn test_ecdsa_send_signature_shares() {
+        let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1), Height::new(0));
+        let height = Height::from(100);
+        let (id_1, id_2, id_3, id_4, id_5) = (
+            create_request_id(&mut uid_generator, height),
+            create_request_id(&mut uid_generator, height),
+            create_request_id(&mut uid_generator, height),
+            create_request_id(&mut uid_generator, height),
+            create_request_id(&mut uid_generator, height),
+        );
+
+        // Set up the ECDSA pool. Pool has shares for requests 1, 2, 3.
+        // Only the share for request 1 is issued by us
+        let shares = vec![
+            EcdsaMessage::EcdsaSigShare(create_signature_share(NODE_1, id_1)),
+            EcdsaMessage::EcdsaSigShare(create_signature_share(NODE_2, id_2)),
+            EcdsaMessage::EcdsaSigShare(create_signature_share(NODE_3, id_3)),
+        ];
+
+        // Set up the signature requests
+        // The block requests signatures 1, 4, 5
+        let block_reader = TestEcdsaBlockReader::for_signer_test(
+            Height::from(100),
+            vec![
+                (id_1, create_sig_inputs(1)),
+                (id_4, create_sig_inputs(4)),
+                (id_5, create_sig_inputs(5)),
+            ],
+        );
+        let transcript_loader: TestEcdsaTranscriptLoader = Default::default();
+
+        // Test using CryptoReturningOK
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut ecdsa_pool, signer) = create_signer_dependencies(pool_config, logger);
-                let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1), Height::new(0));
-                let height = Height::from(100);
-                let (id_1, id_2, id_3, id_4, id_5) = (
-                    create_request_id(&mut uid_generator, height),
-                    create_request_id(&mut uid_generator, height),
-                    create_request_id(&mut uid_generator, height),
-                    create_request_id(&mut uid_generator, height),
-                    create_request_id(&mut uid_generator, height),
-                );
 
-                // Set up the ECDSA pool. Pool has shares for requests 1, 2, 3.
-                // Only the share for request 1 is issued by us
-                let share_1 = create_signature_share(NODE_1, id_1);
-                let share_2 = create_signature_share(NODE_2, id_2);
-                let share_3 = create_signature_share(NODE_3, id_3);
-                let change_set = vec![
-                    EcdsaChangeAction::AddToValidated(EcdsaMessage::EcdsaSigShare(share_1)),
-                    EcdsaChangeAction::AddToValidated(EcdsaMessage::EcdsaSigShare(share_2)),
-                    EcdsaChangeAction::AddToValidated(EcdsaMessage::EcdsaSigShare(share_3)),
-                ];
-                ecdsa_pool.apply_changes(change_set);
-
-                // Set up the signature requests
-                // The block requests signatures 1, 4, 5
-                let block_reader = TestEcdsaBlockReader::for_signer_test(
-                    Height::from(100),
-                    vec![
-                        (id_1, create_sig_inputs(1)),
-                        (id_4, create_sig_inputs(4)),
-                        (id_5, create_sig_inputs(5)),
-                    ],
+                ecdsa_pool.apply_changes(
+                    shares
+                        .iter()
+                        .map(|s| EcdsaChangeAction::AddToValidated(s.clone()))
+                        .collect(),
                 );
-                let transcript_loader: TestEcdsaTranscriptLoader = Default::default();
 
                 // Since request 1 is already in progress, we should issue
                 // shares only for transcripts 4, 5
@@ -759,7 +759,30 @@ mod tests {
                     block_reader.tip_height()
                 ));
             })
-        })
+        });
+
+        // Test using crypto without keys
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let (mut ecdsa_pool, signer) = create_signer_dependencies_with_crypto(
+                    pool_config,
+                    logger,
+                    Some(crypto_without_keys()),
+                );
+
+                ecdsa_pool.apply_changes(
+                    shares
+                        .iter()
+                        .map(|s| EcdsaChangeAction::AddToValidated(s.clone()))
+                        .collect(),
+                );
+
+                // Crypto should return an error and no shares should be created.
+                let change_set =
+                    signer.send_signature_shares(&ecdsa_pool, &transcript_loader, &block_reader);
+                assert!(change_set.is_empty());
+            })
+        });
     }
 
     // Tests that complaints are generated and added to the pool if loading transcript
@@ -855,61 +878,64 @@ mod tests {
     // requests, and others dealings are either deferred or dropped.
     #[test]
     fn test_ecdsa_validate_signature_shares() {
+        let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1), Height::new(0));
+        let time_source = FastForwardTimeSource::new();
+        let height = Height::from(100);
+        let (id_1, id_2, id_3, id_4) = (
+            create_request_id(&mut uid_generator, Height::from(200)),
+            create_request_id(&mut uid_generator, height),
+            create_request_id(&mut uid_generator, Height::from(10)),
+            create_request_id(&mut uid_generator, Height::from(5)),
+        );
+
+        // Set up the transcript creation request
+        // The block requests transcripts 2, 3
+        let block_reader = TestEcdsaBlockReader::for_signer_test(
+            height,
+            vec![(id_2, create_sig_inputs(2)), (id_3, create_sig_inputs(3))],
+        );
+
+        // Set up the ECDSA pool
+        let mut artifacts = Vec::new();
+        // A share from a node ahead of us (deferred)
+        let share = create_signature_share(NODE_2, id_1);
+        artifacts.push(UnvalidatedArtifact {
+            message: EcdsaMessage::EcdsaSigShare(share),
+            peer_id: NODE_2,
+            timestamp: time_source.get_relative_time(),
+        });
+
+        // A share for a request in the finalized block (accepted)
+        let share = create_signature_share(NODE_2, id_2);
+        let msg_id_2 = share.message_id();
+        artifacts.push(UnvalidatedArtifact {
+            message: EcdsaMessage::EcdsaSigShare(share),
+            peer_id: NODE_2,
+            timestamp: time_source.get_relative_time(),
+        });
+
+        // A share for a request in the finalized block (accepted)
+        let share = create_signature_share(NODE_2, id_3);
+        let msg_id_3 = share.message_id();
+        artifacts.push(UnvalidatedArtifact {
+            message: EcdsaMessage::EcdsaSigShare(share),
+            peer_id: NODE_2,
+            timestamp: time_source.get_relative_time(),
+        });
+
+        // A share for a request not in the finalized block (dropped)
+        let share = create_signature_share(NODE_2, id_4);
+        let msg_id_4 = share.message_id();
+        artifacts.push(UnvalidatedArtifact {
+            message: EcdsaMessage::EcdsaSigShare(share),
+            peer_id: NODE_2,
+            timestamp: time_source.get_relative_time(),
+        });
+
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut ecdsa_pool, signer) = create_signer_dependencies(pool_config, logger);
-                let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1), Height::new(0));
-                let time_source = FastForwardTimeSource::new();
-                let height = Height::from(100);
-                let (id_1, id_2, id_3, id_4) = (
-                    create_request_id(&mut uid_generator, Height::from(200)),
-                    create_request_id(&mut uid_generator, height),
-                    create_request_id(&mut uid_generator, Height::from(10)),
-                    create_request_id(&mut uid_generator, Height::from(5)),
-                );
-
-                // Set up the transcript creation request
-                // The block requests transcripts 2, 3
-                let block_reader = TestEcdsaBlockReader::for_signer_test(
-                    height,
-                    vec![(id_2, create_sig_inputs(2)), (id_3, create_sig_inputs(3))],
-                );
-
-                // Set up the ECDSA pool
-                // A share from a node ahead of us (deferred)
-                let share = create_signature_share(NODE_2, id_1);
-                ecdsa_pool.insert(UnvalidatedArtifact {
-                    message: EcdsaMessage::EcdsaSigShare(share),
-                    peer_id: NODE_2,
-                    timestamp: time_source.get_relative_time(),
-                });
-
-                // A share for a request in the finalized block (accepted)
-                let share = create_signature_share(NODE_2, id_2);
-                let msg_id_2 = share.message_id();
-                ecdsa_pool.insert(UnvalidatedArtifact {
-                    message: EcdsaMessage::EcdsaSigShare(share),
-                    peer_id: NODE_2,
-                    timestamp: time_source.get_relative_time(),
-                });
-
-                // A share for a request in the finalized block (accepted)
-                let share = create_signature_share(NODE_2, id_3);
-                let msg_id_3 = share.message_id();
-                ecdsa_pool.insert(UnvalidatedArtifact {
-                    message: EcdsaMessage::EcdsaSigShare(share),
-                    peer_id: NODE_2,
-                    timestamp: time_source.get_relative_time(),
-                });
-
-                // A share for a request not in the finalized block (dropped)
-                let share = create_signature_share(NODE_2, id_4);
-                let msg_id_4 = share.message_id();
-                ecdsa_pool.insert(UnvalidatedArtifact {
-                    message: EcdsaMessage::EcdsaSigShare(share),
-                    peer_id: NODE_2,
-                    timestamp: time_source.get_relative_time(),
-                });
+                artifacts.iter().for_each(|a| ecdsa_pool.insert(a.clone()));
 
                 let change_set = signer.validate_signature_shares(&ecdsa_pool, &block_reader);
                 assert_eq!(change_set.len(), 3);
@@ -917,7 +943,24 @@ mod tests {
                 assert!(is_moved_to_validated(&change_set, &msg_id_3));
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id_4));
             })
-        })
+        });
+
+        // Simulate failure when resolving transcripts
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let (mut ecdsa_pool, signer) = create_signer_dependencies(pool_config, logger);
+                artifacts.iter().for_each(|a| ecdsa_pool.insert(a.clone()));
+
+                let block_reader = block_reader.clone().without_idkg_transcripts();
+                // There are no transcripts in the block reader, shares created for transcripts
+                // that cannot be resolved should be handled invalid.
+                let change_set = signer.validate_signature_shares(&ecdsa_pool, &block_reader);
+                assert_eq!(change_set.len(), 3);
+                assert!(is_handle_invalid(&change_set, &msg_id_2));
+                assert!(is_handle_invalid(&change_set, &msg_id_3));
+                assert!(is_removed_from_unvalidated(&change_set, &msg_id_4));
+            })
+        });
     }
 
     // Tests that duplicate shares from a signer for the same request
