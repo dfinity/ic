@@ -7,6 +7,7 @@ mod construction_payloads;
 mod construction_preprocess;
 mod construction_submit;
 
+use crate::ledger_client::pending_proposals_response::PendingProposalsResponse;
 use crate::ledger_client::proposal_info_response::ProposalInfoResponse;
 use crate::models::{CallResponse, Object};
 use crate::request_types::GetProposalInfo;
@@ -172,6 +173,11 @@ impl RosettaRequestHandler {
                     .await?;
                 let proposal_info_response = ProposalInfoResponse::from(proposal_info);
                 Ok(CallResponse::new(Object::from(proposal_info_response)))
+            }
+            "get_pending_proposals" => {
+                let pending_proposals = self.ledger.pending_proposals().await?;
+                let pending_proposals_response = PendingProposalsResponse::from(pending_proposals);
+                Ok(CallResponse::new(Object::from(pending_proposals_response)))
             }
             _ => Err(ApiError::InvalidRequest(
                 false,

@@ -1,8 +1,10 @@
 use crate::driver::resource::AllocatedVm;
 use ic_base_types::CanisterId;
 use ic_ledger_core::block::BlockIndex;
+use ic_nns_governance::pb::v1::Proposal;
 use ic_rosetta_api::convert::to_model_account_identifier;
 
+use ic_rosetta_api::ledger_client::pending_proposals_response::PendingProposalsResponse;
 use ic_rosetta_api::models::operation::Operation;
 use ic_rosetta_api::models::{
     AccountBalanceMetadata, AccountBalanceRequest, AccountBalanceResponse, AccountType,
@@ -120,7 +122,7 @@ impl RosettaApiClient {
         pk: PublicKey,
     ) -> Result<Result<ConstructionDeriveResponse, Error>, String> {
         let req = ConstructionDeriveRequest::new(self.network_id(), pk);
-        to_rosetta_response(
+        to_rosetta_response::<ConstructionDeriveResponse>(
             self.post_json_request(
                 &format!("{}/construction/derive", self.api_url),
                 serde_json::to_vec(&req).unwrap(),
@@ -140,7 +142,7 @@ impl RosettaApiClient {
                 account_type: AccountType::Neuron { neuron_index: 0 },
             }),
         };
-        to_rosetta_response(
+        to_rosetta_response::<ConstructionDeriveResponse>(
             self.post_json_request(
                 &format!("{}/construction/derive", self.api_url),
                 serde_json::to_vec(&req).unwrap(),
@@ -154,7 +156,7 @@ impl RosettaApiClient {
         ops: Vec<Operation>,
     ) -> Result<Result<ConstructionPreprocessResponse, Error>, String> {
         let req = ConstructionPreprocessRequest::new(self.network_id(), ops);
-        to_rosetta_response(
+        to_rosetta_response::<ConstructionPreprocessResponse>(
             self.post_json_request(
                 &format!("{}/construction/preprocess", self.api_url),
                 serde_json::to_vec(&req).unwrap(),
@@ -173,7 +175,7 @@ impl RosettaApiClient {
             unsigned_transaction,
             signatures,
         };
-        to_rosetta_response(
+        to_rosetta_response::<ConstructionCombineResponse>(
             self.post_json_request(
                 &format!("{}/construction/combine", self.api_url),
                 serde_json::to_vec(&req).unwrap(),
@@ -190,7 +192,7 @@ impl RosettaApiClient {
             network_identifier: self.network_id(),
             signed_transaction,
         };
-        to_rosetta_response(
+        to_rosetta_response::<ConstructionHashResponse>(
             self.post_json_request(
                 &format!("{}/construction/hash", self.api_url),
                 serde_json::to_vec(&req).unwrap(),
@@ -209,7 +211,7 @@ impl RosettaApiClient {
             options,
             public_keys,
         };
-        to_rosetta_response(
+        to_rosetta_response::<ConstructionMetadataResponse>(
             self.post_json_request(
                 &format!("{}/construction/metadata", self.api_url),
                 serde_json::to_vec(&req).unwrap(),
@@ -228,7 +230,7 @@ impl RosettaApiClient {
             signed,
             transaction,
         };
-        to_rosetta_response(
+        to_rosetta_response::<ConstructionParseResponse>(
             self.post_json_request(
                 &format!("{}/construction/parse", self.api_url),
                 serde_json::to_vec(&req).unwrap(),
@@ -251,7 +253,7 @@ impl RosettaApiClient {
         };
         let url = &format!("{}/construction/payloads", self.api_url);
         info!(&self.logger, "Payloads, url: {}", url.clone());
-        to_rosetta_response(
+        to_rosetta_response::<ConstructionPayloadsResponse>(
             self.post_json_request(url, serde_json::to_vec(&req).unwrap())
                 .await,
         )
@@ -270,7 +272,7 @@ impl RosettaApiClient {
 
         let req = ConstructionSubmitRequest::new(self.network_id(), signed_transaction);
 
-        to_rosetta_response(
+        to_rosetta_response::<ConstructionSubmitResponse>(
             self.post_json_request(
                 &format!("{}/construction/submit", self.api_url),
                 serde_json::to_vec(&req).unwrap(),
@@ -283,7 +285,7 @@ impl RosettaApiClient {
         let url = format!("{}/network/list", self.api_url);
         debug!(&self.logger, "[Rosetta client] Call: {}", url);
         let req = MetadataRequest::new();
-        to_rosetta_response(
+        to_rosetta_response::<NetworkListResponse>(
             self.post_json_request(&url, serde_json::to_vec(&req).unwrap())
                 .await,
         )
@@ -292,7 +294,7 @@ impl RosettaApiClient {
     pub async fn network_status(&self) -> Result<Result<NetworkStatusResponse, Error>, String> {
         let url = format!("{}/network/status", self.api_url);
         let req = NetworkRequest::new(self.network_id());
-        to_rosetta_response(
+        to_rosetta_response::<NetworkStatusResponse>(
             self.post_json_request(&url, serde_json::to_vec(&req).unwrap())
                 .await,
         )
@@ -302,7 +304,7 @@ impl RosettaApiClient {
     //     let url = format!("{}/network/options", self.api_url);
     //     info!(&self.logger, "POST NETWORK/OPTIONS, url: {}", url);
     //     let req = MetadataRequest::new();
-    //     to_rosetta_response(
+    //     to_rosetta_response::<>(
     //         self.post_json_request(&url, serde_json::to_vec(&req).unwrap())
     //             .await,
     //     )
@@ -334,7 +336,7 @@ impl RosettaApiClient {
             metadata: Some(account_balance_metadata),
         };
 
-        to_rosetta_response(
+        to_rosetta_response::<AccountBalanceResponse>(
             self.post_json_request(
                 &format!("{}/account/balance", self.api_url),
                 serde_json::to_vec(&req).unwrap(),
@@ -367,7 +369,7 @@ impl RosettaApiClient {
     ) -> Result<Result<AccountBalanceResponse, Error>, String> {
         let req =
             AccountBalanceRequest::new(self.network_id(), to_model_account_identifier(&account));
-        to_rosetta_response(
+        to_rosetta_response::<AccountBalanceResponse>(
             self.post_json_request(
                 &format!("{}/account/balance", self.api_url),
                 serde_json::to_vec(&req).unwrap(),
@@ -383,7 +385,7 @@ impl RosettaApiClient {
         };
         let req = BlockRequest::new(self.network_id(), block_id);
 
-        to_rosetta_response(
+        to_rosetta_response::<BlockResponse>(
             self.post_json_request(
                 &format!("{}/block", self.api_url),
                 serde_json::to_vec(&req).unwrap(),
@@ -407,13 +409,46 @@ impl RosettaApiClient {
             "[Rosetta client] Call: {}",
             &format!("{}/call", self.api_url)
         );
-        to_rosetta_response(
+        to_rosetta_response::<CallResponse>(
             self.post_json_request(
                 &format!("{}/call", self.api_url),
                 serde_json::to_vec(&req).unwrap(),
             )
             .await,
         )
+    }
+
+    pub async fn get_pending_proposals(&self) -> Result<Vec<Proposal>, String> {
+        let req = CallRequest::new(
+            self.network_id(),
+            "get_pending_proposals".to_owned(),
+            Object::new(),
+        );
+        debug!(&self.logger, "[Rosetta client] Call Request: {:?}", req);
+        debug!(
+            &self.logger,
+            "[Rosetta client] Call: {}",
+            &format!("{}/call", self.api_url)
+        );
+
+        let pending_proposals: Vec<Proposal> = PendingProposalsResponse::try_from(Some(
+            to_rosetta_response::<CallResponse>(
+                self.post_json_request(
+                    &format!("{}/call", self.api_url),
+                    serde_json::to_vec(&req).unwrap(),
+                )
+                .await,
+            )
+            .unwrap()
+            .unwrap()
+            .result,
+        ))
+        .unwrap()
+        .pending_proposals
+        .into_iter()
+        .map(|p| p.proposal.unwrap())
+        .collect();
+        Ok(pending_proposals)
     }
 
     pub async fn wait_for_block_at(&self, idx: u64) -> Result<Block, String> {

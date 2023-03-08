@@ -121,9 +121,15 @@ impl LedgerAccess for TestLedger {
     async fn read_blocks<'a>(&'a self) -> Box<dyn Deref<Target = Blocks> + 'a> {
         Box::new(self.blockchain.read().await)
     }
+
     async fn proposal_info(&self, _proposal_id: u64) -> Result<ProposalInfo, ApiError> {
         Err(ApiError::InternalError(false, Default::default()))
     }
+
+    async fn pending_proposals(&self) -> Result<Vec<ProposalInfo>, ApiError> {
+        Err(ApiError::InternalError(false, Default::default()))
+    }
+
     async fn cleanup(&self) {}
 
     fn token_symbol(&self) -> &str {
