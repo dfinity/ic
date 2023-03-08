@@ -43,6 +43,16 @@ pub struct DerivationPath {
 }
 
 impl DerivationPath {
+    /// The maximum length of a BIP32 derivation path
+    ///
+    /// The extended public key format uses a byte to represent the derivation
+    /// level of a key, thus BIP32 derivations with more than 255 path elements
+    /// are not interoperable with other software.
+    ///
+    /// See https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki#serialization-format
+    /// for details
+    const MAXIMUM_DERIVATION_PATH_LENGTH: usize = 255;
+
     /// Create a standard BIP32 derivation path
     pub fn new_bip32(bip32: &[u32]) -> Self {
         let mut path = Vec::with_capacity(bip32.len());
@@ -111,6 +121,14 @@ impl DerivationPath {
             return Err(ThresholdEcdsaError::InvalidArguments(format!(
                 "Invalid chain code length {}",
                 chain_code.len()
+            )));
+        }
+
+        if self.path.len() > Self::MAXIMUM_DERIVATION_PATH_LENGTH {
+            return Err(ThresholdEcdsaError::InvalidArguments(format!(
+                "Derivation path len {} larger than allowed maximum of {}",
+                self.path.len(),
+                Self::MAXIMUM_DERIVATION_PATH_LENGTH
             )));
         }
 

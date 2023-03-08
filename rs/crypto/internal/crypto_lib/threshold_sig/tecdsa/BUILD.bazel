@@ -9,6 +9,7 @@ DEPENDENCIES = [
     "//rs/crypto/internal/crypto_lib/types",
     "//rs/crypto/sha",
     "//rs/types/types",
+    "@crate_index//:assert_matches",
     "@crate_index//:hex",
     "@crate_index//:hex-literal",
     "@crate_index//:k256",
