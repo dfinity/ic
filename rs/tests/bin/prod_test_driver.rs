@@ -1,9 +1,9 @@
 use clap::Parser;
-use ic_tests::{driver::driver_setup::initialize_env, ledger_tests, message_routing};
+use ic_tests::driver::driver_setup::initialize_env;
 use ic_tests::{
     driver::{
         cli::{CliArgs, DriverSubCommand, ValidatedCliProcessTestsArgs, ValidatedCliRunTestsArgs},
-        config::{self, *},
+        config,
         driver_setup::{create_driver_context_from_cli, mk_stdout_logger},
         evaluation::{evaluate, generate_suite_execution_contract},
         pot_dsl::*,
@@ -195,44 +195,6 @@ fn get_test_suites() -> HashMap<String, Suite> {
     let mut m = HashMap::new();
     // Suites used for testing `prod-test-driver` itself.
     get_e2e_suites().into_iter().for_each(|s| m.add_suite(s));
-
-    m.add_suite(
-        suite(
-            "pre_master",
-            vec![pot_with_setup(
-                "transaction_ledger_correctness_pot",
-                ledger_tests::transaction_ledger_correctness::config,
-                par(vec![sys_t(
-                    "transaction_ledger_correctness_test",
-                    ledger_tests::transaction_ledger_correctness::test,
-                )]),
-            )],
-        )
-        .with_alert(TEST_FAILURE_CHANNEL),
-    );
-
-    m.add_suite(
-        suite(
-            "hourly",
-            vec![
-                pot_with_setup(
-                    "token_fault_tolerance_pot",
-                    ledger_tests::token_fault_tolerance::config,
-                    par(vec![sys_t(
-                        "token_fault_tolerance_test",
-                        ledger_tests::token_fault_tolerance::test,
-                    )]),
-                ),
-                pot_with_setup(
-                    "rejoin",
-                    message_routing::rejoin_test::config,
-                    par(vec![sys_t("rejoin", message_routing::rejoin_test::test)]),
-                ),
-            ],
-        )
-        .with_alert(TEST_FAILURE_CHANNEL),
-    );
-
     m
 }
 

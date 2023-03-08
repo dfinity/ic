@@ -16,7 +16,7 @@ Success:: balances obtained by queries matches expected balances after transfers
 end::catalog[] */
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer, NnsInstallationExt,
+    HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer, NnsInstallationExt,
 };
 use crate::util;
 
@@ -33,6 +33,7 @@ use std::time::Duration;
 const MAX_NUMBER_OF_RETRIES: usize = 5;
 
 pub fn config(env: TestEnv) {
+    env.ensure_group_setup_created();
     InternetComputer::new()
         .add_subnet(Subnet::fast_single_node(SubnetType::System).add_nodes(3))
         .add_subnet(Subnet::fast_single_node(SubnetType::Application))
