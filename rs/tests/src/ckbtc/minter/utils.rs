@@ -178,6 +178,13 @@ pub async fn wait_for_signed_tx(
                 info!(&logger, "[retrieve_btc_status] : Tx sent to mempool (3/3)");
                 return txid;
             }
+            RetrieveBtcStatus::Submitted { txid } => {
+                info!(
+                    &logger,
+                    "[retrieve_btc_status] : Tx sent to mempool, waiting for confirmations."
+                );
+                return txid;
+            }
             status => info!(
                 &logger,
                 "[retrieve_btc_status] unexpected status, got : {:?}", status
