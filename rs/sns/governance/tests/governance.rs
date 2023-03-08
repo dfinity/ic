@@ -2153,6 +2153,56 @@ fn test_register_vote_fails_if_past_deadline() {
     );
 }
 
+// If the deadline has passed, the neuron should not be able to vote.
+// This applies even if wait_for_quiet_state is None.
+#[test]
+fn test_register_vote_fails_if_past_deadline_no_wait_for_quiet() {
+    // Set up the test environment with a single neuron
+    let proposal_deadline = 10;
+    let (mut canister_fixture, user_principal, neuron_id) = GovernanceCanisterFixtureBuilder::new()
+        // Set the start time to be after the proposal deadline, so attempts to
+        // vote on the proposal should fail.
+        .set_start_time(proposal_deadline + 1)
+        .create_with_test_neuron();
+
+    let proposal_id = ProposalId::from(1);
+    let proposal = ProposalData {
+        id: Some(proposal_id),
+        proposal: Some(Proposal {
+            action: Some(Action::Motion(Motion::new("Test"))),
+            ..Proposal::default()
+        }),
+        ballots: btreemap! {
+            neuron_id.to_string() => Ballot {
+                vote: Vote::Unspecified as i32,
+                ..Ballot::default()
+            }
+        },
+        // Setting initial_voting_period_seconds instead of wait_for_quiet_state
+        initial_voting_period_seconds: proposal_deadline,
+        ..ProposalData::default()
+    };
+
+    // Register a vote
+    canister_fixture.directly_insert_proposal_data(proposal);
+    let error = canister_fixture
+        .vote(&neuron_id, proposal_id, Vote::Yes, user_principal)
+        .unwrap_err();
+
+    // Inspect results
+    assert!(error.to_string().contains("deadline"), "{error:?}");
+    let proposal = canister_fixture.get_proposal_or_panic(proposal_id);
+    assert_eq!(
+        proposal.ballots,
+        btreemap! {
+            neuron_id.clone().to_string() => Ballot {
+                vote: Vote::Unspecified as i32,
+                ..Ballot::default()
+            }
+        }
+    );
+}
+
 #[test]
 fn test_register_vote_happy() {
     // Set up the test environment with a single neuron
@@ -2178,6 +2228,55 @@ fn test_register_vote_happy() {
                 ..Ballot::default()
             }
         },
+        ..ProposalData::default()
+    };
+
+    canister_fixture.directly_insert_proposal_data(proposal);
+
+    // Register a vote
+    let RegisterVoteResponse {} = canister_fixture
+        .vote(&neuron_id, proposal_id, Vote::Yes, user_principal)
+        .unwrap();
+
+    // Inspect results
+    let proposal = canister_fixture.get_proposal_or_panic(proposal_id);
+    assert_eq!(
+        proposal.ballots,
+        btreemap! {
+            neuron_id.clone().to_string() => Ballot {
+                vote: Vote::Yes as i32,
+                cast_timestamp_seconds: proposal_deadline - 1,
+                ..Ballot::default()
+            }
+        }
+    );
+}
+
+// Same as the previous test, but wait_for_quiet_state is None.
+#[test]
+fn test_register_vote_happy_no_wait_for_quiet() {
+    // Set up the test environment with a single neuron
+    let proposal_deadline = 10;
+    let (mut canister_fixture, user_principal, neuron_id) = GovernanceCanisterFixtureBuilder::new()
+        .set_start_time(proposal_deadline - 1)
+        .create_with_test_neuron();
+
+    // Insert a proposal
+    let proposal_id = ProposalId::from(1);
+    let proposal = ProposalData {
+        id: Some(proposal_id),
+        proposal: Some(Proposal {
+            action: Some(Action::Motion(Motion::new("Test"))),
+            ..Proposal::default()
+        }),
+        ballots: btreemap! {
+            neuron_id.to_string() => Ballot {
+                vote: Vote::Unspecified as i32,
+                ..Ballot::default()
+            }
+        },
+        // Setting initial_voting_period_seconds instead of wait_for_quiet_state
+        initial_voting_period_seconds: proposal_deadline,
         ..ProposalData::default()
     };
 

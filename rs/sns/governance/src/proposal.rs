@@ -895,11 +895,16 @@ impl ProposalData {
     }
 
     /// Returns the proposal's current voting period deadline in seconds from the Unix epoch.
+    /// This may change as the wait_for_quiet_state is updated.
     pub fn get_deadline_timestamp_seconds(&self) -> u64 {
         self.wait_for_quiet_state
             .as_ref()
-            .expect("Proposal must have a wait_for_quiet_state.")
-            .current_deadline_timestamp_seconds
+            .map(|wfq| wfq.current_deadline_timestamp_seconds)
+            .unwrap_or(
+                // Assumes there is no delay between when the proposal is
+                // created and when the voting period "countdown clock" starts.
+                self.proposal_creation_timestamp_seconds + self.initial_voting_period_seconds,
+            )
     }
 
     /// Returns true if votes are still accepted for the proposal and
