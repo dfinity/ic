@@ -26,6 +26,7 @@ DEPENDENCIES = [
     "//rs/types/wasm_types",
     "//rs/universal_canister/lib",
     "@crate_index//:maplit",
+    "@crate_index//:tempfile",
     "@crate_index//:wat",
 ]
 

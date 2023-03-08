@@ -3,11 +3,16 @@ use canister_test::{CanisterId, CanisterInstallMode, Cycles, InstallCodeArgs};
 use criterion::{BatchSize, Criterion, Throughput};
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
 use ic_types::ingress::WasmResult;
-use std::cell::RefCell;
+use std::{
+    cell::RefCell,
+    time::{Duration, Instant},
+};
 
-const INITIAL_NUMBER_OF_ENTRIES: u64 = 128 * 1024;
-
-fn initialize_execution_test(wasm: &[u8], cell: &RefCell<Option<(ExecutionTest, CanisterId)>>) {
+fn initialize_execution_test(
+    wasm: &[u8],
+    initialization_arg: &[u8],
+    cell: &RefCell<Option<(ExecutionTest, CanisterId)>>,
+) {
     const LARGE_INSTRUCTION_LIMIT: u64 = 1_000_000_000_000;
 
     let mut current = cell.borrow_mut();
@@ -25,19 +30,30 @@ fn initialize_execution_test(wasm: &[u8], cell: &RefCell<Option<(ExecutionTest, 
         CanisterInstallMode::Install,
         canister_id,
         wasm.to_vec(),
-        Encode!(&INITIAL_NUMBER_OF_ENTRIES).unwrap(),
+        initialization_arg.to_vec(),
         None,
         None,
         None,
     );
-    let _result = test.install_code(args).unwrap();
+    let result = test.install_code(args).unwrap();
+    if let WasmResult::Reject(s) = result {
+        panic!("Installation rejected: {}", s)
+    }
+    test.checkpoint_canister_memories();
+
+    // Execute a message to synce the new memory so that time isn't included in
+    // benchmarks.
+    test.ingress(canister_id, "update_empty", Encode!(&()).unwrap())
+        .unwrap();
+
     *current = Some((test, canister_id));
 }
 
 pub fn update_bench(
     c: &mut Criterion,
-    wasm: Vec<u8>,
     name: &str,
+    wasm: &[u8],
+    initialization_arg: &[u8],
     method: &str,
     payload: &[u8],
     throughput: Option<Throughput>,
@@ -49,26 +65,31 @@ pub fn update_bench(
         group.throughput(throughput);
     }
     group.bench_function(name, |bench| {
-        bench.iter_batched(
-            || initialize_execution_test(&wasm, &cell),
-            |()| {
+        bench.iter_custom(|iters| {
+            let mut total_duration = Duration::ZERO;
+            for _ in 0..iters {
+                initialize_execution_test(wasm, initialization_arg, &cell);
                 let mut setup = cell.borrow_mut();
                 let (test, canister_id) = setup.as_mut().unwrap();
+                let start = Instant::now();
                 let result = test
                     .ingress(*canister_id, method, payload.to_vec())
                     .unwrap();
+                total_duration += start.elapsed();
                 assert!(matches!(result, WasmResult::Reply(_)));
-            },
-            BatchSize::SmallInput,
-        );
+                test.checkpoint_canister_memories();
+            }
+            total_duration
+        });
     });
     group.finish();
 }
 
 pub fn query_bench(
     c: &mut Criterion,
-    wasm: Vec<u8>,
     name: &str,
+    wasm: &[u8],
+    initialization_arg: &[u8],
     method: &str,
     payload: &[u8],
     throughput: Option<Throughput>,
@@ -81,7 +102,9 @@ pub fn query_bench(
     }
     group.bench_function(name, |bench| {
         bench.iter_batched(
-            || initialize_execution_test(&wasm, &cell),
+            || {
+                initialize_execution_test(wasm, initialization_arg, &cell);
+            },
             |()| {
                 let mut setup = cell.borrow_mut();
                 let (test, canister_id) = setup.as_mut().unwrap();

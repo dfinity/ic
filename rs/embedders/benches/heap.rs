@@ -1,5 +1,4 @@
 use criterion::{criterion_group, criterion_main, Criterion, Throughput};
-use embedders_bench::{query_bench, update_bench};
 use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
 use ic_sys::PAGE_SIZE;
 
@@ -9,6 +8,14 @@ const GB: usize = KB * KB * KB;
 const BYTES: Option<Throughput> = Some(Throughput::Bytes(
     (GB * core::mem::size_of::<i32>() / PAGE_SIZE) as u64,
 ));
+
+fn query_bench(c: &mut Criterion, name: &str, wasm: &[u8], method: &str) {
+    embedders_bench::query_bench(c, name, wasm, &[], method, &[], BYTES);
+}
+
+fn update_bench(c: &mut Criterion, name: &str, wasm: &[u8], method: &str) {
+    embedders_bench::update_bench(c, name, wasm, &[], method, &[], BYTES);
+}
 
 ////////////////////////////////////////////////////////////////////////
 // WAT
@@ -59,6 +66,7 @@ fn heap_wat(
 
             (func (export "canister_update update_test") (call $test))
             (func (export "canister_query query_test") (call $test))
+            (func (export "canister_update update_empty") (call $ic0_msg_reply))
             (memory (export "memory") {wasm_pages})
         )
     "#,
@@ -73,22 +81,22 @@ fn heap_wat(
 
 fn update_heap_read_1g_4k_fwd(c: &mut Criterion) {
     let wasm = wat::parse_str(heap_wat(Operation::Read, GB, 0, PAGE_SIZE as i32)).unwrap();
-    update_bench(c, wasm, "heap_read_1g_4k_fwd", "update_test", &[], BYTES);
+    update_bench(c, "heap_read_1g_4k_fwd", &wasm, "update_test");
 }
 
 fn query_heap_read_1g_4k_fwd(c: &mut Criterion) {
     let wasm = wat::parse_str(heap_wat(Operation::Read, GB, 0, PAGE_SIZE as i32)).unwrap();
-    query_bench(c, wasm, "heap_read_1g_4k_fwd", "query_test", &[], BYTES);
+    query_bench(c, "heap_read_1g_4k_fwd", &wasm, "query_test");
 }
 
 fn update_heap_read_1g_4k_bwd(c: &mut Criterion) {
     let wasm = wat::parse_str(heap_wat(Operation::Read, GB, GB, -(PAGE_SIZE as i32))).unwrap();
-    update_bench(c, wasm, "heap_read_1g_4k_bwd", "update_test", &[], BYTES);
+    update_bench(c, "heap_read_1g_4k_bwd", &wasm, "update_test");
 }
 
 fn query_heap_read_1g_4k_bwd(c: &mut Criterion) {
     let wasm = wat::parse_str(heap_wat(Operation::Read, GB, GB, -(PAGE_SIZE as i32))).unwrap();
-    query_bench(c, wasm, "heap_read_1g_4k_bwd", "query_test", &[], BYTES);
+    query_bench(c, "heap_read_1g_4k_bwd", &wasm, "query_test");
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -97,22 +105,22 @@ fn query_heap_read_1g_4k_bwd(c: &mut Criterion) {
 
 fn update_heap_write_1g_4k_fwd(c: &mut Criterion) {
     let wasm = wat::parse_str(heap_wat(Operation::Write, GB, 0, PAGE_SIZE as i32)).unwrap();
-    update_bench(c, wasm, "heap_write_1g_4k_fwd", "update_test", &[], BYTES);
+    update_bench(c, "heap_write_1g_4k_fwd", &wasm, "update_test");
 }
 
 fn query_heap_write_1g_4k_fwd(c: &mut Criterion) {
     let wasm = wat::parse_str(heap_wat(Operation::Write, GB, 0, PAGE_SIZE as i32)).unwrap();
-    query_bench(c, wasm, "heap_write_1g_4k_fwd", "query_test", &[], BYTES);
+    query_bench(c, "heap_write_1g_4k_fwd", &wasm, "query_test");
 }
 
 fn update_heap_write_1g_4k_bwd(c: &mut Criterion) {
     let wasm = wat::parse_str(heap_wat(Operation::Write, GB, GB, -(PAGE_SIZE as i32))).unwrap();
-    update_bench(c, wasm, "heap_write_1g_4k_bwd", "update_test", &[], BYTES);
+    update_bench(c, "heap_write_1g_4k_bwd", &wasm, "update_test");
 }
 
 fn query_heap_write_1g_4k_bwd(c: &mut Criterion) {
     let wasm = wat::parse_str(heap_wat(Operation::Write, GB, GB, -(PAGE_SIZE as i32))).unwrap();
-    query_bench(c, wasm, "heap_write_1g_4k_bwd", "query_test", &[], BYTES);
+    query_bench(c, "heap_write_1g_4k_bwd", &wasm, "query_test");
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -121,22 +129,22 @@ fn query_heap_write_1g_4k_bwd(c: &mut Criterion) {
 
 fn update_heap_rw_1g_4k_fwd(c: &mut Criterion) {
     let wasm = wat::parse_str(heap_wat(Operation::ReadWrite, GB, 0, PAGE_SIZE as i32)).unwrap();
-    update_bench(c, wasm, "heap_rw_1g_4k_fwd", "update_test", &[], BYTES);
+    update_bench(c, "heap_rw_1g_4k_fwd", &wasm, "update_test");
 }
 
 fn query_heap_rw_1g_4k_fwd(c: &mut Criterion) {
     let wasm = wat::parse_str(heap_wat(Operation::ReadWrite, GB, 0, PAGE_SIZE as i32)).unwrap();
-    query_bench(c, wasm, "heap_rw_1g_4k_fwd", "query_test", &[], BYTES);
+    query_bench(c, "heap_rw_1g_4k_fwd", &wasm, "query_test");
 }
 
 fn update_heap_rw_1g_4k_bwd(c: &mut Criterion) {
     let wasm = wat::parse_str(heap_wat(Operation::ReadWrite, GB, GB, -(PAGE_SIZE as i32))).unwrap();
-    update_bench(c, wasm, "heap_rw_1g_4k_bwd", "update_test", &[], BYTES);
+    update_bench(c, "heap_rw_1g_4k_bwd", &wasm, "update_test");
 }
 
 fn query_heap_rw_1g_4k_bwd(c: &mut Criterion) {
     let wasm = wat::parse_str(heap_wat(Operation::ReadWrite, GB, GB, -(PAGE_SIZE as i32))).unwrap();
-    query_bench(c, wasm, "heap_rw_1g_4k_bwd", "query_test", &[], BYTES);
+    query_bench(c, "heap_rw_1g_4k_bwd", &wasm, "query_test");
 }
 
 ////////////////////////////////////////////////////////////////////////
