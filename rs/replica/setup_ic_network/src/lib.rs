@@ -257,7 +257,9 @@ fn setup_artifact_manager(
                 time_source,
             }),
         );
-        return Ok(Arc::new(manager::ArtifactManagerImpl::new(backends)));
+        return Ok(Arc::new(
+            manager::ArtifactManagerImpl::new_with_default_priority_fn(backends),
+        ));
     }
     if let P2PStateSyncClient::Client(client) = state_sync_client {
         let advert_broadcaster = advert_broadcaster.clone();
@@ -504,7 +506,9 @@ fn setup_artifact_manager(
             )),
         );
     }
-    Ok(Arc::new(manager::ArtifactManagerImpl::new(backends)))
+    Ok(Arc::new(
+        manager::ArtifactManagerImpl::new_with_default_priority_fn(backends),
+    ))
 }
 
 /// The function initializes the artifact pools.

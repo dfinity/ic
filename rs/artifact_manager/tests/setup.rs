@@ -57,7 +57,9 @@ fn setup_manager(artifact_pool_config: ArtifactPoolConfig) -> Arc<dyn ArtifactMa
         )),
     );
 
-    Arc::new(manager::ArtifactManagerImpl::new(backends))
+    Arc::new(manager::ArtifactManagerImpl::new_with_default_priority_fn(
+        backends,
+    ))
 }
 
 fn init_artifact_pools(

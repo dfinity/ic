@@ -16,7 +16,7 @@
 use crate::metrics::DownloadPrioritizerMetrics;
 use ic_interfaces::artifact_manager::ArtifactManager;
 use ic_types::{
-    artifact::{ArtifactAttribute, ArtifactId, ArtifactPriorityFn, ArtifactTag, Priority},
+    artifact::{ArtifactId, ArtifactPriorityFn, ArtifactTag, Priority},
     chunkable::ChunkId,
     crypto::CryptoHash,
     p2p::GossipAdvert,
@@ -144,28 +144,6 @@ pub(crate) trait DownloadPrioritizer: Send + Sync {
         id: &ArtifactId,
         integrity_hash: &CryptoHash,
     ) -> Result<AdvertTrackerRef, DownloadPrioritizerError>;
-}
-
-/// Function type that returns a corresponding priority function
-type GetPriorityFn =
-    Arc<dyn Fn(&dyn ArtifactManager, ArtifactTag) -> ArtifactPriorityFn + Send + Sync + 'static>;
-
-/// Returns a default priority value
-fn priority_fn_default(_: &ArtifactId, _: &ArtifactAttribute) -> Priority {
-    Priority::Fetch
-}
-
-/// Returns the default priority using the internal representation
-fn get_priority_fn_default(_: &dyn ArtifactManager, _: ArtifactTag) -> ArtifactPriorityFn {
-    Box::new(priority_fn_default)
-}
-
-/// Gets priority function from artifact manager
-fn get_priority_fn_from_manager(
-    artifact_manager: &dyn ArtifactManager,
-    tag: ArtifactTag,
-) -> ArtifactPriorityFn {
-    artifact_manager.get_priority_function(tag)
 }
 
 /// Tracks download attempt history for a chunk
@@ -363,18 +341,7 @@ type ClientAdvertMap = HashMap<ArtifactTag, ClientAdvertMapInt>;
 /// A single client advert tracking data structure
 struct ClientAdvertMapInt {
     advert_map: AdvertTrackerAliasedMap,
-    get_priority_fn: GetPriorityFn,
     priority_fn: ArtifactPriorityFn,
-}
-
-impl Default for ClientAdvertMapInt {
-    fn default() -> Self {
-        ClientAdvertMapInt {
-            advert_map: Default::default(),
-            get_priority_fn: Arc::new(get_priority_fn_default),
-            priority_fn: Box::new(priority_fn_default),
-        }
-    }
 }
 
 // Peer Index:
@@ -577,20 +544,13 @@ impl DownloadPrioritizer for DownloadPrioritizerImpl {
         // queues (this trades off performance vs exposure to stale priorities)
 
         self.metrics.priority_fn_updates.inc();
-        let guard = self.replica_map.read().unwrap();
-        let (client_advert_map, _) = guard.deref();
-        let get_priority_fns: LinkedHashMap<_, _> = ArtifactTag::iter()
-            .map(|id| (id, client_advert_map[&id].get_priority_fn.clone()))
-            .collect();
-        drop(guard);
 
         // Capture the new priority functions.  This is a compute heavy operation so the
         // priority functions are collected with locks dropped.
         let priority_update_start = Instant::now();
-        let priority_fns: LinkedHashMap<_, _> = get_priority_fns
-            .iter()
-            .map(|(k, get_priority_fn)| {
-                let client_priority_fn = (*get_priority_fn)(artifact_manager, *k);
+        let priority_fns: LinkedHashMap<_, _> = ArtifactTag::iter()
+            .map(|k| {
+                let client_priority_fn = artifact_manager.get_priority_function(k);
                 (k, client_priority_fn)
             })
             .collect();
@@ -599,7 +559,7 @@ impl DownloadPrioritizer for DownloadPrioritizerImpl {
         let mut guard = self.replica_map.write().unwrap();
         let (client_advert_map, peer_map) = guard.deref_mut();
         priority_fns.into_iter().for_each(|(id, priority_fn)| {
-            client_advert_map.get_mut(id).unwrap().priority_fn = priority_fn;
+            client_advert_map.get_mut(&id).unwrap().priority_fn = priority_fn;
         });
 
         // Atomically(under lock) update all references from peers queues as per new
@@ -903,14 +863,12 @@ impl DownloadPrioritizerImpl {
 
             for client in ArtifactTag::iter() {
                 let client_map = ClientAdvertMapInt {
-                    get_priority_fn: Arc::new(get_priority_fn_from_manager),
-                    ..Default::default()
+                    priority_fn: artifact_manager.get_priority_function(client),
+                    advert_map: AdvertTrackerAliasedMap::default(),
                 };
                 client_advert_map.insert(client, client_map);
             }
         }
-        // Get all the priority functions from the clients !!
-        let _ = download_prioritizer.update_priority_functions(artifact_manager);
         download_prioritizer
     }
 }
@@ -922,6 +880,7 @@ pub(crate) mod test {
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities::types::ids::node_test_id;
     use ic_test_utilities_metrics::fetch_histogram_stats;
+    use ic_types::artifact::ArtifactAttribute;
     use ic_types::crypto::CryptoHash;
     use std::time::Duration;
 
@@ -945,29 +904,14 @@ pub(crate) mod test {
         }
     }
 
-    /// Returns a boxed reference to the function `priority_fn_dynamic`
-    fn get_priority_dynamic_fn(_: &dyn ArtifactManager, _: ArtifactTag) -> ArtifactPriorityFn {
-        Box::new(priority_fn_dynamic)
-    }
-
     /// Returns `Drop` priority
     fn priority_fn_drop_all(_: &ArtifactId, _: &ArtifactAttribute) -> Priority {
         Priority::Drop
     }
 
-    /// Returns a boxed reference to the function that returns `Drop` priority
-    fn get_priority_fn_drop_all(_: &dyn ArtifactManager, _: ArtifactTag) -> ArtifactPriorityFn {
-        Box::new(priority_fn_drop_all)
-    }
-
     /// Returns `Stash` priority
     fn priority_fn_stash_all(_: &ArtifactId, _: &ArtifactAttribute) -> Priority {
         Priority::Stash
-    }
-
-    /// Returns a boxed reference to the function that returns `Stash` priority
-    fn get_priority_fn_stash_all(_: &dyn ArtifactManager, _: ArtifactTag) -> ArtifactPriorityFn {
-        Box::new(priority_fn_stash_all)
     }
 
     /// Returns `Stash` priority after a short delay
@@ -976,24 +920,9 @@ pub(crate) mod test {
         Priority::Stash
     }
 
-    /// Returns a boxed reference to the function that returns a delayed `Stash`
-    /// priority
-    fn get_priority_fn_with_delay(_: &dyn ArtifactManager, _: ArtifactTag) -> ArtifactPriorityFn {
-        Box::new(priority_fn_with_delay)
-    }
-
     /// Returns `FetchNow` priority
     fn priority_fn_fetch_now_all(_: &ArtifactId, _: &ArtifactAttribute) -> Priority {
         Priority::FetchNow
-    }
-
-    /// Returns a boxed reference to the function that returns `FetchNow`
-    /// priority
-    fn get_priority_fn_fetch_now_all(
-        _: &dyn ArtifactManager,
-        _: ArtifactTag,
-    ) -> ArtifactPriorityFn {
-        Box::new(priority_fn_fetch_now_all)
     }
 
     /// Returns an advert with the given ID
@@ -1097,15 +1026,10 @@ pub(crate) mod test {
             let gossip_advert = make_gossip_advert(advert_id);
             let _ = download_prioritizer.add_advert(gossip_advert, peer_id);
         }
-        {
-            // update to new priority function
-            let mut guard = download_prioritizer.replica_map.write().unwrap();
-            let (client_advert_map, _peer_map) = guard.deref_mut();
-            for client in ArtifactTag::iter() {
-                let client = &mut client_advert_map.get_mut(&client).unwrap();
-                client.get_priority_fn = Arc::new(get_priority_fn_with_delay);
-            }
-        }
+        let artifact_manager = ArtifactManagerImpl::new(
+            HashMap::new(),
+            Box::new(|| Box::new(priority_fn_with_delay)),
+        );
         let dropped_artifacts = download_prioritizer.update_priority_functions(&artifact_manager);
         assert_eq!(dropped_artifacts.len(), 0);
         let timer_metric = fetch_histogram_stats(&metrics_registry, "priority_fn_time").unwrap();
@@ -1139,16 +1063,8 @@ pub(crate) mod test {
             assert_eq!(peer_advert_map[Priority::FetchNow].keys().len(), 0);
             assert_eq!(peer_advert_map[Priority::Later].keys().len(), 0);
         }
-
-        {
-            // update to new priority function
-            let mut guard = download_prioritizer.replica_map.write().unwrap();
-            let (client_advert_map, _peer_map) = guard.deref_mut();
-            for client in ArtifactTag::iter() {
-                let client = &mut client_advert_map.get_mut(&client).unwrap();
-                client.get_priority_fn = Arc::new(get_priority_dynamic_fn);
-            }
-        }
+        let artifact_manager =
+            ArtifactManagerImpl::new(HashMap::new(), Box::new(|| Box::new(priority_fn_dynamic)));
         let dropped_artifacts = download_prioritizer.update_priority_functions(&artifact_manager);
         assert_eq!(dropped_artifacts.len(), 0);
         // Check for correct prioritization
@@ -1193,15 +1109,8 @@ pub(crate) mod test {
             let _ = download_prioritizer.add_advert(gossip_advert, peer_id);
         }
 
-        {
-            // update to new new priority function
-            let mut guard = download_prioritizer.replica_map.write().unwrap();
-            let (client_advert_map, _peer_map) = guard.deref_mut();
-            for client in ArtifactTag::iter() {
-                let client = &mut client_advert_map.get_mut(&client).unwrap();
-                client.get_priority_fn = Arc::new(get_priority_fn_drop_all);
-            }
-        }
+        let artifact_manager =
+            ArtifactManagerImpl::new(HashMap::new(), Box::new(|| Box::new(priority_fn_drop_all)));
         let dropped_artifacts = download_prioritizer.update_priority_functions(&artifact_manager);
         assert_eq!(dropped_artifacts.len(), 30);
         // Check for correct prioritization
@@ -1258,17 +1167,8 @@ pub(crate) mod test {
 
         // Insert
         add_adverts(&download_prioritizer, 30, 3);
-
-        // updates
-        {
-            // update to new priority function
-            let mut guard = download_prioritizer.replica_map.write().unwrap();
-            let (client_advert_map, _peer_map) = guard.deref_mut();
-            for client in ArtifactTag::iter() {
-                let client = &mut client_advert_map.get_mut(&client).unwrap();
-                client.get_priority_fn = Arc::new(get_priority_dynamic_fn);
-            }
-        }
+        let artifact_manager =
+            ArtifactManagerImpl::new(HashMap::new(), Box::new(|| Box::new(priority_fn_dynamic)));
         let dropped_artifacts = download_prioritizer.update_priority_functions(&artifact_manager);
         assert_eq!(dropped_artifacts.len(), 0);
         // correct prioritization
@@ -1308,17 +1208,9 @@ pub(crate) mod test {
             let gossip_advert = make_gossip_advert(advert_id);
             let _ = download_prioritizer.add_advert(gossip_advert, peer_id);
         }
-
         // updates
-        {
-            // update to new priority function
-            let mut guard = download_prioritizer.replica_map.write().unwrap();
-            let (client_advert_map, _peer_map) = guard.deref_mut();
-            for client in ArtifactTag::iter() {
-                let client = &mut client_advert_map.get_mut(&client).unwrap();
-                client.get_priority_fn = Arc::new(get_priority_dynamic_fn);
-            }
-        }
+        let artifact_manager =
+            ArtifactManagerImpl::new(HashMap::new(), Box::new(|| Box::new(priority_fn_dynamic)));
         let dropped_artifacts = download_prioritizer.update_priority_functions(&artifact_manager);
         assert_eq!(dropped_artifacts.len(), 0);
         let mut peer_adverts = std::vec::Vec::new();
@@ -1417,21 +1309,12 @@ pub(crate) mod test {
     /// Tests the behavior of the prioritizer when all adverts are stashed
     #[test]
     fn stash_advert() {
-        let artifact_manager = ArtifactManagerImpl::default();
+        let artifact_manager =
+            ArtifactManagerImpl::new(HashMap::new(), Box::new(|| Box::new(priority_fn_stash_all)));
         let download_prioritizer: DownloadPrioritizerImpl = DownloadPrioritizerImpl::new(
             &artifact_manager,
             DownloadPrioritizerMetrics::new(&MetricsRegistry::new()),
         );
-
-        {
-            // stash all
-            let mut guard = download_prioritizer.replica_map.write().unwrap();
-            let (client_advert_map, _peer_map) = guard.deref_mut();
-            for client in ArtifactTag::iter() {
-                let client = &mut client_advert_map.get_mut(&client).unwrap();
-                client.get_priority_fn = Arc::new(get_priority_fn_stash_all);
-            }
-        }
 
         // Insert
         for advert_id in 0..30 {
@@ -1454,15 +1337,11 @@ pub(crate) mod test {
             assert_eq!(peer_advert_map[Priority::Stash].keys().len(), 10);
         }
 
-        {
-            // fetch now all
-            let mut guard = download_prioritizer.replica_map.write().unwrap();
-            let (client_advert_map, _peer_map) = guard.deref_mut();
-            for client in ArtifactTag::iter() {
-                let client = &mut client_advert_map.get_mut(&client).unwrap();
-                client.get_priority_fn = Arc::new(get_priority_fn_fetch_now_all);
-            }
-        }
+        // fetch now all
+        let artifact_manager = ArtifactManagerImpl::new(
+            HashMap::new(),
+            Box::new(|| Box::new(priority_fn_fetch_now_all)),
+        );
         let dropped_artifacts = download_prioritizer.update_priority_functions(&artifact_manager);
         assert_eq!(dropped_artifacts.len(), 0);
 
@@ -1490,21 +1369,13 @@ pub(crate) mod test {
     /// Tests the `peek_priority` method
     #[test]
     fn peek_advert() {
-        let artifact_manager = ArtifactManagerImpl::default();
+        let artifact_manager =
+            ArtifactManagerImpl::new(HashMap::new(), Box::new(|| Box::new(priority_fn_drop_all)));
         let download_prioritizer: DownloadPrioritizerImpl = DownloadPrioritizerImpl::new(
             &artifact_manager,
             DownloadPrioritizerMetrics::new(&MetricsRegistry::new()),
         );
 
-        {
-            // stash all
-            let mut guard = download_prioritizer.replica_map.write().unwrap();
-            let (client_advert_map, _peer_map) = guard.deref_mut();
-            for client in ArtifactTag::iter() {
-                let client = &mut client_advert_map.get_mut(&client).unwrap();
-                client.get_priority_fn = Arc::new(get_priority_fn_drop_all);
-            }
-        }
         let dropped_artifacts = download_prioritizer.update_priority_functions(&artifact_manager);
         assert_eq!(dropped_artifacts.len(), 0);
 
