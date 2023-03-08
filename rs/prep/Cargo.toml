@@ -11,6 +11,7 @@ chrono = "0.4.19"
 fs_extra = "1.2.0"
 ic-crypto = { path = "../crypto" }
 ic-crypto-node-key-generation = { path = "../crypto/node_key_generation" }
+ic-crypto-node-key-validation = { path = "../crypto/node_key_validation" }
 ic-crypto-test-utils-ni-dkg = { path = "../crypto/test_utils/ni-dkg" }
 ic-config = { path = "../config" }
 ic-constants = { path = "../constants" }
@@ -33,7 +34,7 @@ openssl = "0.10.29"
 maplit = "1.0.2"
 prost = "0.11.0"
 rand = "0.8"
-reqwest = { version = "0.11.1", features = [ "blocking", "native-tls" ] }
+reqwest = { version = "0.11.1", features = ["blocking", "native-tls"] }
 serde = { version = "1.0.99", features = ["derive"] }
 serde_json = "1.0.40"
 slog = { version = "2.5.2", features = [

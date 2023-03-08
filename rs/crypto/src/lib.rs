@@ -213,7 +213,7 @@ impl CryptoComponentImpl<Csp> {
     ///     let metrics_registry = MetricsRegistry::new();
     ///
     ///     # // generate the node keys in the secret key store needed for this example to work:
-    ///     # ic_crypto_node_key_generation::get_node_keys_or_generate_if_missing(&config, None);
+    ///     # ic_crypto_node_key_generation::generate_node_keys_once(&config, None).expect("error generating node public keys");
     ///     let first_crypto_component = Arc::new(CryptoComponent::new(&config, None, Arc::new(registry_client), logger, Some(&metrics_registry)));
     ///     let second_crypto_component = Arc::clone(&first_crypto_component);
     /// });

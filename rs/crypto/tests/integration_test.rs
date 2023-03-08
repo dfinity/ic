@@ -9,7 +9,8 @@ use ic_crypto_internal_csp_test_utils::remote_csp_vault::{
     get_temp_file_path, start_new_remote_csp_vault_server_for_test,
 };
 use ic_crypto_internal_tls::keygen::generate_tls_key_pair_der;
-use ic_crypto_node_key_generation::get_node_keys_or_generate_if_missing;
+use ic_crypto_node_key_generation::generate_node_keys_once;
+use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_crypto_temp_crypto::{EcdsaSubnetConfig, NodeKeysToGenerate, TempCryptoComponent};
 use ic_crypto_test_utils::files::temp_dir;
 use ic_crypto_test_utils::tls::x509_certificates::generate_ed25519_cert;
@@ -27,7 +28,7 @@ use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_utilities::FastForwardTimeSource;
 use ic_test_utilities_in_memory_logger::assertions::LogEntriesAssert;
 use ic_test_utilities_in_memory_logger::InMemoryReplicaLogger;
-use ic_types::crypto::{AlgorithmId, CryptoError, CurrentNodePublicKeys, KeyPurpose};
+use ic_types::crypto::{AlgorithmId, CryptoError, KeyPurpose};
 use ic_types::time::GENESIS;
 use ic_types::{RegistryVersion, Time};
 use ic_types_test_utils::ids::node_test_id;
@@ -118,7 +119,8 @@ fn should_successfully_construct_crypto_component_for_non_replica_process_with_d
 ) {
     CryptoConfig::run_with_temp_config(|config| {
         // Create node keys.
-        let (_created_node_pks, _node_id) = get_node_keys_or_generate_if_missing(&config, None);
+        let _created_node_pks =
+            generate_node_keys_once(&config, None).expect("error generating node public keys");
 
         let registry_client = FakeRegistryClient::new(Arc::new(ProtoRegistryDataProvider::new()));
         let _crypto = CryptoComponent::new_for_non_replica_process(
@@ -135,7 +137,9 @@ fn should_successfully_construct_crypto_component_for_non_replica_process_with_d
 fn should_provide_public_keys_via_crypto_for_non_replica_process() {
     CryptoConfig::run_with_temp_config(|config| {
         // Create node keys.
-        let (created_node_pks, _node_id) = get_node_keys_or_generate_if_missing(&config, None);
+        let created_node_pks =
+            generate_node_keys_once(&config, None).expect("error generating node public keys");
+        let node_id = created_node_pks.node_id();
 
         let registry_client = FakeRegistryClient::new(Arc::new(ProtoRegistryDataProvider::new()));
         let crypto = CryptoComponent::new_for_non_replica_process(
@@ -146,24 +150,19 @@ fn should_provide_public_keys_via_crypto_for_non_replica_process() {
             None,
         );
 
-        let retrieved_node_pks = crypto
-            .current_node_public_keys()
-            .expect("Failed to retrieve node public keys");
+        let retrieved_node_pks = ValidNodePublicKeys::try_from(
+            crypto
+                .current_node_public_keys()
+                .expect("Failed to retrieve node public keys"),
+            node_id,
+        )
+        .expect("retrieved keys are not valid");
 
-        assert!(all_node_keys_are_present(&retrieved_node_pks));
         assert_eq!(created_node_pks, retrieved_node_pks);
     })
 }
 
 // TODO(CRP-430): check/improve the test coverage of SKS checks.
-
-fn all_node_keys_are_present(node_pks: &CurrentNodePublicKeys) -> bool {
-    node_pks.node_signing_public_key.is_some()
-        && node_pks.committee_signing_public_key.is_some()
-        && node_pks.tls_certificate.is_some()
-        && node_pks.dkg_dealing_encryption_public_key.is_some()
-        && node_pks.idkg_dealing_encryption_public_key.is_some()
-}
 
 #[test]
 fn should_fail_check_keys_with_registry_if_no_keys_are_present_in_registry() {

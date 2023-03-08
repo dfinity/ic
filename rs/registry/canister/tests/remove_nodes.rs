@@ -6,8 +6,7 @@ use dfn_candid::candid;
 use ic_base_types::PrincipalId;
 use ic_canister_client_sender::Sender;
 use ic_config::crypto::CryptoConfig;
-use ic_crypto_node_key_generation::get_node_keys_or_generate_if_missing;
-use ic_crypto_node_key_validation::ValidNodePublicKeys;
+use ic_crypto_node_key_generation::generate_node_keys_once;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nns_common::registry::encode_or_panic;
 use ic_nns_test_utils::registry::{
@@ -314,11 +313,12 @@ fn remove_nodes_removes_all_keys() {
         let (init_mutation, _, _, _) = prepare_registry(1, NUM_NODES.into());
         let mut nodes_to_remove = vec![];
         let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
-        let (keys, node_id) = get_node_keys_or_generate_if_missing(&config, None);
-        let valid_keys = ValidNodePublicKeys::try_from(keys, node_id).unwrap();
+        let valid_pks =
+            generate_node_keys_once(&config, None).expect("error generating node public keys");
+        let node_id = valid_pks.node_id();
 
         // Add the node along with keys and certs
-        let mut mutations = make_add_node_registry_mutations(node_id, node, valid_keys);
+        let mut mutations = make_add_node_registry_mutations(node_id, node, valid_pks);
         // Add node operator records
         mutations.push(insert(
             make_node_operator_record_key(user_test_id(NO_ID).get()).as_bytes(),

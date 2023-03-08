@@ -286,6 +286,33 @@ mod tls {
     const NOT_AFTER: &str = "99991231235959Z";
 
     #[test]
+    fn should_return_self_signed_certificate() {
+        let csp = Csp::builder().build();
+
+        let cert = csp
+            .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
+            .expect("error generating TLS certificate");
+        let x509_cert = cert.as_x509();
+
+        let public_key = x509_cert.public_key().unwrap();
+        assert_eq!(x509_cert.verify(&public_key).ok(), Some(true));
+        assert_eq!(x509_cert.issued(x509_cert), X509VerifyResult::OK);
+    }
+
+    #[test]
+    fn should_not_set_subject_alt_name() {
+        let csp = Csp::builder().build();
+
+        let cert = csp
+            .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
+            .expect("error generating TLS certificate");
+        let x509_cert = cert.as_x509();
+
+        let subject_alt_names = x509_cert.subject_alt_names();
+        assert!(subject_alt_names.is_none());
+    }
+
+    #[test]
     #[should_panic(expected = "has already been inserted")]
     fn should_panic_if_secret_key_insertion_yields_duplicate_error() {
         let duplicated_key_id = KeyId::from([42; 32]);
@@ -325,8 +352,8 @@ mod tls {
         let cert = csp
             .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
             .expect("error generating TLS certificate");
-
         let x509_cert = cert.as_x509();
+
         assert_eq!(cn_entries(x509_cert).count(), 1);
         let subject_cn = cn_entries(x509_cert).next().unwrap();
         let expected_subject_cn = node_test_id(NODE_1).get().to_string();
@@ -436,14 +463,6 @@ mod tls {
         );
     }
 
-    fn cn_entries(x509_cert: &X509) -> X509NameEntries {
-        x509_cert.subject_name().entries_by_nid(Nid::COMMONNAME)
-    }
-
-    fn serial_number(cert: &TlsPublicKeyCert) -> BigNum {
-        cert.as_x509().serial_number().to_bn().unwrap()
-    }
-
     #[test]
     fn should_fail_with_internal_error_if_tls_public_key_certificate_already_set() {
         let csp = Csp::builder().build();
@@ -460,6 +479,14 @@ mod tls {
                 if internal_error.contains("TLS certificate already set")
             );
         }
+    }
+
+    fn cn_entries(x509_cert: &X509) -> X509NameEntries {
+        x509_cert.subject_name().entries_by_nid(Nid::COMMONNAME)
+    }
+
+    fn serial_number(cert: &TlsPublicKeyCert) -> BigNum {
+        cert.as_x509().serial_number().to_bn().unwrap()
     }
 }
 

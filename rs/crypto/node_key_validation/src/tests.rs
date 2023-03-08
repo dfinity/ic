@@ -2,8 +2,6 @@
 use super::*;
 use assert_matches::assert_matches;
 use ic_base_types::PrincipalId;
-use ic_config::crypto::CryptoConfig;
-use ic_crypto_node_key_generation::get_node_keys_or_generate_if_missing;
 use ic_types::crypto::AlgorithmId;
 use std::str::FromStr;
 
@@ -30,21 +28,6 @@ mod all_node_public_keys_validation {
             actual.tls_certificate() == &hard_coded_keys.tls_certificate.unwrap() &&
             actual.dkg_dealing_encryption_key() == &hard_coded_keys.dkg_dealing_encryption_public_key.unwrap() &&
             actual.idkg_dealing_encryption_key() == &hard_coded_keys.idkg_dealing_encryption_public_key.unwrap());
-    }
-
-    #[test]
-    fn should_succeed_for_generated_node_keys() {
-        let (generated_keys, node_id) = generate_node_keys_and_node_id();
-
-        let valid_keys = ValidNodePublicKeys::try_from(generated_keys.clone(), node_id);
-
-        assert_matches!(valid_keys, Ok(actual)
-            if actual.node_id() == node_id &&
-            actual.node_signing_key() == &generated_keys.node_signing_public_key.unwrap() &&
-            actual.committee_signing_key() == &generated_keys.committee_signing_public_key.unwrap() &&
-            actual.tls_certificate() == &generated_keys.tls_certificate.unwrap() &&
-            actual.dkg_dealing_encryption_key() == &generated_keys.dkg_dealing_encryption_public_key.unwrap() &&
-            actual.idkg_dealing_encryption_key() == &generated_keys.idkg_dealing_encryption_public_key.unwrap());
     }
 
     #[test]
@@ -166,17 +149,6 @@ mod node_signing_public_key_validation {
     }
 
     #[test]
-    fn should_succeed_for_generated_node_signing_public_key() {
-        let public_key = generate_node_keys()
-            .node_signing_public_key
-            .expect("missing node signing public key");
-
-        let valid_public_key = ValidNodeSigningPublicKey::try_from(public_key.clone());
-
-        assert_matches!(valid_public_key, Ok(actual) if actual.get() == &public_key);
-    }
-
-    #[test]
     fn should_fail_on_default_public_key() {
         let result = ValidNodeSigningPublicKey::try_from(PublicKey::default());
 
@@ -255,26 +227,29 @@ mod node_signing_public_key_validation {
     }
 
     pub fn derived_node_id() -> NodeId {
+        use ic_crypto_utils_basic_sig::conversions as basicsig_conversions;
         let expected_node_id = NodeId::new(
             PrincipalId::from_str(
                 "4inqb-2zcvk-f6yql-sowol-vg3es-z24jd-jrkow-mhnsd-ukvfp-fak5p-aae",
             )
             .unwrap(),
         );
-        assert_eq!(
-            expected_node_id,
-            ic_crypto_node_key_generation::derive_node_id(&valid_node_signing_public_key())
-        );
+        let actual_node_id = basicsig_conversions::derive_node_id(&valid_node_signing_public_key())
+            .expect("invalid node signing public key");
+        assert_eq!(expected_node_id, actual_node_id);
         expected_node_id
     }
 
     pub fn node_id_from_node_signing_public_key(public_keys: &CurrentNodePublicKeys) -> NodeId {
-        ic_crypto_node_key_generation::derive_node_id(
+        use ic_crypto_utils_basic_sig::conversions as basicsig_conversions;
+
+        basicsig_conversions::derive_node_id(
             public_keys
                 .node_signing_public_key
                 .as_ref()
                 .expect("missing node signing key required to compute NodeId"),
         )
+        .expect("Corrupted node signing public key")
     }
 }
 
@@ -284,17 +259,6 @@ mod committee_signing_public_key_validation {
     #[test]
     fn should_succeed_for_hard_coded_valid_committee_signing_public_key() {
         let public_key = valid_committee_signing_public_key();
-
-        let valid_public_key = ValidCommitteeSigningPublicKey::try_from(public_key.clone());
-
-        assert_matches!(valid_public_key, Ok(actual) if actual.get() == &public_key);
-    }
-
-    #[test]
-    fn should_succeed_for_generated_committee_signing_public_key() {
-        let public_key = generate_node_keys()
-            .committee_signing_public_key
-            .expect("missing committee signing public key");
 
         let valid_public_key = ValidCommitteeSigningPublicKey::try_from(public_key.clone());
 
@@ -376,10 +340,7 @@ mod committee_signing_public_key_validation {
     fn should_fail_if_committee_signing_key_pop_verification_fails() {
         let swapped_pop_committee_signing_key = {
             let mut committee_signing_public_key = valid_committee_signing_public_key();
-            let proof_data_for_other_key = generate_node_keys()
-                .committee_signing_public_key
-                .unwrap()
-                .proof_data;
+            let proof_data_for_other_key = another_valid_committee_signing_public_key().proof_data;
             assert_ne!(
                 committee_signing_public_key.proof_data,
                 proof_data_for_other_key
@@ -412,6 +373,23 @@ mod committee_signing_public_key_validation {
             timestamp: None,
         }
     }
+
+    fn another_valid_committee_signing_public_key() -> PublicKey {
+        PublicKey {
+            version: 0,
+            algorithm: AlgorithmId::MultiBls12_381 as i32,
+            key_value: hex_decode(
+                "8fff9f51d3af56efde0be172831a6b835be4df818de3ea2bb3ac666eb7\
+            9dcbe6393bac6f504ba490e6615988e285687f14c64d628a0262ee617d1c0a4aaaf500d44927bf0f849b3b\
+            029b3aa994be55e5a9c67a91934b873ebc01b244f5a8bea0",
+            ),
+            proof_data: Some(hex_decode(
+                "9984a0b02d25adba1af0058e65a297b81214f968c9ef04d0f1e8\
+            6b827d604acb2de08a4340515a9e48abcc241ad49642",
+            )),
+            timestamp: None,
+        }
+    }
 }
 
 mod dkg_dealing_encryption_public_key_validation {
@@ -424,19 +402,6 @@ mod dkg_dealing_encryption_public_key_validation {
 
         let valid_public_key =
             ValidDkgDealingEncryptionPublicKey::try_from((public_key.clone(), derived_node_id()));
-
-        assert_matches!(valid_public_key, Ok(actual) if actual.get() == &public_key);
-    }
-
-    #[test]
-    fn should_succeed_for_generated_dkg_dealing_encryption_public_key() {
-        let (public_keys, node_id) = generate_node_keys_and_node_id();
-        let public_key = public_keys
-            .dkg_dealing_encryption_public_key
-            .expect("missing NIDKG dealing encryption key");
-
-        let valid_public_key =
-            ValidDkgDealingEncryptionPublicKey::try_from((public_key.clone(), node_id));
 
         assert_matches!(valid_public_key, Ok(actual) if actual.get() == &public_key);
     }
@@ -488,10 +453,8 @@ mod dkg_dealing_encryption_public_key_validation {
     fn should_fail_if_dkg_dealing_encryption_key_is_invalid() {
         let swapped_pop_dkg_dealing_encryption_key = {
             let mut public_key = valid_dkg_dealing_encryption_public_key();
-            let proof_data_for_other_key = generate_node_keys()
-                .dkg_dealing_encryption_public_key
-                .unwrap()
-                .proof_data;
+            let proof_data_for_other_key =
+                another_valid_dkg_dealing_encryption_public_key().proof_data;
             assert_ne!(public_key.proof_data, proof_data_for_other_key);
             public_key.proof_data = proof_data_for_other_key;
             public_key
@@ -529,6 +492,25 @@ mod dkg_dealing_encryption_public_key_validation {
             timestamp: None,
         }
     }
+
+    fn another_valid_dkg_dealing_encryption_public_key() -> PublicKey {
+        PublicKey {
+            version: 0,
+            algorithm: AlgorithmId::Groth20_Bls12_381 as i32,
+            key_value: hex_decode(
+                "8a2804ac4c963d5013e7025af78a8fdae0e0274857a5f9c911148b6987\
+            2449b8465a0603dc0f78ccbaa4f268d5ac55c8",
+            ),
+            proof_data: Some(hex_decode(
+                "a1781847726f7468323057697468506f705f426c7331325f3338\
+            31a367706f705f6b65795830920b3b9f9cfba7c6f50cd808e9411650c8ebea541db499b2103e91720c38ea\
+            ed0a3e09a683ae4c5bee8f16e5c8a81fd1696368616c6c656e676558204432a1f6f054d076230ab13e30b8\
+            bce264ef781a6996ff8cf0831b93654e606568726573706f6e7365582018fe3e9e21cd1c40f48590d93617\
+            8e7df26d7a1d8172d480045f1f5e6afd387e",
+            )),
+            timestamp: None,
+        }
+    }
 }
 
 mod idkg_dealing_encryption_public_key_validation {
@@ -537,17 +519,6 @@ mod idkg_dealing_encryption_public_key_validation {
     #[test]
     fn should_succeed_for_hard_coded_valid_idkg_dealing_encryption_key() {
         let public_key = valid_idkg_dealing_encryption_public_key();
-
-        let valid_public_key = ValidIDkgDealingEncryptionPublicKey::try_from(public_key.clone());
-
-        assert_matches!(valid_public_key, Ok(actual) if actual.get() == &public_key);
-    }
-
-    #[test]
-    fn should_succeed_for_generated_idkg_dealing_encryption_key() {
-        let public_key = generate_node_keys()
-            .idkg_dealing_encryption_public_key
-            .expect("missing iDKG dealing encryption key");
 
         let valid_public_key = ValidIDkgDealingEncryptionPublicKey::try_from(public_key.clone());
 
@@ -637,16 +608,6 @@ fn invalidate_valid_ed25519_pubkey(
     let point_of_composite_order = point_of_prime_order + point_of_order_8;
     assert!(!point_of_composite_order.is_torsion_free());
     BasicSigEd25519PublicKeyBytes(point_of_composite_order.compress().0)
-}
-
-fn generate_node_keys() -> CurrentNodePublicKeys {
-    let (node_pks, _node_id) = generate_node_keys_and_node_id();
-    node_pks
-}
-
-fn generate_node_keys_and_node_id() -> (CurrentNodePublicKeys, NodeId) {
-    let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
-    get_node_keys_or_generate_if_missing(&config, None)
 }
 
 fn node_id(n: u64) -> NodeId {

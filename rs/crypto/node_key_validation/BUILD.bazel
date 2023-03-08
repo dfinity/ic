@@ -20,8 +20,7 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
-    "//rs/config",
-    "//rs/crypto/node_key_generation",
+    "//rs/crypto/utils/basic_sig",
     "//rs/test_utilities",
     "@crate_index//:assert_matches",
     "@crate_index//:curve25519-dalek",

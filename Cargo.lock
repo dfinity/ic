@@ -5583,6 +5583,7 @@ name = "ic-crypto-node-key-generation"
 version = "0.1.0"
 dependencies = [
  "assert_matches",
+ "hex",
  "ic-base-types",
  "ic-config",
  "ic-crypto",
@@ -5594,6 +5595,7 @@ dependencies = [
  "ic-crypto-node-key-validation",
  "ic-crypto-temp-crypto",
  "ic-crypto-test-utils",
+ "ic-crypto-test-utils-csp",
  "ic-crypto-tls-interfaces",
  "ic-crypto-utils-basic-sig",
  "ic-interfaces",
@@ -5618,14 +5620,13 @@ dependencies = [
  "curve25519-dalek",
  "hex",
  "ic-base-types",
- "ic-config",
  "ic-crypto-internal-basic-sig-ed25519",
  "ic-crypto-internal-multi-sig-bls12381",
  "ic-crypto-internal-threshold-sig-bls12381",
  "ic-crypto-internal-threshold-sig-ecdsa",
  "ic-crypto-internal-types",
- "ic-crypto-node-key-generation",
  "ic-crypto-tls-cert-validation",
+ "ic-crypto-utils-basic-sig",
  "ic-protobuf",
  "ic-test-utilities",
  "ic-types",
@@ -5776,7 +5777,7 @@ dependencies = [
 
 [[package]]
 name = "ic-crypto-test-utils-csp"
-version = "0.1.0"
+version = "0.8.0"
 dependencies = [
  "ic-base-types",
  "ic-crypto-internal-csp",
@@ -5893,10 +5894,8 @@ dependencies = [
  "dfn_core",
  "hex",
  "ic-base-types",
- "ic-config",
  "ic-crypto-internal-basic-sig-ed25519",
  "ic-crypto-internal-types",
- "ic-crypto-node-key-generation",
  "ic-crypto-test-utils",
  "ic-protobuf",
  "ic-test-utilities",
@@ -7459,6 +7458,7 @@ dependencies = [
  "ic-canister-client-sender",
  "ic-config",
  "ic-crypto-node-key-generation",
+ "ic-crypto-node-key-validation",
  "ic-crypto-sha",
  "ic-ic00-types",
  "ic-icrc1",
@@ -7693,6 +7693,7 @@ dependencies = [
  "ic-constants",
  "ic-crypto",
  "ic-crypto-node-key-generation",
+ "ic-crypto-node-key-validation",
  "ic-crypto-test-utils-ni-dkg",
  "ic-http-utils",
  "ic-ic00-types",

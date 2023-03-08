@@ -6,7 +6,7 @@ use crate::mutations::node_management::do_add_node::{
 use crate::registry::Registry;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_config::crypto::CryptoConfig;
-use ic_crypto_node_key_generation::get_node_keys_or_generate_if_missing;
+use ic_crypto_node_key_generation::generate_node_keys_once;
 use ic_nns_test_utils::registry::invariant_compliant_mutation;
 use ic_protobuf::registry::node::v1::NodeRecord;
 use ic_protobuf::registry::subnet::v1::SubnetListRecord;
@@ -91,10 +91,12 @@ pub fn prepare_registry_with_nodes(nodes: u64) -> (RegistryAtomicMutateRequest, 
     let node_ids: Vec<NodeId> = (0..nodes)
         .map(|_| {
             let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
-            let (node_pks, node_id) = get_node_keys_or_generate_if_missing(&config, None);
+            let node_pks =
+                generate_node_keys_once(&config, None).expect("error generating node public keys");
+            let node_id = node_pks.node_id();
             mutations.push(insert(
                 make_crypto_node_key(node_id, KeyPurpose::DkgDealingEncryption).as_bytes(),
-                encode_or_panic(&node_pks.dkg_dealing_encryption_public_key.unwrap()),
+                encode_or_panic(node_pks.dkg_dealing_encryption_key()),
             ));
 
             let node_key = make_node_record_key(node_id);

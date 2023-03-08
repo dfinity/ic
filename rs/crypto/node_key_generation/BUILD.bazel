@@ -25,6 +25,7 @@ DEV_DEPENDENCIES = [
     "//rs/crypto/internal/csp_test_utils",
     "//rs/crypto/temp_crypto",
     "//rs/crypto/test_utils",
+    "//rs/crypto/test_utils/csp",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
     "//rs/registry/fake",
@@ -32,6 +33,7 @@ DEV_DEPENDENCIES = [
     "//rs/types/base_types",
     "//rs/types/types_test_utils",
     "@crate_index//:assert_matches",
+    "@crate_index//:hex",
     "@crate_index//:openssl",
     "@crate_index//:tempfile",
 ]

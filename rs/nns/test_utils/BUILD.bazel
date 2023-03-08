@@ -6,6 +6,7 @@ DEPENDENCIES = [
     "//rs/canister_client/sender",
     "//rs/config",
     "//rs/crypto/node_key_generation",
+    "//rs/crypto/node_key_validation",
     "//rs/crypto/sha",
     "//rs/nervous_system/common",
     "//rs/nervous_system/common/test_keys",
