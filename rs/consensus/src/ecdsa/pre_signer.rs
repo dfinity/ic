@@ -1434,6 +1434,7 @@ impl TranscriptState {
 mod tests {
     use super::*;
     use crate::ecdsa::utils::test_utils::*;
+    use assert_matches::assert_matches;
     use ic_crypto_test_utils_canister_threshold_sigs::CanisterThresholdSigTestEnvironment;
     use ic_interfaces::artifact_pool::UnvalidatedArtifact;
     use ic_interfaces::ecdsa::MutableEcdsaPool;
@@ -1498,16 +1499,10 @@ mod tests {
 
         // Messages for transcripts currently requested
         let action = Action::action(&block_reader, &requested, Some(Height::from(100)), &id_1);
-        match action {
-            Action::Process(_) => {}
-            _ => panic!("Unexpected action: {:?}", action),
-        }
+        assert_matches!(action, Action::Process(_));
 
         let action = Action::action(&block_reader, &requested, Some(Height::from(10)), &id_2);
-        match action {
-            Action::Process(_) => {}
-            _ => panic!("Unexpected action: {:?}", action),
-        }
+        assert_matches!(action, Action::Process(_));
     }
 
     // Tests that dealings are sent for new transcripts, and requests already
