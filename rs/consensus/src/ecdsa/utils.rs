@@ -212,6 +212,10 @@ pub(crate) mod test_utils {
     use crate::ecdsa::signer::{EcdsaSignatureBuilder, EcdsaSignerImpl};
     use ic_artifact_pool::ecdsa_pool::EcdsaPoolImpl;
     use ic_config::artifact_pool::ArtifactPoolConfig;
+    use ic_crypto_temp_crypto::TempCryptoComponent;
+    use ic_crypto_test_utils_canister_threshold_sigs::{
+        create_signed_dealing, CanisterThresholdSigTestEnvironment,
+    };
     use ic_ic00_types::EcdsaKeyId;
     use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaPool};
     use ic_logger::ReplicaLogger;
@@ -259,9 +263,10 @@ pub(crate) mod test_utils {
         }
     }
 
+    #[derive(Clone)]
     pub(crate) struct TestTranscriptParams {
-        idkg_transcripts: BTreeMap<TranscriptRef, IDkgTranscript>,
-        transcript_params_ref: IDkgTranscriptParamsRef,
+        pub(crate) idkg_transcripts: BTreeMap<TranscriptRef, IDkgTranscript>,
+        pub(crate) transcript_params_ref: IDkgTranscriptParamsRef,
     }
 
     pub(crate) struct TestSigInputs {
@@ -270,21 +275,19 @@ pub(crate) mod test_utils {
     }
 
     // Test implementation of EcdsaBlockReader to inject the test transcript params
+    #[derive(Clone, Default)]
     pub(crate) struct TestEcdsaBlockReader {
         height: Height,
         requested_transcripts: Vec<IDkgTranscriptParamsRef>,
+        source_subnet_xnet_transcripts: Vec<IDkgTranscriptParamsRef>,
+        target_subnet_xnet_transcripts: Vec<IDkgTranscriptParamsRef>,
         requested_signatures: Vec<(RequestId, ThresholdEcdsaSigInputsRef)>,
         idkg_transcripts: BTreeMap<TranscriptRef, IDkgTranscript>,
     }
 
     impl TestEcdsaBlockReader {
         pub(crate) fn new() -> Self {
-            Self {
-                height: Height::new(0),
-                requested_transcripts: Vec::new(),
-                requested_signatures: Vec::new(),
-                idkg_transcripts: BTreeMap::new(),
-            }
+            Default::default()
         }
 
         pub(crate) fn for_pre_signer_test(
@@ -303,8 +306,8 @@ pub(crate) mod test_utils {
             Self {
                 height,
                 requested_transcripts,
-                requested_signatures: vec![],
                 idkg_transcripts,
+                ..Default::default()
             }
         }
 
@@ -323,9 +326,9 @@ pub(crate) mod test_utils {
 
             Self {
                 height,
-                requested_transcripts: vec![],
                 requested_signatures,
                 idkg_transcripts,
+                ..Default::default()
             }
         }
 
@@ -340,10 +343,30 @@ pub(crate) mod test_utils {
 
             Self {
                 height,
-                requested_transcripts: vec![],
-                requested_signatures: vec![],
                 idkg_transcripts,
+                ..Default::default()
             }
+        }
+
+        pub(crate) fn with_source_subnet_xnet_transcripts(
+            mut self,
+            refs: Vec<IDkgTranscriptParamsRef>,
+        ) -> Self {
+            self.source_subnet_xnet_transcripts = refs;
+            self
+        }
+
+        pub(crate) fn with_target_subnet_xnet_transcripts(
+            mut self,
+            refs: Vec<IDkgTranscriptParamsRef>,
+        ) -> Self {
+            self.target_subnet_xnet_transcripts = refs;
+            self
+        }
+
+        pub(crate) fn without_idkg_transcripts(mut self) -> Self {
+            self.idkg_transcripts = BTreeMap::new();
+            self
         }
 
         pub(crate) fn add_transcript(
@@ -377,13 +400,13 @@ pub(crate) mod test_utils {
         fn source_subnet_xnet_transcripts(
             &self,
         ) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_> {
-            Box::new(std::iter::empty())
+            Box::new(self.source_subnet_xnet_transcripts.iter())
         }
 
         fn target_subnet_xnet_transcripts(
             &self,
         ) -> Box<dyn Iterator<Item = &IDkgTranscriptParamsRef> + '_> {
-            Box::new(std::iter::empty())
+            Box::new(self.target_subnet_xnet_transcripts.iter())
         }
 
         fn transcript(
@@ -684,11 +707,26 @@ pub(crate) mod test_utils {
         }
     }
 
-    // Creates a test transcript param
+    /// Creates a test transcript param with registry version 0
     pub(crate) fn create_transcript_param(
         transcript_id: IDkgTranscriptId,
         dealer_list: &[NodeId],
         receiver_list: &[NodeId],
+    ) -> TestTranscriptParams {
+        create_transcript_param_with_registry_version(
+            transcript_id,
+            dealer_list,
+            receiver_list,
+            RegistryVersion::from(0),
+        )
+    }
+
+    /// Creates a test transcript param for a specific registry version
+    pub(crate) fn create_transcript_param_with_registry_version(
+        transcript_id: IDkgTranscriptId,
+        dealer_list: &[NodeId],
+        receiver_list: &[NodeId],
+        registry_version: RegistryVersion,
     ) -> TestTranscriptParams {
         let mut dealers = BTreeSet::new();
         dealer_list.iter().for_each(|val| {
@@ -710,14 +748,14 @@ pub(crate) mod test_utils {
         let attrs = IDkgTranscriptAttributes::new(
             dealers,
             AlgorithmId::ThresholdEcdsaSecp256k1,
-            RegistryVersion::from(0),
+            registry_version,
         );
 
         // The transcript that points to the random transcript
         let transcript_params_ref = ReshareOfMaskedParams::new(
             transcript_id,
             receivers,
-            RegistryVersion::from(0),
+            registry_version,
             &attrs,
             random_masked,
         );
@@ -766,6 +804,23 @@ pub(crate) mod test_utils {
     ) -> SignedIDkgDealing {
         SignedIDkgDealing {
             content: create_dealing_content(transcript_id),
+            signature: BasicSignature::fake(dealer_id),
+        }
+    }
+
+    // Creates a test signed dealing with internal payload
+    pub(crate) fn create_dealing_with_payload(
+        transcript_id: IDkgTranscriptId,
+        dealer_id: NodeId,
+    ) -> SignedIDkgDealing {
+        let env = CanisterThresholdSigTestEnvironment::new(2);
+        let dealer = env.receivers().into_iter().next().unwrap();
+        let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
+        let dealing = create_signed_dealing(&params, &env.crypto_components, dealer);
+        let mut content = create_dealing_content(transcript_id);
+        content.internal_dealing_raw = dealing.content.internal_dealing_raw;
+        SignedIDkgDealing {
+            content,
             signature: BasicSignature::fake(dealer_id),
         }
     }
@@ -1219,5 +1274,9 @@ pub(crate) mod test_utils {
             receiving_node_ids: (0..num_nodes).map(node_test_id).collect::<Vec<_>>(),
             registry_version: RegistryVersion::from(registry_version),
         }
+    }
+
+    pub(crate) fn crypto_without_keys() -> Arc<dyn ConsensusCrypto> {
+        TempCryptoComponent::builder().build_arc()
     }
 }

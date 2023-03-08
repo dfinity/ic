@@ -39,6 +39,7 @@ DEPENDENCIES = [
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "//rs/bitcoin/types/internal",
+    "//rs/crypto/temp_crypto",
     "//rs/cycles_account_manager",
     "//rs/execution_environment",
     "//rs/ingress_manager",

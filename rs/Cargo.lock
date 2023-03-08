@@ -4894,6 +4894,7 @@ dependencies = [
  "ic-constants",
  "ic-crypto",
  "ic-crypto-prng",
+ "ic-crypto-temp-crypto",
  "ic-crypto-test-utils-canister-threshold-sigs",
  "ic-cycles-account-manager",
  "ic-error-types",
