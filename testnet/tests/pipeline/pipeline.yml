@@ -147,16 +147,6 @@ rejoin-test-slo:
     # we need debug-level logs from the following components for IC policy monitoring
     REPLICA_LOG_DEBUG_OVERRIDES: "ic_consensus::consensus::batch_delivery,ic_artifact_manager::processors,ic_consensus::consensus,ic_transport::control_plane"
 
-system-tests-hourly:
-  extends:
-    - .system-tests
-    - .with-monitoring
-  variables:
-    SUITE_NAME: "hourly"
-    cd_target_env: "HOURLY"
-  script:
-    - *run-farm-based-test
-
 # Stress tests: Run given job sequence every N minutes so we can easily collect failure data
 icos-deploy-stress:
   extends: .prod-stress-test

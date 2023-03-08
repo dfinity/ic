@@ -68,11 +68,6 @@
     # we need debug-level logs from the following components for IC policy monitoring
     REPLICA_LOG_DEBUG_OVERRIDES: "ic_consensus::consensus::batch_delivery,ic_artifact_manager::processors,ic_consensus::consensus,ic_transport::control_plane"
 
-system-tests-pre-master:
-  extends: .system-tests
-  variables:
-    SUITE_NAME: "pre_master"
-
 test-prod-test-driver-e2e:
   extends:
    - .system-tests

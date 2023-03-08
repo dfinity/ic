@@ -22,7 +22,8 @@ end::catalog[] */
 
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt,
+    HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsCanisterEnvVars,
+    NnsInstallationExt,
 };
 use crate::util::{block_on, runtime_from_url};
 use rand_chacha::ChaCha8Rng;
@@ -63,6 +64,7 @@ const RND_SEED: u64 = 42;
 /// combine tests that are being run in similar environments. Please, keep this
 /// in mind when writing your tests!
 pub fn config(env: TestEnv) {
+    env.ensure_group_setup_created();
     InternetComputer::new()
         .add_fast_single_node_subnet(SubnetType::System)
         .add_fast_single_node_subnet(SubnetType::Application)
@@ -76,6 +78,7 @@ pub fn config(env: TestEnv) {
 }
 
 pub fn test(env: TestEnv) {
+    env.set_nns_canisters_env_vars().unwrap();
     let logger = env.logger();
     let topology = env.topology_snapshot();
     let nns_node = topology.root_subnet().nodes().next().unwrap();
