@@ -125,6 +125,23 @@ bazel-system-test-hourly:
   variables:
     BAZEL_TEST_TAG_FILTERS: "system_test_hourly"
 
+bazel-system-test-hotfix:
+  extends:
+    - .bazel-test-all
+    - .rules-prod-hotfix-pipeline
+  variables:
+    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --test_tag_filters=system_test_hotfix"
+    BAZEL_TARGETS: "//..."
+
+bazel-system-test-staging:
+  extends:
+    - .bazel-test-all
+    - .rules-rollout-pipeline-auto
+  variables:
+    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --test_tag_filters=system_test_staging"
+    BAZEL_TARGETS: "//..."
+  allow_failure: true
+
 bazel-system-test-nightly:
   extends:
     - .bazel-test-all

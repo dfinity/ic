@@ -104,18 +104,6 @@ impl Config {
     }
 }
 
-pub fn config_prod_slo_3_subnets() -> Config {
-    Config::new(3, 4, Duration::from_secs(1200), 10)
-}
-
-pub fn config_nightly_120_subnets() -> Config {
-    Config::new(120, 1, Duration::from_secs(600), 10) // 600s = 10min
-}
-
-pub fn config_hotfix_slo_3_subnets() -> Config {
-    Config::new(3, 4, Duration::from_secs(120), 10)
-}
-
 // Generic setup
 fn setup(env: TestEnv, config: Config) {
     env.ensure_group_setup_created();
