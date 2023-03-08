@@ -1738,21 +1738,35 @@ impl TryFrom<NeuronPermissionList> for Vec<NeuronPermissionType> {
     type Error = String;
 
     fn try_from(permissions: NeuronPermissionList) -> Result<Self, Self::Error> {
+        Vec::<Result<NeuronPermissionType, i32>>::from(permissions)
+            .into_iter()
+            .map(|p| p.map_err(|i| format!("Invalid permission: {i}")))
+            .collect()
+    }
+}
+
+impl From<NeuronPermissionList> for Vec<Result<NeuronPermissionType, i32>> {
+    fn from(permissions: NeuronPermissionList) -> Self {
         permissions
             .permissions
             .into_iter()
-            .map(|p| {
-                NeuronPermissionType::from_i32(p)
-                    .ok_or_else(|| format!("Invalid permission: {}", p))
-            })
+            .map(|p| NeuronPermissionType::from_i32(p).ok_or(p))
             .collect()
     }
 }
 
 impl fmt::Display for NeuronPermissionList {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let permissions = Vec::<NeuronPermissionType>::try_from(self.clone()).unwrap();
-        write!(f, "{permissions:?}")
+        let permissions = Vec::<Result<NeuronPermissionType, i32>>::from(self.clone())
+            .into_iter()
+            .map(|p| match p {
+                Ok(p) => format!("{p:?}"),
+                Err(i) => format!("<Invalid permission ({i})>"),
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        write!(f, "[{permissions}]")
     }
 }
 
@@ -2892,11 +2906,34 @@ pub(crate) mod tests {
         SnsMetadata::validate_logo("data:image/png;base64,aGVsbG8gZnJvbSBkZmluaXR5IQ==").unwrap();
     }
 
-    #[should_panic]
     #[test]
     fn test_validate_logo_doesnt_let_non_base64_through() {
         // `_` is not in the base64 character set we're using
         // so we should panic here.
-        SnsMetadata::validate_logo("data:image/png;base64,aGVsbG8gZnJvbSBkZmluaXR5IQ==_").unwrap();
+        SnsMetadata::validate_logo("data:image/png;base64,aGVsbG8gZnJvbSBkZmluaXR5IQ==_")
+            .unwrap_err();
+    }
+
+    #[test]
+    fn test_neuron_permission_list_display_impl() {
+        let neuron_permission_list = NeuronPermissionList::all();
+        assert_eq!(
+            format!("permissions: {neuron_permission_list}"),
+            format!("permissions: [Unspecified, ConfigureDissolveState, ManagePrincipals, SubmitProposal, Vote, Disburse, Split, MergeMaturity, DisburseMaturity, StakeMaturity, ManageVotingPermission]")
+        );
+    }
+
+    #[test]
+    fn test_neuron_permission_list_display_impl_doesnt_panic_unknown_permission() {
+        let invalid_permission = 10000;
+        let neuron_permission_list = {
+            let mut neuron_permission_list = NeuronPermissionList::all();
+            neuron_permission_list.permissions.push(invalid_permission); // Add an unknown permission to the list
+            neuron_permission_list
+        };
+        assert_eq!(
+            format!("permissions: {neuron_permission_list}"),
+            format!("permissions: [Unspecified, ConfigureDissolveState, ManagePrincipals, SubmitProposal, Vote, Disburse, Split, MergeMaturity, DisburseMaturity, StakeMaturity, ManageVotingPermission, <Invalid permission ({invalid_permission})>]")
+        );
     }
 }
