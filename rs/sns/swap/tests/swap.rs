@@ -38,7 +38,9 @@ use ic_sns_governance::{
     },
     types::ONE_MONTH_SECONDS,
 };
-use ic_sns_swap::swap::{FIRST_PRINCIPAL_BYTES, SALE_NEURON_MEMO_RANGE_START};
+use ic_sns_swap::swap::{
+    CLAIM_SWAP_NEURONS_BATCH_SIZE, FIRST_PRINCIPAL_BYTES, SALE_NEURON_MEMO_RANGE_START,
+};
 use ic_sns_swap::{
     memory,
     pb::v1::{
@@ -3550,11 +3552,9 @@ async fn test_claim_swap_neuron_correctly_creates_neuron_parameters() {
 async fn test_claim_swap_neurons_batches_claims() {
     // Step 1: Prepare the world
 
-    // This test will create a set number of NeuronRecipes to trigger batching. Given that
-    // NeuronParameters might change size in the future, calculate how many should be created
-    // based off the size of NeuronParameters to result in
+    // This test will create a set number of NeuronRecipes to trigger batching.
     let desired_batch_count = 10;
-    let neuron_parameters_per_batch = 500_usize;
+    let neuron_parameters_per_batch = CLAIM_SWAP_NEURONS_BATCH_SIZE;
 
     // We want the test to handle non-divisible batch counts. Therefore create N-1 full batches,
     // and final a half full batch
@@ -3607,10 +3607,8 @@ async fn test_claim_swap_neurons_batches_claims() {
 async fn test_claim_swap_neurons_handles_canister_call_error_during_batch() {
     // Step 1: Prepare the world
 
-    // This test will create a set number of NeuronRecipes to trigger batching. Given that
-    // NeuronParameters might change size in the future, calculate how many should be created
-    // based off the size of NeuronParameters to result in
-    let neuron_parameters_per_batch = 500_usize;
+    // This test will create a set number of NeuronRecipes to trigger batching.
+    let neuron_parameters_per_batch = CLAIM_SWAP_NEURONS_BATCH_SIZE;
 
     // The test requires 3 batches. The first call will succeed, the second one will fail, and the
     // 3rd one will not be attempted.
@@ -3676,10 +3674,8 @@ async fn test_claim_swap_neurons_handles_canister_call_error_during_batch() {
 async fn test_claim_swap_neurons_handles_inconsistent_response() {
     // Step 1: Prepare the world
 
-    // This test will create a set number of NeuronRecipes to trigger batching. Given that
-    // NeuronParameters might change size in the future, calculate how many should be created
-    // based off the size of NeuronParameters to result in
-    let neuron_parameters_per_batch = 500_usize;
+    // This test will create a set number of NeuronRecipes to trigger batching.
+    let neuron_parameters_per_batch = CLAIM_SWAP_NEURONS_BATCH_SIZE;
     // The test requires 1 batch, and will pop one of the SwapNeurons from the response
     let neuron_recipe_count = neuron_parameters_per_batch;
 
