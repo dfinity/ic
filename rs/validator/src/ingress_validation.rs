@@ -17,6 +17,16 @@ use std::{collections::BTreeSet, convert::TryFrom, fmt};
 #[cfg(test)]
 mod tests;
 
+/// Maximum number of delegations allowed in an `HttpRequest`.
+/// Requests having more delegations will be declared invalid without further verifying whether
+/// the delegation chain is correctly signed.
+/// **Note**: this limit is currently more generous than the one in the [IC specification](https://internetcomputer.org/docs/current/references/ic-interface-spec#authentication),
+/// which specifies a maximum of 4 delegations, in order to prevent potentially breaking already deployed applications
+/// since this limit was before (wrongly) not enforced.
+/// This limit will be tightened up once the number of delegations can be observed (via metrics or logs),
+/// see CRP-1961.
+const MAXIMUM_NUMBER_OF_DELEGATIONS: usize = 20;
+
 /// Validates the `request` and that the sender is authorized to send
 /// a message to the receiving canister.
 ///
@@ -132,6 +142,7 @@ pub enum AuthenticationError {
     InvalidPublicKey(CryptoError),
     WebAuthnError(String),
     DelegationTargetError(String),
+    DelegationTooLongError { length: usize, maximum: usize },
 }
 
 impl fmt::Display for AuthenticationError {
@@ -142,6 +153,11 @@ impl fmt::Display for AuthenticationError {
             InvalidPublicKey(err) => write!(f, "Invalid public key: {}", err),
             WebAuthnError(msg) => write!(f, "{}", msg),
             DelegationTargetError(msg) => write!(f, "{}", msg),
+            DelegationTooLongError { length, maximum } => write!(
+                f,
+                "Chain of delegations is too long: got {} delegations, but at most {} are allowed",
+                length, maximum
+            ),
         }
     }
 }
@@ -219,6 +235,22 @@ fn validate_ingress_expiry<C: HttpRequestContent>(
     Ok(())
 }
 
+fn validate_sender_delegation_length(
+    sender_delegation: &Option<Vec<SignedDelegation>>,
+) -> Result<(), RequestValidationError> {
+    match sender_delegation
+        .as_ref()
+        .map(|delegations| delegations.len())
+    {
+        Some(number_of_delegations) if number_of_delegations > MAXIMUM_NUMBER_OF_DELEGATIONS => {
+            Err(InvalidDelegation(DelegationTooLongError {
+                length: number_of_delegations,
+                maximum: MAXIMUM_NUMBER_OF_DELEGATIONS,
+            }))
+        }
+        _ => Ok(()),
+    }
+}
 // Check if any of the sender delegation has expired with respect to the
 // `current_time`, and return an error if so.
 fn validate_sender_delegation_expiry(
@@ -258,6 +290,7 @@ fn validate_signature(
     current_time: Time,
     registry_version: RegistryVersion,
 ) -> Result<CanisterIdSet, RequestValidationError> {
+    validate_sender_delegation_length(&signature.sender_delegation)?;
     validate_sender_delegation_expiry(&signature.sender_delegation, current_time)?;
     let empty_vec = Vec::new();
     let signed_delegations = match &signature.sender_delegation {

@@ -199,8 +199,17 @@ impl DelegationChain {
     pub fn rooted_at(start: DirectAuthenticationScheme) -> DelegationChainBuilder {
         DelegationChainBuilder::new(start)
     }
+
+    pub fn len(&self) -> usize {
+        self.signed_delegations.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.signed_delegations.is_empty()
+    }
 }
 
+#[derive(Debug, Clone)]
 pub struct DelegationChainBuilder {
     start: DirectAuthenticationScheme,
     end: Option<DirectAuthenticationScheme>,
