@@ -33,16 +33,46 @@ use std::convert::TryFrom;
 ///
 /// After all clients are added to the `ArtifactManagerMaker`, an
 /// `ArtifactManager` is created.
-#[allow(clippy::type_complexity)]
-#[derive(Default)]
 pub struct ArtifactManagerImpl {
     /// The clients for each artifact tag.
     clients: HashMap<ArtifactTag, Box<dyn ArtifactManagerBackend>>,
+    default_priority_fn_factory: Box<dyn Fn() -> ArtifactPriorityFn + Send + Sync>,
 }
 
 impl ArtifactManagerImpl {
-    pub fn new(clients: HashMap<ArtifactTag, Box<dyn ArtifactManagerBackend>>) -> Self {
-        Self { clients }
+    pub fn new(
+        clients: HashMap<ArtifactTag, Box<dyn ArtifactManagerBackend>>,
+        default_priority_fn_factory: Box<dyn Fn() -> ArtifactPriorityFn + Send + Sync>,
+    ) -> Self {
+        Self {
+            clients,
+            default_priority_fn_factory,
+        }
+    }
+
+    pub fn new_with_default_priority_fn(
+        clients: HashMap<ArtifactTag, Box<dyn ArtifactManagerBackend>>,
+    ) -> Self {
+        Self {
+            clients,
+            ..Default::default()
+        }
+    }
+}
+
+impl Default for ArtifactManagerImpl {
+    fn default() -> Self {
+        Self {
+            clients: HashMap::new(),
+            default_priority_fn_factory: Box::new(|| {
+                Box::new(
+                    move |_id: &'_ artifact::ArtifactId,
+                          _attribute: &'_ artifact::ArtifactAttribute| {
+                        Priority::Fetch
+                    },
+                )
+            }),
+        }
     }
 }
 
@@ -128,12 +158,9 @@ impl ArtifactManager for ArtifactManagerImpl {
     /// See `ArtifactClient::get_priority_function` for more details.
     fn get_priority_function(&self, tag: artifact::ArtifactTag) -> ArtifactPriorityFn {
         match self.clients.get(&tag) {
-            None => Box::new(
-                move |_id: &'_ artifact::ArtifactId,
-                      _attribute: &'_ artifact::ArtifactAttribute| {
-                    Priority::Fetch
-                },
-            ),
+            // This happens only in tests and never in production. Ideally we use the type system
+            // so we don't need to use a fallback here at all.
+            None => (self.default_priority_fn_factory)(),
             Some(client) => client.get_priority_function(tag),
         }
     }
