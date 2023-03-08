@@ -39,14 +39,32 @@ impl Default for Project {
     }
 }
 
+fn is_cargo_workspace_root(p: impl AsRef<Path>) -> bool {
+    let cargo_toml = p.as_ref().join("Cargo.toml");
+    if !cargo_toml.exists() {
+        return false;
+    }
+    let contents = std::fs::read(&cargo_toml)
+        .unwrap_or_else(|e| panic!("failed to read file {}: {}", cargo_toml.display(), e));
+    String::from_utf8_lossy(&contents).contains("[workspace]")
+}
+
 impl Project {
     pub fn new() -> Self {
         let manifest_dir = env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
         let mut h = Path::new(&manifest_dir);
-        while !h.ends_with("rs") {
-            h = h
-                .parent()
-                .expect("unable to find `rs` directory while traversing to root");
+        while !is_cargo_workspace_root(h) {
+            match h.parent() {
+                Some(p) => {
+                    h = p;
+                }
+                None => {
+                    // We reached the root but didn't find the workspace file.
+                    // We're probably running under Bazel, so we don't need the manifest directory
+                    // in the first place.
+                    break;
+                }
+            }
         }
         Project {
             cargo_manifest_dir: h.to_path_buf(),
