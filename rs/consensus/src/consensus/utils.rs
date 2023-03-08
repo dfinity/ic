@@ -152,8 +152,9 @@ pub fn get_adjusted_notary_delay(
 
 /// Calculate the required delay for notary based on the rank of block to
 /// notarize, adjusted by a multiplier depending the gap between finalized and
-/// notarized heights, and adjusted by how far the certified height lags behind
-/// the finalized height.
+/// notarized heights, by how far the certified height lags behind the finalized
+/// height, and by how far we have advanced beyond a summary block without
+/// creating a CUP.
 pub fn get_adjusted_notary_delay_from_settings(
     settings: NotarizationDelaySettings,
     pool: &PoolReader<'_>,
@@ -189,6 +190,13 @@ pub fn get_adjusted_notary_delay_from_settings(
     let certified_adjusted_delay =
         finality_adjusted_delay + unit_delay.as_millis() as u64 * certified_gap;
 
+    // We measure the gap between a summary height and the current finalized tip that
+    // transpires without producing the cup, and we will start slowing down if
+    // we get approximately halfway (see ACCEPTABLE_CUP_GAP_RATIO) through a dkg interval
+    // without producing the cup for the last summary block.
+    //
+    // At the moment this is a linear slowdown, which could be switched to
+    // exponential if required.
     let cup_gap = finalized_height.saturating_sub(pool.get_catch_up_height().get());
     let last_cup_dkg_info = pool
         .get_highest_catch_up_package()
