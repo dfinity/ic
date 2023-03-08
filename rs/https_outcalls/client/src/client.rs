@@ -112,7 +112,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
         let mut http_adapter_client = CanisterHttpServiceClient::new(self.grpc_channel.clone());
         let anonymous_query_handler = self.anonymous_query_service.clone();
         let metrics = self.metrics.clone();
-        let _subnet_type = self.subnet_type;
+        let subnet_type = self.subnet_type;
 
         // Spawn an async task that sends the canister http request to the adapter and awaits the response.
         // After receiving the response from the adapter an optional transform is applied by doing an upcall to execution.
@@ -159,9 +159,7 @@ impl NonBlockingChannel<CanisterHttpRequest> for CanisterHttpAdapterClientImpl {
                         .collect(),
                     body: request_body.unwrap_or_default(),
                     // Socks proxy is only enabled on system subnets.
-                    // socks_proxy_allowed: matches!(subnet_type, SubnetType::System)
-                    // WIP: enabled when feature is complete.
-                    socks_proxy_allowed: false
+                    socks_proxy_allowed: matches!(subnet_type, SubnetType::System)
                 })
                 .map_err(|grpc_status| {
                     (
