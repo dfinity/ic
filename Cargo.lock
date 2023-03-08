@@ -5515,6 +5515,7 @@ dependencies = [
 name = "ic-crypto-internal-threshold-sig-ecdsa"
 version = "0.1.0"
 dependencies = [
+ "assert_matches",
  "bip32",
  "criterion",
  "fe-derive",

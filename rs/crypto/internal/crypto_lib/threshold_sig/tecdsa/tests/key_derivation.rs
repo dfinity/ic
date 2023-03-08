@@ -7,6 +7,7 @@ use std::convert::{TryFrom, TryInto};
 mod test_utils;
 
 use crate::test_utils::*;
+use assert_matches::assert_matches;
 
 #[test]
 fn test_index_next_behavior() {
@@ -39,6 +40,31 @@ fn test_that_key_derivation_on_secp256r1_currently_fails() -> Result<(), Thresho
             "Currently key derivation not defined for secp256r1".to_string()
         ))
     );
+
+    Ok(())
+}
+
+#[test]
+fn verify_bip32_extended_key_derivation_max_length_enforced() -> Result<(), ThresholdEcdsaError> {
+    let nodes = 3;
+    let threshold = nodes / 3;
+
+    let seed = Seed::from_bytes(b"verify_bip32_extended_key_derivation_max_length");
+
+    let setup = SignatureProtocolSetup::new(EccCurveType::K256, nodes, threshold, threshold, seed)?;
+
+    for i in 0..=255 {
+        let path = vec![i as u32; i];
+        assert_matches!(setup.public_key(&DerivationPath::new_bip32(&path)), Ok(_));
+    }
+
+    for i in 256..1024 {
+        let path = vec![i as u32; i];
+        assert_matches!(
+            setup.public_key(&DerivationPath::new_bip32(&path)),
+            Err(ThresholdEcdsaError::InvalidArguments(_))
+        );
+    }
 
     Ok(())
 }
