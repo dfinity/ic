@@ -14,11 +14,12 @@ mod handle_stake_maturity;
 mod handle_start_dissolve;
 mod handle_stop_dissolve;
 mod neuron_response;
+pub mod pending_proposals_response;
 pub mod proposal_info_response;
 
 use core::ops::Deref;
 
-use candid::Decode;
+use candid::{Decode, Encode};
 use ic_nns_governance::pb::v1::ProposalInfo;
 use std::convert::TryFrom;
 use std::sync::atomic::AtomicBool;
@@ -106,6 +107,7 @@ pub trait LedgerAccess {
         verified: bool,
     ) -> Result<NeuronInfo, ApiError>;
     async fn proposal_info(&self, proposal_id: u64) -> Result<ProposalInfo, ApiError>;
+    async fn pending_proposals(&self) -> Result<Vec<ProposalInfo>, ApiError>;
     async fn transfer_fee(&self) -> Result<TransferFee, ApiError>;
 }
 
@@ -316,10 +318,7 @@ impl LedgerAccess for LedgerClient {
             Decode!(bytes.as_slice(), Option<ProposalInfo>).map_err(|err| {
                 ApiError::InvalidRequest(
                     false,
-                    Details::from(format!(
-                        "Could not decode dissolve timestamp response: {}",
-                        err
-                    )),
+                    Details::from(format!("Could not decode ProposalInfo response: {}", err)),
                 )
             })?;
         match proposal_info_response {
@@ -332,7 +331,30 @@ impl LedgerAccess for LedgerClient {
             )),
         }
     }
-
+    async fn pending_proposals(&self) -> Result<Vec<ProposalInfo>, ApiError> {
+        if self.offline {
+            return Err(ApiError::NotAvailableOffline(false, Details::default()));
+        }
+        let agent = &self.canister_access.as_ref().unwrap().agent;
+        let bytes = agent
+            .query(
+                &self.governance_canister_id.get().0,
+                "get_pending_proposals",
+            )
+            .with_arg(Encode!().unwrap())
+            .call()
+            .await
+            .map_err(|e| ApiError::invalid_request(format!("{}", e)))?;
+        Decode!(bytes.as_slice(), Vec<ProposalInfo>).map_err(|err| {
+            ApiError::InvalidRequest(
+                false,
+                Details::from(format!(
+                    "Could not decode PendingProposals response: {}",
+                    err
+                )),
+            )
+        })
+    }
     async fn neuron_info(
         &self,
         acc_id: NeuronIdOrSubaccount,

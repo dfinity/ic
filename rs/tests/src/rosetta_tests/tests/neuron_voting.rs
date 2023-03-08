@@ -33,12 +33,14 @@ pub fn test(env: TestEnv) {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs();
+
     //We need to know the identity of the agent before we create the neurons.
     //The controller of the neuron has to be the agent principal otherwise we cannot make proposals and vote on them.
     let agent_identity = get_identity();
     let agent_principal = agent_identity.sender().unwrap();
     let agent_keypair = EdKeypair::from_pem(IDENTITY_PEM).unwrap();
-    // Create neurons.
+
+    // Create neurons and set the controller account to be the agent who makes the proposal with that neuron
     let mut neurons = TestNeurons::new(2000, &mut ledger_balances);
     let neuron_setup = |neuron: &mut Neuron| {
         neuron.dissolve_state = Some(DissolveState::DissolveDelaySeconds(one_year_from_now));
@@ -50,6 +52,7 @@ pub fn test(env: TestEnv) {
                 .to_vec();
     };
     let neuron1 = neurons.create_custom(neuron_setup, 100, &agent_keypair);
+
     //Setup for non proposal making entities
     let neuron_setup = |neuron: &mut Neuron| {
         neuron.dissolve_state = Some(DissolveState::DissolveDelaySeconds(one_year_from_now));
@@ -71,9 +74,11 @@ pub fn test(env: TestEnv) {
     let client = setup(&env, PORT, VM_NAME, Some(ledger_balances), Some(neurons));
     let governance_client = create_governance_client(&env, &client);
     block_on(async {
-        let proposal_id = governance_client.make_proposal(&neuron1, &proposal).await;
+        let first_proposal = governance_client.make_proposal(&neuron1, &proposal).await;
+
+        //Test the endpoint get_proposal_info of rosetta
         let proposal_info_response: CallResponse = client
-            .get_proposal_info(proposal_id.id)
+            .get_proposal_info(first_proposal.id)
             .await
             .unwrap()
             .unwrap();
@@ -85,9 +90,38 @@ pub fn test(env: TestEnv) {
             ProposalInfoResponse::try_from(Some(proposal_info_response.result)).unwrap();
         assert_eq!(proposal_info.0.proposal.unwrap(), proposal);
         info!(_logger, "Test Register Vote with Vote: Yes");
-        test_register_proposal(&client, &neuron2, &proposal_id, &1).await;
+        test_register_proposal(&client, &neuron2, &first_proposal, &1).await;
         info!(_logger, "Test Register Vote with Vote: No");
-        test_register_proposal(&client, &neuron3, &proposal_id, &2).await;
+        test_register_proposal(&client, &neuron3, &first_proposal, &2).await;
+
+        //Test the endpoint get_pending_proposals of rosetta
+        //Create a couple more proposals so there is something to query
+        let second_proposal = governance_client.make_proposal(&neuron1, &proposal).await;
+        let third_proposal = governance_client.make_proposal(&neuron1, &proposal).await;
+        let pending_proposals = client.get_pending_proposals().await.unwrap();
+        info!(
+            _logger,
+            "Test if get pending proposal matches the proposals created"
+        );
+
+        // Number of pending proposals should be 2 since the first proposal was already voted for
+        assert_eq!(pending_proposals, vec![proposal.clone(); 2]);
+
+        // Vote on one the second proposal
+        test_register_proposal(&client, &neuron2, &second_proposal, &1).await;
+        test_register_proposal(&client, &neuron3, &second_proposal, &2).await;
+
+        // Now it should be 1 proposal
+        let pending_proposals = client.get_pending_proposals().await.unwrap();
+        assert_eq!(pending_proposals, vec![proposal.clone(); 1]);
+
+        // Vote on third and last proposal
+        test_register_proposal(&client, &neuron2, &third_proposal, &1).await;
+        test_register_proposal(&client, &neuron3, &third_proposal, &2).await;
+
+        // Now there should be no proposal left to vote for
+        let pending_proposals = client.get_pending_proposals().await.unwrap();
+        assert!(pending_proposals.is_empty());
     });
 }
 
