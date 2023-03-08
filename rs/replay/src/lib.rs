@@ -18,7 +18,6 @@ use crate::cmd::{ReplayToolArgs, SubCommand};
 use crate::ingress::*;
 use crate::player::{Player, ReplayResult};
 
-use cmd::RestoreFromBackupCmd;
 use ic_canister_client::{Agent, Sender};
 use ic_config::registry_client::DataProviderConfig;
 use ic_config::{Config, ConfigSource};
@@ -125,16 +124,7 @@ pub fn replay(args: ReplayToolArgs) -> ReplayResult {
             }
         }
 
-        if let Some(cmd) = match subcmd {
-            Some(SubCommand::RestoreFromBackup(cmd)) => Some(cmd.clone()),
-            Some(SubCommand::RestoreFromBackup2(cmd2)) => Some(RestoreFromBackupCmd {
-                registry_local_store_path: cmd2.registry_local_store_path.clone(),
-                backup_spool_path: cmd2.backup_spool_path.clone(),
-                replica_version: cmd2.replica_version.clone(),
-                start_height: cmd2.start_height,
-            }),
-            _ => None,
-        } {
+        if let Some(SubCommand::RestoreFromBackup(cmd)) = subcmd {
             let _enter_guard = rt.enter();
 
             let mut player = Player::new_for_backup(

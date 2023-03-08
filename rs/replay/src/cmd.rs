@@ -59,11 +59,6 @@ pub enum SubCommand {
     /// Restore from the backup. Deprecated.
     RestoreFromBackup(RestoreFromBackupCmd),
 
-    /// Restore from the backup.
-    /// Same as RestoreFromBackup but uses the registry local store from
-    /// the parameter. The other one will be substituted with this.
-    RestoreFromBackup2(RestoreFromBackup2Cmd),
-
     /// The replay will add a test Neuron to the Governance canister
     /// and the corresponding account in the ledger.
     WithNeuronForTests(WithNeuronCmd),
