@@ -8,7 +8,7 @@ use assert_matches::assert_matches;
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_csp_test_utils::files::mk_temp_dir_with_permissions;
 use ic_crypto_node_key_generation::derive_node_id;
-use ic_crypto_node_key_generation::get_node_keys_or_generate_if_missing;
+use ic_crypto_node_key_generation::generate_node_keys_once;
 use ic_logger::replica_logger::no_op_logger;
 use ic_logger::ReplicaLogger;
 use ic_protobuf::crypto::v1::NodePublicKeys;
@@ -991,7 +991,7 @@ fn public_key_certificate_with_der_value(certificate_der: u8) -> X509PublicKeyCe
 
 fn generate_node_keys_in_temp_dir() -> (NodePublicKeys, TempDir) {
     let (config, temp_dir) = CryptoConfig::new_in_temp_dir();
-    let (_keys, _node_id) = get_node_keys_or_generate_if_missing(&config, None);
+    let _keys = generate_node_keys_once(&config, None);
     let keys_from_disk = read_from_public_key_store_file(temp_dir.path());
     assert!(keys_from_disk.node_signing_pk.is_some());
     assert!(keys_from_disk.committee_signing_pk.is_some());

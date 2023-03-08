@@ -2,525 +2,465 @@
 
 use super::*;
 use assert_matches::assert_matches;
-use ic_config::crypto::CryptoConfig;
-use ic_crypto_internal_csp::api::CspPublicKeyStore;
-use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
-use ic_crypto_test_utils::empty_fake_registry;
-use ic_interfaces::crypto::KeyManager;
-use ic_interfaces_registry::RegistryClient;
+use ic_crypto_internal_csp::types::CspPop;
+use ic_crypto_internal_csp::types::CspPublicKey;
+use ic_crypto_internal_threshold_sig_ecdsa::{EccCurveType, MEGaPublicKey};
+use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::CspFsEncryptionPop;
+use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::CspFsEncryptionPublicKey;
+use ic_crypto_node_key_validation::ValidNodeSigningPublicKey;
+use ic_crypto_test_utils_csp::MockAllCryptoServiceProvider;
+use ic_protobuf::registry::crypto::v1::PublicKey;
+use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
+use ic_types::crypto::{AlgorithmId, CurrentNodePublicKeys};
 use ic_types_test_utils::ids::node_test_id;
 
-mod node_public_key_data {
+const RFC5280_NO_WELL_DEFINED_CERTIFICATE_EXPIRATION_DATE: &str = "99991231235959Z";
+
+mod generate_node_signing_keys {
     use super::*;
 
     #[test]
-    fn should_get_correct_node_public_keys() {
-        CryptoConfig::run_with_temp_config(|config| {
-            let (generated_node_pks, _node_id) =
-                get_node_keys_or_generate_if_missing(&config, None);
-            let csp = csp_for_config(&config, None);
+    fn should_delegate_to_csp() {
+        let mut csp = MockAllCryptoServiceProvider::new();
+        let expected_node_signing_public_key = with_csp_gen_node_signing_key_pair(&mut csp);
 
-            let csp_pks = csp
-                .current_node_public_keys()
-                .expect("Failed to retrieve node public keys");
+        let actual_node_signing_public_key = generate_node_signing_keys(&csp);
 
-            assert_eq!(generated_node_pks, csp_pks);
-        })
+        assert_eq!(
+            actual_node_signing_public_key,
+            expected_node_signing_public_key
+        );
     }
 }
 
-#[test]
-fn should_have_the_csp_public_keys_that_were_previously_generated() {
-    CryptoConfig::run_with_temp_config(|config| {
-        let (node_pks, _node_id) = get_node_keys_or_generate_if_missing(&config, None);
-        let csp = csp_for_config(&config, None);
+mod generate_committee_signing_keys {
+    use super::*;
+
+    #[test]
+    fn should_delegate_to_csp() {
+        let mut csp = MockAllCryptoServiceProvider::new();
+        let expected_committee_signing_public_key =
+            with_csp_gen_committee_signing_key_pair(&mut csp);
+
+        let actual_committee_signing_public_key = generate_committee_signing_keys(&csp);
+
         assert_eq!(
-            node_pks,
-            csp.current_node_public_keys()
-                .expect("Failed to retrieve node public keys")
-        );
-    })
-}
-
-#[test]
-fn should_generate_all_keys_for_a_node_without_public_keys() {
-    CryptoConfig::run_with_temp_config(|config| {
-        let csp = csp_for_config(&config, None);
-        assert_eq!(
-            csp.current_node_public_keys()
-                .expect("Failed to retrieve node public keys"),
-            CurrentNodePublicKeys {
-                node_signing_public_key: None,
-                committee_signing_public_key: None,
-                tls_certificate: None,
-                dkg_dealing_encryption_public_key: None,
-                idkg_dealing_encryption_public_key: None
-            }
-        );
-
-        let (node_pks, node_id) = get_node_keys_or_generate_if_missing(&config, None);
-
-        ensure_node_keys_are_generated_correctly(&node_pks, &node_id);
-        let csp = csp_for_config(&config, None);
-        assert_eq!(
-            node_pks,
-            csp.current_node_public_keys()
-                .expect("Failed to retrieve node public keys")
-        );
-    })
-}
-
-fn ensure_node_keys_are_generated_correctly(node_pks: &CurrentNodePublicKeys, node_id: &NodeId) {
-    assert!(all_node_keys_are_present(node_pks));
-
-    let node_signing_pk = node_pks
-        .node_signing_public_key
-        .as_ref()
-        .expect("Missing node signing public key");
-    let derived_node_id = derive_node_id(node_signing_pk);
-    assert_eq!(*node_id, derived_node_id);
-}
-
-#[test]
-#[should_panic(expected = "inconsistent key material")]
-fn should_panic_if_node_has_inconsistent_keys() {
-    let (temp_crypto, _node_keys) = crypto_with_node_keys_generation(
-        empty_fake_registry(),
-        node_test_id(1),
-        NodeKeysToGenerate::only_node_signing_key(),
-    );
-    let different_node_signing_pk = {
-        let (_temp_crypto2, node_keys2) = crypto_with_node_keys_generation(
-            empty_fake_registry(),
-            node_test_id(2),
-            NodeKeysToGenerate::only_node_signing_key(),
-        );
-        node_keys2.node_signing_pk
-    };
-
-    // Store different_node_signing_pk in temp_crypto's crypto_root.
-    store_public_keys(
-        temp_crypto.temp_dir_path(),
-        &NodePublicKeys {
-            node_signing_pk: different_node_signing_pk,
-            ..Default::default()
-        },
-    );
-    let config = CryptoConfig::new(temp_crypto.temp_dir_path().to_path_buf());
-    let (_node_pks, _node_id) = get_node_keys_or_generate_if_missing(&config, None);
-}
-
-#[test]
-fn check_keys_locally_returns_none_if_no_keys_are_present() {
-    CryptoConfig::run_with_temp_config(|config| {
-        let result = check_keys_locally(&config, None);
-        assert!(result.is_ok());
-        assert!(result.unwrap().is_none());
-    })
-}
-
-#[test]
-fn should_fail_check_keys_locally_if_no_matching_node_signing_secret_key_is_present() {
-    let (temp_crypto, node_keys) = crypto_with_node_keys_generation(
-        empty_fake_registry(),
-        node_test_id(1),
-        NodeKeysToGenerate::only_node_signing_key(),
-    );
-    let crypto_root = temp_crypto.temp_dir_path().to_path_buf();
-    let different_node_signing_pk = {
-        let (_temp_crypto2, node_keys2) = crypto_with_node_keys_generation(
-            empty_fake_registry(),
-            node_test_id(2),
-            NodeKeysToGenerate::only_node_signing_key(),
-        );
-        node_keys2.node_signing_pk
-    };
-    assert_ne!(node_keys.node_signing_pk, different_node_signing_pk);
-    store_public_keys(
-        crypto_root.as_path(),
-        &NodePublicKeys {
-            node_signing_pk: different_node_signing_pk,
-            ..node_keys
-        },
-    );
-
-    let result = check_keys_locally(&CryptoConfig::new(crypto_root), None);
-
-    assert_matches!(
-        result,
-        Err(CryptoError::SecretKeyNotFound { algorithm, .. })
-        if algorithm == AlgorithmId::Ed25519
-    );
-}
-
-#[test]
-fn should_fail_check_keys_locally_if_no_matching_committee_signing_secret_key_is_present() {
-    let (temp_crypto, node_keys) = crypto_with_node_keys_generation(
-        empty_fake_registry(),
-        node_test_id(1),
-        NodeKeysToGenerate::all(),
-    );
-    let crypto_root = temp_crypto.temp_dir_path().to_path_buf();
-    let different_committee_signing_pk = {
-        let (_temp_crypto2, node_keys2) = crypto_with_node_keys_generation(
-            empty_fake_registry(),
-            node_test_id(2),
-            NodeKeysToGenerate::only_committee_signing_key(),
-        );
-        node_keys2.committee_signing_pk
-    };
-    assert_ne!(
-        node_keys.committee_signing_pk,
-        different_committee_signing_pk
-    );
-    store_public_keys(
-        crypto_root.as_path(),
-        &NodePublicKeys {
-            committee_signing_pk: different_committee_signing_pk,
-            ..node_keys
-        },
-    );
-
-    let result = check_keys_locally(&CryptoConfig::new(crypto_root), None);
-
-    assert_matches!(
-        result,
-        Err(CryptoError::SecretKeyNotFound { algorithm, .. })
-        if algorithm == AlgorithmId::MultiBls12_381
-    );
-}
-
-#[test]
-fn should_fail_check_keys_locally_if_no_matching_dkg_dealing_encryption_secret_key_is_present() {
-    let (temp_crypto, node_keys) = crypto_with_node_keys_generation(
-        empty_fake_registry(),
-        node_test_id(1),
-        NodeKeysToGenerate::all(),
-    );
-    let crypto_root = temp_crypto.temp_dir_path().to_path_buf();
-    let different_dkg_dealing_enc_pk = {
-        let (_temp_crypto2, node_keys2) = crypto_with_node_keys_generation(
-            empty_fake_registry(),
-            node_test_id(2),
-            NodeKeysToGenerate::only_dkg_dealing_encryption_key(),
-        );
-        node_keys2.dkg_dealing_encryption_pk
-    };
-    assert_ne!(
-        node_keys.dkg_dealing_encryption_pk,
-        different_dkg_dealing_enc_pk
-    );
-    store_public_keys(
-        crypto_root.as_path(),
-        &NodePublicKeys {
-            dkg_dealing_encryption_pk: different_dkg_dealing_enc_pk,
-            ..node_keys
-        },
-    );
-
-    let result = check_keys_locally(&CryptoConfig::new(crypto_root), None);
-
-    assert_matches!(
-        result,
-        Err(CryptoError::SecretKeyNotFound { algorithm, .. })
-        if algorithm == AlgorithmId::Groth20_Bls12_381
-    );
-}
-
-#[test]
-fn should_fail_check_keys_locally_for_new_node_if_no_matching_idkg_dealing_encryption_secret_key_is_present(
-) {
-    let (temp_crypto, node_keys) = crypto_with_node_keys_generation(
-        empty_fake_registry(),
-        node_test_id(1),
-        NodeKeysToGenerate::all(),
-    );
-    let crypto_root = temp_crypto.temp_dir_path().to_path_buf();
-    let different_idkg_dealing_enc_pk = {
-        let (_temp_crypto2, node_keys2) = crypto_with_node_keys_generation(
-            empty_fake_registry(),
-            node_test_id(2),
-            NodeKeysToGenerate::only_idkg_dealing_encryption_key(),
-        );
-        node_keys2
-            .idkg_dealing_encryption_pks
-            .first()
-            .expect("no idkg dealing encryption key")
-            .clone()
-    };
-    assert_ne!(
-        node_keys
-            .idkg_dealing_encryption_pks
-            .first()
-            .expect("no idkg dealing encryption key"),
-        &different_idkg_dealing_enc_pk
-    );
-    store_public_keys(
-        crypto_root.as_path(),
-        &NodePublicKeys {
-            idkg_dealing_encryption_pks: vec![different_idkg_dealing_enc_pk],
-            ..node_keys
-        },
-    );
-
-    let result = check_keys_locally(&CryptoConfig::new(crypto_root), None);
-
-    assert_matches!(
-        result,
-        Err(CryptoError::SecretKeyNotFound { algorithm, .. })
-        if algorithm == AlgorithmId::MegaSecp256k1
-    );
-}
-
-#[test]
-fn should_fail_check_keys_locally_if_no_matching_tls_secret_key_is_present() {
-    let (temp_crypto, node_keys) = crypto_with_node_keys_generation(
-        empty_fake_registry(),
-        node_test_id(1),
-        NodeKeysToGenerate::all(),
-    );
-    let crypto_root = temp_crypto.temp_dir_path().to_path_buf();
-    let different_tls_cert = {
-        let (_temp_crypto2, node_keys2) = crypto_with_node_keys_generation(
-            empty_fake_registry(),
-            node_test_id(2),
-            NodeKeysToGenerate::only_tls_key_and_cert(),
-        );
-        node_keys2.tls_certificate
-    };
-    assert_ne!(node_keys.tls_certificate, different_tls_cert);
-    store_public_keys(
-        crypto_root.as_path(),
-        &NodePublicKeys {
-            tls_certificate: different_tls_cert,
-            ..node_keys
-        },
-    );
-
-    let result = check_keys_locally(&CryptoConfig::new(crypto_root), None);
-
-    assert_matches!(result, Err(CryptoError::TlsSecretKeyNotFound { .. }));
-}
-
-#[test]
-fn should_fail_check_keys_locally_if_idkg_dealing_encryption_public_key_is_missing() {
-    let (temp_crypto, node_keys) = crypto_with_node_keys_generation(
-        empty_fake_registry(),
-        node_test_id(1),
-        NodeKeysToGenerate::all(),
-    );
-    let crypto_root = temp_crypto.temp_dir_path().to_path_buf();
-    store_public_keys(
-        crypto_root.as_path(),
-        &NodePublicKeys {
-            idkg_dealing_encryption_pks: vec![],
-            ..node_keys
-        },
-    );
-
-    let result = check_keys_locally(&CryptoConfig::new(crypto_root), None);
-
-    assert_matches!(
-        result,
-        Err(CryptoError::MalformedPublicKey { algorithm, internal_error, .. })
-        if algorithm == AlgorithmId::MegaSecp256k1 && internal_error.contains("missing iDKG dealing encryption key in local public key store")
-    );
-}
-
-#[test]
-fn should_succeed_check_keys_locally_if_all_keys_are_present() {
-    let (temp_crypto, node_keys) = crypto_with_node_keys_generation(
-        empty_fake_registry(),
-        node_test_id(1),
-        NodeKeysToGenerate::all(),
-    );
-    let crypto_root = temp_crypto.temp_dir_path().to_path_buf();
-    store_public_keys(crypto_root.as_path(), &node_keys);
-
-    let result = check_keys_locally(&CryptoConfig::new(crypto_root), None);
-
-    assert_matches!(result, Ok(Some(_)));
-}
-
-#[test]
-fn should_succeed_check_keys_locally_if_no_keys_are_present() {
-    let (temp_crypto, node_keys) = crypto_with_node_keys_generation(
-        empty_fake_registry(),
-        node_test_id(1),
-        NodeKeysToGenerate::none(),
-    );
-    let crypto_root = temp_crypto.temp_dir_path().to_path_buf();
-    store_public_keys(crypto_root.as_path(), &node_keys);
-
-    let result = check_keys_locally(&CryptoConfig::new(crypto_root), None);
-
-    assert_matches!(result, Ok(None));
-}
-
-fn all_node_keys_are_present(node_pks: &CurrentNodePublicKeys) -> bool {
-    node_pks.node_signing_public_key.is_some()
-        && node_pks.committee_signing_public_key.is_some()
-        && node_pks.tls_certificate.is_some()
-        && node_pks.dkg_dealing_encryption_public_key.is_some()
-        && node_pks.idkg_dealing_encryption_public_key.is_some()
-}
-
-fn store_public_keys(crypto_root: &Path, node_pks: &NodePublicKeys) {
-    public_key_store::store_node_public_keys(crypto_root, node_pks).unwrap();
-}
-
-fn crypto_with_node_keys_generation(
-    registry_client: Arc<dyn RegistryClient>,
-    node_id: NodeId,
-    selector: NodeKeysToGenerate,
-) -> (TempCryptoComponent, NodePublicKeys) {
-    let temp_crypto = TempCryptoComponent::builder()
-        .with_registry(registry_client)
-        .with_node_id(node_id)
-        .with_keys(selector)
-        .build();
-    let current_node_public_keys = temp_crypto
-        .current_node_public_keys()
-        .expect("Failed to retrieve node public keys");
-    let node_public_keys = node_public_keys_from_current_node_public_keys(current_node_public_keys);
-    (temp_crypto, node_public_keys)
-}
-
-fn node_public_keys_from_current_node_public_keys(
-    current_node_public_keys: CurrentNodePublicKeys,
-) -> NodePublicKeys {
-    NodePublicKeys {
-        version: 1,
-        node_signing_pk: current_node_public_keys.node_signing_public_key,
-        committee_signing_pk: current_node_public_keys.committee_signing_public_key,
-        tls_certificate: current_node_public_keys.tls_certificate,
-        dkg_dealing_encryption_pk: current_node_public_keys.dkg_dealing_encryption_public_key,
-        idkg_dealing_encryption_pks: current_node_public_keys
-            .idkg_dealing_encryption_public_key
-            .map_or(vec![], |public_key| vec![public_key]),
+            actual_committee_signing_public_key,
+            expected_committee_signing_public_key
+        )
     }
 }
 
-mod tls {
+mod generate_tls_keys {
     use super::generate_tls_keys;
-    use super::local_csp_in_temp_dir;
+    use super::*;
     use ic_types_test_utils::ids::node_test_id;
-    use openssl::x509::X509VerifyResult;
-    use openssl::{asn1::Asn1Time, nid::Nid, x509::X509NameEntryRef, x509::X509};
 
     const NODE_ID: u64 = 123;
 
     #[test]
-    fn should_return_self_signed_certificate() {
-        let (mut csp, _temp_dir) = local_csp_in_temp_dir();
-        let cert = generate_tls_keys(&mut csp, node_test_id(NODE_ID));
+    fn should_delegate_to_csp_with_correct_not_after() {
+        let mut csp = MockAllCryptoServiceProvider::new();
+        let expected_tls_certificate = with_csp_gen_tls_key_pair(
+            &mut csp,
+            node_test_id(NODE_ID),
+            RFC5280_NO_WELL_DEFINED_CERTIFICATE_EXPIRATION_DATE.to_string(),
+        );
 
-        let x509_cert = cert.as_x509();
-        let public_key = x509_cert.public_key().unwrap();
-        assert_eq!(x509_cert.verify(&public_key).ok(), Some(true));
-        assert_eq!(x509_cert.issued(x509_cert), X509VerifyResult::OK);
-    }
+        let actual_tls_certificate = generate_tls_keys(&csp, node_test_id(NODE_ID));
 
-    #[test]
-    fn should_not_set_subject_alt_name() {
-        let (mut csp, _temp_dir) = local_csp_in_temp_dir();
-        let cert = generate_tls_keys(&mut csp, node_test_id(NODE_ID));
-
-        let x509_cert = cert.as_x509();
-        let subject_alt_names = x509_cert.subject_alt_names();
-        assert!(subject_alt_names.is_none());
-    }
-
-    #[test]
-    fn should_set_cert_issuer_and_subject_cn_as_node_id() {
-        let (mut csp, _temp_dir) = local_csp_in_temp_dir();
-
-        let cert = generate_tls_keys(&mut csp, node_test_id(NODE_ID));
-
-        let x509_cert = cert.as_x509();
-        let issuer_cn = issuer_cn(x509_cert);
-        let subject_cn = subject_cn(x509_cert);
-        let expected_cn = node_test_id(NODE_ID).get().to_string();
-        assert_eq!(expected_cn.as_bytes(), issuer_cn.data().as_slice());
-        assert_eq!(expected_cn.as_bytes(), subject_cn.data().as_slice());
-    }
-
-    #[test]
-    fn should_set_cert_not_after_correctly() {
-        const RFC5280_NO_WELL_DEFINED_CERTIFICATE_EXPIRATION_DATE: &str = "99991231235959Z";
-        let (mut csp, _temp_dir) = local_csp_in_temp_dir();
-
-        let cert = generate_tls_keys(&mut csp, node_test_id(NODE_ID));
-
-        let expected_not_after =
-            Asn1Time::from_str_x509(RFC5280_NO_WELL_DEFINED_CERTIFICATE_EXPIRATION_DATE).unwrap();
-        assert!(cert.as_x509().not_after() == expected_not_after);
-    }
-
-    fn subject_cn(x509_cert: &X509) -> &X509NameEntryRef {
-        x509_cert
-            .subject_name()
-            .entries_by_nid(Nid::COMMONNAME)
-            .next()
-            .unwrap()
-    }
-
-    fn issuer_cn(x509_cert: &X509) -> &X509NameEntryRef {
-        x509_cert
-            .issuer_name()
-            .entries_by_nid(Nid::COMMONNAME)
-            .next()
-            .unwrap()
+        assert_eq!(actual_tls_certificate, expected_tls_certificate);
     }
 }
 
-mod idkg {
+mod generate_dkg_dealing_encryption_keys {
     use super::*;
-    use crate::IDkgDealingEncryptionKeysGenerationError;
-    use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
-    use std::fs;
-    use std::fs::Permissions;
-    use std::os::unix::fs::PermissionsExt;
+
+    const NODE_ID: u64 = 123;
 
     #[test]
-    fn should_correctly_generate_idkg_dealing_encryption_key() {
-        CryptoConfig::run_with_temp_config(|config| {
-            let mut csp = csp_for_config(&config, None);
-            let public_key = generate_idkg_dealing_encryption_keys(&mut csp)
-                .expect("error generation I-DKG dealing encryption keys");
-            assert_eq!(public_key.version, 0);
-            assert_eq!(public_key.algorithm, AlgorithmIdProto::MegaSecp256k1 as i32);
-            assert!(!public_key.key_value.is_empty());
-            assert!(public_key.proof_data.is_none());
-            assert!(public_key.timestamp.is_none());
-        })
-    }
+    fn should_delegate_to_csp() {
+        let mut csp = MockAllCryptoServiceProvider::new();
+        let expected_dkg_dealing_encryption_pk =
+            with_csp_dkg_gen_dealing_encryption_key_pair(&mut csp, node_test_id(NODE_ID));
 
-    #[test]
-    fn should_fail_to_generate_idkg_dealing_encryption_keys_when_crypto_root_dir_write_protected() {
-        let (mut csp, temp_dir) = local_csp_in_temp_dir();
+        let actual_dkg_dealing_encryption_pk =
+            generate_dkg_dealing_encryption_keys(&csp, node_test_id(NODE_ID));
 
-        // make the crypto root directory non-writeable, causing
-        // ic_utils::fs::write_protobuf_using_tmp_file to fail
-        fs::set_permissions(temp_dir.path(), Permissions::from_mode(0o400))
-            .expect("Could not set the permissions of the temp dir.");
-
-        assert_matches!(
-            generate_idkg_dealing_encryption_keys(&mut csp),
-            Err(IDkgDealingEncryptionKeysGenerationError::TransientInternalError(msg))
-            if msg.to_lowercase().contains("secret key store internal error writing protobuf using tmp file: permission denied")
+        assert_eq!(
+            actual_dkg_dealing_encryption_pk,
+            expected_dkg_dealing_encryption_pk
         );
     }
 }
 
-mod generate_required_node_keys {
+mod generate_idkg_dealing_encryption_keys {
     use super::*;
+    use crate::IDkgDealingEncryptionKeysGenerationError;
+    use ic_crypto_internal_threshold_sig_ecdsa::ThresholdEcdsaError::CurveMismatch;
 
     #[test]
-    #[should_panic = "Node contains inconsistent key material"]
-    fn should_panic_because_of_dummy_implementation() {
-        CryptoConfig::run_with_temp_config(|config| {
-            let _ = generate_required_node_keys(&config, None);
-        })
+    fn should_delegate_to_csp() {
+        let mut csp = MockAllCryptoServiceProvider::new();
+        let expected_idkg_dealing_encryption_pk =
+            with_csp_idkg_gen_dealing_encryption_key_pair(&mut csp);
+
+        let actual_idkg_dealing_encryption_pk = generate_idkg_dealing_encryption_keys(&csp)
+            .expect("error generation I-DKG dealing encryption keys");
+
+        assert_eq!(
+            actual_idkg_dealing_encryption_pk,
+            expected_idkg_dealing_encryption_pk
+        );
     }
+
+    #[test]
+    fn should_return_transient_error() {
+        let mut csp = MockAllCryptoServiceProvider::new();
+        csp.expect_idkg_gen_dealing_encryption_key_pair()
+            .times(1)
+            .return_const(Err(CspCreateMEGaKeyError::TransientInternalError {
+                internal_error: "RPC error".to_string(),
+            }));
+
+        let public_key = generate_idkg_dealing_encryption_keys(&csp);
+
+        assert_matches!(public_key, Err(IDkgDealingEncryptionKeysGenerationError::TransientInternalError(e)) if e == "RPC error")
+    }
+
+    #[test]
+    fn should_return_internal_error() {
+        let mut csp = MockAllCryptoServiceProvider::new();
+        csp.expect_idkg_gen_dealing_encryption_key_pair()
+            .times(1)
+            .return_const(Err(CspCreateMEGaKeyError::FailedKeyGeneration(
+                CurveMismatch,
+            )));
+
+        let public_key = generate_idkg_dealing_encryption_keys(&csp);
+
+        assert_matches!(
+            public_key,
+            Err(IDkgDealingEncryptionKeysGenerationError::InternalError(e)) if e.contains("CurveMismatch")
+        )
+    }
+}
+
+mod generate_required_node_keys_once_internal {
+    use super::*;
+    use ic_crypto_internal_csp::vault::api::ValidatePksAndSksKeyPairError::PublicKeyNotFound;
+
+    #[test]
+    fn should_return_already_existing_keys() {
+        let expected_keys = valid_node_public_keys();
+        let mut csp = MockAllCryptoServiceProvider::new();
+        csp.expect_validate_pks_and_sks()
+            .times(1)
+            .return_const(Ok(expected_keys.clone()));
+
+        let result = generate_node_keys_once_internal(&csp);
+
+        assert_eq!(result, Ok(expected_keys));
+    }
+
+    #[test]
+    fn should_return_transient_error() {
+        let mut csp = MockAllCryptoServiceProvider::new();
+        csp.expect_validate_pks_and_sks().times(1).return_const(Err(
+            ValidatePksAndSksError::TransientInternalError("RPC fails".to_string()),
+        ));
+
+        let result = generate_node_keys_once_internal(&csp);
+
+        assert_matches!(result, Err( NodeKeyGenerationError::TransientInternalError(e)) if e == "RPC fails");
+    }
+
+    #[test]
+    #[should_panic]
+    fn should_panic_on_any_inconsistent_key_store_error() {
+        let mut csp = MockAllCryptoServiceProvider::new();
+        csp.expect_validate_pks_and_sks().times(1).return_const(Err(
+            ValidatePksAndSksError::NodeSigningKeyError(PublicKeyNotFound),
+        ));
+
+        let _result = generate_node_keys_once_internal(&csp);
+    }
+
+    #[test]
+    fn should_generate_keys_when_keystore_empty() {
+        let mut csp = MockAllCryptoServiceProvider::new();
+        let valid_node_public_keys = with_csp_generating_all_keys(&mut csp);
+        with_validate_pks_and_sks_returning(
+            &mut csp,
+            Err(ValidatePksAndSksError::EmptyPublicKeyStore),
+            Ok(valid_node_public_keys.clone()),
+        );
+
+        let result = generate_node_keys_once_internal(&csp);
+
+        assert_eq!(result, Ok(valid_node_public_keys));
+    }
+
+    #[test]
+    #[should_panic(expected = "EmptyPublicKeyStore")]
+    fn should_panic_when_keystore_empty_on_second_call() {
+        let mut csp = MockAllCryptoServiceProvider::new();
+        let _valid_node_public_keys = with_csp_generating_all_keys(&mut csp);
+        with_validate_pks_and_sks_returning(
+            &mut csp,
+            Err(ValidatePksAndSksError::EmptyPublicKeyStore),
+            Err(ValidatePksAndSksError::EmptyPublicKeyStore),
+        );
+
+        let _result = generate_node_keys_once_internal(&csp);
+    }
+
+    #[test]
+    #[should_panic(expected = "NodeSigningKeyError(PublicKeyNotFound)")]
+    fn should_panic_on_any_inconsistent_key_store_error_on_second_call() {
+        let mut csp = MockAllCryptoServiceProvider::new();
+        let _valid_node_public_keys = with_csp_generating_all_keys(&mut csp);
+        with_validate_pks_and_sks_returning(
+            &mut csp,
+            Err(ValidatePksAndSksError::EmptyPublicKeyStore),
+            Err(ValidatePksAndSksError::NodeSigningKeyError(
+                PublicKeyNotFound,
+            )),
+        );
+
+        let _result = generate_node_keys_once_internal(&csp);
+    }
+
+    #[test]
+    fn should_return_transient_error_on_second_call() {
+        let mut csp = MockAllCryptoServiceProvider::new();
+        let _valid_node_public_keys = with_csp_generating_all_keys(&mut csp);
+        with_validate_pks_and_sks_returning(
+            &mut csp,
+            Err(ValidatePksAndSksError::EmptyPublicKeyStore),
+            Err(ValidatePksAndSksError::TransientInternalError(
+                "RPC fails".to_string(),
+            )),
+        );
+
+        let result = generate_node_keys_once_internal(&csp);
+
+        assert_matches!(result, Err( NodeKeyGenerationError::TransientInternalError(e)) if e == "RPC fails");
+    }
+}
+
+fn with_validate_pks_and_sks_returning(
+    csp: &mut MockAllCryptoServiceProvider,
+    result_on_first_call: Result<ValidNodePublicKeys, ValidatePksAndSksError>,
+    result_on_second_call: Result<ValidNodePublicKeys, ValidatePksAndSksError>,
+) {
+    let mut counter = 0_u8;
+    csp.expect_validate_pks_and_sks()
+        .times(2)
+        .returning(move || match counter {
+            0 => {
+                counter += 1;
+                result_on_first_call.clone()
+            }
+            1 => {
+                counter += 1;
+                result_on_second_call.clone()
+            }
+            _ => panic!("validate_pks_and_sks called too many times!"),
+        });
+}
+
+fn with_csp_gen_node_signing_key_pair(csp: &mut MockAllCryptoServiceProvider) -> PublicKey {
+    let node_signing_public_key = valid_node_signing_public_key();
+    csp.expect_gen_node_signing_key_pair()
+        .times(1)
+        .return_const(Ok(CspPublicKey::ed25519_from_hex(&hex::encode(
+            node_signing_public_key.key_value.clone(),
+        ))));
+    node_signing_public_key
+}
+
+fn with_csp_gen_committee_signing_key_pair(csp: &mut MockAllCryptoServiceProvider) -> PublicKey {
+    let committee_signing_public_key = valid_committee_signing_public_key();
+    csp.expect_gen_committee_signing_key_pair()
+        .times(1)
+        .return_const(Ok((
+            CspPublicKey::multi_bls12381_from_hex(&hex::encode(
+                committee_signing_public_key.key_value.clone(),
+            )),
+            CspPop::multi_bls12381_from_hex(&hex::encode(
+                committee_signing_public_key
+                    .proof_data
+                    .clone()
+                    .expect("missing pop"),
+            )),
+        )));
+    committee_signing_public_key
+}
+
+fn with_csp_gen_tls_key_pair(
+    csp: &mut MockAllCryptoServiceProvider,
+    node_id: NodeId,
+    not_after: String,
+) -> TlsPublicKeyCert {
+    let tls_certificate = valid_tls_certificate();
+    csp.expect_gen_tls_key_pair()
+        .times(1)
+        .withf(move |_node_id, _not_after| *_node_id == node_id && _not_after == not_after)
+        .return_const(Ok(tls_certificate.clone()));
+    tls_certificate
+}
+
+fn with_csp_dkg_gen_dealing_encryption_key_pair(
+    csp: &mut MockAllCryptoServiceProvider,
+    node_id: NodeId,
+) -> PublicKeyProto {
+    let dkg_dealing_encryption_pk = valid_dkg_dealing_encryption_public_key();
+
+    csp.expect_gen_dealing_encryption_key_pair()
+        .times(1)
+        .withf(move |_node_id| *_node_id == node_id)
+        .return_const(Ok((
+            CspFsEncryptionPublicKey::try_from(&dkg_dealing_encryption_pk)
+                .expect("invalid DKG key"),
+            CspFsEncryptionPop::try_from(&dkg_dealing_encryption_pk).expect("invalid DKG key"),
+        )));
+    dkg_dealing_encryption_pk
+}
+
+fn with_csp_idkg_gen_dealing_encryption_key_pair(
+    csp: &mut MockAllCryptoServiceProvider,
+) -> PublicKeyProto {
+    let idkg_dealing_encryption_pk = valid_idkg_dealing_encryption_public_key();
+    csp.expect_idkg_gen_dealing_encryption_key_pair()
+        .times(1)
+        .return_const(Ok(MEGaPublicKey::deserialize(
+            EccCurveType::K256,
+            &idkg_dealing_encryption_pk.key_value,
+        )
+        .expect("invalid MEGa public key")));
+    idkg_dealing_encryption_pk
+}
+
+fn with_csp_generating_all_keys(csp: &mut MockAllCryptoServiceProvider) -> ValidNodePublicKeys {
+    let node_signing_pk = with_csp_gen_node_signing_key_pair(csp);
+    let node_id = *ValidNodeSigningPublicKey::try_from(node_signing_pk.clone())
+        .expect("invalid node signing public key")
+        .derived_node_id();
+    let committee_signing_pk = with_csp_gen_committee_signing_key_pair(csp);
+    let tls_certificate = with_csp_gen_tls_key_pair(
+        csp,
+        node_id,
+        RFC5280_NO_WELL_DEFINED_CERTIFICATE_EXPIRATION_DATE.to_string(),
+    );
+    let dkg_dealing_encryption_pk = with_csp_dkg_gen_dealing_encryption_key_pair(csp, node_id);
+    let idkg_dealing_encryption_pk = with_csp_idkg_gen_dealing_encryption_key_pair(csp);
+    ValidNodePublicKeys::try_from(
+        CurrentNodePublicKeys {
+            node_signing_public_key: Some(node_signing_pk),
+            committee_signing_public_key: Some(committee_signing_pk),
+            tls_certificate: Some(tls_certificate.to_proto()),
+            dkg_dealing_encryption_public_key: Some(dkg_dealing_encryption_pk),
+            idkg_dealing_encryption_public_key: Some(idkg_dealing_encryption_pk),
+        },
+        node_id,
+    )
+    .expect("invalid node public keys")
+}
+
+fn valid_node_public_keys() -> ValidNodePublicKeys {
+    let node_id = *ValidNodeSigningPublicKey::try_from(valid_node_signing_public_key())
+        .expect("invalid node signing public key")
+        .derived_node_id();
+    ValidNodePublicKeys::try_from(
+        CurrentNodePublicKeys {
+            node_signing_public_key: Some(valid_node_signing_public_key()),
+            committee_signing_public_key: Some(valid_committee_signing_public_key()),
+            tls_certificate: Some(valid_tls_certificate().to_proto()),
+            dkg_dealing_encryption_public_key: Some(valid_dkg_dealing_encryption_public_key()),
+            idkg_dealing_encryption_public_key: Some(valid_idkg_dealing_encryption_public_key()),
+        },
+        node_id,
+    )
+    .expect("invalid node public keys")
+}
+
+fn valid_node_signing_public_key() -> PublicKey {
+    PublicKey {
+        version: 0,
+        algorithm: AlgorithmId::Ed25519 as i32,
+        key_value: hex_decode("58d558c7586efb32f4667ee9a302877da97aa1136cda92af4d7a4f8873f9434f"),
+        proof_data: None,
+        timestamp: None,
+    }
+}
+
+fn valid_committee_signing_public_key() -> PublicKey {
+    PublicKey {
+        version: 0,
+        algorithm: AlgorithmId::MultiBls12_381 as i32,
+        key_value: hex_decode(
+            "8dab94740858cc96e8df512d8d81730a94d0f3534f30\
+                cebd35ee2006ce4a449cad611dd7d97bbc44256932da4d4a76a70b9f347e4a989a3073fc7\
+                c2d51bf30804ebbc5c3c6da08b8392d2482473290aff428868caabbc26eec4e7bc59209eb0a",
+        ),
+        proof_data: Some(hex_decode(
+            "afc3038c06223258a14af7c942428fe42f89f8d733e4f\
+                5ea8d34a90c0df142697802a6f22633df890a1ce5b774b23aed",
+        )),
+        timestamp: None,
+    }
+}
+
+fn valid_tls_certificate() -> TlsPublicKeyCert {
+    TlsPublicKeyCert::try_from(X509PublicKeyCert {
+        certificate_der: hex_decode(
+            "3082015630820108a00302010202140098d074\
+                7d24ca04a2f036d8665402b4ea784830300506032b6570304a3148304606035504030\
+                c3f34696e71622d327a63766b2d663679716c2d736f776f6c2d76673365732d7a3234\
+                6a642d6a726b6f772d6d686e73642d756b7666702d66616b35702d6161653020170d3\
+                232313130343138313231345a180f39393939313233313233353935395a304a314830\
+                4606035504030c3f34696e71622d327a63766b2d663679716c2d736f776f6c2d76673\
+                365732d7a32346a642d6a726b6f772d6d686e73642d756b7666702d66616b35702d61\
+                6165302a300506032b6570032100246acd5f38372411103768e91169dadb7370e9990\
+                9a65639186ac6d1c36f3735300506032b6570034100d37e5ccfc32146767e5fd73343\
+                649f5b5564eb78e6d8d424d8f01240708bc537a2a9bcbcf6c884136d18d2b475706d7\
+                bb905f52faf28707735f1d90ab654380b",
+        ),
+    })
+    .expect("invalid TLS certificate")
+}
+
+fn valid_dkg_dealing_encryption_public_key() -> PublicKey {
+    PublicKey {
+        version: 0,
+        algorithm: AlgorithmId::Groth20_Bls12_381 as i32,
+        key_value: hex_decode(
+            "ad36a01cbd40dcfa36ec21a96bedcab17372a9cd2b9eba6171ebeb28dd041a\
+                    d5cbbdbb4bed55f59938e8ffb3dd69e386",
+        ),
+        proof_data: Some(hex_decode(
+            "a1781847726f7468323057697468506f705f42\
+                6c7331325f333831a367706f705f6b65795830b751c9585044139f80abdebf38d7f30\
+                aeb282f178a5e8c284f279eaad1c90d9927e56cac0150646992bce54e08d317ea6963\
+                68616c6c656e676558203bb20c5e9c75790f63aae921316912ffc80d6d03946dd21f8\
+                5c35159ca030ec668726573706f6e7365582063d6cf189635c0f3111f97e69ae0af8f\
+                1594b0f00938413d89dbafc326340384",
+        )),
+        timestamp: None,
+    }
+}
+
+fn valid_idkg_dealing_encryption_public_key() -> PublicKey {
+    PublicKey {
+        version: 0,
+        algorithm: AlgorithmId::MegaSecp256k1 as i32,
+        key_value: hex_decode("03e1e1f76e9d834221a26c4a080b65e60d3b6f9c1d6e5b880abf916a364893da2e"),
+        proof_data: None,
+        timestamp: None,
+    }
+}
+
+fn hex_decode<T: AsRef<[u8]>>(data: T) -> Vec<u8> {
+    hex::decode(data).expect("failed to decode hex")
 }

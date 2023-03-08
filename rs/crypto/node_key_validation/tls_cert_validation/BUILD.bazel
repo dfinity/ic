@@ -24,8 +24,6 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
-    "//rs/config",
-    "//rs/crypto/node_key_generation",
     "//rs/crypto/test_utils",
     "//rs/test_utilities",
     "@crate_index//:assert_matches",

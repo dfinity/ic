@@ -206,18 +206,18 @@ mod test {
         prepare_registry_with_nodes,
     };
     use ic_config::crypto::CryptoConfig;
-    use ic_crypto_node_key_generation::get_node_keys_or_generate_if_missing;
+    use ic_crypto_node_key_generation::generate_node_keys_once;
+    use ic_crypto_node_key_validation::ValidNodePublicKeys;
     use ic_ic00_types::{EcdsaCurve, EcdsaKeyId};
     use ic_protobuf::registry::subnet::v1::SubnetRecord;
     use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
     use ic_registry_transport::insert;
     use ic_test_utilities::types::ids::subnet_test_id;
-    use ic_types::crypto::CurrentNodePublicKeys;
     use std::ops::Add;
 
-    fn valid_node_keys_and_node_id() -> (CurrentNodePublicKeys, NodeId) {
+    fn valid_node_public_keys() -> ValidNodePublicKeys {
         let (config, _tepm_dir) = CryptoConfig::new_in_temp_dir();
-        get_node_keys_or_generate_if_missing(&config, None)
+        generate_node_keys_once(&config, None).expect("error generating node keys")
     }
 
     fn protobuf_to_vec<M: Message>(entry: M) -> Vec<u8> {
@@ -233,8 +233,9 @@ mod test {
 
         let now = SystemTime::now();
 
-        let (keys, node_id) = valid_node_keys_and_node_id();
-        let pk = keys.idkg_dealing_encryption_public_key.unwrap();
+        let keys = valid_node_public_keys();
+        let node_id = keys.node_id();
+        let pk = keys.idkg_dealing_encryption_key().clone();
 
         registry
             .do_update_node(
@@ -269,8 +270,8 @@ mod test {
 
         let now = SystemTime::now();
 
-        let (keys, _node_id) = valid_node_keys_and_node_id();
-        let pk = keys.idkg_dealing_encryption_public_key.unwrap();
+        let keys = valid_node_public_keys();
+        let pk = keys.idkg_dealing_encryption_key().clone();
 
         registry
             .do_update_node(
@@ -320,8 +321,8 @@ mod test {
 
         let now = SystemTime::now();
 
-        let (keys, _node_id) = valid_node_keys_and_node_id();
-        let pk = keys.idkg_dealing_encryption_public_key.unwrap();
+        let keys = valid_node_public_keys();
+        let pk = keys.idkg_dealing_encryption_key().clone();
 
         registry
             .do_update_node(
@@ -438,19 +439,16 @@ mod test {
             node_ids
                 .iter()
                 .map(|id| {
-                    let (mut node_pub_keys, _node_id) = valid_node_keys_and_node_id();
-                    node_pub_keys
-                        .idkg_dealing_encryption_public_key
-                        .as_mut()
-                        .unwrap()
-                        .timestamp = Some(
+                    let node_pub_keys = valid_node_public_keys();
+                    let mut idkg_public_key = node_pub_keys.idkg_dealing_encryption_key().clone();
+                    idkg_public_key.timestamp = Some(
                         now.duration_since(SystemTime::UNIX_EPOCH)
                             .unwrap()
                             .as_millis() as u64,
                     );
                     insert(
                         make_crypto_node_key(*id, KeyPurpose::IDkgMEGaEncryption).as_bytes(),
-                        encode_or_panic(&node_pub_keys.idkg_dealing_encryption_public_key.unwrap()),
+                        encode_or_panic(&idkg_public_key),
                     )
                 })
                 .collect(),
@@ -459,8 +457,8 @@ mod test {
         // time passes ...
         now = now.add(Duration::from_millis(idkg_key_rotation_period_ms + 1));
         // generate new key
-        let (keys, _node_id) = valid_node_keys_and_node_id();
-        let pk2 = keys.idkg_dealing_encryption_public_key.unwrap();
+        let keys = valid_node_public_keys();
+        let pk2 = keys.idkg_dealing_encryption_key();
 
         // try to update the key of node 0 again
         assert_eq!(
@@ -513,7 +511,7 @@ mod test {
                 now,
                 node_ids[1],
                 UpdateNodeDirectlyPayload {
-                    idkg_dealing_encryption_pk: Some(protobuf_to_vec(pk2)),
+                    idkg_dealing_encryption_pk: Some(protobuf_to_vec(pk2.clone())),
                 }
             ),
             Ok(())

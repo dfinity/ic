@@ -44,7 +44,7 @@ mod tests;
 ///   that is, the certificate is correctly self-signed
 ///
 /// [RFC 5280 (section 4.1.2.5)]: https://tools.ietf.org/html/rfc5280#section-4.1.2.5
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct ValidTlsCertificate {
     certificate: X509PublicKeyCert,
 }

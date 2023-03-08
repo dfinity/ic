@@ -296,7 +296,7 @@ fn check_no_orphaned_node_crypto_records(
 mod tests {
     use super::*;
     use ic_config::crypto::CryptoConfig;
-    use ic_crypto_node_key_generation::get_node_keys_or_generate_if_missing;
+    use ic_crypto_node_key_generation::generate_node_keys_once;
     use ic_nns_common::registry::encode_or_panic;
     use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
     use ic_protobuf::registry::node::v1::NodeRecord;
@@ -350,7 +350,20 @@ mod tests {
 
     fn valid_node_keys_and_node_id() -> (CurrentNodePublicKeys, NodeId) {
         let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
-        get_node_keys_or_generate_if_missing(&config, None)
+        let node_pks =
+            generate_node_keys_once(&config, None).expect("error generating node public keys");
+        let node_id = node_pks.node_id();
+        (map_to_current_node_public_keys(node_pks), node_id)
+    }
+
+    fn map_to_current_node_public_keys(value: ValidNodePublicKeys) -> CurrentNodePublicKeys {
+        CurrentNodePublicKeys {
+            node_signing_public_key: Some(value.node_signing_key().clone()),
+            committee_signing_public_key: Some(value.committee_signing_key().clone()),
+            tls_certificate: Some(value.tls_certificate().clone()),
+            dkg_dealing_encryption_public_key: Some(value.dkg_dealing_encryption_key().clone()),
+            idkg_dealing_encryption_public_key: Some(value.idkg_dealing_encryption_key().clone()),
+        }
     }
 
     fn insert_dummy_node(node_id: &NodeId, snapshot: &mut RegistrySnapshot) {

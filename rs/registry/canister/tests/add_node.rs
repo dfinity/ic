@@ -36,7 +36,8 @@ fn node_is_created_on_receiving_the_request() {
         )
         .await;
 
-        let (payload, node_pks, node_id) = prepare_add_node_payload();
+        let (payload, node_pks) = prepare_add_node_payload();
+        let node_id = node_pks.node_id();
 
         // Then, ensure there is no value for the node
         let node_record = get_node_record(&registry, node_id).await;
@@ -60,31 +61,28 @@ fn node_is_created_on_receiving_the_request() {
 
         // Check that other fields are present
         let node_signing_pubkey_record = get_node_signing_key(&registry, node_id).await.unwrap();
-        assert_eq!(
-            node_signing_pubkey_record,
-            node_pks.node_signing_public_key.unwrap()
-        );
+        assert_eq!(&node_signing_pubkey_record, node_pks.node_signing_key());
 
         let committee_signing_pubkey_record =
             get_committee_signing_key(&registry, node_id).await.unwrap();
         assert_eq!(
-            committee_signing_pubkey_record,
-            node_pks.committee_signing_public_key.unwrap()
+            &committee_signing_pubkey_record,
+            node_pks.committee_signing_key()
         );
 
         let ni_dkg_dealing_encryption_pubkey_record =
             get_dkg_dealing_key(&registry, node_id).await.unwrap();
         assert_eq!(
-            ni_dkg_dealing_encryption_pubkey_record,
-            node_pks.dkg_dealing_encryption_public_key.unwrap()
+            &ni_dkg_dealing_encryption_pubkey_record,
+            node_pks.dkg_dealing_encryption_key()
         );
 
         let transport_tls_certificate_record = get_transport_tls_certificate(&registry, node_id)
             .await
             .unwrap();
         assert_eq!(
-            transport_tls_certificate_record,
-            node_pks.tls_certificate.unwrap()
+            &transport_tls_certificate_record,
+            node_pks.tls_certificate()
         );
 
         // Check that node allowance has decreased
@@ -112,7 +110,8 @@ fn node_is_not_created_on_wrong_principal() {
         )
         .await;
 
-        let (payload, _node_pks, node_id) = prepare_add_node_payload();
+        let (payload, node_pks) = prepare_add_node_payload();
+        let node_id = node_pks.node_id();
 
         // Then, ensure there is no value for the node
         let node_record = get_node_record(&registry, node_id).await;
@@ -150,7 +149,8 @@ fn node_is_not_created_when_above_capacity() {
         )
         .await;
 
-        let (payload, _node_pks, node_id) = prepare_add_node_payload();
+        let (payload, node_pks) = prepare_add_node_payload();
+        let node_id = node_pks.node_id();
 
         // Then, ensure there is no value for the node
         let node_record = get_node_record(&registry, node_id).await;
@@ -168,7 +168,8 @@ fn node_is_not_created_when_above_capacity() {
         assert!(response.is_ok());
 
         // Try to add another node
-        let (payload, _node_pks, node_id) = prepare_add_node_payload();
+        let (payload, node_pks) = prepare_add_node_payload();
+        let node_id = node_pks.node_id();
 
         // Ensure there is no value for this new node
         let node_record = get_node_record(&registry, node_id).await;

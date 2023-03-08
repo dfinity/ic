@@ -4,7 +4,7 @@ use candid::Encode;
 use canister_test::{Canister, Runtime};
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
 use ic_config::crypto::CryptoConfig;
-use ic_crypto_node_key_generation::get_node_keys_or_generate_if_missing;
+use ic_crypto_node_key_generation::generate_node_keys_once;
 use ic_ic00_types::{ECDSAPublicKeyArgs, EcdsaKeyId, Method as Ic00Method};
 use ic_nns_common::registry::encode_or_panic;
 use ic_nns_test_utils::itest_helpers::{
@@ -150,18 +150,20 @@ pub fn prepare_registry_with_nodes(node_count: u64) -> (RegistryAtomicMutateRequ
     let node_ids: Vec<NodeId> = (0..node_count)
         .map(|_| {
             let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
-            let (node_pks, node_id) = get_node_keys_or_generate_if_missing(&config, None);
+            let node_pks =
+                generate_node_keys_once(&config, None).expect("error generating node public keys");
+            let node_id = node_pks.node_id();
             mutations.push(insert(
                 make_crypto_node_key(node_id, KeyPurpose::DkgDealingEncryption).as_bytes(),
-                encode_or_panic(&node_pks.dkg_dealing_encryption_public_key.unwrap()),
+                encode_or_panic(node_pks.dkg_dealing_encryption_key()),
             ));
             mutations.push(insert(
                 make_crypto_node_key(node_id, KeyPurpose::NodeSigning).as_bytes(),
-                encode_or_panic(&node_pks.node_signing_public_key.unwrap()),
+                encode_or_panic(node_pks.node_signing_key()),
             ));
             mutations.push(insert(
                 make_crypto_node_key(node_id, KeyPurpose::IDkgMEGaEncryption).as_bytes(),
-                encode_or_panic(&node_pks.idkg_dealing_encryption_public_key.unwrap()),
+                encode_or_panic(node_pks.idkg_dealing_encryption_key()),
             ));
 
             let node_key = make_node_record_key(node_id);

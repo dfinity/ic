@@ -62,7 +62,7 @@ mod proto_conversions;
 /// valid.
 ///
 /// Use `try_from` to create an instance from unvalidated `NodePublicKeys`.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct ValidNodePublicKeys {
     node_signing_public_key: ValidNodeSigningPublicKey,
     committee_signing_public_key: ValidCommitteeSigningPublicKey,
@@ -199,7 +199,7 @@ impl ValidNodePublicKeys {
 ///
 /// See `try_from((PublicKey, NodeId))` if you need to validate the [`derived_node_id`] against an
 /// expected trustworthy node id.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct ValidNodeSigningPublicKey {
     public_key: PublicKey,
     derived_node_id: NodeId,
@@ -251,7 +251,7 @@ impl ValidNodeSigningPublicKey {
 ///
 /// The [`public_key`] contained is guaranteed to be immutable and a valid node committee signing public key.
 /// Use `try_from` to create an instance from an unvalidated public key.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct ValidCommitteeSigningPublicKey {
     public_key: PublicKey,
 }
@@ -287,7 +287,7 @@ impl ValidCommitteeSigningPublicKey {
 /// The [`public_key`] contained is guaranteed to be immutable and
 /// a valid NIDGK dealing encryption public key.
 /// Use `try_from((PublicKey, NodeId))` to create an instance from an unvalidated public key and node id.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct ValidDkgDealingEncryptionPublicKey {
     public_key: PublicKey,
 }
@@ -322,7 +322,7 @@ impl ValidDkgDealingEncryptionPublicKey {
 /// i.e., the contained public key material is guaranteed to be valid.
 ///
 /// Use `try_from` to create an instance from an unvalidated public key.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct ValidIDkgDealingEncryptionPublicKey {
     public_key: PublicKey,
 }

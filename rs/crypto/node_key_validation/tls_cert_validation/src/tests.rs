@@ -1,8 +1,6 @@
 use super::*;
 use assert_matches::assert_matches;
 use chrono::{Duration, Utc};
-use ic_config::crypto::CryptoConfig;
-use ic_crypto_node_key_generation::get_node_keys_or_generate_if_missing;
 use ic_crypto_test_utils::tls::x509_certificates::ed25519_key_pair;
 use ic_crypto_test_utils::tls::x509_certificates::prime256v1_key_pair;
 use ic_crypto_test_utils::tls::x509_certificates::CertBuilder;
@@ -36,7 +34,7 @@ fn should_fail_if_tls_certificate_is_empty() {
 
 #[test]
 fn should_fail_if_tls_certificate_has_invalid_der_encoding() {
-    let (mut cert, node_id) = valid_cert_and_node_id();
+    let (mut cert, node_id) = valid_hardcoded_cert_and_node_id();
     cert.certificate_der.iter_mut().for_each(|x| *x ^= 0xff);
 
     let result = ValidTlsCertificate::try_from((cert, node_id));
@@ -48,7 +46,7 @@ fn should_fail_if_tls_certificate_has_invalid_der_encoding() {
 
 #[test]
 fn should_fail_if_tls_certificate_der_encoding_has_remainder() {
-    let (mut cert, node_id) = valid_cert_and_node_id();
+    let (mut cert, node_id) = valid_hardcoded_cert_and_node_id();
     cert.certificate_der.push(0x42);
 
     let result = ValidTlsCertificate::try_from((cert, node_id));
@@ -199,25 +197,7 @@ fn should_succeed_if_tls_certificate_notbefore_date_is_one_minute_from_now() {
 
 #[test]
 fn should_succeed_for_hard_coded_valid_certificate() {
-    let certificate = X509PublicKeyCert {
-        certificate_der: hex_decode(
-            "3082015630820108a00302010202140098d074\
-                7d24ca04a2f036d8665402b4ea784830300506032b6570304a3148304606035504030\
-                c3f34696e71622d327a63766b2d663679716c2d736f776f6c2d76673365732d7a3234\
-                6a642d6a726b6f772d6d686e73642d756b7666702d66616b35702d6161653020170d3\
-                232313130343138313231345a180f39393939313233313233353935395a304a314830\
-                4606035504030c3f34696e71622d327a63766b2d663679716c2d736f776f6c2d76673\
-                365732d7a32346a642d6a726b6f772d6d686e73642d756b7666702d66616b35702d61\
-                6165302a300506032b6570032100246acd5f38372411103768e91169dadb7370e9990\
-                9a65639186ac6d1c36f3735300506032b6570034100d37e5ccfc32146767e5fd73343\
-                649f5b5564eb78e6d8d424d8f01240708bc537a2a9bcbcf6c884136d18d2b475706d7\
-                bb905f52faf28707735f1d90ab654380b",
-        ),
-    };
-    let node_id = NodeId::new(
-        PrincipalId::from_str("4inqb-2zcvk-f6yql-sowol-vg3es-z24jd-jrkow-mhnsd-ukvfp-fak5p-aae")
-            .unwrap(),
-    );
+    let (certificate, node_id) = valid_hardcoded_cert_and_node_id();
 
     let result = ValidTlsCertificate::try_from((certificate.clone(), node_id));
 
@@ -419,10 +399,27 @@ fn invalidate_valid_ed25519_pubkey_bytes(pubkey_bytes: &[u8]) -> BasicSigEd25519
     invalidate_valid_ed25519_pubkey(BasicSigEd25519PublicKeyBytes(buf))
 }
 
-fn valid_cert_and_node_id() -> (X509PublicKeyCert, NodeId) {
-    let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
-    let (node_keys, node_id) = get_node_keys_or_generate_if_missing(&config, None);
-    (node_keys.tls_certificate.unwrap(), node_id)
+fn valid_hardcoded_cert_and_node_id() -> (X509PublicKeyCert, NodeId) {
+    let certificate = X509PublicKeyCert {
+        certificate_der: hex_decode(
+            "3082015630820108a00302010202140098d074\
+                7d24ca04a2f036d8665402b4ea784830300506032b6570304a3148304606035504030\
+                c3f34696e71622d327a63766b2d663679716c2d736f776f6c2d76673365732d7a3234\
+                6a642d6a726b6f772d6d686e73642d756b7666702d66616b35702d6161653020170d3\
+                232313130343138313231345a180f39393939313233313233353935395a304a314830\
+                4606035504030c3f34696e71622d327a63766b2d663679716c2d736f776f6c2d76673\
+                365732d7a32346a642d6a726b6f772d6d686e73642d756b7666702d66616b35702d61\
+                6165302a300506032b6570032100246acd5f38372411103768e91169dadb7370e9990\
+                9a65639186ac6d1c36f3735300506032b6570034100d37e5ccfc32146767e5fd73343\
+                649f5b5564eb78e6d8d424d8f01240708bc537a2a9bcbcf6c884136d18d2b475706d7\
+                bb905f52faf28707735f1d90ab654380b",
+        ),
+    };
+    let node_id = NodeId::new(
+        PrincipalId::from_str("4inqb-2zcvk-f6yql-sowol-vg3es-z24jd-jrkow-mhnsd-ukvfp-fak5p-aae")
+            .unwrap(),
+    );
+    (certificate, node_id)
 }
 
 fn node_id(n: u64) -> NodeId {

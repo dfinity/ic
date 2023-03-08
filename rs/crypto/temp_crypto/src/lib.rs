@@ -201,7 +201,7 @@ impl TempCryptoBuilder {
         if let Some(source) = self.temp_dir_source {
             copy_crypto_root(&source, temp_dir.path());
         }
-        let mut csp = csp_for_config(&config, None);
+        let csp = csp_for_config(&config, None);
         let node_keys_to_generate = self
             .node_keys_to_generate
             .unwrap_or_else(NodeKeysToGenerate::none);
@@ -219,17 +219,17 @@ impl TempCryptoBuilder {
             .then(|| generate_committee_signing_keys(&csp));
         let dkg_dealing_encryption_pk = node_keys_to_generate
             .generate_dkg_dealing_encryption_keys
-            .then(|| generate_dkg_dealing_encryption_keys(&mut csp, node_id));
+            .then(|| generate_dkg_dealing_encryption_keys(&csp, node_id));
         let idkg_dealing_encryption_pk = node_keys_to_generate
             .generate_idkg_dealing_encryption_keys
             .then(|| {
-                generate_idkg_dealing_encryption_keys(&mut csp).unwrap_or_else(|e| {
+                generate_idkg_dealing_encryption_keys(&csp).unwrap_or_else(|e| {
                     panic!("Error generating I-DKG dealing encryption keys: {:?}", e)
                 })
             });
         let tls_certificate = node_keys_to_generate
             .generate_tls_keys_and_certificate
-            .then(|| generate_tls_keys(&mut csp, node_id).to_proto());
+            .then(|| generate_tls_keys(&csp, node_id).to_proto());
 
         let is_registry_data_provided = self.registry_data.is_some();
         let registry_data = self

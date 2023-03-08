@@ -10,7 +10,8 @@ use thiserror::Error;
 
 use crate::util::{write_proto_to_file_raw, write_registry_entry};
 use ic_config::crypto::CryptoConfig;
-use ic_crypto_node_key_generation::get_node_keys_or_generate_if_missing;
+use ic_crypto_node_key_generation::generate_node_keys_once;
+use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_protobuf::registry::{
     crypto::v1::{PublicKey, X509PublicKeyCert},
     node::v1::{
@@ -20,7 +21,6 @@ use ic_protobuf::registry::{
 };
 use ic_registry_keys::{make_crypto_node_key, make_crypto_tls_cert_key, make_node_record_key};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_types::crypto::CurrentNodePublicKeys;
 use ic_types::{
     crypto::KeyPurpose,
     registry::connection_endpoint::{ConnectionEndpoint, ConnectionEndpointTryFromError},
@@ -372,13 +372,13 @@ impl NodeConfiguration {
         let node_id = sks.node_id;
         Ok(InitializedNode {
             node_id,
-            pk_committee_signing: sks.node_pks.committee_signing_public_key.unwrap(),
-            pk_node_signing: sks.node_pks.node_signing_public_key.unwrap(),
-            tls_certificate: sks.node_pks.tls_certificate.unwrap(),
+            pk_committee_signing: sks.node_pks.committee_signing_key().clone(),
+            pk_node_signing: sks.node_pks.node_signing_key().clone(),
+            tls_certificate: sks.node_pks.tls_certificate().clone(),
             node_path: PathBuf::from(node_path.as_ref()),
             node_config: self,
-            dkg_dealing_encryption_pubkey: sks.node_pks.dkg_dealing_encryption_public_key.unwrap(),
-            idkg_mega_encryption_pubkey: sks.node_pks.idkg_dealing_encryption_public_key,
+            dkg_dealing_encryption_pubkey: sks.node_pks.dkg_dealing_encryption_key().clone(),
+            idkg_mega_encryption_pubkey: Some(sks.node_pks.idkg_dealing_encryption_key().clone()),
         })
     }
 }
@@ -386,7 +386,7 @@ impl NodeConfiguration {
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NodeSecretKeyStore {
     pub node_id: NodeId,
-    pub node_pks: CurrentNodePublicKeys,
+    pub node_pks: ValidNodePublicKeys,
     pub path: PathBuf,
 }
 
@@ -405,7 +405,9 @@ impl NodeSecretKeyStore {
         })?;
         Self::set_permissions(&path)?;
         let config = CryptoConfig::new(path.clone());
-        let (node_pks, node_id) = get_node_keys_or_generate_if_missing(&config, None);
+        let node_pks =
+            generate_node_keys_once(&config, None).expect("error generating node public keys");
+        let node_id = node_pks.node_id();
 
         Ok(Self {
             node_id,
@@ -416,7 +418,7 @@ impl NodeSecretKeyStore {
 
     /// Sets the permission bits of the given path as expected by the crypto component.
     fn set_permissions<P: AsRef<Path>>(path: P) -> Result<(), InitializeNodeError> {
-        // Set permissions required for `get_node_keys_or_generate_if_missing`
+        // Set permissions required for `generate_node_keys_once`
         std::fs::set_permissions(path.as_ref(), std::fs::Permissions::from_mode(0o750)).map_err(
             |source| InitializeNodeError::CreateNodePathFailed {
                 path: path.as_ref().to_string_lossy().to_string(),

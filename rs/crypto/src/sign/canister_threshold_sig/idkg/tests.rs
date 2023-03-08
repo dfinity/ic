@@ -1,7 +1,7 @@
 use crate::sign::get_mega_pubkey;
 use ic_base_types::RegistryVersion;
 use ic_config::crypto::CryptoConfig;
-use ic_crypto_node_key_generation::get_node_keys_or_generate_if_missing;
+use ic_crypto_node_key_generation::generate_node_keys_once;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_node_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
@@ -11,10 +11,10 @@ use std::sync::Arc;
 #[test]
 fn should_retrieve_mega_keys_from_the_registry() {
     let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
-    let (node_pks, node_id) = get_node_keys_or_generate_if_missing(&config, None);
-    let mega_proto = node_pks
-        .idkg_dealing_encryption_public_key
-        .expect("Missing MEGa public key");
+    let node_pks =
+        generate_node_keys_once(&config, None).expect("error generating node public keys");
+    let node_id = node_pks.node_id();
+    let mega_proto = node_pks.idkg_dealing_encryption_key();
 
     let registry_version = RegistryVersion::from(1);
     let data_provider = Arc::new(ProtoRegistryDataProvider::new());
@@ -24,7 +24,7 @@ fn should_retrieve_mega_keys_from_the_registry() {
         .add(
             &make_crypto_node_key(node_id, KeyPurpose::IDkgMEGaEncryption),
             registry_version,
-            Some(mega_proto),
+            Some(mega_proto.clone()),
         )
         .expect("Could not add public key to registry");
 

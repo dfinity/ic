@@ -10,7 +10,7 @@ use crate::ssh_access_manager::SshAccessManager;
 use crate::upgrade::Upgrade;
 use ic_config::metrics::{Config as MetricsConfig, Exporter};
 use ic_crypto::{CryptoComponent, CryptoComponentForNonReplicaProcess};
-use ic_crypto_node_key_generation::get_node_keys_or_generate_if_missing;
+use ic_crypto_node_key_generation::{generate_node_keys_once, NodeKeyGenerationError};
 use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
 use ic_image_upgrader::ImageUpgrader;
@@ -48,6 +48,14 @@ pub struct Orchestrator {
     task_handles: Vec<JoinHandle<()>>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum OrchestratorInstantiationError {
+    /// If an error occurs during key generation
+    KeyGenerationError(String),
+    /// If an error occurs while reading the replica version from the file system
+    VersionFileError,
+}
+
 // Loads the replica version from the file specified as argument on
 // orchestrator's start.
 fn load_version_from_file(logger: &ReplicaLogger, path: &Path) -> Result<ReplicaVersion, ()> {
@@ -66,25 +74,28 @@ fn load_version_from_file(logger: &ReplicaLogger, path: &Path) -> Result<Replica
 }
 
 impl Orchestrator {
-    pub async fn new(args: OrchestratorArgs) -> Result<Self, ()> {
+    pub async fn new(args: OrchestratorArgs) -> Result<Self, OrchestratorInstantiationError> {
         args.create_dirs();
         let metrics_addr = args.get_metrics_addr();
         let config = args.get_ic_config();
         let crypto_config = config.crypto.clone();
         let node_id = tokio::task::spawn_blocking(move || {
-            get_node_keys_or_generate_if_missing(
-                &crypto_config,
-                Some(tokio::runtime::Handle::current()),
-            )
-            .1
+            generate_node_keys_once(&crypto_config, Some(tokio::runtime::Handle::current()))
+                .map(|keys| keys.node_id())
+                .map_err(|e| match e {
+                    NodeKeyGenerationError::TransientInternalError(e) => {
+                        OrchestratorInstantiationError::KeyGenerationError(e)
+                    }
+                })
         })
         .await
-        .unwrap();
+        .unwrap()?;
 
         let (logger, _async_log_guard) =
             new_replica_logger_from_config(&config.orchestrator_logger);
         let metrics_registry = MetricsRegistry::global();
-        let replica_version = load_version_from_file(&logger, &args.version_file)?;
+        let replica_version = load_version_from_file(&logger, &args.version_file)
+            .map_err(|()| OrchestratorInstantiationError::VersionFileError)?;
         info!(
             logger,
             "Orchestrator started: version={}, config={:?}", replica_version, config
@@ -298,7 +309,7 @@ impl Orchestrator {
                 tokio::select! {
                     _ = tokio::time::sleep(CHECK_INTERVAL_SECS) => {}
                     _ = exit_signal.changed() => {}
-                };
+                }
             }
             info!(log, "Shut down the tECDSA key rotation loop");
         }
@@ -320,7 +331,7 @@ impl Orchestrator {
                 tokio::select! {
                     _ = tokio::time::sleep(CHECK_INTERVAL_SECS) => {}
                     _ = exit_signal.changed() => {}
-                };
+                }
             }
             info!(log, "Shut down the ssh keys & firewall monitoring loop");
         }
