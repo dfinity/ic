@@ -5076,6 +5076,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-crypto-ecdsa-secp256r1"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "lazy_static",
+ "p256",
+ "pem 1.1.1",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
+ "simple_asn1 0.6.2",
+ "wycheproof",
+ "zeroize",
+]
+
+[[package]]
 name = "ic-crypto-extended-bip32"
 version = "0.1.0"
 dependencies = [
