@@ -17,24 +17,44 @@ pub fn build_dashboard() -> Vec<u8> {
         <!DOCTYPE html>
         <html lang=\"en\">
             <head>
-            <title>Minter Dashboard</title>
-            <style>
-                table {{
-                    border: solid;
-                    text-align: left;
-                    width: 100%;
-                    border-width: thin;
-                }}
-                h3 {{
-                    font-variant: small-caps;
-                    margin-top: 30px;
-                    margin-bottom: 5px;
-                }}
-                table table {{ font-size: small; }}
-                .background {{ margin: 0; padding: 0; }}
-                .content {{ max-width: 100vw; width: fit-content; margin: 0 auto; }}
-                tbody tr:nth-child(odd) {{ background-color: #eeeeee; }}
-            </style>
+                <title>Minter Dashboard</title>
+                <style>
+                    table {{
+                        border: solid;
+                        text-align: left;
+                        width: 100%;
+                        border-width: thin;
+                    }}
+                    h3 {{
+                        font-variant: small-caps;
+                        margin-top: 30px;
+                        margin-bottom: 5px;
+                    }}
+                    table table {{ font-size: small; }}
+                    .background {{ margin: 0; padding: 0; }}
+                    .content {{ max-width: 100vw; width: fit-content; margin: 0 auto; }}
+                    tbody tr:nth-child(odd) {{ background-color: #eeeeee; }}
+                </style>
+                <script>
+                    document.addEventListener(\"DOMContentLoaded\", function() {{
+                        var tds = document.querySelectorAll(\".ts-class\");
+                        for (var i = 0; i < tds.length; i++) {{
+                        var td = tds[i];
+                        var timestamp = td.textContent / 1000000;
+                        var date = new Date(timestamp);
+                        var options = {{
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric',
+                            hour: 'numeric',
+                            minute: 'numeric',
+                            second: 'numeric'
+                        }};
+                        td.title = td.textContent;
+                        td.textContent = date.toLocaleString(undefined, options);
+                        }}
+                    }});
+                </script>
             </head>
             <body>
               <div class='background'><div class='content'>
@@ -457,7 +477,7 @@ fn display_logs() -> String {
     fn display_entry(buf: &mut Vec<u8>, tag: &str, e: &LogEntry) {
         write!(
             buf,
-            "<tr><td>{}</td><td onmouseover=\"this.title = new Date(this.textContent / 1000000)\">{}</td><td><code>{}:{}</code></td><td>{}</td></tr>",
+            "<tr><td>{}</td><td class=\"ts-class\">{}</td><td><code>{}:{}</code></td><td>{}</td></tr>",
             tag, e.timestamp, e.file, e.line, e.message
         )
         .unwrap()
