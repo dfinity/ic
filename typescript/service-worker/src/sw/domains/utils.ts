@@ -1,7 +1,5 @@
 import { Principal } from '@dfinity/principal';
 import { isMainNet } from '../requests/utils';
-import { DEFAULT_GATEWAY } from './static';
-import { CanisterLookup } from './typings';
 
 export const apiGateways = [
   'boundary.dfinity.network',
@@ -17,7 +15,7 @@ export const apiGateways = [
  */
 export function maybeResolveCanisterFromHeaders(
   headers: Headers
-): CanisterLookup | null {
+): Principal | null {
   const maybeHostHeader = headers.get('host');
   if (maybeHostHeader) {
     // Remove the port.
@@ -37,43 +35,8 @@ export function maybeResolveCanisterFromHeaders(
  * @param url The URL (normally from the request).
  * @returns A Canister ID or null if none were found.
  */
-export function resolveCanisterFromUrl(url: URL): CanisterLookup | null {
-  try {
-    let lookup = maybeResolveCanisterFromHostName(url.hostname);
-    if (!lookup) {
-      const principal = maybeResolveCanisterIdFromSearchParam(url.searchParams);
-      if (principal) {
-        lookup = {
-          principal,
-          gateway: isMainNet ? DEFAULT_GATEWAY : url,
-        };
-      }
-    }
-
-    return lookup;
-  } catch (_) {
-    return null;
-  }
-}
-
-/**
- * Try to resolve the Canister ID to contact in the search params.
- * @param searchParams The URL Search params.
- * @returns A Canister ID or null if none were found.
- */
-export function maybeResolveCanisterIdFromSearchParam(
-  searchParams: URLSearchParams
-): Principal | null {
-  const maybeCanisterId = searchParams.get('canisterId');
-  if (maybeCanisterId) {
-    try {
-      return Principal.fromText(maybeCanisterId);
-    } catch (e) {
-      // Do nothing.
-    }
-  }
-
-  return null;
+export function resolveCanisterFromUrl(url: URL): Principal | null {
+  return maybeResolveCanisterFromHostName(url.hostname);
 }
 
 export function isRawDomain(hostname: string, mainNet = isMainNet): boolean {
@@ -96,9 +59,8 @@ export function isRawDomain(hostname: string, mainNet = isMainNet): boolean {
  */
 export function maybeResolveCanisterFromHostName(
   hostname: string
-): CanisterLookup | null {
+): Principal | null {
   const subdomains = hostname.split('.').reverse();
-  const topdomains: string[] = [];
   // raw ic domain in handled as a normal web2 request
   if (isRawDomain(hostname)) {
     return null;
@@ -106,18 +68,10 @@ export function maybeResolveCanisterFromHostName(
 
   for (const domain of subdomains) {
     try {
-      const principal = Principal.fromText(domain);
-      const gateway = isMainNet
-        ? DEFAULT_GATEWAY
-        : new URL(
-            self.location.protocol + '//' + topdomains.reverse().join('.')
-          );
-      return {
-        principal,
-        gateway,
-      };
+      return Principal.fromText(domain);
     } catch (_) {
-      topdomains.push(domain);
+      // subdomain did not match expected Principal format
+      // continue checking each subdomain
     }
   }
 

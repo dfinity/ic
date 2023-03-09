@@ -98,7 +98,7 @@ describe('Storage connection to indexed db', () => {
   it('should connect and create stores from callback', async () => {
     const storeNames: CreateStoreOptions[] = [
       'ic-singularity',
-      (database) => database.createObjectStore<string>('ic-scalability'),
+      async (database) => database.createObjectStore<string>('ic-scalability'),
     ];
     storage = await Storage.connect({
       stores: {

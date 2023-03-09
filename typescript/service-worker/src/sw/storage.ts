@@ -7,7 +7,7 @@ const TTL_INDEX_NAME = 'ttl';
 const TTL_INDEX_KEY_PATH = 'expireAt';
 
 type KeysOf<T> = keyof T & string;
-type DBValue = { expireAt?: number; body: unknown };
+type DBValue<T = unknown> = { expireAt?: number; body: T };
 type DBValueSchema = {
   value: DBValue;
 };
@@ -22,8 +22,11 @@ type PickDBSchemaValue<
 
 type IDBKey = IDBValidKey | IDBKeyRange;
 type CreateStoreFn = (
-  database: IDBPDatabase<unknown>
-) => IDBPObjectStore<unknown, ArrayLike<string>, string, 'versionchange'>;
+  database: IDBPDatabase<unknown>,
+  oldVersion: number
+) => Promise<
+  IDBPObjectStore<unknown, ArrayLike<string>, string, 'versionchange'>
+>;
 type CreateStoreOptions = CreateStoreFn | string;
 type InitStores = CreateStoreOptions[];
 
@@ -85,10 +88,10 @@ class Storage<StorageDB extends DBSchema | unknown = unknown> {
     }
 
     const idb = await openDB(name, version, {
-      upgrade(database) {
-        stores?.init?.forEach((createStore) => {
+      async upgrade(database, oldVersion) {
+        for (const createStore of stores.init ?? []) {
           if (typeof createStore !== 'string') {
-            const store = createStore(database);
+            const store = await createStore(database, oldVersion);
             store.createIndex(TTL_INDEX_NAME, TTL_INDEX_KEY_PATH);
             return;
           }
@@ -101,7 +104,7 @@ class Storage<StorageDB extends DBSchema | unknown = unknown> {
 
           const store = database.createObjectStore(createStore);
           store.createIndex(TTL_INDEX_NAME, TTL_INDEX_KEY_PATH);
-        });
+        }
 
         database.onversionchange = function () {
           database.close();
@@ -263,6 +266,7 @@ export {
   DB_DEFAULT_STORE,
   Storage,
   StorageConnectOptions,
+  DBValue,
   CreateStoreFn,
   StoresOptions,
   IDBKey,

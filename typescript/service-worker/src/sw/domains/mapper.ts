@@ -1,36 +1,39 @@
 import { Principal } from '@dfinity/principal';
 import { ICHostInfoEvent } from '../../typings';
-import { DBHostsItem, DomainLookup } from './typings';
-import { MalformedCanisterError, MalformedHostnameError } from './errors';
+import { DBHostsItem } from './typings';
+import { MalformedCanisterError } from './errors';
 
 export class ResolverMapper {
-  static fromDBHostsItem(
-    lookup: DBHostsItem,
-    protocol = self.location.protocol
-  ): DomainLookup {
+  static fromDBHostsItem(lookup: DBHostsItem): Principal | null {
     if (!lookup.canister) {
-      return { canister: false };
+      return null;
     }
 
-    return {
-      canister: {
-        principal: Principal.fromText(lookup.canister.id),
-        gateway: new URL(protocol + '//' + lookup.canister.gateway),
-      },
-    };
+    try {
+      return Principal.fromText(lookup.canister.id);
+    } catch (error) {
+      return null;
+    }
   }
 
-  static toDBHostsItem(lookup: DomainLookup): DBHostsItem {
-    if (!lookup.canister) {
-      return { canister: false };
+  static toDBHostsItem(lookup: Principal | null): DBHostsItem {
+    if (!lookup) {
+      return {
+        canister: false,
+      };
     }
 
-    return {
-      canister: {
-        id: lookup.canister.principal.toText(),
-        gateway: lookup.canister.gateway.hostname,
-      },
-    };
+    try {
+      return {
+        canister: {
+          id: lookup?.toText(),
+        },
+      };
+    } catch (error) {
+      return {
+        canister: false,
+      };
+    }
   }
 
   static toHTTPSUrl(url: URL): URL {
@@ -49,26 +52,11 @@ export class ResolverMapper {
     }
   }
 
-  static getURLFromHostname(
-    hostname: string,
-    protocol = self.location.protocol
-  ): URL {
-    try {
-      return new URL(protocol + '//' + hostname);
-    } catch (err) {
-      const error = err as Error;
-      throw new MalformedHostnameError(error.message);
-    }
-  }
-
   static toDBHostsItemFromEvent(event: ICHostInfoEvent): DBHostsItem | null {
     try {
-      return ResolverMapper.toDBHostsItem({
-        canister: {
-          gateway: ResolverMapper.getURLFromHostname(event.gateway),
-          principal: ResolverMapper.getPrincipalFromText(event.canisterId),
-        },
-      });
+      return ResolverMapper.toDBHostsItem(
+        ResolverMapper.getPrincipalFromText(event.canisterId)
+      );
     } catch (err) {
       // logging the error in case the event had malformed values
       console.error(err);
