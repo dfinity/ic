@@ -2,6 +2,7 @@ import codecs
 import json
 import logging
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -126,14 +127,18 @@ class Workload(threading.Thread):
         if len(rps_per_machine) < 0:
             raise Exception("Not using any workload generators, aborting")
 
-        if (
-            self.target_machines == ["https://ic0.app"]
-            or self.target_machines == ["https://ic0.dev"]
-            or self.target_machines == ["https://icp0.io"]
-        ):
-            target_list = ",".join(self.target_machines)
-        else:
-            target_list = ",".join(f"http://[{target}]:8080" for target in self.target_machines)
+        def is_bn(target):
+            return (
+                target == "https://ic0.app"
+                or target == "https://ic0.dev"
+                or re.search(r"https://icp\d.io", target)
+                or target.endswith(".testnet.dfinity.network")
+            )
+
+        target_list = ",".join(
+            target if is_bn(target) else f"http://[{target}]:8080" for target in self.target_machines
+        )
+
         cmd = f'./ic-workload-generator "{target_list}"' f" -n {self.workload.duration} --no-status-check "
         cmd += " " + " ".join(self.workload.arguments)
         cmd += " --query-timeout-secs " + str(self.query_timeout_secs)
@@ -155,7 +160,7 @@ class Workload(threading.Thread):
         # Later, we might have multiple workloads per iteration, so we should then probably also
         # check the sum of all requests from all workloads, but this should be good enough for now.
         for _rps in rps_per_machine:
-            assert _rps < 8000, f"Not enough workload generator machines: {num_load_generators} which {_rps} rps each"
+            assert _rps < 8000, f"Not enough workload generator machines: {num_load_generators} with {_rps} rps each"
 
         logging.debug(f"generating load for {self.load_generators} using canister IDs: {self.workload.canister_ids}")
         # Each workload generator instance can target only a single canister ID currently.

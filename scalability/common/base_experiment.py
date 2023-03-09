@@ -52,7 +52,7 @@ gflags.DEFINE_string(
 gflags.DEFINE_string("artifacts_path", "../artifacts/release", "Path to the artifacts directory")
 gflags.DEFINE_string("workload_generator_path", "", "Path to the workload generator to be used")
 gflags.DEFINE_boolean("no_instrument", False, "Do not instrument target machine")
-gflags.DEFINE_string("targets", "", "Set load target IP adresses from this coma-separated list directly.")
+gflags.DEFINE_string("targets", "", "Set load target IP adresses from this comma-separated list directly.")
 gflags.DEFINE_string("top_level_out_dir", "", "Set the top-level output directory. Default is the git commit id.")
 gflags.DEFINE_string(
     "second_level_out_dir",
@@ -67,7 +67,7 @@ gflags.DEFINE_string(
     "datapoints",
     "",
     (
-        "Datapoints for each iteration. Supported are a) coma-separated floats, b) ranges start-end:step or c) "
+        "Datapoints for each iteration. Supported are a) comma-separated floats, b) ranges start-end:step or c) "
         "exponential start~target~end where more measurements are executed the closer we get to target."
     ),
 )
@@ -111,7 +111,8 @@ class BaseExperiment:
         if (
             FLAGS.targets == "https://ic0.app"
             or FLAGS.targets == "https://ic0.dev"
-            or FLAGS.targets == "https://icp0.io"
+            or re.search(r"https://icp\d.io", FLAGS.targets)
+            or FLAGS.targets.endswith(".testnet.dfinity.network")
         ):
             print(colored("Benchmarking boundary nodes .. reduced function scope", "red"))
             self.benchmark_boundary_nodes = True
@@ -129,9 +130,6 @@ class BaseExperiment:
 
     def get_ic_version(self, m):
         """Retrieve the IC version from the given machine m."""
-        if self.benchmark_boundary_nodes:
-            return "not-available"
-
         from common import ictools
 
         return ictools.get_ic_version("http://[{}]:8080/api/v2/status".format(m))
