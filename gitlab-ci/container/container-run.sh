@@ -94,7 +94,7 @@ PODMAN_RUN_ARGS+=(
     --mount type=tmpfs,destination=/var/sysimage
 )
 
-if [ -n "${SSH_AUTH_SOCK:-}" ] && [ -f "${SSH_AUTH_SOCK:-}" ]; then
+if [ -n "${SSH_AUTH_SOCK:-}" ] && [ -e "${SSH_AUTH_SOCK:-}" ]; then
     PODMAN_RUN_ARGS+=(
         -v "$SSH_AUTH_SOCK:/ssh-agent"
         -e SSH_AUTH_SOCK="/ssh-agent"
