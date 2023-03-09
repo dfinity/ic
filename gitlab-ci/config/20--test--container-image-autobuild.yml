@@ -14,54 +14,24 @@ container-autobuild-protected:
       # use docker on protected runner
       set -euo pipefail
 
-      # image used in this revision
-      cd gitlab-ci/config
-      CI_IMAGE=$(grep registry.gitlab.com 00--common--images.yml | awk '{ print $2 }' | tr -d '"')
-      CI_IMAGE_NAME=$(echo "$CI_IMAGE" | cut -d':' -f1)
-      CI_IMAGE_TAG=$(echo "$CI_IMAGE" | cut -d':' -f2)
-      cd -
       # container image tag
       TAG=$(cat ./gitlab-ci/container/TAG)
-
       # check if we have it in dockerhub
       EXISTS=$(curl -s https://hub.docker.com/v2/repositories/dfinity/ic-build/tags | jq -r "[.results? | .[]? | .name == \"$TAG\"] | any")
+      EXISTS_BAZEL=$(curl -s https://hub.docker.com/v2/repositories/dfinity/ic-build-bazel/tags | jq -r "[.results? | .[]? | .name == \"$TAG\"] | any")
 
-      if (docker images | grep "$CI_IMAGE_NAME" | grep -q "$CI_IMAGE_TAG"); then
-        # we have docker image present
-        echo "Image '$CI_IMAGE_NAME:$CI_IMAGE_TAG' already present!"
-      else
-        # no image on this protected runner
-        # build it and push it to dockerhub
+      if [ "$EXISTS" != "true" ] || [ "$EXISTS_BAZEL" != "true" ]; then
+        # build it
         echo -e "\e[0Ksection_start:$(date +%s):docker_build_script[collapsed=true]\r\e[0KClick here to see the docker_build_script"
         ./gitlab-ci/container/build-image.sh
         echo -e "\e[0Ksection_end:$(date +%s):docker_build_script\r\e[0K"
-
-        # push new image to dockerhub
+        # push it to dockerhub
         docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD"
         docker push docker.io/dfinity/ic-build:"$TAG"
         docker push docker.io/dfinity/ic-build:latest
         docker push docker.io/dfinity/ic-build-bazel:"$TAG"
         docker push docker.io/dfinity/ic-build-bazel:latest
-        PUSHED=true
-      fi 
-
-      # case where pushing docker image on 1st try failed
-      if [ "$EXISTS" != "true" ] && [ "${PUSHED:-}" != "true" ]; then
-        docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD"
-        docker push docker.io/dfinity/ic-build:"$TAG"
-        docker push docker.io/dfinity/ic-build-bazel:"$TAG"
       fi
-
-      echo -e "\e[0Ksection_start:$(date +%s):sys_info[collapsed=true]\r\e[0KClick here to see system info"
-      echo "SYS-INFO UPTIME"
-      uptime
-      echo "SYS-INFO DISK SPACE"
-      df -h
-      echo "SYS-INFO DOCKER IMAGES"
-      docker images
-      echo "SYS-INFO DOCKER CONTAINERS"
-      docker ps -a
-      echo -e "\e[0Ksection_end:$(date +%s):sys_info\r\e[0K"
 
 container-autobuild:
   extends:
