@@ -1,4 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_library", "rust_test")
+load("//bazel:defs.bzl", "rust_bench")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -65,6 +66,18 @@ DEV_DEPENDENCIES = [
     "@crate_index//:tempfile",
 ]
 
+DATA = [
+    "//rs/canister_sandbox",
+    "//rs/canister_sandbox/sandbox_launcher",
+    "//rs/rust_canisters/stable_structures:stable_structures_canister",
+]
+
+ENV = {
+    "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
+    "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
+    "STABLE_STRUCTURES_CANISTER_WASM_PATH": "$(rootpath //rs/rust_canisters/stable_structures:stable_structures_canister)",
+}
+
 rust_library(
     name = "consensus",
     srcs = glob(["src/**/*.rs"]),
@@ -111,4 +124,34 @@ rust_test(
     srcs = glob(["tests/**"]),
     crate_root = "tests/types.rs",
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [":consensus"],
+)
+
+rust_bench(
+    name = "validate_payload",
+    testonly = True,
+    srcs = ["benches/validate_payload.rs"],
+    data = DATA,
+    env = ENV,
+    deps = [
+        ":consensus",
+        "//rs/artifact_pool",
+        "//rs/config",
+        "//rs/constants",
+        "//rs/execution_environment",
+        "//rs/ingress_manager",
+        "//rs/interfaces",
+        "//rs/interfaces/state_manager",
+        "//rs/interfaces/state_manager/mocks",
+        "//rs/monitoring/logger",
+        "//rs/monitoring/metrics",
+        "//rs/protobuf",
+        "//rs/registry/subnet_type",
+        "//rs/state_manager",
+        "//rs/test_utilities",
+        "//rs/test_utilities/registry",
+        "//rs/types/ic00_types",
+        "//rs/types/types",
+        "@crate_index//:criterion",
+        "@crate_index//:tempfile",
+    ],
 )
