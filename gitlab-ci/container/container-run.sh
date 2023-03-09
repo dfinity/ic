@@ -94,11 +94,13 @@ PODMAN_RUN_ARGS+=(
     --mount type=tmpfs,destination=/var/sysimage
 )
 
-if [ -n "${SSH_AUTH_SOCK:-}" ]; then
+if [ -n "${SSH_AUTH_SOCK:-}" ] && [ -f "${SSH_AUTH_SOCK:-}" ]; then
     PODMAN_RUN_ARGS+=(
         -v "$SSH_AUTH_SOCK:/ssh-agent"
         -e SSH_AUTH_SOCK="/ssh-agent"
     )
+else
+    echo "No ssh-agent to forward."
 fi
 
 # privileged rootful podman is required due to requirements of IC-OS guest build
@@ -106,7 +108,7 @@ fi
 if [ $# -eq 0 ]; then
     set -x
     sudo podman run -it --rm --privileged --network=host --cgroupns=host \
-        "${PODMAN_RUN_ARGS[@]}" -w "$WORKDIR" "$IMAGE" bash --rcfile /etc/bash.bashrc
+        "${PODMAN_RUN_ARGS[@]}" -w "$WORKDIR" "$IMAGE" bash --rcfile /etc/bash.bashrc --rcfile /home/ubuntu/.bashrc
     set +x
 else
     set -x
