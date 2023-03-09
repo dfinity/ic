@@ -7,7 +7,7 @@ mod self_validating;
 mod xnet;
 
 pub use self::canister_http::{CanisterHttpPayload, MAX_CANISTER_HTTP_PAYLOAD_SIZE};
-pub use self::ingress::{IngressPayload, IngressPayloadError, InvalidIngressPayload};
+pub use self::ingress::{IngressPayload, IngressPayloadError};
 pub use self::self_validating::{SelfValidatingPayload, MAX_BITCOIN_PAYLOAD_IN_BYTES};
 pub use self::xnet::XNetPayload;
 
@@ -91,7 +91,7 @@ impl BatchPayload {
     /// BatchPayload.
     /// Return error if deserialization of ingress payload fails.
     #[allow(clippy::result_large_err)]
-    pub fn into_messages(self) -> Result<BatchMessages, InvalidIngressPayload> {
+    pub fn into_messages(self) -> Result<BatchMessages, IngressPayloadError> {
         Ok(BatchMessages {
             signed_ingress_msgs: self.ingress.try_into()?,
             certified_stream_slices: self.xnet.stream_slices,

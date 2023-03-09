@@ -1,11 +1,14 @@
 use crate::{
     artifact::{IngressMessageId, SignedIngress},
-    messages::{MessageId, EXPECTED_MESSAGE_ID_LENGTH},
+    messages::{MessageId, SignedRequestBytes, EXPECTED_MESSAGE_ID_LENGTH},
     CountBytes, Time,
 };
 use ic_protobuf::types::v1 as pb;
 use serde::{Deserialize, Serialize};
-use std::{convert::TryFrom, io::Cursor};
+use std::{
+    convert::TryFrom,
+    io::{Cursor, Write},
+};
 /// Payload that contains Ingress messages
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct IngressPayload {
@@ -70,7 +73,7 @@ type BufferPosition = u64;
 pub enum IngressPayloadError {
     IndexOutOfBound(IngressIndex),
     IngressPositionOutOfBound(IngressIndex, BufferPosition),
-    DeserializationFailure(bincode::Error),
+    DeserializationFailure(String),
     MismatchedMessageIdAtIndex(IngressIndex),
 }
 
@@ -107,16 +110,23 @@ impl IngressPayload {
                 if *pos > self.buffer.len() as u64 {
                     Err(IngressPayloadError::IngressPositionOutOfBound(index, *pos))
                 } else {
-                    bincode::deserialize(&self.buffer[*pos as usize..])
-                        .map_err(IngressPayloadError::DeserializationFailure)
-                        .and_then(|ingress| {
-                            let ingress_id = IngressMessageId::from(&ingress);
-                            if *id == ingress_id {
-                                Ok((ingress_id, ingress))
-                            } else {
-                                Err(IngressPayloadError::MismatchedMessageIdAtIndex(index))
-                            }
-                        })
+                    let end = {
+                        if index == self.id_and_pos.len() - 1 {
+                            self.buffer.len()
+                        } else {
+                            self.id_and_pos[index + 1].1 as usize
+                        }
+                    };
+                    let ingress = SignedIngress::try_from(SignedRequestBytes::from(Vec::from(
+                        &self.buffer[*pos as usize..end],
+                    )))
+                    .map_err(|e| IngressPayloadError::DeserializationFailure(e.to_string()))?;
+                    let ingress_id = IngressMessageId::from(&ingress);
+                    if *id == ingress_id {
+                        Ok((ingress_id, ingress))
+                    } else {
+                        Err(IngressPayloadError::MismatchedMessageIdAtIndex(index))
+                    }
                 }
             })
     }
@@ -134,13 +144,12 @@ impl From<Vec<SignedIngress>> for IngressPayload {
         let mut id_and_pos = Vec::new();
         for ingress in msgs {
             let id = IngressMessageId::from(&ingress);
-            id_and_pos.push((id, buf.position()));
+            let pos = buf.position();
             // This panic will only happen when we run out of memory.
-            // Also if the given SignIngress comes from external source, it must
-            // have been deserialized previously from some byte buffer, so serializing
-            // it again should succeed.
-            bincode::serialize_into(&mut buf, &ingress)
+            buf.write_all(ingress.binary().as_ref())
                 .unwrap_or_else(|err| panic!("SignedIngress serialization error: {:?}", err));
+
+            id_and_pos.push((id, pos));
         }
         IngressPayload {
             id_and_pos,
@@ -149,32 +158,15 @@ impl From<Vec<SignedIngress>> for IngressPayload {
     }
 }
 
-/// Possible errors when converting from an [`IngressPayload`] to a
-/// `Vec<SignedIngress>`.
-#[derive(Debug)]
-pub enum InvalidIngressPayload {
-    DeserializationError(MessageId, bincode::Error),
-    MismatchedMessageId(MessageId, Box<SignedIngress>),
-}
-
 impl TryFrom<IngressPayload> for Vec<SignedIngress> {
-    type Error = InvalidIngressPayload;
-
+    type Error = IngressPayloadError;
     fn try_from(payload: IngressPayload) -> Result<Vec<SignedIngress>, Self::Error> {
-        let mut msgs = Vec::new();
-        for (id, pos) in payload.id_and_pos.iter() {
-            let ingress: SignedIngress = bincode::deserialize(&payload.buffer[*pos as usize..])
-                .map_err(|err| InvalidIngressPayload::DeserializationError(id.into(), err))?;
-            if id != &IngressMessageId::from(&ingress) {
-                return Err(InvalidIngressPayload::MismatchedMessageId(
-                    id.into(),
-                    Box::new(ingress),
-                ));
-            } else {
-                msgs.push(ingress);
-            }
-        }
-        Ok(msgs)
+        payload
+            .id_and_pos
+            .iter()
+            .enumerate()
+            .map(|(i, _)| payload.get(i).map(|m| m.1))
+            .collect::<Result<_, _>>()
     }
 }
 
