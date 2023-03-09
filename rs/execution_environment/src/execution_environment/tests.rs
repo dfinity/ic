@@ -2206,3 +2206,46 @@ fn bitcoin_get_successors_cannot_be_called_by_non_bitcoin_canisters() {
     let result = test.ingress(uni, "update", call).unwrap();
     assert_eq!(result, WasmResult::Reject("Permission denied.".to_string()));
 }
+
+#[test]
+fn replicated_query_refunds_all_sent_cycles() {
+    let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
+    let a_id = test.universal_canister().unwrap();
+    let b_id = test.universal_canister().unwrap();
+
+    let b_callback = wasm().reply().build();
+
+    let cycles = Cycles::from(1_000_000u128);
+
+    let a_payload = wasm()
+        .call_with_cycles(
+            b_id.get(),
+            "query",
+            call_args().other_side(b_callback),
+            cycles.into_parts(),
+        )
+        .build();
+
+    test.ingress_raw(a_id, "update", a_payload);
+    test.execute_message(a_id);
+    test.induct_messages();
+    test.execute_message(b_id);
+
+    let system_state = &mut test.canister_state_mut(b_id).system_state;
+
+    assert_eq!(1, system_state.queues().output_queues_len());
+    assert_eq!(1, system_state.queues().output_message_count());
+
+    let message = system_state
+        .queues_mut()
+        .pop_canister_output(&a_id)
+        .unwrap();
+
+    if let RequestOrResponse::Response(msg) = message {
+        assert_eq!(msg.originator, a_id);
+        assert_eq!(msg.respondent, b_id);
+        assert_eq!(msg.refund, cycles);
+    } else {
+        panic!("unexpected message popped: {:?}", message);
+    }
+}
