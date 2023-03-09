@@ -72,8 +72,8 @@ def test_return_os_finding():
         fix_version_for_vulnerability={"http://vuln.org/CVE-0815": ["1.1"]},
     )
     assert res[0].vulnerabilities == [
-        Vulnerability(id="http://vuln.org/CVE-0815", name="CVE-0815", description="crazy vulnerability", score=8),
         Vulnerability(id="CVE-123", name="CVE-123", description="n/a", score=9),
+        Vulnerability(id="http://vuln.org/CVE-0815", name="CVE-0815", description="crazy vulnerability", score=8),
     ]
     assert res[0].first_level_dependencies == [
         Dependency(
@@ -136,13 +136,13 @@ def test_return_binary_finding():
         version="44f586eee11a2e07fb86afe6d3698925fe4388b7f55abfb29159e7797c87b095",
     )
     assert res[0].vulnerabilities == [
+        Vulnerability(id="CVE-2021-43565", name="CVE-2021-43565", description="n/a", score=-1),
         Vulnerability(
             id="https://avd.aquasec.com/nvd/cve-2022-21698",
             name="CVE-2022-21698",
             description="prometheus/client_golang: Denial of service using InstrumentHandlerCounter",
             score=8,
         ),
-        Vulnerability(id="CVE-2021-43565", name="CVE-2021-43565", description="n/a", score=-1),
     ]
     assert res[0].first_level_dependencies == [
         Dependency(

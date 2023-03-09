@@ -286,6 +286,10 @@ class BazelRustDependencyManager(DependencyManager):
                         finding_builder[lookup].vulnerable_dependency.fix_version_for_vulnerability[
                             vulnerability.id
                         ] = vulnerable_dependency.fix_version_for_vulnerability[vulnerability.id]
+        for finding in finding_builder:
+            finding.vulnerabilities.sort(key=lambda x: x.id)
+            finding.first_level_dependencies.sort(key=lambda x: x.id)
+            finding.projects.sort()
         return finding_builder
 
     def __is_transitive_dependency_first_level_dependency(self, dep: Dependency) -> bool:
@@ -347,4 +351,4 @@ class BazelRustDependencyManager(DependencyManager):
                 project_builder.add(project_string)
 
         project_builder.discard("")
-        return sorted(list(project_builder))
+        return list(project_builder)

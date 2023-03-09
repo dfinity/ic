@@ -136,6 +136,7 @@ class Finding:
         for project in other.projects:
             if project not in self.projects:
                 self.projects.append(project)
+        self.projects.sort()
 
         dep_by_id_version = {}
         for first_lvl_dep in self.first_level_dependencies:
@@ -151,3 +152,4 @@ class Finding:
             else:
                 self.first_level_dependencies.append(first_lvl_dep)
                 dep_by_id_version[id_version] = first_lvl_dep
+        self.first_level_dependencies.sort(key=lambda x: x.id)

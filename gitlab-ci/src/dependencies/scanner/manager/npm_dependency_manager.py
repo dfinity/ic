@@ -190,10 +190,12 @@ class NPMDependencyManager(DependencyManager):
                 # all vulnerabilities were via transitive dependency, so we skip
                 if len(vulnerabilities) == 0:
                     continue
+                vulnerabilities.sort(key=lambda x: x.id)
 
                 first_level_dependencies: typing.List[Dependency] = self.__get_first_level_dependencies_from_npm_list(
                     npm_list_output, dependency_key, ranges_to_check
                 )
+                first_level_dependencies.sort(key=lambda x: x.id)
                 score = max(vulnerability.score for vulnerability in vulnerabilities)
 
                 finding_builder.append(
