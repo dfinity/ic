@@ -343,4 +343,12 @@ pub fn app_subnet_recovery_test(env: TestEnv, upgrade: bool, ecdsa: bool) {
         }
         run_ecdsa_signature_test(&nns_canister, &logger, ecdsa_pub_key.unwrap());
     }
+
+    info!(
+        logger,
+        "Making sure unassigned nodes deleted their state..."
+    );
+    topology_snapshot
+        .unassigned_nodes()
+        .for_each(|n| assert_node_is_unassigned(&n, &logger));
 }
