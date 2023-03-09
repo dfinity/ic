@@ -246,7 +246,16 @@ class Farm(object):
         # Create group
         response = requests.post(
             self.group_url,
-            json={"ttl": FLAGS.farm_ttl_secs, "spec": {}},
+            json={
+                "ttl": FLAGS.farm_ttl_secs,
+                "spec": {
+                    "metadata": {
+                        "jobSchedule": "e2e-scalability-suite-test",
+                        "testName": "e2e-scalability-test",
+                        "user": "CI",
+                    }
+                },
+            },
             headers={"accept": "application/json"},
         )
         if response.status_code >= 400:
