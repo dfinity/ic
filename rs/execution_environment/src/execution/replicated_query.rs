@@ -22,7 +22,7 @@ use ic_types::methods::{FuncRef, WasmMethod};
 #[allow(clippy::too_many_arguments)]
 pub fn execute_replicated_query(
     mut canister: CanisterState,
-    req: CanisterCall,
+    mut req: CanisterCall,
     method: WasmMethod,
     execution_parameters: ExecutionParameters,
     time: Time,
@@ -134,7 +134,8 @@ pub fn execute_replicated_query(
     let log = round.log;
     let result =
         result.map_err(|err| log_and_transform_to_user_error(log, err, &canister.canister_id()));
-    let response = wasm_result_to_query_response(result, &canister, time, call_origin, log);
+    let response =
+        wasm_result_to_query_response(result, &canister, time, call_origin, log, req.take_cycles());
 
     round.cycles_account_manager.refund_unused_execution_cycles(
         &mut canister.system_state,

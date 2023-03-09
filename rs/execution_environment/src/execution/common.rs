@@ -234,6 +234,7 @@ pub(crate) fn wasm_result_to_query_response(
     time: Time,
     call_origin: CallOrigin,
     log: &ReplicaLogger,
+    refund: Cycles,
 ) -> ExecutionResponse {
     match call_origin {
         CallOrigin::Ingress(user_id, message_id) => {
@@ -244,7 +245,7 @@ pub(crate) fn wasm_result_to_query_response(
                 originator: caller_canister_id,
                 respondent: canister.canister_id(),
                 originator_reply_callback: callback_id,
-                refund: Cycles::zero(),
+                refund,
                 response_payload: Payload::from(result),
             };
             ExecutionResponse::Request(response)
@@ -554,5 +555,54 @@ pub(crate) fn finish_call_with_error(
         response,
         instructions_used,
         heap_delta: NumBytes::from(0),
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::wasm_result_to_query_response;
+    use crate::ExecutionResponse;
+    use ic_base_types::{CanisterId, NumSeconds};
+    use ic_error_types::UserError;
+    use ic_logger::LoggerImpl;
+    use ic_logger::ReplicaLogger;
+    use ic_replicated_state::{CanisterState, SchedulerState, SystemState};
+    use ic_types::messages::CallbackId;
+    use ic_types::Cycles;
+    use ic_types::Time;
+
+    #[test]
+    fn test_wasm_result_to_query_response_refunds_correclty() {
+        let scheduler_state = SchedulerState::default();
+        let system_state = SystemState::new_running(
+            CanisterId::from_u64(42),
+            CanisterId::from(100u64).into(),
+            Cycles::new(1 << 36),
+            NumSeconds::from(100_000),
+        );
+
+        let logger = LoggerImpl::new(&Default::default(), "test".to_string());
+        let log = ReplicaLogger::new(logger.root.clone().into());
+
+        let response = wasm_result_to_query_response(
+            Err(UserError::new(
+                ic_error_types::ErrorCode::CanisterCalledTrap,
+                "",
+            )),
+            &CanisterState::new(system_state, None, scheduler_state),
+            Time::from_nanos_since_unix_epoch(100),
+            ic_replicated_state::CallOrigin::CanisterUpdate(
+                CanisterId::from(123u64),
+                CallbackId::new(2),
+            ),
+            &log,
+            Cycles::from(1000u128),
+        );
+
+        if let ExecutionResponse::Request(response) = response {
+            assert_eq!(response.refund, Cycles::from(1000u128));
+        } else {
+            panic!("Unexpected response.");
+        }
     }
 }

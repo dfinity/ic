@@ -1114,7 +1114,8 @@ impl ExecutionEnvironment {
                     instruction_limits,
                     ExecutionMode::Replicated,
                 );
-                execute_replicated_query(
+                let request_cycles = req.cycles();
+                let result = execute_replicated_query(
                     canister,
                     req,
                     method,
@@ -1123,7 +1124,17 @@ impl ExecutionEnvironment {
                     round,
                     round_limits,
                     subnet_size,
-                )
+                );
+                if let ExecuteMessageResult::Finished {
+                    canister: _,
+                    response: ExecutionResponse::Request(response),
+                    instructions_used: _,
+                    heap_delta: _,
+                } = &result
+                {
+                    debug_assert_eq!(request_cycles, response.refund);
+                }
+                result
             }
             WasmMethod::Update(_) => {
                 let execution_parameters = self.execution_parameters(
