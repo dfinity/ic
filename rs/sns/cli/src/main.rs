@@ -192,18 +192,6 @@ struct AddSnsWasmForTestsArgs {
 }
 
 impl DeployArgs {
-    /// panic! if any args are invalid
-    pub fn validate(&self) {
-        if self.network == "ic" {
-            // TODO(NNS1-1511) For sns-subnet deploys, we have set fee, and will not need this
-            // parameter, but will need to ensure user intends to pay the fee
-            assert!(
-                self.initial_cycles_per_canister.is_some(),
-                "When deploying to the ic network, initial_cycles_per_canister must be set"
-            );
-        }
-    }
-
     pub fn generate_sns_init_payload(&self) -> anyhow::Result<SnsInitPayload> {
         generate_sns_init_payload(&self.init_config_file)
     }
@@ -342,7 +330,6 @@ fn main() {
 
 /// Deploy via SNS-WASM canister.
 fn deploy(args: DeployArgs) {
-    args.validate();
     let sns_init_payload = args.generate_sns_init_payload().unwrap_or_else(|err| {
         eprintln!(
             "Error encountered when generating the SnsInitPayload: {}",
@@ -355,7 +342,6 @@ fn deploy(args: DeployArgs) {
 
 /// Deploy an SNS with the given DeployArgs, skipping sns-wasm.
 fn deploy_skipping_sns_wasms_for_tests(args: DeployArgs) {
-    args.validate();
     let sns_init_payload = args.generate_sns_init_payload().unwrap_or_else(|err| {
         eprintln!(
             "Error encountered when generating the SnsInitPayload: {}",
