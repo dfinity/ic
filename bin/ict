@@ -6,7 +6,22 @@ RED="\x1b[31m"
 BOLD="\x1b[1m"
 NC="\x1b[0m"
 
+CURRENT_SCRIPT_DIR=$(dirname "${BASH_SOURCE[0]}")
+ICT_DIR="${CURRENT_SCRIPT_DIR}/../rs/tests/ict"
+CHECKSUM_FILE="${CURRENT_SCRIPT_DIR}/checksum.txt" # holds the resulting hash of all files in the ict directory
 BAZEL_ICT_TARGET="//rs/tests/ict:ict"
+# Path to this binary is hard coded, as getting it from Bazel is a bit slow (~0.5 sec) for a good interactivity.
+ICT_BIN="bazel-out/k8-opt/bin/rs/tests/ict/ict_/ict"
+
+compile_ict() {
+    bazel build $BAZEL_ICT_TARGET --config=local >/dev/null 2>&1
+    CODE="$?"
+    if [ "${CODE}" != "0" ]; then
+        echo -e "${BOLD}${RED}ict compilation failed with code=${CODE}${NC}"
+        echo "Try running the build manually: bazel build ${BAZEL_ICT_TARGET}"
+        exit 1
+    fi
+}
 
 # Check if Bazel server is already running. If not print a message for user and start Bazel.
 pgrep -fi bazel >/dev/null >&1
@@ -22,19 +37,21 @@ if [ "${CODE}" != "0" ]; then
     fi
 fi
 # Check whether ict binary exists/up-to-date. If not compile/recompile + handle errors.
-echo -e "${BOLD}${GREEN}Checking ict is up-to-date ...${NC}"
-bazel build ${BAZEL_ICT_TARGET} --config=local --check_up_to_date >/dev/null 2>&1
-CODE="$?"
-if [ "${CODE}" != "0" ]; then
-    echo -e "${BOLD}${GREEN}Compiling ict ...${NC}"
-    bazel build $BAZEL_ICT_TARGET --config=local >/dev/null 2>&1
-    CODE="$?"
-    if [ "${CODE}" != "0" ]; then
-        echo -e "${BOLD}${RED}ict compilation failed with code=${CODE}${NC}"
-        echo "Try running the build manually: bazel build ${BAZEL_ICT_TARGET}"
-        exit 1
+# Take all files in the ict/* for checksum computation.
+checksum=$(find ${ICT_DIR} -type f -exec sha256sum {} \; | sort -z | sha1sum | head -c 40)
+compile_msg=""
+if [ ! -f "$ICT_BIN" ]; then
+    compile_msg="Compiling ict binary ..."
+else
+    if [ ! -f "${CHECKSUM_FILE}" ] || [ $(<$CHECKSUM_FILE) != "$checksum" ]; then
+        compile_msg="ict source file/s changed, recompiling ict ..."
     fi
 fi
+if [ ! -z "${compile_msg}" ]; then
+    echo -e "${BOLD}${GREEN}${compile_msg}${NC}"
+    compile_ict
+    # write checksum into a file
+    echo ${checksum} >${CHECKSUM_FILE}
+fi
 # Invoke binary with the arguments.
-ICT_BIN=$(bazel cquery --config=local --output=files ${BAZEL_ICT_TARGET} 2>/dev/null)
-"/ic/$ICT_BIN" "$@"
+"$ICT_BIN" "$@"
