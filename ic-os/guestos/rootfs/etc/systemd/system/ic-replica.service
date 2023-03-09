@@ -18,6 +18,8 @@ After=sys-subsystem-net-devices-enp1s0.device
 BindsTo=sys-subsystem-net-devices-enp1s0.device
 After=systemd-networkd.service
 PartOf=systemd-networkd.service
+# Set up a socket to serve gRPC requests to the onchain observability adapter
+Wants=ic-onchain-observability-adapter.socket
 StartLimitBurst=5
 StartLimitIntervalSec=60
 
@@ -39,3 +41,4 @@ RestartSec=10
 
 [Install]
 WantedBy=multi-user.target
+Also=ic-onchain-observability-adapter.socket
