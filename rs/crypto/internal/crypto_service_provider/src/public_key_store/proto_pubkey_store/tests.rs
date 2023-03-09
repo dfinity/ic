@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used)]
 
 use crate::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
-use crate::public_key_store::{read_node_public_keys, PublicKeyAddError};
+use crate::public_key_store::PublicKeyAddError;
 use crate::public_key_store::{PublicKeySetOnceError, PublicKeyStore};
 use crate::PUBLIC_KEY_STORE_DATA_FILENAME;
 use assert_matches::assert_matches;
@@ -1002,7 +1002,10 @@ fn generate_node_keys_in_temp_dir() -> (NodePublicKeys, TempDir) {
 }
 
 fn read_from_public_key_store_file(crypto_root: &Path) -> NodePublicKeys {
-    read_node_public_keys(crypto_root).expect("failed to read public keys")
+    let pk_file = crypto_root.join(PUBLIC_KEY_STORE_DATA_FILENAME);
+    let pk_store_bytes = fs::read(pk_file).expect("failed to read public key store");
+    use prost::Message;
+    NodePublicKeys::decode(&*pk_store_bytes).expect("failed to decode public key store")
 }
 
 fn temp_dir() -> TempDir {
