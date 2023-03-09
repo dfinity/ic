@@ -16,7 +16,7 @@ from common.report import EvaluatedSummaries  # noqa
 
 
 FLAGS = gflags.FLAGS
-gflags.DEFINE_string("rps", "30", "Coma seperated list of rps rates to test.")
+gflags.DEFINE_string("rps", "30", "Comma seperated list of rps rates to test.")
 
 
 def parse_counter_return(r: bytes):

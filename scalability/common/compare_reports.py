@@ -13,7 +13,7 @@ FLAGS = gflags.FLAGS
 gflags.DEFINE_string(
     "reports",
     None,
-    "Coma-seperated list of reports to compare.",
+    "Comma-seperated list of reports to compare.",
 )
 gflags.MarkFlagAsRequired("reports")
 

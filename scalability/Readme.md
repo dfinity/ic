@@ -81,8 +81,8 @@ Example: workloads/canister-http-benchmark.toml
 
 Provides a foundation for stress tests using the Python agent. Python code is parallelized through processes as well as asyncio.
 
-Very flexible, since code can be writte in Python. Allows to implement statefull or flow based benchmarks, where calls are not 
-identical to each other (as with the workload generator), but can be customized for each call. 
+Very flexible, since code can be writte in Python. Allows to implement statefull or flow based benchmarks, where calls are not
+identical to each other (as with the workload generator), but can be customized for each call.
 
 Has delegation support.
 
@@ -103,12 +103,12 @@ A clean way of managing dependencies for a python project, is via isolated virtu
 
 # Deploy IC on the testnet
 
-Experiments that don't require workload generators (directly inheriting from `experiment.py`) require *one* testnet: 
+Experiments that don't require workload generators (directly inheriting from `experiment.py`) require *one* testnet:
 the testnet on which we install canisters to benchmark.
 It should ideally be close to the hardware we are running in mainnet.
 Currently, testnets `benchmarklarge`, `benchmarksmall01` and `benchmarksmall02` are good candidates.
 
-Experiments using workload generators (based on `workload_experiment.py`) require *two* testnets in order to 
+Experiments using workload generators (based on `workload_experiment.py`) require *two* testnets in order to
 guarantee a consistent setup of the workload generator machines.
 In those tests,
 we deploy workload generator instances on the guest OS images in that second testnet.
@@ -118,13 +118,13 @@ the workload generator can be started there instead.
 The use of a second testnet has multiple advantages:
 
  1. We can easily run multiple workload generators, as we have enough machines to deploy to and run the workload generator from.
-    This is very important for some of the experiments, as otherwise, the client side of the experiment could become the 
+    This is very important for some of the experiments, as otherwise, the client side of the experiment could become the
     bottleneck and not issue enough requests (or not issue those requests at a consistent rate).
  2. We get a uniform environment to run the workload generator from (in contrast to some people running it in data centers and others
     from their laptop)
  3. Testnet machines are scrape targets for Prometheus, so we can immediately monitor the client side without additional setup.
 
-`--help` on the experiment file will inform you what the required arguments are 
+`--help` on the experiment file will inform you what the required arguments are
 (both `--testnet` and `--wg_testnet` or only the former).
 
 Depending on your requirements, boot the testnets as usual.
@@ -142,9 +142,9 @@ There is a collection of flags to instruct how to run an experiment. Common ones
 * target_rps
 * max_rps
 * testnet
-* ... 
+* ...
 
-You can add more flags for your experiment as needed. 
+You can add more flags for your experiment as needed.
 
 For the common workload setting flags (e.g. `initial_rps`, `increment_rps`, `target_rps`, `max_rps`), as their definition are shared between query experiments and update experiments, the default values are also shared between the two. So it is expected from experiment developer, to set sensible workload targets for the environment they run the experiment on. A typical way of doing it correctly, takes a couple of tries of different values, to find a sensible compilation of numbers, to set to the recurring pipeline.
 
@@ -160,10 +160,10 @@ Make sure you have *two* testnets reserved, then:
 
 # Run against mainnet
 
-Use `--testnet mercury`. Also need to specify `--mainnet_target_subnet_id` to determine machines to run against as well as `--canister`. 
-The latter is a coma separated list of canister that have to be pre-installed on mainnet (since a wallet is needed, deploying canisters is different on mainnet and currently not supported by the suite).
+Use `--testnet mercury`. Also need to specify `--mainnet_target_subnet_id` to determine machines to run against as well as `--canister`.
+The latter is a comma separated list of canister that have to be pre-installed on mainnet (since a wallet is needed, deploying canisters is different on mainnet and currently not supported by the suite).
 
-There is also a flag `--no_instrument=True` to disable instrumenting the target machine (for which we don't have SSH access on mainnet). 
+There is also a flag `--no_instrument=True` to disable instrumenting the target machine (for which we don't have SSH access on mainnet).
 The suite will then not get a flamegraph and hardware information, but the benchmarks itself will work as usual.
 
 ## Stress-testing mainnet.
@@ -175,7 +175,7 @@ The suite will then not get a flamegraph and hardware information, but the bench
  5. `cd` into you `scalability` in your IC checkout
  5. Configure the desired rate of updates/second per subnetwork by setting variable `LOAD_MAX`.
  5. Run `pipenv run run_mainnet.py`
- 
+
  Observe the dashboards
 
 # Adding new experiment
@@ -195,8 +195,8 @@ In order to add a new experiment:
  - Implement method `run_experiment_internal` which implements the actual benchmark logic. It's typically configurable, so that the benchmark can be executed repeatedly with e.g. increasing load. `config` is a dict that can be used to pass on configuration arguments.
  - Implement `if __name__ == "__main__":` that initializes your experiment, calls `start_experiment` followed by (potentially a series of) `run_experiment` with a sensible configuration for your experiment.
  - Finally call `write_summary_file` and `end_experiment` to generate a report.
- - Add a template file for your experiment to add more details to the generated report in `templates/experiment_foobar.html.hb`. Have a look at existing ones for inspiration.  
-  
+ - Add a template file for your experiment to add more details to the generated report in `templates/experiment_foobar.html.hb`. Have a look at existing ones for inspiration.
+
 Consider other experiments `run_experiment_*.py` for inspiration. Notable `run_system_baseline_experiment.py` for an example of a workload experiment as well as `run_xnet_experiment.py` for one that doesn't.
 
 ## Interactive development

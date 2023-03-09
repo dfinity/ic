@@ -24,7 +24,7 @@ NUM_WORKLOAD_GEN = -1  # Number of machines to run the workload generator on
 FLAGS = gflags.FLAGS
 gflags.DEFINE_bool("use_updates", False, "Issue update calls instead of query calls.")
 gflags.DEFINE_string(
-    "wg_testnet", None, "Testnet to deploy workload generators too. Can be the same as testnet, but use with care!"
+    "wg_testnet", None, "Testnet to deploy workload generators to. Can be the same as testnet, but use with care!"
 )
 gflags.MarkFlagAsRequired("wg_testnet")
 gflags.DEFINE_integer("subnet", 1, "Subnet from which to choose the target machine.")
@@ -32,7 +32,7 @@ gflags.DEFINE_integer("wg_subnet", 0, "Subnet in which to run the workload gener
 gflags.DEFINE_string("mainnet_target_subnet_id", "", "Subnet ID that is running the canister specified by canister_id.")
 gflags.DEFINE_boolean("target_all", False, "Target all nodes, even when running query calls.")
 gflags.DEFINE_string(
-    "workload_generator_machines", "", "Set workload generator IP adresses from this coma-separated list directly."
+    "workload_generator_machines", "", "Set workload generator IP adresses from this comma-separated list directly."
 )
 gflags.DEFINE_integer(
     "query_target_node_idx",
@@ -156,7 +156,10 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
         )
 
         assert len(self.machines) > 0
-        print(f"Running against an IC {self.target_nodes} from {self.machines}")
+        if self.benchmark_boundary_nodes:
+            print(f"Running against an IC {FLAGS.targets} from {self.machines}")
+        else:
+            print(f"Running against an IC {self.target_nodes} from {self.machines}")
 
         super().init()
         self.init_experiment()
@@ -249,7 +252,7 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
 
     def __get_targets(self) -> List[str]:
         """Get list of targets when running against a testnet."""
-        if len(FLAGS.targets) > 0:
+        if len(FLAGS.targets) > 0 and not self.benchmark_boundary_nodes:
             return FLAGS.targets.split(",")
 
         if self.testnet == "mercury":
@@ -273,9 +276,10 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
         recovered = False
         curr_i = 0
 
-        if FLAGS.no_prometheus and self.iteration != 1:
-            print(f"Waiting for quiet for iteration {self.iteration}")
-            time.sleep(60)
+        if FLAGS.no_prometheus:
+            if self.iteration != 1:
+                print(f"Waiting for quiet for iteration {self.iteration}")
+                time.sleep(60)
             return
 
         while not recovered and curr_i < max_num_iterations:
@@ -306,8 +310,9 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
         """End benchmark iteration."""
         super().end_iteration(configuration)
         # Get logs from targets
-        since_time = self.t_iter_end - self.t_iter_start
-        self.get_iter_logs_from_targets(self.target_nodes, f"-{since_time}", self.iter_outdir)
+        if not self.benchmark_boundary_nodes or self.testnet != "mercury":
+            since_time = self.t_iter_end - self.t_iter_start
+            self.get_iter_logs_from_targets(self.target_nodes, f"-{since_time}", self.iter_outdir)
 
     def __wait_kill(self):
         """Wait for previously asynchronously started processes that kill running workload generator instances."""
@@ -355,7 +360,7 @@ class WorkloadExperiment(base_experiment.BaseExperiment):
         """Run the workload generator on all given machines."""
         assert (
             len(self.kill_pids) == 0
-        ), "Some previous commands to kill workload generators has not been completed when attempting to start new ones. This might lead to races. Make sure to start an iteration via start_iteration() before calling run_workload_generator()"
+        ), "Some previous commands to kill workload generators have not been completed when attempting to start new ones. This might lead to races. Make sure to start an iteration via start_iteration() before calling run_workload_generator()"
         if canister_ids is None:
             canister_ids = self.get_canister_ids()
 
