@@ -190,6 +190,32 @@ pub(crate) fn assert_subnet_is_healthy(
     );
 }
 
+/// Assert that the given node has deleted its state within the next 5 minutes.
+pub(crate) fn assert_node_is_unassigned(node: &IcNodeSnapshot, logger: &Logger) {
+    info!(
+        logger,
+        "Asserting that node {} has deleted its state.",
+        node.get_ip_addr()
+    );
+    let check =
+        r#"[ "$(ls -A /var/lib/ic/data/ic_state)" ] && echo "assigned" || echo "unassigned""#;
+    retry(logger.clone(), secs(300), secs(10), || {
+        let s = match node.get_ssh_session(ADMIN) {
+            Ok(s) => s,
+            Err(e) => bail!("Failed to create SSH session: {:?}", e),
+        };
+        match execute_bash_command(&s, check.to_string()) {
+            Ok(s) if s.trim() == "unassigned" => Ok(()),
+            Ok(s) if s.trim() == "assigned" => {
+                bail!("Node {} is still assigned.", node.get_ip_addr())
+            }
+            Ok(s) => bail!("Received unexpected output: {}", s),
+            Err(e) => bail!("Failed to read directory: {}", e),
+        }
+    })
+    .expect("Failed to detect that node has deleted its state.");
+}
+
 /// Select a node with highest finalization height in the given subnet snapshot
 pub(crate) fn select_download_node(
     subnet: SubnetSnapshot,

@@ -327,6 +327,15 @@ fn create_summary_payload_helper(
     ecdsa_payload_metrics: Option<&EcdsaPayloadMetrics>,
     log: ReplicaLogger,
 ) -> Result<ecdsa::Summary, EcdsaPayloadError> {
+    // Registry version as recorded in key transcript if it exists.
+    // Otherwise use curr_interval_registry_version.
+    let curr_key_registry_version = ecdsa_payload
+        .key_transcript
+        .current
+        .as_ref()
+        .map(|transcript| transcript.registry_version())
+        .unwrap_or(curr_interval_registry_version);
+
     let created = match &ecdsa_payload.key_transcript.next_in_creation {
         ecdsa::KeyTranscriptCreation::Created(unmasked) => {
             let transcript = block_reader.transcript(unmasked.as_ref())?;
@@ -364,7 +373,7 @@ fn create_summary_payload_helper(
     // 2. We don't have a key transcript creation in progress.
     let next_in_creation = if is_time_to_reshare_key_transcript(
         registry_client,
-        curr_interval_registry_version,
+        curr_key_registry_version,
         next_interval_registry_version,
         subnet_id,
     )? && created.is_some()
@@ -374,7 +383,7 @@ fn create_summary_payload_helper(
             "Noticed subnet membership or mega encryption key change, will start key_transcript_creation: height = {:?} \
                 current_version = {:?}, next_version = {:?}",
             height,
-            curr_interval_registry_version,
+            curr_key_registry_version,
             next_interval_registry_version
         );
         ecdsa::KeyTranscriptCreation::Begin
@@ -460,21 +469,34 @@ fn get_subnet_nodes(
         ))
 }
 
+// Like `get_subnet_nodes`, but return empty Vec instead of SubnetWithNoNodes error.
+// This is used to avoid throwing error, for example, when we do subnet recovery
+// the old registry version may not have the new subnet members.
+fn get_subnet_nodes_(
+    registry_client: &dyn RegistryClient,
+    registry_version: RegistryVersion,
+    subnet_id: SubnetId,
+) -> Result<Vec<NodeId>, MembershipError> {
+    Ok(registry_client
+        .get_node_ids_on_subnet(subnet_id, registry_version)
+        .map_err(MembershipError::RegistryClientError)?
+        .unwrap_or_default())
+}
+
 pub(crate) fn is_time_to_reshare_key_transcript(
     registry_client: &dyn RegistryClient,
-    curr_interval_registry_version: RegistryVersion,
-    next_interval_registry_version: RegistryVersion,
+    curr_registry_version: RegistryVersion,
+    next_registry_version: RegistryVersion,
     subnet_id: SubnetId,
 ) -> Result<bool, MembershipError> {
     // Shortcut the case where registry version didn't change
-    if curr_interval_registry_version == next_interval_registry_version {
+    if curr_registry_version == next_registry_version {
         return Ok(false);
     }
-    let current_nodes =
-        get_subnet_nodes(registry_client, curr_interval_registry_version, subnet_id)?
-            .into_iter()
-            .collect::<BTreeSet<_>>();
-    let next_nodes = get_subnet_nodes(registry_client, next_interval_registry_version, subnet_id)?
+    let current_nodes = get_subnet_nodes_(registry_client, curr_registry_version, subnet_id)?
+        .into_iter()
+        .collect::<BTreeSet<_>>();
+    let next_nodes = get_subnet_nodes(registry_client, next_registry_version, subnet_id)?
         .into_iter()
         .collect::<BTreeSet<_>>();
     if current_nodes != next_nodes {
@@ -482,9 +504,9 @@ pub(crate) fn is_time_to_reshare_key_transcript(
     }
     // Check if node's key has changed, which should also trigger key transcript resharing.
     for node in current_nodes {
-        let curr_key = get_mega_pubkey(&node, registry_client, curr_interval_registry_version)
+        let curr_key = get_mega_pubkey(&node, registry_client, curr_registry_version)
             .map_err(MembershipError::MegaKeyFromRegistryError)?;
-        let next_key = get_mega_pubkey(&node, registry_client, next_interval_registry_version)
+        let next_key = get_mega_pubkey(&node, registry_client, next_registry_version)
             .map_err(MembershipError::MegaKeyFromRegistryError)?;
         if curr_key != next_key {
             return Ok(true);

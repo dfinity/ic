@@ -2230,7 +2230,7 @@ fn update_next_key_state(
     opt_validated_pool: Option<Pool>, 
     opt_transcript_cache: Option<TranscriptCache>,
     test: Option<bool>,
-) -> (EcdsaKeyTranscript, UIDGenerator, Set<TranscriptRef>, Option<bool>)
+) -> (NextKeyState, UIDGenerator, Set<TranscriptRef>, Option<bool>)
 // Attempt to build the key for the next interval.
 {
     new_transcripts = { };
@@ -2487,8 +2487,7 @@ fn build_ecdsa_summary_payload(
     // *** update height of uid_generator to the height of the new block
     uid_generator.next_unused_transcript_id.height = height;
 
-    // *** update current_key_state and record if we have a new key
-    new_key = false;
+    // *** update current_key_state
     match (current_key_state) {
 
         None => {
@@ -2498,7 +2497,6 @@ fn build_ecdsa_summary_payload(
                 Created(created_key_ref) => {
                     // path #1 or #4 succeeded
                     current_key_state = Some(created_key_ref); 
-                    new_key = true;
                 }
             }
         }
@@ -2529,26 +2527,19 @@ fn build_ecdsa_summary_payload(
 
 
     // *** test for subnet membership change
+    // The logic is that if we have a key that is not being reshared, then we initiate reshare
+    // if the receiver set of that key is not equal to the subnet membership of next_registry_version.
+    // With this logic ,if a resharig attempt has not succeeded at the end of a CUP interval,
+    // that resharing attempt will simply continue as long as it takes.
 
-    match (current_key_state) {
-        Some(current_key_ref) => {
-            subnet_nodes: Set<NodeId>;
+    match (current_key_state, next_key_state) {
+        (Some(current_key_ref), Ibid) => {
 
-            if (new_key) 
-                subnet_nodes = get_subnet_nodes(registry_version, my_subnet_id);
-            else
-                subnet_nodes = current_key_ref.receivers();
-
-            // The logic here is that if we already had a key, we had been targeting registry_version
-            // in any ongoing resharing
-
-            next_subnet_nodes: Set<NodeId> = 
-                get_subnet_nodes(next_registry_version, my_subnet_id);
- 
-            if (subnet_nodes != next_subnet_nodes) next_key_state = Begin;
-            // if there is a membership change, this will trigger a reshare
+            if (current_key_ref.receivers() != get_subnet_nodes(next_registry_version, my_subnet_id))
+                next_key_state = Begin;
+                // if there is a membership change, this will trigger a reshare
         }
-        None => { }
+        _ => { }
     }
 
     // *** update active transcript refs
