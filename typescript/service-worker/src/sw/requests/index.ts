@@ -1,9 +1,10 @@
 import { concat } from '@dfinity/agent';
+import { Principal } from '@dfinity/principal';
 import { decode as base64ArraybufferDecode } from 'base64-arraybuffer';
 import { HttpRequest } from '../../http-interface/canister_http_interface_types';
 import { ResponseCache } from '../cache';
 import { CanisterResolver } from '../domains';
-import { CanisterLookup } from '../domains/typings';
+import { isRawDomain } from '../domains/utils';
 import { streamContent } from '../streaming';
 import { validateBody } from '../validation';
 import { VerifiedResponse, cacheHeaders } from './typings';
@@ -40,28 +41,23 @@ export class RequestProcessor {
     }
 
     const canisterResolver = await CanisterResolver.setup();
-    let currentGateway: URL;
-    try {
-      currentGateway = await canisterResolver.getCurrentGateway();
-    } catch (err) {
-      const error = err as Error;
-      console.error(
-        `Fetch failed for ${this.request.url}, resolving to a status code of 404 (${error.message})`
-      );
-
-      return new Response('Could not find the canister ID.', { status: 404 });
-    }
-
-    const lookup = await canisterResolver.lookupFromHttpRequest(this.request);
+    const gatewayUrl = await canisterResolver.getCurrentGateway();
 
     // maybe check if is an api call
-    if (canisterResolver.isAPICall(this.request, currentGateway, lookup)) {
-      return await this.apiRequestHandler(currentGateway);
+    if (canisterResolver.isAPICall(this.request, gatewayUrl)) {
+      return await this.apiRequestHandler(gatewayUrl);
     }
 
+    const canisterId = await canisterResolver.lookupFromHttpRequest(
+      this.request
+    );
+
     // maybe check if its an asset
-    if (lookup.canister) {
-      const assetResponse = await this.assetRequestHandler(lookup.canister);
+    if (canisterId) {
+      const assetResponse = await this.assetRequestHandler(
+        gatewayUrl,
+        canisterId
+      );
 
       // assets are cached depending of the available cache headers
       await responseCache.save({
@@ -73,7 +69,19 @@ export class RequestProcessor {
       return assetResponse.response;
     }
 
-    return await this.directRequestHandler();
+    if (
+      isRawDomain(this.url.hostname) ||
+      !this.url.hostname.endsWith(canisterResolver.getRootDomain().hostname)
+    ) {
+      return await this.directRequestHandler();
+    }
+
+    console.error(
+      `URL ${JSON.stringify(
+        this.url.toString()
+      )} did not resolve to a canister ID.`
+    );
+    return new Response('Could not find the canister ID.', { status: 404 });
   }
 
   /**
@@ -86,10 +94,10 @@ export class RequestProcessor {
   /**
    * We forward all requests to /api/ to the gateway, as is.
    */
-  private async apiRequestHandler(currentGateway: URL): Promise<Response> {
+  private async apiRequestHandler(gatewayUrl: URL): Promise<Response> {
     const cleanedRequest = await updateRequestApiGateway(
       this.request,
-      currentGateway
+      gatewayUrl
     );
     const response = await fetch(cleanedRequest);
     // force the content-type to be cbor as /api/ is exclusively used for canister calls
@@ -107,12 +115,13 @@ export class RequestProcessor {
    * We perform asset certification for all ic asset requests.
    */
   private async assetRequestHandler(
-    canister: CanisterLookup
+    gatewayUrl: URL,
+    canisterId: Principal
   ): Promise<VerifiedResponse> {
     try {
       const [agent, actor] = await createAgentAndActor(
-        canister.gateway,
-        canister.principal,
+        gatewayUrl,
+        canisterId,
         shouldFetchRootKey
       );
       const requestHeaders: [string, string][] = [['Host', this.url.hostname]];
@@ -214,7 +223,7 @@ export class RequestProcessor {
           buffer,
           await streamContent(
             agent,
-            canister.principal,
+            canisterId,
             httpResponse.streaming_strategy[0]
           )
         );
@@ -228,7 +237,7 @@ export class RequestProcessor {
       if (!upgradeCall && certificate && tree) {
         // Try to validate the body as is.
         bodyValid = await validateBody(
-          canister.principal,
+          canisterId,
           this.url.pathname,
           body.buffer,
           certificate,
@@ -241,7 +250,7 @@ export class RequestProcessor {
           // If that didn't work, try to validate its identity version. This is for
           // backward compatibility.
           bodyValid = await validateBody(
-            canister.principal,
+            canisterId,
             this.url.pathname,
             identity.buffer,
             certificate,

@@ -1,18 +1,17 @@
+import { Principal } from '@dfinity/principal';
+import { IDBPDatabase, IDBPObjectStore } from 'idb';
 import { ICHostInfoEvent } from '../../typings';
-import { Storage } from '../storage';
-import {
-  CurrentGatewayResolveError,
-  MalformedCanisterError,
-  MalformedHostnameError,
-} from './errors';
+import { isMainNet } from '../requests/utils';
+import { DBValue, Storage } from '../storage';
+import { MalformedCanisterError } from './errors';
 import { ResolverMapper } from './mapper';
 import { DEFAULT_GATEWAY, hostnameCanisterIdMap } from './static';
 import {
   DBHostsItem,
-  DomainLookup,
   DomainsStorageDBSchema,
   domainLookupHeaders,
   domainStorageProperties,
+  V1DBHostsItem,
 } from './typings';
 import {
   apiGateways,
@@ -27,7 +26,7 @@ export class CanisterResolver {
   private constructor(
     private readonly storage: Storage<DomainsStorageDBSchema>,
     private readonly ttl = 60 * 60 * 1000, // 60 minutes
-    private readonly inflight = new Map<string, Promise<DomainLookup>>()
+    private readonly inflight = new Map<string, Promise<Principal | null>>()
   ) {}
 
   static async setup(): Promise<CanisterResolver> {
@@ -47,10 +46,50 @@ export class CanisterResolver {
       name: domainStorageProperties.name,
       version: domainStorageProperties.version,
       stores: {
-        init: [domainStorageProperties.store],
+        init: [CanisterResolver.migrateStorage],
         default: domainStorageProperties.store,
       },
     });
+  }
+
+  private static async migrateStorage(
+    db: IDBPDatabase<unknown>,
+    oldVersion: number
+  ): Promise<
+    IDBPObjectStore<unknown, ArrayLike<string>, string, 'versionchange'>
+  > {
+    switch (oldVersion) {
+      default: {
+        return db.createObjectStore(domainStorageProperties.store as string);
+      }
+
+      case 1: {
+        const oldItems: DBValue<V1DBHostsItem>[] = await db.getAll(
+          domainStorageProperties.store
+        );
+        db.deleteObjectStore(domainStorageProperties.store);
+
+        const store = db.createObjectStore(
+          domainStorageProperties.store as string
+        );
+        for (const item of oldItems) {
+          const canister =
+            item.body.canister === false
+              ? false
+              : { id: item.body.canister.id };
+          const newItem: DBValue<DBHostsItem> = {
+            expireAt: item.expireAt,
+            body: {
+              canister,
+            },
+          };
+
+          await store.put(newItem);
+        }
+
+        return store;
+      }
+    }
   }
 
   async saveICHostInfo(event: ICHostInfoEvent): Promise<void> {
@@ -62,18 +101,40 @@ export class CanisterResolver {
     }
   }
 
-  async getCurrentGateway(): Promise<URL> {
-    const currentOrigin = new URL(self.location.origin);
-    const lookup = await this.lookup(currentOrigin, false);
-
-    if (!lookup.canister) {
-      throw new CurrentGatewayResolveError();
-    }
-
-    return lookup.canister.gateway;
+  /**
+   * Gets the current gateway. On mainnet this is always `DEFAULT_API_BOUNDARY_NODE`,
+   * on testnets this is based on the current URL, see `getTestnetGateway` for more information.
+   * @returns The current gateway.
+   */
+  async getCurrentGateway(mainNet = isMainNet): Promise<URL> {
+    return mainNet ? DEFAULT_GATEWAY : this.getRootDomain();
   }
 
-  resolveLookupFromUrl(domain: URL): DomainLookup | null {
+  /**
+   * Gets the root domain that is currently hosting the service worker,
+   * this will be used as the gateway when running on a testnet,
+   * or used to determine if a dApp is making requests against itself or another domain.
+   *
+   * This is based on the current URL and assumes the following format:
+   * `${self.location.protocol}//${canisterId}.${gatewayHostname}/${path}`,
+   * and will return the following:
+   * `${self.location.protocol}//${gatewayHostname}`.
+   *
+   * For example:
+   * `https://rwlgt-iiaaa-aaaaa-aaaaa-cai.small04.testnet.dfinity.network/some-path/`,
+   * will return:
+   * `https://small04.testnet.dfinity.network/`.
+   *
+   * @returns The gateway for the testnet hosting the service worker.
+   */
+  public getRootDomain(): URL {
+    const splitHostname = self.location.hostname.split('.');
+    splitHostname.shift();
+
+    return new URL(`${self.location.protocol}//${splitHostname.join('.')}`);
+  }
+
+  resolveLookupFromUrl(domain: URL): Principal | null {
     // maybe resolve from hardcoded mappings to avoid uncessary network round trips
     const staticMapping = hostnameCanisterIdMap.get(domain.hostname);
     if (staticMapping) {
@@ -82,46 +143,30 @@ export class CanisterResolver {
 
     // handle raw domain as a web2 request
     if (isRawDomain(domain.hostname)) {
-      return { canister: false };
+      return null;
     }
 
     // maybe resolve the canister id from url
-    const canister = resolveCanisterFromUrl(domain);
-    if (canister) {
-      return {
-        canister: {
-          gateway: canister.gateway,
-          principal: canister.principal,
-        },
-      };
-    }
-
-    return null;
+    return resolveCanisterFromUrl(domain);
   }
 
-  async lookupFromHttpRequest(request: Request): Promise<DomainLookup> {
+  async lookupFromHttpRequest(request: Request): Promise<Principal | null> {
     const canister = maybeResolveCanisterFromHeaders(request.headers);
     if (canister) {
-      return {
-        canister: {
-          gateway: canister.gateway,
-          principal: canister.principal,
-        },
-      };
+      return canister;
     }
 
     return await this.lookup(new URL(request.url));
   }
 
-  async lookup(domain: URL, useCurrentGateway = true): Promise<DomainLookup> {
+  async lookup(domain: URL): Promise<Principal | null> {
     // inglight map is used to deduplicate lookups for the same domain
     let inflightLookup = this.inflight.get(domain.origin);
     if (inflightLookup) {
-      const lookup = await inflightLookup;
-      return useCurrentGateway ? await this.useCurrentGateway(lookup) : lookup;
+      return await inflightLookup;
     }
 
-    inflightLookup = (async (): Promise<DomainLookup> => {
+    inflightLookup = (async (): Promise<Principal | null> => {
       // maybe resolve from information available in the request
       const lookupFromUrl = this.resolveLookupFromUrl(domain);
       if (lookupFromUrl) {
@@ -157,7 +202,7 @@ export class CanisterResolver {
     const lookup = await inflightLookup;
     this.inflight.delete(domain.origin);
 
-    return useCurrentGateway ? await this.useCurrentGateway(lookup) : lookup;
+    return lookup;
   }
 
   /**
@@ -166,36 +211,23 @@ export class CanisterResolver {
    */
   public isAPICall(
     request: Request,
-    gateway: URL,
-    lookup: DomainLookup
+    gatewayUrl: URL,
+    mainNet = isMainNet
   ): boolean {
     const url = new URL(request.url);
     if (!url.pathname.startsWith('/api/')) {
       return false;
     }
 
-    const hasApiGateway = [...apiGateways, gateway.hostname].some(
-      (apiGateway) => url.hostname.endsWith(apiGateway)
-    );
-
-    return hasApiGateway || lookup.canister !== false;
-  }
-
-  /**
-   * Enrich the domain lookup with the current gateway for all canister api calls,
-   * this enables the user to have the freedom to choose the gateway he would
-   * be communicating with instead of having the domain mandating it.
-   * @param lookup Lookup for the given domain
-   */
-  private async useCurrentGateway(lookup: DomainLookup): Promise<DomainLookup> {
-    if (
-      lookup.canister &&
-      lookup.canister.gateway.hostname !== self.location.hostname
-    ) {
-      lookup.canister.gateway = await this.getCurrentGateway();
+    if (!mainNet && url.hostname.endsWith(gatewayUrl.hostname)) {
+      return true;
     }
 
-    return lookup;
+    const hasApiGateway = apiGateways.some((apiGateway) =>
+      url.hostname.endsWith(apiGateway)
+    );
+
+    return hasApiGateway;
   }
 
   /**
@@ -205,7 +237,10 @@ export class CanisterResolver {
    * @param domain The domain to find out if points to a canister or we2.
    * @param retries Number of fetch tries, only retry on network failures
    */
-  private async fetchDomain(domain: URL, retries = 3): Promise<DomainLookup> {
+  private async fetchDomain(
+    domain: URL,
+    retries = 3
+  ): Promise<Principal | null> {
     try {
       const secureDomain = ResolverMapper.toHTTPSUrl(domain);
       const response = await fetch(secureDomain.href, {
@@ -213,33 +248,21 @@ export class CanisterResolver {
         mode: 'no-cors',
       });
       const headers = response.headers;
-      const lookup: DomainLookup = { canister: false };
 
       // we expect a 200 from a request to the http gateway
       const successfulResponse =
         response.status >= 200 && response.status < 300;
 
-      if (
-        successfulResponse &&
-        headers.has(domainLookupHeaders.canisterId) &&
-        headers.has(domainLookupHeaders.gateway)
-      ) {
+      if (successfulResponse && headers.has(domainLookupHeaders.canisterId)) {
         const canisterId = headers.get(domainLookupHeaders.canisterId) ?? '';
-        const gateway =
-          headers.get(domainLookupHeaders.gateway) ?? DEFAULT_GATEWAY.hostname;
-        lookup.canister = {
-          principal: ResolverMapper.getPrincipalFromText(canisterId),
-          gateway: ResolverMapper.getURLFromHostname(gateway),
-        };
+
+        return ResolverMapper.getPrincipalFromText(canisterId);
       }
 
-      return lookup;
+      return null;
     } catch (err) {
       // we don't retry in case the gateway returned wrong headers
-      if (
-        err instanceof MalformedCanisterError ||
-        err instanceof MalformedHostnameError
-      ) {
+      if (err instanceof MalformedCanisterError) {
         throw err;
       }
 

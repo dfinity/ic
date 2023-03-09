@@ -15,9 +15,7 @@ describe('Resolve canister from headers', () => {
 
     const resolve = maybeResolveCanisterFromHeaders(headers);
 
-    expect(resolve).not.toBeNull();
-    expect(resolve?.gateway.hostname).toEqual('ic0.app');
-    expect(resolve?.principal).toEqual(Principal.fromText(canisterId));
+    expect(resolve).toEqual(Principal.fromText(canisterId));
   });
 
   it('should resolve removing host port', async () => {
@@ -27,9 +25,7 @@ describe('Resolve canister from headers', () => {
 
     const resolve = maybeResolveCanisterFromHeaders(headers);
 
-    expect(resolve).not.toBeNull();
-    expect(resolve?.gateway.hostname).toEqual('ic0.app');
-    expect(resolve?.principal).toEqual(Principal.fromText(canisterId));
+    expect(resolve).toEqual(Principal.fromText(canisterId));
   });
 
   it('should return null when no canister id is found', async () => {
@@ -81,20 +77,7 @@ describe('Resolve canister from url', () => {
 
     const resolve = resolveCanisterFromUrl(url);
 
-    expect(resolve).not.toBeNull();
-    expect(resolve?.gateway.hostname).toEqual('ic0.app');
-    expect(resolve?.principal).toEqual(Principal.fromText(canisterId));
-  });
-
-  it('should resolve from url with canister id in the search params', async () => {
-    const canisterId = 'g3wsl-eqaaa-aaaan-aaaaa-cai';
-    const url = new URL(`https://ic0.app?canisterId=${canisterId}`);
-
-    const resolve = resolveCanisterFromUrl(url);
-
-    expect(resolve).not.toBeNull();
-    expect(resolve?.gateway.hostname).toEqual('ic0.app');
-    expect(resolve?.principal).toEqual(Principal.fromText(canisterId));
+    expect(resolve).toEqual(Principal.fromText(canisterId));
   });
 
   it('should return null when no canister id is found', async () => {
@@ -120,8 +103,7 @@ describe('Resolve canister from hostname', () => {
     const resolve = maybeResolveCanisterFromHostName(url.hostname);
 
     expect(resolve).not.toBeNull();
-    expect(resolve?.gateway.hostname).toEqual('icgateway.io');
-    expect(resolve?.principal).toEqual(Principal.fromText(canisterId));
+    expect(resolve).toEqual(Principal.fromText(canisterId));
   });
 
   it('should handle raw.ic0 as a web2 resource', async () => {

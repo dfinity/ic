@@ -23,6 +23,16 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       request
         .perform()
+        .then((response) => {
+          if (response.status >= 400) {
+            return handleErrorResponse({
+              isNavigation,
+              error: response.statusText,
+            });
+          }
+
+          return response;
+        })
         .catch((e) => handleErrorResponse({ isNavigation, error: e }))
     );
   } catch (e) {

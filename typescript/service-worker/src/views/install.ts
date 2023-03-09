@@ -43,12 +43,10 @@ export class InstallView extends BaseView {
   }
 
   resolveICHostInfo(): ICHostInfoEvent | null {
-    const gateway = getValueFromCookie('__Secure-IcGateway');
     const canisterId = getValueFromCookie('__Secure-IcCanisterId');
-    if (gateway && canisterId) {
+    if (canisterId) {
       return {
         canisterId,
-        gateway,
       };
     }
 

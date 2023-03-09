@@ -4,7 +4,6 @@ export enum ServiceWorkerEvents {
 
 export interface ICHostInfoEvent {
   canisterId: string;
-  gateway: string;
 }
 
 export interface SaveICHostInfoMessage {

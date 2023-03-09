@@ -67,13 +67,13 @@ it('should not set content-type: application/cbor and x-content-type-options: no
   expect(response.headers.get('content-type')).not.toEqual('application/cbor');
   expect(await response.text()).toEqual('test response');
   expect(response.status).toEqual(200);
+  expect(fetch.mock.calls).toHaveLength(2);
 });
 
 it.each([
   `https://${CANISTER_ID}.ic0.app/api/foo`,
   `https://ic0.app/api/${CANISTER_ID}/foo`,
   `https://icp-api.io/api/${CANISTER_ID}/foo`,
-  `https://dscvr.one/api/foo`,
   `https://boundary.ic0.app/api/${CANISTER_ID}/foo`,
   `https://boundary.dfinity.network/api/${CANISTER_ID}/foo`,
 ])(
@@ -88,6 +88,7 @@ it.each([
     expect(response.headers.get('content-type')).toEqual('application/cbor');
     expect(await response.text()).toEqual('test response');
     expect(response.status).toEqual(200);
+    expect(fetch.mock.calls).toHaveLength(1);
   }
 );
 
@@ -117,6 +118,7 @@ it.each([
         url: responseUrl,
       })
     );
+    expect(fetch.mock.calls).toHaveLength(1);
   }
 );
 
@@ -572,12 +574,9 @@ it('should do update call on upgrade flag', async () => {
         jest
           .spyOn(canisterResolver, 'getCurrentGateway')
           .mockResolvedValue(new URL('https://ic0.app'));
-        jest.spyOn(canisterResolver, 'lookup').mockResolvedValue({
-          canister: {
-            principal: Principal.fromText(CANISTER_ID),
-            gateway: new URL('https://ic0.app'),
-          },
-        });
+        jest
+          .spyOn(canisterResolver, 'lookup')
+          .mockResolvedValue(Principal.fromText(CANISTER_ID));
         resolve(canisterResolver);
       });
     })
@@ -759,7 +758,7 @@ function mockFetchResponses(
       fetchCounter++;
       return promise;
     }
-    return Promise.reject('unexpected request');
+    return Promise.reject(`Request with URL ${req.url} has not been mocked`);
   });
 }
 

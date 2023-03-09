@@ -1,10 +1,14 @@
+import { Principal } from '@dfinity/principal';
+import { IDBPDatabase } from 'idb';
 import { mockLocation } from '../../mocks/location';
+import { MalformedCanisterError } from './errors';
 import {
-  CurrentGatewayResolveError,
-  MalformedCanisterError,
-  MalformedHostnameError,
-} from './errors';
-import { CanisterLookup, DomainLookup, domainLookupHeaders } from './typings';
+  DBHostsItem,
+  domainLookupHeaders,
+  domainStorageProperties,
+  V1DBHostsItem,
+} from './typings';
+import { Storage, CreateStoreFn, DBValue } from '../storage';
 import * as resolverImport from './index';
 
 let CanisterResolver: typeof resolverImport.CanisterResolver;
@@ -40,55 +44,27 @@ describe('Canister resolver lookups', () => {
     expect(resolver).toBeInstanceOf(CanisterResolver);
   });
 
-  it('should resolve current gateway', async () => {
+  it('should resolve current gateway on testnet', async () => {
     global.self.location = mockLocation(
       'https://rdmx6-jaaaa-aaaaa-aaadq-cai.ic1.app'
     );
 
     const resolver = await CanisterResolver.setup();
-    const currentGateway = await resolver.getCurrentGateway();
+    const currentGateway = await resolver.getCurrentGateway(false);
 
     expect(currentGateway).not.toEqual(null);
     expect(currentGateway).toEqual(new URL('https://ic1.app'));
   });
 
-  it('should fail to resolve current gateway of unknown domain', async () => {
-    global.self.location = mockLocation('https://www.unknowncustomdomain.com');
-
-    try {
-      const resolver = await CanisterResolver.setup();
-      await resolver.getCurrentGateway();
-    } catch (err) {
-      expect(err).toBeInstanceOf(CurrentGatewayResolveError);
-    }
-  });
-
-  it('should resolve current gateway of known domain', async () => {
-    const protocol = 'https:';
-    const canisterId = 'rdmx6-jaaaa-aaaaa-aaadq-cai';
-    const gatewayHostname = 'customgateway.io';
-    const fetchSpy = jest.spyOn(global, 'fetch');
-
+  it('should not resolve current gateway on mainnet', async () => {
     global.self.location = mockLocation(
-      `${protocol}//www.knowncustomdomain.com`
-    );
-
-    const mockedHeaders = new Headers();
-    mockedHeaders.set(domainLookupHeaders.canisterId, canisterId);
-    mockedHeaders.set(domainLookupHeaders.gateway, gatewayHostname);
-    fetchSpy.mockResolvedValueOnce(
-      new Response(null, {
-        headers: mockedHeaders,
-        status: 200,
-        statusText: '200 OK',
-      })
+      'https://rdmx6-jaaaa-aaaaa-aaadq-cai.ic1.app'
     );
 
     const resolver = await CanisterResolver.setup();
-    const currentGateway = await resolver.getCurrentGateway();
+    const currentGateway = await resolver.getCurrentGateway(true);
 
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
-    expect(currentGateway).toEqual(new URL(`${protocol}//${gatewayHostname}`));
+    expect(currentGateway).toEqual(new URL('https://icp-api.io'));
   });
 
   it('should retry lookup on network failure', async () => {
@@ -121,7 +97,7 @@ describe('Canister resolver lookups', () => {
 
     // N calls for the same domain should only do one fetch
     const numberOfCalls = 10;
-    let lookups: DomainLookup[] = [];
+    let lookups: (Principal | null)[] = [];
     for (let i = 0; i < numberOfCalls; ++i) {
       lookups.push(
         await resolver.lookup(new URL('https://www.customdappdomain.io'))
@@ -179,11 +155,9 @@ describe('Canister resolver lookups', () => {
     const resolver = await CanisterResolver.setup();
     const hostname = 'www.customdomain.com';
     const canisterId = 'rdmx6-jaaaa-aaaaa-aaadq-cai';
-    const gatewayHostname = 'customgateway.io';
 
     const mockedHeaders = new Headers();
     mockedHeaders.set(domainLookupHeaders.canisterId, canisterId);
-    mockedHeaders.set(domainLookupHeaders.gateway, gatewayHostname);
     fetchSpy.mockResolvedValue(
       new Response(null, {
         headers: mockedHeaders,
@@ -197,7 +171,7 @@ describe('Canister resolver lookups', () => {
     );
 
     expect(fetchSpy).toHaveBeenCalledTimes(1);
-    expect(web2resource.canister).toEqual(false);
+    expect(web2resource).toEqual(null);
   });
 
   it('should fail lookup if canister header is malformated', async () => {
@@ -209,7 +183,6 @@ describe('Canister resolver lookups', () => {
       domainLookupHeaders.canisterId,
       'invalid-canister-format'
     );
-    mockedHeaders.set(domainLookupHeaders.gateway, 'ic0.app');
     fetchSpy.mockResolvedValue(
       new Response(null, {
         headers: mockedHeaders,
@@ -231,73 +204,140 @@ describe('Canister resolver lookups', () => {
     expect(error).toBeInstanceOf(MalformedCanisterError);
   });
 
-  it('should fail lookup if gateway header is malformated', async () => {
-    const fetchSpy = jest.spyOn(global, 'fetch');
-    const resolver = await CanisterResolver.setup();
+  describe('database migrations', () => {
+    const dbMock = {
+      deleteObjectStore: jest.fn(),
+      createObjectStore: jest.fn(),
+      getAll: jest.fn(),
+    };
+    const storeMock = {
+      put: jest.fn(),
+    };
 
-    const mockedHeaders = new Headers();
-    mockedHeaders.set(
-      domainLookupHeaders.canisterId,
-      'rdmx6-jaaaa-aaaaa-aaadq-cai'
-    );
-    mockedHeaders.set(domainLookupHeaders.gateway, '');
-    fetchSpy.mockResolvedValue(
-      new Response(null, {
-        headers: mockedHeaders,
-        status: 200,
-        statusText: '200 OK',
-      })
-    );
+    beforeEach(async () => {
+      CanisterResolver['instance'] = null as any;
+    });
 
-    let error: Error | null = null;
-    try {
-      await resolver.lookup(new URL(`${self.location.protocol}//domain.com`));
-    } catch (err) {
-      error = err as Error;
+    function mockConnect(previousVersion: number) {
+      const connectSpy = jest.spyOn(Storage, 'connect');
+
+      connectSpy.mockImplementation(async (args) => {
+        const upgradeFn = args?.stores?.init?.[0] as CreateStoreFn;
+
+        await upgradeFn(
+          dbMock as unknown as IDBPDatabase<unknown>,
+          previousVersion
+        );
+
+        return {} as Storage<unknown>;
+      });
+
+      return connectSpy;
     }
 
-    expect(fetchSpy).toHaveBeenCalledTimes(1);
-    expect(error).toBeInstanceOf(MalformedHostnameError);
-  });
+    it('should migrate database version from 1 to 2', async () => {
+      const previousVersion = 1;
+      const connectSpy = mockConnect(previousVersion);
 
-  it('should add gateway protocol as the current location protocol', async () => {
-    const protocol = 'http:';
-    global.self.location = mockLocation(
-      `${protocol}//rdmx6-jaaaa-aaaaa-aaadq-cai.ic0.app`
-    );
+      const oldDbItems: DBValue<V1DBHostsItem>[] = [
+        {
+          expireAt: 1678118590100,
+          body: {
+            canister: false,
+          },
+        },
+        {
+          expireAt: undefined,
+          body: {
+            canister: {
+              gateway: 'https://ic0.app',
+              id: 'rdmx6-jaaaa-aaaaa-aaadq-cai',
+            },
+          },
+        },
+        {
+          expireAt: 694479600000,
+          body: {
+            canister: {
+              gateway: 'https://icp-api.io',
+              id: 'ewh3f-3qaaa-aaaap-aazjq-cai',
+            },
+          },
+        },
+        {
+          expireAt: undefined,
+          body: {
+            canister: false,
+          },
+        },
+      ];
+      const expectedNewDbItems: DBValue<DBHostsItem>[] = [
+        {
+          expireAt: 1678118590100,
+          body: {
+            canister: false,
+          },
+        },
+        {
+          expireAt: undefined,
+          body: {
+            canister: {
+              id: 'rdmx6-jaaaa-aaaaa-aaadq-cai',
+            },
+          },
+        },
+        {
+          expireAt: 694479600000,
+          body: {
+            canister: {
+              id: 'ewh3f-3qaaa-aaaap-aazjq-cai',
+            },
+          },
+        },
+        {
+          expireAt: undefined,
+          body: {
+            canister: false,
+          },
+        },
+      ];
 
-    const canisterId = 'qoctq-giaaa-aaaaa-aaaea-cai';
-    const gatewayHostname = 'anothergateway.io';
-    const fetchSpy = jest.spyOn(global, 'fetch');
-    const resolver = await CanisterResolver.setup();
+      dbMock.getAll.mockResolvedValue(oldDbItems);
+      dbMock.createObjectStore.mockReturnValue(storeMock);
 
-    const mockedHeaders = new Headers();
-    mockedHeaders.set(domainLookupHeaders.canisterId, canisterId);
-    mockedHeaders.set(domainLookupHeaders.gateway, gatewayHostname);
-    fetchSpy.mockResolvedValue(
-      new Response(null, {
-        headers: mockedHeaders,
-        status: 200,
-        statusText: '200 OK',
-      })
-    );
+      await CanisterResolver.setup();
 
-    const urlContainsCanisterLookup = await resolver.lookup(
-      new URL('https://g3wsl-eqaaa-aaaan-aaaaa-cai.customgateway.com')
-    );
-    const customDomainLookup = await resolver.lookup(
-      new URL('https://newdomain.com')
-    );
+      expect(connectSpy).toHaveBeenCalled();
+      expect(dbMock.getAll).toHaveBeenCalledWith(domainStorageProperties.store);
+      expect(dbMock.deleteObjectStore).toHaveBeenCalledWith(
+        domainStorageProperties.store
+      );
+      expect(dbMock.createObjectStore).toHaveBeenCalledWith(
+        domainStorageProperties.store
+      );
 
-    expect(urlContainsCanisterLookup).not.toEqual(null);
-    expect(customDomainLookup).not.toEqual(null);
-    expect(urlContainsCanisterLookup.canister).not.toBeFalsy();
-    expect(customDomainLookup.canister).not.toBeFalsy();
-    expect(
-      (urlContainsCanisterLookup.canister as CanisterLookup).gateway.protocol
-    ).toEqual(protocol);
-    expect(
-      (customDomainLookup.canister as CanisterLookup).gateway.protocol
-    ).toEqual(protocol);
+      expect(storeMock.put).toHaveBeenCalledTimes(expectedNewDbItems.length);
+      for (const item of expectedNewDbItems) {
+        expect(storeMock.put).toHaveBeenCalledWith(item);
+      }
+    });
+
+    it('should init new databases', async () => {
+      const previousVersion = 2;
+      const connectSpy = mockConnect(previousVersion);
+
+      dbMock.createObjectStore.mockReturnValue(storeMock);
+
+      await CanisterResolver.setup();
+
+      expect(connectSpy).toHaveBeenCalled();
+      expect(dbMock.createObjectStore).toHaveBeenCalledWith(
+        domainStorageProperties.store
+      );
+
+      expect(dbMock.getAll).not.toHaveBeenCalled();
+      expect(dbMock.deleteObjectStore).not.toHaveBeenCalledWith();
+      expect(storeMock.put).toHaveBeenCalledTimes(0);
+    });
   });
 });
