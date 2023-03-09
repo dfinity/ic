@@ -671,6 +671,8 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 features = [
                     "arithmetic",
                     "ecdsa",
+                    "pem",
+                    "pkcs8",
                 ],
                 default_features = False,
             ),
