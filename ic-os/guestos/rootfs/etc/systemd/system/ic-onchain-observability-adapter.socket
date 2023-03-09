@@ -1,0 +1,13 @@
+[Unit]
+Description= Replica socket to serve gRPC requests to the IC onchain observability adapter 
+
+[Socket]
+ListenStream=/run/ic-node/onchain-observability-adapter/socket
+Service=ic-replica.service
+SocketUser=ic-replica
+SocketGroup=ic-replica
+SocketMode=0660
+
+
+[Install]
+WantedBy=sockets.target
