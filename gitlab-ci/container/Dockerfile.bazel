@@ -1,6 +1,6 @@
 # https://hub.docker.com/_/ubuntu
-# focal-20220922
-FROM ubuntu@sha256:e722c7335fdd0ce77044ab5942cb1fbd2b5f60d1f5416acfcdb0814b2baf7898
+# focal-20230301
+FROM ubuntu@sha256:3626dff0d616e8ee7065a9ac8c7117e904a4178725385910eeecd7f1872fc12d
 
 ARG BAZEL_VERSION=invalid
 ENV TZ=UTC
@@ -9,7 +9,7 @@ COPY --chown=0700 ./files/known_hosts /etc/ssh/ssh_known_hosts
 
 RUN export DEBIAN_FRONTEND=noninteractive && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone && \
     apt -yq update && apt -yqq install  \
-    curl build-essential git gnupg node-json5 uuid-dev \
+    curl build-essential git gnupg node-json5 uuid-dev zsh \
     # GitLab CI \
     sudo gosu jq rclone \
     # Test \
