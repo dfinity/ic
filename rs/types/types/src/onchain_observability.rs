@@ -13,7 +13,7 @@ pub struct Report {
     pub start_time: SystemTime,
     pub end_time: SystemTime,
     pub reporting_node_id_binary: Vec<u8>,
-    pub replica_last_start: SystemTime,
+    pub replica_last_start_time: SystemTime,
     pub peer_report: Vec<PeerReport>,
     // TODO - add other fields after we prototype peer id and peer uptime %
 }

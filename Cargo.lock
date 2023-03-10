@@ -7536,6 +7536,7 @@ dependencies = [
  "ic-logger",
  "ic-metrics",
  "ic-registry-client",
+ "ic-registry-client-helpers",
  "ic-registry-local-store",
  "ic-types",
  "itertools",

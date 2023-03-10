@@ -18,6 +18,7 @@ ic-interfaces = { path = "../../../interfaces" }
 ic-logger = { path = "../../logger" }
 ic-metrics = { path = "../../metrics" }
 ic-registry-client = { path = "../../../registry/client" }
+ic-registry-client-helpers = { path = "../../../registry/helpers" }
 ic-registry-local-store = { path = "../../../registry/local_store" }
 ic-types = { path = "../../../types/types" }
 itertools = "0.10.5"

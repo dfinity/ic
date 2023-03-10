@@ -107,10 +107,9 @@ fn peer_label_and_connected_state_from_raw_response(
         .collect();
 
     for sample in flow_state_metric {
-        let peer_label = sample
-            .labels
-            .get(PEER_ID)
-            .ok_or(MetricsParseError::MetricLabelNotFound)?;
+        let peer_label = sample.labels.get(PEER_ID).ok_or_else(|| {
+            MetricsParseError::MetricParseFailure("Failed to get peer id label".to_string())
+        })?;
         let connection_state = get_connection_state(sample)?;
         res.push((peer_label.to_string(), connection_state));
     }
@@ -121,5 +120,7 @@ fn get_connection_state(sample: &Sample) -> Result<u64, MetricsParseError> {
     if let Value::Gauge(connection_state) = sample.value {
         return Ok(connection_state as u64);
     }
-    Err(MetricsParseError::ConnectionStateParseFailure)
+    Err(MetricsParseError::MetricParseFailure(
+        ("Failed to find connection state").to_string(),
+    ))
 }

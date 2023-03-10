@@ -15,9 +15,10 @@ use ic_interfaces::crypto::{BasicSigner, ErrorReproducibility, KeyManager};
 use ic_logger::{error, info, new_replica_logger_from_config, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_onchain_observability_adapter::{
-    get_peer_ids, Config, Flags, MetricsParseError, SampledMetricsCollector,
+    get_replica_last_start_time, Config, Flags, MetricsParseError, SampledMetricsCollector,
 };
-use ic_registry_client::client::RegistryClientImpl;
+use ic_registry_client::client::{RegistryClient, RegistryClientImpl};
+use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_local_store::LocalStoreImpl;
 use ic_types::{
     crypto::CryptoError,
@@ -62,6 +63,9 @@ pub async fn main() {
     let canister_id =
         CanisterId::from_str(&config.canister_id).expect("Failed to parse canister id");
 
+    // TODO (NET-1332): Switch to adapter-specific metrics registry
+    let metrics_registry = MetricsRegistry::global();
+
     let (logger, _async_log_guard) = new_replica_logger_from_config(&config.logger);
 
     info!(
@@ -72,10 +76,15 @@ pub async fn main() {
         canister_id,
     );
     let handle = Handle::current();
-    // TODO (NET-1332): Switch to adapter-specific metrics registry
-    let metrics_registry = MetricsRegistry::global();
-    let crypto_component =
-        create_crypto_component(&logger, &metrics_registry, &config, handle).await;
+
+    let (registry_client, crypto_component) = create_registry_client_and_crypto_component(
+        logger.clone(),
+        metrics_registry.clone(),
+        config.clone(),
+        handle,
+    )
+    .await;
+
     let node_id = crypto_component.get_node_id();
 
     let canister_client =
@@ -83,10 +92,10 @@ pub async fn main() {
     let http_client = Client::new();
     let http_client_clone = http_client.clone();
 
-    // This will be replaced with fetching node ids from registry
-    let peer_ids = get_peer_ids(http_client_clone)
+    let replica_last_start = get_replica_last_start_time(http_client_clone)
         .await
-        .expect("Error getting peer_ids");
+        .expect("Failed to retrieve replica last start time");
+    let peer_ids = get_peer_ids(node_id, &registry_client);
 
     let mut sampling_interval = interval(config.sampling_interval_sec);
     sampling_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
@@ -120,7 +129,7 @@ pub async fn main() {
                 "Completed Report: interval{:?}-{:?} uptime% {:?}", start_time, end_time, uptime
             );
 
-            let report = prepare_report(node_id, start_time, end_time, uptime);
+            let report = prepare_report(node_id, start_time, end_time, uptime, replica_last_start);
 
             for signature_attempts in 0..MAX_CRYPTO_SIGNATURE_ATTEMPTS {
                 match sign_report(crypto_component.clone(), report.clone(), node_id).await {
@@ -157,13 +166,34 @@ pub async fn main() {
     }
 }
 
+fn get_peer_ids(
+    current_node_id: NodeId,
+    registry_client: &Arc<RegistryClientImpl>,
+) -> HashSet<NodeId> {
+    let latest_version = registry_client.get_latest_version();
+
+    let (subnet_id, _) = registry_client
+        .get_listed_subnet_for_node_id(current_node_id, latest_version)
+        .expect("Failed to get subnet data for node id")
+        .expect("Failed to retrieve subnet id for node id");
+
+    registry_client
+        .get_node_ids_on_subnet(subnet_id, latest_version)
+        .expect("Failed to get subnet data for subnet id")
+        .expect("Failed to retrieve node ids from subnet")
+        .iter()
+        .copied()
+        .filter(|&x| x != current_node_id)
+        .collect()
+}
+
 // Generate crypto component which is needed for signing messages
-async fn create_crypto_component(
-    logger: &ReplicaLogger,
-    metrics_registry: &MetricsRegistry,
-    config: &Config,
+async fn create_registry_client_and_crypto_component(
+    logger: ReplicaLogger,
+    metrics_registry: MetricsRegistry,
+    config: Config,
     rt_handle: Handle,
-) -> Arc<CryptoComponent> {
+) -> (Arc<RegistryClientImpl>, Arc<CryptoComponent>) {
     let DataProviderConfig::LocalStore(local_store_from_config) = config
         .registry_config
         .data_provider
@@ -173,28 +203,29 @@ async fn create_crypto_component(
     let data_provider = Arc::new(LocalStoreImpl::new(local_store_from_config));
     let registry_client = Arc::new(RegistryClientImpl::new(
         data_provider,
-        Some(metrics_registry),
+        Some(&metrics_registry),
     ));
+    // Cloning registry client since we need to move it into the task below
+    let registry_client_clone = registry_client.clone();
 
     // TODO (NET-1336) proper error handling in case registry is not populated
     registry_client
         .fetch_and_start_polling()
         .expect("fetch_and_start_polling failed");
 
-    let metrics_registry_clone = metrics_registry.clone();
-    let config_clone = config.clone();
-    let logger_clone = logger.clone();
-    tokio::task::spawn_blocking(move || {
+    let crypto_component = tokio::task::spawn_blocking(move || {
         Arc::new(CryptoComponent::new(
-            &config_clone.crypto_config,
+            &config.crypto_config,
             Some(rt_handle),
-            registry_client,
-            logger_clone,
-            Some(&metrics_registry_clone),
+            registry_client_clone,
+            logger,
+            Some(&metrics_registry),
         ))
     })
     .await
-    .expect("Failed to create crypto component")
+    .expect("Failed to create crypto component");
+
+    (registry_client, crypto_component)
 }
 
 async fn create_canister_client(crypto: Arc<CryptoComponent>, url: Url, node_id: NodeId) -> Agent {
@@ -240,6 +271,7 @@ fn prepare_report(
     start_time: SystemTime,
     end_time: SystemTime,
     uptime_percent: HashMap<NodeId, f32>,
+    replica_last_start_time: SystemTime,
 ) -> Report {
     // First, prepare the peer data
     let peer_reports = uptime_percent
@@ -255,7 +287,7 @@ fn prepare_report(
         start_time,
         end_time,
         reporting_node_id_binary: reporting_node_id.get().to_vec(),
-        replica_last_start: SystemTime::now(), // TODO (NET-1331) add real value
+        replica_last_start_time,
         peer_report: peer_reports,
     }
 }
@@ -411,7 +443,7 @@ fn convert_peer_label_to_node_id(
 ) -> Result<NodeId, MetricsParseError> {
     let peer_label_split = peer_label.split('_').collect::<Vec<&str>>();
     if peer_label_split.len() != 2 {
-        return Err(MetricsParseError::PeerLabelToIdConversionFailure(
+        return Err(MetricsParseError::MetricParseFailure(
             "Peer label was not succesfully split into 2 pieces".to_string(),
         ));
     }
@@ -424,7 +456,7 @@ fn convert_peer_label_to_node_id(
 
     // Assumption: There is a 1:1 mapping between id prefix and full id
     if valid_node_ids.len() != 1 {
-        return Err(MetricsParseError::PeerLabelToIdConversionFailure(
+        return Err(MetricsParseError::MetricParseFailure(
             "Did not find 1:1 mapping between node id prefix and node id list".to_string(),
         ));
     }
