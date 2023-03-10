@@ -5,7 +5,16 @@
 The procedure currently works on a linux host only.
 
 * Reserve a static testnet using Dee
-* Start the container: `./gitlab-ci/container/container-run.sh -f`
-* Produce required artifacts and start the testnet reserved using them: `bazel run //testnet/tools:icos_deploy --config=systest -- <testnet>`
+* Build and deploy IC-OS to static testnet
+  ```bash
+  ./gitlab-ci/container/container-run.sh -f
+  export ANSIBLE_REMOTE_USER=<sshuser>
+  bazel run //testnet/tools:icos_deploy --config=systest -- <testnet>
+  ```
 
-To produce all required artifacts but do not start a testnet run the command with `-n` flag: `bazel run //testnet/tools:icos_deploy --config=systest -- -n`
+**Note:** *It's important that sshuser matches with your username that was set on servers that run tesetnet nodes! See [here](https://github.com/dfinity-lab/dcs/blob/master/ansible-internal/group_vars/development.yml).*
+
+To produce all required artifacts but do not start a testnet run the command with `-n` flag:
+```bash
+bazel run //testnet/tools:icos_deploy --config=systest -- -n
+```

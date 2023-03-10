@@ -67,6 +67,10 @@ function disk_image_exists() {
 ANSIBLE_ARGS=()
 HOSTS_INI_FILENAME="${HOSTS_INI_FILENAME:-hosts.ini}"
 
+if [ -n "${ANSIBLE_REMOTE_USER:-}" ]; then
+    ANSIBLE_ARGS+=(-u $ANSIBLE_REMOTE_USER)
+fi
+
 while [ $# -gt 0 ]; do
     case "${1}" in
         --git-head)
@@ -254,7 +258,7 @@ if [[ -z \${CERT_NAME+x} ]]; then
     err "'.boundary.vars.cert_name' was not defined"
 else
     (for HOST in "\${HOSTS[@]}"; do
-        scp -r "\${HOST}:/etc/letsencrypt/live/\${CERT_NAME}/*" "${BN_MEDIA_PATH}/certs/" && exit
+        scp -r "${ANSIBLE_REMOTE_USER:-$(whoami)}@\${HOST}:/etc/letsencrypt/live/\${CERT_NAME}/*" "${BN_MEDIA_PATH}/certs/" && exit
     done) || {
         err "failed to find certificate \${CERT_NAME}"
         exit 1
