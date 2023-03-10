@@ -1,13 +1,25 @@
-use std::time::{Duration, Instant};
+use std::{
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
+    time::{Duration, Instant},
+};
 
 use crate::{
+    canister_agent::CanisterAgent,
+    canister_api::{CallMode, SnsRequestProvider},
+    canister_requests,
     driver::test_env_api::retry_async,
-    workload::{CallSpec, Request, RoundRobinPlan, Workload},
+    generic_workload_engine::{
+        engine::Engine,
+        metrics::{LoadTestMetrics, RequestOutcome},
+    },
+    sns_client::SnsClient,
 };
 use anyhow::{bail, Context};
-use candid::{CandidType, Decode, Encode, Principal};
+use candid::{Decode, Principal};
 use ic_agent::Agent;
-use ic_icrc1_agent::CallMode;
 use ic_registry_subnet_type::SubnetType;
 use ic_sns_swap::pb::v1::{GetStateResponse, Params};
 use ic_utils::{
@@ -18,6 +30,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use slog::{info, Logger};
 
+use crate::canister_agent::HasSnsAgentCapability;
 use crate::{
     driver::{
         ic::InternetComputer,
@@ -30,10 +43,7 @@ use crate::{
     util::{block_on, delay},
 };
 
-use super::sns_deployment::{
-    self, install_nns, install_sns, HasSnsAgentCapability, SaleParticipant, SnsClient,
-    SnsRequestProvider,
-};
+use super::sns_deployment::{self, install_nns, install_sns, SaleParticipant};
 
 use ic_base_types::PrincipalId;
 
@@ -47,7 +57,6 @@ const AGGREGATOR_CANISTER_VERSION: &str = "v1";
 // as we should never stop awaiting the execution completion (unless the overall workload timeout controlled
 // by `RESPONSES_COLLECTION_EXTRA_TIMEOUT` is reached).
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1_000);
-const RESPONSES_COLLECTION_EXTRA_TIMEOUT: Duration = Duration::from_secs(5);
 
 fn config_for_security_testing(env: &TestEnv) {
     env.ensure_group_setup_created();
@@ -122,6 +131,7 @@ fn walk_array(array: Value, index: usize) -> Result<Value> {
     }
 }
 
+/// TODO: Reimplement this type using [`canister_api::Request<HttpResponse>`]. Avoid the [`HttpRequestCanister<'agent>`] dependency.
 impl AggregatorClient {
     fn id(canister: &HttpRequestCanister) -> PrincipalId {
         PrincipalId(*canister.canister_id_())
@@ -214,38 +224,58 @@ impl AggregatorClient {
     async fn sub_asset<'agent, P>(
         log: &Logger,
         canister: &HttpRequestCanister<'agent>,
-        extract_sub_asset: P,
+        extract_sub_asset: &P,
         timeout: Duration,
-    ) -> Result<Value>
+    ) -> RequestOutcome<Value, String>
     where
         P: Fn(Value) -> Result<Value>,
     {
-        retry_async(log, timeout, Duration::from_secs(5), || async {
-            let asset_bytes = Self::http_get_asset(log, canister).await?;
-            info!(&log, "Try parsing the response body ...");
-            let asset: Value = serde_json::from_slice(asset_bytes.as_slice())?;
-            extract_sub_asset(asset)
+        let start_time = Instant::now();
+        let attempts = Arc::new(AtomicUsize::new(0));
+        let result = retry_async(log, timeout, Duration::from_secs(5), {
+            let log = log.clone();
+            let attempts = attempts.clone();
+            let canister = canister.clone();
+            move || {
+                let log = log.clone();
+                let attempts = attempts.clone();
+                let canister = canister.clone();
+                attempts.fetch_add(1, Ordering::Relaxed);
+                async move {
+                    let asset_bytes = Self::http_get_asset(&log, &canister).await?;
+                    info!(&log, "Try parsing the response body ...");
+                    let asset: Value = serde_json::from_slice(asset_bytes.as_slice())?;
+                    extract_sub_asset(asset)
+                }
+            }
         })
         .await
+        .map_err(|e| format!("{e:?}"));
+        RequestOutcome::new(
+            result,
+            "aggregator_sub_asset".to_string(),
+            start_time.elapsed(),
+            attempts.load(Ordering::Relaxed),
+        )
     }
 
     pub async fn first_sns_asset<'agent>(
         log: &Logger,
         canister: &HttpRequestCanister<'agent>,
         timeout: Duration,
-    ) -> Result<Value> {
+    ) -> RequestOutcome<Value, String> {
         let extract_sub_asset = move |asset| {
             let sub_asset = walk_array(asset, 0)?;
             Ok(sub_asset)
         };
-        Self::sub_asset(log, canister, extract_sub_asset, timeout).await
+        Self::sub_asset(log, canister, &extract_sub_asset, timeout).await
     }
 
     pub async fn first_swap_params<'agent>(
         log: &Logger,
         canister: &HttpRequestCanister<'agent>,
         timeout: Duration,
-    ) -> Result<Value> {
+    ) -> RequestOutcome<Value, String> {
         let extract_sub_asset = move |asset| {
             let sub_asset = walk_array(asset, 0)?;
             let sub_asset = walk_object(sub_asset, "swap_state".to_string())?;
@@ -257,7 +287,7 @@ impl AggregatorClient {
                 Ok(sub_asset)
             }
         };
-        Self::sub_asset(log, canister, extract_sub_asset, timeout).await
+        Self::sub_asset(log, canister, &extract_sub_asset, timeout).await
     }
 
     pub fn install_aggregator_and_check_healthy(env: &TestEnv) -> Self {
@@ -346,6 +376,7 @@ pub fn wait_until_aggregator_finds_sns(env: TestEnv) {
         &http_canister,
         Duration::from_secs(2 * 60),
     ))
+    .result()
     .unwrap();
     info!(log, "Obtained SNS asset from aggregator: {sns_asset:#}");
     info!(
@@ -370,6 +401,7 @@ pub fn validate_aggregator_data(env: TestEnv) {
             &http_canister,
             Duration::from_secs(2 * 60),
         ))
+        .result()
         .unwrap();
         info!(
             log,
@@ -381,10 +413,10 @@ pub fn validate_aggregator_data(env: TestEnv) {
     info!(log, "Fetch SNS sale params from SNS sale canister ...");
     let sns_sale_params_from_sns = {
         let sns_client = SnsClient::read_attribute(&env);
-        let sns_agent = app_node.build_sns_agent();
+        let canister_agent = app_node.build_canister_agent();
         let request_provider = SnsRequestProvider::from_sns_client(&sns_client);
         let request = request_provider.get_state(CallMode::Update);
-        let res = block_on(sns_agent.update(request)).unwrap();
+        let res = block_on(canister_agent.call(&request)).result().unwrap();
         let res = Decode!(res.as_slice(), GetStateResponse).expect("failed to decode");
         // We've already checked above that the SNS sale params had propagated through the aggregator canister.
         // Thus, they must also be availabe while querying the SNS directly.
@@ -404,159 +436,138 @@ pub fn validate_aggregator_data(env: TestEnv) {
     );
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, CandidType)]
-struct SimpleHttpHeader(String, String);
-
-#[derive(Debug, Clone, Serialize, Deserialize, CandidType)]
-struct SimpleHttpRequest {
-    url: String,
-    method: String,
-    headers: Vec<SimpleHttpHeader>,
-    body: Vec<u8>,
-}
-
-/// asset_endpoint e.g. "/_app/immutable/chunks/vendor-b5e14c74.js"
-pub fn nns_dapp_http_request(nns_dapp_canister_id: Principal, asset_endpoint: String) -> Request {
-    let http_request = SimpleHttpRequest {
-        url: asset_endpoint,
-        method: "GET".to_string(),
-        headers: vec![],
-        body: vec![],
-    };
-    let payload = Encode!(&http_request).unwrap();
-    Request::Query(CallSpec::new(nns_dapp_canister_id, "http_request", payload))
-}
-
-pub fn aggregator_http_request(aggr_canister_id: Principal) -> Request {
-    let http_request = SimpleHttpRequest {
-        url: AggregatorClient::aggregator_http_endpoint(),
-        method: "GET".to_string(),
-        headers: vec![],
-        body: vec![],
-    };
-    let payload = Encode!(&http_request).unwrap();
-    Request::Query(CallSpec::new(aggr_canister_id, "http_request", payload))
-}
-
 pub fn workload_via_aggregator(env: TestEnv, rps: usize, duration: Duration) {
     let log = env.logger();
 
-    // --- Create a plan ---
-    let plan = {
+    // --- Create a future generator ---
+    let future_generator = {
+        let app_node = env.get_first_healthy_application_node_snapshot();
+        let agent = app_node.build_default_agent();
+        let log = log.clone();
         let aggregator = AggregatorClient::read_attribute(&env);
-        let request = aggregator_http_request(aggregator.principal());
-        RoundRobinPlan::new(vec![request])
+        move |_idx| {
+            let log = log.clone();
+            let agent = agent.clone();
+            let aggregator = aggregator.clone();
+            async move {
+                let agent = agent.clone();
+                let http_canister = aggregator.new_http_canister(&agent);
+                AggregatorClient::first_sns_asset(&log, &http_canister, Duration::from_secs(2 * 60))
+                    .await
+                    .map(|_| ())
+                    .into_test_outcome()
+            }
+        }
     };
 
     // --- Generate workload ---
-    let workload = {
-        let app_node = env.get_first_healthy_application_node_snapshot();
-        let agent = app_node.build_default_agent();
-        Workload::new(vec![agent], rps, duration, plan, log.clone())
-            .with_responses_collection_extra_timeout(RESPONSES_COLLECTION_EXTRA_TIMEOUT)
-            .increase_requests_dispatch_timeout(REQUESTS_DISPATCH_EXTRA_TIMEOUT)
-    };
+    let engine = Engine::new(log, future_generator, rps, duration)
+        .increase_dispatch_timeout(REQUESTS_DISPATCH_EXTRA_TIMEOUT);
 
     // --- Emit metrics ---
-    let metrics = block_on(workload.execute()).expect("Workload execution has failed.");
+    let metrics = {
+        let aggr = LoadTestMetrics::default();
+        let fun = LoadTestMetrics::aggregator_fn;
+        block_on(engine.execute(aggr, fun)).expect("Workload execution has failed.")
+    };
     env.emit_report(format!("{metrics}"));
 }
 
 pub fn workload_direct(env: TestEnv, rps: usize, duration: Duration) {
-    let log = env.logger();
-
-    // --- Create a plan ---
-    let sns_client = SnsClient::read_attribute(&env);
-    let request_provider = SnsRequestProvider::from_sns_client(&sns_client);
-    let plan = RoundRobinPlan::new(vec![
-        request_provider.list_deployed_snses(CallMode::Query),
-        request_provider.list_sns_canisters(CallMode::Query),
-        request_provider.icrc1_metadata(CallMode::Query),
-        request_provider.get_metadata(CallMode::Query),
-        request_provider.get_state(CallMode::Query),
-    ]);
-
-    // --- Generate workload ---
-    let workload = {
-        let app_agent = {
-            let app_node = env.get_first_healthy_application_node_snapshot();
-            app_node.build_default_agent()
+    // --- Create a future generator ---
+    let future_generator = {
+        let agents = {
+            let nns_agent = {
+                let nns_node = env.get_first_healthy_nns_node_snapshot();
+                nns_node.build_canister_agent()
+            };
+            let app_agent = {
+                let app_node = env.get_first_healthy_application_node_snapshot();
+                app_node.build_canister_agent()
+            };
+            (nns_agent, app_agent)
         };
-        let nns_agent = {
-            let nns_node = env.get_first_healthy_nns_node_snapshot();
-            nns_node.build_default_agent()
+        let request_provider = {
+            let sns_client = SnsClient::read_attribute(&env);
+            SnsRequestProvider::from_sns_client(&sns_client)
         };
-        // Note: the workload generator is designed for single-subnet applications.
-        // However, here we abuse its ability to rotate multiple agents to establish
-        // a combined workload for the NNS and the applciations subnets. The agent
-        // rotation is synchronized with the plan requests (see `plan` above).
-        // Thus, the `list_deployed_snses` request will always be executed by the
-        // `nns_agent`, while the other requests will always be executed by the `app_agent`.
-        let agents = vec![
-            nns_agent, // for list_deployed_snses
-            app_agent.clone(),
-            app_agent.clone(),
-            app_agent.clone(),
-            app_agent,
-        ];
-        Workload::new(agents, rps, duration, plan, log.clone())
-            .with_responses_collection_extra_timeout(RESPONSES_COLLECTION_EXTRA_TIMEOUT)
-            .increase_requests_dispatch_timeout(REQUESTS_DISPATCH_EXTRA_TIMEOUT)
+        move |idx| {
+            let agents = agents.clone();
+            async move {
+                let (nns_agent, app_agent) = agents.clone();
+                let request_outcome = canister_requests![
+                    idx,
+                    1 * nns_agent => request_provider.list_deployed_snses(CallMode::Query),
+                    1 * app_agent => request_provider.list_sns_canisters(CallMode::Query),
+                    1 * app_agent => request_provider.icrc1_metadata(CallMode::Query),
+                    1 * app_agent => request_provider.get_metadata(CallMode::Query),
+                    1 * app_agent => request_provider.get_state(CallMode::Query),
+                ];
+                request_outcome.into_test_outcome()
+            }
+        }
     };
 
+    // --- Generate workload ---
+    let engine = Engine::new(env.logger(), future_generator, rps, duration)
+        .increase_dispatch_timeout(REQUESTS_DISPATCH_EXTRA_TIMEOUT);
+
     // --- Emit metrics ---
-    let metrics = block_on(workload.execute()).expect("Workload execution has failed.");
+    let metrics =
+        block_on(engine.execute(LoadTestMetrics::default(), LoadTestMetrics::aggregator_fn))
+            .expect("Workload execution has failed.");
     env.emit_report(format!("{metrics}"));
 }
 
 pub fn workload_direct_auth(env: TestEnv, rps: usize, duration: Duration) {
-    let log = env.logger();
-
-    // --- Create a plan ---
-    let sns_client = SnsClient::read_attribute(&env);
-    let request_provider = SnsRequestProvider::from_sns_client(&sns_client);
-    let requests = vec![
-        request_provider.list_deployed_snses(CallMode::Query),
-        request_provider.list_deployed_snses(CallMode::Update),
-        request_provider.list_sns_canisters(CallMode::Query),
-        request_provider.list_sns_canisters(CallMode::Update),
-        request_provider.icrc1_metadata(CallMode::Query),
-        request_provider.icrc1_metadata(CallMode::Update),
-        request_provider.get_metadata(CallMode::Query),
-        request_provider.get_metadata(CallMode::Update),
-        request_provider.get_state(CallMode::Query),
-        request_provider.get_state(CallMode::Update),
-    ];
-    let plan = RoundRobinPlan::new(requests.clone());
-
-    // --- Generate workload ---
-    let workload = {
-        let participants = Vec::<SaleParticipant>::read_attribute(&env);
-        let app_node = env.get_first_healthy_application_node_snapshot();
-        let nns_node = env.get_first_healthy_nns_node_snapshot();
-        let mut agents = vec![];
-        for participant in participants {
-            for request in &requests[..] {
-                // Note: the workload generator is designed for single-subnet applications.
-                // However, here we abuse its ability to rotate multiple agents to establish
-                // a combined workload for the NNS and the applciations subnets. The agent
-                // rotation is synchronized with the plan requests (see `plan` above).
-                // Thus, the `list_deployed_snses` request will always be executed by the
-                // `nns_agent`, while the other requests will always be executed by the `app_agent`.
-                let agent = if request.spec().method_name == "list_deployed_snses" {
-                    nns_node.build_sns_agent_with_identity(participant.clone())
-                } else {
-                    app_node.build_sns_agent_with_identity(participant.clone())
-                };
-                agents.push(agent.get());
+    // --- Create a future generator ---
+    let future_generator = {
+        let participants: Vec<(CanisterAgent, CanisterAgent)> = {
+            let nns_node = env.get_first_healthy_nns_node_snapshot();
+            let app_node = env.get_first_healthy_application_node_snapshot();
+            Vec::<SaleParticipant>::read_attribute(&env)
+                .into_iter()
+                .map(|p| {
+                    let nns_agent = nns_node.build_canister_agent_with_identity(p.clone());
+                    let app_agent = app_node.build_canister_agent_with_identity(p);
+                    (nns_agent, app_agent)
+                })
+                .collect()
+        };
+        let request_provider = {
+            let sns_client = SnsClient::read_attribute(&env);
+            SnsRequestProvider::from_sns_client(&sns_client)
+        };
+        move |idx| {
+            let participant_data: &(CanisterAgent, CanisterAgent) =
+                &participants[idx % participants.len()];
+            let (nns_agent, app_agent) = (participant_data.0.clone(), participant_data.1.clone());
+            async move {
+                let request_outcome = canister_requests![
+                    idx,
+                    1 * nns_agent => request_provider.list_deployed_snses(CallMode::Query),
+                    1 * nns_agent => request_provider.list_deployed_snses(CallMode::Update),
+                    1 * app_agent => request_provider.list_sns_canisters(CallMode::Query),
+                    1 * app_agent => request_provider.list_sns_canisters(CallMode::Update),
+                    1 * app_agent => request_provider.icrc1_metadata(CallMode::Query),
+                    1 * app_agent => request_provider.icrc1_metadata(CallMode::Update),
+                    1 * app_agent => request_provider.get_metadata(CallMode::Query),
+                    1 * app_agent => request_provider.get_metadata(CallMode::Update),
+                    1 * app_agent => request_provider.get_state(CallMode::Query),
+                    1 * app_agent => request_provider.get_state(CallMode::Update),
+                ];
+                request_outcome.into_test_outcome()
             }
         }
-        Workload::new(agents, rps, duration, plan, log.clone())
-            .with_responses_collection_extra_timeout(RESPONSES_COLLECTION_EXTRA_TIMEOUT)
-            .increase_requests_dispatch_timeout(REQUESTS_DISPATCH_EXTRA_TIMEOUT)
     };
 
+    // --- Generate workload ---
+    let engine = Engine::new(env.logger(), future_generator, rps, duration)
+        .increase_dispatch_timeout(REQUESTS_DISPATCH_EXTRA_TIMEOUT);
+
     // --- Emit metrics ---
-    let metrics = block_on(workload.execute()).expect("Workload execution has failed.");
+    let metrics =
+        block_on(engine.execute(LoadTestMetrics::default(), LoadTestMetrics::aggregator_fn))
+            .expect("Workload execution has failed.");
     env.emit_report(format!("{metrics}"));
 }

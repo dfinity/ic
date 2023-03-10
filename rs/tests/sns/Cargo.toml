@@ -65,6 +65,7 @@ ic-interfaces = { path = "../../interfaces" }
 ic-interfaces-registry = { path = "../../interfaces/registry" }
 ic-nns-constants = { path = "../../nns/constants" }
 ic-nns-governance = { path = "../../nns/governance" }
+ic-nns-gtc = { path = "../../nns/gtc" }
 ic-nns-handler-root = { path = "../../nns/handlers/root" }
 ic-nns-test-utils = { path = "../../nns/test_utils" }
 ic-prep = { path = "../../prep" }
@@ -185,6 +186,14 @@ path = "bin/sns_sale_load_test_2.rs"
 [[bin]]
 name = "ic-systest-sns-sale-simple-load-test-3"
 path = "bin/sns_sale_load_test_3.rs"
+
+[[bin]]
+name = "ic-systest-sns-payment-flow-test"
+path = "bin/payment_flow_test.rs"
+
+[[bin]]
+name = "ic-systest-sns-payment-flow-load-test"
+path = "bin/payment_flow_load_test.rs"
 
 [[bin]]
 name = "ic-systest-sns-workload-static-testnet"

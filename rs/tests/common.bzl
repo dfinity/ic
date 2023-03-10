@@ -28,6 +28,7 @@ DEPENDENCIES = [
     "//rs/nns/common",
     "//rs/nns/constants",
     "//rs/nns/governance",
+    "//rs/nns/gtc",
     "//rs/nns/handlers/lifeline",
     "//rs/nns/handlers/root",
     "//rs/nns/init",

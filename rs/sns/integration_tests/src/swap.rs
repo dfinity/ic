@@ -61,7 +61,7 @@ use ic_sns_test_utils::{
     state_test_helpers::{
         canister_status, get_buyer_state, get_open_ticket, get_sns_sale_parameters,
         list_community_fund_participants, new_sale_ticket, participate_in_swap,
-        refresh_buyer_token, send_participation_funds,
+        refresh_buyer_tokens, send_participation_funds,
         sns_governance_get_nervous_system_parameters, sns_governance_list_neurons,
         sns_root_register_dapp_canisters, swap_get_state,
     },
@@ -2800,7 +2800,7 @@ fn test_deletion_of_sale_ticket() {
     );
 
     //Call refresh buyer tokens. There exists a valid ticket and the refresh call is expected to be successfull --> the ticket should no longer exist afterwards
-    let refresh_response = refresh_buyer_token(
+    let refresh_response = refresh_buyer_tokens(
         &state_machine,
         &sns_canister_ids.swap(),
         &TEST_USER1_PRINCIPAL,
@@ -2856,7 +2856,7 @@ fn test_deletion_of_sale_ticket() {
     .is_ok());
 
     //Call refresh buyer tokens --> Should fail as the balance on the icp ledger used to make new sns token purchases is lower than specified by the ticket.
-    let refresh_response = refresh_buyer_token(
+    let refresh_response = refresh_buyer_tokens(
         &state_machine,
         &sns_canister_ids.swap(),
         &TEST_USER1_PRINCIPAL,
@@ -2893,7 +2893,7 @@ fn test_deletion_of_sale_ticket() {
     .is_ok());
 
     // Refresh tokens so ticket is deleted: Call is successfull and the existing ticket is deleted.
-    let refresh_response = refresh_buyer_token(
+    let refresh_response = refresh_buyer_tokens(
         &state_machine,
         &sns_canister_ids.swap(),
         &TEST_USER1_PRINCIPAL,
@@ -2936,7 +2936,7 @@ fn test_deletion_of_sale_ticket() {
     .is_ok());
 
     // If no ticket was provided make sure the payment flow works as before ticket system was introduced
-    let refresh_response = refresh_buyer_token(
+    let refresh_response = refresh_buyer_tokens(
         &state_machine,
         &sns_canister_ids.swap(),
         &TEST_USER1_PRINCIPAL,
@@ -3142,7 +3142,7 @@ fn test_last_man_less_than_min() {
         .unwrap_or_else(|_| panic!("Unable to mint to user {}", user))
     };
     let refresh_buyer_icp_e8s = |user: u64| -> Result<RefreshBuyerTokensResponse, String> {
-        refresh_buyer_token(
+        refresh_buyer_tokens(
             &state_machine,
             &swap_id,
             &PrincipalId::new_user_test_id(user),
@@ -3239,7 +3239,7 @@ fn test_refresh_buyer_token() {
         .buyer_state
         .is_none());
 
-        let refresh_response = refresh_buyer_token(
+        let refresh_response = refresh_buyer_tokens(
             &state_machine,
             &sns_canister_ids.swap(),
             &TEST_USER1_PRINCIPAL,

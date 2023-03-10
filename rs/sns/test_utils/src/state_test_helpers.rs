@@ -550,7 +550,7 @@ pub fn new_sale_ticket(
         swap_pb::new_sale_ticket_response::Result::Err(err) => Err(err),
     }
 }
-pub fn refresh_buyer_token(
+pub fn refresh_buyer_tokens(
     env: &StateMachine,
     swap_id: &CanisterId,
     sender: &PrincipalId,
