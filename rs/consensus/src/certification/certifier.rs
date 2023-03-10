@@ -32,6 +32,9 @@ use std::cell::RefCell;
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
 
+/// We always keep a minimum chain length below catch-up height
+pub const MINIMUM_CHAIN_LENGTH: u64 = 100;
+
 /// The Certification component, processing the changes on the certification
 /// pool and submitting the corresponding change sets.
 pub struct CertifierImpl {
@@ -466,7 +469,10 @@ impl CertifierImpl {
     // Returns the purge height, if artifacts below this height can be purged.
     // Return None if there are no new artifacts to be purged.
     fn get_purge_height(&self, consensus_cache: &dyn ConsensusPoolCache) -> Option<Height> {
-        let purge_height = consensus_cache.catch_up_package().height();
+        let cup_height = consensus_cache.catch_up_package().height();
+        // We pick cup_height, but retain at least the last MINIMUM_CHAIN_LENGTH heights
+        let purge_height = Height::from(cup_height.get().saturating_sub(MINIMUM_CHAIN_LENGTH));
+
         let mut prev_highest_purged_height = self.highest_purged_height.borrow_mut();
         if *prev_highest_purged_height < purge_height {
             *prev_highest_purged_height = purge_height;
@@ -797,14 +803,34 @@ mod tests {
                 assert_eq!(change_set.len(), 5);
                 cert_pool.apply_changes(change_set);
 
+                // if the minimum chain length is outside of the interval (60, 120),
+                // then you need to adjust the test values below.
+
                 // Make sure we skip one DKG round and a new CUP is created.
-                let new_height = pool.advance_round_normal_operation_n(60);
+                pool.advance_round_normal_operation_n(60);
+                let purge_height = *certifier.highest_purged_height.borrow();
+                // purge height stays at 1 because MINIMUM_CHAIN_LENGTH > 60
+                assert_eq!(purge_height.get(), 1);
+
+                pool.advance_round_normal_operation_n(30);
+                let purge_height = *certifier.highest_purged_height.borrow();
+                // We didn't reach the next cup, so no new purge height
+                assert_eq!(purge_height.get(), 1);
+
+                // We crossed the next cup (height=120). Since MIN < 120, our
+                // purge height must be larger than 1.
+                let new_height = pool.advance_round_normal_operation_n(30);
+                let purge_height = certifier
+                    .get_purge_height(pool.as_cache())
+                    .expect("No new purge height was found");
+                assert!(purge_height.get() > 1);
 
                 // add 1 certitifaction and 2 more shares for `new_height` and let them
                 // unvalidated
                 cert_pool.insert(fake_cert_default(new_height));
                 cert_pool.insert(fake_share(new_height, 1));
                 cert_pool.insert(fake_share(new_height, 2));
+
                 assert_eq!(
                     cert_pool.unvalidated_shares_at_height(new_height).count(),
                     2
@@ -819,10 +845,6 @@ mod tests {
                 // Make sure the cert at height 1 is still there.
                 let height = Height::from(1);
                 assert!(cert_pool.certification_at_height(height).is_some());
-
-                let purge_height = certifier
-                    .get_purge_height(pool.as_cache())
-                    .expect("No new purge height was found");
 
                 cert_pool.apply_changes(vec![ChangeAction::RemoveAllBelow(purge_height)]);
 
