@@ -287,13 +287,13 @@ function assemble_and_populate_image() {
     "${TOOL_DIR}"/build_vfat_image.py \
         --input "${TMP_DIR}/boot-tree.tar" \
         --output "${TMP_DIR}/partition-esp.tar" \
-        --size 50M \
+        --size 100M \
         --path boot/efi
 
     "${TOOL_DIR}"/build_vfat_image.py \
         --input "${TMP_DIR}/boot-tree.tar" \
         --output "${TMP_DIR}/partition-grub.tar" \
-        --size 50M \
+        --size 100M \
         --path boot/grub \
         "${BASE_DIR}/bootloader/grub.cfg:/boot/grub/grub.cfg:644" \
         "${BASE_DIR}/bootloader/grubenv:/boot/grub/grubenv:644"

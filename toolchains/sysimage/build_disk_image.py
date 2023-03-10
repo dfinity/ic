@@ -120,11 +120,26 @@ def write_partition_image_from_tar(gpt_entry, image_file, partition_tf):
                 _copyfile(source, target, member.size)
 
 
+def select_partition_file(name, partition_files):
+    for partition_file in partition_files:
+        if name in os.path.basename(partition_file):
+            return partition_file
+
+    return None
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("-o", "--out", help="Target (tar) file to write disk image to", type=str)
     parser.add_argument("-p", "--partition_table", help="CSV file describing the partition table", type=str)
-    parser.add_argument("partitions", metavar="partition", type=str, nargs="+", help="Partitions to write, in order")
+    parser.add_argument("-s", "--expanded-size", help="Optional size to grow the image to", required=False, type=str)
+    parser.add_argument(
+        "partitions",
+        metavar="partition",
+        type=str,
+        nargs="+",
+        help="Partitions to write. These must match the CSV partition table entries.",
+    )
 
     args = parser.parse_args(sys.argv[1:])
 
@@ -141,11 +156,28 @@ def main():
     disk_image = os.path.join(tmpdir, "disk.img")
     prepare_diskimage(gpt_entries, disk_image)
 
-    for index in range(len(partition_files)):
-        write_partition_image_from_tar(gpt_entries[index], disk_image, tarfile.open(partition_files[index], mode="r:"))
+    for entry in gpt_entries:
+        # Skip over any partitions starting with "B_". These are empty in our
+        # published images, and stay this way a live system upgrades into them.
+        if entry["name"].startswith("B_"):
+            continue
+
+        # Remove the "A_" prefix from any partitions before doing a lookup.
+        prefix = "A_"
+        name = entry["name"]
+        if name.startswith(prefix):
+            name = name[len(prefix) :]
+
+        partition_file = select_partition_file(name, partition_files)
+
+        if partition_file:
+            write_partition_image_from_tar(entry, disk_image, tarfile.open(partition_file, mode="r:"))
+        else:
+            print("No partition file for '%s' found, leaving empty" % name)
 
     # Provide additional space for vda10, the final partition, for immediate QEMU use
-    subprocess.run(["truncate", "--size", "50G", disk_image], check=True)
+    if args.expanded_size:
+        subprocess.run(["truncate", "--size", args.expanded_size, disk_image], check=True)
 
     subprocess.run(
         [
