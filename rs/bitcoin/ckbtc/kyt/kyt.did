@@ -1,0 +1,67 @@
+type Outpoint = record {
+    txid : blob;
+    vout : nat32;
+};
+
+type Alert = record  {
+    level : variant { Severe; High; Medium; Low };
+    category : opt text;
+    "service" : opt text;
+    exposure_type : variant { Direct; Indirect };
+};
+
+type Mode = variant { Normal; DryRun };
+
+type InitArg = record {
+    api_key : text;
+    minter_id : principal;
+    maintainers : vec principal;
+    mode : Mode;
+};
+
+type UpgradeArg = record {
+    api_key : opt text;
+    minter_id : opt blob;
+    maintainers : opt vec blob;
+    mode : opt Mode;
+};
+
+type FetchUtxoAlertsError = variant {
+    TemporarilyUnavailable : text;
+};
+
+type WithdrawalAttempt = record {
+    id : text;
+    amount : nat64;
+    address : text;
+    timestamp_nanos : nat64;
+};
+
+type FetchWithdrawalAlertsError = variant {
+    TemporarilyUnavailable : text;
+};
+
+type LifecycleArg = variant {
+    InitArg : InitArg;
+    UpgradeArg : UpgradeArg;
+};
+
+type Response = record {
+    external_id : text;
+    alerts : vec Alert;
+};
+
+service : (LifecycleArg) -> {
+    // Returns the list of alerts for the given incoming UTXOs.
+    fetch_utxo_alerts : (Outpoint) -> (variant { Ok : Response; Err : FetchUtxoAlertsError });
+
+    // Returns the list of alerts for the given withdrawal attempt.
+    fetch_withdrawal_alerts : (WithdrawalAttempt) -> (variant { Ok : Response; Err : FetchWithdrawalAlertsError });
+
+    // Sets the API key.
+    // Rejects the call if the caller is not a maintainer.
+    set_api_key : (text) -> ();
+
+    // A helper method that converts textual TXIDs to candid blobs.
+    txid_to_bytes : (text) -> (blob) query;
+}

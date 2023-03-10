@@ -29,6 +29,13 @@
       "wasm": "../../../../bazel-bin/rs/rosetta-api/icrc1/index/index_canister.wasm",
       "candid": "../../../rosetta-api/icrc1/index/index.did",
       "shrink": false
+    },
+    "kyt": {
+      "type": "custom",
+      "build": ["bazel build //rs/bitcoin/ckbtc/kyt:kyt_canister"],
+      "wasm": "../../../../bazel-bin/rs/bitcoin/ckbtc/kyt/kyt_canister.wasm",
+      "candid": "../kyt/kyt.did",
+      "shrink": false
     }
   },
   "defaults": {
