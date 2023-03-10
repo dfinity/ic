@@ -1901,7 +1901,7 @@ fn observe_replicated_state_metrics(
         queues_response_bytes += queues.responses_size_bytes();
         queues_reservations += queues.reserved_slots();
         queues_oversized_requests_extra_bytes += queues.oversized_requests_extra_bytes();
-        if state.routing_table().route(canister.canister_id().into()) != Some(own_subnet_id) {
+        if state.routing_table().route_canister(canister.canister_id()) != Some(own_subnet_id) {
             canisters_not_in_routing_table += 1;
         }
         if let Some(manager) = canister.system_state.call_context_manager() {
