@@ -195,6 +195,7 @@ system_test(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "system_test_hourly",
+        "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_MALICIOUS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
@@ -206,6 +207,7 @@ system_test(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "system_test_hourly",
+        "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_MALICIOUS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
@@ -555,6 +557,7 @@ system_test(
     tags = [
         "subnet_recovery",
         "system_test_hourly",
+        "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
@@ -567,6 +570,7 @@ system_test(
     tags = [
         "subnet_recovery",
         "system_test_hourly",
+        "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
@@ -591,6 +595,7 @@ system_test(
     tags = [
         "subnet_recovery",
         "system_test_hourly",
+        "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
@@ -603,6 +608,7 @@ system_test(
     tags = [
         "subnet_recovery",
         "system_test_hourly",
+        "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
@@ -627,6 +633,7 @@ system_test(
     tags = [
         "subnet_recovery",
         "system_test_hourly",
+        "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
@@ -639,6 +646,7 @@ system_test(
     tags = [
         "subnet_recovery",
         "system_test_hourly",
+        "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
@@ -980,6 +988,7 @@ system_test(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "system_test_hourly",
+        "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
@@ -1129,6 +1138,7 @@ system_test(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "system_test_hourly",
+        "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + [
@@ -1153,6 +1163,7 @@ system_test(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "system_test_hourly",
+        "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "long",
@@ -1217,6 +1228,7 @@ system_test(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "system_test_hourly",
+        "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
@@ -1228,6 +1240,7 @@ system_test(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "system_test_hourly",
+        "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
@@ -1239,6 +1252,7 @@ system_test(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "system_test_hourly",
+        "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
@@ -1284,6 +1298,7 @@ system_test(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "system_test_hourly",
+        "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
@@ -1351,6 +1366,7 @@ system_test(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "system_test_hourly",
+        "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
