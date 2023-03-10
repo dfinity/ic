@@ -15,7 +15,7 @@ cfg_if::cfg_if! {
 
 use crate::{
     acl::{Authorize, AuthorizeError, WithAuthorize},
-    LocalRef, StableMap, WithMetrics, IN_PROGRESS_TTL,
+    LocalRef, StableMap, StorableId, WithMetrics, IN_PROGRESS_TTL,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -34,13 +34,13 @@ pub trait Queue {
 
 pub struct Queuer {
     tasks: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
-    registrations: LocalRef<StableMap<Id, Registration>>,
+    registrations: LocalRef<StableMap<StorableId, Registration>>,
 }
 
 impl Queuer {
     pub fn new(
         tasks: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
-        registrations: LocalRef<StableMap<Id, Registration>>,
+        registrations: LocalRef<StableMap<StorableId, Registration>>,
     ) -> Self {
         Self {
             tasks,
@@ -53,7 +53,7 @@ impl Queue for Queuer {
     fn queue(&self, id: Id, timestamp: u64) -> Result<(), QueueError> {
         self.registrations.with(|regs| {
             let regs = regs.borrow();
-            regs.get(&id).ok_or(QueueError::NotFound)
+            regs.get(&id.to_owned().into()).ok_or(QueueError::NotFound)
         })?;
 
         self.tasks.with(|tasks| {

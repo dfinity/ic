@@ -31,7 +31,7 @@ impl Generate for Generator {
         let idx = self.counter.with(|c| {
             let mut c = c.borrow_mut();
             let idx = c.get(&()).unwrap_or(0);
-            c.insert((), idx + 1).unwrap();
+            c.insert((), idx + 1);
             idx
         });
 
@@ -54,7 +54,7 @@ mod tests {
     #[test]
     fn generate() {
         // Initialize ID seed
-        ID_SEED.with(|s| s.borrow_mut().insert((), 0).expect("failed to insert"));
+        ID_SEED.with(|s| s.borrow_mut().insert((), 0));
 
         let g = Generator::new(&ID_COUNTER, &ID_SEED);
 
