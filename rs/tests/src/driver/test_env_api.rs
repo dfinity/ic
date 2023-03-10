@@ -1604,7 +1604,22 @@ pub fn install_nns_canisters(
                 (*TEST_USER1_PRINCIPAL).into(),
                 Tokens::from_tokens(200_000).unwrap(),
             );
-            info!(logger, "Initial ledger: {:?}", ledger_balances);
+            if ledger_balances.len() > 100 {
+                let first_100_ledger_balances: HashMap<AccountIdentifier, Tokens> = ledger_balances
+                    .iter()
+                    .take(100)
+                    .map(|(x, y)| (*x, *y))
+                    .collect();
+                info!(
+                    logger,
+                    "Initial ledger (showing the first 100 entries out of {}): {:?}",
+                    ledger_balances.len(),
+                    first_100_ledger_balances
+                );
+            } else {
+                info!(logger, "Initial ledger: {:?}", ledger_balances);
+            }
+
             let mut ledger_init_payload = LedgerCanisterInitPayload::builder()
                 .minting_account(GOVERNANCE_CANISTER_ID.get().into())
                 .initial_values(ledger_balances)

@@ -5,7 +5,7 @@ use ic_tests::driver::new::group::SystemTestGroup;
 use ic_tests::nns_tests::sns_deployment::{add_one_participant, initiate_token_swap, sns_setup};
 use ic_tests::systest;
 
-/// This is a non-interactive load test:
+/// This is a non-interactive test:
 /// 1. Install NNS and SNS
 /// 2. Start the token sale
 /// 3. Add one sale-participating user

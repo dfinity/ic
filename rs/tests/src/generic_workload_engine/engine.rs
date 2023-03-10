@@ -79,10 +79,13 @@ where
             let log = log.clone();
             async move {
                 while let Some((idx, jh)) = fut_rcv.recv().await {
-                    if let Ok(res) = jh.await {
-                        aggr = f(aggr, res);
-                    } else {
-                        warn!(log, "Failed to await join handle for task {idx}.");
+                    match jh.await {
+                        Ok(res) => {
+                            aggr = f(aggr, res);
+                        }
+                        Err(err) => {
+                            warn!(log, "Failed to await join handle for task {idx}: {err:?}");
+                        }
                     }
                 }
                 aggr

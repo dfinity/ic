@@ -60,7 +60,7 @@ lazy_static! {
 }
 
 /// The canister IDs of all SNS canisters
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct SnsCanisterIds {
     pub governance: PrincipalId,
     pub ledger: PrincipalId,
