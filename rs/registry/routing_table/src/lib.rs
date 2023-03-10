@@ -530,12 +530,19 @@ impl RoutingTable {
         // If the `principal_id` was not a subnet, it must be a `CanisterId` (otherwise
         // we can't route to it).
         match CanisterId::try_from(principal_id) {
-            Ok(canister_id) => {
-                lookup_in_ranges(&self.0, canister_id).map(|(_range, subnet_id)| subnet_id)
-            }
+            Ok(canister_id) => self.route_canister(canister_id),
             // Cannot route to any subnet as we couldn't convert to a `CanisterId`.
             Err(_) => None,
         }
+    }
+
+    /// Returns the `SubnetId` that the given `canister_id` is assigned to or
+    /// `None` if an assignment cannot be found.
+    /// This function is an optimisation of a `route()` function when the caller
+    /// wants to route exactly a canister ID, not a generic principal ID
+    /// (and to skip unwanted corresponding lookups).
+    pub fn route_canister(&self, canister_id: CanisterId) -> Option<SubnetId> {
+        lookup_in_ranges(&self.0, canister_id).map(|(_range, subnet_id)| subnet_id)
     }
 
     /// Returns the corresponding `CanisterIdRange` and `SubnetId` that the given `canister_id` is assigned to
