@@ -1039,6 +1039,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             "tiny_http": crate.spec(
                 version = "^0.10.0",
             ),
+            "time": crate.spec(
+                version = "^0.3.20",
+            ),
             "tokio": crate.spec(
                 version = "^1.15.0",
                 features = [
