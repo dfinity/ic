@@ -7552,6 +7552,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-onchain-observability-server"
+version = "0.1.0"
+dependencies = [
+ "ic-async-utils",
+ "ic-metrics",
+ "ic-onchain-observability-service",
+ "tokio",
+ "tonic",
+]
+
+[[package]]
 name = "ic-onchain-observability-service"
 version = "0.1.0"
 dependencies = [
@@ -8197,6 +8208,7 @@ dependencies = [
  "ic-messaging",
  "ic-metrics",
  "ic-nns-constants",
+ "ic-onchain-observability-server",
  "ic-p2p",
  "ic-protobuf",
  "ic-registry-client",

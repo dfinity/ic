@@ -263,7 +263,7 @@ fn create_port_file(path: PathBuf, port: u16) {
 #[allow(clippy::too_many_arguments)]
 pub fn start_server(
     rt_handle: tokio::runtime::Handle,
-    metrics_registry: MetricsRegistry,
+    metrics_registry: &MetricsRegistry,
     config: Config,
     ingress_filter: IngressFilterService,
     // ingress_sender and query_execution_service are external services with a concurrency limiter.
@@ -295,7 +295,7 @@ pub fn start_server(
     if !AtomicCell::<ReplicaHealthStatus>::is_lock_free() {
         error!(log, "Replica health status uses locks instead of atomics.");
     }
-    let metrics = HttpHandlerMetrics::new(&metrics_registry);
+    let metrics = HttpHandlerMetrics::new(metrics_registry);
 
     let delegation_from_nns = Arc::new(RwLock::new(None));
     let health_status = Arc::new(AtomicCell::new(ReplicaHealthStatus::Starting));

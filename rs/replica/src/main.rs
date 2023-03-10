@@ -10,6 +10,7 @@ use ic_interfaces::crypto::IngressSigVerifier;
 use ic_interfaces_registry::{LocalStoreCertifiedTimeReader, RegistryClient};
 use ic_logger::{info, new_replica_logger_from_config};
 use ic_metrics::MetricsRegistry;
+use ic_onchain_observability_server::spawn_onchain_observability_grpc_server;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replica::setup;
 use ic_sys::PAGE_SIZE;
@@ -306,7 +307,7 @@ fn main() -> io::Result<()> {
 
     ic_http_endpoints_public::start_server(
         rt_http.handle().clone(),
-        metrics_registry,
+        &metrics_registry,
         config.http_handler.clone(),
         ingress_message_filter,
         ingress_ingestion_service,
@@ -339,6 +340,14 @@ fn main() -> io::Result<()> {
                 }
             }
         });
+    }
+
+    if config
+        .adapters_config
+        .onchain_observability_enable_grpc_server
+    {
+        // Spawns a new grpc server in a new task.  This will continue to run until the Runtime shuts down.
+        spawn_onchain_observability_grpc_server(metrics_registry, rt_main.handle().clone());
     }
 
     let save_logger = logger.clone();

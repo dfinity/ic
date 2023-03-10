@@ -1,0 +1,11 @@
+[package]
+name = "ic-onchain-observability-server"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ic-async-utils = { path = "../../../async_utils" }
+ic-metrics = { path = "../../../monitoring/metrics" }
+ic-onchain-observability-service = { path = "../service" }
+tokio = "1.15.0"
+tonic = "0.8.3"
