@@ -44,12 +44,13 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
         allow_symlink = True,
     )
 
-    native.genrule(
-        name = "test_version_txt",
-        srcs = [":copy_version_txt"],
-        outs = ["version-test.txt"],
-        cmd = "sed -e 's/.*/&-test/' < $< > $@",
-    )
+    if upgrades:
+        native.genrule(
+            name = "test_version_txt",
+            srcs = [":copy_version_txt"],
+            outs = ["version-test.txt"],
+            cmd = "sed -e 's/.*/&-test/' < $< > $@",
+        )
 
     # -------------------- Build the docker image --------------------
 
@@ -96,7 +97,7 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
             if v != "/"
         },
         file_contexts = ":file_contexts",
-        partition_size = "3G",
+        partition_size = image_deps["rootfs_size"],
         strip_paths = [
             "/run",
             "/boot",
@@ -106,28 +107,78 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
         ],
     )
 
+    if upgrades:
+        ext4_image(
+            name = "partition-root-test-unsigned.tar",
+            src = _dict_value_search(image_deps["rootfs"], "/"),
+            # Take the dependency list declared above, and add in the "version.txt"
+            # at the correct place.
+            extra_files = {
+                k: v
+                for k, v in (image_deps["rootfs"].items() + [(":version-test.txt", "/opt/ic/share/version.txt:0644")])
+                # Skip over special entries
+                if v != "/"
+            },
+            file_contexts = ":file_contexts",
+            partition_size = image_deps["rootfs_size"],
+            strip_paths = [
+                "/run",
+                "/boot",
+            ],
+            target_compatible_with = [
+                "@platforms//os:linux",
+            ],
+        )
+
     # -------------------- Extract boot partition --------------------
 
-    native.alias(name = "extra_boot_args_template", actual = image_deps["boot_args_template"], visibility = [Label("//visibility:private")])
+    if "boot_args_template" not in image_deps:
+        native.alias(name = "partition-root.tar", actual = ":partition-root-unsigned.tar", visibility = [Label("//visibility:private")])
+        native.alias(name = "extra_boot_args", actual = image_deps["extra_boot_args"], visibility = [Label("//visibility:private")])
 
-    native.genrule(
-        name = "partition-root-sign",
-        srcs = ["partition-root-unsigned.tar"],
-        outs = ["partition-root.tar", "partition-root-hash"],
-        cmd = "$(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root.tar) -r $(location partition-root-hash)",
-        executable = False,
-        tools = ["//toolchains/sysimage:verity_sign.py"],
-    )
+        if upgrades:
+            native.alias(name = "partition-root-test.tar", actual = ":partition-root-test-unsigned.tar", visibility = [Label("//visibility:private")])
+            native.alias(name = "extra_boot_test_args", actual = image_deps["extra_boot_args"], visibility = [Label("//visibility:private")])
+    else:
+        native.alias(name = "extra_boot_args_template", actual = image_deps["boot_args_template"], visibility = [Label("//visibility:private")])
 
-    native.genrule(
-        name = "extra_boot_args_root_hash",
-        srcs = [
-            ":extra_boot_args_template",
-            ":partition-root-hash",
-        ],
-        outs = ["extra_boot_args"],
-        cmd = "sed -e s/ROOT_HASH/$$(cat $(location :partition-root-hash))/ < $(location :extra_boot_args_template) > $@",
-    )
+        native.genrule(
+            name = "partition-root-sign",
+            srcs = ["partition-root-unsigned.tar"],
+            outs = ["partition-root.tar", "partition-root-hash"],
+            cmd = "$(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root.tar) -r $(location partition-root-hash)",
+            executable = False,
+            tools = ["//toolchains/sysimage:verity_sign.py"],
+        )
+
+        native.genrule(
+            name = "extra_boot_args_root_hash",
+            srcs = [
+                ":extra_boot_args_template",
+                ":partition-root-hash",
+            ],
+            outs = ["extra_boot_args"],
+            cmd = "sed -e s/ROOT_HASH/$$(cat $(location :partition-root-hash))/ < $(location :extra_boot_args_template) > $@",
+        )
+
+        if upgrades:
+            native.genrule(
+                name = "partition-root-test-sign",
+                srcs = ["partition-root-test-unsigned.tar"],
+                outs = ["partition-root-test.tar", "partition-root-test-hash"],
+                cmd = "$(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root-test.tar) -r $(location partition-root-test-hash)",
+                tools = ["//toolchains/sysimage:verity_sign.py"],
+            )
+
+            native.genrule(
+                name = "extra_boot_args_root_test_hash",
+                srcs = [
+                    ":extra_boot_args_template",
+                    ":partition-root-test-hash",
+                ],
+                outs = ["extra_boot_test_args"],
+                cmd = "sed -e s/ROOT_HASH/$$(cat $(location :partition-root-test-hash))/ < $(location :extra_boot_args_template) > $@",
+            )
 
     ext4_image(
         name = "partition-boot.tar",
@@ -146,99 +197,50 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
             if v != "/"
         },
         file_contexts = ":file_contexts",
-        partition_size = "1G",
+        partition_size = image_deps["bootfs_size"],
         subdir = "boot/",
         target_compatible_with = [
             "@platforms//os:linux",
         ],
     )
 
-    ext4_image(
-        name = "partition-root-test-unsigned.tar",
-        src = _dict_value_search(image_deps["rootfs"], "/"),
-        # Take the dependency list declared above, and add in the "version.txt"
-        # at the correct place.
-        extra_files = {
-            k: v
-            for k, v in (image_deps["rootfs"].items() + [(":version-test.txt", "/opt/ic/share/version.txt:0644")])
-            # Skip over special entries
-            if v != "/"
-        },
-        file_contexts = ":file_contexts",
-        partition_size = "3G",
-        strip_paths = [
-            "/run",
-            "/boot",
-        ],
-        target_compatible_with = [
-            "@platforms//os:linux",
-        ],
-    )
-
-    native.genrule(
-        name = "partition-root-test-sign",
-        srcs = ["partition-root-test-unsigned.tar"],
-        outs = ["partition-root-test.tar", "partition-root-test-hash"],
-        cmd = "$(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root-test.tar) -r $(location partition-root-test-hash)",
-        tools = ["//toolchains/sysimage:verity_sign.py"],
-    )
-
-    native.genrule(
-        name = "extra_boot_args_root_test_hash",
-        srcs = [
-            ":extra_boot_args_template",
-            ":partition-root-test-hash",
-        ],
-        outs = ["extra_boot_test_args"],
-        cmd = "sed -e s/ROOT_HASH/$$(cat $(location :partition-root-test-hash))/ < $(location :extra_boot_args_template) > $@",
-    )
-
-    ext4_image(
-        name = "partition-boot-test.tar",
-        src = _dict_value_search(image_deps["rootfs"], "/"),
-        # Take the dependency list declared above, and add in the "version.txt"
-        # as well as the generated extra_boot_args file in the correct place.
-        extra_files = {
-            k: v
-            for k, v in (
-                image_deps["bootfs"].items() + [
-                    ("version-test.txt", "/boot/version.txt:0644"),
-                    ("extra_boot_test_args", "/boot/extra_boot_args:0644"),
-                ]
-            )
-            # Skip over special entries
-            if v != "/"
-        },
-        file_contexts = ":file_contexts",
-        partition_size = "1G",
-        subdir = "boot/",
-        target_compatible_with = [
-            "@platforms//os:linux",
-        ],
-    )
-
-    # -------------------- Prepare the config partition --------------------
-
-    ext4_image(
-        name = "partition-config.tar",
-        partition_size = "100M",
-        target_compatible_with = [
-            "@platforms//os:linux",
-        ],
-    )
+    if upgrades:
+        ext4_image(
+            name = "partition-boot-test.tar",
+            src = _dict_value_search(image_deps["rootfs"], "/"),
+            # Take the dependency list declared above, and add in the "version.txt"
+            # as well as the generated extra_boot_args file in the correct place.
+            extra_files = {
+                k: v
+                for k, v in (
+                    image_deps["bootfs"].items() + [
+                        ("version-test.txt", "/boot/version.txt:0644"),
+                        ("extra_boot_test_args", "/boot/extra_boot_args:0644"),
+                    ]
+                )
+                # Skip over special entries
+                if v != "/"
+            },
+            file_contexts = ":file_contexts",
+            partition_size = image_deps["bootfs_size"],
+            subdir = "boot/",
+            target_compatible_with = [
+                "@platforms//os:linux",
+            ],
+        )
 
     # -------------------- Assemble disk image --------------------
+
+    custom_partitions = image_deps.get("custom_partitions", default = [])
 
     disk_image(
         name = "disk-img.tar",
         layout = image_deps["partition_table"],
         partitions = [
-            "//ic-os/bootloader:partition-esp.tar",
-            "//ic-os/bootloader:partition-grub.tar",
-            ":partition-config.tar",
             ":partition-boot.tar",
-            "partition-root.tar",
-        ],
+            ":partition-root.tar",
+        ] + custom_partitions,
+        expanded_size = image_deps.get("expanded_size", default = None),
         # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
         # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
         tags = ["no-remote-cache"],
@@ -268,6 +270,7 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
         # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
         # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
         tags = ["no-remote-cache"],
+        visibility = visibility,
     )
 
     sha256sum(
@@ -429,16 +432,22 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
             tags = ["manual"],
         )
 
+    if upgrades:
+        upgrade_outputs = [
+            ":update-img.tar.zst",
+            ":update-img.tar.gz",
+            ":update-img-test.tar.zst",
+            ":update-img-test.tar.gz",
+        ]
+    else:
+        upgrade_outputs = []
+
     native.filegroup(
         name = name,
         srcs = [
             ":disk-img.tar.zst",
             ":disk-img.tar.gz",
-            ":update-img.tar.zst",
-            ":update-img.tar.gz",
-            ":update-img-test.tar.zst",
-            ":update-img-test.tar.gz",
-        ],
+        ] + upgrade_outputs,
         visibility = visibility,
     )
 
@@ -632,8 +641,9 @@ def boundary_node_icos_build(name, image_deps, mode = None, sev = False, visibil
             "//ic-os/bootloader:partition-grub.tar",
             ":partition-config.tar",
             ":partition-boot.tar",
-            "partition-root.tar",
+            ":partition-root.tar",
         ],
+        expanded_size = "50G",
         # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
         # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
         tags = ["no-remote-cache"],
@@ -870,6 +880,7 @@ def boundary_api_guestos_build(name, image_deps, mode = None, visibility = None)
             ":partition-boot.tar",
             "partition-root.tar",
         ],
+        expanded_size = "50G",
         # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
         # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
         tags = ["no-remote-cache"],

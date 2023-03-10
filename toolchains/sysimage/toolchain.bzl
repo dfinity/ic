@@ -110,6 +110,67 @@ vfat_image = rule(
     },
 )
 
+def _fat32_image_impl(ctx):
+    tool = ctx.files._build_fat32_image[0]
+
+    if len(ctx.files.src) > 0:
+        args = ["-i", ctx.files.src[0].path]
+        inputs = [ctx.files.src[0]]
+    else:
+        args = []
+        inputs = []
+    out = ctx.actions.declare_file(ctx.label.name)
+
+    args += [
+        "-o",
+        out.path,
+        "-s",
+        ctx.attr.partition_size,
+        "-p",
+        ctx.attr.subdir,
+    ]
+
+    for input_target, install_target in ctx.attr.extra_files.items():
+        args.append(input_target.files.to_list()[0].path + ":" + install_target)
+        inputs += input_target.files.to_list()
+
+    if ctx.attr.label:
+        args += ["-l", ctx.attr.label]
+
+    ctx.actions.run(
+        executable = tool.path,
+        arguments = args,
+        inputs = inputs,
+        outputs = [out],
+        tools = [tool],
+    )
+
+    return [DefaultInfo(files = depset([out]))]
+
+fat32_image = rule(
+    implementation = _fat32_image_impl,
+    attrs = {
+        "src": attr.label(
+            allow_files = True,
+        ),
+        "extra_files": attr.label_keyed_string_dict(
+            allow_files = True,
+            mandatory = False,
+        ),
+        "partition_size": attr.string(
+            mandatory = True,
+        ),
+        "label": attr.string(),
+        "subdir": attr.string(
+            default = "/",
+        ),
+        "_build_fat32_image": attr.label(
+            allow_files = True,
+            default = ":build_fat32_image.py",
+        ),
+    },
+)
+
 def _ext4_image_impl(ctx):
     tool = ctx.files._build_ext4_image[0]
 
@@ -184,20 +245,27 @@ def _disk_image_impl(ctx):
     in_layout = ctx.files.layout[0]
     partitions = ctx.files.partitions
     out = ctx.actions.declare_file(ctx.label.name)
+    expanded_size = ctx.attr.expanded_size
 
     partition_files = []
     for p in partitions:
         partition_files.append(p.path)
 
+    args = "python3 %s -p %s -o %s" % (
+        tool_file.path,
+        in_layout.path,
+        out.path,
+    )
+
+    if expanded_size:
+        args += " -s %s" % expanded_size
+
+    args += " " + " ".join(partition_files)
+
     ctx.actions.run_shell(
         inputs = [in_layout] + partitions,
         outputs = [out],
-        command = "python3 %s -p %s -o %s %s" % (
-            tool_file.path,
-            in_layout.path,
-            out.path,
-            " ".join(partition_files),
-        ),
+        command = args,
     )
 
     return [DefaultInfo(files = depset([out]))]
@@ -212,6 +280,7 @@ disk_image = rule(
         "partitions": attr.label_list(
             allow_files = True,
         ),
+        "expanded_size": attr.string(),
         "_build_disk_image_tool": attr.label(
             allow_files = True,
             default = ":build_disk_image.py",

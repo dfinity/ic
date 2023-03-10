@@ -57,6 +57,16 @@ def image_deps(mode, malicious = False):
     deps["base_image"] = "//ic-os/guestos:rootfs/docker-base." + mode
     deps["docker_context"] = Label("//ic-os/guestos:rootfs-files")
     deps["partition_table"] = Label("//ic-os/guestos:partitions.csv")
+    deps["expanded_size"] = "50G"
+    deps["rootfs_size"] = "3G"
+    deps["bootfs_size"] = "1G"
+
+    # Add any custom partitions to the manifest
+    deps["custom_partitions"] = [
+        Label("//ic-os/guestos:partition-config.tar"),
+        Label("//ic-os/bootloader:partition-esp.tar"),
+        Label("//ic-os/bootloader:partition-grub.tar"),
+    ]
 
     # We will install extra_boot_args onto the system, after substituting the
     # hash of the root filesystem into it. Track the template (before

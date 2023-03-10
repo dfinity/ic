@@ -1,3 +1,5 @@
+load("//toolchains/sysimage:toolchain.bzl", "ext4_image")
+
 package(default_visibility = ["__subpackages__"])
 
 exports_files([
@@ -15,6 +17,14 @@ exports_files([
 filegroup(
     name = "rootfs-files",
     srcs = glob(["rootfs/**"]),
+)
+
+ext4_image(
+    name = "partition-config.tar",
+    partition_size = "100M",
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
 )
 
 sh_test(
