@@ -138,7 +138,7 @@ fn start_http_endpoint(
     let sig_verifier = Arc::new(temp_crypto_component_with_fake_registry(node_test_id(0)));
     start_server(
         rt,
-        metrics,
+        &metrics,
         config,
         ingress_filter,
         ingress_ingestion,

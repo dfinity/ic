@@ -127,6 +127,7 @@ members = [
   "rs/monitoring/logger",
   "rs/monitoring/metrics",
   "rs/monitoring/onchain_observability/adapter",
+  "rs/monitoring/onchain_observability/server",
   "rs/monitoring/onchain_observability/service",
   "rs/monitoring/pprof",
   "rs/nervous_system/common",
