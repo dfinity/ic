@@ -23,7 +23,7 @@ use ic_types::{
     NodeId,
 };
 use linked_hash_map::LinkedHashMap;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::ops::{Deref, DerefMut, Index, IndexMut};
 use std::sync::{Arc, RwLock, RwLockReadGuard};
 use std::time::Instant;
@@ -33,10 +33,6 @@ use strum::IntoEnumIterator;
 /// Used for adding, removing, and managing adverts per peer, as well as to set
 /// the priority function.
 pub(crate) trait DownloadPrioritizer: Send + Sync {
-    /// Returns the priority of a given advert using the priority function of
-    /// the corresponding client
-    fn peek_priority(&self, advert: &GossipAdvert) -> Result<Priority, DownloadPrioritizerError>;
-
     /// Add/Register the receipt of an advert from a peer.
     ///
     /// The same advert may be received from multiple peers.  Prioritization of
@@ -57,7 +53,6 @@ pub(crate) trait DownloadPrioritizer: Send + Sync {
         &self,
         id: &ArtifactId,
         integrity_hash: &CryptoHash,
-        final_action: AdvertTrackerFinalAction,
     ) -> Result<(), DownloadPrioritizerError>;
 
     /// Delete an advert from a specific peer.
@@ -70,15 +65,10 @@ pub(crate) trait DownloadPrioritizer: Send + Sync {
         id: &ArtifactId,
         integrity_hash: &CryptoHash,
         peer_id: &NodeId,
-        final_action: AdvertTrackerFinalAction,
     ) -> Result<(), DownloadPrioritizerError>;
 
     /// Clears all adverts for a specific peer.
-    fn clear_peer_adverts(
-        &self,
-        peer_id: &NodeId,
-        final_action: AdvertTrackerFinalAction,
-    ) -> Result<(), DownloadPrioritizerError>;
+    fn clear_peer_adverts(&self, peer_id: &NodeId) -> Result<(), DownloadPrioritizerError>;
 
     /// Re-insert advert at the tail as fresh advert
     ///
@@ -104,7 +94,7 @@ pub(crate) trait DownloadPrioritizer: Send + Sync {
         id: &ArtifactId,
         integrity_hash: &CryptoHash,
         peer_id: &NodeId,
-    ) -> Result<Option<GossipAdvert>, DownloadPrioritizerError>;
+    ) -> Result<GossipAdvert, DownloadPrioritizerError>;
 
     /// Update priority function and advert queues.
     ///
@@ -163,9 +153,9 @@ type DownloadAttemptMap = BTreeMap<ChunkId, DownloadAttempt>;
 /// A struct that holds information for tracking the state of an advert
 pub(crate) struct AdvertTracker {
     /// Advert for this tracker
-    pub advert: GossipAdvert,
+    advert: GossipAdvert,
     /// Peers that have advertised this advert
-    pub peers: Vec<NodeId>,
+    peers: HashSet<NodeId>,
     /// Per chunk download attempt history map
     download_attempt_map: DownloadAttemptMap,
     /// Priority as computed by the last priority function
@@ -284,19 +274,12 @@ impl DownloadAttemptTracker for AdvertTracker {
 
 /// Implementation for the AdvertTracker data structure
 impl AdvertTracker {
-    /// Adds a peer. If the peer already exists, it is ignored.
-    fn add_peer(&mut self, node_id: NodeId) {
-        for x in &self.peers {
-            if (*x).get() == node_id.get() {
-                return;
-            }
-        }
-        self.peers.push(node_id);
+    pub fn advert(&self) -> &GossipAdvert {
+        &self.advert
     }
 
-    /// Removes a peer
-    fn remove_peer(&mut self, node_id: &NodeId) {
-        self.peers.retain(|x| x.get() != node_id.get());
+    pub fn peers(&self) -> &HashSet<NodeId> {
+        &self.peers
     }
 
     /// Returns the DownloadAttemptTracker for a chunk
@@ -304,11 +287,6 @@ impl AdvertTracker {
         self.download_attempt_map
             .entry(chunk_id)
             .or_insert_with(Default::default)
-    }
-
-    /// Returns `true` if a peer exists, or `false` otherwise
-    fn has_peer(&self, peer_id: &NodeId) -> bool {
-        self.peers.contains(peer_id)
     }
 }
 
@@ -320,14 +298,6 @@ pub(crate) type AdvertTrackerRef = Arc<RwLock<AdvertTracker>>;
 // dimension
 /// Mapping from an integrity hash to the corresponding advert tracker
 pub(crate) type AdvertTrackerAliasedMap = LinkedHashMap<CryptoHash, AdvertTrackerRef>;
-
-/// Final action to be taken for the advert
-pub enum AdvertTrackerFinalAction {
-    Success,
-    Abort,
-    #[cfg(test)]
-    Failed,
-}
 
 // Replica Adverts indexed/categorized by various P2P clients.  A client is an
 // entity that defines a variant in the ArtifactId enum.  (vice-versa, every
@@ -467,19 +437,6 @@ pub(crate) enum DownloadPrioritizerError {
 
 ///  DownloadPrioritizer Trait implementation
 impl DownloadPrioritizer for DownloadPrioritizerImpl {
-    fn peek_priority(&self, advert: &GossipAdvert) -> Result<Priority, DownloadPrioritizerError> {
-        let guard = self.replica_map.read().unwrap();
-        let (client_advert_map, _) = guard.deref();
-        let client = client_advert_map
-            .get(&(&advert.artifact_id).into())
-            .ok_or(DownloadPrioritizerError::NotFound)?;
-        let priority = (client.priority_fn)(&advert.artifact_id, &advert.attribute);
-        if priority == Priority::Drop {
-            self.metrics.priority_adverts_dropped.inc();
-        }
-        Ok(priority)
-    }
-
     fn add_advert(
         &self,
         advert: GossipAdvert,
@@ -530,7 +487,7 @@ impl DownloadPrioritizer for DownloadPrioritizerImpl {
 
         // Track the peer in the advert
         let mut advert_tracker = advert_tracker.write().unwrap();
-        advert_tracker.add_peer(peer_id);
+        advert_tracker.peers.insert(peer_id);
         Ok(())
     }
 
@@ -608,7 +565,6 @@ impl DownloadPrioritizer for DownloadPrioritizerImpl {
         &self,
         artifact_id: &ArtifactId,
         integrity_hash: &CryptoHash,
-        _final_action: AdvertTrackerFinalAction,
     ) -> Result<(), DownloadPrioritizerError> {
         // remove from client queues
         let mut guard = self.replica_map.write().unwrap();
@@ -653,7 +609,6 @@ impl DownloadPrioritizer for DownloadPrioritizerImpl {
         id: &ArtifactId,
         integrity_hash: &CryptoHash,
         peer_id: &NodeId,
-        _final_action: AdvertTrackerFinalAction,
     ) -> Result<(), DownloadPrioritizerError> {
         let mut guard = self.replica_map.write().unwrap();
         let (client_advert_map, peer_map) = guard.deref_mut();
@@ -687,7 +642,7 @@ impl DownloadPrioritizer for DownloadPrioritizerImpl {
                     ])
                     .dec();
             }
-            advert_tracker.remove_peer(peer_id);
+            advert_tracker.peers.remove(peer_id);
             advert_tracker.peers.len()
         };
 
@@ -702,11 +657,7 @@ impl DownloadPrioritizer for DownloadPrioritizerImpl {
         }
     }
 
-    fn clear_peer_adverts(
-        &self,
-        peer_id: &NodeId,
-        _final_action: AdvertTrackerFinalAction,
-    ) -> Result<(), DownloadPrioritizerError> {
+    fn clear_peer_adverts(&self, peer_id: &NodeId) -> Result<(), DownloadPrioritizerError> {
         let mut guard = self.replica_map.write().unwrap();
         let (client_advert_map, peer_map) = guard.deref_mut();
 
@@ -736,7 +687,7 @@ impl DownloadPrioritizer for DownloadPrioritizerImpl {
                             &format!("{:?}", advert_tracker.priority),
                         ])
                         .dec();
-                    advert_tracker.remove_peer(peer_id);
+                    advert_tracker.peers.remove(peer_id);
                     if advert_tracker.peers.is_empty() {
                         client_advert_map
                             .get_mut(&(&advert_tracker.advert.artifact_id).into())
@@ -759,7 +710,7 @@ impl DownloadPrioritizer for DownloadPrioritizerImpl {
             let advert_tracker = advert_tracker.read().unwrap();
             (advert_tracker.advert.clone(), advert_tracker.peers.clone())
         };
-        self.delete_advert(id, integrity_hash, AdvertTrackerFinalAction::Abort)?;
+        self.delete_advert(id, integrity_hash)?;
         advertisers.into_iter().for_each(|peer_id| {
             let _ = self.add_advert(advert.clone(), peer_id);
         });
@@ -788,7 +739,7 @@ impl DownloadPrioritizer for DownloadPrioritizerImpl {
         id: &ArtifactId,
         integrity_hash: &CryptoHash,
         peer_id: &NodeId,
-    ) -> Result<Option<GossipAdvert>, DownloadPrioritizerError> {
+    ) -> Result<GossipAdvert, DownloadPrioritizerError> {
         let guard = self.replica_map.read().unwrap();
         let (client_advert_map, _) = guard.deref();
         let client = client_advert_map
@@ -800,10 +751,10 @@ impl DownloadPrioritizer for DownloadPrioritizerImpl {
             .ok_or(DownloadPrioritizerError::NotFound)?;
 
         let advert_tracker = advert_tracker.read().unwrap();
-        if advert_tracker.has_peer(peer_id) {
-            Ok(Some(advert_tracker.advert.clone()))
+        if advert_tracker.peers.contains(peer_id) {
+            Ok(advert_tracker.advert.clone())
         } else {
-            Ok(None)
+            Err(DownloadPrioritizerError::NotFound)
         }
     }
 }
@@ -969,11 +920,7 @@ pub(crate) mod test {
         // drop all the adverts
         for advert_id in 0..30 {
             let id = ArtifactId::FileTreeSync(advert_id.to_string());
-            let ret = download_prioritizer.delete_advert(
-                &id,
-                &CryptoHash(vec![advert_id as u8]),
-                AdvertTrackerFinalAction::Success,
-            );
+            let ret = download_prioritizer.delete_advert(&id, &CryptoHash(vec![advert_id as u8]));
             assert!(ret.is_ok());
         }
 
@@ -991,21 +938,13 @@ pub(crate) mod test {
         // Check that dropped adverts are not found
         for advert_id in 0..30 {
             let id = ArtifactId::FileTreeSync(advert_id.to_string());
-            let ret = download_prioritizer.delete_advert(
-                &id,
-                &CryptoHash(vec![advert_id as u8]),
-                AdvertTrackerFinalAction::Abort,
-            );
+            let ret = download_prioritizer.delete_advert(&id, &CryptoHash(vec![advert_id as u8]));
             assert_eq!(ret, Err(DownloadPrioritizerError::NotFound));
         }
 
         for advert_id in 0..30 {
             let id = ArtifactId::FileTreeSync(advert_id.to_string());
-            let ret = download_prioritizer.delete_advert(
-                &id,
-                &CryptoHash(vec![advert_id as u8]),
-                AdvertTrackerFinalAction::Failed,
-            );
+            let ret = download_prioritizer.delete_advert(&id, &CryptoHash(vec![advert_id as u8]));
             assert_eq!(ret, Err(DownloadPrioritizerError::NotFound));
         }
     }
@@ -1244,12 +1183,7 @@ pub(crate) mod test {
 
         // deletes
         peer_adverts.iter().for_each(|(p, i, hash)| {
-            let ret = download_prioritizer.delete_advert_from_peer(
-                i,
-                hash,
-                &node_test_id(*p),
-                AdvertTrackerFinalAction::Abort,
-            );
+            let ret = download_prioritizer.delete_advert_from_peer(i, hash, &node_test_id(*p));
             assert!(ret.is_ok());
         });
         for peer in 0..3 {
@@ -1292,8 +1226,7 @@ pub(crate) mod test {
 
         for node in 0..2 {
             assert_eq!(
-                download_prioritizer
-                    .clear_peer_adverts(&node_test_id(node), AdvertTrackerFinalAction::Abort),
+                download_prioritizer.clear_peer_adverts(&node_test_id(node)),
                 Ok(())
             );
         }
@@ -1363,29 +1296,6 @@ pub(crate) mod test {
                 }
             }
             assert_eq!(fetchnow_count, 10);
-        }
-    }
-
-    /// Tests the `peek_priority` method
-    #[test]
-    fn peek_advert() {
-        let artifact_manager =
-            ArtifactManagerImpl::new(HashMap::new(), Box::new(|| Box::new(priority_fn_drop_all)));
-        let download_prioritizer: DownloadPrioritizerImpl = DownloadPrioritizerImpl::new(
-            &artifact_manager,
-            DownloadPrioritizerMetrics::new(&MetricsRegistry::new()),
-        );
-
-        let dropped_artifacts = download_prioritizer.update_priority_functions(&artifact_manager);
-        assert_eq!(dropped_artifacts.len(), 0);
-
-        // Insert
-        for advert_id in 0..30 {
-            let gossip_advert = make_gossip_advert(advert_id);
-            assert_eq!(
-                download_prioritizer.peek_priority(&gossip_advert).unwrap(),
-                Priority::Drop
-            );
         }
     }
 
