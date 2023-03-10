@@ -4186,6 +4186,12 @@ impl Governance {
             return false;
         }
 
+        if self.ready_to_be_settled_proposal_ids().next().is_none() {
+            // If there are no proposals eligible for reward, no RewardEvent will
+            // be created.
+            return false;
+        }
+
         let seconds_since_last_reward_event = now.saturating_sub(
             self.latest_reward_event()
                 .end_timestamp_seconds
@@ -4268,6 +4274,19 @@ impl Governance {
             // harmless, just abandon.
             return;
         }
+
+        let considered_proposals: Vec<ProposalId> =
+            self.ready_to_be_settled_proposal_ids().collect();
+        if considered_proposals.is_empty() {
+            // This early return is needed to make rewards roll over when there
+            // are no proposals that need to be settled (i.e. give voting
+            // rewards to neurons). This early return could be moved to
+            // immediately before generating a new RewardEvent, near the end,
+            // but returning early is done here, because none of the intervening
+            // code does anything when there are no proposals to consider.
+            return;
+        }
+
         // Log if we are about to "back fill".
         if new_rounds_count > 1 {
             log!(
@@ -4315,18 +4334,6 @@ impl Governance {
             result
         };
         debug_assert!(rewards_purse_e8s >= dec!(0), "{}", rewards_purse_e8s);
-
-        let considered_proposals: Vec<ProposalId> =
-            self.ready_to_be_settled_proposal_ids().collect();
-        if considered_proposals.is_empty() {
-            // This early return is needed to make rewards roll over when there
-            // are no proposals that need to be settled (i.e. give voting
-            // rewards to neurons). This early return could be moved to
-            // immediately before generating a new RewardEvent, near the end,
-            // but returning early is done here, because none of the intervening
-            // code does anything when there are no proposals to consider.
-            return;
-        }
 
         // Add up reward shares based on voting power that was exercised.
         let mut neuron_id_to_reward_shares: HashMap<NeuronId, Decimal> = HashMap::new();
@@ -6674,6 +6681,9 @@ mod tests {
                     }),
                     ..NervousSystemParameters::with_default_values()
                 }),
+                neurons: btreemap! {
+                    A_NEURON_ID.to_string() => A_NEURON.clone(),
+                },
                 ..basic_governance_proto()
             }
             .try_into()
@@ -6686,20 +6696,27 @@ mod tests {
         // Get the initial reward event for comparison later
         let initial_reward_event = governance.latest_reward_event();
 
-        // Advance time such that a reward event should be distributed
-        governance.env.set_time_warp(TimeWarp {
-            delta_s: (ONE_DAY_SECONDS + 1) as i64,
-        });
+        // Make a proposal that should settle
+        governance
+            .make_proposal(&A_NEURON_ID, &A_NEURON_PRINCIPAL_ID, &A_MOTION_PROPOSAL)
+            .now_or_never()
+            .unwrap()
+            .expect("Expected proposal to be submitted");
 
-        // Assert that the rewards should be distributed, and trigger the periodic tasks to
-        // distribute them.
-        assert!(governance.should_distribute_rewards());
+        // Assert that the rewards should not be distributed, and trigger the periodic tasks to
+        // try to distribute them.
+        assert!(!governance.should_distribute_rewards());
         governance.run_periodic_tasks().now_or_never();
 
         // Get the latest reward event and assert that its equal to the initial reward event. This
         // puts governance in the state that the OC-SNS was in for NNS1-2105.
         let latest_reward_event = governance.latest_reward_event();
         assert_eq!(initial_reward_event, latest_reward_event);
+
+        // Advance time such that a reward event should be distributed
+        governance.env.set_time_warp(TimeWarp {
+            delta_s: (ONE_DAY_SECONDS * 5) as i64,
+        });
 
         // Now set the pending_version in Governance such that the period_task to check upgrade
         // status is triggered.
@@ -6735,7 +6752,7 @@ mod tests {
         // These asserts would fail before the change in NNS1-2105. Now, even though
         // there was an attempt to distribute rewards, the status of the upgrade was still checked.
         let latest_reward_event = governance.latest_reward_event();
-        assert_eq!(initial_reward_event, latest_reward_event);
+        assert_ne!(initial_reward_event, latest_reward_event);
         assert!(governance.proto.pending_version.is_none());
         assert_eq!(
             governance.proto.deployed_version.unwrap(),
