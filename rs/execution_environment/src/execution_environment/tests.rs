@@ -2210,23 +2210,24 @@ fn bitcoin_get_successors_cannot_be_called_by_non_bitcoin_canisters() {
 #[test]
 fn replicated_query_refunds_all_sent_cycles() {
     let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
-    let a_id = test.universal_canister().unwrap();
-    let b_id = test.universal_canister().unwrap();
+    let initial_cycles = Cycles::new(1_000_000_000_000);
+    let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let transfered_cycles = Cycles::from(1_000_000u128);
 
-    let b_callback = wasm().reply().build();
-
-    let cycles = Cycles::from(1_000_000u128);
+    let b_callback = wasm().message_payload().append_and_reply().build();
 
     let a_payload = wasm()
         .call_with_cycles(
             b_id.get(),
             "query",
-            call_args().other_side(b_callback),
-            cycles.into_parts(),
+            call_args().other_side(b_callback.clone()),
+            transfered_cycles.into_parts(),
         )
         .build();
 
-    test.ingress_raw(a_id, "update", a_payload);
+    let (message_id, _) = test.ingress_raw(a_id, "update", a_payload);
+
     test.execute_message(a_id);
     test.induct_messages();
     test.execute_message(b_id);
@@ -2238,14 +2239,131 @@ fn replicated_query_refunds_all_sent_cycles() {
 
     let message = system_state
         .queues_mut()
+        .clone()
         .pop_canister_output(&a_id)
         .unwrap();
 
     if let RequestOrResponse::Response(msg) = message {
         assert_eq!(msg.originator, a_id);
         assert_eq!(msg.respondent, b_id);
-        assert_eq!(msg.refund, cycles);
+        assert_eq!(msg.refund, transfered_cycles);
+        assert!(matches!(msg.response_payload, Payload::Data(..)));
     } else {
         panic!("unexpected message popped: {:?}", message);
     }
+
+    test.induct_messages();
+    test.execute_message(a_id);
+
+    let ingress_state = test.ingress_state(&message_id);
+
+    if let IngressState::Completed(wasm_result) = ingress_state {
+        match wasm_result {
+            WasmResult::Reject(result) => panic!("unexpected result {}", result),
+            WasmResult::Reply(_) => (),
+        }
+    } else {
+        panic!("unexpected ingress state {:?}", ingress_state);
+    }
+
+    // Canister A gets a refund for all transferred cycles.
+    assert_eq!(
+        test.canister_state(a_id).system_state.balance(),
+        initial_cycles
+            - test.canister_execution_cost(a_id)
+            - test.call_fee("query", &b_callback)
+            - test.reply_fee(&b_callback)
+    );
+
+    // Canister B doesn't get the transferred cycles.
+    assert_eq!(
+        test.canister_state(b_id).system_state.balance(),
+        initial_cycles - test.canister_execution_cost(b_id)
+    );
+}
+
+#[test]
+fn replicated_query_rejects_when_trying_to_accept_cycles() {
+    let mut test = ExecutionTestBuilder::new().with_manual_execution().build();
+    let initial_cycles = Cycles::new(1_000_000_000_000);
+    let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
+    let transfered_cycles = Cycles::from(1_000_000u128);
+
+    // Even though canister B is trying to accept cycles
+    // it will not accept it since the IC does not allow
+    // accepting cycles in replicated queries.
+    let b_callback = wasm()
+        .accept_cycles(transfered_cycles.get() as u64)
+        .message_payload()
+        .append_and_reply()
+        .build();
+
+    let a_payload = wasm()
+        .call_with_cycles(
+            b_id.get(),
+            "query",
+            call_args().other_side(b_callback.clone()),
+            transfered_cycles.into_parts(),
+        )
+        .build();
+
+    let (message_id, _) = test.ingress_raw(a_id, "update", a_payload);
+
+    test.execute_message(a_id);
+    test.induct_messages();
+    test.execute_message(b_id);
+
+    let system_state = &mut test.canister_state_mut(b_id).system_state;
+
+    assert_eq!(1, system_state.queues().output_queues_len());
+    assert_eq!(1, system_state.queues().output_message_count());
+
+    let message = system_state
+        .queues_mut()
+        .clone()
+        .pop_canister_output(&a_id)
+        .unwrap();
+
+    let response_payload = if let RequestOrResponse::Response(msg) = message {
+        assert_eq!(msg.originator, a_id);
+        assert_eq!(msg.respondent, b_id);
+        assert_eq!(msg.refund, transfered_cycles);
+        if let Payload::Reject(context) = msg.response_payload.clone() {
+            context
+        } else {
+            panic!("unexpected response: {:?}", msg);
+        }
+    } else {
+        panic!("unexpected message popped: {:?}", message);
+    };
+
+    test.induct_messages();
+    test.execute_message(a_id);
+
+    let ingress_state = test.ingress_state(&message_id);
+
+    if let IngressState::Completed(wasm_result) = ingress_state {
+        match wasm_result {
+            WasmResult::Reject(_) => (),
+            WasmResult::Reply(_) => panic!("unexpected result"),
+        }
+    } else {
+        panic!("unexpected ingress state {:?}", ingress_state);
+    };
+
+    // Canister A gets a refund for all transferred cycles.
+    assert_eq!(
+        test.canister_state(a_id).system_state.balance(),
+        initial_cycles
+            - test.canister_execution_cost(a_id)
+            - test.call_fee("query", &b_callback)
+            - test.reject_fee(response_payload.message())
+    );
+
+    // Canister B doesn't get the transferred cycles.
+    assert_eq!(
+        test.canister_state(b_id).system_state.balance(),
+        initial_cycles - test.canister_execution_cost(b_id)
+    );
 }
