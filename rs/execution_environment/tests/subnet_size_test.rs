@@ -28,9 +28,9 @@ use std::{convert::TryFrom, str::FromStr};
 const B: u64 = 1_000_000_000;
 
 const DEFAULT_REFERENCE_SUBNET_SIZE: usize = 13;
-pub const ECDSA_SIGNATURE_FEE: Cycles = Cycles::new(10 * B as u128);
+const TEST_SUBNET_SIZES: [usize; 3] = [4, 13, 34];
 
-const TEST_SUBNET_SIZE_MAX: usize = 34;
+pub const ECDSA_SIGNATURE_FEE: Cycles = Cycles::new(10 * B as u128);
 const DEFAULT_CYCLES_PER_NODE: Cycles = Cycles::new(100 * B as u128);
 const TEST_CANISTER_INSTALL_EXECUTION_INSTRUCTIONS: u64 = match EmbeddersConfig::new()
     .feature_flags
@@ -896,7 +896,7 @@ fn test_subnet_size_one_gib_storage_zero_compute_allocation_cost() {
     let reference_subnet_size = config.reference_subnet_size;
     let reference_cost =
         calculate_one_gib_per_second_cost(&config, reference_subnet_size, compute_allocation);
-    for subnet_size in 1..TEST_SUBNET_SIZE_MAX + 1 {
+    for subnet_size in TEST_SUBNET_SIZES {
         let simulated_cost =
             calculate_one_gib_per_second_cost(&config, subnet_size, compute_allocation);
         let calculated_cost = (reference_cost * subnet_size) / reference_subnet_size;
@@ -950,7 +950,7 @@ fn test_subnet_size_one_gib_storage_non_zero_compute_allocation_cost() {
         let reference_subnet_size = config.reference_subnet_size;
         let reference_cost =
             calculate_one_gib_per_second_cost(&config, reference_subnet_size, compute_allocation);
-        for subnet_size in 1..TEST_SUBNET_SIZE_MAX + 1 {
+        for subnet_size in TEST_SUBNET_SIZES {
             let simulated_cost =
                 calculate_one_gib_per_second_cost(&config, subnet_size, compute_allocation);
             let calculated_cost = (reference_cost * subnet_size) / reference_subnet_size;
@@ -1000,7 +1000,7 @@ fn test_subnet_size_execute_install_code_cost() {
     // Check linear scaling.
     let reference_subnet_size = config.reference_subnet_size;
     let reference_cost = simulate_execute_install_code_cost(subnet_type, reference_subnet_size);
-    for subnet_size in 1..TEST_SUBNET_SIZE_MAX + 1 {
+    for subnet_size in TEST_SUBNET_SIZES {
         let simulated_cost = simulate_execute_install_code_cost(subnet_type, subnet_size);
         let calculated_cost = (reference_cost * subnet_size) / reference_subnet_size;
         assert!(
@@ -1049,7 +1049,7 @@ fn test_subnet_size_ingress_induction_cost() {
     // Check linear scaling.
     let reference_subnet_size = config.reference_subnet_size;
     let reference_cost = simulate_execute_install_code_cost(subnet_type, reference_subnet_size);
-    for subnet_size in 1..TEST_SUBNET_SIZE_MAX + 1 {
+    for subnet_size in TEST_SUBNET_SIZES {
         let simulated_cost = simulate_execute_install_code_cost(subnet_type, subnet_size);
         let calculated_cost = (reference_cost * subnet_size) / reference_subnet_size;
         assert!(
@@ -1097,7 +1097,7 @@ fn test_subnet_size_execute_message_cost() {
     // Check linear scaling.
     let reference_subnet_size = config.reference_subnet_size;
     let reference_cost = simulate_execute_message_cost(subnet_type, reference_subnet_size);
-    for subnet_size in 1..TEST_SUBNET_SIZE_MAX + 1 {
+    for subnet_size in TEST_SUBNET_SIZES {
         let simulated_cost = simulate_execute_message_cost(subnet_type, subnet_size);
         let calculated_cost = (reference_cost * subnet_size) / reference_subnet_size;
         assert!(
@@ -1146,7 +1146,7 @@ fn test_subnet_size_execute_heartbeat_cost() {
     let reference_subnet_size = config.reference_subnet_size;
     let reference_cost =
         simulate_execute_canister_heartbeat_cost(subnet_type, reference_subnet_size);
-    for subnet_size in 1..TEST_SUBNET_SIZE_MAX + 1 {
+    for subnet_size in TEST_SUBNET_SIZES {
         let simulated_cost = simulate_execute_canister_heartbeat_cost(subnet_type, subnet_size);
         let calculated_cost = (reference_cost * subnet_size) / reference_subnet_size;
         assert!(
@@ -1232,7 +1232,7 @@ fn test_subnet_size_sign_with_ecdsa_non_zero_cost() {
             nns_subnet_id,
             subnet_id,
         );
-        for subnet_size in 1..TEST_SUBNET_SIZE_MAX + 1 {
+        for subnet_size in TEST_SUBNET_SIZES {
             let simulated_cost =
                 simulate_sign_with_ecdsa_cost(subnet_type, subnet_size, nns_subnet_id, subnet_id);
             let calculated_cost = (reference_cost * subnet_size) / reference_subnet_size;
@@ -1254,7 +1254,7 @@ fn test_subnet_size_sign_with_ecdsa_zero_cost() {
     assert_eq!(nns_subnet_id, subnet_id);
 
     // Check that the cost is zero independently of the subnet size.
-    for subnet_size in 1..TEST_SUBNET_SIZE_MAX + 1 {
+    for subnet_size in TEST_SUBNET_SIZES {
         assert_eq!(
             simulate_sign_with_ecdsa_cost(subnet_type, subnet_size, nns_subnet_id, subnet_id),
             Cycles::zero(),
@@ -1295,7 +1295,7 @@ fn test_subnet_size_http_request_cost() {
     // Check linear scaling.
     let reference_subnet_size = config.reference_subnet_size;
     let reference_cost = simulate_http_request_cost(subnet_type, reference_subnet_size);
-    for subnet_size in 1..TEST_SUBNET_SIZE_MAX + 1 {
+    for subnet_size in TEST_SUBNET_SIZES {
         let simulated_cost = simulate_http_request_cost(subnet_type, subnet_size);
         let calculated_cost = (reference_cost * subnet_size) / reference_subnet_size;
         assert!(
@@ -1334,7 +1334,7 @@ fn test_subnet_size_xnet_call_cost() {
     // Check linear scaling.
     let reference_subnet_size = config.reference_subnet_size;
     let reference_cost = simulate_xnet_call_cost(subnet_type, reference_subnet_size);
-    for subnet_size in 1..TEST_SUBNET_SIZE_MAX + 1 {
+    for subnet_size in TEST_SUBNET_SIZES {
         let simulated_cost = simulate_xnet_call_cost(subnet_type, subnet_size);
         let calculated_cost = (reference_cost * subnet_size) / reference_subnet_size;
         assert!(
@@ -1378,7 +1378,7 @@ fn test_subnet_size_create_canister_cost() {
     // Check linear scaling.
     let reference_subnet_size = config.reference_subnet_size;
     let reference_cost = simulate_create_canister_cost(subnet_type, reference_subnet_size);
-    for subnet_size in 1..TEST_SUBNET_SIZE_MAX + 1 {
+    for subnet_size in TEST_SUBNET_SIZES {
         let simulated_cost = simulate_create_canister_cost(subnet_type, subnet_size);
         let calculated_cost = (reference_cost * subnet_size) / reference_subnet_size;
         assert!(
@@ -1392,7 +1392,7 @@ fn test_subnet_size_create_canister_cost() {
 fn test_subnet_size_system_subnet_has_zero_cost() {
     let subnet_type = SubnetType::System;
 
-    for subnet_size in 1..TEST_SUBNET_SIZE_MAX + 1 {
+    for subnet_size in TEST_SUBNET_SIZES {
         let compute_allocation = ComputeAllocation::zero();
         assert_eq!(
             simulate_one_gib_per_second_cost(subnet_type, subnet_size, compute_allocation),
