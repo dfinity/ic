@@ -1,9 +1,13 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
+package(default_visibility = ["//visibility:public"])
+
 rust_library(
     name = "icrc_ledger_types",
     srcs = [
+        "src/block.rs",
         "src/lib.rs",
+        "src/transaction.rs",
         "src/value.rs",
     ],
     deps = [
