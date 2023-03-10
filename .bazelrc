@@ -64,8 +64,8 @@ build --flag_alias=s3_endpoint=//gitlab-ci/src/artifacts:s3_endpoint
 
 # Exclude system tests by default
 # https://github.com/bazelbuild/bazel/issues/8439
-build --build_tag_filters="-system_test,-upload"
-test --test_tag_filters="-system_test,-post_master,-allow_to_fail"
+build --build_tag_filters="-system_test,-upload,-fuzz_test"
+test --test_tag_filters="-system_test,-post_master,-allow_to_fail,-fuzz_test"
 test:alltests --test_tag_filters=""
 test:paritytests --test_tag_filters="-system_test,-allow_to_fail"
 test:ci --test_tag_filters="-post_master,-system_test_hourly,-system_test_nightly,-system_test_staging,-system_test_hotfix,-allow_to_fail"
@@ -88,13 +88,13 @@ test --test_timeout=-1,-1,1200,9000 # timeout in seconds for short, moderate(def
 #test:ci --config=alltests
 
 build:ci --noremote_local_fallback
-build:ci --build_tag_filters="-system_test"
+build:ci --build_tag_filters="-system_test,-fuzz_test"
 build:ci --remote_upload_local_results # Whether to upload locally executed action results to the remote cache.
 
 # So that developers can build in debug mode.
 build:dev --compilation_mode=fastbuild
 build:macos_ci --compilation_mode=fastbuild
-build:macos_ci --build_tag_filters="-system_test"
+build:macos_ci --build_tag_filters="-system_test,-fuzz_test"
 
 # Run `bazel build ... --config=local` if you don't have access to the buildfarm infrastructure.
 build:local --remote_cache=

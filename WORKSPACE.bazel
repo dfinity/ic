@@ -60,7 +60,12 @@ rust_analyzer_dependencies()
 
 rust_register_toolchains(
     edition = "2021",
-    version = "1.66.1",
+    # The nightly version is required to compile fuzz tests from Bazel.
+    # The version below is chosen so that it is in sync with the non-nightly version.
+    versions = [
+        "1.66.1",
+        "nightly/2022-12-21",
+    ],
 )
 
 git_repository(
