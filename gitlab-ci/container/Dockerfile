@@ -83,10 +83,10 @@ RUN mkdir $NVM_DIR && \
 # even if this directory is empty.
 ENV CARGO_HOME=/cargo
 
-RUN /usr/bin/pip3 install ansible==2.10.7 gitpython pre-commit==2.20.0 honeycomb-beeline junit-xml paramiko \
-    python-gitlab libhoney termcolor pygithub python-dateutil elasticsearch elasticsearch-dsl freezegun \
-    jsonschema mypy pylint pytest-shutil pyyaml xmltodict pytest==5.4.3 jira toml cvss pytest-cov \
-    requests==2.27.1 urllib3==1.26.8 parse packaging==21.3 nested-lookup node-semver
+RUN /usr/bin/pip3 install ansible==2.10.7 gitpython==3.1.30 pre-commit==2.20.0 honeycomb-beeline junit-xml paramiko \
+    python-gitlab==3.12.0 libhoney termcolor pygithub python-dateutil elasticsearch elasticsearch-dsl freezegun \
+    jsonschema mypy pylint pytest-shutil pyyaml==6.0 xmltodict pytest==5.4.3 jira==3.4.1 toml cvss==2.5 pytest-cov \
+    requests==2.27.1 urllib3==1.26.8 parse==1.19.0 packaging==21.3 nested-lookup==0.2.25 node-semver==0.9.0
 
 ARG didc_release_date=2022-01-06
 RUN curl --fail \

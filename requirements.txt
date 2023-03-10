@@ -340,10 +340,18 @@ cryptography==39.0.1 \
     # via
     #   ansible-core
     #   paramiko
+cvss==2.5 \
+    --hash=sha256:63f648cffb2647498cf28646a7004fe0f48872c9ba7d8653bebd710409f8ba0e \
+    --hash=sha256:c1a48f8a6024642b986c51182a79d7aa2c05d1d75c57ad3496b9ab0451a8e89a
+    # via -r requirements.in
 cycler==0.11.0 \
     --hash=sha256:3a27e95f763a428a739d2add979fa7494c912a32c17c4c38c4d5f082cad165a3 \
     --hash=sha256:9c87405839a19696e837b3b818fed3f5f69f16f1eec1a1ad77e043dcea9c772f
     # via matplotlib
+defusedxml==0.7.1 \
+    --hash=sha256:1bb3032db185915b62d7c6209c5a8792be6a32ab2fedacc84e01b52c51aa3e69 \
+    --hash=sha256:a352e7e428770286cc899e2542b6cdaedb2b4953ff269a210103ec58f6198a61
+    # via jira
 ecdsa==0.18.0 \
     --hash=sha256:190348041559e21b22a1d65cee485282ca11a6f81d503fddb84d5017e9ed1e49 \
     --hash=sha256:80600258e7ed2f16b9aa1d7c295bd70194109ad5a30fdee0eaeefef1d4c559dd
@@ -394,6 +402,10 @@ jinja2==3.1.2 \
     --hash=sha256:31351a702a408a9e7595a8fc6150fc3f43bb6bf7e319770cbc0db9df9437e852 \
     --hash=sha256:6088930bfe239f0e6710546ab9c19c9ef35e29792895fed6e6e31a023a182a61
     # via ansible-core
+jira==3.4.1 \
+    --hash=sha256:20e2df51cc686f663034543c4dec65783e9c721de6448b433d659d5c95b01c7b \
+    --hash=sha256:9b1286a3eada593bb1c83e12989dc2e7c796867523049fa6a680c3a2757e4d17
+    # via -r requirements.in
 kiwisolver==1.4.4 \
     --hash=sha256:02f79693ec433cb4b5f51694e8477ae83b3205768a6fb48ffba60549080e295b \
     --hash=sha256:03baab2d6b4a54ddbb43bba1a3a2d1627e82d205c5cf8f4c924dc49284b87166 \
@@ -570,6 +582,13 @@ multimethod==1.9.1 \
     --hash=sha256:1589bf52ca294667fd15527ea830127c763f5bfc38562e3642591ffd0fd9d56f \
     --hash=sha256:52f8f1f2b9d5a4c7adfdcc114dbeeebe3245a4420801e8807e26522a79fb6bc2
     # via waiter
+nested-lookup==0.2.25 \
+    --hash=sha256:6fa832748c90381f2291d850809e32492519ee5f253d6a5acbc29d937eca02e8
+    # via -r requirements.in
+node-semver==0.9.0 \
+    --hash=sha256:04aa0b0016dbc06748d6378c42d8cf82a343415bd9fca6284f488041d08b33bb \
+    --hash=sha256:8153270903772b1e59500ced6f0aca0f7bdb021651c27584e9283b7077b4916b
+    # via -r requirements.in
 numpy==1.24.2 \
     --hash=sha256:003a9f530e880cb2cd177cba1af7220b9aa42def9c4afc2a2fc3ee6be7eb2b22 \
     --hash=sha256:150947adbdfeceec4e5926d956a06865c1c690f2fd902efede4ca6fe2e657c3f \
@@ -602,11 +621,17 @@ numpy==1.24.2 \
     # via
     #   contourpy
     #   matplotlib
-packaging==23.0 \
-    --hash=sha256:714ac14496c3e68c99c29b00845f7a2b85f3bb6f1078fd9f72fd20f0570002b2 \
-    --hash=sha256:b6ad297f8907de0fa2fe1ccbd26fdaf387f5f47c7275fedf8cce89f99446cf97
+oauthlib==3.2.2 \
+    --hash=sha256:8139f29aac13e25d502680e9e19963e83f16838d48a0d71c287fe40e7067fbca \
+    --hash=sha256:9859c40929662bec5d64f34d01c99e093149682a3f38915dc0655d5a633dd918
+    # via requests-oauthlib
+packaging==21.3 \
+    --hash=sha256:dd47c42927d89ab911e606518907cc2d3a1f38bbd026385970643f9c5b8ecfeb \
+    --hash=sha256:ef103e05f519cdc783ae24ea4e2e0f508a9c99b2d4969652eed6a2e1ea5bd522
     # via
+    #   -r requirements.in
     #   ansible-core
+    #   jira
     #   matplotlib
     #   pytest
 paramiko==3.0.0 \
@@ -615,6 +640,9 @@ paramiko==3.0.0 \
     # via
     #   -r requirements.in
     #   scp
+parse==1.19.0 \
+    --hash=sha256:9ff82852bcb65d139813e2a5197627a94966245c897796760a3a2a8eb66f020b
+    # via -r requirements.in
 pillow==9.4.0 \
     --hash=sha256:013016af6b3a12a2f40b704677f8b51f72cb007dac785a9933d5c86a72a7fe33 \
     --hash=sha256:0845adc64fe9886db00f5ab68c4a8cd933ab749a87747555cec1c95acea64b0b \
@@ -729,6 +757,7 @@ pyparsing==3.0.9 \
     --hash=sha256:5026bae9a10eeaefb61dab2f09052b9f4307d44aee4eda64b309723d8d206bbc
     # via
     #   matplotlib
+    #   packaging
     #   pydot
 pytest==7.2.1 \
     --hash=sha256:c7c6ca206e93355074ae32f7403e8ea12163b1163c976fee7d4d84027c162be5 \
@@ -740,6 +769,10 @@ python-dateutil==2.8.2 \
     # via matplotlib
 python-gflags==3.1.2 \
     --hash=sha256:40ae131e899ef68e9e14aa53ca063839c34f6a168afe622217b5b875492a1ee2
+    # via -r requirements.in
+python-gitlab==3.12.0 \
+    --hash=sha256:567390c2b93690dae62ed9738bf9f221fa45c01378fdf896089dbf7c8a134fbd \
+    --hash=sha256:a5eb36b49783fda34563376674d5251dbbdbd1abd23b287dadf82f67d861b2c1
     # via -r requirements.in
 pyyaml==6.0 \
     --hash=sha256:01b45c0191e6d66c470b6cf1b9531a771a83c1c4208272ead47a3ae4f2f603bf \
@@ -788,7 +821,22 @@ pyyaml==6.0 \
 requests==2.28.2 \
     --hash=sha256:64299f4909223da747622c030b781c0d7811e359c37124b4bd368fb8c6518baa \
     --hash=sha256:98b1b2782e3c6c4904938b84c0eb932721069dfdb9134313beff7c83c2df24bf
-    # via -r requirements.in
+    # via
+    #   -r requirements.in
+    #   jira
+    #   python-gitlab
+    #   requests-oauthlib
+    #   requests-toolbelt
+requests-oauthlib==1.3.1 \
+    --hash=sha256:2577c501a2fb8d05a304c09d090d6e47c306fef15809d102b327cf8364bddab5 \
+    --hash=sha256:75beac4a47881eeb94d5ea5d6ad31ef88856affe2332b9aafb52c6452ccf0d7a
+    # via jira
+requests-toolbelt==0.10.1 \
+    --hash=sha256:18565aa58116d9951ac39baa288d3adb5b3ff975c4f25eee78555d89e8f247f7 \
+    --hash=sha256:62e09f7ff5ccbda92772a29f394a49c3ad6cb181d568b1337626b2abb628a63d
+    # via
+    #   jira
+    #   python-gitlab
 resolvelib==0.8.1 \
     --hash=sha256:c6ea56732e9fb6fca1b2acc2ccc68a0b6b8c566d8f3e78e0443310ede61dbd37 \
     --hash=sha256:d9b7907f055c3b3a2cfc56c914ffd940122915826ff5fb5b1de0c99778f4de98
@@ -807,6 +855,7 @@ six==1.16.0 \
     # via
     #   -r requirements.in
     #   ecdsa
+    #   nested-lookup
     #   python-dateutil
 smmap==5.0.0 \
     --hash=sha256:2aba19d6a040e78d8b09de5c57e96207b09ed71d8e55ce0959eeee6c8e190d94 \
@@ -831,6 +880,10 @@ tomli==2.0.1 \
     --hash=sha256:939de3e7a6161af0c887ef91b7d41a53e7c5a1ca976325f429cb46ea9bc30ecc \
     --hash=sha256:de526c12914f0c550d15924c62d72abc48d6fe7364aa87328337a31007fe8a4f
     # via pytest
+typing-extensions==4.5.0 \
+    --hash=sha256:5cb5f4a79139d699607b3ef622a1dedafa84e115ab0024e0d9c044a9479ca7cb \
+    --hash=sha256:fb33085c39dd998ac16d1431ebc293a8b3eedd00fd4a32de0ff79002c19511b4
+    # via jira
 urllib3==1.26.14 \
     --hash=sha256:076907bf8fd355cde77728471316625a4d2f7e713c125f51953bb5b3eecf4f72 \
     --hash=sha256:75edcdc2f7d85b137124a6c3c9fc3933cdeaa12ecb9a6a959f22797a0feca7e1
