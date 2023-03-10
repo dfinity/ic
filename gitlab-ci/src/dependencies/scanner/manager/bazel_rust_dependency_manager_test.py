@@ -17,7 +17,7 @@ def test_project_root_bazel(bazel_test):
 
 
 def test_cargo_lock_exists(bazel_test):
-    cargo_lock_file = bazel_test.root / "rs" / "Cargo.lock"
+    cargo_lock_file = bazel_test.root / "Cargo.lock"
     assert cargo_lock_file.exists()
 
 
