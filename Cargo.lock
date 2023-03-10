@@ -1532,7 +1532,7 @@ dependencies = [
  "ic-cdk-macros",
  "ic-cdk-timers",
  "ic-certified-map",
- "ic-stable-structures 0.2.0",
+ "ic-stable-structures",
  "mockall 0.11.3",
  "priority-queue",
  "prometheus 0.13.3",
@@ -1548,7 +1548,7 @@ version = "0.1.0"
 dependencies = [
  "addr",
  "candid",
- "ic-stable-structures 0.2.0",
+ "ic-stable-structures",
  "serde",
  "serde_bytes",
  "thiserror",
@@ -4351,7 +4351,7 @@ dependencies = [
  "ic-base-types-protobuf-generator",
  "ic-crypto-sha",
  "ic-protobuf",
- "ic-stable-structures 0.5.1",
+ "ic-stable-structures",
  "ic-test-utilities-compare-dirs",
  "phantom_newtype",
  "proptest",
@@ -4854,7 +4854,7 @@ dependencies = [
  "ic-icrc1-ledger",
  "ic-ledger-core",
  "ic-metrics-encoder",
- "ic-stable-structures 0.5.1",
+ "ic-stable-structures",
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
  "ic0",
@@ -6523,7 +6523,7 @@ dependencies = [
  "ic-icrc1",
  "ic-ledger-core",
  "ic-metrics-encoder",
- "ic-stable-structures 0.5.1",
+ "ic-stable-structures",
  "serde",
 ]
 
@@ -8820,7 +8820,7 @@ dependencies = [
  "ic-protobuf",
  "ic-sns-governance",
  "ic-sns-swap-protobuf-generator",
- "ic-stable-structures 0.5.1",
+ "ic-stable-structures",
  "ic-test-utilities-compare-dirs",
  "ic-types",
  "icp-ledger",
@@ -8949,12 +8949,6 @@ dependencies = [
  "ic-utils-rustfmt",
  "prost-build",
 ]
-
-[[package]]
-name = "ic-stable-structures"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7c382288c7a02396b792e081a5e84727bf65c283d1484c93a39f43097e0854ac"
 
 [[package]]
 name = "ic-stable-structures"
@@ -9522,7 +9516,7 @@ dependencies = [
  "ic-cdk-macros",
  "ic-cdk-timers",
  "ic-metrics-encoder",
- "ic-stable-structures 0.5.1",
+ "ic-stable-structures",
  "num-traits",
  "serde",
  "serde_bytes",
@@ -14667,7 +14661,7 @@ dependencies = [
  "candid",
  "ic-cdk 0.6.10",
  "ic-cdk-macros",
- "ic-stable-structures 0.5.1",
+ "ic-stable-structures",
  "serde",
 ]
 

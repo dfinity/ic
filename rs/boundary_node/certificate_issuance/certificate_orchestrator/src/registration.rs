@@ -1,6 +1,5 @@
 use std::cmp::Reverse;
 
-use anyhow::anyhow;
 use candid::Principal;
 use certificate_orchestrator_interface::{
     EncryptedPair, Id, Name, NameError, Registration, State, UpdateType,
@@ -21,7 +20,7 @@ cfg_if::cfg_if! {
 use crate::{
     acl::{Authorize, AuthorizeError, WithAuthorize},
     id::Generate,
-    LocalRef, StableMap, WithMetrics, REGISTRATION_EXPIRATION_TTL,
+    LocalRef, StableMap, StorableId, WithMetrics, REGISTRATION_EXPIRATION_TTL,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -42,16 +41,16 @@ pub trait Create {
 
 pub struct Creator {
     id_generator: LocalRef<Box<dyn Generate>>,
-    registrations: LocalRef<StableMap<Id, Registration>>,
-    names: LocalRef<StableMap<Name, Id>>,
+    registrations: LocalRef<StableMap<StorableId, Registration>>,
+    names: LocalRef<StableMap<Name, StorableId>>,
     expirations: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
 }
 
 impl Creator {
     pub fn new(
         id_generator: LocalRef<Box<dyn Generate>>,
-        registrations: LocalRef<StableMap<Id, Registration>>,
-        names: LocalRef<StableMap<Name, Id>>,
+        registrations: LocalRef<StableMap<StorableId, Registration>>,
+        names: LocalRef<StableMap<Name, StorableId>>,
         expirations: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
     ) -> Self {
         Self {
@@ -69,7 +68,7 @@ impl Create for Creator {
 
         // Check for duplicate
         if let Some(id) = self.names.with(|names| names.borrow().get(&name)) {
-            return Err(CreateError::Duplicate(id));
+            return Err(CreateError::Duplicate(id.into()));
         }
 
         // Generate ID
@@ -77,25 +76,22 @@ impl Create for Creator {
 
         // Create registration
         self.registrations.with(|regs| {
-            regs.borrow_mut()
-                .insert(
-                    id.clone(),
-                    Registration {
-                        name: name.to_owned(),
-                        canister: canister.to_owned(),
-                        state: State::PendingOrder,
-                    },
-                )
-                .map_err(|err| anyhow!(format!("failed to insert: {err}")))
-        })?;
+            regs.borrow_mut().insert(
+                id.to_owned().into(),
+                Registration {
+                    name: name.to_owned(),
+                    canister: canister.to_owned(),
+                    state: State::PendingOrder,
+                },
+            )
+        });
 
         // Update name mapping
         self.names.with(|names| {
             names
                 .borrow_mut()
-                .insert(name.to_owned(), id.to_owned())
-                .map_err(|err| anyhow!(format!("failed to insert: {err}")))
-        })?;
+                .insert(name.to_owned(), id.to_owned().into())
+        });
 
         // Schedule expiration
         self.expirations.with(|expirations| {
@@ -162,11 +158,11 @@ pub trait Get {
 }
 
 pub struct Getter {
-    registrations: LocalRef<StableMap<Id, Registration>>,
+    registrations: LocalRef<StableMap<StorableId, Registration>>,
 }
 
 impl Getter {
-    pub fn new(registrations: LocalRef<StableMap<Id, Registration>>) -> Self {
+    pub fn new(registrations: LocalRef<StableMap<StorableId, Registration>>) -> Self {
         Self { registrations }
     }
 }
@@ -206,14 +202,14 @@ pub trait Update {
 }
 
 pub struct Updater {
-    registrations: LocalRef<StableMap<Id, Registration>>,
+    registrations: LocalRef<StableMap<StorableId, Registration>>,
     expirations: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
     retries: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
 }
 
 impl Updater {
     pub fn new(
-        registrations: LocalRef<StableMap<Id, Registration>>,
+        registrations: LocalRef<StableMap<StorableId, Registration>>,
         expirations: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
         retries: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
     ) -> Self {
@@ -229,25 +225,21 @@ impl Update for Updater {
     fn update(&self, id: &Id, typ: UpdateType) -> Result<(), UpdateError> {
         match typ {
             // Update canister ID
-            UpdateType::Canister(canister) => {
-                self.registrations.with(|regs| {
-                    let Registration { name, state, .. } =
-                        regs.borrow().get(&id.into()).ok_or(UpdateError::NotFound)?;
+            UpdateType::Canister(canister) => self.registrations.with(|regs| {
+                let Registration { name, state, .. } =
+                    regs.borrow().get(&id.into()).ok_or(UpdateError::NotFound)?;
 
-                    regs.borrow_mut()
-                        .insert(
-                            id.to_owned(),
-                            Registration {
-                                name,
-                                canister,
-                                state,
-                            },
-                        )
-                        .map_err(|err| {
-                            UpdateError::from(anyhow!(format!("failed to insert: {err}")))
-                        })
-                })?;
-            }
+                regs.borrow_mut().insert(
+                    id.into(),
+                    Registration {
+                        name,
+                        canister,
+                        state,
+                    },
+                );
+
+                Ok::<(), UpdateError>(())
+            })?,
 
             // Update state
             UpdateType::State(state) => {
@@ -255,24 +247,21 @@ impl Update for Updater {
                     let Registration { name, canister, .. } =
                         regs.borrow().get(&id.into()).ok_or(UpdateError::NotFound)?;
 
-                    regs.borrow_mut()
-                        .insert(
-                            id.to_owned(),
-                            Registration {
-                                name,
-                                canister,
-                                state: state.to_owned(),
-                            },
-                        )
-                        .map_err(|err| {
-                            UpdateError::from(anyhow!(format!("failed to insert: {err}")))
-                        })
+                    regs.borrow_mut().insert(
+                        id.into(),
+                        Registration {
+                            name,
+                            canister,
+                            state: state.to_owned(),
+                        },
+                    );
+
+                    Ok::<(), UpdateError>(())
                 })?;
 
                 // Successful registrations should not be expired or retried
                 if state == State::Available {
                     self.expirations.with(|exps| exps.borrow_mut().remove(id));
-
                     self.retries.with(|rets| rets.borrow_mut().remove(id));
                 }
             }
@@ -334,22 +323,22 @@ pub trait Remove {
 }
 
 pub struct Remover {
-    registrations: LocalRef<StableMap<Id, Registration>>,
-    names: LocalRef<StableMap<Name, Id>>,
+    registrations: LocalRef<StableMap<StorableId, Registration>>,
+    names: LocalRef<StableMap<Name, StorableId>>,
     tasks: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
     expirations: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
     retries: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
-    encrypted_certificates: LocalRef<StableMap<Id, EncryptedPair>>,
+    encrypted_certificates: LocalRef<StableMap<StorableId, EncryptedPair>>,
 }
 
 impl Remover {
     pub fn new(
-        registrations: LocalRef<StableMap<Id, Registration>>,
-        names: LocalRef<StableMap<Name, Id>>,
+        registrations: LocalRef<StableMap<StorableId, Registration>>,
+        names: LocalRef<StableMap<Name, StorableId>>,
         tasks: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
         expirations: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
         retries: LocalRef<PriorityQueue<Id, Reverse<u64>>>,
-        encrypted_certificates: LocalRef<StableMap<Id, EncryptedPair>>,
+        encrypted_certificates: LocalRef<StableMap<StorableId, EncryptedPair>>,
     ) -> Self {
         Self {
             registrations,
@@ -369,7 +358,8 @@ impl Remove for Remover {
             .with(|regs| regs.borrow().get(&id.into()).ok_or(RemoveError::NotFound))?;
 
         // remove registration
-        self.registrations.with(|regs| regs.borrow_mut().remove(id));
+        self.registrations
+            .with(|regs| regs.borrow_mut().remove(&id.into()));
 
         // remove name mapping
         self.names.with(|names| names.borrow_mut().remove(&name));
@@ -380,7 +370,7 @@ impl Remove for Remover {
 
         // remove certificate
         self.encrypted_certificates
-            .with(|certs| certs.borrow_mut().remove(id));
+            .with(|certs| certs.borrow_mut().remove(&id.into()));
 
         Ok(())
     }
@@ -518,7 +508,8 @@ mod tests {
         };
 
         REGISTRATIONS.with(|regs| {
-            regs.borrow_mut().insert("id".into(), reg.clone()).unwrap();
+            regs.borrow_mut()
+                .insert("id".to_string().into(), reg.clone())
         });
 
         let getter = Getter::new(&REGISTRATIONS);
@@ -535,11 +526,7 @@ mod tests {
 
     #[test]
     fn create_ok() -> Result<(), Error> {
-        crate::ID_SEED.with(|s| {
-            s.borrow_mut()
-                .insert((), 0)
-                .expect("failed to insert id seed")
-        });
+        crate::ID_SEED.with(|s| s.borrow_mut().insert((), 0));
 
         let creator = Creator::new(&ID_GENERATOR, &REGISTRATIONS, &NAMES, &EXPIRATIONS);
 
@@ -550,7 +537,7 @@ mod tests {
 
         // Check regsitration
         let reg = REGISTRATIONS
-            .with(|regs| regs.borrow().get(&id))
+            .with(|regs| regs.borrow().get(&id.to_owned().into()))
             .expect("expected registration to exist but none found");
 
         assert_eq!(
@@ -563,13 +550,14 @@ mod tests {
         );
 
         // Check name
-        let iid = NAMES
+        let iid: String = NAMES
             .with(|names| {
                 names
                     .borrow()
                     .get(&Name::try_from("name.com").expect("failed to create name"))
             })
-            .expect("expected name mapping to exist but none found");
+            .expect("expected name mapping to exist but none found")
+            .into();
 
         assert_eq!(id, iid, "expected ids to match");
 
@@ -584,9 +572,7 @@ mod tests {
             state: State::PendingOrder,
         };
 
-        REGISTRATIONS
-            .with(|regs| regs.borrow_mut().insert("id".into(), reg))
-            .expect("failed to insert");
+        REGISTRATIONS.with(|regs| regs.borrow_mut().insert("id".to_string().into(), reg));
 
         Updater::new(&REGISTRATIONS, &EXPIRATIONS, &RETRIES).update(
             &Id::from("id"),
@@ -595,7 +581,7 @@ mod tests {
 
         // Check registration
         let reg = REGISTRATIONS
-            .with(|regs| regs.borrow().get(&Id::from("id")))
+            .with(|regs| regs.borrow().get(&"id".to_string().into()))
             .expect("expected registration to exist but none found");
 
         assert_eq!(
@@ -618,9 +604,7 @@ mod tests {
             state: State::PendingOrder,
         };
 
-        REGISTRATIONS
-            .with(|regs| regs.borrow_mut().insert("id".into(), reg))
-            .expect("failed to insert");
+        REGISTRATIONS.with(|regs| regs.borrow_mut().insert("id".to_string().into(), reg));
 
         Updater::new(&REGISTRATIONS, &EXPIRATIONS, &RETRIES).update(
             &Id::from("id"),
@@ -629,7 +613,7 @@ mod tests {
 
         // Check registration
         let reg = REGISTRATIONS
-            .with(|regs| regs.borrow().get(&Id::from("id")))
+            .with(|regs| regs.borrow().get(&"id".to_string().into()))
             .expect("expected registration to exist but none found");
 
         assert_eq!(
@@ -665,26 +649,22 @@ mod tests {
 
     #[test]
     fn remove_ok() -> Result<(), Error> {
-        REGISTRATIONS
-            .with(|regs| {
-                regs.borrow_mut().insert(
-                    "id".into(),
-                    Registration {
-                        name: Name::try_from("name.com").unwrap(),
-                        canister: Principal::from_text("aaaaa-aa").unwrap(),
-                        state: State::PendingOrder,
-                    },
-                )
-            })
-            .expect("failed to insert registration");
+        REGISTRATIONS.with(|regs| {
+            regs.borrow_mut().insert(
+                "id".to_string().into(),
+                Registration {
+                    name: Name::try_from("name.com").unwrap(),
+                    canister: Principal::from_text("aaaaa-aa").unwrap(),
+                    state: State::PendingOrder,
+                },
+            )
+        });
 
-        NAMES
-            .with(|names| {
-                names
-                    .borrow_mut()
-                    .insert(Name::try_from("name.com").unwrap(), "id".into())
-            })
-            .expect("failed to insert name mapping");
+        NAMES.with(|names| {
+            names
+                .borrow_mut()
+                .insert(Name::try_from("name.com").unwrap(), "id".to_string().into())
+        });
 
         TASKS.with(|tasks| {
             tasks.borrow_mut().push(
@@ -707,13 +687,11 @@ mod tests {
             )
         });
 
-        ENCRYPTED_CERTIFICATES
-            .with(|certs| {
-                certs
-                    .borrow_mut()
-                    .insert("id".into(), EncryptedPair(vec![], vec![]))
-            })
-            .expect("failed to insert registration");
+        ENCRYPTED_CERTIFICATES.with(|certs| {
+            certs
+                .borrow_mut()
+                .insert("id".to_string().into(), EncryptedPair(vec![], vec![]))
+        });
 
         let r = Remover::new(
             &REGISTRATIONS,
@@ -729,7 +707,7 @@ mod tests {
             other => panic!("expected Ok but got {:?}", other),
         };
 
-        match REGISTRATIONS.with(|regs| regs.borrow().get(&"id".into())) {
+        match REGISTRATIONS.with(|regs| regs.borrow().get(&"id".to_string().into())) {
             None => {}
             Some(_) => panic!("expected registration to be removed, but it wasn't"),
         };
@@ -754,7 +732,7 @@ mod tests {
             Some(_) => panic!("expected retry to be removed, but it wasn't"),
         });
 
-        ENCRYPTED_CERTIFICATES.with(|certs| match certs.borrow().get(&"id".to_string()) {
+        ENCRYPTED_CERTIFICATES.with(|certs| match certs.borrow().get(&"id".to_string().into()) {
             None => {}
             Some(_) => panic!("expected certs to be removed, but they were not"),
         });
@@ -764,18 +742,16 @@ mod tests {
 
     #[test]
     fn remove_partial() -> Result<(), Error> {
-        REGISTRATIONS
-            .with(|regs| {
-                regs.borrow_mut().insert(
-                    "id".into(),
-                    Registration {
-                        name: Name::try_from("name.com").unwrap(),
-                        canister: Principal::from_text("aaaaa-aa").unwrap(),
-                        state: State::PendingOrder,
-                    },
-                )
-            })
-            .expect("failed to insert");
+        REGISTRATIONS.with(|regs| {
+            regs.borrow_mut().insert(
+                "id".to_string().into(),
+                Registration {
+                    name: Name::try_from("name.com").unwrap(),
+                    canister: Principal::from_text("aaaaa-aa").unwrap(),
+                    state: State::PendingOrder,
+                },
+            )
+        });
 
         let r = Remover::new(
             &REGISTRATIONS,
@@ -791,7 +767,7 @@ mod tests {
             other => panic!("expected Ok but got {:?}", other),
         };
 
-        match REGISTRATIONS.with(|regs| regs.borrow().get(&"id".into())) {
+        match REGISTRATIONS.with(|regs| regs.borrow().get(&"id".to_string().into())) {
             None => {}
             Some(_) => panic!("expected registration to be removed, but it wasn't"),
         };

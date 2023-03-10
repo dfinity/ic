@@ -1,14 +1,14 @@
-use std::{cell::RefCell, cmp::Reverse, mem::size_of, thread::LocalKey, time::Duration};
+use std::{cell::RefCell, cmp::Reverse, thread::LocalKey, time::Duration};
 
 use certificate_orchestrator_interface::{
-    CreateRegistrationError, CreateRegistrationResponse, DispenseTaskError, DispenseTaskResponse,
-    EncryptedPair, ExportCertificatesError, ExportCertificatesResponse, GetRegistrationError,
-    GetRegistrationResponse, HeaderField, HttpRequest, HttpResponse, Id, InitArg,
-    ListAllowedPrincipalsError, ListAllowedPrincipalsResponse, ModifyAllowedPrincipalError,
-    ModifyAllowedPrincipalResponse, Name, PeekTaskError, PeekTaskResponse, QueueTaskError,
-    QueueTaskResponse, Registration, RemoveRegistrationError, RemoveRegistrationResponse, State,
-    UpdateRegistrationError, UpdateRegistrationResponse, UpdateType, UploadCertificateError,
-    UploadCertificateResponse, NAME_MAX_LEN,
+    BoundedString, CreateRegistrationError, CreateRegistrationResponse, DispenseTaskError,
+    DispenseTaskResponse, EncryptedPair, ExportCertificatesError, ExportCertificatesResponse,
+    GetRegistrationError, GetRegistrationResponse, HeaderField, HttpRequest, HttpResponse, Id,
+    InitArg, ListAllowedPrincipalsError, ListAllowedPrincipalsResponse,
+    ModifyAllowedPrincipalError, ModifyAllowedPrincipalResponse, Name, PeekTaskError,
+    PeekTaskResponse, QueueTaskError, QueueTaskResponse, Registration, RemoveRegistrationError,
+    RemoveRegistrationResponse, State, UpdateRegistrationError, UpdateRegistrationResponse,
+    UpdateType, UploadCertificateError, UploadCertificateResponse,
 };
 use ic_cdk::{api::time, caller, export::Principal, post_upgrade, pre_upgrade, trap};
 use ic_cdk_macros::{init, query, update};
@@ -39,26 +39,19 @@ mod persistence;
 mod registration;
 mod work;
 
+// Stable Memory
+
 type Memory = VirtualMemory<DefaultMemoryImpl>;
 type LocalRef<T> = &'static LocalKey<RefCell<T>>;
-type StableMap<K, V> = StableBTreeMap<Memory, K, V>;
+
+type StableMap<K, V> = StableBTreeMap<K, V, Memory>;
 type StableSet<T> = StableMap<T, ()>;
 type StableValue<T> = StableMap<(), T>;
 
-const BYTE: u32 = 1;
-const KB: u32 = 1024 * BYTE;
+// Storables
 
-const CONST_KEY_LEN: u32 = 0;
-const SET_VALUE_LEN: u32 = 0;
-
-const PRINCIPAL_ID_LEN: u32 = 63 * BYTE;
-const ID_COUNTER_LEN: u32 = size_of::<u128>() as u32;
-const ID_SEED_LEN: u32 = size_of::<u128>() as u32;
-const REGISTRATION_ID_LEN: u32 = 64 * BYTE;
-const REGISTRATION_LEN: u32 = 128;
-const ENCRYPTED_PRIVATE_KEY_LEN: u32 = KB; // 1 * KB
-const ENCRYPTED_CERTIFICATE_LEN: u32 = 8 * KB;
-const ENCRYPTED_PAIR_LEN: u32 = ENCRYPTED_PRIVATE_KEY_LEN + ENCRYPTED_CERTIFICATE_LEN;
+type StorablePrincipal = BoundedString<63>;
+type StorableId = BoundedString<64>;
 
 const REGISTRATION_EXPIRATION_TTL: Duration = Duration::from_secs(60 * 60); // 1 Hour
 const IN_PROGRESS_TTL: Duration = Duration::from_secs(10 * 60); // 10 Minutes
@@ -228,11 +221,9 @@ pub struct WithMetrics<T>(pub T, LocalRef<CounterVec>);
 
 // ACLs
 thread_local! {
-    static ROOT_PRINCIPALS: RefCell<StableSet<String>> = RefCell::new(
+    static ROOT_PRINCIPALS: RefCell<StableSet<StorablePrincipal>> = RefCell::new(
         StableSet::init(
             MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(MEMORY_ID_ROOT_PRINCIPALS))),
-            PRINCIPAL_ID_LEN, // MAX_KEY_SIZE,
-            SET_VALUE_LEN,    // MAX_VALUE_SIZE
         )
     );
 
@@ -243,11 +234,9 @@ thread_local! {
 }
 
 thread_local! {
-    static ALLOWED_PRINCIPALS: RefCell<StableSet<String>> = RefCell::new(
+    static ALLOWED_PRINCIPALS: RefCell<StableSet<StorablePrincipal>> = RefCell::new(
         StableSet::init(
             MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(MEMORY_ID_ALLOWED_PRINCIPALS))),
-            PRINCIPAL_ID_LEN, // MAX_KEY_SIZE,
-            SET_VALUE_LEN,    // MAX_VALUE_SIZE
         )
     );
 
@@ -262,16 +251,12 @@ thread_local! {
     static ID_COUNTER: RefCell<StableValue<u128>> = RefCell::new(
         StableValue::init(
             MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(MEMORY_ID_ID_COUNTER))),
-            CONST_KEY_LEN,  // MAX_KEY_SIZE,
-            ID_COUNTER_LEN, // MAX_VALUE_SIZE
         )
     );
 
     static ID_SEED: RefCell<StableValue<u128>> = RefCell::new(
         StableValue::init(
             MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(MEMORY_ID_ID_SEED))),
-            CONST_KEY_LEN,  // MAX_KEY_SIZE,
-            ID_SEED_LEN,    // MAX_VALUE_SIZE
         )
     );
 
@@ -283,27 +268,21 @@ thread_local! {
 
 // Registrations
 thread_local! {
-    static REGISTRATIONS: RefCell<StableMap<Id, Registration>> = RefCell::new(
+    static REGISTRATIONS: RefCell<StableMap<StorableId, Registration>> = RefCell::new(
         StableMap::init(
             MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(MEMORY_ID_REGISTRATIONS))),
-            REGISTRATION_ID_LEN, // MAX_KEY_SIZE,
-            REGISTRATION_LEN,    // MAX_VALUE_SIZE
         )
     );
 
-    static NAMES: RefCell<StableMap<Name, Id>> = RefCell::new(
+    static NAMES: RefCell<StableMap<Name, StorableId>> = RefCell::new(
         StableMap::init(
             MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(MEMORY_ID_NAMES))),
-            NAME_MAX_LEN,        // MAX_KEY_SIZE,
-            REGISTRATION_ID_LEN, // MAX_VALUE_SIZE
         )
     );
 
-    static ENCRYPTED_CERTIFICATES: RefCell<StableMap<Id, EncryptedPair>> = RefCell::new(
+    static ENCRYPTED_CERTIFICATES: RefCell<StableMap<StorableId, EncryptedPair>> = RefCell::new(
         StableMap::init(
             MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(MEMORY_ID_ENCRYPTED_CERTIFICATES))),
-            REGISTRATION_ID_LEN, // MAX_KEY_SIZE,
-            ENCRYPTED_PAIR_LEN,  // MAX_VALUE_SIZE
         )
     );
 
@@ -435,15 +414,13 @@ fn init_fn(
     ROOT_PRINCIPALS.with(|m| {
         let mut m = m.borrow_mut();
         root_principals.iter().for_each(|p| {
-            if let Err(err) = m.insert(p.to_text(), ()) {
-                trap(&format!("failed to insert root principal: {err}"));
-            }
+            m.insert(p.to_text().into(), ());
         });
     });
 
     ID_SEED.with(|s| {
         let mut s = s.borrow_mut();
-        s.insert((), id_seed).unwrap();
+        s.insert((), id_seed);
     });
 
     init_timers_fn();
@@ -718,7 +695,7 @@ fn list_allowed_principals() -> ListAllowedPrincipalsResponse {
     ListAllowedPrincipalsResponse::Ok(ALLOWED_PRINCIPALS.with(|m| {
         m.borrow()
             .iter()
-            .map(|(k, _)| Principal::from_text(k).unwrap())
+            .map(|(k, _)| Principal::from_text(k.as_str()).expect("failed to parse principal"))
             .collect()
     }))
 }
@@ -734,11 +711,8 @@ fn add_allowed_principal(principal: Principal) -> ModifyAllowedPrincipalResponse
         });
     }
 
-    if let Err(err) = ALLOWED_PRINCIPALS.with(|m| m.borrow_mut().insert(principal.to_text(), ())) {
-        return ModifyAllowedPrincipalResponse::Err(ModifyAllowedPrincipalError::UnexpectedError(
-            err.to_string(),
-        ));
-    }
+    ALLOWED_PRINCIPALS.with(|m| m.borrow_mut().insert(principal.to_text().into(), ()));
+
     ModifyAllowedPrincipalResponse::Ok(())
 }
 
@@ -753,7 +727,7 @@ fn rm_allowed_principal(principal: Principal) -> ModifyAllowedPrincipalResponse 
         });
     }
 
-    ALLOWED_PRINCIPALS.with(|m| m.borrow_mut().remove(&principal.to_text()));
+    ALLOWED_PRINCIPALS.with(|m| m.borrow_mut().remove(&principal.to_text().into()));
 
     ModifyAllowedPrincipalResponse::Ok(())
 }

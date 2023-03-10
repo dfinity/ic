@@ -1,10 +1,17 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, fmt::Display};
 
 use candid::{
     types::{Serializer, Type},
     CandidType, Decode, Deserialize, Encode, Principal,
 };
-use ic_stable_structures::Storable;
+use ic_stable_structures::{BoundedStorable, Storable};
+
+const BYTE: u32 = 1;
+const KB: u32 = 1024 * BYTE;
+
+const ENCRYPTED_PRIVATE_KEY_LEN: u32 = KB; // 1 * KB
+const ENCRYPTED_CERTIFICATE_LEN: u32 = 8 * KB;
+const ENCRYPTED_PAIR_LEN: u32 = ENCRYPTED_PRIVATE_KEY_LEN + ENCRYPTED_CERTIFICATE_LEN;
 
 pub type Id = String;
 
@@ -19,12 +26,92 @@ impl Storable for EncryptedPair {
         Cow::Owned(Encode!(self).unwrap())
     }
 
-    fn from_bytes(bytes: Vec<u8>) -> Self {
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
         Decode!(&bytes, Self).unwrap()
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+impl BoundedStorable for EncryptedPair {
+    const MAX_SIZE: u32 = ENCRYPTED_PAIR_LEN;
+    const IS_FIXED_SIZE: bool = false;
+}
+
+#[derive(Debug, Clone, PartialOrd, Ord, PartialEq, Eq, Deserialize)]
+pub struct BoundedString<const N: usize>(String);
+
+impl<const N: usize> Display for BoundedString<N> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl<const N: usize> CandidType for BoundedString<N> {
+    fn idl_serialize<S: Serializer>(&self, serializer: S) -> Result<(), S::Error> {
+        String::idl_serialize(&self.0, serializer)
+    }
+
+    fn _ty() -> Type {
+        Type::Text
+    }
+}
+
+impl<'a, const N: usize, T> From<T> for BoundedString<N>
+where
+    T: Into<Cow<'a, str>>,
+{
+    fn from(v: T) -> Self {
+        let v: Cow<str> = v.into();
+        let mut v = v.into_owned();
+
+        // Trim the string to bounded size
+        v.truncate(floor_char_boundary(&v, N));
+
+        Self(v)
+    }
+}
+
+impl<const N: usize> BoundedString<N> {
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+impl<const N: usize> From<BoundedString<N>> for String {
+    fn from(v: BoundedString<N>) -> Self {
+        v.0
+    }
+}
+
+// Copy-paste from https://doc.rust-lang.org/src/core/str/mod.rs.html#258
+// Needed because it's still experimental
+fn floor_char_boundary(v: &str, index: usize) -> usize {
+    if index >= v.len() {
+        v.len()
+    } else {
+        let lower_bound = index.saturating_sub(3);
+        (lower_bound..=index)
+            .rev()
+            .find(|&i| v.is_char_boundary(i))
+            .unwrap()
+    }
+}
+
+impl<const N: usize> Storable for BoundedString<N> {
+    fn to_bytes(&self) -> Cow<[u8]> {
+        self.0.to_bytes()
+    }
+
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        String::from_bytes(bytes).into()
+    }
+}
+
+impl<const N: usize> BoundedStorable for BoundedString<N> {
+    const MAX_SIZE: u32 = N as u32;
+    const IS_FIXED_SIZE: bool = false;
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
 pub struct Name(String);
 
 // NAME_MAX_LEN is the maximum length a name is allowed to have.
@@ -90,15 +177,20 @@ impl Storable for Name {
         Cow::Owned(Encode!(self).unwrap())
     }
 
-    fn from_bytes(bytes: Vec<u8>) -> Self {
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
         Decode!(&bytes, Self).unwrap()
     }
+}
+
+impl BoundedStorable for Name {
+    const MAX_SIZE: u32 = NAME_MAX_LEN;
+    const IS_FIXED_SIZE: bool = false;
 }
 
 #[derive(Debug, CandidType, Clone, PartialEq, Deserialize)]
 pub enum State {
     #[serde(rename = "failed")]
-    Failed(String),
+    Failed(BoundedString<127>),
 
     #[serde(rename = "pendingOrder")]
     PendingOrder,
@@ -113,16 +205,6 @@ pub enum State {
     Available,
 }
 
-impl Storable for State {
-    fn to_bytes(&self) -> Cow<[u8]> {
-        Cow::Owned(Encode!(self).unwrap())
-    }
-
-    fn from_bytes(bytes: Vec<u8>) -> Self {
-        Decode!(&bytes, Self).unwrap()
-    }
-}
-
 #[derive(Debug, CandidType, Clone, PartialEq, Deserialize)]
 pub struct Registration {
     pub name: Name,
@@ -135,9 +217,20 @@ impl Storable for Registration {
         Cow::Owned(Encode!(self).unwrap())
     }
 
-    fn from_bytes(bytes: Vec<u8>) -> Self {
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
         Decode!(&bytes, Self).unwrap()
     }
+}
+
+impl BoundedStorable for Registration {
+    // TODO(BOUN-663): Migrate the registrations to a new BTreeMap so that we can increase the MAX_SIZE
+    // The MAX_SIZE for Registration was determined by building the biggest possible
+    // registration and calculating it's resulting Candid encoded size.
+    // This can be found below under the `max_registration_size` test.
+    // const MAX_SIZE: u32 = 474;
+
+    const MAX_SIZE: u32 = 128;
+    const IS_FIXED_SIZE: bool = false;
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
@@ -365,5 +458,59 @@ mod tests {
         );
 
         assert_eq!(Name::try_from("example."), Err(NameError::DotSuffix),);
+    }
+
+    #[test]
+    fn bounded_string() {
+        assert_eq!(BoundedString::<0>::from("").as_str(), "");
+        assert_eq!(BoundedString::<0>::from("123").as_str(), "");
+        assert_eq!(BoundedString::<1>::from("123").as_str(), "1");
+        assert_eq!(BoundedString::<3>::from("123").as_str(), "123");
+        assert_eq!(BoundedString::<4>::from("123").as_str(), "123");
+    }
+
+    #[test]
+    fn max_registration_size() {
+        let max = [
+            Registration {
+                name: Name(String::from_iter(vec!['a'; NAME_MAX_LEN as usize])),
+                canister: Principal::from_slice(&[0xFF; 29]),
+                state: State::Failed(String::from_iter(vec!['a'; 127]).into()),
+            },
+            Registration {
+                name: Name(String::from_iter(vec!['a'; NAME_MAX_LEN as usize])),
+                canister: Principal::from_slice(&[0xFF; 29]),
+                state: State::Failed(String::from_iter(vec!['a'; 128]).into()),
+            },
+        ];
+
+        for v in max {
+            assert_eq!(v.to_bytes().len() as u32, Registration::MAX_SIZE);
+        }
+    }
+
+    #[test]
+    fn non_max_registration_size() {
+        let non_max = [
+            Registration {
+                name: Name(String::from_iter(vec!['a'; NAME_MAX_LEN as usize - 1])),
+                canister: Principal::from_slice(&[0xFF; 29]),
+                state: State::Failed(String::from_iter(vec!['a'; 127]).into()),
+            },
+            Registration {
+                name: Name(String::from_iter(vec!['a'; NAME_MAX_LEN as usize])),
+                canister: Principal::from_slice(&[0xFF; 28]),
+                state: State::Failed(String::from_iter(vec!['a'; 127]).into()),
+            },
+            Registration {
+                name: Name(String::from_iter(vec!['a'; NAME_MAX_LEN as usize])),
+                canister: Principal::from_slice(&[0xFF; 29]),
+                state: State::Failed(String::from_iter(vec!['a'; 126]).into()),
+            },
+        ];
+
+        for v in non_max {
+            assert!((v.to_bytes().len() as u32) < Registration::MAX_SIZE);
+        }
     }
 }

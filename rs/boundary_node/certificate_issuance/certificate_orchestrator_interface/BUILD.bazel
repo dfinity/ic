@@ -5,7 +5,7 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     "@crate_index//:addr",
     "@crate_index//:candid",
-    "@crate_index//:ic_stable_structures_0_2_0",
+    "@crate_index//:ic-stable-structures",
     "@crate_index//:serde_bytes",
     "@crate_index//:serde",
     "@crate_index//:thiserror",

@@ -41,7 +41,7 @@ impl From<ProcessError> for State {
 impl From<ifc::State> for State {
     fn from(s: ifc::State) -> Self {
         match s {
-            ifc::State::Failed(err) => State::Failed(err),
+            ifc::State::Failed(err) => State::Failed(err.into()),
             ifc::State::PendingOrder => State::PendingOrder,
             ifc::State::PendingChallengeResponse => State::PendingChallengeResponse,
             ifc::State::PendingAcmeApproval => State::PendingAcmeApproval,
@@ -53,7 +53,7 @@ impl From<ifc::State> for State {
 impl From<State> for ifc::State {
     fn from(s: State) -> Self {
         match s {
-            State::Failed(err) => ifc::State::Failed(err),
+            State::Failed(err) => ifc::State::Failed(err.into()),
             State::PendingOrder => ifc::State::PendingOrder,
             State::PendingChallengeResponse => ifc::State::PendingChallengeResponse,
             State::PendingAcmeApproval => ifc::State::PendingAcmeApproval,

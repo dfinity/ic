@@ -5,7 +5,7 @@ use prometheus::labels;
 
 use crate::{
     acl::{Authorize, AuthorizeError, WithAuthorize},
-    LocalRef, StableMap, WithMetrics,
+    LocalRef, StableMap, StorableId, WithMetrics,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -23,14 +23,14 @@ pub trait Upload {
 }
 
 pub struct Uploader {
-    pairs: LocalRef<StableMap<Id, EncryptedPair>>,
-    registrations: LocalRef<StableMap<Id, Registration>>,
+    pairs: LocalRef<StableMap<StorableId, EncryptedPair>>,
+    registrations: LocalRef<StableMap<StorableId, Registration>>,
 }
 
 impl Uploader {
     pub fn new(
-        pairs: LocalRef<StableMap<Id, EncryptedPair>>,
-        registrations: LocalRef<StableMap<Id, Registration>>,
+        pairs: LocalRef<StableMap<StorableId, EncryptedPair>>,
+        registrations: LocalRef<StableMap<StorableId, Registration>>,
     ) -> Self {
         Self {
             pairs,
@@ -43,15 +43,11 @@ impl Upload for Uploader {
     fn upload(&self, id: &Id, pair: EncryptedPair) -> Result<(), UploadError> {
         self.registrations.with(|regs| {
             let regs = regs.borrow();
-            regs.get(id).ok_or(UploadError::NotFound)
+            regs.get(&id.into()).ok_or(UploadError::NotFound)
         })?;
 
-        self.pairs.with(|pairs| {
-            pairs
-                .borrow_mut()
-                .insert(id.to_owned(), pair)
-                .map_err(|err| anyhow!(format!("failed to insert: {err}")))
-        })?;
+        self.pairs
+            .with(|pairs| pairs.borrow_mut().insert(id.into(), pair));
 
         Ok(())
     }
@@ -106,14 +102,14 @@ pub trait Export {
 }
 
 pub struct Exporter {
-    pairs: LocalRef<StableMap<Id, EncryptedPair>>,
-    registrations: LocalRef<StableMap<Id, Registration>>,
+    pairs: LocalRef<StableMap<StorableId, EncryptedPair>>,
+    registrations: LocalRef<StableMap<StorableId, Registration>>,
 }
 
 impl Exporter {
     pub fn new(
-        pairs: LocalRef<StableMap<Id, EncryptedPair>>,
-        registrations: LocalRef<StableMap<Id, Registration>>,
+        pairs: LocalRef<StableMap<StorableId, EncryptedPair>>,
+        registrations: LocalRef<StableMap<StorableId, Registration>>,
     ) -> Self {
         Self {
             pairs,
@@ -131,7 +127,7 @@ impl Export for Exporter {
                     .iter()
                     .map(|(id, pair)| match regs.borrow().get(&id) {
                         None => Err(ExportError::UnexpectedError(anyhow!(
-                            "registration {id} is missing"
+                            "registration {id} is missing",
                         ))),
                         Some(Registration { name, canister, .. }) => Ok(ExportPackage {
                             name,
