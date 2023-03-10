@@ -68,7 +68,7 @@ extern crate lru;
 
 use crate::{
     artifact_download_list::ArtifactDownloadList,
-    download_prioritization::{AdvertTracker, AdvertTrackerFinalAction, DownloadAttemptTracker},
+    download_prioritization::{AdvertTracker, DownloadAttemptTracker},
     gossip_protocol::{GossipImpl, ReceiveCheckCache},
     gossip_types::{GossipChunk, GossipChunkRequest, GossipMessage},
     peer_context::{GossipChunkRequestTracker, PeerContext, PeerContextMap},
@@ -253,7 +253,6 @@ impl GossipImpl {
                 &gossip_chunk.request.artifact_id,
                 &gossip_chunk.request.integrity_hash,
                 &peer_id,
-                AdvertTrackerFinalAction::Abort,
             );
             self.metrics.chunks_redundant_residue.inc();
             return;
@@ -301,8 +300,8 @@ impl GossipImpl {
             &gossip_chunk.request.integrity_hash,
             &peer_id,
         ) {
-            Ok(Some(advert)) => advert,
-            Err(_) | Ok(None) => {
+            Ok(advert) => advert,
+            Err(_) => {
                 trace!(
                 self.log,
                 "The advert for {:?} chunk {:?} from peer {:?} was not found, seems the peer never sent it.",
@@ -346,7 +345,6 @@ impl GossipImpl {
                 &gossip_chunk.request.artifact_id,
                 &gossip_chunk.request.integrity_hash,
                 &peer_id,
-                AdvertTrackerFinalAction::Abort,
             );
             return;
         }
@@ -369,7 +367,6 @@ impl GossipImpl {
         let _ = self.prioritizer.delete_advert(
             &gossip_chunk.request.artifact_id,
             &gossip_chunk.request.integrity_hash,
-            AdvertTrackerFinalAction::Success,
         );
         artifacts_under_construction.remove_tracker(&gossip_chunk.request.integrity_hash);
 
@@ -668,7 +665,7 @@ impl GossipImpl {
                 self.transport.stop_connection(peer_id);
                 self.receive_check_caches.write().remove(peer_id);
                 self.prioritizer
-                    .clear_peer_adverts(peer_id, AdvertTrackerFinalAction::Abort)
+                    .clear_peer_adverts(peer_id)
                     .unwrap_or_else(|e| {
                         info!(
                             self.log,
@@ -726,14 +723,14 @@ impl GossipImpl {
         }
 
         let chunk_request = GossipChunkRequest {
-            artifact_id: advert_tracker.advert.artifact_id.clone(),
-            integrity_hash: advert_tracker.advert.integrity_hash.clone(),
+            artifact_id: advert_tracker.advert().artifact_id.clone(),
+            integrity_hash: advert_tracker.advert().integrity_hash.clone(),
             chunk_id,
         };
         // Skip if some other peer is downloading the chunk and maximum
         // duplicity has been reached.
         let duplicity = advert_tracker
-            .peers
+            .peers()
             .iter()
             .filter_map(|advertiser| peers.get(advertiser)?.requested.get(&chunk_request))
             .count();
@@ -806,7 +803,7 @@ impl GossipImpl {
             // Try to begin a download for the artifact and collect its chunk requests.
             if let Some(artifact_tracker) = artifacts_under_construction.schedule_download(
                 peer_id,
-                &advert_tracker.advert,
+                advert_tracker.advert(),
                 &self.gossip_config,
                 current_peers.len() as u32,
                 self.artifact_manager.as_ref(),
@@ -859,12 +856,9 @@ impl GossipImpl {
         integrity_hash: &CryptoHash,
         artifacts_under_construction: &mut dyn ArtifactDownloadList,
     ) {
-        let ret = self.prioritizer.delete_advert_from_peer(
-            artifact_id,
-            integrity_hash,
-            peer_id,
-            AdvertTrackerFinalAction::Abort,
-        );
+        let ret = self
+            .prioritizer
+            .delete_advert_from_peer(artifact_id, integrity_hash, peer_id);
         // Remove the artifact from the under-construction list if this peer was the
         // last peer with an advert tracker for this artifact, indicated by the
         // previous call's return value.
