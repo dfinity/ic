@@ -30,7 +30,7 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /publish/ @dfinity-lab/teams/idx
 
 # [Packages]
-/packages/icrc-ledger-types         @dfinity-lab/teams/financial-integrations
+/packages/icrc-ledger-types/         @dfinity-lab/teams/financial-integrations
 
 # [Documentation]
 /docs/                                                     @dfinity-lab/teams/docs-owners
