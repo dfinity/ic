@@ -893,6 +893,29 @@ impl ExecutionTest {
         result
     }
 
+    /// Executes a non-replicated query on the latest state.
+    pub fn non_replicated_query<S: ToString>(
+        &mut self,
+        canister_id: CanisterId,
+        method_name: S,
+        method_payload: Vec<u8>,
+    ) -> Result<WasmResult, UserError> {
+        let state = Arc::new(self.state.take().unwrap());
+
+        let query = UserQuery {
+            source: user_test_id(0),
+            receiver: canister_id,
+            method_name: method_name.to_string(),
+            method_payload,
+            ingress_expiry: 0,
+            nonce: None,
+        };
+        let result = self.query(query, Arc::clone(&state), vec![]);
+
+        self.state = Some(Arc::try_unwrap(state).unwrap());
+        result
+    }
+
     pub fn execute_response(
         &mut self,
         canister_id: CanisterId,

@@ -109,7 +109,7 @@ pub fn query_bench(
                 let mut setup = cell.borrow_mut();
                 let (test, canister_id) = setup.as_mut().unwrap();
                 let result = test
-                    .anonymous_query(*canister_id, method, payload.to_vec())
+                    .non_replicated_query(*canister_id, method, payload.to_vec())
                     .unwrap();
                 assert!(matches!(result, WasmResult::Reply(_)));
             },
