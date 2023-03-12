@@ -100,15 +100,6 @@ pub trait CertificationPool {
     fn certified_heights(&self) -> HashSet<Height>;
 }
 
-/// Trait containing only mutable functions wrt. Certification Pool
-pub trait MutableCertificationPool: CertificationPool {
-    /// Inserts a certification message into the unvalidated part of the pool.
-    fn insert(&mut self, msg: CertificationMessage);
-
-    /// Applies a set of change actions to the pool.
-    fn apply_changes(&mut self, change_set: ChangeSet);
-}
-
 /// Enumeration of all permanent errors the verifier component can return.
 #[derive(Debug, PartialEq, Eq)]
 pub enum CertificationPermanentError {

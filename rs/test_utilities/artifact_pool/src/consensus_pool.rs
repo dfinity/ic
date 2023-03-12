@@ -3,10 +3,10 @@ use ic_artifact_pool::dkg_pool::DkgPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus::consensus::pool_reader::PoolReader;
 use ic_interfaces::{
+    artifact_pool::MutablePool,
     consensus_pool::{
         ChangeAction, ChangeSet, ConsensusBlockCache, ConsensusPool, ConsensusPoolCache,
-        MutableConsensusPool, PoolSection, UnvalidatedConsensusArtifact,
-        ValidatedConsensusArtifact,
+        PoolSection, UnvalidatedConsensusArtifact, ValidatedConsensusArtifact,
     },
     crypto::{MultiSigner, ThresholdSigner},
     dkg::DkgPool,
@@ -18,6 +18,7 @@ use ic_logger::replica_logger::no_op_logger;
 use ic_replicated_state::ReplicatedState;
 use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
 use ic_test_utilities::{consensus::fake::*, crypto::CryptoReturningOk, mock_time};
+use ic_types::artifact_kind::ConsensusArtifact;
 use ic_types::batch::ValidationContext;
 use ic_types::crypto::threshold_sig::ni_dkg::DkgId;
 use ic_types::signature::*;
@@ -706,7 +707,7 @@ impl ConsensusPool for TestConsensusPool {
     }
 }
 
-impl MutableConsensusPool for TestConsensusPool {
+impl MutablePool<ConsensusArtifact, ChangeSet> for TestConsensusPool {
     fn insert(&mut self, unvalidated_artifact: UnvalidatedConsensusArtifact) {
         self.pool.insert(unvalidated_artifact)
     }

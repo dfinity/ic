@@ -179,7 +179,7 @@ mod tests {
         add_all_to_validated,
         mocks::{dependencies, Dependencies},
     };
-    use ic_interfaces::consensus_pool::MutableConsensusPool;
+    use ic_interfaces::artifact_pool::MutablePool;
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities::{consensus::fake::*, message_routing::FakeMessageRouting};
 

@@ -298,7 +298,7 @@ mod tests {
         mocks::{dependencies, Dependencies},
         pool_reader::PoolReader,
     };
-    use ic_interfaces::consensus_pool::MutableConsensusPool;
+    use ic_interfaces::artifact_pool::MutablePool;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities::message_routing::MockMessageRouting;

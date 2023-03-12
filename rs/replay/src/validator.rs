@@ -10,11 +10,9 @@ use ic_consensus::{
     },
 };
 use ic_interfaces::{
-    artifact_pool::UnvalidatedArtifact,
+    artifact_pool::{MutablePool, UnvalidatedArtifact},
     certification::Verifier,
-    consensus_pool::{
-        ChangeAction, ConsensusPool, ConsensusPoolCache, HeightIndexedPool, MutableConsensusPool,
-    },
+    consensus_pool::{ChangeAction, ConsensusPool, ConsensusPoolCache, HeightIndexedPool},
     messaging::MessageRouting,
     time_source::{SysTimeSource, TimeSource},
 };

@@ -7,13 +7,14 @@ use crate::{
 };
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_interfaces::{
-    artifact_pool::{ArtifactPoolError, HasTimestamp, UnvalidatedArtifact},
+    artifact_pool::{ArtifactPoolError, HasTimestamp, MutablePool, UnvalidatedArtifact},
     gossip_pool::GossipPool,
     ingress_pool::{
         ChangeAction, ChangeSet, IngressPool, IngressPoolObject, IngressPoolSelect,
-        IngressPoolThrottler, MutableIngressPool, PoolSection, SelectResult,
-        UnvalidatedIngressArtifact, ValidatedIngressArtifact,
+        IngressPoolThrottler, PoolSection, SelectResult, UnvalidatedIngressArtifact,
+        ValidatedIngressArtifact,
     },
+    time_source::TimeSource,
 };
 use ic_logger::{debug, trace, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -254,7 +255,7 @@ impl IngressPool for IngressPoolImpl {
     }
 }
 
-impl MutableIngressPool for IngressPoolImpl {
+impl MutablePool<IngressArtifact, ChangeSet> for IngressPoolImpl {
     /// Insert a new ingress message in the Ingress Pool and update the
     /// peer_index
     fn insert(&mut self, artifact: UnvalidatedArtifact<SignedIngress>) {
@@ -285,7 +286,7 @@ impl MutableIngressPool for IngressPoolImpl {
     }
 
     /// Apply changeset to the Ingress Pool
-    fn apply_changeset(&mut self, change_set: ChangeSet) {
+    fn apply_changes(&mut self, _time_source: &dyn TimeSource, change_set: ChangeSet) {
         for change_action in change_set {
             match change_action {
                 ChangeAction::MoveToValidated((message_id, _, _, _, _)) => {
@@ -432,7 +433,8 @@ impl IngressPoolThrottler for IngressPoolImpl {
 mod tests {
     use super::*;
     use ic_constants::MAX_INGRESS_TTL;
-    use ic_interfaces::time_source::TimeSource;
+    use ic_interfaces::artifact_pool::MutablePool;
+    use ic_interfaces::time_source::{SysTimeSource, TimeSource};
     use ic_test_utilities::{
         mock_time, types::ids::node_test_id, types::messages::SignedIngressBuilder,
         FastForwardTimeSource,
@@ -610,7 +612,7 @@ mod tests {
                     )),
                     ChangeAction::RemoveFromUnvalidated(message_id1.clone()),
                 ];
-                ingress_pool.apply_changeset(changeset);
+                ingress_pool.apply_changes(&SysTimeSource::new(), changeset);
 
                 // Check timestamp is carried over for msg_0.
                 assert_eq!(ingress_pool.unvalidated.get_timestamp(&message_id0), None);
@@ -669,13 +671,13 @@ mod tests {
                     )));
                 }
                 assert_eq!(ingress_pool.unvalidated().size(), initial_count);
-                ingress_pool.apply_changeset(changeset);
+                ingress_pool.apply_changes(&SysTimeSource::new(), changeset);
 
                 assert_eq!(ingress_pool.unvalidated().size(), 0);
                 assert_eq!(ingress_pool.validated().size(), initial_count);
 
                 let changeset = vec![ChangeAction::PurgeBelowExpiry(cutoff_time)];
-                ingress_pool.apply_changeset(changeset);
+                ingress_pool.apply_changes(&SysTimeSource::new(), changeset);
                 assert_eq!(ingress_pool.validated().size(), non_expired_count);
             })
         })

@@ -16,11 +16,11 @@
 use crate::tests::{access_ingress_pool, setup_with_params};
 use ic_constants::MAX_INGRESS_TTL;
 use ic_interfaces::{
-    artifact_pool::UnvalidatedArtifact,
+    artifact_pool::{MutablePool, UnvalidatedArtifact},
     gossip_pool::GossipPool,
     ingress_manager::IngressSelector,
-    ingress_pool::{ChangeAction, MutableIngressPool},
-    time_source::TimeSource,
+    ingress_pool::ChangeAction,
+    time_source::{SysTimeSource, TimeSource},
 };
 use ic_test_utilities::{
     mock_time,
@@ -84,7 +84,7 @@ proptest! {
                             peer_id: node_test_id(0),
                             timestamp: time_source.get_relative_time(),
                         });
-                        ingress_pool.apply_changeset(vec![ChangeAction::MoveToValidated((
+                        ingress_pool.apply_changes(&SysTimeSource::new(), vec![ChangeAction::MoveToValidated((
                             message_id.clone(),
                             node_test_id(0),
                             m.count_bytes(),

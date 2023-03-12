@@ -156,9 +156,9 @@ mod tests {
     use super::*;
     use crate::tests::{access_ingress_pool, setup_with_params};
     use ic_interfaces::{
-        artifact_pool::UnvalidatedArtifact,
-        ingress_pool::{ChangeAction, MutableIngressPool},
-        time_source::TimeSource,
+        artifact_pool::{MutablePool, UnvalidatedArtifact},
+        ingress_pool::ChangeAction,
+        time_source::{SysTimeSource, TimeSource},
     };
     use ic_interfaces_state_manager::StateManager;
     use ic_test_utilities::{
@@ -369,7 +369,7 @@ mod tests {
                         timestamp: time,
                     });
                     let change_set = ingress_manager.on_state_change(&ingress_pool);
-                    ingress_pool.apply_changeset(change_set);
+                    ingress_pool.apply_changes(&SysTimeSource::new(), change_set);
                     ingress_manager.on_state_change(&ingress_pool)
                 });
 

@@ -4,8 +4,12 @@ mod p2p;
 
 use crate::p2p::P2P;
 use ic_interfaces::{
-    artifact_manager::ArtifactPoolDescriptor, artifact_pool::UnvalidatedArtifact,
-    consensus::Consensus, consensus_pool::MutableConsensusPool, time_source::TimeSource,
+    artifact_manager::ArtifactPoolDescriptor,
+    artifact_pool::{MutablePool, UnvalidatedArtifact},
+    consensus::Consensus,
+    consensus_pool::ChangeSet,
+    consensus_pool::ConsensusPool,
+    time_source::TimeSource,
 };
 use ic_types::artifact::{
     ArtifactKind, ConsensusMessage, ConsensusMessageAttribute, ConsensusMessageId, PriorityFn,
@@ -71,7 +75,9 @@ type ConsensusPoolProcessorHandle = PoolProcessorHandle<ConsensusArtifact>;
 
 type ConsensusP2P = P2P<ConsensusArtifact>;
 
-pub fn start_consensus_p2p<P: MutableConsensusPool + Send + Sync + 'static>(
+pub fn start_consensus_p2p<
+    P: MutablePool<ConsensusArtifact, ChangeSet> + Send + Sync + 'static + ConsensusPool,
+>(
     pool: P,
     mutation_source: Box<dyn Consensus + Send + Sync>,
     gossip_state: Box<dyn ArtifactPoolDescriptor<ConsensusArtifact, P> + Send + Sync>,

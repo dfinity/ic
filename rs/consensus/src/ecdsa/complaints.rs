@@ -952,9 +952,8 @@ mod tests {
     use super::*;
     use crate::ecdsa::utils::test_utils::*;
     use ic_crypto_test_utils_canister_threshold_sigs::CanisterThresholdSigTestEnvironment;
-    use ic_interfaces::artifact_pool::UnvalidatedArtifact;
-    use ic_interfaces::ecdsa::MutableEcdsaPool;
-    use ic_interfaces::time_source::TimeSource;
+    use ic_interfaces::artifact_pool::{MutablePool, UnvalidatedArtifact};
+    use ic_interfaces::time_source::{SysTimeSource, TimeSource};
     use ic_test_utilities::types::ids::{NODE_1, NODE_2, NODE_3, NODE_4};
     use ic_test_utilities::FastForwardTimeSource;
     use ic_test_utilities_logger::with_test_replica_logger;
@@ -1109,7 +1108,7 @@ mod tests {
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaComplaint(complaint),
                 )];
-                ecdsa_pool.apply_changes(change_set);
+                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
 
                 let block_reader = TestEcdsaBlockReader::for_complainer_test(
                     Height::new(30),
@@ -1185,7 +1184,7 @@ mod tests {
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaComplaint(complaint),
                 )];
-                ecdsa_pool.apply_changes(change_set);
+                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
 
                 // Complaint for which we already issued an opening. This should
                 // not result in an opening.
@@ -1195,14 +1194,14 @@ mod tests {
                     EcdsaChangeAction::AddToValidated(EcdsaMessage::EcdsaComplaint(complaint)),
                     EcdsaChangeAction::AddToValidated(EcdsaMessage::EcdsaOpening(opening)),
                 ];
-                ecdsa_pool.apply_changes(change_set);
+                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
 
                 // Complaint for transcript not in the active list
                 let complaint = create_complaint(id_3, NODE_2, NODE_3);
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaComplaint(complaint),
                 )];
-                ecdsa_pool.apply_changes(change_set);
+                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
 
                 let block_reader = TestEcdsaBlockReader::for_complainer_test(
                     Height::new(100),
@@ -1295,7 +1294,7 @@ mod tests {
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaComplaint(complaint),
                 )];
-                ecdsa_pool.apply_changes(change_set);
+                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
 
                 // Opening for a transcript currently active,
                 // without a matching complaint (deferred)
@@ -1345,7 +1344,7 @@ mod tests {
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaOpening(opening),
                 )];
-                ecdsa_pool.apply_changes(change_set);
+                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
 
                 let block_reader = TestEcdsaBlockReader::for_complainer_test(
                     Height::new(100),
@@ -1397,7 +1396,7 @@ mod tests {
                     timestamp: time_source.get_relative_time(),
                 });
                 let change_set = vec![EcdsaChangeAction::AddToValidated(message)];
-                ecdsa_pool.apply_changes(change_set);
+                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
 
                 let block_reader = TestEcdsaBlockReader::for_complainer_test(
                     Height::new(100),
@@ -1482,7 +1481,7 @@ mod tests {
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaComplaint(complaint),
                 )];
-                ecdsa_pool.apply_changes(change_set);
+                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
 
                 // Complaint 2: height <= current_height, non-active transcripts (purged)
                 let complaint = create_complaint(id_2, NODE_2, NODE_3);
@@ -1490,14 +1489,14 @@ mod tests {
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaComplaint(complaint),
                 )];
-                ecdsa_pool.apply_changes(change_set);
+                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
 
                 // Complaint 3: height > current_height (not purged)
                 let complaint = create_complaint(id_3, NODE_2, NODE_3);
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaComplaint(complaint),
                 )];
-                ecdsa_pool.apply_changes(change_set);
+                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
 
                 // Only id_1 is active
                 let block_reader = TestEcdsaBlockReader::for_complainer_test(
@@ -1580,7 +1579,7 @@ mod tests {
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaOpening(opening),
                 )];
-                ecdsa_pool.apply_changes(change_set);
+                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
 
                 // Opening 2: height <= current_height, non-active transcripts (purged)
                 let opening = create_opening(id_2, NODE_2, NODE_3, NODE_4);
@@ -1588,14 +1587,14 @@ mod tests {
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaOpening(opening),
                 )];
-                ecdsa_pool.apply_changes(change_set);
+                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
 
                 // Complaint 3: height > current_height (not purged)
                 let opening = create_opening(id_3, NODE_2, NODE_3, NODE_4);
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaOpening(opening),
                 )];
-                ecdsa_pool.apply_changes(change_set);
+                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
 
                 // Only id_1 is active
                 let block_reader = TestEcdsaBlockReader::for_complainer_test(

@@ -1,8 +1,5 @@
 //! Canister Http related public interfaces.
-use crate::{
-    artifact_pool::UnvalidatedArtifact, consensus_pool::ConsensusPoolCache,
-    validation::ValidationError,
-};
+use crate::{consensus_pool::ConsensusPoolCache, validation::ValidationError};
 use ic_base_types::{NumBytes, RegistryVersion};
 use ic_types::{
     artifact::CanisterHttpResponseId,
@@ -126,14 +123,6 @@ pub trait CanisterHttpPool: Send + Sync {
         &self,
         msg_id: &CanisterHttpResponseId,
     ) -> Option<CanisterHttpResponseShare>;
-}
-
-pub trait MutableCanisterHttpPool: CanisterHttpPool {
-    /// Adds the entry to the unvalidated section of the artifact pool.
-    fn insert(&mut self, msg: UnvalidatedArtifact<CanisterHttpResponseShare>);
-
-    /// Mutates the artifact pool by applying the change set.
-    fn apply_changes(&mut self, change_set: CanisterHttpChangeSet);
 }
 
 pub trait CanisterHttpPoolManager: Send {

@@ -9,9 +9,10 @@ use crate::{
 };
 use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
 use ic_interfaces::{
+    artifact_pool::MutablePool,
     consensus_pool::{
         ChangeAction, ChangeSet, ConsensusBlockCache, ConsensusBlockChain, ConsensusPool,
-        ConsensusPoolCache, HeightIndexedPool, HeightRange, MutableConsensusPool, PoolSection,
+        ConsensusPoolCache, HeightIndexedPool, HeightRange, PoolSection,
         UnvalidatedConsensusArtifact, ValidatedConsensusArtifact,
     },
     gossip_pool::GossipPool,
@@ -432,7 +433,7 @@ impl ConsensusPool for ConsensusPoolImpl {
     }
 }
 
-impl MutableConsensusPool for ConsensusPoolImpl {
+impl MutablePool<ConsensusArtifact, ChangeSet> for ConsensusPoolImpl {
     fn insert(&mut self, unvalidated_artifact: UnvalidatedConsensusArtifact) {
         let mut ops = PoolSectionOps::new();
         ops.insert(unvalidated_artifact);

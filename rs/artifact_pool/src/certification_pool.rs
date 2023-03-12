@@ -2,9 +2,11 @@ use crate::height_index::HeightIndex;
 use crate::metrics::{PoolMetrics, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED};
 use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
 use ic_interfaces::{
-    certification::{CertificationPool, ChangeAction, ChangeSet, MutableCertificationPool},
+    artifact_pool::{MutablePool, UnvalidatedArtifact},
+    certification::{CertificationPool, ChangeAction, ChangeSet},
     consensus_pool::HeightIndexedPool,
     gossip_pool::GossipPool,
+    time_source::TimeSource,
 };
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
@@ -102,10 +104,10 @@ impl CertificationPoolImpl {
     }
 }
 
-impl MutableCertificationPool for CertificationPoolImpl {
-    fn insert(&mut self, msg: CertificationMessage) {
-        let height = msg.height();
-        match &msg {
+impl MutablePool<CertificationArtifact, ChangeSet> for CertificationPoolImpl {
+    fn insert(&mut self, msg: UnvalidatedArtifact<CertificationMessage>) {
+        let height = msg.message.height();
+        match &msg.message {
             CertificationMessage::CertificationShare(share) => {
                 if self.unvalidated_shares.insert(height, share) {
                     self.unvalidated_pool_metrics
@@ -123,7 +125,7 @@ impl MutableCertificationPool for CertificationPoolImpl {
         }
     }
 
-    fn apply_changes(&mut self, change_set: ChangeSet) {
+    fn apply_changes(&mut self, _time_source: &dyn TimeSource, change_set: ChangeSet) {
         change_set.into_iter().for_each(|action| match action {
             ChangeAction::AddToValidated(msg) => {
                 self.validated_pool_metrics
@@ -323,7 +325,8 @@ impl GossipPool<CertificationArtifact> for CertificationPoolImpl {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ic_interfaces::certification::{CertificationPool, MutableCertificationPool};
+    use ic_interfaces::certification::CertificationPool;
+    use ic_interfaces::time_source::SysTimeSource;
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities::consensus::fake::{Fake, FakeSigner};
     use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
@@ -377,15 +380,23 @@ mod tests {
         unreachable!("This should be only called on a certification message.");
     }
 
+    fn to_unvalidated(message: CertificationMessage) -> UnvalidatedArtifact<CertificationMessage> {
+        UnvalidatedArtifact::<CertificationMessage> {
+            message,
+            peer_id: node_test_id(0),
+            timestamp: SysTimeSource::new().get_relative_time(),
+        }
+    }
+
     #[test]
     fn test_certification_pool_inserts() {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let mut pool =
                 CertificationPoolImpl::new(pool_config, no_op_logger(), MetricsRegistry::new());
-            pool.insert(fake_share(1, 0));
-            pool.insert(fake_share(2, 1));
+            pool.insert(to_unvalidated(fake_share(1, 0)));
+            pool.insert(to_unvalidated(fake_share(2, 1)));
 
-            pool.insert(fake_cert(1));
+            pool.insert(to_unvalidated(fake_cert(1)));
             let mut other = fake_cert(1);
             if let CertificationMessage::Certification(x) = &mut other {
                 x.signed.signature.signer = NiDkgId {
@@ -395,7 +406,7 @@ mod tests {
                     target_subnet: NiDkgTargetSubnet::Local,
                 };
             }
-            pool.insert(other);
+            pool.insert(to_unvalidated(other));
             assert_eq!(
                 pool.unvalidated_shares_at_height(Height::from(1)).count(),
                 1
@@ -423,10 +434,13 @@ mod tests {
                 CertificationPoolImpl::new(pool_config, no_op_logger(), MetricsRegistry::new());
             let share_msg = fake_share(7, 0);
             let cert_msg = fake_cert(8);
-            pool.apply_changes(vec![
-                ChangeAction::AddToValidated(share_msg.clone()),
-                ChangeAction::AddToValidated(cert_msg.clone()),
-            ]);
+            pool.apply_changes(
+                &SysTimeSource::new(),
+                vec![
+                    ChangeAction::AddToValidated(share_msg.clone()),
+                    ChangeAction::AddToValidated(cert_msg.clone()),
+                ],
+            );
             assert_eq!(
                 pool.certification_at_height(Height::from(8)),
                 Some(msg_to_cert(cert_msg))
@@ -445,12 +459,15 @@ mod tests {
                 CertificationPoolImpl::new(pool_config, no_op_logger(), MetricsRegistry::new());
             let share_msg = fake_share(10, 10);
             let cert_msg = fake_cert(20);
-            pool.insert(share_msg.clone());
-            pool.insert(cert_msg.clone());
-            pool.apply_changes(vec![
-                ChangeAction::MoveToValidated(share_msg.clone()),
-                ChangeAction::MoveToValidated(cert_msg.clone()),
-            ]);
+            pool.insert(to_unvalidated(share_msg.clone()));
+            pool.insert(to_unvalidated(cert_msg.clone()));
+            pool.apply_changes(
+                &SysTimeSource::new(),
+                vec![
+                    ChangeAction::MoveToValidated(share_msg.clone()),
+                    ChangeAction::MoveToValidated(cert_msg.clone()),
+                ],
+            );
             assert_eq!(
                 pool.shares_at_height(Height::from(10))
                     .collect::<Vec<CertificationShare>>(),
@@ -479,16 +496,19 @@ mod tests {
                 CertificationPoolImpl::new(pool_config, no_op_logger(), MetricsRegistry::new());
             let share_msg = fake_share(10, 10);
             let cert_msg = fake_cert(10);
-            pool.insert(share_msg.clone());
-            pool.insert(cert_msg.clone());
-            pool.apply_changes(vec![
-                ChangeAction::MoveToValidated(share_msg),
-                ChangeAction::MoveToValidated(cert_msg),
-            ]);
+            pool.insert(to_unvalidated(share_msg.clone()));
+            pool.insert(to_unvalidated(cert_msg.clone()));
+            pool.apply_changes(
+                &SysTimeSource::new(),
+                vec![
+                    ChangeAction::MoveToValidated(share_msg),
+                    ChangeAction::MoveToValidated(cert_msg),
+                ],
+            );
             let share_msg = fake_share(10, 30);
             let cert_msg = fake_cert(10);
-            pool.insert(share_msg);
-            pool.insert(cert_msg);
+            pool.insert(to_unvalidated(share_msg));
+            pool.insert(to_unvalidated(cert_msg));
 
             assert_eq!(pool.all_heights_with_artifacts().len(), 1);
             assert_eq!(pool.shares_at_height(Height::from(10)).count(), 1);
@@ -503,7 +523,10 @@ mod tests {
                 1
             );
 
-            pool.apply_changes(vec![ChangeAction::RemoveAllBelow(Height::from(11))]);
+            pool.apply_changes(
+                &SysTimeSource::new(),
+                vec![ChangeAction::RemoveAllBelow(Height::from(11))],
+            );
             let mut back_off_factor = 1;
             loop {
                 std::thread::sleep(std::time::Duration::from_millis(
@@ -538,16 +561,19 @@ mod tests {
             let mut pool =
                 CertificationPoolImpl::new(pool_config, no_op_logger(), MetricsRegistry::new());
             let share_msg = fake_share(10, 10);
-            pool.insert(share_msg.clone());
+            pool.insert(to_unvalidated(share_msg.clone()));
 
             assert_eq!(
                 pool.unvalidated_shares_at_height(Height::from(10)).count(),
                 1
             );
-            pool.apply_changes(vec![ChangeAction::HandleInvalid(
-                share_msg,
-                "Testing the removal of invalid artifacts".to_string(),
-            )]);
+            pool.apply_changes(
+                &SysTimeSource::new(),
+                vec![ChangeAction::HandleInvalid(
+                    share_msg,
+                    "Testing the removal of invalid artifacts".to_string(),
+                )],
+            );
             assert_eq!(
                 pool.unvalidated_shares_at_height(Height::from(10)).count(),
                 0

@@ -3,9 +3,10 @@ use crate::{
     pool_common::PoolSection,
 };
 use ic_interfaces::{
-    artifact_pool::{UnvalidatedArtifact, ValidatedArtifact},
-    dkg::{ChangeAction, ChangeSet, DkgPool, MutableDkgPool},
+    artifact_pool::{MutablePool, UnvalidatedArtifact, ValidatedArtifact},
+    dkg::{ChangeAction, ChangeSet, DkgPool},
     gossip_pool::GossipPool,
+    time_source::TimeSource,
 };
 use ic_metrics::MetricsRegistry;
 use ic_types::consensus::dkg;
@@ -91,7 +92,7 @@ impl DkgPoolImpl {
     }
 }
 
-impl MutableDkgPool for DkgPoolImpl {
+impl MutablePool<DkgArtifact, ChangeSet> for DkgPoolImpl {
     /// Inserts an unvalidated artifact into the unvalidated section.
     fn insert(&mut self, artifact: UnvalidatedArtifact<consensus::dkg::Message>) {
         self.unvalidated
@@ -105,7 +106,7 @@ impl MutableDkgPool for DkgPoolImpl {
     /// It panics if we pass a hash for an artifact to be moved into the
     /// validated section, but it cannot be found in the unvalidated
     /// section.
-    fn apply_changes(&mut self, change_set: ChangeSet) {
+    fn apply_changes(&mut self, _time_source: &dyn TimeSource, change_set: ChangeSet) {
         for action in change_set {
             match action {
                 ChangeAction::HandleInvalid(hash, _) => {
@@ -196,6 +197,7 @@ impl DkgPool for DkgPoolImpl {
 mod test {
     use super::*;
     use ic_interfaces::dkg::DkgPool;
+    use ic_interfaces::time_source::SysTimeSource;
     use ic_test_utilities::{
         consensus::fake::FakeSigner,
         mock_time,
@@ -229,6 +231,7 @@ mod test {
         let mut pool = DkgPoolImpl::new(MetricsRegistry::new());
         // add two validated messages, one for every DKG instance
         pool.apply_changes(
+            &SysTimeSource::new(),
             [
                 make_message(current_dkg_id_start_height, node_test_id(0)),
                 make_message(last_dkg_id_start_height, node_test_id(0)),
@@ -255,14 +258,18 @@ mod test {
 
         // purge below the height of the current dkg and make sure the older artifacts
         // are purged from the validated and unvalidated sections
-        pool.apply_changes(vec![ChangeAction::Purge(current_dkg_id_start_height)]);
+        pool.apply_changes(
+            &SysTimeSource::new(),
+            vec![ChangeAction::Purge(current_dkg_id_start_height)],
+        );
         assert_eq!(pool.get_validated().count(), 1);
         assert_eq!(pool.get_unvalidated().count(), 1);
 
         // purge the highest height and make sure everything is gone
-        pool.apply_changes(vec![ChangeAction::Purge(
-            current_dkg_id_start_height.increment(),
-        )]);
+        pool.apply_changes(
+            &SysTimeSource::new(),
+            vec![ChangeAction::Purge(current_dkg_id_start_height.increment())],
+        );
         assert_eq!(pool.get_validated().count(), 0);
         assert_eq!(pool.get_unvalidated().count(), 0);
     }
