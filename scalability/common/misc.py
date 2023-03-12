@@ -6,6 +6,7 @@ import re
 import subprocess
 import sys
 import traceback
+from pathlib import Path
 from statistics import mean
 
 import gflags
@@ -215,7 +216,8 @@ def load_artifacts(artifacts_path: str):
     If previously downloaded, reuse, otherwise download.
     When downloading, store the GIT commit hash that has been used in a text file.
     """
-    f_artifacts_hash = os.path.join(artifacts_path, "githash")
+    p = Path(__file__).parents[2]
+    f_artifacts_hash = os.path.join(p, artifacts_path, "githash")
     if subprocess.run(["stat", f_artifacts_hash], stdout=subprocess.DEVNULL).returncode != 0:
         print("Could not find artifacts, downloading .. ")
         # Delete old artifacts directory, if it exists

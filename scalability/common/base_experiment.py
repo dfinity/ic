@@ -49,7 +49,7 @@ gflags.DEFINE_string(
 gflags.DEFINE_string(
     "cache_path", "", "Path to a file that should be used as a cache. Only use if you know what you are doing."
 )
-gflags.DEFINE_string("artifacts_path", "../artifacts/release", "Path to the artifacts directory")
+gflags.DEFINE_string("artifacts_path", "artifacts/release", "Path to the artifacts directory")
 gflags.DEFINE_string("workload_generator_path", "", "Path to the workload generator to be used")
 gflags.DEFINE_boolean("no_instrument", False, "Do not instrument target machine")
 gflags.DEFINE_string("targets", "", "Set load target IP adresses from this comma-separated list directly.")

@@ -1,5 +1,8 @@
-load("@rules_python//python:defs.bzl", "py_library", "py_test")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
 load("@python_deps//:requirements.bzl", "all_requirements", "requirement")
+load("@aspect_bazel_lib//lib:copy_to_directory.bzl", "copy_to_directory")
+load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
+load("//rs/tests:system_tests.bzl", "symlink_dir")
 
 # there were some issues with loading uuid, therefore we need load requirements individually instead of usings all_requirements
 py_library(
@@ -37,6 +40,7 @@ py_test(
 py_library(
     name = "ssh",
     srcs = ["common/ssh.py"],
+    deps = [requirement("termcolor")],
 )
 
 py_library(
@@ -148,46 +152,256 @@ py_test(
     deps = [":verify_perf"],
 )
 
-#The following python tests cannot be run in bazel currently, since they rely on absolute paths which would need to be refactored in order for them to run in bazel
-#py_library(
-#    name = "workload_experiment",
-#    srcs = ["common/workload_experiment.py"],
-#    deps = [
-#        ":ansible",
-#        ":base_experiment",
-#        ":prometheus",
-#        ":report",
-#        ":ssh",
-#        ":workload_hooks",
-#        requirement("termcolor"),
-#    ],
-#)
-#
-#py_library(
-#    name = "workload_hooks",
-#    srcs = ["workloads/hooks/workload_hooks.py"],
-#)
-#
-#py_library(
-#    name = "run_mixed_workload_experiment",
-#    srcs = ["experiments/run_mixed_workload_experiment.py"],
-#    deps = [
-#        ":misc",
-#        ":report",
-#        ":workload",
-#        ":workload_experiment",
-#        ":workload_hooks",
-#        requirement("python-gflags"),
-#        requirement("toml"),
-#    ],
-#)
-#
-#py_library(
-#    name = "xrc_hooks",
-#    srcs = ["workloads/hooks/xrc_hooks.py"],
-#    deps = [requirement("ic-py")],
-#)
-#
+py_library(
+    name = "farm",
+    srcs = ["common/farm.py"],
+    deps = [
+        ":ssh",
+        requirement("paramiko"),
+        requirement("requests"),
+        requirement("scp"),
+    ],
+)
+
+py_library(
+    name = "delegation",
+    srcs = ["common/delegation.py"],
+    deps = [requirement("ic-py")],
+)
+
+py_library(
+    name = "icpy_stress_experiment",
+    srcs = ["common/icpy_stress_experiment.py"],
+    deps = [
+        ":base_experiment",
+        ":delegation",
+        ":misc",
+        requirement("ic-py"),
+        requirement("python-gflags"),
+        requirement("matplotlib"),
+        requirement("termcolor"),
+    ],
+)
+
+symlink_dir(
+    name = "canisters",
+    targets = {
+        "//rs/registry/canister:registry-canister": "registry-canister.wasm",
+        "//rs/nns/governance:governance-canister": "governance-canister.wasm",
+        "//rs/nns/governance:governance-canister-test": "governance-canister_test.wasm",
+        "//rs/nns/identity:identity-canister": "identity-canister.wasm",
+        "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method": "ledger-canister_notify-method.wasm",
+        "//rs/nns/handlers/root:root-canister": "root-canister.wasm",
+        "//rs/nns/cmc:cycles-minting-canister": "cycles-minting-canister.wasm",
+        "//rs/nns/handlers/lifeline:lifeline_actor": "lifeline.wasm",
+        "//rs/nns/gtc:genesis-token-canister": "genesis-token-canister.wasm",
+        "//rs/nns/sns-wasm:sns-wasm-canister": "sns-wasm-canister.wasm",
+        "//rs/nns/nns-ui:nns-ui-canister": "nns-ui-canister.wasm",
+        "//rs/rosetta-api/icrc1/ledger:ledger_canister": "ic-icrc1-ledger.wasm",
+        "//rs/bitcoin/ckbtc/minter:ckbtc_minter": "ic-ckbtc-minter.wasm",
+        "//rs/rust_canisters/xnet_test:xnet-test-canister": "xnet-test-canister.wasm",
+        "//rs/rust_canisters/response_payload_test:response-payload-test-canister": "response-payload-test-canister.wasm",
+        "//rs/rust_canisters/memory_test:memory_test_canister": "memory-test-canister.wasm",
+    },
+)
+
+symlink_dir(
+    name = "release",
+    targets = {
+        "//rs/prep:ic-prep": "ic-prep",
+        "//rs/nns/init:ic-nns-init": "ic-nns-init",
+        "//rs/registry/admin:ic-admin": "ic-admin",
+        "//rs/workload_generator:ic-workload-generator": "ic-workload-generator",
+    },
+)
+
+copy_file(
+    name = "githash",
+    src = "//bazel:version.txt",
+    out = "release/githash",
+)
+
+copy_to_directory(
+    name = "artifacts",
+    srcs = [
+        ":canisters",
+        ":githash",
+        ":release",
+    ],
+)
+
+py_binary(
+    name = "e2e-scalability-tests",
+    srcs = ["common/tests/e2e-scalability-tests.py"],
+    data = [
+        ":artifacts",
+        "//ic-os/guestos/dev:hash_and_upload_update-img",
+        "//ic-os/guestos/dev:hash_and_upload_disk-img",
+        "//ic-os/guestos:scripts/build-bootstrap-config-image.sh",
+        "//rs/tests:create-universal-vm-config-image.sh",
+        "common/flamegraph.gz",
+        "workloads/tiny.toml",
+    ] + glob([
+        "ii/*",
+    ]),
+    deps = [
+        ":base_experiment",
+        ":farm",
+        ":icpy_stress_experiment",
+        ":ictools",
+        ":max_capacity_large_payload",
+        ":misc",
+        ":run_delegation_experiment",
+        ":run_large_memory_experiment",
+        ":run_large_payload_experiment",
+        ":run_mixed_workload_experiment",
+        ":run_system_baseline_experiment",
+        ":run_xnet_experiment",
+        ":workload",
+        ":workload_experiment",
+        ":workload_xrc_hooks",
+        requirement("python-gflags"),
+        requirement("six"),
+        requirement("ic-py"),
+        requirement("toml"),
+    ],
+)
+
+sh_test(
+    name = "run-e2e-scalability-tests",
+    timeout = "long",
+    srcs = ["common/tests/e2e-scalability-tests.sh"],
+    args = [
+        "$(rootpath :e2e-scalability-tests)",
+        "$(rootpath //bazel:version.txt)",
+    ],
+    data = [
+        ":e2e-scalability-tests",
+        "//bazel:version.txt",
+        "//ic-os/guestos:scripts/build-bootstrap-config-image.sh",
+    ],
+    env_inherit = [
+        "CI_PIPELINE_ID",
+        "CI_RUNNER_TAGS",
+        "HOME",
+    ],
+    tags = [
+        "local",
+        "requires-network",
+    ],
+)
+
+py_library(
+    name = "workload_experiment",
+    srcs = ["common/workload_experiment.py"],
+    deps = [
+        ":ansible",
+        ":base_experiment",
+        ":prometheus",
+        ":report",
+        ":ssh",
+        ":workload_hooks",
+        requirement("termcolor"),
+    ],
+)
+
+py_library(
+    name = "workload_hooks",
+    srcs = ["workloads/hooks/workload_hooks.py"],
+)
+
+py_library(
+    name = "workload_xrc_hooks",
+    srcs = ["workloads/hooks/xrc_hooks.py"],
+    deps = [
+        ":misc",
+        ":workload_hooks",
+        requirement("ic-py"),
+    ],
+)
+
+# Experiments
+
+py_library(
+    name = "run_mixed_workload_experiment",
+    srcs = ["experiments/run_mixed_workload_experiment.py"],
+    deps = [
+        ":misc",
+        ":report",
+        ":workload",
+        ":workload_experiment",
+        ":workload_hooks",
+        requirement("python-gflags"),
+        requirement("toml"),
+    ],
+)
+
+py_library(
+    name = "run_xnet_experiment",
+    srcs = ["experiments/run_xnet_experiment.py"],
+    deps = [
+        ":base_experiment",
+        ":misc",
+        ":prometheus",
+        requirement("ic-py"),
+        requirement("python-gflags"),
+        requirement("termcolor"),
+        requirement("toml"),
+    ],
+)
+
+py_library(
+    name = "run_delegation_experiment",
+    srcs = ["experiments/run_delegation_experiment.py"],
+    deps = [
+        ":delegation",
+        ":icpy_stress_experiment",
+        ":misc",
+        ":report",
+    ],
+)
+
+py_library(
+    name = "run_system_baseline_experiment",
+    srcs = ["experiments/run_system_baseline_experiment.py"],
+    deps = [
+        ":misc",
+        ":workload_experiment",
+        requirement("python-gflags"),
+        requirement("termcolor"),
+    ],
+)
+
+py_library(
+    name = "run_large_payload_experiment",
+    srcs = ["experiments/run_large_payload_experiment.py"],
+    deps = [
+        ":misc",
+        ":workload_experiment",
+        requirement("python-gflags"),
+    ],
+)
+
+py_library(
+    name = "max_capacity_large_payload",
+    srcs = ["experiments/max_capacity_large_payload.py"],
+    deps = [
+        ":misc",
+        ":run_system_baseline_experiment",
+        ":workload_experiment",
+    ],
+)
+
+py_library(
+    name = "run_large_memory_experiment",
+    srcs = ["experiments/run_large_memory_experiment.py"],
+    deps = [
+        ":misc",
+        ":workload_experiment",
+        requirement("python-gflags"),
+    ],
+)
+
 #py_test(
 #    name = "mock_multi",
 #    srcs = ["common/tests/mock_multi.py"],
@@ -206,7 +420,7 @@ py_test(
 #py_test(
 #    name = "mock",
 #    srcs = ["common/tests/mock.py"],
-#    data = ["//publish/canisters:upload"],
+#    data = ["//publish/binaries:binaries"],
 #    deps = [
 #        ":base_experiment",
 #        ":misc",

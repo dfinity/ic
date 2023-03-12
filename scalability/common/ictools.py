@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from pathlib import Path
 
 import cbor
 import gflags
@@ -46,7 +47,8 @@ def build_bootstrap_config_image(name, **kwargs):
                 f.write(keys)
         kwargs["accounts_ssh_authorized_keys"] = ssh_keys_dir
 
-    bootstrap_script = "../ic-os/guestos/scripts/build-bootstrap-config-image.sh"
+    p = Path(__file__).parents[2]
+    bootstrap_script = os.path.join(p, "ic-os/guestos/scripts/build-bootstrap-config-image.sh")
     args = [bootstrap_script, config_image]
     for key, value in kwargs.items():
         args.append("--" + key)

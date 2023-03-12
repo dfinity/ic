@@ -3,6 +3,7 @@ import subprocess
 import sys
 import time
 from dataclasses import dataclass
+from pathlib import Path
 
 from termcolor import colored
 
@@ -74,11 +75,13 @@ class Flamegraph(metrics.Metric):
             assert rcs == [0 for _ in machines]
 
             # Extract flamegraph binary, if not already done
-            if not os.path.exists("common/flamegraph"):
-                subprocess.check_output(["gunzip", "-k", "common/flamegraph.gz"])
+            scalability_dir = Path(__file__).parents[1]
+            # gunzip does not work correctly within bazel so needs to be forced
+            if not os.path.exists(str(scalability_dir) + "/common/flamegraph"):
+                subprocess.check_output(["gunzip", "-k", "--force", str(scalability_dir) + "/common/flamegraph.gz"])
 
             destinations = ["admin@[{}]:".format(m) for m in machines]
-            sources = ["common/flamegraph" for _ in machines]
+            sources = [str(scalability_dir) + "/common/flamegraph" for _ in machines]
             return ssh.scp_in_parallel(sources, destinations)
 
         else:
@@ -125,7 +128,7 @@ class Flamegraph(metrics.Metric):
             self.target,
             (
                 f"cd {TARGET_DIR}; "
-                f'echo "Size of perf data:"; ls -anh {TARGET_DIR}/perf.data; '
+                f'echo "Size of perf data:"; ls -anh {TARGET_DIR}/perf.data; chmod u+x ./flamegraph; stat ./flamegraph; '
                 f"time sudo ./flamegraph --no-inline --perfdata {TARGET_DIR}/perf.data -o {TARGET_DIR}/flamegraph.svg; "
             ),
         )
