@@ -404,7 +404,9 @@ pub mod test {
     use crate::consensus::crypto::SignVerify;
     use crate::consensus::mocks::{dependencies, Dependencies};
     use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
+    use ic_interfaces::artifact_pool::MutablePool;
     use ic_interfaces::consensus_pool::ConsensusPool;
+    use ic_interfaces::time_source::SysTimeSource;
     use ic_interfaces_state_manager::Labeled;
     use ic_metrics::MetricsRegistry;
     use ic_registry_subnet_type::SubnetType;
@@ -517,9 +519,10 @@ pub mod test {
                 };
 
                 let mut canister_http_pool = CanisterHttpPoolImpl::new(MetricsRegistry::new());
-                canister_http_pool.apply_changes(vec![CanisterHttpChangeAction::AddToValidated(
-                    share, content,
-                )]);
+                canister_http_pool.apply_changes(
+                    &SysTimeSource::new(),
+                    vec![CanisterHttpChangeAction::AddToValidated(share, content)],
+                );
 
                 let mut pool_manager = CanisterHttpPoolManagerImpl::new(
                     state_manager,
@@ -693,9 +696,10 @@ pub mod test {
                     signature,
                 };
 
-                canister_http_pool.apply_changes(vec![CanisterHttpChangeAction::AddToValidated(
-                    share, content,
-                )]);
+                canister_http_pool.apply_changes(
+                    &SysTimeSource::new(),
+                    vec![CanisterHttpChangeAction::AddToValidated(share, content)],
+                );
 
                 // Now that there are shares in the pool, we should be able to
                 // call generate_change_set again without send being called.

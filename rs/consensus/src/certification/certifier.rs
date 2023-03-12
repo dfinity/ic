@@ -604,8 +604,10 @@ mod tests {
     use super::*;
     use crate::consensus::mocks::{dependencies, Dependencies};
     use ic_artifact_pool::certification_pool::CertificationPoolImpl;
-    use ic_interfaces::certification::{CertificationPool, MutableCertificationPool};
+    use ic_interfaces::artifact_pool::{MutablePool, UnvalidatedArtifact};
+    use ic_interfaces::certification::CertificationPool;
     use ic_interfaces::consensus_pool::ConsensusPool;
+    use ic_interfaces::time_source::{SysTimeSource, TimeSource};
     use ic_test_utilities::consensus::fake::*;
     use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
     use ic_test_utilities_logger::with_test_replica_logger;
@@ -624,19 +626,29 @@ mod tests {
         CryptoHashOfPartialState, Height,
     };
 
+    fn to_unvalidated(message: CertificationMessage) -> UnvalidatedArtifact<CertificationMessage> {
+        UnvalidatedArtifact::<CertificationMessage> {
+            message,
+            peer_id: node_test_id(0),
+            timestamp: SysTimeSource::new().get_relative_time(),
+        }
+    }
+
     fn gen_content() -> CertificationContent {
         CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(Vec::new())))
     }
 
-    fn fake_share(height: Height, node_id: u64) -> CertificationMessage {
+    fn fake_share(height: Height, node_id: u64) -> UnvalidatedArtifact<CertificationMessage> {
         let content = gen_content();
-        CertificationMessage::CertificationShare(CertificationShare {
-            height,
-            signed: Signed {
-                signature: ThresholdSignatureShare::fake(node_test_id(node_id)),
-                content,
+        to_unvalidated(CertificationMessage::CertificationShare(
+            CertificationShare {
+                height,
+                signed: Signed {
+                    signature: ThresholdSignatureShare::fake(node_test_id(node_id)),
+                    content,
+                },
             },
-        })
+        ))
     }
 
     fn fake_dkg_id(h: u64) -> NiDkgId {
@@ -648,18 +660,18 @@ mod tests {
         }
     }
 
-    fn fake_cert_default(height: Height) -> CertificationMessage {
+    fn fake_cert_default(height: Height) -> UnvalidatedArtifact<CertificationMessage> {
         fake_cert(height, fake_dkg_id(0))
     }
 
-    fn fake_cert(height: Height, dkg_id: NiDkgId) -> CertificationMessage {
+    fn fake_cert(height: Height, dkg_id: NiDkgId) -> UnvalidatedArtifact<CertificationMessage> {
         let content = gen_content();
         let mut signature = ThresholdSignature::fake();
         signature.signer = dkg_id;
-        CertificationMessage::Certification(Certification {
+        to_unvalidated(CertificationMessage::Certification(Certification {
             height,
             signed: Signed { content, signature },
-        })
+        }))
     }
 
     // Adds an expectation to the StateManager mock, which asks for empty hashes for
@@ -724,7 +736,7 @@ mod tests {
                     &cert_pool,
                     &state_manager.list_state_hashes_to_certify(),
                 );
-                cert_pool.apply_changes(change_set);
+                cert_pool.apply_changes(&SysTimeSource::new(), change_set);
 
                 let prio_fn = certifier_gossip.get_priority_function(&cert_pool);
                 for (height, prio) in &[
@@ -801,7 +813,7 @@ mod tests {
                 // expect 5 change actions: 3 full certifications moved to validated section + 2
                 // shares, where no certification is available (at height 3)
                 assert_eq!(change_set.len(), 5);
-                cert_pool.apply_changes(change_set);
+                cert_pool.apply_changes(&SysTimeSource::new(), change_set);
 
                 // if the minimum chain length is outside of the interval (60, 120),
                 // then you need to adjust the test values below.
@@ -846,7 +858,10 @@ mod tests {
                 let height = Height::from(1);
                 assert!(cert_pool.certification_at_height(height).is_some());
 
-                cert_pool.apply_changes(vec![ChangeAction::RemoveAllBelow(purge_height)]);
+                cert_pool.apply_changes(
+                    &SysTimeSource::new(),
+                    vec![ChangeAction::RemoveAllBelow(purge_height)],
+                );
 
                 let mut back_off_factor = 1;
                 loop {
@@ -926,7 +941,7 @@ mod tests {
                     &cert_pool,
                     &state_manager.list_state_hashes_to_certify(),
                 );
-                cert_pool.apply_changes(change_set);
+                cert_pool.apply_changes(&SysTimeSource::new(), change_set);
 
                 // emulates a call from inside on_state_change
                 let mut messages = vec![];
@@ -1012,7 +1027,7 @@ mod tests {
                     &cert_pool,
                     &state_manager.list_state_hashes_to_certify(),
                 );
-                cert_pool.apply_changes(change_set);
+                cert_pool.apply_changes(&SysTimeSource::new(), change_set);
 
                 assert_eq!(cert_pool.shares_at_height(Height::from(3)).count(), 6);
                 assert_eq!(
@@ -1138,10 +1153,10 @@ mod tests {
                 (0..3)
                     .map(|i| {
                         if let CertificationMessage::Certification(mut cert) =
-                            fake_cert_default(Height::from(5))
+                            fake_cert_default(Height::from(5)).message
                         {
                             cert.signed.signature.signer = fake_dkg_id(i);
-                            CertificationMessage::Certification(cert)
+                            to_unvalidated(CertificationMessage::Certification(cert))
                         } else {
                             unreachable!("only full certifications are expected")
                         }
@@ -1163,7 +1178,7 @@ mod tests {
                     &state_manager.list_state_hashes_to_certify(),
                 );
                 assert_eq!(change_set.len(), 1);
-                cert_pool.apply_changes(change_set);
+                cert_pool.apply_changes(&SysTimeSource::new(), change_set);
 
                 assert!(cert_pool.certification_at_height(Height::from(5)).is_some());
             })
@@ -1194,7 +1209,7 @@ mod tests {
                 );
 
                 let cert = if let CertificationMessage::Certification(cert) =
-                    fake_cert_default(Height::from(5))
+                    fake_cert_default(Height::from(5)).message
                 {
                     cert
                 } else {
@@ -1261,7 +1276,7 @@ mod tests {
                     &cert_pool,
                     &state_manager.list_state_hashes_to_certify(),
                 );
-                cert_pool.apply_changes(change_set);
+                cert_pool.apply_changes(&SysTimeSource::new(), change_set);
 
                 // Let's insert valid shares from the same signer again:
                 cert_pool.insert(fake_share(Height::from(4), 0));
@@ -1288,7 +1303,7 @@ mod tests {
                     "Both items should be RemoveFromUnvalidated"
                 );
 
-                cert_pool.apply_changes(change_set);
+                cert_pool.apply_changes(&SysTimeSource::new(), change_set);
 
                 // At level 4, we find a certification
                 assert_eq!(cert_pool.shares_at_height(Height::from(4)).count(), 4);

@@ -1,5 +1,4 @@
 //! The DKG public interface.
-use crate::artifact_pool::UnvalidatedArtifact;
 use ic_types::{consensus::dkg, crypto::CryptoHashOf, Height};
 use std::time::Duration;
 
@@ -25,15 +24,6 @@ pub trait DkgPool: Send + Sync {
     fn get_current_start_height(&self) -> Height;
     /// Checks if the message is present in the validated section.
     fn validated_contains(&self, msg: &dkg::Message) -> bool;
-}
-
-/// Trait containing only mutable functions wrt. DkgPool
-pub trait MutableDkgPool: DkgPool {
-    /// Inserts a dkg message into the unvalidated part of the pool.
-    fn insert(&mut self, msg: UnvalidatedArtifact<dkg::Message>);
-
-    /// Applies a set of change actions to the pool.
-    fn apply_changes(&mut self, change_set: ChangeSet);
 }
 
 /// Various actions that can be perfomed in DKG.

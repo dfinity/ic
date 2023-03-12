@@ -1,7 +1,18 @@
 //! The artifact pool public interface.
+use crate::time_source::TimeSource;
 use derive_more::From;
-use ic_types::{replica_version::ReplicaVersion, CountBytes, NodeId, Time};
+use ic_types::{artifact::ArtifactKind, replica_version::ReplicaVersion, CountBytes, NodeId, Time};
 use serde::{Deserialize, Serialize};
+
+/// The trait defines the canonical way for mutating an artifact pool.
+/// There should be one owner of the object implementing this trait.
+pub trait MutablePool<Artifact: ArtifactKind, C> {
+    /// Inserts a message into the unvalidated part of the pool.
+    fn insert(&mut self, msg: UnvalidatedArtifact<Artifact::Message>);
+
+    /// Applies a set of change actions to the pool.
+    fn apply_changes(&mut self, time_source: &dyn TimeSource, change_set: C);
+}
 
 /// Contains different errors that can happen on artifact acceptance check.
 /// In our P2P protocol none of the errors from 'ArtifactPoolError' are

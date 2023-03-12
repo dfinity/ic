@@ -3,7 +3,8 @@
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use ic_artifact_pool::consensus_pool::ConsensusPoolImpl;
-use ic_interfaces::consensus_pool::{ChangeAction, ChangeSet, ConsensusPool, MutableConsensusPool};
+use ic_interfaces::artifact_pool::MutablePool;
+use ic_interfaces::consensus_pool::{ChangeAction, ChangeSet, ConsensusPool};
 use ic_logger::replica_logger::no_op_logger;
 use ic_test_utilities::FastForwardTimeSource;
 use ic_test_utilities::{

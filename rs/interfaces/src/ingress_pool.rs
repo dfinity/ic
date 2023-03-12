@@ -116,15 +116,6 @@ pub trait IngressPool {
     fn unvalidated(&self) -> &dyn PoolSection<UnvalidatedIngressArtifact>;
 }
 
-/// Mutable operations on top of IngressPool.
-pub trait MutableIngressPool: IngressPool {
-    /// Insert an unvalidated artifact.
-    fn insert(&mut self, unvalidated_artifact: UnvalidatedArtifact<SignedIngress>);
-
-    /// Apply the change set.
-    fn apply_changeset(&mut self, change_set: ChangeSet);
-}
-
 /// Indicate whether something should be selected, and whether selection should
 /// continue:
 /// - 'Selected': select the object and continue;

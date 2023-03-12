@@ -3,17 +3,23 @@
 
 use ic_interfaces::{
     artifact_manager::{ArtifactProcessor, ProcessingResult},
-    artifact_pool::UnvalidatedArtifact,
-    canister_http::{CanisterHttpChangeAction, CanisterHttpPoolManager, MutableCanisterHttpPool},
+    artifact_pool::{MutablePool, UnvalidatedArtifact},
+    canister_http::{
+        CanisterHttpChangeAction, CanisterHttpChangeSet, CanisterHttpPool, CanisterHttpPoolManager,
+    },
     certification::{
-        Certifier, ChangeAction as CertificationChangeAction, MutableCertificationPool,
+        CertificationPool, Certifier, ChangeAction as CertificationChangeAction,
+        ChangeSet as CertificationChangeSet,
     },
     consensus::Consensus,
-    consensus_pool::{ChangeAction as ConsensusAction, ConsensusPoolCache, MutableConsensusPool},
-    dkg::{ChangeAction as DkgChangeAction, Dkg, MutableDkgPool},
-    ecdsa::{Ecdsa, EcdsaChangeAction, MutableEcdsaPool},
+    consensus_pool::{
+        ChangeAction as ConsensusAction, ChangeSet as CoonsensusChangeSet, ConsensusPool,
+        ConsensusPoolCache,
+    },
+    dkg::{ChangeAction as DkgChangeAction, ChangeSet as DkgChangeSet, Dkg, DkgPool},
+    ecdsa::{Ecdsa, EcdsaChangeAction, EcdsaChangeSet, EcdsaPool},
     ingress_manager::IngressHandler,
-    ingress_pool::{ChangeAction as IngressAction, MutableIngressPool},
+    ingress_pool::{ChangeAction as IngressAction, ChangeSet as IngressChangeSet, IngressPool},
     time_source::TimeSource,
 };
 use ic_logger::{debug, warn, ReplicaLogger};
@@ -60,8 +66,9 @@ impl<PoolConsensus> ConsensusProcessor<PoolConsensus> {
     }
 }
 
-impl<PoolConsensus: MutableConsensusPool + Send + Sync + 'static>
-    ArtifactProcessor<ConsensusArtifact> for ConsensusProcessor<PoolConsensus>
+impl<
+        PoolConsensus: MutablePool<ConsensusArtifact, CoonsensusChangeSet> + Send + Sync + 'static + ConsensusPool,
+    > ArtifactProcessor<ConsensusArtifact> for ConsensusProcessor<PoolConsensus>
 {
     /// The method processes changes in the *Consensus* pool and ingress pool.
     fn process_changes(
@@ -177,13 +184,14 @@ impl<PoolIngress> IngressProcessor<PoolIngress> {
     }
 }
 
-impl<PoolIngress: MutableIngressPool + Send + Sync + 'static> ArtifactProcessor<IngressArtifact>
-    for IngressProcessor<PoolIngress>
+impl<
+        PoolIngress: MutablePool<IngressArtifact, IngressChangeSet> + Send + Sync + 'static + IngressPool,
+    > ArtifactProcessor<IngressArtifact> for IngressProcessor<PoolIngress>
 {
     /// The method processes changes in the ingress pool.
     fn process_changes(
         &self,
-        _time_source: &dyn TimeSource,
+        time_source: &dyn TimeSource,
         artifacts: Vec<UnvalidatedArtifact<SignedIngress>>,
     ) -> (Vec<AdvertSendRequest<IngressArtifact>>, ProcessingResult) {
         {
@@ -227,7 +235,7 @@ impl<PoolIngress: MutableIngressPool + Send + Sync + 'static> ArtifactProcessor<
         self.ingress_pool
             .write()
             .unwrap()
-            .apply_changeset(change_set);
+            .apply_changes(time_source, change_set);
         (adverts, ProcessingResult::StateUnchanged)
     }
 }
@@ -267,13 +275,18 @@ impl<PoolCertification> CertificationProcessor<PoolCertification> {
     }
 }
 
-impl<PoolCertification: MutableCertificationPool + Send + Sync + 'static>
-    ArtifactProcessor<CertificationArtifact> for CertificationProcessor<PoolCertification>
+impl<
+        PoolCertification: MutablePool<CertificationArtifact, CertificationChangeSet>
+            + Send
+            + Sync
+            + 'static
+            + CertificationPool,
+    > ArtifactProcessor<CertificationArtifact> for CertificationProcessor<PoolCertification>
 {
     /// The method processes changes in the certification pool.
     fn process_changes(
         &self,
-        _time_source: &dyn TimeSource,
+        time_source: &dyn TimeSource,
         artifacts: Vec<UnvalidatedArtifact<CertificationMessage>>,
     ) -> (
         Vec<AdvertSendRequest<CertificationArtifact>>,
@@ -282,7 +295,7 @@ impl<PoolCertification: MutableCertificationPool + Send + Sync + 'static>
         {
             let mut certification_pool = self.certification_pool.write().unwrap();
             for artifact in artifacts {
-                certification_pool.insert(artifact.message)
+                certification_pool.insert(artifact)
             }
         }
         let mut adverts = Vec::new();
@@ -323,7 +336,7 @@ impl<PoolCertification: MutableCertificationPool + Send + Sync + 'static>
         self.certification_pool
             .write()
             .unwrap()
-            .apply_changes(change_set);
+            .apply_changes(time_source, change_set);
         (adverts, changed)
     }
 }
@@ -360,13 +373,13 @@ impl<PoolDkg> DkgProcessor<PoolDkg> {
     }
 }
 
-impl<PoolDkg: MutableDkgPool + Send + Sync + 'static> ArtifactProcessor<DkgArtifact>
-    for DkgProcessor<PoolDkg>
+impl<PoolDkg: MutablePool<DkgArtifact, DkgChangeSet> + Send + Sync + 'static + DkgPool>
+    ArtifactProcessor<DkgArtifact> for DkgProcessor<PoolDkg>
 {
     /// The method processes changes in the DKG pool.
     fn process_changes(
         &self,
-        _time_source: &dyn TimeSource,
+        time_source: &dyn TimeSource,
         artifacts: Vec<UnvalidatedArtifact<dkg::Message>>,
     ) -> (Vec<AdvertSendRequest<DkgArtifact>>, ProcessingResult) {
         {
@@ -408,7 +421,10 @@ impl<PoolDkg: MutableDkgPool + Send + Sync + 'static> ArtifactProcessor<DkgArtif
             ProcessingResult::StateUnchanged
         };
 
-        self.dkg_pool.write().unwrap().apply_changes(change_set);
+        self.dkg_pool
+            .write()
+            .unwrap()
+            .apply_changes(time_source, change_set);
         (adverts, changed)
     }
 }
@@ -447,12 +463,12 @@ impl<PoolEcdsa> EcdsaProcessor<PoolEcdsa> {
     }
 }
 
-impl<PoolEcdsa: MutableEcdsaPool + Send + Sync + 'static> ArtifactProcessor<EcdsaArtifact>
-    for EcdsaProcessor<PoolEcdsa>
+impl<PoolEcdsa: MutablePool<EcdsaArtifact, EcdsaChangeSet> + Send + Sync + 'static + EcdsaPool>
+    ArtifactProcessor<EcdsaArtifact> for EcdsaProcessor<PoolEcdsa>
 {
     fn process_changes(
         &self,
-        _time_source: &dyn TimeSource,
+        time_source: &dyn TimeSource,
         artifacts: Vec<UnvalidatedArtifact<EcdsaMessage>>,
     ) -> (Vec<AdvertSendRequest<EcdsaArtifact>>, ProcessingResult) {
         {
@@ -510,7 +526,10 @@ impl<PoolEcdsa: MutableEcdsaPool + Send + Sync + 'static> ArtifactProcessor<Ecds
         };
 
         let _timer = self.ecdsa_pool_update_duration.start_timer();
-        self.ecdsa_pool.write().unwrap().apply_changes(change_set);
+        self.ecdsa_pool
+            .write()
+            .unwrap()
+            .apply_changes(time_source, change_set);
         (adverts, changed)
     }
 }
@@ -538,12 +557,17 @@ impl<PoolCanisterHttp> CanisterHttpProcessor<PoolCanisterHttp> {
     }
 }
 
-impl<PoolCanisterHttp: MutableCanisterHttpPool + Send + Sync + 'static>
-    ArtifactProcessor<CanisterHttpArtifact> for CanisterHttpProcessor<PoolCanisterHttp>
+impl<
+        PoolCanisterHttp: MutablePool<CanisterHttpArtifact, CanisterHttpChangeSet>
+            + Send
+            + Sync
+            + 'static
+            + CanisterHttpPool,
+    > ArtifactProcessor<CanisterHttpArtifact> for CanisterHttpProcessor<PoolCanisterHttp>
 {
     fn process_changes(
         &self,
-        _time_source: &dyn TimeSource,
+        time_source: &dyn TimeSource,
         artifacts: Vec<UnvalidatedArtifact<CanisterHttpResponseShare>>,
     ) -> (
         Vec<AdvertSendRequest<CanisterHttpArtifact>>,
@@ -605,7 +629,7 @@ impl<PoolCanisterHttp: MutableCanisterHttpPool + Send + Sync + 'static>
         self.canister_http_pool
             .write()
             .unwrap()
-            .apply_changes(change_set);
+            .apply_changes(time_source, change_set);
         (adverts, changed)
     }
 }

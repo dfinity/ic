@@ -1611,6 +1611,7 @@ pub mod test {
     };
     use crate::consensus::utils::get_block_maker_delay;
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
+    use ic_interfaces::artifact_pool::MutablePool;
     use ic_interfaces::messaging::XNetTransientValidationError;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;

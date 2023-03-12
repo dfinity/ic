@@ -1,16 +1,16 @@
 use ic_artifact_pool::ingress_pool::IngressPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_interfaces::{
-    artifact_pool::UnvalidatedArtifact,
+    artifact_pool::{MutablePool, UnvalidatedArtifact},
     ingress_pool::{
         ChangeSet, IngressPool, IngressPoolObject, IngressPoolSelect, IngressPoolThrottler,
-        MutableIngressPool, PoolSection, SelectResult, UnvalidatedIngressArtifact,
-        ValidatedIngressArtifact,
+        PoolSection, SelectResult, UnvalidatedIngressArtifact, ValidatedIngressArtifact,
     },
+    time_source::TimeSource,
 };
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
-use ic_types::{messages::SignedIngress, Time};
+use ic_types::{artifact_kind::IngressArtifact, messages::SignedIngress, Time};
 
 pub struct TestIngressPool {
     pub pool: IngressPoolImpl,
@@ -40,13 +40,13 @@ impl IngressPoolThrottler for TestIngressPool {
     }
 }
 
-impl MutableIngressPool for TestIngressPool {
+impl MutablePool<IngressArtifact, ChangeSet> for TestIngressPool {
     fn insert(&mut self, unvalidated_artifact: UnvalidatedArtifact<SignedIngress>) {
         self.pool.insert(unvalidated_artifact)
     }
 
-    fn apply_changeset(&mut self, change_set: ChangeSet) {
-        self.pool.apply_changeset(change_set)
+    fn apply_changes(&mut self, time_source: &dyn TimeSource, change_set: ChangeSet) {
+        self.pool.apply_changes(time_source, change_set)
     }
 }
 

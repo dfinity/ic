@@ -1004,8 +1004,7 @@ impl Player {
         println!("Removing all states below height {:?}", purge_height);
         self.state_manager.remove_states_below(purge_height);
         use ic_interfaces::{
-            consensus_pool::{ChangeAction, MutableConsensusPool},
-            time_source::SysTimeSource,
+            artifact_pool::MutablePool, consensus_pool::ChangeAction, time_source::SysTimeSource,
         };
         pool.apply_changes(
             &SysTimeSource::new(),

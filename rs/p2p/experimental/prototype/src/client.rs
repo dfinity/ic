@@ -1,7 +1,8 @@
 use crate::*;
 use ic_interfaces::{
-    artifact_manager::ArtifactPoolDescriptor, artifact_pool::UnvalidatedArtifact,
-    consensus::Consensus, consensus_pool::MutableConsensusPool, time_source::TimeSource,
+    artifact_manager::ArtifactPoolDescriptor, artifact_pool::MutablePool,
+    artifact_pool::UnvalidatedArtifact, consensus::Consensus, consensus_pool::ChangeSet,
+    consensus_pool::ConsensusPool, time_source::TimeSource,
 };
 use ic_types::artifact::{ArtifactKind, ConsensusMessageFilter, PriorityFn};
 use std::sync::Arc;
@@ -10,7 +11,7 @@ use tokio::sync::mpsc::{channel, Receiver};
 
 const STAGGERED_PRIORITY_DURATION: Duration = Duration::from_secs(30);
 
-struct PoolProcessor<A: ArtifactKind, P: MutableConsensusPool> {
+struct PoolProcessor<A: ArtifactKind, P: MutablePool<ConsensusArtifact, ChangeSet>> {
     pool: P,
     mutation_source: Box<dyn Consensus + Send + Sync>,
     // describes internal state that validated pool is in. this state
@@ -25,7 +26,7 @@ struct PoolProcessor<A: ArtifactKind, P: MutableConsensusPool> {
 
 type ConsensusPoolProcessor<P> = PoolProcessor<ConsensusArtifact, P>;
 
-impl<P: MutableConsensusPool> ConsensusPoolProcessor<P> {
+impl<P: MutablePool<ConsensusArtifact, ChangeSet> + ConsensusPool> ConsensusPoolProcessor<P> {
     fn new(
         pool: P,
         mutation_source: Box<dyn Consensus + Send + Sync>,
@@ -95,7 +96,9 @@ impl<P: MutableConsensusPool> ConsensusPoolProcessor<P> {
 }
 
 impl ConsensusPoolProcessorHandle {
-    pub(crate) fn new<P: MutableConsensusPool + Send + Sync + 'static>(
+    pub(crate) fn new<
+        P: MutablePool<ConsensusArtifact, ChangeSet> + Send + Sync + 'static + ConsensusPool,
+    >(
         pool: P,
         mutation_source: Box<dyn Consensus + Send + Sync>,
         gossip_state: Box<dyn ArtifactPoolDescriptor<ConsensusArtifact, P> + Send + Sync>,

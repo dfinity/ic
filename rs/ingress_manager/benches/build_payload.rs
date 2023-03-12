@@ -14,10 +14,10 @@ use ic_constants::MAX_INGRESS_TTL;
 use ic_ic00_types::IC_00;
 use ic_ingress_manager::IngressManager;
 use ic_interfaces::{
-    artifact_pool::UnvalidatedArtifact,
+    artifact_pool::{MutablePool, UnvalidatedArtifact},
     ingress_manager::IngressSelector,
-    ingress_pool::{ChangeAction, ChangeSet, IngressPool, MutableIngressPool},
-    time_source::TimeSource,
+    ingress_pool::{ChangeAction, ChangeSet, IngressPool},
+    time_source::{SysTimeSource, TimeSource},
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager_mocks::MockStateManager;
@@ -156,7 +156,7 @@ fn prepare(
             integrity_hash,
         )));
     }
-    pool.apply_changeset(changeset);
+    pool.apply_changes(&SysTimeSource::new(), changeset);
     assert_eq!(pool.unvalidated().size(), 0);
     assert_eq!(pool.validated().size(), num);
     now + 5 * MAX_INGRESS_TTL

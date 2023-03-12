@@ -7,11 +7,10 @@ use crate::{
     pool_common::PoolSection,
 };
 use ic_interfaces::{
-    artifact_pool::{UnvalidatedArtifact, ValidatedArtifact},
-    canister_http::{
-        CanisterHttpChangeAction, CanisterHttpChangeSet, CanisterHttpPool, MutableCanisterHttpPool,
-    },
+    artifact_pool::{MutablePool, UnvalidatedArtifact, ValidatedArtifact},
+    canister_http::{CanisterHttpChangeAction, CanisterHttpChangeSet, CanisterHttpPool},
     gossip_pool::GossipPool,
+    time_source::TimeSource,
 };
 use ic_metrics::MetricsRegistry;
 use ic_types::{
@@ -100,13 +99,13 @@ impl CanisterHttpPool for CanisterHttpPoolImpl {
     }
 }
 
-impl MutableCanisterHttpPool for CanisterHttpPoolImpl {
+impl MutablePool<CanisterHttpArtifact, CanisterHttpChangeSet> for CanisterHttpPoolImpl {
     fn insert(&mut self, artifact: UnvalidatedArtifact<CanisterHttpResponseShare>) {
         self.unvalidated
             .insert(ic_types::crypto::crypto_hash(&artifact.message), artifact);
     }
 
-    fn apply_changes(&mut self, change_set: CanisterHttpChangeSet) {
+    fn apply_changes(&mut self, _time_source: &dyn TimeSource, change_set: CanisterHttpChangeSet) {
         for action in change_set {
             match action {
                 CanisterHttpChangeAction::AddToValidated(share, content) => {

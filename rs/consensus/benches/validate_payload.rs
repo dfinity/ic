@@ -22,8 +22,9 @@ use ic_execution_environment::IngressHistoryReaderImpl;
 use ic_ic00_types::IC_00;
 use ic_ingress_manager::IngressManager;
 use ic_interfaces::{
+    artifact_pool::MutablePool,
     consensus::PayloadValidationError,
-    consensus_pool::{ChangeAction, ChangeSet, ConsensusPool, MutableConsensusPool},
+    consensus_pool::{ChangeAction, ChangeSet, ConsensusPool},
     time_source::TimeSource,
     validation::ValidationResult,
 };

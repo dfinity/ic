@@ -9,12 +9,13 @@
 
 use crate::metrics::{EcdsaPoolMetrics, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED};
 use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
-use ic_interfaces::artifact_pool::{IntoInner, UnvalidatedArtifact};
+use ic_interfaces::artifact_pool::{IntoInner, MutablePool, UnvalidatedArtifact};
 use ic_interfaces::ecdsa::{
     EcdsaChangeAction, EcdsaChangeSet, EcdsaPool, EcdsaPoolSection, EcdsaPoolSectionOp,
-    EcdsaPoolSectionOps, MutableEcdsaPool, MutableEcdsaPoolSection,
+    EcdsaPoolSectionOps, MutableEcdsaPoolSection,
 };
 use ic_interfaces::gossip_pool::GossipPool;
+use ic_interfaces::time_source::{SysTimeSource, TimeSource};
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::artifact::EcdsaMessageId;
@@ -353,7 +354,8 @@ impl EcdsaPoolImpl {
                 EcdsaMessage::EcdsaSignedDealing(signed_dealing.clone()),
             ));
         }
-        self.apply_changes(change_set);
+
+        self.apply_changes(&SysTimeSource::new(), change_set);
     }
 }
 
@@ -371,14 +373,14 @@ impl EcdsaPool for EcdsaPoolImpl {
     }
 }
 
-impl MutableEcdsaPool for EcdsaPoolImpl {
+impl MutablePool<EcdsaArtifact, EcdsaChangeSet> for EcdsaPoolImpl {
     fn insert(&mut self, artifact: UnvalidatedArtifact<EcdsaMessage>) {
         let mut ops = EcdsaPoolSectionOps::new();
         ops.insert(artifact.into_inner());
         self.unvalidated.mutate(ops);
     }
 
-    fn apply_changes(&mut self, change_set: EcdsaChangeSet) {
+    fn apply_changes(&mut self, _time_source: &dyn TimeSource, change_set: EcdsaChangeSet) {
         let mut unvalidated_ops = EcdsaPoolSectionOps::new();
         let mut validated_ops = EcdsaPoolSectionOps::new();
         for action in change_set {
@@ -571,7 +573,7 @@ mod tests {
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
                     EcdsaMessage::EcdsaDealingSupport(support),
                 )];
-                ecdsa_pool.apply_changes(change_set);
+                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
             }
         }
 
@@ -781,7 +783,7 @@ mod tests {
                     let change_set = vec![EcdsaChangeAction::AddToValidated(
                         EcdsaMessage::EcdsaSignedDealing(ecdsa_dealing),
                     )];
-                    ecdsa_pool.apply_changes(change_set);
+                    ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
                     msg_id
                 };
                 let msg_id_2 = {
@@ -816,7 +818,7 @@ mod tests {
                     let change_set = vec![EcdsaChangeAction::AddToValidated(
                         EcdsaMessage::EcdsaSignedDealing(ecdsa_dealing),
                     )];
-                    ecdsa_pool.apply_changes(change_set);
+                    ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
                     msg_id
                 };
                 let msg_id_2 = {
@@ -832,8 +834,10 @@ mod tests {
                 };
                 check_state(&ecdsa_pool, &[msg_id_2.clone()], &[msg_id_1.clone()]);
 
-                ecdsa_pool
-                    .apply_changes(vec![EcdsaChangeAction::MoveToValidated(msg_id_2.clone())]);
+                ecdsa_pool.apply_changes(
+                    &SysTimeSource::new(),
+                    vec![EcdsaChangeAction::MoveToValidated(msg_id_2.clone())],
+                );
                 check_state(&ecdsa_pool, &[], &[msg_id_1, msg_id_2]);
             })
         })
@@ -854,7 +858,7 @@ mod tests {
                     let change_set = vec![EcdsaChangeAction::AddToValidated(
                         EcdsaMessage::EcdsaSignedDealing(ecdsa_dealing),
                     )];
-                    ecdsa_pool.apply_changes(change_set);
+                    ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
                     msg_id
                 };
                 let msg_id_2 = {
@@ -864,7 +868,7 @@ mod tests {
                     let change_set = vec![EcdsaChangeAction::AddToValidated(
                         EcdsaMessage::EcdsaSignedDealing(ecdsa_dealing),
                     )];
-                    ecdsa_pool.apply_changes(change_set);
+                    ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
                     msg_id
                 };
                 let msg_id_3 = {
@@ -884,10 +888,16 @@ mod tests {
                     &[msg_id_1.clone(), msg_id_2.clone()],
                 );
 
-                ecdsa_pool.apply_changes(vec![EcdsaChangeAction::RemoveValidated(msg_id_1)]);
+                ecdsa_pool.apply_changes(
+                    &SysTimeSource::new(),
+                    vec![EcdsaChangeAction::RemoveValidated(msg_id_1)],
+                );
                 check_state(&ecdsa_pool, &[msg_id_3.clone()], &[msg_id_2.clone()]);
 
-                ecdsa_pool.apply_changes(vec![EcdsaChangeAction::RemoveValidated(msg_id_2)]);
+                ecdsa_pool.apply_changes(
+                    &SysTimeSource::new(),
+                    vec![EcdsaChangeAction::RemoveValidated(msg_id_2)],
+                );
                 check_state(&ecdsa_pool, &[msg_id_3], &[]);
             })
         })
@@ -914,7 +924,10 @@ mod tests {
                 };
                 check_state(&ecdsa_pool, &[msg_id.clone()], &[]);
 
-                ecdsa_pool.apply_changes(vec![EcdsaChangeAction::RemoveUnvalidated(msg_id)]);
+                ecdsa_pool.apply_changes(
+                    &SysTimeSource::new(),
+                    vec![EcdsaChangeAction::RemoveUnvalidated(msg_id)],
+                );
                 check_state(&ecdsa_pool, &[], &[]);
             })
         })
@@ -941,10 +954,10 @@ mod tests {
                 };
                 check_state(&ecdsa_pool, &[msg_id.clone()], &[]);
 
-                ecdsa_pool.apply_changes(vec![EcdsaChangeAction::HandleInvalid(
-                    msg_id,
-                    "test".to_string(),
-                )]);
+                ecdsa_pool.apply_changes(
+                    &SysTimeSource::new(),
+                    vec![EcdsaChangeAction::HandleInvalid(msg_id, "test".to_string())],
+                );
                 check_state(&ecdsa_pool, &[], &[]);
             })
         })
@@ -964,15 +977,15 @@ mod tests {
                     let change_set = vec![EcdsaChangeAction::AddToValidated(
                         EcdsaMessage::EcdsaSignedDealing(ecdsa_dealing),
                     )];
-                    ecdsa_pool.apply_changes(change_set);
+                    ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
                     msg_id
                 };
                 check_state(&ecdsa_pool, &[], &[msg_id.clone()]);
 
-                ecdsa_pool.apply_changes(vec![EcdsaChangeAction::HandleInvalid(
-                    msg_id,
-                    "test".to_string(),
-                )]);
+                ecdsa_pool.apply_changes(
+                    &SysTimeSource::new(),
+                    vec![EcdsaChangeAction::HandleInvalid(msg_id, "test".to_string())],
+                );
                 check_state(&ecdsa_pool, &[], &[]);
             })
         })

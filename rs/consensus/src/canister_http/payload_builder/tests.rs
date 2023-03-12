@@ -7,8 +7,9 @@ use super::*;
 use crate::consensus::mocks::{dependencies_with_subnet_params, Dependencies};
 use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
 use ic_interfaces::{
-    artifact_pool::UnvalidatedArtifact,
-    canister_http::{CanisterHttpChangeAction, MutableCanisterHttpPool},
+    artifact_pool::{MutablePool, UnvalidatedArtifact},
+    canister_http::{CanisterHttpChangeAction, CanisterHttpChangeSet},
+    time_source::SysTimeSource,
     validation::ValidationError,
 };
 use ic_logger::replica_logger::no_op_logger;
@@ -23,6 +24,7 @@ use ic_test_utilities::{
 };
 use ic_test_utilities_registry::SubnetRecordBuilder;
 use ic_types::{
+    artifact_kind::CanisterHttpArtifact,
     canister_http::{CanisterHttpMethod, CanisterHttpRequestContext, CanisterHttpResponseContent},
     consensus::get_faults_tolerated,
     crypto::{crypto_hash, BasicSig, BasicSigOf},
@@ -768,7 +770,7 @@ fn test_response_and_metadata_full(
 }
 /// Replicates the behaviour of receiving and successfully validating a share over the network
 fn add_received_shares_to_pool(
-    pool: &mut dyn MutableCanisterHttpPool,
+    pool: &mut dyn MutablePool<CanisterHttpArtifact, CanisterHttpChangeSet>,
     shares: Vec<CanisterHttpResponseShare>,
 ) {
     for share in shares {
@@ -780,20 +782,26 @@ fn add_received_shares_to_pool(
             timestamp: mock_time(),
         });
 
-        pool.apply_changes(vec![CanisterHttpChangeAction::MoveToValidated(hash)])
+        pool.apply_changes(
+            &SysTimeSource::new(),
+            vec![CanisterHttpChangeAction::MoveToValidated(hash)],
+        )
     }
 }
 
 /// Replicates the behaviour of adding your own share (and content) to the pool
 fn add_own_share_to_pool(
-    pool: &mut dyn MutableCanisterHttpPool,
+    pool: &mut dyn MutablePool<CanisterHttpArtifact, CanisterHttpChangeSet>,
     share: &CanisterHttpResponseShare,
     content: &CanisterHttpResponse,
 ) {
-    pool.apply_changes(vec![CanisterHttpChangeAction::AddToValidated(
-        share.clone(),
-        content.clone(),
-    )]);
+    pool.apply_changes(
+        &SysTimeSource::new(),
+        vec![CanisterHttpChangeAction::AddToValidated(
+            share.clone(),
+            content.clone(),
+        )],
+    );
 }
 
 /// Creates a [`CanisterHttpResponseShare`] from [`CanisterHttpResponseMetadata`]

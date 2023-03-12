@@ -3,14 +3,15 @@ use ic_config::artifact_pool::BACKUP_GROUP_SIZE;
 use ic_consensus::consensus::{dkg_key_manager::DkgKeyManager, pool_reader::PoolReader};
 use ic_crypto_for_verification_only::CryptoComponentForVerificationOnly;
 use ic_interfaces::{
-    artifact_pool::UnvalidatedArtifact,
-    consensus_pool::{ChangeAction, MutableConsensusPool},
+    artifact_pool::{MutablePool, UnvalidatedArtifact},
+    consensus_pool::{ChangeAction, ChangeSet},
     time_source::SysTimeSource,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_protobuf::types::v1 as pb;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{
+    artifact_kind::ConsensusArtifact,
     consensus::{
         BlockProposal, CatchUpPackage, ConsensusMessageHashable, Finalization, Notarization,
         RandomBeacon, RandomTape,
@@ -73,7 +74,7 @@ pub(crate) enum ExitPoint {
 
 /// Deserialize the CUP at the given height and inserts it into the pool.
 pub(crate) fn insert_cup_at_height(
-    pool: &mut dyn MutableConsensusPool,
+    pool: &mut dyn MutablePool<ConsensusArtifact, ChangeSet>,
     backup_dir: &Path,
     height: Height,
 ) {

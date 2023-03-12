@@ -1,6 +1,5 @@
 //! ECDSA related public interfaces.
 
-use crate::artifact_pool::UnvalidatedArtifact;
 use ic_types::artifact::EcdsaMessageId;
 use ic_types::consensus::ecdsa::{
     EcdsaComplaint, EcdsaMessage, EcdsaOpening, EcdsaPrefixOf, EcdsaSigShare, EcdsaStats,
@@ -130,15 +129,6 @@ pub trait EcdsaPool: Send + Sync {
 
     /// Returns reference to the stats. The stats are not persisted.
     fn stats(&self) -> &dyn EcdsaStats;
-}
-
-/// Artifact pool for the ECDSA messages (update interface)
-pub trait MutableEcdsaPool: EcdsaPool {
-    /// Adds the entry to the unvalidated section of the artifact pool.
-    fn insert(&mut self, msg: UnvalidatedArtifact<EcdsaMessage>);
-
-    /// Mutates the artifact pool by applying the change set.
-    fn apply_changes(&mut self, change_set: EcdsaChangeSet);
 }
 
 /// Checks and processes the changes (if any)

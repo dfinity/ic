@@ -103,17 +103,16 @@ use ic_interfaces::{
     artifact_manager::{
         ArtifactClient, ArtifactPoolDescriptor, ArtifactProcessor, ProcessingResult,
     },
-    artifact_pool::UnvalidatedArtifact,
+    artifact_pool::{MutablePool, UnvalidatedArtifact},
     canister_http::*,
-    certification::{Certifier, MutableCertificationPool},
+    certification::{CertificationPool, Certifier, ChangeSet as CertificationChangeSet},
     consensus::Consensus,
-    consensus_pool::{ConsensusPoolCache, MutableConsensusPool},
-    dkg::{Dkg, MutableDkgPool},
-    ecdsa::{Ecdsa, MutableEcdsaPool},
+    consensus_pool::{ChangeSet as ConsensusChangeSet, ConsensusPool, ConsensusPoolCache},
+    dkg::{ChangeSet as DkgChangeSet, Dkg, DkgPool},
+    ecdsa::{Ecdsa, EcdsaChangeSet, EcdsaPool},
     gossip_pool::GossipPool,
     ingress_manager::IngressHandler,
-    ingress_pool::IngressPoolThrottler,
-    ingress_pool::MutableIngressPool,
+    ingress_pool::{ChangeSet as IngressChangeSet, IngressPool, IngressPoolThrottler},
     time_source::{SysTimeSource, TimeSource},
 };
 use ic_logger::ReplicaLogger;
@@ -299,7 +298,13 @@ pub struct ArtifactClientHandle<Artifact: ArtifactKind + 'static> {
 }
 
 pub fn create_ingress_handlers<
-    PoolIngress: MutableIngressPool + Send + Sync + GossipPool<IngressArtifact> + IngressPoolThrottler + 'static,
+    PoolIngress: MutablePool<IngressArtifact, IngressChangeSet>
+        + Send
+        + Sync
+        + GossipPool<IngressArtifact>
+        + IngressPoolThrottler
+        + 'static
+        + IngressPool,
     S: Fn(AdvertSendRequest<IngressArtifact>) + Send + 'static,
 >(
     send_advert: S,
@@ -332,7 +337,12 @@ pub fn create_ingress_handlers<
 }
 
 pub fn create_consensus_handlers<
-    PoolConsensus: MutableConsensusPool + Send + Sync + GossipPool<ConsensusArtifact> + 'static,
+    PoolConsensus: MutablePool<ConsensusArtifact, ConsensusChangeSet>
+        + Send
+        + Sync
+        + GossipPool<ConsensusArtifact>
+        + ConsensusPool
+        + 'static,
     C: Consensus + 'static,
     G: ArtifactPoolDescriptor<ConsensusArtifact, PoolConsensus> + 'static,
     S: Fn(AdvertSendRequest<ConsensusArtifact>) + Send + 'static,
@@ -367,7 +377,12 @@ pub fn create_consensus_handlers<
 }
 
 pub fn create_certification_handlers<
-    PoolCertification: MutableCertificationPool + GossipPool<CertificationArtifact> + Send + Sync + 'static,
+    PoolCertification: MutablePool<CertificationArtifact, CertificationChangeSet>
+        + GossipPool<CertificationArtifact>
+        + CertificationPool
+        + Send
+        + Sync
+        + 'static,
     C: Certifier + 'static,
     G: ArtifactPoolDescriptor<CertificationArtifact, PoolCertification> + 'static,
     S: Fn(AdvertSendRequest<CertificationArtifact>) + Send + 'static,
@@ -404,7 +419,12 @@ pub fn create_certification_handlers<
 }
 
 pub fn create_dkg_handlers<
-    PoolDkg: MutableDkgPool + Send + Sync + GossipPool<DkgArtifact> + 'static,
+    PoolDkg: MutablePool<DkgArtifact, DkgChangeSet>
+        + Send
+        + Sync
+        + GossipPool<DkgArtifact>
+        + 'static
+        + DkgPool,
     C: Dkg + 'static,
     G: ArtifactPoolDescriptor<DkgArtifact, PoolDkg> + 'static,
     S: Fn(AdvertSendRequest<DkgArtifact>) + Send + 'static,
@@ -432,7 +452,12 @@ pub fn create_dkg_handlers<
 }
 
 pub fn create_ecdsa_handlers<
-    PoolEcdsa: MutableEcdsaPool + Send + Sync + GossipPool<EcdsaArtifact> + 'static,
+    PoolEcdsa: MutablePool<EcdsaArtifact, EcdsaChangeSet>
+        + Send
+        + Sync
+        + GossipPool<EcdsaArtifact>
+        + EcdsaPool
+        + 'static,
     C: Ecdsa + 'static,
     G: ArtifactPoolDescriptor<EcdsaArtifact, PoolEcdsa> + 'static,
     S: Fn(AdvertSendRequest<EcdsaArtifact>) + Send + 'static,
@@ -464,7 +489,12 @@ pub fn create_ecdsa_handlers<
 }
 
 pub fn create_https_outcalls_handlers<
-    PoolCanisterHttp: MutableCanisterHttpPool + GossipPool<CanisterHttpArtifact> + Send + Sync + 'static,
+    PoolCanisterHttp: MutablePool<CanisterHttpArtifact, CanisterHttpChangeSet>
+        + GossipPool<CanisterHttpArtifact>
+        + CanisterHttpPool
+        + Send
+        + Sync
+        + 'static,
     C: CanisterHttpPoolManager + Sync + 'static,
     G: ArtifactPoolDescriptor<CanisterHttpArtifact, PoolCanisterHttp> + Send + Sync + 'static,
     S: Fn(AdvertSendRequest<CanisterHttpArtifact>) + Send + 'static,

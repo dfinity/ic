@@ -5,12 +5,13 @@ use ic_artifact_pool::{
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus::consensus::ConsensusImpl;
 use ic_interfaces::{
+    artifact_pool::MutablePool,
     certification,
-    certification::{Certifier, MutableCertificationPool},
+    certification::Certifier,
     consensus::Consensus,
-    consensus_pool::{ChangeAction, ConsensusPool, MutableConsensusPool},
-    dkg::{ChangeAction as DkgChangeAction, Dkg as DkgInterface, MutableDkgPool},
-    time_source::TimeSource,
+    consensus_pool::{ChangeAction, ConsensusPool},
+    dkg::{ChangeAction as DkgChangeAction, Dkg as DkgInterface},
+    time_source::{SysTimeSource, TimeSource},
 };
 use ic_logger::{debug, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -101,7 +102,7 @@ impl<'a> ConsensusDriver<'a> {
                     }
                 }
                 let dkg_pool = &mut self.dkg_pool.write().unwrap();
-                dkg_pool.apply_changes(changeset);
+                dkg_pool.apply_changes(&SysTimeSource::new(), changeset);
             }
         }
         loop {
@@ -123,7 +124,7 @@ impl<'a> ConsensusDriver<'a> {
                     }
                 }
                 let mut certification_pool = self.certification_pool.write().unwrap();
-                certification_pool.apply_changes(changeset);
+                certification_pool.apply_changes(&SysTimeSource::new(), changeset);
             }
         }
         to_deliver

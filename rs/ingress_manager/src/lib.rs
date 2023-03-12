@@ -204,12 +204,13 @@ pub(crate) mod tests {
     use super::*;
     use ic_artifact_pool::ingress_pool::IngressPoolImpl;
     use ic_interfaces::{
-        artifact_pool::UnvalidatedArtifact,
+        artifact_pool::{MutablePool, UnvalidatedArtifact},
         gossip_pool::GossipPool,
         ingress_pool::{
-            ChangeSet, IngressPool, MutableIngressPool, PoolSection, UnvalidatedIngressArtifact,
+            ChangeSet, IngressPool, PoolSection, UnvalidatedIngressArtifact,
             ValidatedIngressArtifact,
         },
+        time_source::TimeSource,
     };
     use ic_interfaces_state_manager_mocks::MockStateManager;
     use ic_metrics::MetricsRegistry;
@@ -349,13 +350,13 @@ pub(crate) mod tests {
         }
     }
 
-    impl<'a> MutableIngressPool for IngressPoolTestAccess<'a> {
+    impl<'a> MutablePool<IngressArtifact, ChangeSet> for IngressPoolTestAccess<'a> {
         fn insert(&mut self, unvalidated_artifact: UnvalidatedArtifact<SignedIngress>) {
             self.0.insert(unvalidated_artifact)
         }
 
-        fn apply_changeset(&mut self, change_set: ChangeSet) {
-            self.0.apply_changeset(change_set)
+        fn apply_changes(&mut self, time_source: &dyn TimeSource, change_set: ChangeSet) {
+            self.0.apply_changes(time_source, change_set)
         }
     }
 

@@ -1,7 +1,7 @@
 use super::types::*;
 use ic_interfaces::{
-    artifact_pool::UnvalidatedArtifact, certification::MutableCertificationPool,
-    consensus_pool::MutableConsensusPool, dkg::MutableDkgPool, time_source::TimeSource,
+    artifact_pool::{MutablePool, UnvalidatedArtifact},
+    time_source::TimeSource,
 };
 use ic_logger::{trace, ReplicaLogger};
 use ic_test_utilities::types::ids::node_test_id;
@@ -50,7 +50,11 @@ fn execute_instance<'a, 'b>(
                 }
                 InputMessage::Certification(msg) => {
                     let mut pool = instance.driver.certification_pool.write().unwrap();
-                    pool.insert(msg);
+                    pool.insert(UnvalidatedArtifact {
+                        message: msg,
+                        peer_id: node_test_id(0),
+                        timestamp,
+                    });
                 }
             },
             // Repeat the polling

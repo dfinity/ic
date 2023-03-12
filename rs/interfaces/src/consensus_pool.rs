@@ -1,9 +1,6 @@
 //! The consensus pool public interface.
 
-use crate::{
-    artifact_pool::{UnvalidatedArtifact, ValidatedArtifact},
-    time_source::TimeSource,
-};
+use crate::artifact_pool::{UnvalidatedArtifact, ValidatedArtifact};
 use ic_base_types::RegistryVersion;
 use ic_protobuf::types::v1 as pb;
 use ic_types::{
@@ -211,15 +208,6 @@ pub trait ConsensusPool {
 
     /// Return a reference to the consensus block cache (ConsensusBlockCache).
     fn as_block_cache(&self) -> &dyn ConsensusBlockCache;
-}
-
-/// Mutation operations on top of ConsensusPool.
-pub trait MutableConsensusPool: ConsensusPool {
-    /// Insert an unvalidated artifact.
-    fn insert(&mut self, unvalidated_artifact: UnvalidatedConsensusArtifact);
-
-    /// Apply the change set.
-    fn apply_changes(&mut self, time_source: &dyn TimeSource, change_set: ChangeSet);
 }
 
 /// HeightIndexedPool provides a set of interfaces for the Consensus component
