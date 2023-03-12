@@ -6,12 +6,14 @@ import subprocess
 import sys
 import time
 import uuid
+from pathlib import Path
 
 import gflags
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from common import farm  # noqa
 from common import ictools  # noqa
+
 
 FLAGS = gflags.FLAGS
 
@@ -24,6 +26,7 @@ def run(args):
     print("Running ", args)
     t_start = time.time()
     proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+
     # Fetch stdout and stderr from the running process immediate to avoid
     # output appearing in an incorrect order.
     for c in iter(lambda: proc.stdout.read(1), b""):
@@ -83,16 +86,16 @@ def main(argv):
         ]
 
         try:
-
             # Benchmarks w/o load generation
             # --------------------------------------------------
             # These have to go first, since we turn of a replica for the load generator ones
+            scalability_dir = Path(__file__).parents[2]
 
             print("📂 Xnet experiment")
             run(
                 [
                     "python3",
-                    "experiments/run_xnet_experiment.py",
+                    os.path.join(scalability_dir, "experiments/run_xnet_experiment.py"),
                     "--iter_duration",
                     "20",
                     "--tests_first_subnet_index",
@@ -106,8 +109,8 @@ def main(argv):
             print("📂 Delegated workload")
             run(
                 [
-                    "python3",
-                    "experiments/run_delegation_experiment.py",
+                    sys.executable,  # force subprocess to run on version specified in bazel, not version locally installed. So far this test was the only one that had issues related to conflicting python versions, but could make sense to add this everywhere
+                    os.path.join(scalability_dir, "experiments/run_delegation_experiment.py"),
                     "--num_procs",
                     "2",
                     "--iter_duration",
@@ -123,7 +126,7 @@ def main(argv):
             run(
                 [
                     "python3",
-                    "experiments/run_system_baseline_experiment.py",
+                    os.path.join(scalability_dir, "experiments/run_system_baseline_experiment.py"),
                     "--iter_duration",
                     "10",
                     "--datapoints",
@@ -154,7 +157,7 @@ def main(argv):
             run(
                 [
                     "python3",
-                    "experiments/run_large_payload_experiment.py",
+                    os.path.join(scalability_dir, "experiments/run_large_payload_experiment.py"),
                     "--iter_duration",
                     "10",
                     "--initial_kb",
@@ -171,7 +174,7 @@ def main(argv):
             run(
                 [
                     "python3",
-                    "experiments/run_system_baseline_experiment.py",
+                    os.path.join(scalability_dir, "experiments/run_system_baseline_experiment.py"),
                     "--iter_duration",
                     "10",
                     "--datapoints",
@@ -186,7 +189,7 @@ def main(argv):
             run(
                 [
                     "python3",
-                    "experiments/run_system_baseline_experiment.py",
+                    os.path.join(scalability_dir, "experiments/run_system_baseline_experiment.py"),
                     "--iter_duration",
                     "10",
                     "--datapoints",
@@ -202,7 +205,7 @@ def main(argv):
             run(
                 [
                     "python3",
-                    "experiments/run_system_baseline_experiment.py",
+                    os.path.join(scalability_dir, "experiments/run_system_baseline_experiment.py"),
                     "--iter_duration",
                     "20",
                     "--datapoints",
@@ -217,7 +220,7 @@ def main(argv):
             run(
                 [
                     "python3",
-                    "experiments/run_system_baseline_experiment.py",
+                    os.path.join(scalability_dir, "experiments/run_system_baseline_experiment.py"),
                     "--iter_duration",
                     "20",
                     "--datapoints",
@@ -233,7 +236,7 @@ def main(argv):
             run(
                 [
                     "python3",
-                    "experiments/max_capacity_large_payload.py",
+                    os.path.join(scalability_dir, "experiments/max_capacity_large_payload.py"),
                     "--iter_duration",
                     "10",
                     "--max_block_payload_size",
@@ -251,7 +254,7 @@ def main(argv):
             run(
                 [
                     "python3",
-                    "experiments/run_large_memory_experiment.py",
+                    os.path.join(scalability_dir, "experiments/run_large_memory_experiment.py"),
                     "--iter_duration",
                     "10",
                     "--datapoints",
@@ -265,7 +268,7 @@ def main(argv):
             run(
                 [
                     "python3",
-                    "experiments/run_large_memory_experiment.py",
+                    os.path.join(scalability_dir, "experiments/run_large_memory_experiment.py"),
                     "--iter_duration",
                     "20",
                     "--datapoints",
@@ -278,7 +281,7 @@ def main(argv):
             run(
                 [
                     "python3",
-                    "experiments/run_large_memory_experiment.py",
+                    os.path.join(scalability_dir, "experiments/run_large_memory_experiment.py"),
                     "--iter_duration",
                     "20",
                     "--datapoints",
@@ -291,9 +294,9 @@ def main(argv):
             run(
                 [
                     "python3",
-                    "experiments/run_mixed_workload_experiment.py",
+                    os.path.join(scalability_dir, "experiments/run_mixed_workload_experiment.py"),
                     "--workload",
-                    "workloads/tiny.toml",
+                    os.path.join(scalability_dir, "workloads/tiny.toml"),
                     "--datapoints",
                     "20",
                 ]

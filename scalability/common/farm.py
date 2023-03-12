@@ -8,6 +8,7 @@ import subprocess
 import sys
 import time
 import uuid
+from pathlib import Path
 from typing import List
 
 import gflags
@@ -380,7 +381,9 @@ class Farm(object):
         from common import ictools
 
         # Generate config image
-        FLAGS.ic_prep_bin = os.path.join(self.artifacts_path, "ic-prep")
+        p = Path(__file__).parents[2]
+        path = os.path.join(p, self.artifacts_path, "ic-prep")
+        FLAGS.ic_prep_bin = path
         self.ic_config = ictools.ic_prep(
             subnets=self.ic_node_ipv6s,
             version=self.version,

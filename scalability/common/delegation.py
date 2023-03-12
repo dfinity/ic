@@ -3,6 +3,7 @@ import logging
 import os
 import re
 import subprocess
+from pathlib import Path
 
 from ic.agent import Agent
 from ic.canister import Canister
@@ -13,6 +14,8 @@ from ic.identity import Identity
 
 logging.basicConfig(level=logging.INFO)
 
+ii_path = os.path.join(Path(__file__).parents[1], "ii/")
+
 
 def install_ii_canister(hostname: str):
     """
@@ -22,9 +25,10 @@ def install_ii_canister(hostname: str):
     """
     args = ["dfx", "deploy", "--network", hostname, "--no-wallet", "--yes"]
     logging.info("II: Installing canister: " + " ".join(args))
+
     output = subprocess.run(
         args,
-        cwd="ii/",
+        cwd=ii_path,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
     ).stdout.decode()
@@ -33,7 +37,7 @@ def install_ii_canister(hostname: str):
         m = re.match(r"Installing code for canister internet_identity, with canister ID ([0-9a-z\-]*)", line)
         if m:
             canister_id = m.groups()[0]
-            with open("ii/canister_id", "w") as f:
+            with open(ii_path + "/canister_id", "w") as f:
                 f.write(canister_id)
             return canister_id
     raise Exception("Could not find canister ID in output")
@@ -45,12 +49,12 @@ def get_ii_canister_id(host_url):
     client = Client(url=host_url)
     agent = Agent(identity, client)
 
-    with open("ii/identity.did", "r") as f:
+    with open(ii_path + "/identity.did", "r") as f:
         identity_canister_did = f.read()
 
     ii_canister_id = None
-    if os.path.exists("ii/canister_id"):
-        with open("ii/canister_id", "r") as f:
+    if os.path.exists(ii_path + "/canister_id"):
+        with open(ii_path + "canister_id", "r") as f:
             ii_canister_id = f.read().strip()
 
     challenge = None
@@ -93,7 +97,7 @@ def get_delegation(host_url, ii_canister_id):
     client = Client(url=host_url)
     agent = Agent(identity, client)
 
-    with open("ii/identity.did", "r") as f:
+    with open(ii_path + "/identity.did", "r") as f:
         identity_canister_did = f.read()
 
     identityCanister = Canister(agent=agent, canister_id=ii_canister_id, candid=identity_canister_did)
