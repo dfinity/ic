@@ -9427,6 +9427,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-test-utilities-serialization"
+version = "0.8.0"
+dependencies = [
+ "assert_matches",
+ "ic-protobuf",
+ "prost",
+ "serde",
+ "serde_cbor",
+ "serde_json",
+]
+
+[[package]]
 name = "ic-test-utilities-tmpdir"
 version = "0.8.0"
 dependencies = [
