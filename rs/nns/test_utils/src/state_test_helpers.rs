@@ -303,7 +303,7 @@ pub fn try_call_with_cycles_via_universal_canister(
                         .reject_message()
                         .reject(),
                 ),
-            ((cycles >> 64) as u64, cycles as u64),
+            Cycles::from(cycles),
         )
         .build();
 

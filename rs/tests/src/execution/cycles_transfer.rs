@@ -49,8 +49,8 @@ pub fn can_transfer_cycles_from_a_canister_to_another(env: TestEnv) {
                     .call_with_cycles(
                         alice.canister_id(),
                         "update",
-                        call_args().other_side(wasm().accept_cycles128(accept_cycles.into_parts())),
-                        Cycles::from(cycles_to_send).into_parts(),
+                        call_args().other_side(wasm().accept_cycles(accept_cycles)),
+                        Cycles::from(cycles_to_send),
                     )
                     .reply(),
             )

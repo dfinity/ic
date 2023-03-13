@@ -4260,7 +4260,7 @@ fn create_canister_fails_if_memory_capacity_exceeded() {
             call_args()
                 .other_side(args.encode())
                 .on_reject(wasm().reject_message().reject()),
-            test.canister_creation_fee().into_parts(),
+            test.canister_creation_fee(),
         )
         .build();
     let result = test.ingress(uc, "update", create_canister);
@@ -4281,7 +4281,7 @@ fn create_canister_fails_if_memory_capacity_exceeded() {
             call_args()
                 .other_side(args.encode())
                 .on_reject(wasm().reject_message().reject()),
-            test.canister_creation_fee().into_parts(),
+            test.canister_creation_fee(),
         )
         .build();
     let result = test.ingress(uc, "update", create_canister).unwrap();
@@ -4319,7 +4319,7 @@ fn create_canister_makes_subnet_oversubscribed() {
             call_args()
                 .other_side(args.encode())
                 .on_reject(wasm().reject_message().reject()),
-            test.canister_creation_fee().into_parts(),
+            test.canister_creation_fee(),
         )
         .build();
     let result = test.ingress(uc, "update", create_canister);
@@ -4338,7 +4338,7 @@ fn create_canister_makes_subnet_oversubscribed() {
             call_args()
                 .other_side(args.encode())
                 .on_reject(wasm().reject_message().reject()),
-            test.canister_creation_fee().into_parts(),
+            test.canister_creation_fee(),
         )
         .build();
     let result = test.ingress(uc, "update", create_canister);
@@ -4358,7 +4358,7 @@ fn create_canister_makes_subnet_oversubscribed() {
             call_args()
                 .other_side(args.encode())
                 .on_reject(wasm().reject_message().reject()),
-            test.canister_creation_fee().into_parts(),
+            test.canister_creation_fee(),
         )
         .build();
     let result = test.ingress(uc, "update", create_canister).unwrap();
@@ -4461,7 +4461,7 @@ fn create_canister_when_compute_capacity_is_oversubscribed() {
             CanisterId::ic_00(),
             Method::CreateCanister,
             call_args().other_side(args.encode()),
-            test.canister_creation_fee().into_parts(),
+            test.canister_creation_fee(),
         )
         .build();
 
@@ -4482,7 +4482,7 @@ fn create_canister_when_compute_capacity_is_oversubscribed() {
             call_args()
                 .other_side(args.encode())
                 .on_reject(wasm().reject_message().reject()),
-            test.canister_creation_fee().into_parts(),
+            test.canister_creation_fee(),
         )
         .build();
     let result = test.ingress(uc, "update", create_canister);
@@ -4502,7 +4502,7 @@ fn create_canister_when_compute_capacity_is_oversubscribed() {
             call_args()
                 .other_side(args.encode())
                 .on_reject(wasm().reject_message().reject()),
-            test.canister_creation_fee().into_parts(),
+            test.canister_creation_fee(),
         )
         .build();
     let result = test.ingress(uc, "update", create_canister).unwrap();

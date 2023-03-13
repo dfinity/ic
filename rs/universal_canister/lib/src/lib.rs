@@ -8,8 +8,8 @@
 pub mod management;
 
 use hex_literal::hex;
+use ic_types::Cycles;
 use universal_canister::Ops;
-
 /// The binary of the universal canister as compiled from
 /// `rs/universal_canister/impl`.
 ///
@@ -17,7 +17,7 @@ use universal_canister::Ops;
 /// `rs/universal_canister`.
 pub const UNIVERSAL_CANISTER_WASM: &[u8] = include_bytes!("universal-canister.wasm");
 pub const UNIVERSAL_CANISTER_WASM_SHA256: [u8; 32] =
-    hex!("6ffdd097110933e62c9eb2d223adde7fbcb7072a7e27af8e3a1053f6a144cc20");
+    hex!("0892a4666fe6a35e524916f687ca2803c652e5f6eb4a23b5d35ea6af2542b6c9");
 
 /// A succinct shortcut for creating a `PayloadBuilder`, which is used to encode
 /// instructions to be executed by the UC.
@@ -243,7 +243,7 @@ impl PayloadBuilder {
         callee: P,
         method: S,
         call_args: CallArgs,
-        cycles: (u64, u64),
+        cycles: Cycles,
     ) -> Self {
         self = self.call_helper(callee, method, call_args, Some(cycles));
         self
@@ -254,7 +254,7 @@ impl PayloadBuilder {
         callee: P,
         method: S,
         call_args: CallArgs,
-        cycles: Option<(u64, u64)>,
+        cycles: Option<Cycles>,
     ) -> Self {
         self = self.push_bytes(callee.as_ref());
         self = self.push_bytes(method.to_string().as_bytes());
@@ -267,7 +267,8 @@ impl PayloadBuilder {
             self = self.push_bytes(on_cleanup.as_slice());
             self.0.push(Ops::CallOnCleanup as u8);
         }
-        if let Some((high_amount, low_amount)) = cycles {
+        if let Some(cycles) = cycles {
+            let (high_amount, low_amount) = cycles.into_parts();
             self = self.push_int64(high_amount);
             self = self.push_int64(low_amount);
             self.0.push(Ops::CallCyclesAdd128 as u8);
@@ -366,14 +367,8 @@ impl PayloadBuilder {
         self
     }
 
-    pub fn accept_cycles(mut self, num_cycles: u64) -> Self {
-        self = self.push_int64(num_cycles);
-        self.0.push(Ops::AcceptCycles as u8);
-        self
-    }
-
-    pub fn accept_cycles128(mut self, amount: (u64, u64)) -> Self {
-        let (amount_high, amount_low) = amount;
+    pub fn accept_cycles(mut self, cycles: Cycles) -> Self {
+        let (amount_high, amount_low) = cycles.into_parts();
         self = self.push_int64(amount_high);
         self = self.push_int64(amount_low);
         self.0.push(Ops::AcceptCycles128 as u8);
@@ -383,7 +378,13 @@ impl PayloadBuilder {
     pub fn call<C: Into<Call>>(mut self, call: C) -> Self {
         let call = call.into();
         let call_args = call.get_call_args();
-        self = self.call_with_cycles(call.callee, call.method, call_args, call.cycles);
+        let (cycles_high, cycles_low) = call.cycles;
+        self = self.call_with_cycles(
+            call.callee,
+            call.method,
+            call_args,
+            Cycles::from_parts(cycles_high, cycles_low),
+        );
         self
     }
 

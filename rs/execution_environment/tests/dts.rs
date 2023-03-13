@@ -2096,7 +2096,7 @@ fn dts_global_timer_periodic_works() {
     let now_nanos = env.time().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64;
 
     let timer = wasm()
-        .instruction_counter_is_at_least(100_000)
+        .instruction_counter_is_at_least(150_000)
         .inc_global_counter()
         .api_global_timer_set(now_nanos)
         .build();
@@ -2142,7 +2142,7 @@ fn dts_global_timer_resume_after_abort() {
     let now_nanos = env.time().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64;
 
     let timer = wasm()
-        .instruction_counter_is_at_least(100_000)
+        .instruction_counter_is_at_least(150_000)
         .inc_global_counter()
         .api_global_timer_set(now_nanos)
         .build();
@@ -2197,7 +2197,7 @@ fn dts_global_timer_does_not_prevent_canister_from_stopping() {
     let now_nanos = env.time().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64;
 
     let timer = wasm()
-        .instruction_counter_is_at_least(100_000)
+        .instruction_counter_is_at_least(150_000)
         .inc_global_counter()
         .api_global_timer_set(now_nanos)
         .build();
@@ -2296,7 +2296,7 @@ fn dts_global_timer_does_not_prevent_upgrade() {
     let now_nanos = env.time().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64;
 
     let timer = wasm()
-        .instruction_counter_is_at_least(100_000)
+        .instruction_counter_is_at_least(150_000)
         .inc_global_counter()
         .api_global_timer_set(now_nanos)
         .build();

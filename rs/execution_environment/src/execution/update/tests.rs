@@ -80,7 +80,7 @@ fn dts_update_concurrent_cycles_change_succeeds() {
     let transferred_cycles = Cycles::new(1000);
 
     let b = wasm()
-        .accept_cycles128(transferred_cycles.into_parts())
+        .accept_cycles(transferred_cycles)
         .message_payload()
         .append_and_reply()
         .build();
@@ -91,7 +91,7 @@ fn dts_update_concurrent_cycles_change_succeeds() {
             b_id.get(),
             "update",
             call_args().other_side(b.clone()),
-            transferred_cycles.into_parts(),
+            transferred_cycles,
         )
         .build();
 
@@ -185,7 +185,7 @@ fn dts_update_concurrent_cycles_change_fails() {
     let transferred_cycles = Cycles::new(1000);
 
     let b = wasm()
-        .accept_cycles128(transferred_cycles.into_parts())
+        .accept_cycles(transferred_cycles)
         .message_payload()
         .append_and_reply()
         .build();
@@ -196,7 +196,7 @@ fn dts_update_concurrent_cycles_change_fails() {
             b_id.get(),
             "update",
             call_args().other_side(b.clone()),
-            transferred_cycles.into_parts(),
+            transferred_cycles,
         )
         .build();
 
@@ -537,7 +537,7 @@ fn dts_abort_of_call_works() {
 
     let b = wasm()
         .instruction_counter_is_at_least(1_000_000)
-        .accept_cycles128(transferred_cycles.into_parts())
+        .accept_cycles(transferred_cycles)
         .push_bytes(&[42])
         .append_and_reply()
         .build();
@@ -549,7 +549,7 @@ fn dts_abort_of_call_works() {
             call_args()
                 .other_side(b.clone())
                 .on_reject(wasm().reject_code().reject_message().reject()),
-            transferred_cycles.into_parts(),
+            transferred_cycles,
         )
         .build();
 

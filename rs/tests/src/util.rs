@@ -422,7 +422,7 @@ impl<'a> UniversalCanister<'a> {
                         .reject_message()
                         .reject(),
                 ),
-                cycles.into_parts(),
+                cycles,
             )
             .build();
 

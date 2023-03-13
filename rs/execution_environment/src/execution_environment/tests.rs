@@ -804,7 +804,7 @@ fn deposit_cycles_to_non_existing_canister_fails() {
             call_args()
                 .other_side(args)
                 .on_reject(wasm().reject_message().reject()),
-            (0, 1),
+            Cycles::from(1u128),
         )
         .build();
     let result = test.ingress(controller, "update", deposit).unwrap();
@@ -1224,7 +1224,7 @@ fn can_reject_a_request_when_canister_is_out_of_cycles() {
     let a_id = test.universal_canister().unwrap();
     let b_id = test.universal_canister().unwrap();
     let b = wasm()
-        .accept_cycles(1_000_000)
+        .accept_cycles(Cycles::from(1_000_000u128))
         .message_payload()
         .append_and_reply()
         .build();
@@ -1235,7 +1235,7 @@ fn can_reject_a_request_when_canister_is_out_of_cycles() {
             call_args()
                 .other_side(b)
                 .on_reject(wasm().reject_message().append_and_reply()),
-            (0, 1_000_000),
+            Cycles::from(1_000_000u128),
         )
         .build();
     test.canister_state_mut(b_id).system_state.freeze_threshold = NumSeconds::from(0);
@@ -1703,7 +1703,7 @@ fn ecdsa_signature_fee_charged() {
             call_args()
                 .other_side(esda_args.encode())
                 .on_reject(wasm().reject_message().reject()),
-            (0, payment),
+            Cycles::from(payment),
         )
         .build();
 
@@ -1725,7 +1725,7 @@ fn ecdsa_signature_fee_charged() {
         .iter()
         .next()
         .unwrap();
-    assert_eq!(context.request.payment.get(), payment as u128 - fee);
+    assert_eq!(context.request.payment.get(), payment - fee);
 
     assert_eq!(
         test.state()
@@ -1771,7 +1771,7 @@ fn ecdsa_signature_rejected_without_fee() {
             call_args()
                 .other_side(esda_args.encode())
                 .on_reject(wasm().reject_message().reject()),
-            (0, fee as u64 - 1),
+            Cycles::from(fee - 1),
         )
         .build();
 
@@ -1808,7 +1808,7 @@ fn ecdsa_signature_with_unknown_key_rejected() {
             call_args()
                 .other_side(esda_args.encode())
                 .on_reject(wasm().reject_message().reject()),
-            (0, 1_000_000_000),
+            Cycles::from(1_000_000_000u128),
         )
         .build();
 
@@ -1844,7 +1844,7 @@ fn ecdsa_public_key_req_with_unknown_key_rejected() {
             call_args()
                 .other_side(esda_args.encode())
                 .on_reject(wasm().reject_message().reject()),
-            (0, 1_000_000_000),
+            Cycles::from(1_000_000_000u128),
         )
         .build();
 
@@ -1924,7 +1924,7 @@ fn ecdsa_signature_fee_ignored_for_nns() {
 #[test]
 fn ecdsa_signature_queue_fills_up() {
     let fee = 1_000_000;
-    let payment = 2_000_000;
+    let payment = 2_000_000u128;
     let ecdsa_key = make_key("secp256k1");
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_type(SubnetType::System)
@@ -1946,7 +1946,7 @@ fn ecdsa_signature_queue_fills_up() {
             call_args()
                 .other_side(esda_args.encode())
                 .on_reject(wasm().reject_message().reject()),
-            (0, payment),
+            Cycles::from(payment),
         )
         .build();
 
@@ -2010,14 +2010,14 @@ fn can_refund_cycles_after_successful_provisional_create_canister() {
         .with_provisional_whitelist_all()
         .build();
     let canister = test.universal_canister().unwrap();
-    let payment = 10_000_000_000;
+    let payment = 10_000_000_000u128;
     let args = Encode!(&ProvisionalCreateCanisterWithCyclesArgs::new(None, None)).unwrap();
     let create_canister = wasm()
         .call_with_cycles(
             ic00::IC_00,
             Method::ProvisionalCreateCanisterWithCycles,
             call_args().other_side(args),
-            (0, payment),
+            Cycles::from(payment),
         )
         .build();
 
@@ -2058,7 +2058,7 @@ fn create_canister_with_specified_id(
             ic00::IC_00,
             Method::ProvisionalCreateCanisterWithCycles,
             call_args().other_side(args),
-            (0, 10_000_000_000),
+            Cycles::from(10_000_000_000u128),
         )
         .build();
 
@@ -2156,7 +2156,7 @@ fn can_refund_cycles_after_successful_provisional_topup_canister() {
         .build();
     let canister_1 = test.universal_canister().unwrap();
     let canister_2 = test.universal_canister().unwrap();
-    let payment = 10_000_000_000;
+    let payment = 10_000_000_000u128;
     let top_up = 1_000_000_000;
     let args = Encode!(&ProvisionalTopUpCanisterArgs::new(canister_2, top_up)).unwrap();
     let top_up_canister = wasm()
@@ -2164,7 +2164,7 @@ fn can_refund_cycles_after_successful_provisional_topup_canister() {
             ic00::IC_00,
             Method::ProvisionalTopUpCanister,
             call_args().other_side(args),
-            (0, payment),
+            Cycles::from(payment),
         )
         .build();
 
@@ -2222,7 +2222,7 @@ fn replicated_query_refunds_all_sent_cycles() {
             b_id.get(),
             "query",
             call_args().other_side(b_callback.clone()),
-            transfered_cycles.into_parts(),
+            transfered_cycles,
         )
         .build();
 
@@ -2294,7 +2294,7 @@ fn replicated_query_rejects_when_trying_to_accept_cycles() {
     // it will not accept it since the IC does not allow
     // accepting cycles in replicated queries.
     let b_callback = wasm()
-        .accept_cycles(transfered_cycles.get() as u64)
+        .accept_cycles(transfered_cycles)
         .message_payload()
         .append_and_reply()
         .build();
@@ -2304,7 +2304,7 @@ fn replicated_query_rejects_when_trying_to_accept_cycles() {
             b_id.get(),
             "query",
             call_args().other_side(b_callback.clone()),
-            transfered_cycles.into_parts(),
+            transfered_cycles,
         )
         .build();
 

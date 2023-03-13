@@ -2393,7 +2393,7 @@ fn ic0_msg_cycles_available_works_for_calls() {
     let callee_id = test.canister_from_wat(wat).unwrap();
     let caller_id = test.universal_canister().unwrap();
     let caller = wasm()
-        .call_with_cycles(callee_id.get(), "test", call_args(), (0, 50))
+        .call_with_cycles(callee_id.get(), "test", call_args(), Cycles::from(50u128))
         .build();
     let result = test.ingress(caller_id, "update", caller).unwrap();
     assert_eq!(WasmResult::Reply(vec![]), result);
@@ -3545,7 +3545,7 @@ fn cycles_cannot_be_accepted_after_response() {
     let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
     let c_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
 
-    let transferred_cycles = (initial_cycles.get() / 2) as u64;
+    let transferred_cycles = Cycles::from(initial_cycles.get() / 2);
 
     // Canister C simply replies with the message that was sent to it.
     let c = wasm().message_payload().append_and_reply().build();
@@ -3574,7 +3574,7 @@ fn cycles_cannot_be_accepted_after_response() {
             b_id.get(),
             "update",
             call_args().other_side(b.clone()),
-            (0, transferred_cycles),
+            transferred_cycles,
         )
         .build();
     let result = test.ingress(a_id, "update", a).unwrap();
@@ -3615,10 +3615,10 @@ fn cycles_are_refunded_if_not_accepted() {
     let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
     let c_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
 
-    let a_to_b_transferred = (initial_cycles.get() / 2) as u64;
-    let a_to_b_accepted = a_to_b_transferred / 2;
+    let a_to_b_transferred = Cycles::from(initial_cycles.get() / 2);
+    let a_to_b_accepted = Cycles::from(a_to_b_transferred.get() / 2);
     let b_to_c_transferred = a_to_b_accepted;
-    let b_to_c_accepted = b_to_c_transferred / 2;
+    let b_to_c_accepted = Cycles::from(b_to_c_transferred.get() / 2);
 
     // Canister C accepts some cycles and replies to canister B.
     let c = wasm()
@@ -3641,7 +3641,7 @@ fn cycles_are_refunded_if_not_accepted() {
             c_id.get(),
             "update",
             call_args().other_side(c.clone()),
-            (0, b_to_c_transferred),
+            b_to_c_transferred,
         )
         .build();
 
@@ -3654,7 +3654,7 @@ fn cycles_are_refunded_if_not_accepted() {
             b_id.get(),
             "update",
             call_args().other_side(b.clone()),
-            (0, a_to_b_transferred),
+            a_to_b_transferred,
         )
         .build();
     let result = test.ingress(a_id, "update", a).unwrap();
@@ -3667,7 +3667,7 @@ fn cycles_are_refunded_if_not_accepted() {
             - test.canister_execution_cost(a_id)
             - test.call_fee("update", &b)
             - test.reply_fee(&b)
-            - Cycles::new(a_to_b_accepted as u128),
+            - a_to_b_accepted,
     );
 
     // Canister B gets all cycles it accepted and a refund for all cycles not
@@ -3678,14 +3678,14 @@ fn cycles_are_refunded_if_not_accepted() {
             - test.canister_execution_cost(b_id)
             - test.call_fee("update", &c)
             - test.reply_fee(&c)
-            + Cycles::new(a_to_b_accepted as u128)
-            - Cycles::new(b_to_c_accepted as u128)
+            + a_to_b_accepted
+            - b_to_c_accepted
     );
 
     // Canister C get all cycles it accepted.
     assert_eq!(
         test.canister_state(c_id).system_state.balance(),
-        initial_cycles - test.canister_execution_cost(c_id) + Cycles::new(b_to_c_accepted as u128)
+        initial_cycles - test.canister_execution_cost(c_id) + b_to_c_accepted
     );
 }
 
@@ -3698,8 +3698,8 @@ fn cycles_are_refunded_if_callee_traps() {
     let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
     let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
 
-    let a_to_b_transferred = (initial_cycles.get() / 2) as u64;
-    let a_to_b_accepted = a_to_b_transferred / 2;
+    let a_to_b_transferred = Cycles::from(initial_cycles.get() / 2);
+    let a_to_b_accepted = Cycles::from(a_to_b_transferred.get() / 2);
 
     // Canister B:
     // 1. Accepts some cycles.
@@ -3722,7 +3722,7 @@ fn cycles_are_refunded_if_callee_traps() {
             call_args()
                 .other_side(b.clone())
                 .on_reject(wasm().reject_code().reject_message().reject()),
-            (0, a_to_b_transferred),
+            a_to_b_transferred,
         )
         .build();
 
@@ -3758,8 +3758,8 @@ fn cycles_are_refunded_even_if_response_callback_traps() {
     let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
     let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
 
-    let a_to_b_transferred = (initial_cycles.get() / 2) as u64;
-    let a_to_b_accepted = a_to_b_transferred / 2;
+    let a_to_b_transferred = Cycles::from(initial_cycles.get() / 2);
+    let a_to_b_accepted = Cycles::from(a_to_b_transferred.get() / 2);
 
     // Canister B accepts cycles and replies.
     let b = wasm()
@@ -3776,7 +3776,7 @@ fn cycles_are_refunded_even_if_response_callback_traps() {
             b_id.get(),
             "update",
             call_args().other_side(b.clone()).on_reply(wasm().trap()),
-            (0, a_to_b_transferred),
+            a_to_b_transferred,
         )
         .build();
     let err = test.ingress(a_id, "update", a).unwrap_err();
@@ -3790,13 +3790,13 @@ fn cycles_are_refunded_even_if_response_callback_traps() {
             - test.canister_execution_cost(a_id)
             - test.call_fee("update", &b)
             - test.reply_fee(&b)
-            - Cycles::new(a_to_b_accepted as u128),
+            - a_to_b_accepted,
     );
 
     // Canister B gets cycles it accepted.
     assert_eq!(
         test.canister_state(b_id).system_state.balance(),
-        initial_cycles - test.canister_execution_cost(b_id) + Cycles::new(a_to_b_accepted as u128)
+        initial_cycles - test.canister_execution_cost(b_id) + a_to_b_accepted
     );
 }
 
@@ -3826,7 +3826,7 @@ fn cycles_are_refunded_if_callee_is_a_query() {
             b_id.get(),
             "query",
             call_args().other_side(b.clone()),
-            (0, a_to_b_transferred),
+            Cycles::from(a_to_b_transferred),
         )
         .build();
     let result = test.ingress(a_id, "update", a).unwrap();
@@ -3871,7 +3871,7 @@ fn cycles_are_refunded_if_callee_is_uninstalled_before_execution() {
             call_args()
                 .other_side(b.clone())
                 .on_reject(wasm().reject_code().reject_message().reject()),
-            (0, a_to_b_transferred),
+            Cycles::from(a_to_b_transferred),
         )
         .build();
 
@@ -3913,10 +3913,10 @@ fn cycles_are_refunded_if_callee_is_uninstalled_after_execution() {
     let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
     let c_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
 
-    let a_to_b_transferred = (initial_cycles.get() / 2) as u64;
-    let a_to_b_accepted = a_to_b_transferred / 2;
+    let a_to_b_transferred = Cycles::from(initial_cycles.get() / 2);
+    let a_to_b_accepted = Cycles::from(a_to_b_transferred.get() / 2);
     let b_to_c_transferred = a_to_b_accepted;
-    let b_to_c_accepted = b_to_c_transferred / 2;
+    let b_to_c_accepted = Cycles::from(b_to_c_transferred.get() / 2);
 
     // Canister C accepts some cycles and replies.
     let c = wasm()
@@ -3935,7 +3935,7 @@ fn cycles_are_refunded_if_callee_is_uninstalled_after_execution() {
             c_id.get(),
             "update",
             call_args().other_side(c.clone()),
-            (0, b_to_c_transferred),
+            b_to_c_transferred,
         )
         .build();
 
@@ -3949,7 +3949,7 @@ fn cycles_are_refunded_if_callee_is_uninstalled_after_execution() {
             call_args()
                 .other_side(b.clone())
                 .on_reject(wasm().reject_code().reject_message().reject()),
-            (0, a_to_b_transferred),
+            a_to_b_transferred,
         )
         .build();
 
@@ -3985,7 +3985,7 @@ fn cycles_are_refunded_if_callee_is_uninstalled_after_execution() {
             - test.canister_execution_cost(a_id)
             - test.call_fee("update", &b)
             - test.reject_fee(reject_message)
-            - Cycles::new(a_to_b_accepted as u128),
+            - a_to_b_accepted,
     );
 
     // Canister B gets all cycles it accepted and all cycles that canister C did
@@ -3996,14 +3996,14 @@ fn cycles_are_refunded_if_callee_is_uninstalled_after_execution() {
             - test.canister_execution_cost(b_id)
             - test.call_fee("update", &c)
             - test.reply_fee(&c)
-            + Cycles::new(a_to_b_accepted as u128)
-            - Cycles::new(b_to_c_accepted as u128)
+            + a_to_b_accepted
+            - b_to_c_accepted
     );
 
     // Canister C gets all cycles it accepted.
     assert_eq!(
         test.canister_state(c_id).system_state.balance(),
-        initial_cycles - test.canister_execution_cost(c_id) + Cycles::new(b_to_c_accepted as u128)
+        initial_cycles - test.canister_execution_cost(c_id) + b_to_c_accepted
     );
 }
 
@@ -4019,10 +4019,10 @@ fn cycles_are_refunded_if_callee_is_reinstalled() {
     let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
     let c_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
 
-    let a_to_b_transferred = (initial_cycles.get() / 2) as u64;
-    let a_to_b_accepted = a_to_b_transferred / 2;
+    let a_to_b_transferred = Cycles::from(initial_cycles.get() / 2);
+    let a_to_b_accepted = Cycles::from(a_to_b_transferred.get() / 2);
     let b_to_c_transferred = a_to_b_accepted;
-    let b_to_c_accepted = b_to_c_transferred / 2;
+    let b_to_c_accepted = Cycles::from(b_to_c_transferred.get() / 2);
 
     // Canister C accepts some cycles and replies.
     let c = wasm()
@@ -4041,7 +4041,7 @@ fn cycles_are_refunded_if_callee_is_reinstalled() {
             c_id.get(),
             "update",
             call_args().other_side(c.clone()),
-            (0, b_to_c_transferred),
+            b_to_c_transferred,
         )
         .build();
 
@@ -4055,7 +4055,7 @@ fn cycles_are_refunded_if_callee_is_reinstalled() {
             call_args()
                 .other_side(b.clone())
                 .on_reject(wasm().reject_code().reject_message().reject()),
-            (0, a_to_b_transferred),
+            a_to_b_transferred,
         )
         .build();
 
@@ -4092,7 +4092,7 @@ fn cycles_are_refunded_if_callee_is_reinstalled() {
             - test.canister_execution_cost(a_id)
             - test.call_fee("update", &b)
             - test.reject_fee(reject_message)
-            - Cycles::new(a_to_b_accepted as u128),
+            - a_to_b_accepted,
     );
 
     // Canister B gets all cycles it accepted and all cycles that canister C did
@@ -4103,14 +4103,14 @@ fn cycles_are_refunded_if_callee_is_reinstalled() {
             - test.canister_execution_cost(b_id)
             - test.call_fee("update", &c)
             - test.reply_fee(&c)
-            + Cycles::new(a_to_b_accepted as u128)
-            - Cycles::new(b_to_c_accepted as u128)
+            + a_to_b_accepted
+            - b_to_c_accepted
     );
 
     // Canister C gets all cycles it accepted.
     assert_eq!(
         test.canister_state(c_id).system_state.balance(),
-        initial_cycles - test.canister_execution_cost(c_id) + Cycles::new(b_to_c_accepted as u128)
+        initial_cycles - test.canister_execution_cost(c_id) + b_to_c_accepted
     );
 }
 
@@ -4125,12 +4125,12 @@ fn cycles_are_refunded_if_callee_is_uninstalled_during_a_self_call() {
     let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
     let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
 
-    let a_to_b_transferred = (initial_cycles.get() / 2) as u64;
-    let a_to_b_accepted = a_to_b_transferred / 2;
-    let b_transferred_1 = (initial_cycles.get() / 2) as u64;
-    let b_accepted_1 = b_transferred_1 / 2;
+    let a_to_b_transferred = Cycles::from(initial_cycles.get() / 2);
+    let a_to_b_accepted = Cycles::from(a_to_b_transferred.get() / 2);
+    let b_transferred_1 = Cycles::from(initial_cycles.get() / 2);
+    let b_accepted_1 = Cycles::from(b_transferred_1.get() / 2);
     let b_transferred_2 = b_accepted_1;
-    let b_accepted_2 = b_transferred_2 / 2;
+    let b_accepted_2 = Cycles::from(b_transferred_2.get() / 2);
 
     // The update method #2 canister B accepts some cycles and then replies.
     let b_2 = wasm()
@@ -4149,7 +4149,7 @@ fn cycles_are_refunded_if_callee_is_uninstalled_during_a_self_call() {
             b_id.get(),
             "update",
             call_args().other_side(b_2.clone()),
-            (0, b_transferred_2),
+            b_transferred_2,
         )
         .build();
 
@@ -4164,7 +4164,7 @@ fn cycles_are_refunded_if_callee_is_uninstalled_during_a_self_call() {
             call_args()
                 .other_side(b_1.clone())
                 .on_reject(wasm().reject_code().reject_message().reject()),
-            (0, b_transferred_1),
+            b_transferred_1,
         )
         .build();
 
@@ -4178,7 +4178,7 @@ fn cycles_are_refunded_if_callee_is_uninstalled_during_a_self_call() {
             call_args()
                 .other_side(b_0.clone())
                 .on_reject(wasm().reject_code().reject_message().reject()),
-            (0, a_to_b_transferred),
+            a_to_b_transferred,
         )
         .build();
 
@@ -4214,7 +4214,7 @@ fn cycles_are_refunded_if_callee_is_uninstalled_during_a_self_call() {
             - test.canister_execution_cost(a_id)
             - test.call_fee("update", &b_0)
             - test.reject_fee(reject_message.clone())
-            - Cycles::new(a_to_b_accepted as u128)
+            - a_to_b_accepted
     );
 
     // The reject message from method #2 of B to method #1.
@@ -4232,7 +4232,7 @@ fn cycles_are_refunded_if_callee_is_uninstalled_during_a_self_call() {
             - test.call_fee("update", &b_2)
             - test.reject_fee(reject_message)
             - test.reject_fee(reject_message_b_2_to_1)
-            + Cycles::new(a_to_b_accepted as u128)
+            + a_to_b_accepted
     );
 }
 
@@ -4647,7 +4647,7 @@ fn cycles_correct_if_update_fails() {
     let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
     let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
 
-    let transferred_cycles = (initial_cycles.get() / 2) as u64;
+    let transferred_cycles = Cycles::from(initial_cycles.get() / 2);
 
     // Canister B accepts all cycles, replies, and traps.
     let b = wasm()
@@ -4663,7 +4663,7 @@ fn cycles_correct_if_update_fails() {
             b_id.get(),
             "update",
             call_args().other_side(b),
-            (0, transferred_cycles),
+            transferred_cycles,
         )
         .build();
     test.ingress_raw(a_id, "update", a);

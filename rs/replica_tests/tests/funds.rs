@@ -42,9 +42,9 @@ fn can_refund_when_having_nested_calls() {
                     canister_c_id,
                     "update",
                     call_args(),
-                    Cycles::new(500_000_000).into_parts(),
+                    Cycles::new(500_000_000),
                 )),
-                Cycles::new(1_000_000_000).into_parts(),
+                Cycles::new(1_000_000_000),
             ),
         )
         .unwrap();
@@ -89,7 +89,7 @@ fn can_deposit_cycles_via_the_management_canister() {
                     IC_00,
                     Method::CreateCanister,
                     call_args().other_side(EmptyBlob.encode()),
-                    cycles_for_new_canister.into_parts(),
+                    cycles_for_new_canister,
                 ),
             )
             .unwrap()
@@ -113,7 +113,7 @@ fn can_deposit_cycles_via_the_management_canister() {
                 IC_00,
                 Method::DepositCycles,
                 call_args().other_side(CanisterIdRecord::from(new_canister_id).encode()),
-                cycles_to_deposit.into_parts(),
+                cycles_to_deposit,
             ),
         )
         .unwrap();

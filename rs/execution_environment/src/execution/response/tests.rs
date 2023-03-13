@@ -82,7 +82,7 @@ fn execute_response_refunds_cycles() {
     // Canister A calls canister B.
     let cycles_sent = Cycles::new(1_000_000);
     let wasm_payload = wasm()
-        .call_with_cycles(b_id.get(), "update", call_args(), cycles_sent.into_parts())
+        .call_with_cycles(b_id.get(), "update", call_args(), cycles_sent)
         .build();
 
     // Enqueue ingress message to canister A and execute it.
@@ -346,7 +346,7 @@ fn cycles_correct_if_response_fails() {
     let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
     let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
 
-    let transferred_cycles = (initial_cycles.get() / 2) as u64;
+    let transferred_cycles = initial_cycles.get() / 2;
 
     // Canister B simply replies with the message that was sent to it.
     let b = wasm().message_payload().append_and_reply().build();
@@ -361,7 +361,7 @@ fn cycles_correct_if_response_fails() {
             call_args()
                 .other_side(b.clone())
                 .on_reply(wasm().reply_data_append().trap()),
-            (0, transferred_cycles),
+            Cycles::from(transferred_cycles),
         )
         .build();
     let (ingress_id, _) = test.ingress_raw(a_id, "update", a);
@@ -394,7 +394,7 @@ fn cycles_correct_if_cleanup_fails() {
     let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
     let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
 
-    let transferred_cycles = (initial_cycles.get() / 2) as u64;
+    let transferred_cycles = initial_cycles.get() / 2;
 
     // Canister B simply replies with the message that was sent to it.
     let b = wasm().message_payload().append_and_reply().build();
@@ -411,7 +411,7 @@ fn cycles_correct_if_cleanup_fails() {
                 .other_side(b.clone())
                 .on_reply(wasm().reply_data_append().trap())
                 .on_cleanup(wasm().trap()),
-            (0, transferred_cycles),
+            Cycles::from(transferred_cycles),
         )
         .build();
     let (ingress_id, _) = test.ingress_raw(a_id, "update", a);
@@ -448,7 +448,7 @@ fn dts_works_in_response_callback() {
     let b_id = test.universal_canister().unwrap();
 
     let b = wasm()
-        .accept_cycles(1000)
+        .accept_cycles(Cycles::from(1_000u128))
         .message_payload()
         .append_and_reply()
         .build();
@@ -467,7 +467,7 @@ fn dts_works_in_response_callback() {
                         .append_and_reply()
                         .build(),
                 ),
-            (0, 1000),
+            Cycles::from(1000u128),
         )
         .build();
 
@@ -529,7 +529,7 @@ fn dts_works_in_cleanup_callback() {
     let b_id = test.universal_canister().unwrap();
 
     let b = wasm()
-        .accept_cycles(1_000)
+        .accept_cycles(Cycles::from(1_000u128))
         .message_payload()
         .append_and_reply()
         .build();
@@ -543,7 +543,7 @@ fn dts_works_in_cleanup_callback() {
                 .on_reply(wasm().trap())
                 .on_reject(wasm().reject_code().reject_message().reject())
                 .on_cleanup(wasm().instruction_counter_is_at_least(1_000_000)),
-            (0, 1000),
+            Cycles::from(1000u128),
         )
         .build();
 
@@ -606,7 +606,7 @@ fn dts_out_of_subnet_memory_in_response_callback() {
     let b_id = test.universal_canister().unwrap();
 
     let b = wasm()
-        .accept_cycles(1000)
+        .accept_cycles(Cycles::from(1_000u128))
         .message_payload()
         .append_and_reply()
         .build();
@@ -627,7 +627,7 @@ fn dts_out_of_subnet_memory_in_response_callback() {
                         .message_payload()
                         .append_and_reply(),
                 ),
-            (0, 2000),
+            Cycles::from(2000u128),
         )
         .build();
 
@@ -710,7 +710,7 @@ fn dts_out_of_subnet_memory_in_cleanup_callback() {
     let b_id = test.universal_canister().unwrap();
 
     let b = wasm()
-        .accept_cycles(1_000)
+        .accept_cycles(Cycles::from(1_000u128))
         .message_payload()
         .append_and_reply()
         .build();
@@ -730,7 +730,7 @@ fn dts_out_of_subnet_memory_in_cleanup_callback() {
                         .stable64_fill(0, 0, 1000)
                         .instruction_counter_is_at_least(1_000_000),
                 ),
-            (0, 1000),
+            Cycles::from(1000u128),
         )
         .build();
 
@@ -812,7 +812,7 @@ fn dts_abort_works_in_response_callback() {
     let b_id = test.universal_canister().unwrap();
 
     let b = wasm()
-        .accept_cycles(1_000)
+        .accept_cycles(Cycles::from(1_000u128))
         .message_payload()
         .append_and_reply()
         .build();
@@ -831,7 +831,7 @@ fn dts_abort_works_in_response_callback() {
                         .append_and_reply()
                         .build(),
                 ),
-            (0, 1000),
+            Cycles::from(1000u128),
         )
         .build();
 
@@ -908,7 +908,7 @@ fn dts_abort_works_in_cleanup_callback() {
     let b_id = test.universal_canister().unwrap();
 
     let b = wasm()
-        .accept_cycles(1_000)
+        .accept_cycles(Cycles::from(1_000u128))
         .message_payload()
         .append_and_reply()
         .build();
@@ -922,7 +922,7 @@ fn dts_abort_works_in_cleanup_callback() {
                 .on_reply(wasm().trap())
                 .on_reject(wasm().reject_code().reject_message().reject())
                 .on_cleanup(wasm().instruction_counter_is_at_least(1_000_000)),
-            (0, 1000),
+            Cycles::from(1000u128),
         )
         .build();
 
@@ -991,7 +991,7 @@ fn successful_response_scenario(test: &mut ExecutionTest) -> (CanisterId, Messag
     let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
 
     let b = wasm()
-        .accept_cycles(1_000)
+        .accept_cycles(Cycles::from(1_000u128))
         .message_payload()
         .append_and_reply()
         .build();
@@ -1009,7 +1009,7 @@ fn successful_response_scenario(test: &mut ExecutionTest) -> (CanisterId, Messag
                         .message_payload()
                         .append_and_reply(),
                 ),
-            (0, 1000),
+            Cycles::from(1000u128),
         )
         .build();
 
@@ -1032,7 +1032,7 @@ fn response_fail_scenario(test: &mut ExecutionTest) -> (CanisterId, MessageId) {
     let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
     let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
 
-    let transferred_cycles = (initial_cycles.get() / 2) as u64;
+    let transferred_cycles = initial_cycles.get() / 2;
 
     // Canister B simply replies with the message that was sent to it.
     let b = wasm().message_payload().append_and_reply().build();
@@ -1053,7 +1053,7 @@ fn response_fail_scenario(test: &mut ExecutionTest) -> (CanisterId, MessageId) {
                         .trap(),
                 )
                 .on_cleanup(wasm().stable_grow(1).stable64_fill(0, 0, 1)),
-            (0, transferred_cycles),
+            Cycles::from(transferred_cycles),
         )
         .build();
     let (ingress_id, _) = test.ingress_raw(a_id, "update", a);
@@ -1089,7 +1089,7 @@ fn cleanup_fail_scenario(test: &mut ExecutionTest) -> (CanisterId, MessageId) {
     let a_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
     let b_id = test.universal_canister_with_cycles(initial_cycles).unwrap();
 
-    let transferred_cycles = (initial_cycles.get() / 2) as u64;
+    let transferred_cycles = initial_cycles.get() / 2;
 
     // Canister B simply replies with the message that was sent to it.
     let b = wasm().message_payload().append_and_reply().build();
@@ -1111,7 +1111,7 @@ fn cleanup_fail_scenario(test: &mut ExecutionTest) -> (CanisterId, MessageId) {
                         .trap(),
                 )
                 .on_cleanup(wasm().instruction_counter_is_at_least(1_000_000).trap()),
-            (0, transferred_cycles),
+            Cycles::from(transferred_cycles),
         )
         .build();
     let (ingress_id, _) = test.ingress_raw(a_id, "update", a);
@@ -1260,7 +1260,7 @@ fn dts_response_concurrent_cycles_change_succeeds() {
     let transferred_cycles = Cycles::new(1000);
 
     let b = wasm()
-        .accept_cycles128(transferred_cycles.into_parts())
+        .accept_cycles(transferred_cycles)
         .message_payload()
         .append_and_reply()
         .build();
@@ -1276,7 +1276,7 @@ fn dts_response_concurrent_cycles_change_succeeds() {
                         b_id.get(),
                         "update",
                         call_args().other_side(b.clone()),
-                        transferred_cycles.into_parts(),
+                        transferred_cycles,
                     ),
             ),
         )
@@ -1379,7 +1379,7 @@ fn dts_response_concurrent_cycles_change_fails() {
     let transferred_cycles = Cycles::new(1000);
 
     let b = wasm()
-        .accept_cycles128(transferred_cycles.into_parts())
+        .accept_cycles(transferred_cycles)
         .message_payload()
         .append_and_reply()
         .build();
@@ -1395,7 +1395,7 @@ fn dts_response_concurrent_cycles_change_fails() {
                         b_id.get(),
                         "update",
                         call_args().other_side(b.clone()),
-                        transferred_cycles.into_parts(),
+                        transferred_cycles,
                     ),
             ),
         )
@@ -1517,7 +1517,7 @@ fn dts_response_with_cleanup_concurrent_cycles_change_fails() {
     let transferred_cycles = Cycles::new(1_000);
 
     let b = wasm()
-        .accept_cycles128(transferred_cycles.into_parts())
+        .accept_cycles(transferred_cycles)
         .message_payload()
         .append_and_reply()
         .build();
@@ -1535,7 +1535,7 @@ fn dts_response_with_cleanup_concurrent_cycles_change_fails() {
                             b_id.get(),
                             "update",
                             call_args().other_side(b.clone()),
-                            transferred_cycles.into_parts(),
+                            transferred_cycles,
                         ),
                 )
                 .on_cleanup(
@@ -1648,7 +1648,7 @@ fn cleanup_callback_cannot_accept_cycles() {
             call_args()
                 .other_side(b)
                 .on_reply(wasm().trap())
-                .on_cleanup(wasm().accept_cycles(0)),
+                .on_cleanup(wasm().accept_cycles(Cycles::from(0u128))),
         )
         .build();
     let err = test.ingress(a_id, "update", a).unwrap_err();
@@ -1657,7 +1657,7 @@ fn cleanup_callback_cannot_accept_cycles() {
     // cannot accept cycles.
     assert!(err
         .description()
-        .contains("\"ic0_msg_cycles_accept\" cannot be executed in cleanup mode"));
+        .contains("\"ic0_msg_cycles_accept128\" cannot be executed in cleanup mode"));
 }
 
 #[test]
@@ -1766,7 +1766,7 @@ fn reserve_instructions_for_cleanup_callback_scenario(
     let unreachable_instructions_amount = 2 * instruction_limit;
     let stable_grow_and_write_instructions = 20_000;
     let stable_memory_data = b"x";
-    let transferred_cycles = (initial_cycles.get() / 2) as u64;
+    let transferred_cycles = initial_cycles.get() / 2;
     let a = wasm()
         .call_with_cycles(
             b_id.get(),
@@ -1789,7 +1789,7 @@ fn reserve_instructions_for_cleanup_callback_scenario(
                         .stable_grow(1)
                         .stable_write(0, stable_memory_data),
                 ),
-            (0, transferred_cycles),
+            Cycles::from(transferred_cycles),
         )
         .build();
     let (ingress_id, _) = test.ingress_raw(a_id, "update", a);
