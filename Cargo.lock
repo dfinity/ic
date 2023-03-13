@@ -5005,6 +5005,7 @@ dependencies = [
  "ic-crypto-test-utils-canister-threshold-sigs",
  "ic-crypto-test-utils-csp",
  "ic-crypto-test-utils-keygen",
+ "ic-crypto-test-utils-keys",
  "ic-crypto-test-utils-local-csp-vault",
  "ic-crypto-test-utils-metrics",
  "ic-crypto-test-utils-multi-sigs",
@@ -5330,6 +5331,7 @@ dependencies = [
  "ic-crypto-sha",
  "ic-crypto-temp-crypto-vault",
  "ic-crypto-test-utils",
+ "ic-crypto-test-utils-keys",
  "ic-crypto-test-utils-local-csp-vault",
  "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-tls-interfaces",
@@ -5612,6 +5614,7 @@ dependencies = [
  "ic-crypto-temp-crypto",
  "ic-crypto-test-utils",
  "ic-crypto-test-utils-csp",
+ "ic-crypto-test-utils-keys",
  "ic-crypto-tls-interfaces",
  "ic-crypto-utils-basic-sig",
  "ic-interfaces",
@@ -5641,6 +5644,7 @@ dependencies = [
  "ic-crypto-internal-threshold-sig-bls12381",
  "ic-crypto-internal-threshold-sig-ecdsa",
  "ic-crypto-internal-types",
+ "ic-crypto-test-utils-keys",
  "ic-crypto-tls-cert-validation",
  "ic-crypto-utils-basic-sig",
  "ic-protobuf",
@@ -5817,6 +5821,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-crypto-test-utils-keys"
+version = "0.8.0"
+dependencies = [
+ "hex",
+ "ic-protobuf",
+]
+
+[[package]]
 name = "ic-crypto-test-utils-local-csp-vault"
 version = "0.8.0"
 dependencies = [
@@ -5913,6 +5925,7 @@ dependencies = [
  "ic-crypto-internal-basic-sig-ed25519",
  "ic-crypto-internal-types",
  "ic-crypto-test-utils",
+ "ic-crypto-test-utils-keys",
  "ic-protobuf",
  "ic-test-utilities",
  "ic-types",

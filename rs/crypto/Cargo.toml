@@ -82,6 +82,7 @@ ic-crypto-tecdsa = { path = "tecdsa" }
 ic-crypto-temp-crypto = { path = "temp_crypto" }
 ic-crypto-test-utils = { path = "test_utils" }
 ic-crypto-test-utils-keygen = { path = "test_utils/keygen" }
+ic-crypto-test-utils-keys = { path = "test_utils/keys" }
 ic-crypto-test-utils-csp = { path = "test_utils/csp" }
 ic-crypto-test-utils-local-csp-vault = { path = "test_utils/local_csp_vault" }
 ic-crypto-test-utils-metrics = { path = "test_utils/metrics" }

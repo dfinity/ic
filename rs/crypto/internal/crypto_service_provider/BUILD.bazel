@@ -63,6 +63,7 @@ DEV_DEPENDENCIES = [
     "//rs/crypto/node_key_generation",
     "//rs/crypto/temp_crypto/temp_vault",
     "//rs/crypto/test_utils",
+    "//rs/crypto/test_utils/keys",
     "//rs/crypto/test_utils/local_csp_vault",
     "//rs/crypto/test_utils/reproducible_rng",
     "//rs/test_utilities",

@@ -15,7 +15,6 @@ use ic_crypto_temp_crypto::{
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_registry_mocks::MockRegistryClient;
 use ic_metrics::MetricsRegistry;
-use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::{make_crypto_node_key, make_crypto_tls_cert_key};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
@@ -34,6 +33,11 @@ mod check_keys_with_registry {
     use ic_crypto_internal_csp::vault::api::ExternalPublicKeyError;
     use ic_crypto_internal_logmon::metrics::CryptoMetrics;
     use ic_crypto_test_utils_csp::MockAllCryptoServiceProvider;
+    use ic_crypto_test_utils_keys::public_keys::{
+        valid_committee_signing_public_key, valid_dkg_dealing_encryption_public_key,
+        valid_idkg_dealing_encryption_public_key, valid_node_signing_public_key,
+        valid_tls_certificate,
+    };
     use ic_crypto_test_utils_metrics::assertions::MetricsObservationsAssert;
     use ic_interfaces::crypto::KeyManager;
     use ic_logger::replica_logger::no_op_logger;
@@ -44,7 +48,6 @@ mod check_keys_with_registry {
     use ic_test_utilities::FastForwardTimeSource;
     use ic_test_utilities_in_memory_logger::assertions::LogEntriesAssert;
     use ic_test_utilities_in_memory_logger::InMemoryReplicaLogger;
-    use ic_types::crypto::AlgorithmId;
     use slog::Level;
 
     const TWO_WEEKS: Duration = Duration::from_secs(2 * 7 * 24 * 60 * 60);
@@ -1539,91 +1542,8 @@ mod check_keys_with_registry {
         }
     }
 
-    fn valid_node_signing_public_key() -> PublicKeyProto {
-        PublicKeyProto {
-            version: 0,
-            algorithm: AlgorithmId::Ed25519 as i32,
-            key_value: hex_decode(
-                "58d558c7586efb32f4667ee9a302877da97aa1136cda92af4d7a4f8873f9434f",
-            ),
-            proof_data: None,
-            timestamp: None,
-        }
-    }
-
-    fn valid_committee_signing_public_key() -> PublicKeyProto {
-        PublicKeyProto {
-            version: 0,
-            algorithm: AlgorithmId::MultiBls12_381 as i32,
-            key_value: hex_decode(
-                "8dab94740858cc96e8df512d8d81730a94d0f3534f30\
-                cebd35ee2006ce4a449cad611dd7d97bbc44256932da4d4a76a70b9f347e4a989a3073fc7\
-                c2d51bf30804ebbc5c3c6da08b8392d2482473290aff428868caabbc26eec4e7bc59209eb0a",
-            ),
-            proof_data: Some(hex_decode(
-                "afc3038c06223258a14af7c942428fe42f89f8d733e4f\
-                5ea8d34a90c0df142697802a6f22633df890a1ce5b774b23aed",
-            )),
-            timestamp: None,
-        }
-    }
-
-    fn valid_tls_certificate() -> X509PublicKeyCert {
-        X509PublicKeyCert {
-            certificate_der: hex_decode(
-                "3082015630820108a00302010202140098d074\
-                7d24ca04a2f036d8665402b4ea784830300506032b6570304a3148304606035504030\
-                c3f34696e71622d327a63766b2d663679716c2d736f776f6c2d76673365732d7a3234\
-                6a642d6a726b6f772d6d686e73642d756b7666702d66616b35702d6161653020170d3\
-                232313130343138313231345a180f39393939313233313233353935395a304a314830\
-                4606035504030c3f34696e71622d327a63766b2d663679716c2d736f776f6c2d76673\
-                365732d7a32346a642d6a726b6f772d6d686e73642d756b7666702d66616b35702d61\
-                6165302a300506032b6570032100246acd5f38372411103768e91169dadb7370e9990\
-                9a65639186ac6d1c36f3735300506032b6570034100d37e5ccfc32146767e5fd73343\
-                649f5b5564eb78e6d8d424d8f01240708bc537a2a9bcbcf6c884136d18d2b475706d7\
-                bb905f52faf28707735f1d90ab654380b",
-            ),
-        }
-    }
-
-    fn valid_dkg_dealing_encryption_public_key() -> PublicKeyProto {
-        PublicKeyProto {
-            version: 0,
-            algorithm: AlgorithmId::Groth20_Bls12_381 as i32,
-            key_value: hex_decode(
-                "ad36a01cbd40dcfa36ec21a96bedcab17372a9cd2b9eba6171ebeb28dd041a\
-                    d5cbbdbb4bed55f59938e8ffb3dd69e386",
-            ),
-            proof_data: Some(hex_decode(
-                "a1781847726f7468323057697468506f705f42\
-                6c7331325f333831a367706f705f6b65795830b751c9585044139f80abdebf38d7f30\
-                aeb282f178a5e8c284f279eaad1c90d9927e56cac0150646992bce54e08d317ea6963\
-                68616c6c656e676558203bb20c5e9c75790f63aae921316912ffc80d6d03946dd21f8\
-                5c35159ca030ec668726573706f6e7365582063d6cf189635c0f3111f97e69ae0af8f\
-                1594b0f00938413d89dbafc326340384",
-            )),
-            timestamp: None,
-        }
-    }
-
-    fn valid_idkg_dealing_encryption_public_key() -> PublicKeyProto {
-        PublicKeyProto {
-            version: 0,
-            algorithm: AlgorithmId::MegaSecp256k1 as i32,
-            key_value: hex_decode(
-                "03e1e1f76e9d834221a26c4a080b65e60d3b6f9c1d6e5b880abf916a364893da2e",
-            ),
-            proof_data: None,
-            timestamp: None,
-        }
-    }
-
     fn subnet_id() -> SubnetId {
         SubnetId::new(PrincipalId::new(29, [0xfc; 29]))
-    }
-
-    fn hex_decode<T: AsRef<[u8]>>(data: T) -> Vec<u8> {
-        hex::decode(data).expect("failed to decode hex")
     }
 }
 

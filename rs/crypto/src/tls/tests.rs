@@ -99,31 +99,16 @@ mod tls_cert_from_registry_raw {
 
 mod tls_cert_from_registry {
     use super::*;
+    use ic_crypto_test_utils_keys::public_keys::valid_tls_certificate;
 
     #[test]
     fn should_succeed_if_valid_certificate_found_in_registry() {
-        let valid_certificate_der = hex::decode(
-            "3082015630820108a00302010202140098d074\
-                7d24ca04a2f036d8665402b4ea784830300506032b6570304a3148304606035504030\
-                c3f34696e71622d327a63766b2d663679716c2d736f776f6c2d76673365732d7a3234\
-                6a642d6a726b6f772d6d686e73642d756b7666702d66616b35702d6161653020170d3\
-                232313130343138313231345a180f39393939313233313233353935395a304a314830\
-                4606035504030c3f34696e71622d327a63766b2d663679716c2d736f776f6c2d76673\
-                365732d7a32346a642d6a726b6f772d6d686e73642d756b7666702d66616b35702d61\
-                6165302a300506032b6570032100246acd5f38372411103768e91169dadb7370e9990\
-                9a65639186ac6d1c36f3735300506032b6570034100d37e5ccfc32146767e5fd73343\
-                649f5b5564eb78e6d8d424d8f01240708bc537a2a9bcbcf6c884136d18d2b475706d7\
-                bb905f52faf28707735f1d90ab654380b",
-        )
-        .expect("failed to decode hex");
-        let valid_certificate = X509PublicKeyCert {
-            certificate_der: valid_certificate_der.clone(),
-        };
+        let valid_certificate = valid_tls_certificate();
         let setup = Setup::builder()
-            .with_registry_tls_certificate(valid_certificate)
+            .with_registry_tls_certificate(valid_certificate.clone())
             .build();
-        let expected_tls_cert =
-            TlsPublicKeyCert::new_from_der(valid_certificate_der).expect("failed to create cert");
+        let expected_tls_cert = TlsPublicKeyCert::new_from_der(valid_certificate.certificate_der)
+            .expect("failed to create cert");
 
         let result = tls_cert_from_registry(
             setup.registry_client.as_ref(),

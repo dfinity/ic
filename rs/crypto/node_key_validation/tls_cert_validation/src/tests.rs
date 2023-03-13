@@ -5,6 +5,7 @@ use ic_crypto_test_utils::tls::x509_certificates::ed25519_key_pair;
 use ic_crypto_test_utils::tls::x509_certificates::prime256v1_key_pair;
 use ic_crypto_test_utils::tls::x509_certificates::CertBuilder;
 use ic_crypto_test_utils::tls::x509_certificates::CertWithPrivateKey;
+use ic_crypto_test_utils_keys::public_keys::valid_tls_certificate;
 use ic_types::PrincipalId;
 use openssl::hash::MessageDigest;
 use std::ops::Range;
@@ -400,32 +401,13 @@ fn invalidate_valid_ed25519_pubkey_bytes(pubkey_bytes: &[u8]) -> BasicSigEd25519
 }
 
 fn valid_hardcoded_cert_and_node_id() -> (X509PublicKeyCert, NodeId) {
-    let certificate = X509PublicKeyCert {
-        certificate_der: hex_decode(
-            "3082015630820108a00302010202140098d074\
-                7d24ca04a2f036d8665402b4ea784830300506032b6570304a3148304606035504030\
-                c3f34696e71622d327a63766b2d663679716c2d736f776f6c2d76673365732d7a3234\
-                6a642d6a726b6f772d6d686e73642d756b7666702d66616b35702d6161653020170d3\
-                232313130343138313231345a180f39393939313233313233353935395a304a314830\
-                4606035504030c3f34696e71622d327a63766b2d663679716c2d736f776f6c2d76673\
-                365732d7a32346a642d6a726b6f772d6d686e73642d756b7666702d66616b35702d61\
-                6165302a300506032b6570032100246acd5f38372411103768e91169dadb7370e9990\
-                9a65639186ac6d1c36f3735300506032b6570034100d37e5ccfc32146767e5fd73343\
-                649f5b5564eb78e6d8d424d8f01240708bc537a2a9bcbcf6c884136d18d2b475706d7\
-                bb905f52faf28707735f1d90ab654380b",
-        ),
-    };
     let node_id = NodeId::new(
         PrincipalId::from_str("4inqb-2zcvk-f6yql-sowol-vg3es-z24jd-jrkow-mhnsd-ukvfp-fak5p-aae")
             .unwrap(),
     );
-    (certificate, node_id)
+    (valid_tls_certificate(), node_id)
 }
 
 fn node_id(n: u64) -> NodeId {
     NodeId::from(PrincipalId::new_node_test_id(n))
-}
-
-fn hex_decode<T: AsRef<[u8]>>(data: T) -> Vec<u8> {
-    hex::decode(data).expect("failed to decode hex")
 }
