@@ -10,7 +10,7 @@ type Alert = record  {
     exposure_type : variant { Direct; Indirect };
 };
 
-type Mode = variant { Normal; DryRun };
+type Mode = variant { Normal; AcceptAll; RejectAll };
 
 type InitArg = record {
     api_key : text;

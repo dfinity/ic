@@ -298,7 +298,16 @@ async fn fetch_utxo_alerts(outpoint: Outpoint) -> Result<FetchAlertsResponse, Er
             let alerts = http_get_utxo_alerts(external_id.clone()).await?;
             (external_id, alerts)
         }
-        KytMode::DryRun => (ic_cdk::api::time().to_string(), vec![]),
+        KytMode::AcceptAll => (ic_cdk::api::time().to_string(), vec![]),
+        KytMode::RejectAll => (
+            ic_cdk::api::time().to_string(),
+            vec![Alert {
+                level: AlertLevel::Severe,
+                category: None,
+                service: None,
+                exposure_type: ExposureType::Direct,
+            }],
+        ),
     };
     record_event(EventKind::UtxoCheck {
         txid: outpoint.txid,
@@ -323,7 +332,16 @@ async fn fetch_withdrawal_alerts(
             let alerts = http_get_withdrawal_alerts(external_id.clone()).await?;
             (external_id, alerts)
         }
-        KytMode::DryRun => (ic_cdk::api::time().to_string(), vec![]),
+        KytMode::AcceptAll => (ic_cdk::api::time().to_string(), vec![]),
+        KytMode::RejectAll => (
+            ic_cdk::api::time().to_string(),
+            vec![Alert {
+                level: AlertLevel::Severe,
+                service: None,
+                category: None,
+                exposure_type: ExposureType::Direct,
+            }],
+        ),
     };
     record_event(EventKind::AddressCheck {
         withdrawal_id: withdrawal.id,
