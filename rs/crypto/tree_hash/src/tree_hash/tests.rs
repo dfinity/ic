@@ -612,14 +612,10 @@ fn witness_should_fail_for_non_existing_path_at_root() {
 
     let builder = tree_with_a_subtree();
     let witness_generator = builder.witness_generator().unwrap();
-    let witness = witness_generator.witness(&partial_tree);
-    assert!(witness.is_err());
-    assert_eq!(
-        TreeHashError::InconsistentPartialTree {
-            offending_path: vec![wrong_label],
-        },
-        witness.unwrap_err()
-    )
+
+    let res = witness_generator.witness(&partial_tree);
+
+    assert_eq!(err_inconsistent_partial_tree(vec![wrong_label]), res);
 }
 
 #[test]
@@ -640,14 +636,13 @@ fn witness_should_fail_for_non_existing_sub_path() {
 
     let builder = tree_with_a_subtree();
     let witness_generator = builder.witness_generator().unwrap();
-    let witness = witness_generator.witness(&partial_tree);
-    assert!(witness.is_err());
+
+    let res = witness_generator.witness(&partial_tree);
+
     assert_eq!(
-        TreeHashError::InconsistentPartialTree {
-            offending_path: vec![label_b, wrong_label],
-        },
-        witness.unwrap_err()
-    )
+        err_inconsistent_partial_tree(vec![label_b, wrong_label]),
+        res
+    );
 }
 
 fn add_leaf<T>(label: T, contents: &str, builder: &mut HashTreeBuilderImpl)
@@ -736,6 +731,11 @@ fn gmlabeled(label: impl Into<Label>, t: MixedHashTree) -> MixedHashTree {
 }
 fn gmpruned(digest: impl Into<Digest>) -> MixedHashTree {
     MixedHashTree::Pruned(digest.into())
+}
+
+/// Returns an `Err(InconsistentPartialTree)` with the given `offending_path`.
+fn err_inconsistent_partial_tree<T>(offending_path: Vec<Label>) -> Result<T, TreeHashError> {
+    Err(TreeHashError::InconsistentPartialTree { offending_path })
 }
 
 #[test]
@@ -1143,12 +1143,7 @@ fn recompute_digest_extra_leaf() {
     let partial_tree_extra_leaf = fixture.partial_tree(&[&fixture.p22, &fixture.p23, &fixture.p3]);
     let res = recompute_digest(&partial_tree_extra_leaf, &witness);
 
-    assert_eq!(
-        Err(TreeHashError::InconsistentPartialTree {
-            offending_path: fixture.p22.0
-        }),
-        res
-    );
+    assert_eq!(err_inconsistent_partial_tree(fixture.p22.0), res);
 }
 
 #[test]
@@ -1160,12 +1155,7 @@ fn recompute_digest_missing_leaf() {
     let partial_tree_missing_leaf = fixture.partial_tree(&[&fixture.p23, &fixture.p3]);
     let res = recompute_digest(&partial_tree_missing_leaf, &witness);
 
-    assert_eq!(
-        Err(TreeHashError::InconsistentPartialTree {
-            offending_path: fixture.p22.0
-        }),
-        res
-    );
+    assert_eq!(err_inconsistent_partial_tree(fixture.p22.0), res);
 }
 
 #[test]
@@ -1177,12 +1167,7 @@ fn recompute_digest_extra_empty_subtree() {
     let partial_tree_extra_leaf = fixture.partial_tree(&[&fixture.p22, &fixture.p3]);
     let res = recompute_digest(&partial_tree_extra_leaf, &witness);
 
-    assert_eq!(
-        Err(TreeHashError::InconsistentPartialTree {
-            offending_path: fixture.p3.0
-        }),
-        res
-    );
+    assert_eq!(err_inconsistent_partial_tree(fixture.p3.0), res);
 }
 
 #[test]
@@ -1194,12 +1179,7 @@ fn recompute_digest_missing_empty_subtree() {
     let partial_tree_missing_leaf = fixture.partial_tree(&[&fixture.p22]);
     let res = recompute_digest(&partial_tree_missing_leaf, &witness);
 
-    assert_eq!(
-        Err(TreeHashError::InconsistentPartialTree {
-            offending_path: fixture.p3.0
-        }),
-        res
-    );
+    assert_eq!(err_inconsistent_partial_tree(fixture.p3.0), res);
 }
 
 /// Ensure that a witness containing a `Fork` with two `Pruned` children fails
@@ -1839,9 +1819,7 @@ fn prune_labeled_tree_impl<T, U>(
                     res.into_iter().collect(),
                 )))
             } else {
-                Err(TreeHashError::InconsistentPartialTree {
-                    offending_path: path.to_owned(),
-                })
+                err_inconsistent_partial_tree(path.to_owned())
             }
         }
     }
@@ -2034,9 +2012,7 @@ fn prune_witness_prune_nothing() {
     let witness = fixture.witness_for(partial_tree);
 
     assert_eq!(
-        Err(TreeHashError::InconsistentPartialTree {
-            offending_path: vec![]
-        }),
+        err_inconsistent_partial_tree(vec![]),
         prune_witness(&witness, &LabeledTree::SubTree(flatmap! {}))
     );
 }
@@ -2094,12 +2070,7 @@ fn prune_witness_prune_already_pruned_leaf() {
 
     let res = prune_witness(&witness, &fixture.partial_tree(&[&fixture.p22]));
 
-    assert_eq!(
-        Err(TreeHashError::InconsistentPartialTree {
-            offending_path: fixture.p22.0
-        }),
-        res
-    );
+    assert_eq!(err_inconsistent_partial_tree(fixture.p22.0), res);
 }
 
 #[test]
@@ -2110,12 +2081,7 @@ fn prune_witness_prune_leaf_from_already_pruned_subtree() {
 
     let res = prune_witness(&witness, &fixture.partial_tree(&[&fixture.p22]));
 
-    assert_eq!(
-        Err(TreeHashError::InconsistentPartialTree {
-            offending_path: fixture.p2.0
-        }),
-        res
-    );
+    assert_eq!(err_inconsistent_partial_tree(fixture.p2.0), res);
 }
 
 #[test]
@@ -2127,12 +2093,7 @@ fn prune_witness_prune_already_pruned_empty_subtree() {
 
     let res = prune_witness(&witness, &fixture.partial_tree(&[&fixture.p3]));
 
-    assert_eq!(
-        Err(TreeHashError::InconsistentPartialTree {
-            offending_path: fixture.p3.0
-        }),
-        res
-    );
+    assert_eq!(err_inconsistent_partial_tree(fixture.p3.0), res);
 }
 
 #[test]
@@ -2147,12 +2108,7 @@ fn prune_witness_prune_some_already_pruned_leaves() {
         &fixture.partial_tree(&[&fixture.p22, &fixture.p23]),
     );
 
-    assert_eq!(
-        Err(TreeHashError::InconsistentPartialTree {
-            offending_path: fixture.p23.0
-        }),
-        res
-    );
+    assert_eq!(err_inconsistent_partial_tree(fixture.p23.0), res);
 }
 
 #[test]
@@ -2163,12 +2119,7 @@ fn prune_witness_prune_inexistent_leaf_from_single_node_subtree() {
 
     let res = prune_witness(&witness, &fixture.partial_tree_12());
 
-    assert_eq!(
-        Err(TreeHashError::InconsistentPartialTree {
-            offending_path: fixture.p12.0
-        }),
-        res
-    );
+    assert_eq!(err_inconsistent_partial_tree(fixture.p12.0), res);
 }
 
 #[test]
@@ -2179,12 +2130,7 @@ fn prune_witness_prune_inexistent_leaf_from_empty_subtree() {
 
     let res = prune_witness(&witness, &fixture.partial_tree_31());
 
-    assert_eq!(
-        Err(TreeHashError::InconsistentPartialTree {
-            offending_path: fixture.p3.0
-        }),
-        res
-    );
+    assert_eq!(err_inconsistent_partial_tree(fixture.p3.0), res);
 }
 
 /// Ensures that an invalid witness, with a partially pruned node (leaf pruned
