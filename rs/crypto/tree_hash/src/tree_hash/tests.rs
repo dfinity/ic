@@ -1202,6 +1202,139 @@ fn recompute_digest_missing_empty_subtree() {
     );
 }
 
+/// Ensure that a witness containing a `Fork` with two `Pruned` children fails
+/// `recompute_digest()` even if the respective digests are valid.
+///
+/// While the above is otherwise valid, we only want to accept minimal
+/// witnesses.
+#[test]
+fn recompute_digest_not_pruned_fork_with_pruned_children() {
+    let l1 = Label::from("l1");
+    let l2 = Label::from("l2");
+    let l3 = Label::from("l3");
+    let v1: &str = "v1";
+    let v2: &str = "v2";
+    let v3: &str = "v3";
+
+    // Compute root digest.
+    let labeled_tree = LabeledTree::SubTree(flatmap! {
+        l1.clone() => LabeledTree::Leaf(Vec::from(v1)),
+        l2.clone() => LabeledTree::Leaf(Vec::from(v2)),
+        l3.clone() => LabeledTree::Leaf(Vec::from(v3))
+    });
+    let witness = Witness::Fork {
+        left_tree: Witness::Fork {
+            left_tree: Witness::Node {
+                label: l1.clone(),
+                sub_witness: Witness::Known().into(),
+            }
+            .into(),
+            right_tree: Witness::Node {
+                label: l2.clone(),
+                sub_witness: Witness::Known().into(),
+            }
+            .into(),
+        }
+        .into(),
+        right_tree: Witness::Node {
+            label: l3.clone(),
+            sub_witness: Witness::Known().into(),
+        }
+        .into(),
+    };
+    let root_digest = recompute_digest(&labeled_tree, &witness).unwrap();
+
+    let l1_digest = compute_node_digest(&l1, &compute_leaf_digest(v1.as_ref()));
+    let l2_digest = compute_node_digest(&l2, &compute_leaf_digest(v2.as_ref()));
+
+    // Sanity check that `l1_digest` and `l2_digest` are valid.
+    {
+        let partial_tree_no_l1 = LabeledTree::SubTree(flatmap! {
+            l2.clone() => LabeledTree::Leaf(Vec::from(v2)),
+            l3.clone() => LabeledTree::Leaf(Vec::from(v3))
+        });
+        let witness_no_l1 = Witness::Fork {
+            left_tree: Witness::Fork {
+                left_tree: Witness::Pruned {
+                    digest: l1_digest.clone(),
+                }
+                .into(),
+                right_tree: Witness::Node {
+                    label: l2,
+                    sub_witness: Witness::Known().into(),
+                }
+                .into(),
+            }
+            .into(),
+            right_tree: Witness::Node {
+                label: l3.clone(),
+                sub_witness: Witness::Known().into(),
+            }
+            .into(),
+        };
+
+        assert_eq!(
+            Ok(root_digest.clone()),
+            recompute_digest(&partial_tree_no_l1, &witness_no_l1)
+        )
+    }
+    {
+        let partial_tree_no_l2 = LabeledTree::SubTree(flatmap! {
+            l1.clone() => LabeledTree::Leaf(Vec::from(v1)),
+            l3.clone() => LabeledTree::Leaf(Vec::from(v3))
+        });
+        let witness_no_l2 = Witness::Fork {
+            left_tree: Witness::Fork {
+                left_tree: Witness::Node {
+                    label: l1,
+                    sub_witness: Witness::Known().into(),
+                }
+                .into(),
+                right_tree: Witness::Pruned {
+                    digest: l2_digest.clone(),
+                }
+                .into(),
+            }
+            .into(),
+            right_tree: Witness::Node {
+                label: l3.clone(),
+                sub_witness: Witness::Known().into(),
+            }
+            .into(),
+        };
+
+        assert_eq!(
+            Ok(root_digest),
+            recompute_digest(&partial_tree_no_l2, &witness_no_l2)
+        )
+    }
+
+    // But pruning each individually without also pruning the `Fork` that holds them
+    // results in an invalid witness.
+    let partial_tree_l3_only = LabeledTree::SubTree(flatmap! {
+        l3.clone() => LabeledTree::Leaf(Vec::from(v3))
+    });
+    let witness_l1_and_l2_pruned = Witness::Fork {
+        left_tree: Witness::Fork {
+            left_tree: Witness::Pruned { digest: l1_digest }.into(),
+            right_tree: Witness::Pruned { digest: l2_digest }.into(),
+        }
+        .into(),
+        right_tree: Witness::Node {
+            label: l3,
+            sub_witness: Witness::Known().into(),
+        }
+        .into(),
+    };
+
+    assert_eq!(
+        Err(TreeHashError::NonMinimalWitness {
+            offending_path: vec![]
+        }),
+        recompute_digest(&partial_tree_l3_only, &witness_l1_and_l2_pruned)
+    );
+}
+
 // Generates a builder with a more complex tree, used for witness tests.
 // (root)
 //    +-- label_a
