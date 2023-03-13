@@ -491,7 +491,8 @@ pub fn register_vote_assert_success(
 
 /// When testing proposals, three different proposal topics available:
 /// Governance, NetworkEconomics, and ExchangeRate.
-enum ProposalTopicBehaviour {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ProposalTopicBehavior {
     Governance,
     NetworkEconomics,
     ExchangeRate,
@@ -499,13 +500,14 @@ enum ProposalTopicBehaviour {
 
 /// A struct to help setting up tests concisely thanks to a concise format to
 /// specifies who proposes something and who votes on that proposal.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ProposalNeuronBehavior {
     /// Neuron id of the proposer.
-    proposer: u64,
+    pub proposer: u64,
     /// Map neuron id of voters to their votes.
-    votes: BTreeMap<u64, Vote>,
+    pub votes: BTreeMap<u64, Vote>,
     /// Keep track of proposal topic to use.
-    proposal_topic: ProposalTopicBehaviour,
+    pub proposal_topic: ProposalTopicBehavior,
 }
 
 impl ProposalNeuronBehavior {
@@ -517,15 +519,15 @@ impl ProposalNeuronBehavior {
     pub fn propose_and_vote(&self, gov: &mut Governance, summary: String) -> ProposalId {
         // Submit proposal
         let action = match self.proposal_topic {
-            ProposalTopicBehaviour::Governance => proposal::Action::Motion(Motion {
+            ProposalTopicBehavior::Governance => proposal::Action::Motion(Motion {
                 motion_text: format!("summary: {}", summary),
             }),
-            ProposalTopicBehaviour::NetworkEconomics => {
+            ProposalTopicBehavior::NetworkEconomics => {
                 proposal::Action::ManageNetworkEconomics(NetworkEconomics {
                     ..Default::default()
                 })
             }
-            ProposalTopicBehaviour::ExchangeRate => {
+            ProposalTopicBehavior::ExchangeRate => {
                 proposal::Action::ExecuteNnsFunction(ExecuteNnsFunction {
                     nns_function: NnsFunction::IcpXdrConversionRate as i32,
                     payload: Encode!(&UpdateIcpXdrConversionRatePayload {
@@ -591,14 +593,14 @@ impl From<&str> for ProposalNeuronBehavior {
             str.chars().last().unwrap()
         };
         let (str, proposal_topic) = match "NEG".find(chr) {
-            None => (str, ProposalTopicBehaviour::NetworkEconomics),
+            None => (str, ProposalTopicBehavior::NetworkEconomics),
             Some(x) => (
                 &str[0..str.len() - 1],
                 match x {
-                    0 => ProposalTopicBehaviour::NetworkEconomics,
-                    1 => ProposalTopicBehaviour::ExchangeRate,
+                    0 => ProposalTopicBehavior::NetworkEconomics,
+                    1 => ProposalTopicBehavior::ExchangeRate,
                     // Must be 2, but using _ for a complete match.
-                    _ => ProposalTopicBehaviour::Governance,
+                    _ => ProposalTopicBehavior::Governance,
                 },
             ),
         };

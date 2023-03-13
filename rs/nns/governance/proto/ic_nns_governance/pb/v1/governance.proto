@@ -1480,6 +1480,9 @@ message RewardEvent {
   // the same scale as ICPs, maturity is not directly convertible to ICPs:
   // conversion requires a minting event to spawn a new neuron.
   uint64 distributed_e8s_equivalent = 4;
+
+  // The total amount of rewards that was available during the reward event.
+  uint64 total_available_e8s_equivalent = 5;
 }
 
 message KnownNeuron {
