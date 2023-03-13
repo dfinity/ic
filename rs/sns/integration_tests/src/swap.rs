@@ -262,6 +262,7 @@ fn begin_swap(
             actual_timestamp_seconds: 32503680000,
             settled_proposals: vec![],
             distributed_e8s_equivalent: 0,
+            total_available_e8s_equivalent: 0,
         });
 
         result

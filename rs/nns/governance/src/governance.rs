@@ -1685,8 +1685,10 @@ impl Topic {
     /// neuron holders.
     fn reward_weight(&self) -> f64 {
         match self {
-            // There are several (typically over 100) exchange rate
-            // proposals per day.
+            // We provide higher voting rewards for neuron holders
+            // who vote on governance proposals.
+            Topic::Governance => 20.0,
+            // Lower voting rewards for exchange rate proposals.
             Topic::ExchangeRate => 0.01,
             // Other topics are unit weighted. Typically a handful of
             // proposals per day (excluding weekends).
@@ -1964,11 +1966,13 @@ impl fmt::Display for RewardEvent {
         write!(
             f,
             "RewardEvent {{ day_after_genesis: {} distributed_e8s_equivalent: {}\
-                   actual_timestamp_seconds: {} settled_proposals: <vec of size {}> }})",
+                   actual_timestamp_seconds: {} settled_proposals: <vec of size {}>\
+                   total_available_e8s_equivalent: {} }})",
             self.day_after_genesis,
             self.distributed_e8s_equivalent,
             self.actual_timestamp_seconds,
-            self.settled_proposals.len()
+            self.settled_proposals.len(),
+            self.total_available_e8s_equivalent,
         )
     }
 }
@@ -2142,6 +2146,7 @@ impl Governance {
                 day_after_genesis: 0,
                 settled_proposals: vec![],
                 distributed_e8s_equivalent: 0,
+                total_available_e8s_equivalent: 0,
             })
         }
 
@@ -6901,18 +6906,21 @@ impl Governance {
             .map(crate::reward::rewards_pool_to_distribute_in_supply_fraction_for_one_day)
             .sum();
 
-        let distributed_e8s_equivalent_float = (supply.get_e8s() as f64) * fraction;
-        // We should not convert right away to integer! The
-        // "distributed_e8s_equivalent" recorded in the RewardEvent proto
-        // should match exactly the sum of the distributed integer e8
-        // equivalents. Due to rounding, we actually need to recompute this sum,
-        // even though it will be very close to distributed_e8s_equivalent_float.
+        let total_available_e8s_equivalent_float = (supply.get_e8s() as f64) * fraction;
+        // The "actually_distributed_e8s_equivalent" recorded in the RewardEvent
+        // protoshould match exactly the sum of the distributed integer e8
+        // equivalents. This amount has to be computed bottom-up and is dependent
+        // on the how many neurons voted, with what voting power and on the
+        // reward weight of proposals being voted on.
         let mut actually_distributed_e8s_equivalent = 0_u64;
 
         let considered_proposals: Vec<ProposalId> =
             self.ready_to_be_settled_proposal_ids().collect();
 
-        // Construct map voters -> total _used_ voting rights for considered proposals
+        // Construct map voters -> total _used_ voting rights for
+        // considered proposals as well as the overall total voting
+        // power on considered proposals, whether or not this voting
+        // power was used to vote (yes or no).
         let (voters_to_used_voting_right, total_voting_rights) = {
             let mut voters_to_used_voting_right: HashMap<NeuronId, f64> = HashMap::new();
             let mut total_voting_rights = 0f64;
@@ -6921,14 +6929,13 @@ impl Governance {
                 if let Some(proposal) = self.get_proposal_data(*pid) {
                     let reward_weight = proposal.topic().reward_weight();
                     for (voter, ballot) in proposal.ballots.iter() {
-                        if !Vote::from(ballot.vote).eligible_for_rewards() {
-                            continue;
-                        }
                         let voting_rights = (ballot.voting_power as f64) * reward_weight;
-                        *voters_to_used_voting_right
-                            .entry(NeuronId { id: *voter })
-                            .or_insert(0f64) += voting_rights;
                         total_voting_rights += voting_rights;
+                        if Vote::from(ballot.vote).eligible_for_rewards() {
+                            *voters_to_used_voting_right
+                                .entry(NeuronId { id: *voter })
+                                .or_insert(0f64) += voting_rights;
+                        }
                     }
                 }
             }
@@ -6944,7 +6951,7 @@ impl Governance {
                     // is non-empty (otherwise we wouldn't be here in the
                     // first place) and (2) the voting power of all ballots is
                     // positive (non-zero).
-                    let reward = (used_voting_rights * distributed_e8s_equivalent_float
+                    let reward = (used_voting_rights * total_available_e8s_equivalent_float
                         / total_voting_rights) as u64;
                     // If the neuron has auto-stake-maturity on, add the new maturity to the
                     // staked maturity, otherwise add it to the un-staked maturity.
@@ -6998,11 +7005,13 @@ impl Governance {
                 }
             };
         }
+
         self.proto.latest_reward_event = Some(RewardEvent {
             day_after_genesis,
             actual_timestamp_seconds: now,
             settled_proposals: considered_proposals,
             distributed_e8s_equivalent: actually_distributed_e8s_equivalent,
+            total_available_e8s_equivalent: total_available_e8s_equivalent_float as u64,
         })
     }
 

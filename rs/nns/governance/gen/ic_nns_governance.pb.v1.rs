@@ -1987,6 +1987,9 @@ pub struct RewardEvent {
     /// conversion requires a minting event to spawn a new neuron.
     #[prost(uint64, tag = "4")]
     pub distributed_e8s_equivalent: u64,
+    /// The total amount of rewards that was available during the reward event.
+    #[prost(uint64, tag = "5")]
+    pub total_available_e8s_equivalent: u64,
 }
 #[derive(
     candid::CandidType,
