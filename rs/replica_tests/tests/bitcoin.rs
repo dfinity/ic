@@ -6,9 +6,7 @@ use ic_btc_service::{
     BtcServiceSendTransactionRequest, BtcServiceSendTransactionResponse,
 };
 use ic_btc_types::NetworkInRequest as BitcoinNetwork;
-use ic_btc_types_internal::{
-    CanisterGetSuccessorsResponseComplete, CanisterGetSuccessorsResponsePartial,
-};
+use ic_btc_types_internal::{GetSuccessorsResponseComplete, GetSuccessorsResponsePartial};
 use ic_config::{
     execution_environment::{BitcoinConfig, Config as HypervisorConfig},
     subnet_config::SubnetConfigs,
@@ -154,12 +152,11 @@ fn bitcoin_get_successors() {
             );
 
             // Expect a dummy response.
-            let expected_response = ic00::BitcoinGetSuccessorsResponse::Complete(
-                CanisterGetSuccessorsResponseComplete {
+            let expected_response =
+                ic00::BitcoinGetSuccessorsResponse::Complete(GetSuccessorsResponseComplete {
                     blocks: vec![],
                     next: vec![],
-                },
-            );
+                });
 
             assert_eq!(response, WasmResult::Reply(expected_response.encode()));
         },
@@ -191,7 +188,7 @@ fn bitcoin_get_successors_pagination() {
             );
 
             let expected_response =
-                ic00::BitcoinGetSuccessorsResponse::Partial(CanisterGetSuccessorsResponsePartial {
+                ic00::BitcoinGetSuccessorsResponse::Partial(GetSuccessorsResponsePartial {
                     partial_block: vec![0; 2_000_000],
                     next: vec![],
                     remaining_follow_ups: 1,

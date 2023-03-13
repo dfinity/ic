@@ -2,8 +2,7 @@ use crate::BitcoinPayloadBuilder;
 use ic_btc_types::NetworkSnakeCase as Network;
 use ic_btc_types_internal::{
     BitcoinAdapterRequestWrapper, BitcoinAdapterResponse, BitcoinAdapterResponseWrapper,
-    CanisterGetSuccessorsRequestInitial, CanisterGetSuccessorsResponseComplete,
-    GetSuccessorsResponse,
+    GetSuccessorsRequestInitial, GetSuccessorsResponseComplete,
 };
 use ic_interfaces::self_validating_payload::SelfValidatingPayloadBuilder;
 use ic_interfaces_bitcoin_adapter_client::BitcoinAdapterClientError;
@@ -109,7 +108,7 @@ fn can_successfully_create_bitcoin_payload() {
             .times(1)
             .returning(|_, _| {
                 Ok(BitcoinAdapterResponseWrapper::GetSuccessorsResponse(
-                    GetSuccessorsResponse {
+                    GetSuccessorsResponseComplete {
                         blocks: vec![],
                         next: vec![],
                     },
@@ -122,15 +121,14 @@ fn can_successfully_create_bitcoin_payload() {
 
     // Create a mock state manager that returns a `ReplicatedState` with
     // some bitcoin adapter requests.
-    let state_manager = mock_state_manager(vec![
-        BitcoinAdapterRequestWrapper::CanisterGetSuccessorsRequest(
-            CanisterGetSuccessorsRequestInitial {
+    let state_manager =
+        mock_state_manager(vec![BitcoinAdapterRequestWrapper::GetSuccessorsRequest(
+            GetSuccessorsRequestInitial {
                 processed_block_hashes: vec![vec![10; 32]],
                 anchor: vec![10; 32],
                 network: Network::Testnet,
             },
-        ),
-    ]);
+        )]);
 
     bitcoin_payload_builder_test(
         MockBitcoinAdapterClient::new(),
@@ -141,7 +139,7 @@ fn can_successfully_create_bitcoin_payload() {
             let expected_payload = FakeSelfValidatingPayloadBuilder::new()
                 .with_responses(vec![BitcoinAdapterResponse {
                     response: BitcoinAdapterResponseWrapper::GetSuccessorsResponse(
-                        GetSuccessorsResponse {
+                        GetSuccessorsResponseComplete {
                             blocks: vec![],
                             next: vec![],
                         },
@@ -173,7 +171,7 @@ fn includes_only_successful_responses_in_the_payload() {
             .times(1)
             .returning(|_, _| {
                 Ok(BitcoinAdapterResponseWrapper::GetSuccessorsResponse(
-                    GetSuccessorsResponse {
+                    GetSuccessorsResponseComplete {
                         blocks: vec![],
                         next: vec![],
                     },
@@ -187,20 +185,16 @@ fn includes_only_successful_responses_in_the_payload() {
     }
 
     let state_manager = mock_state_manager(vec![
-        BitcoinAdapterRequestWrapper::CanisterGetSuccessorsRequest(
-            CanisterGetSuccessorsRequestInitial {
-                processed_block_hashes: vec![vec![10; 32]],
-                anchor: vec![10; 32],
-                network: Network::Testnet,
-            },
-        ),
-        BitcoinAdapterRequestWrapper::CanisterGetSuccessorsRequest(
-            CanisterGetSuccessorsRequestInitial {
-                processed_block_hashes: vec![vec![20; 32]],
-                anchor: vec![20; 32],
-                network: Network::Testnet,
-            },
-        ),
+        BitcoinAdapterRequestWrapper::GetSuccessorsRequest(GetSuccessorsRequestInitial {
+            processed_block_hashes: vec![vec![10; 32]],
+            anchor: vec![10; 32],
+            network: Network::Testnet,
+        }),
+        BitcoinAdapterRequestWrapper::GetSuccessorsRequest(GetSuccessorsRequestInitial {
+            processed_block_hashes: vec![vec![20; 32]],
+            anchor: vec![20; 32],
+            network: Network::Testnet,
+        }),
     ]);
 
     let registry_client = mock_registry_client(MAX_BLOCK_PAYLOAD_SIZE);
@@ -214,7 +208,7 @@ fn includes_only_successful_responses_in_the_payload() {
             let expected_payload = FakeSelfValidatingPayloadBuilder::new()
                 .with_responses(vec![BitcoinAdapterResponse {
                     response: BitcoinAdapterResponseWrapper::GetSuccessorsResponse(
-                        GetSuccessorsResponse {
+                        GetSuccessorsResponseComplete {
                             blocks: vec![],
                             next: vec![],
                         },
@@ -245,7 +239,7 @@ fn includes_only_responses_for_callback_ids_not_seen_in_past_payloads() {
         .times(1)
         .returning(|_, _| {
             Ok(BitcoinAdapterResponseWrapper::GetSuccessorsResponse(
-                GetSuccessorsResponse {
+                GetSuccessorsResponseComplete {
                     blocks: vec![],
                     next: vec![],
                 },
@@ -255,20 +249,16 @@ fn includes_only_responses_for_callback_ids_not_seen_in_past_payloads() {
     // Create a mock state manager that returns a `ReplicatedState` with
     // some bitcoin adapter requests.
     let state_manager = mock_state_manager(vec![
-        BitcoinAdapterRequestWrapper::CanisterGetSuccessorsRequest(
-            CanisterGetSuccessorsRequestInitial {
-                processed_block_hashes: vec![vec![10; 32]],
-                anchor: vec![10; 32],
-                network: Network::Testnet,
-            },
-        ),
-        BitcoinAdapterRequestWrapper::CanisterGetSuccessorsRequest(
-            CanisterGetSuccessorsRequestInitial {
-                processed_block_hashes: vec![vec![20; 32]],
-                anchor: vec![20; 32],
-                network: Network::Testnet,
-            },
-        ),
+        BitcoinAdapterRequestWrapper::GetSuccessorsRequest(GetSuccessorsRequestInitial {
+            processed_block_hashes: vec![vec![10; 32]],
+            anchor: vec![10; 32],
+            network: Network::Testnet,
+        }),
+        BitcoinAdapterRequestWrapper::GetSuccessorsRequest(GetSuccessorsRequestInitial {
+            processed_block_hashes: vec![vec![20; 32]],
+            anchor: vec![20; 32],
+            network: Network::Testnet,
+        }),
     ]);
 
     let registry_client = mock_registry_client(MAX_BLOCK_PAYLOAD_SIZE);
@@ -282,7 +272,7 @@ fn includes_only_responses_for_callback_ids_not_seen_in_past_payloads() {
             let past_payload = FakeSelfValidatingPayloadBuilder::new()
                 .with_responses(vec![BitcoinAdapterResponse {
                     response: BitcoinAdapterResponseWrapper::GetSuccessorsResponse(
-                        GetSuccessorsResponse {
+                        GetSuccessorsResponseComplete {
                             blocks: vec![],
                             next: vec![],
                         },
@@ -293,7 +283,7 @@ fn includes_only_responses_for_callback_ids_not_seen_in_past_payloads() {
             let expected_payload = FakeSelfValidatingPayloadBuilder::new()
                 .with_responses(vec![BitcoinAdapterResponse {
                     response: BitcoinAdapterResponseWrapper::GetSuccessorsResponse(
-                        GetSuccessorsResponse {
+                        GetSuccessorsResponseComplete {
                             blocks: vec![],
                             next: vec![],
                         },
@@ -318,12 +308,11 @@ fn includes_only_responses_for_callback_ids_not_seen_in_past_payloads() {
 fn bitcoin_payload_builder_respects_byte_limit() {
     let dummy_header = vec![0; 80];
 
-    let dummy_response = BitcoinAdapterResponseWrapper::CanisterGetSuccessorsResponse(
-        CanisterGetSuccessorsResponseComplete {
+    let dummy_response =
+        BitcoinAdapterResponseWrapper::GetSuccessorsResponse(GetSuccessorsResponseComplete {
             blocks: vec![],
             next: vec![dummy_header],
-        },
-    );
+        });
     let dummy_response_wrapper = BitcoinAdapterResponse {
         response: dummy_response.clone(),
         callback_id: 0,
@@ -381,40 +370,32 @@ fn bitcoin_payload_builder_respects_byte_limit() {
         bitcoin_testnet_adapter_client
             .expect_send_request()
             .returning(move |_, _| {
-                Ok(
-                    BitcoinAdapterResponseWrapper::CanisterGetSuccessorsResponse(
-                        CanisterGetSuccessorsResponseComplete {
-                            blocks: vec![],
-                            next: vec![vec![0; 80]],
-                        },
-                    ),
-                )
+                Ok(BitcoinAdapterResponseWrapper::GetSuccessorsResponse(
+                    GetSuccessorsResponseComplete {
+                        blocks: vec![],
+                        next: vec![vec![0; 80]],
+                    },
+                ))
             });
 
         // Create a mock state manager that returns a `ReplicatedState` with
         // some bitcoin adapter requests.
         let state_manager = mock_state_manager(vec![
-            BitcoinAdapterRequestWrapper::CanisterGetSuccessorsRequest(
-                CanisterGetSuccessorsRequestInitial {
-                    processed_block_hashes: vec![vec![10; 32]],
-                    anchor: vec![10; 32],
-                    network: Network::Testnet,
-                },
-            ),
-            BitcoinAdapterRequestWrapper::CanisterGetSuccessorsRequest(
-                CanisterGetSuccessorsRequestInitial {
-                    processed_block_hashes: vec![vec![20; 32]],
-                    anchor: vec![20; 32],
-                    network: Network::Testnet,
-                },
-            ),
-            BitcoinAdapterRequestWrapper::CanisterGetSuccessorsRequest(
-                CanisterGetSuccessorsRequestInitial {
-                    processed_block_hashes: vec![vec![30; 32]],
-                    anchor: vec![30; 32],
-                    network: Network::Testnet,
-                },
-            ),
+            BitcoinAdapterRequestWrapper::GetSuccessorsRequest(GetSuccessorsRequestInitial {
+                processed_block_hashes: vec![vec![10; 32]],
+                anchor: vec![10; 32],
+                network: Network::Testnet,
+            }),
+            BitcoinAdapterRequestWrapper::GetSuccessorsRequest(GetSuccessorsRequestInitial {
+                processed_block_hashes: vec![vec![20; 32]],
+                anchor: vec![20; 32],
+                network: Network::Testnet,
+            }),
+            BitcoinAdapterRequestWrapper::GetSuccessorsRequest(GetSuccessorsRequestInitial {
+                processed_block_hashes: vec![vec![30; 32]],
+                anchor: vec![30; 32],
+                network: Network::Testnet,
+            }),
         ]);
 
         let registry_client = mock_registry_client(byte_limit);

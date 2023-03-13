@@ -74,7 +74,7 @@ mod tests {
     use ic_crypto_tree_hash::{flatmap, Label, LabeledTree};
     use ic_interfaces_state_manager_mocks::MockStateManager;
     use ic_registry_subnet_type::SubnetType;
-    use ic_replicated_state::{BitcoinState, CanisterQueues, ReplicatedState, SystemMetadata};
+    use ic_replicated_state::{CanisterQueues, ReplicatedState, SystemMetadata};
     use ic_test_utilities::{mock_time, state::ReplicatedStateBuilder, types::ids::subnet_test_id};
     use ic_types::{
         consensus::certification::{Certification, CertificationContent},
@@ -102,7 +102,6 @@ mod tests {
                         BTreeMap::new(),
                         metadata,
                         CanisterQueues::default(),
-                        BitcoinState::default(),
                     )),
                 )
             });

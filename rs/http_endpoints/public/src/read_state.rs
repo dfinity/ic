@@ -424,7 +424,7 @@ mod test {
     use ic_interfaces_state_manager_mocks::MockStateManager;
     use ic_metrics::MetricsRegistry;
     use ic_registry_subnet_type::SubnetType;
-    use ic_replicated_state::{BitcoinState, CanisterQueues, ReplicatedState, SystemMetadata};
+    use ic_replicated_state::{CanisterQueues, ReplicatedState, SystemMetadata};
     use ic_test_utilities::{
         mock_time,
         state::insert_dummy_canister,
@@ -560,7 +560,6 @@ mod test {
                         BTreeMap::new(),
                         metadata,
                         CanisterQueues::default(),
-                        BitcoinState::default(),
                     )),
                 )
             });

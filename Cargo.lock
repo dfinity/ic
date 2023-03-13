@@ -4409,7 +4409,6 @@ dependencies = [
 name = "ic-btc-adapter-client"
 version = "0.1.0"
 dependencies = [
- "bitcoin",
  "ic-adapter-metrics",
  "ic-async-utils",
  "ic-btc-service",
@@ -6202,7 +6201,6 @@ name = "ic-execution-environment"
 version = "0.8.0"
 dependencies = [
  "assert_matches",
- "bitcoin",
  "candid",
  "criterion",
  "escargot",
@@ -8358,7 +8356,6 @@ name = "ic-replicated-state"
 version = "0.8.0"
 dependencies = [
  "assert_matches",
- "bitcoin",
  "criterion",
  "criterion-time",
  "cvt",
@@ -8995,7 +8992,6 @@ dependencies = [
 name = "ic-state-layout"
 version = "0.8.0"
 dependencies = [
- "bitcoin",
  "hex",
  "ic-base-types",
  "ic-ic00-types",
@@ -9086,8 +9082,6 @@ dependencies = [
  "crossbeam-channel",
  "hex",
  "ic-base-types",
- "ic-btc-types",
- "ic-btc-types-internal",
  "ic-canonical-state",
  "ic-certification-version",
  "ic-config",

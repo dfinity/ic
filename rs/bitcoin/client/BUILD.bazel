@@ -19,7 +19,6 @@ rust_library(
         "//rs/monitoring/adapter_metrics",
         "//rs/monitoring/logger",
         "//rs/monitoring/metrics",
-        "@crate_index//:bitcoin",
         "@crate_index//:prometheus",
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",

@@ -32,9 +32,7 @@ use ic_protobuf::registry::crypto::v1::{
 use ic_registry_keys::make_crypto_threshold_signing_pubkey_key;
 use ic_registry_routing_table::{CanisterMigrations, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{
-    BitcoinState, CanisterQueues, NetworkTopology, ReplicatedState, SystemMetadata,
-};
+use ic_replicated_state::{CanisterQueues, NetworkTopology, ReplicatedState, SystemMetadata};
 use ic_test_utilities::{
     consensus::MockConsensusCache,
     crypto::temp_crypto_component_with_fake_registry,
@@ -195,7 +193,6 @@ fn test_healthy_behind() {
                     BTreeMap::new(),
                     metadata,
                     CanisterQueues::default(),
-                    BitcoinState::default(),
                 )),
             )
         });

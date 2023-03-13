@@ -17,9 +17,7 @@ use ic_registry_keys::{
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_routing_table::{CanisterMigrations, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{
-    BitcoinState, CanisterQueues, NetworkTopology, ReplicatedState, SystemMetadata,
-};
+use ic_replicated_state::{CanisterQueues, NetworkTopology, ReplicatedState, SystemMetadata};
 use ic_test_utilities::{
     consensus::MockConsensusCache, mock_time, state::ReplicatedStateBuilder,
     types::ids::subnet_test_id,
@@ -161,7 +159,6 @@ pub(crate) fn basic_state_manager_mock() -> MockStateManager {
                     BTreeMap::new(),
                     metadata,
                     CanisterQueues::default(),
-                    BitcoinState::default(),
                 )),
             )
         });

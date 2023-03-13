@@ -1,5 +1,4 @@
 mod bitcoin;
-pub mod bitcoin_state;
 pub mod canister_state;
 pub(crate) mod hash;
 pub mod metadata_state;
@@ -10,7 +9,6 @@ pub mod testing {
     pub use super::canister_state::testing::CanisterQueuesTesting;
     pub use super::replicated_state::testing::ReplicatedStateTesting;
 }
-pub use bitcoin_state::{BitcoinState, BitcoinStateError};
 pub use canister_state::{
     execution_state::Memory,
     num_bytes_try_from,

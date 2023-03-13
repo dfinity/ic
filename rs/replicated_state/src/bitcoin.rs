@@ -1,11 +1,10 @@
-use crate::{bitcoin_state::BitcoinStateError, ReplicatedState, StateError};
+use crate::{ReplicatedState, StateError};
 use ic_btc_types_internal::{
     BitcoinAdapterResponse, BitcoinAdapterResponseWrapper, BlockBlob,
-    CanisterGetSuccessorsResponseComplete, CanisterGetSuccessorsResponsePartial,
+    GetSuccessorsResponseComplete, GetSuccessorsResponsePartial,
 };
 use ic_error_types::RejectCode;
 use ic_ic00_types::{BitcoinGetSuccessorsResponse, EmptyBlob, Payload as _};
-use ic_registry_subnet_features::BitcoinFeatureStatus;
 use ic_types::{
     messages::{CallbackId, Payload, RejectContext, Response},
     CanisterId,
@@ -26,7 +25,7 @@ pub fn push_response(
     response: BitcoinAdapterResponse,
 ) -> Result<(), StateError> {
     match response.response {
-        BitcoinAdapterResponseWrapper::CanisterGetSuccessorsResponse(r) => {
+        BitcoinAdapterResponseWrapper::GetSuccessorsResponse(r) => {
             // Received a response to a request from the bitcoin wasm canister.
             // Retrieve the associated request.
             let callback_id = CallbackId::from(response.callback_id);
@@ -35,10 +34,8 @@ pub fn push_response(
                 .subnet_call_context_manager
                 .bitcoin_get_successors_contexts
                 .get_mut(&callback_id)
-                .ok_or_else(|| {
-                    StateError::BitcoinStateError(BitcoinStateError::NonMatchingResponse {
-                        callback_id: callback_id.get(),
-                    })
+                .ok_or_else(|| StateError::BitcoinNonMatchingResponse {
+                    callback_id: callback_id.get(),
                 })?;
 
             let response_payload = match maybe_split_response(r) {
@@ -68,21 +65,7 @@ pub fn push_response(
 
             Ok(())
         }
-        BitcoinAdapterResponseWrapper::GetSuccessorsResponse(_)
-        | BitcoinAdapterResponseWrapper::SendTransactionResponse(_) => {
-            match state.metadata.own_subnet_features.bitcoin().status {
-                BitcoinFeatureStatus::Enabled
-                | BitcoinFeatureStatus::Syncing
-                | BitcoinFeatureStatus::Paused => state
-                    .bitcoin_mut()
-                    .push_response(response)
-                    .map_err(StateError::BitcoinStateError),
-                BitcoinFeatureStatus::Disabled => Err(StateError::BitcoinStateError(
-                    BitcoinStateError::FeatureNotEnabled,
-                )),
-            }
-        }
-        BitcoinAdapterResponseWrapper::CanisterSendTransactionResponse(_) => {
+        BitcoinAdapterResponseWrapper::SendTransactionResponse(_) => {
             // Retrieve the associated request from the call context manager.
             let callback_id = CallbackId::from(response.callback_id);
             let context = state
@@ -90,10 +73,8 @@ pub fn push_response(
                 .subnet_call_context_manager
                 .bitcoin_send_transaction_internal_contexts
                 .get_mut(&callback_id)
-                .ok_or_else(|| {
-                    StateError::BitcoinStateError(BitcoinStateError::NonMatchingResponse {
-                        callback_id: callback_id.get(),
-                    })
+                .ok_or_else(|| StateError::BitcoinNonMatchingResponse {
+                    callback_id: callback_id.get(),
                 })?;
 
             // The response to a `send_transaction` call is always the empty blob.
@@ -122,7 +103,7 @@ enum SplitError {
 // Splits a response if it's too large into a "partial response" and a list of "follow up"
 // responses.
 fn maybe_split_response(
-    response: CanisterGetSuccessorsResponseComplete,
+    response: GetSuccessorsResponseComplete,
 ) -> Result<(BitcoinGetSuccessorsResponse, Vec<BlockBlob>), SplitError> {
     if response.count_bytes() > MAX_RESPONSE_SIZE {
         if response.blocks.len() != 1 {
@@ -147,7 +128,7 @@ fn maybe_split_response(
             follow_ups.len() as u8
         };
 
-        let initial_response = CanisterGetSuccessorsResponsePartial {
+        let initial_response = GetSuccessorsResponsePartial {
             partial_block: block[0..first_response_block_size].to_vec(),
             next: response.next,
             remaining_follow_ups,
@@ -169,7 +150,7 @@ mod test {
     #[test]
     fn maybe_split_response_returns_error_if_not_exactly_one_block() {
         assert_eq!(
-            maybe_split_response(CanisterGetSuccessorsResponseComplete {
+            maybe_split_response(GetSuccessorsResponseComplete {
                 blocks: vec![vec![0; MAX_RESPONSE_SIZE], vec![0]], // two blocks exceeding size.
                 next: vec![],
             }),
@@ -177,7 +158,7 @@ mod test {
         );
 
         assert_eq!(
-            maybe_split_response(CanisterGetSuccessorsResponseComplete {
+            maybe_split_response(GetSuccessorsResponseComplete {
                 blocks: vec![],
                 next: vec![vec![0; MAX_RESPONSE_SIZE + 1]],
             }),
@@ -188,12 +169,12 @@ mod test {
     #[test]
     fn maybe_split_response_two_pages() {
         assert_eq!(
-            maybe_split_response(CanisterGetSuccessorsResponseComplete {
+            maybe_split_response(GetSuccessorsResponseComplete {
                 blocks: vec![vec![0; MAX_RESPONSE_SIZE + 1]],
                 next: vec![],
             }),
             Ok((
-                BitcoinGetSuccessorsResponse::Partial(CanisterGetSuccessorsResponsePartial {
+                BitcoinGetSuccessorsResponse::Partial(GetSuccessorsResponsePartial {
                     partial_block: vec![0; MAX_RESPONSE_SIZE],
                     next: vec![],
                     remaining_follow_ups: 1
@@ -206,12 +187,12 @@ mod test {
     #[test]
     fn maybe_split_response_three_pages() {
         assert_eq!(
-            maybe_split_response(CanisterGetSuccessorsResponseComplete {
+            maybe_split_response(GetSuccessorsResponseComplete {
                 blocks: vec![vec![0; MAX_RESPONSE_SIZE * 2 + 1]],
                 next: vec![],
             }),
             Ok((
-                BitcoinGetSuccessorsResponse::Partial(CanisterGetSuccessorsResponsePartial {
+                BitcoinGetSuccessorsResponse::Partial(GetSuccessorsResponsePartial {
                     partial_block: vec![0; MAX_RESPONSE_SIZE],
                     next: vec![],
                     remaining_follow_ups: 2

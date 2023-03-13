@@ -192,7 +192,7 @@ impl ValidSetRuleImpl {
                     StateError::OutOfMemory { .. }
                     | StateError::InvariantBroken { .. }
                     | StateError::NonMatchingResponse { .. }
-                    | StateError::BitcoinStateError(_) => {
+                    | StateError::BitcoinNonMatchingResponse { .. } => {
                         unreachable!("Unexpected error: {}", err)
                     }
                 };

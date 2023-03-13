@@ -1,12 +1,10 @@
 use crate::error::LayoutError;
 use crate::utils::do_copy;
 
-use bitcoin::{hashes::Hash, Network, OutPoint, Script, TxOut, Txid};
 use ic_base_types::{NumBytes, NumSeconds};
 use ic_logger::{error, info, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_protobuf::{
-    bitcoin::v1 as pb_bitcoin,
     proxy::{try_from_option_field, ProxyDecodeError},
     state::{
         canister_state_bits::v1::{self as pb_canister_state_bits, ConsumedCyclesByUseCase},
@@ -15,7 +13,6 @@ use ic_protobuf::{
     },
 };
 use ic_replicated_state::{
-    bitcoin_state,
     canister_state::{execution_state::WasmMetadata, system_state::CyclesUseCase},
     CallContextManager, CanisterStatus, ExecutionTask, ExportedFunctions, Global, NumWasmPages,
 };
@@ -143,29 +140,6 @@ pub struct CanisterStateBits {
     pub consumed_cycles_since_replica_started_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
 }
 
-/// This struct contains bits of the `BitcoinState` that are not already
-/// covered somewhere else and are too small to be serialized separately.
-#[derive(Debug)]
-pub struct BitcoinStateBits {
-    pub adapter_queues: bitcoin_state::AdapterQueues,
-    pub unstable_blocks: bitcoin_state::UnstableBlocks,
-    pub stable_height: u32,
-    pub network: Network,
-    pub utxos_large: BTreeMap<OutPoint, (TxOut, u32)>,
-}
-
-impl Default for BitcoinStateBits {
-    fn default() -> Self {
-        Self {
-            network: Network::Testnet,
-            adapter_queues: bitcoin_state::AdapterQueues::default(),
-            unstable_blocks: bitcoin_state::UnstableBlocks::default(),
-            stable_height: 0,
-            utxos_large: BTreeMap::default(),
-        }
-    }
-}
-
 #[derive(Clone)]
 struct StateLayoutMetrics {
     state_layout_error_count: IntCounterVec,
@@ -207,12 +181,6 @@ struct CheckpointRefData {
 /// │── tip
 /// │   ├── system_metadata.pbuf
 /// │   ├── subnet_queues.pbuf
-/// │   ├── bitcoin
-/// |   |   └── testnet
-/// |   |       └── state.pbuf
-/// |   |       └── utxos_small.bin
-/// |   |       └── utxos_medium.bin
-/// |   |       └── address_outpoints.bin
 /// │   └── canister_states
 /// │       └── <hex(canister_id)>
 /// │           ├── queues.pbuf
@@ -225,12 +193,6 @@ struct CheckpointRefData {
 /// │   └──<hex(round)>
 /// │      ├── system_metadata.pbuf
 /// │      ├── subnet_queues.pbuf
-/// |      ├── bitcoin
-/// |      |   └── testnet
-/// |      |       └── state.pbuf
-/// |      |       └── utxos_small.bin
-/// |      |       └── utxos_medium.bin
-/// |      |       └── address_outpoints.bin
 /// │      └── canister_states
 /// │          └── <hex(canister_id)>
 /// │              ├── queues.pbuf
@@ -1275,11 +1237,6 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
         )
     }
 
-    pub fn bitcoin(&self) -> Result<BitcoinStateLayout<Permissions>, LayoutError> {
-        // TODO(EXC-1113): Rename this path to "bitcoin", as it stores data for either network.
-        BitcoinStateLayout::new(self.root.join("bitcoin").join("testnet"))
-    }
-
     pub fn height(&self) -> Height {
         self.height
     }
@@ -1327,41 +1284,6 @@ impl<Permissions: AccessPolicy> CanisterLayout<Permissions> {
 
     pub fn stable_memory_blob(&self) -> PathBuf {
         self.canister_root.join("stable_memory.bin")
-    }
-}
-
-pub struct BitcoinStateLayout<Permissions: AccessPolicy> {
-    bitcoin_root: PathBuf,
-    permissions_tag: PhantomData<Permissions>,
-}
-
-impl<Permissions: AccessPolicy> BitcoinStateLayout<Permissions> {
-    pub fn new(bitcoin_root: PathBuf) -> Result<Self, LayoutError> {
-        Permissions::check_dir(&bitcoin_root)?;
-        Ok(Self {
-            bitcoin_root,
-            permissions_tag: PhantomData,
-        })
-    }
-
-    pub fn raw_path(&self) -> PathBuf {
-        self.bitcoin_root.clone()
-    }
-
-    pub fn bitcoin_state(&self) -> ProtoFileWith<pb_bitcoin::BitcoinStateBits, Permissions> {
-        self.bitcoin_root.join("state.pbuf").into()
-    }
-
-    pub fn utxos_small(&self) -> PathBuf {
-        self.bitcoin_root.join("utxos_small.bin")
-    }
-
-    pub fn utxos_medium(&self) -> PathBuf {
-        self.bitcoin_root.join("utxos_medium.bin")
-    }
-
-    pub fn address_outpoints(&self) -> PathBuf {
-        self.bitcoin_root.join("address_outpoints.bin")
     }
 }
 
@@ -1752,106 +1674,6 @@ impl TryFrom<pb_canister_state_bits::ExecutionStateBits> for ExecutionStateBits 
             metadata: try_from_option_field(value.metadata, "ExecutionStateBits::metadata")
                 .unwrap_or_default(),
             binary_hash,
-        })
-    }
-}
-
-impl From<&BitcoinStateBits> for pb_bitcoin::BitcoinStateBits {
-    fn from(item: &BitcoinStateBits) -> Self {
-        pb_bitcoin::BitcoinStateBits {
-            adapter_queues: Some((&item.adapter_queues).into()),
-            unstable_blocks: Some((&item.unstable_blocks).into()),
-            stable_height: item.stable_height,
-            network: match item.network {
-                Network::Testnet => 1,
-                Network::Bitcoin => 2,
-                Network::Regtest => 3,
-                // TODO(EXC-1096): Define our Network struct to avoid this panic.
-                _ => panic!("Invalid network ID"),
-            },
-            utxos_large: item
-                .utxos_large
-                .iter()
-                .map(|(outpoint, (txout, height))| pb_bitcoin::Utxo {
-                    outpoint: Some(pb_bitcoin::OutPoint {
-                        txid: outpoint.txid.to_vec(),
-                        vout: outpoint.vout,
-                    }),
-                    txout: Some(pb_bitcoin::TxOut {
-                        value: txout.value,
-                        script_pubkey: txout.script_pubkey.to_bytes(),
-                    }),
-                    height: *height,
-                })
-                .collect(),
-        }
-    }
-}
-
-impl TryFrom<pb_bitcoin::BitcoinStateBits> for BitcoinStateBits {
-    type Error = ProxyDecodeError;
-
-    fn try_from(value: pb_bitcoin::BitcoinStateBits) -> Result<Self, Self::Error> {
-        // NOTE: The `unwrap_or_default` here is needed temporarily for backward compatibility.
-        let adapter_queues: bitcoin_state::AdapterQueues =
-            try_from_option_field(value.adapter_queues, "BitcoinStateBits::adapter_queues")
-                .unwrap_or_default();
-
-        // NOTE: The `unwrap_or_default` here is needed temporarily for backward compatibility.
-        // TODO(EXC-1094): Replace the `unwrap_or_default` with an error once this change
-        //                 is deployed to prod.
-        let unstable_blocks: bitcoin_state::UnstableBlocks =
-            try_from_option_field(value.unstable_blocks, "BitcoinStateBits::unstable_blocks")
-                .unwrap_or_default();
-        Ok(BitcoinStateBits {
-            adapter_queues,
-            unstable_blocks,
-            stable_height: value.stable_height,
-            network: match value.network {
-                0 => {
-                    // No network specified. Assume "testnet".
-                    // NOTE: This is needed temporarily for protobuf backward compatibility.
-                    // TODO(EXC-1094): Remove this condition once it has been deployed to prod.
-                    Network::Testnet
-                }
-                1 => Network::Testnet,
-                2 => Network::Bitcoin,
-                3 => Network::Regtest,
-                other => {
-                    return Err(ProxyDecodeError::ValueOutOfRange {
-                        typ: "Network",
-                        err: format!(
-                            "Expected 0 or 1 (testnet), 2 (mainnet), 3 (regtest), got {}",
-                            other
-                        ),
-                    })
-                }
-            },
-            utxos_large: value
-                .utxos_large
-                .into_iter()
-                .map(|utxo| {
-                    let outpoint = utxo
-                        .outpoint
-                        .map(|o| {
-                            OutPoint::new(
-                                Txid::from_hash(Hash::from_slice(&o.txid).unwrap()),
-                                o.vout,
-                            )
-                        })
-                        .unwrap();
-
-                    let tx_out = utxo
-                        .txout
-                        .map(|t| TxOut {
-                            value: t.value,
-                            script_pubkey: Script::from(t.script_pubkey),
-                        })
-                        .unwrap();
-
-                    (outpoint, (tx_out, utxo.height))
-                })
-                .collect(),
         })
     }
 }
@@ -2327,11 +2149,5 @@ mod test {
             state_layout.remove_checkpoint_when_unused(Height::new(1));
             std::mem::drop(cp1);
         });
-    }
-
-    #[test]
-    fn test_loading_default_bitcoin_state() {
-        let pb_bitcoin_state_bits = pb_bitcoin::BitcoinStateBits::default();
-        BitcoinStateBits::try_from(pb_bitcoin_state_bits).unwrap();
     }
 }

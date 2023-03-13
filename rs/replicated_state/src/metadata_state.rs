@@ -7,7 +7,6 @@ use crate::{
     metadata_state::subnet_call_context_manager::SubnetCallContextManager,
 };
 use ic_base_types::CanisterId;
-use ic_btc_types::Network as BitcoinNetwork;
 use ic_btc_types_internal::BlockBlob;
 use ic_certification_version::{CertificationVersion, CURRENT_CERTIFICATION_VERSION};
 use ic_constants::MAX_INGRESS_TTL;
@@ -27,7 +26,7 @@ use ic_registry_routing_table::{
     canister_id_into_u64, difference, intersection, CanisterIdRanges, CanisterMigrations,
     RoutingTable, CANISTER_IDS_PER_SUBNET,
 };
-use ic_registry_subnet_features::{BitcoinFeature, BitcoinFeatureStatus, SubnetFeatures};
+use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::nominal_cycles::NominalCycles;
 use ic_types::{
@@ -187,21 +186,6 @@ impl Default for NetworkTopology {
 }
 
 impl NetworkTopology {
-    /// Returns a list of subnets where the bitcoin testnet feature is enabled.
-    pub fn bitcoin_testnet_subnets(&self) -> Vec<SubnetId> {
-        self.subnets
-            .iter()
-            .filter(|(_, subnet_topology)| {
-                subnet_topology.subnet_features.bitcoin()
-                    == BitcoinFeature {
-                        network: BitcoinNetwork::Testnet,
-                        status: BitcoinFeatureStatus::Enabled,
-                    }
-            })
-            .map(|(subnet_id, _)| *subnet_id)
-            .collect()
-    }
-
     /// Returns a list of subnets where the ecdsa feature is enabled.
     pub fn ecdsa_signing_subnets(&self, key_id: &EcdsaKeyId) -> &[SubnetId] {
         self.ecdsa_signing_subnets

@@ -3,18 +3,16 @@ use super::{
     metadata_state::{IngressHistoryState, Stream, Streams, SystemMetadata},
 };
 use crate::{
-    bitcoin_state::{BitcoinState, BitcoinStateError},
     canister_state::queues::CanisterQueuesLoopDetector,
     canister_state::system_state::{push_input, CanisterOutputQueuesIterator},
     metadata_state::StreamMap,
     CanisterQueues,
 };
 use ic_base_types::PrincipalId;
-use ic_btc_types_internal::{BitcoinAdapterRequestWrapper, BitcoinAdapterResponse};
+use ic_btc_types_internal::BitcoinAdapterResponse;
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::{execution_environment::CanisterOutOfCyclesError, messages::CanisterMessage};
 use ic_registry_routing_table::RoutingTable;
-use ic_registry_subnet_features::BitcoinFeatureStatus;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::messages::Ingress;
 use ic_types::{
@@ -98,9 +96,8 @@ pub enum StateError {
     /// their memory limit.
     OutOfMemory { requested: NumBytes, available: i64 },
 
-    /// An error that can be returned when manipulating the `BitcoinState`.
-    /// See `BitcoinStateError` for more information.
-    BitcoinStateError(BitcoinStateError),
+    /// No corresponding request found when trying to push a response from the bitcoin adapter.
+    BitcoinNonMatchingResponse { callback_id: u64 },
 }
 
 /// Circular iterator that consumes messages from all canisters' and the
@@ -230,7 +227,7 @@ pub const LABEL_VALUE_UNKNOWN_SUBNET_METHOD: &str = "UnknownSubnetMethod";
 pub const LABEL_VALUE_INVALID_RESPONSE: &str = "InvalidResponse";
 pub const LABEL_VALUE_INVALID_SUBNET_PAYLOAD: &str = "InvalidSubnetPayload";
 pub const LABEL_VALUE_OUT_OF_MEMORY: &str = "OutOfMemory";
-pub const LABEL_VALUE_BITCOIN_STATE_ERROR: &str = "BitcoinStateError";
+pub const LABEL_VALUE_BITCOIN_NON_MATCHING_RESPONSE: &str = "BitcoinNonMatchingResponse";
 
 impl StateError {
     /// Returns a string representation of the `StateError` variant name to be
@@ -247,7 +244,9 @@ impl StateError {
             StateError::NonMatchingResponse { .. } => LABEL_VALUE_INVALID_RESPONSE,
             StateError::InvalidSubnetPayload => LABEL_VALUE_INVALID_SUBNET_PAYLOAD,
             StateError::OutOfMemory { .. } => LABEL_VALUE_OUT_OF_MEMORY,
-            StateError::BitcoinStateError(_) => LABEL_VALUE_BITCOIN_STATE_ERROR,
+            StateError::BitcoinNonMatchingResponse { .. } => {
+                LABEL_VALUE_BITCOIN_NON_MATCHING_RESPONSE
+            }
         }
     }
 }
@@ -296,7 +295,13 @@ impl std::fmt::Display for StateError {
                 "Cannot enqueue message. Out of memory: requested {}, available {}",
                 requested, available
             ),
-            StateError::BitcoinStateError(error) => write!(f, "Bitcoin state error: {}", error),
+            StateError::BitcoinNonMatchingResponse { callback_id } => {
+                write!(
+                    f,
+                    "Bitcoin: Attempted to push a response for callback id {} without an in-flight corresponding request",
+                    callback_id
+                )
+            }
         }
     }
 }
@@ -368,8 +373,6 @@ pub struct ReplicatedState {
     /// The queue is, therefore, emptied at the end of every round.
     // TODO(EXE-109): Move this queue into `subnet_queues`
     pub consensus_queue: Vec<Response>,
-
-    bitcoin: BitcoinState,
 }
 
 impl ReplicatedState {
@@ -380,7 +383,6 @@ impl ReplicatedState {
             metadata: SystemMetadata::new(own_subnet_id, own_subnet_type),
             subnet_queues: CanisterQueues::default(),
             consensus_queue: Vec::new(),
-            bitcoin: BitcoinState::default(),
         }
     }
 
@@ -389,14 +391,12 @@ impl ReplicatedState {
         canister_states: BTreeMap<CanisterId, CanisterState>,
         metadata: SystemMetadata,
         subnet_queues: CanisterQueues,
-        bitcoin: BitcoinState,
     ) -> Self {
         let mut res = Self {
             canister_states,
             metadata,
             subnet_queues,
             consensus_queue: Vec::new(),
-            bitcoin,
         };
         res.update_stream_responses_size_bytes();
         res
@@ -767,51 +767,12 @@ impl ReplicatedState {
         self.subnet_queues.garbage_collect();
     }
 
-    /// Returns a reference to the `BitcoinState`.
-    pub fn bitcoin(&self) -> &BitcoinState {
-        &self.bitcoin
-    }
-
-    /// Returns a mutable reference to the `BitcoinState`.
-    pub fn bitcoin_mut(&mut self) -> &mut BitcoinState {
-        &mut self.bitcoin
-    }
-
-    /// Pushes a request onto the testnet `BitcoinState` iff the bitcoin testnet
-    /// feature is enabled and returns a `StateError` otherwise.
-    ///
-    /// See documentation of `BitcoinState::push_request` for more information.
-    // TODO(EXC-1097): Remove this method as it isn't being used in production.
-    pub fn push_request_bitcoin(
-        &mut self,
-        request: BitcoinAdapterRequestWrapper,
-    ) -> Result<(), StateError> {
-        match self.metadata.own_subnet_features.bitcoin().status {
-            BitcoinFeatureStatus::Enabled | BitcoinFeatureStatus::Syncing => self
-                .bitcoin
-                .adapter_queues
-                .push_request(request)
-                .map_err(StateError::BitcoinStateError),
-            BitcoinFeatureStatus::Paused | BitcoinFeatureStatus::Disabled => Err(
-                StateError::BitcoinStateError(BitcoinStateError::FeatureNotEnabled),
-            ),
-        }
-    }
-
     /// Pushes a response from the Bitcoin Adapter into the state.
     pub fn push_response_bitcoin(
         &mut self,
         response: BitcoinAdapterResponse,
     ) -> Result<(), StateError> {
         crate::bitcoin::push_response(self, response)
-    }
-
-    pub fn take_bitcoin_state(&mut self) -> BitcoinState {
-        std::mem::take(&mut self.bitcoin)
-    }
-
-    pub fn put_bitcoin_state(&mut self, bitcoin: BitcoinState) {
-        self.bitcoin = bitcoin;
     }
 
     /// Times out requests in all `OutputQueues` found in the replicated state (except the subnet
