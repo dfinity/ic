@@ -3,9 +3,11 @@ use serde::Serialize;
 
 #[derive(Debug, Clone, PartialEq, Eq, CandidType, Serialize, Deserialize)]
 pub enum KytMode {
-    /// In this mode,the canister will not make any HTTP calls and return empty
+    /// In this mode, the canister will not make any HTTP calls and return empty
     /// alert lists for all requests.
-    DryRun,
+    AcceptAll,
+    /// In this mode, the canister will mark generate bogus alerts for all requests.
+    RejectAll,
     /// In this mode, the canister will call Chainalysis API for each request.
     Normal,
 }
