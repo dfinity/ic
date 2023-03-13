@@ -223,7 +223,7 @@ pub(crate) mod test {
     use super::*;
     use crate::consensus::mocks::{dependencies, Dependencies};
     use ic_btc_types_internal::{
-        BitcoinAdapterResponse, BitcoinAdapterResponseWrapper, GetSuccessorsResponse,
+        BitcoinAdapterResponse, BitcoinAdapterResponseWrapper, GetSuccessorsResponseComplete,
     };
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities::{
@@ -379,7 +379,10 @@ pub(crate) mod test {
             .collect();
         let responses_from_adapter = vec![BitcoinAdapterResponse {
             response: BitcoinAdapterResponseWrapper::GetSuccessorsResponse(
-                GetSuccessorsResponse::default(),
+                GetSuccessorsResponseComplete {
+                    blocks: vec![],
+                    next: vec![],
+                },
             ),
             callback_id: 0,
         }];

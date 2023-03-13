@@ -7,12 +7,12 @@ use crossbeam_channel::{unbounded, Sender};
 use ic_logger::{fatal, info, ReplicaLogger};
 #[allow(unused)]
 use ic_replicated_state::{
-    canister_state::execution_state::SandboxMemory, BitcoinState, CanisterState, NumWasmPages,
-    PageMap, ReplicatedState,
+    canister_state::execution_state::SandboxMemory, CanisterState, NumWasmPages, PageMap,
+    ReplicatedState,
 };
 use ic_state_layout::{
-    error::LayoutError, BitcoinStateBits, BitcoinStateLayout, CanisterStateBits, CheckpointLayout,
-    ExecutionStateBits, ReadOnly, RwPolicy, StateLayout, TipHandler,
+    error::LayoutError, CanisterStateBits, CheckpointLayout, ExecutionStateBits, ReadOnly,
+    RwPolicy, StateLayout, TipHandler,
 };
 use ic_types::{malicious_flags::MaliciousFlags, CanisterId, Height};
 use ic_utils::fs::defrag_file_partially;
@@ -315,8 +315,6 @@ fn serialize_to_tip(
         result?;
     }
 
-    serialize_bitcoin_state_to_tip(state.bitcoin(), &tip.bitcoin()?)?;
-
     Ok(())
 }
 
@@ -448,41 +446,6 @@ fn serialize_canister_to_tip(
         .map_err(CheckpointError::from)
 }
 
-fn serialize_bitcoin_state_to_tip(
-    state: &BitcoinState,
-    layout: &BitcoinStateLayout<RwPolicy<TipHandler>>,
-) -> Result<(), CheckpointError> {
-    state
-        .utxo_set
-        .utxos_small
-        .persist_delta(&layout.utxos_small())?;
-
-    state
-        .utxo_set
-        .utxos_medium
-        .persist_delta(&layout.utxos_medium())?;
-
-    state
-        .utxo_set
-        .address_outpoints
-        .persist_delta(&layout.address_outpoints())?;
-
-    layout
-        .bitcoin_state()
-        .serialize(
-            // TODO(EXC-1076): Remove unnecessary clone.
-            (&BitcoinStateBits {
-                adapter_queues: state.adapter_queues.clone(),
-                unstable_blocks: state.unstable_blocks.clone(),
-                stable_height: state.stable_height,
-                network: state.utxo_set.network,
-                utxos_large: state.utxo_set.utxos_large.clone(),
-            })
-                .into(),
-        )
-        .map_err(CheckpointError::from)
-}
-
 /// Defragments part of the tip directory.
 ///
 /// The way we use PageMap files in the tip, namely by having a
@@ -498,8 +461,7 @@ fn serialize_bitcoin_state_to_tip(
 /// The current defragmentation strategy is to pseudorandomly choose a
 /// chunk of size max_size among the eligble files, read it to memory,
 /// and write it back to the file. The effect is that this chunk is
-/// definitely unique to the tip at the end of defragmentation. For
-/// now, only the bitcoin PageMap files are being considered.
+/// definitely unique to the tip at the end of defragmentation.
 pub fn defrag_tip(
     tip: &CheckpointLayout<RwPolicy<TipHandler>>,
     page_maps: &[PageMapType],
@@ -677,7 +639,6 @@ fn handle_compute_manifest_request(
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::BitcoinPageMap;
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities::types::ids::canister_test_id;
     use ic_test_utilities_logger::with_test_replica_logger;
@@ -710,11 +671,9 @@ mod test {
             let defrag_size = 1 << 20; // 1MB
 
             let page_maps: Vec<PageMapType> = vec![
-                PageMapType::Bitcoin(BitcoinPageMap::AddressOutpoints),
-                PageMapType::Bitcoin(BitcoinPageMap::UtxosSmall),
-                PageMapType::Bitcoin(BitcoinPageMap::UtxosMedium),
                 PageMapType::StableMemory(canister_test_id(100)),
                 PageMapType::WasmMemory(canister_test_id(100)),
+                PageMapType::WasmMemory(canister_test_id(101)),
             ];
 
             let paths: Vec<PathBuf> = page_maps

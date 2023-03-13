@@ -1,30 +1,20 @@
-use super::PageAllocatorFileDescriptorImpl;
-use crate::{
-    CheckpointError, CheckpointMetrics, PersistenceError, TipRequest, NUMBER_OF_CHECKPOINT_THREADS,
-};
+use crate::{CheckpointError, CheckpointMetrics, TipRequest, NUMBER_OF_CHECKPOINT_THREADS};
 use crossbeam_channel::{unbounded, Sender};
 use ic_base_types::CanisterId;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::Memory;
 use ic_replicated_state::{
-    bitcoin_state::{BitcoinState, UtxoSet},
-    canister_state::execution_state::WasmBinary,
-    page_map::PageMap,
-    CanisterMetrics, CanisterState, ExecutionState, ReplicatedState, SchedulerState, SystemState,
+    canister_state::execution_state::WasmBinary, page_map::PageMap, CanisterMetrics, CanisterState,
+    ExecutionState, ReplicatedState, SchedulerState, SystemState,
 };
-use ic_state_layout::{
-    BitcoinStateBits, CanisterLayout, CanisterStateBits, CheckpointLayout, ReadOnly, ReadPolicy,
-};
+use ic_state_layout::{CanisterLayout, CanisterStateBits, CheckpointLayout, ReadOnly, ReadPolicy};
 use ic_types::{CanisterTimer, Height, LongExecutionMode, Time};
 use ic_utils::thread::parallel_map;
 use std::collections::BTreeMap;
+use std::convert::TryFrom;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use std::{
-    convert::{From, TryFrom},
-    path::Path,
-};
 
 /// Creates a checkpoint of the node state using specified directory
 /// layout. Returns a new state that is equivalent to the given one
@@ -205,17 +195,7 @@ pub fn load_checkpoint<P: ReadPolicy + Send + Sync>(
         canister_states
     };
 
-    let bitcoin = {
-        let _timer = metrics
-            .load_checkpoint_step_duration
-            .with_label_values(&["bitcoin"])
-            .start_timer();
-
-        load_bitcoin_state(checkpoint_layout)?
-    };
-
-    let state =
-        ReplicatedState::new_from_checkpoint(canister_states, metadata, subnet_queues, bitcoin);
+    let state = ReplicatedState::new_from_checkpoint(canister_states, metadata, subnet_queues);
 
     Ok(state)
 }
@@ -385,64 +365,6 @@ fn load_canister_state_from_checkpoint<P: ReadPolicy>(
         checkpoint_layout.height(),
         Arc::clone(&fd_factory),
     )
-}
-
-fn load_bitcoin_state<P: ReadPolicy>(
-    checkpoint_layout: &CheckpointLayout<P>,
-) -> Result<BitcoinState, CheckpointError> {
-    let layout = checkpoint_layout.bitcoin()?;
-    let height = checkpoint_layout.height();
-
-    let into_checkpoint_error =
-        |field: String, err: ic_protobuf::proxy::ProxyDecodeError| CheckpointError::ProtoError {
-            path: layout.raw_path(),
-            field,
-            proto_err: err.to_string(),
-        };
-
-    let bitcoin_state_proto = layout.bitcoin_state().deserialize_opt()?;
-
-    let bitcoin_state_bits: BitcoinStateBits =
-        BitcoinStateBits::try_from(bitcoin_state_proto.unwrap_or_default())
-            .map_err(|err| into_checkpoint_error(String::from("BitcoinStateBits"), err))?;
-
-    // Create a page allocator file descriptor factory for the bitcoin canister.
-    // TODO: this code will be removed together with the bitcoin canister.
-    let fd_factory: Arc<dyn PageAllocatorFileDescriptor> =
-        Arc::new(PageAllocatorFileDescriptorImpl::new(layout.raw_path()));
-
-    let utxos_small =
-        load_or_create_pagemap(&layout.utxos_small(), height, Arc::clone(&fd_factory))?;
-    let utxos_medium =
-        load_or_create_pagemap(&layout.utxos_medium(), height, Arc::clone(&fd_factory))?;
-    let address_outpoints =
-        load_or_create_pagemap(&layout.address_outpoints(), height, Arc::clone(&fd_factory))?;
-
-    Ok(BitcoinState {
-        adapter_queues: bitcoin_state_bits.adapter_queues,
-        unstable_blocks: bitcoin_state_bits.unstable_blocks,
-        stable_height: bitcoin_state_bits.stable_height,
-        utxo_set: UtxoSet {
-            network: bitcoin_state_bits.network,
-            utxos_small,
-            utxos_medium,
-            utxos_large: bitcoin_state_bits.utxos_large,
-            address_outpoints,
-        },
-        fee_percentiles_cache: None,
-    })
-}
-
-fn load_or_create_pagemap(
-    path: &Path,
-    height: Height,
-    fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
-) -> Result<PageMap, PersistenceError> {
-    if path.exists() {
-        PageMap::open(path, height, fd_factory)
-    } else {
-        Ok(PageMap::new(fd_factory))
-    }
 }
 
 #[cfg(test)]
@@ -1043,107 +965,6 @@ mod tests {
                 original_state.subnet_queues(),
                 recovered_state.subnet_queues()
             );
-        });
-    }
-
-    #[test]
-    fn can_recover_bitcoin_state() {
-        use ic_btc_types::Network as BitcoinNetwork;
-        use ic_btc_types_internal::{BitcoinAdapterRequestWrapper, GetSuccessorsRequest};
-        use ic_registry_subnet_features::{BitcoinFeature, BitcoinFeatureStatus};
-
-        with_test_replica_logger(|log| {
-            let tmp = tmpdir("checkpoint");
-            let root = tmp.path().to_path_buf();
-            let layout = StateLayout::try_new(log.clone(), root, &MetricsRegistry::new()).unwrap();
-            let tip_handler = layout.capture_tip_handler();
-            let state_manager_metrics = state_manager_metrics();
-            let (_tip_thread, tip_channel) = spawn_tip_thread(
-                log,
-                tip_handler,
-                layout.clone(),
-                state_manager_metrics.clone(),
-                MaliciousFlags::default(),
-            );
-
-            const HEIGHT: Height = Height::new(42);
-
-            let own_subnet_type = SubnetType::Application;
-            let subnet_id = subnet_test_id(1);
-            let mut state = ReplicatedState::new(subnet_id, own_subnet_type);
-
-            // Enable the bitcoin feature to be able to mutate its state.
-            state.metadata.own_subnet_features.bitcoin = Some(BitcoinFeature {
-                network: BitcoinNetwork::Testnet,
-                status: BitcoinFeatureStatus::Enabled,
-            });
-
-            // Make some change in the Bitcoin state to later verify that it gets recovered.
-            state
-                .push_request_bitcoin(BitcoinAdapterRequestWrapper::GetSuccessorsRequest(
-                    GetSuccessorsRequest {
-                        processed_block_hashes: vec![],
-                        anchor: vec![],
-                    },
-                ))
-                .unwrap();
-
-            let original_state = state.clone();
-            let _state = make_checkpoint_and_get_state(&state, HEIGHT, &tip_channel);
-
-            let recovered_state = load_checkpoint(
-                &layout.checkpoint(HEIGHT).unwrap(),
-                own_subnet_type,
-                &state_manager_metrics.checkpoint_metrics,
-                Some(&mut thread_pool()),
-                Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
-            )
-            .unwrap();
-
-            assert_eq!(recovered_state.bitcoin(), original_state.bitcoin(),);
-        });
-    }
-
-    #[test]
-    fn can_recover_bitcoin_page_maps() {
-        with_test_replica_logger(|log| {
-            let tmp = tmpdir("checkpoint");
-            let root = tmp.path().to_path_buf();
-            let layout = StateLayout::try_new(log.clone(), root, &MetricsRegistry::new()).unwrap();
-            let tip_handler = layout.capture_tip_handler();
-            let state_manager_metrics = state_manager_metrics();
-            let (_tip_thread, tip_channel) = spawn_tip_thread(
-                log,
-                tip_handler,
-                layout.clone(),
-                state_manager_metrics.clone(),
-                MaliciousFlags::default(),
-            );
-
-            const HEIGHT: Height = Height::new(42);
-
-            let own_subnet_type = SubnetType::Application;
-            let subnet_id = subnet_test_id(1);
-            let mut state = ReplicatedState::new(subnet_id, own_subnet_type);
-
-            // Make some change in the Bitcoin page maps to later verify they get recovered.
-            state.bitcoin_mut().utxo_set.utxos_small = PageMap::from(&[1, 2, 3, 4][..]);
-            state.bitcoin_mut().utxo_set.utxos_medium = PageMap::from(&[5, 6, 7, 8][..]);
-            state.bitcoin_mut().utxo_set.address_outpoints = PageMap::from(&[9, 10, 11, 12][..]);
-
-            let original_state = state.clone();
-            let _state = make_checkpoint_and_get_state(&state, HEIGHT, &tip_channel);
-
-            let recovered_state = load_checkpoint(
-                &layout.checkpoint(HEIGHT).unwrap(),
-                own_subnet_type,
-                &state_manager_metrics.checkpoint_metrics,
-                Some(&mut thread_pool()),
-                Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
-            )
-            .unwrap();
-
-            assert_eq!(recovered_state.bitcoin(), original_state.bitcoin());
         });
     }
 }

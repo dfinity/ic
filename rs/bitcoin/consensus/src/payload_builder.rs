@@ -145,7 +145,7 @@ impl BitcoinPayloadBuilder {
                         timer,
                     );
 
-                    if let BitcoinAdapterResponseWrapper::CanisterGetSuccessorsResponse(r) =
+                    if let BitcoinAdapterResponseWrapper::GetSuccessorsResponse(r) =
                         &response_wrapper
                     {
                         self.metrics
@@ -297,9 +297,7 @@ fn bitcoin_requests_iter(
         .map(|(callback_id, context)| {
             (
                 callback_id,
-                BitcoinAdapterRequestWrapper::CanisterSendTransactionRequest(
-                    context.payload.clone(),
-                ),
+                BitcoinAdapterRequestWrapper::SendTransactionRequest(context.payload.clone()),
             )
         })
         .chain(
@@ -309,9 +307,7 @@ fn bitcoin_requests_iter(
                 .map(|(callback_id, context)| {
                     (
                         callback_id,
-                        BitcoinAdapterRequestWrapper::CanisterGetSuccessorsRequest(
-                            context.payload.clone(),
-                        ),
+                        BitcoinAdapterRequestWrapper::GetSuccessorsRequest(context.payload.clone()),
                     )
                 }),
         )

@@ -54,8 +54,6 @@ rust_test(
     name = "state_manager_lib_tests",
     crate = ":state_manager",
     deps = [
-        "//rs/bitcoin/types/internal",
-        "//rs/bitcoin/types/public",
         "//rs/registry/routing_table",
         "//rs/registry/subnet_features",
         "//rs/registry/subnet_type",

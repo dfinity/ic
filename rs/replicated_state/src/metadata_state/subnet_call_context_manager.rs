@@ -1,4 +1,4 @@
-use ic_btc_types_internal::{CanisterGetSuccessorsRequestInitial, CanisterSendTransactionRequest};
+use ic_btc_types_internal::{GetSuccessorsRequestInitial, SendTransactionRequest};
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::EcdsaKeyId;
 use ic_logger::{info, ReplicaLogger};
@@ -514,7 +514,7 @@ impl TryFrom<(Time, pb_metadata::EcdsaDealingsContext)> for EcdsaDealingsContext
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BitcoinGetSuccessorsContext {
     pub request: Request,
-    pub payload: CanisterGetSuccessorsRequestInitial,
+    pub payload: GetSuccessorsRequestInitial,
     pub time: Time,
 }
 
@@ -537,7 +537,7 @@ impl TryFrom<(Time, pb_metadata::BitcoinGetSuccessorsContext)> for BitcoinGetSuc
     ) -> Result<Self, Self::Error> {
         let request: Request =
             try_from_option_field(context.request, "BitcoinGetSuccessorsContext::request")?;
-        let payload: CanisterGetSuccessorsRequestInitial =
+        let payload: GetSuccessorsRequestInitial =
             try_from_option_field(context.payload, "BitcoinGetSuccessorsContext::payload")?;
         Ok(BitcoinGetSuccessorsContext {
             request,
@@ -552,7 +552,7 @@ impl TryFrom<(Time, pb_metadata::BitcoinGetSuccessorsContext)> for BitcoinGetSuc
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BitcoinSendTransactionInternalContext {
     pub request: Request,
-    pub payload: CanisterSendTransactionRequest,
+    pub payload: SendTransactionRequest,
     pub time: Time,
 }
 
@@ -579,7 +579,7 @@ impl TryFrom<(Time, pb_metadata::BitcoinSendTransactionInternalContext)>
     ) -> Result<Self, Self::Error> {
         let request: Request =
             try_from_option_field(context.request, "BitcoinGetSuccessorsContext::request")?;
-        let payload: CanisterSendTransactionRequest =
+        let payload: SendTransactionRequest =
             try_from_option_field(context.payload, "BitcoinGetSuccessorsContext::payload")?;
         Ok(BitcoinSendTransactionInternalContext {
             request,

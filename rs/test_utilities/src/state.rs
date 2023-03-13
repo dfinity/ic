@@ -13,7 +13,6 @@ use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    bitcoin_state::BitcoinState,
     canister_state::{
         execution_state::{CustomSection, CustomSectionType, WasmBinary, WasmMetadata},
         testing::new_canister_queues_for_test,
@@ -54,7 +53,6 @@ pub struct ReplicatedStateBuilder {
     subnet_id: SubnetId,
     batch_time: Time,
     subnet_features: SubnetFeatures,
-    bitcoin_state: BitcoinState,
     bitcoin_adapter_requests: Vec<BitcoinAdapterRequestWrapper>,
 }
 
@@ -96,11 +94,6 @@ impl ReplicatedStateBuilder {
         self
     }
 
-    pub fn with_bitcoin_state(mut self, state: BitcoinState) -> Self {
-        self.bitcoin_state = state;
-        self
-    }
-
     pub fn build(self) -> ReplicatedState {
         let mut state = ReplicatedState::new(self.subnet_id, self.subnet_type);
 
@@ -121,13 +114,10 @@ impl ReplicatedStateBuilder {
 
         state.metadata.batch_time = self.batch_time;
         state.metadata.own_subnet_features = self.subnet_features;
-        state.put_bitcoin_state(self.bitcoin_state);
 
         for request in self.bitcoin_adapter_requests.into_iter() {
             match request {
-                BitcoinAdapterRequestWrapper::GetSuccessorsRequest(_)
-                | BitcoinAdapterRequestWrapper::SendTransactionRequest(_) => unreachable!(),
-                BitcoinAdapterRequestWrapper::CanisterGetSuccessorsRequest(payload) => {
+                BitcoinAdapterRequestWrapper::GetSuccessorsRequest(payload) => {
                     state
                         .metadata
                         .subnet_call_context_manager
@@ -137,7 +127,7 @@ impl ReplicatedStateBuilder {
                             time: mock_time(),
                         });
                 }
-                BitcoinAdapterRequestWrapper::CanisterSendTransactionRequest(payload) => {
+                BitcoinAdapterRequestWrapper::SendTransactionRequest(payload) => {
                     state
                         .metadata
                         .subnet_call_context_manager
@@ -164,7 +154,6 @@ impl Default for ReplicatedStateBuilder {
             subnet_id: subnet_test_id(1),
             batch_time: mock_time(),
             subnet_features: SubnetFeatures::default(),
-            bitcoin_state: BitcoinState::default(),
             bitcoin_adapter_requests: Vec::new(),
         }
     }

@@ -1034,11 +1034,11 @@ pub use ic_btc_types::{
     SendTransactionRequest as BitcoinSendTransactionArgs,
 };
 pub use ic_btc_types_internal::{
-    CanisterGetSuccessorsRequest as BitcoinGetSuccessorsArgs,
-    CanisterGetSuccessorsRequestInitial as BitcoinGetSuccessorsRequestInitial,
-    CanisterGetSuccessorsResponse as BitcoinGetSuccessorsResponse,
-    CanisterGetSuccessorsResponseComplete as BitcoinGetSuccessorsResponseComplete,
-    CanisterSendTransactionRequest as BitcoinSendTransactionInternalArgs,
+    GetSuccessorsRequest as BitcoinGetSuccessorsArgs,
+    GetSuccessorsRequestInitial as BitcoinGetSuccessorsRequestInitial,
+    GetSuccessorsResponse as BitcoinGetSuccessorsResponse,
+    GetSuccessorsResponseComplete as BitcoinGetSuccessorsResponseComplete,
+    SendTransactionRequest as BitcoinSendTransactionInternalArgs,
 };
 
 impl Payload<'_> for BitcoinGetBalanceArgs {}

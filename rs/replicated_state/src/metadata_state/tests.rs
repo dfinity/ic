@@ -23,7 +23,6 @@ use ic_types::{
 };
 use lazy_static::lazy_static;
 use maplit::btreemap;
-use std::str::FromStr;
 
 lazy_static! {
     static ref LOCAL_CANISTER: CanisterId = CanisterId::from(0x34);
@@ -508,53 +507,9 @@ fn empty_network_topology() {
         ..Default::default()
     };
 
-    assert_eq!(network_topology.bitcoin_testnet_subnets(), vec![]);
     assert_eq!(
         network_topology.ecdsa_signing_subnets(&make_key_id()),
         vec![]
-    );
-}
-
-#[test]
-fn network_topology_bitcoin_testnet_subnets() {
-    let network_topology = NetworkTopology {
-        subnets: btreemap![
-            // A subnet with the bitcoin testnet feature enabled.
-            subnet_test_id(0) => SubnetTopology {
-                public_key: vec![],
-                nodes: BTreeMap::new(),
-                subnet_type: SubnetType::Application,
-                subnet_features: SubnetFeatures::from_str("bitcoin_testnet").unwrap(),
-                ecdsa_keys_held: BTreeSet::new(),
-            },
-
-            // A subnet with the bitcoin testnet feature paused.
-            subnet_test_id(1) => SubnetTopology {
-                public_key: vec![],
-                nodes: BTreeMap::new(),
-                subnet_type: SubnetType::Application,
-                subnet_features: SubnetFeatures::from_str("bitcoin_testnet_paused").unwrap(),
-                ecdsa_keys_held: BTreeSet::new(),
-            },
-
-            // A subnet without the bitcoin feature enabled.
-            subnet_test_id(3) => SubnetTopology {
-                public_key: vec![],
-                nodes: BTreeMap::new(),
-                subnet_type: SubnetType::Application,
-                subnet_features: SubnetFeatures::default(),
-                ecdsa_keys_held: BTreeSet::new(),
-            }
-        ],
-        routing_table: Arc::new(RoutingTable::default()),
-        canister_migrations: Arc::new(CanisterMigrations::default()),
-        nns_subnet_id: subnet_test_id(42),
-        ..Default::default()
-    };
-
-    assert_eq!(
-        network_topology.bitcoin_testnet_subnets(),
-        vec![subnet_test_id(0)]
     );
 }
 

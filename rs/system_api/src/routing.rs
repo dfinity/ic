@@ -279,50 +279,20 @@ fn route_bitcoin_message(
     own_subnet: SubnetId,
 ) -> PrincipalId {
     match network {
+        // Route to the bitcoin canister if it exists, otherwise route to own subnet.
+        // NOTE: Local deployments can run regtest mode for testing, and that routes to the
+        // same canister ID as the bitcoin testnet.
         BitcoinNetwork::Testnet
         | BitcoinNetwork::testnet
         | BitcoinNetwork::Regtest
-        | BitcoinNetwork::regtest => {
-            // Route according to the following priority:
-            //
-            // 1. Route to the bitcoin testnet canister if that canister exists.
-            //
-            // 2. Route to a bitcoin subnet (a subnet with the bitcoin testnet feature
-            //    enabled if one exists).
-            //
-            // 3. Route to own subnet.
-            //
-            // NOTE: Local deployments can run regtest mode for testing, and that routes to the
-            // same canister ID as the bitcoin testnet.
-            if let Some(canister_id) = network_topology.bitcoin_testnet_canister_id {
-                // Does the canister exist?
-                if network_topology
-                    .routing_table
-                    .route(canister_id.get())
-                    .is_some()
-                {
-                    return canister_id.get();
-                }
-            }
-
-            network_topology
-                .bitcoin_testnet_subnets()
-                .first()
-                .cloned()
-                .unwrap_or(own_subnet)
-                .get()
-        }
-        BitcoinNetwork::Mainnet | BitcoinNetwork::mainnet => {
-            // Route to the mainnet canister ID if it exists, otherwise route to
-            // own subnet.
-            //
-            // Note that the bitcoin mainnet subnet feature was never enabled/used, so, unlike
-            // the bitcoin testnet, there is no bitcoin subnet to route to.
-            network_topology
-                .bitcoin_mainnet_canister_id
-                .unwrap_or_else(|| CanisterId::from(own_subnet))
-                .get()
-        }
+        | BitcoinNetwork::regtest => network_topology
+            .bitcoin_testnet_canister_id
+            .unwrap_or_else(|| CanisterId::from(own_subnet))
+            .get(),
+        BitcoinNetwork::Mainnet | BitcoinNetwork::mainnet => network_topology
+            .bitcoin_mainnet_canister_id
+            .unwrap_or_else(|| CanisterId::from(own_subnet))
+            .get(),
     }
 }
 

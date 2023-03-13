@@ -40,30 +40,7 @@ message Block {
   repeated Transaction txdata = 2;
 }
 
-message GetSuccessorsRequest {
-  // Used by the adapter to filter out previously sent blocks from its
-  // `GetSuccessorsResponse`. 
-  repeated bytes processed_block_hashes = 1;
-  // The first hash in processed block hashes. This field is used by the adapter
-  // to start a breadth-first search its known headers to determine which blocks
-  // to respond with in `GetSuccessorsResponse::blocks` field.
-  bytes anchor = 2;
-}
-
-message GetSuccessorsResponse {
-  // The blocks that the adapter has knowledge of based on the anchor and processed
-  // block hashes provided in the `GetSuccessorsRequest`.
-  repeated Block blocks = 1;
-  // The next block headers that used to notify the Bitcoin virtual canister that
-  // more blocks are available.
-  repeated BlockHeader next = 2;
-}
-
 message SendTransactionRequest {
-  bytes transaction = 1;
-}
-
-message CanisterSendTransactionRequest {
   Network network = 1;
   bytes transaction = 2;
 }
@@ -72,21 +49,21 @@ message SendTransactionResponse {};
 
 // Wraps the different types of requests to the Bitcoin Adapter.
 message BitcoinAdapterRequestWrapper {
+  reserved 1;
+  reserved 2;
   oneof r {
-    GetSuccessorsRequest get_successors_request = 1;
-    SendTransactionRequest send_transaction_request = 2;
-    CanisterGetSuccessorsRequestInitial canister_get_successors_request = 3;
-    CanisterSendTransactionRequest canister_send_transaction_request = 4;
+    GetSuccessorsRequestInitial get_successors_request = 3;
+    SendTransactionRequest send_transaction_request = 4;
   }
 }
 
 // Wraps the different types of responses from the Bitcoin Adapter.
 message BitcoinAdapterResponseWrapper {
+  reserved 1;
+  reserved 2;
   oneof r {
-    GetSuccessorsResponse get_successors_response = 1;
-    SendTransactionResponse send_transaction_response = 2;
-    CanisterGetSuccessorsResponseComplete canister_get_successors_response = 3;
-    SendTransactionResponse canister_send_transaction_response = 4;
+    GetSuccessorsResponseComplete get_successors_response = 3;
+    SendTransactionResponse send_transaction_response = 4;
   }
 }
 
@@ -110,34 +87,6 @@ message BitcoinAdapterResponse {
   uint64 callback_id = 2;
 }
 
-message AdapterQueues {
-  // Tracks the callback id that will be generated for the next request.
-  // Used to match incoming responses to existing requests.
-  uint64 next_callback_id = 1;
-  // Queue of outgoing requests to the Bitcoin Adapter.
-  repeated BitcoinAdapterRequest requests = 2;
-  // Queue of incoming responses from the Bitcoin Adapter.
-  repeated BitcoinAdapterResponse responses = 3;
-  // Capacity of the queue of outgoing requests.
-  uint32 requests_queue_capacity = 4;
-}
-
-message UnstableBlocks {
-  uint32 stability_threshold = 1;
-  BlockTree tree = 2;
-}
-
-message BlockTree {
-  Block root = 1;
-  repeated BlockTree children = 2;
-}
-
-message Utxo {
-  OutPoint outpoint = 1;
-  TxOut txout = 2;
-  uint32 height = 3;
-}
-
 enum Network {
   NETWORK_UNSPECIFIED = 0;
   NETWORK_TESTNET = 1;
@@ -146,35 +95,15 @@ enum Network {
 }
 
 // A request to retrieve new blocks from the specified Bitcoin network.
-// NOTE: This request is specific to the Bitcoin wasm canister. It supersedes the
-// `GetSuccessorsRequest` above, which will be deleted once the  Bitcoin replica canister is
-// phased out.
-message CanisterGetSuccessorsRequestInitial {
+message GetSuccessorsRequestInitial {
   Network network = 1;
   repeated bytes processed_block_hashes = 2;
   bytes anchor = 3;
 }
 
 // A response containing new successor blocks from the Bitcoin network.
-// NOTE: This response is specific to the Bitcoin wasm canister. It supersedes the
-// `GetSuccessorsResponse` above, which will be deleted once the  Bitcoin replica canister is
-// phased out.
-message CanisterGetSuccessorsResponseComplete {
+message GetSuccessorsResponseComplete {
   repeated bytes blocks = 1;
   repeated bytes next = 2;
 }
 
-// Represents the Bitcoin state that isn't stored in PageMaps.
-message BitcoinStateBits {
-  // The queues that maintain the requests to and responses from the Bitcoin
-  // Adapter.
-  AdapterQueues adapter_queues = 1;
-
-  UnstableBlocks unstable_blocks = 2;
-
-  uint32 stable_height = 3;
-
-  Network network = 4;
-
-  repeated Utxo utxos_large = 5;
-}

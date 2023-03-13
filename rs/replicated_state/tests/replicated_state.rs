@@ -1,13 +1,11 @@
 use ic_base_types::{CanisterId, NumBytes, NumSeconds, PrincipalId, SubnetId};
 use ic_btc_types::NetworkSnakeCase;
 use ic_btc_types_internal::{
-    BitcoinAdapterRequestWrapper, BitcoinAdapterResponse, BitcoinAdapterResponseWrapper,
-    CanisterGetSuccessorsRequestInitial, CanisterGetSuccessorsResponseComplete,
-    GetSuccessorsRequest, GetSuccessorsResponse,
+    BitcoinAdapterResponse, BitcoinAdapterResponseWrapper, GetSuccessorsRequestInitial,
+    GetSuccessorsResponseComplete,
 };
 use ic_ic00_types::{BitcoinGetSuccessorsResponse, Payload as _};
 use ic_interfaces::messages::CanisterMessage;
-use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::replicated_state::testing::ReplicatedStateTesting;
 use ic_replicated_state::testing::{CanisterQueuesTesting, SystemStateTesting};
@@ -15,7 +13,7 @@ use ic_replicated_state::{
     canister_state::execution_state::{CustomSection, CustomSectionType, WasmMetadata},
     metadata_state::subnet_call_context_manager::BitcoinGetSuccessorsContext,
     replicated_state::{MemoryTaken, PeekableOutputIterator, ReplicatedStateMessageRouting},
-    BitcoinStateError, CanisterState, ReplicatedState, SchedulerState, StateError, SystemState,
+    CanisterState, ReplicatedState, SchedulerState, StateError, SystemState,
 };
 use ic_test_utilities::mock_time;
 use ic_test_utilities::state::{arb_replicated_state_with_queues, ExecutionStateBuilder};
@@ -29,7 +27,6 @@ use ic_types::{
 };
 use proptest::prelude::*;
 use std::collections::{BTreeMap, VecDeque};
-use std::str::FromStr;
 use std::sync::Arc;
 
 const SUBNET_ID: SubnetId = SubnetId::new(PrincipalId::new(29, [0xfc; 29]));
@@ -613,130 +610,20 @@ fn push_input_queues_respects_local_remote_subnet() {
 }
 
 #[test]
-fn push_request_bitcoin_respects_bitcoin_feature_flag() {
-    let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
-
-    let request = BitcoinAdapterRequestWrapper::GetSuccessorsRequest(GetSuccessorsRequest {
-        processed_block_hashes: vec![vec![10; 32]],
-        anchor: vec![10; 32],
-    });
-
-    // Bitcoin feature is disabled, enqueueing a request should fail.
-    assert_eq!(
-        state.push_request_bitcoin(request.clone()),
-        Err(StateError::BitcoinStateError(
-            BitcoinStateError::FeatureNotEnabled
-        ))
-    );
-
-    // Bitcoin feature is paused, enqueueing a request should fail.
-    state.metadata.own_subnet_features =
-        SubnetFeatures::from_str("bitcoin_testnet_paused").unwrap();
-    assert_eq!(
-        state.push_request_bitcoin(request.clone()),
-        Err(StateError::BitcoinStateError(
-            BitcoinStateError::FeatureNotEnabled
-        ))
-    );
-
-    // Bitcoin feature is enabled, enqueueing a request should succeed.
-    state.metadata.own_subnet_features = SubnetFeatures::from_str("bitcoin_testnet").unwrap();
-    state.push_request_bitcoin(request).unwrap();
-}
-
-#[test]
-fn push_response_bitcoin_respects_bitcoin_feature_flag() {
-    let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
-
-    let response = BitcoinAdapterResponse {
-        response: BitcoinAdapterResponseWrapper::GetSuccessorsResponse(
-            GetSuccessorsResponse::default(),
-        ),
-        callback_id: 0,
-    };
-
-    // Bitcoin feature is disabled, enqueueing a response should fail.
-    assert_eq!(
-        state.push_response_bitcoin(response.clone()),
-        Err(StateError::BitcoinStateError(
-            BitcoinStateError::FeatureNotEnabled
-        ))
-    );
-
-    // Enable bitcoin feature and push two requests.
-    state.metadata.own_subnet_features = SubnetFeatures::from_str("bitcoin_testnet").unwrap();
-    state
-        .push_request_bitcoin(BitcoinAdapterRequestWrapper::GetSuccessorsRequest(
-            GetSuccessorsRequest {
-                processed_block_hashes: vec![vec![10; 32]],
-                anchor: vec![10; 32],
-            },
-        ))
-        .unwrap();
-    state
-        .push_request_bitcoin(BitcoinAdapterRequestWrapper::GetSuccessorsRequest(
-            GetSuccessorsRequest {
-                processed_block_hashes: vec![vec![20; 32]],
-                anchor: vec![20; 32],
-            },
-        ))
-        .unwrap();
-
-    // Pushing a response when bitcoin feature is enabled should succeed.
-    state.push_response_bitcoin(response).unwrap();
-
-    // Pause bitcoin feature, responses should still be enqueued successfully.
-    state.metadata.own_subnet_features =
-        SubnetFeatures::from_str("bitcoin_testnet_paused").unwrap();
-    state
-        .push_response_bitcoin(BitcoinAdapterResponse {
-            response: BitcoinAdapterResponseWrapper::GetSuccessorsResponse(
-                GetSuccessorsResponse::default(),
-            ),
-            callback_id: 1,
-        })
-        .unwrap();
-}
-
-#[test]
-fn state_equality_with_bitcoin() {
-    let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
-
-    // Enable bitcoin feature.
-    state.metadata.own_subnet_features = SubnetFeatures::from_str("bitcoin_testnet").unwrap();
-
-    let original_state = state.clone();
-
-    state
-        .push_request_bitcoin(BitcoinAdapterRequestWrapper::GetSuccessorsRequest(
-            GetSuccessorsRequest {
-                processed_block_hashes: vec![vec![10; 32]],
-                anchor: vec![10; 32],
-            },
-        ))
-        .unwrap();
-
-    // The bitcoin state is different and so the states cannot be equal.
-    assert_ne!(original_state, state);
-}
-
-#[test]
 fn insert_bitcoin_response_non_matching() {
     let mut state = ReplicatedState::new(SUBNET_ID, SubnetType::Application);
 
     assert_eq!(
         state.push_response_bitcoin(BitcoinAdapterResponse {
-            response: BitcoinAdapterResponseWrapper::CanisterGetSuccessorsResponse(
-                CanisterGetSuccessorsResponseComplete {
+            response: BitcoinAdapterResponseWrapper::GetSuccessorsResponse(
+                GetSuccessorsResponseComplete {
                     blocks: vec![],
                     next: vec![],
                 },
             ),
             callback_id: 0,
         }),
-        Err(StateError::BitcoinStateError(
-            BitcoinStateError::NonMatchingResponse { callback_id: 0 }
-        ))
+        Err(StateError::BitcoinNonMatchingResponse { callback_id: 0 })
     );
 }
 
@@ -749,7 +636,7 @@ fn insert_bitcoin_response() {
         .subnet_call_context_manager
         .push_bitcoin_get_successors_request(BitcoinGetSuccessorsContext {
             request: RequestBuilder::default().build(),
-            payload: CanisterGetSuccessorsRequestInitial {
+            payload: GetSuccessorsRequestInitial {
                 network: NetworkSnakeCase::Regtest,
                 anchor: vec![],
                 processed_block_hashes: vec![],
@@ -757,16 +644,14 @@ fn insert_bitcoin_response() {
             time: mock_time(),
         });
 
-    let response = CanisterGetSuccessorsResponseComplete {
+    let response = GetSuccessorsResponseComplete {
         blocks: vec![],
         next: vec![],
     };
 
     state
         .push_response_bitcoin(BitcoinAdapterResponse {
-            response: BitcoinAdapterResponseWrapper::CanisterGetSuccessorsResponse(
-                response.clone(),
-            ),
+            response: BitcoinAdapterResponseWrapper::GetSuccessorsResponse(response.clone()),
             callback_id: 0,
         })
         .unwrap();

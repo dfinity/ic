@@ -4,7 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-bitcoin = "0.28.1"
 ic-adapter-metrics = { path = "../../monitoring/adapter_metrics" }
 ic-async-utils = { path = "../../async_utils" }
 ic-btc-service = { path = "../service" }

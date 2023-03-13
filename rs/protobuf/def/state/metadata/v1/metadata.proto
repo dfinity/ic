@@ -130,7 +130,7 @@ message EcdsaDealingsContextTree {
 
 message BitcoinGetSuccessorsContext {
   state.queues.v1.Request request = 1;
-  bitcoin.v1.CanisterGetSuccessorsRequestInitial payload = 2;
+  bitcoin.v1.GetSuccessorsRequestInitial payload = 2;
   Time time = 3;
 }
 
@@ -141,7 +141,7 @@ message BitcoinGetSuccessorsContextTree {
 
 message BitcoinSendTransactionInternalContext {
   state.queues.v1.Request request = 1;
-  bitcoin.v1.CanisterSendTransactionRequest payload = 2;
+  bitcoin.v1.SendTransactionRequest payload = 2;
   Time time = 3;
 }
 

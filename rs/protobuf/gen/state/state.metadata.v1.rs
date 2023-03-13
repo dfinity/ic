@@ -192,9 +192,8 @@ pub struct BitcoinGetSuccessorsContext {
     #[prost(message, optional, tag = "1")]
     pub request: ::core::option::Option<super::super::queues::v1::Request>,
     #[prost(message, optional, tag = "2")]
-    pub payload: ::core::option::Option<
-        super::super::super::bitcoin::v1::CanisterGetSuccessorsRequestInitial,
-    >,
+    pub payload:
+        ::core::option::Option<super::super::super::bitcoin::v1::GetSuccessorsRequestInitial>,
     #[prost(message, optional, tag = "3")]
     pub time: ::core::option::Option<Time>,
 }
@@ -212,8 +211,7 @@ pub struct BitcoinSendTransactionInternalContext {
     #[prost(message, optional, tag = "1")]
     pub request: ::core::option::Option<super::super::queues::v1::Request>,
     #[prost(message, optional, tag = "2")]
-    pub payload:
-        ::core::option::Option<super::super::super::bitcoin::v1::CanisterSendTransactionRequest>,
+    pub payload: ::core::option::Option<super::super::super::bitcoin::v1::SendTransactionRequest>,
     #[prost(message, optional, tag = "3")]
     pub time: ::core::option::Option<Time>,
 }
