@@ -3,7 +3,7 @@
 use anyhow::Result;
 
 use ic_tests::canister_sig_verification_cache_test::{config, test};
-use ic_tests::driver::new::group::SystemTestGroup;
+use ic_tests::driver::group::SystemTestGroup;
 use ic_tests::systest;
 
 fn main() -> Result<()> {

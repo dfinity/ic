@@ -293,20 +293,6 @@
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "build-reproducibility"
 
-.rules-test-prod-test-driver-e2e:
-  rules:
-    - if: '$CI_PARENT_PIPELINE_SOURCE == "merge_request_event"'
-      changes:
-        - 'rs/tests/run-system-tests.py'
-        - 'rs/tests/bin/*'
-        - 'rs/tests/tests_e2e/*'
-        - 'rs/tests/src/driver/*'
-        - '/ic/gitlab-ci/src/test_results/*'
-        - '/ic/gitlab-ci/src/notify_slack/*'
-    - if: '$CI_PARENT_PIPELINE_SOURCE == "merge_request_event"'
-      when: manual
-      allow_failure: true
-
 .rules-hostos:
   rules:
     - if: '$CI_PARENT_PIPELINE_SOURCE == "merge_request_event"'

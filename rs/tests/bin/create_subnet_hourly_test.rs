@@ -1,7 +1,7 @@
 use anyhow::Result;
 use std::time::Duration;
 
-use ic_tests::driver::new::group::SystemTestGroup;
+use ic_tests::driver::group::SystemTestGroup;
 use ic_tests::nns_tests::create_subnet;
 use ic_tests::systest;
 

@@ -3,7 +3,7 @@ use ic_tests::driver::test_env::TestEnv;
 use slog::info;
 use std::time::Duration;
 
-use ic_tests::driver::new::group::SystemTestGroup;
+use ic_tests::driver::group::SystemTestGroup;
 use ic_tests::nns_tests::sns_deployment::{
     setup_static_testnet, workload_static_testnet_fe_users, workload_static_testnet_get_account,
     workload_static_testnet_sale_bot,

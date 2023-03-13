@@ -1,5 +1,5 @@
 use anyhow::Result;
-use ic_tests::driver::new::group::{SystemTestGroup, SystemTestSubGroup};
+use ic_tests::driver::group::{SystemTestGroup, SystemTestSubGroup};
 use ic_tests::driver::test_env::TestEnv;
 use ic_tests::systest;
 use slog::info;

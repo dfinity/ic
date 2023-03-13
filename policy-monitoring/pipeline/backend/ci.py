@@ -50,14 +50,6 @@ class GroupNamesNotFoundInSystestLog(CiException):
 
 class Ci:
 
-    # Should be in sync with testnet/tests/pipeline/pipeline.yml
-    _MONITORED_REGULAR_JOB_TYPES = set(
-        [
-            "system-tests-hourly",
-            "system-tests-nightly",
-        ]
-    )
-
     # Should be in sync with gitlab-ci/config/47--guest-os-test--guest-os-e2e-test.yml
     _MONITORED_PREMASTER_JOB_TYPES = set(
         [

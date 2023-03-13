@@ -14,7 +14,7 @@ use std::{
 use slog::{crit, error, info, Logger};
 use tokio::{runtime::Handle as RtHandle, task::JoinHandle};
 
-use super::{
+use crate::driver::{
     context::GroupContext,
     dsl::SubprocessFn,
     event::BroadcastingEventSubscriberFactory,
@@ -55,7 +55,7 @@ impl SubprocessTask {
 }
 
 impl Task for SubprocessTask {
-    fn spawn(&self) -> Box<dyn super::task::TaskHandle> {
+    fn spawn(&self) -> Box<dyn crate::driver::task::TaskHandle> {
         if self.spawned.swap(true, Ordering::Relaxed) {
             panic!("Respawned already spawned task '{}'", self.task_id);
         }

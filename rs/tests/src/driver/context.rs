@@ -9,7 +9,7 @@ use std::{
     time::SystemTime,
 };
 
-use super::{constants, event::TaskId, subprocess_ipc::SubprocessSender};
+use crate::driver::{constants, event::TaskId, subprocess_ipc::SubprocessSender};
 
 use slog::debug;
 
@@ -178,7 +178,7 @@ impl GroupContext {
             let logger = Logger::root(sender, slog::o!());
             Ok(logger)
         } else {
-            let logger = super::logger::new_stdout_logger();
+            let logger = crate::driver::logger::new_stdout_logger();
             Ok(logger)
         }
     }

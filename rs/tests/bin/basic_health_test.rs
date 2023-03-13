@@ -3,7 +3,7 @@
 use anyhow::Result;
 
 use ic_tests::basic_health_test::{config_single_host, test};
-use ic_tests::driver::new::group::SystemTestGroup;
+use ic_tests::driver::group::SystemTestGroup;
 use ic_tests::systest;
 
 fn main() -> Result<()> {

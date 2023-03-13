@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use ic_tests::driver::new::group::SystemTestGroup;
+use ic_tests::driver::group::SystemTestGroup;
 use ic_tests::execution::canister_lifecycle::controller_and_controllee_on_different_subnets;
 use ic_tests::execution::config_system_verified_application_subnets;
 use ic_tests::systest;

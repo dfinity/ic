@@ -5,7 +5,8 @@ use std::path::PathBuf;
 
 use crate::driver::{
     farm::Farm,
-    new::{
+    test_env_api::FarmBaseUrl,
+    {
         action_graph::ActionGraph,
         context::{GroupContext, ProcessContext},
         dsl::{SubprocessFn, TestFunction},
@@ -22,7 +23,6 @@ use crate::driver::{
         task::{DebugKeepaliveTask, EmptyTask},
         task_scheduler::{new_task_scheduler, TaskTable},
     },
-    test_env_api::FarmBaseUrl,
 };
 use crate::driver::{
     pot_dsl::{PotSetupFn, SysTestFn},
@@ -36,7 +36,7 @@ use anyhow::{bail, Result};
 use clap::Parser;
 use tokio::runtime::{Builder, Handle, Runtime};
 
-use crate::driver::new::{
+use crate::driver::{
     constants::{kibana_link, GROUP_TTL, KEEPALIVE_INTERVAL},
     subprocess_task::SubprocessTask,
     task::{SkipTestTask, Task},

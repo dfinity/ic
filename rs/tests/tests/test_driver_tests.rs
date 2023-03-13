@@ -1,4 +1,4 @@
-use ic_tests::driver::{new::report::SystemTestGroupReportSummary, test_env_api::FarmBaseUrl};
+use ic_tests::driver::{report::SystemTestGroupReportSummary, test_env_api::FarmBaseUrl};
 use std::{
     env,
     path::PathBuf,

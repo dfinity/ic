@@ -1,7 +1,7 @@
 #[rustfmt::skip]
 use anyhow::Result;
 
-use ic_tests::driver::new::group::{SystemTestGroup, SystemTestSubGroup};
+use ic_tests::driver::group::{SystemTestGroup, SystemTestSubGroup};
 use ic_tests::driver::test_env::{SshKeyGen, TestEnv};
 use ic_tests::driver::test_env_api::{HasGroupSetup, ADMIN};
 use ic_tests::{rosetta_tests, systest};

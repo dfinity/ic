@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use ic_tests::driver::new::group::SystemTestGroup;
+use ic_tests::driver::group::SystemTestGroup;
 use ic_tests::ledger_tests::token_balance::{config, test};
 use ic_tests::systest;
 

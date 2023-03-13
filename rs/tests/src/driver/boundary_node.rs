@@ -37,7 +37,7 @@ use serde::{Deserialize, Serialize};
 use slog::info;
 use ssh2::Session;
 
-use super::{
+use crate::driver::{
     farm::{FileId, PlaynetCertificate},
     test_env_api::HasIcDependencies,
 };

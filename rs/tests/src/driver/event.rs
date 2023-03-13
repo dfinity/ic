@@ -10,7 +10,7 @@ use crossbeam_channel::{bounded, select, unbounded, Sender};
 use serde::{Deserialize, Serialize};
 use utils::thread::JoinOnDrop;
 
-use super::process::ProcessEventPayload;
+use crate::driver::process::ProcessEventPayload;
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug, Serialize, Deserialize, Hash)]
 pub enum TaskId {

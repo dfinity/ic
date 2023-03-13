@@ -4,8 +4,8 @@ use anyhow::Result;
 use std::time::Duration;
 
 use ic_prep_lib::subnet_configuration::constants::SMALL_APP_SUBNET_MAX_SIZE;
+use ic_tests::driver::group::SystemTestGroup;
 use ic_tests::driver::ic::ImageSizeGiB;
-use ic_tests::driver::new::group::SystemTestGroup;
 use ic_tests::networking::replica_query_workload::test;
 use ic_tests::networking::subnet_update_workload::config;
 use ic_tests::systest;

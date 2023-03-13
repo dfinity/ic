@@ -9,7 +9,7 @@ use ic_tests::boundary_nodes_integration::boundary_nodes::{
     redirect_to_dashboard_test, redirect_to_non_raw_test, seo_test, sw_test,
     BoundaryNodeHttpsConfig,
 };
-use ic_tests::driver::new::group::{SystemTestGroup, SystemTestSubGroup};
+use ic_tests::driver::group::{SystemTestGroup, SystemTestSubGroup};
 use ic_tests::systest;
 
 fn main() -> Result<()> {

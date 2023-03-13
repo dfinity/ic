@@ -10,7 +10,7 @@ use ic_tests::{
         redirect_to_dashboard_test, redirect_to_non_raw_test, seo_test, sw_test,
         BoundaryNodeHttpsConfig,
     },
-    driver::new::group::{SystemTestGroup, SystemTestSubGroup},
+    driver::group::{SystemTestGroup, SystemTestSubGroup},
     systest,
 };
 

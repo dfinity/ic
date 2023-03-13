@@ -2,7 +2,7 @@
 
 use anyhow::Result;
 
-use ic_tests::driver::new::group::SystemTestGroup;
+use ic_tests::driver::group::SystemTestGroup;
 use ic_tests::orchestrator::subnet_recovery_nns_subnet::{setup, test};
 use ic_tests::systest;
 

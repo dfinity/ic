@@ -12,10 +12,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use utils::fs::{sync_path, write_atomically};
 
-use super::driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR};
-use super::pot_dsl::TestPath;
+use crate::driver::driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR};
+use crate::driver::pot_dsl::TestPath;
 
-use super::new::constants::SUBREPORT_LOG_PREFIX;
+use crate::driver::constants::SUBREPORT_LOG_PREFIX;
 
 const ASYNC_CHAN_SIZE: usize = 8192;
 

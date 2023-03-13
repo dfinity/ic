@@ -5,8 +5,8 @@ use std::time::Duration;
 use anyhow::Result;
 
 use ic_tests::distributed_tests::distributed_api::{distributed_config, distributed_test};
-use ic_tests::driver::new::dsl::TestFunction;
-use ic_tests::driver::new::group::{SystemTestGroup, SystemTestSubGroup};
+use ic_tests::driver::dsl::TestFunction;
+use ic_tests::driver::group::{SystemTestGroup, SystemTestSubGroup};
 use ic_tests::driver::test_env::TestEnv;
 
 static UVM_LABELS: [char; 4] = ['a', 'b', 'c', 'd'];

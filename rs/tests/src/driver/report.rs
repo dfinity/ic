@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::driver::test_setup::GroupSetup;
 
-use super::event::TaskId;
+use crate::driver::event::TaskId;
 
 pub trait TargetFunctionOutcome {
     fn task_id(&self) -> TaskId;

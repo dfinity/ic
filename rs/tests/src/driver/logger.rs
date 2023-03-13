@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use crate::driver::new::constants;
+use crate::driver::constants;
 use anyhow::Result;
 use slog::{o, Drain, Logger};
 use std::fs::File;

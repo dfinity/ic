@@ -2,8 +2,8 @@ use crate::driver::test_env::TestEnvAttribute;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-use super::ic::VmResources;
-use crate::driver::new::constants::GROUP_TTL;
+use crate::driver::constants::GROUP_TTL;
+use crate::driver::ic::VmResources;
 
 #[derive(Clone, Deserialize, Serialize, Default, Debug)]
 pub struct GroupSetup {

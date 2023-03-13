@@ -3,9 +3,9 @@ use std::collections::{BTreeMap, VecDeque};
 
 use slog::{error, Logger};
 
-use super::action_graph::{ActionGraph, NodeEvent};
-use super::event::{Event, EventPayload, EventSubscriber, TaskId};
-use super::task::Task;
+use crate::driver::action_graph::{ActionGraph, NodeEvent};
+use crate::driver::event::{Event, EventPayload, EventSubscriber, TaskId};
+use crate::driver::task::Task;
 
 /// Map a task id to a task.
 pub type TaskTable = BTreeMap<TaskId, Box<dyn Task>>;
@@ -63,7 +63,7 @@ pub fn new_task_scheduler(
             let tid = node_handle.id();
             let action_type = c.event_type;
             //println!("Processing {:?} {:?} ...", action_type, tid);
-            use super::action_graph::NodeEventType::*;
+            use crate::driver::action_graph::NodeEventType::*;
             match action_type {
                 Start => {
                     let t = match scheduled_tasks.remove(&tid) {
