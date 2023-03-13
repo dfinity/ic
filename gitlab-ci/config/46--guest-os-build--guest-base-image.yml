@@ -2,33 +2,33 @@
   TAG=$(date '+%Y-%m-%d-%H%M')
   # guestos-base & guestos-base-dev
   cd "${CI_PROJECT_DIR}/ic-os/guestos/rootfs"
-  docker build -q -t dfinity/guestos-base:"$TAG" -t dfinity/guestos-base:latest \
+  docker build -q --no-cache -t dfinity/guestos-base:"$TAG" -t dfinity/guestos-base:latest \
       -f Dockerfile.base .
-  docker build -q -t dfinity/guestos-base-dev:"$TAG" -t dfinity/guestos-base-dev:latest \
+  docker build -q --no-cache -t dfinity/guestos-base-dev:"$TAG" -t dfinity/guestos-base-dev:latest \
       --build-arg PACKAGE_FILES="packages.common packages.dev" -f Dockerfile.base .
   # boundaryos-base & boundaryos-base-snp
   cd "${CI_PROJECT_DIR}/ic-os/boundary-guestos/rootfs"
-  docker build -q -t dfinity/boundaryos-base:"$TAG" -t dfinity/boundaryos-base:latest \
+  docker build -q --no-cache -t dfinity/boundaryos-base:"$TAG" -t dfinity/boundaryos-base:latest \
       -f Dockerfile.base .
-  docker build -q -t dfinity/boundaryos-base-snp:"$TAG" -t dfinity/boundaryos-base-snp:latest \
+  docker build -q --no-cache -t dfinity/boundaryos-base-snp:"$TAG" -t dfinity/boundaryos-base-snp:latest \
       --build-arg CPU_SUPPORT="snp" -f Dockerfile.base .
   # boundary-api-guestos-base & boundary-api-guestos-base-snp
   cd "${CI_PROJECT_DIR}/ic-os/boundary-api-guestos/rootfs"
-  docker build -q -t dfinity/boundary-api-guestos-base:"$TAG" -t dfinity/boundary-api-guestos-base:latest \
+  docker build -q --no-cache -t dfinity/boundary-api-guestos-base:"$TAG" -t dfinity/boundary-api-guestos-base:latest \
       -f Dockerfile.base .
-  docker build -q -t dfinity/boundary-api-guestos-base-snp:"$TAG" -t dfinity/boundary-api-guestos-base-snp:latest \
+  docker build -q --no-cache -t dfinity/boundary-api-guestos-base-snp:"$TAG" -t dfinity/boundary-api-guestos-base-snp:latest \
       --build-arg CPU_SUPPORT="snp" -f Dockerfile.base .
   # hostos-base & hostos-base-dev
   cd "${CI_PROJECT_DIR}/ic-os/hostos/rootfs"
-  docker build -q -t dfinity/hostos-base:"$TAG" -t dfinity/hostos-base:latest \
+  docker build -q --no-cache -t dfinity/hostos-base:"$TAG" -t dfinity/hostos-base:latest \
       -f Dockerfile.base .
-  docker build -q -t dfinity/hostos-base-dev:"$TAG" -t dfinity/hostos-base-dev:latest \
+  docker build -q --no-cache -t dfinity/hostos-base-dev:"$TAG" -t dfinity/hostos-base-dev:latest \
       --build-arg PACKAGE_FILES="packages.common packages.dev" -f Dockerfile.base .
   # setupos-base & setupos-base-dev
   cd "${CI_PROJECT_DIR}/ic-os/setupos/rootfs"
-  docker build -q -t dfinity/setupos-base:"$TAG" -t dfinity/setupos-base:latest \
+  docker build -q --no-cache -t dfinity/setupos-base:"$TAG" -t dfinity/setupos-base:latest \
       -f Dockerfile.base .
-  docker build -q -t dfinity/setupos-base-dev:"$TAG" -t dfinity/setupos-base-dev:latest \
+  docker build -q --no-cache -t dfinity/setupos-base-dev:"$TAG" -t dfinity/setupos-base-dev:latest \
       --build-arg PACKAGE_FILES="packages.common packages.dev" -f Dockerfile.base .
 
 build-base-images:
