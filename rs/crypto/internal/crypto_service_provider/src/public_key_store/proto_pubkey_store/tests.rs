@@ -9,6 +9,10 @@ use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_csp_test_utils::files::mk_temp_dir_with_permissions;
 use ic_crypto_node_key_generation::derive_node_id;
 use ic_crypto_node_key_generation::generate_node_keys_once;
+use ic_crypto_test_utils_keys::public_keys::{
+    valid_committee_signing_public_key, valid_dkg_dealing_encryption_public_key,
+    valid_idkg_dealing_encryption_public_key, valid_node_signing_public_key, valid_tls_certificate,
+};
 use ic_logger::replica_logger::no_op_logger;
 use ic_logger::ReplicaLogger;
 use ic_protobuf::crypto::v1::NodePublicKeys;
@@ -307,15 +311,7 @@ fn should_deserialize_existing_public_key_store() {
 
     assert_eq!(
         store.node_signing_pubkey(),
-        Some(PublicKey {
-            version: 0,
-            algorithm: AlgorithmId::Ed25519 as i32,
-            key_value: hex_decode(
-                "58d558c7586efb32f4667ee9a302877da97aa1136cda92af4d7a4f8873f9434f"
-            ),
-            proof_data: None,
-            timestamp: None,
-        })
+        Some(valid_node_signing_public_key())
     );
     //node_id is derived from node signing public key
     //so we also check here for the expected hard-coded value
@@ -331,73 +327,17 @@ fn should_deserialize_existing_public_key_store() {
 
     assert_eq!(
         store.committee_signing_pubkey(),
-        Some(PublicKey {
-            version: 0,
-            algorithm: AlgorithmId::MultiBls12_381 as i32,
-            key_value: hex_decode(
-                "8dab94740858cc96e8df512d8d81730a94d0f3534f30\
-                cebd35ee2006ce4a449cad611dd7d97bbc44256932da4d4a76a70b9f347e4a989a3073fc7\
-                c2d51bf30804ebbc5c3c6da08b8392d2482473290aff428868caabbc26eec4e7bc59209eb0a"
-            ),
-            proof_data: Some(hex_decode(
-                "afc3038c06223258a14af7c942428fe42f89f8d733e4f\
-                5ea8d34a90c0df142697802a6f22633df890a1ce5b774b23aed"
-            )),
-            timestamp: None,
-        })
+        Some(valid_committee_signing_public_key())
     );
     assert_eq!(
         store.ni_dkg_dealing_encryption_pubkey(),
-        Some(PublicKey {
-            version: 0,
-            algorithm: AlgorithmId::Groth20_Bls12_381 as i32,
-            key_value: hex_decode(
-                "ad36a01cbd40dcfa36ec21a96bedcab17372a9cd2b9eba6171ebeb28dd041a\
-                    d5cbbdbb4bed55f59938e8ffb3dd69e386"
-            ),
-            proof_data: Some(hex_decode(
-                "a1781847726f7468323057697468506f705f42\
-                6c7331325f333831a367706f705f6b65795830b751c9585044139f80abdebf38d7f30\
-                aeb282f178a5e8c284f279eaad1c90d9927e56cac0150646992bce54e08d317ea6963\
-                68616c6c656e676558203bb20c5e9c75790f63aae921316912ffc80d6d03946dd21f8\
-                5c35159ca030ec668726573706f6e7365582063d6cf189635c0f3111f97e69ae0af8f\
-                1594b0f00938413d89dbafc326340384"
-            )),
-            timestamp: None,
-        })
+        Some(valid_dkg_dealing_encryption_public_key())
     );
     assert_eq!(
         store.idkg_dealing_encryption_pubkeys(),
-        vec![
-            (PublicKey {
-                version: 0,
-                algorithm: AlgorithmId::MegaSecp256k1 as i32,
-                key_value: hex_decode(
-                    "03e1e1f76e9d834221a26c4a080b65e60d3b6f9c1d6e5b880abf916a364893da2e"
-                ),
-                proof_data: None,
-                timestamp: None,
-            })
-        ]
+        vec![(valid_idkg_dealing_encryption_public_key())]
     );
-    assert_eq!(
-        store.tls_certificate(),
-        Some(X509PublicKeyCert {
-            certificate_der: hex_decode(
-                "3082015630820108a00302010202140098d074\
-                7d24ca04a2f036d8665402b4ea784830300506032b6570304a3148304606035504030\
-                c3f34696e71622d327a63766b2d663679716c2d736f776f6c2d76673365732d7a3234\
-                6a642d6a726b6f772d6d686e73642d756b7666702d66616b35702d6161653020170d3\
-                232313130343138313231345a180f39393939313233313233353935395a304a314830\
-                4606035504030c3f34696e71622d327a63766b2d663679716c2d736f776f6c2d76673\
-                365732d7a32346a642d6a726b6f772d6d686e73642d756b7666702d66616b35702d61\
-                6165302a300506032b6570032100246acd5f38372411103768e91169dadb7370e9990\
-                9a65639186ac6d1c36f3735300506032b6570034100d37e5ccfc32146767e5fd73343\
-                649f5b5564eb78e6d8d424d8f01240708bc537a2a9bcbcf6c884136d18d2b475706d7\
-                bb905f52faf28707735f1d90ab654380b"
-            ),
-        })
-    );
+    assert_eq!(store.tls_certificate(), Some(valid_tls_certificate()));
 }
 
 fn equal_ignoring_timestamp(left: &Vec<PublicKey>, right: &Vec<PublicKey>) -> bool {
@@ -953,10 +893,6 @@ mod idkg_dealing_encryption_pubkeys_count {
 
         assert_eq!(key_count, 3);
     }
-}
-
-fn hex_decode<T: AsRef<[u8]>>(data: T) -> Vec<u8> {
-    hex::decode(data).expect("failed to decode hex")
 }
 
 fn pubkey_store_in_test_resources() -> PathBuf {

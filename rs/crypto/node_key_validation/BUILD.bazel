@@ -20,6 +20,7 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
+    "//rs/crypto/test_utils/keys",
     "//rs/crypto/utils/basic_sig",
     "//rs/test_utilities",
     "@crate_index//:assert_matches",

@@ -8,10 +8,11 @@ use ic_crypto_internal_csp::Csp;
 use ic_crypto_internal_csp_test_utils::remote_csp_vault::start_new_remote_csp_vault_server_in_temp_dir;
 use ic_crypto_node_key_generation::generate_node_keys_once;
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
+use ic_crypto_test_utils_keys::public_keys::valid_idkg_dealing_encryption_public_key;
 use ic_interfaces::crypto::KeyManager;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
-use ic_protobuf::registry::crypto::v1::{AlgorithmId as AlgorithmIdProto, AlgorithmId, PublicKey};
+use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use std::sync::Arc;
@@ -128,17 +129,4 @@ fn should_fail_to_convert_mega_pubkey_from_proto_if_pubkey_malformed() {
         result,
         Err(MEGaPublicKeyFromProtoError::MalformedPublicKey { .. })
     );
-}
-
-fn valid_idkg_dealing_encryption_public_key() -> PublicKey {
-    PublicKey {
-        version: 0,
-        algorithm: AlgorithmId::MegaSecp256k1 as i32,
-        key_value: hex::decode(
-            "03e1e1f76e9d834221a26c4a080b65e60d3b6f9c1d6e5b880abf916a364893da2e",
-        )
-        .expect("invalid hex string"),
-        proof_data: None,
-        timestamp: None,
-    }
 }
