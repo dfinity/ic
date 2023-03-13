@@ -220,9 +220,7 @@ where
         // Already pruned `Node` or `Fork`, all done.
         Witness::Pruned { .. } => Ok(witness.to_owned()),
 
-        Witness::Known() => Err(TreeHashError::InconsistentPartialTree {
-            offending_path: curr_path.to_owned(),
-        }),
+        Witness::Known() => err_inconsistent_partial_tree(curr_path),
     }
 }
 
@@ -241,9 +239,7 @@ fn prune_witness_impl(
                 }),
 
                 // Attempting to prune `SubTree` with children without providing them.
-                _ => Err(TreeHashError::InconsistentPartialTree {
-                    offending_path: curr_path.to_owned(),
-                }),
+                _ => err_inconsistent_partial_tree(curr_path),
             }
         }
 
@@ -256,18 +252,14 @@ fn prune_witness_impl(
                     let res = prune_witness_subtree(witness, &mut children, curr_path)?;
                     if let Some((label, _)) = children.next() {
                         curr_path.push(label.to_owned());
-                        return Err(TreeHashError::InconsistentPartialTree {
-                            offending_path: curr_path.to_owned(),
-                        });
+                        return err_inconsistent_partial_tree(curr_path);
                     }
                     Ok(res)
                 }
 
                 // Attempting to prune children of already pruned or empty `SubTree`.
                 Witness::Pruned { .. } | Witness::Known() => {
-                    Err(TreeHashError::InconsistentPartialTree {
-                        offending_path: curr_path.to_owned(),
-                    })
+                    err_inconsistent_partial_tree(curr_path)
                 }
             }
         }
@@ -278,9 +270,7 @@ fn prune_witness_impl(
             match witness {
                 // LabeledTree <-> Witness mismatch.
                 Witness::Fork { .. } | Witness::Node { .. } | Witness::Pruned { .. } => {
-                    Err(TreeHashError::InconsistentPartialTree {
-                        offending_path: curr_path.to_owned(),
-                    })
+                    err_inconsistent_partial_tree(curr_path)
                 }
 
                 // Provided 'Leaf`, prune it.
@@ -641,14 +631,10 @@ impl WitnessGeneratorImpl {
                         if orig_children.is_empty() {
                             Ok(Builder::make_empty())
                         } else {
-                            Err(TreeHashError::InconsistentPartialTree {
-                                offending_path: curr_path.to_owned(),
-                            })
+                            err_inconsistent_partial_tree(curr_path)
                         }
                     }
-                    _ => Err(TreeHashError::InconsistentPartialTree {
-                        offending_path: curr_path.to_owned(),
-                    }),
+                    _ => err_inconsistent_partial_tree(curr_path),
                 }
             }
             LabeledTree::SubTree(children) if !children.is_empty() => {
@@ -656,9 +642,7 @@ impl WitnessGeneratorImpl {
                     let needed_labels: Vec<Label> = children.keys().to_vec();
                     if let Some(missing_label) = find_missing_label(&needed_labels, orig_children) {
                         curr_path.push(missing_label);
-                        return Err(TreeHashError::InconsistentPartialTree {
-                            offending_path: curr_path.to_owned(),
-                        });
+                        return err_inconsistent_partial_tree(curr_path);
                     }
                     // Recursively generate sub-witnesses for each child
                     // of the current LabeledTree::SubTree.
@@ -687,9 +671,7 @@ impl WitnessGeneratorImpl {
                         &mut sub_witnesses,
                     ))
                 } else {
-                    Err(TreeHashError::InconsistentPartialTree {
-                        offending_path: curr_path.to_owned(),
-                    })
+                    err_inconsistent_partial_tree(curr_path)
                 }
             }
             LabeledTree::SubTree(_) => unreachable!(),
@@ -1192,4 +1174,11 @@ impl HashTreeBuilder for HashTreeBuilderImpl {
             _ => None,
         }
     }
+}
+
+/// Returns an `Err(InconsistentPartialTree)` with the given `offending_path`.
+fn err_inconsistent_partial_tree<T>(offending_path: &Vec<Label>) -> Result<T, TreeHashError> {
+    Err(TreeHashError::InconsistentPartialTree {
+        offending_path: offending_path.to_owned(),
+    })
 }
