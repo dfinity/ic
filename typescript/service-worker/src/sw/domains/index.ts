@@ -1,5 +1,5 @@
 import { Principal } from '@dfinity/principal';
-import { IDBPDatabase, IDBPObjectStore } from 'idb';
+import { IDBPDatabase, IDBPObjectStore, IDBPTransaction } from 'idb';
 import { ICHostInfoEvent } from '../../typings';
 import { isMainNet } from '../requests/utils';
 import { DBValue, Storage } from '../storage';
@@ -54,7 +54,8 @@ export class CanisterResolver {
 
   private static async migrateStorage(
     db: IDBPDatabase<unknown>,
-    oldVersion: number
+    oldVersion: number,
+    transaction: IDBPTransaction<unknown, string[], 'versionchange'>
   ): Promise<
     IDBPObjectStore<unknown, ArrayLike<string>, string, 'versionchange'>
   > {
@@ -64,9 +65,10 @@ export class CanisterResolver {
       }
 
       case 1: {
-        const oldItems: DBValue<V1DBHostsItem>[] = await db.getAll(
-          domainStorageProperties.store
-        );
+        const oldItems: DBValue<V1DBHostsItem>[] = await transaction
+          .objectStore(domainStorageProperties.store)
+          .getAll();
+
         db.deleteObjectStore(domainStorageProperties.store);
 
         const store = db.createObjectStore(

@@ -1,5 +1,5 @@
 import { Principal } from '@dfinity/principal';
-import { IDBPDatabase } from 'idb';
+import { IDBPDatabase, IDBPTransaction } from 'idb';
 import { mockLocation } from '../../mocks/location';
 import { MalformedCanisterError } from './errors';
 import {
@@ -205,13 +205,16 @@ describe('Canister resolver lookups', () => {
   });
 
   describe('database migrations', () => {
-    const dbMock = {
-      deleteObjectStore: jest.fn(),
-      createObjectStore: jest.fn(),
-      getAll: jest.fn(),
-    };
     const storeMock = {
       put: jest.fn(),
+      getAll: jest.fn(),
+    };
+    const transactionMock = {
+      objectStore: jest.fn().mockReturnValue(storeMock),
+    };
+    const dbMock = {
+      deleteObjectStore: jest.fn(),
+      createObjectStore: jest.fn().mockReturnValue(storeMock),
     };
 
     beforeEach(async () => {
@@ -226,7 +229,12 @@ describe('Canister resolver lookups', () => {
 
         await upgradeFn(
           dbMock as unknown as IDBPDatabase<unknown>,
-          previousVersion
+          previousVersion,
+          transactionMock as unknown as IDBPTransaction<
+            unknown,
+            string[],
+            'versionchange'
+          >
         );
 
         return {} as Storage<unknown>;
@@ -302,13 +310,15 @@ describe('Canister resolver lookups', () => {
         },
       ];
 
-      dbMock.getAll.mockResolvedValue(oldDbItems);
-      dbMock.createObjectStore.mockReturnValue(storeMock);
+      storeMock.getAll.mockResolvedValue(oldDbItems);
 
       await CanisterResolver.setup();
 
       expect(connectSpy).toHaveBeenCalled();
-      expect(dbMock.getAll).toHaveBeenCalledWith(domainStorageProperties.store);
+      expect(transactionMock.objectStore).toHaveBeenCalledWith(
+        domainStorageProperties.store
+      );
+      expect(storeMock.getAll).toHaveBeenCalled();
       expect(dbMock.deleteObjectStore).toHaveBeenCalledWith(
         domainStorageProperties.store
       );
@@ -326,8 +336,6 @@ describe('Canister resolver lookups', () => {
       const previousVersion = 2;
       const connectSpy = mockConnect(previousVersion);
 
-      dbMock.createObjectStore.mockReturnValue(storeMock);
-
       await CanisterResolver.setup();
 
       expect(connectSpy).toHaveBeenCalled();
@@ -335,9 +343,10 @@ describe('Canister resolver lookups', () => {
         domainStorageProperties.store
       );
 
-      expect(dbMock.getAll).not.toHaveBeenCalled();
+      expect(transactionMock.objectStore).not.toHaveBeenCalled();
+      expect(storeMock.getAll).not.toHaveBeenCalled();
       expect(dbMock.deleteObjectStore).not.toHaveBeenCalledWith();
-      expect(storeMock.put).toHaveBeenCalledTimes(0);
+      expect(storeMock.put).not.toHaveBeenCalled();
     });
   });
 });
