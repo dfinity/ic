@@ -112,7 +112,7 @@ fn full_canister_lifecycle_ingress() {
                     ic00::IC_00,
                     Method::CreateCanister,
                     call_args().other_side(EmptyBlob.encode()),
-                    num_cycles.into_parts(),
+                    num_cycles,
                 )
             ),
             Ok(WasmResult::Reply(canister_id_record.clone(),)),
@@ -137,7 +137,7 @@ fn full_canister_lifecycle_ingress() {
                     )
                     .encode(),
                 ),
-                num_cycles.into_parts(),
+                num_cycles,
             ),
         )
         .unwrap();
@@ -503,7 +503,7 @@ fn can_create_canister_with_cycles_from_another_canister() {
                     IC_00,
                     Method::CreateCanister,
                     call_args().other_side(EmptyBlob.encode()),
-                    cycles_for_new_canister.into_parts(),
+                    cycles_for_new_canister,
                 ),
             )
             .unwrap()

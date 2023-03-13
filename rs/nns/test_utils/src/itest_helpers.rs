@@ -39,6 +39,7 @@ use ic_sns_wasm::pb::v1::AddWasmRequest;
 use ic_test_utilities::universal_canister::{
     call_args, wasm as universal_canister_argument_builder, UNIVERSAL_CANISTER_WASM,
 };
+use ic_types::Cycles;
 use icp_ledger as ledger;
 use ledger::LedgerCanisterInitPayload;
 use lifeline::LIFELINE_CANISTER_WASM;
@@ -1014,7 +1015,7 @@ pub async fn try_call_with_cycles_via_universal_canister(
                         .reject_message()
                         .reject(),
                 ),
-            ((cycles >> 64) as u64, cycles as u64),
+            Cycles::from(cycles),
         )
         .build();
     sender

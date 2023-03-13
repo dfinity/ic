@@ -1360,7 +1360,7 @@ pub fn refunds_after_uninstall_are_refunded(env: TestEnv) {
                                         .on_reply(wasm().reply()),
                                 ),
                             ),
-                            Cycles::new(50).into_parts(),
+                            Cycles::new(50),
                         ),
                     )
                     .await,

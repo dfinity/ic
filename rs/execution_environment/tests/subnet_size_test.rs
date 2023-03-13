@@ -398,7 +398,7 @@ fn simulate_sign_with_ecdsa_cost(
                 })
                 .unwrap(),
             ),
-            payment_before.into_parts(),
+            payment_before,
         )
         .build();
     // Ignore ingress message response, since SignWithECDSA requires a response
@@ -460,7 +460,7 @@ fn simulate_http_request_cost(subnet_type: SubnetType, subnet_size: usize) -> Cy
                 })
                 .unwrap(),
             ),
-            payment_before.into_parts(),
+            payment_before,
         )
         .build();
     // Ignore ingress message response, since HttpRequest requires a consensus response,
@@ -518,8 +518,8 @@ fn simulate_xnet_call_cost(subnet_type: SubnetType, subnet_size: usize) -> Cycle
             .call_with_cycles(
                 bob,
                 "update",
-                call_args().other_side(wasm().accept_cycles128(accept_cycles.into_parts())),
-                cycles_to_send.into_parts(),
+                call_args().other_side(wasm().accept_cycles(accept_cycles)),
+                cycles_to_send,
             )
             .build(),
     )
@@ -560,7 +560,7 @@ fn simulate_create_canister_cost(subnet_type: SubnetType, subnet_size: usize) ->
                 })
                 .unwrap(),
             ),
-            canister_b_initial_balance.into_parts(),
+            canister_b_initial_balance,
         )
         .build();
     let result = env
