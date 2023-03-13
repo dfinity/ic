@@ -2,8 +2,8 @@
 
 use anyhow::Result;
 
-use ic_tests::driver::new::group::SystemTestGroup;
-use ic_tests::driver::new::group::SystemTestSubGroup;
+use ic_tests::driver::group::SystemTestGroup;
+use ic_tests::driver::group::SystemTestSubGroup;
 use ic_tests::execution::call_on_cleanup::*;
 use ic_tests::execution::config_system_verified_subnets;
 use ic_tests::execution::inter_canister_queries::*;

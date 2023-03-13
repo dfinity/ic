@@ -28,7 +28,6 @@ pub mod rosetta_tests;
 pub mod sns_client;
 pub mod spec_compliance;
 pub mod tecdsa;
-pub mod test_suites;
 pub mod types;
 pub mod util;
 pub mod wasm_generator_test;

@@ -29,7 +29,7 @@ use crate::driver::{
     node_software_version::NodeSoftwareVersion, port_allocator::AddrType, resource::AllocatedVm,
 };
 
-use super::farm::FileId;
+use crate::driver::farm::FileId;
 
 pub type UnassignedNodes = BTreeMap<NodeIndex, NodeConfiguration>;
 pub type NodeVms = BTreeMap<NodeId, AllocatedVm>;

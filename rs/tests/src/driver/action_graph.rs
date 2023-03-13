@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-use super::{
+use crate::driver::{
     event::Subscriber,
     plan::{EvalOrder, Plan},
     task::TaskIdT,

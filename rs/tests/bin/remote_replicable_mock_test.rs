@@ -3,7 +3,7 @@
 use anyhow::Result;
 
 use ic_tests::driver::farm::HostFeature;
-use ic_tests::driver::new::group::SystemTestGroup;
+use ic_tests::driver::group::SystemTestGroup;
 use ic_tests::driver::test_env::TestEnv;
 use ic_tests::driver::test_env_api::{HasDependencies, HasGroupSetup, SshSession, ADMIN};
 use ic_tests::driver::universal_vm::{UniversalVm, UniversalVms};

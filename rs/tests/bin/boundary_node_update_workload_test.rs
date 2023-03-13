@@ -3,7 +3,7 @@
 use anyhow::Result;
 use std::time::Duration;
 
-use ic_tests::driver::new::group::SystemTestGroup;
+use ic_tests::driver::group::SystemTestGroup;
 use ic_tests::networking::subnet_update_workload::{config, test};
 use ic_tests::systest;
 

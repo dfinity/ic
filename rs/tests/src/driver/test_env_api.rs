@@ -131,15 +131,12 @@
 //! better to let the user select a node.
 //!
 
-use super::cli::{
-    bail_if_sha256_invalid, parse_journalbeat_hosts, parse_replica_log_debug_overrides,
-};
 use super::config::NODES_INFO;
 use super::driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR;
 use super::farm::{DnsRecord, PlaynetCertificate};
 use super::test_setup::GroupSetup;
+use crate::driver::constants::{self, kibana_link};
 use crate::driver::farm::{Farm, GroupSpec};
-use crate::driver::new::constants::{self, kibana_link};
 use crate::driver::test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute};
 use crate::util::{create_agent, delay};
 use anyhow::{anyhow, bail, Result};
@@ -171,6 +168,7 @@ use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use ic_types::{NodeId, RegistryVersion, ReplicaVersion, SubnetId};
 use ic_utils::interfaces::ManagementCanister;
 use icp_ledger::{AccountIdentifier, LedgerCanisterInitPayload, Tokens};
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use slog::{info, warn, Logger};
 use ssh2::Session;
@@ -193,6 +191,52 @@ const REGISTRY_QUERY_TIMEOUT: Duration = Duration::from_secs(5);
 const READY_RESPONSE_TIMEOUT: Duration = Duration::from_secs(6);
 
 pub type NodesInfo = HashMap<NodeId, Option<MaliciousBehaviour>>;
+
+pub fn bail_if_sha256_invalid(sha256: &str, opt_name: &str) -> Result<()> {
+    let l = sha256.len();
+    if !(l == 64 && sha256.chars().all(|c| c.is_ascii_hexdigit())) {
+        bail!("option '{}': invalid sha256 value: {:?}", opt_name, sha256);
+    }
+    Ok(())
+}
+
+/// Checks whether the input string as the form [hostname:port{,hostname:port}]
+pub fn parse_journalbeat_hosts(s: Option<String>) -> Result<Vec<String>> {
+    const HOST_START: &str = r#"^(([[:alnum:]]|[[:alnum:]][[:alnum:]\-]*[[:alnum:]])\.)*"#;
+    const HOST_STOP: &str = r#"([[:alnum:]]|[[:alnum:]][[:alnum:]\-]*[[:alnum:]])"#;
+    const PORT: &str = r#":[[:digit:]]{2,5}$"#;
+    let s = match s {
+        Some(s) => s,
+        None => return Ok(vec![]),
+    };
+    let rgx = format!("{}{}{}", HOST_START, HOST_STOP, PORT);
+    let rgx = Regex::new(&rgx).unwrap();
+    let mut res = vec![];
+    for target in s.trim().split(',') {
+        if !rgx.is_match(target) {
+            bail!("Invalid journalbeat host: '{}'", s);
+        }
+        res.push(target.to_string());
+    }
+    Ok(res)
+}
+
+pub fn parse_replica_log_debug_overrides(s: Option<String>) -> Result<Vec<String>> {
+    let s = match s {
+        Some(s) => s,
+        None => return Ok(vec![]),
+    };
+    let rgx = r#"^([\w]+::)+[\w]+$"#.to_string();
+    let rgx = Regex::new(&rgx).unwrap();
+    let mut res = vec![];
+    for target in s.trim().split(',') {
+        if !rgx.is_match(target) {
+            bail!("Invalid replica_log_debug_overrides: '{}'", s);
+        }
+        res.push(target.to_string());
+    }
+    Ok(res)
+}
 
 /// An immutable snapshot of the Internet Computer topology valid at a
 /// particular registry version.

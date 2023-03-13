@@ -2,7 +2,7 @@
 
 use anyhow::Result;
 
-use ic_tests::driver::new::group::SystemTestGroup;
+use ic_tests::driver::group::SystemTestGroup;
 use ic_tests::execution::system_api_security_test;
 use ic_tests::systest;
 

@@ -2,8 +2,8 @@
 
 use anyhow::Result;
 
-use ic_tests::driver::new::group::SystemTestGroup;
-use ic_tests::driver::new::group::SystemTestSubGroup;
+use ic_tests::driver::group::SystemTestGroup;
+use ic_tests::driver::group::SystemTestSubGroup;
 use ic_tests::execution::api_tests::test_raw_rand_api;
 use ic_tests::execution::big_stable_memory::*;
 use ic_tests::execution::canister_heartbeat::*;

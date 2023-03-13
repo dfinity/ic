@@ -1,5 +1,5 @@
 use anyhow::Result;
-use ic_tests::driver::new::group::SystemTestGroup;
+use ic_tests::driver::group::SystemTestGroup;
 use ic_tests::nns_tests::sns_aggregator::{
     config_fast, validate_aggregator_data, wait_until_aggregator_finds_sns,
 };

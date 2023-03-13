@@ -2,7 +2,7 @@
 
 use anyhow::Result;
 use ic_tests::{
-    driver::new::group::SystemTestGroup,
+    driver::group::SystemTestGroup,
     orchestrator::ssh_access_to_nodes::{
         can_add_max_number_of_readonly_and_backup_keys,
         cannot_add_more_than_max_number_of_readonly_or_backup_keys, config,

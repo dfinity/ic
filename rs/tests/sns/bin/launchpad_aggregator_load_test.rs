@@ -1,7 +1,7 @@
 use anyhow::Result;
 use std::time::Duration;
 
-use ic_tests::driver::new::group::SystemTestGroup;
+use ic_tests::driver::group::SystemTestGroup;
 use ic_tests::driver::test_env::TestEnv;
 use ic_tests::nns_tests::sns_aggregator::{
     benchmark_config_with_aggregator, validate_aggregator_data, wait_until_aggregator_finds_sns,

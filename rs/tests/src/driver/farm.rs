@@ -18,7 +18,7 @@ use std::io::Write;
 use thiserror::Error;
 use url::Url;
 
-use super::{ic::ImageSizeGiB, test_env::TestEnv};
+use crate::driver::{ic::ImageSizeGiB, test_env::TestEnv};
 
 pub type FarmResult<T> = Result<T, FarmError>;
 

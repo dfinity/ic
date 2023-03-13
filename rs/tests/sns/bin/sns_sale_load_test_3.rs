@@ -1,7 +1,7 @@
 use anyhow::Result;
 use std::time::Duration;
 
-use ic_tests::driver::new::group::SystemTestGroup;
+use ic_tests::driver::group::SystemTestGroup;
 use ic_tests::nns_tests::sns_deployment::{
     initiate_token_swap, sns_setup_with_many_sale_participants,
     workload_many_users_rps100_refresh_buyer_tokens,

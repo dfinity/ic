@@ -9,7 +9,7 @@ use std::{
 
 use tokio::{runtime::Handle as RtHandle, task::JoinHandle};
 
-use super::{
+use crate::driver::{
     event::{BroadcastingEventSubscriberFactory, Event, TaskId},
     task::{Task, TaskHandle},
 };
@@ -40,7 +40,7 @@ impl TimeoutTask {
 }
 
 impl Task for TimeoutTask {
-    fn spawn(&self) -> Box<dyn super::task::TaskHandle> {
+    fn spawn(&self) -> Box<dyn crate::driver::task::TaskHandle> {
         if self.spawned.fetch_or(true, Ordering::Relaxed) {
             panic!("respawned already spawned task `{}`", self.task_id);
         }
@@ -110,7 +110,7 @@ impl TaskHandle for TimeoutTaskHandle {
 
 #[cfg(test)]
 mod tests {
-    use crate::driver::new::event::{test_utils::create_subfact, EventPayload};
+    use crate::driver::event::{test_utils::create_subfact, EventPayload};
 
     use super::*;
     use tokio::runtime::Runtime;

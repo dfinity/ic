@@ -13,7 +13,7 @@ use std::sync::{
 use slog::{info, Logger};
 use tokio::{runtime::Handle as RtHandle, task::JoinHandle};
 
-use super::event::{BroadcastingEventSubscriberFactory, Event, TaskId};
+use crate::driver::event::{BroadcastingEventSubscriberFactory, Event, TaskId};
 
 pub trait TaskIdT: Clone + PartialEq + Eq + Send + Sync + std::fmt::Debug {}
 impl<T: Clone + PartialEq + Eq + Send + Sync + std::fmt::Debug> TaskIdT for T {}
@@ -256,7 +256,7 @@ impl TaskHandle for DebugKeepaliveTaskHandle {
 
 #[cfg(test)]
 mod tests {
-    use crate::driver::new::event::{test_utils::create_subfact, EventPayload};
+    use crate::driver::event::{test_utils::create_subfact, EventPayload};
 
     use super::*;
     use crossbeam_channel::TryRecvError;

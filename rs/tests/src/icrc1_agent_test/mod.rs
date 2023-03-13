@@ -12,7 +12,6 @@ use icp_ledger::ArchiveOptions;
 use crate::{
     driver::{
         ic::{InternetComputer, Subnet},
-        pot_dsl::{par, pot_with_setup, sys_t, Pot},
         test_env::TestEnv,
         test_env_api::{
             HasDependencies, HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
@@ -20,14 +19,6 @@ use crate::{
     },
     util::{assert_create_agent, block_on, runtime_from_url},
 };
-
-pub fn icrc1_agent_test_pot() -> Pot {
-    pot_with_setup(
-        "icrc1_agent_test_pot",
-        config,
-        par(vec![sys_t("icrc1_agent_test", test)]),
-    )
-}
 
 pub fn config(env: TestEnv) {
     env.ensure_group_setup_created();

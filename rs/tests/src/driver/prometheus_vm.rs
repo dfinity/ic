@@ -11,7 +11,7 @@ use serde::Serialize;
 use serde_json::json;
 use slog::{debug, info};
 
-use super::{
+use crate::driver::{
     farm::HostFeature,
     ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmAllocationStrategy, VmResources},
     resource::{DiskImage, ImageType},

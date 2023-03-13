@@ -1,5 +1,5 @@
-use super::event::{Event, EventSubscriber, TaskId};
-use crate::driver::new::constants::{PANIC_LOG_PREFIX, SUBREPORT_LOG_PREFIX};
+use crate::driver::constants::{PANIC_LOG_PREFIX, SUBREPORT_LOG_PREFIX};
+use crate::driver::event::{Event, EventSubscriber, TaskId};
 use bincode;
 use serde::{Deserialize, Serialize};
 use slog::{error, warn, Drain, Level, Logger, OwnedKVList, Record};
@@ -329,7 +329,7 @@ mod tests {
     #[test]
     fn can_send_and_receive_messages() {
         let sock_path = get_unique_sock_path();
-        let (subfact, evt_rcvr) = crate::driver::new::event::test_utils::create_subfact();
+        let (subfact, evt_rcvr) = crate::driver::event::test_utils::create_subfact();
         let sub = subfact.create_broadcasting_subscriber();
 
         // setup

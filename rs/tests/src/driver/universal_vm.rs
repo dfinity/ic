@@ -1,16 +1,18 @@
-use super::driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR;
-use super::farm::id_of_file;
-use super::farm::ClaimResult;
-use super::farm::Farm;
-use super::farm::HostFeature;
-use super::ic::VmAllocationStrategy;
-use super::ic::VmResources;
-use super::resource::AllocatedVm;
-use super::resource::{allocate_resources, get_resource_request_for_universal_vm, DiskImage};
-use super::test_env::SshKeyGen;
-use super::test_env::{TestEnv, TestEnvAttribute};
-use super::test_env_api::HasIcDependencies;
-use super::test_env_api::{
+use crate::driver::driver_setup::SSH_AUTHORIZED_PUB_KEYS_DIR;
+use crate::driver::farm::id_of_file;
+use crate::driver::farm::ClaimResult;
+use crate::driver::farm::Farm;
+use crate::driver::farm::HostFeature;
+use crate::driver::ic::VmAllocationStrategy;
+use crate::driver::ic::VmResources;
+use crate::driver::resource::AllocatedVm;
+use crate::driver::resource::{
+    allocate_resources, get_resource_request_for_universal_vm, DiskImage,
+};
+use crate::driver::test_env::SshKeyGen;
+use crate::driver::test_env::{TestEnv, TestEnvAttribute};
+use crate::driver::test_env_api::HasIcDependencies;
+use crate::driver::test_env_api::{
     get_ssh_session_from_env, retry, HasDependencies, HasTestEnv, HasVmName, RetrieveIpv4Addr,
     SshSession, ADMIN, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
 };

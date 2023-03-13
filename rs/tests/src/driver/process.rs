@@ -15,7 +15,7 @@ use tokio::{
 pub trait KillFn: FnOnce() + Send + Sync {}
 impl<T: FnOnce() + Send + Sync> KillFn for T {}
 
-use super::event::{BroadcastingEventSubscriberFactory, Event, EventSubscriber, TaskId};
+use crate::driver::event::{BroadcastingEventSubscriberFactory, Event, EventSubscriber, TaskId};
 pub struct Process {
     child: Child,
     stdout_jh: JoinHandle<()>,
@@ -147,7 +147,7 @@ pub enum ChannelName {
 
 #[cfg(test)]
 mod tests {
-    use crate::driver::new::event::{EventPayload, EventSubscriber};
+    use crate::driver::event::{EventPayload, EventSubscriber};
 
     use super::*;
     use crossbeam_channel::{unbounded, Sender};

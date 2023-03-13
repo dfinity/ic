@@ -14,7 +14,7 @@ end::catalog[] */
 use anyhow::Result;
 
 use ic_registry_subnet_type::SubnetType;
-use ic_tests::driver::new::group::SystemTestGroup;
+use ic_tests::driver::group::SystemTestGroup;
 use ic_tests::driver::test_env::TestEnv;
 use ic_tests::spec_compliance::{config_impl, test_subnet};
 use ic_tests::systest;

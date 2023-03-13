@@ -110,38 +110,6 @@ rejoin-test-slo:
 
       $SHELL_WRAPPER ./testnet/tests/scripts/rejoin_test.sh "$TESTNET" 900 8 8 large "$CI_JOB_STAGE/$CI_JOB_NAME"
 
-.run-farm-based-test: &run-farm-based-test |
-  WORKING_DIR="${CI_PROJECT_DIR}/working_dir/"
-  mkdir -p "$WORKING_DIR"
-  IC_VERSION_ID=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
-  export IC_VERSION_ID
-  if [[ -z "${REPLICA_LOG_DEBUG_OVERRIDES:-}" ]]; then
-    REPLICA_LOG_DEBUG_OVERRIDES_OPTS=()
-  else
-    REPLICA_LOG_DEBUG_OVERRIDES_OPTS=("--replica-log-debug-overrides=${REPLICA_LOG_DEBUG_OVERRIDES}")
-  fi
-
-  # Logs produced during execution of the system tests are stored away in a structured way, i.e. one file per test.
-  # Unstructured logs, i.e. those which bypassed the logger and were outputed directly to stdout/stderr,
-  # are forwarded to a separate file.
-  # All lines produced by the logger share the same structure: e.g. "Nov 10 13:20:30.931 INFO ...".
-  # Hence, the fourth column can be used to distinguish structured from unstructured logs.
-  $SHELL_WRAPPER "${CI_PROJECT_DIR}/rs/tests/run-system-tests.py" \
-    --suite="${SUITE_NAME}" \
-    --working-dir="${WORKING_DIR}" \
-    "${REPLICA_LOG_DEBUG_OVERRIDES_OPTS[@]}" \
-  | tee "${WORKING_DIR}/unstructured-logs.log" \
-  | awk '$4 ~ /CRIT|ERRO|WARN|INFO|DEBG|TRCE/'
-
-.system-tests:
-  extends: .prod-test
-  needs: []  # allow starting immediately
-  artifacts:
-    when: always
-    paths:
-      - "$CI_PROJECT_DIR/working_dir/"
-  allow_failure: false
-
 .with-monitoring:
   variables:
     # we need debug-level logs from the following components for IC policy monitoring

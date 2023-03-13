@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use anyhow::Result;
 
-use ic_tests::driver::new::group::SystemTestGroup;
+use ic_tests::driver::group::SystemTestGroup;
 use ic_tests::systest;
 use ic_tests::workload_counter_canister_test::{two_third_latency_config, two_third_latency_test};
 
