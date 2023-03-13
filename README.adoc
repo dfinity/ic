@@ -79,7 +79,7 @@ The https://dfinity.org/[DFINITY Foundation] is a Swiss not-for-profit organizat
 
 - x86-64 based system (at least 8 CPUs, 16 GB MEM/SWAP, 100 GB available disk space)
 - Ubuntu 20.04 or newer
-- https://podman.io/getting-started/installation/[Podman]
+- https://podman.io/getting-started/installation[Podman]
 - Git
 
 == Building the code
