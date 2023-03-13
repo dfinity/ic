@@ -1,4 +1,10 @@
-import { openDB, deleteDB, IDBPDatabase, IDBPObjectStore } from 'idb';
+import {
+  openDB,
+  deleteDB,
+  IDBPDatabase,
+  IDBPObjectStore,
+  IDBPTransaction,
+} from 'idb';
 
 const DB_NAME = 'sw';
 const DB_VERSION = 1.0;
@@ -23,7 +29,8 @@ type PickDBSchemaValue<
 type IDBKey = IDBValidKey | IDBKeyRange;
 type CreateStoreFn = (
   database: IDBPDatabase<unknown>,
-  oldVersion: number
+  oldVersion: number,
+  transaction: IDBPTransaction<unknown, string[], 'versionchange'>
 ) => Promise<
   IDBPObjectStore<unknown, ArrayLike<string>, string, 'versionchange'>
 >;
@@ -88,10 +95,10 @@ class Storage<StorageDB extends DBSchema | unknown = unknown> {
     }
 
     const idb = await openDB(name, version, {
-      async upgrade(database, oldVersion) {
+      async upgrade(database, oldVersion, _newVersion, transaction) {
         for (const createStore of stores.init ?? []) {
           if (typeof createStore !== 'string') {
-            const store = await createStore(database, oldVersion);
+            const store = await createStore(database, oldVersion, transaction);
             store.createIndex(TTL_INDEX_NAME, TTL_INDEX_KEY_PATH);
             return;
           }
