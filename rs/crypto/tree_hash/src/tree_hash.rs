@@ -154,6 +154,16 @@ where
             left_tree,
             right_tree,
         } => {
+            // Disallow a `Fork` with two `Pruned` children. Even if otherwise valid,
+            // we should only accept minimal witnesses.
+            if let (Witness::Pruned { .. }, Witness::Pruned { .. }) =
+                (left_tree.as_ref(), right_tree.as_ref())
+            {
+                return Err(TreeHashError::NonMinimalWitness {
+                    offending_path: curr_path.clone(),
+                });
+            }
+
             let left = prune_witness_subtree(left_tree, children, curr_path)?;
             let right = prune_witness_subtree(right_tree, children, curr_path)?;
 

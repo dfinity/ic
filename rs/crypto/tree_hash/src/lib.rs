@@ -779,6 +779,7 @@ impl<'de> serde::de::Deserialize<'de> for MixedHashTree {
 pub enum TreeHashError {
     InconsistentPartialTree { offending_path: Vec<Label> },
     InvalidArgument { info: String },
+    NonMinimalWitness { offending_path: Vec<Label> },
 }
 
 /// A subset of a [`HashTree`] that is sufficient to verify whether some
