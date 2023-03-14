@@ -8,30 +8,6 @@ use ic_tests::nns_tests::sns_deployment::{
 };
 use ic_tests::systest;
 
-fn workload_rps100_many_ticket_participants(env: TestEnv) {
-    generate_ticket_participants_workload(env, 100, Duration::from_secs(60));
-}
-
-fn workload_rps95_many_ticket_participants(env: TestEnv) {
-    generate_ticket_participants_workload(env, 95, Duration::from_secs(60));
-}
-
-fn workload_rps90_many_ticket_participants(env: TestEnv) {
-    generate_ticket_participants_workload(env, 90, Duration::from_secs(60));
-}
-
-fn workload_rps85_many_ticket_participants(env: TestEnv) {
-    generate_ticket_participants_workload(env, 85, Duration::from_secs(60));
-}
-
-fn workload_rps80_many_ticket_participants(env: TestEnv) {
-    generate_ticket_participants_workload(env, 80, Duration::from_secs(60));
-}
-
-fn workload_rps75_many_ticket_participants(env: TestEnv) {
-    generate_ticket_participants_workload(env, 75, Duration::from_secs(60));
-}
-
 fn workload_rps70_many_ticket_participants(env: TestEnv) {
     generate_ticket_participants_workload(env, 70, Duration::from_secs(60));
 }
@@ -73,12 +49,6 @@ fn main() -> Result<()> {
         .add_test(systest!(workload_rps60_many_ticket_participants))
         .add_test(systest!(workload_rps65_many_ticket_participants))
         .add_test(systest!(workload_rps70_many_ticket_participants))
-        .add_test(systest!(workload_rps75_many_ticket_participants))
-        .add_test(systest!(workload_rps80_many_ticket_participants))
-        .add_test(systest!(workload_rps85_many_ticket_participants))
-        .add_test(systest!(workload_rps90_many_ticket_participants))
-        .add_test(systest!(workload_rps95_many_ticket_participants))
-        .add_test(systest!(workload_rps100_many_ticket_participants))
         .execute_from_args()?;
     Ok(())
 }
