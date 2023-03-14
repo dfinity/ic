@@ -817,6 +817,7 @@ pub(crate) trait EcdsaTranscriptLoader: Send {
     ) -> TranscriptLoadStatus;
 }
 
+#[derive(Debug)]
 pub(crate) enum TranscriptLoadStatus {
     /// Transcript was loaded successfully
     Success,
@@ -882,7 +883,6 @@ impl EcdsaTranscriptLoader for EcdsaComplaintHandlerImpl {
             let complaint_openings = self.get_openings_for_complaint(ecdsa_pool, &complaint);
             openings.insert(complaint, complaint_openings);
         }
-        // TODO: check num openings satisfies the threshold
         match IDkgProtocol::load_transcript_with_openings(&*self.crypto, transcript, &openings) {
             Ok(()) => {
                 self.metrics
@@ -951,6 +951,7 @@ impl<'a> Action<'a> {
 mod tests {
     use super::*;
     use crate::ecdsa::utils::test_utils::*;
+    use assert_matches::assert_matches;
     use ic_crypto_test_utils_canister_threshold_sigs::CanisterThresholdSigTestEnvironment;
     use ic_interfaces::artifact_pool::{MutablePool, UnvalidatedArtifact};
     use ic_interfaces::time_source::{SysTimeSource, TimeSource};
@@ -1032,55 +1033,96 @@ mod tests {
     // Tests validation of the received complaints
     #[test]
     fn test_ecdsa_validate_complaints() {
+        let time_source = FastForwardTimeSource::new();
+        let (id_1, id_2, id_3) = (
+            create_transcript_id_with_height(1, Height::from(200)),
+            create_transcript_id_with_height(2, Height::from(20)),
+            create_transcript_id_with_height(3, Height::from(30)),
+        );
+
+        // Set up the ECDSA pool
+        let mut artifacts = Vec::new();
+        // Complaint from a node ahead of us (deferred)
+        let complaint = create_complaint(id_1, NODE_2, NODE_3);
+        artifacts.push(UnvalidatedArtifact {
+            message: EcdsaMessage::EcdsaComplaint(complaint),
+            peer_id: NODE_3,
+            timestamp: time_source.get_relative_time(),
+        });
+
+        // Complaint for a transcript not currently active (dropped)
+        let complaint = create_complaint(id_2, NODE_2, NODE_3);
+        let msg_id_2 = complaint.message_id();
+        artifacts.push(UnvalidatedArtifact {
+            message: EcdsaMessage::EcdsaComplaint(complaint),
+            peer_id: NODE_3,
+            timestamp: time_source.get_relative_time(),
+        });
+
+        // Complaint for a transcript currently active (accepted)
+        let complaint = create_complaint(id_3, NODE_2, NODE_3);
+        let msg_id_3 = complaint.message_id();
+        artifacts.push(UnvalidatedArtifact {
+            message: EcdsaMessage::EcdsaComplaint(complaint),
+            peer_id: NODE_3,
+            timestamp: time_source.get_relative_time(),
+        });
+
+        // Only id_3 is active
+        let block_reader = TestEcdsaBlockReader::for_complainer_test(
+            Height::new(100),
+            vec![TranscriptRef::new(Height::new(10), id_3)],
+        );
+
+        // Test successful validation using CryptoReturningOk
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut ecdsa_pool, complaint_handler) =
                     create_complaint_dependencies(pool_config, logger);
-                let time_source = FastForwardTimeSource::new();
-                let (id_1, id_2, id_3) = (
-                    create_transcript_id_with_height(1, Height::from(200)),
-                    create_transcript_id_with_height(2, Height::from(20)),
-                    create_transcript_id_with_height(3, Height::from(30)),
-                );
 
-                // Set up the ECDSA pool
-                // Complaint from a node ahead of us (deferred)
-                let complaint = create_complaint(id_1, NODE_2, NODE_3);
-                ecdsa_pool.insert(UnvalidatedArtifact {
-                    message: EcdsaMessage::EcdsaComplaint(complaint),
-                    peer_id: NODE_3,
-                    timestamp: time_source.get_relative_time(),
-                });
+                artifacts.iter().for_each(|a| ecdsa_pool.insert(a.clone()));
 
-                // Complaint for a transcript not currently active (dropped)
-                let complaint = create_complaint(id_2, NODE_2, NODE_3);
-                let msg_id_2 = complaint.message_id();
-                ecdsa_pool.insert(UnvalidatedArtifact {
-                    message: EcdsaMessage::EcdsaComplaint(complaint),
-                    peer_id: NODE_3,
-                    timestamp: time_source.get_relative_time(),
-                });
-
-                // Complaint for a transcript currently active (accepted)
-                let complaint = create_complaint(id_3, NODE_2, NODE_3);
-                let msg_id_3 = complaint.message_id();
-                ecdsa_pool.insert(UnvalidatedArtifact {
-                    message: EcdsaMessage::EcdsaComplaint(complaint),
-                    peer_id: NODE_3,
-                    timestamp: time_source.get_relative_time(),
-                });
-
-                // Only id_3 is active
-                let block_reader = TestEcdsaBlockReader::for_complainer_test(
-                    Height::new(100),
-                    vec![TranscriptRef::new(Height::new(10), id_3)],
-                );
                 let change_set = complaint_handler.validate_complaints(&ecdsa_pool, &block_reader);
                 assert_eq!(change_set.len(), 2);
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id_2));
                 assert!(is_moved_to_validated(&change_set, &msg_id_3));
             })
-        })
+        });
+
+        // Test transient crypto failure during validation
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let (mut ecdsa_pool, complaint_handler) = create_complaint_dependencies_with_crypto(
+                    pool_config,
+                    logger,
+                    Some(crypto_without_keys()),
+                );
+
+                artifacts.iter().for_each(|a| ecdsa_pool.insert(a.clone()));
+
+                // Crypto should return a transient error thus validation of msg_id_3 should be deferred.
+                let change_set = complaint_handler.validate_complaints(&ecdsa_pool, &block_reader);
+                assert_eq!(change_set.len(), 1);
+                assert!(is_removed_from_unvalidated(&change_set, &msg_id_2));
+            })
+        });
+
+        // Simulate failure when resolving transcript ref
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let (mut ecdsa_pool, complaint_handler) =
+                    create_complaint_dependencies(pool_config, logger);
+
+                artifacts.iter().for_each(|a| ecdsa_pool.insert(a.clone()));
+
+                let block_reader = block_reader.clone().with_fail_to_resolve();
+                let change_set = complaint_handler.validate_complaints(&ecdsa_pool, &block_reader);
+
+                assert_eq!(change_set.len(), 2);
+                assert!(is_removed_from_unvalidated(&change_set, &msg_id_2));
+                assert!(is_handle_invalid(&change_set, &msg_id_3));
+            })
+        });
     }
 
     // Tests that duplicate complaint from the same complainer is dropped
@@ -1168,47 +1210,49 @@ mod tests {
     // Tests that openings are sent for eligible complaints
     #[test]
     fn test_ecdsa_send_openings() {
+        let (id_1, id_2, id_3) = (
+            create_transcript_id(1),
+            create_transcript_id(2),
+            create_transcript_id(3),
+        );
+        let mut artifacts = Vec::new();
+
+        // Complaint for which we haven't issued an opening. This should
+        // result in opening sent out.
+        let complaint = create_complaint(id_1, NODE_2, NODE_3);
+        artifacts.push(EcdsaMessage::EcdsaComplaint(complaint));
+
+        // Complaint for which we already issued an opening. This should
+        // not result in an opening.
+        let complaint = create_complaint(id_2, NODE_2, NODE_3);
+        let opening = create_opening(id_2, NODE_2, NODE_3, NODE_1);
+        artifacts.push(EcdsaMessage::EcdsaComplaint(complaint));
+        artifacts.push(EcdsaMessage::EcdsaOpening(opening));
+
+        // Complaint for transcript not in the active list
+        let complaint = create_complaint(id_3, NODE_2, NODE_3);
+        artifacts.push(EcdsaMessage::EcdsaComplaint(complaint));
+
+        let block_reader = TestEcdsaBlockReader::for_complainer_test(
+            Height::new(100),
+            vec![
+                TranscriptRef::new(Height::new(10), id_1),
+                TranscriptRef::new(Height::new(20), id_2),
+            ],
+        );
+
+        // Opening should be sent when using CryptoReturningOk
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut ecdsa_pool, complaint_handler) =
                     create_complaint_dependencies(pool_config, logger);
-                let (id_1, id_2, id_3) = (
-                    create_transcript_id(1),
-                    create_transcript_id(2),
-                    create_transcript_id(3),
-                );
 
-                // Complaint for which we haven't issued an opening. This should
-                // result in opening sent out.
-                let complaint = create_complaint(id_1, NODE_2, NODE_3);
-                let change_set = vec![EcdsaChangeAction::AddToValidated(
-                    EcdsaMessage::EcdsaComplaint(complaint),
-                )];
-                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
-
-                // Complaint for which we already issued an opening. This should
-                // not result in an opening.
-                let complaint = create_complaint(id_2, NODE_2, NODE_3);
-                let opening = create_opening(id_2, NODE_2, NODE_3, NODE_1);
-                let change_set = vec![
-                    EcdsaChangeAction::AddToValidated(EcdsaMessage::EcdsaComplaint(complaint)),
-                    EcdsaChangeAction::AddToValidated(EcdsaMessage::EcdsaOpening(opening)),
-                ];
-                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
-
-                // Complaint for transcript not in the active list
-                let complaint = create_complaint(id_3, NODE_2, NODE_3);
-                let change_set = vec![EcdsaChangeAction::AddToValidated(
-                    EcdsaMessage::EcdsaComplaint(complaint),
-                )];
-                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
-
-                let block_reader = TestEcdsaBlockReader::for_complainer_test(
-                    Height::new(100),
-                    vec![
-                        TranscriptRef::new(Height::new(10), id_1),
-                        TranscriptRef::new(Height::new(20), id_2),
-                    ],
+                ecdsa_pool.apply_changes(
+                    &SysTimeSource::new(),
+                    artifacts
+                        .iter()
+                        .map(|a| EcdsaChangeAction::AddToValidated(a.clone()))
+                        .collect(),
                 );
                 let change_set = complaint_handler.send_openings(&ecdsa_pool, &block_reader);
                 assert_eq!(change_set.len(), 1);
@@ -1219,7 +1263,29 @@ mod tests {
                     &NODE_1
                 ));
             })
-        })
+        });
+
+        // Opening should not be sent if crypto fails
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let (mut ecdsa_pool, complaint_handler) = create_complaint_dependencies_with_crypto(
+                    pool_config,
+                    logger,
+                    Some(crypto_without_keys()),
+                );
+
+                ecdsa_pool.apply_changes(
+                    &SysTimeSource::new(),
+                    artifacts
+                        .iter()
+                        .map(|a| EcdsaChangeAction::AddToValidated(a.clone()))
+                        .collect(),
+                );
+
+                let change_set = complaint_handler.send_openings(&ecdsa_pool, &block_reader);
+                assert!(change_set.is_empty());
+            })
+        });
     }
 
     #[test]
@@ -1250,74 +1316,121 @@ mod tests {
     // Tests the validation of received openings
     #[test]
     fn test_ecdsa_validate_openings() {
+        let time_source = FastForwardTimeSource::new();
+        let (id_1, id_2, id_3, id_4) = (
+            create_transcript_id_with_height(1, Height::from(400)),
+            create_transcript_id_with_height(2, Height::from(20)),
+            create_transcript_id_with_height(3, Height::from(30)),
+            create_transcript_id_with_height(4, Height::from(40)),
+        );
+
+        // Set up the ECDSA pool
+        let mut artifacts = Vec::new();
+        // Opening from a node ahead of us (deferred)
+        let opening = create_opening(id_1, NODE_2, NODE_3, NODE_4);
+        artifacts.push(UnvalidatedArtifact {
+            message: EcdsaMessage::EcdsaOpening(opening),
+            peer_id: NODE_4,
+            timestamp: time_source.get_relative_time(),
+        });
+
+        // Opening for a transcript not currently active(dropped)
+        let opening = create_opening(id_2, NODE_2, NODE_3, NODE_4);
+        let msg_id_1 = opening.message_id();
+        artifacts.push(UnvalidatedArtifact {
+            message: EcdsaMessage::EcdsaOpening(opening),
+            peer_id: NODE_4,
+            timestamp: time_source.get_relative_time(),
+        });
+
+        // Opening for a transcript currently active,
+        // with a matching complaint (accepted)
+        let opening = create_opening(id_3, NODE_2, NODE_3, NODE_4);
+        let msg_id_2 = opening.message_id();
+        artifacts.push(UnvalidatedArtifact {
+            message: EcdsaMessage::EcdsaOpening(opening),
+            peer_id: NODE_4,
+            timestamp: time_source.get_relative_time(),
+        });
+        let complaint = EcdsaMessage::EcdsaComplaint(create_complaint(id_3, NODE_2, NODE_3));
+
+        // Opening for a transcript currently active,
+        // without a matching complaint (deferred)
+        let opening = create_opening(id_4, NODE_2, NODE_3, NODE_4);
+        artifacts.push(UnvalidatedArtifact {
+            message: EcdsaMessage::EcdsaOpening(opening),
+            peer_id: NODE_4,
+            timestamp: time_source.get_relative_time(),
+        });
+
+        let block_reader = TestEcdsaBlockReader::for_complainer_test(
+            Height::new(100),
+            vec![
+                TranscriptRef::new(Height::new(10), id_3),
+                TranscriptRef::new(Height::new(20), id_4),
+            ],
+        );
+
+        // Opening should be moved to validated when using CryptoReturningOk
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             with_test_replica_logger(|logger| {
                 let (mut ecdsa_pool, complaint_handler) =
                     create_complaint_dependencies(pool_config, logger);
-                let time_source = FastForwardTimeSource::new();
-                let (id_1, id_2, id_3, id_4) = (
-                    create_transcript_id_with_height(1, Height::from(400)),
-                    create_transcript_id_with_height(2, Height::from(20)),
-                    create_transcript_id_with_height(3, Height::from(30)),
-                    create_transcript_id_with_height(4, Height::from(40)),
+
+                artifacts.iter().for_each(|a| ecdsa_pool.insert(a.clone()));
+                ecdsa_pool.apply_changes(
+                    &SysTimeSource::new(),
+                    vec![EcdsaChangeAction::AddToValidated(complaint.clone())],
                 );
 
-                // Set up the ECDSA pool
-                // Opening from a node ahead of us (deferred)
-                let opening = create_opening(id_1, NODE_2, NODE_3, NODE_4);
-                ecdsa_pool.insert(UnvalidatedArtifact {
-                    message: EcdsaMessage::EcdsaOpening(opening),
-                    peer_id: NODE_4,
-                    timestamp: time_source.get_relative_time(),
-                });
-
-                // Opening for a transcript not currently active(dropped)
-                let opening = create_opening(id_2, NODE_2, NODE_3, NODE_4);
-                let msg_id_1 = opening.message_id();
-                ecdsa_pool.insert(UnvalidatedArtifact {
-                    message: EcdsaMessage::EcdsaOpening(opening),
-                    peer_id: NODE_4,
-                    timestamp: time_source.get_relative_time(),
-                });
-
-                // Opening for a transcript currently active,
-                // with a matching complaint (accepted)
-                let opening = create_opening(id_3, NODE_2, NODE_3, NODE_4);
-                let msg_id_2 = opening.message_id();
-                ecdsa_pool.insert(UnvalidatedArtifact {
-                    message: EcdsaMessage::EcdsaOpening(opening),
-                    peer_id: NODE_4,
-                    timestamp: time_source.get_relative_time(),
-                });
-
-                let complaint = create_complaint(id_3, NODE_2, NODE_3);
-                let change_set = vec![EcdsaChangeAction::AddToValidated(
-                    EcdsaMessage::EcdsaComplaint(complaint),
-                )];
-                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
-
-                // Opening for a transcript currently active,
-                // without a matching complaint (deferred)
-                let opening = create_opening(id_4, NODE_2, NODE_3, NODE_4);
-                ecdsa_pool.insert(UnvalidatedArtifact {
-                    message: EcdsaMessage::EcdsaOpening(opening),
-                    peer_id: NODE_4,
-                    timestamp: time_source.get_relative_time(),
-                });
-
-                let block_reader = TestEcdsaBlockReader::for_complainer_test(
-                    Height::new(100),
-                    vec![
-                        TranscriptRef::new(Height::new(10), id_3),
-                        TranscriptRef::new(Height::new(20), id_4),
-                    ],
-                );
                 let change_set = complaint_handler.validate_openings(&ecdsa_pool, &block_reader);
                 assert_eq!(change_set.len(), 2);
                 assert!(is_removed_from_unvalidated(&change_set, &msg_id_1));
                 assert!(is_moved_to_validated(&change_set, &msg_id_2));
             })
-        })
+        });
+
+        // Opening should be deferred when crypto returns transient failure
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let (mut ecdsa_pool, complaint_handler) = create_complaint_dependencies_with_crypto(
+                    pool_config,
+                    logger,
+                    Some(crypto_without_keys()),
+                );
+
+                artifacts.iter().for_each(|a| ecdsa_pool.insert(a.clone()));
+                ecdsa_pool.apply_changes(
+                    &SysTimeSource::new(),
+                    vec![EcdsaChangeAction::AddToValidated(complaint.clone())],
+                );
+
+                // Crypto should return a transient error thus validation of msg_id_2 should be deferred.
+                let change_set = complaint_handler.validate_openings(&ecdsa_pool, &block_reader);
+                assert_eq!(change_set.len(), 1);
+                assert!(is_removed_from_unvalidated(&change_set, &msg_id_1));
+            })
+        });
+
+        // Opening should be handled invalid when corresponding transcript fails to be resolved
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let (mut ecdsa_pool, complaint_handler) =
+                    create_complaint_dependencies(pool_config, logger);
+
+                artifacts.iter().for_each(|a| ecdsa_pool.insert(a.clone()));
+                ecdsa_pool.apply_changes(
+                    &SysTimeSource::new(),
+                    vec![EcdsaChangeAction::AddToValidated(complaint.clone())],
+                );
+
+                let block_reader = block_reader.clone().with_fail_to_resolve();
+                let change_set = complaint_handler.validate_openings(&ecdsa_pool, &block_reader);
+                assert_eq!(change_set.len(), 2);
+                assert!(is_removed_from_unvalidated(&change_set, &msg_id_1));
+                assert!(is_handle_invalid(&change_set, &msg_id_2));
+            })
+        });
     }
 
     // Tests that duplicate openings are dropped
@@ -1604,6 +1717,137 @@ mod tests {
                 let change_set = complaint_handler.purge_artifacts(&ecdsa_pool, &block_reader);
                 assert_eq!(change_set.len(), 1);
                 assert!(is_removed_from_validated(&change_set, &msg_id));
+            })
+        })
+    }
+
+    // Tests loading of a valid transcript without complaints
+    #[test]
+    fn test_ecdsa_load_transcript_success() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let env = CanisterThresholdSigTestEnvironment::new(3);
+                let (_, _, idkg_transcript) = create_valid_transcript(&env);
+
+                let crypto = env.crypto_components.into_values().next().unwrap();
+                let (ecdsa_pool, complaint_handler) = create_complaint_dependencies_with_crypto(
+                    pool_config,
+                    logger,
+                    Some(Arc::new(crypto)),
+                );
+
+                let status = complaint_handler.load_transcript(&ecdsa_pool, &idkg_transcript);
+                assert_matches!(status, TranscriptLoadStatus::Success);
+            })
+        })
+    }
+
+    // Tests that loading of an invalid transcript fails
+    #[test]
+    fn test_ecdsa_load_transcript_failure_invalid_transcript() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let env = CanisterThresholdSigTestEnvironment::new(3);
+                let receivers = env.receivers().into_iter().collect::<Vec<_>>();
+                let t = create_transcript(create_transcript_id(1), &receivers[..]);
+
+                let crypto = env.crypto_components.into_values().next().unwrap();
+                let (ecdsa_pool, complaint_handler) = create_complaint_dependencies_with_crypto(
+                    pool_config,
+                    logger,
+                    Some(Arc::new(crypto)),
+                );
+
+                let status = complaint_handler.load_transcript(&ecdsa_pool, &t);
+                assert_matches!(status, TranscriptLoadStatus::Failure);
+            })
+        })
+    }
+
+    // Tests that crypto failure when creating complaint leads to transcript load failure
+    #[test]
+    fn test_ecdsa_load_transcript_failure_to_create_complaint() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let env = CanisterThresholdSigTestEnvironment::new(3);
+                let (_, _, transcript) = create_corrupted_transcript(&env);
+
+                let crypto = env.crypto_components.into_values().next().unwrap();
+                let (ecdsa_pool, complaint_handler) = create_complaint_dependencies_with_crypto(
+                    pool_config,
+                    logger,
+                    Some(Arc::new(crypto)),
+                );
+
+                // Will attempt to create a complaint but fail since node ID of crypto and
+                // complaint_handler are different
+                let status = complaint_handler.load_transcript(&ecdsa_pool, &transcript);
+                assert_matches!(status, TranscriptLoadStatus::Failure);
+            })
+        })
+    }
+
+    // Tests that attempt of loading a corrupted transcript leads to complaints and
+    // loading succeeds after openings are generated.
+    #[test]
+    fn test_ecdsa_load_transcripts_with_complaints_and_openings() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let env = CanisterThresholdSigTestEnvironment::new(3);
+                let (complainer, _, t) = create_corrupted_transcript(&env);
+
+                let mut components = env.crypto_components.into_iter();
+                let complainer_crypto = components.next().unwrap().1;
+                let remaining_crypto: Vec<(_, Arc<dyn ConsensusCrypto>)> = components
+                    .map(|(id, c)| (id, Arc::new(c) as Arc<_>))
+                    .collect();
+                let (mut ecdsa_pool, complaint_handler) =
+                    create_complaint_dependencies_with_crypto_and_node_id(
+                        pool_config,
+                        logger,
+                        Some(Arc::new(complainer_crypto)),
+                        complainer,
+                    );
+
+                let status = complaint_handler.load_transcript(&ecdsa_pool, &t);
+                let complaint = match status {
+                    TranscriptLoadStatus::Complaints(mut complaints) if complaints.len() == 1 => {
+                        let complaint = complaints.remove(0);
+                        ecdsa_pool.apply_changes(
+                            &SysTimeSource::new(),
+                            vec![EcdsaChangeAction::AddToValidated(
+                                EcdsaMessage::EcdsaComplaint(complaint.clone()),
+                            )],
+                        );
+                        complaint
+                    }
+                    _ => panic!("Unexpected status: {status:?}"),
+                };
+
+                // should fail due to insufficient openings
+                let status = complaint_handler.load_transcript(&ecdsa_pool, &t);
+                assert_matches!(status, TranscriptLoadStatus::Failure);
+
+                for (node_id, crypto) in remaining_crypto {
+                    let idkg_opening = crypto
+                        .open_transcript(&t, complainer, &complaint.content.idkg_complaint)
+                        .expect("Failed to open transcript with complaint");
+                    let content = EcdsaOpeningContent { idkg_opening };
+                    let signature = crypto
+                        .sign(&content, node_id, t.registry_version)
+                        .expect("Failed to sign opening content");
+                    let opening = EcdsaOpening { content, signature };
+                    ecdsa_pool.apply_changes(
+                        &SysTimeSource::new(),
+                        vec![EcdsaChangeAction::AddToValidated(
+                            EcdsaMessage::EcdsaOpening(opening),
+                        )],
+                    );
+                }
+
+                // should now be successful
+                let status = complaint_handler.load_transcript(&ecdsa_pool, &t);
+                assert_matches!(status, TranscriptLoadStatus::Success);
             })
         })
     }

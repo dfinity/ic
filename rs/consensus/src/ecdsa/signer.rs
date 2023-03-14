@@ -952,7 +952,7 @@ mod tests {
                 let (mut ecdsa_pool, signer) = create_signer_dependencies(pool_config, logger);
                 artifacts.iter().for_each(|a| ecdsa_pool.insert(a.clone()));
 
-                let block_reader = block_reader.clone().without_idkg_transcripts();
+                let block_reader = block_reader.clone().with_fail_to_resolve();
                 // There are no transcripts in the block reader, shares created for transcripts
                 // that cannot be resolved should be handled invalid.
                 let change_set = signer.validate_signature_shares(&ecdsa_pool, &block_reader);

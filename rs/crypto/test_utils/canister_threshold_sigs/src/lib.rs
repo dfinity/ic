@@ -638,11 +638,10 @@ pub fn corrupt_signed_idkg_dealing<R: CryptoRng + RngCore, T: BasicSigner<IDkgDe
         random_receiver_id_excluding_set(transcript_params.receivers(), excluded_receivers, rng)
             .ok_or(CorruptSignedIDkgDealingError::NoReceivers)?;
     let node_index = transcript_params.receivers().position(*receiver).unwrap();
-    let seed = Seed::from_rng(rng);
 
     Ok(idkg_dealing
         .into_builder()
-        .corrupt_internal_dealing_raw_by_changing_ciphertexts(&[node_index], seed)
+        .corrupt_internal_dealing_raw_by_changing_ciphertexts(&[node_index], rng)
         .build_with_signature(transcript_params, basic_signer, signer_id))
 }
 
@@ -1028,15 +1027,16 @@ impl SignedIDkgDealingBuilder {
         self
     }
 
-    pub fn corrupt_internal_dealing_raw_by_changing_ciphertexts(
+    pub fn corrupt_internal_dealing_raw_by_changing_ciphertexts<R: CryptoRng + RngCore>(
         mut self,
         corruption_targets: &[NodeIndex],
-        seed: Seed,
+        rng: &mut R,
     ) -> Self {
         let internal_dealing = IDkgDealingInternal::deserialize(&self.content.internal_dealing_raw)
             .expect("error deserializing iDKG dealing internal");
-        let corrupted_dealing = corrupt_dealing(&internal_dealing, corruption_targets, seed)
-            .expect("error corrupting dealing");
+        let corrupted_dealing =
+            corrupt_dealing(&internal_dealing, corruption_targets, Seed::from_rng(rng))
+                .expect("error corrupting dealing");
         self.content = IDkgDealing {
             internal_dealing_raw: corrupted_dealing
                 .serialize()

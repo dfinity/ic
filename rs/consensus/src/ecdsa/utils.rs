@@ -214,7 +214,9 @@ pub(crate) mod test_utils {
     use ic_config::artifact_pool::ArtifactPoolConfig;
     use ic_crypto_temp_crypto::TempCryptoComponent;
     use ic_crypto_test_utils_canister_threshold_sigs::{
-        create_signed_dealing, CanisterThresholdSigTestEnvironment,
+        batch_sign_signed_dealings, create_and_verify_signed_dealings, create_signed_dealing,
+        create_transcript as crypto_create_transcript, CanisterThresholdSigTestEnvironment,
+        IntoBuilder,
     };
     use ic_ic00_types::EcdsaKeyId;
     use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaPool};
@@ -283,6 +285,7 @@ pub(crate) mod test_utils {
         target_subnet_xnet_transcripts: Vec<IDkgTranscriptParamsRef>,
         requested_signatures: Vec<(RequestId, ThresholdEcdsaSigInputsRef)>,
         idkg_transcripts: BTreeMap<TranscriptRef, IDkgTranscript>,
+        fail_to_resolve: bool,
     }
 
     impl TestEcdsaBlockReader {
@@ -364,8 +367,8 @@ pub(crate) mod test_utils {
             self
         }
 
-        pub(crate) fn without_idkg_transcripts(mut self) -> Self {
-            self.idkg_transcripts = BTreeMap::new();
+        pub(crate) fn with_fail_to_resolve(mut self) -> Self {
+            self.fail_to_resolve = true;
             self
         }
 
@@ -413,6 +416,9 @@ pub(crate) mod test_utils {
             &self,
             transcript_ref: &TranscriptRef,
         ) -> Result<IDkgTranscript, TranscriptLookupError> {
+            if self.fail_to_resolve {
+                return Err("Test transcript resolve failure".into());
+            }
             self.idkg_transcripts
                 .get(transcript_ref)
                 .cloned()
@@ -642,10 +648,11 @@ pub(crate) mod test_utils {
     }
 
     // Sets up the dependencies and creates the complaint handler
-    pub(crate) fn create_complaint_dependencies_with_crypto(
+    pub(crate) fn create_complaint_dependencies_with_crypto_and_node_id(
         pool_config: ArtifactPoolConfig,
         logger: ReplicaLogger,
         consensus_crypto: Option<Arc<dyn ConsensusCrypto>>,
+        node_id: NodeId,
     ) -> (EcdsaPoolImpl, EcdsaComplaintHandlerImpl) {
         let metrics_registry = MetricsRegistry::new();
         let Dependencies {
@@ -658,7 +665,7 @@ pub(crate) mod test_utils {
         } = dependencies(pool_config.clone(), 1);
 
         let complaint_handler = EcdsaComplaintHandlerImpl::new(
-            NODE_1,
+            node_id,
             pool.get_block_cache(),
             consensus_crypto.unwrap_or(crypto),
             metrics_registry.clone(),
@@ -674,6 +681,14 @@ pub(crate) mod test_utils {
         logger: ReplicaLogger,
     ) -> (EcdsaPoolImpl, EcdsaComplaintHandlerImpl) {
         create_complaint_dependencies_with_crypto(pool_config, logger, None)
+    }
+
+    pub(crate) fn create_complaint_dependencies_with_crypto(
+        pool_config: ArtifactPoolConfig,
+        logger: ReplicaLogger,
+        crypto: Option<Arc<dyn ConsensusCrypto>>,
+    ) -> (EcdsaPoolImpl, EcdsaComplaintHandlerImpl) {
+        create_complaint_dependencies_with_crypto_and_node_id(pool_config, logger, crypto, NODE_1)
     }
 
     // Creates a TranscriptID for tests
@@ -788,6 +803,40 @@ pub(crate) mod test_utils {
             IDkgTranscriptOperation::ReshareOfUnmasked(unmasked_transcript.clone()),
         )
         .unwrap()
+    }
+
+    /// Return a valid transcript for random sharing created by the first node of the environment
+    pub(crate) fn create_valid_transcript(
+        env: &CanisterThresholdSigTestEnvironment,
+    ) -> (NodeId, IDkgTranscriptParams, IDkgTranscript) {
+        let node_id = env
+            .crypto_components
+            .keys()
+            .next()
+            .expect("Empty environment");
+        let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
+        let dealings = create_and_verify_signed_dealings(&params, &env.crypto_components);
+        let dealings = batch_sign_signed_dealings(&params, &env.crypto_components, dealings);
+        let idkg_transcript =
+            crypto_create_transcript(&params, &env.crypto_components, &dealings, *node_id);
+        (*node_id, params, idkg_transcript)
+    }
+
+    /// Return a corrupt transcript for random sharing by changing ciphertexts intended
+    /// for the first node of the environment
+    pub(crate) fn create_corrupted_transcript(
+        env: &CanisterThresholdSigTestEnvironment,
+    ) -> (NodeId, IDkgTranscriptParams, IDkgTranscript) {
+        let (node_id, params, mut transcript) = create_valid_transcript(env);
+        let to_corrupt = *transcript.verified_dealings.keys().next().unwrap();
+        let complainer_index = params.receiver_index(node_id).unwrap();
+        let mut signed_dealing = transcript.verified_dealings.get_mut(&to_corrupt).unwrap();
+        let mut rng = rand::thread_rng();
+        let builder = signed_dealing.content.clone().into_builder();
+        signed_dealing.content = builder
+            .corrupt_internal_dealing_raw_by_changing_ciphertexts(&[complainer_index], &mut rng)
+            .build();
+        (node_id, params, transcript)
     }
 
     // Creates a test dealing
