@@ -87,8 +87,13 @@ class DependencyScanner:
                         if jira_finding:
                             # update vulnerabilities and clear risk if we have new vulnerabilities
                             if jira_finding.vulnerabilities != current_findings[index].vulnerabilities:
+                                previous_vulnerabilities = set(map(lambda x: x.id, jira_finding.vulnerabilities))
+                                current_vulnerabilities = set(
+                                    map(lambda x: x.id, current_findings[index].vulnerabilities)
+                                )
+                                if len(current_vulnerabilities.difference(previous_vulnerabilities)) > 0:
+                                    jira_finding.risk = None
                                 jira_finding.vulnerabilities = current_findings[index].vulnerabilities
-                                jira_finding.risk = None
                             if (
                                 jira_finding.first_level_dependencies
                                 != current_findings[index].first_level_dependencies
