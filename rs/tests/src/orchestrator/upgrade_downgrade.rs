@@ -35,7 +35,9 @@ use std::{env, time::Duration};
 pub const MIN_HASH_LENGTH: usize = 8; // in bytes
 
 const DKG_INTERVAL: u64 = 9;
-const SUBNET_SIZE: usize = 4;
+
+const ALLOWED_FAILURES: usize = 1;
+const SUBNET_SIZE: usize = 3 * ALLOWED_FAILURES + 1; // 4 nodes
 
 // Pre-master tests should not run for more than 5..6 minutes. The Upgrade/Downgrade tests run on
 // pre-master and are a known exception to this rule. The test itself takes around 10 minutes,
@@ -183,21 +185,34 @@ fn downgrade_upgrade_roundtrip(
     key: VerifyingKey,
 ) {
     let logger = env.logger();
-    let (subnet_id, subnet_node, faulty_node) = if subnet_type == SubnetType::System {
-        let subnet = env.topology_snapshot().root_subnet();
-        let mut it = subnet.nodes();
-        // We don't want to hit the node we're using for sending the proposals
-        assert!(it.next().unwrap().node_id == nns_node.node_id);
-        (subnet.subnet_id, it.next().unwrap(), it.next().unwrap())
-    } else {
-        let subnet = env
-            .topology_snapshot()
-            .subnets()
-            .find(|subnet| subnet.subnet_type() == SubnetType::Application)
-            .expect("there is no application subnet");
-        let mut it = subnet.nodes();
-        (subnet.subnet_id, it.next().unwrap(), it.next().unwrap())
-    };
+    let (subnet_id, subnet_node, faulty_node, redundant_nodes) =
+        if subnet_type == SubnetType::System {
+            let subnet = env.topology_snapshot().root_subnet();
+            let mut it = subnet.nodes();
+            // We don't want to hit the node we're using for sending the proposals
+            assert!(it.next().unwrap().node_id == nns_node.node_id);
+            let subnet_node = it.next().unwrap();
+            let faulty_node = it.next().unwrap();
+            let mut redundant_nodes = Vec::new();
+            for _ in 0..ALLOWED_FAILURES {
+                redundant_nodes.push(it.next().unwrap());
+            }
+            (subnet.subnet_id, subnet_node, faulty_node, redundant_nodes)
+        } else {
+            let subnet = env
+                .topology_snapshot()
+                .subnets()
+                .find(|subnet| subnet.subnet_type() == SubnetType::Application)
+                .expect("there is no application subnet");
+            let mut it = subnet.nodes();
+            let subnet_node = it.next().unwrap();
+            let faulty_node = it.next().unwrap();
+            let mut redundant_nodes = Vec::new();
+            for _ in 0..ALLOWED_FAILURES {
+                redundant_nodes.push(it.next().unwrap());
+            }
+            (subnet.subnet_id, subnet_node, faulty_node, redundant_nodes)
+        };
     subnet_node.await_status_is_healthy().unwrap();
     faulty_node.await_status_is_healthy().unwrap();
 
@@ -219,6 +234,10 @@ fn downgrade_upgrade_roundtrip(
 
     upgrade_to(nns_node, subnet_id, &subnet_node, target_version, &logger);
 
+    // Killing redundant nodes should not prevent the `faulty_node` downgrading to mainnet version and catching up after restarting.
+    for redundant_node in &redundant_nodes {
+        stop_node(&logger, redundant_node);
+    }
     start_node(&logger, &faulty_node);
     assert_assigned_replica_version(&faulty_node, target_version, env.logger());
 
@@ -245,6 +264,11 @@ fn downgrade_upgrade_roundtrip(
     info!(logger, "Could store and read message '{}'", msg_2);
     run_ecdsa_signature_test(nns_canister, &logger, key);
 
+    // Start redundant nodes for upgrading to the branch version.
+    for redundant_node in &redundant_nodes {
+        start_node(&logger, redundant_node);
+    }
+
     stop_node(&logger, &faulty_node);
     upgrade_to(nns_node, subnet_id, &subnet_node, branch_version, &logger);
 
@@ -255,6 +279,9 @@ fn downgrade_upgrade_roundtrip(
         msg_3,
     );
 
+    for redundant_node in &redundant_nodes {
+        stop_node(&logger, redundant_node);
+    }
     start_node(&logger, &faulty_node);
     assert_assigned_replica_version(&faulty_node, branch_version, env.logger());
 
