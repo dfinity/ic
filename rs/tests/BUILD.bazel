@@ -66,6 +66,7 @@ CKBTC_RUNTIME_DEPS = [
 
 BTC_RUNTIME_DEPS = [
     "@btc_canister//file",
+    ":btc_uvm_config_image",
 ]
 
 GUESTOS_MALICIOUS_RUNTIME_DEPS = [
@@ -790,6 +791,28 @@ system_test(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES + [":tests"],
+)
+
+exports_files([
+    "src/btc_integration/bitcoin.conf",
+    "src/btc_integration/btc_activate.sh",
+])
+
+uvm_config_image(
+    name = "btc_uvm_config_image",
+    srcs = [
+        ":src/btc_integration/bitcoin.conf",
+        ":src/btc_integration/btc_activate.sh",
+        "@bitcoind//image",
+    ],
+    mode = "664",
+    modes = {
+        "activate": "775",
+    },
+    remap_paths = {
+        "/btc_activate.sh": "/activate",
+    },
+    tags = ["manual"],  # this target will be built if required as a dependency of another target
 )
 
 system_test(
