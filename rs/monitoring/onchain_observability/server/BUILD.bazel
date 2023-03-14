@@ -11,6 +11,7 @@ rust_library(
         "//rs/async_utils",
         "//rs/monitoring/metrics",
         "//rs/monitoring/onchain_observability/service",
+        "@crate_index//:prometheus",
         "@crate_index//:tokio",
         "@crate_index//:tonic",
     ],

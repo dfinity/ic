@@ -7,6 +7,10 @@ use ic_onchain_observability_service::{
     OnchainObservabilityServiceGetMetricsDataRequest,
     OnchainObservabilityServiceGetMetricsDataResponse,
 };
+use prometheus::{
+    proto::MetricFamily,
+    {Encoder, TextEncoder},
+};
 use std::time::Duration;
 use tonic::{transport::Server, Request, Response, Status};
 
@@ -20,9 +24,7 @@ pub fn spawn_onchain_observability_grpc_server(
     metrics_registry: MetricsRegistry,
     rt_handle: tokio::runtime::Handle,
 ) {
-    let service_impl = OnchainObservabilityServiceImpl {
-        _metrics_registry: metrics_registry,
-    };
+    let service_impl = OnchainObservabilityServiceImpl { metrics_registry };
     rt_handle.spawn(async move {
         Server::builder()
             .timeout(Duration::from_secs(TIMEOUT_SECS))
@@ -38,7 +40,7 @@ pub fn spawn_onchain_observability_grpc_server(
 }
 
 struct OnchainObservabilityServiceImpl {
-    _metrics_registry: MetricsRegistry,
+    metrics_registry: MetricsRegistry,
 }
 
 #[tonic::async_trait]
@@ -47,9 +49,38 @@ struct OnchainObservabilityServiceImpl {
 impl OnchainObservabilityService for OnchainObservabilityServiceImpl {
     async fn get_metrics_data(
         &self,
-        _request: Request<OnchainObservabilityServiceGetMetricsDataRequest>,
+        request: Request<OnchainObservabilityServiceGetMetricsDataRequest>,
     ) -> Result<Response<OnchainObservabilityServiceGetMetricsDataResponse>, Status> {
-        // TODO implement (NET-1357)
-        Err(Status::unknown("Implement"))
+        let requested_metrics = request.into_inner().requested_metrics;
+
+        // Note that the gather() call below reads from a RWLock, which has the potential to block the thread if it collides with a write.
+        // However, writes can only happen from the register() call, and registration is completed before we start the gRPC server.
+        let filtered_metrics: Vec<MetricFamily> = self
+            .metrics_registry
+            .prometheus_registry()
+            .gather()
+            .into_iter()
+            .filter(|metric| requested_metrics.contains(&metric.get_name().to_string()))
+            .collect();
+
+        // Write metrics to a string, adapted from how it is done for the MetricsEndpoint logs
+        let mut buffer = Vec::with_capacity(filtered_metrics.len());
+        let encoder = TextEncoder::new();
+        encoder
+            .encode(&filtered_metrics, &mut buffer)
+            .map_err(|e| Status::unknown(format!("Failed to encode metrics: {:?} ", e)))?;
+
+        let filtered_metrics_string = String::from_utf8(buffer).map_err(|e| {
+            Status::unknown(format!(
+                "Failed to convert metrics buffer to string: {:?}",
+                e.to_string()
+            ))
+        })?;
+
+        Ok(Response::new(
+            OnchainObservabilityServiceGetMetricsDataResponse {
+                metrics_data: filtered_metrics_string,
+            },
+        ))
     }
 }

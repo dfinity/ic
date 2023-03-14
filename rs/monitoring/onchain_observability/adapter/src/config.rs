@@ -17,6 +17,7 @@ pub struct Config {
     pub sampling_interval_sec: Duration,
     pub canister_client_url: String,
     pub canister_id: String,
+    pub uds_socket_path: String,
 }
 
 #[serde_as]
@@ -33,6 +34,8 @@ pub struct OnchainObservabilityAdapterSpecificConfig {
     #[serde(default = "default_url")]
     pub canister_client_url: String,
     pub canister_id: String,
+    #[serde(default = "uds_default_socket")]
+    pub uds_socket_path: String,
 }
 
 pub(crate) const fn default_report_length() -> Duration {
@@ -45,4 +48,8 @@ pub(crate) const fn default_sampling_interval() -> Duration {
 
 pub(crate) fn default_url() -> String {
     "https://ic0.app".to_string()
+}
+
+pub(crate) fn uds_default_socket() -> String {
+    "/run/ic-node/onchain-observability-adapter/socket".to_string()
 }

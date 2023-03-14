@@ -13,6 +13,6 @@ mod static_metric_collector;
 
 pub use config::Config;
 pub use flags::Flags;
-pub use metrics_parse_error::MetricsParseError;
+pub use metrics_parse_error::MetricsCollectError;
 pub use sampled_metrics_collector::SampledMetricsCollector;
 pub use static_metric_collector::get_replica_last_start_time;

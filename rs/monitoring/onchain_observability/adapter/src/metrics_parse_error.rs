@@ -1,20 +1,20 @@
 #[derive(Debug, Hash, Eq, PartialEq)]
-pub enum MetricsParseError {
+pub enum MetricsCollectError {
     MetricParseFailure(String),
-    HttpResponseError(String),
+    RpcRequestFailure(String),
 }
 
-impl std::fmt::Display for MetricsParseError {
+impl std::fmt::Display for MetricsCollectError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::MetricParseFailure(msg) => {
                 write!(f, "Metric parse failure: {:?}", msg)
             }
-            Self::HttpResponseError(msg) => {
-                write!(f, "Http Response error {:?}", msg)
+            Self::RpcRequestFailure(msg) => {
+                write!(f, "gPRC Request to replica failed with error {:?}", msg)
             }
         }
     }
 }
 
-impl std::error::Error for MetricsParseError {}
+impl std::error::Error for MetricsCollectError {}

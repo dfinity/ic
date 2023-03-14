@@ -1,25 +1,29 @@
-use crate::metrics_parse_error::MetricsParseError;
-use hyper::client::HttpConnector;
-use hyper::{Client, StatusCode, Uri};
+use crate::metrics_parse_error::MetricsCollectError;
+use ic_onchain_observability_service::{
+    onchain_observability_service_client::OnchainObservabilityServiceClient,
+    OnchainObservabilityServiceGetMetricsDataRequest,
+};
 use prometheus_parse::{Sample, Scrape, Value};
-use std::collections::HashMap;
+use std::{collections::HashMap, time::Duration};
+use tonic::transport::Channel;
 
 const CONNECTED_STATE: u64 = 3;
-
 const FLOW_STATE_METRIC: &str = "transport_flow_state";
 const PEER_ID: &str = "flow_peer_id";
+const TIMEOUT_LENGTH_SEC: Duration = Duration::from_secs(30);
 
-// Fetches metrics through http requests to [node ip]:9090
-// Note: This approach will be replaced by gRPC call to replica
-#[derive(Default)]
+// TODO(NET-1365) Come up with more generic interface for fetching multiple metrics + consolidate shared code with sampling code
+
+// Provides an API for fetching metrics periodically and aggregating results.
+// Intended usage: Call sample() until desire sample size is received. Then call aggregate() to return result.  Finally, call clear() to reset the counters.
 pub struct SampledMetricsCollector {
     num_samples: u64,
     connected_state_count: HashMap<String, usize>,
-    client: Client<HttpConnector>,
+    client: OnchainObservabilityServiceClient<Channel>,
 }
 
 impl SampledMetricsCollector {
-    pub fn new_with_client(client: Client<HttpConnector>) -> Self {
+    pub fn new_with_client(client: OnchainObservabilityServiceClient<Channel>) -> Self {
         SampledMetricsCollector {
             num_samples: 0,
             connected_state_count: HashMap::new(),
@@ -27,47 +31,35 @@ impl SampledMetricsCollector {
         }
     }
 
-    pub async fn sample(&mut self) -> Result<(), MetricsParseError> {
-        let uri: Uri = "http://127.0.0.1:9090".parse().unwrap();
+    pub async fn sample(&mut self) -> Result<(), MetricsCollectError> {
+        let request = OnchainObservabilityServiceGetMetricsDataRequest {
+            requested_metrics: vec![FLOW_STATE_METRIC.to_string()],
+        };
 
-        let http_response =
-            self.client
-                .get(uri.clone())
-                .await
-                .or(Err(MetricsParseError::HttpResponseError(
-                    "Error with fetching metrics endpoint".to_string(),
-                )))?;
+        let mut tonic_request = tonic::Request::new(request.clone());
+        tonic_request.set_timeout(TIMEOUT_LENGTH_SEC);
 
-        if http_response.status() != StatusCode::OK {
-            let error_msg = format!(
-                "Invalid status code: {:?}",
-                http_response.status().to_string()
-            );
-            return Err(MetricsParseError::HttpResponseError(error_msg));
-        }
-
-        let body_bytes = hyper::body::to_bytes(http_response.into_body())
-            .await
-            .or(Err(MetricsParseError::HttpResponseError(
-                "Error with bytes conversion".to_string(),
-            )))?;
-
-        let resp = String::from_utf8(body_bytes.to_vec()).map_err(|_| {
-            MetricsParseError::HttpResponseError("Error with utf8 conversion".to_string())
-        })?;
-
-        // Manually scrape the http endpoint response
-        let parsed_data = peer_label_and_connected_state_from_raw_response(resp)?;
-
-        for (peer_label, connection_state) in parsed_data {
-            // Originally store the counts of "connected state". Later, we will transform into a %
-            if connection_state == CONNECTED_STATE {
-                *self.connected_state_count.entry(peer_label).or_insert(0) += 1;
+        match self.client.clone().get_metrics_data(tonic_request).await {
+            Ok(response) => {
+                let parsed_data = peer_label_and_connected_state_from_raw_response(
+                    response.into_inner().metrics_data,
+                )?;
+                // Track the counts of "connected state". Later, we will transform into a %
+                for (peer_label, connection_state) in parsed_data {
+                    if connection_state == CONNECTED_STATE {
+                        *self.connected_state_count.entry(peer_label).or_insert(0) += 1;
+                    }
+                }
+                self.num_samples += 1;
+                Ok(())
+            }
+            Err(status) => {
+                return Err(MetricsCollectError::RpcRequestFailure(format!(
+                    "Request failed {:?}",
+                    status.code()
+                )))
             }
         }
-
-        self.num_samples += 1;
-        Ok(())
     }
 
     pub fn aggregate(&mut self) -> HashMap<String, f32> {
@@ -92,12 +84,13 @@ impl SampledMetricsCollector {
 // Assumes endpoint response is well formatted
 fn peer_label_and_connected_state_from_raw_response(
     response: String,
-) -> Result<Vec<(String, u64)>, MetricsParseError> {
+) -> Result<Vec<(String, u64)>, MetricsCollectError> {
     let mut res = vec![];
 
     let lines = response.lines().map(|s| Ok(s.to_string()));
-    let metrics = Scrape::parse(lines)
-        .map_err(|_| MetricsParseError::HttpResponseError("prometheus scrape error".to_string()))?;
+    let metrics = Scrape::parse(lines).map_err(|_| {
+        MetricsCollectError::RpcRequestFailure("prometheus scrape error".to_string())
+    })?;
 
     // Get peer *label* and connected state from transport flow state metric
     let flow_state_metric: Vec<_> = metrics
@@ -108,7 +101,7 @@ fn peer_label_and_connected_state_from_raw_response(
 
     for sample in flow_state_metric {
         let peer_label = sample.labels.get(PEER_ID).ok_or_else(|| {
-            MetricsParseError::MetricParseFailure("Failed to get peer id label".to_string())
+            MetricsCollectError::MetricParseFailure("Failed to get peer id label".to_string())
         })?;
         let connection_state = get_connection_state(sample)?;
         res.push((peer_label.to_string(), connection_state));
@@ -116,11 +109,11 @@ fn peer_label_and_connected_state_from_raw_response(
     Ok(res)
 }
 
-fn get_connection_state(sample: &Sample) -> Result<u64, MetricsParseError> {
+fn get_connection_state(sample: &Sample) -> Result<u64, MetricsCollectError> {
     if let Value::Gauge(connection_state) = sample.value {
         return Ok(connection_state as u64);
     }
-    Err(MetricsParseError::MetricParseFailure(
+    Err(MetricsCollectError::MetricParseFailure(
         ("Failed to find connection state").to_string(),
     ))
 }
