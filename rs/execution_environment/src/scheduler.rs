@@ -1861,6 +1861,7 @@ fn observe_replicated_state_metrics(
     let mut canisters_with_old_open_call_contexts = 0;
     let mut old_call_contexts_count = 0;
 
+    let canister_id_ranges = state.routing_table().ranges(own_subnet_id);
     state.canisters_iter().for_each(|canister| {
         match canister.status() {
             CanisterStatusType::Running => num_running_canisters += 1,
@@ -1901,7 +1902,7 @@ fn observe_replicated_state_metrics(
         queues_response_bytes += queues.responses_size_bytes();
         queues_reservations += queues.reserved_slots();
         queues_oversized_requests_extra_bytes += queues.oversized_requests_extra_bytes();
-        if state.routing_table().route_canister(canister.canister_id()) != Some(own_subnet_id) {
+        if !canister_id_ranges.contains(&canister.canister_id()) {
             canisters_not_in_routing_table += 1;
         }
         if let Some(manager) = canister.system_state.call_context_manager() {
