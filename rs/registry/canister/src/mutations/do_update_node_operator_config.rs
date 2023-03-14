@@ -44,13 +44,6 @@ impl Registry {
             decode_registry_value::<NodeOperatorRecord>(node_operator_record_vec.clone());
 
         if let Some(new_allowance) = payload.node_allowance {
-            if new_allowance == node_operator_record.node_allowance {
-                panic!(
-                    "{}Node Operator record with ID {} already has an allowance of {}",
-                    LOG_PREFIX, node_operator_id, new_allowance
-                );
-            }
-
             node_operator_record.node_allowance = new_allowance;
         };
 
@@ -74,7 +67,7 @@ impl Registry {
         if let Some(node_operator_ipv6) = payload.ipv6 {
             if !check_ipv6_format(&node_operator_ipv6) {
                 panic!(
-                    "{}New Ipv6 field {} doesnt conform to the required format",
+                    "{}New Ipv6 field {} does not conform to the required format",
                     LOG_PREFIX, node_operator_ipv6
                 );
             }
