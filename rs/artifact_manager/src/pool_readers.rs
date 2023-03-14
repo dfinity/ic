@@ -6,7 +6,7 @@ use ic_interfaces::{
     artifact_manager::{ArtifactClient, ArtifactPoolDescriptor},
     artifact_pool::{ArtifactPoolError, ReplicaVersionMismatch},
     gossip_pool::GossipPool,
-    ingress_pool::{IngressPool, IngressPoolThrottler},
+    ingress_pool::IngressPoolThrottler,
     time_source::TimeSource,
 };
 use ic_logger::{debug, ReplicaLogger};
@@ -156,9 +156,8 @@ impl<Pool> IngressClient<Pool> {
     }
 }
 
-impl<
-        Pool: IngressPool + GossipPool<IngressArtifact> + IngressPoolThrottler + Send + Sync + 'static,
-    > ArtifactClient<IngressArtifact> for IngressClient<Pool>
+impl<Pool: GossipPool<IngressArtifact> + IngressPoolThrottler + Send + Sync + 'static>
+    ArtifactClient<IngressArtifact> for IngressClient<Pool>
 {
     /// The method checks whether the given signed ingress bytes constitutes a
     /// valid singed ingress message.

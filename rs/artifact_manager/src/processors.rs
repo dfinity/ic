@@ -3,7 +3,7 @@
 
 use ic_interfaces::{
     artifact_manager::{ArtifactProcessor, ProcessingResult},
-    artifact_pool::{MutablePool, UnvalidatedArtifact},
+    artifact_pool::{ChangeSetProducer, MutablePool, UnvalidatedArtifact},
     canister_http::{
         CanisterHttpChangeAction, CanisterHttpChangeSet, CanisterHttpPool, CanisterHttpPoolManager,
     },
@@ -11,15 +11,12 @@ use ic_interfaces::{
         CertificationPool, Certifier, ChangeAction as CertificationChangeAction,
         ChangeSet as CertificationChangeSet,
     },
-    consensus::Consensus,
     consensus_pool::{
-        ChangeAction as ConsensusAction, ChangeSet as CoonsensusChangeSet, ConsensusPool,
-        ConsensusPoolCache,
+        ChangeAction as ConsensusAction, ChangeSet as CoonsensusChangeSet, ConsensusPoolCache,
     },
-    dkg::{ChangeAction as DkgChangeAction, ChangeSet as DkgChangeSet, Dkg, DkgPool},
-    ecdsa::{Ecdsa, EcdsaChangeAction, EcdsaChangeSet, EcdsaPool},
-    ingress_manager::IngressHandler,
-    ingress_pool::{ChangeAction as IngressAction, ChangeSet as IngressChangeSet, IngressPool},
+    dkg::{ChangeAction as DkgChangeAction, ChangeSet as DkgChangeSet},
+    ecdsa::{EcdsaChangeAction, EcdsaChangeSet, EcdsaPool},
+    ingress_pool::{ChangeAction as IngressAction, ChangeSet as IngressChangeSet},
     time_source::TimeSource,
 };
 use ic_logger::{debug, warn, ReplicaLogger};
@@ -40,7 +37,7 @@ pub struct ConsensusProcessor<PoolConsensus> {
     /// The *Consensus* pool.
     consensus_pool: Arc<RwLock<PoolConsensus>>,
     /// The *Consensus* client.
-    client: Box<dyn Consensus>,
+    client: Box<dyn ChangeSetProducer<PoolConsensus, ChangeSet = CoonsensusChangeSet>>,
     /// The invalidated artifacts counter.
     invalidated_artifacts: IntCounter,
     /// The logger.
@@ -50,7 +47,7 @@ pub struct ConsensusProcessor<PoolConsensus> {
 impl<PoolConsensus> ConsensusProcessor<PoolConsensus> {
     pub fn new(
         consensus_pool: Arc<RwLock<PoolConsensus>>,
-        client: Box<dyn Consensus>,
+        client: Box<dyn ChangeSetProducer<PoolConsensus, ChangeSet = CoonsensusChangeSet>>,
         log: ReplicaLogger,
         metrics_registry: &MetricsRegistry,
     ) -> Self {
@@ -67,7 +64,7 @@ impl<PoolConsensus> ConsensusProcessor<PoolConsensus> {
 }
 
 impl<
-        PoolConsensus: MutablePool<ConsensusArtifact, CoonsensusChangeSet> + Send + Sync + 'static + ConsensusPool,
+        PoolConsensus: MutablePool<ConsensusArtifact, CoonsensusChangeSet> + Send + Sync + 'static,
     > ArtifactProcessor<ConsensusArtifact> for ConsensusProcessor<PoolConsensus>
 {
     /// The method processes changes in the *Consensus* pool and ingress pool.
@@ -165,7 +162,7 @@ pub struct IngressProcessor<PoolIngress> {
     /// counting.
     ingress_pool: Arc<RwLock<PoolIngress>>,
     /// The ingress handler.
-    client: Arc<dyn IngressHandler + Send + Sync>,
+    client: Arc<dyn ChangeSetProducer<PoolIngress, ChangeSet = IngressChangeSet> + Send + Sync>,
     /// Our node id
     node_id: NodeId,
 }
@@ -173,7 +170,7 @@ pub struct IngressProcessor<PoolIngress> {
 impl<PoolIngress> IngressProcessor<PoolIngress> {
     pub fn new(
         ingress_pool: Arc<RwLock<PoolIngress>>,
-        client: Arc<dyn IngressHandler + Send + Sync>,
+        client: Arc<dyn ChangeSetProducer<PoolIngress, ChangeSet = IngressChangeSet> + Send + Sync>,
         node_id: NodeId,
     ) -> Self {
         Self {
@@ -184,9 +181,8 @@ impl<PoolIngress> IngressProcessor<PoolIngress> {
     }
 }
 
-impl<
-        PoolIngress: MutablePool<IngressArtifact, IngressChangeSet> + Send + Sync + 'static + IngressPool,
-    > ArtifactProcessor<IngressArtifact> for IngressProcessor<PoolIngress>
+impl<PoolIngress: MutablePool<IngressArtifact, IngressChangeSet> + Send + Sync + 'static>
+    ArtifactProcessor<IngressArtifact> for IngressProcessor<PoolIngress>
 {
     /// The method processes changes in the ingress pool.
     fn process_changes(
@@ -347,7 +343,7 @@ pub struct DkgProcessor<PoolDkg> {
     /// counting.
     dkg_pool: Arc<RwLock<PoolDkg>>,
     /// The DKG client.
-    client: Box<dyn Dkg>,
+    client: Box<dyn ChangeSetProducer<PoolDkg, ChangeSet = DkgChangeSet>>,
     /// The invalidated artifacts counter.
     invalidated_artifacts: IntCounter,
     /// The logger.
@@ -357,7 +353,7 @@ pub struct DkgProcessor<PoolDkg> {
 impl<PoolDkg> DkgProcessor<PoolDkg> {
     pub fn new(
         dkg_pool: Arc<RwLock<PoolDkg>>,
-        client: Box<dyn Dkg>,
+        client: Box<dyn ChangeSetProducer<PoolDkg, ChangeSet = DkgChangeSet>>,
         log: ReplicaLogger,
         metrics_registry: &MetricsRegistry,
     ) -> Self {
@@ -373,7 +369,7 @@ impl<PoolDkg> DkgProcessor<PoolDkg> {
     }
 }
 
-impl<PoolDkg: MutablePool<DkgArtifact, DkgChangeSet> + Send + Sync + 'static + DkgPool>
+impl<PoolDkg: MutablePool<DkgArtifact, DkgChangeSet> + Send + Sync + 'static>
     ArtifactProcessor<DkgArtifact> for DkgProcessor<PoolDkg>
 {
     /// The method processes changes in the DKG pool.
@@ -432,7 +428,7 @@ impl<PoolDkg: MutablePool<DkgArtifact, DkgChangeSet> + Send + Sync + 'static + D
 /// ECDSA `OnStateChange` client.
 pub struct EcdsaProcessor<PoolEcdsa> {
     ecdsa_pool: Arc<RwLock<PoolEcdsa>>,
-    client: Box<dyn Ecdsa>,
+    client: Box<dyn ChangeSetProducer<PoolEcdsa, ChangeSet = EcdsaChangeSet>>,
     ecdsa_pool_update_duration: Histogram,
     log: ReplicaLogger,
 }
@@ -440,7 +436,7 @@ pub struct EcdsaProcessor<PoolEcdsa> {
 impl<PoolEcdsa> EcdsaProcessor<PoolEcdsa> {
     pub fn new(
         ecdsa_pool: Arc<RwLock<PoolEcdsa>>,
-        client: Box<dyn Ecdsa>,
+        client: Box<dyn ChangeSetProducer<PoolEcdsa, ChangeSet = EcdsaChangeSet>>,
         log: ReplicaLogger,
         metrics_registry: &MetricsRegistry,
     ) -> Self {

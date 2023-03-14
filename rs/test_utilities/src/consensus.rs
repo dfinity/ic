@@ -6,8 +6,7 @@ use mockall::*;
 use crate::crypto::empty_ni_dkg_transcripts_with_committee;
 use ic_base_types::RegistryVersion;
 use ic_interfaces::{
-    consensus::*,
-    consensus_pool::{ChangeAction, ChangeSet, ConsensusPool, ConsensusPoolCache},
+    consensus_pool::{ChangeAction, ConsensusPoolCache},
     validation::*,
 };
 use ic_interfaces_registry::RegistryClient;
@@ -58,17 +57,6 @@ pub fn assert_action_invalid<T: ConsensusMessageHashable>(action: ChangeAction, 
     match action {
         ChangeAction::HandleInvalid(actual, _) => assert_eq!(actual, msg.clone().into_message()),
         _ => panic!("Expected HandleInvalid ChangeAction"),
-    }
-}
-
-mock! {
-    pub Consensus {}
-
-    pub trait Consensus: Send {
-        fn on_state_change<'a>(
-            &'a self,
-            consensus_pool: &'a (dyn ConsensusPool + 'a),
-        ) -> ChangeSet;
     }
 }
 

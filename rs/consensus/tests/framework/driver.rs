@@ -5,12 +5,11 @@ use ic_artifact_pool::{
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus::consensus::ConsensusImpl;
 use ic_interfaces::{
-    artifact_pool::MutablePool,
+    artifact_pool::{ChangeSetProducer, MutablePool},
     certification,
     certification::Certifier,
-    consensus::Consensus,
     consensus_pool::{ChangeAction, ConsensusPool},
-    dkg::{ChangeAction as DkgChangeAction, Dkg as DkgInterface},
+    dkg::ChangeAction as DkgChangeAction,
     time_source::{SysTimeSource, TimeSource},
 };
 use ic_logger::{debug, ReplicaLogger};

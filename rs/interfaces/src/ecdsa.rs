@@ -130,8 +130,3 @@ pub trait EcdsaPool: Send + Sync {
     /// Returns reference to the stats. The stats are not persisted.
     fn stats(&self) -> &dyn EcdsaStats;
 }
-
-/// Checks and processes the changes (if any)
-pub trait Ecdsa: Send {
-    fn on_state_change(&self, ecdsa_pool: &dyn EcdsaPool) -> EcdsaChangeSet;
-}

@@ -1,7 +1,6 @@
 //! The ingress manager public interface.
 use crate::{
     execution_environment::{CanisterOutOfCyclesError, IngressHistoryError},
-    ingress_pool::{ChangeSet, IngressPool},
     validation::{ValidationError, ValidationResult},
 };
 use ic_types::{
@@ -102,27 +101,6 @@ impl<P> From<IngressTransientError> for ValidationError<P, IngressTransientError
     fn from(err: IngressTransientError) -> ValidationError<P, IngressTransientError> {
         ValidationError::Transient(err)
     }
-}
-
-/// Processes Ingress messages received from peers or HttpHandler.
-///
-/// Its main role is to determine whether the message should be relayed to other
-/// nodes or not and to remove expired messages. This interface is used by
-/// ArtifactManager when a new ingress message is inserted in the unvalidated
-/// pool.
-pub trait IngressHandler {
-    /// Inspect the input [IngressPool] to build a [ChangeSet] of
-    /// actions to be executed. The caller is then expected to apply the
-    /// returned [ChangeSet] to the input of this call, namely
-    /// [IngressPool].
-    ///
-    /// #Input
-    /// [IngressPool] which is passed as a read-only reference.
-    ///
-    /// #Returns
-    /// [ChangeSet] that describes which Ingress Messages are added, moved or
-    /// removed from their current part of the artifact pool
-    fn on_state_change(&self, pool: &dyn IngressPool) -> ChangeSet;
 }
 
 /// A component used by Consensus to build and validate a payload.

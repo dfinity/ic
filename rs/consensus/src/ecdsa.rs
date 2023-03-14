@@ -184,10 +184,12 @@ use crate::ecdsa::pre_signer::{EcdsaPreSigner, EcdsaPreSignerImpl};
 use crate::ecdsa::signer::{EcdsaSigner, EcdsaSignerImpl};
 use crate::ecdsa::utils::EcdsaBlockReaderImpl;
 
-use ic_interfaces::crypto::IDkgProtocol;
-use ic_interfaces::ecdsa::{Ecdsa, EcdsaChangeSet, EcdsaPool};
 use ic_interfaces::{
-    artifact_manager::ArtifactPoolDescriptor, consensus_pool::ConsensusBlockCache,
+    artifact_manager::ArtifactPoolDescriptor,
+    artifact_pool::ChangeSetProducer,
+    consensus_pool::ConsensusBlockCache,
+    crypto::IDkgProtocol,
+    ecdsa::{EcdsaChangeSet, EcdsaPool},
 };
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -346,8 +348,10 @@ impl EcdsaImpl {
     }
 }
 
-impl Ecdsa for EcdsaImpl {
-    fn on_state_change(&self, ecdsa_pool: &dyn EcdsaPool) -> EcdsaChangeSet {
+impl<T: EcdsaPool> ChangeSetProducer<T> for EcdsaImpl {
+    type ChangeSet = EcdsaChangeSet;
+
+    fn on_state_change(&self, ecdsa_pool: &T) -> EcdsaChangeSet {
         let metrics = self.metrics.clone();
         let pre_signer = || {
             timed_call(

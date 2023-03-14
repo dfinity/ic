@@ -2,11 +2,6 @@
 use ic_types::{consensus::dkg, crypto::CryptoHashOf, Height};
 use std::time::Duration;
 
-/// An interface for distributed key generation.
-pub trait Dkg: Send {
-    fn on_state_change(&self, dkg_pool: &dyn DkgPool) -> ChangeSet;
-}
-
 /// The DkgPool is used to store messages that are exchanged between nodes in
 /// the process of executing dkg.
 pub trait DkgPool: Send + Sync {
