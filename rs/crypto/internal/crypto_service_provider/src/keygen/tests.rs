@@ -3,6 +3,7 @@ use super::*;
 use crate::keygen::fixtures::multi_bls_test_vector;
 use crate::keygen::utils::node_signing_pk_to_proto;
 use crate::vault::test_utils::sks::secret_key_store_with_duplicated_key_id_error_on_insert;
+use crate::KeyId;
 use assert_matches::assert_matches;
 use ic_crypto_internal_test_vectors::unhex::{hex_to_32_bytes, hex_to_byte_vec};
 use ic_types_test_utils::ids::node_test_id;
@@ -44,7 +45,6 @@ mod gen_node_siging_key_pair_tests {
                 .expect("missing key"),
             node_signing_pk_to_proto(public_key)
         );
-        assert!(csp.sks_contains(&key_id).is_ok());
     }
 
     #[test]

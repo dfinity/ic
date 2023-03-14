@@ -2,9 +2,9 @@ use ic_base_types::RegistryVersion;
 use ic_crypto_internal_csp::api::NodePublicKeyDataError;
 use ic_crypto_internal_csp::api::{
     CspCreateMEGaKeyError, CspIDkgProtocol, CspKeyGenerator, CspPublicAndSecretKeyStoreChecker,
-    CspPublicKeyStore, CspSecretKeyStoreChecker, CspSigVerifier, CspSigner,
-    CspThresholdEcdsaSigVerifier, CspThresholdEcdsaSigner, CspThresholdSignError,
-    CspTlsHandshakeSignerProvider, NiDkgCspClient, ThresholdSignatureCspClient,
+    CspPublicKeyStore, CspSigVerifier, CspSigner, CspThresholdEcdsaSigVerifier,
+    CspThresholdEcdsaSigner, CspThresholdSignError, CspTlsHandshakeSignerProvider, NiDkgCspClient,
+    ThresholdSignatureCspClient,
 };
 use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_internal_csp::types::ExternalPublicKeys;
@@ -245,11 +245,6 @@ mock! {
         ) -> Result<(), PksAndSksContainsErrors>;
 
         fn validate_pks_and_sks(&self) -> Result<ValidNodePublicKeys, ValidatePksAndSksError>;
-    }
-
-    pub trait CspSecretKeyStoreChecker {
-        fn sks_contains(&self, id: &KeyId) -> Result<bool, CryptoError>;
-        fn sks_contains_tls_key(&self, cert: &TlsPublicKeyCert) -> Result<bool, CryptoError>;
     }
 
     pub trait CspPublicKeyStore {
