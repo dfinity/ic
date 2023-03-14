@@ -1,37 +1,23 @@
-
-type InitArgs = record {
-    governance_id : principal;
-    xrc_id : principal;
-    update_period: nat64;
+type HttpRequest = record {
+  url : text;
+  method : text;
+  body : vec nat8;
+  headers : vec record { text; text };
 };
-
-type TimeseriesEntry = record {
-    time_sec: nat;
-    value: nat;
+type HttpResponse = record {
+  body : vec nat8;
+  headers : vec record { text; text };
+  status_code : nat16;
 };
-
-type TimeseriesResult = record {
-    timeseries: vec TimeseriesEntry;
+type Result = variant { Ok : TvlResult; Err : TvlResultError };
+type TvlResult = record { tvl : nat; time_sec : nat };
+type TvlResultError = record { message : text };
+type TvlArgs = record {
+  governance_id: principal;
+  xrc_id: principal;
+  update_period: nat64;
 };
-
-type TvlResult = record {
-    time_sec: nat;
-    tvl: nat;
-};
-
-type TvlTimeseriesResult = record {
-    timeseries: vec TvlResult;
-};
-
-type TvlResultError = record {
-    message: text;
-};
-
-type Result_tvl = variant { Ok : TvlResult; Err : TvlResultError };
-
-service : (InitArgs) -> {
-    get_tvl : () -> (Result_tvl) query;
-    get_tvl_timeseries : () -> (TvlTimeseriesResult);
-    get_xr_timeseries : () -> (TimeseriesResult);
-    get_locked_e8s_timeseries : () -> (TimeseriesResult);
-};
+service : (TvlArgs) -> {
+  get_tvl : () -> (Result) query;
+  http_request : (HttpRequest) -> (HttpResponse) query;
+}

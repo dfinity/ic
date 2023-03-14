@@ -2,14 +2,13 @@ use candid::{CandidType, Nat};
 use ic_base_types::CanisterId;
 
 #[derive(CandidType, Debug, candid::Deserialize, PartialEq, Eq)]
-pub struct InitArgs {
+pub struct TvlArgs {
     pub governance_id: CanisterId,
     pub xrc_id: CanisterId,
     pub update_period: u64,
 }
 
 // Timeseries types.
-
 #[derive(CandidType, Debug, candid::Deserialize, PartialEq, Eq)]
 pub struct TimeseriesEntry {
     pub time_sec: Nat,
@@ -22,7 +21,6 @@ pub struct TimeseriesResult {
 }
 
 // TVL types.
-
 #[derive(CandidType, Debug, candid::Deserialize, PartialEq, Eq)]
 pub struct TvlResultError {
     pub message: String,
@@ -34,13 +32,7 @@ pub struct TvlResult {
     pub tvl: Nat,
 }
 
-#[derive(CandidType, Debug, candid::Deserialize, PartialEq, Eq)]
-pub struct TvlTimeseriesResult {
-    pub timeseries: Vec<TvlResult>,
-}
-
 // XRC types.
-
 #[derive(CandidType, Clone, Debug, candid::Deserialize, PartialEq, Eq)]
 pub enum AssetClass {
     Cryptocurrency,

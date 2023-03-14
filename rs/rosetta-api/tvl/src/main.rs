@@ -1,46 +1,26 @@
 use candid::candid_method;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_cdk_macros::{init, post_upgrade, query, update};
+use ic_cdk_macros::{init, post_upgrade, query};
 use ic_tvl_canister::metrics::encode_metrics;
-use ic_tvl_canister::types::{
-    InitArgs, TimeseriesResult, TvlResult, TvlResultError, TvlTimeseriesResult,
-};
+use ic_tvl_canister::types::{TvlArgs, TvlResult, TvlResultError};
 
 fn main() {}
 
 // NB: init is only called at first installation, not while upgrading canister.
 #[init]
-fn init(args: InitArgs) {
+fn init(args: TvlArgs) {
     ic_tvl_canister::init(args);
 }
 
 #[post_upgrade]
-async fn post_upgrade(upgrade_args: Option<InitArgs>) {
-    ic_tvl_canister::post_upgrade(upgrade_args).await
+async fn post_upgrade(args: TvlArgs) {
+    ic_tvl_canister::post_upgrade(args).await
 }
 
 #[query]
 #[candid_method(query)]
 async fn get_tvl() -> Result<TvlResult, TvlResultError> {
     ic_tvl_canister::get_tvl().await
-}
-
-#[update]
-#[candid_method(update)]
-async fn get_tvl_timeseries() -> TvlTimeseriesResult {
-    ic_tvl_canister::get_tvl_timeseries().await
-}
-
-#[update]
-#[candid_method(update)]
-async fn get_xr_timeseries() -> TimeseriesResult {
-    ic_tvl_canister::get_xr_timeseries().await
-}
-
-#[update]
-#[candid_method(update)]
-async fn get_locked_e8s_timeseries() -> TimeseriesResult {
-    ic_tvl_canister::get_locked_e8s_timeseries().await
 }
 
 #[query]
@@ -62,4 +42,51 @@ fn http_request(req: HttpRequest) -> HttpResponse {
     } else {
         HttpResponseBuilder::not_found().build()
     }
+}
+
+/// Checks the real candid interface against the one declared in the did file
+#[test]
+fn check_candid_interface_compatibility() {
+    fn source_to_str(source: &candid::utils::CandidSource) -> String {
+        match source {
+            candid::utils::CandidSource::File(f) => {
+                std::fs::read_to_string(f).unwrap_or_else(|_| "".to_string())
+            }
+            candid::utils::CandidSource::Text(t) => t.to_string(),
+        }
+    }
+    fn check_service_compatible(
+        new_name: &str,
+        new: candid::utils::CandidSource,
+        old_name: &str,
+        old: candid::utils::CandidSource,
+    ) {
+        let new_str = source_to_str(&new);
+        let old_str = source_to_str(&old);
+        match candid::utils::service_compatible(new, old) {
+            Ok(_) => {}
+            Err(e) => {
+                eprintln!(
+                    "{} is not compatible with {}!\n\n\
+            {}:\n\
+            {}\n\n\
+            {}:\n\
+            {}\n",
+                    new_name, old_name, new_name, new_str, old_name, old_str
+                );
+                panic!("{:?}", e);
+            }
+        }
+    }
+    candid::export_service!();
+    let new_interface = __export_service();
+    // check the public interface against the actual one
+    let old_interface =
+        std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap()).join("tvl.did");
+    check_service_compatible(
+        "actual ledger candid interface",
+        candid::utils::CandidSource::Text(&new_interface),
+        "declared candid interface in tvl.did file",
+        candid::utils::CandidSource::File(old_interface.as_path()),
+    );
 }
