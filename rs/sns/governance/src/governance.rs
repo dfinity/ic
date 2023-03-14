@@ -2527,11 +2527,14 @@ impl Governance {
         }
     }
 
-    /// Returns the nervous system parameters
+    // Returns an option with the NervousSystemParameters
+    fn nervous_system_parameters(&self) -> Option<&NervousSystemParameters> {
+        self.proto.parameters.as_ref()
+    }
+
+    /// Returns the nervous system parameters or panics
     fn nervous_system_parameters_or_panic(&self) -> &NervousSystemParameters {
-        self.proto
-            .parameters
-            .as_ref()
+        self.nervous_system_parameters()
             .expect("NervousSystemParameters not present")
     }
 
@@ -3039,8 +3042,8 @@ impl Governance {
             .neurons
             .get_mut(&neuron_id.to_string())
             .ok_or_else(||
-            // The specified neuron is not present.
-            GovernanceError::new_with_message(ErrorType::NotFound, "Neuron not found"))?;
+                // The specified neuron is not present.
+                GovernanceError::new_with_message(ErrorType::NotFound, "Neuron not found"))?;
 
         neuron.check_authorized(caller, NeuronPermissionType::Vote)?;
         let proposal_id = pb.proposal.as_ref().ok_or_else(||
@@ -3940,7 +3943,8 @@ impl Governance {
         }
     }
 
-    async fn finalize_disburse_maturity(&mut self) {
+    // Disburses any maturity that should be disbursed, unless this is already happening.
+    async fn maybe_finalize_disburse_maturity(&mut self) {
         if !self.can_finalize_disburse_maturity() {
             return;
         }
@@ -3960,7 +3964,13 @@ impl Governance {
                 // The first entry is the oldest one, check whether it can be completed.
                 let d = neuron.disburse_maturity_in_progress[0].clone();
                 if d.timestamp_of_disbursement_seconds < disbursion_delay_elapsed_seconds {
-                    let neuron_id = neuron.id.as_ref().unwrap();
+                    let neuron_id = match neuron.id.as_ref() {
+                        None => {
+                            log!(ERROR, "NeuronId is not set for neuron. This should never happen.  Cannot disburse.");
+                            continue;
+                        }
+                        Some(id) => id,
+                    };
                     // TODO(NNS1-1708) add modulation
                     let maturity_to_disburse_after_modulation_e8s = d.amount_e8s;
                     let fdm = FinalizeDisburseMaturity {
@@ -4084,11 +4094,20 @@ impl Governance {
             "Running GC now at timestamp {} seconds",
             self.latest_gc_timestamp_seconds
         );
-        let max_proposals_to_keep_per_action = self
-            .nervous_system_parameters_or_panic()
-            .max_proposals_to_keep_per_action
-            .expect("NervousSystemParameters must have max_proposals_to_keep_per_action")
-            as usize;
+
+        let max_proposals_to_keep_per_action = match self
+            .nervous_system_parameters()
+            .and_then(|params| params.max_proposals_to_keep_per_action)
+        {
+            None => {
+                log!(
+                    ERROR,
+                    "NervousSystemParameters must have max_proposals_to_keep_per_action"
+                );
+                return false;
+            }
+            Some(max) => max as usize,
+        };
 
         // This data structure contains proposals grouped by action.
         //
@@ -4161,10 +4180,7 @@ impl Governance {
             }
         }
 
-        if self.can_finalize_disburse_maturity() {
-            self.finalize_disburse_maturity().await;
-        }
-
+        self.maybe_finalize_disburse_maturity().await;
         self.maybe_move_staked_maturity();
         self.maybe_gc();
     }
