@@ -1,7 +1,7 @@
 use crate::IngressManager;
 use ic_constants::MAX_INGRESS_TTL;
 use ic_interfaces::{
-    ingress_manager::IngressHandler,
+    artifact_pool::ChangeSetProducer,
     ingress_pool::{
         ChangeAction::{
             MoveToValidated, PurgeBelowExpiry, RemoveFromUnvalidated, RemoveFromValidated,
@@ -18,9 +18,11 @@ use ic_types::{
 };
 use ic_validator::validate_request;
 
-impl IngressHandler for IngressManager {
+impl<T: IngressPool> ChangeSetProducer<T> for IngressManager {
+    type ChangeSet = ChangeSet;
+
     #[allow(clippy::cognitive_complexity)]
-    fn on_state_change(&self, pool: &dyn IngressPool) -> ChangeSet {
+    fn on_state_change(&self, pool: &T) -> ChangeSet {
         // Skip on_state_change when ingress_message_setting is not available in
         // registry.
         let registry_version = self.registry_client.get_latest_version();

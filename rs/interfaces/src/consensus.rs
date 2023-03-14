@@ -4,7 +4,6 @@ use crate::{
         CanisterHttpPayloadValidationError, CanisterHttpPermanentValidationError,
         CanisterHttpTransientValidationError,
     },
-    consensus_pool::{ChangeSet, ConsensusPool},
     ingress_manager::{
         IngressPayloadValidationError, IngressPermanentError, IngressTransientError,
     },
@@ -17,25 +16,6 @@ use crate::{
 };
 use ic_base_types::{NumBytes, SubnetId};
 use ic_types::registry::RegistryClientError;
-
-/// Consensus artifact processing interface.
-pub trait Consensus: Send {
-    /// Inspect the input [ConsensusPool] to build a [ChangeSet] of actions to
-    /// be executed.
-    ///
-    /// The caller is then expected to apply the returned [ChangeSet] to the
-    /// input of this call, namely [ConsensusPool]. The reason that consensus
-    /// does not directly mutate the objects are:
-    ///
-    /// 1. The actual mutation may need to be coupled with other things,
-    /// performed in a single transaction, and so on. So it is better to leave
-    /// it to the caller to decide.
-    ///
-    /// 2. Because [ConsensusPool] is passed as an read-only reference, the
-    /// caller is free to run other readers concurrently should it choose to.
-    /// But this is a minor point.
-    fn on_state_change(&self, consensus_pool: &dyn ConsensusPool) -> ChangeSet;
-}
 
 #[derive(Debug)]
 pub enum PayloadPermanentError {

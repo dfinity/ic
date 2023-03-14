@@ -4,6 +4,26 @@ use derive_more::From;
 use ic_types::{artifact::ArtifactKind, replica_version::ReplicaVersion, CountBytes, NodeId, Time};
 use serde::{Deserialize, Serialize};
 
+pub trait ChangeSetProducer<Pool>: Send {
+    type ChangeSet;
+
+    /// Inspect the input [Pool] to build a [ChangeSet] of actions to
+    /// be executed.
+    ///
+    /// The caller is then expected to apply the returned [ChangeSet] to the
+    /// input of this call, namely a mutable version of the [Pool]. The reason
+    /// that P2P clients (e.g. consensus) do not directly mutate the objects are:
+    ///
+    /// 1. The actual mutation may need to be coupled with other things,
+    /// performed in a single transaction, and so on. So it is better to leave
+    /// it to the caller to decide.
+    ///
+    /// 2. Because [Pool] is passed as an read-only reference, the
+    /// caller is free to run other readers concurrently should it choose to.
+    /// But this is a minor point.
+    fn on_state_change(&self, pool: &Pool) -> Self::ChangeSet;
+}
+
 /// The trait defines the canonical way for mutating an artifact pool.
 /// There should be one owner of the object implementing this trait.
 pub trait MutablePool<Artifact: ArtifactKind, C> {

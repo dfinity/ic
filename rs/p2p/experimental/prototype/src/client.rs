@@ -1,8 +1,11 @@
 use crate::*;
 use ic_interfaces::{
-    artifact_manager::ArtifactPoolDescriptor, artifact_pool::MutablePool,
-    artifact_pool::UnvalidatedArtifact, consensus::Consensus, consensus_pool::ChangeSet,
-    consensus_pool::ConsensusPool, time_source::TimeSource,
+    artifact_manager::ArtifactPoolDescriptor,
+    artifact_pool::UnvalidatedArtifact,
+    artifact_pool::{ChangeSetProducer, MutablePool},
+    consensus_pool::ChangeSet,
+    consensus_pool::ConsensusPool,
+    time_source::TimeSource,
 };
 use ic_types::artifact::{ArtifactKind, ConsensusMessageFilter, PriorityFn};
 use std::sync::Arc;
@@ -13,7 +16,7 @@ const STAGGERED_PRIORITY_DURATION: Duration = Duration::from_secs(30);
 
 struct PoolProcessor<A: ArtifactKind, P: MutablePool<ConsensusArtifact, ChangeSet>> {
     pool: P,
-    mutation_source: Box<dyn Consensus + Send + Sync>,
+    mutation_source: Box<dyn ChangeSetProducer<P, ChangeSet = ChangeSet>>,
     // describes internal state that validated pool is in. this state
     // can be used for optimizing the protocol.
     gossip_state: Box<dyn ArtifactPoolDescriptor<A, P> + Send + Sync>,
@@ -29,7 +32,7 @@ type ConsensusPoolProcessor<P> = PoolProcessor<ConsensusArtifact, P>;
 impl<P: MutablePool<ConsensusArtifact, ChangeSet> + ConsensusPool> ConsensusPoolProcessor<P> {
     fn new(
         pool: P,
-        mutation_source: Box<dyn Consensus + Send + Sync>,
+        mutation_source: Box<dyn ChangeSetProducer<P, ChangeSet = ChangeSet>>,
         gossip_state: Box<dyn ArtifactPoolDescriptor<ConsensusArtifact, P> + Send + Sync>,
         time_source: Arc<dyn TimeSource>,
         receiver: Receiver<UnvalidatedPoolEvent<ConsensusMessage>>,
@@ -100,7 +103,7 @@ impl ConsensusPoolProcessorHandle {
         P: MutablePool<ConsensusArtifact, ChangeSet> + Send + Sync + 'static + ConsensusPool,
     >(
         pool: P,
-        mutation_source: Box<dyn Consensus + Send + Sync>,
+        mutation_source: Box<dyn ChangeSetProducer<P, ChangeSet = ChangeSet>>,
         gossip_state: Box<dyn ArtifactPoolDescriptor<ConsensusArtifact, P> + Send + Sync>,
         time_source: Arc<dyn TimeSource>,
     ) -> Self {

@@ -55,8 +55,8 @@ use crate::consensus::{
 use ic_config::consensus::ConsensusConfig;
 use ic_interfaces::{
     artifact_manager::ArtifactPoolDescriptor,
+    artifact_pool::ChangeSetProducer,
     canister_http::CanisterHttpPayloadBuilder,
-    consensus::Consensus,
     consensus_pool::ConsensusPool,
     dkg::DkgPool,
     ecdsa::EcdsaPool,
@@ -376,7 +376,8 @@ impl ConsensusImpl {
     }
 }
 
-impl Consensus for ConsensusImpl {
+impl<T: ConsensusPool> ChangeSetProducer<T> for ConsensusImpl {
+    type ChangeSet = ChangeSet;
     /// Invoke `on_state_change` on each subcomponent in order.
     /// Return the first non-empty [ChangeSet] as returned by a subcomponent.
     /// Otherwise return an empty [ChangeSet] if all subcomponents return
@@ -396,7 +397,7 @@ impl Consensus for ConsensusImpl {
     /// finalizing anything, due to the above decision of having to return
     /// early. The order of the rest subcomponents decides whom is given
     /// a priority, but it should not affect liveness or correctness.
-    fn on_state_change(&self, pool: &dyn ConsensusPool) -> ChangeSet {
+    fn on_state_change(&self, pool: &T) -> ChangeSet {
         let pool_reader = PoolReader::new(pool);
         trace!(self.log, "on_state_change");
 
@@ -687,6 +688,7 @@ mod tests {
     use ic_metrics::MetricsRegistry;
     use ic_protobuf::registry::subnet::v1::SubnetRecord;
     use ic_registry_subnet_type::SubnetType;
+    use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
     use ic_test_utilities::{
         canister_http::FakeCanisterHttpPayloadBuilder,
         ingress_selector::FakeIngressSelector,
@@ -704,11 +706,7 @@ mod tests {
     fn set_up_consensus_with_subnet_record(
         record: SubnetRecord,
         pool_config: ArtifactPoolConfig,
-    ) -> (
-        ConsensusImpl,
-        Box<dyn ConsensusPool>,
-        Arc<FastForwardTimeSource>,
-    ) {
+    ) -> (ConsensusImpl, TestConsensusPool, Arc<FastForwardTimeSource>) {
         set_up_consensus_with_subnet_record_and_subnet_id(record, pool_config, subnet_test_id(0))
     }
 
@@ -716,11 +714,7 @@ mod tests {
         record: SubnetRecord,
         pool_config: ArtifactPoolConfig,
         subnet_id: SubnetId,
-    ) -> (
-        ConsensusImpl,
-        Box<dyn ConsensusPool>,
-        Arc<FastForwardTimeSource>,
-    ) {
+    ) -> (ConsensusImpl, TestConsensusPool, Arc<FastForwardTimeSource>) {
         let Dependencies {
             pool,
             membership,
@@ -777,7 +771,7 @@ mod tests {
                 time_source.clone(),
             ))),
         );
-        (consensus_impl, Box::new(pool), time_source)
+        (consensus_impl, pool, time_source)
     }
 
     #[test]
@@ -796,7 +790,7 @@ mod tests {
                 pool_config.clone(),
             );
 
-            assert!(!consensus_impl.on_state_change(pool.borrow()).is_empty());
+            assert!(!consensus_impl.on_state_change(&pool).is_empty());
 
             // ensure that an consensus_impl with a subnet record with is_halted =
             // true returns no changes
@@ -807,7 +801,7 @@ mod tests {
                     .build(),
                 pool_config,
             );
-            assert!(consensus_impl.on_state_change(pool.borrow()).is_empty());
+            assert!(consensus_impl.on_state_change(&pool).is_empty());
         })
     }
 

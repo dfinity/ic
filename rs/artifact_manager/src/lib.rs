@@ -103,16 +103,14 @@ use ic_interfaces::{
     artifact_manager::{
         ArtifactClient, ArtifactPoolDescriptor, ArtifactProcessor, ProcessingResult,
     },
-    artifact_pool::{MutablePool, UnvalidatedArtifact},
+    artifact_pool::{ChangeSetProducer, MutablePool, UnvalidatedArtifact},
     canister_http::*,
     certification::{CertificationPool, Certifier, ChangeSet as CertificationChangeSet},
-    consensus::Consensus,
-    consensus_pool::{ChangeSet as ConsensusChangeSet, ConsensusPool, ConsensusPoolCache},
-    dkg::{ChangeSet as DkgChangeSet, Dkg, DkgPool},
-    ecdsa::{Ecdsa, EcdsaChangeSet, EcdsaPool},
+    consensus_pool::{ChangeSet as ConsensusChangeSet, ConsensusPoolCache},
+    dkg::ChangeSet as DkgChangeSet,
+    ecdsa::{EcdsaChangeSet, EcdsaPool},
     gossip_pool::GossipPool,
-    ingress_manager::IngressHandler,
-    ingress_pool::{ChangeSet as IngressChangeSet, IngressPool, IngressPoolThrottler},
+    ingress_pool::{ChangeSet as IngressChangeSet, IngressPoolThrottler},
     time_source::{SysTimeSource, TimeSource},
 };
 use ic_logger::ReplicaLogger;
@@ -303,14 +301,15 @@ pub fn create_ingress_handlers<
         + Sync
         + GossipPool<IngressArtifact>
         + IngressPoolThrottler
-        + 'static
-        + IngressPool,
+        + 'static,
     S: Fn(AdvertSendRequest<IngressArtifact>) + Send + 'static,
 >(
     send_advert: S,
     time_source: Arc<SysTimeSource>,
     ingress_pool: Arc<RwLock<PoolIngress>>,
-    ingress_handler: Arc<dyn IngressHandler + Send + Sync>,
+    ingress_handler: Arc<
+        dyn ChangeSetProducer<PoolIngress, ChangeSet = IngressChangeSet> + Send + Sync,
+    >,
     log: ReplicaLogger,
     metrics_registry: MetricsRegistry,
     node_id: NodeId,
@@ -341,9 +340,8 @@ pub fn create_consensus_handlers<
         + Send
         + Sync
         + GossipPool<ConsensusArtifact>
-        + ConsensusPool
         + 'static,
-    C: Consensus + 'static,
+    C: ChangeSetProducer<PoolConsensus, ChangeSet = ConsensusChangeSet> + 'static,
     G: ArtifactPoolDescriptor<ConsensusArtifact, PoolConsensus> + 'static,
     S: Fn(AdvertSendRequest<ConsensusArtifact>) + Send + 'static,
 >(
@@ -419,13 +417,8 @@ pub fn create_certification_handlers<
 }
 
 pub fn create_dkg_handlers<
-    PoolDkg: MutablePool<DkgArtifact, DkgChangeSet>
-        + Send
-        + Sync
-        + GossipPool<DkgArtifact>
-        + 'static
-        + DkgPool,
-    C: Dkg + 'static,
+    PoolDkg: MutablePool<DkgArtifact, DkgChangeSet> + Send + Sync + GossipPool<DkgArtifact> + 'static,
+    C: ChangeSetProducer<PoolDkg, ChangeSet = DkgChangeSet> + 'static,
     G: ArtifactPoolDescriptor<DkgArtifact, PoolDkg> + 'static,
     S: Fn(AdvertSendRequest<DkgArtifact>) + Send + 'static,
 >(
@@ -458,7 +451,7 @@ pub fn create_ecdsa_handlers<
         + GossipPool<EcdsaArtifact>
         + EcdsaPool
         + 'static,
-    C: Ecdsa + 'static,
+    C: ChangeSetProducer<PoolEcdsa, ChangeSet = EcdsaChangeSet> + 'static,
     G: ArtifactPoolDescriptor<EcdsaArtifact, PoolEcdsa> + 'static,
     S: Fn(AdvertSendRequest<EcdsaArtifact>) + Send + 'static,
 >(

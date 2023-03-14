@@ -11,8 +11,9 @@ use crate::ecdsa::{
 };
 use ic_interfaces::{
     artifact_manager::ArtifactPoolDescriptor,
+    artifact_pool::ChangeSetProducer,
     consensus_pool::ConsensusPoolCache,
-    dkg::{ChangeAction, ChangeSet, Dkg, DkgPool},
+    dkg::{ChangeAction, ChangeSet, DkgPool},
     validation::{ValidationError, ValidationResult},
 };
 use ic_interfaces_registry::RegistryClient;
@@ -1208,8 +1209,10 @@ fn get_dkg_dealings(
         })
 }
 
-impl Dkg for DkgImpl {
-    fn on_state_change(&self, dkg_pool: &dyn DkgPool) -> ChangeSet {
+impl<T: DkgPool> ChangeSetProducer<T> for DkgImpl {
+    type ChangeSet = ChangeSet;
+
+    fn on_state_change(&self, dkg_pool: &T) -> ChangeSet {
         // This timer will make an entry in the metrics histogram automatically, when
         // it's dropped.
         let _timer = self.metrics.on_state_change_duration.start_timer();

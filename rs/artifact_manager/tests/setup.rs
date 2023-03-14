@@ -2,11 +2,13 @@ use ic_artifact_manager::manager;
 use ic_artifact_pool::consensus_pool::ConsensusPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_interfaces::artifact_manager::{ArtifactPoolDescriptor, *};
+use ic_interfaces::artifact_pool::ChangeSetProducer;
+use ic_interfaces::consensus_pool::ChangeSet;
 use ic_interfaces::time_source::SysTimeSource;
 use ic_logger::replica_logger::{no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_test_utilities::{
-    consensus::{fake::*, make_genesis, MockConsensus},
+    consensus::{fake::*, make_genesis},
     types::ids::subnet_test_id,
 };
 use ic_types::artifact::{ArtifactKind, ArtifactTag, ConsensusMessageId, PriorityFn};
@@ -28,6 +30,16 @@ impl ArtifactPoolDescriptor<ConsensusArtifact, ConsensusPoolImpl>
     }
 }
 
+struct MockConsensus {}
+
+impl ChangeSetProducer<ConsensusPoolImpl> for MockConsensus {
+    type ChangeSet = ChangeSet;
+
+    fn on_state_change(&self, _pool: &ConsensusPoolImpl) -> ChangeSet {
+        vec![]
+    }
+}
+
 fn setup_manager(artifact_pool_config: ArtifactPoolConfig) -> Arc<dyn ArtifactManager> {
     let time_source = Arc::new(SysTimeSource::new());
     let metrics_registry = MetricsRegistry::new();
@@ -39,8 +51,7 @@ fn setup_manager(artifact_pool_config: ArtifactPoolConfig) -> Arc<dyn ArtifactMa
         replica_logger.clone(),
     );
 
-    let mut consensus = MockConsensus::new();
-    consensus.expect_on_state_change().return_const(vec![]);
+    let consensus = MockConsensus {};
     let consensus_gossip = UnimplementedConsensusPoolDescriptor {};
     let mut backends: HashMap<ArtifactTag, Box<dyn manager::ArtifactManagerBackend>> =
         HashMap::new();
