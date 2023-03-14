@@ -1763,7 +1763,7 @@ mod tests {
 
                 artifacts.iter().for_each(|a| ecdsa_pool.insert(a.clone()));
 
-                let block_reader = block_reader.clone().without_idkg_transcripts();
+                let block_reader = block_reader.clone().with_fail_to_resolve();
 
                 let change_set = pre_signer.validate_dealings(&ecdsa_pool, &block_reader);
                 assert_eq!(change_set.len(), 3);
@@ -2251,7 +2251,7 @@ mod tests {
                 ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
                 artifacts.iter().for_each(|a| ecdsa_pool.insert(a.clone()));
 
-                let block_reader = block_reader.clone().without_idkg_transcripts();
+                let block_reader = block_reader.clone().with_fail_to_resolve();
                 let change_set = pre_signer.validate_dealing_support(&ecdsa_pool, &block_reader);
                 assert_eq!(change_set.len(), 4);
                 assert!(is_handle_invalid(&change_set, &msg_id_2));
