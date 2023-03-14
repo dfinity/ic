@@ -71,29 +71,6 @@ pub fn pre_master_config(env: TestEnv) {
         .for_each(|node| node.await_can_login_as_admin_via_ssh().unwrap());
 }
 
-// IC with large subnets for a more resource-intensive test
-pub fn hourly_config(env: TestEnv) {
-    env.ensure_group_setup_created();
-    env.ssh_keygen(ADMIN).expect("ssh-keygen failed");
-
-    InternetComputer::new()
-        .add_subnet(
-            Subnet::fast(SubnetType::System, NNS_SUBNET_SIZE)
-                .with_dkg_interval_length(Height::from(NNS_SUBNET_SIZE as u64 * 2)),
-        )
-        .with_unassigned_nodes(APP_SUBNET_SIZE as i32)
-        .setup_and_start(&env)
-        .expect("failed to setup IC under test");
-    env.topology_snapshot().subnets().for_each(|subnet| {
-        subnet
-            .nodes()
-            .for_each(|node| node.await_status_is_healthy().unwrap())
-    });
-    env.topology_snapshot()
-        .unassigned_nodes()
-        .for_each(|node| node.await_can_login_as_admin_via_ssh().unwrap());
-}
-
 pub fn test(env: TestEnv) {
     let log = &env.logger();
 
