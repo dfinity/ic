@@ -852,22 +852,22 @@ impl IngressQueue {
     }
 
     /// Calls `filter` on each ingress message in the queue, retaining the
-    /// messages for whom the filter returns `true` and dropping the rest.
+    /// messages for which the filter returns `true` and returning the rest.
     pub(super) fn filter_messages<F>(&mut self, mut filter: F) -> Vec<Arc<Ingress>>
     where
         F: FnMut(&Arc<Ingress>) -> bool,
     {
+        // This method operates in place, visiting each element exactly once in the
+        // original order, and preserves the order of the dropped elements.
         let mut filtered_messages = vec![];
-        let mut new_queue = VecDeque::new();
-        for item in self.queue.iter() {
+        self.queue.retain_mut(|item| {
             if filter(item) {
-                new_queue.push_back(Arc::clone(item));
+                true
             } else {
                 filtered_messages.push(Arc::clone(item));
+                false
             }
-        }
-
-        self.queue = new_queue;
+        });
         self.size_bytes = Self::size_bytes(&self.queue);
         filtered_messages
     }
