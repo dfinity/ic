@@ -5,7 +5,6 @@
 /// systemd socket ic-os/guestos/rootfs/etc/systemd/system/ic-onchain-observability-adapter.socket
 use candid::{Decode, Encode};
 use clap::Parser;
-use hyper::Client;
 use ic_async_utils::abort_on_panic;
 use ic_base_types::{CanisterId, NodeId};
 use ic_canister_client::{Agent, Sender};
@@ -15,8 +14,9 @@ use ic_interfaces::crypto::{BasicSigner, ErrorReproducibility, KeyManager};
 use ic_logger::{error, info, new_replica_logger_from_config, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_onchain_observability_adapter::{
-    get_replica_last_start_time, Config, Flags, MetricsParseError, SampledMetricsCollector,
+    get_replica_last_start_time, Config, Flags, MetricsCollectError, SampledMetricsCollector,
 };
+use ic_onchain_observability_service::onchain_observability_service_client::OnchainObservabilityServiceClient;
 use ic_registry_client::client::{RegistryClient, RegistryClientImpl};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_local_store::LocalStoreImpl;
@@ -29,14 +29,18 @@ use rand::Rng;
 use serde_json::to_string_pretty;
 use std::{
     collections::{HashMap, HashSet},
+    path::PathBuf,
     str::FromStr,
     sync::Arc,
     time::SystemTime,
 };
 use tokio::{
+    net::UnixStream,
     runtime::Handle,
     time::{interval, sleep, Duration, MissedTickBehavior},
 };
+use tonic::transport::{Channel, Endpoint, Uri};
+use tower::service_fn;
 use url::Url;
 
 const MAX_CRYPTO_SIGNATURE_ATTEMPTS: u64 = 5;
@@ -89,18 +93,20 @@ pub async fn main() {
 
     let canister_client =
         create_canister_client(crypto_component.clone(), canister_client_url, node_id).await;
-    let http_client = Client::new();
-    let http_client_clone = http_client.clone();
 
-    let replica_last_start = get_replica_last_start_time(http_client_clone)
+    let grpc_client =
+        setup_onchain_observability_adapter_client(PathBuf::from(config.uds_socket_path));
+
+    let replica_last_start = get_replica_last_start_time(grpc_client.clone())
         .await
         .expect("Failed to retrieve replica last start time");
     let peer_ids = get_peer_ids(node_id, &registry_client);
 
     let mut sampling_interval = interval(config.sampling_interval_sec);
     sampling_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
-    let mut sampler = SampledMetricsCollector::new_with_client(http_client);
+    let mut sampler = SampledMetricsCollector::new_with_client(grpc_client);
     let mut start_time = SystemTime::now();
+
     loop {
         sampling_interval.tick().await;
         if let Err(e) = sampler.sample().await {
@@ -440,10 +446,10 @@ fn generate_nonce() -> Vec<u8> {
 fn convert_peer_label_to_node_id(
     peer_label: &str,
     node_id_list: &HashSet<NodeId>,
-) -> Result<NodeId, MetricsParseError> {
+) -> Result<NodeId, MetricsCollectError> {
     let peer_label_split = peer_label.split('_').collect::<Vec<&str>>();
     if peer_label_split.len() != 2 {
-        return Err(MetricsParseError::MetricParseFailure(
+        return Err(MetricsCollectError::MetricParseFailure(
             "Peer label was not succesfully split into 2 pieces".to_string(),
         ));
     }
@@ -456,9 +462,21 @@ fn convert_peer_label_to_node_id(
 
     // Assumption: There is a 1:1 mapping between id prefix and full id
     if valid_node_ids.len() != 1 {
-        return Err(MetricsParseError::MetricParseFailure(
+        return Err(MetricsCollectError::MetricParseFailure(
             "Did not find 1:1 mapping between node id prefix and node id list".to_string(),
         ));
     }
     Ok(*valid_node_ids[0])
+}
+
+pub fn setup_onchain_observability_adapter_client(
+    uds_path: PathBuf,
+) -> OnchainObservabilityServiceClient<Channel> {
+    let endpoint = Endpoint::try_from("http://[::]:50051").expect("Failed to connect to endpoint");
+    let channel = endpoint.connect_with_connector_lazy(service_fn(move |_: Uri| {
+        // Connect to a Uds socket
+        UnixStream::connect(uds_path.clone())
+    }));
+
+    OnchainObservabilityServiceClient::new(channel)
 }

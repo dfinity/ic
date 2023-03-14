@@ -8,7 +8,6 @@ edition = "2021"
 async-trait = "0.1.31"
 candid = "0.8.1"
 clap = { version = "3.1.6", features = ["derive"] }
-hyper = { version = "0.14.18", features = ["full"] }
 ic-async-utils = { path = "../../../async_utils" }
 ic-base-types = { path = "../../../types/base_types" }
 ic-canister-client = { path = "../../../canister_client" }
@@ -17,6 +16,7 @@ ic-crypto = { path = "../../../crypto" }
 ic-interfaces = { path = "../../../interfaces" }
 ic-logger = { path = "../../logger" }
 ic-metrics = { path = "../../metrics" }
+ic-onchain-observability-service = { path = "../service" }
 ic-registry-client = { path = "../../../registry/client" }
 ic-registry-client-helpers = { path = "../../../registry/helpers" }
 ic-registry-local-store = { path = "../../../registry/local_store" }
@@ -31,5 +31,7 @@ slog = "2.7.0"
 tempfile = "3.1.0"
 thiserror = "1.0.26"
 tokio = { version = "1.15.0", features = ["full"] }
+tonic = "0.8.3"
+tower = { version = "0.4.11", features = ["util"] }
 url = "2.1.1"
 [dev-dependencies]

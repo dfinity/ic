@@ -7523,7 +7523,6 @@ dependencies = [
  "async-trait",
  "candid",
  "clap 3.2.23",
- "hyper",
  "ic-async-utils",
  "ic-base-types",
  "ic-canister-client",
@@ -7532,6 +7531,7 @@ dependencies = [
  "ic-interfaces",
  "ic-logger",
  "ic-metrics",
+ "ic-onchain-observability-service",
  "ic-registry-client",
  "ic-registry-client-helpers",
  "ic-registry-local-store",
@@ -7546,6 +7546,8 @@ dependencies = [
  "tempfile",
  "thiserror",
  "tokio",
+ "tonic",
+ "tower",
  "url",
 ]
 
@@ -7556,6 +7558,7 @@ dependencies = [
  "ic-async-utils",
  "ic-metrics",
  "ic-onchain-observability-service",
+ "prometheus 0.12.0",
  "tokio",
  "tonic",
 ]
