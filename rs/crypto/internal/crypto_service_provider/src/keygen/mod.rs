@@ -1,7 +1,6 @@
 //! Utilities for key generation and key identifier generation
 
-use crate::api::{CspKeyGenerator, CspSecretKeyStoreChecker};
-use crate::key_id::KeyId;
+use crate::api::CspKeyGenerator;
 use crate::secret_key_store::panic_due_to_duplicated_key_id;
 use crate::types::{CspPop, CspPublicKey};
 use crate::vault::api::CspTlsKeygenError;
@@ -53,18 +52,6 @@ impl CspKeyGenerator for Csp {
                 }
             })?;
         Ok(cert)
-    }
-}
-
-impl CspSecretKeyStoreChecker for Csp {
-    fn sks_contains(&self, key_id: &KeyId) -> Result<bool, CryptoError> {
-        Ok(self.csp_vault.sks_contains(key_id)?)
-    }
-
-    fn sks_contains_tls_key(&self, cert: &TlsPublicKeyCert) -> Result<bool, CryptoError> {
-        // we calculate the key_id first to minimize locking time:
-        let key_id = KeyId::try_from(cert)?;
-        self.sks_contains(&key_id)
     }
 }
 

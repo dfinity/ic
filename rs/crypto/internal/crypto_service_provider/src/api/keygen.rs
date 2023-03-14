@@ -4,7 +4,6 @@ pub use errors::*;
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
 
 use super::super::types::{CspPop, CspPublicKey};
-use crate::key_id::KeyId;
 use crate::vault::api::ValidatePksAndSksError;
 use crate::{ExternalPublicKeys, PksAndSksContainsErrors};
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
@@ -71,16 +70,6 @@ pub trait CspKeyGenerator {
         node_id: NodeId,
         not_after: &str,
     ) -> Result<TlsPublicKeyCert, CryptoError>;
-}
-
-/// A trait that allows checking the secret key store for the availability of a
-/// key.
-pub trait CspSecretKeyStoreChecker {
-    /// Checks whether the store contains a key with the given `id`.
-    fn sks_contains(&self, key_id: &KeyId) -> Result<bool, CryptoError>;
-
-    /// Checks whether the store contains a private key for the given `cert`.
-    fn sks_contains_tls_key(&self, cert: &TlsPublicKeyCert) -> Result<bool, CryptoError>;
 }
 
 /// A trait that allows simultaneously checking the public and secret key stores for the

@@ -641,8 +641,7 @@ pub trait NiDkgCspVault {
     ) -> Result<(), ni_dkg_errors::CspDkgRetainThresholdKeysError>;
 }
 
-/// Operations of `CspVault` related to querying the secret key store (cf.
-/// `CspSecretKeyStoreChecker`).
+/// Operations of `CspVault` related to querying the secret key store.
 pub trait SecretKeyStoreCspVault {
     /// Checks whether the secret key store contains a key with the given
     /// `key_id`.

@@ -23,7 +23,7 @@ use rand_chacha::ChaCha20Rng;
 mod gen_dealing_encryption_key_pair_tests {
     use super::*;
     use crate::keygen::utils::dkg_dealing_encryption_pk_to_proto;
-    use crate::{CspSecretKeyStoreChecker, LocalCspVault};
+    use crate::LocalCspVault;
     use ic_crypto_internal_test_vectors::unhex::hex_to_32_bytes;
     use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
         CspDkgCreateFsKeyError, InternalError,
@@ -53,7 +53,6 @@ mod gen_dealing_encryption_key_pair_tests {
                 .expect("missing key"),
             dkg_dealing_encryption_pk_to_proto(public_key, pop)
         );
-        assert!(csp.sks_contains(&key_id).is_ok());
     }
 
     #[test]

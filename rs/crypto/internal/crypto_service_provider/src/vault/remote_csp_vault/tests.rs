@@ -93,7 +93,7 @@ mod multi_sig {
     use std::io;
 
     #[test]
-    fn should_generate_node_signing_key_pair_and_store_keys() {
+    fn should_generate_committee_signing_key_pair_and_store_keys() {
         let tokio_rt = new_tokio_runtime();
         let csp_vault = new_remote_csp_vault(tokio_rt.handle());
         test_utils::multi_sig::should_generate_committee_signing_key_pair_and_store_keys(csp_vault);

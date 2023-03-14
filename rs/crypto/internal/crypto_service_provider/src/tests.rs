@@ -1,8 +1,8 @@
 #![allow(clippy::unwrap_used)]
 mod csp_tests {
+    use crate::api::CspKeyGenerator;
     use crate::api::CspSigner;
     use crate::api::CspTlsHandshakeSignerProvider;
-    use crate::api::{CspKeyGenerator, CspSecretKeyStoreChecker};
     use crate::vault::test_utils::tls::ed25519_csp_pubkey_from_tls_pubkey_cert;
     use crate::Csp;
     use crate::CspPublicKey;
@@ -61,18 +61,6 @@ mod csp_tests {
     }
 
     #[test]
-    fn should_contain_newly_generated_secret_key_from_store() {
-        let (csp, public_key) = csp_with_node_signing_key_pair();
-        let key_id = KeyId::try_from(&public_key).unwrap();
-
-        let is_contained_in_sks_store = csp
-            .sks_contains(&key_id)
-            .expect("error looking for secret key");
-
-        assert!(is_contained_in_sks_store);
-    }
-
-    #[test]
     fn should_sign_and_verify_with_newly_generated_secret_key_from_store() {
         let (csp, public_key) = csp_with_node_signing_key_pair();
         let key_id = KeyId::try_from(&public_key).unwrap();
@@ -85,17 +73,6 @@ mod csp_tests {
         let verification = csp.verify(&signature, message, AlgorithmId::Ed25519, public_key);
 
         assert!(verification.is_ok());
-    }
-
-    #[test]
-    fn should_contain_newly_generated_tls_secret_key_from_store() {
-        let (csp, cert) = csp_with_tls_key_pair();
-
-        let is_contained_in_sks_store = csp
-            .sks_contains_tls_key(&cert)
-            .expect("error looking for TLS secret key");
-
-        assert!(is_contained_in_sks_store);
     }
 
     #[test]
