@@ -207,7 +207,8 @@ describe('Canister resolver lookups', () => {
   describe('database migrations', () => {
     const storeMock = {
       put: jest.fn(),
-      getAll: jest.fn(),
+      get: jest.fn(),
+      getAllKeys: jest.fn(),
     };
     const transactionMock = {
       objectStore: jest.fn().mockReturnValue(storeMock),
@@ -247,6 +248,12 @@ describe('Canister resolver lookups', () => {
       const previousVersion = 1;
       const connectSpy = mockConnect(previousVersion);
 
+      const keys = [
+        'https://fonts.googleapis.com',
+        'https://identity.internetcomputer.com',
+        'https://nns.internetcomputer.com',
+        'https://fonts.gstatic.com',
+      ];
       const oldDbItems: DBValue<V1DBHostsItem>[] = [
         {
           expireAt: 1678118590100,
@@ -279,6 +286,10 @@ describe('Canister resolver lookups', () => {
           },
         },
       ];
+      oldDbItems.forEach((item) => {
+        storeMock.get.mockResolvedValueOnce(item);
+      });
+
       const expectedNewDbItems: DBValue<DBHostsItem>[] = [
         {
           expireAt: 1678118590100,
@@ -310,7 +321,7 @@ describe('Canister resolver lookups', () => {
         },
       ];
 
-      storeMock.getAll.mockResolvedValue(oldDbItems);
+      storeMock.getAllKeys.mockResolvedValue(keys);
 
       await CanisterResolver.setup();
 
@@ -318,7 +329,13 @@ describe('Canister resolver lookups', () => {
       expect(transactionMock.objectStore).toHaveBeenCalledWith(
         domainStorageProperties.store
       );
-      expect(storeMock.getAll).toHaveBeenCalled();
+
+      expect(storeMock.get).toHaveBeenCalledTimes(keys.length);
+      keys.forEach((key) => {
+        expect(storeMock.get).toHaveBeenCalledWith(key);
+      });
+
+      expect(storeMock.getAllKeys).toHaveBeenCalled();
       expect(dbMock.deleteObjectStore).toHaveBeenCalledWith(
         domainStorageProperties.store
       );
@@ -327,9 +344,9 @@ describe('Canister resolver lookups', () => {
       );
 
       expect(storeMock.put).toHaveBeenCalledTimes(expectedNewDbItems.length);
-      for (const item of expectedNewDbItems) {
-        expect(storeMock.put).toHaveBeenCalledWith(item);
-      }
+      expectedNewDbItems.forEach((item, i) => {
+        expect(storeMock.put).toHaveBeenCalledWith(item, keys[i]);
+      });
     });
 
     it('should init new databases', async () => {
@@ -344,7 +361,8 @@ describe('Canister resolver lookups', () => {
       );
 
       expect(transactionMock.objectStore).not.toHaveBeenCalled();
-      expect(storeMock.getAll).not.toHaveBeenCalled();
+      expect(storeMock.getAllKeys).not.toHaveBeenCalled();
+      expect(storeMock.get).not.toHaveBeenCalled();
       expect(dbMock.deleteObjectStore).not.toHaveBeenCalledWith();
       expect(storeMock.put).not.toHaveBeenCalled();
     });

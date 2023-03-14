@@ -65,28 +65,36 @@ export class CanisterResolver {
       }
 
       case 1: {
-        const oldItems: DBValue<V1DBHostsItem>[] = await transaction
-          .objectStore(domainStorageProperties.store)
-          .getAll();
+        const oldStore = transaction.objectStore(domainStorageProperties.store);
+        const oldKeys = await oldStore.getAllKeys();
+        const newItems = await Promise.all(
+          oldKeys.map(async (key) => {
+            const oldValue = await oldStore.get(key);
+            const canister =
+              oldValue.body.canister === false
+                ? false
+                : { id: oldValue.body.canister.id };
+            const value: DBValue<DBHostsItem> = {
+              expireAt: oldValue.expireAt,
+              body: {
+                canister,
+              },
+            };
+
+            return {
+              value,
+              key,
+            };
+          })
+        );
 
         db.deleteObjectStore(domainStorageProperties.store);
 
         const store = db.createObjectStore(
           domainStorageProperties.store as string
         );
-        for (const item of oldItems) {
-          const canister =
-            item.body.canister === false
-              ? false
-              : { id: item.body.canister.id };
-          const newItem: DBValue<DBHostsItem> = {
-            expireAt: item.expireAt,
-            body: {
-              canister,
-            },
-          };
-
-          await store.put(newItem);
+        for (const item of newItems) {
+          await store.put(item.value, item.key);
         }
 
         return store;
