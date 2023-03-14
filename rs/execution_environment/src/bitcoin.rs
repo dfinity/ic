@@ -1,4 +1,3 @@
-use crate::util::candid_error_to_user_error;
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::{
     BitcoinGetSuccessorsArgs, BitcoinGetSuccessorsResponse, BitcoinSendTransactionInternalArgs,
@@ -74,7 +73,7 @@ pub fn get_successors(
                 }
             }
         }
-        Err(err) => Err(candid_error_to_user_error(err)),
+        Err(err) => Err(err),
     }
 }
 
@@ -108,7 +107,7 @@ pub fn send_transaction_internal(
 
             Ok(None)
         }
-        Err(err) => Err(candid_error_to_user_error(err)),
+        Err(err) => Err(err),
     }
 }
 

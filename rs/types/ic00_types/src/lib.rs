@@ -59,6 +59,13 @@ pub enum Method {
     ProvisionalTopUpCanister,
 }
 
+fn candid_error_to_user_error(err: candid::Error) -> UserError {
+    UserError::new(
+        ErrorCode::InvalidManagementPayload,
+        format!("Error decoding candid: {}", err),
+    )
+}
+
 /// A trait to be implemented by all structs that are used as payloads
 /// by IC00. This trait encapsulates Candid serialization so that
 /// consumers of IC00 don't need to explicitly depend on Candid.
@@ -67,8 +74,8 @@ pub trait Payload<'a>: Sized + CandidType + Deserialize<'a> {
         Encode!(&self).unwrap()
     }
 
-    fn decode(blob: &'a [u8]) -> Result<Self, candid::Error> {
-        Decode!(blob, Self)
+    fn decode(blob: &'a [u8]) -> Result<Self, UserError> {
+        Decode!(blob, Self).map_err(|error| candid_error_to_user_error(error))
     }
 }
 
@@ -506,8 +513,10 @@ impl<'a> Payload<'a> for EmptyBlob {
         Encode!().unwrap()
     }
 
-    fn decode(blob: &'a [u8]) -> Result<EmptyBlob, candid::Error> {
-        Decode!(blob).map(|_| EmptyBlob)
+    fn decode(blob: &'a [u8]) -> Result<EmptyBlob, UserError> {
+        Decode!(blob)
+            .map(|_| EmptyBlob)
+            .map_err(|err| candid_error_to_user_error(err))
     }
 }
 
@@ -595,26 +604,24 @@ pub struct CreateCanisterArgs {
 }
 
 impl CreateCanisterArgs {
-    pub fn encode(&self) -> Vec<u8> {
-        Encode!(&self).unwrap()
+    pub fn get_sender_canister_version(&self) -> Option<u64> {
+        self.sender_canister_version
     }
+}
 
-    pub fn decode(blob: &[u8]) -> Result<Self, UserError> {
+impl<'a> Payload<'a> for CreateCanisterArgs {
+    fn decode(blob: &'a [u8]) -> Result<Self, UserError> {
         let result = Decode!(blob, Self);
         match result {
             Err(_) => match EmptyBlob::decode(blob) {
                 Err(_) => Err(UserError::new(
-                    ErrorCode::CanisterContractViolation,
+                    ErrorCode::InvalidManagementPayload,
                     "Payload deserialization error.".to_string(),
                 )),
                 Ok(_) => Ok(CreateCanisterArgs::default()),
             },
             Ok(settings) => Ok(settings),
         }
-    }
-
-    pub fn get_sender_canister_version(&self) -> Option<u64> {
-        self.sender_canister_version
     }
 }
 
@@ -717,12 +724,8 @@ impl SetupInitialDKGResponse {
     }
 
     pub fn decode(blob: &[u8]) -> Result<Self, UserError> {
-        let serde_encoded_transcript_records = Decode!(blob, Vec<u8>).map_err(|err| {
-            UserError::new(
-                ErrorCode::CanisterContractViolation,
-                format!("Error decoding candid: {}", err),
-            )
-        })?;
+        let serde_encoded_transcript_records =
+            Decode!(blob, Vec<u8>).map_err(|err| candid_error_to_user_error(err))?;
         match serde_cbor::from_slice::<(
             InitialNiDkgTranscriptRecord,
             InitialNiDkgTranscriptRecord,
@@ -1008,12 +1011,8 @@ impl ComputeInitialEcdsaDealingsResponse {
     }
 
     pub fn decode(blob: &[u8]) -> Result<Self, UserError> {
-        let serde_encoded_transcript_records = Decode!(blob, Vec<u8>).map_err(|err| {
-            UserError::new(
-                ErrorCode::CanisterContractViolation,
-                format!("Error decoding candid: {}", err),
-            )
-        })?;
+        let serde_encoded_transcript_records =
+            Decode!(blob, Vec<u8>).map_err(|err| candid_error_to_user_error(err))?;
         match serde_cbor::from_slice::<(InitialIDkgDealings,)>(&serde_encoded_transcript_records) {
             Err(err) => Err(UserError::new(
                 ErrorCode::CanisterContractViolation,

@@ -192,35 +192,24 @@ impl SystemStateChanges {
         Ok(())
     }
 
-    fn candid_error_to_user_error(error: candid::Error) -> UserError {
-        UserError::new(
-            ErrorCode::InvalidManagementPayload,
-            format!("Error decoding candid: {}", error),
-        )
-    }
-
     fn get_sender_canister_version(msg: &Request) -> Result<Option<u64>, UserError> {
         let method = Ic00Method::from_str(&msg.method_name);
         let payload = msg.method_payload();
         match method {
-            Ok(Ic00Method::InstallCode) => InstallCodeArgs::decode(payload)
-                .map(|record| record.get_sender_canister_version())
-                .map_err(|err| Self::candid_error_to_user_error(err)),
+            Ok(Ic00Method::InstallCode) => {
+                InstallCodeArgs::decode(payload).map(|record| record.get_sender_canister_version())
+            }
             Ok(Ic00Method::CreateCanister) => CreateCanisterArgs::decode(payload)
                 .map(|record| record.get_sender_canister_version()),
             Ok(Ic00Method::UpdateSettings) => UpdateSettingsArgs::decode(payload)
-                .map(|record| record.get_sender_canister_version())
-                .map_err(|err| Self::candid_error_to_user_error(err)),
+                .map(|record| record.get_sender_canister_version()),
             Ok(Ic00Method::SetController) => SetControllerArgs::decode(payload)
-                .map(|record| record.get_sender_canister_version())
-                .map_err(|err| Self::candid_error_to_user_error(err)),
+                .map(|record| record.get_sender_canister_version()),
             Ok(Ic00Method::UninstallCode) => UninstallCodeArgs::decode(payload)
-                .map(|record| record.get_sender_canister_version())
-                .map_err(|err| Self::candid_error_to_user_error(err)),
+                .map(|record| record.get_sender_canister_version()),
             Ok(Ic00Method::ProvisionalCreateCanisterWithCycles) => {
                 ProvisionalCreateCanisterWithCyclesArgs::decode(payload)
                     .map(|record| record.get_sender_canister_version())
-                    .map_err(Self::candid_error_to_user_error)
             }
             Ok(Ic00Method::SignWithECDSA)
             | Ok(Ic00Method::CanisterStatus)

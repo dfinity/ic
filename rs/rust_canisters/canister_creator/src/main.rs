@@ -1,7 +1,7 @@
 use candid::Decode;
 use dfn_core::{api, CanisterId};
 use dfn_macro::update;
-use ic_ic00_types::CanisterIdRecord;
+use ic_ic00_types::{CanisterIdRecord, Payload};
 
 /// The amount of cycles that each created canister gets.
 const INITIAL_CYCLES_BALANCE: u64 = 1_000_000_000_000;

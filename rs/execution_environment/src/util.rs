@@ -1,6 +1,5 @@
 use crate::types::Response;
 use ic_base_types::SubnetId;
-use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::{CanisterStatusType, EmptyBlob, Payload as Ic00Payload, IC_00};
 use ic_interfaces::execution_environment::IngressHistoryWriter;
 use ic_logger::{error, ReplicaLogger};
@@ -107,11 +106,4 @@ pub fn process_stopping_canisters(
     }
     state.put_canister_states(canister_states);
     state
-}
-
-pub fn candid_error_to_user_error(error: candid::Error) -> UserError {
-    UserError::new(
-        ErrorCode::InvalidManagementPayload,
-        format!("Error decoding candid: {}", error),
-    )
 }
