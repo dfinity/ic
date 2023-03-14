@@ -4745,9 +4745,9 @@ dependencies = [
 
 [[package]]
 name = "ic-cdk-timers"
-version = "0.1.0"
+version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c400f8048f4f5ba3bd3d5fe9301b9343e8ef2e2749079af8f99d4f317ebbbb14"
+checksum = "c739e7c592cb66df4f15c6b6c4859b1195782f63923e2fb1b29553d9c0819bd4"
 dependencies = [
  "futures",
  "ic-cdk 0.7.0",
@@ -9536,10 +9536,32 @@ dependencies = [
  "ic-cdk-macros",
  "ic-cdk-timers",
  "ic-metrics-encoder",
+ "ic-nns-governance",
  "ic-stable-structures",
+ "ic-test-utilities-load-wasm",
+ "ic-tvl-sm-tests",
+ "ic0",
  "num-traits",
  "serde",
  "serde_bytes",
+ "walkdir",
+]
+
+[[package]]
+name = "ic-tvl-sm-tests"
+version = "0.1.0"
+dependencies = [
+ "candid",
+ "cddl",
+ "hex",
+ "ic-base-types",
+ "ic-nns-governance",
+ "ic-nns-test-utils",
+ "ic-state-machine-tests",
+ "ic-tvl-canister",
+ "num-traits",
+ "proptest",
+ "xrc-mock",
 ]
 
 [[package]]

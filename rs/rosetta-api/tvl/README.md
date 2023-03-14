@@ -16,24 +16,7 @@ TVL values are processed using data from two other canisters:
 
 TVL timeseries are stored in stable memory.
 
-## Local demo usage
-
-### Required canisters
+## Required canisters
 
 Download the XRC canister at: https://github.com/THLO/xrc_demo/tree/main/xrc
 ([wasm](https://github.com/THLO/xrc_demo/tree/main/xrc/xrc.wasm.gz) and [did](https://github.com/THLO/xrc_demo/tree/main/xrc/xrc.did) although the did file shouldn't change)
-
-### Deployment
-
-You can test the TVL canister by starting DFX:
-
-```shell
-dfx start --clean
-```
-
-then running the demo script from the _scripts_ directory:
-
-```shell
-cd scripts
-./setup.sh
-```

@@ -1,223 +1,134 @@
+use crate::memory::push_entry;
+use crate::memory::{get_last_icp_price_ts, get_last_locked_icp_ts, EntryType, TVL_TIMESERIES};
+use crate::state::{mutate_state, read_state, replace_state};
+use crate::types::{
+    Asset, AssetClass, GetExchangeRateRequest, GetExchangeRateResult, GovernanceCachedMetrics,
+    GovernanceError, TvlArgs, TvlResult, TvlResultError,
+};
+use candid::utils::{ArgumentDecoder, ArgumentEncoder};
+use candid::Nat;
+use candid::Principal;
+use state::TvlState;
+use std::time::Duration;
+
 mod memory;
 pub mod metrics;
 mod state;
 pub mod types;
 
-use crate::memory::{FX_TIMESERIES, LOCKED_E8S_TIMESERIES, TVL_TIMESERIES};
-use crate::types::{
-    Asset, AssetClass, ExchangeRate, GetExchangeRateRequest, GetExchangeRateResult,
-    GovernanceCachedMetrics, GovernanceError, InitArgs, TimeseriesEntry, TimeseriesResult,
-    TvlResult, TvlResultError, TvlTimeseriesResult,
-};
-use candid::utils::{ArgumentDecoder, ArgumentEncoder};
-use candid::Nat;
-use candid::Principal;
-use ic_cdk_timers::set_timer_interval;
-use state::TvlState;
-use std::cell::RefCell;
-use std::time::Duration;
-
-const NANO: u64 = 1_000_000_000;
-
+const SEC_NANOS: u64 = 1_000_000_000;
 const E8S: u64 = 100_000_000;
 
 // We query XRC data slightly in the past to be sure to have a price with consensus.
 const XRC_MARGIN_SEC: u64 = 5 * 60;
-// The payment required for querying the XRC canister.
-const XRC_CALL_COST_CYCLES: u64 = 10_000_000_000;
 
-thread_local! {
-    static STATE: RefCell<Option<TvlState>> = RefCell::new(None);
-}
-
-pub fn init(args: InitArgs) {
-    ic_cdk::println!("Initializing TVL canister...");
+pub fn init(args: TvlArgs) {
     init_state(args);
-    start_tvl_updater();
+    init_timers();
 }
 
-pub async fn post_upgrade(args: Option<InitArgs>) {
-    if let Some(upgrade_args) = args {
-        // Allows to change XRC and/or governance canister reference as well as update delay.
-        init_state(upgrade_args);
-    }
+pub async fn post_upgrade(args: TvlArgs) {
+    init_state(args);
+    mutate_state(|s| {
+        s.last_ts_icp_price = get_last_icp_price_ts();
+        s.last_ts_icp_locked = get_last_locked_icp_ts();
+    });
     // Timers have to be restarted after canister upgrade.
-    start_tvl_updater();
+    init_timers();
 }
 
-fn init_state(args: InitArgs) {
-    STATE.with(|cell| {
-        cell.replace(Some(TvlState {
-            governance_principal: args.governance_id.get(),
-            xrc_principal: args.xrc_id.get(),
-            update_period: args.update_period,
-        }))
+fn init_state(args: TvlArgs) {
+    replace_state(TvlState {
+        governance_principal: args.governance_id.get(),
+        xrc_principal: args.xrc_id.get(),
+        update_period: args.update_period,
+        last_ts_icp_price: 0,
+        last_ts_icp_locked: 0,
     });
 }
 
-/// Start a recurring update of TVL values.
-fn start_tvl_updater() {
-    STATE.with(|s| {
-        let _id = set_timer_interval(
-            Duration::from_secs(s.borrow().as_ref().expect("State not set").update_period),
-            || ic_cdk::spawn(call_update_tvl()),
-        );
-    });
-}
+pub fn init_timers() {
+    let update_period = read_state(|s| s.update_period);
 
-async fn call_update_tvl() {
-    let cur_time = ic_cdk::api::time() / NANO;
-    ic_cdk::api::print(format!("[{}] Updating TVL...", cur_time));
-    if let Err(e) = update_tvl().await {
-        ic_cdk::println!("Cannot update TVL: {}", e.message);
-    }
+    ic_cdk_timers::set_timer_interval(Duration::from_secs(update_period), || {
+        ic_cdk::spawn(async {
+            update_icp_price().await;
+        })
+    });
+    ic_cdk_timers::set_timer_interval(Duration::from_secs(update_period), || {
+        ic_cdk::spawn(async {
+            update_locked_amount().await;
+        });
+    });
 }
 
 /// Retrieve last data from timeseries. Perform a TVL update if none is present.
 pub async fn get_tvl() -> Result<TvlResult, TvlResultError> {
-    let last: Option<TvlResult> = TVL_TIMESERIES.with(|map| {
-        if let Some((time_sec, tvl)) = map.borrow().iter().last() {
-            Some(TvlResult {
-                time_sec: Nat::from(time_sec),
-                tvl: Nat::from(tvl),
-            })
-        } else {
-            None
-        }
-    });
-
-    if let Some(tvl) = last {
-        return Ok(tvl);
-    }
-    // If no result is available yet, update TVL now.
-    update_tvl().await
-}
-
-/// Return the timeseries of TVL stored in stable memory.
-pub async fn get_tvl_timeseries() -> TvlTimeseriesResult {
-    ic_cdk::println!("Getting TVL timeseries");
-    let mut timeseries = vec![];
     TVL_TIMESERIES.with(|map| {
-        for (time_sec, tvl) in map.borrow().iter() {
-            timeseries.push(TvlResult {
-                time_sec: Nat::from(time_sec),
-                tvl: Nat::from(tvl),
+        let (last_ts_icp_price, last_ts_icp_locked) =
+            read_state(|s| (s.last_ts_icp_price, s.last_ts_icp_locked));
+
+        if let Some(price) = map
+            .borrow()
+            .get(&(last_ts_icp_price, crate::memory::EntryType::ICPrice as u32))
+        {
+            if let Some(locked_amount) = map.borrow().get(&(
+                last_ts_icp_locked,
+                crate::memory::EntryType::LockedIcp as u32,
+            )) {
+                let lock_amount_f64 = (locked_amount / E8S) as f64;
+                let price_f64 = (price / E8S) as f64;
+                let tvl = Nat::from((price_f64 * lock_amount_f64) as u64);
+
+                return Ok(TvlResult {
+                    time_sec: Nat::from(last_ts_icp_price),
+                    tvl,
+                });
+            }
+            return Err(TvlResultError {
+                message: "No ICP locked amount entry.".into(),
             });
         }
-    });
-    TvlTimeseriesResult { timeseries }
+        Err(TvlResultError {
+            message: "No ICP price entry.".into(),
+        })
+    })
 }
 
-/// Return the timeseries of exchange rates stored in stable memory.
-pub async fn get_xr_timeseries() -> TimeseriesResult {
-    ic_cdk::println!("Getting exchange rate timeseries");
-    let mut timeseries = vec![];
-    FX_TIMESERIES.with(|map| {
-        for (time_sec, tvl) in map.borrow().iter() {
-            timeseries.push(TimeseriesEntry {
-                time_sec: Nat::from(time_sec),
-                value: Nat::from(tvl),
-            });
-        }
-    });
-    TimeseriesResult { timeseries }
-}
-
-/// Return the timeseries of exchange rates stored in stable memory.
-pub async fn get_locked_e8s_timeseries() -> TimeseriesResult {
-    ic_cdk::println!("Getting locked e8s timeseries");
-    let mut timeseries = vec![];
-    LOCKED_E8S_TIMESERIES.with(|map| {
-        for (time_sec, tvl) in map.borrow().iter() {
-            timeseries.push(TimeseriesEntry {
-                time_sec: Nat::from(time_sec),
-                value: Nat::from(tvl),
-            });
-        }
-    });
-    TimeseriesResult { timeseries }
-}
-
-/// Update the TVL timeseries by using data from XRC and Governance canisters.
-async fn update_tvl() -> Result<TvlResult, TvlResultError> {
-    // Parallel calls to XRC and Governance canisters.
-    let f_res_xrc = get_exchange_rate();
-    let f_res_gov = get_metrics();
-    let (res_xrc, res_gov) = futures::future::join(f_res_xrc, f_res_gov).await;
-
-    if res_gov.is_err() {
-        return Err(TvlResultError {
-            message: String::from("Cannot retrieve locked neurons."),
-        });
-    }
-    let metrics = res_gov.unwrap();
-    store_locked_e8s(&metrics);
-
-    if res_xrc.is_err() {
-        return Err(TvlResultError {
-            message: String::from("Cannot retrieve exchange rate."),
-        });
-    }
-    let res_xrc = res_xrc.unwrap();
-    match res_xrc {
-        GetExchangeRateResult::Ok(xr) => {
-            store_exchange_rate(&xr);
-
-            // We can insert one data per day (per metrics) or one per received xr.
-            let time_sec = xr.timestamp;
-            // let time_sec = metrics.timestamp_seconds;
-
-            let decimals = u64::pow(10, xr.metadata.decimals);
-
-            let total_locked_e8s = metrics.total_locked_e8s;
-            let total_locked_icp = total_locked_e8s / E8S;
-
-            let tvl = total_locked_icp * xr.rate / decimals;
-
-            ic_cdk::println!(
-                "Storing TVL {} from ICP: {}, and exchange rate: {} (decimals: {})",
-                tvl,
-                total_locked_icp,
-                xr.rate,
-                decimals
-            );
-
-            // Store TVL timeseries.
-            store_tvl(time_sec, tvl);
-
-            Ok(TvlResult {
-                time_sec: Nat::from(time_sec),
-                tvl: Nat::from(tvl),
-            })
-        }
-        GetExchangeRateResult::Err(xre) => Err(TvlResultError {
-            message: format!("Error while retrieving exchange rate: {:?}", xre),
-        }),
+fn convert_to_8_decimals(amount: u64, decimals: u32) -> u64 {
+    if decimals >= 8 {
+        // If there are at least 8 decimal places, divide by 10^(decimals - 8)
+        // to shift the decimal point to the left.
+        amount / 10u64.pow(decimals - 8)
+    } else {
+        // If there are fewer than 8 decimal places, multiply by 10^(8 - decimals)
+        // to shift the decimal point to the right.
+        amount * 10u64.pow(8 - decimals)
     }
 }
 
-/// Store exchange rate in stable memory.
-fn store_exchange_rate(xr: &ExchangeRate) {
-    FX_TIMESERIES.with(|m| {
-        let mut map = m.borrow_mut();
-        let _ = map.insert(xr.timestamp, xr.rate);
-    });
+pub async fn update_icp_price() -> Option<u64> {
+    let xrc_result = get_exchange_rate().await;
+    if let Ok(GetExchangeRateResult::Ok(xr)) = xrc_result {
+        let time_sec = xr.timestamp;
+        let icp_price = convert_to_8_decimals(xr.rate, xr.metadata.decimals);
+        push_entry(time_sec, EntryType::ICPrice, icp_price);
+        return Some(icp_price);
+    }
+    None
 }
 
-/// Store total locked e8s in stable memory.
-fn store_locked_e8s(metrics: &GovernanceCachedMetrics) {
-    LOCKED_E8S_TIMESERIES.with(|m| {
-        let mut map = m.borrow_mut();
-        let _ = map.insert(metrics.timestamp_seconds, metrics.total_locked_e8s);
-    });
-}
-
-/// Store total value locked (in USD) in stable memory.
-fn store_tvl(timestamp: u64, tvl_e8s: u64) {
-    TVL_TIMESERIES.with(|m| {
-        let mut map = m.borrow_mut();
-        let _ = map.insert(timestamp, tvl_e8s);
-    });
+pub async fn update_locked_amount() -> Option<u64> {
+    if let Ok(metrics) = get_metrics().await {
+        ic_cdk::println!("{:?}", metrics);
+        push_entry(
+            ic_cdk::api::time(),
+            EntryType::LockedIcp,
+            metrics.total_locked_e8s,
+        );
+        return Some(metrics.total_locked_e8s);
+    }
+    None
 }
 
 /// Query the XRC canister to retrieve the last ICP/USD price.
@@ -232,7 +143,7 @@ async fn get_exchange_rate() -> Result<GetExchangeRateResult, String> {
     };
 
     // Take few minutes back to be sure to have data.
-    let timestamp_sec = ic_cdk::api::time() / NANO - XRC_MARGIN_SEC;
+    let timestamp_sec = ic_cdk::api::time() / SEC_NANOS - XRC_MARGIN_SEC;
 
     // Retrieve last ICP/USD value.
     let args = GetExchangeRateRequest {
@@ -241,16 +152,14 @@ async fn get_exchange_rate() -> Result<GetExchangeRateResult, String> {
         timestamp: Some(timestamp_sec),
     };
 
-    let xrc_id = STATE.with(|s| s.borrow().as_ref().expect("State not set").xrc_principal);
+    let xrc_id = read_state(|s| s.xrc_principal);
 
     ic_cdk::println!("Calling XRC canister ({})", xrc_id);
     let res_xrc: Result<(GetExchangeRateResult,), (i32, String)> =
-        call_with_payment(xrc_id.0, "get_exchange_rate", (args,), XRC_CALL_COST_CYCLES).await;
+        call(xrc_id.0, "get_exchange_rate", (args,)).await;
+    ic_cdk::println!("{:?}", res_xrc);
     match res_xrc {
-        Ok((xr,)) => {
-            // ic_cdk::println!("XRC call result: {:?}", xr);
-            Ok(xr)
-        }
+        Ok((xr,)) => Ok(xr),
         Err((code, msg)) => Err(format!(
             "Error while calling XRC canister ({}): {:?}",
             code, msg
@@ -260,12 +169,7 @@ async fn get_exchange_rate() -> Result<GetExchangeRateResult, String> {
 
 /// Retrieve the metrics from the Governance canister.
 async fn get_metrics() -> Result<GovernanceCachedMetrics, GovernanceError> {
-    let gov_id = STATE.with(|s| {
-        s.borrow()
-            .as_ref()
-            .expect("State not set")
-            .governance_principal
-    });
+    let gov_id = read_state(|s| s.governance_principal);
     ic_cdk::println!("Calling Governance canister ({})", gov_id);
     let res_gov: (Result<GovernanceCachedMetrics, GovernanceError>,) =
         call(gov_id.0, "get_metrics", ())
@@ -281,21 +185,6 @@ where
     Out: for<'a> ArgumentDecoder<'a>,
 {
     ic_cdk::call(id, method, args)
-        .await
-        .map_err(|(code, msg)| (code as i32, msg))
-}
-
-async fn call_with_payment<In, Out>(
-    id: Principal,
-    method: &str,
-    args: In,
-    cycles: u64,
-) -> Result<Out, (i32, String)>
-where
-    In: ArgumentEncoder + Send,
-    Out: for<'a> ArgumentDecoder<'a>,
-{
-    ic_cdk::api::call::call_with_payment(id, method, args, cycles)
         .await
         .map_err(|(code, msg)| (code as i32, msg))
 }
