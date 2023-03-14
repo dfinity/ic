@@ -22,8 +22,8 @@ use std::sync::Arc;
 use crate::ckbtc::lib::install_bitcoin_canister;
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
-    retry, retry_async, HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-    SshSession, ADMIN, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+    retry, retry_async, HasDependencies, HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot,
+    IcNodeContainer, SshSession, ADMIN, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
 };
 use crate::driver::universal_vm::UniversalVms;
 use crate::util::runtime_from_url;
@@ -39,11 +39,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
 use ic_universal_canister::{management, wasm};
 use slog::info;
-use std::{
-    fs::File,
-    io::{Read, Write},
-    path::Path,
-};
+use std::{io::Read, path::Path};
 
 const UNIVERSAL_VM_NAME: &str = "btc-node";
 
@@ -53,37 +49,10 @@ pub fn config(env: TestEnv) {
     // Regtest bitcoin node listens on 18444
     // docker bitcoind image uses 8332 for the rpc server
     // https://en.bitcoinwiki.org/wiki/Running_Bitcoind
-    let activate_script = r#"#!/bin/sh
-cp /config/bitcoin.conf /tmp/bitcoin.conf
-docker run  --name=bitcoind-node -d \
-  -p 8332:8332 \
-  -p 18444:18444 \
-  -v /tmp:/bitcoin/.bitcoin \
-  registry.gitlab.com/dfinity-lab/open/public-docker-registry/kylemanna/bitcoind
-"#;
-    let config_dir = env
-        .single_activate_script_config_dir(UNIVERSAL_VM_NAME, activate_script)
-        .unwrap();
-
-    let bitcoin_conf_path = config_dir.join("bitcoin.conf");
-    let mut bitcoin_conf = File::create(bitcoin_conf_path).unwrap();
-    bitcoin_conf.write_all(r#"
-    # Enable regtest mode. This is required to setup a private bitcoin network.
-    regtest=1
-    debug=1
-    whitelist=[::]/0
-    fallbackfee=0.0002
-
-    # Dummy credentials that are required by `bitcoin-cli`.
-    rpcuser=btc-dev-preview
-    rpcpassword=Wjh4u6SAjT4UMJKxPmoZ0AN2r9qbE-ksXQ5I2_-Hm4w=
-    rpcauth=btc-dev-preview:8555f1162d473af8e1f744aa056fd728$afaf9cb17b8cf0e8e65994d1195e4b3a4348963b08897b4084d210e5ee588bcb
-    "#
-    .as_bytes()).unwrap();
-    bitcoin_conf.sync_all().unwrap();
 
     UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
-        .with_config_dir(config_dir)
+        .with_config_img(env.get_dependency_path("rs/tests/btc_uvm_config_image.zst"))
+        .disable_ipv4()
         .start(&env)
         .expect("failed to setup universal VM");
 
