@@ -231,10 +231,10 @@ pub(crate) mod test_utils {
     use ic_types::consensus::ecdsa::{
         EcdsaBlockReader, EcdsaComplaint, EcdsaComplaintContent, EcdsaKeyTranscript, EcdsaMessage,
         EcdsaOpening, EcdsaOpeningContent, EcdsaPayload, EcdsaReshareRequest, EcdsaSigShare,
-        EcdsaUIDGenerator, IDkgTranscriptAttributes, IDkgTranscriptParamsRef,
-        KeyTranscriptCreation, MaskedTranscript, PreSignatureQuadrupleRef, RequestId,
-        ReshareOfMaskedParams, ThresholdEcdsaSigInputsRef, TranscriptLookupError, TranscriptRef,
-        UnmaskedTranscript,
+        EcdsaUIDGenerator, IDkgTranscriptAttributes, IDkgTranscriptOperationRef,
+        IDkgTranscriptParamsRef, KeyTranscriptCreation, MaskedTranscript, PreSignatureQuadrupleRef,
+        RequestId, ReshareOfMaskedParams, ThresholdEcdsaSigInputsRef, TranscriptLookupError,
+        TranscriptRef, UnmaskedTranscript,
     };
     use ic_types::crypto::canister_threshold_sig::idkg::{
         IDkgComplaint, IDkgDealing, IDkgDealingSupport, IDkgMaskedTranscriptOrigin, IDkgOpening,
@@ -269,6 +269,41 @@ pub(crate) mod test_utils {
     pub(crate) struct TestTranscriptParams {
         pub(crate) idkg_transcripts: BTreeMap<TranscriptRef, IDkgTranscript>,
         pub(crate) transcript_params_ref: IDkgTranscriptParamsRef,
+    }
+
+    impl From<&IDkgTranscriptParams> for TestTranscriptParams {
+        fn from(params: &IDkgTranscriptParams) -> Self {
+            let h = params.transcript_id().source_height();
+            TestTranscriptParams {
+                idkg_transcripts: Default::default(),
+                transcript_params_ref: IDkgTranscriptParamsRef {
+                    transcript_id: params.transcript_id(),
+                    dealers: params.dealers().get().clone(),
+                    receivers: params.receivers().get().clone(),
+                    registry_version: params.registry_version(),
+                    algorithm_id: params.algorithm_id(),
+                    operation_type_ref: match params.operation_type() {
+                        IDkgTranscriptOperation::Random => IDkgTranscriptOperationRef::Random,
+                        IDkgTranscriptOperation::ReshareOfMasked(t) => {
+                            IDkgTranscriptOperationRef::ReshareOfMasked(
+                                MaskedTranscript::try_from((h, t)).unwrap(),
+                            )
+                        }
+                        IDkgTranscriptOperation::ReshareOfUnmasked(t) => {
+                            IDkgTranscriptOperationRef::ReshareOfUnmasked(
+                                UnmaskedTranscript::try_from((h, t)).unwrap(),
+                            )
+                        }
+                        IDkgTranscriptOperation::UnmaskedTimesMasked(t1, t2) => {
+                            IDkgTranscriptOperationRef::UnmaskedTimesMasked(
+                                UnmaskedTranscript::try_from((h, t1)).unwrap(),
+                                MaskedTranscript::try_from((h, t2)).unwrap(),
+                            )
+                        }
+                    },
+                },
+            }
+        }
     }
 
     pub(crate) struct TestSigInputs {
@@ -837,6 +872,31 @@ pub(crate) mod test_utils {
             .corrupt_internal_dealing_raw_by_changing_ciphertexts(&[complainer_index], &mut rng)
             .build();
         (node_id, params, transcript)
+    }
+
+    pub(crate) fn get_dealings_and_support(
+        env: &CanisterThresholdSigTestEnvironment,
+        params: &IDkgTranscriptParams,
+    ) -> (BTreeMap<NodeId, SignedIDkgDealing>, Vec<IDkgDealingSupport>) {
+        let dealings = create_and_verify_signed_dealings(params, &env.crypto_components);
+        let supports = dealings
+            .iter()
+            .flat_map(|(_, dealing)| {
+                env.crypto_components.iter().map(|(signer, c)| {
+                    let c: Arc<&dyn ConsensusCrypto> = Arc::new(c);
+                    let sig_share = c.sign(dealing, *signer, params.registry_version()).unwrap();
+
+                    IDkgDealingSupport {
+                        transcript_id: params.transcript_id(),
+                        dealer_id: dealing.dealer_id(),
+                        dealing_hash: ic_types::crypto::crypto_hash(dealing),
+                        sig_share,
+                    }
+                })
+            })
+            .collect();
+
+        (dealings, supports)
     }
 
     // Creates a test dealing
