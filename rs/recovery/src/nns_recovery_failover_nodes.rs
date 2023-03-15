@@ -10,12 +10,14 @@ use crate::{NeuronArgs, RecoveryResult, IC_REGISTRY_LOCAL_STORE};
 use clap::Parser;
 use ic_base_types::SubnetId;
 use ic_types::{NodeId, ReplicaVersion};
+use serde::{Deserialize, Serialize};
 use slog::Logger;
+use std::iter::Peekable;
 use std::net::IpAddr;
 use std::path::PathBuf;
 use std::process::Command;
 use strum::IntoEnumIterator;
-use strum_macros::EnumIter;
+use strum_macros::{EnumIter, EnumString};
 use url::Url;
 
 use crate::{Recovery, Step};
@@ -23,7 +25,7 @@ use crate::{Recovery, Step};
 /// Caller id that will be used to mutate the registry canister.
 pub const CANISTER_CALLER_ID: &str = "r7inp-6aaaa-aaaaa-aaabq-cai";
 
-#[derive(Debug, Copy, Clone, EnumIter)]
+#[derive(Debug, Copy, Clone, EnumIter, EnumString, PartialEq, Deserialize, Serialize)]
 pub enum StepType {
     StopReplica,
     DownloadCertifications,
@@ -42,7 +44,7 @@ pub enum StepType {
     Cleanup,
 }
 
-#[derive(Parser)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Parser)]
 #[clap(version = "1.0")]
 pub struct NNSRecoveryFailoverNodesArgs {
     /// Id of the broken subnet
@@ -84,11 +86,17 @@ pub struct NNSRecoveryFailoverNodesArgs {
     #[clap(long, multiple_values(true), parse(try_from_str=crate::util::node_id_from_str))]
     /// Replace the members of the given subnet with these nodes
     pub replacement_nodes: Option<Vec<NodeId>>,
+
+    /// If present the tool will start execution for the provided step, skipping the initial ones
+    #[clap(long = "resume")]
+    pub next_step: Option<StepType>,
 }
 
 pub struct NNSRecoveryFailoverNodes {
-    step_iterator: Box<dyn Iterator<Item = StepType>>,
+    step_iterator: Peekable<StepTypeIter>,
+    pub recovery_args: RecoveryArgs,
     pub params: NNSRecoveryFailoverNodesArgs,
+    pub neuron_args: Option<NeuronArgs>,
     recovery: Recovery,
     interactive: bool,
     logger: Logger,
@@ -103,14 +111,15 @@ impl NNSRecoveryFailoverNodes {
         subnet_args: NNSRecoveryFailoverNodesArgs,
         interactive: bool,
     ) -> Self {
-        let ssh_confirmation = neuron_args.is_some();
-        let recovery = Recovery::new(logger.clone(), recovery_args, neuron_args, ssh_confirmation)
+        let recovery = Recovery::new(logger.clone(), recovery_args.clone(), neuron_args.clone())
             .expect("Failed to init recovery");
         recovery.init_registry_local_store_with_url(&subnet_args.validate_nns_url);
         let new_registry_local_store = recovery.work_dir.join(IC_REGISTRY_LOCAL_STORE);
         Self {
-            step_iterator: Box::new(StepType::iter()),
+            step_iterator: StepType::iter().peekable(),
             params: subnet_args,
+            recovery_args,
+            neuron_args,
             recovery,
             logger,
             new_registry_local_store,
@@ -129,9 +138,13 @@ impl NNSRecoveryFailoverNodes {
     }
 }
 
-impl RecoveryIterator<StepType> for NNSRecoveryFailoverNodes {
-    fn get_step_iterator(&mut self) -> &mut Box<dyn Iterator<Item = StepType>> {
+impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoveryFailoverNodes {
+    fn get_step_iterator(&mut self) -> &mut Peekable<StepTypeIter> {
         &mut self.step_iterator
+    }
+
+    fn store_next_step(&mut self, step_type: Option<StepType>) {
+        self.params.next_step = step_type;
     }
 
     fn get_logger(&self) -> &Logger {

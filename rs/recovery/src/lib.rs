@@ -28,6 +28,7 @@ use ic_replay::player::StateParams;
 use ic_types::messages::HttpStatusResponse;
 use ic_types::{Height, ReplicaVersion, SubnetId};
 use prost::Message;
+use serde::{Deserialize, Serialize};
 use slog::{info, warn, Logger};
 use ssh_helper::SshHelper;
 use std::net::IpAddr;
@@ -46,6 +47,7 @@ use crate::file_sync_helper::read_file;
 
 pub mod admin_helper;
 pub mod app_subnet_recovery;
+pub mod args_merger;
 pub mod cli;
 pub mod cmd;
 pub mod command_helper;
@@ -54,11 +56,13 @@ pub mod file_sync_helper;
 pub mod nns_recovery_failover_nodes;
 pub mod nns_recovery_same_nodes;
 pub mod recovery_iterator;
+pub mod recovery_state;
 pub mod replay_helper;
 pub(crate) mod ssh_helper;
 pub mod steps;
 pub mod util;
 
+pub const RECOVERY_DIRECTORY_NAME: &str = "recovery";
 pub const IC_DATA_PATH: &str = "/var/lib/ic/data";
 pub const IC_STATE_DIR: &str = "data/ic_state";
 pub const IC_CHECKPOINTS_PATH: &str = "ic_state/checkpoints";
@@ -80,7 +84,7 @@ pub const CHECKPOINTS: &str = "checkpoints";
 pub const ADMIN: &str = "admin";
 pub const READONLY: &str = "readonly";
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct NeuronArgs {
     dfx_hsm_pin: String,
     slot: String,
@@ -95,11 +99,13 @@ pub struct NodeMetrics {
     certification_height: Height,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RecoveryArgs {
     pub dir: PathBuf,
     pub nns_url: Url,
     pub replica_version: Option<ReplicaVersion>,
     pub key_file: Option<PathBuf>,
+    pub test_mode: bool,
 }
 
 /// The recovery struct comprises working directories for the recovery of a
@@ -135,9 +141,9 @@ impl Recovery {
         logger: Logger,
         args: RecoveryArgs,
         neuron_args: Option<NeuronArgs>,
-        ssh_confirmation: bool,
     ) -> RecoveryResult<Self> {
-        let recovery_dir = args.dir.join("recovery");
+        let ssh_confirmation = !args.test_mode;
+        let recovery_dir = args.dir.join(RECOVERY_DIRECTORY_NAME);
         let binary_dir = recovery_dir.join("binaries");
         let data_dir = recovery_dir.join("original_data");
         let work_dir = recovery_dir.join("working_dir");

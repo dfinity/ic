@@ -6,15 +6,17 @@ use crate::{error::RecoveryError, RecoveryArgs};
 use clap::Parser;
 use ic_base_types::SubnetId;
 use ic_types::ReplicaVersion;
+use serde::{Deserialize, Serialize};
 use slog::Logger;
+use std::iter::Peekable;
 use std::net::IpAddr;
 use std::path::PathBuf;
 use strum::IntoEnumIterator;
-use strum_macros::EnumIter;
+use strum_macros::{EnumIter, EnumString};
 
 use crate::{Recovery, Step};
 
-#[derive(Debug, Copy, Clone, EnumIter)]
+#[derive(Debug, Copy, Clone, EnumIter, EnumString, PartialEq, Deserialize, Serialize)]
 pub enum StepType {
     StopReplica,
     DownloadCertifications,
@@ -32,7 +34,7 @@ pub enum StepType {
     Cleanup,
 }
 
-#[derive(Parser)]
+#[derive(Debug, Clone, PartialEq, Parser, Deserialize, Serialize)]
 #[clap(version = "1.0")]
 pub struct NNSRecoverySameNodesArgs {
     /// Id of the broken subnet
@@ -50,11 +52,16 @@ pub struct NNSRecoverySameNodesArgs {
     /// IP address of the node to upload the new subnet state to
     #[clap(long)]
     pub upload_node: Option<IpAddr>,
+
+    /// If present the tool will start execution for the provided step, skipping the initial ones
+    #[clap(long = "resume")]
+    pub next_step: Option<StepType>,
 }
 
 pub struct NNSRecoverySameNodes {
-    step_iterator: Box<dyn Iterator<Item = StepType>>,
+    step_iterator: Peekable<StepTypeIter>,
     pub params: NNSRecoverySameNodesArgs,
+    pub recovery_args: RecoveryArgs,
     pub recovery: Recovery,
     interactive: bool,
     logger: Logger,
@@ -66,17 +73,21 @@ impl NNSRecoverySameNodes {
         logger: Logger,
         recovery_args: RecoveryArgs,
         subnet_args: NNSRecoverySameNodesArgs,
-        test: bool,
         interactive: bool,
     ) -> Self {
-        let recovery = Recovery::new(logger.clone(), recovery_args, None, !test)
-            .expect("Failed to init recovery");
+        let recovery = Recovery::new(
+            logger.clone(),
+            recovery_args.clone(),
+            /*neuron_args=*/ None,
+        )
+        .expect("Failed to init recovery");
         recovery.init_registry_local_store();
         let new_state_dir = recovery.work_dir.join("new_ic_state");
         create_dir(&new_state_dir).expect("Failed to create state directory for upload.");
         Self {
-            step_iterator: Box::new(StepType::iter()),
+            step_iterator: StepType::iter().peekable(),
             params: subnet_args,
+            recovery_args,
             recovery,
             logger,
             new_state_dir,
@@ -89,9 +100,13 @@ impl NNSRecoverySameNodes {
     }
 }
 
-impl RecoveryIterator<StepType> for NNSRecoverySameNodes {
-    fn get_step_iterator(&mut self) -> &mut Box<dyn Iterator<Item = StepType>> {
+impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
+    fn get_step_iterator(&mut self) -> &mut Peekable<StepTypeIter> {
         &mut self.step_iterator
+    }
+
+    fn store_next_step(&mut self, step_type: Option<StepType>) {
+        self.params.next_step = step_type;
     }
 
     fn get_logger(&self) -> &Logger {

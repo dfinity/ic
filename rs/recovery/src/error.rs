@@ -16,6 +16,8 @@ pub enum RecoveryError {
     CommandError(Option<i32>, String),
     OutputError(String),
     DownloadError(String, FileDownloadError),
+    ParsingError(serde_json::Error),
+    SerializationError(serde_json::Error),
     UnexpectedError(String),
     StepSkipped,
 }
@@ -38,6 +40,12 @@ impl RecoveryError {
     }
     pub(crate) fn invalid_output_error(output: String) -> Self {
         RecoveryError::OutputError(format!("Invalid output: {}", output))
+    }
+    pub(crate) fn parsing_error(e: serde_json::Error) -> Self {
+        RecoveryError::ParsingError(e)
+    }
+    pub(crate) fn serialization_error(e: serde_json::Error) -> Self {
+        RecoveryError::SerializationError(e)
     }
     pub(crate) fn download_error(url: String, target: &Path, e: FileDownloadError) -> Self {
         RecoveryError::DownloadError(
@@ -67,6 +75,12 @@ impl fmt::Display for RecoveryError {
             }
             RecoveryError::StepSkipped => {
                 write!(f, "Recovery step skipped.")
+            }
+            RecoveryError::ParsingError(e) => {
+                write!(f, "Parsing error, error: {:?}", e)
+            }
+            RecoveryError::SerializationError(e) => {
+                write!(f, "Serialization error, error: {:?}", e)
             }
         }
     }

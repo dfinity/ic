@@ -8,14 +8,16 @@ use crate::{error::RecoveryError, RecoveryArgs};
 use clap::Parser;
 use ic_base_types::{NodeId, SubnetId};
 use ic_types::ReplicaVersion;
+use serde::{Deserialize, Serialize};
 use slog::{info, Logger};
+use std::iter::Peekable;
 use std::net::IpAddr;
 use strum::IntoEnumIterator;
-use strum_macros::EnumIter;
+use strum_macros::{EnumIter, EnumString};
 
 use crate::{NeuronArgs, Recovery, Step};
 
-#[derive(Debug, Copy, Clone, EnumIter)]
+#[derive(Debug, Copy, Clone, PartialEq, EnumIter, EnumString, Serialize, Deserialize)]
 pub enum StepType {
     Halt,
     DownloadCertifications,
@@ -32,7 +34,7 @@ pub enum StepType {
     Cleanup,
 }
 
-#[derive(Parser)]
+#[derive(Debug, Clone, PartialEq, Parser, Serialize, Deserialize)]
 #[clap(version = "1.0")]
 pub struct AppSubnetRecoveryArgs {
     /// Id of the broken subnet
@@ -66,11 +68,17 @@ pub struct AppSubnetRecoveryArgs {
     /// Id of the ecdsa subnet used for resharing ecdsa key of subnet to be recovered
     #[clap(long, parse(try_from_str=crate::util::subnet_id_from_str))]
     pub ecdsa_subnet_id: Option<SubnetId>,
+
+    /// If present the tool will start execution for the provided step, skipping the initial ones
+    #[clap(long = "resume")]
+    pub next_step: Option<StepType>,
 }
 
 pub struct AppSubnetRecovery {
-    step_iterator: Box<dyn Iterator<Item = StepType>>,
+    step_iterator: Peekable<StepTypeIter>,
     pub params: AppSubnetRecoveryArgs,
+    pub recovery_args: RecoveryArgs,
+    pub neuron_args: Option<NeuronArgs>,
     recovery: Recovery,
     interactive: bool,
     logger: Logger,
@@ -84,13 +92,14 @@ impl AppSubnetRecovery {
         subnet_args: AppSubnetRecoveryArgs,
         interactive: bool,
     ) -> Self {
-        let ssh_confirmation = neuron_args.is_some();
-        let recovery = Recovery::new(logger.clone(), recovery_args, neuron_args, ssh_confirmation)
+        let recovery = Recovery::new(logger.clone(), recovery_args.clone(), neuron_args.clone())
             .expect("Failed to init recovery");
         recovery.init_registry_local_store();
         Self {
-            step_iterator: Box::new(StepType::iter()),
+            step_iterator: StepType::iter().peekable(),
             params: subnet_args,
+            recovery_args,
+            neuron_args,
             recovery,
             logger,
             interactive,
@@ -102,9 +111,13 @@ impl AppSubnetRecovery {
     }
 }
 
-impl RecoveryIterator<StepType> for AppSubnetRecovery {
-    fn get_step_iterator(&mut self) -> &mut Box<dyn Iterator<Item = StepType>> {
+impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
+    fn get_step_iterator(&mut self) -> &mut Peekable<StepTypeIter> {
         &mut self.step_iterator
+    }
+
+    fn store_next_step(&mut self, step_type: Option<StepType>) {
+        self.params.next_step = step_type;
     }
 
     fn get_logger(&self) -> &Logger {
@@ -130,8 +143,8 @@ impl RecoveryIterator<StepType> for AppSubnetRecovery {
 
             StepType::DownloadCertifications => {
                 info!(&self.logger, "Ensure subnet is halted.");
-                // This can hardly be automated as currently the notion of "subnet is halted" is unclear,
-                // especially in the presence of failures.
+                // This can hardly be automated as currently the notion of "subnet is halted" is
+                // unclear, especially in the presence of failures.
                 wait_for_confirmation(&self.logger);
             }
 

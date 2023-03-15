@@ -217,6 +217,7 @@ pub fn app_subnet_recovery_test(env: TestEnv, upgrade: bool, ecdsa: bool) {
         nns_url: nns_node.get_public_url(),
         replica_version: Some(master_version.clone()),
         key_file: Some(ssh_authorized_priv_keys_dir.join(ADMIN)),
+        test_mode: true,
     };
 
     let mut unassigned_nodes = env.topology_snapshot().unassigned_nodes();
@@ -252,10 +253,16 @@ pub fn app_subnet_recovery_test(env: TestEnv, upgrade: bool, ecdsa: bool) {
         download_node: None,
         upload_node: Some(upload_node.get_ip_addr()),
         ecdsa_subnet_id: ecdsa.then_some(root_subnet_id),
+        next_step: None,
     };
 
-    let mut subnet_recovery =
-        AppSubnetRecovery::new(env.logger(), recovery_args, None, subnet_args, false);
+    let mut subnet_recovery = AppSubnetRecovery::new(
+        env.logger(),
+        recovery_args,
+        /*neuron_args=*/ None,
+        subnet_args,
+        /*interactive=*/ false,
+    );
     if upgrade {
         break_subnet(
             app_nodes,

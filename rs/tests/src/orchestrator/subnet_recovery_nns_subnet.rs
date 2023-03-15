@@ -111,18 +111,25 @@ pub fn test(env: TestEnv) {
         nns_url: upload_node.get_public_url(),
         replica_version: Some(ic_version),
         key_file: Some(ssh_authorized_priv_keys_dir.join(ADMIN)),
+        test_mode: true,
     };
 
-    // unlike during a production recovery using the CLI, here we already know all of parameters ahead of time.
+    // unlike during a production recovery using the CLI, here we already know all of parameters
+    // ahead of time.
     let subnet_args = NNSRecoverySameNodesArgs {
         subnet_id: topo_snapshot.root_subnet_id(),
         upgrade_version: Some(working_version),
         download_node: Some(download_node.get_ip_addr()),
         upload_node: Some(upload_node.get_ip_addr()),
+        next_step: None,
     };
 
-    let mut subnet_recovery =
-        NNSRecoverySameNodes::new(logger.clone(), recovery_args, subnet_args, true, false);
+    let mut subnet_recovery = NNSRecoverySameNodes::new(
+        logger.clone(),
+        recovery_args,
+        subnet_args,
+        /*interactive=*/ false,
+    );
 
     // let's take f+1 nodes and break them.
     let f = (SUBNET_SIZE - 1) / 3;
