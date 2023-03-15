@@ -140,11 +140,18 @@ fn get_all_e2e_test_scenarios() -> HashMap<String, SystemTestGroup> {
                 ),
         ),
         (
-            "test_overall_group_timeout".to_string(),
+            "test_group_timeout_in_test_task".to_string(),
             SystemTestGroup::new()
                 .with_overall_timeout(Duration::from_secs(5))
                 .with_setup(setup_to_succeed)
-                .add_test(systest!(test_to_succeed_7sec)),
+                .add_test(systest!(never_ending_task)),
+        ),
+        (
+            "test_group_timeout_in_setup_task".to_string(),
+            SystemTestGroup::new()
+                .with_overall_timeout(Duration::from_secs(5))
+                .with_setup(never_ending_task)
+                .add_test(systest!(test_to_succeed)),
         ),
     ])
 }
