@@ -43,12 +43,7 @@ use ic_prep_lib::{
     node::{NodeConfiguration, NodeIndex},
     subnet_configuration::SubnetConfig,
 };
-use ic_protobuf::{
-    bitcoin::v1::Network as BitcoinNetwork,
-    registry::subnet::v1::{
-        BitcoinFeatureInfo, BitcoinFeatureStatus, EcdsaConfig, SevFeatureStatus, SubnetFeatures,
-    },
-};
+use ic_protobuf::registry::subnet::v1::{EcdsaConfig, SevFeatureStatus, SubnetFeatures};
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{registry::connection_endpoint::ConnectionEndpoint, Height};
@@ -559,73 +554,6 @@ impl CliArgs {
 fn to_subnet_features(features: &[String]) -> SubnetFeatures {
     let canister_sandboxing = features.iter().any(|s| s.as_str() == "canister_sandboxing");
     let http_requests = features.iter().any(|s| s.as_str() == "http_requests");
-    let bitcoin = if features.iter().any(|s| s.as_str() == "bitcoin_testnet") {
-        Some(BitcoinFeatureInfo {
-            network: BitcoinNetwork::Testnet.into(),
-            status: BitcoinFeatureStatus::Enabled.into(),
-        })
-    } else if features
-        .iter()
-        .any(|s| s.as_str() == "bitcoin_testnet_paused")
-    {
-        Some(BitcoinFeatureInfo {
-            network: BitcoinNetwork::Testnet.into(),
-            status: BitcoinFeatureStatus::Paused.into(),
-        })
-    } else if features
-        .iter()
-        .any(|s| s.as_str() == "bitcoin_testnet_syncing")
-    {
-        Some(BitcoinFeatureInfo {
-            network: BitcoinNetwork::Testnet.into(),
-            status: BitcoinFeatureStatus::Syncing.into(),
-        })
-    } else if features.iter().any(|s| s.as_str() == "bitcoin_mainnet") {
-        Some(BitcoinFeatureInfo {
-            network: BitcoinNetwork::Mainnet.into(),
-            status: BitcoinFeatureStatus::Enabled.into(),
-        })
-    } else if features
-        .iter()
-        .any(|s| s.as_str() == "bitcoin_mainnet_paused")
-    {
-        Some(BitcoinFeatureInfo {
-            network: BitcoinNetwork::Mainnet.into(),
-            status: BitcoinFeatureStatus::Paused.into(),
-        })
-    } else if features
-        .iter()
-        .any(|s| s.as_str() == "bitcoin_mainnet_syncing")
-    {
-        Some(BitcoinFeatureInfo {
-            network: BitcoinNetwork::Mainnet.into(),
-            status: BitcoinFeatureStatus::Syncing.into(),
-        })
-    } else if features.iter().any(|s| s.as_str() == "bitcoin_regtest") {
-        Some(BitcoinFeatureInfo {
-            network: BitcoinNetwork::Regtest.into(),
-            status: BitcoinFeatureStatus::Enabled.into(),
-        })
-    } else if features
-        .iter()
-        .any(|s| s.as_str() == "bitcoin_regtest_syncing")
-    {
-        Some(BitcoinFeatureInfo {
-            network: BitcoinNetwork::Regtest.into(),
-            status: BitcoinFeatureStatus::Syncing.into(),
-        })
-    } else if features
-        .iter()
-        .any(|s| s.as_str() == "bitcoin_regtest_paused")
-    {
-        Some(BitcoinFeatureInfo {
-            network: BitcoinNetwork::Regtest.into(),
-            status: BitcoinFeatureStatus::Paused.into(),
-        })
-    } else {
-        None
-    };
-
     let sev_status = if features
         .iter()
         .any(|s| s.as_str() == "sev_insecure_enabled")
@@ -649,8 +577,6 @@ fn to_subnet_features(features: &[String]) -> SubnetFeatures {
     SubnetFeatures {
         canister_sandboxing,
         http_requests,
-        bitcoin_testnet_feature: None,
-        bitcoin,
         sev_status,
     }
 }

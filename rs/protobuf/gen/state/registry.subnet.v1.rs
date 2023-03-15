@@ -301,16 +301,6 @@ pub struct GossipConfig {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct BitcoinFeatureInfo {
-    /// The network for which the bitcoin feature is enabled.
-    #[prost(enumeration = "super::super::super::bitcoin::v1::Network", tag = "1")]
-    pub network: i32,
-    /// The status of the feature.
-    #[prost(enumeration = "BitcoinFeatureStatus", tag = "2")]
-    pub status: i32,
-}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubnetFeatures {
     /// This feature flag controls whether canister execution happens
     /// in sandboxed process or not. It is disabled by default.
@@ -320,15 +310,6 @@ pub struct SubnetFeatures {
     /// performing http(s) requests to the web2.
     #[prost(bool, tag = "3")]
     pub http_requests: bool,
-    /// Whether or not the subnet is capable of serving requests to the bitcoin testnet canister.
-    /// TODO(EXC-1114): This field is kept temporarily for backward compatibility and can safely
-    /// be removed once this commit is released.
-    #[prost(enumeration = "BitcoinFeature", optional, tag = "5")]
-    pub bitcoin_testnet_feature: ::core::option::Option<i32>,
-    /// Controls whether the bitcoin feature is enabled and which bitcoin network is
-    /// supported.
-    #[prost(message, optional, tag = "6")]
-    pub bitcoin: ::core::option::Option<BitcoinFeatureInfo>,
     /// Status of the SEV-SNP feature.
     #[prost(enumeration = "SevFeatureStatus", optional, tag = "7")]
     pub sev_status: ::core::option::Option<i32>,
@@ -414,76 +395,6 @@ impl SubnetType {
             SubnetType::Application => "SUBNET_TYPE_APPLICATION",
             SubnetType::System => "SUBNET_TYPE_SYSTEM",
             SubnetType::VerifiedApplication => "SUBNET_TYPE_VERIFIED_APPLICATION",
-        }
-    }
-}
-/// TODO(EXC-1114): This type is kept temporarily for backward compatibility and can safely
-/// be removed once this commit is released.
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
-#[repr(i32)]
-pub enum BitcoinFeature {
-    Unspecified = 0,
-    Paused = 1,
-    Enabled = 2,
-}
-impl BitcoinFeature {
-    /// String value of the enum field names used in the ProtoBuf definition.
-    ///
-    /// The values are not transformed in any way and thus are considered stable
-    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-    pub fn as_str_name(&self) -> &'static str {
-        match self {
-            BitcoinFeature::Unspecified => "BITCOIN_FEATURE_UNSPECIFIED",
-            BitcoinFeature::Paused => "BITCOIN_FEATURE_PAUSED",
-            BitcoinFeature::Enabled => "BITCOIN_FEATURE_ENABLED",
-        }
-    }
-}
-/// The status of the bitcoin feature.
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
-#[repr(i32)]
-pub enum BitcoinFeatureStatus {
-    /// The bitcoin feature is disabled.
-    ///
-    /// The subnet does not sync the bitcoin chain and requests to the bitcoin
-    /// API are forwarded to another subnet where the feature is enabled.
-    ///
-    /// WARNING: Transitioning into this state deletes any bitcoin state present
-    /// on the subnet, and full sync from genesis would then be required when
-    /// enabling this feature again.
-    Unspecified = 0,
-    /// The bitcoin feature is paused.
-    ///
-    /// The subnet does not sync the bitcoin chain and requests to the bitcoin
-    /// API are forwarded to another subnet where the feature is enabled.
-    ///
-    /// Transitioning into this state does _not_ delete any bitcoin state that's
-    /// present on the subnet.
-    Paused = 1,
-    /// The bitcoin feature is enabled.
-    ///
-    /// The subnet syncs the bitcoin chain and handles requests to the bitcoin API.
-    Enabled = 2,
-    /// The bitcoin feature is syncing.
-    ///
-    /// The subnet syncs the bitcoin chain but does *not* handle requests to the bitcoin
-    /// API. Requests to the bitcoin API are forwarded to another subnet where the
-    /// feature is enabled.
-    Syncing = 3,
-}
-impl BitcoinFeatureStatus {
-    /// String value of the enum field names used in the ProtoBuf definition.
-    ///
-    /// The values are not transformed in any way and thus are considered stable
-    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
-    pub fn as_str_name(&self) -> &'static str {
-        match self {
-            BitcoinFeatureStatus::Unspecified => "BITCOIN_FEATURE_STATUS_UNSPECIFIED",
-            BitcoinFeatureStatus::Paused => "BITCOIN_FEATURE_STATUS_PAUSED",
-            BitcoinFeatureStatus::Enabled => "BITCOIN_FEATURE_STATUS_ENABLED",
-            BitcoinFeatureStatus::Syncing => "BITCOIN_FEATURE_STATUS_SYNCING",
         }
     }
 }
