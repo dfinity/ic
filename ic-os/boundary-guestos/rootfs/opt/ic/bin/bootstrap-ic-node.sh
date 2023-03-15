@@ -59,10 +59,18 @@ function process_bootstrap() {
 
     # stash a couple of things away to config store
     FILES=(
-        bn_vars.conf network.conf nns.conf
-        nns_public_key.pem denylist.map prober_identity.pem
-        certificate_issuer.conf certificate_issuer_identity.pem certificate_issuer_enc_key.pem
+        bn_vars.conf
+        certificate_issuer_enc_key.pem
+        certificate_issuer_identity.pem
+        certificate_issuer.conf
+        denylist.map
+        network.conf
+        nns_public_key.pem
+        nns.conf
+        pre_isolation_canisters.txt
+        prober_identity.pem
     )
+
     for FILE in ${FILES[@]}; do
         if [ -e "${TMPDIR}/${FILE}" ]; then
             echo "Setting up ${FILE}"
