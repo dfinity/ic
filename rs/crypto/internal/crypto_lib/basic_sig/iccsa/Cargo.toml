@@ -20,7 +20,11 @@ simple_asn1 = "0.6.1"
 [dev-dependencies]
 # TODO (CRP-912) Replace ic-crypto with ic-crypto-utils-threshold-sig
 assert_matches = "1.5.0"
+ic-certification-test-utils = { path = "../../../../../certification/test-utils" }
+ic-crypto-internal-basic-sig-iccsa-test-utils = { path = "test_utils" }
+ic-crypto-test-utils-reproducible-rng = { path = "../../../../../crypto/test_utils/reproducible_rng" }
 ic-crypto = { path = "../../../../../crypto" }
 ic-crypto-internal-test-vectors = { path = "../../../test_vectors" }
 ic-crypto-test-utils = { path = "../../../../test_utils" }
 ic-interfaces = { path = "../../../../../interfaces" }
+rand = "0.8.3"

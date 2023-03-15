@@ -11,9 +11,6 @@ use ic_types::{
 };
 use std::convert::TryFrom;
 
-#[cfg(test)]
-mod tests;
-
 /// The object identifier for ICCSA public keys
 pub fn algorithm_identifier() -> der_utils::PkixAlgorithmIdentifier {
     der_utils::PkixAlgorithmIdentifier::new_with_empty_param(simple_asn1::oid!(
