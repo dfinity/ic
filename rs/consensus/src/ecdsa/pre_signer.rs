@@ -1432,6 +1432,8 @@ impl TranscriptState {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
     use super::*;
     use crate::ecdsa::utils::test_utils::*;
     use assert_matches::assert_matches;
@@ -1442,7 +1444,7 @@ mod tests {
     use ic_test_utilities::FastForwardTimeSource;
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_types::consensus::ecdsa::{EcdsaObject, EcdsaStatsNoOp};
-    use ic_types::crypto::{BasicSig, BasicSigOf, CryptoHash};
+    use ic_types::crypto::{AlgorithmId, BasicSig, BasicSigOf, CryptoHash};
     use ic_types::{Height, RegistryVersion};
 
     // Tests the Action logic
@@ -2663,5 +2665,126 @@ mod tests {
                 assert!(is_removed_from_validated(&change_set, &msg_id_2));
             })
         })
+    }
+
+    // Tests transcript builder failures and success
+    #[test]
+    fn test_ecdsa_transcript_builder() {
+        let env = CanisterThresholdSigTestEnvironment::new(3);
+        let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
+        let tid = params.transcript_id();
+        let (dealings, supports) = get_dealings_and_support(&env, &params);
+        let block_reader =
+            TestEcdsaBlockReader::for_pre_signer_test(tid.source_height(), vec![(&params).into()]);
+        let metrics = EcdsaPayloadMetrics::new(MetricsRegistry::new());
+        let crypto = env.crypto_components.values().next().unwrap();
+
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let (mut ecdsa_pool, _) =
+                    create_pre_signer_dependencies(pool_config, logger.clone());
+
+                {
+                    let b = EcdsaTranscriptBuilderImpl::new(
+                        &block_reader,
+                        crypto,
+                        &ecdsa_pool,
+                        &metrics,
+                        logger.clone(),
+                    );
+
+                    // tid is requested, but there are no dealings for it, the transcript cannot
+                    // be completed
+                    let result = b.get_completed_transcript(tid);
+                    assert_matches!(result, None);
+                }
+
+                // add dealings
+                let change_set = dealings
+                    .values()
+                    .map(|d| {
+                        EcdsaChangeAction::AddToValidated(EcdsaMessage::EcdsaSignedDealing(
+                            d.clone(),
+                        ))
+                    })
+                    .collect();
+                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
+
+                {
+                    let b = EcdsaTranscriptBuilderImpl::new(
+                        &block_reader,
+                        crypto,
+                        &ecdsa_pool,
+                        &metrics,
+                        logger.clone(),
+                    );
+
+                    // cannot aggregate empty shares
+                    let result = b.crypto_aggregate_dealing_support(&params, &[]);
+                    assert_matches!(result, None);
+
+                    // there are no support shares, no transcript should be completed
+                    let result = b.get_completed_transcript(tid);
+                    assert_matches!(result, None);
+                }
+
+                // add support
+                let change_set = supports
+                    .iter()
+                    .map(|s| {
+                        EcdsaChangeAction::AddToValidated(EcdsaMessage::EcdsaDealingSupport(
+                            s.clone(),
+                        ))
+                    })
+                    .collect();
+                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
+
+                let b = EcdsaTranscriptBuilderImpl::new(
+                    &block_reader,
+                    crypto,
+                    &ecdsa_pool,
+                    &metrics,
+                    logger.clone(),
+                );
+                // the transcript should be completed now
+                let result = b.get_completed_transcript(tid);
+                assert_matches!(result, Some(t) if t.transcript_id == tid);
+
+                // returned dealings should be equal to the ones we inserted
+                let dealings1 = dealings.values().cloned().collect::<HashSet<_>>();
+                let dealings2 = b
+                    .get_validated_dealings(tid)
+                    .into_iter()
+                    .collect::<HashSet<_>>();
+                assert_eq!(dealings1, dealings2);
+
+                {
+                    let block_reader =
+                        TestEcdsaBlockReader::for_pre_signer_test(tid.source_height(), vec![]);
+                    let b = EcdsaTranscriptBuilderImpl::new(
+                        &block_reader,
+                        crypto,
+                        &ecdsa_pool,
+                        &metrics,
+                        logger.clone(),
+                    );
+                    // the transcript is no longer requested, it should not be returned
+                    let result = b.get_completed_transcript(tid);
+                    assert_matches!(result, None);
+                }
+
+                let crypto = crypto_without_keys();
+                let b = EcdsaTranscriptBuilderImpl::new(
+                    &block_reader,
+                    crypto.as_ref(),
+                    &ecdsa_pool,
+                    &metrics,
+                    logger,
+                );
+                // transcript completion should fail on crypto failures
+                let result = b.get_completed_transcript(tid);
+                assert_matches!(result, None);
+            })
+        });
     }
 }
