@@ -616,8 +616,8 @@ mod tests {
     use crate::ecdsa::utils::test_utils::*;
     use assert_matches::assert_matches;
     use ic_crypto_test_utils_canister_threshold_sigs::{
-        generate_key_transcript, generate_tecdsa_protocol_inputs,
-        CanisterThresholdSigTestEnvironment,
+        generate_key_transcript, generate_tecdsa_protocol_inputs, load_input_transcripts,
+        run_tecdsa_protocol, CanisterThresholdSigTestEnvironment,
     };
     use ic_interfaces::artifact_pool::{MutablePool, UnvalidatedArtifact};
     use ic_interfaces::time_source::{SysTimeSource, TimeSource};
@@ -1157,6 +1157,136 @@ mod tests {
                 assert_eq!(change_set.len(), 1);
                 assert!(is_removed_from_validated(&change_set, &msg_id_2));
             })
+        })
+    }
+
+    // Tests resolving of sig inputs
+    #[test]
+    fn test_ecdsa_resolve_sig_inputs_refs() {
+        with_test_replica_logger(|logger| {
+            let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1), Height::new(0));
+            let (id_1, id_2) = (
+                create_request_id(&mut uid_generator, Height::from(10)),
+                create_request_id(&mut uid_generator, Height::from(200)),
+            );
+
+            let block_reader = TestEcdsaBlockReader::for_signer_test(
+                Height::from(100),
+                vec![(id_1, create_sig_inputs(1)), (id_2, create_sig_inputs(2))],
+            );
+
+            let metrics = MetricsRegistry::new();
+            let m = metrics.int_counter_vec(
+                "test_ecdsa_resolve_sig_inputs_refs",
+                "ECDSA test metrics",
+                &["test"],
+            );
+            let r = resolve_sig_inputs_refs(&block_reader, "test", m.clone(), &logger);
+            assert_eq!(r.len(), 2);
+            assert!(r.iter().any(|(id, _)| id == &id_1));
+            assert!(r.iter().any(|(id, _)| id == &id_2));
+
+            let block_reader = block_reader.with_fail_to_resolve();
+            let r = resolve_sig_inputs_refs(&block_reader, "test", m, &logger);
+            assert!(r.is_empty());
+        });
+    }
+
+    // Tests aggregating signature shares into a complete signature
+    #[test]
+    fn test_ecdsa_get_completed_signature() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            with_test_replica_logger(|logger| {
+                let (mut ecdsa_pool, _) = create_signer_dependencies(pool_config, logger.clone());
+                let mut uid_generator = EcdsaUIDGenerator::new(subnet_test_id(1), Height::new(0));
+                let req_id = create_request_id(&mut uid_generator, Height::from(10));
+                let env = CanisterThresholdSigTestEnvironment::new(3);
+                let key_transcript =
+                    generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1);
+                let derivation_path = ExtendedDerivationPath {
+                    caller: user_test_id(1).get(),
+                    derivation_path: vec![],
+                };
+                let sig_inputs = generate_tecdsa_protocol_inputs(
+                    &env,
+                    &key_transcript,
+                    &[0; 32],
+                    Randomness::from([0; 32]),
+                    derivation_path,
+                    AlgorithmId::ThresholdEcdsaSecp256k1,
+                );
+
+                // Set up the transcript creation request
+                let block_reader = TestEcdsaBlockReader::for_signer_test(
+                    Height::from(100),
+                    vec![(req_id, (&sig_inputs).into())],
+                );
+
+                let metrics = EcdsaPayloadMetrics::new(MetricsRegistry::new());
+                let crypto = env.crypto_components.iter().next().unwrap().1;
+
+                {
+                    let sig_builder = EcdsaSignatureBuilderImpl::new(
+                        &block_reader,
+                        crypto,
+                        &ecdsa_pool,
+                        &metrics,
+                        logger.clone(),
+                    );
+
+                    // There are no signature shares yet, no signature can be completed
+                    let result = sig_builder.get_completed_signature(&req_id);
+                    assert_matches!(result, None);
+                }
+
+                // Generate signature shares and add to validated
+                let change_set = env
+                    .crypto_components
+                    .iter()
+                    .map(|(id, c)| {
+                        load_input_transcripts(&env.crypto_components, *id, &sig_inputs);
+                        let share = c
+                            .sign_share(&sig_inputs)
+                            .expect("failed to create sig share");
+                        EcdsaSigShare {
+                            signer_id: *id,
+                            request_id: req_id,
+                            share,
+                        }
+                    })
+                    .map(|share| {
+                        EcdsaChangeAction::AddToValidated(EcdsaMessage::EcdsaSigShare(share))
+                    })
+                    .collect::<Vec<_>>();
+                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
+
+                let sig_builder = EcdsaSignatureBuilderImpl::new(
+                    &block_reader,
+                    crypto,
+                    &ecdsa_pool,
+                    &metrics,
+                    logger.clone(),
+                );
+
+                // Signature completion should succeed now.
+                let r1 = sig_builder.get_completed_signature(&req_id);
+                // Compare to combined signature returned by crypto environment
+                let r2 = run_tecdsa_protocol(&env, &sig_inputs);
+                assert_matches!(r1, Some(s) if s == r2);
+
+                // If resolving the transcript refs fails, no signature should be completed
+                let block_reader = block_reader.clone().with_fail_to_resolve();
+                let sig_builder = EcdsaSignatureBuilderImpl::new(
+                    &block_reader,
+                    crypto,
+                    &ecdsa_pool,
+                    &metrics,
+                    logger,
+                );
+
+                let result = sig_builder.get_completed_signature(&req_id);
+                assert_matches!(result, None);
+            });
         })
     }
 }
