@@ -11,7 +11,7 @@ use bitcoin::network::constants::Network as BtcNetwork;
 use bitcoin::util::psbt::serialize::{Deserialize, Serialize};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_btc_types::{Network, OutPoint, Satoshi, Utxo};
-use ic_icrc1::Account;
+use icrc_ledger_types::Account;
 use proptest::proptest;
 use proptest::{
     array::uniform20,
@@ -333,7 +333,7 @@ fn arb_utxo(amount: impl Strategy<Value = Satoshi>) -> impl Strategy<Value = Utx
 fn arb_account() -> impl Strategy<Value = Account> {
     (pvec(any::<u8>(), 32), option::of(uniform32(any::<u8>()))).prop_map(|(pk, subaccount)| {
         Account {
-            owner: PrincipalId::new_self_authenticating(&pk),
+            owner: PrincipalId::new_self_authenticating(&pk).0,
             subaccount,
         }
     })

@@ -5,7 +5,6 @@ use crate::{
 };
 use candid::Principal;
 use ic_base_types::PrincipalId;
-use ic_icrc1::Account;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount_bytes;
 use ic_nervous_system_common::E8;
@@ -36,6 +35,7 @@ use ic_sns_swap::{
         TransferableAmount,
     },
 };
+use icrc_ledger_types::Account;
 use std::{
     str::FromStr,
     sync::{Arc, Mutex},
@@ -308,7 +308,7 @@ pub fn get_snapshot_of_buyers_index_list() -> Vec<PrincipalId> {
 
 pub async fn open_swap(swap: &mut Swap, params: &Params) {
     let account = Account {
-        owner: SWAP_CANISTER_ID.get(),
+        owner: SWAP_CANISTER_ID.get().into(),
         subaccount: None,
     };
     // Open swap.
@@ -414,7 +414,7 @@ pub fn get_transfer_and_account_balance_mock_ledger(
             DEFAULT_TRANSFER_FEE.get_e8s(),
             Some(principal_to_subaccount(from_subaccount)),
             Account {
-                owner: *to,
+                owner: (*to).into(),
                 subaccount: None,
             },
             0,
@@ -437,7 +437,7 @@ pub fn get_transfer_mock_ledger(
         DEFAULT_TRANSFER_FEE.get_e8s(),
         Some(principal_to_subaccount(from_subaccount)),
         Account {
-            owner: *to,
+            owner: (*to).into(),
             subaccount: None,
         },
         0,

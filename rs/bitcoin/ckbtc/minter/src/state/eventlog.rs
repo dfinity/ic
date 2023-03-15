@@ -5,7 +5,7 @@ use crate::state::{
     SubmittedBtcTransaction,
 };
 use ic_btc_types::Utxo;
-use ic_icrc1::Account;
+use icrc_ledger_types::Account;
 use serde::{Deserialize, Serialize};
 
 #[derive(candid::CandidType, Deserialize)]

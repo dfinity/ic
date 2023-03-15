@@ -1,6 +1,5 @@
 use candid::{Decode, Encode};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_icrc1::Account;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::ledger::compute_distribution_subaccount;
 use ic_nns_constants::LEDGER_CANISTER_ID;
@@ -23,10 +22,14 @@ use ic_sns_test_utils::state_test_helpers::setup_sns_canisters;
 use ic_state_machine_tests::StateMachine;
 use icp_ledger::DEFAULT_TRANSFER_FEE as NNS_DEFAULT_TRANSFER_FEE;
 use icp_ledger::{AccountIdentifier, BinaryAccountBalanceArgs, Subaccount as IcpSubaccount};
+use icrc_ledger_types::Account;
 use std::ops::Sub;
 
 fn icrc1_account_to_icp_accountidentifier(account: Account) -> AccountIdentifier {
-    AccountIdentifier::new(account.owner, account.subaccount.map(IcpSubaccount))
+    AccountIdentifier::new(
+        PrincipalId(account.owner),
+        account.subaccount.map(IcpSubaccount),
+    )
 }
 
 #[test]
@@ -36,7 +39,7 @@ fn sns_treasury_can_transfer_funds_via_proposals() {
 
     let user = PrincipalId::new_user_test_id(1000);
     let user_account = Account {
-        owner: user,
+        owner: user.0,
         subaccount: None,
     };
     let user_account_identifier = icrc1_account_to_icp_accountidentifier(user_account);
@@ -45,12 +48,12 @@ fn sns_treasury_can_transfer_funds_via_proposals() {
     let governance = CanisterId::from(first_sns_canister_id + 1);
 
     let sns_treasury_account_nns = Account {
-        owner: governance.get(),
+        owner: governance.get().0,
         subaccount: None,
     };
 
     let sns_treasury_account_sns = Account {
-        owner: governance.get(),
+        owner: governance.get().0,
         subaccount: Some(
             compute_distribution_subaccount(governance.get(), TREASURY_SUBACCOUNT_NONCE).0,
         ),

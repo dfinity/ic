@@ -15,7 +15,7 @@ use ic_base_types::PrincipalId;
 use ic_ckbtc_minter::updates::{
     get_btc_address::GetBtcAddressArgs, get_withdrawal_account::compute_subaccount,
 };
-use ic_icrc1::Account;
+use icrc_ledger_types::Account;
 use slog::info;
 
 pub fn test_ckbtc_addresses(env: TestEnv) {
@@ -78,7 +78,7 @@ pub fn test_ckbtc_addresses(env: TestEnv) {
         let subaccount = compute_subaccount(PrincipalId::from(caller), 0);
         assert_eq!(
             Account {
-                owner: minter_id.get(),
+                owner: minter_id.get().0,
                 subaccount: Some(subaccount),
             },
             res

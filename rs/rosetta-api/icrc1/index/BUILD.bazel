@@ -4,6 +4,7 @@ load("//bazel:canisters.bzl", "rust_canister")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/rosetta-api/icrc1",
     "//rs/rosetta-api/icrc1/ledger",
     "//rs/types/base_types",
@@ -84,6 +85,7 @@ rust_test(
     },
     deps = [
         ":index",
+        "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/rosetta-api/icrc1",
         "//rs/rosetta-api/icrc1/ledger",
         "//rs/rosetta-api/ledger_canister_core",

@@ -29,9 +29,9 @@ use crate::pb::v1::{
 };
 use crate::{account_from_proto, account_to_proto};
 use ic_base_types::PrincipalId;
-use ic_icrc1::{Account, Subaccount};
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::i2d;
+use icrc_ledger_types::{Account, Subaccount};
 use lazy_static::lazy_static;
 use maplit::hashset;
 use rust_decimal::Decimal;
@@ -126,7 +126,7 @@ pub fn log_prefix() -> String {
 pub const TREASURY_SUBACCOUNT_NONCE: u64 = 0;
 
 /// Converts bytes to a subaccount
-pub fn bytes_to_subaccount(bytes: &[u8]) -> Result<ic_icrc1::Subaccount, GovernanceError> {
+pub fn bytes_to_subaccount(bytes: &[u8]) -> Result<icrc_ledger_types::Subaccount, GovernanceError> {
     bytes.try_into().map_err(|_| {
         GovernanceError::new_with_message(ErrorType::PreconditionFailed, "Invalid subaccount")
     })
@@ -1050,7 +1050,7 @@ impl Governance {
         // If no account was provided, transfer to the caller's (default) account.
         let to_account: Account = match disburse.to_account.as_ref() {
             None => Account {
-                owner: *caller,
+                owner: caller.0,
                 subaccount: None,
             },
             Some(ai_pb) => account_from_proto(ai_pb.clone()).map_err(|e| {
@@ -1485,7 +1485,7 @@ impl Governance {
         // If no account was provided, transfer to the caller's account.
         let to_account: Account = match disburse_maturity.to_account.as_ref() {
             None => Account {
-                owner: *caller,
+                owner: caller.0,
                 subaccount: None,
             },
             Some(account) => account_from_proto(account.clone()).map_err(|e| {
@@ -2472,7 +2472,8 @@ impl Governance {
         let to = Account {
             owner: transfer
                 .to_principal
-                .expect("Expected transfer to have a target principal"),
+                .expect("Expected transfer to have a target principal")
+                .0,
             subaccount: transfer.to_subaccount.as_ref().map(|s| {
                 bytes_to_subaccount(&s.subaccount[..])
                     .expect("Couldn't transform transfer.subaccount to Subaccount")
@@ -4850,7 +4851,7 @@ impl Governance {
     /// (currently an account controlled by the governance canister).
     pub fn governance_minting_account(&self) -> Account {
         Account {
-            owner: self.env.canister_id().get(),
+            owner: self.env.canister_id().get().0,
             subaccount: None,
         }
     }
@@ -4859,7 +4860,7 @@ impl Governance {
     /// its subaccount.
     pub fn neuron_account_id(&self, subaccount: Subaccount) -> Account {
         Account {
-            owner: self.env.canister_id().get(),
+            owner: self.env.canister_id().get().0,
             subaccount: Some(subaccount),
         }
     }
@@ -8401,7 +8402,7 @@ mod tests {
         assert_eq!(
             account_from_proto(target_account_pb),
             Ok(Account {
-                owner: setup.controller,
+                owner: setup.controller.0,
                 subaccount: None
             })
         );
@@ -8454,7 +8455,7 @@ mod tests {
         assert_eq!(
             account_from_proto(target_account_pb),
             Ok(Account {
-                owner: target_principal,
+                owner: target_principal.0,
                 subaccount: None
             })
         );
@@ -8509,7 +8510,7 @@ mod tests {
         assert_eq!(
             account_from_proto(target_account_pb),
             Ok(Account {
-                owner: setup.controller,
+                owner: setup.controller.0,
                 subaccount: None
             })
         );

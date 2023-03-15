@@ -2,12 +2,12 @@ use std::convert::TryFrom;
 
 use candid::{Encode, Nat, Principal};
 use canister_test::{Canister, PrincipalId};
-use ic_icrc1::Account;
 use ic_icrc1_agent::{CallMode, Icrc1Agent, TransferArg, Value};
 use ic_icrc1_ledger::{InitArgs, LedgerArgument};
 use ic_nns_test_utils::itest_helpers::install_rust_canister_from_path;
 use ic_registry_subnet_type::SubnetType;
 use icp_ledger::ArchiveOptions;
+use icrc_ledger_types::Account;
 
 use crate::{
     driver::{
@@ -47,15 +47,15 @@ pub fn test(env: TestEnv) {
         let user1 = PrincipalId::try_from(nns_agent.get_principal().unwrap().as_ref()).unwrap();
         let user2 = PrincipalId::new_user_test_id(102);
         let account1 = Account {
-            owner: user1,
+            owner: user1.0,
             subaccount: None,
         };
         let account2 = Account {
-            owner: user2,
+            owner: user2.0,
             subaccount: None,
         };
         let minting_account = Account {
-            owner: minting_user,
+            owner: minting_user.0,
             subaccount: None,
         };
         let mut ledger = nns_runtime
@@ -193,7 +193,7 @@ pub fn test(env: TestEnv) {
             .transfer(TransferArg {
                 from_subaccount: None,
                 to: Account {
-                    owner: user2,
+                    owner: user2.0,
                     subaccount: None,
                 },
                 fee: None,

@@ -3,6 +3,7 @@ load("@rules_rust//rust:defs.bzl", "rust_library")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/canister_client/sender",
     "//rs/config",
     "//rs/crypto/node_key_generation",

@@ -81,11 +81,11 @@ fn test_existing_proposals_unaffected_by_sns_parameter_changes() {
             };
 
             let sns_init_payload = SnsTestsInitPayloadBuilder::new()
-                .with_ledger_account(user_1.get_principal_id().into(), user_1_tokens)
-                .with_ledger_account(user_2.get_principal_id().into(), user_2_tokens)
-                .with_ledger_account(user_3.get_principal_id().into(), user_3_tokens)
-                .with_ledger_account(user_4.get_principal_id().into(), user_4_tokens)
-                .with_ledger_account(user_5.get_principal_id().into(), user_5_tokens)
+                .with_ledger_account(user_1.get_principal_id().0.into(), user_1_tokens)
+                .with_ledger_account(user_2.get_principal_id().0.into(), user_2_tokens)
+                .with_ledger_account(user_3.get_principal_id().0.into(), user_3_tokens)
+                .with_ledger_account(user_4.get_principal_id().0.into(), user_4_tokens)
+                .with_ledger_account(user_5.get_principal_id().0.into(), user_5_tokens)
                 .with_nervous_system_parameters(system_params.clone())
                 .build();
 

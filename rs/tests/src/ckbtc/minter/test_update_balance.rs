@@ -22,8 +22,8 @@ use ic_ckbtc_agent::CkBtcMinterAgent;
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::state::Mode;
 use ic_ckbtc_minter::updates::get_withdrawal_account::compute_subaccount;
-use ic_icrc1::Account;
 use ic_icrc1_agent::Icrc1Agent;
+use icrc_ledger_types::Account;
 use slog::{debug, info};
 
 /// Test update_balance method of the minter canister.
@@ -83,11 +83,11 @@ pub fn test_update_balance(env: TestEnv) {
         let subaccount1 = compute_subaccount(PrincipalId::from(caller), 567);
         let subaccount2 = compute_subaccount(PrincipalId::from(caller), 890);
         let account1 = Account {
-            owner: PrincipalId::from(caller),
+            owner: caller,
             subaccount: Some(subaccount1),
         };
         let account2 = Account {
-            owner: PrincipalId::from(caller),
+            owner: caller,
             subaccount: Some(subaccount2),
         };
 

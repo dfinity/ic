@@ -4,6 +4,7 @@ load("//bazel:canisters.bzl", "rust_canister")
 package(default_visibility = ["//visibility:public"])
 
 LIB_DEPS = [
+    "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/bitcoin/types/public",
     "//rs/crypto/extended_bip32",
     "//rs/crypto/getrandom_for_wasm",
@@ -70,6 +71,7 @@ alias(
         service_file = ":ckbtc_minter.did",
         deps = [
             ":ckbtc_minter_lib",
+            "//packages/icrc-ledger-types:icrc_ledger_types",
             "//rs/crypto/getrandom_for_wasm",
             "//rs/rosetta-api/icrc1",
             "//rs/rust_canisters/canister_log",
@@ -131,6 +133,7 @@ rust_test(
     },
     deps = [
         ":ckbtc_minter_lib",
+        "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/bitcoin/types/public",
         "//rs/rosetta-api/icp_ledger",
         "//rs/rosetta-api/icrc1",

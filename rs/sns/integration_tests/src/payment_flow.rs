@@ -6,10 +6,11 @@ use std::{
 
 use candid::{Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_icrc1::{endpoints::TransferArg, Account, Memo, Subaccount};
+use ic_icrc1::{endpoints::TransferArg, Memo};
 use ic_icrc1_ledger::{InitArgs as Icrc1InitArgs, LedgerArgument};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_nervous_system_common::{E8, SECONDS_PER_DAY};
+use icrc_ledger_types::{Account, Subaccount};
 
 use ic_nns_test_utils::state_test_helpers::icrc1_transfer;
 use ic_sns_swap::{
@@ -33,7 +34,7 @@ use lazy_static::lazy_static;
 
 lazy_static! {
     pub static ref DEFAULT_MINTING_ACCOUNT: Account = Account {
-        owner: PrincipalId::new_user_test_id(1000),
+        owner: PrincipalId::new_user_test_id(1000).0,
         subaccount: None,
     };
     pub static ref DEFAULT_INITIAL_BALANCE: u64 = 10_000_000;
@@ -164,7 +165,7 @@ impl PaymentProtocolTestSetup {
             minting_account: *DEFAULT_MINTING_ACCOUNT,
             initial_balances: vec![(
                 Account {
-                    owner: PrincipalId::from(*DEFAULT_SNS_SALE_CANISTER_ID),
+                    owner: PrincipalId::from(*DEFAULT_SNS_SALE_CANISTER_ID).0,
                     subaccount: None,
                 },
                 *DEFAULT_INITIAL_BALANCE,
@@ -202,7 +203,7 @@ impl PaymentProtocolTestSetup {
         icrc1_transfer(
             &self.state_machine,
             self.icp_ledger_canister_id,
-            self.icp_ledger_minting_account.owner,
+            PrincipalId(self.icp_ledger_minting_account.owner),
             TransferArg {
                 from_subaccount: None,
                 to: *account,
@@ -215,6 +216,7 @@ impl PaymentProtocolTestSetup {
     }
 
     pub fn commit_icp_e8s(&self, sender: &PrincipalId, ticket: &Ticket) -> Result<u64, String> {
+        let sns_sale_principal_id: PrincipalId = self.sns_sale_canister_id.into();
         icrc1_transfer(
             &self.state_machine,
             self.icp_ledger_canister_id,
@@ -222,7 +224,7 @@ impl PaymentProtocolTestSetup {
             TransferArg {
                 from_subaccount: None,
                 to: Account {
-                    owner: self.sns_sale_canister_id.into(),
+                    owner: sns_sale_principal_id.0,
                     subaccount: Some(principal_to_subaccount(sender)),
                 },
                 fee: Some(Nat::from(DEFAULT_TRANSFER_FEE.get_e8s())),
@@ -508,7 +510,7 @@ fn test_simple_refresh_buyer_token() {
 
     // Get user0 some funds to participate in the sale
     assert!(payment_flow_protocol
-        .mint_icp(&Account::from(user0), &(100 * E8))
+        .mint_icp(&user0.0.into(), &(100 * E8))
         .is_ok());
 
     // Get a ticket
@@ -565,7 +567,7 @@ fn test_multiple_payment_flows() {
 
     // Get user0 some funds to participate in the sale
     assert!(payment_flow_protocol
-        .mint_icp(&Account::from(user0), &(100 * E8))
+        .mint_icp(&user0.0.into(), &(100 * E8))
         .is_ok());
 
     let mut amount_committed = 0;
@@ -642,7 +644,7 @@ fn test_payment_flow_multiple_users_concurrent() {
         assert!(payment_flow_protocol
             .lock()
             .unwrap()
-            .mint_icp(&Account::from(new_user), &(100 * E8))
+            .mint_icp(&new_user.0.into(), &(100 * E8))
             .is_ok());
     }
 
@@ -744,7 +746,7 @@ fn test_multiple_spending() {
 
     // Get user0 some funds to participate in the sale
     assert!(payment_flow_protocol
-        .mint_icp(&Account::from(user0), &(100 * E8))
+        .mint_icp(&user0.0.into(), &(100 * E8))
         .is_ok());
 
     // Get a ticket
@@ -824,15 +826,15 @@ fn test_maximum_reached() {
 
     // Get users some funds to participate in the sale
     assert!(payment_flow_protocol
-        .mint_icp(&Account::from(user0), &(100 * E8))
+        .mint_icp(&user0.0.into(), &(100 * E8))
         .is_ok());
     // Get users some funds to participate in the sale
     assert!(payment_flow_protocol
-        .mint_icp(&Account::from(user1), &(100 * E8))
+        .mint_icp(&user1.0.into(), &(100 * E8))
         .is_ok());
     // Get users some funds to participate in the sale
     assert!(payment_flow_protocol
-        .mint_icp(&Account::from(user2), &(100 * E8))
+        .mint_icp(&user2.0.into(), &(100 * E8))
         .is_ok());
     let execute_payment_flow =
         |user: &PrincipalId, payment_flow_protocol: &PaymentProtocolTestSetup, amount: &u64| {
@@ -932,7 +934,13 @@ fn test_committment_below_participant_minimum() {
     for user in &users {
         // Get users some funds to participate in the sale
         assert!(payment_flow_protocol
-            .mint_icp(&Account::from(*user), &(100 * E8))
+            .mint_icp(
+                &Account {
+                    owner: user.0,
+                    subaccount: None
+                },
+                &(100 * E8)
+            )
             .is_ok());
     }
 
@@ -964,13 +972,15 @@ fn test_committment_below_participant_minimum() {
                 < params.min_participant_icp_e8s
     );
 
+    let sns_sale_principal_id: PrincipalId = payment_flow_protocol.sns_sale_canister_id.into();
+
     // User2 who has not yet participated in the sale should not be able to purchase the missing tokens
     payment_flow_protocol
         .transfer_icp(
             &user2,
             None,
             &Account {
-                owner: payment_flow_protocol.sns_sale_canister_id.into(),
+                owner: sns_sale_principal_id.0,
                 subaccount: Some(principal_to_subaccount(&user2)),
             },
             None,

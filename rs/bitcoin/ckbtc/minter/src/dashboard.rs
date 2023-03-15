@@ -2,7 +2,7 @@ use crate::address;
 use crate::state;
 use crate::tx::{DisplayAmount, DisplayTxid};
 use ic_btc_types::Network;
-use ic_icrc1::Account;
+use icrc_ledger_types::Account;
 use std::io::Write;
 
 fn with_utf8_buffer(f: impl FnOnce(&mut Vec<u8>)) -> String {
@@ -210,7 +210,7 @@ pub fn build_account_to_utxos_table() -> String {
 
 pub fn build_metadata() -> String {
     let main_account = Account {
-        owner: ic_cdk::id().into(),
+        owner: ic_cdk::id(),
         subaccount: None,
     };
     state::read_state(|s| {

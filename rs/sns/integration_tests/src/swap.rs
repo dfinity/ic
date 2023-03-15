@@ -2,9 +2,10 @@ use candid::{Decode, Encode, Nat, Principal};
 use dfn_candid::candid_one;
 
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_icrc1::{endpoints::TransferArg, Account};
+use ic_icrc1::endpoints::TransferArg;
 use ic_icrc1_ledger::{InitArgs as LedgerInit, LedgerArgument};
 use ic_ledger_canister_core::archive::ArchiveOptions;
+use icrc_ledger_types::Account;
 
 use ic_nervous_system_common::{
     assert_is_ok, ledger::compute_neuron_staking_subaccount, ExplosiveTokens, E8, SECONDS_PER_DAY,
@@ -1863,7 +1864,7 @@ fn assert_successful_swap_finalizes_correctly(
                         &state_machine,
                         sns_canister_ids.ledger.unwrap().try_into().unwrap(),
                         Account {
-                            owner: sns_canister_ids.governance.unwrap(),
+                            owner: sns_canister_ids.governance.unwrap().0,
                             subaccount: Some(subaccount),
                         },
                     )
@@ -2536,8 +2537,8 @@ fn swap_lifecycle_sad() {
         let observed_balance_e8s = icrc1_balance(
             &state_machine,
             sns_canister_ids.ledger.unwrap().try_into().unwrap(),
-            ic_icrc1::Account {
-                owner: sns_canister_ids.swap.unwrap(),
+            icrc_ledger_types::Account {
+                owner: sns_canister_ids.swap.unwrap().0,
                 subaccount: None,
             },
         )
@@ -2793,7 +2794,7 @@ fn test_deletion_of_sale_ticket() {
             &state_machine,
             LEDGER_CANISTER_ID,
             Account {
-                owner: PrincipalId::from(sns_canister_ids.swap()),
+                owner: PrincipalId::from(sns_canister_ids.swap()).0,
                 subaccount: Some(principal_to_subaccount(&TEST_USER1_PRINCIPAL))
             }
         )
@@ -3020,7 +3021,7 @@ fn test_last_man_less_than_min() {
     let sns_ledger_id = state_machine.create_canister(None);
     let swap_id = state_machine.create_canister(None);
     let minting_account = Account {
-        owner: PrincipalId::new_user_test_id(42),
+        owner: PrincipalId::new_user_test_id(42).0,
         subaccount: None,
     };
 

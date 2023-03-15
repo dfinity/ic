@@ -3,8 +3,8 @@ use candid::types::number::Nat;
 use candid::utils::{ArgumentDecoder, ArgumentEncoder};
 use candid::Principal;
 use ic_icrc1::endpoints::{TransferArg, TransferError, Value};
-pub use ic_icrc1::Account;
 use ic_ledger_core::block::BlockIndex;
+use icrc_ledger_types::Account;
 use num_traits::ToPrimitive;
 
 // Abstraction over the runtime. Implement this in terms of cdk call if you use

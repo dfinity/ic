@@ -2,7 +2,6 @@ use candid::CandidType;
 use dfn_protobuf::ProtoBuf;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha::Sha256;
-use ic_icrc1::Account;
 pub use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_canister_core::ledger::{LedgerContext, LedgerTransaction, TxApplyError};
 use ic_ledger_core::{
@@ -10,6 +9,7 @@ use ic_ledger_core::{
     balances::Balances,
     block::{BlockType, EncodedBlock, HashOf, HASH_LENGTH},
 };
+use icrc_ledger_types::Account;
 use on_wire::{FromWire, IntoWire};
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;

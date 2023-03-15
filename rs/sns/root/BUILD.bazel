@@ -11,6 +11,7 @@ filegroup(
 )
 
 DEPENDENCIES = [
+    "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/nervous_system/common",
     "//rs/nervous_system/root",
     "//rs/rosetta-api/icrc1",

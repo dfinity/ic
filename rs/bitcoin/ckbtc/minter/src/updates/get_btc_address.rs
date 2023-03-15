@@ -4,10 +4,9 @@ use crate::{
     ECDSAPublicKey,
 };
 use candid::{CandidType, Deserialize, Principal};
-use ic_base_types::PrincipalId;
 use ic_canister_log::log;
 use ic_ic00_types::{ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId};
-use ic_icrc1::{Account, Subaccount};
+use icrc_ledger_types::{Account, Subaccount};
 use serde::Serialize;
 
 #[derive(CandidType, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -28,7 +27,7 @@ pub fn account_to_p2wpkh_address_from_state(s: &CkBtcMinterState, account: &Acco
 }
 
 pub async fn get_btc_address(args: GetBtcAddressArgs) -> String {
-    let caller = PrincipalId::from(args.owner.unwrap_or_else(ic_cdk::caller));
+    let owner = args.owner.unwrap_or_else(ic_cdk::caller);
 
     init_ecdsa_public_key().await;
 
@@ -36,7 +35,7 @@ pub async fn get_btc_address(args: GetBtcAddressArgs) -> String {
         account_to_p2wpkh_address_from_state(
             s,
             &Account {
-                owner: caller,
+                owner,
                 subaccount: args.subaccount,
             },
         )

@@ -45,7 +45,7 @@ fn test_add_remove_and_execute_nervous_system_functions() {
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
-            .with_ledger_account(user.get_principal_id().into(), alloc)
+            .with_ledger_account(user.get_principal_id().0.into(), alloc)
             .with_nervous_system_parameters(system_params.clone())
             .build();
 

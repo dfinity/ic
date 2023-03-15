@@ -4,6 +4,7 @@ load("//bazel:canisters.bzl", "rust_canister")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/rosetta-api/icrc1",
     "//rs/rosetta-api/icrc1/benchmark/worker",
     "//rs/rosetta-api/icrc1/client/cdk",

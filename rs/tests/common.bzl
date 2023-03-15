@@ -3,6 +3,7 @@ Common dependencies for system-tests.
 """
 
 DEPENDENCIES = [
+    "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/artifact_pool",
     "//rs/backup",
     "//rs/bitcoin/ckbtc/agent",

@@ -8,10 +8,10 @@ use futures::{
     },
     StreamExt,
 };
-use ic_icrc1::Account;
 use ic_nervous_system_common::ledger::IcpLedger;
 use ic_nervous_system_common::{ledger::ICRC1Ledger, NervousSystemError};
 use icp_ledger::{AccountIdentifier, Tokens};
+use icrc_ledger_types::Account;
 use std::sync::{atomic, atomic::Ordering as AtomicOrdering, Arc, Mutex};
 
 /// Reifies the methods of the Ledger trait, such that they can be sent over a
@@ -21,7 +21,7 @@ pub enum LedgerMessage {
     Transfer {
         amount_e8s: u64,
         fee_e8s: u64,
-        from_subaccount: Option<ic_icrc1::Subaccount>,
+        from_subaccount: Option<icrc_ledger_types::Subaccount>,
         to: Account,
         memo: u64,
     },
@@ -86,7 +86,7 @@ impl ICRC1Ledger for InterleavingTestLedger {
         &self,
         amount_e8s: u64,
         fee_e8s: u64,
-        from_subaccount: Option<ic_icrc1::Subaccount>,
+        from_subaccount: Option<icrc_ledger_types::Subaccount>,
         to: Account,
         memo: u64,
     ) -> Result<u64, NervousSystemError> {
@@ -139,7 +139,7 @@ pub enum LedgerCall {
     TransferFundsICRC1 {
         amount_e8s: u64,
         fee_e8s: u64,
-        from_subaccount: Option<ic_icrc1::Subaccount>,
+        from_subaccount: Option<icrc_ledger_types::Subaccount>,
         to: Account,
         memo: u64,
     },
@@ -191,7 +191,7 @@ impl ICRC1Ledger for SpyLedger {
         &self,
         amount_e8s: u64,
         fee_e8s: u64,
-        from_subaccount: Option<ic_icrc1::Subaccount>,
+        from_subaccount: Option<icrc_ledger_types::Subaccount>,
         to: Account,
         memo: u64,
     ) -> Result</* block_height: */ u64, NervousSystemError> {

@@ -28,7 +28,6 @@ use dfn_core::println;
 use dfn_core::CanisterId;
 use ic_base_types::PrincipalId;
 use ic_canister_log::log;
-use ic_icrc1::{Account, Subaccount};
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::{i2d, ledger::compute_neuron_staking_subaccount_bytes};
 use ic_sns_governance::{
@@ -43,6 +42,7 @@ use ic_sns_governance::{
 use ic_stable_structures::storable::Blob;
 use ic_stable_structures::{BoundedStorable, GrowFailed, Storable};
 use icp_ledger::DEFAULT_TRANSFER_FEE;
+use icrc_ledger_types::{Account, Subaccount};
 use itertools::{Either, Itertools};
 use maplit::btreemap;
 use prost::Message;
@@ -572,7 +572,7 @@ impl Swap {
     ) -> Result<Tokens, String> {
         // Look for the token balance of 'this' canister.
         let account = Account {
-            owner: this_canister.get(),
+            owner: this_canister.get().0,
             subaccount: None,
         };
         let e8s = sns_ledger
@@ -629,7 +629,7 @@ impl Swap {
 
         // Look for the token balance of the specified principal's subaccount on 'this' canister.
         let account = Account {
-            owner: this_canister.get(),
+            owner: this_canister.get().0,
             subaccount: Some(principal_to_subaccount(&buyer)),
         };
         let e8s = icp_ledger
@@ -1554,7 +1554,7 @@ impl Swap {
         // Make transfer.
         let amount_e8s = balance_e8s.saturating_sub(DEFAULT_TRANSFER_FEE.get_e8s());
         let dst = Account {
-            owner: *source_principal_id,
+            owner: source_principal_id.0,
             subaccount: None,
         };
         let transfer_result = icp_ledger
@@ -1648,12 +1648,12 @@ impl Swap {
             let dst = if lifecycle == Lifecycle::Committed {
                 // This Account should be given a name, such as SNS ICP Treasury...
                 Account {
-                    owner: sns_governance.get(),
+                    owner: sns_governance.get().0,
                     subaccount: None,
                 }
             } else {
                 Account {
-                    owner: principal,
+                    owner: principal.0,
                     subaccount: None,
                 }
             };
@@ -1798,7 +1798,7 @@ impl Swap {
                 }
             };
             let dst = Account {
-                owner: sns_governance.get(),
+                owner: sns_governance.get().0,
                 subaccount: Some(dst_subaccount),
             };
 

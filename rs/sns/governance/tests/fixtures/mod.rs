@@ -2,7 +2,6 @@ use crate::fixtures::environment_fixture::{EnvironmentFixture, EnvironmentFixtur
 use async_trait::async_trait;
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_icrc1::{Account, Subaccount};
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::{NervousSystemError, E8};
 use ic_sns_governance::{
@@ -27,6 +26,7 @@ use ic_sns_governance::{
     },
     types::Environment,
 };
+use icrc_ledger_types::{Account, Subaccount};
 use maplit::btreemap;
 use rand::{rngs::StdRng, SeedableRng};
 use std::{
@@ -78,7 +78,7 @@ impl ICRC1Ledger for LedgerFixture {
 
         let self_canister_id = ledger_fixture_state.self_canister_id;
         let from_account = Account {
-            owner: self_canister_id.get(),
+            owner: self_canister_id.get().0,
             subaccount: from_subaccount,
         };
 
@@ -193,7 +193,7 @@ impl LedgerFixtureBuilder {
 
     pub fn account_id(ident: PrincipalId) -> Account {
         Account {
-            owner: ident,
+            owner: ident.0,
             subaccount: None,
         }
     }
@@ -279,7 +279,7 @@ impl NeuronBuilder {
         if let Some(id) = self.id.as_ref() {
             let subaccount = id.subaccount().unwrap();
             let neuron_account = Account {
-                owner: ledger.self_canister_id.get(),
+                owner: ledger.self_canister_id.get().0,
                 subaccount: Some(subaccount),
             };
             ledger.add_account(neuron_account, self.stake_e8s);
@@ -931,7 +931,7 @@ impl GovernanceCanisterFixtureBuilder {
         self.ledger_builder_from_target_mut(target_ledger)
             .add_account(
                 Account {
-                    owner: principal_id,
+                    owner: principal_id.0,
                     subaccount: None,
                 },
                 amount,
@@ -948,7 +948,7 @@ impl GovernanceCanisterFixtureBuilder {
         if let Some(owner) = neuron.get_owner() {
             self.sns_ledger_builder.try_add_account(
                 Account {
-                    owner,
+                    owner: owner.0,
                     subaccount: None,
                 },
                 0,

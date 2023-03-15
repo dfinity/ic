@@ -9,11 +9,11 @@ use ic_ckbtc_minter::updates::retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError, 
 use ic_ckbtc_minter::updates::update_balance::{
     UpdateBalanceArgs, UpdateBalanceError, UpdateBalanceResult,
 };
-use ic_icrc1::Account;
 use ic_icrc1_ledger::{InitArgs as LedgerInitArgs, LedgerArgument};
 use ic_state_machine_tests::StateMachine;
 use ic_test_utilities_load_wasm::load_wasm;
 use icp_ledger::ArchiveOptions;
+use icrc_ledger_types::Account;
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -42,7 +42,7 @@ fn minter_wasm() -> Vec<u8> {
 fn install_ledger(env: &StateMachine) -> CanisterId {
     let args = LedgerArgument::Init(LedgerInitArgs {
         minting_account: Account {
-            owner: Default::default(),
+            owner: Principal::anonymous(),
             subaccount: None,
         },
         initial_balances: vec![],

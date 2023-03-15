@@ -11,7 +11,6 @@ use ic_ic00_types::{
     CanisterInstallMode, CanisterSettingsArgs, CanisterStatusResultV2, UpdateSettingsArgs,
 };
 use ic_icrc1::endpoints::{TransferArg, TransferError};
-use ic_icrc1::Account;
 use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount;
 use ic_nervous_system_root::CanisterIdRecord;
 use ic_nns_constants::{
@@ -32,6 +31,7 @@ use ic_test_utilities::universal_canister::{
 };
 use ic_types::ingress::WasmResult;
 use ic_types::Cycles;
+use icrc_ledger_types::Account;
 use num_traits::ToPrimitive;
 use on_wire::{FromWire, IntoWire, NewType};
 use prost::Message;
@@ -661,7 +661,7 @@ pub fn sns_stake_neuron(
         TransferArg {
             from_subaccount: None,
             to: Account {
-                owner: governance_canister_id.get(),
+                owner: governance_canister_id.get().0,
                 subaccount: Some(to_subaccount.0),
             },
             fee: Some(Nat::from(DEFAULT_TRANSFER_FEE.get_e8s())),

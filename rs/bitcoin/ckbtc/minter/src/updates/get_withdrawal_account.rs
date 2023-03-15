@@ -1,6 +1,6 @@
 use ic_base_types::PrincipalId;
 use ic_crypto_sha::Sha256;
-use ic_icrc1::{Account, Subaccount, DEFAULT_SUBACCOUNT};
+use icrc_ledger_types::{Account, Subaccount, DEFAULT_SUBACCOUNT};
 
 use super::get_btc_address::init_ecdsa_public_key;
 
@@ -8,7 +8,7 @@ use super::get_btc_address::init_ecdsa_public_key;
 pub async fn get_withdrawal_account() -> Account {
     let caller = PrincipalId(ic_cdk::caller());
     init_ecdsa_public_key().await;
-    let ck_btc_principal = PrincipalId(ic_cdk::id());
+    let ck_btc_principal = ic_cdk::id();
     let caller_subaccount: Subaccount = compute_subaccount(caller, 0);
     // Check that the computed subaccount doesn't collide with minting account.
     if &caller_subaccount == DEFAULT_SUBACCOUNT {

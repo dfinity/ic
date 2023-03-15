@@ -19,8 +19,8 @@ use dfn_core::api::CanisterId;
 use ic_base_types::PrincipalId;
 use ic_canister_log::log;
 use ic_crypto_sha::Sha256;
-use ic_icrc1::Account;
 use icp_ledger::DEFAULT_TRANSFER_FEE as NNS_DEFAULT_TRANSFER_FEE;
+use icrc_ledger_types::Account;
 use std::collections::{BTreeMap, HashSet};
 use std::convert::TryFrom;
 
@@ -309,13 +309,13 @@ fn validate_and_render_transfer_sns_treasury_funds(
 
     let to_account = match &transfer.to_subaccount {
         None => Account {
-            owner: to_principal,
+            owner: to_principal.0,
             subaccount: None,
         }
         .to_string(),
         Some(s) => match bytes_to_subaccount(&s.subaccount[..]) {
             Ok(s) => Account {
-                owner: to_principal,
+                owner: to_principal.0,
                 subaccount: Some(s),
             }
             .to_string(),

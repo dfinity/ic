@@ -1,18 +1,18 @@
-use candid::{CandidType, Decode, Encode, Nat};
+use candid::{CandidType, Decode, Encode, Nat, Principal};
 use ic_base_types::PrincipalId;
-use ic_icrc1::blocks::Icrc1Block;
-use ic_icrc1::endpoints::{BlockRange, Transaction as Tx, TransactionRange};
 use ic_icrc1::{
-    endpoints::{
-        ArchiveInfo, GetBlocksResponse, GetTransactionsRequest, GetTransactionsResponse,
-        StandardRecord, Transfer, TransferArg, TransferError, Value,
-    },
+    endpoints::{StandardRecord, TransferArg, TransferError, Value},
     hash::Hash,
-    Account, Block, Memo, Operation, Transaction,
+    Block, Memo, Operation, Transaction,
 };
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::block::{BlockIndex, BlockType, HashOf};
 use ic_state_machine_tests::{CanisterId, ErrorCode, StateMachine};
+use icrc_ledger_types::block::{Block as IcrcBlock, BlockRange, GetBlocksResponse};
+use icrc_ledger_types::transaction::{
+    GetTransactionsResponse, Transaction as Tx, TransactionRange, Transfer,
+};
+use icrc_ledger_types::{Account, ArchiveInfo, GetTransactionsRequest};
 use num_traits::ToPrimitive;
 use proptest::prelude::*;
 use proptest::test_runner::{Config as TestRunnerConfig, TestCaseResult, TestRunner};
@@ -26,7 +26,7 @@ pub const NUM_BLOCKS_TO_ARCHIVE: u64 = 5;
 pub const TX_WINDOW: Duration = Duration::from_secs(24 * 60 * 60);
 
 pub const MINTER: Account = Account {
-    owner: PrincipalId::new(0, [0u8; 29]),
+    owner: PrincipalId::new(0, [0u8; 29]).0,
     subaccount: None,
 };
 
@@ -143,12 +143,12 @@ fn model_transfer(
 fn send_transfer(
     env: &StateMachine,
     ledger: CanisterId,
-    from: PrincipalId,
+    from: Principal,
     arg: &TransferArg,
 ) -> Result<BlockIndex, TransferError> {
     Decode!(
         &env.execute_ingress_as(
-            from,
+            PrincipalId(from),
             ledger,
             "icrc1_transfer",
             Encode!(arg)
@@ -199,15 +199,17 @@ fn list_archives(env: &StateMachine, ledger: CanisterId) -> Vec<ArchiveInfo> {
     .expect("failed to decode archives response")
 }
 
-fn get_archive_transaction(
-    env: &StateMachine,
-    archive: CanisterId,
-    block_index: u64,
-) -> Option<Tx> {
+fn get_archive_transaction(env: &StateMachine, archive: Principal, block_index: u64) -> Option<Tx> {
+    let canister_id =
+        CanisterId::new(archive.into()).expect("failed to convert Principal to CanisterId");
     Decode!(
-        &env.query(archive, "get_transaction", Encode!(&block_index).unwrap())
-            .expect("failed to get transaction")
-            .bytes(),
+        &env.query(
+            canister_id,
+            "get_transaction",
+            Encode!(&block_index).unwrap()
+        )
+        .expect("failed to get transaction")
+        .bytes(),
         Option<Tx>
     )
     .expect("failed to decode get_transaction response")
@@ -215,14 +217,16 @@ fn get_archive_transaction(
 
 fn get_transactions_as<Response: CandidType + for<'a> candid::Deserialize<'a>>(
     env: &StateMachine,
-    canister: CanisterId,
+    canister: Principal,
     start: u64,
     length: usize,
     method_name: String,
 ) -> Response {
+    let canister_id =
+        CanisterId::new(canister.into()).expect("failed to convert Principal to CanisterId");
     Decode!(
         &env.query(
-            canister,
+            canister_id,
             method_name,
             Encode!(&GetTransactionsRequest {
                 start: Nat::from(start),
@@ -239,7 +243,7 @@ fn get_transactions_as<Response: CandidType + for<'a> candid::Deserialize<'a>>(
 
 fn get_archive_transactions(
     env: &StateMachine,
-    archive: CanisterId,
+    archive: Principal,
     start: u64,
     length: usize,
 ) -> TransactionRange {
@@ -248,7 +252,7 @@ fn get_archive_transactions(
 
 fn get_transactions(
     env: &StateMachine,
-    archive: CanisterId,
+    archive: Principal,
     start: u64,
     length: usize,
 ) -> GetTransactionsResponse {
@@ -257,7 +261,7 @@ fn get_transactions(
 
 fn get_blocks(
     env: &StateMachine,
-    archive: CanisterId,
+    archive: Principal,
     start: u64,
     length: usize,
 ) -> GetBlocksResponse {
@@ -266,20 +270,20 @@ fn get_blocks(
 
 fn get_archive_blocks(
     env: &StateMachine,
-    archive: CanisterId,
+    archive: Principal,
     start: u64,
     length: usize,
 ) -> BlockRange {
     get_transactions_as(env, archive, start, length, "get_blocks".to_string())
 }
 
-fn get_phash(block: &Icrc1Block) -> Result<Option<Hash>, String> {
+fn get_phash(block: &IcrcBlock) -> Result<Option<Hash>, String> {
     match block {
-        Icrc1Block::Map(map) => {
+        IcrcBlock::Map(map) => {
             for (k, v) in map.iter() {
                 if k == "phash" {
                     return match v {
-                        Icrc1Block::Blob(blob) => blob
+                        IcrcBlock::Blob(blob) => blob
                             .as_slice()
                             .try_into()
                             .map(Some)
@@ -364,7 +368,7 @@ fn arb_account() -> impl Strategy<Value = Account> {
         .prop_map(|(mut principal, subaccount)| {
             principal.push(0x00);
             Account {
-                owner: PrincipalId::try_from(&principal[..]).unwrap(),
+                owner: Principal::try_from_slice(&principal[..]).unwrap(),
                 subaccount,
             }
         })
@@ -495,20 +499,20 @@ where
     let p1 = PrincipalId::new_user_test_id(1);
     let p2 = PrincipalId::new_user_test_id(2);
 
-    assert_eq!(0, balance_of(&env, canister_id, p1));
-    assert_eq!(0, balance_of(&env, canister_id, p2));
+    assert_eq!(0, balance_of(&env, canister_id, p1.0));
+    assert_eq!(0, balance_of(&env, canister_id, p2.0));
 
     let (env, canister_id) = setup(
         ledger_wasm,
         encode_init_args,
         vec![
-            (Account::from(p1), 10_000_000),
-            (Account::from(p2), 5_000_000),
+            (Account::from(p1.0), 10_000_000),
+            (Account::from(p2.0), 5_000_000),
         ],
     );
 
-    assert_eq!(10_000_000u64, balance_of(&env, canister_id, p1));
-    assert_eq!(5_000_000u64, balance_of(&env, canister_id, p2));
+    assert_eq!(10_000_000u64, balance_of(&env, canister_id, p1.0));
+    assert_eq!(5_000_000u64, balance_of(&env, canister_id, p2.0));
 }
 
 pub fn test_metadata_icp_ledger<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
@@ -640,8 +644,8 @@ where
         ledger_wasm,
         encode_init_args,
         vec![
-            (Account::from(p1), 10_000_000),
-            (Account::from(p2), 5_000_000),
+            (Account::from(p1.0), 10_000_000),
+            (Account::from(p2.0), 5_000_000),
         ],
     );
     assert_eq!(15_000_000, total_supply(&env, canister_id));
@@ -665,20 +669,20 @@ where
         ledger_wasm,
         encode_init_args,
         vec![
-            (Account::from(p1), 10_000_000),
-            (Account::from(p2), 5_000_000),
+            (Account::from(p1.0), 10_000_000),
+            (Account::from(p2.0), 5_000_000),
         ],
     );
 
     assert_eq!(15_000_000, total_supply(&env, canister_id));
-    assert_eq!(10_000_000u64, balance_of(&env, canister_id, p1));
-    assert_eq!(5_000_000u64, balance_of(&env, canister_id, p2));
+    assert_eq!(10_000_000u64, balance_of(&env, canister_id, p1.0));
+    assert_eq!(5_000_000u64, balance_of(&env, canister_id, p2.0));
 
-    transfer(&env, canister_id, p1, p2, 1_000_000).expect("transfer failed");
+    transfer(&env, canister_id, p1.0, p2.0, 1_000_000).expect("transfer failed");
 
     assert_eq!(15_000_000 - FEE, total_supply(&env, canister_id));
-    assert_eq!(9_000_000u64 - FEE, balance_of(&env, canister_id, p1));
-    assert_eq!(6_000_000u64, balance_of(&env, canister_id, p2));
+    assert_eq!(9_000_000u64 - FEE, balance_of(&env, canister_id, p1.0));
+    assert_eq!(6_000_000u64, balance_of(&env, canister_id, p2.0));
 }
 
 pub fn test_tx_deduplication<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
@@ -690,27 +694,28 @@ where
     let (env, canister_id) = setup(
         ledger_wasm,
         encode_init_args,
-        vec![(Account::from(p1), 10_000_000)],
+        vec![(Account::from(p1.0), 10_000_000)],
     );
     // No created_at_time => no deduplication
-    let block_id = transfer(&env, canister_id, p1, p2, 10_000).expect("transfer failed");
-    assert!(transfer(&env, canister_id, p1, p2, 10_000).expect("transfer failed") > block_id);
+    let block_id = transfer(&env, canister_id, p1.0, p2.0, 10_000).expect("transfer failed");
+    assert!(transfer(&env, canister_id, p1.0, p2.0, 10_000).expect("transfer failed") > block_id);
 
     let now = system_time_to_nanos(env.time());
 
     let transfer_args = TransferArg {
         from_subaccount: None,
-        to: p2.into(),
+        to: p2.0.into(),
         fee: None,
         amount: Nat::from(1_000_000),
         created_at_time: Some(now),
         memo: None,
     };
 
-    let block_idx = send_transfer(&env, canister_id, p1, &transfer_args).expect("transfer failed");
+    let block_idx =
+        send_transfer(&env, canister_id, p1.0, &transfer_args).expect("transfer failed");
 
     assert_eq!(
-        send_transfer(&env, canister_id, p1, &transfer_args),
+        send_transfer(&env, canister_id, p1.0, &transfer_args),
         Err(TransferError::Duplicate {
             duplicate_of: Nat::from(block_idx)
         })
@@ -722,7 +727,7 @@ where
         fee: Some(Nat::from(10_000)),
         ..transfer_args.clone()
     };
-    let block_idx = send_transfer(&env, canister_id, p1, &args)
+    let block_idx = send_transfer(&env, canister_id, p1.0, &args)
         .expect("transfer should not be deduplicated because the fee was set explicitly this time");
 
     // This time the transaction is a duplicate.
@@ -730,14 +735,14 @@ where
         Err(TransferError::Duplicate {
             duplicate_of: Nat::from(block_idx)
         }),
-        send_transfer(&env, canister_id, p1, &args,)
+        send_transfer(&env, canister_id, p1.0, &args,)
     );
 
     env.advance_time(TX_WINDOW + Duration::from_secs(5 * 60));
     let now = system_time_to_nanos(env.time());
 
     assert_eq!(
-        send_transfer(&env, canister_id, p1, &transfer_args,),
+        send_transfer(&env, canister_id, p1.0, &transfer_args,),
         Err(TransferError::TooOld),
     );
 
@@ -746,10 +751,10 @@ where
     let block_idx = send_transfer(
         &env,
         canister_id,
-        p1,
+        p1.0,
         &TransferArg {
             from_subaccount: None,
-            to: p2.into(),
+            to: p2.0.into(),
             fee: None,
             amount: Nat::from(1_000_000),
             created_at_time: Some(now),
@@ -766,10 +771,10 @@ where
         send_transfer(
             &env,
             canister_id,
-            p1,
+            p1.0,
             &TransferArg {
                 from_subaccount: None,
-                to: p2.into(),
+                to: p2.0.into(),
                 fee: None,
                 amount: Nat::from(1_000_000),
                 created_at_time: Some(now),
@@ -783,10 +788,10 @@ where
     let block_idx = send_transfer(
         &env,
         canister_id,
-        p1,
+        p1.0,
         &TransferArg {
             from_subaccount: None,
-            to: p2.into(),
+            to: p2.0.into(),
             fee: None,
             amount: Nat::from(1_000_000),
             created_at_time: Some(now),
@@ -803,10 +808,10 @@ where
         send_transfer(
             &env,
             canister_id,
-            p1,
+            p1.0,
             &TransferArg {
                 from_subaccount: None,
-                to: p2.into(),
+                to: p2.0.into(),
                 fee: None,
                 amount: Nat::from(1_000_000),
                 created_at_time: Some(now),
@@ -825,19 +830,19 @@ where
     let p2 = PrincipalId::new_user_test_id(2);
 
     assert_eq!(0, total_supply(&env, canister_id));
-    assert_eq!(0, balance_of(&env, canister_id, p1));
+    assert_eq!(0, balance_of(&env, canister_id, p1.0));
     assert_eq!(0, balance_of(&env, canister_id, MINTER));
 
-    transfer(&env, canister_id, MINTER, p1, 10_000_000).expect("mint failed");
+    transfer(&env, canister_id, MINTER, p1.0, 10_000_000).expect("mint failed");
 
     assert_eq!(10_000_000, total_supply(&env, canister_id));
-    assert_eq!(10_000_000, balance_of(&env, canister_id, p1));
+    assert_eq!(10_000_000, balance_of(&env, canister_id, p1.0));
     assert_eq!(0, balance_of(&env, canister_id, MINTER));
 
-    transfer(&env, canister_id, p1, MINTER, 1_000_000).expect("burn failed");
+    transfer(&env, canister_id, p1.0, MINTER, 1_000_000).expect("burn failed");
 
     assert_eq!(9_000_000, total_supply(&env, canister_id));
-    assert_eq!(9_000_000, balance_of(&env, canister_id, p1));
+    assert_eq!(9_000_000, balance_of(&env, canister_id, p1.0));
     assert_eq!(0, balance_of(&env, canister_id, MINTER));
 
     // You have at least FEE, you can burn at least FEE
@@ -845,30 +850,30 @@ where
         Err(TransferError::BadBurn {
             min_burn_amount: Nat::from(FEE)
         }),
-        transfer(&env, canister_id, p1, MINTER, FEE / 2),
+        transfer(&env, canister_id, p1.0, MINTER, FEE / 2),
     );
 
-    transfer(&env, canister_id, p1, p2, FEE / 2).expect("transfer failed");
+    transfer(&env, canister_id, p1.0, p2.0, FEE / 2).expect("transfer failed");
 
-    assert_eq!(FEE / 2, balance_of(&env, canister_id, p2));
+    assert_eq!(FEE / 2, balance_of(&env, canister_id, p2.0));
 
     // If you have less than FEE, you can burn only the whole amount.
     assert_eq!(
         Err(TransferError::BadBurn {
             min_burn_amount: Nat::from(FEE / 2)
         }),
-        transfer(&env, canister_id, p2, MINTER, FEE / 4),
+        transfer(&env, canister_id, p2.0, MINTER, FEE / 4),
     );
-    transfer(&env, canister_id, p2, MINTER, FEE / 2).expect("burn failed");
+    transfer(&env, canister_id, p2.0, MINTER, FEE / 2).expect("burn failed");
 
-    assert_eq!(0, balance_of(&env, canister_id, p2));
+    assert_eq!(0, balance_of(&env, canister_id, p2.0));
 
     // You cannot burn zero tokens, no matter what your balance is.
     assert_eq!(
         Err(TransferError::BadBurn {
             min_burn_amount: Nat::from(FEE)
         }),
-        transfer(&env, canister_id, p2, MINTER, 0),
+        transfer(&env, canister_id, p2.0, MINTER, 0),
     );
 }
 
@@ -882,8 +887,8 @@ where
         ledger_wasm,
         encode_init_args,
         vec![
-            (Account::from(p1), 10_000_000),
-            (Account::from(p2), 5_000_000),
+            (Account::from(p1.0), 10_000_000),
+            (Account::from(p2.0), 5_000_000),
         ],
     );
 
@@ -893,7 +898,7 @@ where
             &env,
             canister_id,
             Account {
-                owner: p1,
+                owner: p1.0,
                 subaccount: None
             }
         )
@@ -904,7 +909,7 @@ where
             &env,
             canister_id,
             Account {
-                owner: p1,
+                owner: p1.0,
                 subaccount: Some([0; 32])
             }
         )
@@ -913,9 +918,9 @@ where
     transfer(
         &env,
         canister_id,
-        p1,
+        p1.0,
         Account {
-            owner: p2,
+            owner: p2.0,
             subaccount: Some([0; 32]),
         },
         1_000_000,
@@ -928,7 +933,7 @@ where
             &env,
             canister_id,
             Account {
-                owner: p2,
+                owner: p2.0,
                 subaccount: None
             }
         )
@@ -944,7 +949,7 @@ where
     let (env, canister_id) = setup(
         ledger_wasm,
         encode_init_args,
-        vec![(Account::from(p1), 10_000_000)],
+        vec![(Account::from(p1.0), 10_000_000)],
     );
     // [ic_icrc1::endpoints::TransferArg] does not allow invalid memos by construction, we
     // need another type to check invalid inputs.
@@ -963,7 +968,7 @@ where
             canister_id,
             "icrc1_transfer",
             Encode!(&TransferArg {
-                to: p2.into(),
+                to: p2.0.into(),
                 amount: Nat::from(10_000),
                 memo: Some(vec![1u8; 8]),
             })
@@ -983,7 +988,7 @@ where
             canister_id,
             "icrc1_transfer",
             Encode!(&TransferArg {
-                to: p2.into(),
+                to: p2.0.into(),
                 amount: Nat::from(10_000),
                 memo: Some(vec![1u8; 32]),
             })
@@ -1002,7 +1007,7 @@ where
         canister_id,
         "icrc1_transfer",
         Encode!(&TransferArg {
-            to: p2.into(),
+            to: p2.0.into(),
             amount: Nat::from(10_000),
             memo: Some(vec![1u8; 33]),
         })
@@ -1030,7 +1035,7 @@ where
     let (env, canister_id) = setup(
         ledger_wasm,
         encode_init_args,
-        vec![(Account::from(p1), 10_000_000)],
+        vec![(Account::from(p1.0), 10_000_000)],
     );
 
     let now = system_time_to_nanos(env.time());
@@ -1041,10 +1046,10 @@ where
         send_transfer(
             &env,
             canister_id,
-            p1,
+            p1.0,
             &TransferArg {
                 from_subaccount: None,
-                to: p2.into(),
+                to: p2.0.into(),
                 fee: None,
                 amount: Nat::from(1_000_000),
                 created_at_time: Some(now - tx_window - 1),
@@ -1058,10 +1063,10 @@ where
         send_transfer(
             &env,
             canister_id,
-            p1,
+            p1.0,
             &TransferArg {
                 from_subaccount: None,
-                to: p2.into(),
+                to: p2.0.into(),
                 fee: None,
                 amount: Nat::from(1_000_000),
                 created_at_time: Some(now + Duration::from_secs(5 * 60).as_nanos() as u64),
@@ -1070,8 +1075,8 @@ where
         )
     );
 
-    assert_eq!(10_000_000u64, balance_of(&env, canister_id, p1));
-    assert_eq!(0u64, balance_of(&env, canister_id, p2));
+    assert_eq!(10_000_000u64, balance_of(&env, canister_id, p1.0));
+    assert_eq!(0u64, balance_of(&env, canister_id, p2.0));
 }
 
 pub fn test_archiving<T>(
@@ -1087,11 +1092,11 @@ pub fn test_archiving<T>(
     let (env, canister_id) = setup(
         ledger_wasm,
         encode_init_args,
-        vec![(Account::from(p1), 10_000_000)],
+        vec![(Account::from(p1.0), 10_000_000)],
     );
 
     for i in 0..ARCHIVE_TRIGGER_THRESHOLD {
-        transfer(&env, canister_id, p1, p2, 10_000 + i).expect("transfer failed");
+        transfer(&env, canister_id, p1.0, p2.0, 10_000 + i).expect("transfer failed");
     }
 
     env.run_until_completion(/*max_ticks=*/ 10);
@@ -1101,9 +1106,9 @@ pub fn test_archiving<T>(
     assert_eq!(archive_info[0].block_range_start, 0);
     assert_eq!(archive_info[0].block_range_end, NUM_BLOCKS_TO_ARCHIVE - 1);
 
-    let archive_canister_id = archive_info[0].canister_id;
+    let archive_principal = archive_info[0].canister_id;
 
-    let resp = get_transactions(&env, canister_id, 0, 1_000_000);
+    let resp = get_transactions(&env, canister_id.get().0, 0, 1_000_000);
     assert_eq!(resp.first_index, Nat::from(NUM_BLOCKS_TO_ARCHIVE));
     assert_eq!(
         resp.transactions.len(),
@@ -1117,20 +1122,26 @@ pub fn test_archiving<T>(
     );
 
     let archived_transactions =
-        get_archive_transactions(&env, archive_canister_id, 0, NUM_BLOCKS_TO_ARCHIVE as usize)
+        get_archive_transactions(&env, archive_principal, 0, NUM_BLOCKS_TO_ARCHIVE as usize)
             .transactions;
 
     for i in 1..NUM_BLOCKS_TO_ARCHIVE {
         let expected_tx = Transfer {
-            from: p1.into(),
-            to: p2.into(),
+            from: Account {
+                owner: p1.0,
+                subaccount: None,
+            },
+            to: Account {
+                owner: p2.0,
+                subaccount: None,
+            },
             amount: Nat::from(10_000 + i - 1),
             fee: Some(Nat::from(FEE)),
             memo: None,
             created_at_time: None,
         };
         assert_eq!(
-            get_archive_transaction(&env, archive_canister_id, i)
+            get_archive_transaction(&env, archive_principal, i)
                 .unwrap()
                 .transfer
                 .as_ref(),
@@ -1143,23 +1154,32 @@ pub fn test_archiving<T>(
     }
 
     // Check that requesting non-existing blocks does not crash the ledger.
-    let missing_blocks_reply = get_transactions(&env, canister_id, 100, 5);
+    let missing_blocks_reply = get_transactions(&env, canister_id.get().0, 100, 5);
     assert_eq!(0, missing_blocks_reply.transactions.len());
     assert_eq!(0, missing_blocks_reply.archived_transactions.len());
 
     // Upgrade the archive and check that the data is still available.
+
+    let archive_canister_id = CanisterId::new(archive_principal.into())
+        .expect("failed to convert Principal to CanisterId");
 
     env.upgrade_canister(archive_canister_id, archive_wasm, vec![])
         .expect("failed to upgrade the archive canister");
 
     for i in 1..NUM_BLOCKS_TO_ARCHIVE {
         assert_eq!(
-            get_archive_transaction(&env, archive_canister_id, i)
+            get_archive_transaction(&env, archive_principal, i)
                 .unwrap()
                 .transfer,
             Some(Transfer {
-                from: p1.into(),
-                to: p2.into(),
+                from: Account {
+                    owner: p1.0,
+                    subaccount: None
+                },
+                to: Account {
+                    owner: p2.0,
+                    subaccount: None
+                },
                 amount: Nat::from(10_000 + i - 1),
                 fee: Some(Nat::from(FEE)),
                 memo: None,
@@ -1170,7 +1190,7 @@ pub fn test_archiving<T>(
 
     // Check that we can append more blocks after the upgrade.
     for i in 0..(ARCHIVE_TRIGGER_THRESHOLD - NUM_BLOCKS_TO_ARCHIVE) {
-        transfer(&env, canister_id, p1, p2, 20_000 + i).expect("transfer failed");
+        transfer(&env, canister_id, p1.0, p2.0, 20_000 + i).expect("transfer failed");
     }
 
     let archive_info = list_archives(&env, canister_id);
@@ -1183,13 +1203,13 @@ pub fn test_archiving<T>(
 
     // Check that the archive handles requested ranges correctly.
     let archived_transactions =
-        get_archive_transactions(&env, archive_canister_id, 0, 1_000_000).transactions;
+        get_archive_transactions(&env, archive_principal, 0, 1_000_000).transactions;
     let n = 2 * NUM_BLOCKS_TO_ARCHIVE as usize;
     assert_eq!(archived_transactions.len(), n);
 
     for start in 0..n {
         for end in start..n {
-            let tx = get_archive_transactions(&env, archive_canister_id, start as u64, end - start)
+            let tx = get_archive_transactions(&env, archive_principal, start as u64, end - start)
                 .transactions;
             assert_eq!(archived_transactions[start..end], tx);
         }
@@ -1206,16 +1226,16 @@ where
     let (env, canister_id) = setup(
         ledger_wasm,
         encode_init_args,
-        vec![(Account::from(p1), 10_000_000)],
+        vec![(Account::from(p1.0), 10_000_000)],
     );
 
     for i in 0..ARCHIVE_TRIGGER_THRESHOLD {
-        transfer(&env, canister_id, p1, p2, 10_000 + i * 10_000).expect("transfer failed");
+        transfer(&env, canister_id, p1.0, p2.0, 10_000 + i * 10_000).expect("transfer failed");
     }
 
     env.run_until_completion(/*max_ticks=*/ 10);
 
-    let resp = get_blocks(&env, canister_id, 0, 1_000_000);
+    let resp = get_blocks(&env, canister_id.get().0, 0, 1_000_000);
     assert_eq!(resp.first_index, Nat::from(NUM_BLOCKS_TO_ARCHIVE));
     assert_eq!(
         resp.blocks.len(),
@@ -1246,7 +1266,7 @@ where
     }
 
     // Check that requesting non-existing blocks does not crash the ledger.
-    let missing_blocks_reply = get_blocks(&env, canister_id, 100, 5);
+    let missing_blocks_reply = get_blocks(&env, canister_id.get().0, 100, 5);
     assert_eq!(0, missing_blocks_reply.blocks.len());
     assert_eq!(0, missing_blocks_reply.archived_blocks.len());
 }

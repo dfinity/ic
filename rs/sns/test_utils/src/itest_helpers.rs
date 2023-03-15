@@ -1,12 +1,13 @@
 use crate::SNS_MAX_CANISTER_MEMORY_ALLOCATION_IN_BYTES;
 use candid::types::number::Nat;
+use candid::Principal;
 use canister_test::{local_test_with_config_e, Canister, CanisterIdRecord, Project, Runtime, Wasm};
 use dfn_candid::{candid_one, CandidOne};
 use ic_canister_client_sender::Sender;
 use ic_config::subnet_config::SubnetConfig;
 use ic_config::Config;
 use ic_crypto_sha::Sha256;
-use ic_icrc1::{endpoints::TransferArg, Account, Subaccount};
+use ic_icrc1::endpoints::TransferArg;
 use ic_icrc1_index::InitArgs as IndexInitArgs;
 use ic_icrc1_ledger::InitArgs as LedgerInitArgs;
 use ic_icrc1_ledger::LedgerArgument;
@@ -49,6 +50,7 @@ use ic_sns_root::{
 };
 use ic_sns_swap::pb::v1::Init as SwapInit;
 use ic_types::{CanisterId, PrincipalId};
+use icrc_ledger_types::{Account, Subaccount};
 use maplit::btreemap;
 use on_wire::IntoWire;
 use std::future::Future;
@@ -123,7 +125,7 @@ impl SnsTestsInitPayloadBuilder {
         let ledger = LedgerInitArgs {
             // minting_account will be set when the Governance canister ID is allocated
             minting_account: Account {
-                owner: PrincipalId::default(),
+                owner: Principal::anonymous(),
                 subaccount: None,
             },
             initial_balances: vec![],
@@ -298,7 +300,7 @@ pub fn populate_canister_ids(
     {
         if let LedgerArgument::Init(ref mut ledger) = sns_canister_init_payloads.ledger {
             ledger.minting_account = Account {
-                owner: governance_canister_id.unwrap(),
+                owner: governance_canister_id.unwrap().0,
                 subaccount: None,
             };
             ledger.archive_options.controller_id = root_canister_id.unwrap();
@@ -383,7 +385,7 @@ impl SnsCanisters<'_> {
         if let LedgerArgument::Init(ref mut ledger) = init_payloads.ledger {
             assert!(!ledger.initial_balances.iter().any(|(a, _)| a
                 == &Account {
-                    owner: governance_canister_id.get(),
+                    owner: governance_canister_id.get().0,
                     subaccount: None
                 }));
 
@@ -393,7 +395,7 @@ impl SnsCanisters<'_> {
                     .subaccount()
                     .unwrap_or_else(|e| panic!("Couldn't calculate subaccount from neuron: {}", e));
                 let aid = Account {
-                    owner: governance_canister_id.get(),
+                    owner: governance_canister_id.get().0,
                     subaccount: Some(sub),
                 };
                 ledger
@@ -641,7 +643,7 @@ impl SnsCanisters<'_> {
                 fee: Some(Nat::from(DEFAULT_TRANSFER_FEE.get_e8s())),
                 from_subaccount: None,
                 to: Account {
-                    owner: *to_principal_id,
+                    owner: to_principal_id.0,
                     subaccount: to_subaccount,
                 },
                 memo: None,
@@ -765,7 +767,7 @@ impl SnsCanisters<'_> {
 
         let to_account: Option<AccountProto> =
             to_account.map(|Account { owner, subaccount }| AccountProto {
-                owner: Some(owner),
+                owner: Some(PrincipalId(owner)),
                 subaccount: subaccount.map(|s| SubaccountProto {
                     subaccount: s.to_vec(),
                 }),
@@ -825,7 +827,7 @@ impl SnsCanisters<'_> {
         crate::icrc1::balance_of(
             &self.ledger,
             Account {
-                owner: sender.get_principal_id(),
+                owner: sender.get_principal_id().0,
                 subaccount: None,
             },
         )

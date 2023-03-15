@@ -30,8 +30,8 @@ use dfn_core::api::{call_bytes_with_cleanup, Funds};
 use prost::Message;
 
 use ic_ic00_types::IC_00;
-use ic_icrc1::endpoints::ArchiveInfo;
 use ic_sns_root::types::Environment;
+use icrc_ledger_types::ArchiveInfo;
 
 const STABLE_MEM_BUFFER_SIZE: u32 = 100 * 1024 * 1024; // 100MiB
 

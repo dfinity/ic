@@ -8,7 +8,7 @@ use ic_ckbtc_minter::updates::{
     retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError, RetrieveBtcOk},
     update_balance::{UpdateBalanceArgs, UpdateBalanceError, UpdateBalanceResult},
 };
-use ic_icrc1::{Account, Subaccount};
+use icrc_ledger_types::{Account, Subaccount};
 
 #[derive(Debug)]
 pub enum CkBtcMinterAgentError {

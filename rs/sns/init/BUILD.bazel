@@ -10,6 +10,7 @@ filegroup(
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/crypto/sha",
     "//rs/nervous_system/common",
     "//rs/nns/constants",

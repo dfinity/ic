@@ -4,12 +4,12 @@ use dfn_core::api::PrincipalId;
 use dfn_core::{call, CanisterId};
 use dfn_protobuf::protobuf;
 use ic_crypto_sha::Sha256;
-use ic_icrc1::{Account, Subaccount};
 use ic_ledger_core::block::BlockIndex;
 use icp_ledger::{
     tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Memo, SendArgs,
     Subaccount as IcpSubaccount, Tokens, TotalSupplyArgs,
 };
+use icrc_ledger_types::{Account, Subaccount};
 
 pub struct IcpLedgerCanister {
     id: CanisterId,
@@ -79,7 +79,7 @@ pub trait IcpLedger: Send + Sync {
 }
 
 fn icrc1_account_to_icp_accountidentifier(account: Account) -> AccountIdentifier {
-    AccountIdentifier::new(account.owner, account.subaccount.map(IcpSubaccount))
+    AccountIdentifier::new(account.owner.into(), account.subaccount.map(IcpSubaccount))
 }
 
 #[async_trait]

@@ -26,8 +26,8 @@ use ic_ckbtc_minter::updates::{
     retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError},
 };
 use ic_icrc1::endpoints::TransferArg;
-use ic_icrc1::Account;
 use ic_icrc1_agent::Icrc1Agent;
+use icrc_ledger_types::Account;
 use slog::{debug, info};
 
 /// Test retrieve_btc method of the minter canister.
@@ -81,7 +81,7 @@ pub fn test_retrieve_btc(env: TestEnv) {
         let subaccount1 = compute_subaccount(PrincipalId::from(caller), 567);
         let subaccount2 = compute_subaccount(PrincipalId::from(caller), 890);
         let account1 = Account {
-            owner: PrincipalId::from(caller),
+            owner: caller,
             subaccount: Some(subaccount1),
         };
 

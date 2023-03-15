@@ -12,6 +12,7 @@ filegroup(
 )
 
 DEPENDENCIES = [
+    "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/crypto/sha",
     "//rs/nervous_system/common",
     "//rs/nervous_system/root",

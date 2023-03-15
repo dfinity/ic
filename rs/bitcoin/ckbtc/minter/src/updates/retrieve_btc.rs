@@ -3,11 +3,9 @@ use crate::tasks::{schedule_now, TaskType};
 use candid::{CandidType, Deserialize, Nat, Principal};
 use ic_base_types::PrincipalId;
 use ic_canister_log::log;
-use ic_icrc1::{
-    endpoints::{TransferArg, TransferError},
-    Account,
-};
+use ic_icrc1::endpoints::{TransferArg, TransferError};
 use ic_icrc1_client_cdk::{CdkRuntime, ICRC1Client};
+use icrc_ledger_types::Account;
 use num_traits::cast::ToPrimitive;
 
 use super::{get_btc_address::init_ecdsa_public_key, get_withdrawal_account::compute_subaccount};
@@ -91,7 +89,7 @@ pub async fn retrieve_btc(args: RetrieveBtcArgs) -> Result<RetrieveBtcOk, Retrie
     init_ecdsa_public_key().await;
 
     let main_account = Account {
-        owner: ic_cdk::id().into(),
+        owner: ic_cdk::id(),
         subaccount: None,
     };
 
@@ -158,7 +156,7 @@ async fn burn_ckbtcs(user: Principal, amount: u64) -> Result<u64, RetrieveBtcErr
         runtime: CdkRuntime,
         ledger_canister_id: read_state(|s| s.ledger_id.get().into()),
     };
-    let minter = PrincipalId(ic_cdk::id());
+    let minter = ic_cdk::id();
     let from_subaccount = compute_subaccount(PrincipalId(user), 0);
     let result = client
         .transfer(TransferArg {
