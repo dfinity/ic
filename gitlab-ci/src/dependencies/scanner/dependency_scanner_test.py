@@ -37,7 +37,10 @@ class FakeBazel(BazelRustDependencyManager):
                     repository=repository_name,
                     scanner=self.get_scanner_id(),
                     vulnerable_dependency=Dependency("VDID1", "chrono", "1.0", {"VID1": ["1.1", "2.0"]}),
-                    vulnerabilities=[Vulnerability("VID1", "CVE-123", "huuughe vuln", 100)],
+                    vulnerabilities=[
+                        Vulnerability("VID1", "CVE-123", "huuughe vuln", 100),
+                        Vulnerability("VID2", "CVE-456", "other vuln", 50),
+                    ],
                     first_level_dependencies=[Dependency("VDID2", "fl dep", "0.1 beta", {"VID1": ["3.0 alpha"]})],
                     projects=["foo", "bar", "bear"],
                     risk_assessor=[],
@@ -171,12 +174,12 @@ def test_on_periodic_job_one_finding_in_jira(jira_lib_mock):
     scanner_job.do_periodic_scan(repos)
 
     finding = fake_bazel.get_findings(repos[0].name, repos[0].projects[0], repository.engine_version)[0]
-    jira_finding.vulnerable_dependency = finding.vulnerable_dependency
-    jira_finding.vulnerabilities = finding.vulnerabilities
-    jira_finding.first_level_dependencies = finding.first_level_dependencies
-    jira_finding.projects = finding.projects
-    jira_finding.risk = None
-    jira_finding.score = finding.score
+    assert jira_finding.vulnerable_dependency == finding.vulnerable_dependency
+    assert jira_finding.vulnerabilities == finding.vulnerabilities
+    assert jira_finding.first_level_dependencies == finding.first_level_dependencies
+    assert jira_finding.projects == finding.projects
+    assert jira_finding.risk is None
+    assert jira_finding.score == finding.score
 
     jira_lib_mock.get_open_findings_for_repo_and_scanner.assert_called_once()
     jira_lib_mock.get_open_finding.assert_not_called()
@@ -190,6 +193,41 @@ def test_on_periodic_job_one_finding_in_jira(jira_lib_mock):
     sub2.on_scan_job_succeeded.assert_called_once()
     sub1.on_scan_job_failed.assert_not_called()
     sub2.on_scan_job_failed.assert_not_called()
+
+
+def test_on_periodic_job_one_finding_in_jira_clear_risk(jira_lib_mock):
+    # one finding, present in JIRA
+    repository = Repository("ic", "https://gitlab.com/dfinity-lab/public/ic", [Project("ic", "ic")])
+    fake_bazel = FakeBazel(2)
+    jira_finding = fake_bazel.get_findings(repository.name, repository.projects[0], repository.engine_version)[0]
+    jira_finding.risk = SecurityRisk.HIGH
+    assert len(jira_finding.vulnerabilities) > 1
+    # drop vulnerability
+    jira_finding.vulnerabilities = jira_finding.vulnerabilities[:1]
+    jira_lib_mock.get_open_findings_for_repo_and_scanner.return_value = {jira_finding.id(): jira_finding}
+
+    scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [])
+
+    scanner_job.do_periodic_scan([repository])
+
+    assert jira_finding.risk is None
+
+
+def test_on_periodic_job_one_finding_in_jira_leave_risk(jira_lib_mock):
+    # one finding, present in JIRA
+    repository = Repository("ic", "https://gitlab.com/dfinity-lab/public/ic", [Project("ic", "ic")])
+    fake_bazel = FakeBazel(2)
+    jira_finding = fake_bazel.get_findings(repository.name, repository.projects[0], repository.engine_version)[0]
+    jira_finding.risk = SecurityRisk.HIGH
+    # vulnerability disappeared
+    jira_finding.vulnerabilities.append(Vulnerability("other", "other vuln", "some desc", 12))
+    jira_lib_mock.get_open_findings_for_repo_and_scanner.return_value = {jira_finding.id(): jira_finding}
+
+    scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [])
+
+    scanner_job.do_periodic_scan([repository])
+
+    assert jira_finding.risk == SecurityRisk.HIGH
 
 
 def test_on_periodic_job_failure(jira_lib_mock):
