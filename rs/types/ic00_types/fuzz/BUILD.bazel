@@ -11,8 +11,29 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = []
 
 rust_fuzz_test_binary(
+    name = "decode_canister_http_request_args",
+    srcs = ["fuzz_targets/decode_canister_http_request_args.rs"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_fuzz_test_binary(
+    name = "decode_ecdsa_public_key_args",
+    srcs = ["fuzz_targets/decode_ecdsa_public_key_args.rs"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_fuzz_test_binary(
     name = "decode_install_code_args",
     srcs = ["fuzz_targets/decode_install_code_args.rs"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_fuzz_test_binary(
+    name = "decode_sign_with_ecdsa_args",
+    srcs = ["fuzz_targets/decode_sign_with_ecdsa_args.rs"],
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES,
 )
