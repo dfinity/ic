@@ -12,6 +12,7 @@ import (
 var FUZZY_MATCHES_COUNT = 7
 
 type Config struct {
+	isFuzzyMatch bool
 	isDryRun    bool
 	keepAlive   bool
 	filterTests string
@@ -24,18 +25,34 @@ func TestCommandWithConfig(cfg *Config) func(cmd *cobra.Command, args []string) 
 		if res, err_target := check_target_exists(target); !res {
 			if err_target != nil {
 				return err_target
-			} else if closest_matches, err_match := get_closest_target_matches(target); err_match != nil {
-				return err_match
-			} else if len(closest_matches) == 0 {
-				return fmt.Errorf("No test target `%s` was found", target)
+			} else if !cfg.isFuzzyMatch {
+				if targets, err := find_substring_matches(target); err != nil {
+					return err
+				} else if len(targets) == 0 {
+					return fmt.Errorf("\nNone of test targets matches the substring `%s`.\nTry fuzzy match: 'ict test %s --fuzzy'",  target, target)
+				} else if len(targets) == 1 {
+					cmd.Printf("%sTarget `%s` doesn't exist, a single substring match `%s` was found, executing ...%s\n", CYAN, target, targets[0], NC)
+					target = targets[0]
+				} else {
+					return fmt.Errorf("\nTarget `%s` doesn't exist, the following substring matches found:\n%s", target, strings.Join(targets, "\n"))
+				}
 			} else {
-				return fmt.Errorf("No test target `%s` was found: \nDid you mean any of:\n%s", target, strings.Join(closest_matches, "\n"))
+				if closest_matches, err_match := get_closest_target_matches(target); err_match != nil {
+					return err_match
+				} else if len(closest_matches) == 0 {
+					return fmt.Errorf("\nNo fuzzy matches for test target `%s` were found.", target)
+				} else if len(closest_matches) == 1 {
+					cmd.Printf("%sTarget `%s` doesn't exist, a single fuzzy match `%s` was found, executing ...%s\n", CYAN, target, closest_matches[0], NC)
+					target = closest_matches[0]
+				} else {
+					return fmt.Errorf("\nThe following fuzzy matches were found for `%s`:\n%s", target, strings.Join(closest_matches, "\n"))
+				}
 			}
 		}
 		command := []string{"bazel", "test", target, "--config=systest"}
 		// Append all bazel args following the --, i.e. "ict test target -- --verbose_explanations ..."
 		command = append(command, args[1:]...)
-		if !slice_contains_substring(command, "--cache_test_results") {
+		if !any_contains_substring(command, "--cache_test_results") {
 			command = append(command, "--cache_test_results=no")
 		}
 		if len(cfg.filterTests) > 0 {
@@ -72,6 +89,7 @@ func NewTestCmd() *cobra.Command {
 		Args:    cobra.MinimumNArgs(1),
 		RunE:    TestCommandWithConfig(&cfg),
 	}
+	testCmd.Flags().BoolVarP(&cfg.isFuzzyMatch, "fuzzy", "", false, "Use fuzzy matching to find similar target names. Default: substring match.")
 	testCmd.Flags().BoolVarP(&cfg.isDryRun, "dry-run", "n", false, "Print raw Bazel command to be invoked without execution.")
 	testCmd.Flags().BoolVarP(&cfg.keepAlive, "keepalive", "k", false, "Keep test system alive for 60 minutes.")
 	testCmd.PersistentFlags().StringVarP(&cfg.filterTests, "include-tests", "i", "", "Execute only those test functions which contain a substring.")

@@ -15,7 +15,7 @@ var CYAN = "\033[0;36m"
 var NC = "\033[0m"
 
 // see https://github.com/schollz/closestmatch
-var FUZZY_SEARCH_BAG_SIZES = []int{3, 4}
+var FUZZY_SEARCH_BAG_SIZES = []int{2, 3, 4}
 
 func filter(vs []string, f func(string) bool) []string {
 	filtered := make([]string, 0)
@@ -27,7 +27,7 @@ func filter(vs []string, f func(string) bool) []string {
 	return filtered
 }
 
-func slice_contains_substring(vs []string, v string) bool {
+func any_contains_substring(vs []string, v string) bool {
 	for _, s := range vs {
 		if strings.Contains(s, v) {
 			return true
@@ -36,8 +36,19 @@ func slice_contains_substring(vs []string, v string) bool {
 	return false
 }
 
+func find_substring_matches(target string) ([]string, error) {
+	targets, err := get_all_system_test_targets()
+	if err != nil {
+		return []string{}, err
+	}
+	matches := filter(targets, func(s string) bool {
+		return strings.Contains(s, target)
+	})
+	return matches, nil
+}
+
 func get_all_system_test_targets() ([]string, error) {
-	command := []string{"bazel", "query", "tests(//rs/tests:*)"}
+	command := []string{"bazel", "query", "tests(//rs/tests/...)"}
 	queryCmd := exec.Command(command[0], command[1:]...)
 	outputBuffer := &bytes.Buffer{}
 	stdErrBuffer := &bytes.Buffer{}
@@ -48,7 +59,7 @@ func get_all_system_test_targets() ([]string, error) {
 	}
 	cmdOutput := strings.Split(outputBuffer.String(), "\n")
 	all_targets := filter(cmdOutput, func(s string) bool {
-		return len(s) > 0 && strings.Contains(s, "//rs/tests:")
+		return len(s) > 0
 	})
 	return all_targets, nil
 }
