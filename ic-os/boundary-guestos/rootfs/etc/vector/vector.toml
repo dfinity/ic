@@ -46,10 +46,15 @@ if err == null {
   .status = status
 }
 
+.ic_http_request =
+  if .ic_method_name == "http_request" { 1 } else { 0 }
+
 for_each([
-  "ic_subnet_id",
-  "ic_node_id",
   "ic_canister_id",
+  "ic_method_name",
+  "ic_node_id",
+  "ic_request_type",
+  "ic_subnet_id",
 ]) -> |_, k| {
   if get!(., [k]) == "" {
     . = set!(., [k], "N/A")
@@ -119,12 +124,14 @@ inputs = ["nginx_access_json"]
 
     [transforms.nginx_access_metrics.metrics.tags]
     hostname = "{{ hostname }}"
+    ic_http_request = "{{ ic_http_request }}"
     ic_node_id = "{{ ic_node_id }}"
+    ic_request_type = "{{ ic_request_type }}"
     ic_subnet_id = "{{ ic_subnet_id }}"
+    is_bot = "{{ is_bot }}"
     request_method = "{{ request_method }}"
     status = "{{ status }}"
     traffic_segment = "{{ traffic_segment }}"
-    is_bot = "{{ is_bot }}"
     upstream_cache_status = "{{ upstream_cache_status }}"
     upstream_status = "{{ upstream_status }}"
 
@@ -135,12 +142,14 @@ inputs = ["nginx_access_json"]
 
     [transforms.nginx_access_metrics.metrics.tags]
     hostname = "{{ hostname }}"
+    ic_http_request = "{{ ic_http_request }}"
     ic_node_id = "{{ ic_node_id }}"
+    ic_request_type = "{{ ic_request_type }}"
     ic_subnet_id = "{{ ic_subnet_id }}"
+    is_bot = "{{ is_bot }}"
     request_method = "{{ request_method }}"
     status = "{{ status }}"
     traffic_segment = "{{ traffic_segment }}"
-    is_bot = "{{ is_bot }}"
     upstream_cache_status = "{{ upstream_cache_status }}"
     upstream_status = "{{ upstream_status }}"
 
