@@ -996,7 +996,7 @@ pub fn generate_ticket_participants_workload(env: TestEnv, rps: usize, duration:
     env.emit_report(format!("{metrics}"));
 }
 
-const SNS_ENDPOINT_RETRY_TIMEOUT: Duration = Duration::from_secs(20 * 60); // 20 minutes
+const SNS_ENDPOINT_RETRY_TIMEOUT: Duration = Duration::from_secs(5 * 60); // 5 minutes
 const SNS_ENDPOINT_RETRY_BACKOFF: Duration = Duration::from_secs(2); // 2 seconds
 
 async fn run_icp_ledger_transfer(

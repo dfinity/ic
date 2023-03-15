@@ -242,6 +242,11 @@ pushd "${REPO_ROOT}/ic-os/guestos"
     ${WITH_TESTNET_KEYS:-}
 popd
 
+SCP_PREFIX=""
+if [ -n "${ANSIBLE_REMOTE_USER:-}" ]; then
+    SCP_PREFIX="${ANSIBLE_REMOTE_USER}@"
+fi
+
 if [[ "${USE_BOUNDARY_NODES}" == "true" ]]; then
     BOUNDARY_OUT="${TMPDIR}/build-boundary.log"
     echo "**** Build USB sticks for boundary nodes"
@@ -258,7 +263,7 @@ if [[ -z \${CERT_NAME+x} ]]; then
     err "'.boundary.vars.cert_name' was not defined"
 else
     (for HOST in "\${HOSTS[@]}"; do
-        scp -r "${ANSIBLE_REMOTE_USER:-$(whoami)}@\${HOST}:/etc/letsencrypt/live/\${CERT_NAME}/*" "${BN_MEDIA_PATH}/certs/" && exit
+        scp -r "${SCP_PREFIX}\${HOST}:/etc/letsencrypt/live/\${CERT_NAME}/*" "${BN_MEDIA_PATH}/certs/" && exit
     done) || {
         err "failed to find certificate \${CERT_NAME}"
         exit 1
