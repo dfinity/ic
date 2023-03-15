@@ -13,7 +13,6 @@ use crate::{
         ExecutionEnvironmentMetrics, SUBMITTED_OUTCOME_LABEL, SUCCESS_STATUS_LABEL,
     },
     hypervisor::Hypervisor,
-    util::candid_error_to_user_error,
     NonReplicatedQueryKind,
 };
 use candid::Encode;
@@ -470,7 +469,7 @@ impl ExecutionEnvironment {
                     }
 
                     match SignWithECDSAArgs::decode(payload) {
-                        Err(err) => Some((Err(candid_error_to_user_error(err)), msg.take_cycles())),
+                        Err(err) => Some((Err(err), msg.take_cycles())),
                         Ok(args) => {
                             match get_master_ecdsa_public_key(
                                 ecdsa_subnet_public_keys,
@@ -548,7 +547,7 @@ impl ExecutionEnvironment {
 
             Ok(Ic00Method::UninstallCode) => {
                 let res = match UninstallCodeArgs::decode(payload) {
-                    Err(err) => Err(candid_error_to_user_error(err)),
+                    Err(err) => Err(err),
                     Ok(args) => self
                         .canister_manager
                         .uninstall_code(args.get_canister_id(), *msg.sender(), &mut state)
@@ -560,7 +559,7 @@ impl ExecutionEnvironment {
 
             Ok(Ic00Method::UpdateSettings) => {
                 let res = match UpdateSettingsArgs::decode(payload) {
-                    Err(err) => Err(candid_error_to_user_error(err)),
+                    Err(err) => Err(err),
                     Ok(args) => {
                         // Start logging execution time for `update_settings`.
                         let timer = Timer::start();
@@ -619,7 +618,7 @@ impl ExecutionEnvironment {
             // This API is deprecated and should not be used in new code.
             Ok(Ic00Method::SetController) => {
                 let res = match SetControllerArgs::decode(payload) {
-                    Err(err) => Err(candid_error_to_user_error(err)),
+                    Err(err) => Err(err),
                     Ok(args) => self
                         .canister_manager
                         .set_controller(
@@ -637,7 +636,7 @@ impl ExecutionEnvironment {
 
             Ok(Ic00Method::CanisterStatus) => {
                 let res = match CanisterIdRecord::decode(payload) {
-                    Err(err) => Err(candid_error_to_user_error(err)),
+                    Err(err) => Err(err),
                     Ok(args) => self.get_canister_status(
                         *msg.sender(),
                         args.get_canister_id(),
@@ -650,7 +649,7 @@ impl ExecutionEnvironment {
 
             Ok(Ic00Method::StartCanister) => {
                 let res = match CanisterIdRecord::decode(payload) {
-                    Err(err) => Err(candid_error_to_user_error(err)),
+                    Err(err) => Err(err),
                     Ok(args) => {
                         self.start_canister(args.get_canister_id(), *msg.sender(), &mut state)
                     }
@@ -659,13 +658,13 @@ impl ExecutionEnvironment {
             }
 
             Ok(Ic00Method::StopCanister) => match CanisterIdRecord::decode(payload) {
-                Err(err) => Some((Err(candid_error_to_user_error(err)), msg.take_cycles())),
+                Err(err) => Some((Err(err), msg.take_cycles())),
                 Ok(args) => self.stop_canister(args.get_canister_id(), &msg, &mut state),
             },
 
             Ok(Ic00Method::DeleteCanister) => {
                 let res = match CanisterIdRecord::decode(payload) {
-                    Err(err) => Err(candid_error_to_user_error(err)),
+                    Err(err) => Err(err),
                     Ok(args) => {
                         // Start logging execution time for `delete_canister`.
                         let timer = Timer::start();
@@ -701,7 +700,7 @@ impl ExecutionEnvironment {
                     Err(err) => Some((Err(err), msg.take_cycles())),
                     Ok(_) => {
                         let res = match EmptyBlob::decode(payload) {
-                            Err(err) => Err(candid_error_to_user_error(err)),
+                            Err(err) => Err(err),
                             Ok(EmptyBlob) => {
                                 let mut buffer = vec![0u8; 32];
                                 rng.fill_bytes(&mut buffer);
@@ -714,7 +713,7 @@ impl ExecutionEnvironment {
             },
 
             Ok(Ic00Method::DepositCycles) => match CanisterIdRecord::decode(payload) {
-                Err(err) => Some((Err(candid_error_to_user_error(err)), msg.take_cycles())),
+                Err(err) => Some((Err(err), msg.take_cycles())),
                 Ok(args) => Some(self.deposit_cycles(args.get_canister_id(), &mut msg, &mut state)),
             },
             Ok(Ic00Method::HttpRequest) => match state.metadata.own_subnet_features.http_requests {
@@ -723,9 +722,7 @@ impl ExecutionEnvironment {
                         match Self::verify_sender_id(request, &state) {
                             Err(err) => Some((Err(err), msg.take_cycles())),
                             Ok(_) => match CanisterHttpRequestArgs::decode(payload) {
-                                Err(err) => {
-                                    Some((Err(candid_error_to_user_error(err)), msg.take_cycles()))
-                                }
+                                Err(err) => Some((Err(err), msg.take_cycles())),
                                 Ok(args) => match CanisterHttpRequestContext::try_from((
                                     state.time(),
                                     request.as_ref(),
@@ -794,7 +791,7 @@ impl ExecutionEnvironment {
             },
             Ok(Ic00Method::SetupInitialDKG) => match &msg {
                 CanisterCall::Request(request) => match SetupInitialDKGArgs::decode(payload) {
-                    Err(err) => Some((Err(candid_error_to_user_error(err)), msg.take_cycles())),
+                    Err(err) => Some((Err(err), msg.take_cycles())),
                     Ok(args) => self
                         .setup_initial_dkg(*msg.sender(), &args, request, &mut state, rng)
                         .map_or_else(|err| Some((Err(err), msg.take_cycles())), |()| None),
@@ -809,7 +806,7 @@ impl ExecutionEnvironment {
                 match &msg {
                     CanisterCall::Request(request) => {
                         let res = match ECDSAPublicKeyArgs::decode(request.method_payload()) {
-                            Err(err) => Some(Err(candid_error_to_user_error(err))),
+                            Err(err) => Some(Err(err)),
                             Ok(args) => match get_master_ecdsa_public_key(
                                 ecdsa_subnet_public_keys,
                                 self.own_subnet_id,
@@ -848,7 +845,7 @@ impl ExecutionEnvironment {
                         let res =
                             match ComputeInitialEcdsaDealingsArgs::decode(request.method_payload())
                             {
-                                Err(err) => Some(candid_error_to_user_error(err)),
+                                Err(err) => Some(err),
                                 Ok(args) => match get_master_ecdsa_public_key(
                                     ecdsa_subnet_public_keys,
                                     self.own_subnet_id,
@@ -875,7 +872,7 @@ impl ExecutionEnvironment {
 
             Ok(Ic00Method::ProvisionalCreateCanisterWithCycles) => {
                 let res = match ProvisionalCreateCanisterWithCyclesArgs::decode(payload) {
-                    Err(err) => Err(candid_error_to_user_error(err)),
+                    Err(err) => Err(err),
                     Ok(args) => {
                         let cycles_amount = args.to_u128();
                         match CanisterSettings::try_from(args.settings) {
@@ -902,7 +899,7 @@ impl ExecutionEnvironment {
 
             Ok(Ic00Method::ProvisionalTopUpCanister) => {
                 let res = match ProvisionalTopUpCanisterArgs::decode(payload) {
-                    Err(err) => Err(candid_error_to_user_error(err)),
+                    Err(err) => Err(err),
                     Ok(args) => self.add_cycles(
                         *msg.sender(),
                         args.get_canister_id(),
@@ -1871,7 +1868,7 @@ impl ExecutionEnvironment {
             state: &mut ReplicatedState,
         ) -> Result<(InstallCodeContext, CanisterState), UserError> {
             let payload = msg.method_payload();
-            let args = InstallCodeArgs::decode(payload).map_err(candid_error_to_user_error)?;
+            let args = InstallCodeArgs::decode(payload)?;
             let install_context = InstallCodeContext::try_from((*msg.sender(), args))?;
             let canister = state
                 .take_canister_state(&install_context.canister_id)

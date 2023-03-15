@@ -1,9 +1,9 @@
 use std::str::FromStr;
 use std::{collections::BTreeSet, fmt::Write};
 
-use candid::Decode;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_btc_types::NetworkInRequest as BitcoinNetwork;
+use ic_error_types::UserError;
 use ic_ic00_types::{
     BitcoinGetBalanceArgs, BitcoinGetCurrentFeePercentilesArgs, BitcoinGetUtxosArgs,
     BitcoinSendTransactionArgs, CanisterIdRecord, ComputeInitialEcdsaDealingsArgs,
@@ -15,16 +15,16 @@ use ic_replicated_state::NetworkTopology;
 
 #[derive(Debug)]
 pub(super) enum ResolveDestinationError {
-    CandidError(candid::Error),
+    UserError(UserError),
     MethodNotFound(String),
     SubnetNotFound(CanisterId, Ic00Method),
     AlreadyResolved(PrincipalId),
     EcdsaKeyError(String),
 }
 
-impl From<candid::Error> for ResolveDestinationError {
-    fn from(err: candid::Error) -> Self {
-        ResolveDestinationError::CandidError(err)
+impl From<UserError> for ResolveDestinationError {
+    fn from(err: UserError) -> Self {
+        ResolveDestinationError::UserError(err)
     }
 }
 
@@ -54,7 +54,7 @@ pub(super) fn resolve_destination(
         Ok(Ic00Method::SetupInitialDKG) => Ok(own_subnet.get()),
         Ok(Ic00Method::UpdateSettings) => {
             // Find the destination canister from the payload.
-            let args = Decode!(payload, UpdateSettingsArgs)?;
+            let args = UpdateSettingsArgs::decode(payload)?;
             let canister_id = args.get_canister_id();
 
             network_topology
@@ -67,7 +67,7 @@ pub(super) fn resolve_destination(
         }
         Ok(Ic00Method::InstallCode) => {
             // Find the destination canister from the payload.
-            let args = Decode!(payload, InstallCodeArgs)?;
+            let args = InstallCodeArgs::decode(payload)?;
             let canister_id = args.get_canister_id();
             network_topology
                 .routing_table
@@ -78,7 +78,7 @@ pub(super) fn resolve_destination(
                 })
         }
         Ok(Ic00Method::SetController) => {
-            let args = Decode!(payload, SetControllerArgs)?;
+            let args = SetControllerArgs::decode(payload)?;
             let canister_id = args.get_canister_id();
             network_topology
                 .routing_table
@@ -93,7 +93,7 @@ pub(super) fn resolve_destination(
         | Ok(Ic00Method::StopCanister)
         | Ok(Ic00Method::DeleteCanister)
         | Ok(Ic00Method::DepositCycles) => {
-            let args = Decode!(payload, CanisterIdRecord)?;
+            let args = CanisterIdRecord::decode(payload)?;
             let canister_id = args.get_canister_id();
             network_topology
                 .routing_table
@@ -104,7 +104,7 @@ pub(super) fn resolve_destination(
                 })
         }
         Ok(Ic00Method::UninstallCode) => {
-            let args = Decode!(payload, UninstallCodeArgs)?;
+            let args = UninstallCodeArgs::decode(payload)?;
             let canister_id = args.get_canister_id();
             network_topology
                 .routing_table
@@ -129,7 +129,7 @@ pub(super) fn resolve_destination(
                 })
         }
         Ok(Ic00Method::BitcoinGetBalance) => {
-            let args = Decode!(payload, BitcoinGetBalanceArgs)?;
+            let args = BitcoinGetBalanceArgs::decode(payload)?;
             Ok(route_bitcoin_message(
                 args.network,
                 network_topology,
@@ -137,7 +137,7 @@ pub(super) fn resolve_destination(
             ))
         }
         Ok(Ic00Method::BitcoinGetUtxos) => {
-            let args = Decode!(payload, BitcoinGetUtxosArgs)?;
+            let args = BitcoinGetUtxosArgs::decode(payload)?;
             Ok(route_bitcoin_message(
                 args.network,
                 network_topology,
@@ -145,7 +145,7 @@ pub(super) fn resolve_destination(
             ))
         }
         Ok(Ic00Method::BitcoinSendTransaction) => {
-            let args = Decode!(payload, BitcoinSendTransactionArgs)?;
+            let args = BitcoinSendTransactionArgs::decode(payload)?;
 
             Ok(route_bitcoin_message(
                 args.network,
@@ -154,7 +154,7 @@ pub(super) fn resolve_destination(
             ))
         }
         Ok(Ic00Method::BitcoinGetCurrentFeePercentiles) => {
-            let args = Decode!(payload, BitcoinGetCurrentFeePercentilesArgs)?;
+            let args = BitcoinGetCurrentFeePercentilesArgs::decode(payload)?;
             Ok(route_bitcoin_message(
                 args.network,
                 network_topology,
@@ -162,7 +162,7 @@ pub(super) fn resolve_destination(
             ))
         }
         Ok(Ic00Method::ECDSAPublicKey) => {
-            let key_id = Decode!(payload, ECDSAPublicKeyArgs)?.key_id;
+            let key_id = ECDSAPublicKeyArgs::decode(payload)?.key_id;
             route_ecdsa_message(
                 &key_id,
                 network_topology,
@@ -171,7 +171,7 @@ pub(super) fn resolve_destination(
             )
         }
         Ok(Ic00Method::SignWithECDSA) => {
-            let key_id = Decode!(payload, SignWithECDSAArgs)?.key_id;
+            let key_id = SignWithECDSAArgs::decode(payload)?.key_id;
             route_ecdsa_message(
                 &key_id,
                 network_topology,
@@ -180,7 +180,7 @@ pub(super) fn resolve_destination(
             )
         }
         Ok(Ic00Method::ComputeInitialEcdsaDealings) => {
-            let args = Decode!(payload, ComputeInitialEcdsaDealingsArgs)?;
+            let args = ComputeInitialEcdsaDealingsArgs::decode(payload)?;
             route_ecdsa_message(
                 &args.key_id,
                 network_topology,
