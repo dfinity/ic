@@ -1,6 +1,7 @@
 use ic_canister_client_sender::{ed25519_public_key_to_der, Ed25519KeyPair};
+use ic_certification_test_utils::serialize_to_cbor;
+use ic_crypto_internal_basic_sig_iccsa_test_utils::CanisterState;
 use ic_crypto_internal_threshold_sig_bls12381::types::SecretKeyBytes;
-use ic_crypto_test_utils_canister_sigs::{encode_sig, CanisterState};
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
 use ic_types::crypto::{CanisterSig, Signable};
 use ic_types::messages::{
@@ -265,11 +266,13 @@ fn canister_signature_for_message(
         certificate: Blob(cbor_cert),
         tree: canister_state.witness,
     };
-    CanisterSig(encode_sig(sig_with_canister_witness))
+    CanisterSig(serialize_to_cbor(&sig_with_canister_witness))
 }
 
 fn canister_state_with_message(message: Vec<u8>, seed: &[u8]) -> CanisterState {
-    use ic_crypto_test_utils_canister_sigs::{new_canister_state_tree, witness_from_tree};
+    use ic_crypto_internal_basic_sig_iccsa_test_utils::{
+        new_canister_state_tree, witness_from_tree,
+    };
 
     let canister_state_tree = new_canister_state_tree(seed, &message[..]);
     let mixed_tree = witness_from_tree(canister_state_tree);

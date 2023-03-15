@@ -5231,19 +5231,34 @@ dependencies = [
  "base64 0.11.0",
  "hex",
  "ic-certification",
+ "ic-certification-test-utils",
  "ic-crypto",
  "ic-crypto-internal-basic-sig-der-utils",
+ "ic-crypto-internal-basic-sig-iccsa-test-utils",
  "ic-crypto-internal-test-vectors",
  "ic-crypto-internal-types",
  "ic-crypto-sha",
  "ic-crypto-test-utils",
+ "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-tree-hash",
  "ic-interfaces",
  "ic-types",
+ "rand 0.8.5",
  "serde",
  "serde_bytes",
  "serde_cbor",
  "simple_asn1 0.6.2",
+]
+
+[[package]]
+name = "ic-crypto-internal-basic-sig-iccsa-test-utils"
+version = "0.1.0"
+dependencies = [
+ "ic-certification-test-utils",
+ "ic-crypto-sha",
+ "ic-crypto-tree-hash",
+ "ic-types",
+ "rand 0.8.5",
 ]
 
 [[package]]
@@ -5749,11 +5764,10 @@ version = "0.8.0"
 dependencies = [
  "ic-certification-test-utils",
  "ic-crypto-internal-basic-sig-iccsa",
+ "ic-crypto-internal-basic-sig-iccsa-test-utils",
  "ic-crypto-internal-types",
- "ic-crypto-sha",
  "ic-crypto-temp-crypto",
  "ic-crypto-test-utils",
- "ic-crypto-tree-hash",
  "ic-interfaces-registry",
  "ic-protobuf",
  "ic-registry-client-fake",
@@ -9694,6 +9708,7 @@ dependencies = [
  "ic-crypto-iccsa",
  "ic-crypto-internal-basic-sig-der-utils",
  "ic-crypto-internal-basic-sig-ed25519",
+ "ic-crypto-internal-basic-sig-iccsa-test-utils",
  "ic-crypto-internal-threshold-sig-bls12381",
  "ic-crypto-test-utils",
  "ic-crypto-test-utils-canister-sigs",

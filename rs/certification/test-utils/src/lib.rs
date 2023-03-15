@@ -1,5 +1,5 @@
 use ic_crypto_internal_seed::Seed;
-use rand::thread_rng;
+use rand::{thread_rng, CryptoRng, Rng, RngCore};
 use serde::Serialize;
 
 use ic_crypto_internal_threshold_sig_bls12381::api::{
@@ -20,7 +20,6 @@ use ic_types::{
     crypto::{CombinedThresholdSig, CombinedThresholdSigOf},
     CanisterId, CryptoHashOfPartialState, NumberOfNodes, SubnetId,
 };
-use rand::{CryptoRng, Rng, RngCore};
 
 const REPLICA_TIME: u64 = 1234567;
 
