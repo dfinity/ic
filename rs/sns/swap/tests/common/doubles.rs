@@ -1,6 +1,5 @@
 use async_trait::async_trait;
 use ic_base_types::CanisterId;
-use ic_icrc1::{Account, Subaccount};
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::{ledger::ICRC1Ledger, NervousSystemError};
 use ic_sns_governance::pb::v1::{
@@ -15,6 +14,7 @@ use ic_sns_swap::{
         SettleCommunityFundParticipation,
     },
 };
+use icrc_ledger_types::{Account, Subaccount};
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 

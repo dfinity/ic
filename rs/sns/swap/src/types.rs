@@ -11,11 +11,11 @@ use crate::pb::v1::{
 use crate::swap::is_valid_principal;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
-use ic_icrc1::{Account, Subaccount};
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::ledger::ICRC1Ledger;
 use ic_nervous_system_common::SECONDS_PER_DAY;
 use ic_sns_governance::pb::v1::{ClaimedSwapNeuronStatus, NeuronId};
+use icrc_ledger_types::{Account, Subaccount};
 use std::str::FromStr;
 
 pub fn validate_principal(p: &str) -> Result<(), String> {

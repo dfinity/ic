@@ -3,7 +3,6 @@ use candid::{CandidType, Decode, Encode};
 use canister_test::Project;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ic00_types::CanisterInstallMode;
-use ic_icrc1::Account;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::{ExplosiveTokens, SECONDS_PER_DAY};
 use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
@@ -22,6 +21,7 @@ use ic_sns_root::pb::v1::{
     RegisterDappCanistersResponse,
 };
 use ic_sns_root::{CanisterIdRecord, CanisterStatusResultV2};
+use icrc_ledger_types::Account;
 
 use ic_sns_swap::pb::v1::params::NeuronBasketConstructionParameters;
 use ic_sns_swap::pb::v1::{
@@ -453,9 +453,10 @@ impl Scenario {
             vec![root_canister_id.into()],
         );
 
+        let swap_principal_id: PrincipalId = swap_canister_id.into();
         // Construct base configuration.
         let account_identifiers = vec![Account {
-            owner: swap_canister_id.into(),
+            owner: swap_principal_id.0,
             subaccount: None,
         }];
         let mut configuration = SnsTestsInitPayloadBuilder::new()

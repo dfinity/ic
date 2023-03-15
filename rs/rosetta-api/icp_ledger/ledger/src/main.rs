@@ -5,12 +5,9 @@ use dfn_core::{
     over, over_async, over_async_may_reject, over_init, printer, setup, stable, BytesS,
 };
 use dfn_protobuf::protobuf;
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::CanisterId;
 use ic_canister_log::{LogEntry, Sink};
-use ic_icrc1::{
-    endpoints::{StandardRecord, TransferArg, Value},
-    Account,
-};
+use ic_icrc1::endpoints::{StandardRecord, TransferArg, Value};
 use ic_ledger_canister_core::{
     archive::{Archive, ArchiveOptions},
     ledger::{
@@ -31,6 +28,7 @@ use icp_ledger::{
     TipOfChainRes, TotalSupplyArgs, Transaction, TransferArgs, TransferError, TransferFee,
     TransferFeeArgs, MAX_BLOCKS_PER_REQUEST,
 };
+use icrc_ledger_types::Account;
 use ledger_canister::{Ledger, LEDGER, MAX_MESSAGE_SIZE_BYTES};
 use num_traits::cast::ToPrimitive;
 use std::cell::RefCell;
@@ -772,7 +770,7 @@ async fn transfer_candid(arg: TransferArgs) -> Result<BlockIndex, TransferError>
 async fn icrc1_transfer(arg: TransferArg) -> Result<Nat, ic_icrc1::endpoints::TransferError> {
     let to = AccountIdentifier::from(arg.to);
     let from_account = Account {
-        owner: PrincipalId::from(ic_cdk::api::caller()),
+        owner: ic_cdk::api::caller(),
         subaccount: arg.from_subaccount,
     };
     let amount = match arg.amount.0.to_u64() {

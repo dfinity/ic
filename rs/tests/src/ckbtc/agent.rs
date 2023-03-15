@@ -35,7 +35,7 @@ use ic_ckbtc_minter::updates::{
     get_withdrawal_account::compute_subaccount, retrieve_btc::RetrieveBtcArgs,
     update_balance::UpdateBalanceArgs,
 };
-use ic_icrc1::Account;
+use icrc_ledger_types::Account;
 use slog::info;
 
 pub fn test_ckbtc_minter_agent(env: TestEnv) {
@@ -92,7 +92,7 @@ async fn test_get_withdrawal_account(agent: &CkBtcMinterAgent) {
     let subaccount = compute_subaccount(owner, 0);
     assert_eq!(
         Account {
-            owner: PrincipalId(agent.minter_canister_id),
+            owner: agent.minter_canister_id,
             subaccount: Some(subaccount),
         },
         res

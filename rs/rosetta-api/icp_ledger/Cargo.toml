@@ -21,6 +21,7 @@ ic-crypto-sha = { path = "../../crypto/sha/" }
 ic-icrc1 = { path = "../icrc1" }
 ic-ledger-canister-core = { path = "../ledger_canister_core" }
 ic-ledger-core = { path = "../ledger_core" }
+icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 lazy_static = "1.4.0"
 on_wire = {path = "../../rust_canisters/on_wire"}
 prost = "0.11.0"

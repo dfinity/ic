@@ -12,7 +12,6 @@ use candid::{Nat, Principal};
 use ic_agent::{Identity, Signature};
 use ic_base_types::PrincipalId;
 use ic_canister_client_sender::ed25519_public_key_to_der;
-use ic_icrc1::Account;
 use ic_icrc1_agent::{Icrc1Agent, TransferArg};
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::E8;
@@ -25,6 +24,7 @@ use ic_sns_swap::swap::principal_to_subaccount;
 
 use ic_types::Height;
 use icp_ledger::{AccountIdentifier, Subaccount};
+use icrc_ledger_types::Account;
 use serde::{Deserialize, Serialize};
 use slog::info;
 use tokio::runtime::Builder;
@@ -104,7 +104,7 @@ pub fn workload_static_testnet_fe_users(env: TestEnv) {
         let sns_sale_canister_id = sns_client.sns_canisters.swap().get();
         let sns_subaccount = Some(principal_to_subaccount(&TEST_USER1_PRINCIPAL));
         Account {
-            owner: sns_sale_canister_id,
+            owner: sns_sale_canister_id.0,
             subaccount: sns_subaccount,
         }
     };
@@ -749,7 +749,7 @@ pub fn add_one_participant(env: TestEnv) {
     let sns_sale_canister_id = sns_client.sns_canisters.swap().get();
     let sns_subaccount = Some(principal_to_subaccount(&wealthy_user_identity.principal_id));
     let sns_account = Account {
-        owner: sns_sale_canister_id,
+        owner: sns_sale_canister_id.0,
         subaccount: sns_subaccount,
     };
     let block_idx_1 = {
@@ -896,7 +896,7 @@ pub fn generate_ticket_participants_workload(env: TestEnv, rps: usize, duration:
                 if overall_result.is_ok() {
                     overall_result = {
                         let sns_account = Account {
-                            owner: sns_sale_canister_id,
+                            owner: sns_sale_canister_id.0,
                             subaccount: Some(sns_subaccount.0),
                         };
                         let transfer_arg = TransferArg {

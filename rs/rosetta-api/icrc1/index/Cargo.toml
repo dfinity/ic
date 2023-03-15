@@ -17,6 +17,7 @@ ic-cdk-macros = "0.6.0"
 ic-icrc1 = { path = ".." }
 ic-icrc1-ledger = { path = "../ledger" }
 ic-metrics-encoder = "1.1"
+icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 num-traits = "0.2.14"
 serde = "1.0.139"
 

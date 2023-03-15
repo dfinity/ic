@@ -42,6 +42,7 @@ ic-test-utilities = { path = "../../test_utilities" }
 ic-types = { path = "../../types/types" }
 ic-utils = { path = "../../utils" }
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
+icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 lifeline = { path = "../handlers/lifeline" }
 maplit = "1.0.2"
 num-traits = "0.2.14"

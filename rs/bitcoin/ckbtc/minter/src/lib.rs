@@ -3,7 +3,7 @@ use crate::logs::{P0, P1};
 use candid::{CandidType, Deserialize};
 use ic_btc_types::{MillisatoshiPerByte, Network, OutPoint, Satoshi, Utxo};
 use ic_canister_log::log;
-use ic_icrc1::Account;
+use icrc_ledger_types::Account;
 use scopeguard::{guard, ScopeGuard};
 use serde::Serialize;
 use serde_bytes::ByteBuf;
@@ -160,7 +160,7 @@ async fn submit_pending_requests() {
     }
 
     let main_account = Account {
-        owner: ic_cdk::id().into(),
+        owner: ic_cdk::id(),
         subaccount: None,
     };
 
@@ -397,7 +397,7 @@ async fn finalize_requests() {
     };
 
     let main_account = Account {
-        owner: ic_cdk::id().into(),
+        owner: ic_cdk::id(),
         subaccount: None,
     };
 

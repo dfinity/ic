@@ -7,7 +7,6 @@ use crate::pb::v1::{
 };
 use anyhow::anyhow;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_icrc1::Account;
 use ic_icrc1_index::InitArgs as IndexInitArgs;
 use ic_icrc1_ledger::{InitArgs as LedgerInitArgs, LedgerArgument};
 use ic_ledger_canister_core::archive::ArchiveOptions;
@@ -25,6 +24,7 @@ use ic_sns_governance::pb::v1::{
 use ic_sns_governance::types::DEFAULT_TRANSFER_FEE;
 use ic_sns_root::pb::v1::SnsRootCanister;
 use ic_sns_swap::pb::v1::Init as SwapInit;
+use icrc_ledger_types::Account;
 use lazy_static::lazy_static;
 use maplit::{btreemap, hashset};
 use serde::{Deserialize, Serialize};
@@ -190,7 +190,7 @@ impl SnsInitPayload {
         // jg6qm-uw64t-m6ppo-oluwn-ogr5j-dc5pm-lgy2p-eh6px-hebcd-5v73i-nqe
         // for the button to retrieve tokens.
         let tester = "jg6qm-uw64t-m6ppo-oluwn-ogr5j-dc5pm-lgy2p-eh6px-hebcd-5v73i-nqe";
-        let principal = PrincipalId::from_str(tester).unwrap();
+        let principal = PrincipalId::from_str(tester).unwrap().0;
         let account = Account {
             owner: principal,
             subaccount: None,
@@ -221,7 +221,7 @@ impl SnsInitPayload {
             .clone();
 
         let minting_account = Account {
-            owner: sns_canister_ids.governance,
+            owner: sns_canister_ids.governance.0,
             subaccount: None,
         };
 
@@ -844,11 +844,11 @@ mod test {
         MAX_TOKEN_SYMBOL_LENGTH,
     };
     use ic_base_types::{CanisterId, PrincipalId};
-    use ic_icrc1::Account;
     use ic_icrc1_ledger::LedgerArgument;
     use ic_sns_governance::governance::ValidGovernanceProto;
     use ic_sns_governance::pb::v1::governance::SnsMetadata;
     use ic_sns_governance::types::ONE_MONTH_SECONDS;
+    use icrc_ledger_types::Account;
     use std::collections::BTreeMap;
     use std::convert::TryInto;
 
@@ -974,7 +974,7 @@ mod test {
             assert_eq!(
                 ledger.minting_account,
                 Account {
-                    owner: sns_canister_ids.governance,
+                    owner: sns_canister_ids.governance.0,
                     subaccount: None
                 }
             );
@@ -1143,7 +1143,7 @@ mod test {
             assert_eq!(
                 ledger.minting_account,
                 Account {
-                    owner: sns_canister_ids.governance,
+                    owner: sns_canister_ids.governance.0,
                     subaccount: None
                 }
             );
@@ -1279,7 +1279,7 @@ mod test {
         for neuron in governance.neurons.values() {
             let subaccount = neuron.id.clone().unwrap().id;
             let account = Account {
-                owner: sns_canister_ids.governance,
+                owner: sns_canister_ids.governance.0,
                 subaccount: Some(subaccount.as_slice().try_into().unwrap()),
             };
             let account_balance = *init_accounts

@@ -13,8 +13,8 @@ use candid::{CandidType, Decode, Deserialize, Encode};
 use dfn_core::CanisterId;
 use ic_base_types::{NumBytes, PrincipalId};
 use ic_canister_log::log;
-use ic_icrc1::endpoints::ArchiveInfo;
 use ic_sns_swap::pb::v1::GetCanisterStatusRequest;
+use icrc_ledger_types::ArchiveInfo;
 use lazy_static::lazy_static;
 use num_traits::cast::ToPrimitive;
 use std::str::FromStr;
@@ -958,7 +958,7 @@ impl SnsRootCanister {
 
         let archive_principals_ids: Vec<PrincipalId> = archive_infos
             .iter()
-            .map(|archive| archive.canister_id.get())
+            .map(|archive| PrincipalId(archive.canister_id))
             .collect();
 
         self_ref.with(|state| {
@@ -2534,7 +2534,7 @@ mod tests {
         let mut ledger_canister_client = MockLedgerCanisterClient {
             calls: vec![LedgerCanisterClientCall::Archives {
                 result: Ok(vec![ArchiveInfo {
-                    canister_id: expected_archive_canister_id,
+                    canister_id: expected_archive_canister_id.into(),
                     block_range_start: Default::default(),
                     block_range_end: Default::default(),
                 }]),
@@ -2573,12 +2573,12 @@ mod tests {
             calls: vec![LedgerCanisterClientCall::Archives {
                 result: Ok(vec![
                     ArchiveInfo {
-                        canister_id: expected_archive_canister_ids[0],
+                        canister_id: expected_archive_canister_ids[0].into(),
                         block_range_start: Default::default(),
                         block_range_end: Default::default(),
                     },
                     ArchiveInfo {
-                        canister_id: expected_archive_canister_ids[1],
+                        canister_id: expected_archive_canister_ids[1].into(),
                         block_range_start: Default::default(),
                         block_range_end: Default::default(),
                     },
@@ -2622,7 +2622,7 @@ mod tests {
             calls: vec![
                 LedgerCanisterClientCall::Archives {
                     result: Ok(vec![ArchiveInfo {
-                        canister_id: expected_archive_canister_ids[0],
+                        canister_id: expected_archive_canister_ids[0].into(),
                         block_range_start: Default::default(),
                         block_range_end: Default::default(),
                     }]),
@@ -2630,12 +2630,12 @@ mod tests {
                 LedgerCanisterClientCall::Archives {
                     result: Ok(vec![
                         ArchiveInfo {
-                            canister_id: expected_archive_canister_ids[0],
+                            canister_id: expected_archive_canister_ids[0].into(),
                             block_range_start: Default::default(),
                             block_range_end: Default::default(),
                         },
                         ArchiveInfo {
-                            canister_id: expected_archive_canister_ids[1],
+                            canister_id: expected_archive_canister_ids[1].into(),
                             block_range_start: Default::default(),
                             block_range_end: Default::default(),
                         },
@@ -2698,12 +2698,12 @@ mod tests {
                 LedgerCanisterClientCall::Archives {
                     result: Ok(vec![
                         ArchiveInfo {
-                            canister_id: expected_archive_canister_ids[0],
+                            canister_id: expected_archive_canister_ids[0].into(),
                             block_range_start: Default::default(),
                             block_range_end: Default::default(),
                         },
                         ArchiveInfo {
-                            canister_id: expected_archive_canister_ids[1],
+                            canister_id: expected_archive_canister_ids[1].into(),
                             block_range_start: Default::default(),
                             block_range_end: Default::default(),
                         },
@@ -2712,17 +2712,17 @@ mod tests {
                 LedgerCanisterClientCall::Archives {
                     result: Ok(vec![
                         ArchiveInfo {
-                            canister_id: expected_archive_canister_ids[0],
+                            canister_id: expected_archive_canister_ids[0].into(),
                             block_range_start: Default::default(),
                             block_range_end: Default::default(),
                         },
                         ArchiveInfo {
-                            canister_id: expected_archive_canister_ids[2],
+                            canister_id: expected_archive_canister_ids[2].into(),
                             block_range_start: Default::default(),
                             block_range_end: Default::default(),
                         },
                         ArchiveInfo {
-                            canister_id: expected_archive_canister_ids[3],
+                            canister_id: expected_archive_canister_ids[3].into(),
                             block_range_start: Default::default(),
                             block_range_end: Default::default(),
                         },
@@ -2785,7 +2785,7 @@ mod tests {
             calls: vec![
                 LedgerCanisterClientCall::Archives {
                     result: Ok(vec![ArchiveInfo {
-                        canister_id: expected_archive_canister_ids[0],
+                        canister_id: expected_archive_canister_ids[0].into(),
                         block_range_start: Default::default(),
                         block_range_end: Default::default(),
                     }]),
@@ -2799,12 +2799,12 @@ mod tests {
                 LedgerCanisterClientCall::Archives {
                     result: Ok(vec![
                         ArchiveInfo {
-                            canister_id: expected_archive_canister_ids[0],
+                            canister_id: expected_archive_canister_ids[0].into(),
                             block_range_start: Default::default(),
                             block_range_end: Default::default(),
                         },
                         ArchiveInfo {
-                            canister_id: expected_archive_canister_ids[1],
+                            canister_id: expected_archive_canister_ids[1].into(),
                             block_range_start: Default::default(),
                             block_range_end: Default::default(),
                         },
@@ -2932,7 +2932,7 @@ mod tests {
             calls: vec![
                 LedgerCanisterClientCall::Archives {
                     result: Ok(vec![ArchiveInfo {
-                        canister_id: expected_archive_canister_ids[0],
+                        canister_id: expected_archive_canister_ids[0].into(),
                         block_range_start: Default::default(),
                         block_range_end: Default::default(),
                     }]),
@@ -2940,12 +2940,12 @@ mod tests {
                 LedgerCanisterClientCall::Archives {
                     result: Ok(vec![
                         ArchiveInfo {
-                            canister_id: expected_archive_canister_ids[0],
+                            canister_id: expected_archive_canister_ids[0].into(),
                             block_range_start: Default::default(),
                             block_range_end: Default::default(),
                         },
                         ArchiveInfo {
-                            canister_id: expected_archive_canister_ids[1],
+                            canister_id: expected_archive_canister_ids[1].into(),
                             block_range_start: Default::default(),
                             block_range_end: Default::default(),
                         },
@@ -3088,7 +3088,7 @@ mod tests {
             calls: vec![
                 LedgerCanisterClientCall::Archives {
                     result: Ok(vec![ArchiveInfo {
-                        canister_id: expected_archive_canister_ids[0],
+                        canister_id: expected_archive_canister_ids[0].into(),
                         block_range_start: Default::default(),
                         block_range_end: Default::default(),
                     }]),
@@ -3096,12 +3096,12 @@ mod tests {
                 LedgerCanisterClientCall::Archives {
                     result: Ok(vec![
                         ArchiveInfo {
-                            canister_id: expected_archive_canister_ids[0],
+                            canister_id: expected_archive_canister_ids[0].into(),
                             block_range_start: Default::default(),
                             block_range_end: Default::default(),
                         },
                         ArchiveInfo {
-                            canister_id: expected_archive_canister_ids[1],
+                            canister_id: expected_archive_canister_ids[1].into(),
                             block_range_start: Default::default(),
                             block_range_end: Default::default(),
                         },

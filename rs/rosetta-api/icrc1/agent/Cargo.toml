@@ -11,4 +11,5 @@ garcon = { version = "0.2", features = ["async"] }
 ic-agent = "=0.22.0"
 ic-icrc1 = { path = "../" }
 ic-ledger-core = { path = "../../ledger_core" }
+icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 num-traits = "0.2.14"

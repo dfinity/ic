@@ -4,11 +4,12 @@ use ic_base_types::PrincipalId;
 use ic_canister_client_sender::Sender;
 use ic_crypto_sha::Sha256;
 use ic_icrc1::endpoints::TransferArg;
-use ic_icrc1::{Account, Memo};
+use ic_icrc1::Memo;
 use ic_ledger_core::tokens::TOKEN_SUBDIVIDABLE_BY;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common_test_keys::TEST_USER1_KEYPAIR;
 use ic_sns_governance::pb::v1::manage_neuron_response::Command as CommandResponse;
+use icrc_ledger_types::Account;
 
 use ic_sns_governance::pb::v1::manage_neuron::claim_or_refresh::{By, MemoAndController};
 use ic_sns_governance::pb::v1::manage_neuron::{ClaimOrRefresh, Command, Disburse};
@@ -41,7 +42,7 @@ fn test_stake_and_disburse_neuron_with_notification() {
             };
 
             let sns_init_payload = SnsTestsInitPayloadBuilder::new()
-                .with_ledger_account(user.get_principal_id().into(), alloc)
+                .with_ledger_account(user.get_principal_id().0.into(), alloc)
                 .with_nervous_system_parameters(system_params)
                 .build();
 
@@ -50,7 +51,7 @@ fn test_stake_and_disburse_neuron_with_notification() {
             let user_balance = icrc1::balance_of(
                 &sns_canisters.ledger,
                 Account {
-                    owner: user.get_principal_id(),
+                    owner: user.get_principal_id().0,
                     subaccount: None,
                 },
             )
@@ -80,7 +81,7 @@ fn test_stake_and_disburse_neuron_with_notification() {
                     fee: Some(Nat::from(DEFAULT_TRANSFER_FEE.get_e8s())),
                     from_subaccount: None,
                     to: Account {
-                        owner: PrincipalId::from(sns_canisters.governance.canister_id()),
+                        owner: PrincipalId::from(sns_canisters.governance.canister_id()).0,
                         subaccount: Some(to_subaccount),
                     },
                     created_at_time: None,
@@ -122,7 +123,7 @@ fn test_stake_and_disburse_neuron_with_notification() {
             let user_balance = icrc1::balance_of(
                 &sns_canisters.ledger,
                 Account {
-                    owner: user.get_principal_id(),
+                    owner: user.get_principal_id().0,
                     subaccount: None,
                 },
             )
@@ -167,7 +168,7 @@ fn test_stake_and_disburse_neuron_with_notification() {
             let user_balance: Tokens = icrc1::balance_of(
                 &sns_canisters.ledger,
                 Account {
-                    owner: user.get_principal_id(),
+                    owner: user.get_principal_id().0,
                     subaccount: None,
                 },
             )

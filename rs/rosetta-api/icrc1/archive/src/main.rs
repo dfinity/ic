@@ -1,17 +1,16 @@
 use candid::{candid_method, Principal};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk_macros::{init, post_upgrade, query, update};
-use ic_icrc1::{
-    blocks::Icrc1Block,
-    endpoints::{BlockRange, GetBlocksArgs, GetTransactionsRequest, Transaction, TransactionRange},
-    Block,
-};
+use ic_icrc1::{blocks::icrc1_block_from_encoded, Block};
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
 use ic_stable_structures::{
     cell::Cell as StableCell, log::Log as StableLog, memory_manager::MemoryManager,
     DefaultMemoryImpl, RestrictedMemory, Storable,
 };
+use icrc_ledger_types::block::{Block as IcrcBlock, BlockRange, GetBlocksArgs};
+use icrc_ledger_types::transaction::{Transaction, TransactionRange};
+use icrc_ledger_types::GetTransactionsRequest;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::cell::RefCell;
@@ -122,9 +121,9 @@ fn decode_transaction(txid: u64, bytes: Vec<u8>) -> Transaction {
         .into()
 }
 
-fn decode_icrc1_block(_txid: u64, bytes: Vec<u8>) -> Icrc1Block {
+fn decode_icrc1_block(_txid: u64, bytes: Vec<u8>) -> IcrcBlock {
     let encoded_block = EncodedBlock::from(bytes);
-    Icrc1Block::from(&encoded_block)
+    icrc1_block_from_encoded(&encoded_block)
 }
 
 #[init]

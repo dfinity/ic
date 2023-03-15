@@ -1,6 +1,6 @@
 use super::{PrincipalId, PrincipalIdError, SubnetId};
 use candid::types::principal::PrincipalError;
-use candid::CandidType;
+use candid::{CandidType, Principal};
 use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
 use serde::de::Error;
 use serde::{Deserialize, Serialize};
@@ -204,5 +204,12 @@ impl std::str::FromStr for CanisterId {
         let principal_id =
             PrincipalId::from_str(input).map_err(CanisterIdError::PrincipalIdParseError)?;
         CanisterId::new(principal_id)
+    }
+}
+
+impl From<CanisterId> for Principal {
+    fn from(val: CanisterId) -> Self {
+        let principal_id: PrincipalId = val.into();
+        principal_id.into()
     }
 }

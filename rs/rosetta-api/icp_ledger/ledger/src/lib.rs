@@ -1,6 +1,5 @@
 use dfn_core::api::now;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_icrc1::Account;
 use ic_ledger_canister_core::archive::ArchiveCanisterWasm;
 use ic_ledger_canister_core::blockchain::Blockchain;
 use ic_ledger_canister_core::ledger::{
@@ -17,6 +16,7 @@ use icp_ledger::{
     AccountIdentifier, ApprovalKey, Block, LedgerBalances, Memo, Operation, PaymentError,
     Transaction, TransferError, TransferFee, DEFAULT_TRANSFER_FEE,
 };
+use icrc_ledger_types::Account;
 use intmap::IntMap;
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};

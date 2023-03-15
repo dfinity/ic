@@ -96,6 +96,7 @@ ic-test-utilities = { path = "../test_utilities" }
 ic-types = { path = "../types/types" }
 ic-types-test-utils = { path = "../types/types_test_utils" }
 ic-universal-canister = { path = "../universal_canister/lib" }
+icrc-ledger-types = { path = "../../packages/icrc-ledger-types" }
 json5 = "0.4.1"
 k256 = { version = "0.12", features = ["ecdsa"] }
 hyper = "0.14.18"

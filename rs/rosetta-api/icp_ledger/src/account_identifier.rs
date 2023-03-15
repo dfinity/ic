@@ -2,6 +2,7 @@ use candid::CandidType;
 use dfn_core::CanisterId;
 use ic_base_types::{CanisterIdError, PrincipalId, PrincipalIdError};
 use ic_crypto_sha::Sha224;
+use icrc_ledger_types::Account;
 use serde::{de, de::Error, Deserialize, Serialize};
 use std::{
     convert::{TryFrom, TryInto},
@@ -44,9 +45,9 @@ impl From<AccountIdentifier> for proto::AccountIdentifier {
     }
 }
 
-impl From<ic_icrc1::Account> for AccountIdentifier {
-    fn from(account: ic_icrc1::Account) -> Self {
-        Self::new(account.owner, account.subaccount.map(Subaccount))
+impl From<Account> for AccountIdentifier {
+    fn from(account: Account) -> Self {
+        Self::new(account.owner.into(), account.subaccount.map(Subaccount))
     }
 }
 

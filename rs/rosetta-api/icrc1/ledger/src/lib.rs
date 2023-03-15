@@ -3,15 +3,12 @@ pub mod cdk_runtime;
 use crate::cdk_runtime::CdkRuntime;
 use candid::{
     types::number::{Int, Nat},
-    CandidType,
+    CandidType, Principal,
 };
-use ic_base_types::{CanisterId, PrincipalId};
-use ic_icrc1::blocks::Icrc1Block;
-use ic_icrc1::endpoints::{
-    ArchivedRange, GetBlocksResponse, GetTransactionsResponse, QueryBlockArchiveFn,
-    QueryTxArchiveFn, Transaction as Tx, Value,
-};
-use ic_icrc1::{Account, Block, LedgerBalances, Transaction};
+use ic_base_types::PrincipalId;
+use ic_icrc1::blocks::icrc1_block_from_encoded;
+use ic_icrc1::endpoints::Value;
+use ic_icrc1::{Block, LedgerBalances, Transaction};
 use ic_ledger_canister_core::{
     archive::{ArchiveCanisterWasm, ArchiveOptions},
     blockchain::Blockchain,
@@ -25,6 +22,11 @@ use ic_ledger_core::{
     timestamp::TimeStamp,
     tokens::Tokens,
 };
+use icrc_ledger_types::block::{GetBlocksResponse, QueryBlockArchiveFn};
+use icrc_ledger_types::transaction::{
+    GetTransactionsResponse, QueryTxArchiveFn, Transaction as Tx,
+};
+use icrc_ledger_types::{Account, ArchivedRange};
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 use std::borrow::Cow;
@@ -338,7 +340,7 @@ impl Ledger {
         start: BlockIndex,
         length: usize,
         decode: impl Fn(&EncodedBlock) -> B,
-        make_callback: impl Fn(CanisterId) -> ArchiveFn,
+        make_callback: impl Fn(Principal) -> ArchiveFn,
     ) -> (u64, Vec<B>, Vec<ArchivedRange<ArchiveFn>>) {
         let locations = block_locations(self, start, length);
 
@@ -358,7 +360,7 @@ impl Ledger {
             .map(|(canister_id, slice)| ArchivedRange {
                 start: Nat::from(slice.start),
                 length: Nat::from(range_utils::range_len(&slice)),
-                callback: make_callback(canister_id),
+                callback: make_callback(canister_id.get().0),
             })
             .collect();
 
@@ -391,7 +393,7 @@ impl Ledger {
         let (first_index, local_blocks, archived_blocks) = self.query_blocks(
             start,
             length,
-            |enc_block| Icrc1Block::from(enc_block),
+            |enc_block| icrc1_block_from_encoded(enc_block),
             |canister_id| QueryBlockArchiveFn::new(canister_id, "get_blocks"),
         );
 

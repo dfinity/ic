@@ -8,10 +8,11 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_cdk::api::management_canister::main::{
     CanisterIdRecord, CanisterInstallMode, CreateCanisterArgument, InstallCodeArgument, WasmModule,
 };
-use ic_icrc1::{endpoints::TransferArg, Account};
+use ic_icrc1::endpoints::TransferArg;
 use ic_icrc1_benchmark_worker::InitArgs;
 use ic_icrc1_client_cdk::{CdkRuntime, ICRC1Client};
 use ic_ledger_core::Tokens;
+use icrc_ledger_types::Account;
 
 pub(crate) const ICP_E8S: Tokens = Tokens::from_e8s(100_000_000);
 
@@ -92,7 +93,7 @@ async fn transfer_tokens_to_canisters(amount: u64, canisters: Vec<Principal>) {
             .transfer(TransferArg {
                 from_subaccount: None,
                 to: Account {
-                    owner: worker,
+                    owner: worker.0,
                     subaccount: None,
                 },
                 fee: None,

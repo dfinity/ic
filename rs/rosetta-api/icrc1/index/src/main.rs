@@ -2,11 +2,11 @@ use candid::candid_method;
 use ic_base_types::CanisterId;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk_macros::{heartbeat, init, post_upgrade, pre_upgrade, query, update};
-use ic_icrc1::Subaccount;
 use ic_icrc1_index::{
     encode_metrics, GetAccountTransactionsArgs, GetTransactionsResult, InitArgs,
     ListSubaccountsArgs,
 };
+use icrc_ledger_types::Subaccount;
 
 fn main() {}
 

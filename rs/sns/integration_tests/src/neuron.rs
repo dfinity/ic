@@ -7,7 +7,7 @@ use dfn_candid::candid_one;
 use ic_base_types::CanisterId;
 use ic_canister_client_sender::Sender;
 use ic_crypto_sha::Sha256;
-use ic_icrc1::{endpoints::TransferArg, Account, Memo, Subaccount};
+use ic_icrc1::{endpoints::TransferArg, Memo};
 use ic_ledger_core::{tokens::TOKEN_SUBDIVIDABLE_BY, Tokens};
 use ic_nervous_system_common::{i2d, NervousSystemError};
 use ic_nervous_system_common_test_keys::{
@@ -47,6 +47,7 @@ use ic_sns_test_utils::itest_helpers::{
 };
 use ic_sns_test_utils::now_seconds;
 use ic_types::PrincipalId;
+use icrc_ledger_types::{Account, Subaccount};
 use maplit::btreemap;
 use rust_decimal_macros::dec;
 use std::time::SystemTime;
@@ -80,7 +81,7 @@ fn test_list_neurons_determinism() {
         let account_identifiers = users
             .iter()
             .map(|user| Account {
-                owner: user.get_principal_id(),
+                owner: user.get_principal_id().0,
                 subaccount: None,
             })
             .collect();
@@ -128,11 +129,11 @@ fn test_list_neurons_of_principal() {
         let user3 = Sender::from_keypair(&TEST_USER3_KEYPAIR);
 
         let account_identifier1 = Account {
-            owner: user1.get_principal_id(),
+            owner: user1.get_principal_id().0,
             subaccount: None,
         };
         let account_identifier2 = Account {
-            owner: user2.get_principal_id(),
+            owner: user2.get_principal_id().0,
             subaccount: None,
         };
 
@@ -182,7 +183,7 @@ fn test_claim_neuron_with_default_permissions() {
         let alloc = Tokens::from_tokens(1000).unwrap();
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
-            .with_ledger_account(user.get_principal_id().into(), alloc)
+            .with_ledger_account(user.get_principal_id().0.into(), alloc)
             .build();
 
         let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
@@ -219,7 +220,7 @@ fn test_canister_can_claim_and_manage_neuron() {
         });
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
-            .with_ledger_account(principal_id.into(), alloc)
+            .with_ledger_account(principal_id.0.into(), alloc)
             .with_nervous_system_parameters(params)
             .build();
 
@@ -245,7 +246,7 @@ fn test_canister_can_claim_and_manage_neuron() {
             fee: Some(Nat::from(DEFAULT_TRANSFER_FEE.get_e8s())),
             from_subaccount: None,
             to: Account {
-                owner: sns_canisters.governance.canister_id().get(),
+                owner: sns_canisters.governance.canister_id().get().0,
                 subaccount: Some(to_subaccount),
             },
             memo: None,
@@ -330,7 +331,7 @@ fn test_claim_neuron_happy() {
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
-            .with_ledger_account(user.get_principal_id().into(), alloc)
+            .with_ledger_account(user.get_principal_id().0.into(), alloc)
             .with_nervous_system_parameters(sys_params.clone())
             .build();
 
@@ -440,8 +441,8 @@ fn test_claim_neuron_fails_when_max_number_of_neurons_is_reached() {
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
-            .with_ledger_account(user1.sender.get_principal_id().into(), alloc)
-            .with_ledger_account(user2.sender.get_principal_id().into(), alloc)
+            .with_ledger_account(user1.sender.get_principal_id().0.into(), alloc)
+            .with_ledger_account(user2.sender.get_principal_id().0.into(), alloc)
             .with_nervous_system_parameters(sys_params.clone())
             .build();
 
@@ -547,7 +548,7 @@ fn test_refresh_neuron() {
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
-            .with_ledger_account(user.sender.get_principal_id().into(), alloc)
+            .with_ledger_account(user.sender.get_principal_id().0.into(), alloc)
             .with_nervous_system_parameters(params.clone())
             .build();
 
@@ -650,7 +651,7 @@ fn test_neuron_action_is_not_authorized() {
         let unauthorized_caller = Sender::from_keypair(&TEST_USER2_KEYPAIR);
 
         let neuron_owner_account_identifier = Account {
-            owner: neuron_owner.get_principal_id(),
+            owner: neuron_owner.get_principal_id().0,
             subaccount: None,
         };
         let alloc = Tokens::from_tokens(1000).unwrap();
@@ -770,7 +771,7 @@ fn test_disburse_maturity_succeeds_to_self() {
         // 1. Setup test environment.
         let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
         let account_identifier = Account {
-            owner: user.get_principal_id(),
+            owner: user.get_principal_id().0,
             subaccount: None,
         };
         let (sns_canisters, neuron_id, subaccount) =
@@ -891,7 +892,7 @@ fn test_disburse_maturity_succeeds_to_other_account() {
         assert_eq!(
             target_account,
             account_to_proto(Account {
-                owner: maturity_receiver.get_principal_id(),
+                owner: maturity_receiver.get_principal_id().0,
                 subaccount: None
             })
         );
@@ -922,7 +923,7 @@ fn test_disburse_maturity_fails_if_no_maturity() {
     local_test_on_sns_subnet(|runtime| async move {
         let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
         let account_identifier = Account {
-            owner: user.get_principal_id(),
+            owner: user.get_principal_id().0,
             subaccount: None,
         };
         let alloc = Tokens::from_tokens(1000).unwrap();
@@ -987,7 +988,7 @@ async fn create_sns_canisters_with_staked_neuron_and_maturity<'a>(
     owner: &'a Sender,
 ) -> (SnsCanisters<'a>, NeuronId, Subaccount) {
     let account_identifier = Account {
-        owner: owner.get_principal_id(),
+        owner: owner.get_principal_id().0,
         subaccount: None,
     };
     let alloc = Tokens::from_tokens(1000).unwrap();
@@ -1660,7 +1661,7 @@ fn test_one_user_cannot_claim_other_users_neuron() {
         let user1 = Sender::from_keypair(&TEST_USER1_KEYPAIR);
         let user2 = Sender::from_keypair(&TEST_USER2_KEYPAIR);
         let account_identifier1 = Account {
-            owner: user1.get_principal_id(),
+            owner: user1.get_principal_id().0,
             subaccount: None,
         };
         let alloc = Tokens::from_tokens(1000).unwrap();
@@ -1698,7 +1699,7 @@ fn test_one_user_cannot_claim_other_users_neuron() {
                 fee: Some(Nat::from(DEFAULT_TRANSFER_FEE.get_e8s())),
                 from_subaccount: None,
                 to: Account {
-                    owner: PrincipalId::from(sns_canisters.governance.canister_id()),
+                    owner: PrincipalId::from(sns_canisters.governance.canister_id()).0,
                     subaccount: Some(to_subaccount),
                 },
                 created_at_time: None,
@@ -1792,7 +1793,7 @@ fn test_neuron_add_all_permissions_to_self() {
     local_test_on_sns_subnet(|runtime| async move {
         let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
         let account_identifier = Account {
-            owner: user.get_principal_id(),
+            owner: user.get_principal_id().0,
             subaccount: None,
         };
         let alloc = Tokens::from_tokens(1000).unwrap();
@@ -1865,7 +1866,7 @@ fn test_neuron_add_multiple_permissions_and_principals() {
         let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
         let additional_user = Sender::from_keypair(&TEST_USER2_KEYPAIR);
         let account_identifier = Account {
-            owner: user.get_principal_id(),
+            owner: user.get_principal_id().0,
             subaccount: None,
         };
         let alloc = Tokens::from_tokens(1000).unwrap();
@@ -1949,7 +1950,7 @@ fn test_neuron_add_non_grantable_permission_fails() {
     local_test_on_sns_subnet(|runtime| async move {
         let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
         let account_identifier = Account {
-            owner: user.get_principal_id(),
+            owner: user.get_principal_id().0,
             subaccount: None,
         };
         let alloc = Tokens::from_tokens(1000).unwrap();
@@ -2018,7 +2019,7 @@ fn test_exceeding_max_principals_for_neuron_fails() {
         let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
         let additional_user = Sender::from_keypair(&TEST_USER2_KEYPAIR);
         let account_identifier = Account {
-            owner: user.get_principal_id(),
+            owner: user.get_principal_id().0,
             subaccount: None,
         };
         let alloc = Tokens::from_tokens(1000).unwrap();
@@ -2084,7 +2085,7 @@ fn test_add_neuron_permission_missing_principal_id_fails() {
     local_test_on_sns_subnet(|runtime| async move {
         let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
         let account_identifier = Account {
-            owner: user.get_principal_id(),
+            owner: user.get_principal_id().0,
             subaccount: None,
         };
         let alloc = Tokens::from_tokens(1000).unwrap();
@@ -2151,7 +2152,7 @@ fn test_neuron_remove_all_permissions_of_self() {
     local_test_on_sns_subnet(|runtime| async move {
         let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
         let account_identifier = Account {
-            owner: user.get_principal_id(),
+            owner: user.get_principal_id().0,
             subaccount: None,
         };
         let alloc = Tokens::from_tokens(1000).unwrap();
@@ -2206,7 +2207,7 @@ fn test_neuron_remove_some_permissions() {
     local_test_on_sns_subnet(|runtime| async move {
         let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
         let account_identifier = Account {
-            owner: user.get_principal_id(),
+            owner: user.get_principal_id().0,
             subaccount: None,
         };
         let alloc = Tokens::from_tokens(1000).unwrap();
@@ -2275,7 +2276,7 @@ fn test_neuron_remove_permissions_of_wrong_principal() {
         let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
         let additional_user = Sender::from_keypair(&TEST_USER2_KEYPAIR);
         let account_identifier = Account {
-            owner: user.get_principal_id(),
+            owner: user.get_principal_id().0,
             subaccount: None,
         };
         let alloc = Tokens::from_tokens(1000).unwrap();
@@ -2347,7 +2348,7 @@ fn test_neuron_remove_permissions_of_different_principal() {
         let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
         let additional_user = Sender::from_keypair(&TEST_USER2_KEYPAIR);
         let account_identifier = Account {
-            owner: user.get_principal_id(),
+            owner: user.get_principal_id().0,
             subaccount: None,
         };
         let alloc = Tokens::from_tokens(1000).unwrap();
@@ -2434,7 +2435,7 @@ fn test_remove_neuron_permission_missing_principal_id_fails() {
     local_test_on_sns_subnet(|runtime| async move {
         let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
         let account_identifier = Account {
-            owner: user.get_principal_id(),
+            owner: user.get_principal_id().0,
             subaccount: None,
         };
         let alloc = Tokens::from_tokens(1000).unwrap();
@@ -2498,7 +2499,7 @@ fn test_remove_neuron_permission_when_neuron_missing_permission_type_fails() {
     local_test_on_sns_subnet(|runtime| async move {
         let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
         let account_identifier = Account {
-            owner: user.get_principal_id(),
+            owner: user.get_principal_id().0,
             subaccount: None,
         };
         let alloc = Tokens::from_tokens(1000).unwrap();
@@ -2591,7 +2592,7 @@ fn test_disburse_neuron_to_self_succeeds() {
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
-            .with_ledger_account(user.sender.get_principal_id().into(), alloc)
+            .with_ledger_account(user.sender.get_principal_id().0.into(), alloc)
             .with_nervous_system_parameters(params.clone())
             .build();
 
@@ -2705,7 +2706,7 @@ fn test_disburse_neuron_to_different_account_succeeds() {
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
-            .with_ledger_account(neuron_owner.sender.get_principal_id().into(), alloc)
+            .with_ledger_account(neuron_owner.sender.get_principal_id().0.into(), alloc)
             .with_nervous_system_parameters(params.clone())
             .build();
 
@@ -2740,7 +2741,7 @@ fn test_disburse_neuron_to_different_account_succeeds() {
                 &neuron_owner.sender,
                 &neuron_owner.subaccount,
                 Some(amount_to_disburse),
-                Some(funds_receiver.sender.get_principal_id().into()),
+                Some(funds_receiver.sender.get_principal_id().0.into()),
             )
             .await;
         let transfer_block_height = match disburse_response.command.unwrap() {
@@ -2805,8 +2806,8 @@ fn test_disburse_neuron_burns_neuron_fees() {
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
-            .with_ledger_account(user.sender.get_principal_id().into(), alloc)
-            .with_ledger_account(voter.sender.get_principal_id().into(), alloc)
+            .with_ledger_account(user.sender.get_principal_id().0.into(), alloc)
+            .with_ledger_account(voter.sender.get_principal_id().0.into(), alloc)
             .with_nervous_system_parameters(params.clone())
             .build();
 
@@ -2929,7 +2930,7 @@ fn test_split_neuron_succeeds() {
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
-            .with_ledger_account(parent.sender.get_principal_id().into(), alloc)
+            .with_ledger_account(parent.sender.get_principal_id().0.into(), alloc)
             .with_nervous_system_parameters(params.clone())
             .build();
 
@@ -3016,8 +3017,8 @@ fn test_split_neuron_inheritance() {
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
-            .with_ledger_account(parent.sender.get_principal_id().into(), alloc)
-            .with_ledger_account(voter.sender.get_principal_id().into(), alloc)
+            .with_ledger_account(parent.sender.get_principal_id().0.into(), alloc)
+            .with_ledger_account(voter.sender.get_principal_id().0.into(), alloc)
             .with_nervous_system_parameters(params.clone())
             .build();
 
@@ -3111,7 +3112,7 @@ fn test_split_neuron_child_amount_is_above_min_stake() {
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
-            .with_ledger_account(parent.sender.get_principal_id().into(), alloc)
+            .with_ledger_account(parent.sender.get_principal_id().0.into(), alloc)
             .with_nervous_system_parameters(params.clone())
             .build();
 
@@ -3199,7 +3200,7 @@ fn test_split_neuron_parent_amount_is_above_min_stake() {
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
-            .with_ledger_account(parent.sender.get_principal_id().into(), alloc)
+            .with_ledger_account(parent.sender.get_principal_id().0.into(), alloc)
             .with_nervous_system_parameters(params.clone())
             .build();
 
@@ -3318,7 +3319,7 @@ fn test_neuron_voting_power_multiplier_with_ballots() {
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
             // User3 will have funds available in the ledger for staking a neuron
-            .with_ledger_account(user3.sender.get_principal_id().into(), alloc)
+            .with_ledger_account(user3.sender.get_principal_id().0.into(), alloc)
             .with_nervous_system_parameters(params.clone())
             .with_initial_neurons(neurons)
             .build();

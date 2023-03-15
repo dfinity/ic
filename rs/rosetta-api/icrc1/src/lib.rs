@@ -2,7 +2,7 @@ pub mod blocks;
 pub mod endpoints;
 pub mod hash;
 
-use candid::CandidType;
+use candid::{CandidType, Principal};
 use ciborium::tag::Required;
 use ic_base_types::PrincipalId;
 use ic_ledger_canister_core::ledger::{LedgerContext, LedgerTransaction, TxApplyError};
@@ -12,77 +12,14 @@ use ic_ledger_core::{
     timestamp::TimeStamp,
     tokens::Tokens,
 };
+use icrc_ledger_types::{Account, Subaccount};
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fmt;
 
-pub type Subaccount = [u8; 32];
-
-pub const DEFAULT_SUBACCOUNT: &Subaccount = &[0; 32];
 pub const MAX_MEMO_LENGTH: usize = 32;
-
-#[derive(Serialize, Deserialize, CandidType, Clone, Debug, Copy)]
-pub struct Account {
-    pub owner: PrincipalId,
-    pub subaccount: Option<Subaccount>,
-}
-
-impl Account {
-    #[inline]
-    pub fn effective_subaccount(&self) -> &Subaccount {
-        self.subaccount.as_ref().unwrap_or(DEFAULT_SUBACCOUNT)
-    }
-}
-
-impl PartialEq for Account {
-    fn eq(&self, other: &Self) -> bool {
-        self.owner == other.owner && self.effective_subaccount() == other.effective_subaccount()
-    }
-}
-
-impl Eq for Account {}
-
-impl std::cmp::PartialOrd for Account {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl std::cmp::Ord for Account {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.owner.cmp(&other.owner).then_with(|| {
-            self.effective_subaccount()
-                .cmp(other.effective_subaccount())
-        })
-    }
-}
-
-impl std::hash::Hash for Account {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.owner.hash(state);
-        self.effective_subaccount().hash(state);
-    }
-}
-
-impl fmt::Display for Account {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.subaccount {
-            None => write!(f, "{}", self.owner),
-            Some(subaccount) => write!(f, "0x{}.{}", hex::encode(&subaccount[..]), self.owner),
-        }
-    }
-}
-
-impl From<PrincipalId> for Account {
-    fn from(owner: PrincipalId) -> Self {
-        Self {
-            owner,
-            subaccount: None,
-        }
-    }
-}
 
 fn ser_compact_account<S>(acc: &Account, s: S) -> Result<S::Ok, S::Error>
 where
@@ -114,7 +51,7 @@ struct CompactAccount(Vec<ByteBuf>);
 
 impl From<Account> for CompactAccount {
     fn from(acc: Account) -> Self {
-        let mut components = vec![ByteBuf::from(acc.owner.to_vec())];
+        let mut components = vec![ByteBuf::from(acc.owner.as_slice().to_vec())];
         if let Some(sub) = acc.subaccount {
             components.push(ByteBuf::from(sub.to_vec()))
         }
@@ -136,8 +73,8 @@ impl TryFrom<CompactAccount> for Account {
             ));
         }
 
-        let principal = PrincipalId::try_from(&elems[0][..])
-            .map_err(|e| format!("invalid principal: {}", e))?;
+        let principal =
+            Principal::try_from(&elems[0][..]).map_err(|e| format!("invalid principal: {}", e))?;
         let subaccount = if elems.len() > 1 {
             Some(Subaccount::try_from(&elems[1][..]).map_err(|_| {
                 format!(

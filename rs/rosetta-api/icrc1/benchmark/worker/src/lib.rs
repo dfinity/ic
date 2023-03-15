@@ -1,7 +1,8 @@
 use candid::{CandidType, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_icrc1::{endpoints::TransferArg, Account, Memo};
+use ic_icrc1::{endpoints::TransferArg, Memo};
 use ic_icrc1_client_cdk::{CdkRuntime, ICRC1Client};
+use icrc_ledger_types::Account;
 use num_traits::ToPrimitive;
 use rand::RngCore;
 use rand_chacha::{rand_core::SeedableRng, ChaCha8Rng};
@@ -86,7 +87,7 @@ async fn run_accounts_batch(batch_args: BatchArgs) -> BatchResult {
             let args = TransferArg {
                 from_subaccount: None,
                 to: Account {
-                    owner: to,
+                    owner: to.0,
                     subaccount: None,
                 },
                 fee: None,
@@ -166,7 +167,7 @@ async fn run_transactions_batch(batch_args: BatchArgs) -> BatchResult {
             let args = TransferArg {
                 from_subaccount: None,
                 to: Account {
-                    owner: PrincipalId(to),
+                    owner: to,
                     subaccount: None,
                 },
                 fee: None,

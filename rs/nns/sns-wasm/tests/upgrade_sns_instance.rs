@@ -17,7 +17,6 @@ pub mod common;
 use crate::common::EXPECTED_SNS_CREATION_FEE;
 use ic_ic00_types::CanisterInstallMode;
 use ic_icrc1::endpoints::{NumTokens, TransferArg, TransferError};
-use ic_icrc1::Account;
 use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount;
 use ic_nns_test_utils::sns_wasm::{
     build_archive_sns_wasm, build_governance_sns_wasm, build_index_sns_wasm, build_ledger_sns_wasm,
@@ -48,6 +47,7 @@ use ic_sns_wasm::pb::v1::{
 };
 use ic_state_machine_tests::StateMachine;
 use ic_types::Cycles;
+use icrc_ledger_types::Account;
 
 #[test]
 fn upgrade_root_sns_canister_via_sns_wasms() {
@@ -424,7 +424,7 @@ fn upgrade_archive_sns_canister_via_sns_wasms() {
         ledger.archive_options.num_blocks_to_archive = 5;
         ledger.initial_balances.push((
             Account {
-                owner: user,
+                owner: user.into(),
                 subaccount: None,
             },
             100000000,
@@ -504,7 +504,7 @@ fn upgrade_archive_sns_canister_via_sns_wasms() {
         TransferArg {
             from_subaccount: None,
             to: Account {
-                owner: user,
+                owner: user.into(),
                 subaccount: Some([1; 32]),
             },
             fee: None,
@@ -701,7 +701,7 @@ fn test_out_of_sync_version_still_allows_upgrade_to_succeed() {
         ledger.archive_options.num_blocks_to_archive = 5;
         ledger.initial_balances.push((
             Account {
-                owner: user,
+                owner: user.into(),
                 subaccount: None,
             },
             100000000,
@@ -786,7 +786,7 @@ fn test_out_of_sync_version_still_allows_upgrade_to_succeed() {
         TransferArg {
             from_subaccount: None,
             to: Account {
-                owner: user,
+                owner: user.into(),
                 subaccount: Some([1; 32]),
             },
             fee: None,

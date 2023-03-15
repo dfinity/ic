@@ -2,11 +2,10 @@ use candid::{CandidType, Nat};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_profiler::{measure_span, SpanStats};
 use ic_cdk::api::stable::{StableReader, StableWriter};
-use ic_icrc1::endpoints::{ArchivedRange, QueryTxArchiveFn, TransactionRange};
-use ic_icrc1::{
-    endpoints::{GetTransactionsRequest, GetTransactionsResponse, Transaction, Transfer},
-    Account, Subaccount,
+use icrc_ledger_types::transaction::{
+    GetTransactionsResponse, QueryTxArchiveFn, Transaction, TransactionRange, Transfer,
 };
+use icrc_ledger_types::{Account, ArchivedRange, GetTransactionsRequest, Subaccount};
 use num_traits::cast::ToPrimitive;
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
@@ -210,7 +209,7 @@ async fn get_transactions_from_archive(
         length: archived.length.clone(),
     };
     let (res,): (TransactionRange,) = ic_cdk::call(
-        archived.callback.canister_id.get().0,
+        archived.callback.canister_id,
         &archived.callback.method,
         (req,),
     )
@@ -313,7 +312,7 @@ fn index_transaction(txid: u64, transaction: Transaction) -> Result<(), String> 
 fn add_tx(txid: u64, account: Account) {
     measure_span(&PROFILING_DATA, "add_tx", move || {
         with_index_mut(|idx| {
-            let account_index = match idx.account_index.entry(account.owner) {
+            let account_index = match idx.account_index.entry(account.owner.into()) {
                 btree_map::Entry::Vacant(v) => v.insert(BTreeMap::new()),
                 btree_map::Entry::Occupied(o) => o.into_mut(),
             };
@@ -353,7 +352,7 @@ fn get_account_transactions_ids(args: GetAccountTransactionsArgs) -> Vec<u64> {
         .to_usize()
         .unwrap();
     with_index(|idx| {
-        let account_index = match idx.account_index.get(&args.account.owner) {
+        let account_index = match idx.account_index.get(&args.account.owner.into()) {
             Some(account_index) => account_index,
             None => return vec![],
         };
@@ -432,7 +431,7 @@ pub async fn get_account_transactions(args: GetAccountTransactionsArgs) -> GetTr
 fn get_oldest_txid(account: &Account) -> Option<Nat> {
     with_index(|idx| {
         idx.account_index
-            .get(&account.owner)?
+            .get(&account.owner.into())?
             .get(account.effective_subaccount())?
             .first()
             .map(|txid| Nat::from(*txid))
@@ -497,7 +496,7 @@ mod tests {
 
     use candid::Nat;
     use ic_base_types::{CanisterId, PrincipalId};
-    use ic_icrc1::Account;
+    use icrc_ledger_types::Account;
 
     use proptest::{option, proptest};
 
@@ -508,7 +507,7 @@ mod tests {
 
     fn account(n: u64) -> Account {
         Account {
-            owner: PrincipalId::new_user_test_id(n),
+            owner: PrincipalId::new_user_test_id(n).0,
             subaccount: None,
         }
     }
@@ -517,7 +516,7 @@ mod tests {
         INDEX.with(|idx| {
             let mut account_index = BTreeMap::new();
             for (account, new_txids) in txids {
-                let account_index = match account_index.entry(account.owner) {
+                let account_index = match account_index.entry(PrincipalId(account.owner)) {
                     btree_map::Entry::Vacant(v) => v.insert(BTreeMap::new()),
                     btree_map::Entry::Occupied(o) => o.into_mut(),
                 };
@@ -675,7 +674,7 @@ mod tests {
             let mut subaccount = [0u8; 32];
             subaccount[0..8].copy_from_slice(&subaccount_number.to_le_bytes());
             let account = Account {
-                owner: PrincipalId::new_user_test_id(principal),
+                owner: PrincipalId::new_user_test_id(principal).0,
                 subaccount: Some(subaccount),
             };
             add_tx(next_txid.next().unwrap(), account);

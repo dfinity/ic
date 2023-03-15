@@ -21,6 +21,7 @@ rust_library(
     },
     version = "0.8.0",
     deps = [
+        "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/crypto/tree_hash",
         "//rs/rosetta-api/icrc1",
         "//rs/rosetta-api/ledger_canister_core",
@@ -46,6 +47,7 @@ rust_canister(
     service_file = ":icrc1.did",
     deps = [
         ":ledger",
+        "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/rosetta-api/icrc1",
         "//rs/rosetta-api/ledger_canister_core",
         "//rs/rosetta-api/ledger_core",

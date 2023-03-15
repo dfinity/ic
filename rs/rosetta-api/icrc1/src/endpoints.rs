@@ -1,13 +1,10 @@
-use crate::blocks::Icrc1Block;
 use crate::{Account, Block, Memo, Subaccount};
 use candid::types::number::{Int, Nat};
 use candid::CandidType;
-use ic_base_types::CanisterId;
 use ic_ledger_canister_core::ledger::TransferError as CoreTransferError;
+use icrc_ledger_types::transaction::{Burn, Mint, Transaction, Transfer};
 use serde::Deserialize;
 use serde_bytes::ByteBuf;
-use std::convert::TryFrom;
-use std::marker::PhantomData;
 
 pub type NumTokens = Nat;
 pub type BlockIndex = Nat;
@@ -135,187 +132,6 @@ pub struct StandardRecord {
 
 // Non-standard queries
 
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct ArchiveInfo {
-    pub canister_id: CanisterId,
-    pub block_range_start: BlockIndex,
-    pub block_range_end: BlockIndex,
-}
-
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct GetTransactionsRequest {
-    pub start: BlockIndex,
-    pub length: Nat,
-}
-
-impl GetTransactionsRequest {
-    pub fn as_start_and_length(&self) -> Result<(u64, u64), String> {
-        use num_traits::cast::ToPrimitive;
-
-        let start = self.start.0.to_u64().ok_or_else(|| {
-            format!(
-                "transaction index {} is too large, max allowed: {}",
-                self.start,
-                u64::MAX
-            )
-        })?;
-        let length = self.length.0.to_u64().ok_or_else(|| {
-            format!(
-                "requested length {} is too large, max allowed: {}",
-                self.length,
-                u64::MAX
-            )
-        })?;
-        Ok((start, length))
-    }
-}
-
-pub type GetBlocksArgs = GetTransactionsRequest;
-
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct Mint {
-    pub amount: Nat,
-    pub to: Account,
-    pub memo: Option<Memo>,
-    pub created_at_time: Option<u64>,
-}
-
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct Burn {
-    pub amount: Nat,
-    pub from: Account,
-    pub memo: Option<Memo>,
-    pub created_at_time: Option<u64>,
-}
-
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct Transfer {
-    pub amount: Nat,
-    pub from: Account,
-    pub to: Account,
-    pub memo: Option<Memo>,
-    pub fee: Option<Nat>,
-    pub created_at_time: Option<u64>,
-}
-
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct Transaction {
-    pub kind: String,
-    pub mint: Option<Mint>,
-    pub burn: Option<Burn>,
-    pub transfer: Option<Transfer>,
-    pub timestamp: u64,
-}
-
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct ArchivedRange<Callback> {
-    pub start: Nat,
-    pub length: Nat,
-    pub callback: Callback,
-}
-
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct GetTransactionsResponse {
-    pub log_length: Nat,
-    pub first_index: Nat,
-    pub transactions: Vec<Transaction>,
-    pub archived_transactions: Vec<ArchivedRange<QueryTxArchiveFn>>,
-}
-
-#[derive(Debug, CandidType, Deserialize)]
-pub struct GetBlocksResponse {
-    pub first_index: BlockIndex,
-    pub chain_length: u64,
-    pub certificate: Option<serde_bytes::ByteBuf>,
-    pub blocks: Vec<Icrc1Block>,
-    pub archived_blocks: Vec<ArchivedRange<QueryBlockArchiveFn>>,
-}
-
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct TransactionRange {
-    pub transactions: Vec<Transaction>,
-}
-
-#[derive(Debug, Deserialize, PartialEq, Eq)]
-#[serde(try_from = "candid::types::reference::Func")]
-pub struct QueryArchiveFn<Input: CandidType, Output: CandidType> {
-    pub canister_id: CanisterId,
-    pub method: String,
-    pub _marker: PhantomData<(Input, Output)>,
-}
-
-impl<Input: CandidType, Output: CandidType> QueryArchiveFn<Input, Output> {
-    pub fn new(canister_id: CanisterId, method: impl Into<String>) -> Self {
-        Self {
-            canister_id,
-            method: method.into(),
-            _marker: PhantomData,
-        }
-    }
-}
-
-impl<Input: CandidType, Output: CandidType> Clone for QueryArchiveFn<Input, Output> {
-    fn clone(&self) -> Self {
-        Self {
-            canister_id: self.canister_id,
-            method: self.method.clone(),
-            _marker: PhantomData,
-        }
-    }
-}
-
-impl<Input: CandidType, Output: CandidType> From<QueryArchiveFn<Input, Output>>
-    for candid::types::reference::Func
-{
-    fn from(archive_fn: QueryArchiveFn<Input, Output>) -> Self {
-        let p: &ic_base_types::PrincipalId = archive_fn.canister_id.as_ref();
-        Self {
-            principal: p.0,
-            method: archive_fn.method,
-        }
-    }
-}
-
-impl<Input: CandidType, Output: CandidType> TryFrom<candid::types::reference::Func>
-    for QueryArchiveFn<Input, Output>
-{
-    type Error = String;
-    fn try_from(func: candid::types::reference::Func) -> Result<Self, Self::Error> {
-        let canister_id = CanisterId::try_from(func.principal.as_slice())
-            .map_err(|e| format!("principal is not a canister id: {}", e))?;
-        Ok(QueryArchiveFn {
-            canister_id,
-            method: func.method,
-            _marker: PhantomData,
-        })
-    }
-}
-
-impl<Input: CandidType, Output: CandidType> CandidType for QueryArchiveFn<Input, Output> {
-    fn _ty() -> candid::types::Type {
-        candid::types::Type::Func(candid::types::Function {
-            modes: vec![candid::parser::types::FuncMode::Query],
-            args: vec![Input::_ty()],
-            rets: vec![Output::_ty()],
-        })
-    }
-
-    fn idl_serialize<S>(&self, serializer: S) -> Result<(), S::Error>
-    where
-        S: candid::types::Serializer,
-    {
-        candid::types::reference::Func::from(self.clone()).idl_serialize(serializer)
-    }
-}
-
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct BlockRange {
-    pub blocks: Vec<Icrc1Block>,
-}
-
-pub type QueryBlockArchiveFn = QueryArchiveFn<GetBlocksArgs, BlockRange>;
-pub type QueryTxArchiveFn = QueryArchiveFn<GetTransactionsRequest, TransactionRange>;
-
 impl From<Block> for Transaction {
     fn from(b: Block) -> Transaction {
         use crate::Operation;
@@ -328,7 +144,10 @@ impl From<Block> for Transaction {
             timestamp: b.timestamp,
         };
         let created_at_time = b.transaction.created_at_time;
-        let memo = b.transaction.memo;
+        let mut memo: Option<ByteBuf> = None;
+        if b.transaction.memo.is_some() {
+            memo = Some(b.transaction.memo.unwrap().0);
+        }
 
         match b.transaction.operation {
             Operation::Mint { to, amount } => {

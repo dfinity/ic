@@ -10,3 +10,4 @@ futures = "0.3.13"
 ic-icrc1 = { path = "../../../rosetta-api/icrc1" }
 icp-ledger = { path = "../../../rosetta-api/icp_ledger" }
 ic-nervous-system-common = { path = "../../common" }
+icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }

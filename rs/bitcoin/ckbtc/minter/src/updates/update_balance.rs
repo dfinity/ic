@@ -1,14 +1,11 @@
 use crate::logs::P1;
 use crate::tasks::{schedule_now, TaskType};
 use candid::{CandidType, Deserialize, Nat, Principal};
-use ic_base_types::PrincipalId;
 use ic_btc_types::{GetUtxosError, GetUtxosResponse};
 use ic_canister_log::log;
-use ic_icrc1::{
-    endpoints::{TransferArg, TransferError},
-    Account, Subaccount,
-};
+use ic_icrc1::endpoints::{TransferArg, TransferError};
 use ic_icrc1_client_cdk::{CdkRuntime, ICRC1Client};
+use icrc_ledger_types::{Account, Subaccount};
 use serde::Serialize;
 
 use super::get_btc_address::init_ecdsa_public_key;
@@ -103,7 +100,7 @@ pub async fn update_balance(
     let _guard = balance_update_guard(args.owner.unwrap_or(caller))?;
 
     let caller_account = Account {
-        owner: PrincipalId::from(args.owner.unwrap_or(caller)),
+        owner: args.owner.unwrap_or(caller),
         subaccount: args.subaccount,
     };
 
@@ -122,7 +119,7 @@ pub async fn update_balance(
 
     let new_utxos: Vec<_> = state::read_state(|s| {
         let maybe_existing_utxos = s.utxos_state_addresses.get(&caller_account);
-        let maybe_finalized_utxos = s.finalized_utxos.get(&caller_account.owner);
+        let maybe_finalized_utxos = s.finalized_utxos.get(&caller_account.owner.into());
         utxos
             .into_iter()
             .filter(|u| {
@@ -137,7 +134,7 @@ pub async fn update_balance(
     });
 
     // Remove pending finalized transactions for the affected principal.
-    state::mutate_state(|s| s.finalized_utxos.remove(&caller_account.owner));
+    state::mutate_state(|s| s.finalized_utxos.remove(&caller_account.owner.into()));
 
     let satoshis_to_mint = new_utxos.iter().map(|u| u.value).sum::<u64>();
 

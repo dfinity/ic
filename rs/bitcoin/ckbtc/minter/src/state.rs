@@ -19,7 +19,7 @@ use candid::{Deserialize, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_btc_types::{Network, OutPoint, Utxo};
 use ic_canister_log::log;
-use ic_icrc1::Account;
+use icrc_ledger_types::Account;
 use serde::Serialize;
 
 // Like assert_eq, but returns an error instead of panicking.
@@ -469,12 +469,9 @@ impl CkBtcMinterState {
 
     fn forget_utxo(&mut self, utxo: &Utxo) {
         if let Some(account) = self.outpoint_account.remove(&utxo.outpoint) {
-            if self
-                .update_balance_principals
-                .contains(&account.owner.into())
-            {
+            if self.update_balance_principals.contains(&account.owner) {
                 self.finalized_utxos
-                    .entry(account.owner)
+                    .entry(account.owner.into())
                     .or_insert_with(BTreeSet::new)
                     .insert(utxo.clone());
             }

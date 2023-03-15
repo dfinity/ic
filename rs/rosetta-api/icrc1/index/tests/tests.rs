@@ -1,8 +1,8 @@
 use candid::{Decode, Encode, Nat};
 use ic_base_types::PrincipalId;
 use ic_icrc1::{
-    endpoints::{ArchiveInfo, TransferArg, TransferError, Value},
-    Account, Block, Memo, Operation, Subaccount, Transaction,
+    endpoints::{TransferArg, TransferError, Value},
+    Block, Memo, Operation, Transaction,
 };
 use ic_icrc1_index::{
     GetAccountTransactionsArgs, GetTransactions, GetTransactionsResult, InitArgs as IndexInitArgs,
@@ -16,6 +16,7 @@ use ic_ledger_core::{
     tokens::Tokens,
 };
 use ic_state_machine_tests::{CanisterId, StateMachine};
+use icrc_ledger_types::{Account, ArchiveInfo, Subaccount};
 use num_traits::cast::ToPrimitive;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -26,7 +27,7 @@ const NUM_BLOCKS_TO_ARCHIVE: usize = 5;
 const MINT_BLOCKS_PER_ARCHIVE: u64 = 5;
 
 const MINTER: Account = Account {
-    owner: PrincipalId::new(0, [0u8; 29]),
+    owner: PrincipalId::new(0, [0u8; 29]).0,
     subaccount: None,
 };
 
@@ -190,7 +191,7 @@ fn transfer(
     send_transfer(
         env,
         ledger,
-        from.owner,
+        PrincipalId(from.owner),
         &TransferArg {
             from_subaccount: from.subaccount,
             to,
@@ -230,7 +231,7 @@ fn get_account_transactions(
 ) -> GetTransactions {
     Decode!(
         &env.execute_ingress_as(
-            account.owner,
+            PrincipalId(account.owner),
             index,
             "get_account_transactions",
             Encode!(&GetAccountTransactionsArgs {
@@ -256,11 +257,11 @@ fn list_subaccounts(
 ) -> Vec<Subaccount> {
     Decode!(
         &env.execute_ingress_as(
-            account.owner,
+            PrincipalId(account.owner),
             index,
             "list_subaccounts",
             Encode!(&ListSubaccountsArgs {
-                owner: account.owner,
+                owner: PrincipalId(account.owner),
                 start,
             })
             .unwrap()
@@ -284,7 +285,7 @@ fn index_ledger_id(env: &StateMachine, index: CanisterId) -> CanisterId {
 
 fn account(n: u64) -> Account {
     Account {
-        owner: PrincipalId::new_user_test_id(n),
+        owner: PrincipalId::new_user_test_id(n).0,
         subaccount: None,
     }
 }
@@ -293,7 +294,7 @@ fn account_with_subaccount(n: u64, s: u128) -> Account {
     let mut sub: [u8; 32] = [0; 32];
     sub[..16].copy_from_slice(&s.to_be_bytes());
     Account {
-        owner: PrincipalId::new_user_test_id(n),
+        owner: PrincipalId::new_user_test_id(n).0,
         subaccount: Some(sub),
     }
 }

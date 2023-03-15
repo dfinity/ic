@@ -17,7 +17,6 @@ use crate::common::{
 use error_refund_icp_response::err::Type::Precondition;
 use futures::{channel::mpsc, future::FutureExt, StreamExt};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_icrc1::Account;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::{
     assert_is_err, assert_is_ok, ledger::compute_neuron_staking_subaccount_bytes,
@@ -52,6 +51,7 @@ use ic_sns_swap::{
     swap::{apportion_approximately_equally, principal_to_subaccount},
 };
 use icp_ledger::DEFAULT_TRANSFER_FEE;
+use icrc_ledger_types::Account;
 use maplit::{btreemap, hashset};
 use std::{
     collections::HashSet,
@@ -185,7 +185,7 @@ fn test_init() {
 fn test_open() {
     let mut swap = Swap::new(init());
     let account = Account {
-        owner: SWAP_CANISTER_ID.get(),
+        owner: SWAP_CANISTER_ID.get().into(),
         subaccount: None,
     };
     let params = params();
@@ -271,7 +271,7 @@ fn test_open_with_delay() {
     let init = init();
     let mut swap = Swap::new(init);
     let account = Account {
-        owner: SWAP_CANISTER_ID.get(),
+        owner: SWAP_CANISTER_ID.get().into(),
         subaccount: None,
     };
     let params = Params {
@@ -343,7 +343,7 @@ fn test_min_icp() {
         ..params()
     };
     let account = Account {
-        owner: SWAP_CANISTER_ID.get(),
+        owner: SWAP_CANISTER_ID.get().into(),
         subaccount: None,
     };
     let mut swap = Swap::new(init());
@@ -377,7 +377,7 @@ fn test_min_icp() {
             SWAP_CANISTER_ID,
             &mock_stub(vec![LedgerExpect::AccountBalance(
                 Account {
-                    owner: SWAP_CANISTER_ID.get(),
+                    owner: SWAP_CANISTER_ID.get().into(),
                     subaccount: Some(principal_to_subaccount(&TEST_USER1_PRINCIPAL.clone()))
                 },
                 Ok(Tokens::from_e8s(2 * E8))
@@ -400,7 +400,7 @@ fn test_min_icp() {
             SWAP_CANISTER_ID,
             &mock_stub(vec![LedgerExpect::AccountBalance(
                 Account {
-                    owner: SWAP_CANISTER_ID.get(),
+                    owner: SWAP_CANISTER_ID.get().into(),
                     subaccount: Some(principal_to_subaccount(&TEST_USER2_PRINCIPAL.clone()))
                 },
                 Ok(Tokens::from_e8s(2 * E8))
@@ -448,7 +448,7 @@ fn test_min_icp() {
                         DEFAULT_TRANSFER_FEE.get_e8s(),
                         Some(principal_to_subaccount(&TEST_USER2_PRINCIPAL)),
                         Account {
-                            owner: *TEST_USER2_PRINCIPAL,
+                            owner: (*TEST_USER2_PRINCIPAL).into(),
                             subaccount: None,
                         },
                         0,
@@ -459,7 +459,7 @@ fn test_min_icp() {
                         DEFAULT_TRANSFER_FEE.get_e8s(),
                         Some(principal_to_subaccount(&TEST_USER1_PRINCIPAL)),
                         Account {
-                            owner: *TEST_USER1_PRINCIPAL,
+                            owner: (*TEST_USER1_PRINCIPAL).into(),
                             subaccount: None,
                         },
                         0,
@@ -489,7 +489,7 @@ fn test_min_max_icp_per_buyer() {
         ..params()
     };
     let account = Account {
-        owner: SWAP_CANISTER_ID.get(),
+        owner: SWAP_CANISTER_ID.get().into(),
         subaccount: None,
     };
     let mut swap = Swap::new(init());
@@ -524,7 +524,7 @@ fn test_min_max_icp_per_buyer() {
                 SWAP_CANISTER_ID,
                 &mock_stub(vec![LedgerExpect::AccountBalance(
                     Account {
-                        owner: SWAP_CANISTER_ID.get(),
+                        owner: SWAP_CANISTER_ID.get().into(),
                         subaccount: Some(principal_to_subaccount(&TEST_USER1_PRINCIPAL.clone())),
                     },
                     Ok(Tokens::from_e8s(99999999)),
@@ -543,7 +543,7 @@ fn test_min_max_icp_per_buyer() {
                 SWAP_CANISTER_ID,
                 &mock_stub(vec![LedgerExpect::AccountBalance(
                     Account {
-                        owner: SWAP_CANISTER_ID.get(),
+                        owner: SWAP_CANISTER_ID.get().into(),
                         subaccount: Some(principal_to_subaccount(&TEST_USER1_PRINCIPAL.clone())),
                     },
                     Ok(Tokens::from_e8s(6 * E8)),
@@ -567,7 +567,7 @@ fn test_min_max_icp_per_buyer() {
                 SWAP_CANISTER_ID,
                 &mock_stub(vec![LedgerExpect::AccountBalance(
                     Account {
-                        owner: SWAP_CANISTER_ID.get(),
+                        owner: SWAP_CANISTER_ID.get().into(),
                         subaccount: Some(principal_to_subaccount(&TEST_USER1_PRINCIPAL.clone())),
                     },
                     Ok(Tokens::from_e8s(10 * E8)),
@@ -603,7 +603,7 @@ fn test_max_icp() {
         ..params()
     };
     let account = Account {
-        owner: SWAP_CANISTER_ID.get(),
+        owner: SWAP_CANISTER_ID.get().into(),
         subaccount: None,
     };
     let mut swap = Swap::new(init());
@@ -637,7 +637,7 @@ fn test_max_icp() {
             SWAP_CANISTER_ID,
             &mock_stub(vec![LedgerExpect::AccountBalance(
                 Account {
-                    owner: SWAP_CANISTER_ID.get(),
+                    owner: SWAP_CANISTER_ID.get().into(),
                     subaccount: Some(principal_to_subaccount(&TEST_USER1_PRINCIPAL.clone()))
                 },
                 Ok(Tokens::from_e8s(6 * E8))
@@ -660,7 +660,7 @@ fn test_max_icp() {
             SWAP_CANISTER_ID,
             &mock_stub(vec![LedgerExpect::AccountBalance(
                 Account {
-                    owner: SWAP_CANISTER_ID.get(),
+                    owner: SWAP_CANISTER_ID.get().into(),
                     subaccount: Some(principal_to_subaccount(&TEST_USER2_PRINCIPAL.clone()))
                 },
                 Ok(Tokens::from_e8s(6 * E8))
@@ -701,7 +701,7 @@ fn test_scenario_happy() {
         ..params()
     };
     let account = Account {
-        owner: SWAP_CANISTER_ID.get(),
+        owner: SWAP_CANISTER_ID.get().into(),
         subaccount: None,
     };
     let mut swap = Swap::new(init());
@@ -760,7 +760,7 @@ fn test_scenario_happy() {
             SWAP_CANISTER_ID,
             &mock_stub(vec![LedgerExpect::AccountBalance(
                 Account {
-                    owner: SWAP_CANISTER_ID.get(),
+                    owner: SWAP_CANISTER_ID.get().into(),
                     subaccount: Some(principal_to_subaccount(&TEST_USER1_PRINCIPAL.clone()))
                 },
                 Ok(Tokens::from_e8s(900 * E8))
@@ -785,7 +785,7 @@ fn test_scenario_happy() {
             SWAP_CANISTER_ID,
             &mock_stub(vec![LedgerExpect::AccountBalance(
                 Account {
-                    owner: SWAP_CANISTER_ID.get(),
+                    owner: SWAP_CANISTER_ID.get().into(),
                     subaccount: Some(principal_to_subaccount(&TEST_USER2_PRINCIPAL.clone()))
                 },
                 Ok(Tokens::from_e8s(600 * E8))
@@ -815,7 +815,7 @@ fn test_scenario_happy() {
             SWAP_CANISTER_ID,
             &mock_stub(vec![LedgerExpect::AccountBalance(
                 Account {
-                    owner: SWAP_CANISTER_ID.get(),
+                    owner: SWAP_CANISTER_ID.get().into(),
                     subaccount: Some(principal_to_subaccount(&TEST_USER3_PRINCIPAL.clone()))
                 },
                 Ok(Tokens::from_e8s(400 * E8))
@@ -879,7 +879,7 @@ fn test_scenario_happy() {
                         DEFAULT_TRANSFER_FEE.get_e8s(),
                         Some(principal_to_subaccount(&TEST_USER2_PRINCIPAL)),
                         Account {
-                            owner: SNS_GOVERNANCE_CANISTER_ID.get(),
+                            owner: SNS_GOVERNANCE_CANISTER_ID.get().into(),
                             subaccount: None,
                         },
                         0,
@@ -890,7 +890,7 @@ fn test_scenario_happy() {
                         DEFAULT_TRANSFER_FEE.get_e8s(),
                         Some(principal_to_subaccount(&TEST_USER3_PRINCIPAL)),
                         Account {
-                            owner: SNS_GOVERNANCE_CANISTER_ID.get(),
+                            owner: SNS_GOVERNANCE_CANISTER_ID.get().into(),
                             subaccount: None,
                         },
                         0,
@@ -901,7 +901,7 @@ fn test_scenario_happy() {
                         DEFAULT_TRANSFER_FEE.get_e8s(),
                         Some(principal_to_subaccount(&TEST_USER1_PRINCIPAL)),
                         Account {
-                            owner: SNS_GOVERNANCE_CANISTER_ID.get(),
+                            owner: SNS_GOVERNANCE_CANISTER_ID.get().into(),
                             subaccount: None,
                         },
                         0,
@@ -930,7 +930,7 @@ fn test_scenario_happy() {
                     DEFAULT_TRANSFER_FEE.get_e8s(),
                     Some(principal_to_subaccount(&TEST_USER2_PRINCIPAL)),
                     Account {
-                        owner: SNS_GOVERNANCE_CANISTER_ID.get(),
+                        owner: SNS_GOVERNANCE_CANISTER_ID.get().into(),
                         subaccount: None,
                     },
                     0,
@@ -947,13 +947,13 @@ fn test_scenario_happy() {
         // "Sweep" all SNS tokens, going to the buyers.
         fn dst(controller: PrincipalId, memo: u64) -> Account {
             Account {
-                owner: SNS_GOVERNANCE_CANISTER_ID.get(),
+                owner: SNS_GOVERNANCE_CANISTER_ID.get().into(),
                 subaccount: Some(compute_neuron_staking_subaccount_bytes(controller, memo)),
             }
         }
         fn cf(memo: u64) -> Account {
             Account {
-                owner: SNS_GOVERNANCE_CANISTER_ID.get(),
+                owner: SNS_GOVERNANCE_CANISTER_ID.get().into(),
                 subaccount: Some(compute_neuron_staking_subaccount_bytes(
                     NNS_GOVERNANCE_CANISTER_ID.get(),
                     memo,
@@ -1439,7 +1439,7 @@ async fn test_finalize_swap_abort() {
 
                 fee_e8s: DEFAULT_TRANSFER_FEE.get_e8s(),
                 from_subaccount: Some(principal_to_subaccount(&buyer_principal_id)),
-                to: Account::from(buyer_principal_id),
+                to: Account::from(buyer_principal_id.0),
                 memo: 0,
             }
         ],
@@ -1870,7 +1870,7 @@ fn test_get_buyer_state() {
         ..params()
     };
     let account = Account {
-        owner: SWAP_CANISTER_ID.get(),
+        owner: SWAP_CANISTER_ID.get().into(),
         subaccount: None,
     };
     let mut swap = Swap::new(init());
@@ -1902,7 +1902,7 @@ fn test_get_buyer_state() {
             SWAP_CANISTER_ID,
             &mock_stub(vec![LedgerExpect::AccountBalance(
                 Account {
-                    owner: SWAP_CANISTER_ID.get(),
+                    owner: SWAP_CANISTER_ID.get().into(),
                     subaccount: Some(principal_to_subaccount(&TEST_USER1_PRINCIPAL.clone()))
                 },
                 Ok(Tokens::from_e8s(6 * E8))
@@ -1938,7 +1938,7 @@ fn test_get_buyer_state() {
             SWAP_CANISTER_ID,
             &mock_stub(vec![LedgerExpect::AccountBalance(
                 Account {
-                    owner: SWAP_CANISTER_ID.get(),
+                    owner: SWAP_CANISTER_ID.get().into(),
                     subaccount: Some(principal_to_subaccount(&TEST_USER2_PRINCIPAL.clone()))
                 },
                 Ok(Tokens::from_e8s(6 * E8))
@@ -3932,7 +3932,7 @@ fn test_refresh_buyer_tokens() {
     let user3 = PrincipalId::new_user_test_id(3);
     let user4 = PrincipalId::new_user_test_id(4);
     let account = Account {
-        owner: SWAP_CANISTER_ID.get(),
+        owner: SWAP_CANISTER_ID.get().into(),
         subaccount: None,
     };
 
@@ -3944,7 +3944,7 @@ fn test_refresh_buyer_tokens() {
                     SWAP_CANISTER_ID,
                     &mock_stub(vec![LedgerExpect::AccountBalance(
                         Account {
-                            owner: SWAP_CANISTER_ID.get(),
+                            owner: SWAP_CANISTER_ID.get().into(),
                             subaccount: Some(principal_to_subaccount(user)),
                         },
                         Ok(Tokens::from_e8s(*balance_icp)),
@@ -3968,7 +3968,7 @@ fn test_refresh_buyer_tokens() {
                     SWAP_CANISTER_ID,
                     &mock_stub(vec![LedgerExpect::AccountBalance(
                         Account {
-                            owner: SWAP_CANISTER_ID.get(),
+                            owner: SWAP_CANISTER_ID.get().into(),
                             subaccount: Some(principal_to_subaccount(user)),
                         },
                         Ok(Tokens::from_e8s(*balance_icp)),

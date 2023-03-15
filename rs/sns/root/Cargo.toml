@@ -27,6 +27,7 @@ ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-common-build-metadata = { path = "../../nervous_system/common/build_metadata" }
 ic-nervous-system-root = { path = "../../nervous_system/root" }
 ic-sns-swap = { path = "../swap" }
+icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 lazy_static = "1.4.0"
 num-traits = "0.2.12"
 prost = "0.11.0"

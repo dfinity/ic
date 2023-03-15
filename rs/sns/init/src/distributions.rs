@@ -5,7 +5,6 @@ use crate::pb::v1::{
 use crate::SnsCanisterIds;
 use anyhow::anyhow;
 use ic_base_types::PrincipalId;
-use ic_icrc1::Account;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::ledger::{
     compute_distribution_subaccount_bytes, compute_neuron_staking_subaccount,
@@ -18,6 +17,7 @@ use ic_sns_governance::pb::v1::{
 };
 use ic_sns_governance::types::ONE_MONTH_SECONDS;
 use ic_sns_swap::swap::{SALE_NEURON_MEMO_RANGE_END, SALE_NEURON_MEMO_RANGE_START};
+use icrc_ledger_types::Account;
 use maplit::btreemap;
 use std::collections::BTreeMap;
 
@@ -401,7 +401,7 @@ impl FractionalDeveloperVotingPower {
         let swap = self.swap_distribution()?;
 
         let swap_canister_account = Account {
-            owner: sns_canister_ids.swap,
+            owner: sns_canister_ids.swap.0,
             subaccount: None,
         };
         let initial_swap_amount_tokens = Tokens::from_e8s(swap.initial_swap_amount_e8s);
@@ -449,7 +449,7 @@ impl FractionalDeveloperVotingPower {
         let subaccount =
             compute_distribution_subaccount_bytes(*governance_canister, distribution_account_nonce);
         let account = Account {
-            owner: *governance_canister,
+            owner: governance_canister.0,
             subaccount: Some(subaccount),
         };
         let tokens = Tokens::from_e8s(amount_e8s);
@@ -467,7 +467,7 @@ impl FractionalDeveloperVotingPower {
     ) -> (Account, Tokens) {
         let subaccount = compute_neuron_staking_subaccount_bytes(*claimer, memo);
         let account = Account {
-            owner: *governance_canister,
+            owner: governance_canister.0,
             subaccount: Some(subaccount),
         };
         let tokens = Tokens::from_e8s(amount_e8s);
@@ -577,7 +577,6 @@ mod test {
     };
     use crate::{SnsCanisterIds, Tokens};
     use ic_base_types::{CanisterId, PrincipalId};
-    use ic_icrc1::Account;
     use ic_nervous_system_common::ledger::{
         compute_distribution_subaccount_bytes, compute_neuron_staking_subaccount_bytes,
     };
@@ -590,6 +589,7 @@ mod test {
     use ic_sns_governance::pb::v1::{NervousSystemParameters, NeuronId, NeuronPermission};
     use ic_sns_governance::types::{ONE_MONTH_SECONDS, ONE_YEAR_SECONDS};
     use ic_sns_swap::swap::SALE_NEURON_MEMO_RANGE_START;
+    use icrc_ledger_types::Account;
     use std::str::FromStr;
 
     fn create_canister_ids() -> SnsCanisterIds {
@@ -616,7 +616,7 @@ mod test {
         }
 
         Account {
-            owner: canister,
+            owner: canister.0,
             subaccount,
         }
     }
@@ -635,7 +635,7 @@ mod test {
         }
 
         Account {
-            owner: canister,
+            owner: canister.0,
             subaccount,
         }
     }
@@ -714,7 +714,7 @@ mod test {
             Some(SWAP_SUBACCOUNT_NONCE),
         );
         let swap_canister_account = Account {
-            owner: canister_ids.swap,
+            owner: canister_ids.swap.0,
             subaccount: None,
         };
 

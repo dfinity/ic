@@ -5,11 +5,11 @@ use crate::scenario::{
 use crate::{get_index_principal, get_worker_wasm, RunScenarioResult, Scenario, NANO};
 use candid::{Nat, Principal};
 use ic_base_types::PrincipalId;
-use ic_icrc1::Account;
 use ic_icrc1_benchmark_worker::{BatchArgs, BatchResult};
 use ic_icrc1_index::{
     GetAccountTransactionsArgs, GetTransactions, GetTransactionsErr, GetTransactionsResult,
 };
+use icrc_ledger_types::Account;
 
 const USERS: u32 = 3;
 
@@ -83,7 +83,7 @@ pub(crate) async fn run_benchmark() -> RunScenarioResult {
     // TODO
     let user = users[0];
     let account = Account {
-        owner: PrincipalId(user),
+        owner: user,
         subaccount: None,
     };
     let args = GetAccountTransactionsArgs {

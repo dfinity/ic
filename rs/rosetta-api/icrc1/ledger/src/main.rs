@@ -1,22 +1,21 @@
 use candid::candid_method;
 use candid::types::number::Nat;
-use ic_base_types::PrincipalId;
 use ic_canister_log::{declare_log_buffer, export};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::api::stable::{StableReader, StableWriter};
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
 use ic_icrc1::{
-    endpoints::{
-        ArchiveInfo, GetBlocksArgs, GetBlocksResponse, GetTransactionsRequest,
-        GetTransactionsResponse, StandardRecord, TransferArg, TransferError, Value,
-    },
-    Account, Operation, Transaction,
+    endpoints::{StandardRecord, TransferArg, TransferError, Value},
+    Operation, Transaction,
 };
 use ic_icrc1_ledger::{Ledger, LedgerArgument};
 use ic_ledger_canister_core::ledger::{
     apply_transaction, archive_blocks, LedgerAccess, LedgerContext, LedgerData,
 };
 use ic_ledger_core::{timestamp::TimeStamp, tokens::Tokens};
+use icrc_ledger_types::block::{GetBlocksArgs, GetBlocksResponse};
+use icrc_ledger_types::transaction::GetTransactionsResponse;
+use icrc_ledger_types::{Account, ArchiveInfo, GetTransactionsRequest};
 use num_traits::ToPrimitive;
 use std::cell::RefCell;
 
@@ -252,10 +251,9 @@ async fn icrc1_transfer(arg: TransferArg) -> Result<Nat, TransferError> {
             .map(TimeStamp::from_nanos_since_unix_epoch);
 
         let from_account = Account {
-            owner: PrincipalId::from(ic_cdk::api::caller()),
+            owner: ic_cdk::api::caller(),
             subaccount: arg.from_subaccount,
         };
-
         let amount = match arg.amount.0.to_u64() {
             Some(n) => Tokens::from_e8s(n),
             None => {
@@ -351,7 +349,7 @@ fn archives() -> Vec<ArchiveInfo> {
                     .index()
                     .into_iter()
                     .map(|((start, end), canister_id)| ArchiveInfo {
-                        canister_id,
+                        canister_id: canister_id.get().0,
                         block_range_start: Nat::from(start),
                         block_range_end: Nat::from(end),
                     })

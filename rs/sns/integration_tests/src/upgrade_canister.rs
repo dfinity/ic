@@ -49,7 +49,7 @@ fn test_upgrade_canister_proposal_is_successful() {
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
-            .with_ledger_account(user.get_principal_id().into(), alloc)
+            .with_ledger_account(user.get_principal_id().0.into(), alloc)
             .with_nervous_system_parameters(system_params)
             .build();
 
@@ -192,7 +192,7 @@ fn test_upgrade_canister_proposal_execution_fail() {
         };
 
         let mut sns_init_payload = SnsTestsInitPayloadBuilder::new()
-            .with_ledger_account(user.get_principal_id().into(), alloc)
+            .with_ledger_account(user.get_principal_id().0.into(), alloc)
             .with_nervous_system_parameters(system_params)
             .build();
 
@@ -421,7 +421,7 @@ fn test_upgrade_after_state_shrink() {
         };
 
         let sns_init_payload = SnsTestsInitPayloadBuilder::new()
-            .with_ledger_account(neuron_claimer.sender.get_principal_id().into(), alloc)
+            .with_ledger_account(neuron_claimer.sender.get_principal_id().0.into(), alloc)
             .with_nervous_system_parameters(system_params)
             .build();
 

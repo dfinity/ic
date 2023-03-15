@@ -28,6 +28,7 @@ ic-icrc1 = { path = "../../rosetta-api/icrc1" }
 ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
 ic-metrics-encoder = "1"
 icp-ledger = { path = "../../rosetta-api/icp_ledger" }
+icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 json5 = "0.4.1"
 maplit = "1.0.2"
 priority-queue = "1.3.1"

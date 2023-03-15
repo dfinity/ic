@@ -26,7 +26,6 @@ use ic_ckbtc_minter::lifecycle::init::{InitArgs as CkbtcMinterInitArgs, Mode};
 use ic_config::subnet_config::ECDSA_SIGNATURE_FEE;
 use ic_ic00_types::CanisterIdRecord;
 use ic_ic00_types::ProvisionalCreateCanisterWithCyclesArgs;
-use ic_icrc1::Account;
 use ic_icrc1_ledger::{InitArgs, LedgerArgument};
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nns_common::types::{NeuronId, ProposalId};
@@ -40,6 +39,7 @@ use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
 use ic_types_test_utils::ids::subnet_test_id;
 use icp_ledger::ArchiveOptions;
+use icrc_ledger_types::Account;
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use serde::Serialize;
 use slog::{debug, info, Logger};
@@ -252,7 +252,7 @@ pub(crate) async fn install_ledger(
 ) -> CanisterId {
     info!(&logger, "Installing ledger ...");
     let minting_account = Account {
-        owner: minting_user,
+        owner: minting_user.0,
         subaccount: None,
     };
     let init_args = LedgerArgument::Init(InitArgs {

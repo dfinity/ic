@@ -14,6 +14,7 @@ package_group(
 )
 
 DEPENDENCIES = [
+    "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/nervous_system/common",
     "//rs/rosetta-api/icp_ledger",
     "//rs/rosetta-api/icrc1",

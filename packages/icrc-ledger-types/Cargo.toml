@@ -12,6 +12,7 @@ repository = "https://github.com/dfinity/ic"
 
 [dependencies]
 candid = "0.8"
+hex = "0.4.2"
 serde_bytes = "0.11"
 serde = "1"
 sha2 = "0.10"
