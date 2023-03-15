@@ -242,7 +242,8 @@ pub(crate) mod test_utils {
         IDkgTranscriptParams, IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin, SignedIDkgDealing,
     };
     use ic_types::crypto::canister_threshold_sig::{
-        ExtendedDerivationPath, ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigShare,
+        ExtendedDerivationPath, ThresholdEcdsaCombinedSignature, ThresholdEcdsaSigInputs,
+        ThresholdEcdsaSigShare,
     };
     use ic_types::crypto::AlgorithmId;
     use ic_types::malicious_behaviour::MaliciousBehaviour;
@@ -309,6 +310,54 @@ pub(crate) mod test_utils {
     pub(crate) struct TestSigInputs {
         pub(crate) idkg_transcripts: BTreeMap<TranscriptRef, IDkgTranscript>,
         pub(crate) sig_inputs_ref: ThresholdEcdsaSigInputsRef,
+    }
+
+    impl From<&ThresholdEcdsaSigInputs> for TestSigInputs {
+        fn from(inputs: &ThresholdEcdsaSigInputs) -> TestSigInputs {
+            let height = Height::from(0);
+            let quad = inputs.presig_quadruple();
+            let key = inputs.key_transcript();
+            let transcripts = vec![
+                quad.kappa_times_lambda().clone(),
+                quad.kappa_unmasked().clone(),
+                quad.key_times_lambda().clone(),
+                quad.lambda_masked().clone(),
+                key.clone(),
+            ];
+            let mut idkg_transcripts: BTreeMap<TranscriptRef, IDkgTranscript> = Default::default();
+            for t in transcripts {
+                idkg_transcripts.insert(TranscriptRef::new(height, t.transcript_id), t);
+            }
+            let sig_inputs_ref = ThresholdEcdsaSigInputsRef {
+                derivation_path: inputs.derivation_path().clone(),
+                hashed_message: inputs.hashed_message().try_into().unwrap(),
+                nonce: *inputs.nonce(),
+                presig_quadruple_ref: PreSignatureQuadrupleRef {
+                    kappa_unmasked_ref: UnmaskedTranscript::try_from((
+                        height,
+                        quad.kappa_unmasked(),
+                    ))
+                    .unwrap(),
+                    lambda_masked_ref: MaskedTranscript::try_from((height, quad.lambda_masked()))
+                        .unwrap(),
+                    kappa_times_lambda_ref: MaskedTranscript::try_from((
+                        height,
+                        quad.kappa_times_lambda(),
+                    ))
+                    .unwrap(),
+                    key_times_lambda_ref: MaskedTranscript::try_from((
+                        height,
+                        quad.key_times_lambda(),
+                    ))
+                    .unwrap(),
+                },
+                key_transcript_ref: UnmaskedTranscript::try_from((height, key)).unwrap(),
+            };
+            TestSigInputs {
+                idkg_transcripts,
+                sig_inputs_ref,
+            }
+        }
     }
 
     // Test implementation of EcdsaBlockReader to inject the test transcript params
