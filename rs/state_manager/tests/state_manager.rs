@@ -39,6 +39,7 @@ use ic_types::{
 use proptest::prelude::*;
 use std::path::Path;
 use std::sync::Arc;
+use std::time::SystemTime;
 use std::{
     collections::HashSet,
     convert::{TryFrom, TryInto},
@@ -3100,18 +3101,22 @@ fn certified_read_can_fetch_multiple_entries_in_one_go() {
 // and the state to reset to the pre-divergence checkpoint.
 #[test]
 fn report_diverged_checkpoint() {
+    let now_ts = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
     state_manager_crash_test(
         vec![Box::new(|state_manager: StateManagerImpl| {
+            std::thread::sleep(std::time::Duration::from_secs(2));
             let (_, state) = state_manager.take_tip();
             state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
-            wait_for_checkpoint(&state_manager, height(1));
 
             let (_, state) = state_manager.take_tip();
             state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
-            wait_for_checkpoint(&state_manager, height(2));
 
             let (_, state) = state_manager.take_tip();
             state_manager.commit_and_certify(state, height(3), CertificationScope::Full);
+            wait_for_checkpoint(&state_manager, height(3));
 
             // This could only happen if calculating the manifest and certification of height 2
             // completed after reaching height 3
@@ -3142,17 +3147,22 @@ fn report_diverged_checkpoint() {
                 "state_manager_last_diverged_state_timestamp_seconds",
             )
             .unwrap();
-            assert!(last_diverged > 0);
+            assert!(last_diverged > now_ts);
         },
     );
 }
 
 #[test]
 fn report_diverged_state() {
+    let now_ts = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
     state_manager_crash_test(
         vec![Box::new(|state_manager: StateManagerImpl| {
             let (_height, state) = state_manager.take_tip();
             state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
+            std::thread::sleep(std::time::Duration::from_secs(2));
             let mut certification = certify_height(&state_manager, height(1));
             let (_height, state) = state_manager.take_tip();
             state_manager.commit_and_certify(state, height(2), CertificationScope::Metadata);
@@ -3179,7 +3189,7 @@ fn report_diverged_state() {
                 "state_manager_last_diverged_state_timestamp_seconds",
             )
             .unwrap();
-            assert!(last_diverged > 0);
+            assert!(last_diverged > now_ts);
         },
     );
 }
@@ -3224,7 +3234,125 @@ fn remove_too_many_diverged_checkpoints() {
 }
 
 #[test]
-fn remove_too_many_diverged_states() {
+fn remove_old_diverged_checkpoint() {
+    state_manager_crash_test(
+        vec![
+            Box::new(|state_manager: StateManagerImpl| {
+                let (_, state) = state_manager.take_tip();
+                state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+                wait_for_checkpoint(&state_manager, height(1));
+
+                state_manager.report_diverged_checkpoint(height(1))
+            }),
+            Box::new(|state_manager: StateManagerImpl| {
+                // Mark diverged checkpoint as old.
+                // As we are still in state_manager_crash_test() we have to crash in
+                // order for the test not to fail.
+                let path = state_manager
+                    .state_layout()
+                    .diverged_checkpoint_path(height(1));
+                if std::process::Command::new("touch")
+                    .args(["-d", "19700101", path.to_str().unwrap()])
+                    .spawn()
+                    .is_err()
+                {
+                    return;
+                }
+                let (_, state) = state_manager.take_tip();
+                state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+                let (_, state) = state_manager.take_tip();
+                state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+                wait_for_checkpoint(&state_manager, height(2));
+
+                panic!();
+            }),
+        ],
+        |metrics, state_manager| {
+            assert!(state_manager
+                .state_layout()
+                .diverged_checkpoint_heights()
+                .unwrap()
+                .is_empty());
+            let last_diverged = fetch_int_gauge(
+                metrics,
+                "state_manager_last_diverged_state_timestamp_seconds",
+            )
+            .unwrap();
+            assert_eq!(last_diverged, 0);
+        },
+    );
+}
+
+#[test]
+fn checkpoints_have_growing_mtime() {
+    state_manager_test(|_metrics, state_manager| {
+        let checkpoint_age = |h| {
+            state_manager
+                .state_layout()
+                .checkpoint(height(h))
+                .unwrap()
+                .raw_path()
+                .metadata()
+                .unwrap()
+                .modified()
+                .unwrap()
+        };
+        let (_, state) = state_manager.take_tip();
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        wait_for_checkpoint(&state_manager, height(1));
+        std::thread::sleep(std::time::Duration::from_secs(2));
+        let (_, state) = state_manager.take_tip();
+        state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+        wait_for_checkpoint(&state_manager, height(2));
+        assert!(checkpoint_age(1) < checkpoint_age(2));
+    });
+}
+
+#[test]
+fn dont_remove_diverged_checkpoint_if_there_was_no_progress() {
+    state_manager_crash_test(
+        vec![
+            Box::new(|state_manager: StateManagerImpl| {
+                let (_, state) = state_manager.take_tip();
+                state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+                let (_, state) = state_manager.take_tip();
+                state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+                wait_for_checkpoint(&state_manager, height(2));
+
+                state_manager.report_diverged_checkpoint(height(2))
+            }),
+            Box::new(|state_manager: StateManagerImpl| {
+                // Mark diverged checkpoint as old.
+                // As we are still in state_manager_crash_test() we have to crash in
+                // order for the test not to fail.
+                let path = state_manager
+                    .state_layout()
+                    .diverged_checkpoint_path(height(2));
+                if std::process::Command::new("touch")
+                    .args(["-d", "19700101", path.to_str().unwrap()])
+                    .spawn()
+                    .is_err()
+                {
+                    return;
+                }
+
+                panic!();
+            }),
+        ],
+        |_metrics, state_manager| {
+            assert_eq!(
+                vec![height(2)],
+                state_manager
+                    .state_layout()
+                    .diverged_checkpoint_heights()
+                    .unwrap()
+            );
+        },
+    );
+}
+
+#[test]
+fn remove_too_many_diverged_state_markers() {
     fn diverge_state_at(state_manager: StateManagerImpl, divergence: u64) {
         let (_height, state) = state_manager.take_tip();
         state_manager.commit_and_certify(state, height(1), CertificationScope::Metadata);
