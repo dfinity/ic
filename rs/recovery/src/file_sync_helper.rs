@@ -147,10 +147,37 @@ pub fn read_dir(path: &Path) -> RecoveryResult<ReadDir> {
     fs::read_dir(path).map_err(|e| RecoveryError::dir_error(path, e))
 }
 
+pub fn path_exists(path: &Path) -> RecoveryResult<bool> {
+    path.try_exists()
+        .map_err(|e| RecoveryError::IoError(String::from("Cannot check if the path exists"), e))
+}
+
 pub fn remove_dir(path: &Path) -> RecoveryResult<()> {
-    if path.exists() {
+    if path_exists(path)? {
         fs::remove_dir_all(path).map_err(|e| RecoveryError::dir_error(path, e))
     } else {
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use tempfile::tempdir;
+
+    use super::*;
+
+    #[test]
+    fn path_exists_should_return_true() {
+        let tmp = tempdir().expect("Couldn't create a temp test directory");
+
+        assert!(path_exists(tmp.path()).unwrap());
+    }
+
+    #[test]
+    fn path_exists_should_return_false() {
+        let tmp = tempdir().expect("Couldn't create a temp test directory");
+        let non_existing_path = tmp.path().join("non_existing_subdir");
+
+        assert!(!path_exists(&non_existing_path).unwrap());
     }
 }

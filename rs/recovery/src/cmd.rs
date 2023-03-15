@@ -1,5 +1,6 @@
 use clap::Parser;
 use ic_types::ReplicaVersion;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use url::Url;
 
@@ -10,12 +11,12 @@ use crate::{
 };
 
 /// Subcommands for recovery procedures (application subnets, NNS with failover nodes, etc...)
-#[derive(Parser)]
+#[derive(Clone, Debug, PartialEq, Parser, Serialize, Deserialize)]
 pub enum SubCommand {
     /// Application subnet recovery on same or failover nodes.
     AppSubnetRecovery(AppSubnetRecoveryArgs),
     /// NNS recovery on a failover IC.
-    NNSRecoveryFailoverNodes(Box<NNSRecoveryFailoverNodesArgs>),
+    NNSRecoveryFailoverNodes(NNSRecoveryFailoverNodesArgs),
     /// NNS recovery on the same nodes.
     NNSRecoverySameNodes(NNSRecoverySameNodesArgs),
 }
@@ -50,5 +51,5 @@ pub struct RecoveryToolArgs {
     pub test: bool,
 
     #[clap(subcommand)]
-    pub subcmd: SubCommand,
+    pub subcmd: Option<SubCommand>,
 }

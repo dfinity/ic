@@ -1,13 +1,15 @@
-//! Command line interfaces to various subnet recovery processes.
 //! Calls the recovery library.
 use crate::app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs};
 use crate::get_node_heights_from_metrics;
 use crate::nns_recovery_failover_nodes::{NNSRecoveryFailoverNodes, NNSRecoveryFailoverNodesArgs};
 use crate::nns_recovery_same_nodes::{NNSRecoverySameNodes, NNSRecoverySameNodesArgs};
+use crate::recovery_iterator::RecoveryIterator;
+use crate::recovery_state::HasRecoveryState;
 use crate::steps::Step;
 use crate::util;
 use crate::util::subnet_id_from_str;
 use crate::{NeuronArgs, RecoveryArgs};
+use core::fmt::Debug;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_types::{NodeId, ReplicaVersion, SubnetId};
 use slog::{info, warn, Logger};
@@ -34,14 +36,13 @@ pub fn app_subnet_recovery(
     logger: Logger,
     args: RecoveryArgs,
     subnet_recovery_args: AppSubnetRecoveryArgs,
-    test: bool,
+    mut neuron_args: Option<NeuronArgs>,
 ) {
     print_step(&logger, "App Subnet Recovery");
     print_summary(&logger, &args, subnet_recovery_args.subnet_id);
     wait_for_confirmation(&logger);
 
-    let mut neuron_args = None;
-    if !test {
+    if neuron_args.is_none() && !args.test_mode {
         neuron_args = Some(read_neuron_args(&logger));
     }
 
@@ -50,13 +51,10 @@ pub fn app_subnet_recovery(
         args,
         neuron_args,
         subnet_recovery_args,
-        true,
+        /*interactive=*/ true,
     );
 
-    for (step_type, step) in subnet_recovery {
-        print_step(&logger, &format!("{:?}", step_type));
-        execute_step_after_consent(&logger, step);
-    }
+    execute_steps(&logger, subnet_recovery);
 }
 
 /// NNS is recovered on same nodes by:
@@ -74,19 +72,19 @@ pub fn nns_recovery_same_nodes(
     logger: Logger,
     args: RecoveryArgs,
     nns_recovery_args: NNSRecoverySameNodesArgs,
-    test: bool,
 ) {
     print_step(&logger, "NNS Recovery Same Nodes");
     print_summary(&logger, &args, nns_recovery_args.subnet_id);
     wait_for_confirmation(&logger);
 
-    let nns_recovery =
-        NNSRecoverySameNodes::new(logger.clone(), args, nns_recovery_args, test, true);
+    let nns_recovery = NNSRecoverySameNodes::new(
+        logger.clone(),
+        args,
+        nns_recovery_args,
+        /*interactive=*/ true,
+    );
 
-    for (step_type, step) in nns_recovery {
-        print_step(&logger, &format!("{:?}", step_type));
-        execute_step_after_consent(&logger, step);
-    }
+    execute_steps(&logger, nns_recovery);
 }
 
 /// NNS is recovered on failover nodes by:
@@ -104,23 +102,48 @@ pub fn nns_recovery_failover_nodes(
     logger: Logger,
     args: RecoveryArgs,
     nns_recovery_args: NNSRecoveryFailoverNodesArgs,
-    test: bool,
+    mut neuron_args: Option<NeuronArgs>,
 ) {
     print_step(&logger, "NNS Recovery Failover Nodes");
     print_summary(&logger, &args, nns_recovery_args.subnet_id);
     wait_for_confirmation(&logger);
 
-    let mut neuron_args = None;
-    if !test {
+    if neuron_args.is_none() && !args.test_mode {
         neuron_args = Some(read_neuron_args(&logger));
     }
 
-    let nns_recovery =
-        NNSRecoveryFailoverNodes::new(logger.clone(), args, neuron_args, nns_recovery_args, true);
+    let nns_recovery = NNSRecoveryFailoverNodes::new(
+        logger.clone(),
+        args,
+        neuron_args,
+        nns_recovery_args,
+        /*interactive=*/ true,
+    );
 
-    for (step_type, step) in nns_recovery {
-        print_step(&logger, &format!("{:?}", step_type));
-        execute_step_after_consent(&logger, step);
+    execute_steps(&logger, nns_recovery);
+}
+
+fn execute_steps<
+    StepType: Copy + Debug + PartialEq,
+    I: Iterator<Item = StepType>,
+    Steps: HasRecoveryState<StepType = StepType>
+        + RecoveryIterator<StepType, I>
+        + Iterator<Item = (StepType, Box<dyn Step>)>,
+>(
+    logger: &Logger,
+    mut steps: Steps,
+) {
+    if let Some(next_step) = steps.get_next_step() {
+        steps.resume(next_step);
+    }
+
+    while let Some((step_type, step)) = steps.next() {
+        print_step(logger, &format!("{:?}", step_type));
+        execute_step_after_consent(logger, step);
+
+        if let Err(e) = steps.get_state().save() {
+            warn!(logger, "Failed to save the recovery state: {}", e);
+        }
     }
 }
 

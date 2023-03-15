@@ -159,6 +159,7 @@ pub fn test(env: TestEnv) {
         nns_url: parent_nns_node.get_public_url(),
         replica_version: Some(ic_version.clone()),
         key_file: Some(ssh_authorized_priv_keys_dir.join(ADMIN)),
+        test_mode: true,
     };
     let subnet_args = NNSRecoveryFailoverNodesArgs {
         subnet_id: topo_broken_ic.root_subnet_id(),
@@ -171,10 +172,16 @@ pub fn test(env: TestEnv) {
         upload_node: Some(upload_node.get_ip_addr()),
         parent_nns_host_ip: Some(parent_nns_node.get_ip_addr()),
         replacement_nodes: Some(replacement_nodes),
+        next_step: None,
     };
 
-    let mut subnet_recovery =
-        NNSRecoveryFailoverNodes::new(env.logger(), recovery_args, None, subnet_args, false);
+    let mut subnet_recovery = NNSRecoveryFailoverNodes::new(
+        env.logger(),
+        recovery_args,
+        /*neuron_args=*/ None,
+        subnet_args,
+        /*interactive=*/ false,
+    );
 
     // let's take f+1 nodes and break them.
     let f = (SUBNET_SIZE - 1) / 3;
