@@ -397,7 +397,6 @@ mod tests {
             features: Some(SubnetFeatures {
                 canister_sandboxing: false,
                 http_requests: false,
-                bitcoin: None,
                 sev_status: None,
             }),
             ecdsa_config: Some(EcdsaConfig {
@@ -517,7 +516,6 @@ mod tests {
             features: Some(SubnetFeatures {
                 canister_sandboxing: false,
                 http_requests: false,
-                bitcoin: None,
                 sev_status: None,
             }),
             ecdsa_config: Some(EcdsaConfig {
@@ -566,7 +564,6 @@ mod tests {
                     SubnetFeatures {
                         canister_sandboxing: false,
                         http_requests: false,
-                        bitcoin: None,
                         sev_status: None,
                     }
                     .into()
