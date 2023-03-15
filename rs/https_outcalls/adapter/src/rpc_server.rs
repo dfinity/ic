@@ -145,10 +145,14 @@ impl CanisterHttpService for CanisterHttp {
                 *http_req_clone.uri_mut() = http_req.uri().clone();
                 // If we fail to connect through IPv6 we retry with socks.
                 match self.client.request(http_req).await {
-                    Err(e) if e.is_connect() => self.socks_client.request(http_req_clone).await,
+                    Err(e) if e.is_connect() => {
+                        self.metrics.requests_socks.inc();
+                        self.socks_client.request(http_req_clone).await
+                    }
                     resp => resp,
                 }
             } else {
+                self.metrics.requests_socks.inc();
                 self.socks_client.request(http_req).await
             }
         } else {
