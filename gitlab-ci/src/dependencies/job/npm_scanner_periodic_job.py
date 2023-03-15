@@ -31,9 +31,7 @@ REPOS_TO_SCAN = [
         DEFAULT_NODE_VERSION,
     ),
     Repository("ic-js", "https://github.com/dfinity/ic-js", [Project("ic-js", "ic-js")], DEFAULT_NODE_VERSION),
-    Repository(
-        "agent-js", "https://github.com/dfinity/agent-js", [Project("agent-js", "agent-js")], DEFAULT_NODE_VERSION
-    ),
+    Repository("agent-js", "https://github.com/dfinity/agent-js", [Project("agent-js", "agent-js")], 16),
     Repository(
         "cycles-wallet",
         "https://github.com/dfinity/cycles-wallet",
