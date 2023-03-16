@@ -1,8 +1,8 @@
 # Tools for dealing with the partition table (defined in partitions.csv)
 # and disk image building.
 #
-# NOTE: When sourcing, be sure to specify CSV dir, or "", otherwise, arguments
-# to the parent script will be passed.
+# NOTE: When sourcing, be sure to specify CSV dir, otherwise arguments to the
+# parent script will be passed.
 #
 # Arguments:
 #   $1: The folder containing layout CSVs.
@@ -10,8 +10,8 @@
 if [ "$1" != "" ]; then
     CSV_DIR="$1"
 else
-    BASE_DIR=$(dirname "${BASH_SOURCE[0]}")/..
-    CSV_DIR="${BASE_DIR}"/build
+    echo "Directory containing CSV files not specified"
+    exit 1
 fi
 
 function prepare_disk_image() {
@@ -42,12 +42,14 @@ function prepare_lvm_image() {
     truncate --size 0 "$DISK_IMAGE"
     truncate --size "$IMAGE_SIZE_BYTES" "$DISK_IMAGE"
 
-    LOOP_NAME=$(losetup -P -f --show "$DISK_IMAGE")
-    trap "losetup -d $LOOP_NAME" EXIT
+    LOOP_NAME=$(sudo losetup -P -f --show "$DISK_IMAGE")
+    trap "sudo losetup -d $LOOP_NAME" EXIT
 
-    lvm pvcreate "$LOOP_NAME" -u "$PV_UUID" --norestorefile --config "devices { filter=[\"a|${LOOP_NAME}|\", \"r|.*|\"] }"
+    sudo lvm pvcreate "$LOOP_NAME" -u "$PV_UUID" --norestorefile --config "devices { filter=[\"a|${LOOP_NAME}|\", \"r|.*|\"] }"
 
     create_lvm_volumes "$VOLUME_GROUP" "$VG_UUID" "$PV_UUID" "$IMAGE_SIZE_BYTES" "$LOOP_NAME"
+
+    sudo losetup -d $LOOP_NAME
 }
 
 # Write a single partition image into a specific partition of the
@@ -188,7 +190,8 @@ function create_lvm_volumes() {
     local DEV_SIZE=$(("$SIZE" / 512))
     local PE_COUNT=$((("$DEV_SIZE" / 8192) - 1))
 
-    local out=backup
+    out="$(mktemp)"
+    trap "rm -rf $out" EXIT
 
     # Create the header
     cat >>$out <<EOF
@@ -286,10 +289,8 @@ EOF
 }
 EOF
 
-    faketime "2021-5-7 0" lvm vgcfgrestore -f $out "$VOLUME_GROUP" --config "devices { filter=[\"a|${LOOP_NAME}|\", \"r|.*|\"] }"
-    rm $out
-
-    lvm vgscan --mknodes --config "devices { filter=[\"a|${LOOP_NAME}|\", \"r|.*|\"] }"
+    faketime "2021-5-7 0" sudo lvm vgcfgrestore -f $out "$VOLUME_GROUP" --config "devices { filter=[\"a|${LOOP_NAME}|\", \"r|.*|\"] }"
+    rm -rf $out
 }
 
 function read_partition_sizes_by_name() {

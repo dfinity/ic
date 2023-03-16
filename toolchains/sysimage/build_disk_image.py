@@ -158,7 +158,8 @@ def main():
 
     for entry in gpt_entries:
         # Skip over any partitions starting with "B_". These are empty in our
-        # published images, and stay this way a live system upgrades into them.
+        # published images, and stay this way until a live system upgrades
+        # into them.
         if entry["name"].startswith("B_"):
             continue
 

@@ -18,4 +18,4 @@ A_var  , 2841, 2560,AkcyNt-TkgJ-JL7M-UNoP-jWWC-Fhvh-86QyHG,Mutable data partitio
 B_boot , 5401,  256,6gl2Fd-qm1V-9E3W-Arjv-J5mW-RqFO-EgYiNC,Boot partition for system B
 B_root , 5657, 2560,UVBREu-GuBh-VHHb-RUAp-jjhQ-blIy-ez3Tjr,Root partition for system B
 B_var  , 8217, 2560,VNZoZ9-013f-hbEJ-Xd9C-AH6E-vAhI-KkzZ4p,Mutable data partition for system B
-guestos,10777,13056,woW7RT-t6jS-cRo2-uENw-iQXu-ni2u-AZdHpq,GuestOS LVM partition
+guestos,10777,12800,woW7RT-t6jS-cRo2-uENw-iQXu-ni2u-AZdHpq,GuestOS LVM partition

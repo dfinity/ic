@@ -10,9 +10,8 @@ set -eo pipefail
 
 # -----------------------------------------------------------------------
 
-BASE_DIR=$(dirname "${BASH_SOURCE[0]}")
+BASE_DIR=$(dirname "${BASH_SOURCE[0]}")/..
 
-cd "${BASE_DIR}"/../..
-source scripts/partitions.sh hostos/build
+source ${BASE_DIR}/../scripts/partitions.sh ${BASE_DIR}
 
 write_single_lvm_volume $2 hostlvm config $1

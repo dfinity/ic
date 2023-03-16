@@ -288,6 +288,59 @@ disk_image = rule(
     },
 )
 
+def _lvm_image_impl(ctx):
+    tool_file = ctx.files._build_lvm_image_tool[0]
+
+    in_layout = ctx.files.layout[0]
+    vg_name = ctx.attr.vg_name
+    vg_uuid = ctx.attr.vg_uuid
+    pv_uuid = ctx.attr.pv_uuid
+    partitions = ctx.files.partitions
+    out = ctx.actions.declare_file(ctx.label.name)
+
+    partition_files = []
+    for p in partitions:
+        partition_files.append(p.path)
+
+    args = "python3 %s -v %s -n %s -u %s -p %s -o %s" % (
+        tool_file.path,
+        in_layout.path,
+        vg_name,
+        vg_uuid,
+        pv_uuid,
+        out.path,
+    )
+
+    args += " " + " ".join(partition_files)
+
+    ctx.actions.run_shell(
+        inputs = [in_layout] + partitions,
+        outputs = [out],
+        command = args,
+    )
+
+    return [DefaultInfo(files = depset([out]))]
+
+lvm_image = rule(
+    implementation = _lvm_image_impl,
+    attrs = {
+        "layout": attr.label(
+            allow_files = True,
+            mandatory = True,
+        ),
+        "partitions": attr.label_list(
+            allow_files = True,
+        ),
+        "vg_name": attr.string(),
+        "vg_uuid": attr.string(),
+        "pv_uuid": attr.string(),
+        "_build_lvm_image_tool": attr.label(
+            allow_files = True,
+            default = ":build_lvm_image.py",
+        ),
+    },
+)
+
 def _upgrade_image_impl(ctx):
     tool_file = ctx.files._build_upgrade_image_tool[0]
 

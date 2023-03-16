@@ -184,7 +184,12 @@ RUN find /opt -type d -exec chmod 0755 {} \+ && \
     chmod 0755 /opt/ic/bin/* && \
     chmod 0644 /opt/ic/share/*
 
+# NOTE: The following to be deleted once the shell HostOS build path is deleted
 COPY boot /boot
 # Update POSIX permissions in /boot/
 RUN chown root:root /boot
-RUN chmod 0644 /boot/extra_boot_args /boot/version.txt
+RUN chmod 0644 /boot/extra_boot_args
+RUN \
+    if [ -f "/boot/version.txt" ]; then \
+        chmod 0644 /boot/version.txt; \
+    fi
