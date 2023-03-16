@@ -68,7 +68,8 @@ pub(crate) async fn get_wasm(
         .call_canister(
             SNS_WASM_CANISTER_ID,
             "get_wasm",
-            Encode!(&GetWasmRequest { hash: wasm_hash }).expect("Could not encode"),
+            Encode!(&GetWasmRequest { hash: wasm_hash })
+                .map_err(|e| format!("Could not encode GetWasmRequest: {:?}", e))?,
         )
         .await
         .map_err(|(code, message)| {
@@ -172,17 +173,21 @@ pub(crate) async fn get_running_version(
 ) -> Result<Version, String> {
     let response = sns_canisters_summary(env, root_canister_id).await?;
 
-    let root = response.root.unwrap();
-    let governance = response.governance.unwrap();
-    let swap = response.swap.unwrap();
-    let ledger = response.ledger.unwrap();
-    let archives = response.archives;
-    let index = response.index.unwrap();
+    let GetSnsCanistersSummaryResponse {
+        root: Some(root),
+        governance: Some(governance),
+        ledger: Some(ledger),
+        swap: Some(swap),
+        dapps: _,
+        archives,
+        index: Some(index),
+    } = response else {
+        return Err(format!("CanisterSummary could not be fetched for all canisters: {:?}", response));
+    };
 
-    let get_hash = |canister_status: &CanisterSummary, label: &str| {
+    let get_hash = |canister_status: CanisterSummary, label: &str| {
         canister_status
             .status
-            .as_ref()
             .ok_or_else(|| format!("{} had no status", label))
             .and_then(|status| {
                 status
@@ -195,18 +200,20 @@ pub(crate) async fn get_running_version(
     // be interpreted as empty (i.e. no running archives) but won't match any archive hashes
     let archive_wasm_hash = archives
         .into_iter()
-        .map(|canister_summary| get_hash(&canister_summary, "Ledger Archive").unwrap_or_default())
+        .map(|canister_summary| get_hash(canister_summary, "Ledger Archive"))
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
         // Make sure all returned versions are the same.
         .reduce(|x, y| if x == y { x } else { vec![0, 0, 0] })
         .unwrap_or_default();
 
     Ok(Version {
-        root_wasm_hash: get_hash(&root, "Root")?,
-        governance_wasm_hash: get_hash(&governance, "Governance")?,
-        ledger_wasm_hash: get_hash(&ledger, "Ledger")?,
-        swap_wasm_hash: get_hash(&swap, "Swap")?,
+        root_wasm_hash: get_hash(root, "Root")?,
+        governance_wasm_hash: get_hash(governance, "Governance")?,
+        ledger_wasm_hash: get_hash(ledger, "Ledger")?,
+        swap_wasm_hash: get_hash(swap, "Swap")?,
         archive_wasm_hash,
-        index_wasm_hash: get_hash(&index, "Index")?,
+        index_wasm_hash: get_hash(index, "Index")?,
     })
 }
 
@@ -218,7 +225,7 @@ async fn sns_canisters_summary(
     let arg = Encode!(&GetSnsCanistersSummaryRequest {
         update_canister_list: Some(true)
     })
-    .unwrap();
+    .map_err(|e| format!("Could not encode GetSnsCanistersSummaryRequest: {:?}", e))?;
 
     let response = env
         .call_canister(root_canister_id, "get_sns_canisters_summary", arg)
@@ -369,7 +376,10 @@ impl Version {
 
     fn get_hash_for_type(&self, canister_type: &SnsCanisterType) -> Vec<u8> {
         match canister_type {
-            SnsCanisterType::Unspecified => panic!("Cannot happen"),
+            // Unspecified should be impossible given we create the diff we are using,
+            // but we must not panic in a heartbeat, so  we use a value that won't match a
+            // real hash so downstream check will fail.
+            SnsCanisterType::Unspecified => vec![0; 3],
             SnsCanisterType::Root => self.root_wasm_hash.clone(),
             SnsCanisterType::Governance => self.governance_wasm_hash.clone(),
             SnsCanisterType::Ledger => self.ledger_wasm_hash.clone(),
