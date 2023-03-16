@@ -2299,13 +2299,15 @@ async fn test_invalid_proposals_fail() {
 /// We check that the reward event for a proposal happens at the expected time.
 #[tokio::test]
 async fn test_reward_event_proposals_last_longer_than_reward_period() {
+    let genesis_timestamp_seconds = 56;
     let mut fake_driver = fake::FakeDriver::default()
-        .at(56)
+        .at(genesis_timestamp_seconds)
         // To make assertion easy to sanity-check, the total supply of ICPs is chosen
         // so that the reward supply for the first day is 100 (365_250 * 10% / 365.25 = 100).
         // On next days it will be a bit less, but it is still easy to verify by eye
         // the order of magnitude.
         .with_supply(Tokens::from_e8s(365_250));
+    const INITIAL_REWARD_POT_PER_ROUND_E8S: u64 = 100;
     let mut fixture = fixture_two_neurons_second_is_bigger();
     // Proposals last longer than the reward period
     let wait_for_quiet_threshold_seconds = 5 * REWARD_DISTRIBUTION_PERIOD_SECONDS;
@@ -2318,7 +2320,7 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
     );
     let expected_initial_event = RewardEvent {
         day_after_genesis: 0,
-        actual_timestamp_seconds: 56,
+        actual_timestamp_seconds: genesis_timestamp_seconds,
         settled_proposals: vec![],
         distributed_e8s_equivalent: 0,
         total_available_e8s_equivalent: 0,
@@ -2331,6 +2333,7 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
     // Too early: nothing should have changed
     assert_eq!(*gov.latest_reward_event(), expected_initial_event);
     fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS);
+    // We are now 1.5 reward periods (1.5 days) past genesis.
     gov.run_periodic_tasks().now_or_never();
     // A reward event should have happened, albeit an empty one, i.e.,
     // given that no voting took place, no rewards were distributed.
@@ -2345,81 +2348,119 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
             total_available_e8s_equivalent: 100,
         }
     );
-    // Now let's send a proposal
-    gov.make_proposal(
-        &NeuronId { id: 1 },
-        // Must match neuron 1's serialized_id.
-        &principal(1),
-        &Proposal {
-            title: Some("A Reasonable Title".to_string()),
-            summary: "proposal 1".to_string(),
-            action: Some(proposal::Action::Motion(Motion {
-                motion_text: "Thou shall not do bad things with the IC".to_string(),
-            })),
-            ..Default::default()
-        },
-    )
-    .await
-    .unwrap();
-    let pid = ProposalId { id: 1 };
+
+    // Make a proposal.
+    let proposal_id = gov
+        .make_proposal(
+            &NeuronId { id: 1 },
+            // Must match neuron 1's serialized_id.
+            &principal(1),
+            &Proposal {
+                title: Some("A Reasonable Title".to_string()),
+                summary: "proposal 1".to_string(),
+                action: Some(proposal::Action::Motion(Motion {
+                    motion_text: "Thou shall not do bad things with the IC".to_string(),
+                })),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+
     // Let's advance time by two reward periods, but less than the
     // wait-for-quiet. The proposal should not be considered for rewards.
     // Given that two reward periods passed since the last reward event
     // and given that each reward period gives slightly less than 100 maturity
     // total_available_e8s_equivalent is equal to 199 maturity.
     fake_driver.advance_time_by(2 * REWARD_DISTRIBUTION_PERIOD_SECONDS);
+    // We are now at +3.5 reward periods.
     gov.run_periodic_tasks().now_or_never();
-    assert_eq!(
-        *gov.latest_reward_event(),
-        RewardEvent {
-            day_after_genesis: 3,
-            actual_timestamp_seconds: fake_driver.now(),
-            settled_proposals: vec![],
-            distributed_e8s_equivalent: 0,
-            total_available_e8s_equivalent: 199,
-        }
-    );
+    {
+        let fully_elapsed_reward_rounds = 3;
+        let total_available_e8s_equivalent = fully_elapsed_reward_rounds
+            * INITIAL_REWARD_POT_PER_ROUND_E8S
+            // We need to subtract a little bit, because the reward rate
+            // gradually decreases.
+            - 1;
+        assert_eq!(
+            *gov.latest_reward_event(),
+            RewardEvent {
+                day_after_genesis: fully_elapsed_reward_rounds,
+                actual_timestamp_seconds: fake_driver.now(),
+                settled_proposals: vec![],
+                distributed_e8s_equivalent: 0,
+                total_available_e8s_equivalent,
+            }
+        );
+    }
     // let's advance further in time, just before expiration
     fake_driver.advance_time_by(3 * REWARD_DISTRIBUTION_PERIOD_SECONDS - 5);
+    // We are now at +6.5 - epsilon reward periods. Notice that at 6.5 reward
+    // periods, the proposal become rewardable.
     gov.run_periodic_tasks().now_or_never();
     // This should have triggered an empty reward event
     assert_eq!(gov.latest_reward_event().day_after_genesis, 6);
     // let's advance further in time, but not far enough to trigger a reward event
     fake_driver.advance_time_by(10);
+    // We are now at +6.5 + epsilon reward periods.
+
+    // This should generate a RewardEvent, because we now have a rewardable
+    // proposal (i.e. the proposal has reward_status ReadyToSettle).
     gov.run_periodic_tasks().now_or_never();
     assert_eq!(gov.latest_reward_event().day_after_genesis, 6);
     // let's advance far enough to trigger a reward event
     fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS);
     gov.run_periodic_tasks().now_or_never();
-    // Given that one reward period passed since the last reward event,
-    // the total_available_e8s_equivalent is 99, i.e., a bit less than
-    // 365_250 / 365.25 * 10 % = 100, since this is 7 days after genesis.
-    // Given that the second neuron is much bigger (stake 953) compared to the
-    // the first neuron (stake 23) and only the first neuron voted,
-    // total_available_e8s_equivalent is 2, which is 2% (=23/(23+953))
-    // of total_available_e8s_equivalent.
+
+    // Inspect latest_reward_event.
+    let fully_elapsed_reward_rounds = 7;
+    let expected_available_e8s_equivalent =
+        fully_elapsed_reward_rounds * INITIAL_REWARD_POT_PER_ROUND_E8S - 3;
+    let neuron_share = gov
+        .proto
+        .neurons
+        .get(&1)
+        .unwrap()
+        .voting_power(fake_driver.now()) as f64
+        / gov
+            .proto
+            .neurons
+            .values()
+            .map(|neuron| neuron.voting_power(fake_driver.now()))
+            .sum::<u64>() as f64;
+    let expected_distributed_e8s_equivalent =
+        (expected_available_e8s_equivalent as f64 * neuron_share) as u64;
+    assert_eq!(expected_distributed_e8s_equivalent, 15);
     assert_eq!(
         *gov.latest_reward_event(),
         RewardEvent {
-            day_after_genesis: 7,
+            day_after_genesis: fully_elapsed_reward_rounds,
             actual_timestamp_seconds: fake_driver.now(),
-            settled_proposals: vec![pid],
-            // Just copy the distributed_e8s_equivalent from the actual here, we'll
-            // assert value just below
-            distributed_e8s_equivalent: 2,
-            total_available_e8s_equivalent: 99,
+            settled_proposals: vec![proposal_id],
+            distributed_e8s_equivalent: expected_distributed_e8s_equivalent,
+            total_available_e8s_equivalent: expected_available_e8s_equivalent,
         }
     );
-    // There was only one voter (the proposer), which should get rewards according to its stake.
+
+    // Inspect neuron maturities.
+    let proposer_neuron_id = NeuronId { id: 1 };
     assert_eq!(
-        gov.get_neuron(&NeuronId { id: 1 })
+        gov.get_neuron(&proposer_neuron_id)
             .unwrap()
             .maturity_e8s_equivalent,
-        2
+        expected_distributed_e8s_equivalent,
     );
+    for neuron in gov.proto.neurons.values() {
+        if neuron.id == Some(proposer_neuron_id.clone()) {
+            continue;
+        }
+
+        assert_eq!(neuron.maturity_e8s_equivalent, 0, "{:#?}", neuron);
+    }
+
     // The ballots should have been cleared
-    let p = gov.get_proposal_data(pid).unwrap();
-    assert!(p.ballots.is_empty(), "Proposal Info: {:?}", p);
+    let proposal = gov.get_proposal_data(proposal_id).unwrap();
+    assert!(proposal.ballots.is_empty(), "Proposal Info: {:?}", proposal);
 
     // Now let's advance again -- a new empty reward event should happen
     fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS);
@@ -2434,12 +2475,13 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
             total_available_e8s_equivalent: 99,
         }
     );
+
     // Neuron maturity should not have changed
     assert_eq!(
         gov.get_neuron(&NeuronId { id: 1 })
             .unwrap()
             .maturity_e8s_equivalent,
-        2
+        expected_distributed_e8s_equivalent,
     );
 }
 
@@ -2447,8 +2489,9 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
 /// proposal's content, should never be taken into account for voting rewards.
 #[tokio::test]
 async fn test_restricted_proposals_are_not_eligible_for_voting_rewards() {
+    let genesis_timestamp_seconds = 3;
     let mut fake_driver = fake::FakeDriver::default()
-        .at(3)
+        .at(genesis_timestamp_seconds)
         // We need a positive supply to ensure that there can be voting rewards
         .with_supply(Tokens::from_e8s(1_234_567_890));
     let mut fixture = fixture_for_manage_neuron();
@@ -2468,7 +2511,7 @@ async fn test_restricted_proposals_are_not_eligible_for_voting_rewards() {
         *gov.latest_reward_event(),
         RewardEvent {
             day_after_genesis: 0,
-            actual_timestamp_seconds: 3,
+            actual_timestamp_seconds: genesis_timestamp_seconds,
             settled_proposals: vec![],
             distributed_e8s_equivalent: 0,
             total_available_e8s_equivalent: 0,
@@ -2948,6 +2991,8 @@ fn compute_maturities(
         }
     }
     gov.run_periodic_tasks().now_or_never();
+
+    // Inspect latest_reward_event.
     let actual_reward_event = gov.latest_reward_event();
     assert_eq!(
         *actual_reward_event,
