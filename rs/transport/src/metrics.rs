@@ -117,7 +117,7 @@ impl DataPlaneMetrics {
             write_bytes_total: metrics_registry.int_counter_vec(
                 "transport_write_bytes_total",
                 "Total bytes written at the application-level",
-                &[LABEL_CHANNEL_ID],
+                &[LABEL_CHANNEL_ID, LABEL_PEER_ID],
             ),
             send_message_duration: metrics_registry.histogram_vec(
                 "transport_send_message_duration_seconds",
@@ -128,7 +128,7 @@ impl DataPlaneMetrics {
             read_bytes_total: metrics_registry.int_counter_vec(
                 "transport_read_bytes_total",
                 "Total bytes read at the application-level",
-                &[LABEL_CHANNEL_ID],
+                &[LABEL_CHANNEL_ID, LABEL_PEER_ID],
             ),
             message_read_errors_total: metrics_registry.int_counter_vec(
                 "transport_read_message_errors_total",

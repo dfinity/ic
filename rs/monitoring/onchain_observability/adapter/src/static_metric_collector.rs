@@ -1,24 +1,62 @@
 use crate::metrics_parse_error::MetricsCollectError;
+use ic_base_types::{NodeId, PrincipalId};
 use ic_onchain_observability_service::{
     onchain_observability_service_client::OnchainObservabilityServiceClient,
     OnchainObservabilityServiceGetMetricsDataRequest,
 };
-use prometheus_parse::{Scrape, Value};
-use std::time::{Duration, SystemTime};
+use prometheus_parse::{Sample, Scrape, Value, Value::Counter};
+use std::{
+    collections::{HashMap, HashSet},
+    str::FromStr,
+    time::{Duration, SystemTime},
+};
 use tonic::transport::Channel;
 
 const PROCESS_START_TIME_METRIC: &str = "process_start_time_seconds";
+const RETRY_CONNECTION_METRIC: &str = "transport_retry_connection";
+const TOTAL_BYTES_SENT_METRIC: &str = "transport_write_bytes_total";
+const TOTAL_BYTES_RECEIVED_METRIC: &str = "transport_read_bytes_total";
+const PEER_ID_LABEL: &str = "peer_id";
+
 // TODO make these config-based
 const RETRY_INTERVAL_SEC: Duration = Duration::from_secs(30);
 const TIMEOUT_LENGTH_SEC: Duration = Duration::from_secs(30);
 const MAX_ATTEMPTS: u64 = 5;
 
-// TODO(NET-1365) Come up with more generic interface for fetching multiple metrics + consolidate shared code with sampling code
-pub async fn get_replica_last_start_time(
+// Represents the non-sampled metrics collected from replica from an individual gRPC request
+#[derive(Clone, Debug)]
+pub struct CollectedMetrics {
+    // Represents last restart time for the replica providing peer metrics. Can be used to
+    // determine if metric counters were reset since last gRPC query.
+    pub replica_last_start_time: SystemTime,
+    pub peer_metrics: HashMap<NodeId, PeerMetrics>,
+}
+
+// The non-sampled peer metrics obtained from gRPC request.
+#[derive(Clone, Debug)]
+pub struct PeerMetrics {
+    // The number of times a peer connection was disconnected and a reconnect was attempted
+    pub num_retries: u64,
+    // Total bytes the reporting replica received from the peer
+    pub bytes_received: u64,
+    // Total bytes the reporting replica wrote to the peer
+    pub bytes_sent: u64,
+}
+
+// Sends a gRPC request to the replica to collect the relevant metrics.
+// Response will be filtered on peer ids passed as a parameter.  This is to resolve any
+// possible discrepancies between peers from latest registry version (source of truth) and prometheus metrics.
+pub async fn collect_metrics_for_peers(
     mut client: OnchainObservabilityServiceClient<Channel>,
-) -> Result<SystemTime, MetricsCollectError> {
+    peer_ids: &HashSet<NodeId>,
+) -> Result<CollectedMetrics, MetricsCollectError> {
     let request = OnchainObservabilityServiceGetMetricsDataRequest {
-        requested_metrics: vec![PROCESS_START_TIME_METRIC.to_string()],
+        requested_metrics: vec![
+            PROCESS_START_TIME_METRIC.to_string(),
+            RETRY_CONNECTION_METRIC.to_string(),
+            TOTAL_BYTES_SENT_METRIC.to_string(),
+            TOTAL_BYTES_RECEIVED_METRIC.to_string(),
+        ],
     };
 
     for attempt in 0..MAX_ATTEMPTS {
@@ -27,7 +65,7 @@ pub async fn get_replica_last_start_time(
 
         match client.get_metrics_data(tonic_request).await {
             Ok(response) => {
-                return replica_last_start_from_raw_response(response.into_inner().metrics_data)
+                return parse_metrics_response(response.into_inner().metrics_data, peer_ids)
             }
             Err(e) => {
                 // TODO(NET-1338) add metric to track when grpc fails
@@ -46,17 +84,68 @@ pub async fn get_replica_last_start_time(
     ))
 }
 
-// Since metrics endpoint is a giant string, we must manually scrape relevant data
-// Assumes endpoint response is well formatted
-fn replica_last_start_from_raw_response(
+// Takes raw string gRPC response and converts into CollectedMetrics struct
+pub fn parse_metrics_response(
     response: String,
-) -> Result<SystemTime, MetricsCollectError> {
+    peer_ids: &HashSet<NodeId>,
+) -> Result<CollectedMetrics, MetricsCollectError> {
     let lines = response.lines().map(|s| Ok(s.to_string()));
-    let metrics = Scrape::parse(lines).map_err(|_| {
-        MetricsCollectError::RpcRequestFailure("prometheus scrape error".to_string())
+    let scraped_metrics = Scrape::parse(lines).map_err(|_| {
+        MetricsCollectError::MetricParseFailure("prometheus scrape error".to_string())
     })?;
 
-    let replica_last_start_time_vec: Vec<&Value> = metrics
+    let replica_last_start_time = extract_replica_last_start(&scraped_metrics).map_err(|e| {
+        MetricsCollectError::MetricParseFailure(format!(
+            "Failed to parse replica last start: {:?}",
+            e
+        ))
+    })?;
+
+    // If parsing the prometheus metrics data fails, then a log entry will not be created
+    // TODO (NET-1338) Add counter to track metric parse failure
+    let bytes_sent_for_peers =
+        extract_peer_counts_for_metric(&scraped_metrics, TOTAL_BYTES_SENT_METRIC)?;
+
+    let bytes_received_for_peers =
+        extract_peer_counts_for_metric(&scraped_metrics, TOTAL_BYTES_RECEIVED_METRIC)?;
+
+    let retry_count_for_peers =
+        extract_peer_counts_for_metric(&scraped_metrics, RETRY_CONNECTION_METRIC)?;
+
+    let mut peer_metrics_map = HashMap::new();
+
+    for peer_id in peer_ids.iter() {
+        if bytes_received_for_peers.get(peer_id).is_none()
+            || bytes_received_for_peers.get(peer_id).is_none()
+        {
+            // We will skip the peer report if some fields are missing (except num retries, explained below)
+            // However, we can still publish the larger log entry without the peer. Otherwise, a down peer with missing prometheus metrics
+            // for its peer id label (ex. bytes received) could prevent a recently-restarted reporting replica from publishing any data
+            continue;
+        }
+
+        // Unlike other metrics, we will still fill in a missing retry metric as 0. If there are 0 retries to peer connection since reporting replica restart, then
+        // this prometheus metric will not be not be recorded for the given peer label.  Since this is indicative of a healthy peer and could be a common case,
+        // treating this as an error may misrepresent the data
+        let num_retries = *retry_count_for_peers.get(peer_id).unwrap_or(&0);
+
+        let current_peer_metrics = PeerMetrics {
+            num_retries,
+            bytes_received: bytes_received_for_peers[peer_id],
+            bytes_sent: bytes_sent_for_peers[peer_id],
+        };
+        peer_metrics_map.insert(*peer_id, current_peer_metrics);
+    }
+
+    Ok(CollectedMetrics {
+        replica_last_start_time,
+        peer_metrics: peer_metrics_map,
+    })
+}
+
+// Returns the replica last start time from the prometheus scrape
+fn extract_replica_last_start(parse: &Scrape) -> Result<SystemTime, MetricsCollectError> {
+    let replica_last_start_time_vec: Vec<&Value> = parse
         .samples
         .iter()
         .filter(|&sample| sample.metric == PROCESS_START_TIME_METRIC)
@@ -85,3 +174,56 @@ fn replica_last_start_from_raw_response(
         "Replica last start metric key found, but missing value".to_string(),
     ))
 }
+
+fn extract_peer_counts_for_metric(
+    parse: &Scrape,
+    metric_name: &str,
+) -> Result<HashMap<NodeId, u64>, MetricsCollectError> {
+    let filtered_prometheus_scrape: Vec<&Sample> = parse
+        .samples
+        .iter()
+        .filter(|&sample| sample.metric == metric_name)
+        .collect();
+
+    let mut metric_for_peers = HashMap::new();
+
+    if filtered_prometheus_scrape.is_empty() {
+        // A missing metric may or may not be interpreted as an error.  Pass an empty response and let the caller decide
+        return Ok(metric_for_peers);
+    }
+
+    for sample in filtered_prometheus_scrape {
+        let node_id_str = sample.labels.get(PEER_ID_LABEL).ok_or_else(|| {
+            MetricsCollectError::MetricParseFailure(format!(
+                "Missing peer id label for metric {:?}",
+                metric_name
+            ))
+        })?;
+        // convert node id str into NodeId
+        let principal_id = PrincipalId::from_str(node_id_str).map_err(|e| {
+            MetricsCollectError::MetricParseFailure(format!(
+                "Could not convert string to Principal Id {:?}",
+                e
+            ))
+        })?;
+        let node_id = NodeId::from(principal_id);
+
+        let count = match sample.value {
+            Counter(count) | Value::Gauge(count) => {
+                // TODO(NET-1366): Handle any unexpected negative numbers
+                count as u64
+            }
+            _ => {
+                return Err(MetricsCollectError::MetricParseFailure(format!(
+                    "Unsupported value for metric {:?} could not be converted into count",
+                    metric_name
+                )))
+            }
+        };
+        metric_for_peers.insert(node_id, count);
+    }
+
+    Ok(metric_for_peers)
+}
+
+// TODO(NET-1313) add unit test

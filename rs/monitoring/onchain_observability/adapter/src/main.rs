@@ -14,7 +14,7 @@ use ic_interfaces::crypto::{BasicSigner, ErrorReproducibility, KeyManager};
 use ic_logger::{error, info, new_replica_logger_from_config, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_onchain_observability_adapter::{
-    get_replica_last_start_time, Config, Flags, MetricsCollectError, SampledMetricsCollector,
+    collect_metrics_for_peers, Config, Flags, MetricsCollectError, SampledMetricsCollector,
 };
 use ic_onchain_observability_service::onchain_observability_service_client::OnchainObservabilityServiceClient;
 use ic_registry_client::client::{RegistryClient, RegistryClientImpl};
@@ -97,10 +97,13 @@ pub async fn main() {
     let grpc_client =
         setup_onchain_observability_adapter_client(PathBuf::from(config.uds_socket_path));
 
-    let replica_last_start = get_replica_last_start_time(grpc_client.clone())
-        .await
-        .expect("Failed to retrieve replica last start time");
     let peer_ids = get_peer_ids(node_id, &registry_client);
+
+    // TODO(NET-1368) - Collect metrics every 60 minutes, compute delta, and skip log entry if metric collection failed
+    let collected_metrics = collect_metrics_for_peers(grpc_client.clone(), &peer_ids)
+        .await
+        .expect("Failed to retrieve metrics");
+    let replica_last_start = collected_metrics.replica_last_start_time;
 
     let mut sampling_interval = interval(config.sampling_interval_sec);
     sampling_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
@@ -172,6 +175,9 @@ pub async fn main() {
     }
 }
 
+// Currently the adapter only consider the peer ids from the latest registry versions.
+// This may cause some occasional discrepancies between metrics between registry and peers.
+// NET-1352 to track
 fn get_peer_ids(
     current_node_id: NodeId,
     registry_client: &Arc<RegistryClientImpl>,
