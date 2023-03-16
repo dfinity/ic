@@ -124,6 +124,7 @@ bazel-system-test-hourly:
     - .bazel-rules-post-master
   variables:
     BAZEL_TEST_TAG_FILTERS: "system_test_hourly"
+  timeout: 120 minutes
 
 bazel-system-test-hotfix:
   extends:
