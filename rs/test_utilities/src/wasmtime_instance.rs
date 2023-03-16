@@ -3,7 +3,9 @@ use std::sync::Arc;
 
 use ic_config::{flag_status::FlagStatus, subnet_config::SchedulerConfig};
 use ic_embedders::{wasm_utils::compile, wasmtime_embedder::WasmtimeInstance, WasmtimeEmbedder};
-use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory, SystemApi};
+use ic_interfaces::execution_environment::{
+    ExecutionMode, HypervisorError, SubnetAvailableMemory, SystemApi,
+};
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{Global, Memory, NetworkTopology, PageMap};
@@ -24,6 +26,7 @@ use crate::{
 pub const DEFAULT_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(5_000_000_000);
 
 pub struct WasmtimeInstanceBuilder {
+    wasm: Vec<u8>,
     wat: String,
     globals: Option<Vec<Global>>,
     api_type: ic_system_api::ApiType,
@@ -36,6 +39,7 @@ pub struct WasmtimeInstanceBuilder {
 impl Default for WasmtimeInstanceBuilder {
     fn default() -> Self {
         Self {
+            wasm: vec![],
             wat: "".to_string(),
             globals: None,
             api_type: ic_system_api::ApiType::init(mock_time(), vec![], user_test_id(24).get()),
@@ -63,6 +67,10 @@ impl WasmtimeInstanceBuilder {
         }
     }
 
+    pub fn with_wasm(self, wasm: Vec<u8>) -> Self {
+        Self { wasm, ..self }
+    }
+
     pub fn with_globals(self, globals: Vec<Global>) -> Self {
         Self {
             globals: Some(globals),
@@ -88,13 +96,19 @@ impl WasmtimeInstanceBuilder {
         }
     }
 
-    pub fn build(self) -> WasmtimeInstance<SystemApiImpl> {
+    pub fn try_build(
+        self,
+    ) -> Result<WasmtimeInstance<SystemApiImpl>, (HypervisorError, SystemApiImpl)> {
         let log = no_op_logger();
-        let wasm = wat::parse_str(self.wat).expect("Failed to convert wat to wasm");
+
+        let wasm = if !self.wat.is_empty() {
+            wat::parse_str(self.wat).expect("Failed to convert wat to wasm")
+        } else {
+            self.wasm
+        };
 
         let embedder = WasmtimeEmbedder::new(self.config, log.clone());
-        let (compiled, result) = compile(&embedder, &BinaryEncodedWasm::new(wasm));
-        result.expect("Failed to compile wat in WasmtimeInstance");
+        let (compiled, _result) = compile(&embedder, &BinaryEncodedWasm::new(wasm));
 
         let cycles_account_manager = CyclesAccountManagerBuilder::new().build();
         let system_state = SystemStateBuilder::default().build();
@@ -135,7 +149,7 @@ impl WasmtimeInstanceBuilder {
             log,
         );
         let instruction_limit = api.slice_instruction_limit();
-        let mut instance = embedder
+        let instance = embedder
             .new_instance(
                 canister_test_id(1),
                 &compiled,
@@ -151,9 +165,17 @@ impl WasmtimeInstanceBuilder {
                 ModificationTracking::Track,
                 api,
             )
-            .map_err(|r| r.0)
-            .expect("Failed to create instance");
-        instance.set_instruction_counter(i64::try_from(instruction_limit.get()).unwrap());
+            .map(|mut result| {
+                result.set_instruction_counter(i64::try_from(instruction_limit.get()).unwrap());
+                result
+            });
         instance
+    }
+
+    pub fn build(self) -> WasmtimeInstance<SystemApiImpl> {
+        let instance = self.try_build();
+        instance
+            .map_err(|r| r.0)
+            .expect("Failed to create instance")
     }
 }

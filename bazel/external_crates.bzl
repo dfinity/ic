@@ -1166,6 +1166,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             "wasm-encoder": crate.spec(
                 version = "^0.20.0",
             ),
+            "wasm-smith": crate.spec(
+                version = "^0.12.4",
+            ),
             "wasmparser": crate.spec(
                 version = "^0.95.0",
             ),
