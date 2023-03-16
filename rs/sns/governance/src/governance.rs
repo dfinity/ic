@@ -2533,7 +2533,7 @@ impl Governance {
         self.proto.parameters.as_ref()
     }
 
-    /// Returns the nervous system parameters or panics
+    /// Returns the NervousSystemParameters or panics
     fn nervous_system_parameters_or_panic(&self) -> &NervousSystemParameters {
         self.nervous_system_parameters()
             .expect("NervousSystemParameters not present")
