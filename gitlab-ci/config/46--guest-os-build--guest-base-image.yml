@@ -72,7 +72,11 @@ build-push-base-images:
          docker push "${IMAGE}":"${TAG}"
          docker push "${IMAGE}":latest
 
+         # The digest may contain the localhost entry
          NEW_REF="$(docker inspect --format='{{index .RepoDigests 0}}' "${IMAGE}":"${TAG}")"
+         if [[ ${NEW_REF} == localhost* ]]; then
+             NEW_REF="$(docker inspect --format='{{index .RepoDigests 1}}' "${IMAGE}":"${TAG}")"
+         fi
          echo "${NEW_REF}" > "${CI_PROJECT_DIR}/${FILE}"
      done
 
