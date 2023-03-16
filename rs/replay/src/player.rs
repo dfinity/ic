@@ -924,7 +924,6 @@ impl Player {
                 self.consensus_pool.as_mut().unwrap(),
                 &mut height_to_batches,
                 self.subnet_id,
-                self.state_manager.latest_state_height(),
                 self.validator.as_ref().unwrap(),
                 &mut dkg_manager,
                 &mut invalid_artifacts,
@@ -967,13 +966,6 @@ impl Player {
                         new_version, self.registry.get_latest_version()
                     );
                     println!("Updated the registry.");
-                }
-                backup::ExitPoint::StateBehind(certified_height) => {
-                    assert!(
-                        certified_height <= self.state_manager.latest_state_height(),
-                        "The state manager didn't catch up with the expected certified height"
-                    );
-                    self.state_manager.remove_states_below(certified_height);
                 }
                 backup::ExitPoint::Done => {
                     println!(

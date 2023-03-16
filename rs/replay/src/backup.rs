@@ -65,9 +65,6 @@ pub(crate) enum ExitPoint {
     /// block with a validation context referencing a newer version than
     /// locally known.
     NewerRegistryVersion(RegistryVersion),
-    /// We restored all artifacts before a block with the certified height in
-    /// the validation context higher than the last state height.
-    StateBehind(Height),
     /// Can't proceed because artifact validation failed after the given height.
     ValidationIncomplete(Height),
 }
@@ -167,7 +164,6 @@ pub(crate) fn deserialize_consensus_artifacts(
     pool: &mut ConsensusPoolImpl,
     height_to_batches: &mut BTreeMap<Height, HeightArtifacts>,
     subnet_id: SubnetId,
-    latest_state_height: Height,
     validator: &ReplayValidator,
     dkg_manager: &mut DkgKeyManager,
     invalid_artifacts: &mut Vec<InvalidArtifact>,
@@ -256,12 +252,6 @@ pub(crate) fn deserialize_consensus_artifacts(
             .unwrap_or_else(|err| panic!("{}", deserialization_error(file, err)));
 
             let validation_context = &proposal.content.as_ref().context;
-            let certified_height = validation_context.certified_height;
-            // If the block references newer execution height than we have, we exit.
-            if certified_height > latest_state_height {
-                height_to_batches.insert(height, height_artifacts);
-                return ExitPoint::StateBehind(certified_height);
-            }
 
             let block_registry_version = validation_context.registry_version;
             if block_registry_version > registry_client.get_latest_version() {
