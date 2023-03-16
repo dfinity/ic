@@ -4,9 +4,7 @@
 use ic_interfaces::{
     artifact_manager::{ArtifactProcessor, ProcessingResult},
     artifact_pool::{ChangeSetProducer, MutablePool, UnvalidatedArtifact},
-    canister_http::{
-        CanisterHttpChangeAction, CanisterHttpChangeSet, CanisterHttpPool, CanisterHttpPoolManager,
-    },
+    canister_http::{CanisterHttpChangeAction, CanisterHttpChangeSet, CanisterHttpPool},
     certification::{
         CertificationPool, Certifier, ChangeAction as CertificationChangeAction,
         ChangeSet as CertificationChangeSet,
@@ -531,21 +529,18 @@ impl<PoolEcdsa: MutablePool<EcdsaArtifact, EcdsaChangeSet> + Send + Sync + 'stat
 }
 
 pub struct CanisterHttpProcessor<PoolCanisterHttp> {
-    consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
     canister_http_pool: Arc<RwLock<PoolCanisterHttp>>,
-    client: Arc<RwLock<dyn CanisterHttpPoolManager + Sync + 'static>>,
+    client: Box<dyn ChangeSetProducer<PoolCanisterHttp, ChangeSet = CanisterHttpChangeSet>>,
     log: ReplicaLogger,
 }
 
 impl<PoolCanisterHttp> CanisterHttpProcessor<PoolCanisterHttp> {
     pub fn new(
-        consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
         canister_http_pool: Arc<RwLock<PoolCanisterHttp>>,
-        client: Arc<RwLock<dyn CanisterHttpPoolManager + Sync + 'static>>,
+        client: Box<dyn ChangeSetProducer<PoolCanisterHttp, ChangeSet = CanisterHttpChangeSet>>,
         log: ReplicaLogger,
     ) -> Self {
         Self {
-            consensus_pool_cache,
             canister_http_pool,
             client,
             log,
@@ -579,11 +574,7 @@ impl<
         let mut adverts = Vec::new();
         let change_set = {
             let canister_http_pool = self.canister_http_pool.read().unwrap();
-            let change_set = self
-                .client
-                .write()
-                .unwrap()
-                .on_state_change(self.consensus_pool_cache.as_ref(), &*canister_http_pool);
+            let change_set = self.client.on_state_change(&*canister_http_pool);
 
             for change_action in change_set.iter() {
                 match change_action {

@@ -484,26 +484,24 @@ pub fn create_ecdsa_handlers<
 pub fn create_https_outcalls_handlers<
     PoolCanisterHttp: MutablePool<CanisterHttpArtifact, CanisterHttpChangeSet>
         + GossipPool<CanisterHttpArtifact>
-        + CanisterHttpPool
         + Send
         + Sync
+        + CanisterHttpPool
         + 'static,
-    C: CanisterHttpPoolManager + Sync + 'static,
+    C: ChangeSetProducer<PoolCanisterHttp, ChangeSet = CanisterHttpChangeSet> + 'static,
     G: ArtifactPoolDescriptor<CanisterHttpArtifact, PoolCanisterHttp> + Send + Sync + 'static,
     S: Fn(AdvertSendRequest<CanisterHttpArtifact>) + Send + 'static,
 >(
     send_advert: S,
     (pool_manager, canister_http_gossip): (C, G),
     time_source: Arc<SysTimeSource>,
-    consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
     canister_http_pool: Arc<RwLock<PoolCanisterHttp>>,
     log: ReplicaLogger,
     metrics_registry: MetricsRegistry,
 ) -> ArtifactClientHandle<CanisterHttpArtifact> {
     let client = processors::CanisterHttpProcessor::new(
-        consensus_pool_cache.clone(),
         canister_http_pool.clone(),
-        Arc::new(RwLock::new(pool_manager)),
+        Box::new(pool_manager),
         log,
     );
     let manager = ArtifactProcessorHandle::new(
