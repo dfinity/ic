@@ -727,7 +727,14 @@ fn rm_allowed_principal(principal: Principal) -> ModifyAllowedPrincipalResponse 
         });
     }
 
-    ALLOWED_PRINCIPALS.with(|m| m.borrow_mut().remove(&principal.to_text().into()));
+    if ALLOWED_PRINCIPALS
+        .with(|m| m.borrow_mut().remove(&principal.to_text().into()))
+        .is_none()
+    {
+        return ModifyAllowedPrincipalResponse::Err(ModifyAllowedPrincipalError::UnexpectedError(
+            "principal not found".to_string(),
+        ));
+    };
 
     ModifyAllowedPrincipalResponse::Ok(())
 }
