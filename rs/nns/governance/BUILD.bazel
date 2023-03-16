@@ -36,6 +36,7 @@ DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:comparable",
     "@crate_index//:ic-metrics-encoder",
+    "@crate_index//:itertools",
     "@crate_index//:prost",
     "@crate_index//:rand_0_8_4",
     "@crate_index//:rand_chacha_0_3_1",

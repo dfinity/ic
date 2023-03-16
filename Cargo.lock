@@ -7251,6 +7251,7 @@ dependencies = [
  "ic-test-utilities-compare-dirs",
  "ic-types",
  "icp-ledger",
+ "itertools",
  "lazy_static",
  "maplit",
  "on_wire",

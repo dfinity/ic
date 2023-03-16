@@ -1,5 +1,6 @@
 use crate::pb::v1::{
     add_or_remove_node_provider::Change,
+    governance::GovernanceCachedMetrics,
     governance::{
         neuron_in_flight_command::{Command as InFlightCommand, SyncCommand},
         NeuronInFlightCommand,
@@ -11,10 +12,13 @@ use crate::pb::v1::{
         ClaimOrRefresh, Command, NeuronIdOrSubaccount,
     },
     manage_neuron_response,
+    manage_neuron_response::{MergeMaturityResponse, StakeMaturityResponse},
     neuron::DissolveState,
     neuron::Followees,
     proposal,
+    proposal::Action,
     reward_node_provider::RewardMode,
+    reward_node_provider::RewardToAccount,
     settle_community_fund_participation, swap_background_information, Ballot, BallotInfo,
     DerivedProposalInformation, ExecuteNnsFunction, Governance as GovernanceProto, GovernanceError,
     KnownNeuron, KnownNeuronData, ListKnownNeuronsResponse, ListNeurons, ListNeuronsResponse,
@@ -23,8 +27,9 @@ use crate::pb::v1::{
     NeuronState, NnsFunction, NodeProvider, OpenSnsTokenSwap, Proposal, ProposalData, ProposalInfo,
     ProposalRewardStatus, ProposalStatus, RewardEvent, RewardNodeProvider, RewardNodeProviders,
     SetSnsTokenSwapOpenTimeWindow, SettleCommunityFundParticipation, SwapBackgroundInformation,
-    Tally, Topic, UpdateNodeProvider, Vote,
+    Tally, Topic, UpdateNodeProvider, Vote, WaitForQuietState,
 };
+
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::convert::{TryFrom, TryInto};
@@ -35,39 +40,37 @@ use std::string::ToString;
 
 use async_trait::async_trait;
 use candid::{Decode, Encode};
+use cycles_minting_canister::IcpXdrConversionRateCertifiedResponse;
+use dfn_candid::candid_one;
+use dfn_core::api::spawn;
 use dfn_protobuf::ToProto;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_nns_common::pb::v1::{NeuronId, ProposalId};
-use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
+use ic_crypto_sha::Sha256;
+use ic_nervous_system_common::{
+    ledger, ledger::IcpLedger, validate_proposal_url, NervousSystemError,
+};
+use ic_nns_common::{
+    pb::v1::{NeuronId, ProposalId},
+    types::UpdateIcpXdrConversionRatePayload,
+};
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID,
     LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
 use ic_protobuf::registry::dc::v1::AddOrRemoveDataCentersProposalPayload;
 use ic_sns_root::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
-use ic_sns_swap::pb::v1 as sns_swap_pb;
+use ic_sns_swap::pb::v1::{self as sns_swap_pb, Lifecycle, RestoreDappControllersRequest};
 use ic_sns_wasm::pb::v1::{ListDeployedSnsesRequest, ListDeployedSnsesResponse};
-use icp_ledger::{AccountIdentifier, Subaccount, DEFAULT_TRANSFER_FEE};
-use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
+use icp_ledger::{
+    AccountIdentifier, Subaccount, Tokens, DEFAULT_TRANSFER_FEE, TOKEN_SUBDIVIDABLE_BY,
+};
+use itertools::Itertools;
+use registry_canister::{
+    mutations::do_add_node_operator::AddNodeOperatorPayload, pb::v1::NodeProvidersMonthlyXdrRewards,
+};
 
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
-
-use crate::pb::v1::governance::GovernanceCachedMetrics;
-use crate::pb::v1::manage_neuron_response::{MergeMaturityResponse, StakeMaturityResponse};
-use crate::pb::v1::proposal::Action;
-use crate::pb::v1::reward_node_provider::RewardToAccount;
-use crate::pb::v1::WaitForQuietState;
-use cycles_minting_canister::IcpXdrConversionRateCertifiedResponse;
-use dfn_candid::candid_one;
-use dfn_core::api::spawn;
-use ic_crypto_sha::Sha256;
-use ic_nervous_system_common::{
-    ledger, ledger::IcpLedger, validate_proposal_url, NervousSystemError,
-};
-use ic_sns_swap::pb::v1::{Lifecycle, RestoreDappControllersRequest};
-use icp_ledger::{Tokens, TOKEN_SUBDIVIDABLE_BY};
-use registry_canister::pb::v1::NodeProvidersMonthlyXdrRewards;
 
 // A few helper constants for durations.
 pub const ONE_DAY_SECONDS: u64 = 24 * 60 * 60;
@@ -4266,6 +4269,7 @@ impl Governance {
         ListProposalInfoResponse { proposal_info }
     }
 
+    // TODO: This is slow, because it scans all proposals.
     fn ready_to_be_settled_proposal_ids(&self) -> impl Iterator<Item = ProposalId> + '_ {
         let now = self.env.now();
         self.proto
@@ -6864,10 +6868,10 @@ impl Governance {
 
     /// Return `true` if rewards should be distributed, `false` otherwise
     fn should_distribute_rewards(&self) -> bool {
+        // Enough time has elapsed.
         let reward_available_at = self.proto.genesis_timestamp_seconds
             + (self.latest_reward_event().day_after_genesis + 1)
                 * REWARD_DISTRIBUTION_PERIOD_SECONDS;
-
         self.env.now() >= reward_available_at
     }
 
@@ -6880,22 +6884,25 @@ impl Governance {
     /// * Associate those proposals to the new reward event
     fn distribute_rewards(&mut self, supply: Tokens) {
         println!("{}distribute_rewards. Supply: {:?}", LOG_PREFIX, supply);
+        let now = self.env.now();
 
-        let day_after_genesis = (self.env.now() - self.proto.genesis_timestamp_seconds)
-            / REWARD_DISTRIBUTION_PERIOD_SECONDS;
-
+        // Which reward rounds (i.e. days) require rewards? (Usually, there is
+        // just one of these, but we support rewarding many consecutive rounds.)
+        let day_after_genesis =
+            (now - self.proto.genesis_timestamp_seconds) / REWARD_DISTRIBUTION_PERIOD_SECONDS;
         if day_after_genesis <= self.latest_reward_event().day_after_genesis {
             // This may happen, in case consider_distributing_rewards was called
             // several times at almost the same time. This is
             // harmless, just abandon.
             return;
         }
-
         if day_after_genesis > 1 + self.latest_reward_event().day_after_genesis {
             println!(
-                "{}Some reward distribution should have happened, but were missed.\
-                      It is now {} full days since IC genesis, and the last distribution\
-                      nominally happened at {} full days since IC genesis.",
+                "{}More than one reward round (i.e. days) has passed since the last \
+                 RewardEvent. This could mean that rewards are being rolled over, \
+                 or earlier rounds were missed. It is now {} full days since \
+                 IC genesis, and the last distribution nominally happened at {} \
+                 full days since IC genesis.",
                 LOG_PREFIX,
                 day_after_genesis,
                 self.latest_reward_event().day_after_genesis
@@ -6906,7 +6913,25 @@ impl Governance {
             .map(crate::reward::rewards_pool_to_distribute_in_supply_fraction_for_one_day)
             .sum();
 
-        let total_available_e8s_equivalent_float = (supply.get_e8s() as f64) * fraction;
+        let rolling_over_from_previous_reward_event_e8s_equivalent = self
+            .proto
+            .latest_reward_event
+            .as_ref()
+            .unwrap_or(&RewardEvent::default())
+            .rollover_e8s_equivalent();
+        let total_available_e8s_equivalent_float = (supply.get_e8s() as f64) * fraction
+            + rolling_over_from_previous_reward_event_e8s_equivalent as f64;
+
+        let considered_proposals: Vec<ProposalId> =
+            self.ready_to_be_settled_proposal_ids().collect();
+        println!(
+            "{}distributing voting rewards for the following proposals: {}",
+            LOG_PREFIX,
+            considered_proposals
+                .iter()
+                .map(|id| format!("{}", id.id))
+                .join(", "),
+        );
         // The "actually_distributed_e8s_equivalent" recorded in the RewardEvent
         // protoshould match exactly the sum of the distributed integer e8
         // equivalents. This amount has to be computed bottom-up and is dependent
@@ -6914,9 +6939,9 @@ impl Governance {
         // reward weight of proposals being voted on.
         let mut actually_distributed_e8s_equivalent = 0_u64;
 
-        let considered_proposals: Vec<ProposalId> =
-            self.ready_to_be_settled_proposal_ids().collect();
-
+        // Sum up "voting rights", which determine the share of the pot earned
+        // by a neuron.
+        //
         // Construct map voters -> total _used_ voting rights for
         // considered proposals as well as the overall total voting
         // power on considered proposals, whether or not this voting
@@ -6942,39 +6967,54 @@ impl Governance {
             (voters_to_used_voting_right, total_voting_rights)
         };
 
-        for (neuron_id, used_voting_rights) in voters_to_used_voting_right {
-            match self.get_neuron_mut(&neuron_id) {
-                Ok(mut neuron) => {
-                    // Note that "as" rounds toward zero; this is the desired
-                    // behavior here. Also note that `total_voting_rights` has
-                    // to be positive because (1) voters_to_used_voting_right
-                    // is non-empty (otherwise we wouldn't be here in the
-                    // first place) and (2) the voting power of all ballots is
-                    // positive (non-zero).
-                    let reward = (used_voting_rights * total_available_e8s_equivalent_float
-                        / total_voting_rights) as u64;
-                    // If the neuron has auto-stake-maturity on, add the new maturity to the
-                    // staked maturity, otherwise add it to the un-staked maturity.
-                    if neuron.auto_stake_maturity.unwrap_or(false) {
-                        neuron.staked_maturity_e8s_equivalent =
-                            Some(neuron.staked_maturity_e8s_equivalent.unwrap_or(0) + reward);
-                    } else {
-                        neuron.maturity_e8s_equivalent += reward;
+        // Increment neuron maturities (and actually_distributed_e8s_equivalent).
+        //
+        // The point of this guard is to avoid divide by zero. Not sure if that
+        // is theoretically possible, but even if it isn't, it might occur due
+        // to some bug.
+        if total_voting_rights == 0.0 {
+            println!(
+                "{}Warning: total_voting_rights == 0, even though considered_proposals \
+                 is nonempty (see earlier log).",
+                LOG_PREFIX,
+            );
+        } else {
+            for (neuron_id, used_voting_rights) in voters_to_used_voting_right {
+                match self.get_neuron_mut(&neuron_id) {
+                    Ok(mut neuron) => {
+                        // Note that " as u64" rounds toward zero; this is the desired
+                        // behavior here. Also note that `total_voting_rights` has
+                        // to be positive because (1) voters_to_used_voting_right
+                        // is non-empty (otherwise we wouldn't be here in the
+                        // first place) and (2) the voting power of all ballots is
+                        // positive (non-zero).
+                        let reward = (used_voting_rights * total_available_e8s_equivalent_float
+                            / total_voting_rights) as u64;
+                        // If the neuron has auto-stake-maturity on, add the new maturity to the
+                        // staked maturity, otherwise add it to the un-staked maturity.
+                        if neuron.auto_stake_maturity.unwrap_or(false) {
+                            neuron.staked_maturity_e8s_equivalent =
+                                Some(neuron.staked_maturity_e8s_equivalent.unwrap_or(0) + reward);
+                        } else {
+                            neuron.maturity_e8s_equivalent += reward;
+                        }
+                        actually_distributed_e8s_equivalent += reward;
                     }
-                    actually_distributed_e8s_equivalent += reward;
+                    Err(e) => println!(
+                        "{}Cannot find neuron {}, despite having voted with power {} \
+                            in the considered reward period. The reward that should have been \
+                            distributed to this neuron is simply skipped, so the total amount \
+                            of distributed reward for this period will be lower than the maximum \
+                            allowed. Underlying error: {:?}.",
+                        LOG_PREFIX, neuron_id.id, used_voting_rights, e
+                    ),
                 }
-                Err(e) => println!(
-                    "{}Cannot find neuron {}, despite having voted with power {} \
-                        in the considered reward period. The reward that should have been \
-                        distributed to this neuron is simply skipped, so the total amount \
-                        of distributed reward for this period will be lower than the maximum \
-                        allowed. Underlying error: {:?}.",
-                    LOG_PREFIX, neuron_id.id, used_voting_rights, e
-                ),
             }
         }
 
-        let now = self.env.now();
+        // Mark the proposals that we just considered as "rewarded". More
+        // formally, causes their reward_status to be Settled; whereas, before,
+        // they were in the ReadyToSettle state.
         for pid in considered_proposals.iter() {
             // Before considering a proposal for reward, it must be fully processed --
             // because we're about to clear the ballots, so no further processing will be
@@ -7005,6 +7045,14 @@ impl Governance {
                 }
             };
         }
+
+        if considered_proposals.is_empty() {
+            println!(
+                "{}Voting rewards will roll over, because no there were proposals \
+                 that needed rewards (i.e. have reward_status == ReadyToSettle)",
+                LOG_PREFIX,
+            );
+        };
 
         self.proto.latest_reward_event = Some(RewardEvent {
             day_after_genesis,

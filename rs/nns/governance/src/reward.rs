@@ -14,6 +14,7 @@
 //! * Floating point makes code easier since the reward pool is specified as a
 //!   fraction of the total ICP supply.
 
+use crate::pb::v1::RewardEvent;
 use std::ops::{Add, Div, Mul, Sub};
 
 // ---- NON-BOILERPLATE CODE STARTS HERE ----------------------------------
@@ -94,6 +95,27 @@ pub fn rewards_pool_to_distribute_in_supply_fraction_for_one_day(
     let rate = FINAL_VOTING_REWARD_RELATIVE_RATE + variable_rate;
 
     rate * ONE_DAY
+}
+
+impl RewardEvent {
+    // The amount from self that should go into some future (nonempty)
+    // RewardEvent.
+    //
+    // Of course, if self is nonempty (i.e. settled_proposals is nonempty), then
+    // this returns 0.
+    //
+    // Otherwise, this returns total_available_e8s_equivalent.
+    //
+    // (Not to be confused with the amount that came from an earlier RewardEvent
+    // into this one. self is the source of the roll over in this method, not
+    // destination.)
+    pub(crate) fn rollover_e8s_equivalent(&self) -> u64 {
+        if self.settled_proposals.is_empty() {
+            self.total_available_e8s_equivalent
+        } else {
+            0
+        }
+    }
 }
 
 // ---- REAL-CODE ENDS HERE ---------------------------------------------
