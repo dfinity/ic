@@ -15114,6 +15114,7 @@ dependencies = [
  "bitcoincore-rpc",
  "candid",
  "canister-test",
+ "certificate_orchestrator_interface",
  "chrono",
  "clap 3.2.23",
  "crossbeam-channel",
