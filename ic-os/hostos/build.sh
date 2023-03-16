@@ -50,13 +50,15 @@ if [ "${ROOT_PASSWORD}" != "" -a "${BUILD_TYPE}" != "dev" ]; then
 fi
 
 BASE_DIR=$(dirname "${BASH_SOURCE[0]}")
-TMPDIR=$(mktemp -d)
 SCRIPTS_DIR=$BASE_DIR/../scripts
 TOOL_DIR="${BASE_DIR}/../../toolchains/sysimage/"
 
-docker version
+TMPDIR=$(mktemp -d)
+trap "rm -rf $TMPDIR" exit
 
-trap "rm -rf esp.img.tar grub.img.tar rootfs.tar" EXIT
+source "${SCRIPTS_DIR}/partitions.sh" ${BASE_DIR}
+
+docker version
 
 BASE_IMAGE="$(cat ${BASE_DIR}/rootfs/docker-base.${BUILD_TYPE})"
 
@@ -65,27 +67,69 @@ echo "Set version"
 echo "${VERSION}" >"${BASE_DIR}/rootfs/opt/ic/share/version.txt"
 echo "${VERSION}" >"${BASE_DIR}/rootfs/boot/version.txt"
 
+# Build bootloader image
 BOOTLOADER_TAR="${TMPDIR}/bootloader.tar"
-ESP_IMG_TAR="${BASE_DIR}/esp.img.tar"
-GRUB_IMG_TAR="${BASE_DIR}/grub.img.tar"
 $BASE_DIR/bootloader/build-bootloader-tree.sh -o ${BOOTLOADER_TAR}
+
+# Build main image
+ROOTFS_TAR=${TMPDIR}/rootfs.tar
+$SCRIPTS_DIR/build-docker-save.sh \
+    --build-arg BASE_IMAGE="${BASE_IMAGE}" \
+    --build-arg ROOT_PASSWORD="${ROOT_PASSWORD}" \
+    $BASE_DIR/rootfs >${ROOTFS_TAR}
+
+# Build bootloader partitions
+ESP_IMG_TAR="${TMPDIR}/esp.img.tar"
+GRUB_IMG_TAR="${TMPDIR}/grub.img.tar"
 "${TOOL_DIR}"/build_vfat_image.py -o "${ESP_IMG_TAR}" -s 100M -p boot/efi -i "${BOOTLOADER_TAR}"
 "${TOOL_DIR}"/build_vfat_image.py -o "${GRUB_IMG_TAR}" -s 100M -p boot/grub -i "${BOOTLOADER_TAR}" \
     "${BASE_DIR}/bootloader/grub.cfg:/boot/grub/grub.cfg:644" \
     "${BASE_DIR}/bootloader/grubenv:/boot/grub/grubenv:644"
 
-$SCRIPTS_DIR/build-docker-save.sh \
-    --build-arg BASE_IMAGE="${BASE_IMAGE}" \
-    --build-arg ROOT_PASSWORD="${ROOT_PASSWORD}" \
-    $BASE_DIR/rootfs >$BASE_DIR/rootfs.tar
+# Extract bootloader partitions.
+ESP_IMG="${TMPDIR}/esp.img"
+GRUB_IMG="${TMPDIR}/grub.img"
+tar -xOf ${ESP_IMG_TAR} >${ESP_IMG}
+tar -xOf ${GRUB_IMG_TAR} >${GRUB_IMG}
 
-docker build --iidfile $TMPDIR/iidfile -q -f $BASE_DIR/build/Dockerfile $BASE_DIR/.. 2>&1
-IMAGE_ID=$(cat $TMPDIR/iidfile | cut -d':' -f2)
+# Prepare empty config partition.
+CONFIG_IMG="${TMPDIR}/config.img"
+truncate --size 100M "$CONFIG_IMG"
+make_ext4fs -T 0 -l 100M "$CONFIG_IMG"
 
-docker run -h builder --cidfile $TMPDIR/cid --privileged $IMAGE_ID
-CONTAINER_ID=$(cat $TMPDIR/cid)
-docker cp $CONTAINER_ID:/ic-os/disk-img.tar.gz disk-img.tar.gz
-docker cp $CONTAINER_ID:/ic-os/update-img.tar.gz update-img.tar.gz
-docker rm $CONTAINER_ID
+# Build partitions for system image A.
+BOOT_IMG="${TMPDIR}/boot.img"
+ROOT_IMG="${TMPDIR}/root.img"
+"${BASE_DIR}"/../scripts/build-ubuntu.sh -i "${ROOTFS_TAR}" -r "${ROOT_IMG}" -b "${BOOT_IMG}"
+
+# Assemble update image
+UPDATE_DIR=${TMPDIR}/update
+mkdir ${UPDATE_DIR}
+echo "${VERSION}" >"${UPDATE_DIR}/VERSION.TXT"
+cp "${BOOT_IMG}" "${UPDATE_DIR}/boot.img"
+cp "${ROOT_IMG}" "${UPDATE_DIR}/root.img"
+# Sort by name in tar file -- makes ordering deterministic and ensures
+# that VERSION.TXT is first entry, making it quick & easy to extract.
+# Override owner, group and mtime to make build independent of the user
+# building it.
+tar czf "update-img.tar.gz" --sort=name --owner=root:0 --group=root:0 --mtime='UTC 2020-01-01' --sparse -C "${UPDATE_DIR}" .
+
+# Create HostOS LVM Structure
+VOLUME_GROUP="hostlvm"
+LVM_IMG="${TMPDIR}/lvm.img"
+prepare_lvm_image "$LVM_IMG" 107374182400 "$VOLUME_GROUP" "4c7GVZ-Df82-QEcJ-xXtV-JgRL-IjLE-hK0FgA" "eu0VQE-HlTi-EyRc-GceP-xZtn-3j6t-iqEwyv" # 100G
+
+# Assemble disk image
+DISK_IMG="${TMPDIR}/disk.img"
+prepare_disk_image "$DISK_IMG" 108447924224 # 101G
+write_single_partition "$DISK_IMG" esp "$ESP_IMG"
+write_single_partition "$DISK_IMG" grub "$GRUB_IMG"
+write_single_partition "$DISK_IMG" hostlvm "$LVM_IMG"
+write_single_lvm_volume "$DISK_IMG" "$VOLUME_GROUP" A_boot "$BOOT_IMG"
+write_single_lvm_volume "$DISK_IMG" "$VOLUME_GROUP" A_root "$ROOT_IMG"
+write_single_lvm_volume "$DISK_IMG" "$VOLUME_GROUP" config "$CONFIG_IMG"
+
+# Package image in tar
+tar czf "disk-img.tar.gz" --sort=name --owner=root:0 --group=root:0 --mtime='UTC 2020-01-01' --sparse -C "${TMPDIR}" disk.img
 
 rm -rf $TMPDIR

@@ -62,7 +62,7 @@ def image_deps(mode, malicious = False):
     deps["bootfs_size"] = "1G"
 
     # Add any custom partitions to the manifest
-    deps["custom_partitions"] = [
+    deps["custom_partitions"] = lambda: [
         Label("//ic-os/guestos:partition-config.tar"),
         Label("//ic-os/bootloader:partition-esp.tar"),
         Label("//ic-os/bootloader:partition-grub.tar"),

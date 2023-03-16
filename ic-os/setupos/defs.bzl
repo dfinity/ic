@@ -36,7 +36,7 @@ def image_deps(mode, _malicious = False):
     deps["bootfs_size"] = "100M"
 
     # Add any custom partitions to the manifest
-    deps["custom_partitions"] = [
+    deps["custom_partitions"] = lambda: [
         Label("//ic-os/setupos:partition-config.tar"),
         Label("//ic-os/setupos:partition-data.tar"),
         Label("//ic-os/setupos/bootloader:partition-esp.tar"),

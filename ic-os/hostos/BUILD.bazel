@@ -1,0 +1,31 @@
+load("//toolchains/sysimage:toolchain.bzl", "ext4_image")
+
+package(default_visibility = ["__subpackages__"])
+
+exports_files([
+    "partitions.csv",
+    "volumes.csv",
+    "rootfs/docker-base.dev",
+    "rootfs/docker-base.prod",
+])
+
+filegroup(
+    name = "rootfs-files",
+    srcs = glob(["rootfs/**"]),
+)
+
+ext4_image(
+    name = "partition-config.tar",
+    partition_size = "100M",
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
+)
+
+# All host-os targets are named the same, just stay in different submodules.
+# To build or run specific target:
+#
+# bazel run   //ic-os/hostos/envs/prod:upload_disk-img           [--s3_endpoint=<internal endpoint address>]
+# bazel build //ic-os/hostos/envs/dev/...
+#
+# check //ic-os/defs.bzl for the full list of targets.

@@ -189,8 +189,8 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
             k: v
             for k, v in (
                 image_deps["bootfs"].items() + [
-                    ("version.txt", "/boot/version.txt:0644"),
-                    ("extra_boot_args", "/boot/extra_boot_args:0644"),
+                    (":version.txt", "/boot/version.txt:0644"),
+                    (":extra_boot_args", "/boot/extra_boot_args:0644"),
                 ]
             )
             # Skip over special entries
@@ -214,8 +214,8 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
                 k: v
                 for k, v in (
                     image_deps["bootfs"].items() + [
-                        ("version-test.txt", "/boot/version.txt:0644"),
-                        ("extra_boot_test_args", "/boot/extra_boot_args:0644"),
+                        (":version-test.txt", "/boot/version.txt:0644"),
+                        (":extra_boot_test_args", "/boot/extra_boot_args:0644"),
                     ]
                 )
                 # Skip over special entries
@@ -231,7 +231,11 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
 
     # -------------------- Assemble disk image --------------------
 
-    custom_partitions = image_deps.get("custom_partitions", default = [])
+    # Build a list of custom partitions with a funciton, to allow "injecting" build steps at this point
+    if "custom_partitions" not in image_deps:
+        custom_partitions = []
+    else:
+        custom_partitions = image_deps["custom_partitions"]()
 
     disk_image(
         name = "disk-img.tar",
@@ -251,7 +255,7 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
 
     native.genrule(
         name = "disk-img.tar_zst",
-        srcs = ["disk-img.tar"],
+        srcs = [":disk-img.tar"],
         outs = ["disk-img.tar.zst"],
         cmd = "zstd --threads=0 -10 -f -z $< -o $@",
         # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
@@ -266,7 +270,7 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
 
     gzip_compress(
         name = "disk-img.tar.gz",
-        srcs = ["disk-img.tar"],
+        srcs = [":disk-img.tar"],
         # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
         # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
         tags = ["no-remote-cache"],
@@ -296,7 +300,7 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
 
         native.genrule(
             name = "update-img.tar_zst",
-            srcs = ["update-img.tar"],
+            srcs = [":update-img.tar"],
             outs = ["update-img.tar.zst"],
             cmd = "zstd --threads=0 -10 -f -z $< -o $@",
             # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
@@ -311,7 +315,7 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
 
         gzip_compress(
             name = "update-img.tar.gz",
-            srcs = ["update-img.tar"],
+            srcs = [":update-img.tar"],
             # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
             # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
             tags = ["no-remote-cache"],
@@ -337,7 +341,7 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
 
         native.genrule(
             name = "update-img-test.tar_zst",
-            srcs = ["update-img-test.tar"],
+            srcs = [":update-img-test.tar"],
             outs = ["update-img-test.tar.zst"],
             cmd = "zstd --threads=0 -10 -f -z $< -o $@",
             # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
@@ -352,7 +356,7 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
 
         gzip_compress(
             name = "update-img-test.tar.gz",
-            srcs = ["update-img-test.tar"],
+            srcs = [":update-img-test.tar"],
             # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
             # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
             tags = ["no-remote-cache"],
