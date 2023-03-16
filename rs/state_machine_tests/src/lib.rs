@@ -1005,6 +1005,34 @@ impl StateMachine {
             .commit_and_certify(state, h.increment(), CertificationScope::Full);
     }
 
+    /// Removes a canister state from this state machine and migrates it to another state machine.
+    pub fn move_canister_state_to(
+        &self,
+        other_env: &StateMachine,
+        canister_id: CanisterId,
+    ) -> Result<(), String> {
+        let (height, mut state) = self.state_manager.take_tip();
+        if let Some(canister_state) = state.take_canister_state(&canister_id) {
+            self.state_manager.commit_and_certify(
+                state,
+                height.increment(),
+                CertificationScope::Full,
+            );
+            let (height, mut state) = other_env.state_manager.take_tip();
+            state.put_canister_state(canister_state);
+            other_env.state_manager.commit_and_certify(
+                state,
+                height.increment(),
+                CertificationScope::Full,
+            );
+            return Ok(());
+        }
+        Err(format!(
+            "No canister state for canister id {}.",
+            canister_id
+        ))
+    }
+
     pub fn install_wasm_in_mode(
         &self,
         canister_id: CanisterId,
