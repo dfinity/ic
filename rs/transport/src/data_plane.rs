@@ -180,7 +180,7 @@ fn spawn_write_task<W: AsyncWrite + Unpin + Send + 'static>(
             arc_self
                 .data_plane_metrics
                 .write_bytes_total
-                .with_label_values(&[&channel_id_str])
+                .with_label_values(&[&channel_id_str, &peer_id.to_string()])
                 .inc_by(message_len as u64);
         }
     })
@@ -260,7 +260,7 @@ fn spawn_read_task<R: AsyncRead + Unpin + Send + 'static>(
                     // shutdowns.
                     arc_self.data_plane_metrics
                         .read_bytes_total
-                        .with_label_values(&[&channel_id_str])
+                        .with_label_values(&[&channel_id_str, &peer_id.to_string()])
                         .inc_by(payload.0.len() as u64);
                     let _callback_start_time = arc_self.data_plane_metrics
                         .event_handler_message_duration
