@@ -1,5 +1,5 @@
 //! Canister Http related public interfaces.
-use crate::{consensus_pool::ConsensusPoolCache, validation::ValidationError};
+use crate::validation::ValidationError;
 use ic_base_types::{NumBytes, RegistryVersion};
 use ic_types::{
     artifact::CanisterHttpResponseId,
@@ -123,15 +123,6 @@ pub trait CanisterHttpPool: Send + Sync {
         &self,
         msg_id: &CanisterHttpResponseId,
     ) -> Option<CanisterHttpResponseShare>;
-}
-
-pub trait CanisterHttpPoolManager: Send {
-    /// A function to be invoked every time the canister http pool is changed.
-    fn on_state_change(
-        &mut self,
-        consensus_cache: &dyn ConsensusPoolCache,
-        canister_http_pool: &dyn CanisterHttpPool,
-    ) -> CanisterHttpChangeSet;
 }
 
 pub trait CanisterHttpPayloadBuilder: Send + Sync {
