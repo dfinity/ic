@@ -50,3 +50,17 @@ dfx deploy index --network ic --argument '(record { ledger_id = principal "mc6ru
 ```shell
 dfx deploy --network ic archive --argument '(principal "mc6ru-gyaaa-aaaar-qaaaq-cai", 0, opt 3_221_225_472, null)'
 ```
+
+## KYT ([`pvm5g-xaaaa-aaaar-qaaia-cai`](https://dashboard.internetcomputer.org/canister/pvm5g-xaaaa-aaaar-qaaia-cai))
+
+### Install
+
+```shell
+dfx deploy kyt --network ic --argument '(variant { InitArg = record { api_key = ""; maintainers = vec {}; mode = variant { AcceptAll }; minter_id = principal "ml52i-qqaaa-aaaar-qaaba-cai" } })'
+```
+
+### Upgrade
+
+```shell
+dfx deploy --network ic kyt --argument '(variant { UpgradeArg = record { } } })'
+```
