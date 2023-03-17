@@ -108,6 +108,8 @@ rust_library(
 
 rust_test(
     name = "execution_environment_test",
+    # TODO(EXC-1349): Split the test to run targets in parallel.
+    timeout = "long",
     aliases = ALIASES,
     crate = ":execution_environment",
     data = DATA,
