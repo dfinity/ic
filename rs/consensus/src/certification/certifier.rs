@@ -3,9 +3,8 @@ use super::CertificationCrypto;
 use crate::consensus::{membership::Membership, utils};
 use ic_interfaces::{
     artifact_manager::ArtifactPoolDescriptor,
-    certification::{
-        CertificationPool, Certifier, ChangeAction, ChangeSet, Verifier, VerifierError,
-    },
+    artifact_pool::ChangeSetProducer,
+    certification::{CertificationPool, ChangeAction, ChangeSet, Verifier, VerifierError},
     consensus_pool::ConsensusPoolCache,
     validation::ValidationError,
 };
@@ -29,7 +28,7 @@ use ic_types::{
 };
 use prometheus::{Histogram, IntCounter, IntGauge};
 use std::cell::RefCell;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::time::Instant;
 
 /// We always keep a minimum chain length below catch-up height
@@ -42,6 +41,7 @@ pub struct CertifierImpl {
     membership: Arc<Membership>,
     crypto: Arc<dyn CertificationCrypto>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+    consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
     metrics: CertifierMetrics,
     /// The highest height that has been purged. Used to avoid redudant purging.
     highest_purged_height: RefCell<Height>,
@@ -132,6 +132,7 @@ pub fn setup(
             membership,
             crypto,
             state_manager.clone(),
+            consensus_pool_cache.clone(),
             metrics_registry,
             log,
         ),
@@ -142,12 +143,39 @@ pub fn setup(
     )
 }
 
-impl Certifier for CertifierImpl {
-    fn on_state_change(
-        &self,
-        consensus_cache: &dyn ConsensusPoolCache,
-        certification_pool: Arc<RwLock<dyn CertificationPool>>,
-    ) -> ChangeSet {
+/// The certifier component is responsible for signing execution states.
+/// These signatures are required, to securely transmit a set of inter-canister
+/// messages from one sub-network to another, or to synchronize the replica
+/// state.
+///
+/// For creating a signature for a state, every replica follows the
+/// following algorithm:
+///
+/// 1. Request a set of (height, hash) tuples from its local StateManager, where
+/// `hash` is the hash of the replicated state after processing the batch at the
+/// specified height. The StateManager is responsible for selecting which parts
+/// of the replicated state are included in the computation of the hash.
+///
+/// 2. Sign the hash-height tuple, resulting in a CertificationShare, and place
+/// the CertificationShare in the certification pool, to be gossiped to other
+/// replicas.
+///
+/// 3. On every invocation of `on_state_change`, if sufficiently many
+/// CertificationShares for the same (height, hash) pair were received, combine
+/// them into a full Certification and put it into the certification pool. At
+/// that point, the CertificationShares are not required anymore and can be
+/// purged.
+///
+/// 4. For every (height, hash) pair with a full Certification, submit
+/// the pair (height, Certification) to the StateManager.
+///
+/// 5. Whenever the catch-up package height increases, remove all certification
+/// artifacts below this height.
+impl<T: CertificationPool> ChangeSetProducer<T> for CertifierImpl {
+    type ChangeSet = ChangeSet;
+
+    /// Should be called on every change of the certification pool and timeouts.
+    fn on_state_change(&self, certification_pool: &T) -> ChangeSet {
         // This timer will make an entry in the metrics histogram automatically, when
         // it's dropped.
         let _timer = self.metrics.execution_time.start_timer();
@@ -156,7 +184,6 @@ impl Certifier for CertifierImpl {
         // First, we iterate over requested heights and deliver certifications to the
         // state manager, if they're available or return those hashes which do not have
         // certifications and for which we did not issue a share yet.
-        let certification_pool = &*certification_pool.read().unwrap();
         let state_hashes_to_certify: Vec<_> = self
             .state_manager
             .list_state_hashes_to_certify()
@@ -192,11 +219,7 @@ impl Certifier for CertifierImpl {
         // Filter out only those heights, where the current node belongs to the
         // committee.
         let start = Instant::now();
-        let shares = self.sign(
-            consensus_cache,
-            certification_pool,
-            &state_hashes_to_certify,
-        );
+        let shares = self.sign(certification_pool, &state_hashes_to_certify);
         if !shares.is_empty() {
             self.metrics.shares_created.inc_by(shares.len() as u64);
             trace!(
@@ -212,7 +235,7 @@ impl Certifier for CertifierImpl {
         }
 
         let start = Instant::now();
-        if let Some(purge_height) = self.get_purge_height(consensus_cache) {
+        if let Some(purge_height) = self.get_purge_height() {
             trace!(
                 &self.log,
                 "Determined a new purge height {:?} in {:?}",
@@ -226,7 +249,7 @@ impl Certifier for CertifierImpl {
 
         let certifications = state_hashes_to_certify
             .iter()
-            .flat_map(|(height, _)| self.aggregate(consensus_cache, certification_pool, *height))
+            .flat_map(|(height, _)| self.aggregate(certification_pool, *height))
             .collect::<Vec<_>>();
 
         if !certifications.is_empty() {
@@ -246,11 +269,7 @@ impl Certifier for CertifierImpl {
         }
 
         let start = Instant::now();
-        let change_set = self.validate(
-            consensus_cache,
-            certification_pool,
-            &state_hashes_to_certify,
-        );
+        let change_set = self.validate(certification_pool, &state_hashes_to_certify);
         if change_set.is_empty() {
             trace!(
                 &self.log,
@@ -277,6 +296,7 @@ impl CertifierImpl {
         membership: Arc<Membership>,
         crypto: Arc<dyn CertificationCrypto>,
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+        consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
         metrics_registry: MetricsRegistry,
         log: ReplicaLogger,
     ) -> Self {
@@ -285,6 +305,7 @@ impl CertifierImpl {
             membership,
             crypto,
             state_manager,
+            consensus_pool_cache,
             metrics: CertifierMetrics {
                 shares_created: metrics_registry.int_counter(
                     "certification_shares_created",
@@ -312,7 +333,6 @@ impl CertifierImpl {
     // Gets height/hash pairs and creates certification shares for them.
     fn sign(
         &self,
-        consensus_cache: &dyn ConsensusPoolCache,
         certification_pool: &dyn CertificationPool,
         state_hashes: &[(Height, CryptoHashOfPartialState)],
     ) -> Vec<CertificationMessage> {
@@ -345,8 +365,11 @@ impl CertifierImpl {
             })
             .filter_map(|(height, hash)| {
                 let content = CertificationContent::new(hash);
-                let dkg_id =
-                    utils::active_high_threshold_transcript(consensus_cache, height)?.dkg_id;
+                let dkg_id = utils::active_high_threshold_transcript(
+                    self.consensus_pool_cache.as_ref(),
+                    height,
+                )?
+                .dkg_id;
                 match self
                     .crypto
                     .sign(&content, self.replica_config.node_id, dkg_id)
@@ -369,7 +392,6 @@ impl CertifierImpl {
     // aggregates into full certification artifacts if possible.
     fn aggregate(
         &self,
-        consensus_cache: &dyn ConsensusPoolCache,
         certification_pool: &dyn CertificationPool,
         height: Height,
     ) -> Vec<CertificationMessage> {
@@ -400,7 +422,11 @@ impl CertifierImpl {
             self.crypto.as_aggregate(),
             Box::new(|cert: &CertificationTuple| {
                 Some(
-                    utils::active_high_threshold_transcript(consensus_cache, cert.height())?.dkg_id,
+                    utils::active_high_threshold_transcript(
+                        self.consensus_pool_cache.as_ref(),
+                        cert.height(),
+                    )?
+                    .dkg_id,
                 )
             }),
             shares,
@@ -421,7 +447,6 @@ impl CertifierImpl {
     // Validates all unvalidated artifacts and returns corresponding change set.
     fn validate(
         &self,
-        consensus_cache: &dyn ConsensusPoolCache,
         certification_pool: &dyn CertificationPool,
         state_hashes: &[(Height, CryptoHashOfPartialState)],
     ) -> ChangeSet {
@@ -437,9 +462,7 @@ impl CertifierImpl {
                 for certification in
                     certification_pool.unvalidated_certifications_at_height(*height)
                 {
-                    if let Some(val) =
-                        self.validate_certification(consensus_cache, hash, certification)
-                    {
+                    if let Some(val) = self.validate_certification(hash, certification) {
                         match val {
                             ChangeAction::MoveToValidated(_) => {
                                 cert_change_set.push(val);
@@ -458,7 +481,7 @@ impl CertifierImpl {
                     certification_pool
                         .unvalidated_shares_at_height(*height)
                         .filter_map(move |share| {
-                            self.validate_share(consensus_cache, certification_pool, hash, share)
+                            self.validate_share(certification_pool, hash, share)
                         })
                         .chain(cert_change_set.into_iter()),
                 )
@@ -468,8 +491,8 @@ impl CertifierImpl {
 
     // Returns the purge height, if artifacts below this height can be purged.
     // Return None if there are no new artifacts to be purged.
-    fn get_purge_height(&self, consensus_cache: &dyn ConsensusPoolCache) -> Option<Height> {
-        let cup_height = consensus_cache.catch_up_package().height();
+    fn get_purge_height(&self) -> Option<Height> {
+        let cup_height = self.consensus_pool_cache.catch_up_package().height();
         // We pick cup_height, but retain at least the last MINIMUM_CHAIN_LENGTH heights
         let purge_height = Height::from(cup_height.get().saturating_sub(MINIMUM_CHAIN_LENGTH));
 
@@ -483,14 +506,15 @@ impl CertifierImpl {
 
     fn validate_certification(
         &self,
-        consensus_cache: &dyn ConsensusPoolCache,
         hash: &CryptoHashOfPartialState,
         certification: &Certification,
     ) -> Option<ChangeAction> {
         let msg = CertificationMessage::Certification(certification.clone());
         let verifier = VerifierImpl::new(self.crypto.clone());
-        let registry_version =
-            utils::registry_version_at_height(consensus_cache, certification.height)?;
+        let registry_version = utils::registry_version_at_height(
+            self.consensus_pool_cache.as_ref(),
+            certification.height,
+        )?;
 
         // check if the certification contains the same state hash as our local one. If
         // not, we consider the certification invalid.
@@ -526,7 +550,6 @@ impl CertifierImpl {
 
     fn validate_share(
         &self,
-        consensus_cache: &dyn ConsensusPoolCache,
         certification_pool: &dyn CertificationPool,
         hash: &CryptoHashOfPartialState,
         share: &CertificationShare,
@@ -579,8 +602,11 @@ impl CertifierImpl {
                         .crypto
                         .verify(
                             &share.signed,
-                            utils::active_high_threshold_transcript(consensus_cache, share.height)?
-                                .dkg_id,
+                            utils::active_high_threshold_transcript(
+                                self.consensus_pool_cache.as_ref(),
+                                share.height,
+                            )?
+                            .dkg_id,
                         )
                         .map_err(VerifierError::from)
                     {
@@ -606,7 +632,6 @@ mod tests {
     use ic_artifact_pool::certification_pool::CertificationPoolImpl;
     use ic_interfaces::artifact_pool::{MutablePool, UnvalidatedArtifact};
     use ic_interfaces::certification::CertificationPool;
-    use ic_interfaces::consensus_pool::ConsensusPool;
     use ic_interfaces::time_source::{SysTimeSource, TimeSource};
     use ic_test_utilities::consensus::fake::*;
     use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
@@ -731,11 +756,8 @@ mod tests {
                 for height in &[1, 3] {
                     cert_pool.insert(fake_cert_default(Height::from(*height)));
                 }
-                let change_set = certifier.validate(
-                    pool.as_cache(),
-                    &cert_pool,
-                    &state_manager.list_state_hashes_to_certify(),
-                );
+                let change_set =
+                    certifier.validate(&cert_pool, &state_manager.list_state_hashes_to_certify());
                 cert_pool.apply_changes(&SysTimeSource::new(), change_set);
 
                 let prio_fn = certifier_gossip.get_priority_function(&cert_pool);
@@ -788,6 +810,7 @@ mod tests {
                     membership,
                     crypto,
                     state_manager.clone(),
+                    pool.get_cache(),
                     metrics_registry,
                     log,
                 );
@@ -805,11 +828,8 @@ mod tests {
                 }
 
                 // let's move everything to validated
-                let change_set = certifier.validate(
-                    pool.as_cache(),
-                    &cert_pool,
-                    &state_manager.list_state_hashes_to_certify(),
-                );
+                let change_set =
+                    certifier.validate(&cert_pool, &state_manager.list_state_hashes_to_certify());
                 // expect 5 change actions: 3 full certifications moved to validated section + 2
                 // shares, where no certification is available (at height 3)
                 assert_eq!(change_set.len(), 5);
@@ -833,7 +853,7 @@ mod tests {
                 // purge height must be larger than 1.
                 let new_height = pool.advance_round_normal_operation_n(30);
                 let purge_height = certifier
-                    .get_purge_height(pool.as_cache())
+                    .get_purge_height()
                     .expect("No new purge height was found");
                 assert!(purge_height.get() > 1);
 
@@ -890,7 +910,7 @@ mod tests {
                 );
 
                 // Now that we have purged, we expect that there are no new change actions.
-                let purge_height = certifier.get_purge_height(pool.as_cache());
+                let purge_height = certifier.get_purge_height();
                 assert!(purge_height.is_none());
             })
         })
@@ -925,6 +945,7 @@ mod tests {
                     membership,
                     crypto,
                     state_manager.clone(),
+                    pool.get_cache(),
                     metrics_registry,
                     log,
                 );
@@ -936,21 +957,14 @@ mod tests {
                     .for_each(|x| cert_pool.insert(x));
 
                 // this moves unvalidated shares to validated
-                let change_set = certifier.validate(
-                    pool.as_cache(),
-                    &cert_pool,
-                    &state_manager.list_state_hashes_to_certify(),
-                );
+                let change_set =
+                    certifier.validate(&cert_pool, &state_manager.list_state_hashes_to_certify());
                 cert_pool.apply_changes(&SysTimeSource::new(), change_set);
 
                 // emulates a call from inside on_state_change
                 let mut messages = vec![];
                 for i in 1..6 {
-                    messages.append(&mut certifier.aggregate(
-                        pool.as_cache(),
-                        &cert_pool,
-                        Height::from(i),
-                    ));
+                    messages.append(&mut certifier.aggregate(&cert_pool, Height::from(i)));
                 }
 
                 assert_eq!(
@@ -1007,6 +1021,7 @@ mod tests {
                     membership,
                     crypto,
                     state_manager.clone(),
+                    pool.get_cache(),
                     metrics_registry,
                     log,
                 );
@@ -1022,11 +1037,8 @@ mod tests {
                 cert_pool.insert(cert);
 
                 // this moves unvalidated shares to validated
-                let change_set = certifier.validate(
-                    pool.as_cache(),
-                    &cert_pool,
-                    &state_manager.list_state_hashes_to_certify(),
-                );
+                let change_set =
+                    certifier.validate(&cert_pool, &state_manager.list_state_hashes_to_certify());
                 cert_pool.apply_changes(&SysTimeSource::new(), change_set);
 
                 assert_eq!(cert_pool.shares_at_height(Height::from(3)).count(), 6);
@@ -1077,12 +1089,12 @@ mod tests {
                     membership,
                     crypto,
                     state_manager,
+                    pool.get_cache(),
                     metrics_registry,
                     log,
                 );
 
                 let shares = certifier.sign(
-                    pool.as_cache(),
                     &cert_pool,
                     &[
                         (
@@ -1140,6 +1152,7 @@ mod tests {
                     membership,
                     crypto,
                     state_manager.clone(),
+                    pool.get_cache(),
                     metrics_registry.clone(),
                     log,
                 );
@@ -1172,11 +1185,8 @@ mod tests {
                 assert!(cert_pool.certification_at_height(Height::from(5)).is_none());
 
                 // this moves unvalidated shares to validated
-                let change_set = certifier.validate(
-                    pool.as_cache(),
-                    &cert_pool,
-                    &state_manager.list_state_hashes_to_certify(),
-                );
+                let change_set =
+                    certifier.validate(&cert_pool, &state_manager.list_state_hashes_to_certify());
                 assert_eq!(change_set.len(), 1);
                 cert_pool.apply_changes(&SysTimeSource::new(), change_set);
 
@@ -1204,6 +1214,7 @@ mod tests {
                     membership,
                     crypto,
                     state_manager,
+                    pool.get_cache(),
                     MetricsRegistry::new(),
                     log,
                 );
@@ -1219,7 +1230,7 @@ mod tests {
                 let hash = CryptoHashOfPartialState::from(CryptoHash(vec![88, 99, 00]));
 
                 assert_eq!(
-                    certifier.validate_certification(pool.as_cache(), &hash, &cert),
+                    certifier.validate_certification(&hash, &cert),
                     Some(ChangeAction::HandleInvalid(
                         CertificationMessage::Certification(cert.clone()),
                         format!(
@@ -1261,6 +1272,7 @@ mod tests {
                     membership,
                     crypto,
                     state_manager.clone(),
+                    pool.get_cache(),
                     metrics_registry,
                     log,
                 );
@@ -1271,11 +1283,8 @@ mod tests {
                     .for_each(|x| cert_pool.insert(x));
 
                 // this moves unvalidated shares to validated
-                let change_set = certifier.validate(
-                    pool.as_cache(),
-                    &cert_pool,
-                    &state_manager.list_state_hashes_to_certify(),
-                );
+                let change_set =
+                    certifier.validate(&cert_pool, &state_manager.list_state_hashes_to_certify());
                 cert_pool.apply_changes(&SysTimeSource::new(), change_set);
 
                 // Let's insert valid shares from the same signer again:
@@ -1283,11 +1292,8 @@ mod tests {
                 cert_pool.insert(fake_share(Height::from(5), 0));
 
                 // This is supposed to invalidate the two new shares
-                let change_set = certifier.validate(
-                    pool.as_cache(),
-                    &cert_pool,
-                    &state_manager.list_state_hashes_to_certify(),
-                );
+                let change_set =
+                    certifier.validate(&cert_pool, &state_manager.list_state_hashes_to_certify());
 
                 assert_eq!(
                     change_set.len(),

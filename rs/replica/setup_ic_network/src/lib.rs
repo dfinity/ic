@@ -399,7 +399,6 @@ fn setup_artifact_manager(
                     replica_logger.clone(),
                 ),
                 Arc::clone(&time_source) as Arc<_>,
-                Arc::clone(&artifact_pools.consensus_pool_cache) as Arc<_>,
                 Arc::clone(&artifact_pools.certification_pool),
                 replica_logger.clone(),
                 metrics_registry.clone(),
