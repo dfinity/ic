@@ -179,32 +179,32 @@ struct CheckpointRefData {
 /// ├── states_metadata.pbuf
 /// │
 /// │── tip
-/// │   ├── system_metadata.pbuf
+/// │   ├── canister_states
+/// │   │   └── <hex(canister_id)>
+/// │   │       ├── canister.pbuf
+/// │   │       ├── queues.pbuf
+/// │   │       ├── software.wasm
+/// │   │       ├── stable_memory.(pbuf|bin)
+/// │   │       └── vmemory_0.bin
 /// │   ├── subnet_queues.pbuf
-/// │   └── canister_states
-/// │       └── <hex(canister_id)>
-/// │           ├── queues.pbuf
-/// │           ├── vmemory_0.bin
-/// │           ├── canister.pbuf
-/// │           ├── stable_memory.(pbuf|bin)
-/// │           └── software.wasm
+/// │   └── system_metadata.pbuf
 /// │
 /// ├── [checkpoints, backups, diverged_checkpoints]
 /// │   └──<hex(round)>
-/// │      ├── system_metadata.pbuf
+/// │      ├── canister_states
+/// │      │   └── <hex(canister_id)>
+/// │      │       ├── canister.pbuf
+/// │      │       ├── queues.pbuf
+/// │      │       ├── software.wasm
+/// │      │       ├── stable_memory.(pbuf|bin)
+/// │      │       └── vmemory_0.bin
 /// │      ├── subnet_queues.pbuf
-/// │      └── canister_states
-/// │          └── <hex(canister_id)>
-/// │              ├── queues.pbuf
-/// │              ├── vmemory_0.bin
-/// │              ├── canister.pbuf
-/// │              ├── stable_memory.(pbuf|bin)
-/// │              └── software.wasm
+/// │      └── system_metadata.pbuf
 /// │
-/// └── diverged_state_markers
+/// ├── diverged_state_markers
 /// │   └──<hex(round)>
 /// │
-/// └── tmp
+/// ├── tmp
 /// └── fs_tmp
 /// ```
 ///
