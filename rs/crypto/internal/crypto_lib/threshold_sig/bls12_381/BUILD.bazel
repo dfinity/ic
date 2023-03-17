@@ -1,4 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
+load("//bazel:defs.bzl", "rust_bench")
 
 package(default_visibility = [
     "//rs/certification/test-utils:__subpackages__",
@@ -68,4 +69,54 @@ rust_test_suite(
     compile_data = glob(["tests/data/*"]),
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = [":bls12_381"] + DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_bench(
+    name = "bls_bench",
+    testonly = True,
+    srcs = ["benches/bls.rs"],
+    deps = [
+        ":bls12_381",
+        "//rs/crypto/internal/crypto_lib/bls12_381/type",
+        "//rs/crypto/internal/crypto_lib/types",
+        "//rs/crypto/test_utils/reproducible_rng",
+        "@crate_index//:criterion",
+        "@crate_index//:rand_0_8_4",
+    ],
+)
+
+rust_bench(
+    name = "dlog_bench",
+    testonly = True,
+    srcs = ["benches/dlog.rs"],
+    deps = [
+        ":bls12_381",
+        "//rs/crypto/internal/crypto_lib/bls12_381/type",
+        "@crate_index//:criterion",
+        "@crate_index//:rand_0_8_4",
+    ],
+)
+
+rust_bench(
+    name = "fs_nidkg_bench",
+    testonly = True,
+    srcs = ["benches/fs_nidkg.rs"],
+    deps = [
+        ":bls12_381",
+        "//rs/crypto/internal/crypto_lib/bls12_381/type",
+        "//rs/crypto/internal/crypto_lib/seed",
+        "@crate_index//:criterion",
+    ],
+)
+
+rust_bench(
+    name = "zk_bench",
+    testonly = True,
+    srcs = ["benches/zk.rs"],
+    deps = [
+        ":bls12_381",
+        "//rs/crypto/internal/crypto_lib/bls12_381/type",
+        "@crate_index//:criterion",
+        "@crate_index//:rand_0_8_4",
+    ],
 )
