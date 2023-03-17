@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
-load("//bazel:defs.bzl", "rust_test_suite_with_extra_srcs")
+load("//bazel:defs.bzl", "rust_bench", "rust_test_suite_with_extra_srcs")
 
 package(default_visibility = ["//rs/crypto:__subpackages__"])
 
@@ -70,4 +70,70 @@ rust_test_suite_with_extra_srcs(
     extra_srcs = glob(["tests/**/test_*.rs"]),
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
     deps = [":tecdsa"] + DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_bench(
+    name = "dealings_bench",
+    testonly = True,
+    srcs = ["benches/dealings.rs"],
+    deps = [
+        ":tecdsa",
+        "//rs/rust_canisters/canister_test",
+        "//rs/types/types",
+        "@crate_index//:criterion",
+        "@crate_index//:rand_0_8_4",
+    ],
+)
+
+rust_bench(
+    name = "field_ops_bench",
+    testonly = True,
+    srcs = ["benches/field_ops.rs"],
+    deps = [
+        ":tecdsa",
+        "@crate_index//:criterion",
+    ],
+)
+
+rust_bench(
+    name = "group_ops_bench",
+    testonly = True,
+    srcs = ["benches/group_ops.rs"],
+    deps = [
+        ":tecdsa",
+        "@crate_index//:criterion",
+        "@crate_index//:rand_0_8_4",
+    ],
+)
+
+rust_bench(
+    name = "hash2curve_bench",
+    testonly = True,
+    srcs = ["benches/hash2curve.rs"],
+    deps = [
+        ":tecdsa",
+        "@crate_index//:criterion",
+    ],
+)
+
+rust_bench(
+    name = "poly_bench",
+    testonly = True,
+    srcs = ["benches/poly.rs"],
+    deps = [
+        ":tecdsa",
+        "@crate_index//:criterion",
+        "@crate_index//:rand_0_8_4",
+    ],
+)
+
+rust_bench(
+    name = "zk_bench",
+    testonly = True,
+    srcs = ["benches/zk.rs"],
+    deps = [
+        ":tecdsa",
+        "@crate_index//:criterion",
+        "@crate_index//:rand_0_8_4",
+    ],
 )
