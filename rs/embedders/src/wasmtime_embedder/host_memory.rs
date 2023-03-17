@@ -91,9 +91,18 @@ unsafe impl wasmtime::MemoryCreator for WasmtimeMemoryCreator {
     }
 }
 
+/// Represents Wasm memory together with its prologue and epilogue guard regions:
+/// `[prologue guard region][Wasm memory][epilogue guard region]`.
+/// The guard regions are unmapped and catch out-of-bounds accesses. Note that
+/// the prologue guard region is not necessary for correctness, we use as a
+/// safety measure to improve security.
 pub struct MmapMemory {
-    mem: *mut c_void,
-    mem_size: usize,
+    // The address of the prologue guard region.
+    start: *mut c_void,
+    // The size of the entire region including all guard regions.
+    size_in_bytes: usize,
+    // The start of the actual memory exposed to Wasm.
+    wasm_memory: *mut c_void,
 }
 
 /// SAFETY: This type is not actually Send/Sync but this it is only used
@@ -102,9 +111,20 @@ pub struct MmapMemory {
 unsafe impl Send for MmapMemory {}
 unsafe impl Sync for MmapMemory {}
 
+/// The minimal required guard region for correctness is 2GiB. We use 4GiB as a
+/// safety measure since the allocation happens in the virtual memory and its
+/// overhead is negligible.
+const MIN_GUARD_REGION_SIZE: usize = 4 * 1024 * 1024 * 1024;
+
 impl MmapMemory {
     pub fn new(mem_size_in_bytes: usize, guard_size_in_bytes: usize) -> Self {
-        let mem_size = round_up_to_os_page_size(mem_size_in_bytes + guard_size_in_bytes);
+        let guard_size_in_bytes =
+            round_up_to_os_page_size(guard_size_in_bytes.max(MIN_GUARD_REGION_SIZE));
+        let prologue_guard_size_in_bytes = guard_size_in_bytes;
+        let epilogue_guard_size_in_bytes = guard_size_in_bytes;
+        let size_in_bytes = prologue_guard_size_in_bytes
+            + round_up_to_os_page_size(mem_size_in_bytes)
+            + epilogue_guard_size_in_bytes;
 
         // SAFETY: These are valid arguments to `mmap`. Only `mem_size` is non-constant,
         // but any `usize` will result in a valid call.
@@ -113,10 +133,10 @@ impl MmapMemory {
         // depending on the overcommit strategy configured in the kernel, the
         // call to mmap may fail. See:
         // https://www.kernel.org/doc/Documentation/vm/overcommit-accounting
-        let mem = unsafe {
+        let start = unsafe {
             mmap(
                 ptr::null_mut(),
-                mem_size,
+                size_in_bytes,
                 PROT_NONE,
                 MAP_PRIVATE | MAP_ANON,
                 -1,
@@ -124,26 +144,34 @@ impl MmapMemory {
             )
         };
         assert_ne!(
-            mem,
+            start,
             MAP_FAILED,
             "mmap failed: size={} {}",
-            mem_size,
+            size_in_bytes,
             Error::last_os_error()
         );
 
-        Self { mem, mem_size }
+        // SAFETY: The allocated region includes the prologue guard region.
+        let wasm_memory =
+            unsafe { (start as *mut u8).add(prologue_guard_size_in_bytes) as *mut c_void };
+
+        Self {
+            start,
+            size_in_bytes,
+            wasm_memory,
+        }
     }
 }
 
 impl LinearMemory for MmapMemory {
     fn as_ptr(&self) -> *mut c_void {
-        self.mem
+        self.wasm_memory
     }
 }
 
 impl Drop for MmapMemory {
     fn drop(&mut self) {
-        let result = unsafe { munmap(self.mem, self.mem_size) };
+        let result = unsafe { munmap(self.start, self.size_in_bytes) };
         assert_eq!(result, 0, "munmap failed: {}", Error::last_os_error());
     }
 }
