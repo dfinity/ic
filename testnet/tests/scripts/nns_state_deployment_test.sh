@@ -43,8 +43,8 @@ results_dir="$(
     realpath "$2"
 )"
 
-PEM_FILE="$results_dir/file.pem"
-LOG_FILE="$results_dir/file.log"
+PEM_FILE="$results_dir/key.pem"
+LOG_FILE="$results_dir/run.log"
 
 cat <<EOT >"$PEM_FILE"
 -----BEGIN PRIVATE KEY-----
@@ -61,7 +61,7 @@ curl "https://download.dfinity.systems/ic/$GIT_REVISION/release/ic-admin.gz" | z
 chmod +x "ic-admin"
 NNS_REVISION=$(./ic-admin --nns-url "https://ic0.app" get-subnet 0 | jq -r ".records[0].value.replica_version_id")
 
-./nns_state_deployment.sh "$testnet" "$NNS_REVISION" "bc7vk-kulc6-vswcu-ysxhv-lsrxo-vkszu-zxku3-xhzmh-iac7m-lwewm-2ae" "$PEM_FILE" &>"$LOG_FILE"
+DIR="$results_dir" ./nns_state_deployment.sh "$testnet" "$NNS_REVISION" "bc7vk-kulc6-vswcu-ysxhv-lsrxo-vkszu-zxku3-xhzmh-iac7m-lwewm-2ae" "$PEM_FILE" &>"$LOG_FILE"
 
 if grep -q "can successfully create proposals" "$LOG_FILE"; then
     echo "SUCCESS!"
