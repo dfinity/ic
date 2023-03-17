@@ -242,14 +242,6 @@ impl Params {
             ));
         }
 
-        // Cap `min_participant_icp_e8s` at 100.
-        if self.min_participants > 100 {
-            return Err(format!(
-                "min_participants ({}) can be at most 100",
-                self.min_participants
-            ));
-        }
-
         // 100 * 1B * E8S should fit in a u64.
         assert!(self
             .max_icp_e8s
@@ -865,6 +857,17 @@ mod tests {
     #[test]
     fn open_request_validate_ok() {
         assert_is_ok!(OPEN_REQUEST.validate(START_OF_2022_TIMESTAMP_SECONDS, &INIT));
+    }
+
+    #[test]
+    fn params_high_participants_validate_ok() {
+        let params = Params {
+            min_participants: 500,
+            // max_icp_e8s must be enough for all of min_participants to participate
+            max_icp_e8s: 500 * PARAMS.min_participant_icp_e8s,
+            ..PARAMS
+        };
+        params.validate(&INIT).unwrap();
     }
 
     #[test]
