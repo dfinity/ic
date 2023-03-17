@@ -1114,6 +1114,7 @@ pub fn redirect_to_non_raw_test(env: TestEnv) {
         async move {
             let res = client
                 .post(format!("https://raw.{host}/api/v2/canister/CID/query"))
+                .body("body")
                 .send()
                 .await?;
 
@@ -1139,6 +1140,7 @@ pub fn redirect_to_non_raw_test(env: TestEnv) {
         async move {
             let res = client
                 .post(format!("https://raw.{host}/api/v2/canister/CID/call"))
+                .body("body")
                 .send()
                 .await?;
 
@@ -1164,6 +1166,7 @@ pub fn redirect_to_non_raw_test(env: TestEnv) {
         async move {
             let res = client
                 .post(format!("https://raw.{host}/api/v2/canister/CID/read_state"))
+                .body("body")
                 .send()
                 .await?;
 
