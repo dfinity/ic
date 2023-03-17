@@ -210,6 +210,7 @@ pub(crate) mod test_utils {
     };
     use crate::ecdsa::pre_signer::{EcdsaPreSignerImpl, EcdsaTranscriptBuilder};
     use crate::ecdsa::signer::{EcdsaSignatureBuilder, EcdsaSignerImpl};
+    use assert_matches::assert_matches;
     use ic_artifact_pool::ecdsa_pool::EcdsaPoolImpl;
     use ic_config::artifact_pool::ArtifactPoolConfig;
     use ic_crypto_temp_crypto::TempCryptoComponent;
@@ -222,9 +223,11 @@ pub(crate) mod test_utils {
     use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaPool};
     use ic_logger::ReplicaLogger;
     use ic_metrics::MetricsRegistry;
+    use ic_protobuf::registry::subnet::v1::EcdsaInitialization;
     use ic_test_utilities::consensus::fake::*;
     use ic_test_utilities::crypto::{
         dummy_idkg_dealing_for_tests, dummy_idkg_transcript_id_for_tests,
+        dummy_initial_idkg_dealing_for_tests,
     };
     use ic_test_utilities::types::ids::{node_test_id, NODE_1, NODE_2};
     use ic_types::artifact::EcdsaMessageId;
@@ -251,7 +254,10 @@ pub(crate) mod test_utils {
     use ic_types::{Height, NodeId, PrincipalId, Randomness, RegistryVersion, SubnetId};
     use std::collections::{BTreeMap, BTreeSet};
     use std::convert::TryFrom;
+    use std::str::FromStr;
     use std::sync::{Arc, Mutex};
+
+    use super::inspect_ecdsa_initializations;
 
     pub(crate) fn empty_response() -> ic_types::messages::Response {
         ic_types::messages::Response {
@@ -1404,7 +1410,6 @@ pub(crate) mod test_utils {
     }
 
     pub(crate) fn empty_ecdsa_payload(subnet_id: SubnetId) -> EcdsaPayload {
-        use std::str::FromStr;
         EcdsaPayload {
             signature_agreements: BTreeMap::new(),
             ongoing_signatures: BTreeMap::new(),
@@ -1426,7 +1431,6 @@ pub(crate) mod test_utils {
         num_nodes: u64,
         registry_version: u64,
     ) -> EcdsaReshareRequest {
-        use std::str::FromStr;
         EcdsaReshareRequest {
             key_id: EcdsaKeyId::from_str("Secp256k1:some_key").unwrap(),
             receiving_node_ids: (0..num_nodes).map(node_test_id).collect::<Vec<_>>(),
@@ -1436,5 +1440,24 @@ pub(crate) mod test_utils {
 
     pub(crate) fn crypto_without_keys() -> Arc<dyn ConsensusCrypto> {
         TempCryptoComponent::builder().build_arc()
+    }
+
+    #[test]
+    fn test_inspect_ecdsa_initializations() {
+        let initial_dealings = dummy_initial_idkg_dealing_for_tests();
+        let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
+        let ecdsa_init = EcdsaInitialization {
+            key_id: Some((&key_id).into()),
+            dealings: Some((&initial_dealings).into()),
+        };
+
+        let res = inspect_ecdsa_initializations(&[ecdsa_init.clone(), ecdsa_init.clone()]);
+        assert_matches!(res, Err(_));
+
+        let res = inspect_ecdsa_initializations(&[ecdsa_init]);
+        assert_matches!(res, Ok(Some(_)));
+
+        let res = inspect_ecdsa_initializations(&[]);
+        assert_matches!(res, Ok(None));
     }
 }

@@ -1744,6 +1744,7 @@ mod tests {
     use super::*;
     use crate::consensus::mocks::{dependencies, Dependencies};
     use crate::ecdsa::utils::test_utils::*;
+    use assert_matches::assert_matches;
     use ic_crypto_test_utils_canister_threshold_sigs::{
         generate_key_transcript, run_idkg_and_create_and_verify_transcript,
         CanisterThresholdSigTestEnvironment,
@@ -1751,6 +1752,7 @@ mod tests {
     use ic_interfaces_registry::RegistryValue;
     use ic_logger::replica_logger::no_op_logger;
     use ic_protobuf::types::v1 as pb;
+    use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
     use ic_test_utilities::consensus::fake::{Fake, FakeContentSigner};
     use ic_test_utilities::{
@@ -1765,6 +1767,7 @@ mod tests {
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_types::batch::BatchPayload;
     use ic_types::consensus::dkg::{Dealings, Summary};
+    use ic_types::consensus::ecdsa::TranscriptRef;
     use ic_types::consensus::{
         BlockPayload, BlockProposal, DataPayload, HashedBlock, Payload, Rank, SummaryPayload,
     };
@@ -2305,10 +2308,10 @@ mod tests {
         assert_eq!(ecdsa_payload.signature_agreements.len(), 1);
         let (_, response) = ecdsa_payload.signature_agreements.iter().next().unwrap();
         if let ecdsa::CompletedSignature::Unreported(response) = response {
-            assert!(matches!(
+            assert_matches!(
                 response.response_payload,
                 ic_types::messages::Payload::Reject(..)
-            ));
+            );
         } else {
             panic!("Unexpected response");
         }
@@ -2773,10 +2776,10 @@ mod tests {
             ecdsa_payload.signature_agreements.keys().next().unwrap(),
             &[1; 32],
         );
-        assert!(matches!(
+        assert_matches!(
             ecdsa_payload.signature_agreements.values().next().unwrap(),
             ecdsa::CompletedSignature::ReportedToExecution
-        ));
+        );
     }
 
     /// Test that ECDSA signature agreement is only delivered once.
@@ -3226,10 +3229,10 @@ mod tests {
         assert_eq!(payload.ongoing_xnet_reshares.len(), 1);
         assert!(payload.ongoing_xnet_reshares.contains_key(&req_2));
         assert_eq!(payload.xnet_reshare_agreements.len(), 1);
-        assert!(matches!(
+        assert_matches!(
             payload.xnet_reshare_agreements.get(&req_1).unwrap(),
             ecdsa::CompletedReshareRequest::Unreported(_)
-        ));
+        );
 
         // Request 2 dealings are created, it should be moved from in
         // progress -> completed
@@ -3246,14 +3249,14 @@ mod tests {
         );
         assert!(payload.ongoing_xnet_reshares.is_empty());
         assert_eq!(payload.xnet_reshare_agreements.len(), 2);
-        assert!(matches!(
+        assert_matches!(
             payload.xnet_reshare_agreements.get(&req_1).unwrap(),
             ecdsa::CompletedReshareRequest::ReportedToExecution
-        ));
-        assert!(matches!(
+        );
+        assert_matches!(
             payload.xnet_reshare_agreements.get(&req_2).unwrap(),
             ecdsa::CompletedReshareRequest::Unreported(_)
-        ));
+        );
 
         update_completed_reshare_requests(
             &mut payload,
@@ -3265,14 +3268,14 @@ mod tests {
         );
         assert!(payload.ongoing_xnet_reshares.is_empty());
         assert_eq!(payload.xnet_reshare_agreements.len(), 2);
-        assert!(matches!(
+        assert_matches!(
             payload.xnet_reshare_agreements.get(&req_1).unwrap(),
             ecdsa::CompletedReshareRequest::ReportedToExecution
-        ));
-        assert!(matches!(
+        );
+        assert_matches!(
             payload.xnet_reshare_agreements.get(&req_2).unwrap(),
             ecdsa::CompletedReshareRequest::ReportedToExecution
-        ));
+        );
     }
 
     #[test]
@@ -3876,7 +3879,7 @@ mod tests {
             // Step 1: initial bootstrap payload should be created successfully
             let payload_0 =
                 make_bootstrap_summary(subnet_id, key_id, Height::from(0), None, &no_op_logger());
-            assert!(matches!(payload_0, Ok(Some(_))));
+            assert_matches!(payload_0, Ok(Some(_)));
             let payload_0 = payload_0.unwrap().unwrap();
 
             // Step 2: a summary payload should be created successfully, with next_in_creation
@@ -3892,12 +3895,12 @@ mod tests {
                 None,
                 no_op_logger(),
             );
-            assert!(matches!(payload_1, Ok(Some(_))));
+            assert_matches!(payload_1, Ok(Some(_)));
             let payload_1 = payload_1.unwrap().unwrap();
-            assert!(matches!(
+            assert_matches!(
                 payload_1.key_transcript.next_in_creation,
                 ecdsa::KeyTranscriptCreation::Begin
-            ));
+            );
 
             // Step 3: a data payload be created successfully
             let mut payload_2 = payload_1;
@@ -3917,10 +3920,10 @@ mod tests {
                 no_op_logger(),
             );
             assert!(result.is_ok());
-            assert!(matches!(
+            assert_matches!(
                 payload_2.key_transcript.next_in_creation,
                 ecdsa::KeyTranscriptCreation::RandomTranscriptParams(_)
-            ));
+            );
 
             // Step 4: the summary payload should be created successfully, carrying forward
             // unfinished next_in_creation
@@ -3935,12 +3938,12 @@ mod tests {
                 None,
                 no_op_logger(),
             );
-            assert!(matches!(payload_3, Ok(Some(_))));
+            assert_matches!(payload_3, Ok(Some(_)));
             let payload_3 = payload_3.unwrap().unwrap();
-            assert!(matches!(
+            assert_matches!(
                 payload_3.key_transcript.next_in_creation,
                 ecdsa::KeyTranscriptCreation::RandomTranscriptParams(_)
-            ));
+            );
 
             // Step 5: the summary payload should be created successfully, carrying forward
             // unfinished next_in_creation even when membership changes
@@ -3951,7 +3954,7 @@ mod tests {
             add_subnet_record(&registry_data_provider, 12, subnet_id, subnet_record);
             registry.update_to_latest_version();
             let new_registry_version = registry.get_latest_version();
-            assert!(matches!(
+            assert_matches!(
                 is_time_to_reshare_key_transcript(
                     registry.as_ref(),
                     registry_version,
@@ -3959,7 +3962,7 @@ mod tests {
                     subnet_id,
                 ),
                 Ok(true)
-            ));
+            );
             let payload_4 = create_summary_payload_helper(
                 subnet_id,
                 registry.as_ref(),
@@ -3971,12 +3974,271 @@ mod tests {
                 None,
                 no_op_logger(),
             );
-            assert!(matches!(payload_4, Ok(Some(_))));
+            assert_matches!(payload_4, Ok(Some(_)));
             let payload_4 = payload_4.unwrap().unwrap();
-            assert!(matches!(
+            assert_matches!(
                 payload_4.key_transcript.next_in_creation,
                 ecdsa::KeyTranscriptCreation::RandomTranscriptParams(_)
-            ));
+            );
+        })
+    }
+
+    #[test]
+    fn test_next_in_creation_with_initial_dealings() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let Dependencies {
+                registry,
+                registry_data_provider,
+                ..
+            } = dependencies(pool_config, 1);
+            let subnet_id = subnet_test_id(1);
+            let node_ids = vec![node_test_id(0)];
+            let subnet_record = SubnetRecordBuilder::from(&node_ids)
+                .with_dkg_interval_length(9)
+                .build();
+            add_subnet_record(&registry_data_provider, 511, subnet_id, subnet_record);
+            registry.update_to_latest_version();
+            let registry_version = registry.get_latest_version();
+
+            let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
+            let mut block_reader = TestEcdsaBlockReader::new();
+            let transcript_builder = TestEcdsaTranscriptBuilder::new();
+            let signature_builder = TestEcdsaSignatureBuilder::new();
+            let ecdsa_config = EcdsaConfig {
+                quadruples_to_create_in_advance: 1,
+                key_ids: vec![key_id.clone()],
+                signature_request_timeout_ns: Some(100000),
+                ..EcdsaConfig::default()
+            };
+
+            // Generate initial dealings
+            let initial_dealings = dummy_initial_idkg_dealing_for_tests();
+            let init_tid = initial_dealings.params().transcript_id();
+
+            // Step 1: initial bootstrap payload should be created successfully
+            let payload_0 = make_bootstrap_summary(
+                subnet_id,
+                key_id,
+                Height::from(0),
+                Some(initial_dealings),
+                &no_op_logger(),
+            );
+            assert_matches!(payload_0, Ok(Some(_)));
+            let payload_0 = payload_0.unwrap().unwrap();
+            // Add initial reshare transcript to block reader
+            let transcript = payload_0.idkg_transcripts.values().next().unwrap().clone();
+            for &h in &[0, 3, 4] {
+                block_reader.add_transcript(
+                    TranscriptRef::new(Height::from(h), transcript.transcript_id),
+                    transcript.clone(),
+                );
+            }
+
+            // Step 2: a summary payload should be created successfully, with next_in_creation
+            // set to XnetReshareOfUnmaskedParams.
+            let payload_1 = create_summary_payload_helper(
+                subnet_id,
+                registry.as_ref(),
+                &block_reader,
+                Height::from(1),
+                registry_version,
+                registry_version,
+                &payload_0,
+                None,
+                no_op_logger(),
+            );
+            assert_matches!(payload_1, Ok(Some(_)));
+            let payload_1 = payload_1.unwrap().unwrap();
+            assert_matches!(
+                payload_1.key_transcript.next_in_creation,
+                ecdsa::KeyTranscriptCreation::XnetReshareOfUnmaskedParams((ref init, ref params))
+                if init.params().transcript_id() == init_tid && params.as_ref().transcript_id == init_tid
+            );
+
+            // Step 3: a data payload be created successfully
+            let mut payload_2 = payload_1;
+            let result = create_data_payload_helper_2(
+                &mut payload_2,
+                Height::from(2),
+                mock_time(),
+                &ecdsa_config,
+                registry_version,
+                &node_ids,
+                &BTreeMap::default(),
+                &BTreeMap::default(),
+                &block_reader,
+                &transcript_builder,
+                &signature_builder,
+                None,
+                no_op_logger(),
+            );
+            assert!(result.is_ok());
+            assert_matches!(
+                payload_2.key_transcript.next_in_creation,
+                ecdsa::KeyTranscriptCreation::XnetReshareOfUnmaskedParams((ref init, ref params))
+                if init.params().transcript_id() == init_tid && params.as_ref().transcript_id == init_tid
+            );
+
+            // Step 4: Allow the transcript to be completed
+            transcript_builder.add_transcript(init_tid, transcript.clone());
+
+            // Step 5: a data payload with created key should be created successfully
+            let mut payload_3 = payload_2.clone();
+            let result = create_data_payload_helper_2(
+                &mut payload_3,
+                Height::from(3),
+                mock_time(),
+                &ecdsa_config,
+                registry_version,
+                &node_ids,
+                &BTreeMap::default(),
+                &BTreeMap::default(),
+                &block_reader,
+                &transcript_builder,
+                &signature_builder,
+                None,
+                no_op_logger(),
+            );
+            assert!(result.is_ok());
+            assert_matches!(
+                payload_3.key_transcript.next_in_creation,
+                ecdsa::KeyTranscriptCreation::Created(ref unmasked)
+                if unmasked.as_ref().transcript_id == transcript.transcript_id
+            );
+            assert_matches!(payload_3.key_transcript.current, None);
+
+            // Step 6: a data payload with existing current key should be created successfully
+            let mut payload_4 = payload_3.clone();
+            let result = create_data_payload_helper_2(
+                &mut payload_4,
+                Height::from(3),
+                mock_time(),
+                &ecdsa_config,
+                registry_version,
+                &node_ids,
+                &BTreeMap::default(),
+                &BTreeMap::default(),
+                &block_reader,
+                &transcript_builder,
+                &signature_builder,
+                None,
+                no_op_logger(),
+            );
+            assert!(result.is_ok());
+            assert_eq!(
+                payload_3.key_transcript.next_in_creation,
+                payload_4.key_transcript.next_in_creation
+            );
+            assert_matches!(payload_4.key_transcript.current, Some(_));
+            let refs = payload_4.key_transcript.get_refs();
+            assert_eq!(refs.len(), 2);
+            assert_eq!(refs[0], refs[1]);
+
+            // Step 7: the summary payload with created key, based on payload_3
+            // should be created successfully
+            let payload_5 = create_summary_payload_helper(
+                subnet_id,
+                registry.as_ref(),
+                &block_reader,
+                Height::from(4),
+                registry_version,
+                registry_version,
+                &payload_3,
+                None,
+                no_op_logger(),
+            );
+            assert_matches!(payload_5, Ok(Some(_)));
+            let payload_5 = payload_5.unwrap().unwrap();
+            assert_matches!(
+                payload_5.key_transcript.next_in_creation,
+                ecdsa::KeyTranscriptCreation::Created(ref unmasked)
+                if unmasked.as_ref().transcript_id == transcript.transcript_id
+            );
+            let refs = payload_5.key_transcript.get_refs();
+            assert_eq!(refs.len(), 2);
+            assert_eq!(refs[0], refs[1]);
+
+            // Step 8: the summary payload with created key, based on payload_4
+            // should be created successfully
+            let payload_6 = create_summary_payload_helper(
+                subnet_id,
+                registry.as_ref(),
+                &block_reader,
+                Height::from(5),
+                registry_version,
+                registry_version,
+                &payload_4,
+                None,
+                no_op_logger(),
+            );
+            assert_matches!(payload_6, Ok(Some(_)));
+            let payload_6 = payload_6.unwrap().unwrap();
+            // next_in_creation should be back to begin since membership changes
+            assert_matches!(
+                payload_6.key_transcript.next_in_creation,
+                ecdsa::KeyTranscriptCreation::Begin
+            );
+            assert_matches!(payload_6.key_transcript.current, Some(_));
+        })
+    }
+
+    #[test]
+    fn test_get_ecdsa_config_if_enabled() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let Dependencies {
+                registry,
+                registry_data_provider,
+                ..
+            } = dependencies(pool_config, 1);
+            let log = no_op_logger();
+            let subnet_id = subnet_test_id(1);
+            let node_ids = vec![node_test_id(0)];
+            let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
+            let ecdsa_config_malformed = EcdsaConfig {
+                quadruples_to_create_in_advance: 1,
+                key_ids: vec![key_id.clone(), key_id.clone()],
+                ..EcdsaConfig::default()
+            };
+            let mut registry_version = RegistryVersion::from(10);
+
+            let update = |version: &mut RegistryVersion,
+                          config: &EcdsaConfig|
+             -> Result<Option<EcdsaConfig>, RegistryClientError> {
+                version.inc_assign();
+                let subnet_record = SubnetRecordBuilder::from(&node_ids)
+                    .with_ecdsa_config(config.clone())
+                    .build();
+                add_subnet_record(
+                    &registry_data_provider,
+                    version.get(),
+                    subnet_id,
+                    subnet_record,
+                );
+                registry.update_to_latest_version();
+                get_ecdsa_config_if_enabled(subnet_id, *version, registry.as_ref(), &log)
+            };
+
+            let res = update(&mut registry_version, &ecdsa_config_malformed);
+            let ecdsa_config_valid = EcdsaConfig {
+                quadruples_to_create_in_advance: 1,
+                key_ids: vec![key_id],
+                max_queue_size: Some(DEFAULT_ECDSA_MAX_QUEUE_SIZE),
+                ..EcdsaConfig::default()
+            };
+            assert_matches!(res, Ok(Some(config)) if config == ecdsa_config_valid);
+
+            let res = update(&mut registry_version, &ecdsa_config_valid);
+            assert_matches!(res, Ok(Some(config)) if config == ecdsa_config_valid);
+
+            let mut ecdsa_config_invalid = ecdsa_config_valid.clone();
+            ecdsa_config_invalid.quadruples_to_create_in_advance = 0;
+            let res = update(&mut registry_version, &ecdsa_config_invalid);
+            assert_matches!(res, Ok(None));
+
+            let mut ecdsa_config_invalid = ecdsa_config_valid;
+            ecdsa_config_invalid.key_ids = vec![];
+            let res = update(&mut registry_version, &ecdsa_config_invalid);
+            assert_matches!(res, Ok(None));
         })
     }
 }
