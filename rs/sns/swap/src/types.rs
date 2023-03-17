@@ -860,6 +860,17 @@ mod tests {
     }
 
     #[test]
+    fn params_high_participants_validate_ok() {
+        let params = Params {
+            min_participants: 500,
+            // max_icp_e8s must be enough for all of min_participants to participate
+            max_icp_e8s: 500 * PARAMS.min_participant_icp_e8s,
+            ..PARAMS
+        };
+        params.validate(&INIT).unwrap();
+    }
+
+    #[test]
     fn open_request_validate_invalid_params() {
         let request = OpenRequest {
             params: Some(Params {
