@@ -223,13 +223,11 @@ impl Storable for Registration {
 }
 
 impl BoundedStorable for Registration {
-    // TODO(BOUN-663): Migrate the registrations to a new BTreeMap so that we can increase the MAX_SIZE
     // The MAX_SIZE for Registration was determined by building the biggest possible
     // registration and calculating it's resulting Candid encoded size.
     // This can be found below under the `max_registration_size` test.
-    // const MAX_SIZE: u32 = 474;
-
-    const MAX_SIZE: u32 = 128;
+    // The final MAX_SIZE we use here provided plenty of padding for future growth
+    const MAX_SIZE: u32 = 1024;
     const IS_FIXED_SIZE: bool = false;
 }
 
@@ -469,6 +467,8 @@ mod tests {
         assert_eq!(BoundedString::<4>::from("123").as_str(), "123");
     }
 
+    const MAX_REGISTRATION_SIZE: usize = 474;
+
     #[test]
     fn max_registration_size() {
         let max = [
@@ -485,7 +485,7 @@ mod tests {
         ];
 
         for v in max {
-            assert_eq!(v.to_bytes().len() as u32, Registration::MAX_SIZE);
+            assert_eq!(v.to_bytes().len(), MAX_REGISTRATION_SIZE);
         }
     }
 
@@ -510,7 +510,7 @@ mod tests {
         ];
 
         for v in non_max {
-            assert!((v.to_bytes().len() as u32) < Registration::MAX_SIZE);
+            assert!(v.to_bytes().len() < MAX_REGISTRATION_SIZE);
         }
     }
 }
