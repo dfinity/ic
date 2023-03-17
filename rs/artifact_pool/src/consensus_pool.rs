@@ -19,12 +19,13 @@ use ic_interfaces::{
     time_source::TimeSource,
 };
 use ic_logger::ReplicaLogger;
+use ic_metrics::buckets::linear_buckets;
 use ic_types::{
     artifact::ConsensusMessageFilter, artifact::ConsensusMessageId,
     artifact_kind::ConsensusArtifact, consensus::catchup::CUPWithOriginalProtobuf, consensus::*,
     Height, SubnetId, Time,
 };
-use prometheus::{labels, opts, IntGauge};
+use prometheus::{histogram_opts, labels, opts, Histogram, IntGauge};
 use std::cmp::Ordering;
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -69,6 +70,7 @@ pub trait MutablePoolSection<T>: PoolSection<T> {
 struct PerTypeMetrics<T> {
     max_height: prometheus::IntGauge,
     min_height: prometheus::IntGauge,
+    count: Histogram,
     phantom: PhantomData<T>,
 }
 
@@ -97,6 +99,17 @@ impl<T> PerTypeMetrics<T> {
                 ))
                 .unwrap(),
             ),
+            count: registry.register(
+                Histogram::with_opts(histogram_opts!(
+                    "artifact_pool_consensus_count_per_height",
+                    "The number of artifacts of the given height in a consensus pool, by pool type \
+                    and object type",
+                    // 1, 2, ..., 10
+                    linear_buckets(1.0, 1.0, 10),
+                    labels! {LABEL_POOL_TYPE.to_string() => pool_portion.to_string(), LABEL_TYPE.to_string() => type_name.to_string()}
+                ))
+                .unwrap(),
+            ),
             phantom: PhantomData,
         }
     }
@@ -110,6 +123,21 @@ impl<T> PerTypeMetrics<T> {
         }
         if max >= 0 {
             self.max_height.set(max);
+        }
+    }
+
+    /// Updates the number of artifacts for each height in [last_height, new_height)
+    fn update_count(
+        &self,
+        index: &dyn HeightIndexedPool<T>,
+        last_height: Height,
+        new_height: Height,
+    ) {
+        let mut height = last_height;
+        while height < new_height {
+            let count = index.get_by_height(height).count();
+            self.count.observe(count as f64);
+            height.inc_assign();
         }
     }
 }
@@ -186,6 +214,33 @@ impl PoolMetrics {
         self.catch_up_package_share
             .update_from_height_indexed_pool(pool_section.catch_up_package_share());
         self.total_size.set(pool_section.size() as i64)
+    }
+
+    fn update_count<T>(
+        &mut self,
+        pool_section: &dyn PoolSection<T>,
+        last_height: Height,
+        new_height: Height,
+    ) {
+        macro_rules! update_count {
+            ($artifact_name:ident) => {
+                self.$artifact_name.update_count(
+                    pool_section.$artifact_name(),
+                    last_height,
+                    new_height,
+                );
+            };
+        }
+
+        update_count!(random_beacon);
+        update_count!(random_tape);
+        update_count!(block_proposal);
+        update_count!(notarization);
+        update_count!(finalization);
+        update_count!(random_beacon_share);
+        update_count!(random_tape_share);
+        update_count!(notarization_share);
+        update_count!(finalization_share);
     }
 }
 
@@ -401,8 +456,21 @@ impl ConsensusPoolImpl {
 
     fn apply_changes_validated(&mut self, ops: PoolSectionOps<ValidatedConsensusArtifact>) {
         if !ops.ops.is_empty() {
+            let last_height = self.validated.pool_section().finalization().max_height();
             self.validated.mutate(ops);
+            let new_height = self.validated.pool_section().finalization().max_height();
+
             self.validated_metrics.update(self.validated.pool_section());
+            // Update the metrics if necessary.
+            if let (Some(last_height), Some(new_height)) = (last_height, new_height) {
+                if new_height != last_height {
+                    self.validated_metrics.update_count(
+                        self.validated.pool_section(),
+                        last_height,
+                        new_height,
+                    );
+                }
+            }
         }
     }
 
@@ -865,6 +933,147 @@ mod tests {
             assert_eq!(pool.unvalidated().get_timestamp(&msg_id_1), None);
             assert_eq!(pool.validated().get_timestamp(&msg_id_1), None);
         })
+    }
+
+    #[test]
+    fn test_metrics() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let time_source = FastForwardTimeSource::new();
+            let mut pool = ConsensusPoolImpl::new_from_cup_without_bytes(
+                subnet_test_id(0),
+                make_genesis(ic_types::consensus::dkg::Summary::fake()),
+                pool_config,
+                ic_metrics::MetricsRegistry::global(),
+                no_op_logger(),
+            );
+
+            // creates a block for the given height and rank
+            let fake_block = |height: u64, rank: u64| {
+                Block::new(
+                    CryptoHashOf::from(CryptoHash(vec![])),
+                    Payload::new(
+                        ic_types::crypto::crypto_hash,
+                        (ic_types::consensus::dkg::Summary::fake(), None).into(),
+                    ),
+                    Height::from(height),
+                    Rank(rank),
+                    ValidationContext {
+                        registry_version: RegistryVersion::from(99),
+                        certified_height: Height::from(42),
+                        time: mock_time(),
+                    },
+                )
+            };
+
+            // creates a fake block proposal for the given block
+            let fake_block_proposal = |block: &Block| {
+                ChangeAction::AddToValidated(
+                    BlockProposal::fake(block.clone(), node_test_id(333)).into_message(),
+                )
+            };
+
+            // creates a fake notarization for the given block
+            let fake_notarization = |block: &Block| {
+                ChangeAction::AddToValidated(
+                    Notarization::fake(NotarizationContent::new(
+                        block.height(),
+                        ic_types::crypto::crypto_hash(block),
+                    ))
+                    .into_message(),
+                )
+            };
+
+            // creates a fake finalization for the given block
+            let fake_finalization = |block: &Block| {
+                ChangeAction::AddToValidated(
+                    Finalization::fake(FinalizationContent::new(
+                        block.height(),
+                        ic_types::crypto::crypto_hash(block),
+                    ))
+                    .into_message(),
+                )
+            };
+
+            // extracts the notarization metric from the registry
+            let get_metric = || {
+                prometheus::default_registry()
+                .gather()
+                .iter()
+                .find(|m| m.get_name() == "artifact_pool_consensus_count_per_height")
+                .expect("articact_pool_consensus_count_per_heigfht metric not registered")
+                .get_metric()
+                .iter()
+                .find(|m|
+                    m.get_label().iter().any(|label| {
+                        label.get_name() == "pool_type" && label.get_value() == "validated"
+                    }) &&
+                    m.get_label().iter().any(|label| {
+                        label.get_name() == "type" && label.get_value() == "notarization"
+                    }))
+                .expect(
+                    "metric with pool_type = unvalidated and type = notarization not registered",
+                )
+                .get_histogram()
+                .clone()
+            };
+
+            //
+            // Height = 3
+            //
+            let block = fake_block(3, 0);
+
+            pool.apply_changes(
+                time_source.as_ref(),
+                vec![
+                    fake_block_proposal(&block),
+                    fake_notarization(&block),
+                    fake_finalization(&block),
+                ],
+            );
+
+            let metric = get_metric();
+            assert_eq!(metric.get_sample_count(), 0_u64);
+            assert_eq!(metric.get_sample_sum(), 0_f64);
+
+            //
+            // Height = 4
+            //
+            let block1 = fake_block(4, 0);
+            let block2 = fake_block(4, 1);
+
+            pool.apply_changes(
+                time_source.as_ref(),
+                vec![
+                    fake_block_proposal(&block1),
+                    fake_notarization(&block1),
+                    fake_block_proposal(&block2),
+                    fake_notarization(&block2),
+                    fake_finalization(&block2),
+                ],
+            );
+
+            let metric = get_metric();
+            assert_eq!(metric.get_sample_count(), 1_u64);
+            assert_eq!(metric.get_sample_sum(), 1_f64);
+
+            //
+            // Height = 5
+            //
+            let block = fake_block(5, 0);
+
+            pool.apply_changes(
+                time_source.as_ref(),
+                vec![
+                    fake_block_proposal(&block),
+                    fake_notarization(&block),
+                    fake_finalization(&block),
+                ],
+            );
+
+            let metric = get_metric();
+            assert_eq!(metric.get_sample_count(), 2_u64);
+            assert_eq!(metric.get_sample_sum(), 3_f64);
+        });
     }
 
     #[test]
