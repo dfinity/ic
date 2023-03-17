@@ -3836,6 +3836,8 @@ proptest! {
         );
     }
 
+    /// Depending on the specific input, may fail with either `InvalidSignature` or
+    /// `InconsistentPartialTree`. Hence, only a generic `should_panic`.
     #[test]
     #[should_panic]
     fn stream_store_decode_slice_modify_message_begin(stream in arb_stream(0, 10, 0, 10)) {
@@ -3938,7 +3940,7 @@ proptest! {
             true,
             /* modification between encoding and decoding  */
             |state_manager, slice| {
-                // we do not modify the slice before decoding it again - the wrong
+                // Do not modify the slice before decoding it again - the wrong
                 // destination subnet should already make it fail
                 (state_manager, slice)
             }
@@ -3955,12 +3957,35 @@ proptest! {
             Some(size_limit),
             /* custom destination subnet */
             None,
-            /* certification verification should succeed */
+            /* certification verification should fail */
             false,
             /* modification between encoding and decoding  */
             |state_manager, slice| {
-                // we do not modify the slice before decoding it again - the signature validation
+                // Do not modify the slice before decoding it again - the signature validation
                 // failure caused by passing the `RejectingVerifier` should already make it fail.
+                (state_manager, slice)
+            }
+        );
+    }
+
+    /// If both signature verification and slice decoding would fail, we expect to
+    /// see an error about the former.
+    #[test]
+    #[should_panic(expected = "InvalidSignature")]
+    fn stream_store_decode_with_invalid_destination_and_rejecting_verifier(stream in arb_stream(0, 10, 0, 10), size_limit in 0..20usize) {
+        encode_decode_stream_test(
+            /* stream to be used */
+            stream,
+            /* size limit used upon encoding */
+            Some(size_limit),
+            /* custom destination subnet */
+            Some(subnet_test_id(1)),
+            /* certification verification should fail  */
+            false,
+            /* modification between encoding and decoding  */
+            |state_manager, slice| {
+                // Do not modify the slice, the wrong destination subnet and rejecting verifier
+                // should make it fail regardless.
                 (state_manager, slice)
             }
         );

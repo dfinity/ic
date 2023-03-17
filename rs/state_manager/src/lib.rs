@@ -3134,9 +3134,6 @@ impl CertifiedStreamStore for StateManagerImpl {
             .with_label_values(&["decode_certified_stream"])
             .start_timer();
 
-        fn crypto_hash_of_partial_state(d: &Digest) -> CryptoHashOfPartialState {
-            CryptoHashOfPartialState::from(CryptoHash(d.0.to_vec()))
-        }
         fn verify_recomputed_digest(
             verifier: &Arc<dyn Verifier>,
             remote_subnet: SubnetId,
@@ -3155,8 +3152,7 @@ impl CertifiedStreamStore for StateManagerImpl {
                 log,
             );
 
-            let hash_matches =
-                crypto_hash_of_partial_state(&digest) == certification.signed.content.hash;
+            let hash_matches = digest.as_bytes() == certification.signed.content.hash.get_ref().0;
             let verification_status =
                 verifier.validate(remote_subnet, certification, registry_version);
             let signature_verifies = verification_status.is_ok();
@@ -3168,17 +3164,6 @@ impl CertifiedStreamStore for StateManagerImpl {
         }
 
         let tree = stream_encoding::decode_labeled_tree(&certified_slice.payload)?;
-
-        // The function `decode_stream_slice` already checks internally whether the
-        // slice only contains a stream for a single destination subnet.
-        let (subnet_id, slice) = stream_encoding::decode_slice_from_tree(&tree)?;
-
-        if subnet_id != self.own_subnet_id {
-            return Err(DecodeStreamError::InvalidDestination {
-                sender: remote_subnet,
-                receiver: subnet_id,
-            });
-        }
 
         let witness = v1::Witness::proxy_decode(&certified_slice.merkle_proof).map_err(|e| {
             DecodeStreamError::SerializationError(format!("Failed to deserialize witness: {:?}", e))
@@ -3199,6 +3184,17 @@ impl CertifiedStreamStore for StateManagerImpl {
             &self.malicious_flags,
         ) {
             return Err(DecodeStreamError::InvalidSignature(remote_subnet));
+        }
+
+        // `decode_slice_from_tree()` already checks internally whether the
+        // slice only contains a stream for a single destination subnet.
+        let (subnet_id, slice) = stream_encoding::decode_slice_from_tree(&tree)?;
+
+        if subnet_id != self.own_subnet_id {
+            return Err(DecodeStreamError::InvalidDestination {
+                sender: remote_subnet,
+                receiver: subnet_id,
+            });
         }
 
         Ok(slice)
