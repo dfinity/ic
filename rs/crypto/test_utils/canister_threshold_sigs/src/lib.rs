@@ -621,6 +621,17 @@ pub fn random_dealer_id_excluding(transcript: &IDkgTranscript, exclusion: NodeId
         .expect("dealer index not in transcript")
 }
 
+pub fn random_crypto_component_not_in_receivers(
+    env: &CanisterThresholdSigTestEnvironment,
+    receivers: &IDkgReceivers,
+) -> TempCryptoComponent {
+    let node_id = random_node_id_excluding(receivers.get());
+    TempCryptoComponent::builder()
+        .with_registry(Arc::clone(&env.registry) as Arc<_>)
+        .with_node_id(node_id)
+        .build()
+}
+
 /// Corrupts the dealing for a single randomly picked receiver.
 /// node_id is the self Node Id. The shares for the receivers specified
 /// in excluded_receivers won't be corrupted.
@@ -676,20 +687,7 @@ pub fn run_tecdsa_protocol(
     env: &CanisterThresholdSigTestEnvironment,
     sig_inputs: &ThresholdEcdsaSigInputs,
 ) -> ThresholdEcdsaCombinedSignature {
-    let sig_shares: BTreeMap<_, _> = sig_inputs
-        .receivers()
-        .get()
-        .iter()
-        .map(|&signer_id| {
-            load_input_transcripts(&env.crypto_components, signer_id, sig_inputs);
-
-            let sig_share = crypto_for(signer_id, &env.crypto_components)
-                .sign_share(sig_inputs)
-                .expect("failed to create sig share");
-            (signer_id, sig_share)
-        })
-        .collect();
-
+    let sig_shares = sig_share_from_each_receiver(env, sig_inputs);
     // Verify that each signature share can be verified
     let verifier_id = random_node_id_excluding(sig_inputs.receivers().get());
     let verifier_crypto_component = TempCryptoComponent::builder()
@@ -709,6 +707,26 @@ pub fn run_tecdsa_protocol(
     combiner_crypto_component
         .combine_sig_shares(sig_inputs, &sig_shares)
         .expect("Failed to generate signature")
+}
+
+pub fn sig_share_from_each_receiver(
+    env: &CanisterThresholdSigTestEnvironment,
+    inputs: &ThresholdEcdsaSigInputs,
+) -> BTreeMap<NodeId, ThresholdEcdsaSigShare> {
+    let sig_shares: BTreeMap<_, _> = inputs
+        .receivers()
+        .get()
+        .iter()
+        .map(|&signer_id| {
+            load_input_transcripts(&env.crypto_components, signer_id, inputs);
+
+            let sig_share = crypto_for(signer_id, &env.crypto_components)
+                .sign_share(inputs)
+                .expect("failed to create sig share");
+            (signer_id, sig_share)
+        })
+        .collect();
+    sig_shares
 }
 
 /// Corrupts valid instances of a given type containing some binary data
@@ -803,6 +821,16 @@ impl CorruptBytes for ThresholdEcdsaSigShare {
     fn clone_with_bit_flipped(&self) -> Self::Type {
         ThresholdEcdsaSigShare {
             sig_share_raw: self.sig_share_raw.clone_with_bit_flipped(),
+        }
+    }
+}
+
+impl CorruptBytes for ThresholdEcdsaCombinedSignature {
+    type Type = Self;
+
+    fn clone_with_bit_flipped(&self) -> Self::Type {
+        ThresholdEcdsaCombinedSignature {
+            signature: self.signature.clone_with_bit_flipped(),
         }
     }
 }
