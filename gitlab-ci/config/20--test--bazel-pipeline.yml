@@ -97,30 +97,9 @@ bazel-test-all-allow-to-fail:
     BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --keep_going --test_tag_filters=allow_to_fail"
     BAZEL_TARGETS: "//..."
 
-.scheduled-bazel-system-test:
-  extends:
-    - .bazel-test-all
-  variables:
-    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --test_tag_filters=${BAZEL_TEST_TAG_FILTERS} --build_event_json_file=./build_event_file.json"
-    BAZEL_TARGETS: "//..."
-  artifacts:
-    when: always
-    paths:
-      - output_dir/
-      - build_event_file.json
-  after_script:
-    - |
-      mkdir output_dir
-      export OUTPUT_DIR="$PWD/output_dir"
-      export BUILD_EVENT_JSON_PATH="$PWD/build_event_file.json"
-      export SLACK_WEBHOOK_URL
-      export HONEYCOMB_API_TOKEN
-      bazel run //rs/tests:post_processing
-    - !reference [after_script]
-
 bazel-system-test-hourly:
   extends:
-    - .scheduled-bazel-system-test
+    - .bazel-test-all
     - .bazel-rules-post-master
   variables:
     BAZEL_TEST_TAG_FILTERS: "system_test_hourly"

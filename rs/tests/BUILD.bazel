@@ -134,12 +134,6 @@ rust_binary(
     deps = DEPENDENCIES + [":tests"],
 )
 
-py_binary(
-    name = "post_processing",
-    srcs = ["bin/bazel_test_postprocessing.py"],
-    main = ":bin/bazel_test_postprocessing.py",
-)
-
 rust_test(
     name = "test_e2e_scenarios",
     srcs = ["tests/test_driver_tests.rs"],
