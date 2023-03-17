@@ -1904,22 +1904,48 @@ fn can_state_sync_from_cache() {
         let msg = src_state_sync
             .get_validated_by_identifier(&id)
             .expect("failed to get state sync messages");
-
         assert_error_counters(src_metrics);
-
         state_manager_test_with_state_sync(|dst_metrics, dst_state_manager, dst_state_sync| {
             // Not all chunk ids to be omitted will work for the purpose of this test
             // They have to be (1) not included in a file group chunk and (2) not identical
             // to another chunk that is not omitted.
+            //
+            // Here we choose the `system_metadata.pbuf` because it is never empty and unlikely to be identical to others.
+            //   file idx  |  file size | chunk idx |                         path
+            // ------------+------------+---------- +------------------------------------------------------
+            //           4 |        216 |     0     | canister_states/00000000000000640101/canister.pbuf
+            //           5 |          0 |    N/A    | canister_states/00000000000000640101/queues.pbuf
+            //           6 |         18 |     1     | canister_states/00000000000000640101/software.wasm
+            //           7 |       4096 |     2     | canister_states/00000000000000640101/stable_memory.bin
+            //           8 |       4096 |     3     | canister_states/00000000000000640101/vmemory_0.bin
+            //           9 |        216 |     4     | canister_states/00000000000000c80101/canister.pbuf
+            //          10 |          0 |    N/A    | canister_states/00000000000000c80101/queues.pbuf
+            //          11 |         18 |     5     | canister_states/00000000000000c80101/software.wasm
+            //          12 |          0 |    N/A    | canister_states/00000000000000c80101/stable_memory.bin
+            //          13 |          0 |    N/A    | canister_states/00000000000000c80101/vmemory_0.bin
+            //          14 |          0 |    N/A    | subnet_queues.pbuf
+            //          15 |         88 |     6     | system_metadata.pbuf
+            //
+            // Given the current state layout, the chunk for `system_metadata.pbuf` is the last one in the chunk table.
+            // If there are changes to the state layout and it changes the position of `system_metadata.pbuf` in the chunk table,
+            // the assertion below will panic and we need to adjust the selected chunk id accordingly for this test.
+            let chunk_table_idx_to_omit = msg.manifest.chunk_table.len() - 1;
+            let chunk_id_to_omit = ChunkId::new(chunk_table_idx_to_omit as u32 + 1);
+            let file_table_idx_to_omit =
+                msg.manifest.chunk_table[chunk_table_idx_to_omit].file_index as usize;
+            let file_path = &msg.manifest.file_table[file_table_idx_to_omit].relative_path;
+            // Make sure the chunk to omit is from file `system_metadata.pbuf`.
+            assert!(file_path.ends_with("system_metadata.pbuf"));
+
             let omit: HashSet<ChunkId> =
-                maplit::hashset! {ChunkId::new(4), ChunkId::new(FILE_GROUP_CHUNK_ID_OFFSET)};
+                maplit::hashset! {chunk_id_to_omit, ChunkId::new(FILE_GROUP_CHUNK_ID_OFFSET)};
 
             // First state sync is destroyed before completion
             {
                 let mut chunkable = dst_state_sync.create_chunkable_state(&id);
 
                 // First fetch chunk 0 (the manifest), and then ask for all chunks afterwards,
-                // but never receive 1 and FILE_GROUP_CHUNK_ID_OFFSET
+                // but never receive the chunk for `system_metadata.pbuf` and FILE_GROUP_CHUNK_ID_OFFSET
                 let completion = pipe_partial_state_sync(&msg, &mut *chunkable, &omit);
                 assert!(completion.is_none(), "Unexpectedly completed state sync");
             }
