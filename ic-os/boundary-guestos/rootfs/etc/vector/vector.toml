@@ -6,6 +6,7 @@ type = "prometheus_exporter"
 inputs = ["vector_metrics"]
 address = "${VECTOR_PROMETHUS_ADDR}"
 default_namespace = "vector"
+suppress_timestamp = true
 
 # nginx
 
@@ -208,6 +209,7 @@ type = "prometheus_exporter"
 inputs = ["nginx_access_metrics", "nginx_error_metrics"]
 address = "${NGINX_PROMETHUS_ADDR}"
 default_namespace = "nginx"
+suppress_timestamp = true
 
 # control-plane
 
@@ -386,3 +388,8 @@ type = "prometheus_exporter"
 inputs = ["danted_metrics"]
 address = "${DANTED_PROMETHUS_ADDR}"
 default_namespace = "danted"
+suppress_timestamp = true
+
+# this metric sees very low activity,
+# therefore we retain it for a longer time (2 hrs)
+flush_period_secs = 7200
