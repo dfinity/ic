@@ -159,6 +159,7 @@ fn consensus_produces_expected_batches() {
             Arc::clone(&membership) as Arc<_>,
             Arc::clone(&fake_crypto) as Arc<_>,
             Arc::clone(&state_manager) as Arc<_>,
+            Arc::clone(&consensus_cache),
             metrics_registry.clone(),
             no_op_logger(),
         );

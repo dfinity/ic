@@ -6,12 +6,9 @@ use ic_interfaces::{
     artifact_pool::{ChangeSetProducer, MutablePool, UnvalidatedArtifact},
     canister_http::{CanisterHttpChangeAction, CanisterHttpChangeSet, CanisterHttpPool},
     certification::{
-        CertificationPool, Certifier, ChangeAction as CertificationChangeAction,
-        ChangeSet as CertificationChangeSet,
+        ChangeAction as CertificationChangeAction, ChangeSet as CertificationChangeSet,
     },
-    consensus_pool::{
-        ChangeAction as ConsensusAction, ChangeSet as CoonsensusChangeSet, ConsensusPoolCache,
-    },
+    consensus_pool::{ChangeAction as ConsensusAction, ChangeSet as CoonsensusChangeSet},
     dkg::{ChangeAction as DkgChangeAction, ChangeSet as DkgChangeSet},
     ecdsa::{EcdsaChangeAction, EcdsaChangeSet, EcdsaPool},
     ingress_pool::{ChangeAction as IngressAction, ChangeSet as IngressChangeSet},
@@ -236,12 +233,10 @@ impl<PoolIngress: MutablePool<IngressArtifact, IngressChangeSet> + Send + Sync +
 
 /// Certification `OnStateChange` client.
 pub struct CertificationProcessor<PoolCertification> {
-    /// The *Consensus* pool cache.
-    consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
     /// The certification pool.
     certification_pool: Arc<RwLock<PoolCertification>>,
     /// The certifier.
-    client: Box<dyn Certifier>,
+    client: Box<dyn ChangeSetProducer<PoolCertification, ChangeSet = CertificationChangeSet>>,
     /// The invalidated artifacts counter.
     invalidated_artifacts: IntCounter,
     /// The logger.
@@ -250,14 +245,12 @@ pub struct CertificationProcessor<PoolCertification> {
 
 impl<PoolCertification> CertificationProcessor<PoolCertification> {
     pub fn new(
-        consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
         certification_pool: Arc<RwLock<PoolCertification>>,
-        client: Box<dyn Certifier>,
+        client: Box<dyn ChangeSetProducer<PoolCertification, ChangeSet = CertificationChangeSet>>,
         log: ReplicaLogger,
         metrics_registry: &MetricsRegistry,
     ) -> Self {
         Self {
-            consensus_pool_cache,
             certification_pool,
             client,
             log,
@@ -270,11 +263,7 @@ impl<PoolCertification> CertificationProcessor<PoolCertification> {
 }
 
 impl<
-        PoolCertification: MutablePool<CertificationArtifact, CertificationChangeSet>
-            + Send
-            + Sync
-            + 'static
-            + CertificationPool,
+        PoolCertification: MutablePool<CertificationArtifact, CertificationChangeSet> + Send + Sync + 'static,
     > ArtifactProcessor<CertificationArtifact> for CertificationProcessor<PoolCertification>
 {
     /// The method processes changes in the certification pool.
@@ -293,10 +282,9 @@ impl<
             }
         }
         let mut adverts = Vec::new();
-        let change_set = self.client.on_state_change(
-            self.consensus_pool_cache.as_ref(),
-            self.certification_pool.clone(),
-        );
+        let change_set = self
+            .client
+            .on_state_change(&*self.certification_pool.read().unwrap());
         let changed = if !change_set.is_empty() {
             ProcessingResult::StateChanged
         } else {

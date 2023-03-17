@@ -170,6 +170,7 @@ impl<'a> ConsensusRunner<'a> {
             membership,
             fake_crypto,
             deps.state_manager.clone(),
+            deps.consensus_pool.read().unwrap().get_cache(),
             deps.metrics_registry.clone(),
             replica_logger.clone(),
         );

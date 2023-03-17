@@ -1,52 +1,11 @@
 //! The certification public interface.
-use crate::{
-    consensus_pool::ConsensusPoolCache,
-    validation::{ValidationError, ValidationResult},
-};
+use crate::validation::{ValidationError, ValidationResult};
 use ic_types::{
     consensus::certification::{Certification, CertificationMessage, CertificationShare},
     crypto::CryptoError,
     CryptoHashOfPartialState, Height, RegistryVersion, SubnetId,
 };
 use std::collections::HashSet;
-use std::sync::{Arc, RwLock};
-
-/// The certifier component is responsible for signing execution states.
-/// These signatures are required, to securely transmit a set of inter-canister
-/// messages from one sub-network to another, or to synchronize the replica
-/// state.
-///
-/// For creating a signature for a state, every replica follows the
-/// following algorithm:
-///
-/// 1. Request a set of (height, hash) tuples from its local StateManager, where
-/// `hash` is the hash of the replicated state after processing the batch at the
-/// specified height. The StateManager is responsible for selecting which parts
-/// of the replicated state are included in the computation of the hash.
-///
-/// 2. Sign the hash-height tuple, resulting in a CertificationShare, and place
-/// the CertificationShare in the certification pool, to be gossiped to other
-/// replicas.
-///
-/// 3. On every invocation of `on_state_change`, if sufficiently many
-/// CertificationShares for the same (height, hash) pair were received, combine
-/// them into a full Certification and put it into the certification pool. At
-/// that point, the CertificationShares are not required anymore and can be
-/// purged.
-///
-/// 4. For every (height, hash) pair with a full Certification, submit
-/// the pair (height, Certification) to the StateManager.
-///
-/// 5. Whenever the catch-up package height increases, remove all certification
-/// artifacts below this height.
-pub trait Certifier: Send {
-    /// Should be called on every change of the certification pool and timeouts.
-    fn on_state_change(
-        &self,
-        consensus_cache: &dyn ConsensusPoolCache,
-        certification_pool: Arc<RwLock<dyn CertificationPool>>,
-    ) -> ChangeSet;
-}
 
 /// Contains all possible change actions applicable to the certification pool.
 pub type ChangeSet = Vec<ChangeAction>;

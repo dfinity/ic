@@ -104,9 +104,9 @@ use ic_interfaces::{
         ArtifactClient, ArtifactPoolDescriptor, ArtifactProcessor, ProcessingResult,
     },
     artifact_pool::{ChangeSetProducer, MutablePool, UnvalidatedArtifact},
-    canister_http::*,
-    certification::{CertificationPool, Certifier, ChangeSet as CertificationChangeSet},
-    consensus_pool::{ChangeSet as ConsensusChangeSet, ConsensusPoolCache},
+    canister_http::{CanisterHttpChangeSet, CanisterHttpPool},
+    certification::ChangeSet as CertificationChangeSet,
+    consensus_pool::ChangeSet as ConsensusChangeSet,
     dkg::ChangeSet as DkgChangeSet,
     ecdsa::{EcdsaChangeSet, EcdsaPool},
     gossip_pool::GossipPool,
@@ -377,24 +377,21 @@ pub fn create_consensus_handlers<
 pub fn create_certification_handlers<
     PoolCertification: MutablePool<CertificationArtifact, CertificationChangeSet>
         + GossipPool<CertificationArtifact>
-        + CertificationPool
         + Send
         + Sync
         + 'static,
-    C: Certifier + 'static,
+    C: ChangeSetProducer<PoolCertification, ChangeSet = CertificationChangeSet> + 'static,
     G: ArtifactPoolDescriptor<CertificationArtifact, PoolCertification> + 'static,
     S: Fn(AdvertSendRequest<CertificationArtifact>) + Send + 'static,
 >(
     send_advert: S,
     (certifier, certifier_gossip): (C, G),
     time_source: Arc<SysTimeSource>,
-    consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
     certification_pool: Arc<RwLock<PoolCertification>>,
     log: ReplicaLogger,
     metrics_registry: MetricsRegistry,
 ) -> ArtifactClientHandle<CertificationArtifact> {
     let client = processors::CertificationProcessor::new(
-        consensus_pool_cache.clone(),
         certification_pool.clone(),
         Box::new(certifier),
         log,

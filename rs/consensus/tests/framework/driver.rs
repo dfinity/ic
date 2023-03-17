@@ -7,8 +7,7 @@ use ic_consensus::consensus::ConsensusImpl;
 use ic_interfaces::{
     artifact_pool::{ChangeSetProducer, MutablePool},
     certification,
-    certification::Certifier,
-    consensus_pool::{ChangeAction, ConsensusPool},
+    consensus_pool::ChangeAction,
     dkg::ChangeAction as DkgChangeAction,
     time_source::{SysTimeSource, TimeSource},
 };
@@ -28,7 +27,9 @@ impl<'a> ConsensusDriver<'a> {
         pool_config: ArtifactPoolConfig,
         consensus: ConsensusImpl,
         dkg: ic_consensus::dkg::DkgImpl,
-        certifier: Box<dyn Certifier + 'a>,
+        certifier: Box<
+            dyn ChangeSetProducer<CertificationPoolImpl, ChangeSet = certification::ChangeSet> + 'a,
+        >,
         consensus_pool: Arc<RwLock<ConsensusPoolImpl>>,
         dkg_pool: Arc<RwLock<dkg_pool::DkgPoolImpl>>,
         logger: ReplicaLogger,
@@ -105,10 +106,9 @@ impl<'a> ConsensusDriver<'a> {
             }
         }
         loop {
-            let changeset = self.certifier.on_state_change(
-                self.consensus_pool.read().unwrap().as_cache(),
-                self.certification_pool.clone(),
-            );
+            let changeset = self
+                .certifier
+                .on_state_change(&*self.certification_pool.read().unwrap());
             if changeset.is_empty() {
                 break;
             }

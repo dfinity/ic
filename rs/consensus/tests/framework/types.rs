@@ -6,8 +6,9 @@ use ic_artifact_pool::{
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus::{consensus::ConsensusImpl, dkg};
 use ic_interfaces::{
+    artifact_pool::ChangeSetProducer,
     canister_http::CanisterHttpPayloadBuilder,
-    certification::Certifier,
+    certification::ChangeSet,
     ingress_manager::IngressSelector,
     messaging::{MessageRouting, XNetPayloadBuilder},
     self_validating_payload::SelfValidatingPayloadBuilder,
@@ -231,7 +232,8 @@ pub type StopPredicate<'a> = &'a dyn Fn(&ConsensusInstance<'a>) -> bool;
 pub struct ConsensusDriver<'a> {
     pub(crate) consensus: ConsensusImpl,
     pub(crate) dkg: dkg::DkgImpl,
-    pub(crate) certifier: Box<dyn Certifier + 'a>,
+    pub(crate) certifier:
+        Box<dyn ChangeSetProducer<CertificationPoolImpl, ChangeSet = ChangeSet> + 'a>,
     pub(crate) logger: ReplicaLogger,
     pub consensus_pool: Arc<RwLock<ConsensusPoolImpl>>,
     pub certification_pool: Arc<RwLock<CertificationPoolImpl>>,
