@@ -22,7 +22,7 @@ use ic_ckbtc_agent::CkBtcMinterAgent;
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::state::Mode;
 use ic_ckbtc_minter::updates::get_withdrawal_account::compute_subaccount;
-use ic_icrc1_agent::Icrc1Agent;
+use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::Account;
 use slog::{debug, info};
 

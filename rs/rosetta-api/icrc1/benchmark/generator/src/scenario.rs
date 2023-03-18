@@ -8,10 +8,10 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_cdk::api::management_canister::main::{
     CanisterIdRecord, CanisterInstallMode, CreateCanisterArgument, InstallCodeArgument, WasmModule,
 };
-use ic_icrc1::endpoints::TransferArg;
 use ic_icrc1_benchmark_worker::InitArgs;
 use ic_icrc1_client_cdk::{CdkRuntime, ICRC1Client};
 use ic_ledger_core::Tokens;
+use icrc_ledger_types::transaction::TransferArg;
 use icrc_ledger_types::Account;
 
 pub(crate) const ICP_E8S: Tokens = Tokens::from_e8s(100_000_000);

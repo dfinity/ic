@@ -51,7 +51,6 @@ ic-cup-explorer = { path = "../cup_explorer" }
 ic-http-utils = { path = "../http_utils" }
 ic-ic00-types = { path = "../types/ic00_types" }
 ic-icrc1 = { path = "../rosetta-api/icrc1" }
-ic-icrc1-agent = { path = "../rosetta-api/icrc1/agent" }
 ic-icrc1-ledger = { path = "../rosetta-api/icrc1/ledger" }
 ic-ledger-core = { path = "../rosetta-api/ledger_core" }
 ic-ledger-canister-blocks-synchronizer-test-utils = { path = "../rosetta-api/ledger_canister_blocks_synchronizer/test_utils" }
@@ -97,6 +96,7 @@ ic-test-utilities = { path = "../test_utilities" }
 ic-types = { path = "../types/types" }
 ic-types-test-utils = { path = "../types/types_test_utils" }
 ic-universal-canister = { path = "../universal_canister/lib" }
+icrc-ledger-agent = { path = "../../packages/icrc-ledger-agent" }
 icrc-ledger-types = { path = "../../packages/icrc-ledger-types" }
 json5 = "0.4.1"
 k256 = { version = "0.12", features = ["ecdsa"] }

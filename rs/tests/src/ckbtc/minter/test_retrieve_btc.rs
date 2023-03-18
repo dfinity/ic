@@ -25,8 +25,8 @@ use ic_ckbtc_minter::updates::{
     get_withdrawal_account::compute_subaccount,
     retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError},
 };
-use ic_icrc1::endpoints::TransferArg;
-use ic_icrc1_agent::Icrc1Agent;
+use icrc_ledger_agent::Icrc1Agent;
+use icrc_ledger_types::transaction::TransferArg;
 use icrc_ledger_types::Account;
 use slog::{debug, info};
 

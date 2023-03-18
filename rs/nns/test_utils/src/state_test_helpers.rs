@@ -10,7 +10,6 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_ic00_types::{
     CanisterInstallMode, CanisterSettingsArgs, CanisterStatusResultV2, UpdateSettingsArgs,
 };
-use ic_icrc1::endpoints::{TransferArg, TransferError};
 use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount;
 use ic_nervous_system_root::CanisterIdRecord;
 use ic_nns_constants::{
@@ -31,6 +30,7 @@ use ic_test_utilities::universal_canister::{
 };
 use ic_types::ingress::WasmResult;
 use ic_types::Cycles;
+use icrc_ledger_types::transaction::{TransferArg, TransferError};
 use icrc_ledger_types::Account;
 use num_traits::ToPrimitive;
 use on_wire::{FromWire, IntoWire, NewType};

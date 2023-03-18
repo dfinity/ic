@@ -2,11 +2,13 @@ use std::convert::TryFrom;
 
 use candid::{Encode, Nat, Principal};
 use canister_test::{Canister, PrincipalId};
-use ic_icrc1_agent::{CallMode, Icrc1Agent, TransferArg, Value};
 use ic_icrc1_ledger::{InitArgs, LedgerArgument};
 use ic_nns_test_utils::itest_helpers::install_rust_canister_from_path;
 use ic_registry_subnet_type::SubnetType;
 use icp_ledger::ArchiveOptions;
+use icrc_ledger_agent::{CallMode, Icrc1Agent};
+use icrc_ledger_types::transaction::TransferArg;
+use icrc_ledger_types::value::MetadataValue as Value;
 use icrc_ledger_types::Account;
 
 use crate::{

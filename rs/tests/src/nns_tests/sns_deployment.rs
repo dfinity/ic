@@ -12,9 +12,10 @@ use candid::{Nat, Principal};
 use ic_agent::{Identity, Signature};
 use ic_base_types::PrincipalId;
 use ic_canister_client_sender::ed25519_public_key_to_der;
-use ic_icrc1_agent::{Icrc1Agent, TransferArg};
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::E8;
+use icrc_ledger_agent::Icrc1Agent;
+use icrc_ledger_types::transaction::TransferArg;
 
 use ic_rosetta_api::models::RosettaSupportedKeyPair;
 use ic_rosetta_test_utils::EdKeypair;

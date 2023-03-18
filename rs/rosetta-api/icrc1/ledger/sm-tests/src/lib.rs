@@ -1,10 +1,6 @@
 use candid::{CandidType, Decode, Encode, Nat, Principal};
 use ic_base_types::PrincipalId;
-use ic_icrc1::{
-    endpoints::{StandardRecord, TransferArg, TransferError, Value},
-    hash::Hash,
-    Block, Memo, Operation, Transaction,
-};
+use ic_icrc1::{endpoints::StandardRecord, hash::Hash, Block, Operation, Transaction};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::block::{BlockIndex, BlockType, HashOf};
 use ic_state_machine_tests::{CanisterId, ErrorCode, StateMachine};
@@ -12,6 +8,8 @@ use icrc_ledger_types::block::{Block as IcrcBlock, BlockRange, GetBlocksResponse
 use icrc_ledger_types::transaction::{
     GetTransactionsResponse, Transaction as Tx, TransactionRange, Transfer,
 };
+use icrc_ledger_types::transaction::{Memo, TransferArg, TransferError};
+use icrc_ledger_types::value::MetadataValue as Value;
 use icrc_ledger_types::{Account, ArchiveInfo, GetTransactionsRequest};
 use num_traits::ToPrimitive;
 use proptest::prelude::*;

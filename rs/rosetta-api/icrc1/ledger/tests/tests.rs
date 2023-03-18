@@ -1,5 +1,4 @@
 use ic_base_types::PrincipalId;
-use ic_icrc1::endpoints::Value;
 use ic_icrc1_ledger::{InitArgs, LedgerArgument};
 use ic_icrc1_ledger_sm_tests::{
     ARCHIVE_TRIGGER_THRESHOLD, BLOB_META_KEY, BLOB_META_VALUE, FEE, INT_META_KEY, INT_META_VALUE,
@@ -7,6 +6,7 @@ use ic_icrc1_ledger_sm_tests::{
     TOKEN_NAME, TOKEN_SYMBOL,
 };
 use ic_ledger_canister_core::archive::ArchiveOptions;
+use icrc_ledger_types::value::MetadataValue as Value;
 use std::path::PathBuf;
 
 fn ledger_wasm() -> Vec<u8> {

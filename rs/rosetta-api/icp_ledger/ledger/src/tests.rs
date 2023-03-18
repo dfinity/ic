@@ -822,7 +822,7 @@ fn test_transaction_hash_consistency() {
         hash_string, "f39130181586ea3d166185104114d7697d1e18af4f65209a53627f39b2fa0996",
         "Transaction hash must be stable."
     );
-    transaction.icrc1_memo = Some(ic_icrc1::Memo::default().0);
+    transaction.icrc1_memo = Some(icrc_ledger_types::transaction::Memo::default().0);
     let transaction_hash = transaction.hash();
     let hash_string = transaction_hash.to_string();
     assert_ne!(

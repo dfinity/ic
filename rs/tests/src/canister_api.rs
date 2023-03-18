@@ -1,6 +1,5 @@
 use candid::{CandidType, Decode, Encode, Nat, Principal};
 use ic_base_types::PrincipalId;
-use ic_icrc1_agent::{TransferArg, TransferError, Value};
 use ic_ledger_core::Tokens;
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_gtc::pb::v1::AccountState;
@@ -17,6 +16,8 @@ use ic_sns_swap::pb::v1::{
     RefreshBuyerTokensResponse as RefreshBuyerTokensRes,
 };
 use icp_ledger::Subaccount;
+use icrc_ledger_types::transaction::{TransferArg, TransferError};
+use icrc_ledger_types::value::MetadataValue as Value;
 use icrc_ledger_types::Account;
 
 //nns/gtc/gen/ic_nns_gtc.pb.v1.rs

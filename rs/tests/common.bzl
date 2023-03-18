@@ -3,6 +3,7 @@ Common dependencies for system-tests.
 """
 
 DEPENDENCIES = [
+    "//packages/icrc-ledger-agent:icrc_ledger_agent",
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/artifact_pool",
     "//rs/backup",
@@ -57,7 +58,6 @@ DEPENDENCIES = [
     "//rs/replay",
     "//rs/rosetta-api",
     "//rs/rosetta-api/icrc1",
-    "//rs/rosetta-api/icrc1/agent",
     "//rs/rosetta-api/icrc1/ledger",
     "//rs/rosetta-api/icp_ledger",
     "//rs/rosetta-api/ledger_canister_blocks_synchronizer/test_utils",

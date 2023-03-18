@@ -16,7 +16,6 @@ use std::time::Duration;
 pub mod common;
 use crate::common::EXPECTED_SNS_CREATION_FEE;
 use ic_ic00_types::CanisterInstallMode;
-use ic_icrc1::endpoints::{NumTokens, TransferArg, TransferError};
 use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount;
 use ic_nns_test_utils::sns_wasm::{
     build_archive_sns_wasm, build_governance_sns_wasm, build_index_sns_wasm, build_ledger_sns_wasm,
@@ -47,6 +46,7 @@ use ic_sns_wasm::pb::v1::{
 };
 use ic_state_machine_tests::StateMachine;
 use ic_types::Cycles;
+use icrc_ledger_types::transaction::{NumTokens, TransferArg, TransferError};
 use icrc_ledger_types::Account;
 
 #[test]

@@ -1,6 +1,7 @@
 [workspace]
 
 members = [
+  "packages/icrc-ledger-agent",
   "packages/icrc-ledger-types",
   "rs/artifact_manager",
   "rs/artifact_pool",
@@ -210,7 +211,6 @@ members = [
   "rs/rosetta-api/ledger_canister_blocks_synchronizer",
   "rs/rosetta-api/ledger_canister_blocks_synchronizer/test_utils",
   "rs/rosetta-api/icrc1",
-  "rs/rosetta-api/icrc1/agent",
   "rs/rosetta-api/icrc1/benchmark/generator",
   "rs/rosetta-api/icrc1/benchmark/worker",
   "rs/rosetta-api/icrc1/client",

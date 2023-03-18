@@ -7,7 +7,6 @@ use candid::{
 };
 use ic_base_types::PrincipalId;
 use ic_icrc1::blocks::icrc1_block_from_encoded;
-use ic_icrc1::endpoints::Value;
 use ic_icrc1::{Block, LedgerBalances, Transaction};
 use ic_ledger_canister_core::{
     archive::{ArchiveCanisterWasm, ArchiveOptions},
@@ -26,6 +25,7 @@ use icrc_ledger_types::block::{GetBlocksResponse, QueryBlockArchiveFn};
 use icrc_ledger_types::transaction::{
     GetTransactionsResponse, QueryTxArchiveFn, Transaction as Tx,
 };
+use icrc_ledger_types::value::MetadataValue as Value;
 use icrc_ledger_types::{Account, ArchivedRange};
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;

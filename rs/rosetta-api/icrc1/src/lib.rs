@@ -2,7 +2,7 @@ pub mod blocks;
 pub mod endpoints;
 pub mod hash;
 
-use candid::{CandidType, Principal};
+use candid::Principal;
 use ciborium::tag::Required;
 use ic_base_types::PrincipalId;
 use ic_ledger_canister_core::ledger::{LedgerContext, LedgerTransaction, TxApplyError};
@@ -12,14 +12,12 @@ use ic_ledger_core::{
     timestamp::TimeStamp,
     tokens::Tokens,
 };
+use icrc_ledger_types::transaction::Memo;
 use icrc_ledger_types::{Account, Subaccount};
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 use std::collections::HashMap;
 use std::convert::TryFrom;
-use std::fmt;
-
-pub const MAX_MEMO_LENGTH: usize = 32;
 
 fn ser_compact_account<S>(acc: &Account, s: S) -> Result<S::Ok, S::Error>
 where
@@ -125,72 +123,6 @@ pub enum Operation {
         #[serde(rename = "amt")]
         amount: u64,
     },
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub struct MemoTooLarge(usize);
-
-impl fmt::Display for MemoTooLarge {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "Memo field is {} bytes long, max allowed length is {}",
-            self.0, MAX_MEMO_LENGTH
-        )
-    }
-}
-
-#[derive(
-    Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord, Default,
-)]
-#[serde(transparent)]
-pub struct Memo(#[serde(deserialize_with = "deserialize_memo_bytes")] pub ByteBuf);
-
-fn deserialize_memo_bytes<'de, D>(d: D) -> Result<ByteBuf, D::Error>
-where
-    D: serde::de::Deserializer<'de>,
-{
-    use serde::de::Error;
-    let bytes = ByteBuf::deserialize(d)?;
-    let memo = Memo::try_from(bytes).map_err(D::Error::custom)?;
-    Ok(memo.into())
-}
-
-impl From<[u8; MAX_MEMO_LENGTH]> for Memo {
-    fn from(memo: [u8; MAX_MEMO_LENGTH]) -> Self {
-        Self(ByteBuf::from(memo.to_vec()))
-    }
-}
-
-impl From<u64> for Memo {
-    fn from(num: u64) -> Self {
-        Self(ByteBuf::from(num.to_be_bytes().to_vec()))
-    }
-}
-
-impl TryFrom<ByteBuf> for Memo {
-    type Error = MemoTooLarge;
-
-    fn try_from(b: ByteBuf) -> Result<Self, MemoTooLarge> {
-        if b.len() > MAX_MEMO_LENGTH {
-            return Err(MemoTooLarge(b.len()));
-        }
-        Ok(Self(b))
-    }
-}
-
-impl TryFrom<Vec<u8>> for Memo {
-    type Error = MemoTooLarge;
-
-    fn try_from(v: Vec<u8>) -> Result<Self, MemoTooLarge> {
-        Self::try_from(ByteBuf::from(v))
-    }
-}
-
-impl From<Memo> for ByteBuf {
-    fn from(memo: Memo) -> Self {
-        memo.0
-    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord)]
