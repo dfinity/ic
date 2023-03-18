@@ -30,7 +30,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use slog::{info, Logger};
 
-use crate::canister_agent::HasSnsAgentCapability;
+use crate::canister_agent::HasCanisterAgentCapability;
 use crate::{
     driver::{
         ic::InternetComputer,
@@ -390,47 +390,49 @@ pub fn validate_aggregator_data(env: TestEnv) {
     let log = env.logger();
     let start_time = Instant::now();
     let app_node = env.get_first_healthy_application_node_snapshot();
-
-    info!(log, "Fetch SNS sale params from aggregator canister ...");
-    let sns_sale_params_from_aggregator = {
-        let aggregator = AggregatorClient::read_attribute(&env);
-        let agent = app_node.build_default_agent();
-        let http_canister = aggregator.new_http_canister(&agent);
-        let swap_params = block_on(AggregatorClient::first_swap_params(
-            &log,
-            &http_canister,
-            Duration::from_secs(2 * 60),
-        ))
-        .result()
-        .unwrap();
-        info!(
-            log,
-            "Obtained SNS sale parameters from aggregator: {swap_params:#}"
-        );
-        let reinterpreted_swap_params: Params = serde_json::from_value(swap_params).unwrap();
-        reinterpreted_swap_params
-    };
-    info!(log, "Fetch SNS sale params from SNS sale canister ...");
-    let sns_sale_params_from_sns = {
-        let sns_client = SnsClient::read_attribute(&env);
-        let canister_agent = app_node.build_canister_agent();
-        let request_provider = SnsRequestProvider::from_sns_client(&sns_client);
-        let request = request_provider.get_state(CallMode::Update);
-        let res = block_on(canister_agent.call(&request)).result().unwrap();
-        let res = Decode!(res.as_slice(), GetStateResponse).expect("failed to decode");
-        // We've already checked above that the SNS sale params had propagated through the aggregator canister.
-        // Thus, they must also be availabe while querying the SNS directly.
-        let sns_sale_params = res.swap.unwrap().params.unwrap();
-        let sns_sale_params_json = serde_json::to_value(sns_sale_params.clone()).unwrap();
-        info!(
-            log,
-            "Obtained SNS sale parameters from SNS sale canister: {sns_sale_params_json:#}"
-        );
-        sns_sale_params
-    };
-    assert_eq!(sns_sale_params_from_aggregator, sns_sale_params_from_sns);
+    let aggregator = AggregatorClient::read_attribute(&env);
+    let sns_client = SnsClient::read_attribute(&env);
+    block_on(async move {
+        info!(log, "Fetch SNS sale params from aggregator canister ...");
+        let sns_sale_params_from_aggregator = {
+            let agent = app_node.build_default_agent();
+            let http_canister = aggregator.new_http_canister(&agent);
+            let swap_params = AggregatorClient::first_swap_params(
+                &log,
+                &http_canister,
+                Duration::from_secs(2 * 60),
+            )
+            .await
+            .result()
+            .unwrap();
+            info!(
+                log,
+                "Obtained SNS sale parameters from aggregator: {swap_params:#}"
+            );
+            let reinterpreted_swap_params: Params = serde_json::from_value(swap_params).unwrap();
+            reinterpreted_swap_params
+        };
+        info!(log, "Fetch SNS sale params from SNS sale canister ...");
+        let sns_sale_params_from_sns = {
+            let canister_agent = app_node.build_canister_agent().await;
+            let request_provider = SnsRequestProvider::from_sns_client(&sns_client);
+            let request = request_provider.get_state(CallMode::Update);
+            let res = canister_agent.call(&request).await.result().unwrap();
+            let res = Decode!(res.as_slice(), GetStateResponse).expect("failed to decode");
+            // We've already checked above that the SNS sale params had propagated through the aggregator canister.
+            // Thus, they must also be availabe while querying the SNS directly.
+            let sns_sale_params = res.swap.unwrap().params.unwrap();
+            let sns_sale_params_json = serde_json::to_value(sns_sale_params.clone()).unwrap();
+            info!(
+                log,
+                "Obtained SNS sale parameters from SNS sale canister: {sns_sale_params_json:#}"
+            );
+            sns_sale_params
+        };
+        assert_eq!(sns_sale_params_from_aggregator, sns_sale_params_from_sns);
+    });
     info!(
-        log,
+        env.logger(),
         "========== The SNS Aggregator has detected an SNS token sale in {:?} ===========",
         start_time.elapsed()
     );
@@ -461,12 +463,12 @@ pub fn workload_via_aggregator(env: TestEnv, rps: usize, duration: Duration) {
     };
 
     // --- Generate workload ---
-    let engine = Engine::new(log, future_generator, rps, duration)
+    let engine = Engine::new(log.clone(), future_generator, rps, duration)
         .increase_dispatch_timeout(REQUESTS_DISPATCH_EXTRA_TIMEOUT);
 
     // --- Emit metrics ---
     let metrics = {
-        let aggr = LoadTestMetrics::default();
+        let aggr = LoadTestMetrics::new(log);
         let fun = LoadTestMetrics::aggregator_fn;
         block_on(engine.execute(aggr, fun)).expect("Workload execution has failed.")
     };
@@ -474,18 +476,18 @@ pub fn workload_via_aggregator(env: TestEnv, rps: usize, duration: Duration) {
 }
 
 pub fn workload_direct(env: TestEnv, rps: usize, duration: Duration) {
+    let log = env.logger();
+
     // --- Create a future generator ---
     let future_generator = {
         let agents = {
-            let nns_agent = {
-                let nns_node = env.get_first_healthy_nns_node_snapshot();
-                nns_node.build_canister_agent()
-            };
-            let app_agent = {
-                let app_node = env.get_first_healthy_application_node_snapshot();
-                app_node.build_canister_agent()
-            };
-            (nns_agent, app_agent)
+            let nns_node = env.get_first_healthy_nns_node_snapshot();
+            let app_node = env.get_first_healthy_application_node_snapshot();
+            block_on(async move {
+                let nns_agent = nns_node.build_canister_agent().await;
+                let app_agent = app_node.build_canister_agent().await;
+                (nns_agent, app_agent)
+            })
         };
         let request_provider = {
             let sns_client = SnsClient::read_attribute(&env);
@@ -509,17 +511,19 @@ pub fn workload_direct(env: TestEnv, rps: usize, duration: Duration) {
     };
 
     // --- Generate workload ---
-    let engine = Engine::new(env.logger(), future_generator, rps, duration)
+    let engine = Engine::new(log.clone(), future_generator, rps, duration)
         .increase_dispatch_timeout(REQUESTS_DISPATCH_EXTRA_TIMEOUT);
 
     // --- Emit metrics ---
     let metrics =
-        block_on(engine.execute(LoadTestMetrics::default(), LoadTestMetrics::aggregator_fn))
+        block_on(engine.execute(LoadTestMetrics::new(log), LoadTestMetrics::aggregator_fn))
             .expect("Workload execution has failed.");
     env.emit_report(format!("{metrics}"));
 }
 
 pub fn workload_direct_auth(env: TestEnv, rps: usize, duration: Duration) {
+    let log = env.logger();
+
     // --- Create a future generator ---
     let future_generator = {
         let participants: Vec<(CanisterAgent, CanisterAgent)> = {
@@ -528,9 +532,12 @@ pub fn workload_direct_auth(env: TestEnv, rps: usize, duration: Duration) {
             Vec::<SaleParticipant>::read_attribute(&env)
                 .into_iter()
                 .map(|p| {
-                    let nns_agent = nns_node.build_canister_agent_with_identity(p.clone());
-                    let app_agent = app_node.build_canister_agent_with_identity(p);
-                    (nns_agent, app_agent)
+                    block_on(async {
+                        let nns_agent =
+                            nns_node.build_canister_agent_with_identity(p.clone()).await;
+                        let app_agent = app_node.build_canister_agent_with_identity(p).await;
+                        (nns_agent, app_agent)
+                    })
                 })
                 .collect()
         };
@@ -562,12 +569,12 @@ pub fn workload_direct_auth(env: TestEnv, rps: usize, duration: Duration) {
     };
 
     // --- Generate workload ---
-    let engine = Engine::new(env.logger(), future_generator, rps, duration)
+    let engine = Engine::new(log.clone(), future_generator, rps, duration)
         .increase_dispatch_timeout(REQUESTS_DISPATCH_EXTRA_TIMEOUT);
 
     // --- Emit metrics ---
     let metrics =
-        block_on(engine.execute(LoadTestMetrics::default(), LoadTestMetrics::aggregator_fn))
+        block_on(engine.execute(LoadTestMetrics::new(log), LoadTestMetrics::aggregator_fn))
             .expect("Workload execution has failed.");
     env.emit_report(format!("{metrics}"));
 }

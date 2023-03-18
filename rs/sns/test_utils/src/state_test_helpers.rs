@@ -540,17 +540,11 @@ pub fn new_sale_ticket(
     let res = env
         .execute_ingress_as(sender, swap_id, "new_sale_ticket", args)
         .unwrap();
-    match Decode!(&res.bytes(), NewSaleTicketResponse)
+    Decode!(&res.bytes(), NewSaleTicketResponse)
         .unwrap()
-        .result
-        .unwrap()
-    {
-        swap_pb::new_sale_ticket_response::Result::Ok(swap_pb::new_sale_ticket_response::Ok {
-            ticket,
-        }) => Ok(ticket.unwrap()),
-        swap_pb::new_sale_ticket_response::Result::Err(err) => Err(err),
-    }
+        .ticket()
 }
+
 pub fn refresh_buyer_tokens(
     env: &StateMachine,
     swap_id: &CanisterId,

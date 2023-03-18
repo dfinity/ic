@@ -292,17 +292,8 @@ impl PaymentProtocolTestSetup {
         get_lifecycle(&self.state_machine, &self.sns_sale_canister_id)
     }
 
-    pub fn get_open_ticket(
-        &self,
-        buyer: &PrincipalId,
-    ) -> Result<Option<Ticket>, ic_sns_swap::pb::v1::get_open_ticket_response::Err> {
-        match get_open_ticket(&self.state_machine, self.sns_sale_canister_id, *buyer).result {
-            Some(res) => match res {
-                ic_sns_swap::pb::v1::get_open_ticket_response::Result::Ok(ok) => Ok(ok.ticket),
-                ic_sns_swap::pb::v1::get_open_ticket_response::Result::Err(err) => Err(err),
-            },
-            None => panic!("Get open ticket returned None"),
-        }
+    pub fn get_open_ticket(&self, buyer: &PrincipalId) -> Result<Option<Ticket>, i32> {
+        get_open_ticket(&self.state_machine, self.sns_sale_canister_id, *buyer).ticket()
     }
 
     pub fn new_sale_ticket(
@@ -343,9 +334,7 @@ fn test_get_open_ticket() {
     let payment_flow_protocol = PaymentProtocolTestSetup::default_setup();
     assert_eq!(
         payment_flow_protocol.get_open_ticket(&user0).unwrap_err(),
-        get_open_ticket_response::Err {
-            error_type: Some(get_open_ticket_response::err::Type::SaleNotOpen.into()),
-        }
+        get_open_ticket_response::err::Type::SaleNotOpen as i32
     );
 
     // open the sale

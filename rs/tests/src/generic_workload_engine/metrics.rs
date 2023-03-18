@@ -1,9 +1,13 @@
 use std::fmt::Display;
+use std::time::Instant;
 use std::{
     cmp::{max, min},
     collections::{BTreeMap, HashMap},
     time::Duration,
 };
+
+use itertools::Itertools;
+use slog::{info, Logger};
 
 // TODO
 // #[derive(Default, Clone, Debug)]
@@ -33,15 +37,24 @@ pub struct RequestMetrics {
 /// Outcome of a request-based workflow, i.e., r_1, r_2, ..., r_N in which each individual request r_i may depend on the outcome of r_{i-1}
 pub type LoadTestOutcome<T, S> = Vec<(String, RequestOutcome<T, S>)>;
 
-#[derive(Default)]
 pub struct LoadTestMetrics {
     /// Keys are (request_pos, request_label) pairs, where
     /// - request_pos is the position of the request in the workflow (see [`LoadTestOutcome`])
     /// - request_label is a request label
     inner: BTreeMap<String, RequestMetrics>,
+    last_time_emitted: Instant,
+    logger: Logger,
 }
 
 impl LoadTestMetrics {
+    pub fn new(logger: Logger) -> Self {
+        Self {
+            inner: Default::default(),
+            last_time_emitted: Instant::now(),
+            logger,
+        }
+    }
+
     pub fn aggregate_load_testing_metrics<T, S>(mut self, item: LoadTestOutcome<T, S>) -> Self
     where
         T: Clone,
@@ -51,7 +64,15 @@ impl LoadTestMetrics {
             let entry = self.inner.entry(req_name).or_default();
             entry.push(outcome)
         });
+        self.log_throttled();
         self
+    }
+
+    fn log_throttled(&mut self) {
+        if self.last_time_emitted.elapsed() > Duration::from_secs(5) {
+            info!(&self.logger, "{self}");
+            self.last_time_emitted = Instant::now();
+        }
     }
 
     pub fn aggregator_fn(
@@ -64,14 +85,21 @@ impl LoadTestMetrics {
 
 impl Display for LoadTestMetrics {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "LoadTestMetrics {{ ")
+        // Compute number of symbols in longest label
+        let label_width = self
+            .inner
+            .iter()
+            .map(|x| x.0)
+            .max_by(|x, y| x.chars().count().cmp(&y.chars().count()))
+            .map(|x| x.chars().count());
+        let label_width = label_width.unwrap_or(10);
+        writeln!(f, "LoadTestMetrics {{")
             .and(
                 self.inner
                     .iter()
                     .fold(write!(f, ""), |acc, (req_name, metrics)| {
-                        acc.and(write!(f, "  {req_name}: "))
+                        acc.and(write!(f, "     {req_name:<label_width$} "))
                             .and(metrics.fmt(f))
-                            .and(write!(f, ", "))
                     }),
             )
             .and(write!(f, "}}"))
@@ -189,17 +217,26 @@ impl Display for RequestMetrics {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "RequestMetrics {{ duration=(min:{}ms, avg:{}ms, max:{}ms), attempts=(min:{}, avg:{}, max:{}), success_rate:{:.2}%, successes:{}, failures:{}, errors:```{:?}``` }}",
+            "RequestMetrics {{ duration=(min:{:>6}ms, avg:{:>6.1}ms, max:{:>6}ms), attempts=(min:{:>3}, avg:{:>3.1}, max:{:>3}), success_rate:{:>3.2}%, successes:{:>7}, failures:{:>7}",
             self.min_request_duration().as_millis(),
             self.avg_request_duration().as_millis(),
             self.max_request_duration().as_millis(),
             self.min_attempts(),
-            self.avg_attempts().map(|x| format!("{x}")).unwrap_or_else(|| "inf".to_string()),
+            self.avg_attempts().map(|x| format!("{x:>3.1}")).unwrap_or_else(|| "inf".to_string()),
             self.max_attempts(),
             self.success_rate(),
             self.success_calls(),
             self.failure_calls(),
-            self.errors_map
+        ).and(
+            if self.errors_map.is_empty() {
+                writeln!(f, "}}")
+            } else {
+                writeln!(f, " errors:").and(
+                    self.errors_map.iter().sorted_unstable_by(|(err_a, count_a), (err_b, count_b)| count_a.cmp(count_b).then(err_a.cmp(err_b))).fold(write!(f, ""), |acc, (error, count)| {
+                        acc.and(writeln!(f, "          {count:>7} x {error:?}"))
+                    })
+                ).and(writeln!(f, "     }}"))
+            }
         )
     }
 }
@@ -255,32 +292,60 @@ impl<ResultType: Clone, ErrorType: Clone> RequestOutcome<ResultType, ErrorType> 
         self
     }
 
-    pub fn map<F, NewResultType>(&self, f: F) -> RequestOutcome<NewResultType, ErrorType>
+    fn map_result<F, NewResultType, NewErrorType>(
+        self,
+        f: F,
+    ) -> RequestOutcome<NewResultType, NewErrorType>
     where
         NewResultType: Clone,
-        F: FnOnce(ResultType) -> NewResultType,
+        NewErrorType: Clone,
+        F: FnOnce(Result<ResultType, ErrorType>) -> Result<NewResultType, NewErrorType>,
     {
         RequestOutcome {
-            result: self.result.clone().map(f),
+            result: f(self.result),
             workflow_pos: self.workflow_pos,
-            label: self.label.clone(),
+            label: self.label,
             duration: self.duration,
             attempts: self.attempts,
         }
     }
 
-    pub fn map_err<F, NewErrorType>(&self, f: F) -> RequestOutcome<ResultType, NewErrorType>
+    /// Maps a `RequestOutcome<ResultType, ErrorType>` to `RequestOutcome<NewResultType, ErrorType>` by applying a function to a contained `Ok` value of `self.result`,
+    /// leaving an `Err` value untouched.
+    ///
+    /// A common pattern is `request_outcome.map(|_| ())`, used for making request outcomes compatible with the provided `RequestMetrics` aggregators.
+    pub fn map<F, NewResultType>(self, f: F) -> RequestOutcome<NewResultType, ErrorType>
+    where
+        NewResultType: Clone,
+        F: FnOnce(ResultType) -> NewResultType,
+    {
+        self.map_result(|result| result.map(f))
+    }
+
+    /// Maps a `RequestOutcome<ResultType, ErrorType>` to `RequestOutcome<ResultType, NewErrorType>` by applying a function to a contained `Err` value of `self.result`,
+    /// leaving an `Ok` value untouched.
+    pub fn map_err<F, NewErrorType>(self, f: F) -> RequestOutcome<ResultType, NewErrorType>
     where
         NewErrorType: Clone,
         F: FnOnce(ErrorType) -> NewErrorType,
     {
-        RequestOutcome {
-            result: self.result.clone().map_err(f),
-            workflow_pos: self.workflow_pos,
-            label: self.label.clone(),
-            duration: self.duration,
-            attempts: self.attempts,
-        }
+        self.map_result(|result| result.map_err(f))
+    }
+
+    /// Map `RequestOutcome<ResultType, ErrorType>` to a new `RequestOutcome<(), ErrorType>` instance by applying `checker` to the `Ok` result of `self`.
+    ///
+    /// This method is convenient, e.g., for checking a request response.
+    pub fn check_response<F>(self, checker: F) -> RequestOutcome<(), ErrorType>
+    where
+        F: FnOnce(ResultType) -> Result<(), ErrorType>,
+    {
+        self.map_result(|result| {
+            if let Ok(response) = result {
+                checker(response)
+            } else {
+                result.map(|_| ())
+            }
+        })
     }
 
     fn key(&self) -> String {
