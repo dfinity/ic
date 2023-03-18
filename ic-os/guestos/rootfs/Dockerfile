@@ -75,7 +75,8 @@ RUN sed -e "s/.*PermitRootLogin.*/PermitRootLogin prohibit-password/" -i /etc/ss
 # Mount points for data storage.
 RUN mkdir -p /var/lib/ic/backup \
              /var/lib/ic/crypto \
-             /var/lib/ic/data
+             /var/lib/ic/data   \
+             /var/lib/execution/data
 
 # Create two mount points for temporary use during setup of "var" partition
 RUN mkdir -p /mnt/var_old /mnt/var_new
@@ -201,6 +202,7 @@ COPY opt /opt
 RUN find /opt -type d -exec chmod 0755 {} \+ && \
     find /opt -type f -exec chmod 0644 {} \+ && \
     chmod 0755 /opt/ic/bin/* && \
+    chmod 0755 /opt/eth/bin/* && \
     chmod 0644 /opt/ic/share/*
 
 # The following steps apply conditionally to the dev image ONLY

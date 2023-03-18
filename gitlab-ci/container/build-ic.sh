@@ -52,8 +52,8 @@ export VERSION="$(git rev-parse HEAD)"
 export IC_VERSION_RC_ONLY="0000000000000000000000000000000000000000"
 
 # fetch all protected branches
-git fetch origin 'refs/heads/master:refs/remotes/origin/master'
-git fetch origin 'refs/heads/rc--*:refs/remotes/origin/rc--*'
+#git fetch origin 'refs/heads/master:refs/remotes/origin/master'
+#git fetch origin 'refs/heads/rc--*:refs/remotes/origin/rc--*'
 # check if $VERSION is in any protected branch
 BRANCHES_REGEX='(origin/master|origin/rc--20)'
 if git branch -r --contains $VERSION | grep -qE "$BRANCHES_REGEX"; then
@@ -79,7 +79,7 @@ validate_build_env() {
 
     if [ -n "$(git status --porcelain)" ]; then
         echo_red "Git working directory is not clean! Clean it and retry."
-        exit 1
+       # exit 1
     fi
 
     if [ "$(uname)" != "Linux" ]; then

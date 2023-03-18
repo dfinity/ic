@@ -55,21 +55,21 @@ function swap_alternative() {
 
 function get_boot_partition() {
     if [ "$1" == B ]; then
-        echo /dev/vda7
+        echo /dev/vda8
     else
         echo /dev/vda4
     fi
 }
 function get_root_partition() {
     if [ "$1" == B ]; then
-        echo /dev/vda8
+        echo /dev/vda9
     else
         echo /dev/vda5
     fi
 }
 function get_var_partition() {
     if [ "$1" == B ]; then
-        echo /dev/vda9
+        echo /dev/vda10
     else
         echo /dev/vda6
     fi

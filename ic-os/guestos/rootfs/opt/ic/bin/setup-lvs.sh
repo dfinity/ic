@@ -31,9 +31,9 @@ function retry() {
     return 1
 }
 
-pvs /dev/mapper/vda10-crypt >/dev/null 2>&1 || (
+pvs /dev/mapper/vda12-crypt >/dev/null 2>&1 || (
     echo "Volume group 'store' does not exist yet (first boot?), creating it."
-    retry vgcreate --force store /dev/mapper/vda10-crypt
+    retry vgcreate --force store /dev/mapper/vda12-crypt
     retry vgchange --force -a y
 )
 
@@ -48,15 +48,26 @@ lvs /dev/store/shared-crypto >/dev/null 2>&1 || (
 lvs /dev/store/shared-data >/dev/null 2>&1 || (
     echo "Logical volume 'shared-data' does not exist yet (first boot?), creating it."
     # For now, only use 25% of available capacity.
-    TOTAL_SIZE=$(($(blockdev --getsz /dev/mapper/vda10-crypt) * 512))
+    TOTAL_SIZE=$(($(blockdev --getsz /dev/mapper/vda12-crypt) * 512))
     LV_SIZE=$(("$TOTAL_SIZE" / 4 / 1024 / 1024))
     retry lvcreate --yes -L "$LV_SIZE"M -n shared-data store
 )
 
+# Set up state data store if it does not exist yet.
+lvs /dev/store/shared-executiondata >/dev/null 2>&1 || (
+    echo "Logical volume 'shared-data' does not exist yet (first boot?), creating it."
+    # For now, only use 25% of available capacity.
+    TOTAL_SIZE=$(($(blockdev --getsz /dev/mapper/vda12-crypt) * 512))
+    LV_SIZE=$(("$TOTAL_SIZE" / 4 / 1024 / 1024))
+    retry lvcreate --yes -L "$LV_SIZE"M -n shared-executiondata store
+)
+
+
+
 # Set up backup data store if it does not exist yet.
 lvs /dev/store/shared-backup >/dev/null 2>&1 || (
     echo "Logical volume 'shared-backup' does not exist yet (first boot?), creating it."
-    TOTAL_SIZE=$(($(blockdev --getsz /dev/mapper/vda10-crypt) * 512))
+    TOTAL_SIZE=$(($(blockdev --getsz /dev/mapper/vda12-crypt) * 512))
     # Limit to 180G or 25% of capacity, whichever is lower.
     LV_SIZE=$(("$TOTAL_SIZE" / 4 / 1024 / 1024))
     LV_SIZE_LIMIT=180000

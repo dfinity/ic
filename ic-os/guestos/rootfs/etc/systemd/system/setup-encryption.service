@@ -3,11 +3,11 @@ Description=Set up encrypted storage on first boot
 DefaultDependencies=no
 After=boot-config.mount
 Requires=boot-config.mount
-Before=systemd-cryptsetup@vda10\x2dcrypt.service
+Before=systemd-cryptsetup@vda12\x2dcrypt.service
 
 [Install]
 WantedBy=local-fs.target
-RequiredBy=systemd-cryptsetup@vda10\x2dcrypt.service
+RequiredBy=systemd-cryptsetup@vda12\x2dcrypt.service
 
 [Service]
 Type=oneshot
