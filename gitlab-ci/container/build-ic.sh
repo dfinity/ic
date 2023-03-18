@@ -28,6 +28,7 @@ echo_green() { echo -e "${GREEN}${1}${NOCOLOR}"; }
 export BUILD_BIN=false
 export BUILD_CAN=false
 export BUILD_IMG=false
+export BUILD_DEBUG_IMG=false
 
 if [ "$#" == 0 ]; then
     echo_red "ERROR: Please specify one of '-b', '-c' or '-i'" >&2
@@ -35,11 +36,12 @@ if [ "$#" == 0 ]; then
     usage && exit 1
 fi
 
-while getopts ':bcih' opt; do
+while getopts ':bcidh' opt; do
     case "$opt" in
         b) BUILD_BIN=true ;;
         c) BUILD_CAN=true ;;
         i) BUILD_IMG=true ;;
+	d) BUILD_DEBUG_IMG=true ;;
         h) usage && exit 0 ;;
         :) echo_red "Option requires an argument.\n" && usage && exit 1 ;;
         ?) echo_red "Invalid command option.\n" && usage && exit 1 ;;
@@ -117,12 +119,19 @@ BUILD_CANISTERS_CMD=$(
 END
 )
 
+if [[ $BUILD_DEBUG_IMG ]]
+then
+    IMG_TYPE=dev
+else
+    IMG_TYPE=prod
+fi
+
 BUILD_IMAGES_CMD=$(
     cat <<-END
     # build ic-os images
     mkdir -p "$DISK_DIR"
-    $BAZEL_CMD //ic-os/guestos/prod
-    bazel cquery --output=files //ic-os/guestos/prod | xargs -I {} cp {} "$DISK_DIR"
+    $BAZEL_CMD //ic-os/guestos/${IMG_TYPE}
+    bazel cquery --output=files //ic-os/guestos/${IMG_TYPE} | xargs -I {} cp {} "$DISK_DIR"
 END
 )
 BUILD_CMD=""

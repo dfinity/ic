@@ -104,7 +104,7 @@ while [ $# -gt 0 ]; do
             USE_BOUNDARY_NODES="false"
             ;;
 	--deploy-local)
-            DEPLOY_LOCAL="true"
+            DEPLOY_LOCAL=true
             ;;
         --with-testnet-keys)
             WITH_TESTNET_KEYS="--with-testnet-keys"
@@ -148,7 +148,7 @@ if [[ ! -f ${hosts_ini_file_path} ]]; then
 fi
 
 for i in {1..60}; do
-    if disk_image_exists; then
+    if [ ${DEPLOY_LOCAL}  -o disk_image_exists ]; then
         echo "Disk image found for ${GIT_REVISION}"
         break
     fi

@@ -67,6 +67,9 @@ Arguments:
             MAX_INGRESS_BYTES_PER_MESSAGE="${argument#*=}"
             shift
             ;;
+        --deploy-local)
+            DEPLOY_LOCAL=true
+            ;;
         -x | --debug)
             DEBUG=1
             ;;
@@ -90,6 +93,7 @@ WHITELIST="${WHITELIST:=}"
 DKG_INTERVAL_LENGTH="${DKG_INTERVAL_LENGTH:=-1}"
 # Negative value means unset (default will be used)
 MAX_INGRESS_BYTES_PER_MESSAGE="${MAX_INGRESS_BYTES_PER_MESSAGE:=-1}"
+DEPLOY_LOCAL=${DEPLOY_LOCAL:-false}
 
 if [[ -z "$GIT_REVISION" ]]; then
     echo "Please provide the GIT_REVISION as env. variable or the command line with --git-revision=<value>"
@@ -231,6 +235,12 @@ function generate_subnet_config() {
     REPLICA_HASH=$(cat "$TEMPDIR/REPLICA_HASH")
     NM_HASH=$(cat "$TEMPDIR/NM_HASH")
 
+    if ${DEPLOY_LOCAL}; then
+	PREP_ALLOW_EMPTY_UPDATE="--allow-empty-update-image"
+    else
+	PREP_ALLOW_EMPTY_UPDATE=""
+    fi
+
     set -x
     # Generate key material for assigned nodes
     # See subnet_crypto_install, line 5
@@ -250,6 +260,7 @@ function generate_subnet_config() {
         "--initial-node-operator" "${NODE_OPERATOR_ID}" \
         "--initial-node-provider" "${NODE_OPERATOR_ID}" \
         "--ssh-readonly-access-file" "${TESTNET_KEYS}" \
+	${PREP_ALLOW_EMPTY_UPDATE} \
         "--ssh-backup-access-file" "${TESTNET_KEYS}"
     set +x
 }

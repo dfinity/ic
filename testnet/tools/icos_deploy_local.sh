@@ -47,7 +47,15 @@ if [ $retval -ne 0 ]; then
        return -1
 fi
 
+#icprep is build 20.02 container 22.04 has a different openssl version
+#export LD_LIBRARY_PATH=$HOME/wrk/apk/openssl1_1_1/openssl-1.1.1o
+
 cd "$(dirname "$0")"
 REPO_ROOT="$(git rev-parse --show-toplevel)"
-${REPO_ROOT}/gitlab-ci/container/build-ic.sh -i -b -c
-bash -x ${REPO_ROOT}/testnet/tools/icos_deploy.sh localhost --deploy-local --git-revision $(${REPO_ROOT}/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh master)
+GIT_REVISION=$(git log --format=format:%H  --max-count=1)
+${REPO_ROOT}/gitlab-ci/container/build-ic.sh -i -d -b -c
+sudo rm -rf  /var/local/ic/disk/localhost/${GIT_REVISION}
+sudo mkdir -p /var/local/ic/disk/localhost/${GIT_REVISION}
+sudo cp /wrk/apk/ic/artifacts/icos/disk-img.tar.zst /var/local/ic/disk/localhost/${GIT_REVISION}/
+sudo cp /wrk/apk/ic/artifacts/icos/SHA256SUMS /var/local/ic/disk/localhost/${GIT_REVISION}/
+bash -x ${REPO_ROOT}/testnet/tools/icos_deploy.sh localhost --deploy-local --git-revision ${GIT_REVISION}
