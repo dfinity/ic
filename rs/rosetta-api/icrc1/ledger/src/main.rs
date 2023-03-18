@@ -5,7 +5,7 @@ use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::api::stable::{StableReader, StableWriter};
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
 use ic_icrc1::{
-    endpoints::{StandardRecord, TransferArg, TransferError, Value},
+    endpoints::{convert_transfer_error, StandardRecord},
     Operation, Transaction,
 };
 use ic_icrc1_ledger::{Ledger, LedgerArgument};
@@ -14,7 +14,8 @@ use ic_ledger_canister_core::ledger::{
 };
 use ic_ledger_core::{timestamp::TimeStamp, tokens::Tokens};
 use icrc_ledger_types::block::{GetBlocksArgs, GetBlocksResponse};
-use icrc_ledger_types::transaction::GetTransactionsResponse;
+use icrc_ledger_types::transaction::{GetTransactionsResponse, TransferArg, TransferError};
+use icrc_ledger_types::value::MetadataValue as Value;
 use icrc_ledger_types::{Account, ArchiveInfo, GetTransactionsRequest};
 use num_traits::ToPrimitive;
 use std::cell::RefCell;
@@ -322,7 +323,8 @@ async fn icrc1_transfer(arg: TransferArg) -> Result<Nat, TransferError> {
             )
         };
 
-        let (block_idx, _) = apply_transaction(ledger, tx, now, effective_fee)?;
+        let (block_idx, _) =
+            apply_transaction(ledger, tx, now, effective_fee).map_err(convert_transfer_error)?;
         Ok(block_idx)
     })?;
 

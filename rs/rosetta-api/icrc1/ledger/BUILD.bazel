@@ -93,6 +93,7 @@ rust_test(
     },
     deps = [
         ":ledger",
+        "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/rosetta-api/icrc1",
         "//rs/rosetta-api/icrc1/ledger/sm-tests",
         "//rs/rosetta-api/ledger_canister_core",

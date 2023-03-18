@@ -2,9 +2,9 @@ use candid::{Decode, Encode, Nat, Principal};
 use dfn_candid::candid_one;
 
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_icrc1::endpoints::TransferArg;
 use ic_icrc1_ledger::{InitArgs as LedgerInit, LedgerArgument};
 use ic_ledger_canister_core::archive::ArchiveOptions;
+use icrc_ledger_types::transaction::TransferArg;
 use icrc_ledger_types::Account;
 
 use ic_nervous_system_common::{

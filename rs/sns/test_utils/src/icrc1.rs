@@ -2,8 +2,8 @@ use candid::types::number::Nat;
 use canister_test::Canister;
 use dfn_candid::candid_one;
 use ic_canister_client_sender::Sender;
-use ic_icrc1::endpoints::{TransferArg, TransferError};
 use ic_ledger_core::block::BlockIndex;
+use icrc_ledger_types::transaction::{TransferArg, TransferError};
 use icrc_ledger_types::Account;
 use num_traits::ToPrimitive;
 

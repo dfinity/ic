@@ -7,7 +7,7 @@ use dfn_core::{
 use dfn_protobuf::protobuf;
 use ic_base_types::CanisterId;
 use ic_canister_log::{LogEntry, Sink};
-use ic_icrc1::endpoints::{StandardRecord, TransferArg, Value};
+use ic_icrc1::endpoints::{convert_transfer_error, StandardRecord};
 use ic_ledger_canister_core::{
     archive::{Archive, ArchiveOptions},
     ledger::{
@@ -28,6 +28,8 @@ use icp_ledger::{
     TipOfChainRes, TotalSupplyArgs, Transaction, TransferArgs, TransferError, TransferFee,
     TransferFeeArgs, MAX_BLOCKS_PER_REQUEST,
 };
+use icrc_ledger_types::transaction::TransferArg;
+use icrc_ledger_types::value::MetadataValue as Value;
 use icrc_ledger_types::Account;
 use ledger_canister::{Ledger, LEDGER, MAX_MESSAGE_SIZE_BYTES};
 use num_traits::cast::ToPrimitive;
@@ -221,13 +223,13 @@ async fn send(
 }
 
 async fn icrc1_send(
-    memo: Option<ic_icrc1::Memo>,
+    memo: Option<icrc_ledger_types::transaction::Memo>,
     amount: Tokens,
     fee: Option<Nat>,
     from_account: Account,
     to: AccountIdentifier,
     created_at_time: Option<TimeStamp>,
-) -> Result<BlockIndex, ic_icrc1::endpoints::TransferError> {
+) -> Result<BlockIndex, icrc_ledger_types::transaction::TransferError> {
     let from = AccountIdentifier::from(from_account);
     let minting_acc = LEDGER
         .read()
@@ -237,7 +239,7 @@ async fn icrc1_send(
     let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
     let (operation, effective_fee) = if to == minting_acc {
         if fee.is_some() && fee.as_ref() != Some(&Nat::from(0u64)) {
-            return Err(ic_icrc1::endpoints::TransferError::BadFee {
+            return Err(icrc_ledger_types::transaction::TransferError::BadFee {
                 expected_fee: Nat::from(0u64),
             });
         }
@@ -245,19 +247,19 @@ async fn icrc1_send(
         let balance = ledger.balances.account_balance(&from);
         let min_burn_amount = ledger.transfer_fee.min(balance);
         if amount < min_burn_amount {
-            return Err(ic_icrc1::endpoints::TransferError::BadBurn {
+            return Err(icrc_ledger_types::transaction::TransferError::BadBurn {
                 min_burn_amount: Nat::from(min_burn_amount.get_e8s()),
             });
         }
         if amount == Tokens::ZERO {
-            return Err(ic_icrc1::endpoints::TransferError::BadBurn {
+            return Err(icrc_ledger_types::transaction::TransferError::BadBurn {
                 min_burn_amount: Nat::from(ledger.transfer_fee.get_e8s()),
             });
         }
         (Operation::Burn { from, amount }, Tokens::ZERO)
     } else if from == minting_acc {
         if fee.is_some() && fee.as_ref() != Some(&Nat::from(0u64)) {
-            return Err(ic_icrc1::endpoints::TransferError::BadFee {
+            return Err(icrc_ledger_types::transaction::TransferError::BadFee {
                 expected_fee: Nat::from(0u64),
             });
         }
@@ -265,7 +267,7 @@ async fn icrc1_send(
     } else {
         let expected_fee = LEDGER.read().unwrap().transfer_fee;
         if fee.is_some() && fee.as_ref() != Some(&Nat::from(expected_fee.get_e8s())) {
-            return Err(ic_icrc1::endpoints::TransferError::BadFee {
+            return Err(icrc_ledger_types::transaction::TransferError::BadFee {
                 expected_fee: Nat::from(expected_fee.get_e8s()),
             });
         }
@@ -289,7 +291,7 @@ async fn icrc1_send(
             created_at_time,
         };
         let (block_index, hash) = apply_transaction(&mut *ledger, tx, now, effective_fee)
-            .map_err(ic_icrc1::endpoints::TransferError::from)?;
+            .map_err(convert_transfer_error)?;
 
         set_certified_data(&hash.into_bytes());
 
@@ -767,7 +769,9 @@ async fn transfer_candid(arg: TransferArgs) -> Result<BlockIndex, TransferError>
 }
 
 #[candid_method(update, rename = "icrc1_transfer")]
-async fn icrc1_transfer(arg: TransferArg) -> Result<Nat, ic_icrc1::endpoints::TransferError> {
+async fn icrc1_transfer(
+    arg: TransferArg,
+) -> Result<Nat, icrc_ledger_types::transaction::TransferError> {
     let to = AccountIdentifier::from(arg.to);
     let from_account = Account {
         owner: ic_cdk::api::caller(),
@@ -780,7 +784,9 @@ async fn icrc1_transfer(arg: TransferArg) -> Result<Nat, ic_icrc1::endpoints::Tr
             let balance =
                 Nat::from(account_balance(AccountIdentifier::from(from_account)).get_e8s());
             assert!(balance < arg.amount);
-            return Err(ic_icrc1::endpoints::TransferError::InsufficientFunds { balance });
+            return Err(
+                icrc_ledger_types::transaction::TransferError::InsufficientFunds { balance },
+            );
         }
     };
     let created_at_time = arg

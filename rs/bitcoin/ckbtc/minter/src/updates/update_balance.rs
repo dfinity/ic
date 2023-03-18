@@ -3,8 +3,8 @@ use crate::tasks::{schedule_now, TaskType};
 use candid::{CandidType, Deserialize, Nat, Principal};
 use ic_btc_types::{GetUtxosError, GetUtxosResponse};
 use ic_canister_log::log;
-use ic_icrc1::endpoints::{TransferArg, TransferError};
 use ic_icrc1_client_cdk::{CdkRuntime, ICRC1Client};
+use icrc_ledger_types::transaction::{TransferArg, TransferError};
 use icrc_ledger_types::{Account, Subaccount};
 use serde::Serialize;
 

@@ -8,7 +8,6 @@ use ic_agent::{Agent, AgentError};
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_canister_client::Sender;
 use ic_crypto_sha::Sha256;
-pub use ic_icrc1::endpoints::Value;
 use ic_nervous_system_common::E8;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL,

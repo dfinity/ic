@@ -6,10 +6,10 @@ use std::{
 
 use candid::{Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_icrc1::{endpoints::TransferArg, Memo};
 use ic_icrc1_ledger::{InitArgs as Icrc1InitArgs, LedgerArgument};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_nervous_system_common::{E8, SECONDS_PER_DAY};
+use icrc_ledger_types::transaction::{Memo, TransferArg};
 use icrc_ledger_types::{Account, Subaccount};
 
 use ic_nns_test_utils::state_test_helpers::icrc1_transfer;

@@ -7,7 +7,6 @@ use dfn_candid::candid_one;
 use ic_base_types::CanisterId;
 use ic_canister_client_sender::Sender;
 use ic_crypto_sha::Sha256;
-use ic_icrc1::{endpoints::TransferArg, Memo};
 use ic_ledger_core::{tokens::TOKEN_SUBDIVIDABLE_BY, Tokens};
 use ic_nervous_system_common::{i2d, NervousSystemError};
 use ic_nervous_system_common_test_keys::{
@@ -47,6 +46,7 @@ use ic_sns_test_utils::itest_helpers::{
 };
 use ic_sns_test_utils::now_seconds;
 use ic_types::PrincipalId;
+use icrc_ledger_types::transaction::{Memo, TransferArg};
 use icrc_ledger_types::{Account, Subaccount};
 use maplit::btreemap;
 use rust_decimal_macros::dec;

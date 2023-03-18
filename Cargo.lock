@@ -6513,19 +6513,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-icrc1-agent"
-version = "0.8.0"
-dependencies = [
- "candid",
- "garcon",
- "ic-agent",
- "ic-icrc1",
- "ic-ledger-core",
- "icrc-ledger-types",
- "num-traits",
-]
-
-[[package]]
 name = "ic-icrc1-archive"
 version = "0.8.0"
 dependencies = [
@@ -9995,6 +9982,16 @@ dependencies = [
  "strum 0.24.1",
  "strum_macros 0.24.3",
  "tempfile",
+]
+
+[[package]]
+name = "icrc-ledger-agent"
+version = "0.1.0"
+dependencies = [
+ "candid",
+ "garcon",
+ "ic-agent",
+ "icrc-ledger-types",
 ]
 
 [[package]]
@@ -14560,7 +14557,6 @@ dependencies = [
  "ic-http-utils",
  "ic-ic00-types",
  "ic-icrc1",
- "ic-icrc1-agent",
  "ic-icrc1-ledger",
  "ic-interfaces",
  "ic-interfaces-registry",
@@ -15191,7 +15187,6 @@ dependencies = [
  "ic-http-utils",
  "ic-ic00-types",
  "ic-icrc1",
- "ic-icrc1-agent",
  "ic-icrc1-ledger",
  "ic-interfaces",
  "ic-interfaces-registry",
@@ -15240,6 +15235,7 @@ dependencies = [
  "ic-utils 0.22.0",
  "ic-utils 0.8.0",
  "icp-ledger",
+ "icrc-ledger-agent",
  "icrc-ledger-types",
  "itertools",
  "json5",

@@ -1,9 +1,6 @@
 use candid::{Decode, Encode, Nat};
 use ic_base_types::PrincipalId;
-use ic_icrc1::{
-    endpoints::{TransferArg, TransferError, Value},
-    Block, Memo, Operation, Transaction,
-};
+use ic_icrc1::{Block, Operation, Transaction};
 use ic_icrc1_index::{
     GetAccountTransactionsArgs, GetTransactions, GetTransactionsResult, InitArgs as IndexInitArgs,
     ListSubaccountsArgs, TransactionWithId,
@@ -16,6 +13,8 @@ use ic_ledger_core::{
     tokens::Tokens,
 };
 use ic_state_machine_tests::{CanisterId, StateMachine};
+use icrc_ledger_types::transaction::{Memo, TransferArg, TransferError};
+use icrc_ledger_types::value::MetadataValue as Value;
 use icrc_ledger_types::{Account, ArchiveInfo, Subaccount};
 use num_traits::cast::ToPrimitive;
 use std::path::PathBuf;

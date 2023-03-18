@@ -1,7 +1,7 @@
 use candid::{CandidType, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_icrc1::{endpoints::TransferArg, Memo};
 use ic_icrc1_client_cdk::{CdkRuntime, ICRC1Client};
+use icrc_ledger_types::transaction::{Memo, TransferArg};
 use icrc_ledger_types::Account;
 use num_traits::ToPrimitive;
 use rand::RngCore;

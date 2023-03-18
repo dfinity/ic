@@ -7,7 +7,6 @@ use ic_canister_client_sender::Sender;
 use ic_config::subnet_config::SubnetConfig;
 use ic_config::Config;
 use ic_crypto_sha::Sha256;
-use ic_icrc1::endpoints::TransferArg;
 use ic_icrc1_index::InitArgs as IndexInitArgs;
 use ic_icrc1_ledger::InitArgs as LedgerInitArgs;
 use ic_icrc1_ledger::LedgerArgument;
@@ -50,6 +49,7 @@ use ic_sns_root::{
 };
 use ic_sns_swap::pb::v1::Init as SwapInit;
 use ic_types::{CanisterId, PrincipalId};
+use icrc_ledger_types::transaction::TransferArg;
 use icrc_ledger_types::{Account, Subaccount};
 use maplit::btreemap;
 use on_wire::IntoWire;

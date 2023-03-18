@@ -1,7 +1,7 @@
 use candid::{Decode, Encode, Nat, Principal};
 use ic_agent::Agent;
-pub use ic_icrc1::endpoints::{TransferArg, TransferError, Value};
-pub use ic_ledger_core::block::BlockIndex;
+use icrc_ledger_types::transaction::{TransferArg, TransferError};
+use icrc_ledger_types::value::MetadataValue as Value;
 use icrc_ledger_types::Account;
 
 #[derive(Debug)]
