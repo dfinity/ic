@@ -1,12 +1,20 @@
-use std::time::Instant;
+use std::{
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
+    time::{Duration, Instant},
+};
 
+use anyhow::bail;
+use async_trait::async_trait;
 use ic_agent::{Agent, Identity};
 
 use crate::{
     canister_api::{Request, Response},
-    driver::test_env_api::{HasPublicApiUrl, IcNodeSnapshot},
+    driver::test_env_api::{retry_async, HasPublicApiUrl, IcNodeSnapshot},
     generic_workload_engine::metrics::RequestOutcome,
-    util::{assert_create_agent, assert_create_agent_with_identity, block_on, delay},
+    util::{assert_create_agent, assert_create_agent_with_identity, delay},
 };
 
 /// An agent that is well-suited for interacting with arbitrary IC canisters.
@@ -15,36 +23,36 @@ pub struct CanisterAgent {
     pub agent: Agent,
 }
 
-pub trait HasSnsAgentCapability: HasPublicApiUrl + Send + Sync {
-    fn build_canister_agent(&self) -> CanisterAgent;
-    fn build_canister_agent_with_identity(
+#[async_trait]
+pub trait HasCanisterAgentCapability: HasPublicApiUrl + Send + Sync {
+    async fn build_canister_agent(&self) -> CanisterAgent;
+    async fn build_canister_agent_with_identity(
         &self,
         identity: impl Identity + Clone + 'static,
     ) -> CanisterAgent;
 }
 
-impl HasSnsAgentCapability for IcNodeSnapshot {
-    fn build_canister_agent(&self) -> CanisterAgent {
-        let agent = block_on(assert_create_agent(self.get_public_url().as_str()));
+#[async_trait]
+impl HasCanisterAgentCapability for IcNodeSnapshot {
+    async fn build_canister_agent(&self) -> CanisterAgent {
+        let agent = assert_create_agent(self.get_public_url().as_str()).await;
         CanisterAgent { agent }
     }
 
-    fn build_canister_agent_with_identity(
+    async fn build_canister_agent_with_identity(
         &self,
         identity: impl Identity + Clone + 'static,
     ) -> CanisterAgent {
-        let agent = block_on(assert_create_agent_with_identity(
-            self.get_public_url().as_str(),
-            identity,
-        ));
+        let agent =
+            assert_create_agent_with_identity(self.get_public_url().as_str(), identity).await;
         CanisterAgent { agent }
     }
 }
 
 impl CanisterAgent {
-    pub fn from_boundary_node_url(bn_url: &str) -> Self {
+    pub async fn from_boundary_node_url(bn_url: &str) -> Self {
         Self {
-            agent: block_on(assert_create_agent(bn_url)),
+            agent: assert_create_agent(bn_url).await,
         }
     }
 
@@ -100,6 +108,57 @@ impl CanisterAgent {
             format!("{}+parse", request.method_name()),
             raw_outcome.duration,
             raw_outcome.attempts,
+        )
+    }
+
+    pub async fn call_with_retries<T, R>(
+        &self,
+        request: R,
+        timeout: Duration,
+        backoff_delay: Duration,
+        expected_outcome: Option<&(dyn Fn(T) -> bool + Sync + Send)>,
+    ) -> RequestOutcome<T, String>
+    where
+        T: Response + Clone,
+        R: Request<T> + Clone + Sync + Send + 'static,
+    {
+        let log = slog::Logger::root(slog::Discard, slog::o!());
+        let label = request.method_name();
+        let start_time = Instant::now();
+        let attempts = Arc::new(AtomicUsize::new(0));
+        let result = retry_async(&log, timeout, backoff_delay, {
+            let attempts = attempts.clone();
+            let request = request.clone();
+            move || {
+                attempts.fetch_add(1, Ordering::Relaxed);
+                let request = request.clone();
+                async move {
+                    let request = request.clone();
+                    match self.call_and_parse(&request).await.result() {
+                        Ok(result) => match expected_outcome {
+                            Some(predicate) => {
+                                if predicate(result.clone()) {
+                                    Ok(result)
+                                } else {
+                                    bail!("Unexpected outcome")
+                                }
+                            }
+                            None => Ok(result),
+                        },
+                        Err(error) => {
+                            bail!(error)
+                        }
+                    }
+                }
+            }
+        })
+        .await
+        .map_err(|e| format!("{e:?}"));
+        RequestOutcome::new(
+            result,
+            format!("{}+retries", label),
+            start_time.elapsed(),
+            attempts.load(Ordering::Relaxed),
         )
     }
 }

@@ -1617,6 +1617,11 @@ trait RegistryResultHelper<T> {
     fn unwrap_result(self) -> T;
 }
 
+/// How many ICP should TEST_USER1 have after ICP ledger initialization.
+///
+/// The starting balance of one user should be sufficient for most test scenarios but less than `Tokens::MAX` as that is the upper bound on the sum of all minted tokens.
+pub const TEST_USER1_STARTING_TOKENS: Tokens = Tokens::from_e8s(u64::MAX / 2);
+
 /// Installs the NNS canisters on the node given by `url` using the initial
 /// registry created by `ic-prep`, stored under `registry_local_store`.
 pub fn install_nns_canisters(
@@ -1644,10 +1649,7 @@ pub fn install_nns_canisters(
                 LIFELINE_CANISTER_ID.get().into(),
                 Tokens::from_tokens(10_000).unwrap(),
             );
-            ledger_balances.insert(
-                (*TEST_USER1_PRINCIPAL).into(),
-                Tokens::from_tokens(200_000).unwrap(),
-            );
+            ledger_balances.insert((*TEST_USER1_PRINCIPAL).into(), TEST_USER1_STARTING_TOKENS);
             if ledger_balances.len() > 100 {
                 let first_100_ledger_balances: HashMap<AccountIdentifier, Tokens> = ledger_balances
                     .iter()

@@ -4,12 +4,13 @@ use std::time::Duration;
 
 use ic_tests::driver::group::SystemTestGroup;
 use ic_tests::nns_tests::sns_deployment::{
-    generate_ticket_participants_workload, initiate_token_swap, sns_setup_with_many_icp_users,
+    generate_ticket_participants_workload, initiate_token_swap, sns_setup,
 };
 use ic_tests::systest;
 
-fn workload_rps100_many_ticket_participants(env: TestEnv) {
-    generate_ticket_participants_workload(env, 100, Duration::from_secs(60));
+fn multiple_ticket_participants(env: TestEnv) {
+    // Issue 3 workflows over 1 second - this allows detecting possible degradations in the workload metrics aggregator logic.
+    generate_ticket_participants_workload(env, 3, Duration::from_secs(1));
 }
 
 /// This is a non-interactive test:
@@ -23,10 +24,9 @@ fn workload_rps100_many_ticket_participants(env: TestEnv) {
 /// 6. Assert that the user is actually participating in the sale of X ICP worth of SNS tokens
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_overall_timeout(Duration::from_secs(30 * 60)) // 30 min
-        .with_setup(sns_setup_with_many_icp_users)
+        .with_setup(sns_setup)
         .add_test(systest!(initiate_token_swap))
-        .add_test(systest!(workload_rps100_many_ticket_participants))
+        .add_test(systest!(multiple_ticket_participants))
         .execute_from_args()?;
     Ok(())
 }
