@@ -1301,7 +1301,7 @@ impl Scheduler for SchedulerImpl {
         let mut cycles_in_sum = Cycles::zero();
         let round_log;
         let mut csprng;
-        let long_running_canister_ids;
+        let long_running_canister_ids: BTreeSet<_>;
         {
             let _timer = self.metrics.round_preparation_duration.start_timer();
             round_log = new_logger!(self.log; messaging.round => current_round.get());
@@ -1331,6 +1331,27 @@ impl Scheduler for SchedulerImpl {
                     }
                 })
                 .collect();
+
+            // Check if any of the long-running canisters has a paused
+            // execution. Note that a long-running canister has either
+            // a paused execution or an aborted execution.
+            let has_any_paused_execution = long_running_canister_ids.iter().any(|canister_id| {
+                state
+                    .canister_state(canister_id)
+                    .map(|canister| {
+                        canister.has_paused_execution() || canister.has_paused_install_code()
+                    })
+                    .unwrap_or(false)
+            });
+
+            if !has_any_paused_execution {
+                // It is possible that the replica has abandoned the replicated
+                // state with paused executions and switched to a new replicated
+                // state that was obtained via the state sync.
+                // In such a case we need to abort all paused executions to avoid
+                // deadlocking the round execution.
+                self.exec_env.abandon_paused_executions();
+            }
 
             {
                 let _timer = self.metrics.round_preparation_ingress.start_timer();

@@ -999,6 +999,12 @@ pub trait Scheduler: Send {
     ///   many instructions is left which is used to update the limit for the
     ///   next `pulse` and if the above constraint is satisfied, we can start
     ///   the `pulse`. And so on.
+    /// * Deterministic time slicing puts additional constraints on the states.
+    ///   Normally states form a chain, where the result of one execution
+    ///   becomes the input of the subsequent execution. The chain may break due
+    ///   to state sync, which starts a new execution chain. The function
+    ///   assumes that the old chain will be completely abandoned and the
+    ///   function will never be called on the old chain.
     #[allow(clippy::too_many_arguments)]
     fn execute_round(
         &self,
