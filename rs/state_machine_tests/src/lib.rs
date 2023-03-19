@@ -1005,6 +1005,21 @@ impl StateMachine {
             .commit_and_certify(state, h.increment(), CertificationScope::Full);
     }
 
+    /// Replaces the canister state in this state machine with the canister
+    /// state in given source replicated state.
+    ///
+    /// This is useful for emulating the state change due to a state sync.
+    pub fn replace_canister_state(
+        &self,
+        source_state: Arc<ReplicatedState>,
+        canister_id: CanisterId,
+    ) {
+        let (h, mut state) = self.state_manager.take_tip();
+        state.put_canister_state(source_state.canister_state(&canister_id).unwrap().clone());
+        self.state_manager
+            .commit_and_certify(state, h.increment(), CertificationScope::Full);
+    }
+
     /// Removes a canister state from this state machine and migrates it to another state machine.
     pub fn move_canister_state_to(
         &self,

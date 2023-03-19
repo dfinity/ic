@@ -9,6 +9,7 @@ use ic_config::{
 };
 use ic_ic00_types::{CanisterIdRecord, EmptyBlob, InstallCodeArgs, Method, Payload, IC_00};
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::canister_state::NextExecution;
 use ic_state_machine_tests::{
     CanisterId, CanisterInstallMode, CanisterSettingsArgs, CryptoHashOfState, ErrorCode,
     IngressState, IngressStatus, MessageId, PrincipalId, StateMachine, StateMachineConfig,
@@ -2325,4 +2326,57 @@ fn dts_global_timer_does_not_prevent_upgrade() {
     let result = env.upgrade_canister(canister_id, empty_wasm, vec![]);
 
     assert_eq!(Ok(()), result);
+}
+
+#[test]
+fn dts_abort_paused_execution_on_state_switch() {
+    if should_skip_test_due_to_disabled_dts() {
+        // Skip this test if DTS is not supported.
+        return;
+    }
+
+    let env = dts_env(
+        NumInstructions::from(1_000_000_000),
+        NumInstructions::from(50_000),
+    );
+
+    let user_id = PrincipalId::new_anonymous();
+    let binary = UNIVERSAL_CANISTER_WASM.to_vec();
+
+    let canister_id = env
+        .install_canister_with_cycles(binary, vec![], None, INITIAL_CYCLES_BALANCE)
+        .unwrap();
+
+    // Snapshot the clean state that doesn't have any paused executions.
+    let clean_state = env.get_latest_state();
+
+    // Start and pause a long-running execution.
+    let update = wasm()
+        .instruction_counter_is_at_least(1_000_000)
+        .reply_data(&[42])
+        .build();
+    env.send_ingress(user_id, canister_id, "update", update.clone());
+    env.tick();
+    assert_eq!(
+        env.get_latest_state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .next_execution(),
+        NextExecution::ContinueLong,
+    );
+
+    // Emulate switching of the state due to state sync.
+    env.replace_canister_state(clean_state, canister_id);
+
+    assert_eq!(
+        env.get_latest_state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .next_execution(),
+        NextExecution::None,
+    );
+
+    // Execute a new message on the new state.
+    let result = env.execute_ingress(canister_id, "update", update).unwrap();
+    assert_eq!(result, WasmResult::Reply(vec![42]));
 }

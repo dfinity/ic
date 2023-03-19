@@ -2181,6 +2181,22 @@ impl ExecutionEnvironment {
         }
     }
 
+    /// Aborts all paused executions known to the execution environment. This
+    /// function is useful in the case when the replica abandons the old
+    /// replicated state that has paused execution when it syncs to a more
+    /// recent replicated state.
+    pub fn abandon_paused_executions(&self) {
+        let mut guard = self.paused_execution_registry.lock().unwrap();
+        let paused_execution = std::mem::take(&mut guard.paused_execution);
+        for p in paused_execution.into_values() {
+            p.abort(&self.log);
+        }
+        let paused_install_code = std::mem::take(&mut guard.paused_install_code);
+        for p in paused_install_code.into_values() {
+            p.abort(&self.log);
+        }
+    }
+
     /// If the given result corresponds to a finished execution, then it processes
     /// the response and return the ingress status (if any). Otherwise, it registers
     /// the paused execution and adds it to the task queue.
