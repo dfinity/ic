@@ -53,7 +53,7 @@ fi
 cd "$(dirname "$0")"
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 GIT_REVISION=$(git log --format=format:%H  --max-count=1)
-${REPO_ROOT}/gitlab-ci/container/build-ic.sh -i -d -b -c
+${REPO_ROOT}/gitlab-ci/container/build-ic.sh -i -d -s -b -c
 sudo rm -rf  /var/local/ic/disk/localhost/${GIT_REVISION}
 sudo mkdir -p /var/local/ic/disk/localhost/${GIT_REVISION}
 sudo cp /wrk/apk/ic/artifacts/icos/disk-img.tar.zst /var/local/ic/disk/localhost/${GIT_REVISION}/

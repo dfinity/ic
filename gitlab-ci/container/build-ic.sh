@@ -29,6 +29,8 @@ export BUILD_BIN=false
 export BUILD_CAN=false
 export BUILD_IMG=false
 export BUILD_DEBUG_IMG=false
+export BUILD_STATIC_SSL=false
+
 
 if [ "$#" == 0 ]; then
     echo_red "ERROR: Please specify one of '-b', '-c' or '-i'" >&2
@@ -36,12 +38,13 @@ if [ "$#" == 0 ]; then
     usage && exit 1
 fi
 
-while getopts ':bcidh' opt; do
+while getopts ':bcidsh' opt; do
     case "$opt" in
         b) BUILD_BIN=true ;;
         c) BUILD_CAN=true ;;
         i) BUILD_IMG=true ;;
-	d) BUILD_DEBUG_IMG=true ;;
+        d) BUILD_DEBUG_IMG=true ;;
+        s) BUILD_STATIC_SSL=true ;;
         h) usage && exit 0 ;;
         :) echo_red "Option requires an argument.\n" && usage && exit 1 ;;
         ?) echo_red "Invalid command option.\n" && usage && exit 1 ;;
@@ -99,13 +102,20 @@ rm -rf "$BINARIES_DIR_FULL"
 rm -rf "$CANISTERS_DIR_FULL"
 rm -rf "$DISK_DIR_FULL"
 
+if [[ $BUILD_STATIC_SSL ]]
+then
+    SSL_OPT="DFINITY_OPENSSL_STATIC=1 "
+else
+    SSL_OPT=""
+fi
+
 echo_green "Building selected IC artifacts"
 BAZEL_CMD="bazel build --config=local --ic_version='$VERSION' --ic_version_rc_only='$IC_VERSION_RC_ONLY'"
 BUILD_BINARIES_CMD=$(
     cat <<-END
     # build binaries
     mkdir -p "$BINARIES_DIR"
-    $BAZEL_CMD //publish/binaries
+    $SSL_OPT $BAZEL_CMD //publish/binaries
     bazel cquery --output=files //publish/binaries | xargs -I {} cp {} "$BINARIES_DIR"
 END
 )
