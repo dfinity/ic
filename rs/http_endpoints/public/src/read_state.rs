@@ -285,7 +285,7 @@ async fn verify_paths(
 
                 if num_request_ids > MAX_READ_STATE_REQUEST_IDS {
                     return Err(HttpError {
-                        status: StatusCode::TOO_MANY_REQUESTS,
+                        status: StatusCode::BAD_REQUEST,
                         message: format!(
                             "Can only request up to {} paths for request_status.",
                             MAX_READ_STATE_REQUEST_IDS
