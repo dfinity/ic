@@ -40,10 +40,10 @@ sh -ci "$(curl -fsSL https://internetcomputer.org/install.sh)"
 PATH=$PATH:$HOME/bin
 ```
 
-Knowledge of testnets. Read [go/testnets][http://go/testnets] if you need to be brought up to speed.
+Knowledge of testnets. Read [go/testnets](http://go/testnets) if you need to be brought up to speed.
 
 You will need to pick a testnet that has a `hosts_unassigned.ini` file. To figure out which ones fit that description, use this
-[query])(https://sourcegraph.com/search?q=context:global+repo:dfinity/ic+f:hosts_unassigned.ini+f:%28small%7Cmedium%7Clarge%29&patternType=regexp&case=yes&sm=1&groupBy=repo).
+[query](https://sourcegraph.com/search?q=context:global+repo:dfinity/ic+f:hosts_unassigned.ini+f:%28small%7Cmedium%7Clarge%29&patternType=regexp&case=yes&sm=1&groupBy=repo).
 E.g. currently, small01 has such a file.
 
 ### nns_dev_testnet.sh
