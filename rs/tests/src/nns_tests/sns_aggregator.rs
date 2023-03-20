@@ -390,12 +390,12 @@ pub fn validate_aggregator_data(env: TestEnv) {
     let log = env.logger();
     let start_time = Instant::now();
     let app_node = env.get_first_healthy_application_node_snapshot();
+    let agent = app_node.build_default_agent();
     let aggregator = AggregatorClient::read_attribute(&env);
     let sns_client = SnsClient::read_attribute(&env);
     block_on(async move {
         info!(log, "Fetch SNS sale params from aggregator canister ...");
         let sns_sale_params_from_aggregator = {
-            let agent = app_node.build_default_agent();
             let http_canister = aggregator.new_http_canister(&agent);
             let swap_params = AggregatorClient::first_swap_params(
                 &log,
