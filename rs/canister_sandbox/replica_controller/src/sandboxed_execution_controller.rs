@@ -16,7 +16,7 @@ use ic_embedders::{
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 #[cfg(target_os = "linux")]
 use ic_logger::warn;
-use ic_logger::{error, ReplicaLogger};
+use ic_logger::{error, info, ReplicaLogger};
 use ic_metrics::buckets::decimal_buckets_with_zero;
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::canister_state::execution_state::{
@@ -617,6 +617,8 @@ impl WasmExecutor for SandboxedExecutionController {
             &sandbox_process,
             &execution_state.wasm_binary,
             compilation_cache,
+            sandbox_safe_system_state.canister_id(),
+            &self.logger,
             &self.metrics,
         ) {
             Ok((wasm_id, compilation_result)) => (wasm_id, compilation_result),
@@ -829,7 +831,12 @@ impl WasmExecutor for SandboxedExecutionController {
             .metrics
             .sandboxed_execution_replica_create_exe_state_finish_duration
             .start_timer();
-        observe_metrics(&self.metrics, &serialized_module.imports_details);
+        observe_metrics(
+            &self.logger,
+            &self.metrics,
+            &serialized_module.imports_details,
+            canister_id,
+        );
 
         cache_opened_wasm(
             &mut wasm_binary.embedder_cache.lock().unwrap(),
@@ -878,13 +885,26 @@ impl WasmExecutor for SandboxedExecutionController {
     }
 }
 
-fn observe_metrics(metrics: &SandboxedExecutionMetrics, imports_details: &WasmImportsDetails) {
+fn observe_metrics(
+    logger: &ReplicaLogger,
+    metrics: &SandboxedExecutionMetrics,
+    imports_details: &WasmImportsDetails,
+    canister_id: CanisterId,
+) {
     if imports_details.imports_controller_size {
+        info!(
+            logger,
+            "Canister {} imports deprecated system API ic0.controller_size.", canister_id
+        );
         metrics
             .sandboxed_execution_wasm_imports_controller_size
             .inc();
     }
     if imports_details.imports_controller_copy {
+        info!(
+            logger,
+            "Canister {} imports deprecated system API ic0.controller_copy.", canister_id
+        );
         metrics
             .sandboxed_execution_wasm_imports_controller_copy
             .inc();
@@ -1347,6 +1367,8 @@ fn open_wasm(
     sandbox_process: &Arc<SandboxProcess>,
     wasm_binary: &WasmBinary,
     compilation_cache: Arc<CompilationCache>,
+    canister_id: CanisterId,
+    logger: &ReplicaLogger,
     metrics: &SandboxedExecutionMetrics,
 ) -> HypervisorResult<(WasmId, Option<CompilationResult>)> {
     let mut embedder_cache = wasm_binary.embedder_cache.lock().unwrap();
@@ -1389,7 +1411,12 @@ fn open_wasm(
             {
                 Ok((compilation_result, serialized_module)) => {
                     cache_opened_wasm(&mut embedder_cache, sandbox_process, wasm_id);
-                    observe_metrics(metrics, &serialized_module.imports_details);
+                    observe_metrics(
+                        logger,
+                        metrics,
+                        &serialized_module.imports_details,
+                        canister_id,
+                    );
                     compilation_cache.insert(&wasm_binary.binary, Ok(Arc::new(serialized_module)));
                     Ok((wasm_id, Some(compilation_result)))
                 }
@@ -1407,7 +1434,12 @@ fn open_wasm(
         }
         Some(Ok(serialized_module)) => {
             metrics.inc_cache_lookup(COMPILATION_CACHE_HIT);
-            observe_metrics(metrics, &serialized_module.imports_details);
+            observe_metrics(
+                logger,
+                metrics,
+                &serialized_module.imports_details,
+                canister_id,
+            );
             sandbox_process
                 .history
                 .record(format!("OpenWasmSerialized(wasm_id={})", wasm_id));
