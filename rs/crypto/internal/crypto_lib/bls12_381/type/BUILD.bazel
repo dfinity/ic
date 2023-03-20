@@ -1,4 +1,5 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test", "rust_test_suite")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test", "rust_test_suite")
+load("//bazel:defs.bzl", "rust_bench")
 
 package(default_visibility = ["//rs/crypto:__subpackages__"])
 
@@ -39,8 +40,9 @@ rust_library(
     deps = DEPENDENCIES,
 )
 
-rust_binary(
+rust_bench(
     name = "type_bench",
+    testonly = True,
     srcs = ["benches/ops.rs"],
     crate_root = "benches/ops.rs",
     proc_macro_deps = MACRO_DEPENDENCIES,

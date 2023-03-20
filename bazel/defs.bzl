@@ -80,4 +80,5 @@ def rust_bench(name, env = {}, data = [], **kwargs):
         testonly = kwargs.get("testonly", False),
         env = dict(env.items() + {"BAZEL_DEFS_BENCH_BIN": "$(location :%s)" % binary_name}.items()),
         data = data + [":" + binary_name],
+        tags = kwargs.get("tags", []) + ["rust_bench"],
     )

@@ -79,7 +79,7 @@ rust_test(
 )
 
 rust_bench(
-    name = "build_payload",
+    name = "build_payload_bench",
     testonly = True,
     srcs = ["benches/build_payload.rs"],
     data = DATA,
@@ -109,7 +109,7 @@ rust_bench(
 )
 
 rust_bench(
-    name = "handle_ingress",
+    name = "handle_ingress_bench",
     testonly = True,
     srcs = ["benches/handle_ingress.rs"],
     data = DATA,

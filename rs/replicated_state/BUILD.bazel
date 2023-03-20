@@ -1,4 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test", "rust_test_suite")
+load("//bazel:defs.bzl", "rust_bench")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -81,8 +82,9 @@ rust_binary(
     deps = [":replicated_state"] + BIN_DEPENDENCIES,
 )
 
-rust_binary(
+rust_bench(
     name = "replicated_state_intmap_bench",
+    testonly = True,
     srcs = [
         "benches/bench_allocator.rs",
     ],

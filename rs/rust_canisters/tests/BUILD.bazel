@@ -1,5 +1,6 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test_suite")
+load("@rules_rust//rust:defs.bzl", "rust_test_suite")
 load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:defs.bzl", "rust_bench")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -35,32 +36,24 @@ MACRO_DEV_DEPENDENCIES = []
 
 ALIASES = {}
 
-# Use the sh_binary rule below to execute the benchmark.
-rust_binary(
-    name = "tests_bench_bin",
+rust_bench(
+    name = "json_bench",
+    testonly = True,
     srcs = ["benches/json.rs"],
     crate_root = "benches/json.rs",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    deps = DEPENDENCIES + DEV_DEPENDENCIES,
-)
-
-# rust_binary rule doesn't support env attribute, so pass them in here.
-sh_binary(
-    name = "test_bench",
-    srcs = ["benches/run_test_bench.sh"],
     data = [
         ":json",
-        ":tests_bench_bin",
         "//rs/canister_sandbox",
         "//rs/canister_sandbox/sandbox_launcher",
     ],
     env = {
-        "TESTS_BENCH_BIN": "$(rootpath :tests_bench_bin)",
         "JSON_WASM_PATH": "$(rootpath :json)",
         "CARGO_MANIFEST_DIR": "rs/rust_canisters/tests/",
         "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
         "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
     },
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
 rust_canister(
