@@ -119,7 +119,8 @@ impl MutablePool<CanisterHttpArtifact, CanisterHttpChangeSet> for CanisterHttpPo
                     self.content
                         .insert(ic_types::crypto::crypto_hash(&content), content);
                 }
-                CanisterHttpChangeAction::MoveToValidated(id) => {
+                CanisterHttpChangeAction::MoveToValidated(share) => {
+                    let id = ic_types::crypto::crypto_hash(&share);
                     match self.unvalidated.remove(&id) {
                         None => (),
                         Some(value) => {

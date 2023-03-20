@@ -495,12 +495,11 @@ fn setup_artifact_manager(
                     canister_http::gossip::CanisterHttpGossipImpl::new(
                         Arc::clone(&artifact_pools.consensus_pool_cache),
                         Arc::clone(&state_manager) as Arc<_>,
-                        replica_logger.clone(),
+                        replica_logger,
                     ),
                 ),
                 Arc::clone(&time_source) as Arc<_>,
                 Arc::clone(&artifact_pools.canister_http_pool),
-                replica_logger,
                 metrics_registry,
             )),
         );

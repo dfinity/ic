@@ -324,9 +324,7 @@ impl CanisterHttpPoolManagerImpl {
                     ))
                 } else {
                     self.metrics.shares_validated.inc();
-                    Some(CanisterHttpChangeAction::MoveToValidated(
-                        ic_types::crypto::crypto_hash(share),
-                    ))
+                    Some(CanisterHttpChangeAction::MoveToValidated(share.clone()))
                 }
             })
             .collect()
