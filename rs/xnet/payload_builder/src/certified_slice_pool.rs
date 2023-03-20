@@ -36,7 +36,6 @@ type PayloadTreeMap = FlatMap<Label, PayloadTree>;
 pub type CertifiedSliceResult<T> = Result<T, CertifiedSliceError>;
 
 /// Metrics for [`CertifiedSlicePool`].
-#[derive(Debug)]
 struct CertifiedSlicePoolMetrics {
     pool_size_bytes: IntGauge,
     take_count: IntCounterVec,
@@ -1061,7 +1060,6 @@ fn to_stream_index(label: &Label) -> Result<StreamIndex, InvalidSlice> {
 /// It does not verify the validity of the slices it stores or returns, but
 /// operations will return `CertifiedSliceError` if the slices are obviously
 /// invalid (e.g. if payload structure is invalid or witness pruning fails).
-#[derive(Debug)]
 pub struct CertifiedSlicePool {
     /// The actual slice pool contents.
     slices: BTreeMap<SubnetId, UnpackedStreamSlice>,
@@ -1108,9 +1106,12 @@ impl CertifiedSlicePool {
         match self.take_slice_impl(subnet_id, begin, msg_limit, byte_limit) {
             Ok(Some(slice)) => {
                 let slice_count_bytes = slice.count_bytes();
+                debug_assert!(slice_count_bytes <= byte_limit.unwrap_or(usize::MAX));
+
                 self.metrics.observe_take(STATUS_SUCCESS);
                 self.metrics.observe_take_message_count(slice.payload.len());
                 self.metrics.observe_take_size_bytes(slice_count_bytes);
+
                 Ok(Some((slice.pack(), slice_count_bytes)))
             }
             Ok(None) => {
