@@ -31,6 +31,7 @@ use crate::{
 use async_trait::async_trait;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
+use ic_ic00_types::CanisterInstallModeError;
 use ic_ledger_core::{tokens::Tokens, tokens::TOKEN_SUBDIVIDABLE_BY};
 use ic_nervous_system_common::{validate_proposal_url, NervousSystemError};
 use std::{
@@ -887,6 +888,18 @@ impl From<NervousSystemError> for GovernanceError {
         GovernanceError {
             error_type: ErrorType::External as i32,
             error_message: nervous_system_error.error_message,
+        }
+    }
+}
+
+impl From<CanisterInstallModeError> for GovernanceError {
+    fn from(canister_install_mode_error: CanisterInstallModeError) -> Self {
+        GovernanceError {
+            error_type: ErrorType::External as i32,
+            error_message: format!(
+                "Invalid mode for install_code: {}",
+                canister_install_mode_error.0
+            ),
         }
     }
 }

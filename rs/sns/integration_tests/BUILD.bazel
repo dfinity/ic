@@ -55,6 +55,7 @@ DEV_DEPENDENCIES = [
     "//rs/nns/governance",
     "//rs/nns/sns-wasm",
     "//rs/nns/test_utils",
+    "//rs/protobuf",
     "//rs/rosetta-api/icp_ledger",
     "//rs/rust_canisters/on_wire",
     "//rs/sns/swap",

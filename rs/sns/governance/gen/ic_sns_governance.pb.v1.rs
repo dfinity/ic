@@ -360,6 +360,13 @@ pub struct UpgradeSnsControlledCanister {
     /// Arguments passed to the post-upgrade method of the new wasm module.
     #[prost(bytes = "vec", optional, tag = "3")]
     pub canister_upgrade_arg: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    /// Canister install_code mode.
+    #[prost(
+        enumeration = "::ic_protobuf::types::v1::CanisterInstallMode",
+        optional,
+        tag = "4"
+    )]
+    pub mode: ::core::option::Option<i32>,
 }
 /// A proposal to transfer SNS treasury funds to (optionally a Subaccount of) the
 /// target principal.

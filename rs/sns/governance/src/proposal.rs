@@ -1170,6 +1170,7 @@ mod tests {
     use ic_ic00_types::CanisterStatusType;
     use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
     use ic_nns_constants::SNS_WASM_CANISTER_ID;
+    use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
     use ic_test_utilities::types::ids::canister_test_id;
     use lazy_static::lazy_static;
     use maplit::hashset;
@@ -1356,6 +1357,7 @@ mod tests {
             canister_id: Some(basic_principal_id()),
             new_canister_wasm: vec![0, 0x61, 0x73, 0x6D, 1, 0, 0, 0],
             canister_upgrade_arg: None,
+            mode: Some(CanisterInstallModeProto::Upgrade.into()),
         };
         assert_is_ok(validate_and_render_upgrade_sns_controlled_canister(
             &upgrade,

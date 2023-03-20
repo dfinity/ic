@@ -9,6 +9,7 @@ use ic_ledger_core::Tokens;
 use ic_nervous_system_common_test_keys::{TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR};
 use ic_nervous_system_root::{CanisterIdRecord, CanisterStatusResult, CanisterStatusType};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
+use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
 use ic_sns_governance::pb::v1::{
     governance_error::ErrorType, proposal::Action, NervousSystemParameters, NeuronPermissionList,
     NeuronPermissionType, Proposal, UpgradeSnsControlledCanister,
@@ -115,6 +116,8 @@ fn test_upgrade_canister_proposal_is_successful() {
                     canister_id: Some(dapp_canister.canister_id().get()),
                     new_canister_wasm: new_dapp_wasm,
                     canister_upgrade_arg: Some(wasm().set_global_data(&[42]).build()),
+                    // mode: None corresponds to CanisterInstallModeProto::Upgrade
+                    mode: None,
                 },
             )),
             ..Default::default()
@@ -170,6 +173,153 @@ fn test_upgrade_canister_proposal_is_successful() {
             .await
             .unwrap();
         assert_eq!(res, vec![42]);
+
+        Ok(())
+    })
+}
+
+#[test]
+fn test_upgrade_canister_proposal_reinstall() {
+    local_test_on_sns_subnet(|runtime| async move {
+        // Step 1: Prepare
+
+        // Step 1.a: Boot up SNS with one user.
+        let user = Sender::from_keypair(&TEST_USER1_KEYPAIR);
+        let alloc = Tokens::from_tokens(1000).unwrap();
+
+        let system_params = NervousSystemParameters {
+            neuron_claimer_permissions: Some(NeuronPermissionList {
+                permissions: NeuronPermissionType::all(),
+            }),
+            ..NervousSystemParameters::with_default_values()
+        };
+
+        let sns_init_payload = SnsTestsInitPayloadBuilder::new()
+            .with_ledger_account(user.get_principal_id().0.into(), alloc)
+            .with_nervous_system_parameters(system_params)
+            .build();
+
+        let sns_canisters = SnsCanisters::set_up(&runtime, sns_init_payload).await;
+
+        let mut dapp_canister = runtime
+            .create_canister_max_cycles_with_retries()
+            .await
+            .expect("Could not create dapp canister");
+
+        let dapp_wasm = Wasm::from_bytes(UNIVERSAL_CANISTER_WASM);
+
+        dapp_wasm
+            .install_with_retries_onto_canister(
+                &mut dapp_canister,
+                Some(wasm().stable_grow(42).build()),
+                None,
+            )
+            .await
+            .unwrap();
+        // Check that stable memory was grown.
+        let res: Vec<u8> = dapp_canister
+            .update_(
+                "update",
+                bytes,
+                wasm()
+                    .stable_size()
+                    .int_to_blob()
+                    .append_and_reply()
+                    .build(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(res, vec![42, 0, 0, 0]);
+
+        dapp_canister
+            .set_controller(sns_canisters.root.canister_id().get())
+            .await
+            .expect("Could not set root as controller of dapp");
+
+        // Step 1.b: Create a neuron.
+        let neuron_id = sns_canisters
+            .stake_and_claim_neuron(&user, Some(ONE_YEAR_SECONDS as u32))
+            .await;
+        let subaccount = neuron_id
+            .subaccount()
+            .expect("Error creating the subaccount");
+
+        sns_canisters
+            .register_dapp_canister(&user, &neuron_id, dapp_canister.canister_id())
+            .await;
+
+        // Step 2: Execute code under test: Propose that we upgrade dapp.
+        // (This should get executed right away,
+        // because the proposing neuron is the only neuron.)
+        let new_dapp_wasm = Wasm::from_bytes(UNIVERSAL_CANISTER_WASM).bytes();
+        let new_dapp_wasm_hash = &ic_crypto_sha::Sha256::hash(&new_dapp_wasm);
+        let proposal = Proposal {
+            title: "Reinstall dapp.".into(),
+            action: Some(Action::UpgradeSnsControlledCanister(
+                UpgradeSnsControlledCanister {
+                    canister_id: Some(dapp_canister.canister_id().get()),
+                    new_canister_wasm: new_dapp_wasm,
+                    canister_upgrade_arg: Some(wasm().build()),
+                    mode: Some(CanisterInstallModeProto::Reinstall.into()),
+                },
+            )),
+            ..Default::default()
+        };
+        let proposal_id = sns_canisters
+            .make_proposal(&user, &subaccount, proposal)
+            .await
+            .unwrap();
+
+        // Step 3: Inspect result(s).
+
+        // Step 3.a: Assert that the proposal was approved.
+        let proposal = sns_canisters
+            .await_proposal_execution_or_failure(&proposal_id)
+            .await;
+
+        assert_ne!(
+            proposal.decided_timestamp_seconds, 0,
+            "proposal: {:?}",
+            proposal
+        );
+        assert_ne!(
+            proposal.executed_timestamp_seconds, 0,
+            "proposal: {:?}",
+            proposal
+        );
+        assert_eq!(
+            proposal.failed_timestamp_seconds, 0,
+            "proposal: {:?}",
+            proposal
+        );
+        assert_eq!(proposal.failure_reason, None, "proposal: {:?}", proposal);
+
+        // Step 3.b: Wait until new dapp is running.
+        let status = sns_canisters
+            .await_canister_upgrade(dapp_canister.canister_id())
+            .await;
+
+        // Step 3.c: Assert that the new wasm hash is new_dapp_wasm_hash.
+        assert_eq!(
+            status.module_hash.as_ref().unwrap()[..],
+            new_dapp_wasm_hash[..],
+            "status: {:?}",
+            status
+        );
+        // Check that stable memory was erased during reinstall.
+        let res: Vec<u8> = dapp_canister
+            .update_(
+                "update",
+                bytes,
+                wasm()
+                    .stable_size()
+                    .int_to_blob()
+                    .append_and_reply()
+                    .build(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(res, vec![0, 0, 0, 0]);
 
         Ok(())
     })
@@ -267,6 +417,7 @@ fn test_upgrade_canister_proposal_execution_fail() {
                     canister_id: Some(dapp_canister.canister_id().get()),
                     new_canister_wasm: new_dapp_wasm,
                     canister_upgrade_arg: None,
+                    mode: Some(CanisterInstallModeProto::Upgrade.into()),
                 },
             )),
             ..Default::default()
@@ -456,6 +607,7 @@ fn test_upgrade_after_state_shrink() {
                     canister_id: Some(sns_canisters.governance.canister_id().into()),
                     new_canister_wasm: governance_wasm,
                     canister_upgrade_arg: None,
+                    mode: Some(CanisterInstallModeProto::Upgrade.into()),
                 },
             )),
             ..Default::default()

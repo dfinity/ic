@@ -227,6 +227,7 @@ generated_files_check(
     srcs = ["tests/check_generated_files.rs"],
     data = glob(["gen/**"]) + [
         ":protos",
+        "//rs/protobuf:protos",
         "//rs/types/base_types:protos",
         "//rs/rosetta-api/icp_ledger:protos",
     ],
