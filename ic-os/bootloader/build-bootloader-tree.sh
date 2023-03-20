@@ -25,6 +25,7 @@ BASE_IMAGE="dfinity/ic-build-bazel@sha256:1978886cfda51b09057bffd60f2e5edb588c6c
 
 docker build --iidfile ${TMPDIR}/iidfile - <<<"
     FROM $BASE_IMAGE
+    USER root:root
     RUN mkdir -p /build/boot/grub
     RUN cp -r /usr/lib/grub/x86_64-efi /build/boot/grub
     RUN mkdir -p /build/boot/efi/EFI/Boot
@@ -35,7 +36,7 @@ docker build --iidfile ${TMPDIR}/iidfile - <<<"
         part_gpt btrfs ext2 fat iso9660 loopback \
         test keystatus gfxmenu regexp probe \
         efi_gop efi_uga all_video gfxterm font \
-        echo read ls cat png jpeg halt reboot loadenv
+        echo read ls cat png jpeg halt reboot loadenv lvm
 "
 
 IMAGE=$(cat ${TMPDIR}/iidfile | cut -d':' -f2)

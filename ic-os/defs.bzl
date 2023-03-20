@@ -4,6 +4,7 @@ A macro to build multiple versions of the ICOS image (i.e., dev vs prod)
 
 load("//toolchains/sysimage:toolchain.bzl", "disk_image", "docker_tar", "ext4_image", "sha256sum", "tar_extract", "upgrade_image")
 load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts")
+load("//ic-os/bootloader:defs.bzl", "build_grub_partition")
 load("//bazel:defs.bzl", "gzip_compress")
 load("//bazel:output_files.bzl", "output_files")
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
@@ -51,6 +52,10 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
             outs = ["version-test.txt"],
             cmd = "sed -e 's/.*/&-test/' < $< > $@",
         )
+
+    # -------------------- Build grub partition --------------------
+
+    build_grub_partition("partition-grub.tar", grub_config = image_deps.get("grub_config", default = None))
 
     # -------------------- Build the docker image --------------------
 
@@ -241,6 +246,8 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
         name = "disk-img.tar",
         layout = image_deps["partition_table"],
         partitions = [
+            "//ic-os/bootloader:partition-esp.tar",
+            ":partition-grub.tar",
             ":partition-boot.tar",
             ":partition-root.tar",
         ] + custom_partitions,
@@ -523,6 +530,8 @@ def boundary_node_icos_build(name, image_deps, mode = None, sev = False, visibil
         },
     )
 
+    build_grub_partition("partition-grub.tar")
+
     docker_tar(
         visibility = visibility,
         name = "rootfs-tree.tar",
@@ -642,7 +651,7 @@ def boundary_node_icos_build(name, image_deps, mode = None, sev = False, visibil
         layout = "//ic-os/boundary-guestos:partitions.csv",
         partitions = [
             "//ic-os/bootloader:partition-esp.tar",
-            "//ic-os/bootloader:partition-grub.tar",
+            ":partition-grub.tar",
             ":partition-config.tar",
             ":partition-boot.tar",
             ":partition-root.tar",
@@ -757,6 +766,8 @@ def boundary_api_guestos_build(name, image_deps, mode = None, visibility = None)
             "TEMPLATE_FILE": "$(rootpath //ic-os:vuln-scan.html)",
         },
     )
+
+    build_grub_partition("partition-grub.tar")
 
     docker_tar(
         visibility = visibility,
@@ -879,7 +890,7 @@ def boundary_api_guestos_build(name, image_deps, mode = None, visibility = None)
         layout = "//ic-os/boundary-api-guestos:partitions.csv",
         partitions = [
             "//ic-os/bootloader:partition-esp.tar",
-            "//ic-os/bootloader:partition-grub.tar",
+            ":partition-grub.tar",
             ":partition-config.tar",
             ":partition-boot.tar",
             "partition-root.tar",

@@ -3,11 +3,11 @@ load("//toolchains/sysimage:toolchain.bzl", "ext4_image")
 package(default_visibility = ["__subpackages__"])
 
 exports_files([
-    "bootloader/extra_boot_args.template",
     "partitions.csv",
     "rootfs/docker-base.dev",
     "rootfs/docker-base.prod",
     "rootfs/allow_console_root",
+    "rootfs/extra_boot_args.template",
     "rootfs/dev-certs/canister_http_test_ca.cert",
     "rootfs/dev-certs/canister_http_test_ca.key",
     "rootfs/opt/ic/share/ic.json5.template",

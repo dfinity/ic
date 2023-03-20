@@ -64,8 +64,6 @@ def image_deps(mode, malicious = False):
     # Add any custom partitions to the manifest
     deps["custom_partitions"] = lambda: [
         Label("//ic-os/guestos:partition-config.tar"),
-        Label("//ic-os/bootloader:partition-esp.tar"),
-        Label("//ic-os/bootloader:partition-grub.tar"),
     ]
 
     # We will install extra_boot_args onto the system, after substituting the
@@ -73,6 +71,6 @@ def image_deps(mode, malicious = False):
     # substitution) as a dependency so that changes to the template file are
     # reflected in the overall version hash (the root_hash must include the
     # version hash, it cannot be the other way around).
-    deps["boot_args_template"] = Label("//ic-os/guestos:bootloader/extra_boot_args.template")
+    deps["boot_args_template"] = Label("//ic-os/guestos:rootfs/extra_boot_args.template")
 
     return deps

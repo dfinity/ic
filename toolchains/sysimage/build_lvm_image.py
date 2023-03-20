@@ -275,11 +275,13 @@ metadata_copies = 0
     dev_size = int(size / 512)  # Sector size
     pe_count = int((size - LVM_HEADER_SIZE_BYTES) / EXTENT_SIZE_BYTES)
 
+    # Note: "/dev/nvme0n1p3" is just a hint, but can help speed up boot
     lines += f"""
 physical_volumes {{
 pv0 {{
 id = "{pv_uuid}"
 
+device = "/dev/nvme0n1p3"
 status = ["ALLOCATABLE"]
 flags = []
 dev_size = {dev_size}
