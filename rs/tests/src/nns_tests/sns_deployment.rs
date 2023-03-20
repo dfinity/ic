@@ -260,10 +260,7 @@ fn setup(env: TestEnv, sale_participants: Vec<SaleParticipant>) {
         .expect("failed to start prometheus VM");
 
     InternetComputer::new()
-        .with_required_host_features(vec![
-            HostFeature::SnsLoadTest,
-            HostFeature::Host("fr1-dll07.fr1.dfinity.network".to_string()),
-        ])
+        .with_required_host_features(vec![HostFeature::SnsLoadTest])
         .with_default_vm_resources(VmResources {
             vcpus: Some(UVM_NUM_CPUS),
             memory_kibibytes: Some(UVM_MEMORY_SIZE),
