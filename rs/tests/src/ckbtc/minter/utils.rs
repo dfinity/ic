@@ -34,9 +34,7 @@ use canister_test::Canister;
 use ic_ckbtc_agent::CkBtcMinterAgent;
 use ic_ckbtc_minter::state::RetrieveBtcStatus;
 use ic_ckbtc_minter::updates::retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError};
-use ic_ckbtc_minter::updates::update_balance::{
-    UpdateBalanceArgs, UpdateBalanceError, UpdateBalanceResult,
-};
+use ic_ckbtc_minter::updates::update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus};
 use ic_universal_canister::{management, wasm};
 use icrc_ledger_agent::{CallMode, Icrc1Agent, Icrc1AgentError};
 use icrc_ledger_types::transaction::GetTransactionsResponse;
@@ -317,7 +315,7 @@ pub async fn update_balance(
     ckbtc_minter_agent: &CkBtcMinterAgent,
     logger: &Logger,
     subaccount: Option<Subaccount>,
-) -> Result<UpdateBalanceResult, UpdateBalanceError> {
+) -> Result<Vec<UtxoStatus>, UpdateBalanceError> {
     debug!(logger, "Calling update balance");
     ckbtc_minter_agent
         .update_balance(UpdateBalanceArgs {
@@ -330,7 +328,7 @@ pub async fn update_balance(
 
 pub async fn update_balance_without_subaccount(
     ckbtc_minter_agent: &CkBtcMinterAgent,
-) -> Result<UpdateBalanceResult, UpdateBalanceError> {
+) -> Result<Vec<UtxoStatus>, UpdateBalanceError> {
     ckbtc_minter_agent
         .update_balance(UpdateBalanceArgs {
             owner: None,

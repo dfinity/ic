@@ -21,6 +21,7 @@ use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_btc_types::Network;
 use ic_canister_client::Sender;
 use ic_cdk::export::Principal;
+use ic_ckbtc_kyt::{InitArg as KytInitArg, KytMode, LifecycleArg, UpgradeArg as KytUpgradeArg};
 use ic_ckbtc_minter::lifecycle::init::MinterArg;
 use ic_ckbtc_minter::lifecycle::init::{InitArgs as CkbtcMinterInitArgs, Mode};
 use ic_config::subnet_config::ECDSA_SIGNATURE_FEE;
@@ -57,11 +58,14 @@ pub(crate) const RETRIEVE_BTC_MIN_AMOUNT: u64 = 100;
 pub const TIMEOUT_SHORT: Duration = Duration::from_secs(300);
 
 const BITCOIN_TESTNET_CANISTER_ID: &str = "g4xu7-jiaaa-aaaan-aaaaq-cai";
+// const KYT_CANISTER_ID: &str = "g4xu7-jiaaa-aaaan-aaaaq-cai";
 
 /// Maximum time (in nanoseconds) spend in queue at 0 to make the minter treat requests rigth away
 pub const MAX_NANOS_IN_QUEUE: u64 = 0;
 
 pub const BTC_MIN_CONFIRMATIONS: u32 = 6;
+
+pub const KYT_FEE: u64 = 1001;
 
 pub fn config(env: TestEnv) {
     // Use the btc integration setup.
@@ -282,6 +286,7 @@ pub(crate) async fn install_minter(
     ledger_id: CanisterId,
     logger: &Logger,
     max_time_in_queue_nanos: u64,
+    kyt_canister_id: CanisterId,
 ) -> CanisterId {
     info!(&logger, "Installing minter ...");
     let args = CkbtcMinterInitArgs {
@@ -295,6 +300,8 @@ pub(crate) async fn install_minter(
         max_time_in_queue_nanos,
         min_confirmations: Some(BTC_MIN_CONFIRMATIONS),
         mode: Mode::GeneralAvailability,
+        kyt_fee: Some(KYT_FEE),
+        kyt_principal: Some(kyt_canister_id),
     };
 
     let minter_arg = MinterArg::Init(args);
@@ -306,6 +313,44 @@ pub(crate) async fn install_minter(
     )
     .await;
     canister.canister_id()
+}
+
+pub(crate) async fn install_kyt(
+    kyt_canister: &mut Canister<'_>,
+    logger: &Logger,
+    env: &TestEnv,
+    minter_id: Principal,
+) -> CanisterId {
+    info!(&logger, "Installing kyt canister ...");
+    let kyt_init_args = LifecycleArg::InitArg(KytInitArg {
+        api_key: "".into(),
+        minter_id,
+        maintainers: vec![],
+        mode: KytMode::AcceptAll,
+    });
+
+    install_rust_canister_from_path(
+        kyt_canister,
+        env.get_dependency_path("rs/bitcoin/ckbtc/kyt/kyt_canister.wasm"),
+        Some(Encode!(&kyt_init_args).unwrap()),
+    )
+    .await;
+    kyt_canister.canister_id()
+}
+
+pub(crate) async fn upgrade_kyt(kyt_canister: &mut Canister<'_>, mode: KytMode) -> CanisterId {
+    let kyt_upgrade_arg = LifecycleArg::UpgradeArg(KytUpgradeArg {
+        mode: Some(mode),
+        api_key: None,
+        maintainers: None,
+        minter_id: None,
+    });
+
+    kyt_canister
+        .upgrade_to_self_binary(Encode!(&kyt_upgrade_arg).unwrap())
+        .await
+        .expect("failed to upgrade the canister");
+    kyt_canister.canister_id()
 }
 
 pub(crate) async fn install_bitcoin_canister(

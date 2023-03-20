@@ -148,5 +148,11 @@ pub fn encode_metrics(
         "Median Bitcoin transaction fee per vbyte in Satoshi.",
     )?;
 
+    metrics.encode_gauge(
+        "ckbtc_minter_owed_kyt_amount",
+        state::read_state(|s| s.owed_kyt_amount) as f64,
+        "The total amount of ckBTC that minter owes to the KYT canister.",
+    )?;
+
     Ok(())
 }

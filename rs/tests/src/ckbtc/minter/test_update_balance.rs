@@ -6,8 +6,8 @@ use crate::ckbtc::minter::utils::{
 };
 use crate::{
     ckbtc::lib::{
-        activate_ecdsa_signature, create_canister, install_bitcoin_canister, install_ledger,
-        install_minter, subnet_sys, BTC_MIN_CONFIRMATIONS, TEST_KEY_LOCAL,
+        activate_ecdsa_signature, create_canister, install_bitcoin_canister, install_kyt,
+        install_ledger, install_minter, subnet_sys, BTC_MIN_CONFIRMATIONS, KYT_FEE, TEST_KEY_LOCAL,
     },
     driver::{
         test_env::TestEnv,
@@ -22,6 +22,7 @@ use ic_ckbtc_agent::CkBtcMinterAgent;
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::state::Mode;
 use ic_ckbtc_minter::updates::get_withdrawal_account::compute_subaccount;
+use ic_ckbtc_minter::updates::update_balance::UtxoStatus;
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::Account;
 use slog::{debug, info};
@@ -56,10 +57,21 @@ pub fn test_update_balance(env: TestEnv) {
 
         let mut ledger_canister = create_canister(&runtime).await;
         let mut minter_canister = create_canister(&runtime).await;
+        let mut kyt_canister = create_canister(&runtime).await;
+
         let minting_user = minter_canister.canister_id().get();
+        let kyt_id = install_kyt(
+            &mut kyt_canister,
+            &logger,
+            &env,
+            Principal::from(minting_user),
+        )
+        .await;
         let ledger_id = install_ledger(&env, &mut ledger_canister, minting_user, &logger).await;
-        let minter_id = install_minter(&env, &mut minter_canister, ledger_id, &logger, 0).await;
+        let minter_id =
+            install_minter(&env, &mut minter_canister, ledger_id, &logger, 0, kyt_id).await;
         let minter = Principal::from(minter_id.get());
+
         let ledger = Principal::from(ledger_id.get());
         let agent = assert_create_agent(sys_node.get_public_url().as_str()).await;
         let universal_canister =
@@ -123,16 +135,24 @@ pub fn test_update_balance(env: TestEnv) {
         let update_result = update_balance(&minter_agent, &logger, Some(subaccount1))
             .await
             .unwrap();
+        assert!(!update_result.is_empty());
         // The other subaccount should not be impacted.
         assert_no_new_utxo(&minter_agent, &subaccount2).await;
-        assert_mint_transaction(
-            &ledger_agent,
-            &logger,
-            update_result.block_index,
-            &account1,
-            3 * BTC_BLOCK_SIZE,
-        )
-        .await;
+        for update_balance_entry in &update_result {
+            if let UtxoStatus::Minted { block_index, .. } = &update_balance_entry {
+                assert_mint_transaction(
+                    &ledger_agent,
+                    &logger,
+                    *block_index,
+                    &account1,
+                    BTC_BLOCK_SIZE - KYT_FEE,
+                )
+                .await;
+            } else {
+                panic!("expected to have one minted utxo, got: {:?}", update_result);
+            }
+        }
+
         // Calling update_balance again will always trigger a NoNewUtxo error.
         upgrade_canister(&mut minter_canister).await;
         assert_no_new_utxo(&minter_agent, &subaccount1).await;
@@ -170,16 +190,25 @@ pub fn test_update_balance(env: TestEnv) {
         let update_result = update_balance(&minter_agent, &logger, Some(subaccount2))
             .await
             .unwrap();
+        assert!(!update_result.is_empty());
         // The other subaccount should not be impacted.
         assert_no_new_utxo(&minter_agent, &subaccount1).await;
-        assert_mint_transaction(
-            &ledger_agent,
-            &logger,
-            update_result.block_index,
-            &account2,
-            7 * BTC_BLOCK_SIZE,
-        )
-        .await;
+
+        for update_balance_entry in &update_result {
+            if let UtxoStatus::Minted { block_index, .. } = &update_balance_entry {
+                assert_mint_transaction(
+                    &ledger_agent,
+                    &logger,
+                    *block_index,
+                    &account2,
+                    BTC_BLOCK_SIZE - KYT_FEE,
+                )
+                .await;
+            } else {
+                panic!("expected to have one minted utxo, got {:?}", update_result);
+            }
+        }
+
         // Calling update_balance again will always trigger a NoNewUtxo error.
         upgrade_canister(&mut minter_canister).await;
         assert_no_new_utxo(&minter_agent, &subaccount2).await;

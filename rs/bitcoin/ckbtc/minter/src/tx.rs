@@ -53,6 +53,14 @@ impl fmt::Display for DisplayTxid<'_> {
     }
 }
 
+pub struct DisplayOutpoint<'a>(pub &'a OutPoint);
+
+impl fmt::Display for DisplayOutpoint<'_> {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(fmt, "{}:{}", DisplayTxid(&self.0.txid), self.0.vout)
+    }
+}
+
 /// Displays an amount in satoshis as decimal fraction of BTC.
 pub struct DisplayAmount(pub u64);
 

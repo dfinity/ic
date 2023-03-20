@@ -5,9 +5,9 @@ use crate::ckbtc::minter::utils::{
 };
 use crate::{
     ckbtc::lib::{
-        activate_ecdsa_signature, create_canister, install_bitcoin_canister, install_ledger,
-        install_minter, subnet_sys, BTC_MIN_CONFIRMATIONS, RETRIEVE_BTC_MIN_AMOUNT, TEST_KEY_LOCAL,
-        TRANSFER_FEE,
+        activate_ecdsa_signature, create_canister, install_bitcoin_canister, install_kyt,
+        install_ledger, install_minter, subnet_sys, BTC_MIN_CONFIRMATIONS, KYT_FEE,
+        RETRIEVE_BTC_MIN_AMOUNT, TEST_KEY_LOCAL, TRANSFER_FEE,
     },
     driver::{
         test_env::TestEnv,
@@ -21,6 +21,7 @@ use ic_base_types::PrincipalId;
 use ic_ckbtc_agent::CkBtcMinterAgent;
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::state::{eventlog::Event, Mode, RetrieveBtcRequest};
+use ic_ckbtc_minter::updates::update_balance::UtxoStatus;
 use ic_ckbtc_minter::updates::{
     get_withdrawal_account::compute_subaccount,
     retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError},
@@ -54,9 +55,20 @@ pub fn test_retrieve_btc(env: TestEnv) {
 
         let mut ledger_canister = create_canister(&runtime).await;
         let mut minter_canister = create_canister(&runtime).await;
+        let mut kyt_canister = create_canister(&runtime).await;
+
         let minting_user = minter_canister.canister_id().get();
+        let kyt_id = install_kyt(
+            &mut kyt_canister,
+            &logger,
+            &env,
+            Principal::from(minting_user),
+        )
+        .await;
+
         let ledger_id = install_ledger(&env, &mut ledger_canister, minting_user, &logger).await;
-        let minter_id = install_minter(&env, &mut minter_canister, ledger_id, &logger, 0).await;
+        let minter_id =
+            install_minter(&env, &mut minter_canister, ledger_id, &logger, 0, kyt_id).await;
         let minter = Principal::from(minter_id.get());
         let ledger = Principal::from(ledger_id.get());
         let agent = assert_create_agent(sys_node.get_public_url().as_str()).await;
@@ -107,14 +119,21 @@ pub fn test_retrieve_btc(env: TestEnv) {
         let update_result = update_balance(&minter_agent, &logger, Some(subaccount1))
             .await
             .unwrap();
-        assert_mint_transaction(
-            &ledger_agent,
-            &logger,
-            update_result.block_index,
-            &account1,
-            3 * BTC_BLOCK_SIZE,
-        )
-        .await;
+        assert!(!update_result.is_empty());
+        for update_balance_entry in &update_result {
+            if let UtxoStatus::Minted { block_index, .. } = &update_balance_entry {
+                assert_mint_transaction(
+                    &ledger_agent,
+                    &logger,
+                    *block_index,
+                    &account1,
+                    BTC_BLOCK_SIZE - KYT_FEE,
+                )
+                .await;
+            } else {
+                panic!("expected to have one minted utxo, got: {:?}", update_result);
+            }
+        }
 
         // Now test retrieve_btc logic.
         // Get the subaccount used for btc retrieval.
@@ -147,7 +166,7 @@ pub fn test_retrieve_btc(env: TestEnv) {
         assert_account_balance(
             &ledger_agent,
             &account1,
-            3 * BTC_BLOCK_SIZE - transfer_amount - TRANSFER_FEE,
+            3 * (BTC_BLOCK_SIZE - KYT_FEE) - transfer_amount - TRANSFER_FEE,
         )
         .await;
         info!(&logger, "Verify withdrawal_account balance on the ledger");
@@ -162,7 +181,7 @@ pub fn test_retrieve_btc(env: TestEnv) {
             .await
             .expect("Error while calling retrieve_btc")
             .expect("Error in retrieve_btc");
-        assert_eq!(2, retrieve_result.block_index);
+        assert_eq!(4, retrieve_result.block_index);
 
         let events = minter_agent
             .get_events(0, 1000)
@@ -171,7 +190,7 @@ pub fn test_retrieve_btc(env: TestEnv) {
         assert!(
             events.iter().any(|e| matches!(
                 e,
-                Event::AcceptedRetrieveBtcRequest(RetrieveBtcRequest { block_index: 2, .. })
+                Event::AcceptedRetrieveBtcRequest(RetrieveBtcRequest { block_index: 4, .. })
             )),
             "missing accepted_retrieve_btc_request event in the log: {:?}",
             events
@@ -206,7 +225,7 @@ pub fn test_retrieve_btc(env: TestEnv) {
         );
 
         // Verify that a burn transaction occurred.
-        assert_burn_transaction(&ledger_agent, &logger, 2, &withdrawal_account, 35_000_000).await;
+        assert_burn_transaction(&ledger_agent, &logger, 4, &withdrawal_account, 35_000_000).await;
 
         // Check that we can retrieve btc in the restricted mode.
         let caller = agent.get_principal().unwrap();
@@ -226,6 +245,6 @@ pub fn test_retrieve_btc(env: TestEnv) {
             .await
             .expect("Error while calling retrieve_btc")
             .expect("failed to retrieve btc");
-        assert_eq!(3, retrieve_result.block_index);
+        assert_eq!(5, retrieve_result.block_index);
     });
 }

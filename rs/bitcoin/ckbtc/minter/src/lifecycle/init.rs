@@ -7,6 +7,7 @@ use ic_btc_types::Network;
 use serde::Serialize;
 
 pub const DEFAULT_MIN_CONFIRMATIONS: u32 = 6;
+pub const DEFAULT_KYT_FEE: u64 = 1000;
 
 #[derive(CandidType, serde::Deserialize)]
 pub enum MinterArg {
@@ -41,6 +42,16 @@ pub struct InitArgs {
     /// Flag that indicates if the minter is in read-only mode.
     #[serde(default)]
     pub mode: Mode,
+
+    /// The fee that the minter will pay for each KYT check.
+    /// NOTE: this field is optional for backward compatibility.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kyt_fee: Option<u64>,
+
+    /// The principal of the KYT canister.
+    /// NOTE: this field is optional for backward compatibility.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kyt_principal: Option<CanisterId>,
 }
 
 pub fn init(args: InitArgs) {

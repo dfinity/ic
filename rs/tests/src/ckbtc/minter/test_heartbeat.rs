@@ -4,8 +4,9 @@ use crate::ckbtc::minter::utils::{
 };
 use crate::{
     ckbtc::lib::{
-        activate_ecdsa_signature, create_canister, install_bitcoin_canister, install_ledger,
-        install_minter, subnet_sys, BTC_MIN_CONFIRMATIONS, TEST_KEY_LOCAL,
+        activate_ecdsa_signature, create_canister, install_bitcoin_canister, install_kyt,
+        install_ledger, install_minter, subnet_sys, BTC_MIN_CONFIRMATIONS, KYT_FEE, TEST_KEY_LOCAL,
+        TRANSFER_FEE,
     },
     driver::{
         test_env::TestEnv,
@@ -51,10 +52,21 @@ pub fn test_heartbeat(env: TestEnv) {
 
         let mut ledger_canister = create_canister(&runtime).await;
         let mut minter_canister = create_canister(&runtime).await;
+        let mut kyt_canister = create_canister(&runtime).await;
+
         let minting_user = minter_canister.canister_id().get();
+        let kyt_id = install_kyt(
+            &mut kyt_canister,
+            &logger,
+            &env,
+            Principal::from(minting_user),
+        )
+        .await;
+
         let ledger_id = install_ledger(&env, &mut ledger_canister, minting_user, &logger).await;
         // Here we put the max_time_in_queue to 0 because we want the minter to send request right away with no batching
-        let minter_id = install_minter(&env, &mut minter_canister, ledger_id, &logger, 0).await;
+        let minter_id =
+            install_minter(&env, &mut minter_canister, ledger_id, &logger, 0, kyt_id).await;
         let minter = Principal::from(minter_id.get());
         let ledger = Principal::from(ledger_id.get());
         let agent = assert_create_agent(sys_node.get_public_url().as_str()).await;
@@ -97,9 +109,9 @@ pub fn test_heartbeat(env: TestEnv) {
             .await
             .expect("Error while calling get_withdrawal_account");
 
-        const TRANSFER_FEE: u64 = 1_000;
+        const BITCOIN_NETWORK_TRANSFER_FEE: u64 = 2820;
 
-        let transfer_amount = 99_997_180_u64 - TRANSFER_FEE;
+        let transfer_amount = btc_to_wrap - BITCOIN_NETWORK_TRANSFER_FEE - KYT_FEE - TRANSFER_FEE;
 
         let transfer_result = ledger_agent
             .transfer(TransferArg {

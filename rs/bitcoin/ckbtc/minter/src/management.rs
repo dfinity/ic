@@ -5,10 +5,11 @@ use crate::tx;
 use candid::{CandidType, Principal};
 use ic_btc_types::{
     Address, GetCurrentFeePercentilesRequest, GetUtxosRequest, GetUtxosResponse,
-    MillisatoshiPerByte, Network, SendTransactionRequest, UtxosFilterInRequest,
+    MillisatoshiPerByte, Network, SendTransactionRequest, Utxo, UtxosFilterInRequest,
 };
 use ic_canister_log::log;
 use ic_cdk::api::call::RejectionCode;
+use ic_ckbtc_kyt::{Error as KytError, FetchAlertsResponse};
 use ic_ic00_types::{EcdsaCurve, EcdsaKeyId, SignWithECDSAArgs, SignWithECDSAReply};
 use serde::de::DeserializeOwned;
 use std::fmt;
@@ -178,7 +179,7 @@ pub async fn get_utxos(
 pub async fn get_current_fees(network: Network) -> Result<Vec<MillisatoshiPerByte>, CallError> {
     let cost_cycles = match network {
         Network::Mainnet => 100_000_000,
-        Network::Testnet | Network::Regtest => 40_000_000,
+        Network::Testnet | Network::Regtest => 100_000_000,
     };
 
     call(
@@ -243,4 +244,19 @@ pub async fn sign_with_ecdsa(
     )
     .await?;
     Ok(reply.signature)
+}
+
+/// Requests alerts for the given UTXO.
+pub async fn fetch_utxo_alerts(
+    kyt_principal: Principal,
+    utxo: &Utxo,
+) -> Result<Result<FetchAlertsResponse, KytError>, CallError> {
+    let (res,): (Result<FetchAlertsResponse, KytError>,) =
+        ic_cdk::api::call::call(kyt_principal, "fetch_utxo_alerts", (utxo.outpoint.clone(),))
+            .await
+            .map_err(|(code, message)| CallError {
+                method: "fetch_utxo_alerts".to_string(),
+                reason: Reason::from_reject(code, message),
+            })?;
+    Ok(res)
 }

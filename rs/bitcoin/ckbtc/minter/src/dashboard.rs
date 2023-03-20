@@ -230,8 +230,16 @@ pub fn build_metadata() -> String {
                         <td>{}</td>
                     </tr>
                     <tr>
-                        <th>Ledger id</th>
+                        <th>Ledger Principal</th>
                         <td><code>{}</code></td>
+                    </tr>
+                    <tr>
+                        <th>KYT Principal</th>
+                        <td><code>{}</code></td>
+                    </tr>
+                    <tr>
+                        <th>KYT Fee</th>
+                        <td>{}</td>
                     </tr>
                     <tr>
                         <th>Min retrieve BTC amount</th>
@@ -252,6 +260,10 @@ pub fn build_metadata() -> String {
                 .unwrap_or_default(),
             s.min_confirmations,
             s.ledger_id,
+            s.kyt_principal
+                .map(|p| p.to_string())
+                .unwrap_or_else(|| "N/A".to_string()),
+            DisplayAmount(s.kyt_fee),
             DisplayAmount(s.retrieve_btc_min_amount),
             DisplayAmount(get_total_btc_managed())
         )

@@ -6,7 +6,7 @@ package(default_visibility = ["//visibility:public"])
 rust_library(
     name = "kyt",
     srcs = ["src/lib.rs"],
-    crate_name = "ckbtc_kyt",
+    crate_name = "ic_ckbtc_kyt",
     deps = [
         "@crate_index//:candid",
         "@crate_index//:serde",

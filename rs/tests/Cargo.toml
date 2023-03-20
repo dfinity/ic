@@ -40,6 +40,7 @@ ic-canister-client-sender = { path = "../canister_client/sender" }
 ic-cdk = "0.6.0"
 ic-certification = { path = "../certification" }
 ic-ckbtc-agent = { path = "../bitcoin/ckbtc/agent" }
+ic-ckbtc-kyt = { path = "../bitcoin/ckbtc/kyt" }
 ic-ckbtc-minter = { path = "../bitcoin/ckbtc/minter" }
 ic-config = { path = "../config" }
 ic-constants = { path = "../constants" }

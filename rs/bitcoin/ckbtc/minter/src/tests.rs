@@ -705,6 +705,8 @@ proptest! {
             max_time_in_queue_nanos: 0,
             min_confirmations: None,
             mode: Mode::GeneralAvailability,
+            kyt_fee: None,
+            kyt_principal: None
         });
         for (utxo, acc_idx) in utxos_acc_idx {
             state.add_utxos(accounts[acc_idx], vec![utxo]);
@@ -727,6 +729,8 @@ proptest! {
             max_time_in_queue_nanos: 0,
             min_confirmations: None,
             mode: Mode::GeneralAvailability,
+            kyt_fee: None,
+            kyt_principal: None
         });
 
         let mut available_amount = 0;
