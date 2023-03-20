@@ -1,0 +1,32 @@
+[Unit]
+Description=Eth Execution
+# We must wait for IC bootstrap to complete: It writes various
+# state files and may also be needed to obtain network config.
+After=bootstrap-ic-node.service
+Wants=bootstrap-ic-node.service
+# We must also wait for storage permission fixup to have finished.
+After=setup-permissions.service
+Wants=setup-permissions.service
+# We must also wait for the network to become online: We must
+# put the correct address(es) into the ic.json5, but in case
+# of dynamic assignment they only become available once all
+# network interfaces are up.
+After=sys-subsystem-net-devices-enp1s0.device
+BindsTo=sys-subsystem-net-devices-enp1s0.device
+After=systemd-networkd.service
+PartOf=systemd-networkd.service
+StartLimitBurst=5
+StartLimitIntervalSec=60
+
+[Service]
+UMask=026
+Type=simple
+User=ic-replica
+ExecStart=/opt/execution/eth/bin/geth --datadir /var/lib/execution/data --syncmode full --port 30301 --http --http.addr 0.0.0.0 --http.port 8545 --http.api eth,net,web3 --http.corsdomain * --http.vhosts * --bootnodes enode://4b66a675a7d7d55dc9d9b1011ba622672413125bbfe418ecd1664658463b702eabd53df7d0360a2cd7fd29fb1885be7ba3303ca37e8cf475a5a02765aa9a7f40@127.0.0.1:30210 --networkid 129139 --verbosity 3 --miner.etherbase 0xc9f376b2f61d4211c7fa80cbb2ea187b0b57dbc3 --authrpc.port 8551
+
+LimitNOFILE=1048576
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
