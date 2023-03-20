@@ -127,7 +127,7 @@ rust_test(
 )
 
 rust_bench(
-    name = "validate_payload",
+    name = "validate_payload_bench",
     testonly = True,
     srcs = ["benches/validate_payload.rs"],
     data = DATA,

@@ -1,4 +1,5 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//bazel:defs.bzl", "rust_bench")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -32,8 +33,9 @@ rust_test(
     ],
 )
 
-rust_binary(
+rust_bench(
     name = "memory_tracker_bench",
+    testonly = True,
     srcs = ["benches/traps.rs"],
     deps = [
         ":memory_tracker",
