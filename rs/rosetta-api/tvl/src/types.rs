@@ -1,11 +1,11 @@
 use candid::{CandidType, Nat};
-use ic_base_types::CanisterId;
+use ic_base_types::PrincipalId;
 
 #[derive(CandidType, Debug, candid::Deserialize, PartialEq, Eq)]
 pub struct TvlArgs {
-    pub governance_id: CanisterId,
-    pub xrc_id: CanisterId,
-    pub update_period: u64,
+    pub governance_id: Option<PrincipalId>,
+    pub xrc_id: Option<PrincipalId>,
+    pub update_period: Option<u64>,
 }
 
 // Timeseries types.

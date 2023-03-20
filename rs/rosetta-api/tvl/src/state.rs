@@ -2,10 +2,15 @@ use ic_base_types::PrincipalId;
 use std::cell::RefCell;
 
 pub struct TvlState {
+    // The principal of the governance canister of the NNS.
     pub governance_principal: PrincipalId,
+    // The principal of the exchange rate canister.
     pub xrc_principal: PrincipalId,
+    // The time period to wait between two data updates, in seconds.
     pub update_period: u64,
+    // The last timestamp of an ICP Price.
     pub last_ts_icp_price: u64,
+    // The last timestamp of an ICP locked.
     pub last_ts_icp_locked: u64,
 }
 

@@ -13,9 +13,9 @@ type Result = variant { Ok : TvlResult; Err : TvlResultError };
 type TvlResult = record { tvl : nat; time_sec : nat };
 type TvlResultError = record { message : text };
 type TvlArgs = record {
-  governance_id: principal;
-  xrc_id: principal;
-  update_period: nat64;
+  governance_id: opt principal;
+  xrc_id: opt principal;
+  update_period: opt nat64;
 };
 service : (TvlArgs) -> {
   get_tvl : () -> (Result) query;

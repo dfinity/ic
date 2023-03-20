@@ -15,6 +15,16 @@ pub enum EntryType {
     LockedIcp = 1,
 }
 
+impl From<u32> for EntryType {
+    fn from(num: u32) -> Self {
+        match num {
+            0 => EntryType::ICPrice,
+            1 => EntryType::LockedIcp,
+            _ => panic!("Invalid EntryType value: {}", num),
+        }
+    }
+}
+
 type Memory = VirtualMemory<DefaultMemoryImpl>;
 
 thread_local! {

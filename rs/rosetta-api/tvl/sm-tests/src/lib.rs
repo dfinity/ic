@@ -48,9 +48,9 @@ fn install_tvl(
 
 fn tvl_init_args(governance_id: CanisterId, xrc_id: CanisterId) -> TVLInitArgs {
     TVLInitArgs {
-        update_period: 30,
-        governance_id,
-        xrc_id,
+        update_period: Some(30),
+        governance_id: Some(governance_id.get()),
+        xrc_id: Some(xrc_id.get()),
     }
 }
 
