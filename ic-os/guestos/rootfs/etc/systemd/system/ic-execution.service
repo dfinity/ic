@@ -22,6 +22,7 @@ StartLimitIntervalSec=60
 UMask=026
 Type=simple
 User=ic-replica
+ExecStartPre=/opt/execution/eth/bin/genesis.sh -e=/opt/execution/eth/bin/geth -d=/var/lib/execution/data -g=/opt/execution/eth/network_config/genesis.json
 ExecStart=/opt/execution/eth/bin/geth --datadir /var/lib/execution/data --syncmode full --port 30301 --http --http.addr 0.0.0.0 --http.port 8545 --http.api eth,net,web3 --http.corsdomain * --http.vhosts * --bootnodes enode://4b66a675a7d7d55dc9d9b1011ba622672413125bbfe418ecd1664658463b702eabd53df7d0360a2cd7fd29fb1885be7ba3303ca37e8cf475a5a02765aa9a7f40@127.0.0.1:30210 --networkid 129139 --verbosity 3 --miner.etherbase 0xc9f376b2f61d4211c7fa80cbb2ea187b0b57dbc3 --authrpc.port 8551
 
 LimitNOFILE=1048576
