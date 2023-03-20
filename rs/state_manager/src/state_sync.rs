@@ -86,10 +86,7 @@ impl ArtifactKind for StateSyncArtifact {
                 height: msg.height,
                 hash: msg.root_hash.clone(),
             },
-            attribute: StateSyncAttribute {
-                height: msg.height,
-                root_hash: msg.root_hash.clone(),
-            },
+            attribute: StateSyncAttribute,
             size: size as usize,
             integrity_hash: crypto_hash(msg).get(),
         }
@@ -212,24 +209,24 @@ impl ArtifactClient<StateSyncArtifact> for StateSync {
         let state_sync_refs = self.state_sync_refs.clone();
         let log = self.log.clone();
 
-        Box::new(move |_artifact_id, attr| {
+        Box::new(move |artifact_id, _attr| {
             use std::cmp::Ordering;
 
-            if attr.height <= latest_height {
+            if artifact_id.height <= latest_height {
                 return Priority::Drop;
             }
 
             if let Some((max_sync_height, hash, cup_interval_length)) = &fetch_state {
-                if let Some(recorded_root_hash) = state_sync_refs.get(&attr.height) {
+                if let Some(recorded_root_hash) = state_sync_refs.get(&artifact_id.height) {
                     // If this advert@h is for an ongoing state sync, we check if the hash is the
                     // same as the hash that consensus gave us.
-                    if recorded_root_hash != attr.root_hash {
+                    if recorded_root_hash != artifact_id.hash {
                         warn!(
                             log,
                             "Received an advert for state @{} with a hash that does not match the hash of the state we are fetching: expected {:?}, got {:?}",
-                            attr.height,
+                            artifact_id.height,
                             recorded_root_hash,
-                            attr.root_hash
+                            artifact_id.hash
                         );
                         return Priority::Drop;
                     }
@@ -241,7 +238,7 @@ impl ArtifactClient<StateSyncArtifact> for StateSync {
                     // Note: CUP interval length may change, and we can't predict future intervals.
                     // The condition below is only a heuristic.
                     if *max_sync_height
-                        > attr.height
+                        > artifact_id.height
                             + cup_interval_length.increment() * EXTRA_CHECKPOINTS_TO_KEEP as u64
                     {
                         return Priority::Drop;
@@ -250,16 +247,16 @@ impl ArtifactClient<StateSyncArtifact> for StateSync {
                     };
                 }
 
-                return match attr.height.cmp(max_sync_height) {
+                return match artifact_id.height.cmp(max_sync_height) {
                     Ordering::Less => Priority::Drop,
                     // Drop the advert if the hashes do not match.
-                    Ordering::Equal if *hash != attr.root_hash => {
+                    Ordering::Equal if *hash != artifact_id.hash => {
                         warn!(
                             log,
                             "Received an advert for state {} with a hash that does not match the hash passed to fetch_state: expected {:?}, got {:?}",
-                            attr.height,
+                            artifact_id.height,
                             *hash,
-                            attr.root_hash
+                            artifact_id.hash
                         );
                         Priority::Drop
                     }
@@ -351,7 +348,7 @@ impl ArtifactProcessor<StateSyncArtifact> for StateSync {
             .collect();
 
         if let Some(artifact) = artifacts.last() {
-            self.state_manager.states.write().last_advertised = artifact.advert.attribute.height;
+            self.state_manager.states.write().last_advertised = artifact.advert.id.height;
         }
 
         (artifacts, ProcessingResult::StateUnchanged)

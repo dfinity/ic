@@ -557,13 +557,7 @@ impl std::hash::Hash for StateSyncMessage {
 
 /// State sync atrribute.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct StateSyncAttribute {
-    pub height: Height,
-
-    // Note: the root hash is also an attribute so that we can access it from
-    // the priority function.
-    pub root_hash: CryptoHashOfState,
-}
+pub struct StateSyncAttribute;
 
 /// State sync filter is by height.
 #[derive(Default, Clone, Debug, PartialEq, Eq, Hash)]
