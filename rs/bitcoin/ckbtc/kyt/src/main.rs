@@ -1,12 +1,12 @@
 use candid::candid_method;
 use candid::Principal;
-use ckbtc_kyt::{
-    Alert, AlertLevel, Error, ExposureType, FetchAlertsResponse, KytMode, LifecycleArg, Outpoint,
-    WithdrawalAttempt,
-};
 use ic_canisters_http_types as http;
 use ic_cdk::api::management_canister::http_request::{HttpMethod, HttpResponse, TransformArgs};
 use ic_cdk_macros::{init, post_upgrade, query, update};
+use ic_ckbtc_kyt::{
+    Alert, AlertLevel, Error, ExposureType, FetchAlertsResponse, KytMode, LifecycleArg, Outpoint,
+    WithdrawalAttempt,
+};
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory as VM};
 use ic_stable_structures::storable::Storable;
 use ic_stable_structures::{DefaultMemoryImpl, RestrictedMemory as RM, StableCell, StableLog};

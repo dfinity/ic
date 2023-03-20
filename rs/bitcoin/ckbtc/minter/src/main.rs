@@ -14,7 +14,7 @@ use ic_ckbtc_minter::updates::retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError, 
 use ic_ckbtc_minter::updates::{
     self,
     get_btc_address::GetBtcAddressArgs,
-    update_balance::{UpdateBalanceArgs, UpdateBalanceError, UpdateBalanceResult},
+    update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus},
 };
 use ic_ckbtc_minter::{
     state::eventlog::{Event, GetEventsArg},
@@ -133,9 +133,7 @@ fn retrieve_btc_status(req: RetrieveBtcStatusRequest) -> RetrieveBtcStatus {
 
 #[candid_method(update)]
 #[update]
-async fn update_balance(
-    args: UpdateBalanceArgs,
-) -> Result<UpdateBalanceResult, UpdateBalanceError> {
+async fn update_balance(args: UpdateBalanceArgs) -> Result<Vec<UtxoStatus>, UpdateBalanceError> {
     check_anonymous_caller();
     check_postcondition(updates::update_balance::update_balance(args).await)
 }

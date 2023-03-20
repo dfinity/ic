@@ -8,6 +8,7 @@ DEPENDENCIES = [
     "//rs/artifact_pool",
     "//rs/backup",
     "//rs/bitcoin/ckbtc/agent",
+    "//rs/bitcoin/ckbtc/kyt",
     "//rs/bitcoin/ckbtc/minter",
     "//rs/bitcoin/types/public",
     "//rs/boundary_node/certificate_issuance/certificate_orchestrator_interface",

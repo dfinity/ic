@@ -199,7 +199,7 @@ dependencies = [
  "serde_urlencoded",
  "smallvec",
  "socket2 0.4.7",
- "time 0.3.17",
+ "time 0.3.20",
  "url",
 ]
 
@@ -1946,7 +1946,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e859cd57d0710d9e06c381b550c06e76992472a8c6d527aecd2fc673dcc231fb"
 dependencies = [
  "percent-encoding 2.2.0",
- "time 0.3.17",
+ "time 0.3.20",
  "version_check",
 ]
 
@@ -4807,10 +4807,28 @@ dependencies = [
  "candid",
  "garcon",
  "ic-agent",
+ "ic-canisters-http-types",
  "ic-ckbtc-minter",
  "ic-icrc1",
  "icrc-ledger-types",
  "num-traits",
+]
+
+[[package]]
+name = "ic-ckbtc-kyt"
+version = "0.1.0"
+dependencies = [
+ "askama",
+ "candid",
+ "ciborium",
+ "hex",
+ "ic-canisters-http-types",
+ "ic-cdk 0.7.0",
+ "ic-cdk-macros",
+ "ic-stable-structures",
+ "serde",
+ "serde_json",
+ "time 0.3.20",
 ]
 
 [[package]]
@@ -4831,6 +4849,7 @@ dependencies = [
  "ic-canisters-http-types",
  "ic-cdk 0.7.0",
  "ic-cdk-macros",
+ "ic-ckbtc-kyt",
  "ic-crypto-extended-bip32",
  "ic-crypto-getrandom-for-wasm",
  "ic-crypto-sha",
@@ -13204,7 +13223,7 @@ checksum = "ffbe84efe2f38dea12e9bfc1f65377fdf03e53a18cb3b995faedf7934c7e785b"
 dependencies = [
  "pem 1.1.1",
  "ring",
- "time 0.3.17",
+ "time 0.3.20",
  "yasna",
 ]
 
@@ -14363,7 +14382,7 @@ dependencies = [
  "num-bigint 0.4.3",
  "num-traits",
  "thiserror",
- "time 0.3.17",
+ "time 0.3.20",
 ]
 
 [[package]]
@@ -14444,7 +14463,7 @@ dependencies = [
  "serde",
  "serde_json",
  "slog",
- "time 0.3.17",
+ "time 0.3.20",
 ]
 
 [[package]]
@@ -14479,7 +14498,7 @@ dependencies = [
  "slog",
  "term 0.7.0",
  "thread_local",
- "time 0.3.17",
+ "time 0.3.20",
 ]
 
 [[package]]
@@ -15177,6 +15196,7 @@ dependencies = [
  "ic-cdk 0.6.10",
  "ic-certification",
  "ic-ckbtc-agent",
+ "ic-ckbtc-kyt",
  "ic-ckbtc-minter",
  "ic-config",
  "ic-constants",
@@ -15378,9 +15398,9 @@ dependencies = [
 
 [[package]]
 name = "time"
-version = "0.3.17"
+version = "0.3.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a561bf4617eebd33bca6434b988f39ed798e527f51a1e797d0ee4f61c0a38376"
+checksum = "cd0cbfecb4d19b5ea75bb31ad904eb5b9fa13f21079c3b92017ebdf4999a5890"
 dependencies = [
  "itoa",
  "libc",
@@ -15398,9 +15418,9 @@ checksum = "2e153e1f1acaef8acc537e68b44906d2db6436e2b35ac2c6b42640fff91f00fd"
 
 [[package]]
 name = "time-macros"
-version = "0.2.6"
+version = "0.2.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d967f99f534ca7e495c575c62638eebc2898a8c84c119b89e250477bc4ba16b2"
+checksum = "fd80a657e71da814b8e5d60d3374fc6d35045062245d80224748ae522dd76f36"
 dependencies = [
  "time-core",
 ]
@@ -15423,7 +15443,7 @@ dependencies = [
  "ascii",
  "chunked_transfer",
  "log",
- "time 0.3.17",
+ "time 0.3.20",
  "url",
 ]
 
@@ -17006,7 +17026,7 @@ version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "aed2e7a52e3744ab4d0c05c20aa065258e84c49fd4226f5191b2ed29712710b4"
 dependencies = [
- "time 0.3.17",
+ "time 0.3.20",
 ]
 
 [[package]]

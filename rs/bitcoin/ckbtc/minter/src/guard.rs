@@ -123,6 +123,8 @@ mod tests {
             max_time_in_queue_nanos: 0,
             min_confirmations: None,
             mode: crate::state::Mode::GeneralAvailability,
+            kyt_principal: None,
+            kyt_fee: None,
         }
     }
 

@@ -6,9 +6,7 @@ use ic_ckbtc_minter::lifecycle::init::MinterArg;
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::state::Mode;
 use ic_ckbtc_minter::updates::retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError, RetrieveBtcOk};
-use ic_ckbtc_minter::updates::update_balance::{
-    UpdateBalanceArgs, UpdateBalanceError, UpdateBalanceResult,
-};
+use ic_ckbtc_minter::updates::update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus};
 use ic_icrc1_ledger::{InitArgs as LedgerInitArgs, LedgerArgument};
 use ic_state_machine_tests::StateMachine;
 use ic_test_utilities_load_wasm::load_wasm;
@@ -75,6 +73,8 @@ fn install_minter(env: &StateMachine, ledger_id: CanisterId) -> CanisterId {
         max_time_in_queue_nanos: 0,
         min_confirmations: Some(1),
         mode: Mode::GeneralAvailability,
+        kyt_fee: None,
+        kyt_principal: Some(CanisterId::from(0)),
     };
     let minter_arg = MinterArg::Init(args);
     env.install_canister(minter_wasm(), Encode!(&minter_arg).unwrap(), None)
@@ -104,6 +104,8 @@ fn test_upgrade_read_only() {
         min_confirmations: None,
         max_time_in_queue_nanos: Some(100),
         mode: Some(Mode::ReadOnly),
+        kyt_principal: Some(CanisterId::from(0)),
+        kyt_fee: None,
     };
     let minter_arg = MinterArg::Upgrade(Some(upgrade_args));
     env.upgrade_canister(minter_id, minter_wasm(), Encode!(&minter_arg).unwrap())
@@ -124,7 +126,7 @@ fn test_upgrade_read_only() {
             Encode!(&update_balance_args).unwrap(),
         )
         .expect("Failed to call update_balance");
-    let res = Decode!(&res.bytes(), Result<UpdateBalanceResult, UpdateBalanceError>).unwrap();
+    let res = Decode!(&res.bytes(), Result<Vec<UtxoStatus>, UpdateBalanceError>).unwrap();
     assert!(
         matches!(res, Err(UpdateBalanceError::TemporarilyUnavailable(_))),
         "unexpected result: {:?}",
@@ -172,6 +174,8 @@ fn test_upgrade_restricted() {
         min_confirmations: None,
         max_time_in_queue_nanos: Some(100),
         mode: Some(Mode::RestrictedTo(vec![authorized_principal])),
+        kyt_fee: None,
+        kyt_principal: Some(CanisterId::from(0)),
     };
     let minter_arg = MinterArg::Upgrade(Some(upgrade_args));
     env.upgrade_canister(minter_id, minter_wasm(), Encode!(&minter_arg).unwrap())
@@ -192,7 +196,7 @@ fn test_upgrade_restricted() {
             Encode!(&update_balance_args).unwrap(),
         )
         .expect("Failed to call update_balance");
-    let res = Decode!(&res.bytes(), Result<UpdateBalanceResult, UpdateBalanceError>).unwrap();
+    let res = Decode!(&res.bytes(), Result<Vec<UtxoStatus>, UpdateBalanceError>).unwrap();
     assert!(
         matches!(res, Err(UpdateBalanceError::TemporarilyUnavailable(_))),
         "unexpected result: {:?}",
@@ -225,6 +229,8 @@ fn test_upgrade_restricted() {
         min_confirmations: None,
         max_time_in_queue_nanos: Some(100),
         mode: Some(Mode::DepositsRestrictedTo(vec![authorized_principal])),
+        kyt_principal: Some(CanisterId::from(0)),
+        kyt_fee: None,
     };
     env.upgrade_canister(minter_id, minter_wasm(), Encode!(&upgrade_args).unwrap())
         .expect("Failed to upgrade the minter canister");
@@ -242,7 +248,7 @@ fn test_upgrade_restricted() {
             Encode!(&update_balance_args).unwrap(),
         )
         .expect("Failed to call update_balance");
-    let res = Decode!(&res.bytes(), Result<UpdateBalanceResult, UpdateBalanceError>).unwrap();
+    let res = Decode!(&res.bytes(), Result<Vec<UtxoStatus>, UpdateBalanceError>).unwrap();
     assert!(
         matches!(res, Err(UpdateBalanceError::TemporarilyUnavailable(_))),
         "unexpected result: {:?}",

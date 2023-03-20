@@ -1,0 +1,17 @@
+[package]
+name = "ic-ckbtc-kyt"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+askama = "0.11"
+candid = "0.8.1"
+ciborium = { git = "https://github.com/enarx/ciborium", rev = "e719537c99b564c3674a56defe53713c702c6f46" }
+hex = "0.4.3"
+ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
+ic-cdk = "0.7.0"
+ic-cdk-macros = "0.6.0"
+ic-stable-structures = "0.5.0"
+serde = "1.0.136"
+serde_json = "1.0"
+time = { version = "0.3.20", features = ["formatting"] }

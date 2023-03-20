@@ -52,6 +52,7 @@ BOUNDARY_NODE_GUESTOS_SEV_RUNTIME_DEPS = [
 CKBTC_RUNTIME_DEPS = [
     "//rs/rosetta-api/icrc1/ledger:ledger_canister",
     "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
+    "//rs/bitcoin/ckbtc/kyt:kyt_canister",
     "@btc_canister//file",
 ]
 
@@ -909,6 +910,18 @@ system_test(
 
 system_test(
     name = "ckbtc_minter_heartbeat",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS +
+        UNIVERSAL_VM_RUNTIME_DEPS +
+        NNS_CANISTER_RUNTIME_DEPS +
+        CKBTC_RUNTIME_DEPS,
+    deps = DEPENDENCIES + [":tests"],
+)
+
+system_test(
+    name = "ckbtc_minter_kyt",
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =

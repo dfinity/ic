@@ -2,7 +2,7 @@
 
 use super::{
     eventlog::Event, CkBtcMinterState, FinalizedBtcRetrieval, FinalizedStatus, RetrieveBtcRequest,
-    SubmittedBtcTransaction,
+    SubmittedBtcTransaction, UtxoCheckStatus,
 };
 use crate::storage::record_event;
 use ic_btc_types::Utxo;
@@ -54,4 +54,23 @@ pub fn sent_transaction(state: &mut CkBtcMinterState, tx: SubmittedBtcTransactio
 pub fn confirm_transaction(state: &mut CkBtcMinterState, txid: &[u8; 32]) {
     record_event(&Event::ConfirmedBtcTransaction { txid: *txid });
     state.finalize_transaction(txid);
+}
+
+pub fn mark_utxo_checked(
+    state: &mut CkBtcMinterState,
+    utxo: &Utxo,
+    uuid: String,
+    status: UtxoCheckStatus,
+) {
+    record_event(&Event::CheckedUtxo {
+        utxo: utxo.clone(),
+        uuid: uuid.clone(),
+        clean: status.is_clean(),
+    });
+    state.mark_utxo_checked(utxo.clone(), uuid, status);
+}
+
+pub fn ignore_utxo(state: &mut CkBtcMinterState, utxo: Utxo) {
+    record_event(&Event::IgnoredUtxo { utxo: utxo.clone() });
+    state.ignore_utxo(utxo);
 }

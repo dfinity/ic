@@ -37,11 +37,24 @@ type RetrieveBtcOk = record {
 };
 
 // The result of an [update_balance] call.
-type UpdateBalanceResult = record {
-    // Returns the identifier of the mint transaction on the ckBTC ledger.
-    block_index : nat64;
-    // Returns the amount of newly minted ckBTC tokens.
-    amount : nat64;
+type UtxoStatus = variant {
+    // The minter ignored this UTXO because UTXO's value is too small to pay
+    // the KYT fees. This state is final, retrying [update_balance] call will
+    // have no effect on this UTXO.
+    ValueTooSmall : Utxo;
+    // The KYT provider considered this UTXO to be tained. This UTXO state is
+    // final, retrying [update_balance] call will have no effect on this UTXO.
+    Tainted : Utxo;
+    // The UTXO passed the KYT check, but the minter failed to mint ckBTC
+    // because the Ledger was unavailable. Retrying the [update_balance] call
+    // should eventually advance the UTXO to the [Minted] state.
+    Checked : Utxo;
+    // The UTXO passed the KYT check, and ckBTC has been minted.
+    Minted : record {
+        block_index : nat64;
+        minted_amount : nat64;
+        utxo : Utxo;
+    };
 };
 
 type UpdateBalanceError = variant {
@@ -106,6 +119,9 @@ type InitArgs = record {
 
     /// The minter's operation mode.
     mode : Mode;
+
+    /// The canister id of the KYT canister.
+    kyt_principal: opt principal;
 };
 
 // The upgrade parameters of the minter canister.
@@ -157,7 +173,7 @@ type RetrieveBtcStatus = variant {
 };
 
 type Utxo = record {
-    outpoint : record { txid : blob; vout : nat32 };
+    outpoint : record { txid : vec nat8; vout : nat32 };
     value : nat64;
     height : nat32;
 };
@@ -187,6 +203,12 @@ type Event = variant {
         submitted_at : nat64;
     };
     confirmed_transaction : record { txid : blob };
+    checked_utxo : record {
+        utxo : Utxo;
+        uuid : text;
+        clean : bool;
+    };
+    ignored_utxo : record { utxo: Utxo; };
 };
 
 type MinterArg = variant {
@@ -212,7 +234,7 @@ service : (minter_arg : MinterArg) -> {
     //
     // * The owner deposited some BTC to the address that the
     //   [get_btc_address] endpoint returns.
-    update_balance : (record { owner: opt principal; subaccount : opt blob }) -> (variant { Ok : UpdateBalanceResult; Err : UpdateBalanceError });
+    update_balance : (record { owner: opt principal; subaccount : opt blob }) -> (variant { Ok : vec UtxoStatus; Err : UpdateBalanceError });
 
     // }}} Section "Convert BTC to ckBTC"
 

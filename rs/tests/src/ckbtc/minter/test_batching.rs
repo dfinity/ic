@@ -6,8 +6,8 @@ use crate::ckbtc::minter::utils::{
 };
 use crate::{
     ckbtc::lib::{
-        activate_ecdsa_signature, create_canister_at_id, install_ledger, install_minter,
-        subnet_sys, BTC_MIN_CONFIRMATIONS, TEST_KEY_LOCAL,
+        activate_ecdsa_signature, create_canister_at_id, install_kyt, install_ledger,
+        install_minter, subnet_sys, BTC_MIN_CONFIRMATIONS, KYT_FEE, TEST_KEY_LOCAL, TRANSFER_FEE,
     },
     driver::{
         test_env::TestEnv,
@@ -70,6 +70,7 @@ pub fn test_batching(env: TestEnv) {
 
     let minter_id = CanisterId::from_u64(200);
     let ledger_id = CanisterId::from_u64(201);
+    let kyt_id = CanisterId::from_u64(202);
 
     block_on(async {
         let runtime = runtime_from_url(sys_node.get_public_url(), sys_node.effective_canister_id());
@@ -77,7 +78,17 @@ pub fn test_batching(env: TestEnv) {
 
         let mut ledger_canister = create_canister_at_id(&runtime, ledger_id.get()).await;
         let mut minter_canister = create_canister_at_id(&runtime, minter_id.get()).await;
+        let mut kyt_canister = create_canister_at_id(&runtime, kyt_id.get()).await;
+
         let minting_user = minter_canister.canister_id().get();
+        let kyt_id = install_kyt(
+            &mut kyt_canister,
+            &logger,
+            &env,
+            Principal::from(minting_user),
+        )
+        .await;
+
         let ledger_id = install_ledger(&env, &mut ledger_canister, minting_user, &logger).await;
 
         // We set the minter with a very long time in the queue parameter so we can add up requests in queue
@@ -90,6 +101,7 @@ pub fn test_batching(env: TestEnv) {
             ledger_id,
             &logger,
             five_hours_nanos,
+            kyt_id,
         )
         .await;
 
@@ -136,9 +148,9 @@ pub fn test_batching(env: TestEnv) {
             .await
             .expect("Error while calling get_withdrawal_account");
 
-        const TRANSFER_FEE: u64 = 1_000;
+        const BITCOIN_NETWORK_TRANSFER_FEE: u64 = 2820;
 
-        let transfer_amount = 99_997_180_u64 - TRANSFER_FEE;
+        let transfer_amount = btc_to_wrap - BITCOIN_NETWORK_TRANSFER_FEE - KYT_FEE - TRANSFER_FEE;
 
         let transfer_result = ledger_agent
             .transfer(TransferArg {

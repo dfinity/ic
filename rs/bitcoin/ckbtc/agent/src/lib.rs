@@ -1,14 +1,16 @@
 use candid::{CandidType, Deserialize, Principal};
 use ic_agent::Agent;
+use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_ckbtc_minter::queries::RetrieveBtcStatusRequest;
 use ic_ckbtc_minter::state::eventlog::{Event, GetEventsArg};
 use ic_ckbtc_minter::state::RetrieveBtcStatus;
 use ic_ckbtc_minter::updates::{
     get_btc_address::GetBtcAddressArgs,
     retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError, RetrieveBtcOk},
-    update_balance::{UpdateBalanceArgs, UpdateBalanceError, UpdateBalanceResult},
+    update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus},
 };
 use icrc_ledger_types::{Account, Subaccount};
+use std::collections::BTreeMap;
 
 #[derive(Debug)]
 pub enum CkBtcMinterAgentError {
@@ -102,7 +104,7 @@ impl CkBtcMinterAgent {
     pub async fn update_balance(
         &self,
         args: UpdateBalanceArgs,
-    ) -> Result<Result<UpdateBalanceResult, UpdateBalanceError>, CkBtcMinterAgentError> {
+    ) -> Result<Result<Vec<UtxoStatus>, UpdateBalanceError>, CkBtcMinterAgentError> {
         self.update("update_balance", args).await
     }
 
@@ -125,4 +127,57 @@ impl CkBtcMinterAgent {
         self.query("get_events", GetEventsArg { start, length })
             .await
     }
+
+    pub async fn get_metrics(&self) -> Result<HttpResponse, CkBtcMinterAgentError> {
+        self.query(
+            "http_request",
+            HttpRequest {
+                method: "GET".into(),
+                url: "/metrics".into(),
+                headers: vec![],
+                body: Default::default(),
+            },
+        )
+        .await
+    }
+
+    pub async fn get_metrics_map(&self) -> BTreeMap<String, Metric> {
+        let metrics = self.get_metrics().await.unwrap();
+        parse_metrics(std::str::from_utf8(&metrics.body.into_vec()).unwrap())
+    }
+}
+
+/// Parse the fields that can be found in the metrics
+fn parse_metrics(text: &str) -> BTreeMap<String, Metric> {
+    let mut map = BTreeMap::new();
+    for line in text.lines() {
+        if let Some((key, value, ts)) = parse_metric(line) {
+            let metric = map.entry(key).or_insert_with(Metric::default);
+            metric.value = value;
+            metric.timestamp = ts;
+        }
+    }
+    map
+}
+
+fn parse_metric(line: &str) -> Option<(String, f64, i64)> {
+    let mut parts = line.split_whitespace();
+    if let Some(name) = parts.next() {
+        if let Some(value) = parts.next() {
+            if let Ok(value) = value.parse::<f64>() {
+                if let Some(ts) = parts.next() {
+                    if let Ok(ts) = ts.parse::<i64>() {
+                        return Some((name.to_string(), value, ts));
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+#[derive(Default, Debug)]
+pub struct Metric {
+    pub value: f64,
+    pub timestamp: i64,
 }

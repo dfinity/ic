@@ -16,7 +16,7 @@ use crate::lifecycle::upgrade::UpgradeArgs;
 use crate::logs::P0;
 use crate::{address::BitcoinAddress, ECDSAPublicKey};
 use candid::{Deserialize, Principal};
-use ic_base_types::{CanisterId, PrincipalId};
+use ic_base_types::CanisterId;
 use ic_btc_types::{Network, OutPoint, Utxo};
 use ic_canister_log::log;
 use icrc_ledger_types::Account;
@@ -170,6 +170,26 @@ impl Default for Mode {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize, Serialize)]
+pub enum UtxoCheckStatus {
+    Clean,
+    Tainted,
+}
+
+impl UtxoCheckStatus {
+    pub fn from_clean_flag(clean: bool) -> Self {
+        if clean {
+            Self::Clean
+        } else {
+            Self::Tainted
+        }
+    }
+
+    pub fn is_clean(self) -> bool {
+        self == Self::Clean
+    }
+}
+
 /// The state of the ckBTC Minter.
 ///
 /// Every piece of state of the Minter should be stored as field of this struct.
@@ -224,8 +244,11 @@ pub struct CkBtcMinterState {
     /// The total amount of ckBTC burned.
     pub tokens_burned: u64,
 
-    /// The CanisterId of the ckBTC Ledger
+    /// The CanisterId of the ckBTC Ledger.
     pub ledger_id: CanisterId,
+
+    /// The principal of the KYT canister.
+    pub kyt_principal: Option<CanisterId>,
 
     /// The set of UTXOs unused in pending transactions.
     pub available_utxos: BTreeSet<Utxo>,
@@ -245,7 +268,7 @@ pub struct CkBtcMinterState {
     /// We insert a new entry into this map if we discover a concurrent
     /// update_balance calls during a transaction finalization and remove the
     /// entry once the update_balance call completes.
-    pub finalized_utxos: BTreeMap<PrincipalId, BTreeSet<Utxo>>,
+    pub finalized_utxos: BTreeMap<Principal, BTreeSet<Utxo>>,
 
     /// Process one timer event at a time.
     #[serde(skip)]
@@ -255,6 +278,21 @@ pub struct CkBtcMinterState {
     pub mode: Mode,
 
     pub last_fee_per_vbyte: Vec<u64>,
+
+    /// The fee for a single KYT request.
+    pub kyt_fee: u64,
+
+    /// The total amount of fees we owe to the KYT provider.
+    pub owed_kyt_amount: u64,
+
+    /// A cache of UTXO KYT check statuses.
+    pub checked_utxos: BTreeMap<Utxo, (String, UtxoCheckStatus)>,
+
+    /// UTXOs whose values are too small to pay the KYT check fee.
+    pub ignored_utxos: BTreeSet<Utxo>,
+
+    /// UTXOs that the KYT provider considered tainted.
+    pub quarantined_utxos: BTreeSet<Utxo>,
 }
 
 impl CkBtcMinterState {
@@ -268,6 +306,8 @@ impl CkBtcMinterState {
             max_time_in_queue_nanos,
             min_confirmations,
             mode,
+            kyt_fee,
+            kyt_principal,
         }: InitArgs,
     ) {
         self.btc_network = btc_network;
@@ -276,6 +316,10 @@ impl CkBtcMinterState {
         self.ledger_id = ledger_id;
         self.max_time_in_queue_nanos = max_time_in_queue_nanos;
         self.mode = mode;
+        self.kyt_principal = kyt_principal;
+        if let Some(kyt_fee) = kyt_fee {
+            self.kyt_fee = kyt_fee;
+        }
         if let Some(min_confirmations) = min_confirmations {
             self.min_confirmations = min_confirmations;
         }
@@ -288,6 +332,8 @@ impl CkBtcMinterState {
             max_time_in_queue_nanos,
             min_confirmations,
             mode,
+            kyt_principal,
+            kyt_fee,
         }: UpgradeArgs,
     ) {
         if let Some(retrieve_btc_min_amount) = retrieve_btc_min_amount {
@@ -310,6 +356,10 @@ impl CkBtcMinterState {
         }
         if let Some(mode) = mode {
             self.mode = mode;
+        }
+        self.kyt_principal = kyt_principal;
+        if let Some(kyt_fee) = kyt_fee {
+            self.kyt_fee = kyt_fee;
         }
     }
 
@@ -368,6 +418,7 @@ impl CkBtcMinterState {
         for utxo in utxos {
             self.outpoint_account.insert(utxo.outpoint.clone(), account);
             self.available_utxos.insert(utxo.clone());
+            self.checked_utxos.remove(&utxo);
             account_bucket.insert(utxo);
         }
 
@@ -471,7 +522,7 @@ impl CkBtcMinterState {
         if let Some(account) = self.outpoint_account.remove(&utxo.outpoint) {
             if self.update_balance_principals.contains(&account.owner) {
                 self.finalized_utxos
-                    .entry(account.owner.into())
+                    .entry(account.owner)
                     .or_insert_with(BTreeSet::new)
                     .insert(utxo.clone());
             }
@@ -601,6 +652,49 @@ impl CkBtcMinterState {
         self.finalized_requests.push_back(req)
     }
 
+    /// Filters out known UTXOs of the given account from the given UTXO list.
+    pub fn new_utxos_for_account(&self, mut utxos: Vec<Utxo>, account: &Account) -> Vec<Utxo> {
+        let maybe_existing_utxos = self.utxos_state_addresses.get(account);
+        let maybe_finalized_utxos = self.finalized_utxos.get(&account.owner);
+        utxos.retain(|utxo| {
+            !maybe_existing_utxos
+                .map(|utxos| utxos.contains(utxo))
+                .unwrap_or(false)
+                && !maybe_finalized_utxos
+                    .map(|utxos| utxos.contains(utxo))
+                    .unwrap_or(false)
+                && !self.ignored_utxos.contains(utxo)
+                && !self.quarantined_utxos.contains(utxo)
+        });
+        utxos
+    }
+
+    /// Adds given UTXO to the set of ignored UTXOs.
+    fn ignore_utxo(&mut self, utxo: Utxo) {
+        assert!(utxo.value <= self.kyt_fee);
+        self.ignored_utxos.insert(utxo);
+    }
+
+    /// Marks the given UTXO as checked.
+    /// If the UTXO is clean, we increase the owed KYT amount and remember that UTXO until we see it
+    /// again in a [add_utxos] call.
+    /// If the UTXO is tainted, we put it in the quarantine area without increasing the owed KYT
+    /// amount.
+    fn mark_utxo_checked(&mut self, utxo: Utxo, uuid: String, status: UtxoCheckStatus) {
+        match status {
+            UtxoCheckStatus::Clean => {
+                if self.checked_utxos.insert(utxo, (uuid, status)).is_none() {
+                    // Updated the owed amount only if it's the first time we mark this UTXO as
+                    // clean.
+                    self.owed_kyt_amount += self.kyt_fee;
+                }
+            }
+            UtxoCheckStatus::Tainted => {
+                self.quarantined_utxos.insert(utxo);
+            }
+        }
+    }
+
     /// Checks whether the internal state of the minter matches the other state
     /// semantically (the state holds the same data, but maybe in a slightly
     /// different form).
@@ -640,6 +734,37 @@ impl CkBtcMinterState {
             self.utxos_state_addresses,
             other.utxos_state_addresses,
             "utxos_state_addresses do not match"
+        );
+        ensure_eq!(
+            self.quarantined_utxos,
+            other.quarantined_utxos,
+            "quarantined_utxos do not match"
+        );
+
+        ensure_eq!(
+            self.ignored_utxos,
+            other.ignored_utxos,
+            "ignored_utxos do not match"
+        );
+
+        ensure_eq!(
+            self.checked_utxos,
+            other.checked_utxos,
+            "checked_utxos do not match"
+        );
+
+        ensure_eq!(self.kyt_fee, other.kyt_fee, "kyt_fee does not match");
+
+        ensure_eq!(
+            self.owed_kyt_amount,
+            other.owed_kyt_amount,
+            "owed_kyt_amount does not match"
+        );
+
+        ensure_eq!(
+            self.kyt_principal,
+            other.kyt_principal,
+            "kyt_principal does not match"
         );
 
         let my_txs = as_sorted_vec(self.submitted_transactions.iter().cloned(), |tx| tx.txid);
@@ -690,6 +815,7 @@ impl From<InitArgs> for CkBtcMinterState {
             tokens_minted: 0,
             tokens_burned: 0,
             ledger_id: args.ledger_id,
+            kyt_principal: args.kyt_principal,
             available_utxos: Default::default(),
             outpoint_account: Default::default(),
             utxos_state_addresses: Default::default(),
@@ -697,6 +823,13 @@ impl From<InitArgs> for CkBtcMinterState {
             is_timer_running: false,
             mode: args.mode,
             last_fee_per_vbyte: vec![1; 100],
+            kyt_fee: args
+                .kyt_fee
+                .unwrap_or(crate::lifecycle::init::DEFAULT_KYT_FEE),
+            owed_kyt_amount: 0,
+            checked_utxos: Default::default(),
+            ignored_utxos: Default::default(),
+            quarantined_utxos: Default::default(),
         }
     }
 }
