@@ -1726,10 +1726,7 @@ fn state_sync_priority_fn_respects_states_to_fetch() {
                         height: height(*h),
                         hash: hash(*h as u8),
                     },
-                    &StateSyncAttribute {
-                        height: height(*h),
-                        root_hash: hash(*h as u8),
-                    }
+                    &StateSyncAttribute
                 )
             );
         }
@@ -1745,10 +1742,7 @@ fn state_sync_priority_fn_respects_states_to_fetch() {
                     height: height(3),
                     hash: hash(3),
                 },
-                &StateSyncAttribute {
-                    height: height(3),
-                    root_hash: hash(3),
-                }
+                &StateSyncAttribute
             )
         );
         // Wrong hash
@@ -1759,10 +1753,7 @@ fn state_sync_priority_fn_respects_states_to_fetch() {
                     height: height(3),
                     hash: hash(4),
                 },
-                &StateSyncAttribute {
-                    height: height(3),
-                    root_hash: hash(4),
-                }
+                &StateSyncAttribute
             )
         );
 
@@ -1776,10 +1767,7 @@ fn state_sync_priority_fn_respects_states_to_fetch() {
                     height: height(3),
                     hash: hash(3),
                 },
-                &StateSyncAttribute {
-                    height: height(3),
-                    root_hash: hash(3),
-                }
+                &StateSyncAttribute
             )
         );
         assert_eq!(
@@ -1789,10 +1777,7 @@ fn state_sync_priority_fn_respects_states_to_fetch() {
                     height: height(4),
                     hash: hash(4),
                 },
-                &StateSyncAttribute {
-                    height: height(4),
-                    root_hash: hash(4),
-                }
+                &StateSyncAttribute
             )
         );
     });
