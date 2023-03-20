@@ -104,7 +104,7 @@ use ic_interfaces::{
         ArtifactClient, ArtifactPoolDescriptor, ArtifactProcessor, ProcessingResult,
     },
     artifact_pool::{ChangeSetProducer, MutablePool, UnvalidatedArtifact},
-    canister_http::{CanisterHttpChangeSet, CanisterHttpPool},
+    canister_http::CanisterHttpChangeSet,
     certification::ChangeSet as CertificationChangeSet,
     consensus_pool::ChangeSet as ConsensusChangeSet,
     dkg::ChangeSet as DkgChangeSet,
@@ -483,7 +483,6 @@ pub fn create_https_outcalls_handlers<
         + GossipPool<CanisterHttpArtifact>
         + Send
         + Sync
-        + CanisterHttpPool
         + 'static,
     C: ChangeSetProducer<PoolCanisterHttp, ChangeSet = CanisterHttpChangeSet> + 'static,
     G: ArtifactPoolDescriptor<CanisterHttpArtifact, PoolCanisterHttp> + Send + Sync + 'static,
@@ -493,14 +492,10 @@ pub fn create_https_outcalls_handlers<
     (pool_manager, canister_http_gossip): (C, G),
     time_source: Arc<SysTimeSource>,
     canister_http_pool: Arc<RwLock<PoolCanisterHttp>>,
-    log: ReplicaLogger,
     metrics_registry: MetricsRegistry,
 ) -> ArtifactClientHandle<CanisterHttpArtifact> {
-    let client = processors::CanisterHttpProcessor::new(
-        canister_http_pool.clone(),
-        Box::new(pool_manager),
-        log,
-    );
+    let client =
+        processors::CanisterHttpProcessor::new(canister_http_pool.clone(), Box::new(pool_manager));
     let manager = ArtifactProcessorHandle::new(
         time_source.clone(),
         metrics_registry,

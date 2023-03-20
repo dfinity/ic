@@ -4,7 +4,7 @@
 use ic_interfaces::{
     artifact_manager::{ArtifactProcessor, ProcessingResult},
     artifact_pool::{ChangeSetProducer, MutablePool, UnvalidatedArtifact},
-    canister_http::{CanisterHttpChangeAction, CanisterHttpChangeSet, CanisterHttpPool},
+    canister_http::{CanisterHttpChangeAction, CanisterHttpChangeSet},
     certification::{
         ChangeAction as CertificationChangeAction, ChangeSet as CertificationChangeSet,
     },
@@ -19,11 +19,12 @@ use ic_metrics::MetricsRegistry;
 use ic_types::{
     artifact::*,
     artifact_kind::*,
+    canister_http::CanisterHttpResponseShare,
+    consensus::HasRank,
     consensus::{certification::CertificationMessage, dkg, ConsensusMessage},
     messages::SignedIngress,
     NodeId,
 };
-use ic_types::{canister_http::CanisterHttpResponseShare, consensus::HasRank};
 use prometheus::{histogram_opts, Histogram, IntCounter};
 use std::sync::{Arc, RwLock};
 
@@ -519,29 +520,22 @@ impl<PoolEcdsa: MutablePool<EcdsaArtifact, EcdsaChangeSet> + Send + Sync + 'stat
 pub struct CanisterHttpProcessor<PoolCanisterHttp> {
     canister_http_pool: Arc<RwLock<PoolCanisterHttp>>,
     client: Box<dyn ChangeSetProducer<PoolCanisterHttp, ChangeSet = CanisterHttpChangeSet>>,
-    log: ReplicaLogger,
 }
 
 impl<PoolCanisterHttp> CanisterHttpProcessor<PoolCanisterHttp> {
     pub fn new(
         canister_http_pool: Arc<RwLock<PoolCanisterHttp>>,
         client: Box<dyn ChangeSetProducer<PoolCanisterHttp, ChangeSet = CanisterHttpChangeSet>>,
-        log: ReplicaLogger,
     ) -> Self {
         Self {
             canister_http_pool,
             client,
-            log,
         }
     }
 }
 
 impl<
-        PoolCanisterHttp: MutablePool<CanisterHttpArtifact, CanisterHttpChangeSet>
-            + Send
-            + Sync
-            + 'static
-            + CanisterHttpPool,
+        PoolCanisterHttp: MutablePool<CanisterHttpArtifact, CanisterHttpChangeSet> + Send + Sync + 'static,
     > ArtifactProcessor<CanisterHttpArtifact> for CanisterHttpProcessor<PoolCanisterHttp>
 {
     fn process_changes(
@@ -558,42 +552,31 @@ impl<
                 pool.insert(artifact);
             }
         }
-
         let mut adverts = Vec::new();
-        let change_set = {
-            let canister_http_pool = self.canister_http_pool.read().unwrap();
-            let change_set = self.client.on_state_change(&*canister_http_pool);
+        let change_set = self
+            .client
+            .on_state_change(&*self.canister_http_pool.read().unwrap());
 
-            for change_action in change_set.iter() {
-                match change_action {
-                    CanisterHttpChangeAction::AddToValidated(share, _) => {
-                        adverts.push(CanisterHttpArtifact::message_to_advert_send_request(
-                            share,
-                            ArtifactDestination::AllPeersInSubnet,
-                        ))
-                    }
-                    CanisterHttpChangeAction::MoveToValidated(msg_id) => {
-                        if let Some(msg) = canister_http_pool.lookup_unvalidated(msg_id) {
-                            adverts.push(CanisterHttpArtifact::message_to_advert_send_request(
-                                &msg,
-                                ArtifactDestination::AllPeersInSubnet,
-                            ))
-                        } else {
-                            warn!(
-                                self.log,
-                                "CanisterHttpProcessor::MoveToValidated(): artifact not found: {:?}",
-                                msg_id
-                            );
-                        }
-                    }
-                    CanisterHttpChangeAction::RemoveContent(_) => {}
-                    CanisterHttpChangeAction::RemoveValidated(_) => {}
-                    CanisterHttpChangeAction::RemoveUnvalidated(_) => {}
-                    CanisterHttpChangeAction::HandleInvalid(_, _) => {}
+        for change_action in change_set.iter() {
+            match change_action {
+                CanisterHttpChangeAction::AddToValidated(share, _) => {
+                    adverts.push(CanisterHttpArtifact::message_to_advert_send_request(
+                        share,
+                        ArtifactDestination::AllPeersInSubnet,
+                    ))
                 }
+                CanisterHttpChangeAction::MoveToValidated(msg) => {
+                    adverts.push(CanisterHttpArtifact::message_to_advert_send_request(
+                        msg,
+                        ArtifactDestination::AllPeersInSubnet,
+                    ));
+                }
+                CanisterHttpChangeAction::RemoveContent(_) => {}
+                CanisterHttpChangeAction::RemoveValidated(_) => {}
+                CanisterHttpChangeAction::RemoveUnvalidated(_) => {}
+                CanisterHttpChangeAction::HandleInvalid(_, _) => {}
             }
-            change_set
-        };
+        }
 
         let changed = if !change_set.is_empty() {
             ProcessingResult::StateChanged

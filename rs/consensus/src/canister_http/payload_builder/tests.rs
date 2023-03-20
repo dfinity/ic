@@ -774,17 +774,15 @@ fn add_received_shares_to_pool(
     shares: Vec<CanisterHttpResponseShare>,
 ) {
     for share in shares {
-        let hash = crypto_hash(&share);
-
         pool.insert(UnvalidatedArtifact {
-            message: share,
+            message: share.clone(),
             peer_id: node_test_id(0),
             timestamp: mock_time(),
         });
 
         pool.apply_changes(
             &SysTimeSource::new(),
-            vec![CanisterHttpChangeAction::MoveToValidated(hash)],
+            vec![CanisterHttpChangeAction::MoveToValidated(share)],
         )
     }
 }
