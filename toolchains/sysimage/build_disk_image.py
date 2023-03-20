@@ -137,7 +137,7 @@ def main():
         "partitions",
         metavar="partition",
         type=str,
-        nargs="+",
+        nargs="*",
         help="Partitions to write. These must match the CSV partition table entries.",
     )
 
