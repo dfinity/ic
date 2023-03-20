@@ -50,10 +50,7 @@ pub fn distributed_config(env: TestEnv, uvm_labels: Vec<String>) {
         UniversalVm::new(uvm_name.clone())
             .with_config_img(env.get_dependency_path(NNS_DAPP_SPECS_UVM_CONFIG_IMAGE_PATH))
             .disable_ipv4()
-            .with_required_host_features(vec![
-                HostFeature::SnsLoadTest,
-                HostFeature::Host("fr1-dll07.fr1.dfinity.network".to_string()),
-            ])
+            .with_required_host_features(vec![HostFeature::SnsLoadTest])
             .with_vm_resources(VmResources {
                 vcpus: Some(UVM_NUM_CPUS),
                 memory_kibibytes: Some(UVM_MEMORY_SIZE),

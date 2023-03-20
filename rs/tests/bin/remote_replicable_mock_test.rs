@@ -2,7 +2,6 @@
 
 use anyhow::Result;
 
-use ic_tests::driver::farm::HostFeature;
 use ic_tests::driver::group::SystemTestGroup;
 use ic_tests::driver::test_env::TestEnv;
 use ic_tests::driver::test_env_api::{HasDependencies, HasGroupSetup, SshSession, ADMIN};
@@ -27,9 +26,6 @@ pub fn setup(env: TestEnv) {
             env.get_dependency_path("rs/tests/replicable_mock_test_uvm_config_image.zst"),
         )
         .disable_ipv4()
-        .with_required_host_features(vec![HostFeature::Host(
-            "fr1-dll07.fr1.dfinity.network".to_string(),
-        )])
         .start(&env)
         .expect("failed to setup universal VM");
 }
