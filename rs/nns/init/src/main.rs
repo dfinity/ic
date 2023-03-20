@@ -126,6 +126,10 @@ struct CliArgs {
     /// The subnets to which SNS may be deployed
     #[clap(long, multiple_values(true))]
     sns_subnet: Vec<PrincipalId>,
+
+    /// Pass specified_id to provisional_create_canister_with_cycles when creating canisters.
+    #[clap(long)]
+    pass_specified_id: bool,
 }
 
 const LOG_PREFIX: &str = "[ic-nns-init] ";
@@ -200,7 +204,10 @@ async fn main() {
             agent,
             effective_canister_id: REGISTRY_CANISTER_ID.into(),
         });
-        NnsCanisters::set_up(&runtime, init_payloads).await;
+        match args.pass_specified_id {
+            true => NnsCanisters::set_up_at_ids(&runtime, init_payloads).await,
+            false => NnsCanisters::set_up(&runtime, init_payloads).await,
+        };
         eprintln!(
             "{}All NNS canisters have been set up on the replica with {}",
             LOG_PREFIX, url
