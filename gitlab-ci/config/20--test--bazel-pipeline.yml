@@ -102,7 +102,8 @@ bazel-system-test-hourly:
     - .bazel-test-all
     - .bazel-rules-post-master
   variables:
-    BAZEL_TEST_TAG_FILTERS: "system_test_hourly"
+    BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel --test_tag_filters=system_test_hourly"
+    BAZEL_TARGETS: "//..."
   timeout: 120 minutes
 
 bazel-system-test-hotfix:
