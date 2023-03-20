@@ -407,7 +407,9 @@ pub fn check_all_participants(env: TestEnv) {
             let request = sns_request_provider
                 .get_buyer_state(Some(participant.principal_id), CallMode::Query);
             info!(log, "Submitting request {request:?} ...");
-            let res = block_on(canister_agent.call_and_parse(&request))
+            let res = canister_agent
+                .call_and_parse(&request)
+                .await
                 .result()
                 .unwrap();
             info!(
