@@ -27,7 +27,9 @@ SCRIPT_DIR=$(dirname "$SCRIPT_PATH")
 ORIGINAL_NNS_ID=tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe
 SSH_ARGS="-o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no"
 TMP_DIR=${DIR:-$(mktemp -d)}
+LOG_DIR=${LOG_DIR:-$TMP_DIR}
 print_green Tmp Dir: $TMP_DIR
+print_green Log Dir: $LOG_DIR
 WORKING_DIR="$TMP_DIR/recovery/working_dir"
 DATA_DIR="$WORKING_DIR/data"
 IC_ADMIN="$TMP_DIR/ic-admin"
@@ -45,6 +47,7 @@ cd -
 print_green "NNS_URL=$NNS_URL"
 
 mkdir -p $TMP_DIR
+mkdir -p $LOG_DIR
 
 step 1 "Download all binary tools." || (
     log "Downloading to $TMP_DIR ..."
@@ -56,7 +59,7 @@ step 1 "Download all binary tools." || (
 )
 
 step 2 "Deploy an IC to the testnet." || (
-    LOG_FILE="$TMP_DIR/2_testnet_deployment_log.txt"
+    LOG_FILE="$LOG_DIR/2_testnet_deployment_log.txt"
     log "Log of the deployment is written to $LOG_FILE ..."
     $SCRIPT_DIR/icos_deploy.sh --boundary-dev-image --dkg-interval-length 19 "$TESTNET" --git-revision "$VERSION" --hosts-ini $HOSTS_INI_FILENAME >$LOG_FILE 2>&1
 )
@@ -65,7 +68,7 @@ step 2 "Deploy an IC to the testnet." || (
 mapfile -d " " -t node_ids <<<"$($TMP_DIR/ic-admin --nns-url "$NNS_URL" get-topology | jq -r '.topology.unassigned_nodes | map_values(.node_id) | join(" ")')"
 
 step 3 "Fetch the NNS state from the backup pod." || (
-    LOG_FILE="$TMP_DIR/3_nns_state_fetching_log.txt"
+    LOG_FILE="$LOG_DIR/3_nns_state_fetching_log.txt"
     log "writing log to $LOG_FILE ..."
     mkdir -p "$DATA_DIR"
     # Repeat the command until it succeeded
@@ -77,7 +80,7 @@ step 3 "Fetch the NNS state from the backup pod." || (
 )
 
 step 4 "Create a neuron followed by trusted neurons." || (
-    LOG_FILE="$TMP_DIR/4_create_neuron_leader.txt"
+    LOG_FILE="$LOG_DIR/4_create_neuron_leader.txt"
     VARS_FILE="$TMP_DIR/output_vars_4.sh"
     log "writing log to $LOG_FILE ..."
     # Giving our Neuron 1 billion ICP so it can pass all proposals instantly
@@ -117,7 +120,7 @@ step 6 "Recover the NNS subnet to the first unassigned node." || (
     chmod +x $TMP_DIR/driver.sh
 
     # Run the recovery.
-    LOG_FILE="$TMP_DIR/6_nns_recovery_log.txt"
+    LOG_FILE="$LOG_DIR/6_nns_recovery_log.txt"
     VARS_FILE="$TMP_DIR/output_vars_6.sh"
 
     log "Running ic-recovery, this can take a few minutes... "
