@@ -32,7 +32,7 @@ use ic_sns_governance::{
                 Command as CommandResponse, MergeMaturityResponse, StakeMaturityResponse,
             },
             neuron,
-            neuron::DissolveState,
+            neuron::{DissolveState, Followees},
             proposal::Action,
             Account as AccountProto, Ballot, ClaimSwapNeuronsError, ClaimSwapNeuronsRequest,
             ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus, DeregisterDappCanisters, Empty,
@@ -2459,4 +2459,84 @@ fn test_register_vote_happy_no_wait_for_quiet() {
             }
         }
     );
+}
+
+/// Tests that if a Neuron's has an empty Followees vector for an Action, the fallback is
+/// to vote with the followees in the Unspecified Action
+#[test]
+fn test_empty_followees_are_filtered() {
+    // Create the various neurons needed for this test
+    let followee_principal_id = PrincipalId::new_user_test_id(1000);
+    let followee_neuron_id = neuron_id(followee_principal_id, /*memo*/ 0);
+
+    let follower_principal_id = PrincipalId::new_user_test_id(1001);
+    let follower_neuron_id = neuron_id(follower_principal_id, /*memo*/ 0);
+
+    let proposer_principal_id = PrincipalId::new_user_test_id(1002);
+    let proposer_neuron_id = neuron_id(proposer_principal_id, /*memo*/ 0);
+
+    // Set up the test environment with neurons that can vote
+    let mut canister_fixture = GovernanceCanisterFixtureBuilder::new()
+        .add_neuron(
+            NeuronBuilder::new(
+                follower_neuron_id.clone(),
+                E8,
+                NeuronPermission::all(&follower_principal_id),
+            )
+            .add_followees(
+                native_action_ids::UNSPECIFIED,
+                Followees {
+                    followees: vec![followee_neuron_id.clone()],
+                },
+            )
+            .add_followees(native_action_ids::MOTION, Followees { followees: vec![] })
+            .set_dissolve_delay(15778801),
+        )
+        .add_neuron(
+            NeuronBuilder::new(
+                followee_neuron_id.clone(),
+                E8,
+                NeuronPermission::all(&followee_principal_id),
+            )
+            .set_dissolve_delay(15778801),
+        )
+        .add_neuron(
+            NeuronBuilder::new(
+                proposer_neuron_id.clone(),
+                E8,
+                NeuronPermission::all(&proposer_principal_id),
+            )
+            .set_dissolve_delay(15778801),
+        )
+        .create();
+
+    // Submit a motion proposal
+    let (proposal_id, _) = canister_fixture
+        .make_default_proposal(
+            &proposer_neuron_id,
+            Motion {
+                motion_text: "Test self following".to_string(),
+            },
+            proposer_principal_id,
+        )
+        .unwrap();
+
+    // Vote with the followee neuron, this should result in the follower neuron voting even though
+    // it has an empty followees vector on this Action
+    assert!(canister_fixture
+        .vote(
+            &followee_neuron_id,
+            proposal_id,
+            Vote::Yes,
+            followee_principal_id
+        )
+        .is_ok());
+
+    let proposal_data = canister_fixture.get_proposal_or_panic(proposal_id);
+    let follower_ballot = proposal_data
+        .ballots
+        .get(&follower_neuron_id.to_string())
+        .expect("Expected the follower neuron to have a ballot");
+    // This assert fails before NNS1-2148
+    assert_eq!(follower_ballot.vote, Vote::Yes as i32);
 }

@@ -245,6 +245,7 @@ impl Neuron {
         if let Some(followees) = self
             .followees
             .get(&(action))
+            .filter(|followees| !followees.followees.is_empty())
             .or_else(|| self.followees.get(&unspecified_key))
             // extract plain vector from 'Followees' proto
             .map(|x| &x.followees)
