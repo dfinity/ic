@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use ic_logger::info;
 use ic_replicated_state::canister_state::execution_state::WasmBinary;
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::{ExportedFunctions, Global, Memory, NumWasmPages, PageMap};
@@ -215,7 +216,10 @@ impl WasmExecutor for WasmExecutorImpl {
         };
 
         if let Some(serialized_module) = serialized_module {
-            self.observe_metrics(&serialized_module.imports_details);
+            self.observe_metrics(
+                &serialized_module.imports_details,
+                sandbox_safe_system_state.canister_id(),
+            );
         }
 
         let wasm_reserved_pages = get_wasm_reserved_pages(execution_state);
@@ -294,7 +298,7 @@ impl WasmExecutor for WasmExecutorImpl {
                 } => (cache, serialized_module, compilation_result),
                 _ => panic!("Newly created WasmBinary must be compiled or deserialized."),
             };
-        self.observe_metrics(&serialized_module.imports_details);
+        self.observe_metrics(&serialized_module.imports_details, canister_id);
         let exported_functions = serialized_module.exported_functions.clone();
         let wasm_metadata = serialized_module.wasm_metadata.clone();
 
@@ -355,11 +359,19 @@ impl WasmExecutorImpl {
         }
     }
 
-    pub fn observe_metrics(&self, imports_details: &WasmImportsDetails) {
+    pub fn observe_metrics(&self, imports_details: &WasmImportsDetails, canister_id: CanisterId) {
         if imports_details.imports_controller_size {
+            info!(
+                self.log,
+                "Canister {} imports deprecated system API ic0.controller_size.", canister_id
+            );
             self.metrics.imports_controller_size.inc();
         }
         if imports_details.imports_controller_copy {
+            info!(
+                self.log,
+                "Canister {} imports deprecated system API ic0.controller_copy.", canister_id
+            );
             self.metrics.imports_controller_copy.inc();
         }
         if imports_details.imports_call_cycles_add {
