@@ -11,7 +11,6 @@ stages:             # Files from the given stage should be prefixed with:
   - cargo-test          # 40--
   - guest-os-build      # 46--
   - guest-os-test       # 47--
-  - host-os-build       # 52--
   - host-os-test        # 54--
   - build-determinism-test  # 55--
   - prod-tests          # 60--

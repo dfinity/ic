@@ -42,5 +42,5 @@ build-determinism-guest-update-img-release:
     - job: build-determinism-binaries-release
       artifacts: false
   variables:
-    PATH0: "build-ic-release/guest-os/update-img"
+    PATH0: "build-ic-release/guest-os"
     PATH1: "guest-os/update-img"

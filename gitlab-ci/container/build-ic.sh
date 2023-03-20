@@ -11,7 +11,7 @@ Usage: $0 -b -c -i
 
     -b  Build IC Binaries
     -c  Build IC Canisters
-    -i  Build IC-OS Image
+    -i  Build IC-OS Images
     -h  Print help
 EOF
 }
@@ -119,10 +119,18 @@ END
 
 BUILD_IMAGES_CMD=$(
     cat <<-END
-    # build ic-os images
-    mkdir -p "$DISK_DIR"
+    # build guestos images
+    mkdir -p "${DISK_DIR}/guestos"
     $BAZEL_CMD //ic-os/guestos/prod
-    bazel cquery --output=files //ic-os/guestos/prod | xargs -I {} cp {} "$DISK_DIR"
+    bazel cquery --output=files //ic-os/guestos/prod | xargs -I {} cp {} "${DISK_DIR}/guestos"
+    # build hostos images
+    mkdir -p "${DISK_DIR}/hostos"
+    $BAZEL_CMD //ic-os/hostos/envs/prod
+    bazel cquery --output=files //ic-os/hostos/envs/prod | xargs -I {} cp {} "${DISK_DIR}/hostos"
+    # build setupos images
+    mkdir -p "${DISK_DIR}/setupos"
+    $BAZEL_CMD //ic-os/setupos/envs/prod
+    bazel cquery --output=files //ic-os/setupos/envs/prod | xargs -I {} cp {} "${DISK_DIR}/setupos"
 END
 )
 BUILD_CMD=""
@@ -165,8 +173,18 @@ if "$BUILD_CAN"; then
 fi
 
 if "$BUILD_IMG"; then
-    echo_green "##### IC-OS SHA256SUMS #####"
-    pushd "$DISK_DIR_FULL"
+    echo_green "##### GUESTOS SHA256SUMS #####"
+    pushd "$DISK_DIR_FULL/guestos"
+    # shellcheck disable=SC2035
+    sha256sum -b *.tar.* | tee SHA256SUMS
+    popd
+    echo_green "##### HOSTOS SHA256SUMS #####"
+    pushd "$DISK_DIR_FULL/hostos"
+    # shellcheck disable=SC2035
+    sha256sum -b *.tar.* | tee SHA256SUMS
+    popd
+    echo_green "##### SETUPOS SHA256SUMS #####"
+    pushd "$DISK_DIR_FULL/setupos"
     # shellcheck disable=SC2035
     sha256sum -b *.tar.* | tee SHA256SUMS
     popd

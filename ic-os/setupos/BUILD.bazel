@@ -1,6 +1,5 @@
-load("//toolchains/sysimage:toolchain.bzl", "ext4_image", "fat32_image")
+load("//toolchains/sysimage:toolchain.bzl", "fat32_image")
 load("@bazel_tools//tools/build_defs/pkg:pkg.bzl", "pkg_tar")
-load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 
 package(default_visibility = ["__subpackages__"])
 
@@ -12,7 +11,6 @@ exports_files([
     "config/ssh_authorized_keys",
     "data/deployment.json.template",
     "data/nns_public_key.pem",
-    "data/host-os.img.tar.gz",
 ])
 
 filegroup(
@@ -30,30 +28,12 @@ pkg_tar(
     package_dir = "config",
 )
 
+# TODO: This can be extended for build time configuration, as needed
 genrule(
     name = "deployment_json",
     srcs = [":data/deployment.json.template"],
     outs = ["deployment.json"],
     cmd = "sed -e 's/.*/&/' < $< > $@",
-)
-
-copy_file(
-    name = "copy_guestos_img",
-    src = "//ic-os/guestos/prod:disk-img.tar.gz",
-    out = "guest-os.img.tar.gz",
-    allow_symlink = True,
-)
-
-pkg_tar(
-    name = "data_tar",
-    srcs = [
-        ":data/host-os.img.tar.gz",
-        ":data/nns_public_key.pem",
-        ":deployment.json",
-        ":guest-os.img.tar.gz",
-    ],
-    mode = "0644",
-    package_dir = "data",
 )
 
 fat32_image(
@@ -62,16 +42,6 @@ fat32_image(
     label = "CONFIG",
     partition_size = "50M",
     subdir = "./config",
-    target_compatible_with = [
-        "@platforms//os:linux",
-    ],
-)
-
-ext4_image(
-    name = "partition-data.tar",
-    src = "data_tar",
-    partition_size = "1750M",
-    subdir = "./data",
     target_compatible_with = [
         "@platforms//os:linux",
     ],
