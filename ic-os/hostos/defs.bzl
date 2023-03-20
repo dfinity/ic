@@ -37,11 +37,12 @@ def image_deps(mode, _malicious = False):
     deps["volume_table"] = Label("//ic-os/hostos:volumes.csv")
     deps["rootfs_size"] = "3G"
     deps["bootfs_size"] = "100M"
+    deps["grub_config"] = Label("//ic-os/hostos:grub.cfg")
 
     # Add any custom partitions to the manifest
     deps["custom_partitions"] = _custom_partitions
 
-    deps["extra_boot_args"] = Label("//ic-os/hostos/bootloader:extra_boot_args")
+    deps["extra_boot_args"] = Label("//ic-os/hostos:rootfs/extra_boot_args")
 
     return deps
 
@@ -65,4 +66,4 @@ def _custom_partitions():
         ],
     )
 
-    return [":partition-hostlvm.tar", Label("//ic-os/hostos/bootloader:partition-esp.tar"), Label("//ic-os/hostos/bootloader:partition-grub.tar")]
+    return [":partition-hostlvm.tar"]

@@ -5,7 +5,9 @@ package(default_visibility = ["__subpackages__"])
 
 exports_files([
     "partitions.csv",
+    "grub.cfg",
     "rootfs/docker-base.dev",
+    "rootfs/extra_boot_args",
     "rootfs/docker-base.prod",
     "config/config.ini",
     "config/ssh_authorized_keys",
