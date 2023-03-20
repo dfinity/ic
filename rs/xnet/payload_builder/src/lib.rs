@@ -80,6 +80,9 @@ pub struct XNetPayloadBuilderMetrics {
     pub outstanding_queries: IntGauge,
     /// Critical error: failed `count_bytes()` on valid slice.
     pub critical_error_slice_count_bytes_failed: IntCounter,
+    /// Critical error: mismatch between the byte sizes computed by `take_slice()`,
+    /// `certified_slice_count_bytes()` and `UnpackedStreamSlice::count_bytes()`.
+    pub critical_error_slice_count_bytes_invalid: IntCounter,
 }
 
 pub const METRIC_BUILD_PAYLOAD_DURATION: &str = "xnet_builder_build_payload_duration_seconds";
@@ -90,7 +93,9 @@ pub const METRIC_SLICE_MESSAGES: &str = "xnet_builder_slice_messages";
 pub const METRIC_SLICE_PAYLOAD_SIZE: &str = "xnet_builder_slice_payload_size_bytes";
 pub const METRIC_VALIDATE_PAYLOAD_DURATION: &str = "xnet_builder_validate_payload_duration_seconds";
 pub const METRIC_OUTSTANDING_XNET_QUERIES: &str = "xnet_builder_outstanding_queries";
+
 pub const CRITICAL_ERROR_SLICE_COUNT_BYTES_FAILED: &str = "xnet_slice_count_bytes_failed";
+pub const CRITICAL_ERROR_SLICE_INVALID_COUNT_BYTES: &str = "xnet_slice_count_bytes_invalid";
 
 pub const LABEL_STATUS: &str = "status";
 pub const LABEL_PROXIMITY: &str = "proximity";
@@ -150,6 +155,8 @@ impl XNetPayloadBuilderMetrics {
             ),
             critical_error_slice_count_bytes_failed: metrics_registry
                 .error_counter(CRITICAL_ERROR_SLICE_COUNT_BYTES_FAILED),
+            critical_error_slice_count_bytes_invalid: metrics_registry
+                .error_counter(CRITICAL_ERROR_SLICE_INVALID_COUNT_BYTES),
         }
     }
 
@@ -754,12 +761,26 @@ impl XNetPayloadBuilderImpl {
                     // TODO(MR-6): Record failed pool take.
                     Err(_) => continue,
                 };
+                debug_assert!(slice_bytes <= bytes_left);
 
                 // Filter out invalid slices.
                 let validation_result =
                     self.validate_slice(subnet_id, &slice, &begin, validation_context, &state);
                 // TODO(MR-6): Record valid/invalid slice.
-                if let SliceValidationResult::Valid { .. } = validation_result {
+                if let SliceValidationResult::Valid { byte_size, .. } = validation_result {
+                    if byte_size != slice_bytes || byte_size > bytes_left {
+                        let message = format!(
+                            "Slice from {} has packed byte size {}, unpacked byte size {}, limit was {}",
+                            subnet_id, byte_size, slice_bytes, bytes_left
+                        );
+                        debug_assert!(false, "{}", message);
+                        error!(
+                            self.log,
+                            "{}: {}", CRITICAL_ERROR_SLICE_INVALID_COUNT_BYTES, message
+                        );
+                        self.metrics.critical_error_slice_count_bytes_invalid.inc();
+                        continue;
+                    }
                     bytes_left = bytes_left.saturating_sub(slice_bytes);
                     stream_slices.insert(subnet_id, slice);
                 } else {

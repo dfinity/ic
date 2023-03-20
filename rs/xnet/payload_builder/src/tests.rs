@@ -402,7 +402,10 @@ async fn validate_broken_count_bytes_fn() {
             .is_err());
 
         assert_eq!(
-            metric_vec(&[(&[("error", &CRITICAL_ERROR_SLICE_COUNT_BYTES_FAILED)], 1)]),
+            metric_vec(&[
+                (&[("error", &CRITICAL_ERROR_SLICE_INVALID_COUNT_BYTES)], 0),
+                (&[("error", &CRITICAL_ERROR_SLICE_COUNT_BYTES_FAILED)], 1),
+            ]),
             fetch_int_counter_vec(&fixture.metrics, "critical_errors")
         );
     });
