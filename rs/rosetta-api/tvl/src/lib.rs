@@ -8,9 +8,12 @@ use crate::types::{
 use candid::utils::{ArgumentDecoder, ArgumentEncoder};
 use candid::Nat;
 use candid::Principal;
+use ic_base_types::PrincipalId;
 use state::TvlState;
+use std::str::FromStr;
 use std::time::Duration;
 
+pub mod dashboard;
 mod memory;
 pub mod metrics;
 mod state;
@@ -18,6 +21,10 @@ pub mod types;
 
 const SEC_NANOS: u64 = 1_000_000_000;
 const E8S: u64 = 100_000_000;
+// By default we update data four times a day.
+const DEFAULT_UPDATE_PERIOD: u64 = 60 * 60 * 6;
+const DEFAULT_GOVERNANCE_PRINCIPAL: &str = "rrkah-fqaaa-aaaaa-aaaaq-cai";
+const DEFAULT_XRC_PRINCIPAL: &str = "uf6dk-hyaaa-aaaaq-qaaaq-cai";
 
 // We query XRC data slightly in the past to be sure to have a price with consensus.
 const XRC_MARGIN_SEC: u64 = 5 * 60;
@@ -39,9 +46,13 @@ pub async fn post_upgrade(args: TvlArgs) {
 
 fn init_state(args: TvlArgs) {
     replace_state(TvlState {
-        governance_principal: args.governance_id.get(),
-        xrc_principal: args.xrc_id.get(),
-        update_period: args.update_period,
+        governance_principal: args
+            .governance_id
+            .unwrap_or_else(|| PrincipalId::from_str(DEFAULT_GOVERNANCE_PRINCIPAL).unwrap()),
+        xrc_principal: args
+            .xrc_id
+            .unwrap_or_else(|| PrincipalId::from_str(DEFAULT_XRC_PRINCIPAL).unwrap()),
+        update_period: args.update_period.unwrap_or(DEFAULT_UPDATE_PERIOD),
         last_ts_icp_price: 0,
         last_ts_icp_locked: 0,
     });
