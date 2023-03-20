@@ -30,9 +30,10 @@ use ic_test_utilities::consensus::fake::FakeVerifier;
 use ic_test_utilities_registry::{
     add_subnet_record, insert_initial_dkg_transcript, SubnetRecordBuilder,
 };
+use ic_types::batch::BatchMessages;
 use ic_types::malicious_flags::MaliciousFlags;
 use ic_types::{
-    batch::{Batch, BatchPayload, IngressPayload},
+    batch::Batch,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{MessageId, SignedIngress},
     replica_config::ReplicaConfig,
@@ -323,9 +324,9 @@ fn build_batch(message_routing: &dyn MessageRouting, msgs: Vec<SignedIngress>) -
     Batch {
         batch_number: message_routing.expected_batch_height(),
         requires_full_state_hash: !msgs.is_empty(),
-        payload: BatchPayload {
-            ingress: IngressPayload::from(msgs),
-            ..BatchPayload::default()
+        messages: BatchMessages {
+            signed_ingress_msgs: msgs,
+            ..BatchMessages::default()
         },
         randomness: Randomness::from(get_random_seed()),
         ecdsa_subnet_public_keys: BTreeMap::new(),

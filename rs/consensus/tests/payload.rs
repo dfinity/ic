@@ -27,7 +27,6 @@ use ic_types::{
     crypto::CryptoHash, malicious_flags::MaliciousFlags, replica_config::ReplicaConfig,
     CryptoHashOfState, Height,
 };
-use std::convert::TryInto;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::Duration;
 
@@ -183,9 +182,9 @@ fn consensus_produces_expected_batches() {
         *router.batches.write().unwrap() = Vec::new();
         assert_eq!(batches.len(), 2);
         assert_ne!(batches[0].batch_number, batches[1].batch_number);
-        let mut msgs: Vec<_> = batches[0].payload.ingress.clone().try_into().unwrap();
+        let mut msgs: Vec<_> = batches[0].messages.signed_ingress_msgs.clone();
         assert_eq!(msgs.pop(), Some(ingress0));
-        let mut msgs: Vec<_> = batches[1].payload.ingress.clone().try_into().unwrap();
+        let mut msgs: Vec<_> = batches[1].messages.signed_ingress_msgs.clone();
         assert_eq!(msgs.pop(), Some(ingress1));
     })
 }

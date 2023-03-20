@@ -4,12 +4,12 @@ use ic_metrics::{
     MetricsRegistry,
 };
 use ic_types::{
-    batch::Batch,
+    batch::BatchPayload,
     consensus::{
         ecdsa::{CompletedReshareRequest, CompletedSignature, EcdsaPayload, KeyTranscriptCreation},
         Block, BlockProposal, ConsensusMessageHashable, HasHeight, HasRank,
     },
-    CountBytes,
+    CountBytes, Height,
 };
 use prometheus::{
     GaugeVec, Histogram, HistogramVec, IntCounter, IntCounterVec, IntGauge, IntGaugeVec,
@@ -145,6 +145,7 @@ impl From<&Block> for BlockStats {
 }
 
 // Batch payload stats
+#[derive(Debug, Default)]
 pub struct BatchStats {
     pub batch_height: u64,
     pub ingress_messages_delivered: usize,
@@ -156,21 +157,24 @@ pub struct BatchStats {
     pub canister_http_divergences_delivered: usize,
 }
 
-impl From<&Batch> for BatchStats {
-    fn from(batch: &Batch) -> Self {
+impl BatchStats {
+    pub(crate) fn from_payload(batch_height: Height, payload: &BatchPayload) -> Self {
         Self {
-            batch_height: batch.batch_number.get(),
-            ingress_messages_delivered: batch.payload.ingress.message_count(),
-            ingress_message_bytes_delivered: batch.payload.ingress.count_bytes(),
-            xnet_bytes_delivered: batch.payload.xnet.size_bytes(),
-            ingress_ids: batch.payload.ingress.message_ids(),
-            canister_http_success_delivered: batch.payload.canister_http.responses.len(),
-            canister_http_timeouts_delivered: batch.payload.canister_http.timeouts.len(),
-            canister_http_divergences_delivered: batch
-                .payload
-                .canister_http
-                .divergence_responses
-                .len(),
+            batch_height: batch_height.get(),
+            ingress_messages_delivered: payload.ingress.message_count(),
+            ingress_message_bytes_delivered: payload.ingress.count_bytes(),
+            xnet_bytes_delivered: payload.xnet.size_bytes(),
+            ingress_ids: payload.ingress.message_ids(),
+            canister_http_success_delivered: payload.canister_http.responses.len(),
+            canister_http_timeouts_delivered: payload.canister_http.timeouts.len(),
+            canister_http_divergences_delivered: payload.canister_http.divergence_responses.len(),
+        }
+    }
+
+    pub(crate) fn empty(batch_height: Height) -> Self {
+        Self {
+            batch_height: batch_height.get(),
+            ..Self::default()
         }
     }
 }

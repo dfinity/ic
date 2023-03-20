@@ -18,7 +18,7 @@ use ic_test_utilities::{
     consensus::fake::FakeVerifier, mock_time, types::messages::SignedIngressBuilder,
 };
 use ic_types::{
-    batch::{Batch, BatchPayload, IngressPayload},
+    batch::{Batch, BatchMessages},
     ingress::{IngressState, IngressStatus, WasmResult},
     malicious_flags::MaliciousFlags,
     messages::SignedIngress,
@@ -111,9 +111,9 @@ fn build_batch(message_routing: &dyn MessageRouting, msgs: Vec<SignedIngress>) -
     Batch {
         batch_number: message_routing.expected_batch_height(),
         requires_full_state_hash: !msgs.is_empty(),
-        payload: BatchPayload {
-            ingress: IngressPayload::from(msgs),
-            ..BatchPayload::default()
+        messages: BatchMessages {
+            signed_ingress_msgs: msgs,
+            ..BatchMessages::default()
         },
         randomness: Randomness::from([0; 32]),
         ecdsa_subnet_public_keys: BTreeMap::new(),

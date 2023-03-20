@@ -125,21 +125,27 @@ pub fn deliver_batches(
                 // This flag can only be true, if we've called deliver_batches with a height
                 // limit.  In this case we also want to have a checkpoint for that last height.
                 let persist_batch = Some(h) == max_batch_height_to_deliver;
+                let requires_full_state_hash = block.payload.is_summary() || persist_batch;
+                let (batch_messages, batch_stats) = if block.payload.is_summary() {
+                    (BatchMessages::default(), BatchStats::empty(h))
+                } else {
+                    let batch_payload = BlockPayload::from(block.payload).into_data().batch;
+                    let batch_stats = BatchStats::from_payload(h, &batch_payload);
+                    let batch_messages = batch_payload.into_messages().unwrap();
+                    (batch_messages, batch_stats)
+                };
+
                 let batch = Batch {
                     batch_number: h,
-                    requires_full_state_hash: block.payload.is_summary() || persist_batch,
-                    payload: if block.payload.is_summary() {
-                        BatchPayload::default()
-                    } else {
-                        BlockPayload::from(block.payload).into_data().batch
-                    },
+                    requires_full_state_hash,
+                    messages: batch_messages,
                     randomness,
                     ecdsa_subnet_public_keys: ecdsa_subnet_public_key.into_iter().collect(),
                     registry_version: block.context.registry_version,
                     time: block.context.time,
                     consensus_responses,
                 };
-                let batch_stats = BatchStats::from(&batch);
+
                 debug!(
                     log,
                     "replica {:?} delivered batch {:?} for block_hash {:?}",

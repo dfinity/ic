@@ -30,8 +30,8 @@ pub struct Batch {
     /// Whether the state obtained by executing this batch needs to be fully
     /// hashed to be eligible for StateSync.
     pub requires_full_state_hash: bool,
-    /// The payload to be processed.
-    pub payload: BatchPayload,
+    /// The payload messages to be processed.
+    pub messages: BatchMessages,
     /// A source of randomness for processing the Batch.
     pub randomness: Randomness,
     /// The ECDSA public key of the subnet.
@@ -80,6 +80,7 @@ pub struct BatchPayload {
 }
 
 /// Return ingress messages, xnet messages, and responses from the bitcoin adapter.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct BatchMessages {
     pub signed_ingress_msgs: Vec<SignedIngress>,
     pub certified_stream_slices: BTreeMap<SubnetId, CertifiedStreamSlice>,

@@ -52,10 +52,11 @@ use ic_registry_transport::{
 use ic_replica::setup::get_subnet_type;
 use ic_replicated_state::ReplicatedState;
 use ic_state_manager::StateManagerImpl;
+use ic_types::batch::BatchMessages;
 use ic_types::consensus::certification::CertificationShare;
 use ic_types::malicious_flags::MaliciousFlags;
 use ic_types::{
-    batch::{Batch, BatchPayload, IngressPayload},
+    batch::Batch,
     consensus::{catchup::CUPWithOriginalProtobuf, CatchUpPackage, HasHeight, HasVersion},
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::UserQuery,
@@ -714,7 +715,7 @@ impl Player {
         let mut extra_batch = Batch {
             batch_number,
             requires_full_state_hash: true,
-            payload: BatchPayload::default(),
+            messages: BatchMessages::default(),
             // Use a fake randomness here since we don't have random tape for extra messages
             randomness,
             ecdsa_subnet_public_keys: BTreeMap::new(),
@@ -728,12 +729,10 @@ impl Player {
             return (context_time, None);
         }
         if !extra_msgs.is_empty() {
-            extra_batch.payload.ingress = IngressPayload::from(
-                extra_msgs
-                    .iter()
-                    .map(|fm| fm.ingress.clone())
-                    .collect::<Vec<_>>(),
-            );
+            extra_batch.messages.signed_ingress_msgs = extra_msgs
+                .iter()
+                .map(|fm| fm.ingress.clone())
+                .collect::<Vec<_>>();
             println!("extra_batch created with new ingress");
         }
         let batch_number = extra_batch.batch_number;

@@ -2,7 +2,7 @@ use crate::{routing::stream_handler::StreamHandler, scheduling::valid_set_rule::
 use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_logger::{debug, trace, ReplicaLogger};
 use ic_replicated_state::ReplicatedState;
-use ic_types::{batch::BatchPayload, messages::SignedIngressContent};
+use ic_types::{batch::BatchMessages, messages::SignedIngressContent};
 use std::sync::Arc;
 
 #[cfg(test)]
@@ -14,7 +14,7 @@ pub(crate) trait Demux: Send {
     /// Process the provided payload. Splices off XNetMessages as appropriate
     /// and (attempts) to induct the messages contained in the payload as
     /// appropriate.
-    fn process_payload(&self, state: ReplicatedState, payload: BatchPayload) -> ReplicatedState;
+    fn process_payload(&self, state: ReplicatedState, messages: BatchMessages) -> ReplicatedState;
 }
 
 pub(crate) struct DemuxImpl<'a> {
@@ -41,15 +41,12 @@ impl<'a> DemuxImpl<'a> {
 }
 
 impl<'a> Demux for DemuxImpl<'a> {
-    fn process_payload(&self, state: ReplicatedState, payload: BatchPayload) -> ReplicatedState {
+    fn process_payload(
+        &self,
+        state: ReplicatedState,
+        batch_messages: BatchMessages,
+    ) -> ReplicatedState {
         trace!(self.log, "Processing Payload");
-
-        let batch_messages = payload.into_messages().unwrap_or_else(|err| {
-            unreachable!(
-                "Failed to retrieve messages from validated batch payload: {:?}",
-                err
-            )
-        });
 
         let mut decoded_slices = BTreeMap::new();
         for (subnet_id, certified_slice) in batch_messages.certified_stream_slices {

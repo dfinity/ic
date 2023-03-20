@@ -841,7 +841,7 @@ impl BatchProcessor for FakeBatchProcessorImpl {
         state.metadata.batch_time = time;
 
         // Get only ingress out of the batch_messages
-        let signed_ingress_msgs = batch.payload.into_messages().unwrap().signed_ingress_msgs;
+        let signed_ingress_msgs = batch.messages.signed_ingress_msgs;
 
         // Treat all ingress messages as already executed.
         let all_ingress_execution_results = signed_ingress_msgs.into_iter().map(|ingress| {

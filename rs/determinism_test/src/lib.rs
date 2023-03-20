@@ -14,7 +14,7 @@ use ic_state_manager::StateManagerImpl;
 use ic_test_utilities::types::messages::SignedIngressBuilder;
 use ic_types::{
     artifact::SignedIngress,
-    batch::{Batch, BatchPayload, IngressPayload},
+    batch::{Batch, BatchMessages},
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::MessageId,
     time::UNIX_EPOCH,
@@ -27,9 +27,9 @@ fn build_batch(message_routing: &dyn MessageRouting, msgs: Vec<SignedIngress>) -
     Batch {
         batch_number: message_routing.expected_batch_height(),
         requires_full_state_hash: false,
-        payload: BatchPayload {
-            ingress: IngressPayload::from(msgs),
-            ..BatchPayload::default()
+        messages: BatchMessages {
+            signed_ingress_msgs: msgs,
+            ..BatchMessages::default()
         },
         randomness: Randomness::from([0; 32]),
         ecdsa_subnet_public_keys: BTreeMap::new(),
@@ -43,10 +43,7 @@ fn build_batch_with_full_state_hash(message_routing: &dyn MessageRouting) -> Bat
     Batch {
         batch_number: message_routing.expected_batch_height(),
         requires_full_state_hash: true,
-        payload: BatchPayload {
-            ingress: IngressPayload::from(vec![]),
-            ..BatchPayload::default()
-        },
+        messages: BatchMessages::default(),
         randomness: Randomness::from([0; 32]),
         ecdsa_subnet_public_keys: BTreeMap::new(),
         registry_version: RegistryVersion::from(1),

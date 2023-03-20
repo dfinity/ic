@@ -751,7 +751,7 @@ impl StateMachine {
         let batch = Batch {
             batch_number,
             requires_full_state_hash: self.checkpoints_enabled.get(),
-            payload,
+            messages: payload.into_messages().unwrap(),
             randomness: Randomness::from(seed),
             ecdsa_subnet_public_keys: self.ecdsa_subnet_public_keys.clone(),
             registry_version: self.registry_client.get_latest_version(),

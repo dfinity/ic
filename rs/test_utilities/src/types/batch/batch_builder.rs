@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use crate::util::mock_time;
 use ic_types::{
-    batch::{Batch, BatchPayload},
+    batch::{Batch, BatchMessages},
     Height, Randomness, RegistryVersion, Time,
 };
 
@@ -17,7 +17,7 @@ impl Default for BatchBuilder {
             batch: Batch {
                 batch_number: Height::from(0),
                 requires_full_state_hash: false,
-                payload: super::payload::PayloadBuilder::default().build(),
+                messages: BatchMessages::default(),
                 randomness: Randomness::from([0; 32]),
                 ecdsa_subnet_public_keys: BTreeMap::new(),
                 registry_version: RegistryVersion::from(1),
@@ -40,9 +40,9 @@ impl BatchBuilder {
         self
     }
 
-    /// Set the payload field to payload.
-    pub fn payload(mut self, payload: BatchPayload) -> Self {
-        self.batch.payload = payload;
+    /// Set the messages field to messages.
+    pub fn messages(mut self, messages: BatchMessages) -> Self {
+        self.batch.messages = messages;
         self
     }
 
