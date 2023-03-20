@@ -11,15 +11,13 @@ use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{ReplicatedState, SubnetTopology};
 use ic_test_utilities::{
-    state_manager::FakeStateManager,
-    types::batch::{BatchBuilder, IngressPayloadBuilder, PayloadBuilder},
-    types::ids::subnet_test_id,
+    state_manager::FakeStateManager, types::batch::BatchBuilder, types::ids::subnet_test_id,
     types::messages::SignedIngressBuilder,
 };
 use ic_test_utilities_execution_environment::test_registry_settings;
 use ic_test_utilities_logger::with_test_replica_logger;
-use ic_types::crypto::canister_threshold_sig::MasterEcdsaPublicKey;
 use ic_types::messages::SignedIngress;
+use ic_types::{batch::BatchMessages, crypto::canister_threshold_sig::MasterEcdsaPublicKey};
 use ic_types::{Height, PrincipalId, SubnetId};
 use mockall::{mock, predicate::*, Sequence};
 use std::collections::{BTreeMap, BTreeSet};
@@ -74,7 +72,7 @@ fn test_fixture(provided_batch: &Batch) -> StateMachineTestFixture {
         .expect_process_payload()
         .times(1)
         .in_sequence(&mut seq)
-        .with(always(), eq(provided_batch.payload.clone()))
+        .with(always(), eq(provided_batch.messages.clone()))
         .returning(|state, _| state);
 
     let mut scheduler = Box::new(MockScheduler::new());
@@ -203,16 +201,12 @@ fn param_batch_test(batch_num: Height, in_count: u64) {
         ingress_messages.push(in_msg);
     }
 
-    let ingress_payload_builder = IngressPayloadBuilder::new();
-    let payload_builder = PayloadBuilder::new();
     let batch_builder = BatchBuilder::new();
-
     let provided_batch = batch_builder
-        .payload(
-            payload_builder
-                .ingress(ingress_payload_builder.msgs(ingress_messages).build())
-                .build(),
-        )
+        .messages(BatchMessages {
+            signed_ingress_msgs: ingress_messages,
+            ..BatchMessages::default()
+        })
         .batch_number(batch_num)
         .build();
 

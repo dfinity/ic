@@ -99,7 +99,7 @@ impl StateMachine for StateMachineImpl {
 
         // Preprocess messages and add messages to the induction pool through the Demux.
         let phase_timer = Timer::start();
-        let mut state_with_messages = self.demux.process_payload(state, batch.payload);
+        let mut state_with_messages = self.demux.process_payload(state, batch.messages);
 
         // Append additional responses to the consensus queue.
         state_with_messages
