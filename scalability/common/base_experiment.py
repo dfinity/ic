@@ -21,6 +21,7 @@ import subprocess
 import sys
 import time
 import traceback
+from pathlib import Path
 from typing import List
 
 import gflags
@@ -49,7 +50,7 @@ gflags.DEFINE_string(
 gflags.DEFINE_string(
     "cache_path", "", "Path to a file that should be used as a cache. Only use if you know what you are doing."
 )
-gflags.DEFINE_string("artifacts_path", "artifacts/release", "Path to the artifacts directory")
+gflags.DEFINE_string("artifacts_path", "", "Path to the artifacts directory")
 gflags.DEFINE_string("workload_generator_path", "", "Path to the workload generator to be used")
 gflags.DEFINE_boolean("no_instrument", False, "Do not instrument target machine")
 gflags.DEFINE_string("targets", "", "Set load target IP adresses from this comma-separated list directly.")
@@ -73,6 +74,13 @@ gflags.DEFINE_string(
 )
 
 
+def get_artifacts_path():
+    if len(FLAGS.artifacts_path) < 1:
+        return os.path.join(Path(__file__).parents[2], "artifacts/release")
+    else:
+        return FLAGS.artifacts_path
+
+
 class BaseExperiment:
     """Wrapper class around experiments."""
 
@@ -81,7 +89,8 @@ class BaseExperiment:
         misc.parse_command_line_args()
 
         self.cached_topologies = {}
-        self.artifacts_path = FLAGS.artifacts_path
+        self.artifacts_path = get_artifacts_path()
+
         self.__load_artifacts()
 
         self.testnet = FLAGS.testnet

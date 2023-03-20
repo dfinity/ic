@@ -224,7 +224,7 @@ class Workload(threading.Thread):
         if self.is_local_run():
             assert len(commands) == 1, f"More than 1 command, cannot currently execute this locally: {commands}"
             cmd = shlex.split(commands[0])
-            cmd = [os.path.join(FLAGS.artifacts_path, "ic-workload-generator")] + cmd[1:]
+            cmd = [os.path.join(self.artifacts_path, "ic-workload-generator")] + cmd[1:]
             print(f"Running command: {cmd}")
             rc = [subprocess.run(cmd).returncode]
         else:
