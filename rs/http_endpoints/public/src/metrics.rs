@@ -1,9 +1,6 @@
 use crate::types::*;
-use ic_metrics::{
-    buckets::{add_bucket, decimal_buckets, decimal_buckets_with_zero},
-    MetricsRegistry,
-};
-use prometheus::{Histogram, HistogramVec, IntCounter, IntCounterVec};
+use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
+use prometheus::{HistogramVec, IntCounter, IntCounterVec};
 use tokio::time::Instant;
 
 pub const LABEL_DETAIL: &str = "detail";
@@ -30,7 +27,6 @@ pub(crate) struct HttpHandlerMetrics {
     pub(crate) response_body_size_bytes: HistogramVec,
     pub(crate) connections_total: IntCounter,
     pub(crate) health_status_transitions_total: IntCounterVec,
-    pub(crate) read_state_request_status_request_ids: Histogram,
     connection_setup_duration: HistogramVec,
     connection_duration: HistogramVec,
 }
@@ -80,12 +76,6 @@ impl HttpHandlerMetrics {
                 "replica_http_health_status_state_transitions_total",
                 "Number of health status state transitions",
                 &[LABEL_HEALTH_STATUS_BEFORE,LABEL_HEALTH_STATUS_AFTER]
-            ),
-            read_state_request_status_request_ids: metrics_registry.histogram(
-                "replica_http_read_state_request_status_request_ids",
-                "Number of request id requested for request status read state requests",
-                // 0, 1.0, 2.0, 5.0, 10, 20, 50, 100
-                add_bucket(100.0, decimal_buckets_with_zero(0,1)),
             ),
             connection_setup_duration: metrics_registry.histogram_vec(
                 "replica_http_connection_setup_duration_seconds",

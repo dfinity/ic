@@ -34,7 +34,7 @@ use tower::{
     limit::concurrency::GlobalConcurrencyLimitLayer, util::BoxCloneService, Service, ServiceBuilder,
 };
 
-const MAX_READ_STATE_REQUEST_IDS: u8 = 1;
+const MAX_READ_STATE_REQUEST_STATUS_PATHS: u8 = 1;
 const MAX_READ_STATE_CONCURRENT_REQUESTS: usize = 100;
 
 #[derive(Clone)]
@@ -189,7 +189,6 @@ impl Service<Request<Vec<u8>>> for ReadStateService {
                 &read_state.paths,
                 &targets,
                 effective_canister_id,
-                &metrics,
             )
             .await
             {
@@ -239,10 +238,9 @@ async fn verify_paths(
     paths: &[Path],
     targets: &CanisterIdSet,
     effective_canister_id: CanisterId,
-    metrics: &HttpHandlerMetrics,
 ) -> Result<(), HttpError> {
     let state = state_reader_executor.get_latest_state().await?.take();
-    let mut num_request_ids = 0;
+    let mut num_request_status_paths = 0;
 
     // Convert the paths to slices to make it easier to match below.
     let paths: Vec<Vec<&[u8]>> = paths
@@ -281,14 +279,14 @@ async fn verify_paths(
             [b"subnet", _subnet_id, b"public_key"] => {}
             [b"subnet", _subnet_id, b"canister_ranges"] => {}
             [b"request_status", request_id] | [b"request_status", request_id, ..] => {
-                num_request_ids += 1;
+                num_request_status_paths += 1;
 
-                if num_request_ids > MAX_READ_STATE_REQUEST_IDS {
+                if num_request_status_paths > MAX_READ_STATE_REQUEST_STATUS_PATHS {
                     return Err(HttpError {
                         status: StatusCode::BAD_REQUEST,
                         message: format!(
                             "Can only request up to {} paths for request_status.",
-                            MAX_READ_STATE_REQUEST_IDS
+                            MAX_READ_STATE_REQUEST_STATUS_PATHS
                         ),
                     });
                 }
@@ -328,10 +326,6 @@ async fn verify_paths(
             }
         }
     }
-
-    metrics
-        .read_state_request_status_request_ids
-        .observe(num_request_ids.into());
 
     Ok(())
 }
@@ -413,7 +407,6 @@ fn can_read_canister_metadata(
 mod test {
     use crate::{
         common::test::{array, assert_cbor_ser_equal, bytes, int},
-        metrics::HttpHandlerMetrics,
         read_state::{can_read_canister_metadata, verify_paths},
         state_reader_executor::StateReaderExecutor,
         HttpError,
@@ -422,7 +415,6 @@ mod test {
     use ic_crypto_tree_hash::{Digest, Label, MixedHashTree, Path};
     use ic_interfaces_state_manager::Labeled;
     use ic_interfaces_state_manager_mocks::MockStateManager;
-    use ic_metrics::MetricsRegistry;
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{CanisterQueues, ReplicatedState, SystemMetadata};
     use ic_test_utilities::{
@@ -573,7 +565,6 @@ mod test {
                 &[Path::from(Label::from("time"))],
                 &CanisterIdSet::All,
                 canister_test_id(1),
-                &HttpHandlerMetrics::new(&MetricsRegistry::default())
             )
             .await,
             Ok(())
