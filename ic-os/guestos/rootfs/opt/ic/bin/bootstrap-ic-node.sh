@@ -131,6 +131,7 @@ while [ ! -f /boot/config/CONFIGURED ]; do
 
     # Fix up permissions. This is actually the wrong place.
     chown ic-replica.nogroup -R /var/lib/ic/data
+    chown ic-replica.nogroup -R /var/lib/execution/data
 
     if [ "${DEV}" != "" ]; then
         umount /mnt
