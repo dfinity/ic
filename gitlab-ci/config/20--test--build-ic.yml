@@ -40,10 +40,18 @@
       buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
           gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" \
           "artifacts/canisters" "${CI_JOB_NAME}/canisters"
-      # ic-os update img
+      # guestos images
       buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
           gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" \
-          "artifacts/icos" "${CI_JOB_NAME}/guest-os/update-img"
+          "artifacts/icos/guestos" "${CI_JOB_NAME}/guest-os"
+      # hostos images
+      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
+          gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" \
+          "artifacts/icos/hostos" "${CI_JOB_NAME}/host-os"
+      # setupos images
+      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
+          gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" \
+          "artifacts/icos/setupos" "${CI_JOB_NAME}/setup-os"
 
       # collect dotenv
       if [ -f /tmp/nns.release.env ]; then

@@ -9,6 +9,6 @@ icos_build(
     name = "prod",
     image_deps = image_deps,
     upgrades = False,
-    upload_prefix = "setup-os-bazel",
+    upload_prefix = "setup-os",
     vuln_scan = False,
 )

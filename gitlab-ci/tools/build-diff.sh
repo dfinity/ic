@@ -127,8 +127,14 @@ diff -u "$SHA256SUMS0" "$SHA256SUMS1" || true
 # TODO(IDX-2542)
 sed -i -e '/panics.wasm/d' -e '/ic-rosetta-api/d' -e '/system-tests/d' -e'/prod-test-driver/d' -e'/sns-test-dapp-canister/d' $SHA256SUMS0 $SHA256SUMS1
 
-# build-ic produces guest and update img so we need to filter guest img out
-sed -i -e '/disk-img/d' $SHA256SUMS0 $SHA256SUMS1
+# Most of the time, we only want to check update images so we strip out any
+# disk images. When checking SetupOS, do the opposite.
+SETUPOS_FLAG="${SETUPOS_FLAG:=}"
+if [ "${SETUPOS_FLAG}" != "" ]; then
+    sed -i -e '/update-img/d' $SHA256SUMS0 $SHA256SUMS1
+else
+    sed -i -e '/disk-img/d' $SHA256SUMS0 $SHA256SUMS1
+fi
 
 if ! diff -u $SHA256SUMS0 $SHA256SUMS1; then
     set +x
@@ -140,9 +146,6 @@ if ! diff -u $SHA256SUMS0 $SHA256SUMS1; then
         diffoscope_check
 
         ARTIFACT="update-img.tar.gz"
-        if grep -q "host-update-img" $SHA256SUMS0; then
-            ARTIFACT="host-update-img.tar.gz"
-        fi
 
         mkdir -p "$PATH0" "$PATH1" artifacts
         curl -sfS --retry 5 --retry-delay 10 \

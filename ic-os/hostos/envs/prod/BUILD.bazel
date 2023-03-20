@@ -8,6 +8,7 @@ load("//ic-os/hostos:defs.bzl", "image_deps")
 icos_build(
     name = "prod",
     image_deps = image_deps,
-    upload_prefix = "host-os-bazel",
+    upload_prefix = "host-os",
+    visibility = ["//visibility:public"],
     vuln_scan = False,
 )

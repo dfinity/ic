@@ -49,7 +49,7 @@ build-determinism-guest-update-img:
       - artifacts
   variables:
     PATH0: "guest-os/update-img"
-    PATH1: "build-ic/guest-os/update-img"
+    PATH1: "build-ic/guest-os"
   script:
     - |
       set -eExuo pipefail
@@ -59,47 +59,40 @@ build-determinism-host-update-img:
   extends:
     - .ubuntu-cargo-docker-k8s-pinned-dc
     - .rules-parent-pipeline
-    - .rules-hostos
   stage: build-determinism-test
   needs:
-    - job: host-os-updateimg
+    - job: wait-for-bazel-test-all
       artifacts: false
-    - job: host-os-updateimg-determinism
-      artifacts: false
-    - job: build-determinism-binaries
+    - job: build-ic
       artifacts: false
   artifacts:
     paths:
       - artifacts
   variables:
     PATH0: "host-os/update-img"
-    PATH1: "host-os/update-img-determinism"
+    PATH1: "build-ic/host-os"
   script:
     - |
       set -eExuo pipefail
       ./gitlab-ci/tools/build-diff.sh "$PATH0" "$PATH1"
 
-build-determinism-setup-os:
+build-determinism-setupos-img:
   extends:
     - .ubuntu-cargo-docker-k8s-pinned-dc
     - .rules-parent-pipeline
-    - .rules-hostos
   stage: build-determinism-test
   needs:
-    - job: setup-os-diskimg
+    - job: wait-for-bazel-test-all
       artifacts: false
-    - job: setup-os-diskimg-determinism
-      artifacts: false
-    - job: build-determinism-binaries
+    - job: build-ic
       artifacts: false
   artifacts:
     paths:
       - artifacts
-  # TODO: NODE-724
-  allow_failure: true
   variables:
     PATH0: "setup-os/disk-img"
-    PATH1: "setup-os/disk-img-determinism"
+    PATH1: "build-ic/setup-os"
+    SETUPOS_FLAG: "true"
   script:
     - |
       set -eExuo pipefail

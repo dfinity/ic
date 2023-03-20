@@ -19,9 +19,18 @@ The following vendors and models are currently supported:
 
 === Build Process
 
-The build process consists of a Shell script and two Dockerfiles, which turn the upstream Ubuntu Docker image into a bootable disk-image containing the system. Please consult the following scripts for details:
+To build with Bazel, you need https://bazel.build/install[Bazel] installed.
+Alternatively, the following script allows building in a container with the correct environment already configured:
 
-  ic/ic-os/setupos/scripts/build-disk-image.sh
+    ./gitlab-ci/container/container-run.sh
+
+Build a setupOS image:
+
+* You can build any of the setupos targets (`prod`, `dev`):
+
+    bazel build //ic-os/setupos/envs/{prod,dev}/...
+
+This will output disk-img.tar{.gz,.zst} in /ic/bazel-bin/ic-os/setupos/envs/{prod,dev}, which is your tarred setupOS image.
 
 === Docker
 
