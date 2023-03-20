@@ -4,6 +4,7 @@ package ic_sns_governance.pb.v1;
 
 import "ic_base_types/pb/v1/types.proto";
 import "ic_ledger/pb/v1/types.proto";
+import "types/v1/ic00_types.proto";
 
 // The different types of neuron permissions, i.e., privileges to modify a neuron,
 // that principals can have.
@@ -310,6 +311,8 @@ message UpgradeSnsControlledCanister {
   bytes new_canister_wasm = 2;
   // Arguments passed to the post-upgrade method of the new wasm module.
   optional bytes canister_upgrade_arg = 3;
+  // Canister install_code mode.
+  optional types.v1.CanisterInstallMode mode = 4;
 }
 
 

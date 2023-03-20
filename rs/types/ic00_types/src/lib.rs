@@ -7,6 +7,7 @@ use ic_base_types::{CanisterId, NodeId, NumBytes, PrincipalId, RegistryVersion, 
 use ic_error_types::{ErrorCode, UserError};
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::subnet::v1::{InitialIDkgDealings, InitialNiDkgTranscriptRecord};
+use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
 use ic_protobuf::{proxy::ProxyDecodeError, registry::crypto::v1 as pb_registry_crypto};
 use num_traits::cast::ToPrimitive;
 use serde::Serialize;
@@ -395,6 +396,21 @@ impl TryFrom<String> for CanisterInstallMode {
             "reinstall" => Ok(CanisterInstallMode::Reinstall),
             "upgrade" => Ok(CanisterInstallMode::Upgrade),
             _ => Err(CanisterInstallModeError(mode.to_string())),
+        }
+    }
+}
+
+impl TryFrom<i32> for CanisterInstallMode {
+    type Error = CanisterInstallModeError;
+
+    fn try_from(item: i32) -> Result<Self, Self::Error> {
+        match CanisterInstallModeProto::from_i32(item) {
+            Some(CanisterInstallModeProto::Install) => Ok(CanisterInstallMode::Install),
+            Some(CanisterInstallModeProto::Reinstall) => Ok(CanisterInstallMode::Reinstall),
+            Some(CanisterInstallModeProto::Upgrade) => Ok(CanisterInstallMode::Upgrade),
+            Some(CanisterInstallModeProto::Unspecified) | None => {
+                Err(CanisterInstallModeError(item.to_string()))
+            }
         }
     }
 }

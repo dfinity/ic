@@ -4,6 +4,7 @@ use std::path::Path;
 pub struct ProtoPaths<'a> {
     pub governance: &'a Path,
     pub base_types: &'a Path,
+    pub ic00_types: &'a Path,
     pub ledger: &'a Path,
 }
 
@@ -21,6 +22,7 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     config.btree_map(["."]);
     config.extern_path(".ic_base_types.pb.v1", "::ic-base-types");
     config.extern_path(".ic_ledger.pb.v1", "::ledger-canister::protobuf");
+    config.extern_path(".types.v1", "::ic-protobuf::types::v1");
 
     config.type_attribute(
         "ic_sns_governance.pb.v1.GetMode",
@@ -557,7 +559,12 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     config
         .compile_protos(
             &[proto_file],
-            &[proto.governance, proto.base_types, proto.ledger],
+            &[
+                proto.governance,
+                proto.base_types,
+                proto.ic00_types,
+                proto.ledger,
+            ],
         )
         .unwrap();
 

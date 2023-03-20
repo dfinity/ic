@@ -8735,6 +8735,7 @@ dependencies = [
  "ic-nns-constants",
  "ic-nns-governance",
  "ic-nns-test-utils",
+ "ic-protobuf",
  "ic-sns-cli",
  "ic-sns-governance",
  "ic-sns-init",

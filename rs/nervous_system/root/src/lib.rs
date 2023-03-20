@@ -186,6 +186,11 @@ impl ChangeCanisterProposal {
         self.arg = arg;
         self
     }
+
+    pub fn with_mode(mut self, mode: CanisterInstallMode) -> Self {
+        self.mode = mode;
+        self
+    }
 }
 
 #[derive(CandidType, Serialize, Deserialize, Clone)]

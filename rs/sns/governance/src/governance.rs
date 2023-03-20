@@ -29,8 +29,10 @@ use crate::pb::v1::{
 };
 use crate::{account_from_proto, account_to_proto};
 use ic_base_types::PrincipalId;
+use ic_ic00_types::CanisterInstallMode;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::i2d;
+use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
 use icrc_ledger_types::{Account, Subaccount};
 use lazy_static::lazy_static;
 use maplit::hashset;
@@ -2333,6 +2335,10 @@ impl Governance {
             upgrade
                 .canister_upgrade_arg
                 .unwrap_or_else(|| Encode!().unwrap()),
+            upgrade
+                .mode
+                .unwrap_or(CanisterInstallModeProto::Upgrade as i32)
+                .try_into()?,
         )
         .await
     }
@@ -2342,6 +2348,7 @@ impl Governance {
         target_canister_id: CanisterId,
         wasm: Vec<u8>,
         arg: Vec<u8>,
+        mode: CanisterInstallMode,
     ) -> Result<(), GovernanceError> {
         // Serialize upgrade.
         let payload = {
@@ -2353,14 +2360,11 @@ impl Governance {
             // stop_before_installing field in ChangeCanisterProposal.
             let stop_before_installing = true;
 
-            // The other values of this type (Install and Reinstall) are never
-            // appropriate for us.
-            let mode = ic_ic00_types::CanisterInstallMode::Upgrade;
-
             let change_canister_arg =
                 ChangeCanisterProposal::new(stop_before_installing, mode, target_canister_id)
                     .with_wasm(wasm)
-                    .with_arg(arg);
+                    .with_arg(arg)
+                    .with_mode(mode);
 
             candid::Encode!(&change_canister_arg).unwrap()
         };
@@ -2442,6 +2446,7 @@ impl Governance {
                     target_canister_id,
                     target_wasm.clone(),
                     Encode!().unwrap(),
+                    CanisterInstallMode::Upgrade,
                 )
                 .await?;
             }
@@ -4996,6 +5001,7 @@ mod tests {
         TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL, TEST_USER1_KEYPAIR,
     };
     use ic_nns_constants::SNS_WASM_CANISTER_ID;
+    use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
     use ic_sns_test_utils::itest_helpers::UserInfo;
     use ic_test_utilities::types::ids::canister_test_id;
     use maplit::btreemap;
@@ -7708,6 +7714,7 @@ mod tests {
                 // small valid wasm
                 new_canister_wasm: vec![0, 0x61, 0x73, 0x6D, 2, 0, 0, 0],
                 canister_upgrade_arg: None,
+                mode: Some(CanisterInstallModeProto::Upgrade.into()),
             });
 
             // Upgrade Proposal
