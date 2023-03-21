@@ -1,4 +1,5 @@
-type Outpoint = record {
+type DepositRequest = record {
+    caller : principal;
     txid : blob;
     vout : nat32;
 };
@@ -31,6 +32,7 @@ type FetchUtxoAlertsError = variant {
 };
 
 type WithdrawalAttempt = record {
+    caller : principal;
     id : text;
     amount : nat64;
     address : text;
@@ -53,7 +55,7 @@ type Response = record {
 
 service : (LifecycleArg) -> {
     // Returns the list of alerts for the given incoming UTXOs.
-    fetch_utxo_alerts : (Outpoint) -> (variant { Ok : Response; Err : FetchUtxoAlertsError });
+    fetch_utxo_alerts : (DepositRequest) -> (variant { Ok : Response; Err : FetchUtxoAlertsError });
 
     // Returns the list of alerts for the given withdrawal attempt.
     fetch_withdrawal_alerts : (WithdrawalAttempt) -> (variant { Ok : Response; Err : FetchWithdrawalAlertsError });

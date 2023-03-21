@@ -4,8 +4,8 @@ use ic_canisters_http_types as http;
 use ic_cdk::api::management_canister::http_request::{HttpMethod, HttpResponse, TransformArgs};
 use ic_cdk_macros::{init, post_upgrade, query, update};
 use ic_ckbtc_kyt::{
-    Alert, AlertLevel, Error, ExposureType, FetchAlertsResponse, KytMode, LifecycleArg, Outpoint,
-    WithdrawalAttempt,
+    Alert, AlertLevel, DepositRequest, Error, ExposureType, FetchAlertsResponse, KytMode,
+    LifecycleArg, WithdrawalAttempt,
 };
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory as VM};
 use ic_stable_structures::storable::Storable;
@@ -54,7 +54,15 @@ where
     }
 
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        Self(ciborium::de::from_reader(bytes.as_ref()).unwrap())
+        Self(
+            ciborium::de::from_reader(bytes.as_ref()).unwrap_or_else(|e| {
+                panic!(
+                    "failed to decode CBOR {}: {}",
+                    hex::encode(bytes.as_ref()),
+                    e
+                )
+            }),
+        )
     }
 }
 
@@ -101,7 +109,8 @@ impl Event {
         match &self.kind {
             EventKind::UtxoCheck { .. } => "utxo_check",
             EventKind::AddressCheck { .. } => "address_check",
-            EventKind::ApiKeyUpdate { .. } => "api_key_update",
+            EventKind::ApiKeyUpdate { .. } => "legacy_api_key_update",
+            EventKind::ApiKeySet { .. } => "api_key_set",
         }
     }
 
@@ -111,6 +120,16 @@ impl Event {
             EventKind::UtxoCheck { external_id, .. } => Some(external_id),
             EventKind::AddressCheck { external_id, .. } => Some(external_id),
             EventKind::ApiKeyUpdate { .. } => None,
+            EventKind::ApiKeySet { .. } => None,
+        }
+    }
+
+    pub fn caller(&self) -> Option<&Principal> {
+        match &self.kind {
+            EventKind::UtxoCheck { caller, .. } => caller.as_ref(),
+            EventKind::AddressCheck { caller, .. } => caller.as_ref(),
+            EventKind::ApiKeyUpdate => None,
+            EventKind::ApiKeySet { caller, .. } => caller.as_ref(),
         }
     }
 
@@ -119,7 +138,8 @@ impl Event {
         match &self.kind {
             EventKind::UtxoCheck { alerts, .. } => alerts.is_empty(),
             EventKind::AddressCheck { alerts, .. } => alerts.is_empty(),
-            EventKind::ApiKeyUpdate { .. } => true,
+            EventKind::ApiKeyUpdate => true,
+            EventKind::ApiKeySet { .. } => true,
         }
     }
 }
@@ -132,6 +152,9 @@ pub enum EventKind {
         txid: [u8; 32],
         #[serde(rename = "vout")]
         vout: u32,
+        #[serde(rename = "caller")]
+        #[serde(skip_serializing_if = "Option::is_none")]
+        caller: Option<Principal>,
         #[serde(rename = "external_id")]
         external_id: String,
         #[serde(rename = "alerts")]
@@ -139,6 +162,9 @@ pub enum EventKind {
     },
     #[serde(rename = "address_check")]
     AddressCheck {
+        #[serde(rename = "caller")]
+        #[serde(skip_serializing_if = "Option::is_none")]
+        caller: Option<Principal>,
         #[serde(rename = "id")]
         withdrawal_id: String,
         #[serde(rename = "address")]
@@ -152,6 +178,12 @@ pub enum EventKind {
     },
     #[serde(rename = "api_key_update")]
     ApiKeyUpdate,
+    #[serde(rename = "api_key_set")]
+    ApiKeySet {
+        #[serde(rename = "caller")]
+        #[serde(skip_serializing_if = "Option::is_none")]
+        caller: Option<Principal>,
+    },
 }
 
 thread_local! {
@@ -258,6 +290,9 @@ fn post_upgrade(arg: LifecycleArg) {
         let mut config = cell.borrow().get().clone();
         if let Some(api_key) = arg.api_key {
             config.api_key = api_key;
+            record_event(EventKind::ApiKeySet {
+                caller: Some(ic_cdk::caller()),
+            });
         }
         if let Some(minter_id) = arg.minter_id {
             config.minter_id = minter_id;
@@ -284,17 +319,19 @@ fn set_api_key(api_key: String) {
             cell.borrow_mut()
                 .set(config)
                 .expect("failed to encode config");
-            record_event(EventKind::ApiKeyUpdate);
+            record_event(EventKind::ApiKeySet {
+                caller: Some(ic_cdk::caller()),
+            });
         }
     });
 }
 
 #[update(guard = "caller_is_minter")]
 #[candid_method(update)]
-async fn fetch_utxo_alerts(outpoint: Outpoint) -> Result<FetchAlertsResponse, Error> {
+async fn fetch_utxo_alerts(request: DepositRequest) -> Result<FetchAlertsResponse, Error> {
     let (external_id, alerts) = match kyt_mode() {
         KytMode::Normal => {
-            let external_id = http_register_tx(outpoint.clone()).await?;
+            let external_id = http_register_tx(request.clone()).await?;
             let alerts = http_get_utxo_alerts(external_id.clone()).await?;
             (external_id, alerts)
         }
@@ -310,8 +347,9 @@ async fn fetch_utxo_alerts(outpoint: Outpoint) -> Result<FetchAlertsResponse, Er
         ),
     };
     record_event(EventKind::UtxoCheck {
-        txid: outpoint.txid,
-        vout: outpoint.vout,
+        txid: request.txid,
+        vout: request.vout,
+        caller: Some(request.caller),
         alerts: alerts.clone(),
         external_id: external_id.clone(),
     });
@@ -344,6 +382,7 @@ async fn fetch_withdrawal_alerts(
         ),
     };
     record_event(EventKind::AddressCheck {
+        caller: Some(withdrawal.caller),
         withdrawal_id: withdrawal.id,
         address: withdrawal.address,
         amount: withdrawal.amount,
@@ -412,15 +451,15 @@ fn http_request(req: http::HttpRequest) -> http::HttpResponse {
     }
 }
 
-async fn http_register_tx(outpoint: Outpoint) -> Result<json_rpc::ExternalId, Error> {
+async fn http_register_tx(req: DepositRequest) -> Result<json_rpc::ExternalId, Error> {
     let response: json_rpc::RegisterTransferResponse = json_rpc::http_call(
         HttpMethod::POST,
         api_key(),
-        "v2/users/cktestbtc/transfers".to_string(),
+        format!("v2/users/{}/transfers", req.caller),
         json_rpc::RegisterTransferRequest {
             network: json_rpc::Network::Bitcoin,
             asset: json_rpc::Asset::Btc,
-            transfer_reference: format!("{}:{}", DisplayTxid(&outpoint.txid), outpoint.vout),
+            transfer_reference: format!("{}:{}", DisplayTxid(&req.txid), req.vout),
             direction: json_rpc::Direction::Received,
         },
     )
@@ -453,7 +492,7 @@ async fn http_register_withdrawal(
     let response: json_rpc::RegisterWithdrawalResponse = json_rpc::http_call(
         HttpMethod::POST,
         api_key(),
-        "v2/users/ckbtc/withdrawal-attempts".to_string(),
+        format!("v2/users/{}/withdrawal-attempts", withdrawal.caller),
         json_rpc::RegisterWithdrawalRequest {
             network: json_rpc::Network::Bitcoin,
             asset: json_rpc::Asset::Btc,
