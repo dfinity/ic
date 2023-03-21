@@ -496,14 +496,18 @@ pub trait ProposalMetadata {
     fn url(&self) -> String;
     fn proposer_and_sender(&self, sender: Sender) -> (NeuronId, Sender);
     fn is_dry_run(&self) -> bool;
-    fn is_verbose(&self) -> bool;
+    fn is_json(&self) -> bool;
 }
 
-/// Trait to extract the title and the payload for each proposal type.
+/// Trait to extract the title for proposal type.
+pub trait ProposalTitle {
+    fn title(&self) -> String;
+}
+
+/// Trait to extract the payload for each proposal type.
 /// This trait is async as building some payloads requires async calls.
 #[async_trait]
-pub trait ProposalTitleAndPayload<T: CandidType> {
-    fn title(&self) -> String;
+pub trait ProposalPayload<T: CandidType> {
     async fn payload(&self, nns_url: Url) -> T;
 }
 
@@ -540,8 +544,7 @@ struct ProposeToRemoveNodesFromSubnetCmd {
     pub node_ids: Vec<PrincipalId>,
 }
 
-#[async_trait]
-impl ProposalTitleAndPayload<RemoveNodesFromSubnetPayload> for ProposeToRemoveNodesFromSubnetCmd {
+impl ProposalTitle for ProposeToRemoveNodesFromSubnetCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
@@ -551,7 +554,10 @@ impl ProposalTitleAndPayload<RemoveNodesFromSubnetPayload> for ProposeToRemoveNo
             ),
         }
     }
+}
 
+#[async_trait]
+impl ProposalPayload<RemoveNodesFromSubnetPayload> for ProposeToRemoveNodesFromSubnetCmd {
     async fn payload(&self, _: Url) -> RemoveNodesFromSubnetPayload {
         let node_ids = self
             .node_ids
@@ -580,8 +586,7 @@ struct ProposeToChangeSubnetMembershipCmd {
     pub node_ids_remove: Vec<PrincipalId>,
 }
 
-#[async_trait]
-impl ProposalTitleAndPayload<ChangeSubnetMembershipPayload> for ProposeToChangeSubnetMembershipCmd {
+impl ProposalTitle for ProposeToChangeSubnetMembershipCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
@@ -593,7 +598,10 @@ impl ProposalTitleAndPayload<ChangeSubnetMembershipPayload> for ProposeToChangeS
             ),
         }
     }
+}
 
+#[async_trait]
+impl ProposalPayload<ChangeSubnetMembershipPayload> for ProposeToChangeSubnetMembershipCmd {
     async fn payload(&self, nns_url: Url) -> ChangeSubnetMembershipPayload {
         let registry_canister = RegistryCanister::new(vec![nns_url]);
         let subnet_id = self.subnet.get_id(&registry_canister).await;
@@ -674,8 +682,7 @@ struct ProposeToRemoveNodeOperatorsCmd {
     node_operators_to_remove: Vec<PrincipalId>,
 }
 
-#[async_trait]
-impl ProposalTitleAndPayload<RemoveNodeOperatorsPayload> for ProposeToRemoveNodeOperatorsCmd {
+impl ProposalTitle for ProposeToRemoveNodeOperatorsCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
@@ -688,7 +695,10 @@ impl ProposalTitleAndPayload<RemoveNodeOperatorsPayload> for ProposeToRemoveNode
             ),
         }
     }
+}
 
+#[async_trait]
+impl ProposalPayload<RemoveNodeOperatorsPayload> for ProposeToRemoveNodeOperatorsCmd {
     async fn payload(&self, _: Url) -> RemoveNodeOperatorsPayload {
         RemoveNodeOperatorsPayload {
             node_operators_to_remove: self
@@ -709,10 +719,7 @@ fn shortened_subnet_string(subnet: &SubnetDescriptor) -> String {
     }
 }
 
-#[async_trait]
-impl ProposalTitleAndPayload<UpdateSubnetReplicaVersionPayload>
-    for ProposeToUpdateSubnetReplicaVersionCmd
-{
+impl ProposalTitle for ProposeToUpdateSubnetReplicaVersionCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
@@ -723,7 +730,10 @@ impl ProposalTitleAndPayload<UpdateSubnetReplicaVersionPayload>
             ),
         }
     }
+}
 
+#[async_trait]
+impl ProposalPayload<UpdateSubnetReplicaVersionPayload> for ProposeToUpdateSubnetReplicaVersionCmd {
     async fn payload(&self, nns_url: Url) -> UpdateSubnetReplicaVersionPayload {
         let registry_canister = RegistryCanister::new(vec![nns_url.clone()]);
         let subnet_id = self.subnet.get_id(&registry_canister).await;
@@ -750,17 +760,19 @@ struct ProposeToUpdateUnassignedNodesConfigCmd {
     pub replica_version_id: Option<String>,
 }
 
-#[async_trait]
-impl ProposalTitleAndPayload<UpdateUnassignedNodesConfigPayload>
-    for ProposeToUpdateUnassignedNodesConfigCmd
-{
+impl ProposalTitle for ProposeToUpdateUnassignedNodesConfigCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
             None => "Update all unassigned nodes".to_string(),
         }
     }
+}
 
+#[async_trait]
+impl ProposalPayload<UpdateUnassignedNodesConfigPayload>
+    for ProposeToUpdateUnassignedNodesConfigCmd
+{
     async fn payload(&self, _: Url) -> UpdateUnassignedNodesConfigPayload {
         UpdateUnassignedNodesConfigPayload {
             ssh_readonly_access: self.ssh_readonly_access.clone(),
@@ -777,8 +789,7 @@ struct ProposeXdrIcpConversionRateCmd {
     pub xdr_permyriad_per_icp: u64,
 }
 
-#[async_trait]
-impl ProposalTitleAndPayload<UpdateIcpXdrConversionRatePayload> for ProposeXdrIcpConversionRateCmd {
+impl ProposalTitle for ProposeXdrIcpConversionRateCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
@@ -788,7 +799,10 @@ impl ProposalTitleAndPayload<UpdateIcpXdrConversionRatePayload> for ProposeXdrIc
             ),
         }
     }
+}
 
+#[async_trait]
+impl ProposalPayload<UpdateIcpXdrConversionRatePayload> for ProposeXdrIcpConversionRateCmd {
     async fn payload(&self, _: Url) -> UpdateIcpXdrConversionRatePayload {
         UpdateIcpXdrConversionRatePayload {
             data_source: "IC admin".to_string(),
@@ -809,15 +823,17 @@ struct StartCanisterCmd {
     pub canister_id: CanisterId,
 }
 
-#[async_trait]
-impl ProposalTitleAndPayload<StopOrStartCanisterProposal> for StartCanisterCmd {
+impl ProposalTitle for StartCanisterCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
             None => format!("Start canister {}", self.canister_id),
         }
     }
+}
 
+#[async_trait]
+impl ProposalPayload<StopOrStartCanisterProposal> for StartCanisterCmd {
     async fn payload(&self, _: Url) -> StopOrStartCanisterProposal {
         StopOrStartCanisterProposal {
             canister_id: self.canister_id,
@@ -834,15 +850,17 @@ struct StopCanisterCmd {
     pub canister_id: CanisterId,
 }
 
-#[async_trait]
-impl ProposalTitleAndPayload<StopOrStartCanisterProposal> for StopCanisterCmd {
+impl ProposalTitle for StopCanisterCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
             None => format!("Stop canister {}", self.canister_id),
         }
     }
+}
 
+#[async_trait]
+impl ProposalPayload<StopOrStartCanisterProposal> for StopCanisterCmd {
     async fn payload(&self, _: Url) -> StopOrStartCanisterProposal {
         StopOrStartCanisterProposal {
             canister_id: self.canister_id,
@@ -870,15 +888,17 @@ struct ProposeToBlessReplicaVersionCmd {
     pub release_package_urls: Vec<String>,
 }
 
-#[async_trait]
-impl ProposalTitleAndPayload<BlessReplicaVersionPayload> for ProposeToBlessReplicaVersionCmd {
+impl ProposalTitle for ProposeToBlessReplicaVersionCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
             None => format!("Bless replica version: {}", self.replica_version_id,),
         }
     }
+}
 
+#[async_trait]
+impl ProposalPayload<BlessReplicaVersionPayload> for ProposeToBlessReplicaVersionCmd {
     async fn payload(&self, _: Url) -> BlessReplicaVersionPayload {
         BlessReplicaVersionPayload {
             replica_version_id: self.replica_version_id.clone(),
@@ -895,7 +915,7 @@ impl ProposalTitleAndPayload<BlessReplicaVersionPayload> for ProposeToBlessRepli
 }
 
 /// Sub-command to submit a proposal to bless a new replica version, with full
-/// detais.
+/// details.
 #[derive_common_proposal_fields]
 #[derive(ProposalMetadata, Parser)]
 struct ProposeToBlessReplicaVersionFlexibleCmd {
@@ -915,17 +935,17 @@ struct ProposeToBlessReplicaVersionFlexibleCmd {
     release_package_sha256_hex: Option<String>,
 }
 
-#[async_trait]
-impl ProposalTitleAndPayload<BlessReplicaVersionPayload>
-    for ProposeToBlessReplicaVersionFlexibleCmd
-{
+impl ProposalTitle for ProposeToBlessReplicaVersionFlexibleCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
             None => format!("Bless replica version: {}", self.replica_version_id,),
         }
     }
+}
 
+#[async_trait]
+impl ProposalPayload<BlessReplicaVersionPayload> for ProposeToBlessReplicaVersionFlexibleCmd {
     async fn payload(&self, _: Url) -> BlessReplicaVersionPayload {
         let release_package_url = self
             .release_package_url
@@ -972,10 +992,7 @@ struct ProposeToUpdateElectedReplicaVersionsCmd {
     pub replica_versions_to_unelect: Vec<String>,
 }
 
-#[async_trait]
-impl ProposalTitleAndPayload<UpdateElectedReplicaVersionsPayload>
-    for ProposeToUpdateElectedReplicaVersionsCmd
-{
+impl ProposalTitle for ProposeToUpdateElectedReplicaVersionsCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
@@ -985,7 +1002,12 @@ impl ProposalTitleAndPayload<UpdateElectedReplicaVersionsPayload>
             },
         }
     }
+}
 
+#[async_trait]
+impl ProposalPayload<UpdateElectedReplicaVersionsPayload>
+    for ProposeToUpdateElectedReplicaVersionsCmd
+{
     async fn payload(&self, _: Url) -> UpdateElectedReplicaVersionsPayload {
         let payload = UpdateElectedReplicaVersionsPayload {
             replica_version_to_elect: self.replica_version_to_elect.clone(),
@@ -1007,8 +1029,7 @@ struct ProposeToRetireReplicaVersionCmd {
     pub replica_version_ids: Vec<String>,
 }
 
-#[async_trait]
-impl ProposalTitleAndPayload<RetireReplicaVersionPayload> for ProposeToRetireReplicaVersionCmd {
+impl ProposalTitle for ProposeToRetireReplicaVersionCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
@@ -1024,7 +1045,10 @@ impl ProposalTitleAndPayload<RetireReplicaVersionPayload> for ProposeToRetireRep
             }
         }
     }
+}
 
+#[async_trait]
+impl ProposalPayload<RetireReplicaVersionPayload> for ProposeToRetireReplicaVersionCmd {
     async fn payload(&self, _: Url) -> RetireReplicaVersionPayload {
         assert!(
             !self.replica_version_ids.is_empty(),
@@ -1268,8 +1292,7 @@ fn parse_initial_ecdsa_config_options(
     })
 }
 
-#[async_trait]
-impl ProposalTitleAndPayload<CreateSubnetPayload> for ProposeToCreateSubnetCmd {
+impl ProposalTitle for ProposeToCreateSubnetCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
@@ -1279,7 +1302,10 @@ impl ProposalTitleAndPayload<CreateSubnetPayload> for ProposeToCreateSubnetCmd {
             ),
         }
     }
+}
 
+#[async_trait]
+impl ProposalPayload<CreateSubnetPayload> for ProposeToCreateSubnetCmd {
     async fn payload(&self, _: Url) -> CreateSubnetPayload {
         let node_ids = self
             .node_ids
@@ -1362,8 +1388,7 @@ struct ProposeToAddNodesToSubnetCmd {
     pub node_ids: Vec<PrincipalId>,
 }
 
-#[async_trait]
-impl ProposalTitleAndPayload<AddNodesToSubnetPayload> for ProposeToAddNodesToSubnetCmd {
+impl ProposalTitle for ProposeToAddNodesToSubnetCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
@@ -1374,7 +1399,10 @@ impl ProposalTitleAndPayload<AddNodesToSubnetPayload> for ProposeToAddNodesToSub
             ),
         }
     }
+}
 
+#[async_trait]
+impl ProposalPayload<AddNodesToSubnetPayload> for ProposeToAddNodesToSubnetCmd {
     async fn payload(&self, nns_url: Url) -> AddNodesToSubnetPayload {
         let registry_canister = RegistryCanister::new(vec![nns_url.clone()]);
         let node_ids = self
@@ -1475,8 +1503,7 @@ struct ProposeToUpdateRecoveryCupCmd {
     pub idkg_key_rotation_period_ms: Option<u64>,
 }
 
-#[async_trait]
-impl ProposalTitleAndPayload<RecoverSubnetPayload> for ProposeToUpdateRecoveryCupCmd {
+impl ProposalTitle for ProposeToUpdateRecoveryCupCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
@@ -1487,7 +1514,10 @@ impl ProposalTitleAndPayload<RecoverSubnetPayload> for ProposeToUpdateRecoveryCu
             ),
         }
     }
+}
 
+#[async_trait]
+impl ProposalPayload<RecoverSubnetPayload> for ProposeToUpdateRecoveryCupCmd {
     async fn payload(&self, nns_url: Url) -> RecoverSubnetPayload {
         let registry_canister = RegistryCanister::new(vec![nns_url.clone()]);
         let subnet_id = self.subnet.get_id(&registry_canister).await.get();
@@ -1750,8 +1780,7 @@ fn parse_ecdsa_keys(key_strings: &[String]) -> Vec<EcdsaKeyId> {
         .collect::<Vec<EcdsaKeyId>>()
 }
 
-#[async_trait]
-impl ProposalTitleAndPayload<UpdateSubnetPayload> for ProposeToUpdateSubnetCmd {
+impl ProposalTitle for ProposeToUpdateSubnetCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
@@ -1761,7 +1790,10 @@ impl ProposalTitleAndPayload<UpdateSubnetPayload> for ProposeToUpdateSubnetCmd {
             ),
         }
     }
+}
 
+#[async_trait]
+impl ProposalPayload<UpdateSubnetPayload> for ProposeToUpdateSubnetCmd {
     async fn payload(&self, nns_url: Url) -> UpdateSubnetPayload {
         let registry_canister = RegistryCanister::new(vec![nns_url.clone()]);
         let subnet_id = self.subnet.get_id(&registry_canister).await;
@@ -1931,17 +1963,7 @@ struct ProposeToChangeNnsCanisterCmd {
 }
 
 #[async_trait]
-impl ProposalTitleAndPayload<UpgradeRootProposalPayload> for ProposeToChangeNnsCanisterCmd {
-    fn title(&self) -> String {
-        match &self.proposal_title {
-            Some(title) => title.clone(),
-            None => format!(
-                "Upgrade Root Canister to wasm with hash: {}",
-                &self.wasm_module_sha256
-            ),
-        }
-    }
-
+impl ProposalPayload<UpgradeRootProposalPayload> for ProposeToChangeNnsCanisterCmd {
     async fn payload(&self, _: Url) -> UpgradeRootProposalPayload {
         let wasm_module = read_wasm_module(
             &self.wasm_module_path,
@@ -1962,18 +1984,20 @@ impl ProposalTitleAndPayload<UpgradeRootProposalPayload> for ProposeToChangeNnsC
     }
 }
 
-#[async_trait]
-impl ProposalTitleAndPayload<ChangeCanisterProposal> for ProposeToChangeNnsCanisterCmd {
+impl ProposalTitle for ProposeToChangeNnsCanisterCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
             None => format!(
-                "Upgrade Nns Canister: {} to wasm with hash: {}",
+                "Upgrade NNS Canister: {} to wasm with hash: {}",
                 self.canister_id, &self.wasm_module_sha256
             ),
         }
     }
+}
 
+#[async_trait]
+impl ProposalPayload<ChangeCanisterProposal> for ProposeToChangeNnsCanisterCmd {
     async fn payload(&self, _: Url) -> ChangeCanisterProposal {
         let wasm_module = read_wasm_module(
             &self.wasm_module_path,
@@ -2008,8 +2032,7 @@ struct ProposeToUninstallCodeCmd {
     canister_id: CanisterId,
 }
 
-#[async_trait]
-impl ProposalTitleAndPayload<CanisterIdRecord> for ProposeToUninstallCodeCmd {
+impl ProposalTitle for ProposeToUninstallCodeCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
@@ -2019,7 +2042,10 @@ impl ProposalTitleAndPayload<CanisterIdRecord> for ProposeToUninstallCodeCmd {
             ),
         }
     }
+}
 
+#[async_trait]
+impl ProposalPayload<CanisterIdRecord> for ProposeToUninstallCodeCmd {
     async fn payload(&self, _: Url) -> CanisterIdRecord {
         CanisterIdRecord::from(self.canister_id)
     }
@@ -2064,15 +2090,17 @@ struct ProposeToAddNnsCanisterCmd {
     query_allocation: Option<u64>,
 }
 
-#[async_trait]
-impl ProposalTitleAndPayload<AddCanisterProposal> for ProposeToAddNnsCanisterCmd {
+impl ProposalTitle for ProposeToAddNnsCanisterCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
             None => format!("Add nns canister: {}", self.name),
         }
     }
+}
 
+#[async_trait]
+impl ProposalPayload<AddCanisterProposal> for ProposeToAddNnsCanisterCmd {
     async fn payload(&self, _: Url) -> AddCanisterProposal {
         let wasm_module = read_wasm_module(
             &self.wasm_module_path,
@@ -2121,15 +2149,17 @@ struct ProposeToAddWasmToSnsWasmCmd {
     canister_type: String,
 }
 
-#[async_trait]
-impl ProposalTitleAndPayload<AddWasmRequest> for ProposeToAddWasmToSnsWasmCmd {
+impl ProposalTitle for ProposeToAddWasmToSnsWasmCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
             None => format!("Add {} SNS canister wasm to SNS-WASM", self.canister_type),
         }
     }
+}
 
+#[async_trait]
+impl ProposalPayload<AddWasmRequest> for ProposeToAddWasmToSnsWasmCmd {
     async fn payload(&self, _: Url) -> AddWasmRequest {
         let wasm = read_wasm_module(
             &self.wasm_module_path,
@@ -2264,17 +2294,19 @@ struct ProposeToInsertSnsWasmUpgradePathEntriesCmd {
     pub versions: Vec<JsonSnsVersion>,
 }
 
-#[async_trait]
-impl ProposalTitleAndPayload<InsertUpgradePathEntriesRequest>
-    for ProposeToInsertSnsWasmUpgradePathEntriesCmd
-{
+impl ProposalTitle for ProposeToInsertSnsWasmUpgradePathEntriesCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
             None => "Insert custom upgrade paths into SNS-W".to_string(),
         }
     }
+}
 
+#[async_trait]
+impl ProposalPayload<InsertUpgradePathEntriesRequest>
+    for ProposeToInsertSnsWasmUpgradePathEntriesCmd
+{
     async fn payload(&self, _: Url) -> InsertUpgradePathEntriesRequest {
         let force_upgrade_main_upgrade_path = self.force_upgrade_main_upgrade_path.unwrap_or(false);
 
@@ -2330,9 +2362,9 @@ fn print_insert_sns_wasm_upgrade_path_entries_payload(payload: InsertUpgradePath
             let pretty_from: PrettySnsVersion = upgrade.current_version.unwrap().into();
             format!(
                 r"SnsUpgrade {{
-    current_version: 
+    current_version:
             {:#?},
-    next_version:    
+    next_version:
             {:#?}
 }}",
                 pretty_from, pretty_to
@@ -2342,7 +2374,7 @@ fn print_insert_sns_wasm_upgrade_path_entries_payload(payload: InsertUpgradePath
         .join(",\n");
 
     println!(
-        r"InsertUpgradePathEntriesRequest {{ 
+        r"InsertUpgradePathEntriesRequest {{
     sns_governance_canister_id: {:?},
     upgrade_path: {}
 }}",
@@ -2362,17 +2394,17 @@ struct ProposeToUpdateSnsSubnetIdsInSnsWasmCmd {
     pub sns_subnet_ids_to_remove: Vec<PrincipalId>,
 }
 
-#[async_trait]
-impl ProposalTitleAndPayload<UpdateSnsSubnetListRequest>
-    for ProposeToUpdateSnsSubnetIdsInSnsWasmCmd
-{
+impl ProposalTitle for ProposeToUpdateSnsSubnetIdsInSnsWasmCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
             None => "Add SNS Subnet IDs to SNS-WASM".to_string(),
         }
     }
+}
 
+#[async_trait]
+impl ProposalPayload<UpdateSnsSubnetListRequest> for ProposeToUpdateSnsSubnetIdsInSnsWasmCmd {
     async fn payload(&self, _: Url) -> UpdateSnsSubnetListRequest {
         UpdateSnsSubnetListRequest {
             sns_subnet_ids_to_add: self.sns_subnet_ids_to_add.clone(),
@@ -2469,6 +2501,7 @@ struct ProposeToOpenSnsTokenSwap {
     /// after the adoption of the sale proposal.
     sale_delay_seconds: Option<u64>,
 }
+
 impl From<&ProposeToOpenSnsTokenSwap> for OpenSnsTokenSwap {
     fn from(cli_proposal: &ProposeToOpenSnsTokenSwap) -> OpenSnsTokenSwap {
         let ProposeToOpenSnsTokenSwap {
@@ -2493,7 +2526,7 @@ impl From<&ProposeToOpenSnsTokenSwap> for OpenSnsTokenSwap {
             summary: _,
             summary_file: _,
             dry_run: _,
-            verbose: _,
+            json: _,
         } = (*cli_proposal).clone();
         OpenSnsTokenSwap {
             target_swap_canister_id: Some(target_swap_canister_id),
@@ -2516,17 +2549,26 @@ impl From<&ProposeToOpenSnsTokenSwap> for OpenSnsTokenSwap {
     }
 }
 
-#[async_trait]
-impl ProposalTitleAndPayload<UpdateAllowedPrincipalsRequest>
-    for ProposeToUpdateSnsDeployWhitelistCmd
-{
+impl ProposalTitle for ProposeToOpenSnsTokenSwap {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => "Open SNS Token swap".to_string(),
+        }
+    }
+}
+
+impl ProposalTitle for ProposeToUpdateSnsDeployWhitelistCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
             None => "Update the list of Principals allowed to deploy an SNS".to_string(),
         }
     }
+}
 
+#[async_trait]
+impl ProposalPayload<UpdateAllowedPrincipalsRequest> for ProposeToUpdateSnsDeployWhitelistCmd {
     async fn payload(&self, _: Url) -> UpdateAllowedPrincipalsRequest {
         UpdateAllowedPrincipalsRequest {
             added_principals: self.added_principals.clone(),
@@ -2540,15 +2582,17 @@ impl ProposalTitleAndPayload<UpdateAllowedPrincipalsRequest>
 #[derive(ProposalMetadata, Parser)]
 struct ProposeToClearProvisionalWhitelistCmd {}
 
-#[async_trait]
-impl ProposalTitleAndPayload<()> for ProposeToClearProvisionalWhitelistCmd {
+impl ProposalTitle for ProposeToClearProvisionalWhitelistCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
             None => "Clear the provisional whitelist".to_string(),
         }
     }
+}
 
+#[async_trait]
+impl ProposalPayload<()> for ProposeToClearProvisionalWhitelistCmd {
     async fn payload(&self, _: Url) -> () {}
 }
 
@@ -2570,10 +2614,7 @@ struct ProposeToSetAuthorizedSubnetworksCmd {
     pub subnets: Option<Vec<PrincipalId>>,
 }
 
-#[async_trait]
-impl ProposalTitleAndPayload<SetAuthorizedSubnetworkListArgs>
-    for ProposeToSetAuthorizedSubnetworksCmd
-{
+impl ProposalTitle for ProposeToSetAuthorizedSubnetworksCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
@@ -2596,7 +2637,10 @@ impl ProposalTitleAndPayload<SetAuthorizedSubnetworkListArgs>
             },
         }
     }
+}
 
+#[async_trait]
+impl ProposalPayload<SetAuthorizedSubnetworkListArgs> for ProposeToSetAuthorizedSubnetworksCmd {
     async fn payload(&self, _: Url) -> SetAuthorizedSubnetworkListArgs {
         let subnets: Vec<SubnetId> = self
             .subnets
@@ -2626,8 +2670,7 @@ struct ProposeToUpdateSubnetTypeCmd {
     pub subnet_type: String,
 }
 
-#[async_trait]
-impl ProposalTitleAndPayload<UpdateSubnetTypeArgs> for ProposeToUpdateSubnetTypeCmd {
+impl ProposalTitle for ProposeToUpdateSubnetTypeCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
@@ -2641,7 +2684,10 @@ impl ProposalTitleAndPayload<UpdateSubnetTypeArgs> for ProposeToUpdateSubnetType
             },
         }
     }
+}
 
+#[async_trait]
+impl ProposalPayload<UpdateSubnetTypeArgs> for ProposeToUpdateSubnetTypeCmd {
     async fn payload(&self, _: Url) -> UpdateSubnetTypeArgs {
         match self.operation {
             AddOrRemove::Add => UpdateSubnetTypeArgs::Add(self.subnet_type.clone()),
@@ -2669,10 +2715,7 @@ struct ProposeToChangeSubnetTypeAssignmentCmd {
     pub subnet_type: String,
 }
 
-#[async_trait]
-impl ProposalTitleAndPayload<ChangeSubnetTypeAssignmentArgs>
-    for ProposeToChangeSubnetTypeAssignmentCmd
-{
+impl ProposalTitle for ProposeToChangeSubnetTypeAssignmentCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
@@ -2694,7 +2737,10 @@ impl ProposalTitleAndPayload<ChangeSubnetTypeAssignmentArgs>
             },
         }
     }
+}
 
+#[async_trait]
+impl ProposalPayload<ChangeSubnetTypeAssignmentArgs> for ProposeToChangeSubnetTypeAssignmentCmd {
     async fn payload(&self, _: Url) -> ChangeSubnetTypeAssignmentArgs {
         match self.operation {
             AddOrRemove::Add => ChangeSubnetTypeAssignmentArgs::Add(SubnetListWithType {
@@ -2731,6 +2777,24 @@ struct ProposeToAddOrRemoveNodeProviderCmd {
     pub add_or_remove_provider: AddOrRemove,
 }
 
+impl ProposalTitle for ProposeToAddOrRemoveNodeProviderCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => match self.add_or_remove_provider {
+                AddOrRemove::Add => format!(
+                    "Add Node Provider: {}",
+                    shortened_pid_string(&self.node_provider_pid)
+                ),
+                AddOrRemove::Remove => format!(
+                    "Remove Node Provider: {}",
+                    shortened_pid_string(&self.node_provider_pid)
+                ),
+            },
+        }
+    }
+}
+
 /// Sub-command to submit a proposal to add a new node operator.
 #[derive_common_proposal_fields]
 #[derive(ProposalMetadata, Parser)]
@@ -2763,8 +2827,7 @@ struct ProposeToAddNodeOperatorCmd {
     ipv6: Option<String>,
 }
 
-#[async_trait]
-impl ProposalTitleAndPayload<AddNodeOperatorPayload> for ProposeToAddNodeOperatorCmd {
+impl ProposalTitle for ProposeToAddNodeOperatorCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
@@ -2775,7 +2838,10 @@ impl ProposalTitleAndPayload<AddNodeOperatorPayload> for ProposeToAddNodeOperato
             ),
         }
     }
+}
 
+#[async_trait]
+impl ProposalPayload<AddNodeOperatorPayload> for ProposeToAddNodeOperatorCmd {
     async fn payload(&self, _: Url) -> AddNodeOperatorPayload {
         let rewardable_nodes = self
             .rewardable_nodes
@@ -2833,10 +2899,7 @@ struct ProposeToUpdateNodeOperatorConfigCmd {
     pub set_ipv6_to_none: Option<bool>,
 }
 
-#[async_trait]
-impl ProposalTitleAndPayload<UpdateNodeOperatorConfigPayload>
-    for ProposeToUpdateNodeOperatorConfigCmd
-{
+impl ProposalTitle for ProposeToUpdateNodeOperatorConfigCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
@@ -2846,7 +2909,10 @@ impl ProposalTitleAndPayload<UpdateNodeOperatorConfigPayload>
             ),
         }
     }
+}
 
+#[async_trait]
+impl ProposalPayload<UpdateNodeOperatorConfigPayload> for ProposeToUpdateNodeOperatorConfigCmd {
     async fn payload(&self, _: Url) -> UpdateNodeOperatorConfigPayload {
         let rewardable_nodes = self
             .rewardable_nodes
@@ -2931,10 +2997,7 @@ impl ProposeToAddOrRemoveDataCentersCmd {
     }
 }
 
-#[async_trait]
-impl ProposalTitleAndPayload<AddOrRemoveDataCentersProposalPayload>
-    for ProposeToAddOrRemoveDataCentersCmd
-{
+impl ProposalTitle for ProposeToAddOrRemoveDataCentersCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
@@ -2967,7 +3030,10 @@ impl ProposalTitleAndPayload<AddOrRemoveDataCentersProposalPayload>
             }
         }
     }
+}
 
+#[async_trait]
+impl ProposalPayload<AddOrRemoveDataCentersProposalPayload> for ProposeToAddOrRemoveDataCentersCmd {
     async fn payload(&self, _: Url) -> AddOrRemoveDataCentersProposalPayload {
         let payload = self.get_payload();
 
@@ -3004,17 +3070,17 @@ struct ProposeToUpdateNodeRewardsTableCmd {
     pub updated_node_rewards: String,
 }
 
-#[async_trait]
-impl ProposalTitleAndPayload<UpdateNodeRewardsTableProposalPayload>
-    for ProposeToUpdateNodeRewardsTableCmd
-{
+impl ProposalTitle for ProposeToUpdateNodeRewardsTableCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
             None => "Update the Node Rewards Table".into(),
         }
     }
+}
 
+#[async_trait]
+impl ProposalPayload<UpdateNodeRewardsTableProposalPayload> for ProposeToUpdateNodeRewardsTableCmd {
     async fn payload(&self, _: Url) -> UpdateNodeRewardsTableProposalPayload {
         let map: BTreeMap<String, BTreeMap<String, u64>> =
             serde_json::from_str(&self.updated_node_rewards)
@@ -3055,15 +3121,17 @@ struct ProposeToSetFirewallConfigCmd {
     pub ipv6_prefixes: String,
 }
 
-#[async_trait]
-impl ProposalTitleAndPayload<SetFirewallConfigPayload> for ProposeToSetFirewallConfigCmd {
+impl ProposalTitle for ProposeToSetFirewallConfigCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
             None => "Update firewall configuration".to_string(),
         }
     }
+}
 
+#[async_trait]
+impl ProposalPayload<SetFirewallConfigPayload> for ProposeToSetFirewallConfigCmd {
     async fn payload(&self, _: Url) -> SetFirewallConfigPayload {
         let firewall_config =
             String::from_utf8(read_file_fully(&self.firewall_config_file)).unwrap();
@@ -3108,15 +3176,17 @@ struct ProposeToAddFirewallRulesCmd {
     pub test: bool,
 }
 
-#[async_trait]
-impl ProposalTitleAndPayload<AddFirewallRulesPayload> for ProposeToAddFirewallRulesCmd {
+impl ProposalTitle for ProposeToAddFirewallRulesCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
             None => "Add firewall rules".to_string(),
         }
     }
+}
 
+#[async_trait]
+impl ProposalPayload<AddFirewallRulesPayload> for ProposeToAddFirewallRulesCmd {
     async fn payload(&self, _: Url) -> AddFirewallRulesPayload {
         let rule_file = String::from_utf8(read_file_fully(&self.rules_file)).unwrap();
         let rules: Vec<FirewallRule> = serde_json::from_str(&rule_file)
@@ -3155,15 +3225,17 @@ struct ProposeToRemoveFirewallRulesCmd {
     pub test: bool,
 }
 
-#[async_trait]
-impl ProposalTitleAndPayload<RemoveFirewallRulesPayload> for ProposeToRemoveFirewallRulesCmd {
+impl ProposalTitle for ProposeToRemoveFirewallRulesCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
             None => "Remove firewall rules".to_string(),
         }
     }
+}
 
+#[async_trait]
+impl ProposalPayload<RemoveFirewallRulesPayload> for ProposeToRemoveFirewallRulesCmd {
     async fn payload(&self, _: Url) -> RemoveFirewallRulesPayload {
         let positions: Vec<i32> = self
             .positions
@@ -3200,15 +3272,17 @@ struct ProposeToUpdateFirewallRulesCmd {
     pub test: bool,
 }
 
-#[async_trait]
-impl ProposalTitleAndPayload<UpdateFirewallRulesPayload> for ProposeToUpdateFirewallRulesCmd {
+impl ProposalTitle for ProposeToUpdateFirewallRulesCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
             None => "Update firewall rules".to_string(),
         }
     }
+}
 
+#[async_trait]
+impl ProposalPayload<UpdateFirewallRulesPayload> for ProposeToUpdateFirewallRulesCmd {
     async fn payload(&self, _: Url) -> UpdateFirewallRulesPayload {
         let rule_file = String::from_utf8(read_file_fully(&self.rules_file)).unwrap();
         let rules: Vec<FirewallRule> = serde_json::from_str(&rule_file)
@@ -3262,15 +3336,17 @@ struct ProposeToRemoveNodesCmd {
     pub node_ids: Vec<PrincipalId>,
 }
 
-#[async_trait]
-impl ProposalTitleAndPayload<RemoveNodesPayload> for ProposeToRemoveNodesCmd {
+impl ProposalTitle for ProposeToRemoveNodesCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
             None => format!("Remove nodes: {}", shortened_pids_string(&self.node_ids)),
         }
     }
+}
 
+#[async_trait]
+impl ProposalPayload<RemoveNodesPayload> for ProposeToRemoveNodesCmd {
     async fn payload(&self, _: Url) -> RemoveNodesPayload {
         RemoveNodesPayload {
             node_ids: self
@@ -3387,10 +3463,7 @@ struct ProposeToPrepareCanisterMigrationCmd {
     destination_subnet: PrincipalId,
 }
 
-#[async_trait]
-impl ProposalTitleAndPayload<PrepareCanisterMigrationPayload>
-    for ProposeToPrepareCanisterMigrationCmd
-{
+impl ProposalTitle for ProposeToPrepareCanisterMigrationCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
@@ -3402,7 +3475,10 @@ impl ProposalTitleAndPayload<PrepareCanisterMigrationPayload>
             ),
         }
     }
+}
 
+#[async_trait]
+impl ProposalPayload<PrepareCanisterMigrationPayload> for ProposeToPrepareCanisterMigrationCmd {
     async fn payload(&self, _: Url) -> PrepareCanisterMigrationPayload {
         PrepareCanisterMigrationPayload {
             canister_id_ranges: self.canister_id_ranges.clone(),
@@ -3427,8 +3503,7 @@ struct ProposeToRerouteCanisterRangesCmd {
     destination_subnet: PrincipalId,
 }
 
-#[async_trait]
-impl ProposalTitleAndPayload<RerouteCanisterRangesPayload> for ProposeToRerouteCanisterRangesCmd {
+impl ProposalTitle for ProposeToRerouteCanisterRangesCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
@@ -3440,7 +3515,10 @@ impl ProposalTitleAndPayload<RerouteCanisterRangesPayload> for ProposeToRerouteC
             ),
         }
     }
+}
 
+#[async_trait]
+impl ProposalPayload<RerouteCanisterRangesPayload> for ProposeToRerouteCanisterRangesCmd {
     async fn payload(&self, _: Url) -> RerouteCanisterRangesPayload {
         RerouteCanisterRangesPayload {
             reassigned_canister_ranges: self.canister_id_ranges.clone(),
@@ -3462,10 +3540,7 @@ struct ProposeToCompleteCanisterMigrationCmd {
     migration_trace: Vec<PrincipalId>,
 }
 
-#[async_trait]
-impl ProposalTitleAndPayload<CompleteCanisterMigrationPayload>
-    for ProposeToCompleteCanisterMigrationCmd
-{
+impl ProposalTitle for ProposeToCompleteCanisterMigrationCmd {
     fn title(&self) -> String {
         match &self.proposal_title {
             Some(title) => title.clone(),
@@ -3475,7 +3550,10 @@ impl ProposalTitleAndPayload<CompleteCanisterMigrationPayload>
             ),
         }
     }
+}
 
+#[async_trait]
+impl ProposalPayload<CompleteCanisterMigrationPayload> for ProposeToCompleteCanisterMigrationCmd {
     async fn payload(&self, _: Url) -> CompleteCanisterMigrationPayload {
         CompleteCanisterMigrationPayload {
             canister_id_ranges: self.canister_id_ranges.clone(),
@@ -4775,7 +4853,7 @@ async fn print_and_get_last_value<T: Message + Default + serde::Serialize>(
 /// a proposal to the governance canister.
 async fn propose_external_proposal_from_command<
     C: CandidType + Serialize + Debug,
-    Command: ProposalMetadata + ProposalTitleAndPayload<C>,
+    Command: ProposalMetadata + ProposalTitle + ProposalPayload<C>,
 >(
     cmd: Command,
     nns_function: NnsFunction,
@@ -4789,7 +4867,7 @@ async fn propose_external_proposal_from_command<
         Some(proposer),
     ));
 
-    print_payload(&payload, &cmd);
+    print_proposal(&payload, &cmd);
 
     if cmd.is_dry_run() {
         return;
@@ -5023,7 +5101,7 @@ fn get_firewall_ruleset_hash(cmd: GetFirewallRulesetHashCmd) {
     println!("{}", compute_firewall_ruleset_hash(&rules));
 }
 
-/// Enpasulates a node/node operator id pair.
+/// Encapsulates a node/node operator id pair.
 #[derive(Serialize)]
 struct NodeAndNodeOperatorId {
     node_id: String,
@@ -5306,7 +5384,7 @@ async fn propose_to_open_sns_token_swap(
             Some(proposer),
         ));
         let payload = OpenSnsTokenSwap::from(&cmd);
-        print_payload(&payload, &cmd);
+        print_proposal(&payload, &cmd);
 
         if cmd.is_dry_run() {
             return Ok(None);
@@ -5383,7 +5461,7 @@ async fn propose_to_add_or_remove_node_provider(
         }
     };
     let payload = AddOrRemoveNodeProvider { change };
-    print_payload(&payload, &cmd);
+    print_proposal(&payload, &cmd);
 
     if cmd.is_dry_run() {
         return;
@@ -5525,7 +5603,7 @@ async fn submit_root_proposal_to_upgrade_governance_canister(
     match result {
         Ok(()) => println!("Root proposal to upgrade the governance canister submitted."),
         Err(error) => println!(
-            "Error submitting root propoposal to upgrade governance cansister: {}",
+            "Error submitting root proposal to upgrade governance canister: {}",
             error
         ),
     }
@@ -5560,7 +5638,7 @@ async fn vote_on_root_proposal_to_upgrade_governance_canister(
         .await;
     match result {
         Ok(()) => println!("Ballot for root proposal cast."),
-        Err(error) => println!("Error submitting root propoposal ballot: {}", error),
+        Err(error) => println!("Error submitting root proposal ballot: {}", error),
     }
 }
 
@@ -5886,11 +5964,28 @@ impl RootCanisterClient {
     }
 }
 
-fn print_payload<T: Serialize + Debug, C: ProposalMetadata>(payload: &T, cmd: &C) {
-    if cmd.is_verbose() {
-        let serialized = serde_json::to_string(&payload).unwrap();
-        println!("submit_proposal payload: \n{}", serialized);
+fn print_proposal<T: Serialize + Debug, Command: ProposalMetadata + ProposalTitle>(
+    payload: &T,
+    cmd: &Command,
+) {
+    if cmd.is_json() {
+        #[derive(Serialize)]
+        struct Proposal<T> {
+            title: String,
+            summary: String,
+            payload: T,
+        }
+
+        let serialized = serde_json::to_string_pretty(&Proposal {
+            title: cmd.title(),
+            summary: cmd.summary(),
+            payload,
+        })
+        .expect("Serialization for the cmd to JSON failed.");
+        println!("{}", serialized);
     } else {
-        println!("submit_proposal payload: \n{:#?}", payload);
+        println!("Title: {}\n", cmd.title());
+        println!("Summary: {}\n", cmd.summary());
+        println!("Payload: {:#?}", payload);
     }
 }

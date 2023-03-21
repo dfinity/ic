@@ -35,8 +35,8 @@ fn impl_proposal_metadata(ast: &syn::DeriveInput) -> TokenStream {
                 self.dry_run
             }
 
-            fn is_verbose(&self) -> bool {
-                self.verbose
+            fn is_json(&self) -> bool {
+                self.json
             }
         }
     };
@@ -91,9 +91,9 @@ pub fn derive_common_proposal_fields(_: TokenStream, item: TokenStream) -> Token
                             #[clap(long)]
                             pub dry_run: bool,
 
-                            /// If set, verbose output will be printed.
+                            /// If set, JSON output will be printed for --dry-run
                             #[clap(long)]
-                            pub verbose: bool,
+                            pub json: bool,
                     });
                     stream.extend(gen);
                     stream.extend(group.stream());
