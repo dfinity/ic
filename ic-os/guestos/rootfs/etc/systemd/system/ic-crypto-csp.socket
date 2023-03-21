@@ -3,8 +3,8 @@ Description=Socket for IC Crypto Service Provider
 
 [Socket]
 ListenStream=/run/ic-node/crypto-csp/socket
-SocketUser=ic-replica
-SocketGroup=ic-replica
+SocketUser=ic-csp-vault
+SocketGroup=ic-csp-vault-socket
 SocketMode=0660
 
 [Install]

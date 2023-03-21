@@ -104,9 +104,15 @@ RUN echo "set dash/sh false" | debconf-communicate && dpkg-reconfigure -fnoninte
 # Note that a group "backup" already exists and is used for the purpose of
 # allowing backup read access.
 RUN addgroup --system nonconfidential && \
-    addgroup --system confidential && \
+    addgroup --system ic-csp-vault-socket && \
     addgroup --system vsock && \
     addgroup --system ic-registry-local-store
+
+# The "ic-csp-vault" account. Used to run `ic-crypto-csp` binary and access the crypto key material.
+RUN addgroup ic-csp-vault && \
+    adduser --system --disabled-password --shell /usr/sbin/nologin -c "IC crypto CSP vault" ic-csp-vault && \
+    adduser ic-csp-vault ic-csp-vault && \
+    adduser ic-csp-vault ic-csp-vault-socket
 
 # The "ic-http-adapter" account. Used to run `ic-https-outcalls-adapter` binary
 # to allow nodes to make HTTP calls.
@@ -117,8 +123,8 @@ RUN addgroup ic-http-adapter && \
 # User which will run the replica service.
 RUN adduser --system --disabled-password --home /var/lib/ic --group --no-create-home ic-replica && \
     adduser ic-replica backup && \
+    adduser ic-replica ic-csp-vault-socket && \
     adduser ic-replica nonconfidential && \
-    adduser ic-replica confidential && \
     adduser ic-replica ic-registry-local-store && \
     adduser ic-replica ic-http-adapter && \
     adduser ic-replica vsock
