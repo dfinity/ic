@@ -13,11 +13,12 @@ use ic_ledger_canister_core::ledger::{
     apply_transaction, archive_blocks, LedgerAccess, LedgerContext, LedgerData,
 };
 use ic_ledger_core::{timestamp::TimeStamp, tokens::Tokens};
-use icrc_ledger_types::block::{GetBlocksArgs, GetBlocksResponse};
+use icrc_ledger_types::block::{BlockCertificate, GetBlocksArgs, GetBlocksResponse};
 use icrc_ledger_types::transaction::{GetTransactionsResponse, TransferArg, TransferError};
 use icrc_ledger_types::value::MetadataValue as Value;
 use icrc_ledger_types::{Account, ArchiveInfo, GetTransactionsRequest};
 use num_traits::ToPrimitive;
+use serde_bytes::ByteBuf;
 use std::cell::RefCell;
 
 const MAX_MESSAGE_SIZE: u64 = 1024 * 1024;
@@ -385,6 +386,17 @@ fn get_blocks(req: GetBlocksArgs) -> GetBlocksResponse {
         .as_start_and_length()
         .unwrap_or_else(|msg| ic_cdk::api::trap(&msg));
     Access::with_ledger(|ledger| ledger.get_blocks(start, length as usize))
+}
+
+#[query]
+#[candid_method(query)]
+fn get_last_block_certificate() -> BlockCertificate {
+    let last_block_index =
+        Access::with_ledger(|ledger| ledger.blockchain().chain_length().checked_sub(1).unwrap());
+    BlockCertificate {
+        block_index: last_block_index,
+        certificate: ic_cdk::api::data_certificate().map(ByteBuf::from),
+    }
 }
 
 candid::export_service!();
