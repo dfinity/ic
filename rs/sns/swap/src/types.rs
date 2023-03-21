@@ -323,6 +323,8 @@ impl BuyerState {
                 amount_e8s: amount_icp_e8s,
                 transfer_start_timestamp_seconds: 0,
                 transfer_success_timestamp_seconds: 0,
+                amount_transferred_e8s: Some(0),
+                transfer_fee_paid_e8s: Some(0),
             }),
         }
     }
@@ -349,6 +351,8 @@ impl BuyerState {
                 amount_e8s: val,
                 transfer_start_timestamp_seconds: 0,
                 transfer_success_timestamp_seconds: 0,
+                amount_transferred_e8s: Some(0),
+                transfer_fee_paid_e8s: Some(0),
             });
         }
     }
@@ -572,6 +576,12 @@ pub enum TransferResult {
     Success(u64),
     /// The operation failed with the specified error message.
     Failure(String),
+}
+
+impl TransferResult {
+    pub fn is_success(&self) -> bool {
+        matches!(self, Self::Success(_))
+    }
 }
 
 /// Intermediate struct used when generating the basket of neurons for investors.

@@ -198,8 +198,10 @@ type Ticket = record {
   amount_icp_e8s : nat64;
 };
 type TransferableAmount = record {
+  transfer_fee_paid_e8s : opt nat64;
   transfer_start_timestamp_seconds : nat64;
   amount_e8s : nat64;
+  amount_transferred_e8s : opt nat64;
   transfer_success_timestamp_seconds : nat64;
 };
 service : (Init) -> {

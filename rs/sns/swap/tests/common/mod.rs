@@ -103,6 +103,8 @@ pub fn create_single_neuron_recipe(amount_e8s: u64, buyer_principal: String) -> 
             amount_e8s,
             transfer_start_timestamp_seconds: 0,
             transfer_success_timestamp_seconds: 0,
+            amount_transferred_e8s: Some(0),
+            transfer_fee_paid_e8s: Some(0),
         }),
         neuron_attributes: Some(NeuronAttributes {
             memo: 0,

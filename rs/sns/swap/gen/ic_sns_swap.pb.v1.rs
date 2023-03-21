@@ -399,12 +399,22 @@ pub mod params {
     ::prost::Message,
 )]
 pub struct TransferableAmount {
+    /// The amount in e8s equivalent that the participant committed to the Swap, which is held by the swap canister until
+    /// the swap is committed or aborted.
     #[prost(uint64, tag = "1")]
     pub amount_e8s: u64,
+    /// When the transfer to refund or commit funds starts.
     #[prost(uint64, tag = "2")]
     pub transfer_start_timestamp_seconds: u64,
+    /// When the transfer to refund or commit succeeds.
     #[prost(uint64, tag = "3")]
     pub transfer_success_timestamp_seconds: u64,
+    /// The amount that was successfully transferred when swap commits or aborts (minus fees).
+    #[prost(uint64, optional, tag = "4")]
+    pub amount_transferred_e8s: ::core::option::Option<u64>,
+    /// The fee charged when transferring from the swap canister;
+    #[prost(uint64, optional, tag = "5")]
+    pub transfer_fee_paid_e8s: ::core::option::Option<u64>,
 }
 #[derive(
     candid::CandidType,

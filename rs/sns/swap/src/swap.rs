@@ -64,7 +64,7 @@ use crate::pb::v1::{
 };
 
 /// The maximum count of participants that can be returned by ListDirectParticipants
-pub const MAX_LIST_DIRECT_PARTICIPANTS_LIMIT: u32 = 30_000;
+pub const MAX_LIST_DIRECT_PARTICIPANTS_LIMIT: u32 = 20_000;
 
 /// The default count of community fund participants that can be returned
 /// by ListCommunityFundParticipants
@@ -1613,7 +1613,7 @@ impl Swap {
         now_fn: fn(bool) -> u64,
         icp_ledger: &dyn ICRC1Ledger,
     ) -> SweepResult {
-        let lifecycle = self.lifecycle();
+        let lifecycle: Lifecycle = self.lifecycle();
 
         let init = match self.init_and_validate() {
             Ok(init) => init,
@@ -1701,6 +1701,17 @@ impl Swap {
                 TransferResult::Failure(_) => {
                     sweep_result.failure += 1;
                 }
+            }
+
+            // Update the buyer state to indicate funds that have been successfully committed or refunded.
+            if result.is_success() {
+                // Record transfer fee
+                icp_transferable_amount.transfer_fee_paid_e8s =
+                    Some(DEFAULT_TRANSFER_FEE.get_e8s());
+                // Record the amount minus transfer fee that was refunded or committed.
+                let amount_transferred_e8s =
+                    Some(icp_transferable_amount.amount_e8s - DEFAULT_TRANSFER_FEE.get_e8s());
+                icp_transferable_amount.amount_transferred_e8s = amount_transferred_e8s;
             }
         }
 
@@ -1839,6 +1850,11 @@ impl Swap {
                     sweep_result.skipped += 1;
                 }
                 TransferResult::Success(_) => {
+                    let fee_e8s = sns_transaction_fee_tokens.get_e8s();
+                    sns_transferable_amount.transfer_fee_paid_e8s = Some(fee_e8s);
+                    sns_transferable_amount.amount_transferred_e8s =
+                        Some(sns_transferable_amount.amount_e8s - fee_e8s);
+
                     sweep_result.success += 1;
                 }
                 TransferResult::Failure(_) => {
@@ -2551,6 +2567,8 @@ fn create_sns_neuron_basket_for_direct_participant(
                 amount_e8s: scheduled_vesting_event.amount_e8s,
                 transfer_start_timestamp_seconds: 0,
                 transfer_success_timestamp_seconds: 0,
+                amount_transferred_e8s: Some(0),
+                transfer_fee_paid_e8s: Some(0),
             }),
             investor: Some(Investor::Direct(DirectInvestment {
                 buyer_principal: buyer_principal.to_string(),
@@ -2613,6 +2631,8 @@ fn create_sns_neuron_basket_for_cf_participant(
                 amount_e8s: scheduled_vesting_event.amount_e8s,
                 transfer_start_timestamp_seconds: 0,
                 transfer_success_timestamp_seconds: 0,
+                amount_transferred_e8s: Some(0),
+                transfer_fee_paid_e8s: Some(0),
             }),
             investor: Some(Investor::CommunityFund(CfInvestment {
                 hotkey_principal: hotkey_principal.to_string(),
