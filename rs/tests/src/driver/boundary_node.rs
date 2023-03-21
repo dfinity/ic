@@ -66,50 +66,22 @@ pub struct BoundaryNode {
     pub required_host_features: Vec<HostFeature>,
     pub has_ipv4: bool,
     pub boot_image: Option<DiskImage>,
+}
+
+pub struct BoundaryNodeWithVm {
+    pub name: String,
+    pub allocated_vm: VMCreateResponse,
+    pub use_real_certs_and_dns: bool,
     pub nns_node_urls: Vec<Url>,
     pub nns_public_key: Option<PathBuf>,
     pub replica_ipv6_rule: String,
-    pub use_real_certs_and_dns: bool,
+    pub has_ipv4: bool,
 }
 
-impl BoundaryNode {
-    pub fn new(name: String) -> Self {
-        Self {
-            name,
-            is_sev: false,
-            vm_resources: Default::default(),
-            qemu_cli_args: Default::default(),
-            vm_allocation: Default::default(),
-            required_host_features: Default::default(),
-            has_ipv4: true,
-            boot_image: Default::default(),
-            nns_node_urls: Default::default(),
-            nns_public_key: Default::default(),
-            replica_ipv6_rule: Default::default(),
-            use_real_certs_and_dns: false,
-        }
+impl BoundaryNodeWithVm {
+    pub fn ipv6(&self) -> Ipv6Addr {
+        self.allocated_vm.ipv6
     }
-
-    pub fn enable_sev(mut self) -> Self {
-        self.is_sev = true;
-        self.with_required_host_features(vec![HostFeature::AmdSevSnp])
-            .with_qemu_cli_args(
-                vec![
-            "-cpu",
-            "EPYC-v4",
-            "-machine",
-            "memory-encryption=sev0,vmport=off",
-            "-object",
-            "sev-snp-guest,id=sev0,cbitpos=51,reduced-phys-bits=1",
-            "-append",
-            "root=/dev/vda5 console=ttyS0 dfinity.system=A dfinity.boot_state=stable swiotlb=2621"
-        ]
-                .iter()
-                .map(|s| s.to_string())
-                .collect(),
-            )
-    }
-
     /// Acquire a playnet certificate (or fail if all have been acquired already)
     /// for the domain `ic{ix}.farm.dfinity.systems`
     /// where `ix` is the index of the acquired playnet.
@@ -136,27 +108,6 @@ impl BoundaryNode {
         self.use_real_certs_and_dns = true;
         self
     }
-
-    pub fn with_vm_resources(mut self, vm_resources: VmResources) -> Self {
-        self.vm_resources = vm_resources;
-        self
-    }
-
-    pub fn with_qemu_cli_args(mut self, qemu_cli_args: Vec<String>) -> Self {
-        self.qemu_cli_args = qemu_cli_args;
-        self
-    }
-
-    pub fn with_vm_allocation(mut self, vm_allocation: VmAllocationStrategy) -> Self {
-        self.vm_allocation = Some(vm_allocation);
-        self
-    }
-
-    pub fn with_required_host_features(mut self, required_host_features: Vec<HostFeature>) -> Self {
-        self.required_host_features = required_host_features;
-        self
-    }
-
     pub fn with_nns_urls(mut self, nns_node_urls: Vec<Url>) -> Self {
         self.nns_node_urls = nns_node_urls;
         self
@@ -171,7 +122,6 @@ impl BoundaryNode {
         self.replica_ipv6_rule = replica_ipv6_rule;
         self
     }
-
     pub fn for_ic(self, env: &TestEnv, name: &str) -> Self {
         let replica_ipv6_rule = env
             .topology_snapshot_by_name(name)
@@ -200,69 +150,11 @@ impl BoundaryNode {
             .with_nns_public_key(env.prep_dir(name).unwrap().root_public_key_path())
             .with_nns_urls(nns_urls)
     }
-
-    pub fn with_snp_boot_img(mut self, env: &TestEnv) -> Self {
-        let boundary_node_snp_img_url = env.get_boundary_node_snp_img_url().unwrap();
-        let boundary_node_snp_img_sha256 = env.get_boundary_node_snp_img_sha256().unwrap();
-        let snp_image = DiskImage {
-            image_type: ImageType::IcOsImage,
-            url: boundary_node_snp_img_url,
-            sha256: boundary_node_snp_img_sha256,
-        };
-
-        self.boot_image = Some(snp_image);
-        self
-    }
-
     pub fn start(&self, env: &TestEnv) -> Result<()> {
         let logger = env.logger();
         let pot_setup = GroupSetup::read_attribute(env);
         let farm_url = env.get_farm_url()?;
         let farm = Farm::new(farm_url, logger.clone());
-        let boundary_node_img_url = env.get_boundary_node_img_url()?;
-        let boundary_node_img_sha256 = env.get_boundary_node_img_sha256()?;
-
-        let create_vm_req = CreateVmRequest::new(
-            self.name.clone(),
-            if self.is_sev {
-                VmType::Sev
-            } else {
-                VmType::Production
-            },
-            self.vm_resources.vcpus.unwrap_or_else(|| {
-                pot_setup
-                    .default_vm_resources
-                    .and_then(|vm_resources| vm_resources.vcpus)
-                    .unwrap_or(DEFAULT_VCPUS_PER_VM)
-            }),
-            self.vm_resources.memory_kibibytes.unwrap_or_else(|| {
-                pot_setup
-                    .default_vm_resources
-                    .and_then(|vm_resources| vm_resources.memory_kibibytes)
-                    .unwrap_or(DEFAULT_MEMORY_KIB_PER_VM)
-            }),
-            self.qemu_cli_args.clone(),
-            match &self.boot_image {
-                None => {
-                    let url = boundary_node_img_url;
-                    let sha256 = boundary_node_img_sha256;
-                    ImageLocation::IcOsImageViaUrl { url, sha256 }
-                }
-                Some(disk_image) => From::from(disk_image.clone()),
-            },
-            self.vm_resources
-                .boot_image_minimal_size_gibibytes
-                .or_else(|| {
-                    pot_setup
-                        .default_vm_resources
-                        .and_then(|vm_resources| vm_resources.boot_image_minimal_size_gibibytes)
-                }),
-            self.has_ipv4,
-            self.vm_allocation.clone(),
-            self.required_host_features.clone(),
-        );
-        let vm_create_resp = farm.create_vm(&pot_setup.farm_group_name, create_vm_req)?;
-
         // Acquire a playnet certificate and provision an AAAA record pointing
         // ic{ix}.farm.dfinity.systems to the IPv6 address of the BN.
         let opt_existing_playnet = if self.use_real_certs_and_dns {
@@ -280,7 +172,7 @@ impl BoundaryNode {
 
             existing_playnet
                 .aaaa_records
-                .push(vm_create_resp.ipv6.to_string());
+                .push(self.allocated_vm.ipv6.to_string());
             let bn_fqdn = existing_playnet.playnet_cert.playnet.clone();
             env.create_playnet_dns_records(vec![
                 DnsRecord {
@@ -315,7 +207,7 @@ impl BoundaryNode {
 
         env.write_boundary_node_vm(
             &self.name,
-            &vm_create_resp,
+            &self.allocated_vm,
             opt_existing_playnet_cert
                 .as_ref()
                 .map(|existing_playnet_cert| existing_playnet_cert.playnet.clone()),
@@ -371,10 +263,138 @@ impl BoundaryNode {
     }
 }
 
+impl BoundaryNode {
+    pub fn new(name: String) -> Self {
+        Self {
+            name,
+            is_sev: false,
+            vm_resources: Default::default(),
+            qemu_cli_args: Default::default(),
+            vm_allocation: Default::default(),
+            required_host_features: Default::default(),
+            has_ipv4: true,
+            boot_image: Default::default(),
+        }
+    }
+
+    pub fn enable_sev(mut self) -> Self {
+        self.is_sev = true;
+        self.with_required_host_features(vec![HostFeature::AmdSevSnp])
+            .with_qemu_cli_args(
+                vec![
+            "-cpu",
+            "EPYC-v4",
+            "-machine",
+            "memory-encryption=sev0,vmport=off",
+            "-object",
+            "sev-snp-guest,id=sev0,cbitpos=51,reduced-phys-bits=1",
+            "-append",
+            "root=/dev/vda5 console=ttyS0 dfinity.system=A dfinity.boot_state=stable swiotlb=2621"
+        ]
+                .iter()
+                .map(|s| s.to_string())
+                .collect(),
+            )
+    }
+
+    pub fn with_vm_resources(mut self, vm_resources: VmResources) -> Self {
+        self.vm_resources = vm_resources;
+        self
+    }
+
+    pub fn with_qemu_cli_args(mut self, qemu_cli_args: Vec<String>) -> Self {
+        self.qemu_cli_args = qemu_cli_args;
+        self
+    }
+
+    pub fn with_vm_allocation(mut self, vm_allocation: VmAllocationStrategy) -> Self {
+        self.vm_allocation = Some(vm_allocation);
+        self
+    }
+
+    pub fn with_required_host_features(mut self, required_host_features: Vec<HostFeature>) -> Self {
+        self.required_host_features = required_host_features;
+        self
+    }
+
+    pub fn allocate_vm(self, env: &TestEnv) -> Result<BoundaryNodeWithVm> {
+        let logger = env.logger();
+        let pot_setup = GroupSetup::read_attribute(env);
+        let farm_url = env.get_farm_url()?;
+        let farm = Farm::new(farm_url, logger.clone());
+        let boundary_node_img_url = env.get_boundary_node_img_url()?;
+        let boundary_node_img_sha256 = env.get_boundary_node_img_sha256()?;
+
+        let create_vm_req = CreateVmRequest::new(
+            self.name.clone(),
+            if self.is_sev {
+                VmType::Sev
+            } else {
+                VmType::Production
+            },
+            self.vm_resources.vcpus.unwrap_or_else(|| {
+                pot_setup
+                    .default_vm_resources
+                    .and_then(|vm_resources| vm_resources.vcpus)
+                    .unwrap_or(DEFAULT_VCPUS_PER_VM)
+            }),
+            self.vm_resources.memory_kibibytes.unwrap_or_else(|| {
+                pot_setup
+                    .default_vm_resources
+                    .and_then(|vm_resources| vm_resources.memory_kibibytes)
+                    .unwrap_or(DEFAULT_MEMORY_KIB_PER_VM)
+            }),
+            self.qemu_cli_args.clone(),
+            match &self.boot_image {
+                None => {
+                    let url = boundary_node_img_url;
+                    let sha256 = boundary_node_img_sha256;
+                    ImageLocation::IcOsImageViaUrl { url, sha256 }
+                }
+                Some(disk_image) => From::from(disk_image.clone()),
+            },
+            self.vm_resources
+                .boot_image_minimal_size_gibibytes
+                .or_else(|| {
+                    pot_setup
+                        .default_vm_resources
+                        .and_then(|vm_resources| vm_resources.boot_image_minimal_size_gibibytes)
+                }),
+            self.has_ipv4,
+            self.vm_allocation.clone(),
+            self.required_host_features.clone(),
+        );
+        let allocated_vm = farm.create_vm(&pot_setup.farm_group_name, create_vm_req)?;
+
+        Ok(BoundaryNodeWithVm {
+            name: self.name,
+            allocated_vm,
+            nns_node_urls: Default::default(),
+            nns_public_key: Default::default(),
+            replica_ipv6_rule: Default::default(),
+            use_real_certs_and_dns: false,
+            has_ipv4: self.has_ipv4,
+        })
+    }
+
+    pub fn with_snp_boot_img(mut self, env: &TestEnv) -> Self {
+        let boundary_node_snp_img_url = env.get_boundary_node_snp_img_url().unwrap();
+        let boundary_node_snp_img_sha256 = env.get_boundary_node_snp_img_sha256().unwrap();
+        let snp_image = DiskImage {
+            image_type: ImageType::IcOsImage,
+            url: boundary_node_snp_img_url,
+            sha256: boundary_node_snp_img_sha256,
+        };
+
+        self.boot_image = Some(snp_image);
+        self
+    }
+}
+
 /// side-effectful function that creates the config disk images
 /// in the boundary node directories.
 fn create_and_upload_config_disk_image(
-    boundary_node: &BoundaryNode,
+    boundary_node: &BoundaryNodeWithVm,
     env: &TestEnv,
     group_name: &str,
     farm: &Farm,

@@ -122,7 +122,10 @@ pub fn config(
     let bn = if use_boundary_node {
         info!(&logger, "Installing a boundary node ...");
 
-        let bn = BoundaryNode::new(String::from(BOUNDARY_NODE_NAME)).for_ic(&env, "");
+        let bn = BoundaryNode::new(String::from(BOUNDARY_NODE_NAME))
+            .allocate_vm(&env)
+            .unwrap()
+            .for_ic(&env, "");
 
         bn.start(&env).expect("Failed to setup a universal VM.");
         info!(&logger, "Installation of the boundary nodes succeeded.");
