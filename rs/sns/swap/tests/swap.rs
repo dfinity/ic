@@ -14,6 +14,7 @@ use crate::common::{
     successful_set_mode_call_result, successful_settle_community_fund_participation_result, sweep,
     try_error_refund_err, try_error_refund_ok, verify_participant_balances, TestInvestor,
 };
+use candid::Principal;
 use error_refund_icp_response::err::Type::Precondition;
 use futures::{channel::mpsc, future::FutureExt, StreamExt};
 use ic_base_types::{CanisterId, PrincipalId};
@@ -52,7 +53,7 @@ use ic_sns_swap::{
 };
 use icp_ledger::DEFAULT_TRANSFER_FEE;
 use icrc_ledger_types::Account;
-use maplit::{btreemap, hashset};
+use maplit::btreemap;
 use std::{
     collections::HashSet,
     pin::Pin,
@@ -1050,6 +1051,15 @@ fn test_scenario_happy() {
         assert_eq!(invalid, 0);
         assert_eq!(success, 18);
         assert_eq!(global_failures, 0);
+
+        for recipe in &swap.neuron_recipes {
+            let sns = recipe.sns.as_ref().unwrap();
+            assert_eq!(
+                sns.amount_transferred_e8s.unwrap(),
+                sns.amount_e8s - sns_transaction_fee_e8s
+            );
+            assert_eq!(sns.transfer_fee_paid_e8s.unwrap(), sns_transaction_fee_e8s);
+        }
     }
 }
 
@@ -1075,15 +1085,16 @@ async fn test_finalize_swap_ok() {
         }),
         sale_delay_seconds: None,
     };
+    let buyers = btreemap! {
+        i2principal_id_string(1001) => BuyerState::new(50 * E8),
+        i2principal_id_string(1002) => BuyerState::new(30 * E8),
+        i2principal_id_string(1003) => BuyerState::new(20 * E8),
+    };
     let mut swap = Swap {
         lifecycle: Open as i32,
         init: Some(init.clone()),
         params: Some(params.clone()),
-        buyers: btreemap! {
-            i2principal_id_string(1001) => BuyerState::new(50 * E8),
-            i2principal_id_string(1002) => BuyerState::new(30 * E8),
-            i2principal_id_string(1003) => BuyerState::new(20 * E8),
-        },
+        buyers: buyers.clone(),
         cf_participants: vec![],
         neuron_recipes: vec![],
         open_sns_token_swap_proposal_id: Some(OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID),
@@ -1188,11 +1199,7 @@ async fn test_finalize_swap_ok() {
         .collect::<HashSet<_>>();
     assert_eq!(
         neuron_controllers,
-        hashset![
-            i2principal_id_string(1001),
-            i2principal_id_string(1002),
-            i2principal_id_string(1003),
-        ],
+        buyers.keys().cloned().collect::<HashSet<String>>()
     );
     // Assert that SNS governance was set to normal mode.
     {
@@ -1241,13 +1248,14 @@ async fn test_finalize_swap_ok() {
         owner: SNS_GOVERNANCE_CANISTER_ID.into(),
         subaccount: None,
     };
-    let expected_icp_ledger_calls = vec![(1003, 20), (1001, 50), (1002, 30)]
-        .into_iter()
-        .map(|(buyer, icp_amount)| {
+    let expected_icp_ledger_calls = buyers
+        .iter()
+        .map(|(buyer, buyer_state)| {
+            let icp_amount_e8s = buyer_state.icp.as_ref().unwrap().amount_e8s;
             let from_subaccount = Some(principal_to_subaccount(
-                &PrincipalId::from_str(&i2principal_id_string(buyer)).unwrap(),
+                &PrincipalId::from_str(buyer).unwrap(),
             ));
-            let amount_e8s = icp_amount * E8 - DEFAULT_TRANSFER_FEE.get_e8s();
+            let amount_e8s = icp_amount_e8s - DEFAULT_TRANSFER_FEE.get_e8s();
             LedgerCall::TransferFundsICRC1 {
                 amount_e8s,
                 fee_e8s: DEFAULT_TRANSFER_FEE.get_e8s(),
@@ -1313,6 +1321,34 @@ async fn test_finalize_swap_ok() {
             )]
         );
     }
+
+    assert_eq!(buyers.len(), 3);
+    buyers
+        .iter()
+        .for_each(|(principal_string, buyer_state_initial)| {
+            // Assert that buyer states are correctly updated
+            let req = GetBuyerStateRequest {
+                principal_id: Some(PrincipalId::from_str(principal_string).unwrap()),
+            };
+            let response = swap.get_buyer_state(&req);
+
+            let initial_transferable_amount = buyer_state_initial.icp.as_ref().unwrap();
+            let expected_amount_e8s = initial_transferable_amount.amount_e8s;
+            let fee_e8s = DEFAULT_TRANSFER_FEE.get_e8s();
+            let expected_amount_committed_e8s = expected_amount_e8s - fee_e8s;
+            assert_eq!(
+                response.buyer_state.unwrap(),
+                BuyerState {
+                    icp: Some(TransferableAmount {
+                        amount_e8s: expected_amount_e8s,
+                        transfer_start_timestamp_seconds: END_TIMESTAMP_SECONDS + 5,
+                        transfer_success_timestamp_seconds: END_TIMESTAMP_SECONDS + 10,
+                        amount_transferred_e8s: Some(expected_amount_committed_e8s),
+                        transfer_fee_paid_e8s: Some(fee_e8s)
+                    })
+                }
+            );
+        });
 }
 
 #[tokio::test]
@@ -1486,7 +1522,7 @@ async fn test_finalize_swap_abort() {
 #[test]
 fn test_error_refund_single_user() {
     let user1 = *TEST_USER1_PRINCIPAL;
-    //Test with single account
+    // Test with single account
     {
         let params = Params {
             max_icp_e8s: 10 * E8,
@@ -1508,7 +1544,7 @@ fn test_error_refund_single_user() {
         // Swap should be open
         assert_eq!(swap.lifecycle(), Open);
 
-        //Buy a tokens
+        // Buy tokens
         let amount = 6 * E8;
         buy_token(
             &mut swap,
@@ -1521,10 +1557,10 @@ fn test_error_refund_single_user() {
         .now_or_never()
         .unwrap();
 
-        //Verify that SNS Sale canister registered the tokens
+        // Verify that SNS Sale canister registered the tokens
         assert_eq!(amount, get_sns_balance(&user1, &mut swap));
 
-        //User has not commited yet --> No neuron has been created
+        // User has not commited yet --> No neuron has been created
         assert!(std::panic::catch_unwind(|| verify_participant_balances(
             &swap,
             &user1,
@@ -1533,7 +1569,7 @@ fn test_error_refund_single_user() {
         ))
         .is_err());
 
-        //User has not commited yet --> Cannot get a refund
+        // User has not commited yet --> Cannot get a refund
         let refund_err = try_error_refund_err(
             &mut swap,
             &user1,
@@ -1547,14 +1583,15 @@ fn test_error_refund_single_user() {
             .contains("ABORTED or COMMITTED"));
         assert_eq!(refund_err.error_type.unwrap(), Precondition as i32);
 
-        //The minimum number of participants is 1, so when calling commit with the appropriate end time a commit should be possible
+        // The minimum number of participants is 1, so when calling commit with the appropriate end
+        // time a commit should be possible
         assert!(swap.can_commit(swap.params.clone().unwrap().swap_due_timestamp_seconds));
         assert!(swap.try_commit_or_abort(swap.params.clone().unwrap().swap_due_timestamp_seconds));
 
-        //The life cycle should have changed to COMMITTED
+        // The life cycle should have changed to COMMITTED
         assert_eq!(swap.lifecycle(), Committed);
 
-        //Now that the lifecycle has changed to commited, the neurons for the buyers should have been generated
+        // Now that the lifecycle has changed to commited, the neurons for the buyers should have been generated
         verify_participant_balances(
             &swap,
             &user1,
@@ -1562,8 +1599,10 @@ fn test_error_refund_single_user() {
             swap.params.clone().unwrap().sns_token_e8s,
         );
 
-        //The lifecycle is committed, however the funds have not been sweeped i.e. sent to the governance canister if commited or back to buyer if aborted
-        //lifecycle is currently commited so funds should go governance canister after speep. Unitl then the buyer cannot refund
+        // The lifecycle is committed, however the funds have not been swept i.e. sent to the
+        // governance canister if committed or back to buyer if aborted. The lifecycle is currently
+        // committed so funds should go to the governance canister after sweep. Until then the
+        // buyer cannot refund.
         let refund_err = try_error_refund_err(
             &mut swap,
             &user1,
@@ -1576,7 +1615,9 @@ fn test_error_refund_single_user() {
         assert!(refund_err.description.unwrap().contains("escrow"));
         assert_eq!(refund_err.error_type.unwrap(), Precondition as i32);
 
-        //If user1 sends another amount by accident without actually buying any tokens (and thus not refreshing the balance of bought tokens) he should not be able to get a refund for that amount until the sns was sweeped.
+        // If user1 sends another amount by accident without actually buying any tokens (and thus
+        // not refreshing the balance of bought tokens) he should not be able to get a refund for
+        // that amount until the sns has been swept.
         let refund_err = try_error_refund_err(
             &mut swap,
             &user1,
@@ -1592,7 +1633,7 @@ fn test_error_refund_single_user() {
         assert!(refund_err.description.unwrap().contains("escrow"));
         assert_eq!(refund_err.error_type.unwrap(), Precondition as i32);
 
-        //Now try to sweep
+        // Now try to sweep
         let SweepResult {
             success,
             failure,
@@ -1631,8 +1672,10 @@ fn test_error_refund_single_user() {
         .unwrap();
         assert_eq!(refund_ok.block_height.unwrap(), 100);
 
-        //User cant get a refund after sweep. Balance of the subaccount of the buyer is now 0 since it was transferred to the sns governance canister
-        //Transfer Response is set to be an Error since the account of the user1 in the sns sales canister is 0 and cannot pay for fees
+        // User can't get a refund after sweep. Balance of the subaccount of the buyer is now 0
+        // since it was transferred to the sns governance canister. Transfer Response is set to be
+        // an Error since the account of the user1 in the sns sales canister is 0 and cannot pay for
+        // fees.
         let refund_err = try_error_refund_err(
             &mut swap,
             &user1,
@@ -2258,8 +2301,7 @@ async fn test_sweep_icp_handles_ledger_transfers() {
             i2principal_id_string(1000) => BuyerState {
                 icp: Some(TransferableAmount {
                     amount_e8s: DEFAULT_TRANSFER_FEE.get_e8s() - 1,
-                    transfer_start_timestamp_seconds: 0,
-                    transfer_success_timestamp_seconds: 0,
+                    ..Default::default()
                 })
             },
             // This Buyer has already had its transfer succeed, and should result in
@@ -2269,6 +2311,7 @@ async fn test_sweep_icp_handles_ledger_transfers() {
                     amount_e8s: 10 * E8,
                     transfer_start_timestamp_seconds: END_TIMESTAMP_SECONDS,
                     transfer_success_timestamp_seconds: END_TIMESTAMP_SECONDS + 1,
+                    ..Default::default()
                 })
             },
             // This buyer's state is valid, and a mock call to the ledger will allow it
@@ -2276,8 +2319,7 @@ async fn test_sweep_icp_handles_ledger_transfers() {
             i2principal_id_string(1002) => BuyerState {
                 icp: Some(TransferableAmount {
                     amount_e8s: 10 * E8,
-                    transfer_start_timestamp_seconds: 0,
-                    transfer_success_timestamp_seconds: 0,
+                    ..Default::default()
                 })
             },
             // This buyer's state is valid, but a mock call to the ledger will fail the transfer,
@@ -2285,8 +2327,7 @@ async fn test_sweep_icp_handles_ledger_transfers() {
             i2principal_id_string(1003) => BuyerState {
                 icp: Some(TransferableAmount {
                     amount_e8s: 10 * E8,
-                    transfer_start_timestamp_seconds: 0,
-                    transfer_success_timestamp_seconds: 0,
+                    ..Default::default()
                 })
             },
         },
@@ -2338,8 +2379,7 @@ async fn test_finalization_halts_when_sweep_icp_fails() {
             i2principal_id_string(1000) => BuyerState {
                 icp: Some(TransferableAmount {
                     amount_e8s: DEFAULT_TRANSFER_FEE.get_e8s() - 1,
-                    transfer_start_timestamp_seconds: 0,
-                    transfer_success_timestamp_seconds: 0,
+                    ..Default::default()
                 })
             },
             // This buyer's state is valid, but a mock call to the ledger will fail the transfer,
@@ -2347,8 +2387,7 @@ async fn test_finalization_halts_when_sweep_icp_fails() {
             i2principal_id_string(1003) => BuyerState {
                 icp: Some(TransferableAmount {
                     amount_e8s: 10 * E8,
-                    transfer_start_timestamp_seconds: 0,
-                    transfer_success_timestamp_seconds: 0,
+                    ..Default::default()
                 })
             },
         },
@@ -2547,6 +2586,7 @@ async fn test_sweep_sns_handles_ledger_transfers() {
                     amount_e8s: 10 * E8,
                     transfer_start_timestamp_seconds: END_TIMESTAMP_SECONDS,
                     transfer_success_timestamp_seconds: END_TIMESTAMP_SECONDS + 1,
+                    ..Default::default()
                 }),
                 ..Default::default()
             },
@@ -2557,8 +2597,7 @@ async fn test_sweep_sns_handles_ledger_transfers() {
                 investor: direct_investor.clone(),
                 sns: Some(TransferableAmount {
                     amount_e8s: 10 * E8,
-                    transfer_start_timestamp_seconds: 0,
-                    transfer_success_timestamp_seconds: 0,
+                    ..Default::default()
                 }),
                 ..Default::default()
             },
@@ -2569,8 +2608,7 @@ async fn test_sweep_sns_handles_ledger_transfers() {
                 investor: direct_investor.clone(),
                 sns: Some(TransferableAmount {
                     amount_e8s: 10 * E8,
-                    transfer_start_timestamp_seconds: 0,
-                    transfer_success_timestamp_seconds: 0,
+                    ..Default::default()
                 }),
                 ..Default::default()
             },
@@ -2630,8 +2668,7 @@ async fn test_finalization_halts_when_sweep_sns_fails() {
                 investor: direct_investor.clone(),
                 sns: Some(TransferableAmount {
                     amount_e8s: 10 * E8,
-                    transfer_start_timestamp_seconds: 0,
-                    transfer_success_timestamp_seconds: 0,
+                    ..Default::default()
                 }),
                 ..Default::default()
             },
@@ -3199,6 +3236,7 @@ fn test_derived_state() {
             amount_e8s: 100_000_000,
             transfer_start_timestamp_seconds: 10,
             transfer_success_timestamp_seconds: 12,
+            ..Default::default()
         }),
     };
     let buyers = btreemap! {
@@ -4439,4 +4477,77 @@ fn test_get_state_bounds_data_sources() {
     assert!(!swap.cf_participants.is_empty());
     assert!(!swap.neuron_recipes.is_empty());
     assert!(!swap.buyers.is_empty());
+}
+
+/// Assert that an aborted sale that successfully refunds buyers also clears these buyers' buyer
+/// state (i.e. sets their committed amounts to 0).
+#[tokio::test]
+async fn test_finalize_swap_abort_sets_amount_transferred_and_fees_correctly() {
+    let buyer = PrincipalId::new_user_test_id(1);
+    let e8s = 50 * E8;
+    // Create a swap in state aborted
+    let mut swap = Swap {
+        lifecycle: Aborted as i32,
+        init: Some(init()),
+        params: Some(params()),
+        buyers: btreemap! {
+            Principal::from(buyer).to_text() => BuyerState::new(e8s), // Valid
+        },
+        ..Default::default()
+    };
+
+    // Verify that the buyer state was updated as expected
+    let req = GetBuyerStateRequest {
+        principal_id: Some(buyer),
+    };
+    let response = swap.get_buyer_state(&req);
+    assert_eq!(e8s, response.buyer_state.unwrap().amount_icp_e8s());
+
+    let mut sns_root_client = SpySnsRootClient::new(vec![
+        // Add a mock reply of a successful call to SNS Root
+        SnsRootClientReply::successful_set_dapp_controllers(),
+    ]);
+
+    let icp_ledger: SpyLedger = SpyLedger::new(
+        // ICP Ledger should be called once and should return success
+        vec![LedgerReply::TransferFunds(Ok(1000))],
+    );
+
+    let response = swap
+        .finalize(
+            now_fn,
+            &mut sns_root_client,
+            &mut SpySnsGovernanceClient::default(),
+            &icp_ledger,
+            &SpyLedger::default(), // SNS Ledger
+            &mut SpyNnsGovernanceClient::with_successful_replies(),
+        )
+        .await;
+
+    // Successful sweep_icp
+    assert_eq!(
+        response.sweep_icp_result,
+        Some(SweepResult {
+            success: 1, // Single valid buyer
+            skipped: 0,
+            failure: 0,
+            invalid: 0,
+            global_failures: 0,
+        })
+    );
+
+    // After a user is refunded, their buyer state should be cleared
+    let response = swap.get_buyer_state(&req);
+    assert_eq!(
+        response.buyer_state.unwrap(),
+        BuyerState {
+            icp: Some(TransferableAmount {
+                amount_e8s: 50 * E8,
+                transfer_start_timestamp_seconds: END_TIMESTAMP_SECONDS + 5,
+                transfer_success_timestamp_seconds: END_TIMESTAMP_SECONDS + 10,
+                amount_transferred_e8s: Some(50 * E8 - DEFAULT_TRANSFER_FEE.get_e8s()),
+                transfer_fee_paid_e8s: Some(DEFAULT_TRANSFER_FEE.get_e8s())
+            })
+        }
+    );
 }

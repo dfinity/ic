@@ -382,9 +382,21 @@ message Params {
 }
 
 message TransferableAmount {
+  // The amount in e8s equivalent that the participant committed to the Swap, which is held by the swap canister until
+  // the swap is committed or aborted.
   uint64 amount_e8s = 1;
+
+  // When the transfer to refund or commit funds starts.
   uint64 transfer_start_timestamp_seconds = 2;
+
+  // When the transfer to refund or commit succeeds.
   uint64 transfer_success_timestamp_seconds = 3;
+
+  // The amount that was successfully transferred when swap commits or aborts (minus fees).
+  optional uint64 amount_transferred_e8s = 4;
+
+  // The fee charged when transferring from the swap canister;
+  optional uint64 transfer_fee_paid_e8s = 5;
 }
 
 message BuyerState {
