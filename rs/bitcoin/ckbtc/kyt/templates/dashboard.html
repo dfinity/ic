@@ -34,13 +34,18 @@
           <h3>Events</h3>
           <table>
               <thead>
-                  <th>Timestamp</th><th>Kind</th><th>External Id</th><th>Success?</th>
+                  <th>Timestamp</th>
+                  <th>Kind</th>
+                  <th>Caller</th>
+                  <th>External Id</th>
+                  <th>Success?</th>
               </thead>
               <tbody>
                   {% for e in events %}
                   <tr>
                       <td>{{ e.timestamp_string() }}</td>
                       <td>{{ e.kind_str() }}</td>
+                      <td>{% if e.caller().is_some() %}<code>{{ e.caller().unwrap() }}</code>{% else %}N/A{% endif %}</td>
                       <td>{% if e.external_id().is_some() %}<code>{{ e.external_id().unwrap() }}</code>{% else %}N/A{% endif %}</td>
                       <td>{% if e.ok() %}&#10004{% else %}&#10008{% endif %}</td>
                   </tr>

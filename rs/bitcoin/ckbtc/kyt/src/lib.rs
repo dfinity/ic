@@ -39,7 +39,8 @@ pub enum LifecycleArg {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, CandidType, Serialize, Deserialize)]
-pub struct Outpoint {
+pub struct DepositRequest {
+    pub caller: Principal,
     pub txid: [u8; 32],
     pub vout: u32,
 }
@@ -74,6 +75,8 @@ pub struct FetchAlertsResponse {
 
 #[derive(Debug, Clone, PartialEq, Eq, CandidType, Deserialize)]
 pub struct WithdrawalAttempt {
+    /// The caller who initiated the request.
+    pub caller: Principal,
     /// A unique withdrawal identifier.
     pub id: String,
     /// The BTC amount in Satoshi.

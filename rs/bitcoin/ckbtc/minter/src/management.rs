@@ -9,7 +9,7 @@ use ic_btc_types::{
 };
 use ic_canister_log::log;
 use ic_cdk::api::call::RejectionCode;
-use ic_ckbtc_kyt::{Error as KytError, FetchAlertsResponse};
+use ic_ckbtc_kyt::{DepositRequest, Error as KytError, FetchAlertsResponse};
 use ic_ic00_types::{EcdsaCurve, EcdsaKeyId, SignWithECDSAArgs, SignWithECDSAReply};
 use serde::de::DeserializeOwned;
 use std::fmt;
@@ -249,14 +249,24 @@ pub async fn sign_with_ecdsa(
 /// Requests alerts for the given UTXO.
 pub async fn fetch_utxo_alerts(
     kyt_principal: Principal,
+    caller: Principal,
     utxo: &Utxo,
 ) -> Result<Result<FetchAlertsResponse, KytError>, CallError> {
-    let (res,): (Result<FetchAlertsResponse, KytError>,) =
-        ic_cdk::api::call::call(kyt_principal, "fetch_utxo_alerts", (utxo.outpoint.clone(),))
-            .await
-            .map_err(|(code, message)| CallError {
-                method: "fetch_utxo_alerts".to_string(),
-                reason: Reason::from_reject(code, message),
-            })?;
+    let txid = TryInto::<[u8; 32]>::try_into(utxo.outpoint.txid.as_ref())
+        .unwrap_or_else(|_| panic!("BUG: UTXO ID {:?} is not 32 bytes long", utxo.outpoint.txid));
+    let (res,): (Result<FetchAlertsResponse, KytError>,) = ic_cdk::api::call::call(
+        kyt_principal,
+        "fetch_utxo_alerts",
+        (DepositRequest {
+            caller,
+            txid,
+            vout: utxo.outpoint.vout,
+        },),
+    )
+    .await
+    .map_err(|(code, message)| CallError {
+        method: "fetch_utxo_alerts".to_string(),
+        reason: Reason::from_reject(code, message),
+    })?;
     Ok(res)
 }

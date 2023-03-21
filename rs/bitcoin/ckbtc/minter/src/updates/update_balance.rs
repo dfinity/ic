@@ -185,7 +185,7 @@ pub async fn update_balance(
             utxo_statuses.push(UtxoStatus::ValueTooSmall(utxo));
             continue;
         }
-        let (uuid, status) = kyt_check_utxo(&utxo).await?;
+        let (uuid, status) = kyt_check_utxo(caller_account.owner, &utxo).await?;
         mutate_state(|s| {
             crate::state::audit::mark_utxo_checked(s, &utxo, uuid.clone(), status);
         });
@@ -226,7 +226,10 @@ pub async fn update_balance(
     Ok(utxo_statuses)
 }
 
-async fn kyt_check_utxo(utxo: &Utxo) -> Result<(String, UtxoCheckStatus), UpdateBalanceError> {
+async fn kyt_check_utxo(
+    caller: Principal,
+    utxo: &Utxo,
+) -> Result<(String, UtxoCheckStatus), UpdateBalanceError> {
     let kyt_principal = read_state(|s| {
         s.kyt_principal
             .expect("BUG: upgrade procedure must ensure that the KYT principal is set")
@@ -238,7 +241,7 @@ async fn kyt_check_utxo(utxo: &Utxo) -> Result<(String, UtxoCheckStatus), Update
         return Ok((uuid, status));
     }
 
-    match fetch_utxo_alerts(kyt_principal, utxo)
+    match fetch_utxo_alerts(kyt_principal, caller, utxo)
         .await
         .map_err(|call_err| {
             UpdateBalanceError::TemporarilyUnavailable(format!(
