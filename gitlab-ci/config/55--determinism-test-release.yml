@@ -12,6 +12,14 @@
     - |
       set -eExuo pipefail
 
+      # TODO IDX-2757
+      if [ "$CI_JOB_NAME" == "build-determinism-guest-update-img-release" ]; then
+          OLD_PATH="$(git rev-parse HEAD)/build-ic-release/guest-os/update-img"
+          if curl -sfSI --retry 2 "https://download.dfinity.systems/ic/$OLD_PATH/SHA256SUMS"; then
+              PATH0="build-ic-release/guest-os/update-img"
+          fi
+      fi
+
       # what we've build in build-ic-release
       P0=$PATH0
       # what is live and available under $NNS_RELEASE_VERSION
