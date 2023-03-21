@@ -1,10 +1,7 @@
 use clap::Parser;
 use ic_crypto::threshold_sig_public_key_to_der;
-use ic_error_types::UserError;
-use ic_ic00_types::{CanisterIdRecord, CanisterInstallMode, InstallCodeArgs};
 use ic_state_machine_tests::StateMachine;
 use ic_test_state_machine_client::{CanisterCall, RawCanisterId, Request, Request::*};
-use ic_types::ingress::WasmResult;
 use ic_types::{CanisterId, PrincipalId};
 use serde::Serialize;
 use std::io::{stdin, stdout, Read, Write};
@@ -79,18 +76,13 @@ fn main() {
                 send_response((), &opts);
             }
             CanisterUpdateCall(call) => {
-                let call = ParsedCanisterCall::from(call);
-                if call.canister_id == CanisterId::ic_00() {
-                    management_call(&env, &call, &opts);
-                } else {
-                    let result = env.execute_ingress_as(
-                        call.sender,
-                        call.canister_id,
-                        call.method,
-                        call.arg,
-                    );
-                    send_response(result, &opts);
+                let mut call = ParsedCanisterCall::from(call);
+                if call.canister_id == CanisterId::ic_00() && call.method == "create_canister" {
+                    call.method = "provisional_create_canister_with_cycles".to_string();
                 }
+                let result =
+                    env.execute_ingress_as(call.sender, call.canister_id, call.method, call.arg);
+                send_response(result, &opts);
             }
             CanisterQueryCall(call) => {
                 let call = ParsedCanisterCall::from(call);
@@ -139,55 +131,6 @@ fn debug_print_data(opts: &Opts, prefix: &str, data: &[u8]) {
             hex::encode(data)
         };
         debug_print!(opts, "{}: {}, length: {:?}", prefix, truncated, data.len());
-    }
-}
-
-fn management_call(env: &StateMachine, call: &ParsedCanisterCall, opts: &Opts) {
-    match call.method.as_str() {
-        "create_canister" => {
-            let settings = candid::decode_one(&call.arg)
-                .expect("failed to decode candid argument for 'create_canister'");
-            let id = env.create_canister(settings);
-            let result = candid::encode_one(CanisterIdRecord::from(id)).unwrap();
-            send_response(Ok::<WasmResult, UserError>(WasmResult::Reply(result)), opts);
-        }
-        "install_code" => {
-            let settings: InstallCodeArgs = candid::decode_one(&call.arg)
-                .expect("failed to decode candid argument for 'create_canister'");
-            let canister_id =
-                CanisterId::try_from(settings.canister_id).expect("invalid canister id");
-            let result = match settings.mode {
-                CanisterInstallMode::Install => {
-                    env.install_existing_canister(canister_id, settings.wasm_module, settings.arg)
-                }
-                CanisterInstallMode::Reinstall => {
-                    env.reinstall_canister(canister_id, settings.wasm_module, settings.arg)
-                }
-                CanisterInstallMode::Upgrade => {
-                    env.upgrade_canister(canister_id, settings.wasm_module, settings.arg)
-                }
-            };
-            let success = candid::encode_one(()).unwrap();
-            send_response(result.map(|_| WasmResult::Reply(success)), opts);
-        }
-        "start_canister" => {
-            let canister_id: CanisterIdRecord = candid::decode_one(&call.arg)
-                .expect("failed to decode candid argument for 'start_canister'");
-            send_response(env.start_canister(canister_id.get_canister_id()), opts);
-        }
-        "stop_canister" => {
-            let canister_id: CanisterIdRecord = candid::decode_one(&call.arg)
-                .expect("failed to decode candid argument for 'stop_canister'");
-            send_response(env.stop_canister(canister_id.get_canister_id()), opts);
-        }
-        "delete_canister" => {
-            let canister_id: CanisterIdRecord = candid::decode_one(&call.arg)
-                .expect("failed to decode candid argument for 'delete_canister'");
-            send_response(env.delete_canister(canister_id.get_canister_id()), opts);
-        }
-        other => {
-            panic!("unsupported management canister call: {}", other)
-        }
     }
 }
 
