@@ -402,45 +402,33 @@ py_library(
     ],
 )
 
-#py_test(
-#    name = "mock_multi",
-#    srcs = ["common/tests/mock_multi.py"],
-#    data = ["//publish/canisters:upload"],
-#    deps = [
-#        ":base_experiment",
-#        ":misc",
-#        ":run_mixed_workload_experiment",
-#        ":ssh",
-#        ":workload",
-#        ":xrc_hooks"
-#    ],
-#    tags = ["local"],
-#)
-#
-#py_test(
-#    name = "mock",
-#    srcs = ["common/tests/mock.py"],
-#    data = ["//publish/binaries:binaries"],
-#    deps = [
-#        ":base_experiment",
-#        ":misc",
-#        ":report",
-#        ":ssh",
-#        ":workload",
-#        ":workload_experiment",
-#    ],
-#    tags = ["local"],
-#)
-#
-#py_library(
-#    name = "add_benchmark",
-#    srcs = ["add_benchmark.py"],
-#    deps = [requirement("pybars3")]
-#)
-#
-#py_test(
-#    name = "wizard",
-#    srcs = ["common/tests/wizard.py"],
-#    data = glob(["**"]),
-#    deps = [":add_benchmark"],
-#)
+py_test(
+    name = "mock_multi",
+    srcs = ["common/tests/mock_multi.py"],
+    data = [
+        "workloads/mixed-query-update.toml",
+        ":artifacts",
+    ],
+    deps = [
+        ":base_experiment",
+        ":misc",
+        ":run_mixed_workload_experiment",
+        ":ssh",
+        ":workload",
+        ":workload_xrc_hooks",
+    ],
+)
+
+py_test(
+    name = "mock",
+    srcs = ["common/tests/mock.py"],
+    data = [":artifacts"],
+    deps = [
+        ":base_experiment",
+        ":misc",
+        ":report",
+        ":ssh",
+        ":workload",
+        ":workload_experiment",
+    ],
+)

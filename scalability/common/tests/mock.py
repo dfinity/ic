@@ -1,18 +1,26 @@
 """A mock experiment."""
-import os
 import sys
 import unittest
+from pathlib import Path
 from unittest import TestCase
 from unittest.mock import MagicMock
 from unittest.mock import Mock
 
-sys.path.append(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "../"))
+import gflags
+
+p = Path(__file__).parents[2]
+sys.path.append(f"{p}/")
+
 import common.misc as misc  # noqa
 from common.base_experiment import BaseExperiment  # noqa
 from common.workload_experiment import WorkloadExperiment  # noqa
 from common import report  # noqa
 from common.workload import Workload  # noqa
 from common import ssh  # noqa
+
+FLAGS = gflags.FLAGS
+FLAGS.__delattr__("artifacts_path")
+gflags.DEFINE_string("artifacts_path", "scalability/artifacts/release", "Path to the artifacts directory")
 
 
 class ExperimentMock(WorkloadExperiment):

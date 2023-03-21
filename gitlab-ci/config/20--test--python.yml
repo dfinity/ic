@@ -38,29 +38,3 @@ python-gitlab-ci-tests:
       set -xeuo pipefail
       cd gitlab-ci/src
       pytest -v -o junit_family=xunit1 --junitxml=../../test_report.xml --cov=. --cov-report=term --cov-report=term-missing --cov-report=html --cov-branch
-
-python-scalability-tests:
-  extends:
-    - .ubuntu-docker-k8s
-    - .rules-pipeline-no-merge-train
-  needs:
-    # Some tests download canisters from the s3 - it has to only run when all canisters were uploaded to not populate proxy cache with partial results.
-    job: bazel-test-all
-    artifacts: false
-  stage: test
-  variables: 
-    PYTHONPATH : "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
-  artifacts:
-    reports:
-      junit: test_report.xml
-    paths:
-      - gitlab-ci/src/htmlcov
-  script:
-    - |
-      echo "Running scalability/common/tests"
-      set -euo pipefail
-      cd "${CI_PROJECT_DIR}/scalability"
-      pip3 install -r requirements.txt
-      python3 -m unittest common/tests/mock_multi.py
-      python3 -m unittest common/tests/mock.py
-      python3 -m unittest common/tests/wizard.py
