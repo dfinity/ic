@@ -184,7 +184,7 @@ struct CheckpointRefData {
 /// │   │       ├── canister.pbuf
 /// │   │       ├── queues.pbuf
 /// │   │       ├── software.wasm
-/// │   │       ├── stable_memory.(pbuf|bin)
+/// │   │       ├── stable_memory.bin
 /// │   │       └── vmemory_0.bin
 /// │   ├── subnet_queues.pbuf
 /// │   └── system_metadata.pbuf
@@ -196,7 +196,7 @@ struct CheckpointRefData {
 /// │      │       ├── canister.pbuf
 /// │      │       ├── queues.pbuf
 /// │      │       ├── software.wasm
-/// │      │       ├── stable_memory.(pbuf|bin)
+/// │      │       ├── stable_memory.bin
 /// │      │       └── vmemory_0.bin
 /// │      ├── subnet_queues.pbuf
 /// │      └── system_metadata.pbuf
