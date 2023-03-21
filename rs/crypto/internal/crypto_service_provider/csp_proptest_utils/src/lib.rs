@@ -14,6 +14,9 @@ pub use common::arb_algorithm_id;
 pub use common::arb_key_id;
 pub use csp_basic_signature_error::arb_csp_basic_signature_error;
 pub use csp_basic_signature_keygen_error::arb_csp_basic_signature_keygen_error;
+pub use csp_multi_signature_error::arb_csp_multi_signature_error;
+pub use csp_multi_signature_keygen_error::arb_csp_multi_signature_keygen_error;
+pub use csp_pop::arb_csp_pop;
 pub use csp_public_key::arb_csp_public_key;
 pub use csp_signature::arb_csp_signature;
 
@@ -267,6 +270,23 @@ mod csp_public_key {
     }
 }
 
+mod csp_pop {
+    use super::*;
+    use crate::common::arb_48_bytes;
+    use ic_crypto_internal_csp::types::CspPop;
+    use ic_crypto_internal_multi_sig_bls12381::types as multi_types;
+
+    prop_compose! {
+        pub(super)  fn arb_multi_bls12_381()(bytes in arb_48_bytes()) -> CspPop {
+           CspPop::MultiBls12_381(multi_types::PopBytes(bytes))
+        }
+    }
+
+    pub fn arb_csp_pop() -> BoxedStrategy<CspPop> {
+        arb_multi_bls12_381().boxed()
+    }
+}
+
 mod csp_basic_signature_keygen_error {
     use super::*;
     use crate::common::arb_key_id;
@@ -292,6 +312,84 @@ mod csp_basic_signature_keygen_error {
 
     pub fn arb_csp_basic_signature_keygen_error() -> BoxedStrategy<CspBasicSignatureKeygenError> {
         prop_oneof![
+            arb_internal_error(),
+            arb_duplicated_key_id_error(),
+            arb_transient_internal_error()
+        ]
+        .boxed()
+    }
+}
+
+mod csp_multi_signature_error {
+    use super::*;
+    use ic_crypto_internal_csp::vault::api::CspMultiSignatureError;
+
+    prop_compose! {
+        pub(super)fn arb_secret_key_not_found_error()(algorithm in arb_algorithm_id(), key_id in arb_key_id()) -> CspMultiSignatureError {
+            CspMultiSignatureError::SecretKeyNotFound { algorithm, key_id }
+        }
+    }
+
+    prop_compose! {
+       pub(super) fn arb_unsupported_algorithm_error()(algorithm in arb_algorithm_id()) -> CspMultiSignatureError {
+            CspMultiSignatureError::UnsupportedAlgorithm { algorithm }
+        }
+    }
+
+    prop_compose! {
+       pub(super) fn arb_wrong_secret_key_type_error()(algorithm in arb_algorithm_id(), secret_key_variant in ".*") -> CspMultiSignatureError {
+            CspMultiSignatureError::WrongSecretKeyType { algorithm, secret_key_variant }
+        }
+    }
+
+    prop_compose! {
+       pub(super) fn arb_internal_error()(internal_error in ".*") -> CspMultiSignatureError {
+            CspMultiSignatureError::InternalError { internal_error }
+        }
+    }
+
+    pub fn arb_csp_multi_signature_error() -> BoxedStrategy<CspMultiSignatureError> {
+        prop_oneof![
+            arb_secret_key_not_found_error(),
+            arb_unsupported_algorithm_error(),
+            arb_wrong_secret_key_type_error(),
+            arb_internal_error(),
+        ]
+        .boxed()
+    }
+}
+
+mod csp_multi_signature_keygen_error {
+    use super::*;
+    use ic_crypto_internal_csp::vault::api::CspMultiSignatureKeygenError;
+
+    prop_compose! {
+        pub(super) fn arb_malformed_public_key_error()(algorithm in arb_algorithm_id(), key_bytes in proptest::option::of(vec(any::<u8>(), 0..100)), internal_error in ".*") -> CspMultiSignatureKeygenError {
+            CspMultiSignatureKeygenError::MalformedPublicKey { algorithm, key_bytes, internal_error }
+        }
+    }
+
+    prop_compose! {
+       pub(super) fn arb_internal_error()(internal_error in ".*") -> CspMultiSignatureKeygenError {
+            CspMultiSignatureKeygenError::InternalError { internal_error }
+        }
+    }
+
+    prop_compose! {
+        pub(super) fn arb_duplicated_key_id_error()(key_id in arb_key_id()) -> CspMultiSignatureKeygenError {
+            CspMultiSignatureKeygenError::DuplicateKeyId {key_id}
+        }
+    }
+
+    prop_compose! {
+        pub(super) fn arb_transient_internal_error()(internal_error in ".*") -> CspMultiSignatureKeygenError {
+            CspMultiSignatureKeygenError::TransientInternalError { internal_error }
+        }
+    }
+
+    pub fn arb_csp_multi_signature_keygen_error() -> BoxedStrategy<CspMultiSignatureKeygenError> {
+        prop_oneof![
+            arb_malformed_public_key_error(),
             arb_internal_error(),
             arb_duplicated_key_id_error(),
             arb_transient_internal_error()

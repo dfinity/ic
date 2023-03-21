@@ -1,21 +1,46 @@
 //! Tests of Multi-Signature operations in the CSP vault.
-use mockall::Sequence;
-
+#![allow(clippy::unwrap_used)]
+use crate::api::CspSigner;
 use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
 use crate::public_key_store::PublicKeySetOnceError;
 use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
-use crate::vault::api::CspMultiSignatureKeygenError;
+use crate::types::CspPublicKey;
+use crate::vault::api::BasicSignatureCspVault;
 use crate::vault::api::MultiSignatureCspVault;
+use crate::vault::api::PublicKeyStoreCspVault;
+use crate::vault::api::SecretKeyStoreCspVault;
+use crate::vault::api::{CspMultiSignatureError, CspMultiSignatureKeygenError};
+use crate::vault::local_csp_vault::multi_sig::committee_signing_pk_to_proto;
 use crate::vault::local_csp_vault::multi_sig::SecretKeyStoreError;
 use crate::vault::local_csp_vault::multi_sig::SecretKeyStorePersistenceError;
-use crate::vault::test_utils;
+use crate::Csp;
+use crate::KeyId;
 use crate::LocalCspVault;
 use assert_matches::assert_matches;
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+use ic_types::crypto::AlgorithmId;
+use mockall::Sequence;
+use rand::Rng;
+use strum::IntoEnumIterator;
 
 #[test]
 fn should_generate_committee_signing_key_pair_and_store_keys() {
-    test_utils::multi_sig::should_generate_committee_signing_key_pair_and_store_keys(
-        LocalCspVault::builder().build_into_arc(),
+    let csp_vault = LocalCspVault::builder().build();
+    let (pk, pop) = csp_vault
+        .gen_committee_signing_key_pair()
+        .expect("Failure generating key pair with pop");
+
+    assert_matches!(pk, CspPublicKey::MultiBls12_381(_));
+    assert!(csp_vault
+        .sks_contains(&KeyId::try_from(&pk).unwrap())
+        .is_ok());
+    assert_eq!(
+        csp_vault
+            .current_node_public_keys()
+            .expect("missing public keys")
+            .committee_signing_public_key
+            .expect("missing node signing key"),
+        committee_signing_pk_to_proto((pk, pop))
     );
 }
 
@@ -35,7 +60,7 @@ fn should_store_committee_signing_secret_key_before_public_key() {
     let vault = LocalCspVault::builder()
         .with_node_secret_key_store(sks)
         .with_public_key_store(pks)
-        .build_into_arc();
+        .build();
 
     let _ = vault.gen_committee_signing_key_pair();
 }
@@ -48,9 +73,13 @@ fn should_fail_with_internal_error_if_committee_signing_key_already_set() {
         .returning(|_key| Err(PublicKeySetOnceError::AlreadySet));
     let vault = LocalCspVault::builder()
         .with_public_key_store(pks_returning_already_set_error)
-        .build_into_arc();
-    test_utils::multi_sig::should_fail_with_internal_error_if_committee_signing_key_already_set(
-        vault,
+        .build();
+
+    let result = vault.gen_committee_signing_key_pair();
+
+    assert_matches!(result,
+        Err(CspMultiSignatureKeygenError::InternalError { internal_error })
+        if internal_error.contains("committee signing public key already set")
     );
 }
 
@@ -106,8 +135,15 @@ fn should_fail_with_internal_error_if_node_signing_secret_key_persistence_fails_
 
 #[test]
 fn should_fail_with_internal_error_if_committee_signing_key_generated_more_than_once() {
-    let vault = LocalCspVault::builder().build_into_arc();
-    test_utils::multi_sig::should_fail_with_internal_error_if_committee_signing_key_generated_more_than_once(vault);
+    let vault = LocalCspVault::builder().build();
+    assert!(vault.gen_committee_signing_key_pair().is_ok());
+
+    let result = vault.gen_committee_signing_key_pair();
+
+    assert_matches!(result,
+        Err(CspMultiSignatureKeygenError::InternalError { internal_error })
+        if internal_error.contains("committee signing public key already set")
+    );
 }
 
 #[test]
@@ -119,36 +155,99 @@ fn should_fail_with_transient_internal_error_if_committee_signing_key_persistenc
         .return_once(|_key| Err(PublicKeySetOnceError::Io(io_error)));
     let vault = LocalCspVault::builder()
         .with_public_key_store(pks_returning_io_error)
-        .build_into_arc();
-    test_utils::multi_sig::should_fail_with_transient_internal_error_if_committee_signing_key_persistence_fails(
-        vault,
+        .build();
+    let result = vault.gen_committee_signing_key_pair();
+
+    assert_matches!(result,
+        Err(CspMultiSignatureKeygenError::TransientInternalError { internal_error })
+        if internal_error.contains("IO error")
     );
 }
 
 #[test]
 fn should_generate_verifiable_pop() {
-    test_utils::multi_sig::should_generate_verifiable_pop(
-        LocalCspVault::builder().build_into_arc(),
-    );
+    let csp_vault = LocalCspVault::builder().build();
+    let (public_key, pop) = csp_vault
+        .gen_committee_signing_key_pair()
+        .expect("Failed to generate key pair with PoP");
+    let verifier = Csp::builder().build();
+
+    assert!(verifier
+        .verify_pop(&pop, AlgorithmId::MultiBls12_381, public_key)
+        .is_ok());
 }
 
 #[test]
 fn should_multi_sign_and_verify_with_generated_key() {
-    test_utils::multi_sig::should_multi_sign_and_verify_with_generated_key(
-        LocalCspVault::builder().build_into_arc(),
-    );
+    let mut rng = reproducible_rng();
+    let csp_vault = LocalCspVault::builder().with_rng(rng.clone()).build();
+    let (csp_pub_key, csp_pop) = csp_vault
+        .gen_committee_signing_key_pair()
+        .expect("failed to generate keys");
+    let key_id = KeyId::try_from(&csp_pub_key).unwrap();
+
+    let msg_len: usize = rng.gen_range(0..1024);
+    let msg: Vec<u8> = (0..msg_len).map(|_| rng.gen::<u8>()).collect();
+
+    let verifier = Csp::builder()
+        .with_vault(LocalCspVault::builder().with_rng(rng.clone()).build())
+        .build();
+    let sig = csp_vault
+        .multi_sign(AlgorithmId::MultiBls12_381, &msg, key_id)
+        .expect("failed to generate signature");
+
+    assert!(verifier
+        .verify(&sig, &msg, AlgorithmId::MultiBls12_381, csp_pub_key.clone())
+        .is_ok());
+
+    assert!(verifier
+        .verify_pop(&csp_pop, AlgorithmId::MultiBls12_381, csp_pub_key)
+        .is_ok());
 }
 
 #[test]
 fn should_fail_to_multi_sign_with_unsupported_algorithm_id() {
-    test_utils::multi_sig::should_not_multi_sign_with_unsupported_algorithm_id(
-        LocalCspVault::builder().build_into_arc(),
-    );
+    let csp_vault = LocalCspVault::builder().build();
+    let (csp_pub_key, _csp_pop) = csp_vault
+        .gen_committee_signing_key_pair()
+        .expect("failed to generate keys");
+    let key_id = KeyId::try_from(&csp_pub_key).unwrap();
+
+    let msg = [31; 41];
+
+    for algorithm_id in AlgorithmId::iter() {
+        if algorithm_id != AlgorithmId::MultiBls12_381 {
+            assert_eq!(
+                csp_vault
+                    .multi_sign(algorithm_id, &msg, key_id)
+                    .expect_err("Unexpected success."),
+                CspMultiSignatureError::UnsupportedAlgorithm {
+                    algorithm: algorithm_id,
+                }
+            );
+        }
+    }
 }
 
 #[test]
 fn should_fail_to_multi_sign_if_secret_key_in_store_has_wrong_type() {
-    test_utils::multi_sig::should_not_multi_sign_if_secret_key_in_store_has_wrong_type(
-        LocalCspVault::builder().build_into_arc(),
+    let csp_vault = LocalCspVault::builder().build();
+    let wrong_csp_pub_key = csp_vault
+        .gen_node_signing_key_pair()
+        .expect("failed to generate keys");
+
+    let msg = [31; 41];
+    let result = csp_vault.multi_sign(
+        AlgorithmId::MultiBls12_381,
+        &msg,
+        KeyId::try_from(&wrong_csp_pub_key).unwrap(),
+    );
+
+    assert_eq!(
+        result.expect_err("Unexpected success."),
+        CspMultiSignatureError::WrongSecretKeyType {
+            algorithm: AlgorithmId::MultiBls12_381,
+            secret_key_variant: "Ed25519".to_string()
+        }
     );
 }
