@@ -21,3 +21,9 @@ pub struct BlockRange {
 }
 
 pub type QueryBlockArchiveFn = QueryArchiveFn<GetBlocksArgs, BlockRange>;
+
+#[derive(Debug, CandidType, Deserialize)]
+pub struct BlockCertificate {
+    pub block_index: u64,
+    pub certificate: Option<serde_bytes::ByteBuf>,
+}
