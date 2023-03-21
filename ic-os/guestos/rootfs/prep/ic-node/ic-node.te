@@ -87,7 +87,6 @@ ic_manageboot_read_upgrade_image(ic_data_t)
 
 # Manage relevant files
 ic_rw_data(ic_orchestrator_t)
-ic_rw_crypto_store(ic_orchestrator_t)
 
 # Manage files that back canister memory
 ic_rw_canister_mem(ic_replica_t)
@@ -153,7 +152,6 @@ allow ic_replica_t ic_orchestrator_t : fd use;
 
 # Manage relevant files
 ic_rw_data(ic_replica_t)
-ic_rw_crypto_store(ic_replica_t)
 
 # wants to read openssl config and public certs
 miscfiles_read_generic_certs(ic_replica_t)

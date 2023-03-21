@@ -11,7 +11,7 @@ Requires=ic-crypto-csp.socket
 StartLimitIntervalSec=0
 
 [Service]
-User=ic-replica
+User=ic-csp-vault
 Environment=RUST_BACKTRACE=1
 # When starting ic-crypto-csp, ideally --replica-config-file would directly point to
 # /run/ic-node/config/ic.json5, but this file may be not available yet as it is generated
