@@ -27,7 +27,7 @@ use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_metrics::{fetch_int_counter_vec, fetch_int_gauge, Labels};
 use ic_test_utilities_tmpdir::tmpdir;
 use ic_types::{
-    artifact::{Priority, StateSyncArtifactId, StateSyncAttribute},
+    artifact::{Priority, StateSyncArtifactId},
     chunkable::ChunkId,
     crypto::CryptoHash,
     ingress::{IngressState, IngressStatus, WasmResult},
@@ -1726,7 +1726,7 @@ fn state_sync_priority_fn_respects_states_to_fetch() {
                         height: height(*h),
                         hash: hash(*h as u8),
                     },
-                    &StateSyncAttribute
+                    &()
                 )
             );
         }
@@ -1742,7 +1742,7 @@ fn state_sync_priority_fn_respects_states_to_fetch() {
                     height: height(3),
                     hash: hash(3),
                 },
-                &StateSyncAttribute
+                &()
             )
         );
         // Wrong hash
@@ -1753,7 +1753,7 @@ fn state_sync_priority_fn_respects_states_to_fetch() {
                     height: height(3),
                     hash: hash(4),
                 },
-                &StateSyncAttribute
+                &()
             )
         );
 
@@ -1767,7 +1767,7 @@ fn state_sync_priority_fn_respects_states_to_fetch() {
                     height: height(3),
                     hash: hash(3),
                 },
-                &StateSyncAttribute
+                &()
             )
         );
         assert_eq!(
@@ -1777,7 +1777,7 @@ fn state_sync_priority_fn_respects_states_to_fetch() {
                     height: height(4),
                     hash: hash(4),
                 },
-                &StateSyncAttribute
+                &()
             )
         );
     });

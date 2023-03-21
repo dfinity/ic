@@ -70,7 +70,7 @@ pub enum ArtifactAttribute {
     EcdsaMessage(EcdsaMessageAttribute),
     CanisterHttpMessage(CanisterHttpResponseAttribute),
     FileTreeSync(FileTreeSyncAttribute),
-    StateSync(StateSyncAttribute),
+    StateSync(()),
 }
 
 /// Artifact identifier type.
@@ -554,10 +554,6 @@ impl std::hash::Hash for StateSyncMessage {
         self.manifest.hash(state);
     }
 }
-
-/// State sync atrribute.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct StateSyncAttribute;
 
 /// State sync filter is by height.
 #[derive(Default, Clone, Debug, PartialEq, Eq, Hash)]

@@ -15,7 +15,7 @@ use ic_logger::{info, warn, ReplicaLogger};
 use ic_types::{
     artifact::{
         Advert, AdvertSendRequest, ArtifactDestination, ArtifactKind, ArtifactTag, Priority,
-        StateSyncArtifactId, StateSyncAttribute, StateSyncFilter, StateSyncMessage,
+        StateSyncArtifactId, StateSyncFilter, StateSyncMessage,
     },
     chunkable::Chunkable,
     crypto::crypto_hash,
@@ -71,7 +71,7 @@ impl ArtifactKind for StateSyncArtifact {
     const TAG: ArtifactTag = ArtifactTag::StateSyncArtifact;
     type Id = StateSyncArtifactId;
     type Message = StateSyncMessage;
-    type Attribute = StateSyncAttribute;
+    type Attribute = ();
     type Filter = StateSyncFilter;
 
     fn message_to_advert(msg: &StateSyncMessage) -> Advert<StateSyncArtifact> {
@@ -86,7 +86,7 @@ impl ArtifactKind for StateSyncArtifact {
                 height: msg.height,
                 hash: msg.root_hash.clone(),
             },
-            attribute: StateSyncAttribute,
+            attribute: (),
             size: size as usize,
             integrity_hash: crypto_hash(msg).get(),
         }
@@ -200,8 +200,7 @@ impl ArtifactClient<StateSyncArtifact> for StateSync {
 
     fn get_priority_function(
         &self,
-    ) -> Box<dyn Fn(&StateSyncArtifactId, &StateSyncAttribute) -> Priority + Send + Sync + 'static>
-    {
+    ) -> Box<dyn Fn(&StateSyncArtifactId, &()) -> Priority + Send + Sync + 'static> {
         use ic_interfaces_state_manager::StateReader;
 
         let latest_height = self.state_manager.latest_state_height();
