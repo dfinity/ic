@@ -1021,25 +1021,38 @@ impl StateMachine {
     }
 
     /// Removes a canister state from this state machine and migrates it to another state machine.
+    /// This is done by writing a checkpoint and then removing the canister state from `self`;
+    /// then importing the canister state into `other_env` from the checkpoint.
     pub fn move_canister_state_to(
         &self,
         other_env: &StateMachine,
         canister_id: CanisterId,
     ) -> Result<(), String> {
+        // Enable checkpoints and make a tick to write a checkpoint.
+        let cp_enabled = self.checkpoints_enabled.get();
+        self.set_checkpoints_enabled(true);
+        self.tick();
+        self.set_checkpoints_enabled(cp_enabled);
+
         let (height, mut state) = self.state_manager.take_tip();
-        if let Some(canister_state) = state.take_canister_state(&canister_id) {
+        if state.take_canister_state(&canister_id).is_some() {
             self.state_manager.commit_and_certify(
                 state,
                 height.increment(),
                 CertificationScope::Full,
             );
-            let (height, mut state) = other_env.state_manager.take_tip();
-            state.put_canister_state(canister_state);
-            other_env.state_manager.commit_and_certify(
-                state,
-                height.increment(),
-                CertificationScope::Full,
+
+            other_env.import_canister_state(
+                self.state_manager
+                    .state_layout()
+                    .checkpoint(height)
+                    .unwrap()
+                    .canister(&canister_id)
+                    .unwrap()
+                    .raw_path(),
+                canister_id,
             );
+
             return Ok(());
         }
         Err(format!(
