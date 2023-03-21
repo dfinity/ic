@@ -203,6 +203,26 @@ If these items validate, it will output the text of the proposal as well as gene
 It will ask for your HSM pin, and it will read out the command it is going to execute before executing it, requiring
 confirmation by typing "yes" when asked if you want to proceed.
 
+## Troubleshooting `nns_dev-testnet.sh`
+
+### Could not fetch catch up package
+
+If you seem to be stuck on "6. Recover the NNS subnet to the first
+unassinged node", check out the log mentioned at that step
+(6_nns_recovery_log.txt). You may see many lines similar to the following:
+
+```
+Mar 21 00:11:30.904 INFO Try: 21. Could not fetch CUP: failed to get catch up package: Request failed for http://[2a00:fb01:400:42:5000:f9ff:fe05:faa0]:8080/_/catch_up_package: hyper::Error(Connect, ConnectError("tcp connect error", Os { code: 111, kind: ConnectionRefused, message: "Connection refused" }))
+Mar 21 00:11:30.904 INFO Recovery CUP not yet present, retrying...
+```
+
+If so, try contacting someone on the Consensus team (E.g. Leo Eichhorn
+and Christian Müller) on the #eng-testing Slack channel.
+E.g. [here](https://dfinity.slack.com/archives/C018WHN6R2L/p1679358521278899).
+
+A few failed attempts is not bad. Therefore, if you haven't been waiting
+that long, no need to immediately call for backup. (You might want
+to start drafting a plea for help while you are waiting.)
 
 ## Getting test coverage data with `get_test_coverage.sh`
 
