@@ -17,21 +17,29 @@ use std::convert::TryFrom;
 use std::io::{stdin, stdout, Write};
 use std::net::IpAddr;
 use std::sync::Arc;
+use strum::EnumMessage;
 use url::Url;
 
-/// Application subnets are recovered by:
-///     1. Halting the broken subnet
-///     2. Downloading the most recent state by
-///         a) Choosing a node with max finalization height
-///         b) Optionally deploying read only access keys
-///     3. Updating the config to point to downloaded state
-///     4. Deleting old checkpoints
-///     5. Replaying finalized blocks using `ic-replay`
-///     6. Optionally proposing and upgrading the subnet to a new replica
-///        version     
-///     7. Proposing the recovery CUP
-///     8. Uploading the replayed state to one of the nodes
-///     9. Unhalting the recovered subnet
+const SUMMARY: &str = "The recovery process of an application subnet is only necessary,
+if a subnet stopped finalizing new blocks and cannot recover from
+this failure on its own. If the root cause of the issue was already
+identified and a new replica version with a hotfix is ready to be
+elected, a recovery process can be started.
+
+On a high level, this process consists of the following steps:
+
+1. Halting the broken subnet and deploying read only access keys.
+2. Downloading the most recent state by:
+    a) Downloading and merging certification pools from all available nodes
+    b) Choosing a node with the highest finalization height and downloading its 
+       most recent state,
+3. Replaying finalized blocks using `ic-replay`.
+4. Optionally proposing and upgrading the subnet to a new replica
+   version.
+5. Proposing the recovery CUP.
+6. Uploading the obtained state to one of the nodes.
+7. Unhalting the recovered subnet.";
+
 pub fn app_subnet_recovery(
     logger: Logger,
     args: RecoveryArgs,
@@ -39,6 +47,7 @@ pub fn app_subnet_recovery(
     mut neuron_args: Option<NeuronArgs>,
 ) {
     print_step(&logger, "App Subnet Recovery");
+    info!(logger, "\n{}\n", SUMMARY);
     print_summary(&logger, &args, subnet_recovery_args.subnet_id);
     wait_for_confirmation(&logger);
 
@@ -124,7 +133,7 @@ pub fn nns_recovery_failover_nodes(
 }
 
 fn execute_steps<
-    StepType: Copy + Debug + PartialEq,
+    StepType: Copy + Debug + PartialEq + EnumMessage,
     I: Iterator<Item = StepType>,
     Steps: HasRecoveryState<StepType = StepType>
         + RecoveryIterator<StepType, I>

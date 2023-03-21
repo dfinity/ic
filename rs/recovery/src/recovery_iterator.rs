@@ -8,8 +8,13 @@ use crate::{
     nns_recovery_same_nodes::NNSRecoverySameNodes, steps::Step, RecoveryResult,
 };
 use slog::{info, warn, Logger};
+use strum::EnumMessage;
 
-pub trait RecoveryIterator<StepType: Copy + Debug + PartialEq, I: Iterator<Item = StepType>> {
+pub trait RecoveryIterator<
+    StepType: Copy + Debug + PartialEq + EnumMessage,
+    I: Iterator<Item = StepType>,
+>
+{
     fn get_step_iterator(&mut self) -> &mut Peekable<I>;
     fn get_step_impl(&self, step_type: StepType) -> RecoveryResult<Box<dyn Step>>;
     fn store_next_step(&mut self, step_type: Option<StepType>);
@@ -36,6 +41,10 @@ pub trait RecoveryIterator<StepType: Copy + Debug + PartialEq, I: Iterator<Item 
 
     fn next_step(&mut self) -> Option<(StepType, Box<dyn Step>)> {
         let result = if let Some(current_step) = self.get_step_iterator().next() {
+            super::cli::print_step(self.get_logger(), &format!("{:?}", current_step));
+            if let Some(explanation) = current_step.get_documentation() {
+                info!(self.get_logger(), "\n\n{}\n", format(explanation));
+            }
             if self.interactive() {
                 self.read_step_params(current_step);
             }
@@ -85,11 +94,40 @@ impl Iterator for NNSRecoveryFailoverNodes {
     }
 }
 
+// Creates line breaks so that no line is longer than 80 characters.
+fn format(description: &str) -> String {
+    let iter = description.split(' ');
+    let mut lines = Vec::new();
+    let mut line = String::new();
+    for word in iter {
+        if line.len() + word.len() > 80 {
+            lines.push(line.clone());
+            line.clear();
+        }
+        line += word;
+        line += " ";
+    }
+    lines.push(line);
+    lines.join("\n")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    struct FakeStep {}
+    #[derive(Debug, Copy, Clone, EnumMessage, PartialEq)]
+    enum FakeStep {
+        P0,
+        P1,
+        P2,
+        P3,
+        P4,
+        P5,
+        P6,
+        P7,
+        P8,
+        P9,
+    }
 
     impl Step for FakeStep {
         fn descr(&self) -> String {
@@ -103,17 +141,32 @@ mod tests {
 
     /// Fake RecoveryIterator which iterates from 0 to 9.
     struct FakeRecoveryIterator {
-        step_iterator: Peekable<std::ops::Range<u64>>,
+        step_iterator: Peekable<Box<std::vec::IntoIter<FakeStep>>>,
         logger: Logger,
         read_step_params_called: bool,
         interactive: bool,
-        next_step: Option<u64>,
+        next_step: Option<FakeStep>,
     }
 
     impl FakeRecoveryIterator {
         fn new(interactive: bool) -> Self {
             Self {
-                step_iterator: (0..10).peekable(),
+                step_iterator: Box::new(
+                    vec![
+                        FakeStep::P0,
+                        FakeStep::P1,
+                        FakeStep::P2,
+                        FakeStep::P3,
+                        FakeStep::P4,
+                        FakeStep::P5,
+                        FakeStep::P6,
+                        FakeStep::P7,
+                        FakeStep::P8,
+                        FakeStep::P9,
+                    ]
+                    .into_iter(),
+                )
+                .peekable(),
                 logger: crate::util::make_logger(),
                 read_step_params_called: false,
                 interactive,
@@ -122,12 +175,12 @@ mod tests {
         }
     }
 
-    impl RecoveryIterator<u64, std::ops::Range<u64>> for FakeRecoveryIterator {
-        fn get_step_iterator(&mut self) -> &mut Peekable<std::ops::Range<u64>> {
+    impl RecoveryIterator<FakeStep, Box<std::vec::IntoIter<FakeStep>>> for FakeRecoveryIterator {
+        fn get_step_iterator(&mut self) -> &mut Peekable<Box<std::vec::IntoIter<FakeStep>>> {
             &mut self.step_iterator
         }
 
-        fn store_next_step(&mut self, next_step: Option<u64>) {
+        fn store_next_step(&mut self, next_step: Option<FakeStep>) {
             self.next_step = next_step
         }
 
@@ -139,10 +192,10 @@ mod tests {
             self.interactive
         }
 
-        fn get_step_impl(&self, _step_type: u64) -> RecoveryResult<Box<dyn Step>> {
-            Ok(Box::new(FakeStep {}))
+        fn get_step_impl(&self, _step_type: FakeStep) -> RecoveryResult<Box<dyn Step>> {
+            Ok(Box::new(FakeStep::P1))
         }
-        fn read_step_params(&mut self, _step_type: u64) {
+        fn read_step_params(&mut self, _step_type: FakeStep) {
             self.read_step_params_called = true;
         }
     }
@@ -151,16 +204,19 @@ mod tests {
     fn resume_advances_to_right_step() {
         let mut fake_recovery_iterator = FakeRecoveryIterator::new(/*interactive=*/ true);
 
-        fake_recovery_iterator.resume(5);
+        fake_recovery_iterator.resume(FakeStep::P5);
 
-        assert_eq!(fake_recovery_iterator.step_iterator.next(), Some(5));
+        assert_eq!(
+            fake_recovery_iterator.step_iterator.next(),
+            Some(FakeStep::P5)
+        );
     }
 
     #[test]
     fn resume_doesnt_read_step_params() {
         let mut fake_recovery_iterator = FakeRecoveryIterator::new(/*interactive=*/ true);
 
-        fake_recovery_iterator.resume(5);
+        fake_recovery_iterator.resume(FakeStep::P5);
 
         assert!(!fake_recovery_iterator.read_step_params_called);
     }
@@ -170,10 +226,10 @@ mod tests {
         let mut fake_recovery_iterator = FakeRecoveryIterator::new(/*interactive=*/ true);
 
         fake_recovery_iterator.next_step();
-        assert_eq!(Some(1), fake_recovery_iterator.next_step);
+        assert_eq!(Some(FakeStep::P1), fake_recovery_iterator.next_step);
 
         fake_recovery_iterator.next_step();
-        assert_eq!(Some(2), fake_recovery_iterator.next_step);
+        assert_eq!(Some(FakeStep::P2), fake_recovery_iterator.next_step);
     }
 
     #[test]
