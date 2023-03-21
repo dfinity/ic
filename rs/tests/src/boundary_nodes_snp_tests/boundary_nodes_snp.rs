@@ -59,14 +59,16 @@ pub fn config(env: TestEnv) {
         .expect("Could not install NNS canisters");
 
     let bn = BoundaryNode::new(String::from(BOUNDARY_NODE_SNP_NAME))
-        .for_ic(&env, "")
         .with_vm_resources(VmResources {
             vcpus: None,
             memory_kibibytes: Some(AmountOfMemoryKiB::new(4194304)),
             boot_image_minimal_size_gibibytes: None,
         })
         .enable_sev()
-        .with_snp_boot_img(&env);
+        .with_snp_boot_img(&env)
+        .allocate_vm(&env)
+        .unwrap()
+        .for_ic(&env, "");
     bn.start(&env).expect("failed to setup BoundaryNode VM");
 
     // Await Replicas

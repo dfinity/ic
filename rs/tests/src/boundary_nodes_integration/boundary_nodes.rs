@@ -213,7 +213,10 @@ fn setup(bn_https_config: BoundaryNodeHttpsConfig, env: TestEnv) {
         .install_nns_canisters()
         .expect("Could not install NNS canisters");
 
-    let bn = BoundaryNode::new(String::from(BOUNDARY_NODE_NAME)).for_ic(&env, "");
+    let bn = BoundaryNode::new(String::from(BOUNDARY_NODE_NAME))
+        .allocate_vm(&env)
+        .unwrap()
+        .for_ic(&env, "");
     let bn = match bn_https_config {
         BoundaryNodeHttpsConfig::UseRealCertsAndDns => bn.use_real_certs_and_dns(),
         BoundaryNodeHttpsConfig::AcceptInvalidCertsAndResolveClientSide => bn,

@@ -17,8 +17,9 @@ Success::
 end::catalog[] */
 
 use crate::canister_http::lib::*;
-use crate::driver::boundary_node::{BoundaryNode, BoundaryNodeVm};
+use crate::driver::test_env_api::{HasPublicApiUrl, RetrieveIpv4Addr};
 use crate::driver::{
+    boundary_node::{BoundaryNode, BoundaryNodeVm},
     ic::{InternetComputer, Subnet},
     test_env::TestEnv,
     test_env_api::{retry_async, HasGroupSetup, READY_WAIT_TIMEOUT, RETRY_BACKOFF},
@@ -33,20 +34,8 @@ use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use proxy_canister::{RemoteHttpRequest, RemoteHttpResponse};
 use slog::info;
-use std::io::Write;
-use tempfile::NamedTempFile;
 
 const BN_NAME: &str = "socks-bn";
-
-// A valid NNS public key (mainnet). Could also be any other valid public key, it does not matter for the test.
-// It is only needed because BN configuration requires a correctly formated key.
-const PUB_KEY: &str = "
------BEGIN PUBLIC KEY-----
-MIGCMB0GDSsGAQQBgtx8BQMBAgEGDCsGAQQBgtx8BQMCAQNhAKyelsUDvp1A6h1+
-RpPIq75fEGzjGnSTZWq/aWyftJXmLBv1HIT+TEeCX6Aj3SLPrgLPXPqhvSLQesaJ
-5JKpuGUZkX/RWnYWa1Eklh8gXUtdeGUIJUS+F36Du7OCOHUsIQ==
------END PUBLIC KEY-----
-";
 
 pub fn config(env: TestEnv) {
     let logger = env.logger();
@@ -75,19 +64,13 @@ pub fn config(env: TestEnv) {
 
     info!(&logger, "Started Universal VM!");
 
-    let mut file = NamedTempFile::new().unwrap();
-    writeln!(file, "{}", PUB_KEY).unwrap();
-    BoundaryNode::new(String::from(BN_NAME))
-        //  Panics if not specified. Don't care about these value
-        .with_replica_ipv6_rule("::/0".to_string())
-        .with_nns_urls(vec!["http://doesnotexist.com".parse().unwrap()])
-        .with_nns_public_key(file.path().to_path_buf())
-        .start(&env)
-        .expect("failed to setup BoundaryNode VM");
+    // Create raw BN vm to get ipv6 address with which we configure IC.
+    let bn_vm = BoundaryNode::new(BN_NAME.to_string())
+        .allocate_vm(&env)
+        .unwrap();
+    let bn_ipv6 = bn_vm.ipv6();
 
-    let deployed_boundary_node = env.get_deployed_boundary_node(BN_NAME).unwrap();
-    let bn_ipv6 = deployed_boundary_node.get_snapshot().unwrap().ipv6();
-    info!(&logger, "Started BN!");
+    info!(&logger, "Created raw BN with IP {}!", bn_ipv6);
 
     // Create IC with injected socks proxy.
     InternetComputer::new()
@@ -110,9 +93,33 @@ pub fn config(env: TestEnv) {
         )
         .setup_and_start(&env)
         .expect("failed to setup IC under test");
-    await_nodes_healthy(&env);
 
+    await_nodes_healthy(&env);
     install_nns_canisters(&env);
+
+    // Start BN.
+    bn_vm
+        .for_ic(&env, "")
+        .start(&env)
+        .expect("failed to setup BoundaryNode VM");
+
+    let boundary_node_vm = env
+        .get_deployed_boundary_node(BN_NAME)
+        .unwrap()
+        .get_snapshot()
+        .unwrap();
+
+    info!(
+        &logger,
+        "Boundary node {BN_NAME} has IPv4 {:?} and IPv6 {:?}",
+        boundary_node_vm.block_on_ipv4().unwrap(),
+        boundary_node_vm.ipv6()
+    );
+
+    info!(&logger, "Checking BN health");
+    boundary_node_vm
+        .await_status_is_healthy()
+        .expect("Boundary node did not come up healthy.");
 }
 
 pub fn test(env: TestEnv) {
