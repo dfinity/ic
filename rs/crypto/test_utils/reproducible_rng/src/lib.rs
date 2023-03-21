@@ -12,6 +12,7 @@ pub fn reproducible_rng() -> ReproducibleRng {
 /// return type `impl Rng + CryptoRng` can only be used as function parameter
 /// or as return type
 /// (See [impl trait type](https://doc.rust-lang.org/reference/types/impl-trait.html)).
+#[derive(Clone)]
 pub struct ReproducibleRng {
     rng: ChaCha20Rng,
     seed: [u8; 32],
@@ -33,7 +34,7 @@ impl ReproducibleRng {
     }
 }
 
-impl rand::SeedableRng for ReproducibleRng {
+impl SeedableRng for ReproducibleRng {
     type Seed = [u8; 32];
     #[inline]
     fn from_seed(seed: Self::Seed) -> Self {
