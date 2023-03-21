@@ -12,11 +12,13 @@ use std::iter::Peekable;
 use std::net::IpAddr;
 use std::path::PathBuf;
 use strum::IntoEnumIterator;
-use strum_macros::{EnumIter, EnumString};
+use strum_macros::{EnumIter, EnumMessage, EnumString};
 
 use crate::{Recovery, Step};
 
-#[derive(Debug, Copy, Clone, EnumIter, EnumString, PartialEq, Deserialize, Serialize)]
+#[derive(
+    Debug, Copy, Clone, EnumIter, EnumMessage, EnumString, PartialEq, Deserialize, Serialize,
+)]
 pub enum StepType {
     StopReplica,
     DownloadCertifications,

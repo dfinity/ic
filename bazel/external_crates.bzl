@@ -988,13 +988,13 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^0.15.0",
             ),
             "strum": crate.spec(
-                version = "^0.23.0",
+                version = "^0.24.1",
                 features = [
                     "derive",
                 ],
             ),
             "strum_macros": crate.spec(
-                version = "^0.23.0",
+                version = "^0.24.1",
             ),
             "substring": crate.spec(
                 version = "^1.4.5",

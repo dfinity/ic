@@ -17,7 +17,7 @@ use std::net::IpAddr;
 use std::path::PathBuf;
 use std::process::Command;
 use strum::IntoEnumIterator;
-use strum_macros::{EnumIter, EnumString};
+use strum_macros::{EnumIter, EnumMessage, EnumString};
 use url::Url;
 
 use crate::{Recovery, Step};
@@ -25,7 +25,9 @@ use crate::{Recovery, Step};
 /// Caller id that will be used to mutate the registry canister.
 pub const CANISTER_CALLER_ID: &str = "r7inp-6aaaa-aaaaa-aaabq-cai";
 
-#[derive(Debug, Copy, Clone, EnumIter, EnumString, PartialEq, Deserialize, Serialize)]
+#[derive(
+    Debug, Copy, Clone, EnumIter, EnumString, PartialEq, Deserialize, Serialize, EnumMessage,
+)]
 pub enum StepType {
     StopReplica,
     DownloadCertifications,
