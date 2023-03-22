@@ -217,7 +217,7 @@ symlink_dir(
 
 copy_file(
     name = "githash",
-    src = "//bazel:version.txt",
+    src = "//ic-os/guestos/dev:version.txt",
     out = "release/githash",
 )
 
@@ -273,12 +273,12 @@ sh_test(
     srcs = ["common/tests/e2e-scalability-tests.sh"],
     args = [
         "$(rootpath :e2e-scalability-tests)",
-        "$(rootpath //bazel:version.txt)",
+        "$(rootpath //ic-os/guestos/dev:version.txt)",
     ],
     data = [
         ":e2e-scalability-tests",
-        "//bazel:version.txt",
         "//ic-os/guestos:scripts/build-bootstrap-config-image.sh",
+        "//ic-os/guestos/dev:version.txt",
     ],
     env_inherit = [
         "CI_PIPELINE_ID",

@@ -43,6 +43,7 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
         src = "//bazel:version.txt",
         out = "version.txt",
         allow_symlink = True,
+        visibility = visibility,
     )
 
     if upgrades:

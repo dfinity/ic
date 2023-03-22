@@ -12,3 +12,11 @@ string_flag(
     name = "s3_endpoint",
     build_setting_default = "",
 )
+
+package_group(
+    name = "uploaders",
+    packages = [
+        "//ic-os/...",
+        "//publish/...",
+    ],
+)

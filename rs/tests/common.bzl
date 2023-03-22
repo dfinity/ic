@@ -154,7 +154,6 @@ GUESTOS_RUNTIME_DEPS = [
     "//ic-os/guestos/dev:hash_and_upload_disk-img",
     "//ic-os/guestos/dev:hash_and_upload_update-img",
     "//ic-os/guestos:scripts/build-bootstrap-config-image.sh",
-    "//bazel:version.txt",
 ]
 
 NNS_CANISTER_RUNTIME_DEPS = ["//rs/tests:nns-canisters"]
