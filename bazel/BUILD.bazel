@@ -17,22 +17,25 @@ config_setting(
 string_flag(
     name = "ic_version",
     build_setting_default = "",
-    visibility = ["//visibility:public"],
 )
 
 string_flag(
     name = "ic_version_rc_only",
     build_setting_default = "0000000000000000000000000000000000000000",
-    visibility = ["//visibility:public"],
 )
 
 # Generates version.txt file that contains the value of `--ic_version` flag if set, otherwise <git sha>-<timestamp>.
 # It has to be tagged as `no-cache` as bazel treats version_file as never changing.
+# Visibility of ic_version is limited to package group uploaders and subpackages.
+# Other packages should consume ic_version of artifacts they target.
 ic_version_or_git_sha(
     name = "version.txt",
     ic_version = ":ic_version",
     tags = ["no-cache"],
-    visibility = ["//visibility:public"],
+    visibility = [
+        "__subpackages__",
+        "//gitlab-ci/src/artifacts:uploaders",
+    ],
 )
 
 # Similar to the above target, but use the `ic_version_rc_only` flag. The intention is to set this flag to a dummy value on MR pipelines to preserve caching
