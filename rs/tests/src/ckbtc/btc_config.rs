@@ -66,7 +66,8 @@ docker run  --name=bitcoind-node -d \
                 .with_dkg_interval_length(Height::from(10))
                 .add_nodes(1),
         )
-        .setup_and_start_with_ids(&env)
+        .use_specified_ids_allocation_range()
+        .setup_and_start(&env)
         .expect("failed to setup IC under test");
 
     env.topology_snapshot().subnets().for_each(|subnet| {

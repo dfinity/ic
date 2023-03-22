@@ -42,6 +42,7 @@ pub struct InternetComputer {
     name: String,
     pub bitcoind_addr: Option<SocketAddr>,
     pub socks_proxy: Option<String>,
+    use_specified_ids_allocation_range: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -149,6 +150,11 @@ impl InternetComputer {
         self
     }
 
+    pub fn use_specified_ids_allocation_range(mut self) -> Self {
+        self.use_specified_ids_allocation_range = true;
+        self
+    }
+
     pub fn with_socks_proxy(mut self, socks_proxy: String) -> Self {
         self.socks_proxy = Some(socks_proxy);
         self
@@ -165,7 +171,7 @@ impl InternetComputer {
         let res_request = get_resource_request(self, env, &group_name)?;
         let res_group = allocate_resources(&farm, &res_request)?;
         self.propagate_ip_addrs(&res_group);
-        let init_ic = init_ic(self, env, &logger, false)?;
+        let init_ic = init_ic(self, env, &logger, self.use_specified_ids_allocation_range)?;
 
         // save initial registry snapshot for this pot
         let local_store_path = env
@@ -185,37 +191,6 @@ impl InternetComputer {
             "{}",
             env.topology_snapshot_by_name(&self.name)
         );
-        setup_and_start_vms(&init_ic, self, env, &farm, &group_name)?;
-        Ok(())
-    }
-
-    pub fn setup_and_start_with_ids(&mut self, env: &TestEnv) -> Result<()> {
-        let tempdir = tempfile::tempdir()?;
-        self.create_secret_key_stores(tempdir.path())?;
-        let logger = env.logger();
-        let pot_setup = GroupSetup::read_attribute(env);
-        let farm_base_url = env.get_farm_url()?;
-        let farm = Farm::new(farm_base_url, logger.clone());
-        let group_name: String = pot_setup.farm_group_name;
-        let res_request = get_resource_request(self, env, &group_name)?;
-        let res_group = allocate_resources(&farm, &res_request)?;
-        self.propagate_ip_addrs(&res_group);
-        let init_ic = init_ic(self, env, &logger, true)?;
-
-        // save initial registry snapshot for this group
-        let local_store_path = env
-            .registry_local_store_path(&self.name)
-            .expect("corrupted ic-prep directory structure");
-        let reg_snapshot = ic_regedit::load_registry_local_store(local_store_path)?;
-        let reg_snapshot_serialized =
-            serde_json::to_string_pretty(&reg_snapshot).expect("Could not pretty print value.");
-        IcPrepStateDir::new(init_ic.target_dir.to_str().expect("invalid target dir"));
-        std::fs::write(
-            init_ic.target_dir.join("initial_registry_snapshot.json"),
-            reg_snapshot_serialized,
-        )
-        .unwrap();
-
         setup_and_start_vms(&init_ic, self, env, &farm, &group_name)?;
         Ok(())
     }
