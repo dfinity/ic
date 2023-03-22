@@ -107,12 +107,12 @@ fi
 # additionally, we need to use hosts's cgroups and network
 if [ $# -eq 0 ]; then
     set -x
-    sudo podman run -it --rm --privileged --network=host --cgroupns=host \
+    sudo podman run --pids-limit=-1 -it --rm --privileged --network=host --cgroupns=host \
         "${PODMAN_RUN_ARGS[@]}" -w "$WORKDIR" "$IMAGE" bash --rcfile /etc/bash.bashrc --rcfile /home/ubuntu/.bashrc
     set +x
 else
     set -x
-    sudo podman run -it --rm --privileged --network=host --cgroupns=host \
+    sudo podman run --pids-limit=-1 -it --rm --privileged --network=host --cgroupns=host \
         "${PODMAN_RUN_ARGS[@]}" -w "$WORKDIR" "$IMAGE" "$@"
     set +x
 fi
