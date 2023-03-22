@@ -29,6 +29,7 @@ use crate::pb::v1::{
 };
 use crate::{account_from_proto, account_to_proto};
 use ic_base_types::PrincipalId;
+use ic_canister_profiler::{measure_span, SpanStats};
 use ic_ic00_types::CanisterInstallMode;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::i2d;
@@ -38,6 +39,7 @@ use lazy_static::lazy_static;
 use maplit::hashset;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
+use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::btree_map::{BTreeMap, Entry};
 use std::collections::btree_set::BTreeSet;
@@ -47,6 +49,7 @@ use std::convert::TryInto;
 use std::ops::Bound::{Excluded, Unbounded};
 use std::str::FromStr;
 use std::string::ToString;
+use std::thread::LocalKey;
 use strum::IntoEnumIterator;
 
 use crate::ledger::ICRC1Ledger;
@@ -600,6 +603,10 @@ pub struct Governance {
     // Implementation of the interface pointing to the NNS's ICP ledger canister
     nns_ledger: Box<dyn ICRC1Ledger>,
 
+    // Stores information about the instruction usage of various "spans", which
+    // map roughly to the execution of a single update call.
+    pub profiling_information: &'static LocalKey<RefCell<SpanStats>>,
+
     /// Cached data structure that (for each proposal function_id) maps a followee to
     /// the set of its followers. It is the inverse of the mapping from follower
     /// to followees that is stored in each (follower) neuron.
@@ -665,10 +672,15 @@ impl Governance {
             })
         }
 
+        thread_local! {
+            static PROFILING_INFORMATION: RefCell<SpanStats> = RefCell::default();
+        }
+
         let mut gov = Self {
             proto,
             env,
             ledger,
+            profiling_information: &PROFILING_INFORMATION,
             nns_ledger,
             function_followee_index: BTreeMap::new(),
             principal_to_neuron_ids_index: BTreeMap::new(),
@@ -1336,8 +1348,8 @@ impl Governance {
 
         if merge_maturity.percentage_to_merge > 100 || merge_maturity.percentage_to_merge == 0 {
             return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                "The percentage of maturity to merge must be a value between 1 and 100 (inclusive)."));
+                    ErrorType::PreconditionFailed,
+                    "The percentage of maturity to merge must be a value between 1 and 100 (inclusive)."));
         }
 
         let transaction_fee_e8s = self.transaction_fee_e8s_or_panic();
@@ -1353,13 +1365,13 @@ impl Governance {
 
         if maturity_to_merge <= transaction_fee_e8s {
             return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                format!(
-                    "Tried to merge {} e8s, but can't merge an amount less than the transaction fee of {} e8s",
-                    maturity_to_merge,
-                    transaction_fee_e8s
-                ),
-            ));
+                    ErrorType::PreconditionFailed,
+                    format!(
+                        "Tried to merge {} e8s, but can't merge an amount less than the transaction fee of {} e8s",
+                        maturity_to_merge,
+                        transaction_fee_e8s
+                    ),
+                ));
         }
 
         // Do the transfer, this is a minting transfer, from the governance canister's
@@ -3744,17 +3756,6 @@ impl Governance {
         Ok(())
     }
 
-    /// Calls manage_neuron_internal and unwraps the result in a ManageNeuronResponse.
-    pub async fn manage_neuron(
-        &mut self,
-        mgmt: &ManageNeuron,
-        caller: &PrincipalId,
-    ) -> ManageNeuronResponse {
-        self.manage_neuron_internal(caller, mgmt)
-            .await
-            .unwrap_or_else(ManageNeuronResponse::error)
-    }
-
     /// Returns a governance::Mode, according to self.proto.mode.
     ///
     /// That field is actually an i32, so this has to do some translation.
@@ -3784,6 +3785,17 @@ impl Governance {
         );
 
         governance::Mode::Normal
+    }
+
+    /// Calls manage_neuron_internal and unwraps the result in a ManageNeuronResponse.
+    pub async fn manage_neuron(
+        &mut self,
+        mgmt: &ManageNeuron,
+        caller: &PrincipalId,
+    ) -> ManageNeuronResponse {
+        self.manage_neuron_internal(caller, mgmt)
+            .await
+            .unwrap_or_else(ManageNeuronResponse::error)
     }
 
     /// Parses manage neuron commands coming from a given caller and calls the
@@ -4162,21 +4174,31 @@ impl Governance {
 
     /// Runs periodic tasks that are not directly triggered by user input.
     pub async fn run_periodic_tasks(&mut self) {
-        self.process_proposals();
+        measure_span(self.profiling_information, "process_proposals", || {
+            self.process_proposals()
+        });
 
         if self.should_check_upgrade_status() {
             self.check_upgrade_status().await;
         }
 
+        let should_distribute_rewards = measure_span(
+            self.profiling_information,
+            "should_distribute_rewards",
+            || self.should_distribute_rewards(),
+        );
+
         // Getting the total governance token supply from the ledger is expensive enough
         // that we don't want to do it on every call to `run_periodic_tasks`. So
         // we only fetch it when it's needed, which is when rewards should be
         // distributed
-        if self.should_distribute_rewards() {
+        if should_distribute_rewards {
             match self.ledger.total_supply().await {
                 Ok(supply) => {
                     // Distribute rewards
-                    self.distribute_rewards(supply);
+                    measure_span(self.profiling_information, "distribute_rewards", || {
+                        self.distribute_rewards(supply)
+                    });
                 }
                 Err(e) => log!(
                     ERROR,
@@ -4187,8 +4209,14 @@ impl Governance {
         }
 
         self.maybe_finalize_disburse_maturity().await;
-        self.maybe_move_staked_maturity();
-        self.maybe_gc();
+
+        measure_span(
+            self.profiling_information,
+            "maybe_move_staked_maturity",
+            || self.maybe_move_staked_maturity(),
+        );
+
+        measure_span(self.profiling_information, "maybe_gc", || self.maybe_gc());
     }
 
     /// Returns `true` if rewards should be distributed (which is the case if

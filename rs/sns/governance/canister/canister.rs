@@ -623,6 +623,51 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         "Total number of neurons.",
     )?;
 
+    match w.histogram_vec(
+        "sns_governance_performance_metrics",
+        "Performance data of the SNS governance canister.",
+    ) {
+        Ok(instrumentation_builder) => {
+            let recording_result = governance
+                .profiling_information
+                .with(|r| r.borrow().record_metrics(instrumentation_builder));
+            match recording_result {
+                Ok(_) => {}
+                Err(e) => {
+                    log!(ERROR, "Unable to record instrumentation metrics: {}", e);
+                }
+            }
+        }
+        Err(e) => {
+            log!(
+                ERROR,
+                "Unable to create instrumentation histogram builder: {}",
+                e
+            );
+        }
+    }
+
+    let spans = &[
+        "process_proposals",
+        "should_distribute_rewards",
+        "distribute_rewards",
+        "maybe_move_staked_maturity",
+        "maybe_gc",
+    ];
+
+    for name in spans {
+        if let Some(instructions_consumption) = governance
+            .profiling_information
+            .with(|r| r.borrow().get_span(name).map(|info| info.sum))
+        {
+            w.encode_gauge(
+                &format!("sns_governance_{name}_total_instructions_consumption"),
+                instructions_consumption as f64,
+                &format!("Total instruction consumption of {name}"),
+            )?;
+        }
+    }
+
     Ok(())
 }
 
