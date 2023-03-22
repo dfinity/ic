@@ -10,4 +10,5 @@ pub struct DashboardTemplate {
     pub maintainers: Vec<Principal>,
     pub events: Vec<Event>,
     pub mode: KytMode,
+    pub last_api_key_update_date: String,
 }

@@ -12,7 +12,7 @@ use ic_stable_structures::storable::Storable;
 use ic_stable_structures::{DefaultMemoryImpl, RestrictedMemory as RM, StableCell, StableLog};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::fmt;
 
 mod dashboard;
@@ -77,6 +77,9 @@ struct Config {
     maintainers: Vec<Principal>,
     #[serde(default = "default_kyt_mode")]
     mode: KytMode,
+    /// The IC timestamp of the last API key update.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    last_api_key_update: Option<u64>,
 }
 
 impl Default for Config {
@@ -86,6 +89,7 @@ impl Default for Config {
             minter_id: Principal::anonymous(),
             maintainers: vec![],
             mode: default_kyt_mode(),
+            last_api_key_update: None,
         }
     }
 }
@@ -207,6 +211,9 @@ thread_local! {
     static EVENT_LOG: StableLog<Cbor<Event>, VirtualMemory, VirtualMemory> = MEMORY_MANAGER.with(|mm| {
         StableLog::init(mm.get(EVENT_INDEX_ID), mm.get(EVENT_DATA_ID))
     }).expect("failed to initialize the event log");
+
+    static UTXO_CHECKS_COUNT: Cell<u64> = Cell::default();
+    static ADDRESS_CHECKS_COUNT: Cell<u64> = Cell::default();
 }
 
 fn api_key() -> String {
@@ -274,6 +281,7 @@ fn init(arg: LifecycleArg) {
                 minter_id: arg.minter_id,
                 maintainers: arg.maintainers,
                 mode: arg.mode,
+                last_api_key_update: Some(ic_cdk::api::time()),
             }))
             .expect("failed to initialize the config");
     })
@@ -290,6 +298,7 @@ fn post_upgrade(arg: LifecycleArg) {
         let mut config = cell.borrow().get().clone();
         if let Some(api_key) = arg.api_key {
             config.api_key = api_key;
+            config.last_api_key_update = Some(ic_cdk::api::time());
             record_event(EventKind::ApiKeySet {
                 caller: Some(ic_cdk::caller()),
             });
@@ -316,6 +325,7 @@ fn set_api_key(api_key: String) {
         if cell.borrow().get().api_key != api_key {
             let mut config = cell.borrow().get().clone();
             config.api_key = api_key;
+            config.last_api_key_update = Some(ic_cdk::api::time());
             cell.borrow_mut()
                 .set(config)
                 .expect("failed to encode config");
@@ -346,6 +356,9 @@ async fn fetch_utxo_alerts(request: DepositRequest) -> Result<FetchAlertsRespons
             }],
         ),
     };
+
+    UTXO_CHECKS_COUNT.with(|c| c.set(c.get() + 1));
+
     record_event(EventKind::UtxoCheck {
         txid: request.txid,
         vout: request.vout,
@@ -381,6 +394,9 @@ async fn fetch_withdrawal_alerts(
             }],
         ),
     };
+
+    ADDRESS_CHECKS_COUNT.with(|c| c.set(c.get() + 1));
+
     record_event(EventKind::AddressCheck {
         caller: Some(withdrawal.caller),
         withdrawal_id: withdrawal.id,
@@ -422,12 +438,74 @@ fn cleanup_response(mut args: TransformArgs) -> HttpResponse {
 #[query]
 #[candid_method(query)]
 fn http_request(req: http::HttpRequest) -> http::HttpResponse {
-    if req.path() == "/dashboard" {
-        use askama::Template;
-        let (minter_id, maintainers, mode) = CONFIG_CELL.with(|cell| {
-            let data = cell.borrow().get().clone().0;
-            (data.minter_id, data.maintainers, data.mode)
+    if req.path() == "/metrics" {
+        let mut writer =
+            ic_metrics_encoder::MetricsEncoder::new(vec![], ic_cdk::api::time() as i64 / 1_000_000);
+
+        writer
+            .encode_gauge(
+                "cycle_balance",
+                ic_cdk::api::canister_balance128() as f64,
+                "The canister cycle balance.",
+            )
+            .unwrap();
+
+        writer
+            .encode_gauge(
+                "stable_memory_bytes",
+                ic_cdk::api::stable::stable_size() as f64 * 65536.0,
+                "Size of the stable memory allocated by this canister.",
+            )
+            .unwrap();
+
+        json_rpc::HTTP_CALL_STATS.with(|c| {
+            let mut counter = writer
+                .counter_vec(
+                    "ckbtc_kyt_http_calls_total",
+                    "The number of received KYT requests since the last canister upgrade.",
+                )
+                .unwrap();
+            for (status, count) in c.borrow().iter() {
+                counter = counter
+                    .value(&[("status", status.to_string().as_str())], *count as f64)
+                    .unwrap();
+            }
         });
+
+        writer
+            .encode_gauge(
+                "ckbtc_kyt_last_api_key_update",
+                CONFIG_CELL.with(|c| {
+                    c.borrow().get().last_api_key_update.unwrap_or_default() / 1_000_000_000
+                }) as f64,
+                "The timestamp (in seconds) of the last API key update.",
+            )
+            .unwrap();
+
+        writer
+            .counter_vec(
+                "ckbtc_kyt_requests_total",
+                "The number of KYT requests received since the last canister upgrade.",
+            )
+            .unwrap()
+            .value(
+                &[("type", "utxo_check")],
+                UTXO_CHECKS_COUNT.with(|c| c.get() as f64),
+            )
+            .unwrap()
+            .value(
+                &[("type", "address_check")],
+                ADDRESS_CHECKS_COUNT.with(|c| c.get() as f64),
+            )
+            .unwrap();
+
+        http::HttpResponseBuilder::ok()
+            .header("Content-Type", "text/plain; version=0.0.4")
+            .with_body_and_content_length(writer.into_inner())
+            .build()
+    } else if req.path() == "/dashboard" {
+        use askama::Template;
+        let config = CONFIG_CELL.with(|cell| cell.borrow().get().clone().0);
 
         let events: Vec<Event> = EVENT_LOG.with(|log| {
             const MAX_EVENTS: u64 = 100;
@@ -436,10 +514,13 @@ fn http_request(req: http::HttpRequest) -> http::HttpResponse {
             log.iter().skip(skip_events).map(|Cbor(e)| e).collect()
         });
         let dashboard = dashboard::DashboardTemplate {
-            minter_id,
-            maintainers,
+            minter_id: config.minter_id,
+            maintainers: config.maintainers,
             events,
-            mode,
+            last_api_key_update_date: format_timestamp(
+                config.last_api_key_update.unwrap_or_default(),
+            ),
+            mode: config.mode,
         }
         .render()
         .unwrap();

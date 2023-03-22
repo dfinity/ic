@@ -11,7 +11,9 @@ hex = "0.4.3"
 ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
 ic-cdk = "0.7.0"
 ic-cdk-macros = "0.6.0"
+ic-metrics-encoder = "1.1"
 ic-stable-structures = "0.5.0"
+num-traits = "0.2.14"
 serde = "1.0.136"
 serde_json = "1.0"
 time = { version = "0.3.20", features = ["formatting"] }
