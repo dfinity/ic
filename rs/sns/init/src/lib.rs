@@ -255,6 +255,7 @@ impl SnsInitPayload {
                 cycles_for_archive_creation: Some(10_000_000_000_000),
                 max_transactions_per_response: None,
             },
+            fee_collector_account: None,
         };
 
         Ok(LedgerArgument::Init(payload))

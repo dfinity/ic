@@ -57,6 +57,7 @@ fn install_ledger(env: &StateMachine) -> CanisterId {
             cycles_for_archive_creation: None,
             max_transactions_per_response: None,
         },
+        fee_collector_account: None,
     });
     env.install_canister(ledger_wasm(), Encode!(&args).unwrap(), None)
         .unwrap()

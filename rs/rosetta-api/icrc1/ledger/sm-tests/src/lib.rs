@@ -1,6 +1,8 @@
-use candid::{CandidType, Decode, Encode, Nat, Principal};
+use candid::{CandidType, Decode, Deserialize, Encode, Nat, Principal};
 use ic_base_types::PrincipalId;
-use ic_icrc1::{endpoints::StandardRecord, hash::Hash, Block, Operation, Transaction};
+use ic_icrc1::{
+    endpoints::StandardRecord, hash::Hash, Block, CompactAccount, Operation, Transaction,
+};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::block::{BlockIndex, BlockType, HashOf};
 use ic_state_machine_tests::{CanisterId, ErrorCode, StateMachine};
@@ -14,6 +16,7 @@ use icrc_ledger_types::{Account, ArchiveInfo, GetTransactionsRequest};
 use num_traits::ToPrimitive;
 use proptest::prelude::*;
 use proptest::test_runner::{Config as TestRunnerConfig, TestCaseResult, TestRunner};
+use serde::de::{value::SeqDeserializer, IntoDeserializer};
 use std::{
     collections::{BTreeMap, HashMap},
     time::{Duration, SystemTime},
@@ -44,6 +47,7 @@ pub const INT_META_VALUE: i128 = i128::MIN;
 #[derive(CandidType, Clone, Debug, PartialEq, Eq)]
 pub struct InitArgs {
     pub minting_account: Account,
+    pub fee_collector_account: Option<Account>,
     pub initial_balances: Vec<(Account, u64)>,
     pub transfer_fee: u64,
     pub token_name: String,
@@ -53,11 +57,18 @@ pub struct InitArgs {
 }
 
 #[derive(CandidType, Clone, Debug, PartialEq, Eq)]
+pub enum ChangeFeeCollector {
+    Unset,
+    SetTo(Account),
+}
+
+#[derive(CandidType, Clone, Debug, Default, PartialEq, Eq)]
 pub struct UpgradeArgs {
     pub metadata: Option<Vec<(String, Value)>>,
     pub token_name: Option<String>,
     pub token_symbol: Option<String>,
     pub transfer_fee: Option<u64>,
+    pub change_fee_collector: Option<ChangeFeeCollector>,
 }
 
 #[derive(CandidType, Clone, Debug, PartialEq, Eq)]
@@ -424,12 +435,15 @@ fn arb_block() -> impl Strategy<Value = Block> {
             transaction,
             effective_fee,
             timestamp: ts,
+            fee_collector: None,
+            fee_collector_block_index: None,
         })
 }
 
 fn init_args(initial_balances: Vec<(Account, u64)>) -> InitArgs {
     InitArgs {
         minting_account: MINTER,
+        fee_collector_account: None,
         initial_balances,
         transfer_fee: FEE,
         token_name: TOKEN_NAME.to_string(),
@@ -1394,6 +1408,7 @@ where
         token_name: Some(OTHER_TOKEN_NAME.into()),
         token_symbol: Some(OTHER_TOKEN_SYMBOL.into()),
         transfer_fee: Some(NEW_FEE),
+        ..UpgradeArgs::default()
     }));
 
     env.upgrade_canister(canister_id, ledger_wasm, Encode!(&upgrade_args).unwrap())
@@ -1434,4 +1449,261 @@ where
     .to_u64()
     .unwrap();
     assert_eq!(token_fee_after_upgrade, NEW_FEE);
+}
+
+pub fn test_fee_collector<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let env = StateMachine::new();
+    // by default the fee collector is not set
+    let ledger_id = install_ledger(&env, ledger_wasm.clone(), encode_init_args, vec![]);
+    // only 1 test case because we modify the ledger within the test
+    let mut runner = TestRunner::new(TestRunnerConfig::with_cases(1));
+    runner
+        .run(
+            &(
+                arb_account(),
+                arb_account(),
+                arb_account(),
+                1..10_000_000u64,
+            )
+                .prop_filter("The three accounts must be different", |(a1, a2, a3, _)| {
+                    a1 != a2 && a2 != a3 && a1 != a3
+                }),
+            |(account_from, account_to, fee_collector, amount)| {
+                // test 1: with no fee collector the fee should be burned
+
+                // mint some tokens for a user
+                transfer(&env, ledger_id, MINTER, account_from, 3 * (amount + FEE))
+                    .expect("Unable to mint tokens");
+
+                // record the previous total_supply and make the transfer.
+                let total_supply_before = total_supply(&env, ledger_id);
+                transfer(&env, ledger_id, account_from, account_to, amount)
+                    .expect("Unable to perform transfer");
+
+                // if the fee was burned then the total_supply after the
+                // transfer should be the one before plus the (burned) FEE
+                assert_eq!(
+                    total_supply_before,
+                    total_supply(&env, ledger_id) + FEE,
+                    "Total supply should have been decreased of the (burned) fee {}",
+                    FEE
+                );
+
+                // test 2: upgrade the ledger to have a fee collector.
+                //         The fee should be collected by the fee collector
+
+                // set the fee collector
+                let ledger_upgrade_arg = LedgerArgument::Upgrade(Some(UpgradeArgs {
+                    change_fee_collector: Some(ChangeFeeCollector::SetTo(fee_collector)),
+                    ..UpgradeArgs::default()
+                }));
+                env.upgrade_canister(
+                    ledger_id,
+                    ledger_wasm.clone(),
+                    Encode!(&ledger_upgrade_arg).unwrap(),
+                )
+                .unwrap();
+
+                // record the previous total_supply and make the transfer.
+                let total_supply_before = total_supply(&env, ledger_id);
+                transfer(&env, ledger_id, account_from, account_to, amount)
+                    .expect("Unable to perform transfer");
+
+                // if the fee was burned then the total_supply after the
+                // transfer should be the one before (nothing burned)
+                assert_eq!(
+                    total_supply_before,
+                    total_supply(&env, ledger_id),
+                    "Total supply shouldn't have changed"
+                );
+
+                // the fee collector must have collected the fee
+                assert_eq!(
+                    FEE,
+                    balance_of(&env, ledger_id, fee_collector),
+                    "The fee_collector should have collected the fee"
+                );
+
+                // test 3: upgrade the ledger to not have a fee collector.
+                //         The fee should once again be burned.
+
+                // unset the fee collector
+                let ledger_upgrade_arg = LedgerArgument::Upgrade(Some(UpgradeArgs {
+                    change_fee_collector: Some(ChangeFeeCollector::Unset),
+                    ..UpgradeArgs::default()
+                }));
+                env.upgrade_canister(
+                    ledger_id,
+                    ledger_wasm.clone(),
+                    Encode!(&ledger_upgrade_arg).unwrap(),
+                )
+                .unwrap();
+
+                // record the previous total_supply and make the transfer.
+                let total_supply_before = total_supply(&env, ledger_id);
+                transfer(&env, ledger_id, account_from, account_to, amount)
+                    .expect("Unable to perform transfer");
+
+                // if the fee was burned then the total_supply after the
+                // transfer should be the one before plus the (burned) FEE
+                assert_eq!(
+                    total_supply_before,
+                    total_supply(&env, ledger_id) + FEE,
+                    "Total supply should have been decreased of the (burned) fee {}",
+                    FEE
+                );
+
+                // the fee collector must have collected no fee this time
+                assert_eq!(
+                    FEE,
+                    balance_of(&env, ledger_id, fee_collector),
+                    "The fee_collector should have collected the fee"
+                );
+
+                Ok(())
+            },
+        )
+        .unwrap();
+}
+
+pub fn test_fee_collector_blocks<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    fn value_as_u64(value: icrc_ledger_types::value::Value) -> u64 {
+        match value {
+            icrc_ledger_types::value::Value::Nat(n) => {
+                n.0.to_u64().expect("Bloc index must be a u64")
+            }
+            value => panic!("Expected Value::Nat but found {:?}", value),
+        }
+    }
+
+    fn value_as_account(value: icrc_ledger_types::value::Value) -> Account {
+        match value {
+            icrc_ledger_types::value::Value::Array(array) => {
+                let array: Vec<_> = array
+                    .iter()
+                    .map(|value| match value {
+                        icrc_ledger_types::value::Value::Blob(bytes) => bytes.clone().into_vec(),
+                        value => panic!("Expected Value::Blob but found {:?}", value),
+                    })
+                    .collect();
+                let deser: SeqDeserializer<_, serde::de::value::Error> = array.into_deserializer();
+                let account = CompactAccount::deserialize(deser)
+                    .expect("Unable to deserialize CompactAccount");
+                Account::try_from(account).expect("Unable to convert compact account to account")
+            }
+            value => panic!("Expected Value::Array but found {:?}", value),
+        }
+    }
+
+    fn fee_collector_from_block(
+        block: icrc_ledger_types::value::Value,
+    ) -> (Option<Account>, Option<u64>) {
+        match block {
+            icrc_ledger_types::value::Value::Map(block_map) => {
+                let fee_collector = block_map
+                    .get("fee_col")
+                    .map(|fee_collector| value_as_account(fee_collector.clone()));
+                let fee_collector_block_index = block_map
+                    .get("fee_col_block")
+                    .map(|value| value_as_u64(value.clone()));
+                (fee_collector, fee_collector_block_index)
+            }
+            _ => panic!("A block should be a map!"),
+        }
+    }
+
+    let env = StateMachine::new();
+    // only 1 test case because we modify the ledger within the test
+    let mut runner = TestRunner::new(TestRunnerConfig::with_cases(1));
+    runner
+        .run(
+            &(
+                arb_account(),
+                arb_account(),
+                arb_account(),
+                1..10_000_000u64,
+            )
+                .prop_filter("The three accounts must be different", |(a1, a2, a3, _)| {
+                    a1 != a2 && a2 != a3 && a1 != a3
+                }),
+            |(account_from, account_to, fee_collector_account, amount)| {
+                let args = encode_init_args(InitArgs {
+                    fee_collector_account: Some(fee_collector_account),
+                    initial_balances: vec![(account_from, (amount + FEE) * 6)],
+                    ..init_args(vec![])
+                });
+                let args = Encode!(&args).unwrap();
+                let ledger_id = env
+                    .install_canister(ledger_wasm.clone(), args, None)
+                    .unwrap();
+
+                // The block at index 0 is the minting operation for account_from and
+                // has the fee collector set.
+                // Make 2 more transfers that should point to the first block index
+                transfer(&env, ledger_id, account_from, account_to, amount)
+                    .expect("Unable to perform the transfer");
+                transfer(&env, ledger_id, account_from, account_to, amount)
+                    .expect("Unable to perform the transfer");
+
+                let blocks = get_blocks(&env, ledger_id.get().0, 0, 4).blocks;
+
+                // the first block must have the fee collector explicitly defined
+                assert_eq!(
+                    fee_collector_from_block(blocks.get(0).unwrap().clone()),
+                    (Some(fee_collector_account), None)
+                );
+                // the other two blocks must have a pointer to the first block
+                assert_eq!(
+                    fee_collector_from_block(blocks.get(1).unwrap().clone()),
+                    (None, Some(0))
+                );
+                assert_eq!(
+                    fee_collector_from_block(blocks.get(2).unwrap().clone()),
+                    (None, Some(0))
+                );
+
+                // change the fee collector to a new one. The next block must have
+                // the fee collector set while the ones that follow will point
+                // to that one
+                let ledger_upgrade_arg = LedgerArgument::Upgrade(Some(UpgradeArgs {
+                    change_fee_collector: Some(ChangeFeeCollector::SetTo(account_from)),
+                    ..UpgradeArgs::default()
+                }));
+                env.upgrade_canister(
+                    ledger_id,
+                    ledger_wasm.clone(),
+                    Encode!(&ledger_upgrade_arg).unwrap(),
+                )
+                .unwrap();
+
+                let block_id = transfer(&env, ledger_id, account_from, account_to, amount)
+                    .expect("Unable to perform the transfer");
+                transfer(&env, ledger_id, account_from, account_to, amount)
+                    .expect("Unable to perform the transfer");
+                transfer(&env, ledger_id, account_from, account_to, amount)
+                    .expect("Unable to perform the transfer");
+                let blocks = get_blocks(&env, ledger_id.get().0, block_id, 3).blocks;
+                assert_eq!(
+                    fee_collector_from_block(blocks.get(0).unwrap().clone()),
+                    (Some(account_from), None)
+                );
+                assert_eq!(
+                    fee_collector_from_block(blocks.get(1).unwrap().clone()),
+                    (None, Some(block_id))
+                );
+                assert_eq!(
+                    fee_collector_from_block(blocks.get(2).unwrap().clone()),
+                    (None, Some(block_id))
+                );
+
+                Ok(())
+            },
+        )
+        .unwrap()
 }

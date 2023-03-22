@@ -85,7 +85,7 @@ fn post_upgrade(args: Option<LedgerArgument>) {
             LedgerArgument::Init(_) => panic!("Cannot upgrade the canister with an Init argument. Please provide an Upgrade argument."),
             LedgerArgument::Upgrade(upgrade_args) => {
                 if let Some(upgrade_args) = upgrade_args {
-                    Access::with_ledger_mut(|ledger| ledger.upgrade_metadata(upgrade_args));
+                    Access::with_ledger_mut(|ledger| ledger.upgrade(upgrade_args));
                 }
             }
         }

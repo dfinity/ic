@@ -47,6 +47,7 @@ type Value = variant {
 // The initialization parameters of the Ledger
 type InitArgs = record {
     minting_account : Account;
+    fee_collector_account : opt Account;
     transfer_fee : nat64;
     token_symbol : text;
     token_name : text;
@@ -62,11 +63,16 @@ type InitArgs = record {
     };
 };
 
+type ChangeFeeCollector = variant {
+    Unset; SetTo: Account;
+};
+
 type UpgradeArgs = record {
     metadata : opt vec record { text; Value };
     token_symbol : opt text;
     token_name : opt text;
     transfer_fee : opt nat64;
+    change_fee_collector : opt ChangeFeeCollector;
 };
 
 type LedgerArg = variant {

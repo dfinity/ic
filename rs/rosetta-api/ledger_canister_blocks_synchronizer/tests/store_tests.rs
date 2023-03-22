@@ -47,6 +47,10 @@ impl LedgerContext for TestContext {
     fn approvals_mut(&mut self) -> &mut Approvals {
         &mut self.approvals
     }
+
+    fn fee_collector(&self) -> Option<&ic_ledger_core::block::FeeCollector<Self::AccountId>> {
+        None
+    }
 }
 
 #[actix_rt::test]

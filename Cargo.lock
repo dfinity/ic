@@ -6708,6 +6708,7 @@ dependencies = [
  "icrc-ledger-types",
  "num-traits",
  "proptest",
+ "serde",
 ]
 
 [[package]]

@@ -8,7 +8,7 @@ use std::ops::Range;
 use std::time::Duration;
 
 use ic_ledger_core::balances::{BalanceError, Balances, BalancesStore, InspectableBalancesStore};
-use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock, HashOf};
+use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock, FeeCollector, HashOf};
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::Tokens;
 
@@ -59,6 +59,8 @@ pub trait LedgerContext {
 
     fn approvals(&self) -> &Self::Approvals;
     fn approvals_mut(&mut self) -> &mut Self::Approvals;
+
+    fn fee_collector(&self) -> Option<&FeeCollector<Self::AccountId>>;
 }
 
 pub trait LedgerTransaction: Sized {
@@ -112,7 +114,7 @@ pub trait LedgerAccess {
 pub trait LedgerData: LedgerContext {
     type ArchiveWasm: ArchiveCanisterWasm;
     type Runtime: Runtime;
-    type Block: BlockType<Transaction = Self::Transaction>;
+    type Block: BlockType<Transaction = Self::Transaction, AccountId = Self::AccountId>;
     type Transaction: LedgerTransaction<AccountId = Self::AccountId, SpenderId = Self::SpenderId>
         + Ord
         + Clone;
@@ -157,6 +159,8 @@ pub trait LedgerData: LedgerContext {
 
     /// The callback that the ledger framework calls when it purges a transaction.
     fn on_purged_transaction(&mut self, height: BlockIndex);
+
+    fn fee_collector_mut(&mut self) -> Option<&mut FeeCollector<Self::AccountId>>;
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -227,11 +231,13 @@ where
             }
         })?;
 
+    let fee_collector = ledger.fee_collector().cloned();
     let block = L::Block::from_transaction(
         ledger.blockchain().last_hash,
         transaction,
         now,
         effective_fee,
+        fee_collector,
     );
     let block_timestamp = block.timestamp();
 
@@ -239,6 +245,11 @@ where
         .blockchain_mut()
         .add_block(block)
         .expect("failed to add block");
+    if let Some(fee_collector) = ledger.fee_collector_mut().as_mut() {
+        if fee_collector.block_index.is_none() {
+            fee_collector.block_index = Some(height);
+        }
+    }
 
     if let Some((_, tx_hash)) = maybe_time_and_hash {
         // The caller requested deduplication, so we have to remember this
@@ -269,6 +280,7 @@ where
             .expect("failed to burn funds that must have existed");
 
         let parent_hash = ledger.blockchain().last_hash;
+        let fee_collector = ledger.fee_collector().cloned();
 
         ledger
             .blockchain_mut()
@@ -277,6 +289,7 @@ where
                 burn_tx,
                 now,
                 Tokens::from_e8s(0),
+                fee_collector,
             ))
             .unwrap();
     }

@@ -31,6 +31,7 @@ fn archive_wasm() -> Vec<u8> {
 fn encode_init_args(args: ic_icrc1_ledger_sm_tests::InitArgs) -> LedgerArgument {
     LedgerArgument::Init(InitArgs {
         minting_account: MINTER,
+        fee_collector_account: args.fee_collector_account,
         initial_balances: args.initial_balances,
         transfer_fee: FEE,
         token_name: TOKEN_NAME.to_string(),
@@ -129,4 +130,14 @@ fn block_hashes_are_stable() {
 #[test]
 fn check_transfer_model() {
     ic_icrc1_ledger_sm_tests::check_transfer_model(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn check_fee_collector() {
+    ic_icrc1_ledger_sm_tests::test_fee_collector(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn check_fee_collector_blocks() {
+    ic_icrc1_ledger_sm_tests::test_fee_collector_blocks(ledger_wasm(), encode_init_args);
 }

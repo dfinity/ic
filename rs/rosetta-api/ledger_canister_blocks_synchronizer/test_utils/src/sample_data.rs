@@ -109,8 +109,13 @@ impl Scribe {
         let parent_hash = self.blockchain.back().map(|hb| hb.hash);
         let index = self.next_index();
 
-        let block =
-            Block::from_transaction(parent_hash, transaction, self.time().into(), effective_fee);
+        let block = Block::from_transaction(
+            parent_hash,
+            transaction,
+            self.time().into(),
+            effective_fee,
+            None,
+        );
 
         self.blockchain
             .push_back(HashedBlock::hash_block(block.encode(), parent_hash, index));

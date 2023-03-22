@@ -74,6 +74,7 @@ fn mint_block() -> EncodedBlock {
         },
         TimeStamp::new(3, 4),
         Tokens::ZERO,
+        None,
     )
     .encode()
 }
@@ -108,6 +109,7 @@ fn install_ledger(
             Value::entry(BLOB_META_KEY, BLOB_META_VALUE),
         ],
         archive_options,
+        fee_collector_account: None,
     });
     env.install_canister(ledger_wasm(), Encode!(&args).unwrap(), None)
         .unwrap()

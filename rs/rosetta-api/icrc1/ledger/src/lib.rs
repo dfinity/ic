@@ -17,7 +17,7 @@ use ic_ledger_canister_core::{
 use ic_ledger_core::{
     approvals::AllowanceTable,
     balances::Balances,
-    block::{BlockIndex, BlockType, EncodedBlock, HashOf},
+    block::{BlockIndex, BlockType, EncodedBlock, FeeCollector, HashOf},
     timestamp::TimeStamp,
     tokens::Tokens,
 };
@@ -99,12 +99,28 @@ impl From<Value> for StoredValue {
 #[derive(Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
 pub struct InitArgs {
     pub minting_account: Account,
+    pub fee_collector_account: Option<Account>,
     pub initial_balances: Vec<(Account, u64)>,
     pub transfer_fee: u64,
     pub token_name: String,
     pub token_symbol: String,
     pub metadata: Vec<(String, Value)>,
     pub archive_options: ArchiveOptions,
+}
+
+#[derive(Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
+pub enum ChangeFeeCollector {
+    Unset,
+    SetTo(Account),
+}
+
+impl From<ChangeFeeCollector> for Option<FeeCollector<Account>> {
+    fn from(value: ChangeFeeCollector) -> Self {
+        match value {
+            ChangeFeeCollector::Unset => None,
+            ChangeFeeCollector::SetTo(account) => Some(FeeCollector::from(account)),
+        }
+    }
 }
 
 #[derive(Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
@@ -117,6 +133,8 @@ pub struct UpgradeArgs {
     pub token_symbol: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub transfer_fee: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub change_fee_collector: Option<ChangeFeeCollector>,
 }
 
 #[derive(Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
@@ -131,6 +149,7 @@ pub struct Ledger {
     blockchain: Blockchain<CdkRuntime, Icrc1ArchiveWasm>,
 
     minting_account: Account,
+    fee_collector: Option<FeeCollector<Account>>,
 
     transactions_by_hash: BTreeMap<HashOf<Transaction>, BlockIndex>,
     transactions_by_height: VecDeque<TransactionInfo<Transaction>>,
@@ -151,6 +170,7 @@ impl Ledger {
             token_symbol,
             metadata,
             archive_options,
+            fee_collector_account,
         }: InitArgs,
         now: TimeStamp,
     ) -> Self {
@@ -160,6 +180,7 @@ impl Ledger {
             transactions_by_hash: BTreeMap::new(),
             transactions_by_height: VecDeque::new(),
             minting_account,
+            fee_collector: fee_collector_account.map(FeeCollector::from),
             transfer_fee: Tokens::from_e8s(transfer_fee),
             token_symbol,
             token_name,
@@ -214,6 +235,10 @@ impl LedgerContext for Ledger {
 
     fn approvals_mut(&mut self) -> &mut Self::Approvals {
         unimplemented!()
+    }
+
+    fn fee_collector(&self) -> Option<&FeeCollector<Self::AccountId>> {
+        self.fee_collector.as_ref()
     }
 }
 
@@ -276,6 +301,10 @@ impl LedgerData for Ledger {
     }
 
     fn on_purged_transaction(&mut self, _height: BlockIndex) {}
+
+    fn fee_collector_mut(&mut self) -> Option<&mut FeeCollector<Self::AccountId>> {
+        self.fee_collector.as_mut()
+    }
 }
 
 impl Ledger {
@@ -302,7 +331,7 @@ impl Ledger {
         records
     }
 
-    pub fn upgrade_metadata(&mut self, args: UpgradeArgs) {
+    pub fn upgrade(&mut self, args: UpgradeArgs) {
         if let Some(upgrade_metadata_args) = args.metadata {
             self.metadata = upgrade_metadata_args
                 .into_iter()
@@ -317,6 +346,15 @@ impl Ledger {
         }
         if let Some(transfer_fee) = args.transfer_fee {
             self.transfer_fee = Tokens::from_e8s(transfer_fee);
+        }
+        if let Some(change_fee_collector) = args.change_fee_collector {
+            self.fee_collector = change_fee_collector.into();
+            if self.fee_collector.as_ref().map(|fc| fc.fee_collector) == Some(self.minting_account)
+            {
+                ic_cdk::trap(
+                    "The fee collector account cannot be the same account as the minting account",
+                );
+            }
         }
     }
 

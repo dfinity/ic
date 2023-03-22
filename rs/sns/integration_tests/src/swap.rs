@@ -3048,6 +3048,7 @@ fn test_last_man_less_than_min() {
     );
     let args = Encode!(&LedgerArgument::Init(LedgerInit {
         minting_account,
+        fee_collector_account: None,
         initial_balances: vec![(
             Account {
                 owner: swap_id.into(),

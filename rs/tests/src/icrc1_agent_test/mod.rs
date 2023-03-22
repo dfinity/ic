@@ -81,6 +81,7 @@ pub fn test(env: TestEnv) {
                 cycles_for_archive_creation: None,
                 max_transactions_per_response: None,
             },
+            fee_collector_account: None,
         };
         install_icrc1_ledger(&env, &mut ledger, &LedgerArgument::Init(init_args.clone())).await;
 

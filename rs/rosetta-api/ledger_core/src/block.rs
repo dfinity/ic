@@ -170,8 +170,26 @@ impl EncodedBlock {
     }
 }
 
+#[derive(Clone, Debug, Deserialize, Hash, PartialEq, Serialize)]
+pub struct FeeCollector<Account> {
+    pub fee_collector: Account,
+    /// The block index of the block where the fee_collector has
+    /// been written.
+    pub block_index: Option<BlockIndex>,
+}
+
+impl<Account> From<Account> for FeeCollector<Account> {
+    fn from(fee_collector: Account) -> Self {
+        Self {
+            fee_collector,
+            block_index: None,
+        }
+    }
+}
+
 pub trait BlockType: Sized {
     type Transaction;
+    type AccountId;
 
     /// Constructs a new block containing the given transaction.
     ///
@@ -187,6 +205,7 @@ pub trait BlockType: Sized {
         tx: Self::Transaction,
         block_timestamp: TimeStamp,
         effective_fee: Tokens,
+        fee_collector: Option<FeeCollector<Self::AccountId>>,
     ) -> Self;
 
     /// Encodes this block into a binary representation.
