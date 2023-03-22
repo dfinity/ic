@@ -471,6 +471,7 @@ pub async fn upgrade_nns_canister_by_proposal(
     root: &Canister<'_>,
     stop_before_installing: bool,
     wasm: Wasm,
+    arg: Option<Vec<u8>>,
 ) {
     change_nns_canister_by_proposal(
         CanisterInstallMode::Upgrade,
@@ -479,7 +480,7 @@ pub async fn upgrade_nns_canister_by_proposal(
         root,
         stop_before_installing,
         wasm,
-        None,
+        arg,
     )
     .await
 }
@@ -582,6 +583,7 @@ pub async fn maybe_upgrade_root_controlled_canister_to_self(
         &nns_canisters.root,
         stop_before_installing,
         wasm,
+        None,
     )
     .await;
     canister.set_wasm(wasm_clone);

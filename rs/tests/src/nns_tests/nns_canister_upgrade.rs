@@ -94,6 +94,7 @@ pub fn test(env: TestEnv) {
             &Canister::new(&nns, ROOT_CANISTER_ID),
             false,
             canister_test::Wasm::from_bytes(lifeline::LIFELINE_CANISTER_WASM),
+            None,
         )
         .await;
 

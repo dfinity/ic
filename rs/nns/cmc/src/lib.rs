@@ -12,11 +12,30 @@ pub const CREATE_CANISTER_REFUND_FEE: Tokens = Tokens::from_e8s(DEFAULT_TRANSFER
 pub const TOP_UP_CANISTER_REFUND_FEE: Tokens = Tokens::from_e8s(DEFAULT_TRANSFER_FEE.get_e8s() * 2);
 
 #[derive(Serialize, Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
+pub enum ExchangeRateCanister {
+    /// Enables the exchange rate canister with the given canister ID.
+    Set(CanisterId),
+    /// Disable the exchange rate canister.
+    Unset,
+}
+
+impl ExchangeRateCanister {
+    pub fn extract_exchange_rate_canister_id(&self) -> Option<CanisterId> {
+        match self {
+            ExchangeRateCanister::Set(exchange_rate_canister_id) => {
+                Some(*exchange_rate_canister_id)
+            }
+            ExchangeRateCanister::Unset => None,
+        }
+    }
+}
+#[derive(Serialize, Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
 pub struct CyclesCanisterInitPayload {
     pub ledger_canister_id: CanisterId,
     pub governance_canister_id: CanisterId,
     pub minting_account_id: Option<AccountIdentifier>,
     pub last_purged_notification: Option<BlockIndex>,
+    pub exchange_rate_canister: Option<ExchangeRateCanister>,
 }
 
 /// Argument taken by top up notification endpoint

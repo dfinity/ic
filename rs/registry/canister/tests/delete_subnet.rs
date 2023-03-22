@@ -149,6 +149,7 @@ fn test_subnet_is_only_deleted_when_appropriate() {
             CyclesCanisterInitPayload {
                 ledger_canister_id: LEDGER_CANISTER_ID,
                 governance_canister_id: GOVERNANCE_CANISTER_ID,
+                exchange_rate_canister: None,
                 minting_account_id: Some(GOVERNANCE_CANISTER_ID.get().into()),
                 last_purged_notification: Some(1),
             },
