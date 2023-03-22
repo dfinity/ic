@@ -1,0 +1,25 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "//rs/ic_os/vsock/vsock_lib:vsock_lib",
+    "@crate_index//:clap",
+]
+
+MACRO_DEPENDENCIES = []
+
+ALIASES = {}
+
+rust_binary(
+    name = "vsock_guest",
+    srcs = ["src/main.rs"],
+    aliases = ALIASES,
+    crate_name = "vsock_guest",
+    edition = "2021",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = [
+        "@platforms//os:linux",
+    ],
+    deps = DEPENDENCIES,
+)

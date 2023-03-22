@@ -506,33 +506,5 @@ Whilst the whole point of virtualization is to securely isolate operating system
 
 To retain the highest isolation between the two operating systems, we limit ourselves to strictly defined function calls. All VSOCK commands are triggered from the GuestOS.
 
-|Name        |Parameters      |Description
-|attach-hsm  |                |Attach HSM to ReplicaOS virtual machine
-|detach-hsm  |                |Detach HSM from ReplicaOS virtual machine
-|_upgrade_   |URL, hash       |Download and apply update disk-image on the HostOS, then trigger a reboot of HostOS
-|set-node-id |Node ID         |Sets the node-id on HostOS by storing it to the config partition, and adding it to the end of the hostname
-|join-success|                |Notifies the HostOS of a successful network join. The HostOS will use this to notify operators to remove the HSM from the machine
+To see the full list of VSOCK commands and a detailed description of the vsock program,  link:../../rs/ic_os/vsock/README.md[read the vsock readme]
 
-==== set-node-id
-
-After setup, we add the node ID to the hostname of both Host- and ReplicaOS, in order to help with debugging. After a successful join, the orchestrator binary will trigger two processes. First, the join-success VSOCK call will instruct the operator it is safe to remove the HSM from the machine. Next, the orchestrator needs to update the hostname of the Host- and ReplicaOS. For the ReplicaOS, the orchestrator rightfully has very limited permissions. To trigger the update indirectly, the orchestrator touches /tmp/node-id, and triggers a system service. This service fetches the node-id, stores it to the config partition, updates the hostname, and calls the set-node-id VSOCK call. On the HostOS, when this call is received, the node ID is written to the config partition, and the hostname is updated.
-
-==== upgrade
-
-At the very least, the ReplicaOS needs to be able to instruct the HostOS that an HostOS upgrade should happen. The suggestion is to realize this communication also via VSOCK.
-
-One problem is that the ReplicaOS does not know which version the HostOS is currently running. In order to instruct the HostOS to upgrade, we either:
-- Have another VSOCK call which allows the ReplicaOS to query the current version and state (upgrading, upgraded, .. ) of the HostOS.
-- Or periodically send update requests to the HostOS independent of the hosts version (e.g. just call this endpoint every 5 minutes or so independent of the version of the HostOS).
-
-In addition, we’d like to be able to do staggered upgrades in some later version of the HostOS upgrade. This is to avoid long downtime of subnetworks, as rebooting the HostOS typically takes several minutes and rebooting all hosts at the same time would lead to downtime of the HostOS for the entire duration of the reboot. The staggering could be realized by:
-- The HostOS’es themselves (e.g. based on some hashing of the IPv6 address),
-- The ReplicaOS holding back upgrade instructions () or
-- Or they could be encoded in the NNS proposal triggering the upgrade itself (e.g. via absolute UNIX timestamp at which to upgrade or a relative time offset after the proposal finds its way into the registry; would have one such timestamp per HostOS).
-
-Suggestion:
-- Per-subnet entry of HostOS version in registry. Optional list of host IP → relative offset in order to instruct HostOS to wait at least that offset of time before upgrading
-- Replica periodically (every 5 mins) sends that entry via VSOCK to HostOS
-
-- system upgrade
-- network interfaces (networkctl)
