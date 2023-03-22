@@ -248,6 +248,39 @@ pub struct TopologySnapshot {
     env: TestEnv,
 }
 
+impl std::fmt::Display for TopologySnapshot {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        writeln!(
+            f,
+            "\n============================== IC TopologySnapshot, registry version {} ==============================",
+            self.registry_version
+        )
+        .unwrap();
+        self.subnets().enumerate().for_each(|(idx, s)| {
+            writeln!(
+                f,
+                "Subnet id={}, index={}, type={:?}",
+                s.subnet_id,
+                idx,
+                s.subnet_type(),
+            )
+            .unwrap();
+            s.nodes().enumerate().for_each(|(idx, n)| {
+                writeln!(f, "\tNode id={}, index={}", n.node_id, idx).unwrap();
+            });
+        });
+        self.unassigned_nodes().enumerate().for_each(|(idx, n)| {
+            writeln!(f, "Unassigned node id={}, index={}", n.node_id, idx).unwrap()
+        });
+        writeln!(
+            f,
+            "====================================================================================================="
+        )
+        .unwrap();
+        Ok(())
+    }
+}
+
 impl TopologySnapshot {
     pub fn subnets(&self) -> Box<dyn Iterator<Item = SubnetSnapshot>> {
         let registry_version = self.local_registry.get_latest_version();
@@ -343,7 +376,11 @@ impl TopologySnapshot {
     /// method blocks for a duration of 180 seconds at maximum.
     pub async fn block_for_newer_registry_version(&self) -> Result<TopologySnapshot> {
         let minimum_version = self.local_registry.get_latest_version() + RegistryVersion::from(1);
-        self.block_for_min_registry_version(minimum_version).await
+        let result = self.block_for_min_registry_version(minimum_version).await;
+        if let Ok(ref topology) = result {
+            info!(self.env.logger(), "{}", topology);
+        }
+        result
     }
 
     /// This method blocks and repeatedly fetches updates from the registry
