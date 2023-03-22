@@ -1347,7 +1347,7 @@ impl ProposalData {
             None => return,
         };
 
-        // Dont evaluate wait for quiet if there is already a decision, or the
+        // Don't evaluate wait for quiet if there is already a decision, or the
         // deadline has been met. The deciding amount for yes and no are
         // slightly different, because yes needs a majority to succeed, while
         // no only needs a tie.
@@ -1852,7 +1852,7 @@ impl GovernanceProto {
     }
 
     // Returns whether the proposed default following is valid by making
-    // sure that the refered to neurons exist.
+    // sure that the referred-to neurons exist.
     fn validate_default_followees(
         &self,
         proposed: &HashMap<i32, Followees>,
@@ -2320,7 +2320,7 @@ impl Governance {
         if self.proto.in_flight_commands.contains_key(&id) {
             return Err(GovernanceError::new_with_message(
                 ErrorType::LedgerUpdateOngoing,
-                "Neuron has an ongoing ledger udpate.",
+                "Neuron has an ongoing ledger update.",
             ));
         }
 
@@ -2338,7 +2338,7 @@ impl Governance {
         match self.proto.in_flight_commands.remove(&id) {
             None => {
                 println!(
-                    "Unexpected condition when unlocking neuron {}: the neuron was not registred as 'in flight'",
+                    "Unexpected condition when unlocking neuron {}: the neuron was not registered as 'in flight'",
                     id
                 );
             }
@@ -2899,7 +2899,7 @@ impl Governance {
                 format!(
                     "Trying to split a neuron with argument {} e8s. This is too little: \
                       at the minimum, one needs the minimum neuron stake, which is {} e8s, \
-                      plus the transaction fee, which is {}. Hence the mininum split amount is {}.",
+                      plus the transaction fee, which is {}. Hence the minimum split amount is {}.",
                     split.amount_e8s,
                     min_stake,
                     transaction_fee_e8s,
@@ -3263,7 +3263,7 @@ impl Governance {
             // when a proposal could be submitted and rejected on behalf of
             // the source neuron (since cached stake is high enough), but that
             // would be impossible to charge because the account had been
-            // emptied. To guard against this, we pre-emptively set the stake
+            // emptied. To guard against this, we preemptively set the stake
             // to zero, and set it back in case of transfer failure.
             //
             // Another important reason to set the cached stake to zero (net
@@ -3689,7 +3689,7 @@ impl Governance {
                 format!(
                     "Called `disburse_to_neuron` with `amount` argument {} e8s. This is too little: \
                       at the minimum, one needs the minimum neuron stake, which is {} e8s, \
-                      plus the transaction fee, which is {}. Hence the mininum disburse amount is {}.",
+                      plus the transaction fee, which is {}. Hence the minimum disburse amount is {}.",
                     disburse_to_neuron.amount_e8s,
                     min_stake,
                     transaction_fee_e8s,
@@ -3883,7 +3883,7 @@ impl Governance {
     }
 
     /// Set the status of a proposal that is 'being executed' to
-    /// 'executed' or 'failed' depending on the value of 'succcess'.
+    /// 'executed' or 'failed' depending on the value of 'success'.
     ///
     /// The proposal ID 'pid' is taken as a raw integer to avoid
     /// lifetime issues.
@@ -4183,7 +4183,7 @@ impl Governance {
     /// infos. If `before_proposal` is not provided, start from the highest
     /// available proposal ID (inclusive).
     ///
-    /// As proposal IDs are assigned sequentially, this retrives up to
+    /// As proposal IDs are assigned sequentially, this retrieves up to
     /// `limit` proposals older (in terms of creation) than a specific
     /// proposal. This can be used to paginate through proposals, as follows:
     ///
@@ -4197,7 +4197,7 @@ impl Governance {
     /// }
     /// `
     ///
-    /// - A proposal with resticted voting is included only if the
+    /// - A proposal with restricted voting is included only if the
     /// caller is allowed to vote on the proposal.
     ///
     /// - The proposals' ballots only show votes from neurons that the
@@ -4289,7 +4289,7 @@ impl Governance {
     }
 
     /// Rounds now downwards to nearest multiple of REWARD_DISTRIBUTION_PERIOD_SECONDS after genesis
-    fn most_recent_fully_ellapsed_reward_round_end_timestamp_seconds(&self) -> u64 {
+    fn most_recent_fully_elapsed_reward_round_end_timestamp_seconds(&self) -> u64 {
         let now = self.env.now();
         let genesis_timestamp_seconds = self.proto.genesis_timestamp_seconds;
 
@@ -5880,7 +5880,7 @@ impl Governance {
             // Thus, for each iteration of the loop, the number of
             // entries in 'ballots' that have an unspecified value
             // decreases, or else the loop terminates. As nothing is
-            // addded to 'ballots' (or removed for that matter), the
+            // added to 'ballots' (or removed for that matter), the
             // loop terminates in at most 'ballots.len()+1' steps.
             //
             // The worst case is attained if there is a linear
@@ -5998,7 +5998,7 @@ impl Governance {
     /// If the list of followees is empty, remove the followees for
     /// this topic. If the list has at least one element, replace the
     /// current list of followees for the given topic with the
-    /// provided list. Note that the list is replaced, not addded to.
+    /// provided list. Note that the list is replaced, not added to.
     fn follow(
         &mut self,
         id: &NeuronId,
@@ -6287,8 +6287,8 @@ impl Governance {
     ///
     /// Preconditions:
     /// - The new neuron won't take us above the `MAX_NUMBER_OF_NEURONS`.
-    /// - The amount transfered was greater than or equal to
-    ///   `self.enconomics.neuron_minimum_stake_e8s`.
+    /// - The amount transferred was greater than or equal to
+    ///   `self.economics.neuron_minimum_stake_e8s`.
     ///
     /// Note that we need to create the neuron before checking the balance
     /// so that we record the neuron and avoid a race where a user calls
@@ -6820,7 +6820,7 @@ impl Governance {
                             .expect("Couldn't convert stake to u64");
 
                         println!(
-                            "{}Spawning neuron: {:?}. Performing ledger udpate.",
+                            "{}Spawning neuron: {:?}. Performing ledger update.",
                             LOG_PREFIX, neuron
                         );
 
@@ -6896,7 +6896,7 @@ impl Governance {
             self.latest_reward_event().day_after_genesis * REWARD_DISTRIBUTION_PERIOD_SECONDS
                 + self.proto.genesis_timestamp_seconds;
 
-        self.most_recent_fully_ellapsed_reward_round_end_timestamp_seconds()
+        self.most_recent_fully_elapsed_reward_round_end_timestamp_seconds()
             > latest_distribution_nominal_end_timestamp_seconds
     }
 
@@ -6948,7 +6948,7 @@ impl Governance {
             + rolling_over_from_previous_reward_event_e8s_equivalent as f64;
 
         let as_of_timestamp_seconds =
-            self.most_recent_fully_ellapsed_reward_round_end_timestamp_seconds();
+            self.most_recent_fully_elapsed_reward_round_end_timestamp_seconds();
         let considered_proposals: Vec<ProposalId> = self
             .ready_to_be_settled_proposal_ids(as_of_timestamp_seconds)
             .collect();
@@ -7534,7 +7534,7 @@ fn draw_funds_from_the_community_fund(
                 amount_icp_e8s: neuron_contribution_e8s,
             });
 
-        // Deduct contribution from manturity.
+        // Deduct contribution from maturity.
         neuron.maturity_e8s_equivalent -= neuron_contribution_e8s;
 
         // Update running total.
@@ -8544,7 +8544,7 @@ mod tests {
             );
             assert!(
                 // Because these are Vec<u8>, assert_eq would generate feedback
-                // that's very hard to decypher, so we skip that by using
+                // that's very hard to decipher, so we skip that by using
                 // assert! plus the == operator instead.
                 request == expected_arguments.request,
                 "{}\nvs.\n{}",

@@ -2863,7 +2863,7 @@ impl Governance {
             is_eligible_for_rewards,
             initial_voting_period_seconds,
             wait_for_quiet_deadline_increase_seconds,
-            // Writing these explicitly so that we have to make a consious decision
+            // Writing these explicitly so that we have to make a conscious decision
             // about what to do when adding a new field to `ProposalData`.
             latest_tally: ProposalData::default().latest_tally,
             decided_timestamp_seconds: ProposalData::default().decided_timestamp_seconds,
@@ -3968,7 +3968,7 @@ impl Governance {
         }
         self.proto.is_finalizing_disburse_maturity = Some(true);
         let now_seconds = self.env.now();
-        let disbursion_delay_elapsed_seconds = now_seconds - SEVEN_DAYS_IN_SECONDS;
+        let disbursal_delay_elapsed_seconds = now_seconds - SEVEN_DAYS_IN_SECONDS;
         // Filter all the neurons that have some disbursing maturity in progress.
         let neurons_with_disbursal: Vec<Neuron> = self
             .proto
@@ -3981,7 +3981,7 @@ impl Governance {
             if !neuron.disburse_maturity_in_progress.is_empty() {
                 // The first entry is the oldest one, check whether it can be completed.
                 let d = neuron.disburse_maturity_in_progress[0].clone();
-                if d.timestamp_of_disbursement_seconds < disbursion_delay_elapsed_seconds {
+                if d.timestamp_of_disbursement_seconds < disbursal_delay_elapsed_seconds {
                     let neuron_id = match neuron.id.as_ref() {
                         None => {
                             log!(ERROR, "NeuronId is not set for neuron. This should never happen. Cannot disburse.");
@@ -6938,7 +6938,7 @@ mod tests {
         // constraint.
         governance.run_periodic_tasks().now_or_never();
 
-        // A failed deployment is when pending is erased but depoyed_version is not updated.
+        // A failed deployment is when pending is erased but deployed_version is not updated.
         assert!(governance.proto.pending_version.is_none());
         assert_eq!(
             governance.proto.deployed_version.unwrap(),
@@ -8205,7 +8205,7 @@ mod tests {
     }
 
     #[test]
-    fn test_stake_maturity_fails_on_non_exisiting_neuron() {
+    fn test_stake_maturity_fails_on_non_existing_neuron() {
         // Step 1: Prepare the world and parameters.
         let controller = *TEST_NEURON_1_OWNER_PRINCIPAL;
         let neuron_id = test_neuron_id(controller);
@@ -8370,7 +8370,7 @@ mod tests {
     // Sets up an environment for a disburse-maturity test. The returned
     // setup consists of:
     // - an initialized governance, whose API can be called
-    // - an id of a neuron (with the specified maturity) contained in the initialized governace
+    // - an id of a neuron (with the specified maturity) contained in the initialized governance
     // - an id of a principal that controls the neuron
     fn prepare_setup_for_disburse_maturity_tests(
         earned_maturity_e8s: u64,
@@ -8615,7 +8615,7 @@ mod tests {
     }
 
     #[test]
-    fn test_disburse_maturity_fails_on_non_exisiting_neuron() {
+    fn test_disburse_maturity_fails_on_non_existing_neuron() {
         // Step 1: Prepare the world and parameters.
         let mut setup = prepare_setup_for_disburse_maturity_tests(1000);
         let non_existing_neuron_id = test_neuron_id(*TEST_NEURON_2_OWNER_PRINCIPAL);
@@ -8722,7 +8722,7 @@ mod tests {
     // Sets up an environment for a split-neuron test. The returned
     // setup consists of:
     // - an initialized governance, whose API can be called
-    // - an id of a neuron (with the specified stake and maturity) contained in the initialized governace
+    // - an id of a neuron (with the specified stake and maturity) contained in the initialized governance
     // - an id of a principal that controls the neuron
     fn prepare_setup_for_split_neuron_tests(
         stake_e8s: u64,
