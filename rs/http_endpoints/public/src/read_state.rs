@@ -34,7 +34,6 @@ use tower::{
     limit::concurrency::GlobalConcurrencyLimitLayer, util::BoxCloneService, Service, ServiceBuilder,
 };
 
-const MAX_READ_STATE_REQUEST_STATUS_PATHS: u8 = 1;
 const MAX_READ_STATE_CONCURRENT_REQUESTS: usize = 100;
 
 #[derive(Clone)]
@@ -240,7 +239,7 @@ async fn verify_paths(
     effective_canister_id: CanisterId,
 ) -> Result<(), HttpError> {
     let state = state_reader_executor.get_latest_state().await?.take();
-    let mut num_request_status_paths = 0;
+    let mut request_status_id: Option<MessageId> = None;
 
     // Convert the paths to slices to make it easier to match below.
     let paths: Vec<Vec<&[u8]>> = paths
@@ -279,22 +278,20 @@ async fn verify_paths(
             [b"subnet", _subnet_id, b"public_key"] => {}
             [b"subnet", _subnet_id, b"canister_ranges"] => {}
             [b"request_status", request_id] | [b"request_status", request_id, ..] => {
-                num_request_status_paths += 1;
-
-                if num_request_status_paths > MAX_READ_STATE_REQUEST_STATUS_PATHS {
-                    return Err(HttpError {
-                        status: StatusCode::BAD_REQUEST,
-                        message: format!(
-                            "Can only request up to {} paths for request_status.",
-                            MAX_READ_STATE_REQUEST_STATUS_PATHS
-                        ),
-                    });
-                }
-
                 // Verify that the request was signed by the same user.
                 if let Ok(message_id) = MessageId::try_from(*request_id) {
-                    let ingress_status = state.get_ingress_status(&message_id);
+                    if let Some(request_status_id) = request_status_id {
+                        if request_status_id != message_id {
+                            return Err(HttpError {
+                                status: StatusCode::BAD_REQUEST,
+                                message:
+                                    "Can only request a single request ID in request_status paths."
+                                        .to_string(),
+                            });
+                        }
+                    }
 
+                    let ingress_status = state.get_ingress_status(&message_id);
                     if let Some(ingress_user_id) = ingress_status.user_id() {
                         if let Some(receiver) = ingress_status.receiver() {
                             if ingress_user_id != *user || !targets.contains(&receiver) {
@@ -307,6 +304,8 @@ async fn verify_paths(
                             }
                         }
                     }
+
+                    request_status_id = Some(message_id);
                 } else {
                     return Err(HttpError {
                         status: StatusCode::BAD_REQUEST,
@@ -569,5 +568,39 @@ mod test {
             .await,
             Ok(())
         );
+        assert_eq!(
+            verify_paths(
+                &sre,
+                &user_test_id(1),
+                &[
+                    Path::new(vec![
+                        Label::from("request_status"),
+                        [0; 32].into(),
+                        Label::from("status")
+                    ]),
+                    Path::new(vec![
+                        Label::from("request_status"),
+                        [0; 32].into(),
+                        Label::from("reply")
+                    ])
+                ],
+                &CanisterIdSet::All,
+                canister_test_id(1),
+            )
+            .await,
+            Ok(())
+        );
+        assert!(verify_paths(
+            &sre,
+            &user_test_id(1),
+            &[
+                Path::new(vec![Label::from("request_status"), [0; 32].into()]),
+                Path::new(vec![Label::from("request_status"), [1; 32].into()])
+            ],
+            &CanisterIdSet::All,
+            canister_test_id(1),
+        )
+        .await
+        .is_err());
     }
 }
