@@ -1018,6 +1018,15 @@ impl StateMachine {
         state.put_canister_state(source_state.canister_state(&canister_id).unwrap().clone());
         self.state_manager
             .commit_and_certify(state, h.increment(), CertificationScope::Full);
+        self.state_manager.remove_states_below(h.increment());
+    }
+
+    /// Removes states below the latest height.
+    ///
+    /// This is useful for testing behaviour after old states are dropped.
+    pub fn remove_old_states(&self) {
+        let h = self.state_manager.latest_state_height();
+        self.state_manager.remove_states_below(h);
     }
 
     /// Removes a canister state from this state machine and migrates it to another state machine.
