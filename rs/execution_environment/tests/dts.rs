@@ -2380,3 +2380,83 @@ fn dts_abort_paused_execution_on_state_switch() {
     let result = env.execute_ingress(canister_id, "update", update).unwrap();
     assert_eq!(result, WasmResult::Reply(vec![42]));
 }
+
+#[test]
+fn dts_abort_after_dropping_memory_on_state_switch() {
+    if should_skip_test_due_to_disabled_dts() {
+        // Skip this test if DTS is not supported.
+        return;
+    }
+
+    let env = dts_env(
+        NumInstructions::from(1_000_000_000),
+        NumInstructions::from(100_000_000),
+    );
+
+    let user_id = PrincipalId::new_anonymous();
+
+    let wat = r#"
+        (module
+            (import "ic0" "msg_reply" (func $msg_reply))
+            (func (export "canister_update update")
+                ;; We need to generate at least MIN_PAGES_TO_FREE dirty pages
+                ;; to force freeing pages (see page_allocator/mmap.rs).
+                (memory.fill (i32.const 0) (i32.const 42) (i32.const 65536000))
+                (call $msg_reply)
+            )
+            (func (export "canister_update long_update")
+                (memory.fill (i32.const 0) (i32.const 42) (i32.const 65536000))
+                (memory.fill (i32.const 0) (i32.const 42) (i32.const 65536000))
+                (memory.fill (i32.const 0) (i32.const 42) (i32.const 65536000))
+                (memory.fill (i32.const 0) (i32.const 42) (i32.const 65536000))
+                (call $msg_reply)
+            )
+            (memory 1000)
+        )"#;
+
+    let binary = wat2wasm(wat);
+
+    let canister_id = env
+        .install_canister_with_cycles(binary, vec![], None, INITIAL_CYCLES_BALANCE)
+        .unwrap();
+
+    // Snapshot the clean state that doesn't have any paused executions.
+    let clean_state = env.get_latest_state();
+
+    // Generate dirty pages.
+    env.execute_ingress(canister_id, "update", vec![]).unwrap();
+
+    // Start and pause a long-running execution.
+    env.send_ingress(user_id, canister_id, "long_update", vec![]);
+    env.tick();
+    assert_eq!(
+        env.get_latest_state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .next_execution(),
+        NextExecution::ContinueLong,
+    );
+
+    env.replace_canister_state(clean_state, canister_id);
+
+    // Drop all old state to free dirty pages.
+    env.remove_old_states();
+
+    // This is unfortunate, but freeing of dirty pages is deferred and happens
+    // on a background thread. There is no way to wait for this event except for
+    // sleeping.
+    std::thread::sleep(Duration::from_millis(100));
+
+    assert_eq!(
+        env.get_latest_state()
+            .canister_state(&canister_id)
+            .unwrap()
+            .next_execution(),
+        NextExecution::None,
+    );
+
+    // This will abort the paused execution. The expectation is that aborting
+    // doesn't try to access a dropped page.
+    let result = env.execute_ingress(canister_id, "update", vec![]).unwrap();
+    assert_eq!(result, WasmResult::Reply(vec![]));
+}

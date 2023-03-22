@@ -799,6 +799,13 @@ impl<S: SystemApi> WasmtimeInstance<S> {
                 .unwrap_or(e)
         });
 
+        if let Err(HypervisorError::Aborted) = result {
+            // The replica process has aborted the execution and the memory may
+            // have already been dropped. Return early instead of trying to
+            // compute instance stats because they will not be used anyway.
+            return Err(HypervisorError::Aborted);
+        }
+
         let access = self.page_accesses()?;
         self.instance_stats.accessed_pages += access.num_accessed_pages;
         self.instance_stats.dirty_pages += access.dirty_pages.len();
