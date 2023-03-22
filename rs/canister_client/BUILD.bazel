@@ -13,6 +13,7 @@ package(default_visibility = [
     "//rs/rust_canisters/canister_test:__pkg__",
     "//rs/scenario_tests:__pkg__",
     "//rs/tests:__pkg__",
+    "//rs/tests/boundary_nodes:__pkg__",
     "//rs/tests/sns:__pkg__",
     "//rs/workload_generator:__pkg__",
 ])
