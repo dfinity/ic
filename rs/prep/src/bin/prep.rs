@@ -186,6 +186,11 @@ struct CliArgs {
     /// The hex-formatted SHA-256 hash measurement of the SEV guest launch context.
     #[clap(long)]
     pub guest_launch_measurement_sha256_hex: Option<String>,
+
+    /// Whether or not to assign canister ID allocation range for specified IDs to subnet.
+    /// Used only for local and testnet replicas.
+    #[clap(long = "use-specified-ids-allocation-range")]
+    use_specified_ids_allocation_range: bool,
 }
 
 fn main() -> Result<()> {
@@ -239,7 +244,7 @@ fn main() -> Result<()> {
     for (n_idx, nc) in valid_args.unassigned_nodes.iter() {
         topology_config.insert_unassigned_node(*n_idx, nc.clone())
     }
-    let ic_config0 = IcConfig::new(
+    let mut ic_config0 = IcConfig::new(
         valid_args.working_dir.as_path(),
         topology_config,
         valid_args.replica_version_id,
@@ -253,6 +258,9 @@ fn main() -> Result<()> {
         valid_args.ssh_readonly_access,
         valid_args.guest_launch_measurement_sha256_hex,
     );
+
+    ic_config0
+        .set_use_specified_ids_allocation_range(valid_args.use_specified_ids_allocation_range);
 
     let ic_config = match valid_args.dc_pk_dir {
         Some(dir) => ic_config0.load_registry_node_operator_records_from_dir(
@@ -291,6 +299,7 @@ struct ValidatedArgs {
     pub max_ingress_bytes_per_message: Option<u64>,
     pub allow_empty_update_image: bool,
     pub guest_launch_measurement_sha256_hex: Option<String>,
+    pub use_specified_ids_allocation_range: bool,
 }
 
 /// Structured definition of a flow provided by the `--p2p-flows` flag.
@@ -719,6 +728,7 @@ impl CliArgs {
             }),
             allow_empty_update_image: self.allow_empty_update_image,
             guest_launch_measurement_sha256_hex: self.guest_launch_measurement_sha256_hex,
+            use_specified_ids_allocation_range: self.use_specified_ids_allocation_range,
         })
     }
 }

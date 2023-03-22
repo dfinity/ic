@@ -38,6 +38,7 @@ Arguments:
        --max-ingress-bytes-per-message= maximum size of ingress message allowed in bytes
   -x,  --debug                          enable verbose console output
        --with-testnet-keys              Initialize the registry with readonly and backup keys from testnet/config/ssh_authorized_keys.
+       --allow-specified-ids            Allow installing canisters at specified IDs
 '
             exit 1
             ;;
@@ -82,6 +83,9 @@ Arguments:
             ;;
         --with-testnet-keys)
             TESTNET_KEYS="${REPO_ROOT}/testnet/config/ssh_authorized_keys/admin"
+            ;;
+        --allow-specified-ids)
+            ALLOW_SPECIFIED_IDS="--use-specified-ids-allocation-range"
             ;;
         *)
             echo 'Error: Argument is not supported.'
@@ -262,7 +266,8 @@ function generate_subnet_config() {
         "--initial-node-operator" "${NODE_OPERATOR_ID}" \
         "--initial-node-provider" "${NODE_OPERATOR_ID}" \
         "--ssh-readonly-access-file" "${TESTNET_KEYS}" \
-        "--ssh-backup-access-file" "${TESTNET_KEYS}"
+        "--ssh-backup-access-file" "${TESTNET_KEYS}" \
+        ${ALLOW_SPECIFIED_IDS:-}
     set +x
 }
 
