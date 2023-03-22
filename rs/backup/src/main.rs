@@ -76,6 +76,9 @@ async fn main() {
         match args.subcmd {
             Some(SubCommand::Init) => BackupManager::init(log, args.config_file),
             Some(SubCommand::Upgrade) => BackupManager::upgrade(log, args.config_file),
+            Some(SubCommand::GetReplicaVersion { subnet_id }) => {
+                BackupManager::get_version(log, args.config_file, subnet_id.0)
+            }
             _ => {
                 let bm = BackupManager::new(log, args, &rt);
                 Arc::new(bm).do_backups();
