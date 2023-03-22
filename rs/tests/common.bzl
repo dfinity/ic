@@ -165,3 +165,12 @@ UNIVERSAL_VM_RUNTIME_DEPS = [
 GRAFANA_RUNTIME_DEPS = UNIVERSAL_VM_RUNTIME_DEPS + [
     "//rs/tests:grafana_dashboards",
 ]
+
+BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS = [
+    "//ic-os/boundary-guestos/envs/dev:hash_and_upload_disk-img",
+    "//ic-os/boundary-guestos:scripts/build-bootstrap-config-image.sh",
+]
+
+BOUNDARY_NODE_GUESTOS_SEV_RUNTIME_DEPS = [
+    "//ic-os/boundary-guestos/envs/dev-sev:hash_and_upload_disk-img",
+]
