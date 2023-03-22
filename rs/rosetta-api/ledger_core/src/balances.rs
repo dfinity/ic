@@ -118,6 +118,7 @@ where
         to: &S::AccountId,
         amount: Tokens,
         fee: Tokens,
+        fee_collector: Option<&S::AccountId>,
     ) -> Result<(), BalanceError> {
         let debit_amount = (amount + fee).map_err(|_| {
             // No account can hold more than u64::MAX.
@@ -126,10 +127,15 @@ where
         })?;
         self.debit(from, debit_amount)?;
         self.credit(to, amount);
-        // NB. integer overflow is not possible here unless there is a
-        // severe bug in the system: total amount of tokens in the
-        // circulation cannot exceed u64::MAX.
-        self.token_pool += fee;
+        match fee_collector {
+            None => {
+                // NB. integer overflow is not possible here unless there is a
+                // severe bug in the system: total amount of tokens in the
+                // circulation cannot exceed u64::MAX.
+                self.token_pool += fee;
+            }
+            Some(fee_collector) => self.credit(fee_collector, fee),
+        }
         Ok(())
     }
 

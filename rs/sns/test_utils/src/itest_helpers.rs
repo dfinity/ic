@@ -145,6 +145,7 @@ impl SnsTestsInitPayloadBuilder {
             token_symbol: "TKX".to_string(),
             token_name: "Token Example".to_string(),
             metadata: vec![],
+            fee_collector_account: None,
         };
 
         let swap = SwapInit {

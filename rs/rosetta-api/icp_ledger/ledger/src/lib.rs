@@ -127,6 +127,10 @@ impl LedgerContext for Ledger {
     fn approvals_mut(&mut self) -> &mut Self::Approvals {
         &mut self.approvals
     }
+
+    fn fee_collector(&self) -> Option<&ic_ledger_core::block::FeeCollector<Self::AccountId>> {
+        None
+    }
 }
 
 impl LedgerData for Ledger {
@@ -189,6 +193,12 @@ impl LedgerData for Ledger {
 
     fn on_purged_transaction(&mut self, height: BlockIndex) {
         self.blocks_notified.remove(height);
+    }
+
+    fn fee_collector_mut(
+        &mut self,
+    ) -> Option<&mut ic_ledger_core::block::FeeCollector<Self::AccountId>> {
+        None
     }
 }
 

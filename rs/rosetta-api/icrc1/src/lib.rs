@@ -8,12 +8,13 @@ use ic_base_types::PrincipalId;
 use ic_ledger_canister_core::ledger::{LedgerContext, LedgerTransaction, TxApplyError};
 use ic_ledger_core::{
     balances::Balances,
-    block::{BlockType, EncodedBlock, HashOf},
+    block::{BlockType, EncodedBlock, FeeCollector, HashOf},
     timestamp::TimeStamp,
     tokens::Tokens,
 };
 use icrc_ledger_types::transaction::Memo;
 use icrc_ledger_types::{Account, Subaccount};
+use serde::ser::Error;
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 use std::collections::HashMap;
@@ -35,6 +36,26 @@ where
     Account::try_from(compact_account).map_err(D::Error::custom)
 }
 
+fn ser_opt_compact_account<S>(acc: &Option<Account>, s: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::ser::Serializer,
+{
+    acc.map_or_else(
+        || Err(S::Error::custom("Expected some account but found None")),
+        |acc| CompactAccount::from(acc).serialize(s),
+    )
+}
+
+fn de_opt_compact_account<'de, D>(d: D) -> Result<Option<Account>, D::Error>
+where
+    D: serde::de::Deserializer<'de>,
+{
+    use serde::de::Error;
+    let compact_account = CompactAccount::deserialize(d)?;
+    let account = Account::try_from(compact_account).map_err(D::Error::custom)?;
+    Ok(Some(account))
+}
+
 /// A compact representation of an Account.
 ///
 /// Instead of encoding accounts as structs with named fields,
@@ -45,7 +66,7 @@ where
 /// ```
 #[derive(Serialize, Deserialize)]
 #[serde(transparent)]
-struct CompactAccount(Vec<ByteBuf>);
+pub struct CompactAccount(Vec<ByteBuf>);
 
 impl From<Account> for CompactAccount {
     fn from(acc: Account) -> Self {
@@ -189,6 +210,8 @@ impl LedgerTransaction for Transaction {
     where
         C: LedgerContext<AccountId = Self::AccountId>,
     {
+        let fee_collector = context.fee_collector().map(|fc| fc.fee_collector);
+        let fee_collector = fee_collector.as_ref();
         match &self.operation {
             Operation::Transfer {
                 from,
@@ -200,6 +223,7 @@ impl LedgerTransaction for Transaction {
                 to,
                 Tokens::from_e8s(*amount),
                 fee.map(Tokens::from_e8s).unwrap_or(effective_fee),
+                fee_collector,
             )?,
             Operation::Burn { from, amount } => context
                 .balances_mut()
@@ -262,12 +286,21 @@ pub struct Block {
     pub effective_fee: Option<u64>,
     #[serde(rename = "ts")]
     pub timestamp: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "fee_col")]
+    #[serde(serialize_with = "ser_opt_compact_account")]
+    #[serde(deserialize_with = "de_opt_compact_account")]
+    pub fee_collector: Option<Account>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "fee_col_block")]
+    pub fee_collector_block_index: Option<u64>,
 }
 
 type TaggedBlock = Required<Block, 55799>;
 
 impl BlockType for Block {
     type Transaction = Transaction;
+    type AccountId = Account;
 
     fn encode(self) -> EncodedBlock {
         let mut bytes = vec![];
@@ -308,17 +341,28 @@ impl BlockType for Block {
         transaction: Self::Transaction,
         timestamp: TimeStamp,
         effective_fee: Tokens,
+        fee_collector: Option<FeeCollector<Self::AccountId>>,
     ) -> Self {
         let effective_fee = if let Operation::Transfer { fee, .. } = &transaction.operation {
             fee.is_none().then_some(effective_fee.get_e8s())
         } else {
             None
         };
+        let (fee_collector, fee_collector_block_index) = match fee_collector {
+            Some(FeeCollector {
+                fee_collector,
+                block_index: None,
+            }) => (Some(fee_collector), None),
+            Some(FeeCollector { block_index, .. }) => (None, block_index),
+            None => (None, None),
+        };
         Self {
             parent_hash,
             transaction,
             effective_fee,
             timestamp: timestamp.as_nanos_since_unix_epoch(),
+            fee_collector,
+            fee_collector_block_index,
         }
     }
 }

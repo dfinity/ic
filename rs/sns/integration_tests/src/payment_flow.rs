@@ -175,6 +175,7 @@ impl PaymentProtocolTestSetup {
             token_symbol: "STK".to_string(),
             metadata: vec![],
             archive_options: DEFAULT_ICRC1_ARCHIVE_OPTIONS.clone(),
+            fee_collector_account: None,
         }
     }
 

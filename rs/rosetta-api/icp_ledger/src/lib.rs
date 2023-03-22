@@ -7,7 +7,7 @@ use ic_ledger_canister_core::ledger::{LedgerContext, LedgerTransaction, TxApplyE
 use ic_ledger_core::{
     approvals::Approvals,
     balances::Balances,
-    block::{BlockType, EncodedBlock, HashOf, HASH_LENGTH},
+    block::{BlockType, EncodedBlock, FeeCollector, HashOf, HASH_LENGTH},
 };
 use icrc_ledger_types::Account;
 use on_wire::{FromWire, IntoWire};
@@ -120,7 +120,9 @@ where
             to,
             amount,
             fee,
-        } => context.balances_mut().transfer(from, to, *amount, *fee)?,
+        } => context
+            .balances_mut()
+            .transfer(from, to, *amount, *fee, None)?,
         Operation::Burn { from, amount, .. } => context.balances_mut().burn(from, *amount)?,
         Operation::Mint { to, amount, .. } => context.balances_mut().mint(to, *amount)?,
         Operation::Approve {
@@ -170,7 +172,9 @@ where
                 // We need help from the transfer_from endpoint to populate
                 // [from] and [spender] with equal values if the spender is the
                 // account owner.
-                context.balances_mut().transfer(from, to, *amount, *fee)?;
+                context
+                    .balances_mut()
+                    .transfer(from, to, *amount, *fee, None)?;
                 return Ok(());
             }
 
@@ -180,7 +184,9 @@ where
                     allowance: allowance.amount,
                 });
             }
-            context.balances_mut().transfer(from, to, *amount, *fee)?;
+            context
+                .balances_mut()
+                .transfer(from, to, *amount, *fee, None)?;
             context
                 .approvals_mut()
                 .use_allowance(from, spender, *amount, now)
@@ -306,6 +312,7 @@ impl Block {
             transaction,
             timestamp,
             effective_fee,
+            None,
         ))
     }
 
@@ -316,7 +323,7 @@ impl Block {
         timestamp: TimeStamp,
         effective_fee: Tokens,
     ) -> Self {
-        Self::from_transaction(parent_hash, transaction, timestamp, effective_fee)
+        Self::from_transaction(parent_hash, transaction, timestamp, effective_fee, None)
     }
 
     pub fn transaction(&self) -> Cow<Transaction> {
@@ -326,6 +333,7 @@ impl Block {
 
 impl BlockType for Block {
     type Transaction = Transaction;
+    type AccountId = AccountIdentifier;
 
     fn encode(self) -> EncodedBlock {
         EncodedBlock::from_vec(
@@ -358,6 +366,7 @@ impl BlockType for Block {
         transaction: Self::Transaction,
         timestamp: TimeStamp,
         _effective_fee: Tokens,
+        _fee_collector: Option<FeeCollector<AccountIdentifier>>,
     ) -> Self {
         Self {
             parent_hash,
