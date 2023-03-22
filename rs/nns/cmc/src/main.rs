@@ -9,7 +9,7 @@ use cycles_minting_canister::*;
 use dfn_candid::{candid_one, CandidOne};
 use dfn_core::{
     api::{call_with_cleanup, caller, set_certified_data},
-    over, over_async, over_init, over_may_reject, stable, BytesS,
+    over, over_async, over_init, over_may_reject, stable,
 };
 use dfn_protobuf::protobuf;
 use ic_crypto_tree_hash::{
@@ -80,6 +80,10 @@ struct State {
     ledger_canister_id: CanisterId,
 
     governance_canister_id: CanisterId,
+
+    /// An ID that provides an interface to a canister that provides exchange
+    /// rate information such as the [XRC](https://github.com/dfinity/exchange-rate-canister).
+    exchange_rate_canister_id: Option<CanisterId>,
 
     /// Account used to burn funds.
     minting_account_id: Option<AccountIdentifier>,
@@ -181,6 +185,7 @@ impl Default for State {
         Self {
             ledger_canister_id: CanisterId::ic_00(),
             governance_canister_id: CanisterId::ic_00(),
+            exchange_rate_canister_id: None,
             minting_account_id: None,
             authorized_subnets: BTreeMap::new(),
             default_subnets: vec![],
@@ -220,9 +225,15 @@ fn main() {
 
 fn init(args: CyclesCanisterInitPayload) {
     print(format!(
-        "[cycles] init() with ledger canister {}, governance canister {} and minting account {}",
+        "[cycles] init() with ledger canister {}, governance canister {}, exchange rate canister {}, and minting account {}",
         args.ledger_canister_id,
         args.governance_canister_id,
+        args.exchange_rate_canister.as_ref()
+            .map(|x| match x {
+                ExchangeRateCanister::Set(id) => id.to_string(),
+                ExchangeRateCanister::Unset => "<unset>".to_string()
+            })
+            .unwrap_or_else(|| "<none>".to_string()),
         args.minting_account_id
             .map(|x| x.to_string())
             .unwrap_or_else(|| "<none>".to_string())
@@ -234,6 +245,9 @@ fn init(args: CyclesCanisterInitPayload) {
         state.governance_canister_id = args.governance_canister_id;
         state.minting_account_id = args.minting_account_id;
         state.last_purged_notification = args.last_purged_notification;
+        if let Some(xrc_flag) = args.exchange_rate_canister {
+            state.exchange_rate_canister_id = xrc_flag.extract_exchange_rate_canister_id();
+        }
     });
 }
 
@@ -1640,21 +1654,27 @@ fn pre_upgrade() {
 }
 
 #[export_name = "canister_post_upgrade"]
-fn post_upgrade() {
-    over_init(|_: BytesS| {
-        let bytes = stable::get();
-        print(format!(
-            "[cycles] deserializing state after upgrade ({} bytes)",
-            bytes.len(),
-        ));
+fn post_upgrade_() {
+    over_init(|CandidOne(args)| post_upgrade(args))
+}
 
-        let mut new_state = State::decode(&bytes).unwrap();
-        if new_state.subnet_types_to_subnets.is_none() {
-            new_state.subnet_types_to_subnets = Some(BTreeMap::new());
-        }
+fn post_upgrade(args: CyclesCanisterInitPayload) {
+    let bytes = stable::get();
+    print(format!(
+        "[cycles] deserializing state after upgrade ({} bytes)",
+        bytes.len(),
+    ));
 
-        STATE.with(|state| state.replace(Some(new_state)));
-    })
+    let mut new_state = State::decode(&bytes).unwrap();
+    if new_state.subnet_types_to_subnets.is_none() {
+        new_state.subnet_types_to_subnets = Some(BTreeMap::new());
+    }
+
+    if let Some(xrc_flag) = args.exchange_rate_canister {
+        new_state.exchange_rate_canister_id = xrc_flag.extract_exchange_rate_canister_id();
+    }
+
+    STATE.with(|state| state.replace(Some(new_state)));
 }
 
 #[export_name = "canister_query http_request"]
@@ -1708,6 +1728,7 @@ mod tests {
         init(CyclesCanisterInitPayload {
             ledger_canister_id: CanisterId::ic_00(),
             governance_canister_id: CanisterId::ic_00(),
+            exchange_rate_canister: None,
             minting_account_id: None,
             last_purged_notification: Some(0),
         })

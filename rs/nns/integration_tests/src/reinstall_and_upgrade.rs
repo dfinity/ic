@@ -81,6 +81,7 @@ fn test_reinstall_and_upgrade_canisters_canonical_ordering() {
                             true,
                             // Method fails if wasm stays the same
                             append_inert(Some(&wasm)),
+                            None,
                         )
                         .await;
                     }
@@ -198,7 +199,7 @@ fn test_reinstall_and_upgrade_canisters_with_state_changes() {
             wasm,
             use_root,
             canister,
-            init_payload: _,
+            init_payload,
             mode: _,
         } in canister_install_info
         {
@@ -209,6 +210,7 @@ fn test_reinstall_and_upgrade_canisters_with_state_changes() {
                     &nns_canisters.root,
                     false,
                     wasm,
+                    Some(init_payload),
                 )
                 .await;
             } else {
