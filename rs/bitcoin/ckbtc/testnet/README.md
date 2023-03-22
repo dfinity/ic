@@ -62,5 +62,5 @@ dfx deploy kyt --network ic --argument '(variant { InitArg = record { api_key = 
 ### Upgrade
 
 ```shell
-dfx deploy --network ic kyt --argument '(variant { UpgradeArg = record { } } })'
+dfx deploy --network ic kyt --argument '(variant { UpgradeArg = record {};})'
 ```
