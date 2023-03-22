@@ -8,8 +8,8 @@ use std::{collections::HashMap, time::Duration};
 use tonic::transport::Channel;
 
 const CONNECTED_STATE: u64 = 3;
-const FLOW_STATE_METRIC: &str = "transport_flow_state";
-const PEER_ID: &str = "flow_peer_id";
+const CONNECTION_STATE_METRIC: &str = "transport_connection_state";
+const PEER_ID: &str = "peer_id";
 const TIMEOUT_LENGTH_SEC: Duration = Duration::from_secs(30);
 
 // TODO(NET-1365) Come up with more generic interface for fetching multiple metrics + consolidate shared code with sampling code
@@ -33,7 +33,7 @@ impl SampledMetricsCollector {
 
     pub async fn sample(&mut self) -> Result<(), MetricsCollectError> {
         let request = OnchainObservabilityServiceGetMetricsDataRequest {
-            requested_metrics: vec![FLOW_STATE_METRIC.to_string()],
+            requested_metrics: vec![CONNECTION_STATE_METRIC.to_string()],
         };
 
         let mut tonic_request = tonic::Request::new(request.clone());
@@ -80,7 +80,7 @@ impl SampledMetricsCollector {
 }
 
 // Since metrics endpoint is a giant string, we must manually scrape relevant data
-// Derive connection state using the transport_flow_state metrics
+// Derive connection state using the transport_connection_state metrics
 // Assumes endpoint response is well formatted
 fn peer_label_and_connected_state_from_raw_response(
     response: String,
@@ -92,14 +92,14 @@ fn peer_label_and_connected_state_from_raw_response(
         MetricsCollectError::RpcRequestFailure("prometheus scrape error".to_string())
     })?;
 
-    // Get peer *label* and connected state from transport flow state metric
-    let flow_state_metric: Vec<_> = metrics
+    // Get peer *label* and connected state from transport connection state metric
+    let connection_state_metric: Vec<_> = metrics
         .samples
         .iter()
-        .filter(|&sample| sample.metric == FLOW_STATE_METRIC)
+        .filter(|&sample| sample.metric == CONNECTION_STATE_METRIC)
         .collect();
 
-    for sample in flow_state_metric {
+    for sample in connection_state_metric {
         let peer_label = sample.labels.get(PEER_ID).ok_or_else(|| {
             MetricsCollectError::MetricParseFailure("Failed to get peer id label".to_string())
         })?;

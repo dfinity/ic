@@ -324,6 +324,14 @@ fn main() -> io::Result<()> {
         malicious_behaviour.malicious_flags.clone(),
     );
 
+    if config
+        .adapters_config
+        .onchain_observability_enable_grpc_server
+    {
+        // Spawns a new grpc server in a new task.  This will continue to run until the Runtime shuts down.
+        spawn_onchain_observability_grpc_server(metrics_registry, rt_main.handle().clone());
+    }
+
     std::thread::sleep(Duration::from_millis(5000));
 
     if config.malicious_behaviour.maliciously_seg_fault() {
@@ -340,14 +348,6 @@ fn main() -> io::Result<()> {
                 }
             }
         });
-    }
-
-    if config
-        .adapters_config
-        .onchain_observability_enable_grpc_server
-    {
-        // Spawns a new grpc server in a new task.  This will continue to run until the Runtime shuts down.
-        spawn_onchain_observability_grpc_server(metrics_registry, rt_main.handle().clone());
     }
 
     let save_logger = logger.clone();
