@@ -564,6 +564,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             "libsecp256k1": crate.spec(
                 version = "^0.7.0",
             ),
+            "libusb": crate.spec(
+                version = "^0.3.0",
+            ),
             "linked-hash-map": crate.spec(
                 version = "^0.5.3",
             ),
@@ -1143,7 +1146,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 ],
             ),
             "vsock": crate.spec(
-                version = "^0.2.6",
+                version = "^0.3",
             ),
             "walrus": crate.spec(
                 version = "^0.19.0",

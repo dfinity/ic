@@ -28,6 +28,9 @@ def image_deps(mode, _malicious = False):
         "rootfs": {
             # base layer
             ":rootfs-tree.tar": "/",
+
+            # additional files to install
+            "//publish/binaries:vsock_host": "/opt/ic/bin/vsock-host:0755",
         },
     }
 
