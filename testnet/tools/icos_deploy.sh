@@ -32,8 +32,9 @@ function exit_usage() {
         err '    --max-ingress-bytes-per-message <dil> Set maximum ingress size in bytes (-1 if not provided explicitly, which means - default will be used)'
         err '    --hosts-ini <hosts_override.ini>      Override the default ansible hosts.ini to set different testnet configuration'
         err '    --no-boundary-nodes                   Do not deploy boundary nodes even if they are declared in the hosts.ini file'
-        err '    --boundary-dev-image		    Use development image of the boundary node VM (includes development service worker'
+        err '    --boundary-dev-image		       Use development image of the boundary node VM (includes development service worker'
         err '    --with-testnet-keys                   Initialize the registry with readonly and backup keys from testnet/config/ssh_authorized_keys'
+        err '    --allow-specified-ids                 Allow installing canisters at specified IDs'
         err ''
         err 'To get the latest branch revision that has a disk image pre-built, you can use gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh'
         err 'Example (deploy latest master to small-a):'
@@ -109,6 +110,9 @@ while [ $# -gt 0 ]; do
             ;;
         --with-testnet-keys)
             WITH_TESTNET_KEYS="--with-testnet-keys"
+            ;;
+        --allow-specified-ids)
+            ALLOW_SPECIFIED_IDS="--allow-specified-ids"
             ;;
         -?*) exit_usage ;;
         *) deployment="$1" ;;
@@ -193,6 +197,10 @@ else
     ANSIBLE_ARGS+=("--skip-tags" "boundary_node_vm")
 fi
 
+if ! [[ -z "${ALLOW_SPECIFIED_IDS+x}" ]]; then
+    ANSIBLE_ARGS+=("-e" "allow_specified_ids=true")
+fi
+
 ANSIBLE_ARGS+=(
     "-i" "${INVENTORY}"
     "-e" "bn_image_type=${BOUNDARY_IMAGE_TYPE:-}"
@@ -239,7 +247,8 @@ pushd "${REPO_ROOT}/ic-os/guestos"
     --dkg-interval-length=${DKG_INTERVAL_LENGTH} \
     --max-ingress-bytes-per-message=${MAX_INGRESS_BYTES_PER_MESSAGE} \
     --output-nns-public-key="${MEDIA_PATH}/nns-public-key.pem" \
-    ${WITH_TESTNET_KEYS:-}
+    ${WITH_TESTNET_KEYS:-} \
+    ${ALLOW_SPECIFIED_IDS:-}
 popd
 
 SCP_PREFIX=""

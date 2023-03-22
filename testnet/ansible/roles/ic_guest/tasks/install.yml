@@ -109,6 +109,9 @@
           --pin {{ hsm_pin }}
           --key-id {{ hsm_key_id }}
           {% endif %}
+          {% if allow_specified_ids is defined %}
+          --pass-specified-id \
+          {% endif %}
           --wasm-dir "{{ ic_media_path }}/canisters"
 
       echo "Test NNS is installed"

@@ -320,13 +320,29 @@ impl<'a> Runtime {
         &'a self,
         num_cycles: Option<u128>,
     ) -> Result<Canister<'a>, String> {
+        self.create_canister_with_specified_id(num_cycles, None)
+            .await
+    }
+
+    /// Creates an empty canister.
+    ///
+    /// Note that this calls ic00::Method::ProvisionalCreateCanisterWithCycles,
+    /// which is protected by a whitelist of callers. Depending on the
+    /// runtime, and depending on the replica configuration, this may not be
+    /// authorized.
+    pub async fn create_canister_with_specified_id(
+        &'a self,
+        num_cycles: Option<u128>,
+        specified_id: Option<PrincipalId>,
+    ) -> Result<Canister<'a>, String> {
         let canister_id_record: Result<CanisterIdRecord, String> = self
             .get_management_canister()
             .update_(
                 ic00::Method::ProvisionalCreateCanisterWithCycles.to_string(),
                 candid,
                 (ProvisionalCreateCanisterWithCyclesArgs::new(
-                    num_cycles, None,
+                    num_cycles,
+                    specified_id,
                 ),),
             )
             .await;
