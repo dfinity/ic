@@ -4,8 +4,17 @@ use ic_cdk::api::management_canister::http_request::HttpResponse;
 use ic_cdk::api::management_canister::http_request::{
     CanisterHttpRequestArgument, HttpHeader, HttpMethod, TransformContext,
 };
+use num_traits::ToPrimitive;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use std::cell::RefCell;
+use std::collections::BTreeMap;
+
 pub type ExternalId = String;
+
+thread_local! {
+    /// Stats for the number HTTP responses by status.
+    pub static HTTP_CALL_STATS: RefCell<BTreeMap<u16, u64>> = RefCell::default();
+}
 
 // Registering a transaction
 // https://docs.chainalysis.com/api/kyt/#registration
@@ -150,8 +159,14 @@ pub async fn http_call<I: Serialize, O: DeserializeOwned>(
         (request,),
         cycles,
     )
-    .await
-    .unwrap();
+    .await?;
+
+    HTTP_CALL_STATS.with(|c| {
+        *c.borrow_mut()
+            .entry(response.status.0.to_u16().unwrap())
+            .or_default() += 1
+    });
+
     Ok(if response.status < 300u64 {
         let result: O = serde_json::from_slice(&response.body).unwrap_or_else(|e| {
             panic!(

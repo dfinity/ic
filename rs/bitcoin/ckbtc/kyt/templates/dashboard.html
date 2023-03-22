@@ -57,6 +57,10 @@
                         <td>{% for m in maintainers %}{% if !loop.first %},{% endif %}<code>{{ m }}</code>{% endfor %}
                         </td>
                     </tr>
+                    <tr>
+                        <th>Last API key update</th>
+                        <td>{{ last_api_key_update_date }}</td>
+                    </tr>
                 </tbody>
             </table>
             <h3>Events</h3>
@@ -84,7 +88,5 @@
             </table>
         </div>
     </div>
-
     <body>
-
 </html>
