@@ -4269,23 +4269,47 @@ impl Governance {
         ListProposalInfoResponse { proposal_info }
     }
 
-    // TODO: This is slow, because it scans all proposals.
-    fn ready_to_be_settled_proposal_ids(&self) -> impl Iterator<Item = ProposalId> + '_ {
-        let now = self.env.now();
+    // This is slow, because it scans all proposals.
+    pub fn ready_to_be_settled_proposal_ids(
+        &self,
+        as_of_timestamp_seconds: u64,
+    ) -> impl Iterator<Item = ProposalId> + '_ {
         self.proto
             .proposals
             .iter()
-            .filter(move |(_, data)| {
-                let topic = data.topic();
+            .filter(move |(_, proposal)| {
+                let topic = proposal.topic();
                 let voting_period_seconds = self.voting_period_seconds()(topic);
-                data.reward_status(now, voting_period_seconds)
-                    == ProposalRewardStatus::ReadyToSettle
+                let reward_status =
+                    proposal.reward_status(as_of_timestamp_seconds, voting_period_seconds);
+
+                reward_status == ProposalRewardStatus::ReadyToSettle
             })
             .map(|(k, _)| ProposalId { id: *k })
     }
 
+    /// Rounds now downwards to nearest multiple of REWARD_DISTRIBUTION_PERIOD_SECONDS after genesis
+    fn most_recent_fully_ellapsed_reward_round_end_timestamp_seconds(&self) -> u64 {
+        let now = self.env.now();
+        let genesis_timestamp_seconds = self.proto.genesis_timestamp_seconds;
+
+        if genesis_timestamp_seconds > now {
+            println!(
+                "{}Warning: genesis is in the future: {} vs. now = {})",
+                LOG_PREFIX, genesis_timestamp_seconds, now,
+            );
+            return 0;
+        }
+
+        (now - genesis_timestamp_seconds) // Duration since genesis (in seconds).
+            / REWARD_DISTRIBUTION_PERIOD_SECONDS // This is where the truncation happens. Whole number of rounds.
+            * REWARD_DISTRIBUTION_PERIOD_SECONDS // Convert back into seconds.
+            + self.proto.genesis_timestamp_seconds // Convert from duration to back to instant.
+    }
+
     pub fn num_ready_to_be_settled_proposals(&self) -> usize {
-        self.ready_to_be_settled_proposal_ids().count()
+        self.ready_to_be_settled_proposal_ids(self.env.now())
+            .count()
     }
 
     /// This method attempts to move a proposal forward in the process,
@@ -6868,11 +6892,12 @@ impl Governance {
 
     /// Return `true` if rewards should be distributed, `false` otherwise
     fn should_distribute_rewards(&self) -> bool {
-        // Enough time has elapsed.
-        let reward_available_at = self.proto.genesis_timestamp_seconds
-            + (self.latest_reward_event().day_after_genesis + 1)
-                * REWARD_DISTRIBUTION_PERIOD_SECONDS;
-        self.env.now() >= reward_available_at
+        let latest_distribution_nominal_end_timestamp_seconds =
+            self.latest_reward_event().day_after_genesis * REWARD_DISTRIBUTION_PERIOD_SECONDS
+                + self.proto.genesis_timestamp_seconds;
+
+        self.most_recent_fully_ellapsed_reward_round_end_timestamp_seconds()
+            > latest_distribution_nominal_end_timestamp_seconds
     }
 
     /// Create a reward event.
@@ -6922,8 +6947,11 @@ impl Governance {
         let total_available_e8s_equivalent_float = (supply.get_e8s() as f64) * fraction
             + rolling_over_from_previous_reward_event_e8s_equivalent as f64;
 
-        let considered_proposals: Vec<ProposalId> =
-            self.ready_to_be_settled_proposal_ids().collect();
+        let as_of_timestamp_seconds =
+            self.most_recent_fully_ellapsed_reward_round_end_timestamp_seconds();
+        let considered_proposals: Vec<ProposalId> = self
+            .ready_to_be_settled_proposal_ids(as_of_timestamp_seconds)
+            .collect();
         println!(
             "{}distributing voting rewards for the following proposals: {}",
             LOG_PREFIX,
@@ -6969,14 +6997,20 @@ impl Governance {
 
         // Increment neuron maturities (and actually_distributed_e8s_equivalent).
         //
-        // The point of this guard is to avoid divide by zero. Not sure if that
-        // is theoretically possible, but even if it isn't, it might occur due
-        // to some bug.
-        if total_voting_rights == 0.0 {
+        // The point of this guard is to avoid divide by zero (or super tiny
+        // positive number). Not sure if that is theoretically possible, but
+        // even if it isn't, it might occur due to some bug.
+        //
+        // Theoretically, the smallest nonzero we can get is 0.01, because we
+        // are just adding and multiplying, and everything is just integers,
+        // except for proposal weights, which are currently (as of Mar, 2023)
+        // 20x, 1x, and 0.01x.
+        if total_voting_rights < 0.001 {
             println!(
-                "{}Warning: total_voting_rights == 0, even though considered_proposals \
-                 is nonempty (see earlier log).",
-                LOG_PREFIX,
+                "{}Warning: total_voting_rights == {}, even though considered_proposals \
+                 is nonempty (see earlier log). Therefore, we skip incrementing maturity \
+                 to avoid dividing by zero (or super small number).",
+                LOG_PREFIX, total_voting_rights,
             );
         } else {
             for (neuron_id, used_voting_rights) in voters_to_used_voting_right {

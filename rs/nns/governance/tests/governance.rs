@@ -62,7 +62,7 @@ use ic_nns_governance::{
         ProposalStatus::{self, Rejected},
         RewardEvent, RewardNodeProvider, RewardNodeProviders, SetDefaultFollowees,
         SettleCommunityFundParticipation, SwapBackgroundInformation, Tally, Topic,
-        UpdateNodeProvider, Vote,
+        UpdateNodeProvider, Vote, WaitForQuietState,
     },
 };
 use ic_sns_root::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
@@ -72,7 +72,7 @@ use ic_sns_swap::pb::v1::{
 use ic_sns_wasm::pb::v1::{DeployedSns, ListDeployedSnsesRequest, ListDeployedSnsesResponse};
 use icp_ledger::{AccountIdentifier, Memo, Subaccount, Tokens};
 use lazy_static::lazy_static;
-use maplit::hashmap;
+use maplit::{btreemap, hashmap};
 use pretty_assertions::{assert_eq, assert_ne};
 use proptest::prelude::{prop_assert, prop_assert_eq, proptest, TestCaseError};
 use rand::{prelude::IteratorRandom, rngs::StdRng, Rng, SeedableRng};
@@ -12253,6 +12253,93 @@ async fn test_proposal_url_not_on_list_fails() {
     )
     .await
     .unwrap();
+}
+
+#[test]
+fn test_ready_to_be_settled_proposals_ids() {
+    // Step 1: Prepare the world.
+
+    let genesis_timestamp_seconds = 123_456_789;
+    let mut fake_driver = fake::FakeDriver::default().at(genesis_timestamp_seconds);
+
+    let end_of_reward_round_1_timestamp_seconds =
+        genesis_timestamp_seconds + REWARD_DISTRIBUTION_PERIOD_SECONDS;
+    // Enters reward_status == ReadyToSettle just before the end of round 1.
+    let proposal_1 = ProposalData {
+        id: Some(ProposalId { id: 1 }),
+        wait_for_quiet_state: Some(WaitForQuietState {
+            current_deadline_timestamp_seconds: end_of_reward_round_1_timestamp_seconds - 5,
+        }),
+        ..Default::default()
+    };
+    // Enters reward_status == ReadyToSettle shortly after end of round 1.
+    let proposal_2 = ProposalData {
+        id: Some(ProposalId { id: 2 }),
+        wait_for_quiet_state: Some(WaitForQuietState {
+            current_deadline_timestamp_seconds: end_of_reward_round_1_timestamp_seconds + 5,
+        }),
+        ..Default::default()
+    };
+
+    let governance_proto = GovernanceProto {
+        proposals: btreemap! {
+            1 => proposal_1,
+            2 => proposal_2,
+        },
+        genesis_timestamp_seconds,
+        ..Default::default()
+    };
+
+    let governance = Governance::new(
+        governance_proto,
+        fake_driver.get_fake_env(),
+        fake_driver.get_fake_ledger(),
+        fake_driver.get_fake_cmc(),
+    );
+    let rewardable_proposal_ids = |now_timestamp_seconds| -> Vec<u64> {
+        governance
+            .ready_to_be_settled_proposal_ids(now_timestamp_seconds)
+            .map(|id| id.id)
+            .collect::<Vec<u64>>()
+    };
+
+    // Step 2 & 3: Run code under test and inspect results.
+
+    // Since no proposal has entered reward_status == ReadyToSettle, we
+    // really do not expect to see anything yet.
+    assert_eq!(
+        rewardable_proposal_ids(fake_driver.now()),
+        Vec::<u64>::new()
+    );
+
+    fake_driver.advance_time_by(REWARD_DISTRIBUTION_PERIOD_SECONDS - 6);
+    // At this point, both proposals are still accepting proposals; therefore,
+    // we still see nothing as rewardable.
+    assert_eq!(
+        rewardable_proposal_ids(fake_driver.now()),
+        Vec::<u64>::new()
+    );
+
+    fake_driver.advance_time_by(2);
+    // We are now at 4 seconds before the end of the first reward round.
+    // At this point, proposal 1 is no longer accepting votes.
+    assert_eq!(rewardable_proposal_ids(fake_driver.now()), vec![1]);
+
+    fake_driver.advance_time_by(8);
+    // We are now 4 seconds after the end of the first reward round, barely into
+    // the second round. At the point proposal 2 is almost done accepting votes,
+    // but not quite.
+    assert_eq!(rewardable_proposal_ids(fake_driver.now()), vec![1]);
+
+    fake_driver.advance_time_by(2);
+    // Finally, proposal 2 is done accepting votes, and is therefore ready for
+    // rewarding.
+    assert_eq!(rewardable_proposal_ids(fake_driver.now()), vec![1, 2]);
+
+    fake_driver.advance_time_by(10);
+    // After advancing by more time, the both proposals continue to be waiting
+    // for rewards (because in this test, no rewards are given).
+    assert_eq!(rewardable_proposal_ids(fake_driver.now()), vec![1, 2]);
 }
 
 #[tokio::test]
