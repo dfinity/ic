@@ -243,7 +243,7 @@ fn canister_pre_upgrade() {
 }
 
 /// Executes some logic after executing an upgrade, including deserializing what has been written
-/// to stable memory in canister_pre_upgrade and initialising the governance's state with it.
+/// to stable memory in canister_pre_upgrade and initializing the governance's state with it.
 #[export_name = "canister_post_upgrade"]
 fn canister_post_upgrade() {
     dfn_core::printer::hook();
@@ -341,7 +341,7 @@ fn get_sns_initialization_parameters_(
     governance().get_sns_initialization_parameters(&request)
 }
 
-/// Performs a command on a neuron if the caller is authorised to do so.
+/// Performs a command on a neuron if the caller is authorized to do so.
 /// The possible neuron commands are (for details, see the SNS's governance.proto):
 /// - configuring the neuron (increasing or setting its dissolve delay or changing the
 /// dissolve state),
