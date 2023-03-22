@@ -29,10 +29,6 @@ fn round_up_to_os_page_size(size: usize) -> usize {
     round_up_to_page_size(size, PAGE_SIZE)
 }
 
-fn wasm_max_mem_size_in_bytes() -> usize {
-    WASM32_MAX_PAGES as usize * WASM_PAGE_SIZE as usize
-}
-
 #[derive(Hash, PartialEq, Eq)]
 pub(crate) struct MemoryStart(pub(crate) usize);
 
@@ -65,6 +61,24 @@ unsafe impl wasmtime::MemoryCreator for WasmtimeMemoryCreator {
         reserved_size_in_bytes: Option<usize>,
         guard_size: usize,
     ) -> Result<Box<dyn wasmtime::LinearMemory>, String> {
+        // We don't use the `reserved_size_in_bytes` because the size of the
+        // memory allocation is determined based on the memory type: 64-bit
+        // memories have size at most the maximum stable memory size and 32-bit
+        // memories have size at most 4GiB. So we always allocate that amount
+        // (unless the module explicitly lists a smaller maximum).
+        //
+        // If we get a `reserved_size_in_bytes` that exceeds the max stable
+        // memory size then there has been a change in our setting of the
+        // `static_memory_maximum_size` for the `wasmtime::Config` which isn't
+        // compatible with the memory sizes we expect to see here.
+        if let Some(reserved_size) = reserved_size_in_bytes {
+            assert!(
+                reserved_size <= MAX_STABLE_MEMORY_IN_BYTES as usize,
+                "Reserved bytes for wasm memory {} exceeds the maximum expected {}",
+                reserved_size,
+                MAX_STABLE_MEMORY_IN_BYTES
+            )
+        }
         let max_pages = if ty.is_64() {
             MAX_STABLE_MEMORY_IN_BYTES / (WASM_PAGE_SIZE as u64)
         } else {
@@ -73,9 +87,7 @@ unsafe impl wasmtime::MemoryCreator for WasmtimeMemoryCreator {
         let min = std::cmp::min(ty.minimum(), max_pages) as usize;
         let max = std::cmp::min(ty.maximum().unwrap_or(max_pages), max_pages) as usize;
 
-        let mem_size = reserved_size_in_bytes.unwrap_or_else(wasm_max_mem_size_in_bytes);
-
-        let mem = MmapMemory::new(mem_size, guard_size);
+        let mem = MmapMemory::new(max * WASM_PAGE_SIZE as usize, guard_size);
 
         match self.created_memories.lock() {
             Err(err) => Err(format!("Error locking map of created memories: {:?}", err)),

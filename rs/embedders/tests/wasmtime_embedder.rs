@@ -14,8 +14,9 @@ use ic_types::{
 mod test {
     use ic_interfaces::execution_environment::{HypervisorError, TrapCode};
     use ic_registry_subnet_type::SubnetType;
+    use ic_replicated_state::canister_state::WASM_PAGE_SIZE_IN_BYTES;
     use ic_test_utilities::wasmtime_instance::DEFAULT_NUM_INSTRUCTIONS;
-    use ic_types::{methods::WasmClosure, PrincipalId};
+    use ic_types::{methods::WasmClosure, NumBytes, PrincipalId};
 
     use super::*;
 
@@ -1562,5 +1563,46 @@ mod test {
             .build();
         let err = instance.run(func_ref("test_len_both")).unwrap_err();
         assert_eq!(err, Trapped(StableMemoryOutOfBounds));
+    }
+
+    /// Test that stable memory access past the normal 32-bit range (including
+    /// guard pages) works properly.
+    #[test]
+    fn stable_access_beyond_32_bit_range() {
+        fn func_ref(name: &str) -> FuncRef {
+            FuncRef::Method(WasmMethod::Update(name.to_string()))
+        }
+
+        let gb = 1024 * 1024 * 1024;
+        // We'll grow stable memory to 30 GB and then try writing to the last byte.
+        let bytes_to_access = 30 * gb;
+        let max_stable_memory_in_wasm_pages = bytes_to_access / WASM_PAGE_SIZE_IN_BYTES as u64;
+        let last_byte_of_stable_memory = bytes_to_access - 1;
+
+        let wat = format!(
+            r#"
+        (module
+            (import "ic0" "stable64_grow" (func $stable_grow (param i64) (result i64)))
+            (import "ic0" "stable64_write"
+                (func $stable64_write (param $offset i64) (param $src i64) (param $size i64)))
+            (func (export "canister_update write_to_last_page")
+                ;; Grow stable memory to the maximum size
+                (i64.eq (i64.const -1) (call $stable_grow (i64.const {max_stable_memory_in_wasm_pages})))
+                (if
+                    (then unreachable)
+                )
+
+                ;; Write to the last byte of stable memory
+                (call $stable64_write (i64.const {last_byte_of_stable_memory}) (i64.const 0) (i64.const 1))
+            )
+            (memory 2 2)
+        )"#
+        );
+
+        let mut instance = WasmtimeInstanceBuilder::new()
+            .with_wat(&wat)
+            .with_canister_memory_limit(NumBytes::from(40 * gb))
+            .build();
+        instance.run(func_ref("write_to_last_page")).unwrap();
     }
 }
