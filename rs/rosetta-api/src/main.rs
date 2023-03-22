@@ -14,8 +14,14 @@ use url::Url;
 struct Opt {
     #[clap(short = 'a', long = "address", default_value = "0.0.0.0")]
     listen_address: String,
-    #[clap(short = 'p', long = "port", default_value = "8081")]
-    listen_port: u16,
+    /// The listen port of Rosetta. If not set then the port used will be 8081 unless --listen-port-file is
+    /// defined in which case a random port is used.
+    #[clap(short = 'p', long = "port")]
+    listen_port: Option<u16>,
+    /// File where the port will be written. Useful when the port is set to 0 because a random port will be picked.
+    #[clap(short = 'P', long = "port-file")]
+    listen_port_file: Option<PathBuf>,
+    /// Id of the ICP ledger canister.
     #[clap(short = 'c', long = "canister-id")]
     ic_canister_id: Option<String>,
     #[clap(short = 't', long = "token-sybol")]
@@ -23,6 +29,7 @@ struct Opt {
     /// Id of the governance canister to use for neuron management.
     #[clap(short = 'g', long = "governance-canister-id")]
     governance_canister_id: Option<String>,
+    /// The URL of the replica to connect to.
     #[clap(long = "ic-url")]
     ic_url: Option<String>,
     #[clap(
@@ -71,8 +78,13 @@ async fn main() -> std::io::Result<()> {
     let pkg_name = env!("CARGO_PKG_NAME");
     let pkg_version = env!("CARGO_PKG_VERSION");
     log::info!("Starting {}, pkg_version: {}", pkg_name, pkg_version);
-    log::info!("Listening on {}:{}", opt.listen_address, opt.listen_port);
-    let addr = format!("{}:{}", opt.listen_address, opt.listen_port);
+    let listen_port = match (opt.listen_port, &opt.listen_port_file) {
+        (None, None) => 8081,
+        (None, Some(_)) => 0, // random port
+        (Some(p), _) => p,
+    };
+    log::info!("Listening on {}:{}", opt.listen_address, listen_port);
+    let addr = format!("{}:{}", opt.listen_address, listen_port);
 
     let (root_key, canister_id, governance_canister_id, url) = if opt.mainnet {
         let root_key = match opt.root_key {
@@ -186,8 +198,14 @@ async fn main() -> std::io::Result<()> {
     let req_handler = RosettaRequestHandler::new(blockchain, ledger.clone());
 
     log::info!("Network id: {:?}", req_handler.network_id());
-    let serv = RosettaApiServer::new(ledger, req_handler, addr, expose_metrics)
-        .expect("Error creating RosettaApiServer");
+    let serv = RosettaApiServer::new(
+        ledger,
+        req_handler,
+        addr,
+        opt.listen_port_file,
+        expose_metrics,
+    )
+    .expect("Error creating RosettaApiServer");
 
     // actix server catches kill signals. After that we still need to stop our
     // server properly

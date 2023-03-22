@@ -20,6 +20,7 @@ use prometheus::{
 use std::{
     io,
     mem::replace,
+    path::PathBuf,
     sync::{
         atomic::{
             AtomicBool,
@@ -340,6 +341,7 @@ impl RosettaApiServer {
         ledger: Arc<T>,
         req_handler: RosettaRequestHandler,
         addr: String,
+        listen_port_file: Option<PathBuf>,
         expose_metrics: bool,
     ) -> io::Result<Self> {
         let stopped = Arc::new(AtomicBool::new(false));
@@ -381,8 +383,27 @@ impl RosettaApiServer {
                 app
             }
         })
-        .bind(addr)?
-        .run();
+        .bind(addr)?;
+
+        if let Some(listen_port_file) = listen_port_file {
+            let listen_port_file_parent = listen_port_file
+                .parent()
+                .expect("Unable to get the parent of listen_port_file");
+            std::fs::create_dir_all(listen_port_file_parent).unwrap_or_else(|e| {
+                panic!(
+                    "Unable to create the parent directories for file {}: {}",
+                    listen_port_file.display(),
+                    e
+                )
+            });
+            std::fs::write(
+                listen_port_file,
+                server.addrs().get(0).unwrap().port().to_string(),
+            )
+            .unwrap_or_else(|e| panic!("Unable to write to listen_port_file! Error: {}", e));
+        }
+
+        let server = server.run();
 
         Ok(Self {
             stopped,
