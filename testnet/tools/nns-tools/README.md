@@ -58,6 +58,10 @@ This script creates a testnet with mainnet state using a stable shared identity 
 It then stores all of the variables in a directory (which is output) so they can be easily referenced for
 interaction with the subnet
 
+Needs to be run on zh1-spm22.zh1.dfinity.network. (Ideally, we'd
+be able to run this locally; implementing that is feasible, but
+we haven't done it yet.)
+
 ### Example usage of nns_dev_testnet.sh
 
 When running the testnet creation script, a temporary directory is created.  If you would like to use a particular directory
@@ -147,19 +151,35 @@ canister=governance dfx canister \
 
 ## NNS Canister Upgrade Testing Process
 
+This is usually done as one of the steps in the [NNS release process][1].
+
+[1]: https://www.notion.so/Releasing-a-NNS-Canister-6d176f60478c4236a1af5f14462e73fc
+
 In order to test a canister upgrade, you will first need to spin up a testnet.  See [Spinning up a testnet](#spinning-up-a-testnet) above.
 
 If you have a working testnet, start by sourcing variables into your local shell if you have not already done so.
-`source /tmp/$USER-nns-test/output_vars_nns_dev_testnet.sh`
+```bash
+source /tmp/$USER-nns-test/output_vars_nns_dev_testnet.sh
+````
 
 Next, we test the upgrade
-`./test-canister-upgrade.sh <CANISTER_NAME> <TARGET_VERSION>`
+```bash
+./test-canister-upgrade.sh <CANISTER_NAME> <TARGET_VERSION>
+```
 
-`<CANISTER_NAME>` is the key of the canister in `rs/nns/canister_ids.json`.
-`<TARGET_VERSION>` is the git hash of the version that has canisters available on the build system.
+* `<CANISTER_NAME>` is the key of the canister in `rs/nns/canister_ids.json`.
+* `<TARGET_VERSION>` is the git hash of the version that has canisters available
+  on the build system. You can find a suitable value by looking at the
+  [commits page](https://gitlab.com/dfinity-lab/public/ic/-/commits/master?ref_type=heads)
+  in Gitlab. In one of the columns towards the right, you will see some red Xs
+  and green checkmarks. If you click on the clipboard icon next to a green checkmark,
+  you will copy a suitable value.
 
 For example:
-`./test-canister-upgrade.sh registry 1a2d86e9d66d93c4a9a9a147774577c377ce0c66`
+
+```bash
+./test-canister-upgrade.sh registry 1a2d86e9d66d93c4a9a9a147774577c377ce0c66
+```
 
 The script will test upgrading the canister via proposal, and then upgrading it again via proposal.  It uses the gzipped
 WASM as well as the un-gzipped WASM, as they will report different hashes in the running canister (allowing us to verify that the proposal succeeded.)
@@ -168,30 +188,62 @@ This is essential to ensuring that not only can we upgrade _to_ a particular ver
 
 ## NNS Canister Upgrade Proposal Process
 
-After you have verified your upgrade works with mainnet state (See [`NNS Canister Upgrade Testing Process`](#nns-canister-upgrade-testing-process)), 
-you will prepare an upgrade proposal and submit it.
+This is usually done as one of the steps in the [NNS release process][1].
+
+[1]: https://www.notion.so/Releasing-a-NNS-Canister-6d176f60478c4236a1af5f14462e73fc
+
+The commands in this section need to be run locally, not in zh1-spm22, like the commands
+in other sections.
+
+After you have verified your upgrade works with mainnet state
+(See [`NNS Canister Upgrade Testing Process`](#nns-canister-upgrade-testing-process)), 
+you will prepare an upgrade proposal (i.e. come up with a file containing proposal text) and make the proposal.
 
 This process will be done on a machine that has an HSM key available.
+(This is why these commands must be run locally.)
 
-First, run 
-`./prepare-nns-upgrade-proposal-text.sh  <CANISTER_NAME> <TARGET_VERSION> <PROPOSAL_FILE>`
+First, to begin writing a file with some pre-populated proposal text, run 
+
+```bash
+./prepare-nns-upgrade-proposal-text.sh  <CANISTER_NAME> <TARGET_VERSION> <OUTPUT_PROPOSAL_FILE>
+```
 
 `PREVIOUS_COMMIT` can be optionally added as an environment variable if the canister in question does not have its currently  
  deployed commit as canister metadata. 
 
 For example:
-`./prepare-nns-upgrade-proposal-text.sh registry d2d9d63309cf568e3b2c2a0bc366b6850b044792 /tmp/upgrade_registry.md`
+
+```bash
+./prepare-nns-upgrade-proposal-text.sh \
+    registry \
+    d2d9d63309cf568e3b2c2a0bc366b6850b044792 \
+    /tmp/upgrade_registry.md
+```
+
+(Omitting the third argument would cause the text to be printed to stdout instead of writing the contents to the specified path.)
 
 Next, you will need to open the file, and edit the section with `TODO ADD FEATURE NOTES` in it, and add a list of features
 to be deployed.  These can be determined by looking at the list of commits generated in the proposal.
 
-Finally, after inspecting the proposal, run 
-`./submit-mainnet-nns-upgrade-proposal.sh <PROPOSAL_FILE> <YOUR_NEURON_ID>`
+Plug in your HSM key. Unplug your Ubikey. Optionally, you can test that your security hardware is ready by running
 
-In this case, it is the neuron id associated with your HSM key (which must be plugged into your computer).
+```bash
+pkcs11-tool --list-slots
+```
+
+Finally, run
+
+```bash
+./submit-mainnet-nns-upgrade-proposal.sh <PROPOSAL_FILE> <YOUR_NEURON_ID>
+```
+
+In this case, it is the neuron id associated with your HSM key.
 
 For example:
-`./submit-mainnet-nns-upgrade-proposal.sh /tmp/upgrade_registry.md 123`
+
+```bash
+./submit-mainnet-nns-upgrade-proposal.sh /tmp/upgrade_registry.md 123
+```
 
 This script will read the proposal and validate the following:
 1. The proposed canister ID is consistent with the human readable canister name in the title.
@@ -202,6 +254,11 @@ If these items validate, it will output the text of the proposal as well as gene
 
 It will ask for your HSM pin, and it will read out the command it is going to execute before executing it, requiring
 confirmation by typing "yes" when asked if you want to proceed.
+
+Once the proposal(s) have been made, make a note of the proposal ID (printed at the end).
+
+You will need to notify people about this proposal so that they know to vote on it.
+Jump back to the [release runbook in Notion][1].
 
 ## Troubleshooting `nns_dev-testnet.sh`
 
