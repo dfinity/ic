@@ -4,7 +4,7 @@ use crate::driver::{
     node_software_version::NodeSoftwareVersion,
     resource::{allocate_resources, get_resource_request, ResourceGroup},
     test_env::{TestEnv, TestEnvAttribute},
-    test_env_api::{HasIcDependencies, HasRegistryLocalStore},
+    test_env_api::{HasIcDependencies, HasRegistryLocalStore, HasTopologySnapshot},
     test_setup::GroupSetup,
 };
 use anyhow::Result;
@@ -19,6 +19,7 @@ use ic_types::p2p::build_default_gossip_config;
 use ic_types::{Height, NodeId, PrincipalId};
 use phantom_newtype::AmountOf;
 use serde::{Deserialize, Serialize};
+use slog::info;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::net::{Ipv6Addr, SocketAddr};
@@ -179,7 +180,11 @@ impl InternetComputer {
             reg_snapshot_serialized,
         )
         .unwrap();
-
+        info!(
+            env.logger(),
+            "{}",
+            env.topology_snapshot_by_name(&self.name)
+        );
         setup_and_start_vms(&init_ic, self, env, &farm, &group_name)?;
         Ok(())
     }
