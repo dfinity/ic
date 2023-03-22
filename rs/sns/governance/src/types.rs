@@ -947,7 +947,7 @@ impl From<Action> for NervousSystemFunction {
         match action {
             Action::Unspecified(_) => NervousSystemFunction {
                 id: native_action_ids::UNSPECIFIED,
-                name: "Unspecified".to_string(),
+                name: "All Topics".to_string(),
                 description: Some(
                     "Catch-all w.r.t to following for all types of proposals.".to_string(),
                 ),
