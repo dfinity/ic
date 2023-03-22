@@ -378,9 +378,9 @@ impl BackupHelper {
     pub fn replay(&self) {
         let start_height = self.last_state_checkpoint();
         let start_time = Instant::now();
-        let mut current_replica_version = self
-            .retrieve_replica_version_last_replayed()
-            .unwrap_or_else(|| self.initial_replica_version.clone());
+        let mut current_replica_version =
+            retrieve_replica_version_last_replayed(&self.log, self.spool_dir(), self.state_dir())
+                .unwrap_or_else(|| self.initial_replica_version.clone());
 
         // replay the current version once, but if there is upgrade do it again
         loop {
@@ -496,64 +496,18 @@ impl BackupHelper {
         }
     }
 
-    fn collect_spool_dirs(&self) -> Option<Vec<DirEntry>> {
-        if !self.spool_dir().exists() {
-            return None;
-        }
-        let spool_dirs = match collect_only_dirs(&self.spool_dir()) {
-            Ok(dirs) => dirs,
-            Err(err) => {
-                error!(self.log, "{:?}", err);
-                return None;
-            }
-        };
-        if spool_dirs.is_empty() {
-            return None;
-        }
-        Some(spool_dirs)
-    }
-
     pub fn retrieve_spool_top_height(&self) -> u64 {
         let mut spool_top_height = 0;
-        if let Some(spool_dirs) = self.collect_spool_dirs() {
-            for spool_dir in spool_dirs {
-                if into_replica_version(&self.log, &spool_dir).is_some() {
-                    let (top_height, _) = fetch_top_height(&spool_dir);
-                    if spool_top_height < top_height {
-                        spool_top_height = top_height;
-                    }
+        let spool_dirs = collect_spool_dirs(&self.log, self.spool_dir());
+        for spool_dir in spool_dirs {
+            if into_replica_version(&self.log, &spool_dir).is_some() {
+                let (top_height, _) = fetch_top_height(&spool_dir);
+                if spool_top_height < top_height {
+                    spool_top_height = top_height;
                 }
             }
         }
         spool_top_height
-    }
-
-    // searches in spool a directory that contains a block finishing the last call to ic-replay
-    fn retrieve_replica_version_last_replayed(&self) -> Option<ReplicaVersion> {
-        let spool_dirs = match self.collect_spool_dirs() {
-            Some(dirs) => dirs,
-            None => return None,
-        };
-
-        let last_checkpoint = self.last_state_checkpoint();
-        if last_checkpoint == 0 {
-            return None;
-        }
-
-        let mut max_height = 0;
-        let mut current_replica_version = None;
-        for spool_dir in spool_dirs {
-            let replica_version = into_replica_version(&self.log, &spool_dir);
-            if is_height_in_spool(&spool_dir, last_checkpoint) && replica_version.is_some() {
-                let (top_height, _) = fetch_top_height(&spool_dir);
-                if max_height < top_height {
-                    max_height = top_height;
-                    current_replica_version = replica_version;
-                }
-            }
-        }
-
-        current_replica_version
     }
 
     fn check_upgrade_request(&self, stdout: String) -> Option<String> {
@@ -917,4 +871,45 @@ fn create_if_not_exists(dir: PathBuf) -> PathBuf {
         create_dir_all(&dir).unwrap_or_else(|e| panic!("Failure creating directory {dir:?}: {e}"));
     }
     dir
+}
+
+fn collect_spool_dirs(log: &Logger, spool_dir: PathBuf) -> Vec<DirEntry> {
+    if !spool_dir.exists() {
+        return Vec::new();
+    }
+    match collect_only_dirs(&spool_dir) {
+        Ok(dirs) => dirs,
+        Err(err) => {
+            error!(log, "{:?}", err);
+            Vec::new()
+        }
+    }
+}
+
+/// Searches in spool a directory that contains a block finishing the last call to ic-replay.
+pub fn retrieve_replica_version_last_replayed(
+    log: &Logger,
+    spool_dir: PathBuf,
+    state_dir: PathBuf,
+) -> Option<ReplicaVersion> {
+    let last_checkpoint = last_checkpoint(&state_dir);
+    if last_checkpoint == 0 {
+        return None;
+    }
+
+    let mut max_height = 0;
+    let mut current_replica_version = None;
+    let spool_dirs = collect_spool_dirs(log, spool_dir);
+    for spool_dir in spool_dirs {
+        let replica_version = into_replica_version(log, &spool_dir);
+        if is_height_in_spool(&spool_dir, last_checkpoint) && replica_version.is_some() {
+            let (top_height, _) = fetch_top_height(&spool_dir);
+            if max_height < top_height {
+                max_height = top_height;
+                current_replica_version = replica_version;
+            }
+        }
+    }
+
+    current_replica_version
 }

@@ -19,7 +19,10 @@ use ic_types::{PrincipalId, ReplicaVersion, SubnetId};
 use slog::{error, info, Logger};
 use tokio::runtime::Handle;
 
-use crate::util::{block_on, sleep_secs};
+use crate::{
+    backup_helper::retrieve_replica_version_last_replayed,
+    util::{block_on, sleep_secs},
+};
 use crate::{
     backup_helper::BackupHelper,
     cmd::BackupArgs,
@@ -160,6 +163,15 @@ impl BackupManager {
             subnet_backups: backups,
             log,
         }
+    }
+
+    pub fn get_version(log: Logger, config_file: PathBuf, subnet_id: SubnetId) {
+        let config = Config::load_config(config_file).expect("Config file can't be loaded");
+        let spool_dir = config.root_dir.join("spool").join(subnet_id.to_string());
+        let state_dir = config.root_dir.join(format!("data/{}/ic_state", subnet_id));
+        let replica_version = retrieve_replica_version_last_replayed(&log, spool_dir, state_dir)
+            .expect("Proper replica version is expected");
+        println!("{}", replica_version)
     }
 
     pub fn upgrade(log: Logger, config_file: PathBuf) {
