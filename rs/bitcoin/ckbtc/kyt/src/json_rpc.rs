@@ -1,9 +1,10 @@
+use ic_cdk::api::call::call_with_payment128;
 use ic_cdk::api::call::CallResult;
+use ic_cdk::api::management_canister::http_request::HttpResponse;
 use ic_cdk::api::management_canister::http_request::{
-    http_request, CanisterHttpRequestArgument, HttpHeader, HttpMethod, TransformContext,
+    CanisterHttpRequestArgument, HttpHeader, HttpMethod, TransformContext,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-
 pub type ExternalId = String;
 
 // Registering a transaction
@@ -133,7 +134,24 @@ pub async fn http_call<I: Serialize, O: DeserializeOwned>(
         body: Some(payload.into_bytes()),
         transform: Some(TransformContext::new(super::cleanup_response, vec![])),
     };
-    let (response,) = http_request(request).await?;
+
+    // Details of the values used in the following lines can be found here:
+    // https://internetcomputer.org/docs/current/developer-docs/production/computation-and-storage-costs
+    const HTTP_MAX_SIZE: u128 = 2 * 1024 * 1024;
+    let base_cycles = 400_000_000u128 + 100_000u128 * (2 * HTTP_MAX_SIZE);
+
+    const BASE_SUBNET_SIZE: u128 = 13;
+    const SUBNET_SIZE: u128 = 34;
+    let cycles = base_cycles * SUBNET_SIZE / BASE_SUBNET_SIZE;
+
+    let (response,): (HttpResponse,) = call_with_payment128(
+        candid::Principal::management_canister(),
+        "http_request",
+        (request,),
+        cycles,
+    )
+    .await
+    .unwrap();
     Ok(if response.status < 300u64 {
         let result: O = serde_json::from_slice(&response.body).unwrap_or_else(|e| {
             panic!(

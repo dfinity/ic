@@ -1,5 +1,6 @@
 use candid::{CandidType, Deserialize, Principal};
 use serde::Serialize;
+use std::fmt;
 
 #[derive(Debug, Clone, PartialEq, Eq, CandidType, Serialize, Deserialize)]
 pub enum KytMode {
@@ -10,6 +11,16 @@ pub enum KytMode {
     RejectAll,
     /// In this mode, the canister will call Chainalysis API for each request.
     Normal,
+}
+
+impl fmt::Display for KytMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            KytMode::AcceptAll => write!(f, "AcceptAll"),
+            KytMode::RejectAll => write!(f, "RejectAll"),
+            KytMode::Normal => write!(f, "Normal"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, CandidType, Deserialize)]

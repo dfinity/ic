@@ -424,9 +424,9 @@ fn cleanup_response(mut args: TransformArgs) -> HttpResponse {
 fn http_request(req: http::HttpRequest) -> http::HttpResponse {
     if req.path() == "/dashboard" {
         use askama::Template;
-        let (minter_id, maintainers) = CONFIG_CELL.with(|cell| {
+        let (minter_id, maintainers, mode) = CONFIG_CELL.with(|cell| {
             let data = cell.borrow().get().clone().0;
-            (data.minter_id, data.maintainers)
+            (data.minter_id, data.maintainers, data.mode)
         });
 
         let events: Vec<Event> = EVENT_LOG.with(|log| {
@@ -439,6 +439,7 @@ fn http_request(req: http::HttpRequest) -> http::HttpResponse {
             minter_id,
             maintainers,
             events,
+            mode,
         }
         .render()
         .unwrap();
