@@ -1,7 +1,7 @@
 genrule(
     name = "icos_deploy",
     srcs = [
-        "//bazel:version.txt",
+        "//ic-os/guestos/dev:version.txt",
         "//ic-os/guestos/dev:hash_and_upload_disk-img",
         "//ic-os/guestos/dev:hash_and_upload_update-img",
         "//ic-os/guestos/prod:hash_and_upload_update-img",
@@ -11,7 +11,7 @@ genrule(
     ],
     outs = ["icos_deploy_script"],
     cmd = """
-    VERSION="$$(cat $(location //bazel:version.txt))"
+    VERSION="$$(cat $(location //ic-os/guestos/dev:version.txt))"
 
     cat <<EOF > $@
 #!/usr/bin/env bash
