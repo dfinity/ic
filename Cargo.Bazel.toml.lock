@@ -2413,6 +2413,7 @@ dependencies = [
  "ic-test-state-machine-client",
  "ic-utils",
  "ic-wasm",
+ "ic-xrc-types",
  "ic0",
  "ic_bls12_381",
  "idna 0.3.0",
@@ -3948,6 +3949,16 @@ dependencies = [
  "clap 3.2.23",
  "ic-types 0.4.2",
  "walrus",
+]
+
+[[package]]
+name = "ic-xrc-types"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "90a417f89cb892632ba2b19928d926f0d5bf3b0610c7c9e2b7f7db0446ae89f4"
+dependencies = [
+ "candid 0.8.4",
+ "serde",
 ]
 
 [[package]]
