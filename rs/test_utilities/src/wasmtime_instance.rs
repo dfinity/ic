@@ -1,6 +1,7 @@
 use std::convert::TryFrom;
 use std::sync::Arc;
 
+use ic_base_types::NumBytes;
 use ic_config::{flag_status::FlagStatus, subnet_config::SchedulerConfig};
 use ic_embedders::{wasm_utils::compile, wasmtime_embedder::WasmtimeInstance, WasmtimeEmbedder};
 use ic_interfaces::execution_environment::{
@@ -34,6 +35,7 @@ pub struct WasmtimeInstanceBuilder {
     subnet_type: SubnetType,
     network_topology: NetworkTopology,
     config: ic_config::embedders::Config,
+    canister_memory_limit: NumBytes,
 }
 
 impl Default for WasmtimeInstanceBuilder {
@@ -47,6 +49,7 @@ impl Default for WasmtimeInstanceBuilder {
             subnet_type: SubnetType::Application,
             network_topology: NetworkTopology::default(),
             config: ic_config::embedders::Config::default(),
+            canister_memory_limit: NumBytes::from(4 << 30), // Set to 4 GiB by default
         }
     }
 }
@@ -96,6 +99,13 @@ impl WasmtimeInstanceBuilder {
         }
     }
 
+    pub fn with_canister_memory_limit(self, canister_memory_limit: NumBytes) -> Self {
+        Self {
+            canister_memory_limit,
+            ..self
+        }
+    }
+
     pub fn try_build(
         self,
     ) -> Result<WasmtimeInstance<SystemApiImpl>, (HypervisorError, SystemApiImpl)> {
@@ -135,7 +145,7 @@ impl WasmtimeInstanceBuilder {
                     self.num_instructions,
                     self.num_instructions,
                 ),
-                canister_memory_limit: ic_types::NumBytes::from(4 << 30),
+                canister_memory_limit: self.canister_memory_limit,
                 compute_allocation: ComputeAllocation::default(),
                 subnet_type: self.subnet_type,
                 execution_mode: ExecutionMode::Replicated,

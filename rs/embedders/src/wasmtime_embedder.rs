@@ -29,7 +29,7 @@ use ic_replicated_state::{
 use ic_sys::PAGE_SIZE;
 use ic_types::{
     methods::{FuncRef, WasmMethod},
-    CanisterId,
+    CanisterId, MAX_STABLE_MEMORY_IN_BYTES,
 };
 use ic_wasm_types::{BinaryEncodedWasm, WasmEngineError};
 use memory_tracker::{DirtyPageTracking, PageBitmap, SigsegvMemoryTracker};
@@ -195,12 +195,15 @@ impl WasmtimeEmbedder {
             config.wasm_memory64(true);
         }
         config
-            // maximum size in bytes where a linear memory is considered
-            // static. setting this to maximum Wasm memory size will guarantee
+            // The maximum size in bytes where a linear memory is considered
+            // static. Setting this to maximum Wasm memory size will guarantee
             // the memory is always static.
-            .static_memory_maximum_size(
-                wasmtime_environ::WASM_PAGE_SIZE as u64 * wasmtime_environ::WASM32_MAX_PAGES,
-            )
+            //
+            // If there is a change in the size of the largest memories we
+            // expect to see then the changes will likely need to be coordinated
+            // with a change in how we create the memories in the implementation
+            // of `wasmtime::MemoryCreator`.
+            .static_memory_maximum_size(MAX_STABLE_MEMORY_IN_BYTES)
             .max_wasm_stack(embedder_config.max_wasm_stack_size);
 
         config
