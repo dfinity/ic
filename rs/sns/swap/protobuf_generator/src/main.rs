@@ -6,7 +6,7 @@ fn main() {
         std::env::var("CARGO_MANIFEST_DIR")
             .expect("CARGO_MANIFEST_DIR env variable is not defined"),
     );
-    let out = manifest_dir.join("../gen");
+    let out = manifest_dir.join("../src/gen");
     let swap_proto = manifest_dir.join("../proto");
 
     // TODO(NNS1-1589): Uncomment.

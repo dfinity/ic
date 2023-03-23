@@ -171,7 +171,7 @@ rust_test_suite_with_extra_srcs(
 generated_files_check(
     name = "check_generated_files",
     srcs = ["tests/check_generated_files.rs"],
-    data = glob(["gen/**"]) + [
+    data = glob(["src/gen/**"]) + [
         ":protos",
         "//rs/types/base_types:protos",
         "//rs/sns/init:protos",

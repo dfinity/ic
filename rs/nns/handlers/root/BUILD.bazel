@@ -77,7 +77,6 @@ rust_library(
     name = "root",
     srcs = glob([
         "src/**",
-        "gen/**",
     ]),
     aliases = ALIASES,
     crate_name = "ic_nns_handler_root",
@@ -107,7 +106,7 @@ rust_canister(
 generated_files_check(
     name = "check_generated_files",
     srcs = ["tests/check_generated_files.rs"],
-    data = glob(["gen/**"]) + [
+    data = glob(["src/gen/**"]) + [
         ":protos",
         "//rs/nns/common:protos",
         "//rs/types/base_types:protos",

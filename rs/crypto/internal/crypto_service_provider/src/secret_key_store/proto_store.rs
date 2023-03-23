@@ -33,7 +33,7 @@ fn key_id_from_hex(key_id_hex: &str) -> KeyId {
 /// The secret key store protobuf definitions
 // Include the prost-build generated registry protos.
 #[allow(clippy::all)]
-#[path = "../../gen/ic.crypto.v1.rs"]
+#[path = "../gen/ic.crypto.v1.rs"]
 pub mod pb;
 
 type SecretKeys = HashMap<KeyId, (CspSecretKey, Option<Scope>)>;

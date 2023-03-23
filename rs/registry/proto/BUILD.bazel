@@ -19,7 +19,6 @@ rust_library(
     name = "proto",
     srcs = glob([
         "src/**",
-        "gen/**",
     ]),
     crate_name = "ic_registry_common_proto",
     version = "0.8.0",
@@ -37,7 +36,7 @@ generated_files_check(
     data = [
         ":protos",
     ] + glob([
-        "gen/**",
+        "src/gen/**",
     ]),
     manifest_dir = "rs/registry/proto",
     deps = DEV_DEPENDENCIES,

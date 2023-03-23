@@ -14,7 +14,7 @@ fn check_generated_files() {
     let out = tempfile::TempDir::new().expect("failed to create a temporary directory");
     generate_prost_files(&def, out.path());
 
-    let gen = manifest_dir.join("gen");
+    let gen = manifest_dir.join("src/gen");
     match compare(&gen, out.path()) {
         Ok(_) => (),
         Err(CompareError::PathsDiffer { left, right }) => {

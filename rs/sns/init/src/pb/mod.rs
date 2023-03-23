@@ -1,3 +1,3 @@
 #[allow(clippy::all)]
-#[path = "../../gen/ic_sns_init.pb.v1.rs"]
+#[path = "../gen/ic_sns_init.pb.v1.rs"]
 pub mod v1;

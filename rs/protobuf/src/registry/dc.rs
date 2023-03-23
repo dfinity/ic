@@ -1,6 +1,6 @@
 #[allow(clippy::all)]
 pub mod v1 {
-    include!("../../gen/registry/registry.dc.v1.rs");
+    include!("../gen/registry/registry.dc.v1.rs");
     use std::fmt;
 
     pub const MAX_DC_ID_LENGTH: usize = 255;

@@ -28,7 +28,7 @@ pub use ic_ledger_core::{
 
 pub mod account_identifier;
 #[allow(clippy::all)]
-#[path = "../gen/ic_ledger.pb.v1.rs"]
+#[path = "gen/ic_ledger.pb.v1.rs"]
 pub mod protobuf;
 mod validate_endpoints;
 pub use account_identifier::{AccountIdentifier, Subaccount};
@@ -647,6 +647,7 @@ impl NotifyCanisterArgs {
         } else {
             Ok(NotifyCanisterArgs {
                 block_height,
+
                 max_fee: send_args.fee,
                 from_subaccount: send_args.from_subaccount,
                 to_canister,

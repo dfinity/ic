@@ -12,7 +12,6 @@ rust_library(
     name = "protobuf",
     srcs = glob([
         "src/**",
-        "gen/**",
     ]),
     crate_name = "ic_protobuf",
     version = "0.8.0",
@@ -43,7 +42,7 @@ generated_files_check(
     name = "check_generated_files",
     srcs = ["tests/check_generated_files.rs"],
     data = glob([
-        "gen/**",
+        "src/gen/**",
     ]) + [":protos"],
     manifest_dir = "rs/protobuf",
     deps = [

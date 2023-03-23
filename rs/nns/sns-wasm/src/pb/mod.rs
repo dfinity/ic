@@ -16,7 +16,7 @@ use std::fmt::{Display, Write};
 use std::str::FromStr;
 
 #[allow(clippy::all)]
-#[path = "../../gen/ic_sns_wasm.pb.v1.rs"]
+#[path = "../gen/ic_sns_wasm.pb.v1.rs"]
 pub mod v1;
 
 /// Converts a sha256 hash into a hex string representation

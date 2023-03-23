@@ -38,7 +38,7 @@ generated_files_check(
     data = [
         ":protos",
         "//rs/protobuf:protos",
-    ] + glob(["gen/**"]),
+    ] + glob(["src/gen/**"]),
     manifest_dir = "rs/registry/transport",
     deps = [
         "//rs/registry/transport/protobuf_generator:lib",

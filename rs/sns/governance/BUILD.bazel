@@ -101,7 +101,6 @@ rust_library(
     name = "governance",
     srcs = glob([
         "src/**",
-        "gen/**",
     ]),
     aliases = ALIASES,
     crate_name = "ic_sns_governance",
@@ -114,7 +113,6 @@ rust_library(
     name = "governance_test_feature",
     srcs = glob([
         "src/**",
-        "gen/**",
     ]),
     aliases = ALIASES,
     crate_features = ["test"],
@@ -226,7 +224,7 @@ rust_test_suite_with_extra_srcs(
 generated_files_check(
     name = "check_generated_files",
     srcs = ["tests/check_generated_files.rs"],
-    data = glob(["gen/**"]) + [
+    data = glob(["src/gen/**"]) + [
         ":protos",
         "//rs/protobuf:protos",
         "//rs/types/base_types:protos",
