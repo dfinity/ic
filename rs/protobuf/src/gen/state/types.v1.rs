@@ -71,3 +71,26 @@ impl NiDkgTag {
         }
     }
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum CanisterInstallMode {
+    Unspecified = 0,
+    Install = 1,
+    Reinstall = 2,
+    Upgrade = 3,
+}
+impl CanisterInstallMode {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            CanisterInstallMode::Unspecified => "CANISTER_INSTALL_MODE_UNSPECIFIED",
+            CanisterInstallMode::Install => "CANISTER_INSTALL_MODE_INSTALL",
+            CanisterInstallMode::Reinstall => "CANISTER_INSTALL_MODE_REINSTALL",
+            CanisterInstallMode::Upgrade => "CANISTER_INSTALL_MODE_UPGRADE",
+        }
+    }
+}

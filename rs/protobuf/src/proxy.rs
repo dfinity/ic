@@ -215,3 +215,18 @@ where
         field.ok_or(ProxyDecodeError::MissingField(field_name))?,
     )?)
 }
+
+/// Converts a variable-length slice into a fixed-length slice
+/// representing a module hash.
+/// Returns `Err(ProxyDecodeError::InvalidDigestLength({...}))` if
+/// the input slice does not have the length of 32.
+pub fn try_decode_hash(bytes: impl AsRef<[u8]>) -> Result<[u8; 32], ProxyDecodeError> {
+    let slice = bytes.as_ref();
+    let array: [u8; 32] = slice
+        .try_into()
+        .map_err(|_| ProxyDecodeError::InvalidDigestLength {
+            expected: 32,
+            actual: slice.len(),
+        })?;
+    Ok(array)
+}

@@ -5,18 +5,21 @@ mod provisional;
 use candid::{CandidType, Decode, Deserialize, Encode};
 use ic_base_types::{CanisterId, NodeId, NumBytes, PrincipalId, RegistryVersion, SubnetId};
 use ic_error_types::{ErrorCode, UserError};
+use ic_protobuf::proxy::{try_decode_hash, try_from_option_field};
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::subnet::v1::{InitialIDkgDealings, InitialNiDkgTranscriptRecord};
+use ic_protobuf::state::canister_metadata::v1 as pb_canister_metadata;
 use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
 use ic_protobuf::{proxy::ProxyDecodeError, registry::crypto::v1 as pb_registry_crypto};
 use num_traits::cast::ToPrimitive;
 use serde::Serialize;
-use std::{collections::BTreeSet, convert::TryFrom, fmt, slice::Iter, str::FromStr};
+use std::{collections::BTreeSet, convert::TryFrom, error::Error, fmt, slice::Iter, str::FromStr};
 use strum_macros::{Display, EnumIter, EnumString};
 
 /// The id of the management canister.
 pub const IC_00: CanisterId = CanisterId::ic_00();
 pub const MAX_CONTROLLERS: usize = 10;
+const WASM_HASH_LENGTH: usize = 32;
 pub use http::{
     CanisterHttpRequestArgs, CanisterHttpResponsePayload, HttpHeader, HttpMethod, TransformArgs,
     TransformContext, TransformFunc,
@@ -100,6 +103,339 @@ impl From<CanisterId> for CanisterIdRecord {
         Self {
             canister_id: canister_id.into(),
         }
+    }
+}
+
+// Canister history
+
+/// `CandidType` for user variant of `CanisterChangeOrigin`
+/// ```text
+/// record {
+///   user_id : principal;
+/// }
+/// ```
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct CanisterChangeFromUserRecord {
+    user_id: PrincipalId,
+}
+
+/// `CandidType` for canister variant of `CanisterChangeOrigin`
+/// ```text
+/// record {
+///   canister_id : principal;
+///   canister_version : opt nat64;
+/// }
+/// ```
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct CanisterChangeFromCanisterRecord {
+    canister_id: PrincipalId,
+    canister_version: Option<u64>,
+}
+
+/// `CandidType` for `CanisterChangeOrigin`
+/// ```text
+/// variant {
+///   canister_change_from_user : record {
+///     user_id : principal;
+///   };
+///   canister_change_from_canister : record {
+///     canister_id : principal;
+///     canister_version : opt nat64;
+///   };
+/// }
+/// ```
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub enum CanisterChangeOrigin {
+    #[serde(rename = "canister_change_from_user")]
+    CanisterChangeFromUser(CanisterChangeFromUserRecord),
+    #[serde(rename = "canister_change_from_canister")]
+    CanisterChangeFromCanister(CanisterChangeFromCanisterRecord),
+}
+
+impl CanisterChangeOrigin {
+    pub fn from_user(user_id: PrincipalId) -> CanisterChangeOrigin {
+        CanisterChangeOrigin::CanisterChangeFromUser(CanisterChangeFromUserRecord { user_id })
+    }
+
+    pub fn from_canister(
+        canister_id: PrincipalId,
+        canister_version: Option<u64>,
+    ) -> CanisterChangeOrigin {
+        CanisterChangeOrigin::CanisterChangeFromCanister(CanisterChangeFromCanisterRecord {
+            canister_id,
+            canister_version,
+        })
+    }
+
+    /// The principal (user or canister) initiating a canister change.
+    pub fn origin(&self) -> PrincipalId {
+        match self {
+            CanisterChangeOrigin::CanisterChangeFromUser(change_from_user) => {
+                change_from_user.user_id
+            }
+            CanisterChangeOrigin::CanisterChangeFromCanister(change_from_canister) => {
+                change_from_canister.canister_id
+            }
+        }
+    }
+}
+
+/// `CandidType` for `CanisterCodeDeploymentRecord`
+/// ```text
+/// record {
+///   mode : variant {install; reinstall; upgrade};
+///   module_hash : blob;
+/// }
+/// ```
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct CanisterCodeDeploymentRecord {
+    mode: CanisterInstallMode,
+    module_hash: [u8; WASM_HASH_LENGTH],
+}
+
+/// `CandidType` for `CanisterControllersChangeRecord`
+/// ```text
+/// record {
+///   controllers : vec principal;
+/// }
+/// ```
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct CanisterControllersChangeRecord {
+    controllers: Vec<PrincipalId>,
+}
+
+/// `CandidType` for `CanisterChangeDetails`
+/// ```text
+/// variant {
+///   canister_creation;
+///   canister_code_uninstall;
+///   canister_code_deployment : record {
+///     mode : variant {install; reinstall; upgrade};
+///     module_hash : blob;
+///   };
+///   canister_controllers_change : record {
+///     controllers : vec principal;
+///   };
+/// }
+/// ```
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub enum CanisterChangeDetails {
+    #[serde(rename = "canister_creation")]
+    CanisterCreation,
+    #[serde(rename = "canister_code_uninstall")]
+    CanisterCodeUninstall,
+    #[serde(rename = "canister_code_deployment")]
+    CanisterCodeDeployment(CanisterCodeDeploymentRecord),
+    #[serde(rename = "canister_controllers_change")]
+    CanisterControllersChange(CanisterControllersChangeRecord),
+}
+
+impl CanisterChangeDetails {
+    pub fn code_deployment(
+        mode: CanisterInstallMode,
+        module_hash: [u8; WASM_HASH_LENGTH],
+    ) -> CanisterChangeDetails {
+        CanisterChangeDetails::CanisterCodeDeployment(CanisterCodeDeploymentRecord {
+            mode,
+            module_hash,
+        })
+    }
+
+    pub fn controllers_change(controllers: Vec<PrincipalId>) -> CanisterChangeDetails {
+        CanisterChangeDetails::CanisterControllersChange(CanisterControllersChangeRecord {
+            controllers,
+        })
+    }
+}
+
+/// Every canister change (canister creation, code uninstallation, code deployment, or controllers change) consists of
+///
+/// 1. the system timestamp (in nanoseconds since Unix Epoch) at which the change was performed,
+/// 2. the canister version after performing the change,
+/// 3. the change's origin (a user or a canister),
+/// 4. and the change's details.
+///
+/// The change origin includes the principal (called _originator_ in the following) that initiated the change and,
+/// if the originator is a canister, the originator's canister version when the originator initiated the change
+/// (if available).
+///
+/// Code deployments are described by their mode (code install, code reinstall, code upgrade) and
+/// the SHA-256 hash of the newly deployed canister module.
+///
+/// Controllers changes are described by the full new set of the canister controllers after the change.
+///
+/// `CandidType` for `CanisterChange`
+/// ```text
+/// record {
+///   timestamp_nanos : nat64;
+///   canister_version : nat64;
+///   origin : canister_change_origin;
+///   change_details : canister_change_details;
+/// }
+/// ```
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct CanisterChange {
+    timestamp_nanos: u64,
+    canister_version: u64,
+    origin: CanisterChangeOrigin,
+    change_details: CanisterChangeDetails,
+}
+
+impl CanisterChange {
+    pub fn new(
+        timestamp_nanos: u64,
+        canister_version: u64,
+        origin: CanisterChangeOrigin,
+        change_details: CanisterChangeDetails,
+    ) -> CanisterChange {
+        CanisterChange {
+            timestamp_nanos,
+            canister_version,
+            origin,
+            change_details,
+        }
+    }
+}
+
+impl From<&CanisterChangeOrigin> for pb_canister_metadata::canister_change::Origin {
+    fn from(item: &CanisterChangeOrigin) -> Self {
+        match item {
+            CanisterChangeOrigin::CanisterChangeFromUser(change_from_user) => {
+                pb_canister_metadata::canister_change::Origin::CanisterChangeFromUser(
+                    pb_canister_metadata::CanisterChangeFromUser {
+                        user_id: Some(change_from_user.user_id.into()),
+                    },
+                )
+            }
+            CanisterChangeOrigin::CanisterChangeFromCanister(change_from_canister) => {
+                pb_canister_metadata::canister_change::Origin::CanisterChangeFromCanister(
+                    pb_canister_metadata::CanisterChangeFromCanister {
+                        canister_id: Some(change_from_canister.canister_id.into()),
+                        canister_version: change_from_canister.canister_version,
+                    },
+                )
+            }
+        }
+    }
+}
+
+impl TryFrom<pb_canister_metadata::canister_change::Origin> for CanisterChangeOrigin {
+    type Error = ProxyDecodeError;
+
+    fn try_from(value: pb_canister_metadata::canister_change::Origin) -> Result<Self, Self::Error> {
+        match value {
+            pb_canister_metadata::canister_change::Origin::CanisterChangeFromUser(
+                change_from_user,
+            ) => Ok(CanisterChangeOrigin::from_user(try_from_option_field(
+                change_from_user.user_id,
+                "user_id",
+            )?)),
+            pb_canister_metadata::canister_change::Origin::CanisterChangeFromCanister(
+                change_from_canister,
+            ) => Ok(CanisterChangeOrigin::from_canister(
+                try_from_option_field(change_from_canister.canister_id, "canister_id")?,
+                change_from_canister.canister_version,
+            )),
+        }
+    }
+}
+
+impl From<&CanisterChangeDetails> for pb_canister_metadata::canister_change::ChangeDetails {
+    fn from(item: &CanisterChangeDetails) -> Self {
+        match item {
+            CanisterChangeDetails::CanisterCreation => {
+                pb_canister_metadata::canister_change::ChangeDetails::CanisterCreation(
+                    pb_canister_metadata::CanisterCreation {},
+                )
+            }
+            CanisterChangeDetails::CanisterCodeUninstall => {
+                pb_canister_metadata::canister_change::ChangeDetails::CanisterCodeUninstall(
+                    pb_canister_metadata::CanisterCodeUninstall {},
+                )
+            }
+            CanisterChangeDetails::CanisterCodeDeployment(canister_code_deployment) => {
+                pb_canister_metadata::canister_change::ChangeDetails::CanisterCodeDeployment(
+                    pb_canister_metadata::CanisterCodeDeployment {
+                        module_hash: canister_code_deployment.module_hash.to_vec(),
+                        mode: canister_code_deployment.mode as i32,
+                    },
+                )
+            }
+            CanisterChangeDetails::CanisterControllersChange(canister_controllers_change) => {
+                pb_canister_metadata::canister_change::ChangeDetails::CanisterControllersChange(
+                    pb_canister_metadata::CanisterControllersChange {
+                        controllers: canister_controllers_change
+                            .controllers
+                            .iter()
+                            .map(|c| (*c).into())
+                            .collect::<Vec<ic_protobuf::types::v1::PrincipalId>>(),
+                    },
+                )
+            }
+        }
+    }
+}
+
+impl TryFrom<pb_canister_metadata::canister_change::ChangeDetails> for CanisterChangeDetails {
+    type Error = ProxyDecodeError;
+
+    fn try_from(
+        item: pb_canister_metadata::canister_change::ChangeDetails,
+    ) -> Result<Self, Self::Error> {
+        match item {
+            pb_canister_metadata::canister_change::ChangeDetails::CanisterCreation(_) => {
+                Ok(CanisterChangeDetails::CanisterCreation)
+            }
+            pb_canister_metadata::canister_change::ChangeDetails::CanisterCodeUninstall(_) => {
+                Ok(CanisterChangeDetails::CanisterCodeUninstall)
+            }
+            pb_canister_metadata::canister_change::ChangeDetails::CanisterCodeDeployment(
+                canister_code_deployment,
+            ) => Ok(CanisterChangeDetails::code_deployment(
+                canister_code_deployment.mode.try_into().map_err(
+                    |e: CanisterInstallModeError| ProxyDecodeError::ValueOutOfRange {
+                        typ: "CanisterInstallMode",
+                        err: e.to_string(),
+                    },
+                )?,
+                try_decode_hash(canister_code_deployment.module_hash)?,
+            )),
+            pb_canister_metadata::canister_change::ChangeDetails::CanisterControllersChange(
+                canister_controllers_change,
+            ) => Ok(CanisterChangeDetails::controllers_change(
+                canister_controllers_change
+                    .controllers
+                    .into_iter()
+                    .map(TryInto::try_into)
+                    .collect::<Result<Vec<PrincipalId>, _>>()?,
+            )),
+        }
+    }
+}
+
+impl From<&CanisterChange> for pb_canister_metadata::CanisterChange {
+    fn from(item: &CanisterChange) -> Self {
+        Self {
+            timestamp_nanos: item.timestamp_nanos,
+            canister_version: item.canister_version,
+            origin: Some((&item.origin).into()),
+            change_details: Some((&item.change_details).into()),
+        }
+    }
+}
+
+impl TryFrom<pb_canister_metadata::CanisterChange> for CanisterChange {
+    type Error = ProxyDecodeError;
+
+    fn try_from(value: pb_canister_metadata::CanisterChange) -> Result<Self, Self::Error> {
+        let origin = try_from_option_field(value.origin, "origin")?;
+        let change_details = try_from_option_field(value.change_details, "change_details")?;
+        Ok(Self {
+            timestamp_nanos: value.timestamp_nanos,
+            canister_version: value.canister_version,
+            origin,
+            change_details,
+        })
     }
 }
 
@@ -386,6 +722,14 @@ impl CanisterInstallMode {
 #[derive(Debug)]
 pub struct CanisterInstallModeError(pub String);
 
+impl Error for CanisterInstallModeError {}
+
+impl fmt::Display for CanisterInstallModeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 impl TryFrom<String> for CanisterInstallMode {
     type Error = CanisterInstallModeError;
 
@@ -423,6 +767,16 @@ impl From<CanisterInstallMode> for String {
             CanisterInstallMode::Upgrade => "upgrade",
         };
         res.to_string()
+    }
+}
+
+impl From<&CanisterInstallMode> for CanisterInstallModeProto {
+    fn from(item: &CanisterInstallMode) -> Self {
+        match item {
+            CanisterInstallMode::Install => CanisterInstallModeProto::Install,
+            CanisterInstallMode::Reinstall => CanisterInstallModeProto::Reinstall,
+            CanisterInstallMode::Upgrade => CanisterInstallModeProto::Upgrade,
+        }
     }
 }
 
