@@ -1,8 +1,10 @@
 use clap::Parser;
+use ic_config::execution_environment;
+use ic_config::subnet_config::SubnetConfig;
 use ic_crypto::threshold_sig_public_key_to_der;
-use ic_state_machine_tests::StateMachine;
+use ic_state_machine_tests::{StateMachineBuilder, StateMachineConfig};
 use ic_test_state_machine_client::{CanisterCall, RawCanisterId, Request, Request::*};
-use ic_types::{CanisterId, PrincipalId};
+use ic_types::{CanisterId, Cycles, PrincipalId};
 use serde::Serialize;
 use std::io::{stdin, stdout, Read, Write};
 
@@ -55,7 +57,12 @@ struct Opts {
 
 fn main() {
     let opts: Opts = Opts::parse();
-    let env = StateMachine::new();
+    let hypervisor_config = execution_environment::Config {
+        default_provisional_cycles_balance: Cycles::new(0),
+        ..Default::default()
+    };
+    let config = StateMachineConfig::new(SubnetConfig::default_system_subnet(), hypervisor_config);
+    let env = StateMachineBuilder::new().with_config(Some(config)).build();
     loop {
         debug_print!(&opts, "enter request loop");
         let size =

@@ -56,9 +56,9 @@ rust_library(
 )
 
 BIN_DEPENDENCIES = [
+    "//rs/config",
     "//rs/crypto",
     "//rs/types/types",
-    "//rs/types/error_types",
     "//rs/types/ic00_types",
     ":state_machine_tests",
     "@crate_index//:candid",
