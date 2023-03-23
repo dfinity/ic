@@ -2565,6 +2565,49 @@ fn labeled_tree_conversion() {
 }
 
 #[test]
+fn hash_tree_builders_debug_output_gets_truncated_on_deep_trees() {
+    const DUMMY_LABEL: &str = "dummy label";
+    const MAX_DEPTH: usize = 50;
+    const TRUNCATION_MSG: &str = "... Further levels of the tree are truncated";
+
+    let hash_tree_with_depth = |depth| -> HashTreeBuilderImpl {
+        let mut builder = HashTreeBuilderImpl::default();
+        for _ in 0..depth - 1 {
+            builder.start_subtree();
+            builder.new_edge(Label::from(DUMMY_LABEL.as_bytes()));
+        }
+
+        builder.start_leaf();
+        builder.write_leaf(b"dummy leaf");
+        builder.finish_leaf();
+
+        for _ in 0..depth - 1 {
+            builder.finish_subtree();
+        }
+
+        builder
+    };
+
+    // trees of depth less than or equal to `MAX_DEPTH` should not be truncated
+    for depth in 1..=MAX_DEPTH {
+        let output = format!("{:?}", hash_tree_with_depth(depth));
+        assert!(!output.contains(TRUNCATION_MSG), "{output:?}");
+    }
+
+    // trees of depth higher than `MAX_DEPTH` should be truncated
+    for depth in [MAX_DEPTH + 1, MAX_DEPTH + 100, MAX_DEPTH + 1000] {
+        let output = format!("{:?}", hash_tree_with_depth(depth));
+        assert!(output.contains(TRUNCATION_MSG), "{output:?}");
+        assert_eq!(
+            output.matches(DUMMY_LABEL).count(),
+            // both hash and labeled tree are printed
+            MAX_DEPTH * 2,
+            "{output:?}"
+        );
+    }
+}
+
+#[test]
 fn labeled_tree_leaf_count() {
     let tree = LabeledTree::Leaf(());
     assert_eq!(count_leaves_and_empty_subtrees(&tree), 1);
