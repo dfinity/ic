@@ -6,10 +6,12 @@ pub use crate::canister_state::queues::CanisterOutputQueuesIterator;
 use crate::{CanisterQueues, CanisterState, InputQueueType, StateError};
 pub use call_context_manager::{CallContext, CallContextAction, CallContextManager, CallOrigin};
 use ic_base_types::NumSeconds;
+use ic_ic00_types::{CanisterChange, CanisterChangeDetails, CanisterChangeOrigin};
 use ic_interfaces::messages::{CanisterCall, CanisterMessage, CanisterMessageOrTask, CanisterTask};
 use ic_logger::{error, ReplicaLogger};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
+    state::canister_metadata::v1 as pb_canister_metadata,
     state::canister_state_bits::v1 as pb,
 };
 use ic_registry_subnet_type::SubnetType;
@@ -34,6 +36,9 @@ lazy_static! {
     static ref DEFAULT_PRINCIPAL_ZERO_CONTROLLERS: PrincipalId =
         PrincipalId::from_str("zrl4w-cqaaa-nocon-troll-eraaa-d5qc").unwrap();
 }
+
+/// Maximum number of canister changes stored in the canister history.
+pub const MAX_CANISTER_HISTORY_CHANGES: u64 = 1000;
 
 /// Enumerates use cases of consumed cycles.
 #[derive(Clone, Copy, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
@@ -153,6 +158,50 @@ impl CanisterMetrics {
     }
 }
 
+/// The canister history consists of a list of canister changes
+/// with the oldest canister changes at lowest indices.
+/// The system can drop the oldest canister changes from the list to keep its length bounded
+/// (with `1000` latest canister changes to always remain in the list).
+/// The system also drops all canister changes if the canister runs out of cycles.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CanisterHistory {
+    changes: Arc<VecDeque<Arc<CanisterChange>>>,
+    /// The `total_num_changes` records the total number of canister changes
+    /// that have ever been recorded. In particular, if the system drops some canister changes,
+    /// `total_num_changes` does not decrease.
+    total_num_changes: u64,
+}
+
+impl CanisterHistory {
+    pub fn clear_canister_history(&mut self) {
+        self.changes = Arc::new(Default::default());
+    }
+
+    pub fn add_canister_change(
+        &mut self,
+        timestamp_nanos: Time,
+        canister_version: u64,
+        origin: CanisterChangeOrigin,
+        change_details: CanisterChangeDetails,
+    ) {
+        let changes = Arc::make_mut(&mut self.changes);
+        if self.total_num_changes >= MAX_CANISTER_HISTORY_CHANGES {
+            changes.pop_front();
+        }
+        changes.push_back(Arc::new(CanisterChange::new(
+            timestamp_nanos.as_nanos_since_unix_epoch(),
+            canister_version,
+            origin,
+            change_details,
+        )));
+        self.total_num_changes += 1;
+    }
+
+    pub fn get_total_num_changes(&self) -> u64 {
+        self.total_num_changes
+    }
+}
+
 /// State that is controlled and owned by the system (IC).
 ///
 /// Contains structs needed for running and maintaining the canister on the IC.
@@ -217,6 +266,9 @@ pub struct SystemState {
 
     /// Canister version.
     pub canister_version: u64,
+
+    /// Canister history.
+    pub canister_history: CanisterHistory,
 }
 
 /// A wrapper around the different canister statuses.
@@ -492,6 +544,36 @@ impl TryFrom<pb::ExecutionTask> for ExecutionTask {
     }
 }
 
+impl From<&CanisterHistory> for pb_canister_metadata::CanisterHistory {
+    fn from(item: &CanisterHistory) -> Self {
+        Self {
+            changes: item
+                .changes
+                .iter()
+                .map(|e| (&(**e)).into())
+                .collect::<Vec<pb_canister_metadata::CanisterChange>>(),
+            total_num_changes: item.total_num_changes,
+        }
+    }
+}
+
+impl TryFrom<pb_canister_metadata::CanisterHistory> for CanisterHistory {
+    type Error = ProxyDecodeError;
+
+    fn try_from(value: pb_canister_metadata::CanisterHistory) -> Result<Self, Self::Error> {
+        Ok(Self {
+            changes: Arc::new(
+                value
+                    .changes
+                    .into_iter()
+                    .map(|e| Ok(Arc::new(e.try_into()?)))
+                    .collect::<Result<VecDeque<_>, Self::Error>>()?,
+            ),
+            total_num_changes: value.total_num_changes,
+        })
+    }
+}
+
 impl SystemState {
     pub fn new_running(
         canister_id: CanisterId,
@@ -562,6 +644,7 @@ impl SystemState {
             task_queue: Default::default(),
             global_timer: CanisterTimer::Inactive,
             canister_version: 0,
+            canister_history: CanisterHistory::default(),
         }
     }
 
@@ -596,6 +679,7 @@ impl SystemState {
         task_queue: VecDeque<ExecutionTask>,
         global_timer: CanisterTimer,
         canister_version: u64,
+        canister_history: CanisterHistory,
     ) -> Self {
         Self {
             controllers,
@@ -611,6 +695,7 @@ impl SystemState {
             task_queue,
             global_timer,
             canister_version,
+            canister_history,
         }
     }
 

@@ -1,6 +1,7 @@
 use ic_base_types::NumBytes;
 use ic_config::state_manager::Config;
 use ic_crypto_tree_hash::{flatmap, Label, LabeledTree, MixedHashTree};
+use ic_ic00_types::{CanisterChangeDetails, CanisterChangeOrigin};
 use ic_interfaces::artifact_manager::{ArtifactClient, ArtifactProcessor};
 use ic_interfaces::{artifact_pool::UnvalidatedArtifact, certification::Verifier};
 use ic_interfaces_certified_stream_store::{CertifiedStreamStore, EncodeStreamError};
@@ -33,6 +34,7 @@ use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::CallbackId,
     state_sync::FILE_GROUP_CHUNK_ID_OFFSET,
+    time::Time,
     xnet::{StreamIndex, StreamIndexedQueue},
     CanisterId, CryptoHashOfPartialState, CryptoHashOfState, Height, PrincipalId,
 };
@@ -1865,6 +1867,15 @@ fn can_state_sync_from_cache() {
         // Modify the first canister to ensure that its chunks are not identical to the
         // other canister
         let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
+        canister_state
+            .system_state
+            .canister_history
+            .add_canister_change(
+                Time::from_nanos_since_unix_epoch(42),
+                0,
+                CanisterChangeOrigin::from_user(user_test_id(42).get()),
+                CanisterChangeDetails::CanisterCreation,
+            );
         let execution_state = canister_state.execution_state.as_mut().unwrap();
         execution_state
             .stable_memory
@@ -1898,18 +1909,20 @@ fn can_state_sync_from_cache() {
             // Here we choose the `system_metadata.pbuf` because it is never empty and unlikely to be identical to others.
             //   file idx  |  file size | chunk idx |                         path
             // ------------+------------+---------- +------------------------------------------------------
-            //           4 |        216 |     0     | canister_states/00000000000000640101/canister.pbuf
-            //           5 |          0 |    N/A    | canister_states/00000000000000640101/queues.pbuf
-            //           6 |         18 |     1     | canister_states/00000000000000640101/software.wasm
-            //           7 |       4096 |     2     | canister_states/00000000000000640101/stable_memory.bin
-            //           8 |       4096 |     3     | canister_states/00000000000000640101/vmemory_0.bin
-            //           9 |        216 |     4     | canister_states/00000000000000c80101/canister.pbuf
-            //          10 |          0 |    N/A    | canister_states/00000000000000c80101/queues.pbuf
-            //          11 |         18 |     5     | canister_states/00000000000000c80101/software.wasm
-            //          12 |          0 |    N/A    | canister_states/00000000000000c80101/stable_memory.bin
-            //          13 |          0 |    N/A    | canister_states/00000000000000c80101/vmemory_0.bin
-            //          14 |          0 |    N/A    | subnet_queues.pbuf
-            //          15 |         88 |     6     | system_metadata.pbuf
+            //           0 |        216 |     0     | canister_states/00000000000000640101/canister.pbuf
+            //           1 |         26 |     1     | canister_states/00000000000000640101/canister_metadata.pbuf
+            //           2 |          0 |    N/A    | canister_states/00000000000000640101/queues.pbuf
+            //           3 |         18 |     2     | canister_states/00000000000000640101/software.wasm
+            //           4 |       4096 |     3     | canister_states/00000000000000640101/stable_memory.bin
+            //           5 |       4096 |     4     | canister_states/00000000000000640101/vmemory_0.bin
+            //           6 |        216 |     5     | canister_states/00000000000000c80101/canister.pbuf
+            //           7 |          2 |     6     | canister_states/00000000000000c80101/canister_metadata.pbuf
+            //           8 |          0 |    N/A    | canister_states/00000000000000c80101/queues.pbuf
+            //           9 |         18 |     7     | canister_states/00000000000000c80101/software.wasm
+            //          10 |          0 |    N/A    | canister_states/00000000000000c80101/stable_memory.bin
+            //          11 |          0 |    N/A    | canister_states/00000000000000c80101/vmemory_0.bin
+            //          12 |          0 |    N/A    | subnet_queues.pbuf
+            //          13 |         88 |     8     | system_metadata.pbuf
             //
             // Given the current state layout, the chunk for `system_metadata.pbuf` is the last one in the chunk table.
             // If there are changes to the state layout and it changes the position of `system_metadata.pbuf` in the chunk table,

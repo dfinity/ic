@@ -7,6 +7,7 @@ use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     state::{
+        canister_metadata::v1::{self as pb_canister_metadata},
         canister_state_bits::v1::{self as pb_canister_state_bits, ConsumedCyclesByUseCase},
         queues::v1 as pb_queues,
         system_metadata::v1 as pb_metadata,
@@ -182,6 +183,7 @@ struct CheckpointRefData {
 /// │   ├── canister_states
 /// │   │   └── <hex(canister_id)>
 /// │   │       ├── canister.pbuf
+/// │   │       ├── canister_metadata.pbuf
 /// │   │       ├── queues.pbuf
 /// │   │       ├── software.wasm
 /// │   │       ├── stable_memory.bin
@@ -194,6 +196,7 @@ struct CheckpointRefData {
 /// │      ├── canister_states
 /// │      │   └── <hex(canister_id)>
 /// │      │       ├── canister.pbuf
+/// │      │       ├── canister_metadata.pbuf
 /// │      │       ├── queues.pbuf
 /// │      │       ├── software.wasm
 /// │      │       ├── stable_memory.bin
@@ -1278,6 +1281,12 @@ impl<Permissions: AccessPolicy> CanisterLayout<Permissions> {
         self.canister_root.join("canister.pbuf").into()
     }
 
+    pub fn canister_metadata(
+        &self,
+    ) -> ProtoFileWith<pb_canister_metadata::CanisterMetadata, Permissions> {
+        self.canister_root.join("canister_metadata.pbuf").into()
+    }
+
     pub fn vmemory_0(&self) -> PathBuf {
         self.canister_root.join("vmemory_0.bin")
     }
@@ -1914,8 +1923,10 @@ fn build_copy_plan(src: &Path, dst: &Path, plan: &mut CopyPlan) -> std::io::Resu
 mod test {
     use super::*;
 
-    use ic_ic00_types::IC_00;
+    use ic_ic00_types::{CanisterChangeDetails, CanisterChangeOrigin, IC_00};
     use ic_interfaces::messages::{CanisterCall, CanisterMessage, CanisterMessageOrTask};
+    use ic_replicated_state::canister_state::system_state::CanisterHistory;
+    use ic_test_utilities::types::ids::user_test_id;
     use ic_test_utilities::{
         mock_time,
         types::{
@@ -1925,6 +1936,7 @@ mod test {
     };
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_tmpdir::tmpdir;
+    use ic_types::time::Time;
     use std::sync::Arc;
 
     fn default_canister_state_bits() -> CanisterStateBits {
@@ -2013,6 +2025,49 @@ mod test {
         expected_controllers.insert(canister_test_id(0).get());
         expected_controllers.insert(IC_00.into());
         assert_eq!(canister_state_bits.controllers, expected_controllers);
+    }
+
+    #[test]
+    fn test_encode_decode_empty_history() {
+        // A canister state with empty history.
+        let canister_history = CanisterHistory::default();
+
+        let pb_canister_metadata = pb_canister_metadata::CanisterMetadata {
+            canister_history: Some(pb_canister_metadata::CanisterHistory::from(
+                &canister_history,
+            )),
+        };
+        let pb_canister_history =
+            CanisterHistory::try_from(pb_canister_metadata.canister_history.unwrap()).unwrap();
+
+        assert_eq!(canister_history, pb_canister_history);
+    }
+
+    #[test]
+    fn test_encode_decode_non_empty_history() {
+        let mut canister_history = CanisterHistory::default();
+        canister_history.add_canister_change(
+            Time::from_nanos_since_unix_epoch(42),
+            0,
+            CanisterChangeOrigin::from_user(user_test_id(42).get()),
+            CanisterChangeDetails::CanisterCreation,
+        );
+        canister_history.add_canister_change(
+            Time::from_nanos_since_unix_epoch(123),
+            1,
+            CanisterChangeOrigin::from_user(user_test_id(123).get()),
+            CanisterChangeDetails::CanisterCodeUninstall,
+        );
+
+        let pb_canister_metadata = pb_canister_metadata::CanisterMetadata {
+            canister_history: Some(pb_canister_metadata::CanisterHistory::from(
+                &canister_history,
+            )),
+        };
+        let pb_canister_history =
+            CanisterHistory::try_from(pb_canister_metadata.canister_history.unwrap()).unwrap();
+
+        assert_eq!(canister_history, pb_canister_history);
     }
 
     #[test]

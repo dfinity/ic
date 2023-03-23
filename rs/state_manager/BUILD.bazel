@@ -96,6 +96,7 @@ rust_test(
         "//rs/test_utilities/metrics",
         "//rs/test_utilities/tmpdir",
         "//rs/types/base_types",
+        "//rs/types/ic00_types",
         "//rs/types/types",
         "//rs/types/wasm_types",
         "@crate_index//:assert_matches",

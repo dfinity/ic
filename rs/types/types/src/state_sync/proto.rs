@@ -1,8 +1,9 @@
 //! Conversions from Rust to proto structs and back for `StateSync`.
 use crate::state_sync::{ChunkInfo, FileInfo, Manifest};
+use ic_protobuf::proxy::try_decode_hash;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::state::sync::v1 as pb;
-use std::convert::{AsRef, TryFrom, TryInto};
+use std::convert::TryFrom;
 
 impl From<FileInfo> for pb::FileInfo {
     fn from(file_info: FileInfo) -> Self {
@@ -88,15 +89,4 @@ impl TryFrom<pb::Manifest> for Manifest {
                 .collect::<Result<_, _>>()?,
         ))
     }
-}
-
-fn try_decode_hash(bytes: impl AsRef<[u8]>) -> Result<[u8; 32], ProxyDecodeError> {
-    let slice = bytes.as_ref();
-    let array: [u8; 32] = slice
-        .try_into()
-        .map_err(|_| ProxyDecodeError::InvalidDigestLength {
-            expected: 32,
-            actual: slice.len(),
-        })?;
-    Ok(array)
 }
