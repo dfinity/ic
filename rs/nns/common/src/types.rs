@@ -94,10 +94,21 @@ impl Display for ProposalId {
     }
 }
 
+/// The reason for why an exchange rate proposal is created.
+#[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub enum UpdateIcpXdrConversionRatePayloadReason {
+    /// The timestamp of the rate stored in the CMC is older than the execution interval.
+    OldRate,
+    /// The relative difference between the rate in the CMC and the rate the conversion rate provider retrieved exceeds
+    /// a threshold defined by the conversion rate provider.
+    DivergedRate,
+}
+
 /// The payload of a proposal to update the ICP/XDR conversion rate in the CMC.
 #[derive(CandidType, Default, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct UpdateIcpXdrConversionRatePayload {
     pub data_source: String,
     pub timestamp_seconds: u64,
     pub xdr_permyriad_per_icp: u64,
+    pub reason: Option<UpdateIcpXdrConversionRatePayloadReason>,
 }

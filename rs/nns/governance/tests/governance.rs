@@ -1331,6 +1331,7 @@ async fn test_minimum_icp_xdr_conversion_rate() {
                         xdr_permyriad_per_icp: 0,
                         data_source: "".to_string(),
                         timestamp_seconds: 0,
+                        reason: None,
                     })
                     .unwrap(),
                 })),
@@ -1355,6 +1356,7 @@ async fn test_minimum_icp_xdr_conversion_rate() {
                     xdr_permyriad_per_icp: 100_000_000,
                     data_source: "".to_string(),
                     timestamp_seconds: 0,
+                    reason: None,
                 })
                 .unwrap(),
             })),
@@ -2747,6 +2749,7 @@ async fn test_genesis_in_the_future_in_supported() {
                         xdr_permyriad_per_icp: 9256,
                         data_source: "the data source".to_string(),
                         timestamp_seconds: 111_222_333,
+                        reason: None,
                     })
                     .unwrap(),
                 })),
