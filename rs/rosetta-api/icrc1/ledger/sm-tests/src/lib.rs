@@ -1,8 +1,6 @@
-use candid::{CandidType, Decode, Deserialize, Encode, Nat, Principal};
+use candid::{CandidType, Decode, Encode, Nat, Principal};
 use ic_base_types::PrincipalId;
-use ic_icrc1::{
-    endpoints::StandardRecord, hash::Hash, Block, CompactAccount, Operation, Transaction,
-};
+use ic_icrc1::{endpoints::StandardRecord, hash::Hash, Block, Operation, Transaction};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::block::{BlockIndex, BlockType, HashOf};
 use ic_state_machine_tests::{CanisterId, ErrorCode, StateMachine};
@@ -12,11 +10,10 @@ use icrc_ledger_types::transaction::{
 };
 use icrc_ledger_types::transaction::{Memo, TransferArg, TransferError};
 use icrc_ledger_types::value::MetadataValue as Value;
-use icrc_ledger_types::{Account, ArchiveInfo, GetTransactionsRequest};
+use icrc_ledger_types::{Account, ArchiveInfo, GetTransactionsRequest, Subaccount};
 use num_traits::ToPrimitive;
 use proptest::prelude::*;
 use proptest::test_runner::{Config as TestRunnerConfig, TestCaseResult, TestRunner};
-use serde::de::{value::SeqDeserializer, IntoDeserializer};
 use std::{
     collections::{BTreeMap, HashMap},
     time::{Duration, SystemTime},
@@ -429,15 +426,19 @@ fn arb_block() -> impl Strategy<Value = Block> {
         arb_transaction(),
         proptest::option::of(any::<u64>()),
         any::<u64>(),
+        proptest::option::of(arb_account()),
+        proptest::option::of(any::<u64>()),
     )
-        .prop_map(|(parent_hash, transaction, effective_fee, ts)| Block {
-            parent_hash: parent_hash.map(HashOf::new),
-            transaction,
-            effective_fee,
-            timestamp: ts,
-            fee_collector: None,
-            fee_collector_block_index: None,
-        })
+        .prop_map(
+            |(parent_hash, transaction, effective_fee, ts, fee_col, fee_col_block)| Block {
+                parent_hash: parent_hash.map(HashOf::new),
+                transaction,
+                effective_fee,
+                timestamp: ts,
+                fee_collector: fee_col,
+                fee_collector_block_index: fee_col_block,
+            },
+        )
 }
 
 fn init_args(initial_balances: Vec<(Account, u64)>) -> InitArgs {
@@ -1583,20 +1584,25 @@ where
     }
 
     fn value_as_account(value: icrc_ledger_types::value::Value) -> Account {
+        use icrc_ledger_types::value::Value;
+
         match value {
-            icrc_ledger_types::value::Value::Array(array) => {
-                let array: Vec<_> = array
-                    .iter()
-                    .map(|value| match value {
-                        icrc_ledger_types::value::Value::Blob(bytes) => bytes.clone().into_vec(),
-                        value => panic!("Expected Value::Blob but found {:?}", value),
-                    })
-                    .collect();
-                let deser: SeqDeserializer<_, serde::de::value::Error> = array.into_deserializer();
-                let account = CompactAccount::deserialize(deser)
-                    .expect("Unable to deserialize CompactAccount");
-                Account::try_from(account).expect("Unable to convert compact account to account")
-            }
+            Value::Array(array) => match &array[..] {
+                [Value::Blob(principal_bytes)] => Account {
+                    owner: Principal::try_from(principal_bytes.as_ref())
+                        .expect("failed to parse account owner"),
+                    subaccount: None,
+                },
+                [Value::Blob(principal_bytes), Value::Blob(subaccount_bytes)] => Account {
+                    owner: Principal::try_from(principal_bytes.as_ref())
+                        .expect("failed to parse account owner"),
+                    subaccount: Some(
+                        Subaccount::try_from(subaccount_bytes.as_ref())
+                            .expect("failed to parse subaccount"),
+                    ),
+                },
+                _ => panic!("Unexpected account representation: {:?}", array),
+            },
             value => panic!("Expected Value::Array but found {:?}", value),
         }
     }

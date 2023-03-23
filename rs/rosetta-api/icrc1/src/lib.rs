@@ -1,8 +1,8 @@
 pub mod blocks;
+mod compact_account;
 pub mod endpoints;
 pub mod hash;
 
-use candid::Principal;
 use ciborium::tag::Required;
 use ic_base_types::PrincipalId;
 use ic_ledger_canister_core::ledger::{LedgerContext, LedgerTransaction, TxApplyError};
@@ -13,123 +13,25 @@ use ic_ledger_core::{
     tokens::Tokens,
 };
 use icrc_ledger_types::transaction::Memo;
-use icrc_ledger_types::{Account, Subaccount};
-use serde::ser::Error;
+use icrc_ledger_types::Account;
 use serde::{Deserialize, Serialize};
-use serde_bytes::ByteBuf;
 use std::collections::HashMap;
-use std::convert::TryFrom;
-
-fn ser_compact_account<S>(acc: &Account, s: S) -> Result<S::Ok, S::Error>
-where
-    S: serde::ser::Serializer,
-{
-    CompactAccount::from(*acc).serialize(s)
-}
-
-fn de_compact_account<'de, D>(d: D) -> Result<Account, D::Error>
-where
-    D: serde::de::Deserializer<'de>,
-{
-    use serde::de::Error;
-    let compact_account = CompactAccount::deserialize(d)?;
-    Account::try_from(compact_account).map_err(D::Error::custom)
-}
-
-fn ser_opt_compact_account<S>(acc: &Option<Account>, s: S) -> Result<S::Ok, S::Error>
-where
-    S: serde::ser::Serializer,
-{
-    acc.map_or_else(
-        || Err(S::Error::custom("Expected some account but found None")),
-        |acc| CompactAccount::from(acc).serialize(s),
-    )
-}
-
-fn de_opt_compact_account<'de, D>(d: D) -> Result<Option<Account>, D::Error>
-where
-    D: serde::de::Deserializer<'de>,
-{
-    use serde::de::Error;
-    let compact_account = CompactAccount::deserialize(d)?;
-    let account = Account::try_from(compact_account).map_err(D::Error::custom)?;
-    Ok(Some(account))
-}
-
-/// A compact representation of an Account.
-///
-/// Instead of encoding accounts as structs with named fields,
-/// we encode them as tuples with variables number of elements.
-/// ```text
-/// [bytes] <=> Account { owner: bytes, subaccount : None }
-/// [x: bytes, y: bytes] <=> Account { owner: x, subaccount: Some(y) }
-/// ```
-#[derive(Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct CompactAccount(Vec<ByteBuf>);
-
-impl From<Account> for CompactAccount {
-    fn from(acc: Account) -> Self {
-        let mut components = vec![ByteBuf::from(acc.owner.as_slice().to_vec())];
-        if let Some(sub) = acc.subaccount {
-            components.push(ByteBuf::from(sub.to_vec()))
-        }
-        CompactAccount(components)
-    }
-}
-
-impl TryFrom<CompactAccount> for Account {
-    type Error = String;
-    fn try_from(compact: CompactAccount) -> Result<Account, String> {
-        let elems = compact.0;
-        if elems.is_empty() {
-            return Err("account tuple must have at least one element".to_string());
-        }
-        if elems.len() > 2 {
-            return Err(format!(
-                "account tuple must have at most two elements, got {}",
-                elems.len()
-            ));
-        }
-
-        let principal =
-            Principal::try_from(&elems[0][..]).map_err(|e| format!("invalid principal: {}", e))?;
-        let subaccount = if elems.len() > 1 {
-            Some(Subaccount::try_from(&elems[1][..]).map_err(|_| {
-                format!(
-                    "invalid subaccount: expected 32 bytes, got {}",
-                    elems[1].len()
-                )
-            })?)
-        } else {
-            None
-        };
-
-        Ok(Account {
-            owner: principal,
-            subaccount,
-        })
-    }
-}
 
 #[derive(Serialize, Deserialize, Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(tag = "op")]
 pub enum Operation {
     #[serde(rename = "mint")]
     Mint {
-        #[serde(serialize_with = "ser_compact_account")]
-        #[serde(deserialize_with = "de_compact_account")]
+        #[serde(with = "compact_account")]
         to: Account,
         #[serde(rename = "amt")]
         amount: u64,
     },
     #[serde(rename = "xfer")]
     Transfer {
-        #[serde(serialize_with = "ser_compact_account")]
-        #[serde(deserialize_with = "de_compact_account")]
+        #[serde(with = "compact_account")]
         from: Account,
-        #[serde(serialize_with = "ser_compact_account")]
-        #[serde(deserialize_with = "de_compact_account")]
+        #[serde(with = "compact_account")]
         to: Account,
         #[serde(rename = "amt")]
         amount: u64,
@@ -138,8 +40,7 @@ pub enum Operation {
     },
     #[serde(rename = "burn")]
     Burn {
-        #[serde(serialize_with = "ser_compact_account")]
-        #[serde(deserialize_with = "de_compact_account")]
+        #[serde(with = "compact_account")]
         from: Account,
         #[serde(rename = "amt")]
         amount: u64,
@@ -279,18 +180,22 @@ pub struct Block {
     #[serde(rename = "phash")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent_hash: Option<HashOf<EncodedBlock>>,
+
     #[serde(rename = "tx")]
     pub transaction: Transaction,
+
     #[serde(rename = "fee")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub effective_fee: Option<u64>,
+
     #[serde(rename = "ts")]
     pub timestamp: u64,
+
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[serde(rename = "fee_col")]
-    #[serde(serialize_with = "ser_opt_compact_account")]
-    #[serde(deserialize_with = "de_opt_compact_account")]
+    #[serde(with = "compact_account::opt")]
     pub fee_collector: Option<Account>,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(rename = "fee_col_block")]
     pub fee_collector_block_index: Option<u64>,
