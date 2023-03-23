@@ -49,6 +49,7 @@ Arguments:
        --cert-issuer-identity           specify an identity file for certificate-issuer
        --cert-issuer-enc-key            specify an encryption key for certificate-issuer
        --pre-isolation-canisters        specify a set of pre-domain-isolation canisters
+       --ip-hash-salt                   specify a salt for hashing ip values
   -x,  --debug                          enable verbose console output
 '
     exit 1
@@ -111,6 +112,9 @@ for argument in "${@}"; do
             ;;
         --pre-isolation-canisters=*)
             PRE_ISOLATION_CANISTERS="${argument#*=}"
+            ;;
+        --ip-hash-salt=*)
+            IP_HASH_SALT="${argument#*=}"
             ;;
         *)
             echo "Error: Argument \"${argument#}\" is not supported for $0"
@@ -262,6 +266,8 @@ function generate_boundary_node_config() {
 bn_version_info{git_revision="${GIT_REVISION}"} 1
 EOF
 
+        # Copy vars listing from environment's Ansible inventory
+        # to the BN's /boot/config directory
         echo "$BN_VARS" >"${CONFIG_DIR}/${NODE_PREFIX}/bn_vars.conf"
     done
 }
@@ -516,6 +522,26 @@ function copy_pre_isolation_canisters() {
     done
 }
 
+function copy_ip_hash_salt() {
+    if [[ -z "${IP_HASH_SALT:-}" ]]; then
+        err "ip hashing salt has not been provided, proceeding without copying it"
+        return
+    fi
+
+    for n in $NODES; do
+        declare -n NODE=$n
+        if [[ "${NODE["type"]}" != "boundary" ]]; then
+            continue
+        fi
+
+        local SUBNET_IDX="${NODE["subnet_idx"]}"
+        local NODE_IDX="${NODE["node_idx"]}"
+        local NODE_PREFIX="${DEPLOYMENT}.${SUBNET_IDX}.${NODE_IDX}"
+
+        echo "ip_hash_salt=${IP_HASH_SALT}" >>"${CONFIG_DIR}/${NODE_PREFIX}/bn_vars.conf"
+    done
+}
+
 function build_tarball() {
     for n in $NODES; do
         declare -n NODE=$n
@@ -568,6 +594,7 @@ function main() {
     copy_geolite2_dbs
     generate_certificate_issuer_config
     copy_pre_isolation_canisters
+    copy_ip_hash_salt
     build_tarball
     build_removable_media
     remove_temporary_directories
