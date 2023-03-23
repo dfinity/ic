@@ -22,13 +22,18 @@ Runbook::
 
 end::catalog[] */
 
+use crate::canister_agent::HasCanisterAgentCapability;
+use crate::canister_api::{CallMode, GenericRequest};
+use crate::canister_requests;
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
     HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt,
 };
-use crate::util::{assert_canister_counter_with_retries, assert_create_agent, block_on, delay};
-use crate::workload::{CallSpec, Request, RoundRobinPlan, Workload};
+use crate::generic_workload_engine::engine::Engine;
+use crate::generic_workload_engine::metrics::{LoadTestMetricsProvider, RequestOutcome};
+use crate::util::{assert_canister_counter_with_retries, block_on, delay};
+
 use ic_agent::{export::Principal, Agent};
 use ic_base_types::PrincipalId;
 use ic_prep_lib::subnet_configuration::constants;
@@ -43,8 +48,7 @@ const NON_EXISTING_METHOD_B: &str = "non_existing_method_b";
 const MAX_RETRIES: u32 = 10;
 const RETRY_WAIT: Duration = Duration::from_secs(10);
 const SUCCESS_THRESHOLD: f32 = 0.95; // If more than 95% of the expected calls are successful the test passes
-const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1); // This param can be slightly tweaked (1-2 sec), if the workload fails to dispatch requests precisely on time.
-const RESPONSES_COLLECTION_EXTRA_TIMEOUT: Duration = Duration::from_secs(5); // Responses are collected during the workload execution + this extra time, after all requests had been dispatched.
+const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1);
 
 /// Default configuration for this test
 pub fn config(env: TestEnv) {
@@ -130,14 +134,12 @@ fn test(
             log,
             "Step 1: Install {} canisters on the subnet..", canister_count
         );
-        let mut agents = Vec::new();
         let mut canisters = Vec::new();
+        let agent = app_node.build_canister_agent().await;
 
-        agents.push(assert_create_agent(app_node.get_public_url().as_str()).await);
-        let install_agent = agents[0].clone();
         for _ in 0..canister_count {
             canisters.push(
-                install_counter_canister(&install_agent, app_node.effective_canister_id()).await,
+                install_counter_canister(&agent.get(), app_node.effective_canister_id()).await,
             );
         }
         info!(log, "{} canisters installed successfully.", canisters.len());
@@ -149,29 +151,33 @@ fn test(
             canister_count
         );
         info!(log, "Step 2: Instantiate and start the workload..");
+
         let payload: Vec<u8> = vec![0; 12];
-        let plan = RoundRobinPlan::new(vec![
-            Request::Update(CallSpec::new(canisters[0], "write", payload.clone())),
-            Request::Query(CallSpec::new(
-                canisters[1],
-                NON_EXISTING_METHOD_A,
-                payload.clone(),
-            )),
-            Request::Query(CallSpec::new(
-                canisters[0],
-                NON_EXISTING_METHOD_B,
-                payload.clone(),
-            )),
-            Request::Update(CallSpec::new(canisters[1], "write", payload.clone())),
-        ]);
-        let workload = Workload::new(agents, rps, duration, plan, log.clone())
-            .with_responses_collection_extra_timeout(RESPONSES_COLLECTION_EXTRA_TIMEOUT)
-            .increase_requests_dispatch_timeout(REQUESTS_DISPATCH_EXTRA_TIMEOUT);
-        let metrics = workload
-            .execute()
-            .await
-            .expect("Workload execution has failed.");
-        info!(log, "Results of the workload execution {:?}", metrics);
+        let generator = {
+            let (agent, canisters, payload) = (agent.clone(), canisters.clone(), payload.clone());
+            move |idx: usize| {
+                let (agent, canisters, payload) =
+                    (agent.clone(), canisters.clone(), payload.clone());
+                async move {
+                    let (agent, canisters, payload) =
+                        (agent.clone(), canisters.clone(), payload.clone());
+                    let request_outcome = canister_requests![
+                        idx,
+                        1 * agent => GenericRequest::new(canisters[1], NON_EXISTING_METHOD_A.to_string(), payload.clone(), CallMode::Query),
+                        1 * agent => GenericRequest::new(canisters[0], NON_EXISTING_METHOD_B.to_string(), payload.clone(), CallMode::Query),
+                        1 * agent => GenericRequest::new(canisters[0], "write".to_string(), payload.clone(), CallMode::Update),
+                        1 * agent => GenericRequest::new(canisters[1], "write".to_string(), payload.clone(), CallMode::Update),
+                    ];
+                    request_outcome.into_test_outcome()
+                }
+            }
+        };
+        let metrics = Engine::new(log.clone(), generator, rps, duration)
+            .increase_dispatch_timeout(REQUESTS_DISPATCH_EXTRA_TIMEOUT)
+            .execute_simply(log.clone())
+            .await;
+        info!(log, "Reporting workload execution results ...");
+        env.emit_report(format!("{metrics}"));
         info!(
             log,
             "Step 3: Assert expected number of failed query calls on each canister.."
@@ -182,7 +188,7 @@ fn test(
         let min_expected_success_calls = min_expected_failure_calls;
         info!(
             log,
-            "Min expected number of success calls {}, failure calls {}",
+            "Minimal expected number of success calls {}, failure calls {}",
             min_expected_success_calls,
             min_expected_failure_calls
         );
@@ -206,20 +212,20 @@ fn test(
         );
         assert!(
             metrics.failure_calls() >= min_expected_failure_calls,
-            "Observed failure calls {} is at least min expected failure calls {}",
+            "The number of observed failure calls ({}) is less than expected ({})",
             metrics.failure_calls(),
             min_expected_failure_calls
         );
         assert!(
             metrics.success_calls() >= min_expected_success_calls,
-            "Observed success calls {} is at least min expected success calls {}",
+            "The number of observed success calls ({}) is less than expected ({})",
             metrics.success_calls(),
             min_expected_success_calls
         );
         assert_eq!(
             requests_count,
             metrics.total_calls(),
-            "Expected requests count {}, recorded number of total calls {}",
+            "Submitted {} calls, but the total number of recorded calls is {}",
             requests_count,
             metrics.total_calls()
         );
@@ -230,12 +236,12 @@ fn test(
         let min_expected_canister_counter = min_expected_success_calls / canister_count;
         info!(
             log,
-            "Min expected counter value on canisters {}", min_expected_canister_counter
+            "Minimal expected counter value on canisters {}", min_expected_canister_counter
         );
         for canister in canisters.iter() {
             assert_canister_counter_with_retries(
                 &log,
-                &install_agent,
+                &agent.get(),
                 canister,
                 payload.clone(),
                 min_expected_canister_counter,

@@ -50,6 +50,10 @@ impl HasCanisterAgentCapability for IcNodeSnapshot {
 }
 
 impl CanisterAgent {
+    pub fn from(agent: Agent) -> Self {
+        Self { agent }
+    }
+
     pub async fn from_boundary_node_url(bn_url: &str) -> Self {
         Self {
             agent: assert_create_agent(bn_url).await,
@@ -82,13 +86,7 @@ impl CanisterAgent {
                 .await
         })
         .map_err(|e| format!("{e:?}"));
-        RequestOutcome::new(
-            result,
-            // TODO: incorporate canister IDs into labels to avoid collisions if two canisters have endpoints with the same name
-            request.method_name(),
-            start_time.elapsed(),
-            1,
-        )
+        RequestOutcome::new(result, request.signature(), start_time.elapsed(), 1)
     }
 
     pub async fn call_and_parse<T>(
@@ -105,7 +103,7 @@ impl CanisterAgent {
                     .parse_response(r.as_slice())
                     .expect("failed to decode")
             }),
-            format!("{}+parse", request.method_name()),
+            format!("{}+parse", request.signature()),
             raw_outcome.duration,
             raw_outcome.attempts,
         )
@@ -123,7 +121,7 @@ impl CanisterAgent {
         R: Request<T> + Clone + Sync + Send + 'static,
     {
         let log = slog::Logger::root(slog::Discard, slog::o!());
-        let label = request.method_name();
+        let label = request.signature();
         let start_time = Instant::now();
         let attempts = Arc::new(AtomicUsize::new(0));
         let result = retry_async(&log, timeout, backoff_delay, {

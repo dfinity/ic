@@ -56,10 +56,61 @@ pub trait Request<T: Response> {
     }
     fn canister_id(&self) -> Principal;
     fn method_name(&self) -> String;
+    fn signature(&self) -> String {
+        format!(
+            "{}@{}[{}]",
+            self.method_name(),
+            self.canister_id(),
+            if self.is_query() { "q" } else { "u" }
+        )
+    }
     fn payload(&self) -> Vec<u8>;
     fn parse_response(&self, raw_response: &[u8]) -> anyhow::Result<T> {
         let response = Decode!(raw_response, T)?;
         Ok(response)
+    }
+}
+
+/// Please use this structure only for interacting with test canisters that are **not deployed to production**.
+/// Responses to requests of this type cannot be decoded. Canisters that have external clients (outside of this repo) should be system tested
+/// via an appropriate `Request<ResponseType>`, for which `ResponseType` <: `Response` is a Candid type that can be decoded.
+///
+/// Some examples of when this type is appropriate:
+/// - Counter Canister (//rs/workload_generator:src/counter.wat)
+/// - Universal Canister (//rs/universal_canister/lib)
+pub struct GenericRequest {
+    canister: Principal,
+    method: String,
+    payload: Vec<u8>,
+    mode: CallMode,
+}
+
+impl GenericRequest {
+    pub fn new(canister: Principal, method: String, payload: Vec<u8>, mode: CallMode) -> Self {
+        Self {
+            canister,
+            method,
+            payload,
+            mode,
+        }
+    }
+}
+
+impl Request<()> for GenericRequest {
+    fn mode(&self) -> CallMode {
+        self.mode.clone()
+    }
+    fn canister_id(&self) -> Principal {
+        self.canister
+    }
+    fn method_name(&self) -> String {
+        self.method.clone()
+    }
+    fn payload(&self) -> Vec<u8> {
+        self.payload.clone()
+    }
+    fn parse_response(&self, _raw_response: &[u8]) -> anyhow::Result<()> {
+        panic!("GenericRequest response cannot be parsed (use only for testing)")
     }
 }
 

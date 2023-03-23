@@ -6,16 +6,37 @@ use std::{
     time::Duration,
 };
 
+use async_trait::async_trait;
 use itertools::Itertools;
 use slog::{info, Logger};
 
-// TODO
-// #[derive(Default, Clone, Debug)]
-// pub struct RequestDurationBucket {
-//     threshold: Duration,
-//     requests_above_threshold: u64,
-//     requests_below_threshold: u64,
-// }
+use super::engine::Engine;
+
+#[derive(Default, Clone, Debug)]
+pub struct RequestDurationBucket {
+    // threshold: Duration, TODO
+    requests_above_threshold: u64,
+    requests_below_threshold: u64,
+}
+
+impl RequestDurationBucket {
+    pub fn requests_count_below_threshold(&self) -> u64 {
+        self.requests_below_threshold
+    }
+
+    pub fn requests_count_above_threshold(&self) -> u64 {
+        self.requests_above_threshold
+    }
+
+    pub fn requests_ratio_below_threshold(&self) -> f64 {
+        self.requests_below_threshold as f64
+            / (self.requests_above_threshold + self.requests_below_threshold) as f64
+    }
+
+    pub fn requests_ratio_above_threshold(&self) -> f64 {
+        1.0 - self.requests_ratio_below_threshold()
+    }
+}
 
 pub type Counter = usize;
 
@@ -38,9 +59,6 @@ pub struct RequestMetrics {
 pub type LoadTestOutcome<T, S> = Vec<(String, RequestOutcome<T, S>)>;
 
 pub struct LoadTestMetrics {
-    /// Keys are (request_pos, request_label) pairs, where
-    /// - request_pos is the position of the request in the workflow (see [`LoadTestOutcome`])
-    /// - request_label is a request label
     inner: BTreeMap<String, RequestMetrics>,
     last_time_emitted: Instant,
     logger: Logger,
@@ -53,6 +71,40 @@ impl LoadTestMetrics {
             last_time_emitted: Instant::now(),
             logger,
         }
+    }
+
+    pub fn success_calls(&self) -> Counter {
+        self.inner
+            .values()
+            .fold(0usize, |acc, x| acc + x.success_calls())
+    }
+
+    pub fn failure_calls(&self) -> Counter {
+        self.inner
+            .values()
+            .fold(0usize, |acc, x| acc + x.failure_calls())
+    }
+
+    pub fn total_calls(&self) -> Counter {
+        self.success_calls() + self.failure_calls()
+    }
+
+    pub fn errors(&self) -> HashMap<String, Counter> {
+        self.inner.values().fold(HashMap::new(), |mut acc, x| {
+            for (error, count) in x.errors() {
+                acc.entry(error.clone())
+                    .and_modify(|total_count| *total_count += *count)
+                    .or_insert(*count);
+            }
+            acc
+        })
+    }
+
+    pub fn find_request_duration_bucket(
+        &self,
+        _threshold: Duration,
+    ) -> Option<RequestDurationBucket> {
+        todo!()
     }
 
     pub fn aggregate_load_testing_metrics<T, S>(mut self, item: LoadTestOutcome<T, S>) -> Self
@@ -123,10 +175,9 @@ impl RequestMetrics {
         self.min_request_duration
     }
 
-    pub fn avg_request_duration(&self) -> Duration {
+    pub fn avg_request_duration(&self) -> Option<Duration> {
         self.total_request_duration
             .checked_div(self.total_calls().try_into().unwrap())
-            .unwrap()
     }
 
     pub fn success_rate(&self) -> f64 {
@@ -145,13 +196,8 @@ impl RequestMetrics {
         self.max_attempts
     }
 
-    pub fn avg_attempts(&self) -> Option<f64> {
-        let tot = self.total_calls();
-        if tot == 0 {
-            None
-        } else {
-            Some((self.total_attempts as f64) / (tot as f64))
-        }
+    pub fn avg_attempts(&self) -> f64 {
+        (self.total_attempts as f64) / (self.total_calls() as f64)
     }
 
     pub fn errors(&self) -> &HashMap<String, Counter> {
@@ -217,12 +263,12 @@ impl Display for RequestMetrics {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "RequestMetrics {{ duration=(min:{:>6}ms, avg:{:>6.1}ms, max:{:>6}ms), attempts=(min:{:>3}, avg:{:>3.1}, max:{:>3}), success_rate:{:>3.2}%, successes:{:>7}, failures:{:>7}",
+            "RequestMetrics {{ duration=(min:{:>6}ms, avg:{}ms, max:{:>6}ms), attempts=(min:{:>3}, avg:{:>5.1}, max:{:>3}), success_rate:{:>6.2}%, successes:{:>7}, failures:{:>7}",
             self.min_request_duration().as_millis(),
-            self.avg_request_duration().as_millis(),
+            self.avg_request_duration().map(|x| format!("{:>8.1}", x.as_millis())).unwrap_or_else(|| "     inf".to_string()),
             self.max_request_duration().as_millis(),
             self.min_attempts(),
-            self.avg_attempts().map(|x| format!("{x:>3.1}")).unwrap_or_else(|| "inf".to_string()),
+            self.avg_attempts(),
             self.max_attempts(),
             self.success_rate(),
             self.success_calls(),
@@ -363,5 +409,223 @@ impl<ResultType: Clone, ErrorType: Clone> RequestOutcome<ResultType, ErrorType> 
     pub fn push_outcome(self, test_outcome: &mut LoadTestOutcome<ResultType, ErrorType>) -> Self {
         test_outcome.push((self.key(), self.clone()));
         self
+    }
+}
+
+#[async_trait]
+pub trait LoadTestMetricsProvider {
+    /// Execute and aggregate the outcome into a `LoadTestMetrics` object.
+    ///
+    /// The `log` argument is used for logging intermediate aggregations, converging to the result of this method.
+    async fn execute_simply(mut self, log: Logger) -> LoadTestMetrics;
+}
+
+#[async_trait]
+impl<F, Fut> LoadTestMetricsProvider for Engine<F>
+where
+    F: FnMut(usize) -> Fut + Send + 'static,
+    Fut: std::future::Future<Output = LoadTestOutcome<(), String>> + Send + 'static,
+{
+    async fn execute_simply(mut self, log: Logger) -> LoadTestMetrics {
+        let aggr = LoadTestMetrics::new(log);
+        let fun = LoadTestMetrics::aggregator_fn;
+        self.execute(aggr, fun)
+            .await
+            .expect("Execution of the workload failed.")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_load_test_metrics() {
+        // Emulate test A
+        let outcome_a = {
+            let mut outcome: LoadTestOutcome<(), String> = LoadTestOutcome::default();
+            {
+                let result: Result<(), String> = Ok(());
+                let label = "request-0".to_string();
+                let duration = Duration::from_millis(20_000);
+                let attempts = 2;
+                RequestOutcome::new(result, label, duration, attempts)
+            }
+            .with_workflow_position(0)
+            .push_outcome(&mut outcome);
+            {
+                let result: Result<(), String> = Ok(());
+                let label = "request-1".to_string();
+                let duration = Duration::from_millis(1_000);
+                let attempts = 1;
+                RequestOutcome::new(result, label, duration, attempts)
+            }
+            .with_workflow_position(1)
+            .push_outcome(&mut outcome);
+            {
+                let result: Result<(), String> = Err("request-2-failure".to_string());
+                let label = "request-2".to_string();
+                let duration = Duration::from_millis(5_000);
+                let attempts = 5;
+                RequestOutcome::new(result, label, duration, attempts)
+            }
+            .with_workflow_position(2)
+            .push_outcome(&mut outcome);
+            outcome
+        };
+
+        // Emulate test B
+        let outcome_b = {
+            let mut outcome: LoadTestOutcome<(), String> = LoadTestOutcome::default();
+            {
+                let result: Result<(), String> = Ok(());
+                let label = "request-0".to_string();
+                let duration = Duration::from_millis(30_000);
+                let attempts = 3;
+                RequestOutcome::new(result, label, duration, attempts)
+            }
+            .with_workflow_position(0)
+            .push_outcome(&mut outcome);
+            {
+                let result: Result<(), String> = Err("request-1-failure".to_string());
+                let label = "request-1".to_string();
+                let duration = Duration::from_millis(99_000);
+                let attempts = 99;
+                RequestOutcome::new(result, label, duration, attempts)
+            }
+            .with_workflow_position(1)
+            .push_outcome(&mut outcome);
+            {
+                let result: Result<(), String> = Err("request-2-failure".to_string());
+                let label = "request-2".to_string();
+                let duration = Duration::from_millis(5_000);
+                let attempts = 5;
+                RequestOutcome::new(result, label, duration, attempts)
+            }
+            .with_workflow_position(2)
+            .push_outcome(&mut outcome);
+            outcome
+        };
+
+        // Aggregate
+        let m = {
+            let log = slog::Logger::root(slog::Discard, slog::o!());
+            LoadTestMetrics::new(log)
+                .aggregate_load_testing_metrics(outcome_a)
+                .aggregate_load_testing_metrics(outcome_b)
+        };
+
+        // Print metrics
+        println!("test_load_test_metrics: {m}");
+
+        // Perform checks
+        {
+            let (success_calls, expectected_success_calls) = (m.success_calls(), 3usize);
+            assert_eq!(
+                success_calls, expectected_success_calls,
+                "Expected {expectected_success_calls} success calls but observed {success_calls}"
+            );
+        }
+        {
+            let (failure_calls, expected_failure_calls) = (m.failure_calls(), 3usize);
+            assert_eq!(
+                failure_calls, expected_failure_calls,
+                "Expected {expected_failure_calls} failure calls but observed {failure_calls}"
+            );
+        }
+        {
+            let (total_calls, expected_total_calls) = (m.total_calls(), 6usize);
+            assert_eq!(
+                total_calls, expected_total_calls,
+                "Expected {expected_total_calls} calls but observed {total_calls}"
+            );
+        }
+        {
+            let (errors, expected_errors) = (
+                m.errors(),
+                vec![
+                    ("request-1-failure".to_string(), 1usize),
+                    ("request-2-failure".to_string(), 2usize),
+                ]
+                .into_iter()
+                .collect::<HashMap<String, usize>>(),
+            );
+            assert_eq!(
+                errors, expected_errors,
+                "Observed errors {errors:?} did not match expected errors {expected_errors:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_load_test_metrics_collision() {
+        // Emulate test C
+        let outcome_c = {
+            let mut outcome: LoadTestOutcome<(), String> = LoadTestOutcome::default();
+            {
+                let result: Result<(), String> = Ok(());
+                let label = "request-3".to_string();
+                let duration = Duration::from_millis(1_000);
+                let attempts = 1;
+                RequestOutcome::new(result, label, duration, attempts)
+            }
+            .push_outcome(&mut outcome);
+            {
+                let result: Result<(), String> = Err("failure".to_string());
+                let label = "request-4".to_string();
+                let duration = Duration::from_millis(5_000);
+                let attempts = 5;
+                RequestOutcome::new(result, label, duration, attempts)
+            }
+            .push_outcome(&mut outcome);
+            outcome
+        };
+
+        // Emulate test D
+        let outcome_d = {
+            let mut outcome: LoadTestOutcome<(), String> = LoadTestOutcome::default();
+            {
+                let result: Result<(), String> = Err("failure".to_string());
+                let label = "request-3".to_string();
+                let duration = Duration::from_millis(99_000);
+                let attempts = 99;
+                RequestOutcome::new(result, label, duration, attempts)
+            }
+            .push_outcome(&mut outcome);
+            {
+                let result: Result<(), String> = Err("failure".to_string());
+                let label = "request-4".to_string();
+                let duration = Duration::from_millis(5_000);
+                let attempts = 5;
+                RequestOutcome::new(result, label, duration, attempts)
+            }
+            .push_outcome(&mut outcome);
+            outcome
+        };
+
+        // Aggregate
+        let m = {
+            let log = slog::Logger::root(slog::Discard, slog::o!());
+            LoadTestMetrics::new(log)
+                .aggregate_load_testing_metrics(outcome_c)
+                .aggregate_load_testing_metrics(outcome_d)
+        };
+
+        // Print metrics
+        println!("test_load_test_metrics: {m}");
+
+        // Perform checks
+        {
+            let (errors, expected_errors) = (
+                m.errors(),
+                vec![("failure".to_string(), 3usize)]
+                    .into_iter()
+                    .collect::<HashMap<String, usize>>(),
+            );
+            assert_eq!(
+                errors, expected_errors,
+                "Observed errors {errors:?} did not match expected errors {expected_errors:?}"
+            );
+        }
     }
 }
