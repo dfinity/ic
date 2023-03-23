@@ -3,16 +3,20 @@
 //!
 //! Some tests are run over a range of subnet configurations to check for corner cases.
 
-use super::*;
 use crate::consensus::mocks::{dependencies_with_subnet_params, Dependencies};
 use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
 use ic_interfaces::{
     artifact_pool::{MutablePool, UnvalidatedArtifact},
-    canister_http::{CanisterHttpChangeAction, CanisterHttpChangeSet},
+    canister_http::{
+        CanisterHttpChangeAction, CanisterHttpChangeSet, CanisterHttpPayloadBuilder,
+        CanisterHttpPayloadValidationError, CanisterHttpPermanentValidationError,
+        CanisterHttpTransientValidationError,
+    },
     time_source::SysTimeSource,
     validation::ValidationError,
 };
 use ic_logger::replica_logger::no_op_logger;
+use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::subnet::v1::SubnetFeatures;
 use ic_test_utilities::{
     mock_time,
@@ -25,14 +29,29 @@ use ic_test_utilities::{
 use ic_test_utilities_registry::SubnetRecordBuilder;
 use ic_types::{
     artifact_kind::CanisterHttpArtifact,
-    canister_http::{CanisterHttpMethod, CanisterHttpRequestContext, CanisterHttpResponseContent},
+    batch::{CanisterHttpPayload, ValidationContext},
+    canister_http::{
+        CanisterHttpMethod, CanisterHttpRequestContext, CanisterHttpResponse,
+        CanisterHttpResponseContent, CanisterHttpResponseDivergence, CanisterHttpResponseMetadata,
+        CanisterHttpResponseShare, CanisterHttpResponseWithConsensus,
+        CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK, CANISTER_HTTP_TIMEOUT_INTERVAL,
+    },
     consensus::get_faults_tolerated,
-    crypto::{crypto_hash, BasicSig, BasicSigOf},
-    signature::BasicSignatureBatch,
+    crypto::{crypto_hash, BasicSig, BasicSigOf, Signed},
+    messages::CallbackId,
+    registry::RegistryClientError,
+    signature::{BasicSignature, BasicSignatureBatch},
     time::UNIX_EPOCH,
-    Time,
+    Height, NumBytes, RegistryVersion, Time,
 };
-use std::{collections::BTreeMap, ops::DerefMut, time::Duration};
+use std::{
+    collections::BTreeMap,
+    ops::DerefMut,
+    sync::{Arc, RwLock},
+    time::Duration,
+};
+
+use super::CanisterHttpPayloadBuilderImpl;
 
 /// The maximum subnet size up to which we will check the functionality of the canister http feature.
 const MAX_SUBNET_SIZE: usize = 40;
