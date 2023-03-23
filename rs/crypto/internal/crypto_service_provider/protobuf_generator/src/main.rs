@@ -6,7 +6,7 @@ fn main() {
         std::env::var("CARGO_MANIFEST_DIR")
             .expect("CARGO_MANIFEST_DIR env variable is not defined"),
     );
-    let out = manifest_dir.join("../gen");
+    let out = manifest_dir.join("../src/gen");
     let def = manifest_dir.join("../proto");
 
     match std::fs::remove_dir_all(&out) {

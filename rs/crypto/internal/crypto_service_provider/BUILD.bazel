@@ -89,7 +89,6 @@ rust_library(
     name = "crypto_service_provider",
     srcs = glob([
         "src/**",
-        "gen/**",
     ]),
     crate_name = "ic_crypto_internal_csp",
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -132,7 +131,7 @@ rust_doc_test(
 generated_files_check(
     name = "check_generated_files",
     srcs = ["tests/check_generated_files.rs"],
-    data = glob(["gen/**"]) + [":protos"],
+    data = glob(["src/gen/**"]) + [":protos"],
     manifest_dir = "rs/crypto/internal/crypto_service_provider",
     deps = [
         "//rs/crypto/internal/crypto_service_provider/protobuf_generator:lib",

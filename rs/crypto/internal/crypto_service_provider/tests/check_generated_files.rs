@@ -14,7 +14,7 @@ fn check_generated_files() {
     let def = manifest_dir.join("proto");
     generate_prost_files(&def, out.path());
 
-    let gen = manifest_dir.join("gen");
+    let gen = manifest_dir.join("src/gen");
 
     match compare(&gen, out.path()) {
         Ok(_) => (),

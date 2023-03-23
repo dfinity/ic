@@ -1,7 +1,7 @@
 use crate::registry::crypto::v1::PublicKey;
 
 #[allow(clippy::all)]
-#[path = "../../gen/registry/registry.crypto.v1.rs"]
+#[path = "../gen/registry/registry.crypto.v1.rs"]
 pub mod v1;
 
 impl PublicKey {

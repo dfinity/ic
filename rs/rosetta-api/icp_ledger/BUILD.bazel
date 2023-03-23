@@ -143,7 +143,7 @@ generated_files_check(
     data = [
         ":protos",
         "//rs/types/base_types:protos",
-    ] + glob(["gen/**"]),
+    ] + glob(["src/gen/**"]),
     manifest_dir = "rs/rosetta-api/icp_ledger",
     deps = [
         "//rs/rosetta-api/icp_ledger/protobuf_generator:lib",

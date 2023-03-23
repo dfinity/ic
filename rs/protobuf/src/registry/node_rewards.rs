@@ -1,6 +1,6 @@
 #[allow(clippy::all)]
 pub mod v2 {
-    include!("../../gen/registry/registry.node_rewards.v2.rs");
+    include!("../gen/registry/registry.node_rewards.v2.rs");
     use std::collections::BTreeMap;
     use std::fmt;
     use std::iter::Extend;
@@ -306,7 +306,7 @@ pub mod v2 {
 /// DEPRECATED
 #[allow(clippy::all)]
 pub mod v1 {
-    include!("../../gen/registry/registry.node_rewards.v1.rs");
+    include!("../gen/registry/registry.node_rewards.v1.rs");
     use std::collections::{BTreeMap, HashMap};
     use std::iter::Extend;
 

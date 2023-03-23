@@ -28,7 +28,6 @@ rust_library(
     name = "base_types",
     srcs = glob([
         "src/**",
-        "gen/**",
     ]),
     crate_name = "ic_base_types",
     proc_macro_deps = [
@@ -55,7 +54,7 @@ generated_files_check(
     name = "check_generated_files",
     srcs = ["tests/check_generated_files.rs"],
     data = glob([
-        "gen/**",
+        "src/gen/**",
     ]) + [":protos"],
     manifest_dir = "rs/types/base_types",
     deps = [

@@ -23,7 +23,7 @@ use v1::*;
 use crate::determinism_test::v1::composite::NestedInner;
 
 #[allow(clippy::all)]
-#[path = "../gen/determinism_test/determinism_test.v1.rs"]
+#[path = "gen/determinism_test/determinism_test.v1.rs"]
 pub mod v1;
 
 #[test]

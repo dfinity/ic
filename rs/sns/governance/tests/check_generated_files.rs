@@ -25,7 +25,7 @@ fn check_generated_files() {
         out.path(),
     );
 
-    let gen = manifest_dir.join("gen");
+    let gen = manifest_dir.join("src/gen");
 
     match compare(&gen, out.path()) {
         Ok(_) => (),

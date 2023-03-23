@@ -177,7 +177,7 @@ generated_files_check(
         "//rs/registry/transport:protos",
         "//rs/protobuf:protos",
         "//rs/nns/common:protos",
-    ] + glob(["gen/**"]),
+    ] + glob(["src/gen/**"]),
     manifest_dir = "rs/registry/canister",
     deps = [
         "//rs/registry/canister/protobuf_generator:lib",

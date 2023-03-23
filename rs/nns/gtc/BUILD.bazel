@@ -76,7 +76,6 @@ rust_library(
     name = "gtc",
     srcs = glob([
         "src/**",
-        "gen/**",
     ]),
     aliases = ALIASES,
     crate_name = "ic_nns_gtc",
@@ -149,7 +148,7 @@ rust_test_suite(
 generated_files_check(
     name = "check_generated_files",
     srcs = ["tests/check_generated_files.rs"],
-    data = glob(["gen/**"]) + [
+    data = glob(["src/gen/**"]) + [
         ":protos",
         "//rs/nns/common:protos",
         "//rs/types/base_types:protos",

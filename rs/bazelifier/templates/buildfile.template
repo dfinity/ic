@@ -100,7 +100,7 @@ rust_test_suite(
 generated_files_check(
     name = "check_generated_files",
     srcs = ["tests/check_generated_files.rs"],
-    data = glob(["gen/**"]) + [":protos"],
+    data = glob(["src/gen/**"]) + [":protos"],
     manifest_dir = "rs/{{ p.manifest_dir }}",
     deps = [
         "//rs/{{ p.manifest_dir }}/{{ p.generator_name }}:lib",
