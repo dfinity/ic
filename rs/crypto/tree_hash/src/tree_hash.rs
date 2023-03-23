@@ -20,6 +20,13 @@ const DOMAIN_HASHTREE_EMPTY_SUBTREE: &str = "ic-hashtree-empty";
 const DOMAIN_HASHTREE_NODE: &str = "ic-hashtree-labeled";
 const DOMAIN_HASHTREE_FORK: &str = "ic-hashtree-fork";
 
+/// Limit on the depth of the tree printed via the [`Debug`] trait.
+/// Currently, 50 is the limit for the depth of deserialization.
+const DEBUG_PRINT_DEPTH_LIMIT: u8 = 50;
+
+/// Indentation width, i.e., the number of leading whitespaces.
+const INDENT_WIDTH: usize = 2;
+
 // Helpers for creation of domain-separated hashers.
 pub(crate) fn new_leaf_hasher() -> Hasher {
     Hasher::for_domain(DOMAIN_HASHTREE_LEAF)
@@ -92,14 +99,17 @@ fn write_labeled_tree<T: Debug>(
     level: u8,
     f: &mut fmt::Formatter<'_>,
 ) -> fmt::Result {
-    let indent =
-        String::from_utf8(vec![b' '; (level * 8) as usize]).expect("String was not valid utf8");
+    // stop at level `DEBUG_PRINT_DEPTH_LIMIT` to prevent oveflows/too large debug outputs
+    if level >= DEBUG_PRINT_DEPTH_LIMIT {
+        return write_truncation_info(f);
+    }
+    let indent = " ".repeat(level as usize * INDENT_WIDTH);
     match tree {
         LabeledTree::Leaf(t) => writeln!(f, "{}\\__ leaf:{:?}", indent, t),
         LabeledTree::SubTree(children) => {
             for child in children.iter() {
                 writeln!(f, "{}+-- {}:", indent, child.0)?;
-                write_labeled_tree(child.1, level + 1, f)?;
+                write_labeled_tree(child.1, level.saturating_add(1), f)?;
             }
             write!(f, "")
         }
@@ -107,8 +117,11 @@ fn write_labeled_tree<T: Debug>(
 }
 
 fn write_hash_tree(tree: &HashTree, level: u8, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    let indent =
-        String::from_utf8(vec![b' '; (level * 8) as usize]).expect("String was not valid utf8");
+    // stop at level `DEBUG_PRINT_DEPTH_LIMIT` to prevent oveflows/too large debug outputs
+    if level >= DEBUG_PRINT_DEPTH_LIMIT {
+        return write_truncation_info(f);
+    }
+    let indent = " ".repeat(level as usize * INDENT_WIDTH);
     match tree {
         HashTree::Leaf { digest } => writeln!(f, "{}\\__leaf:{:?}", indent, digest),
         HashTree::Fork {
@@ -117,8 +130,8 @@ fn write_hash_tree(tree: &HashTree, level: u8, f: &mut fmt::Formatter<'_>) -> fm
             right_tree,
         } => {
             writeln!(f, "{}+-- fork:{:?}", indent, digest)?;
-            write_hash_tree(left_tree, level + 1, f)?;
-            write_hash_tree(right_tree, level + 1, f)
+            write_hash_tree(left_tree, level.saturating_add(1), f)?;
+            write_hash_tree(right_tree, level.saturating_add(1), f)
         }
         HashTree::Node {
             digest,
@@ -126,9 +139,18 @@ fn write_hash_tree(tree: &HashTree, level: u8, f: &mut fmt::Formatter<'_>) -> fm
             hash_tree,
         } => {
             writeln!(f, "{}--- node: [{}], {:?}", indent, label, digest)?;
-            write_hash_tree(hash_tree, level + 1, f)
+            write_hash_tree(hash_tree, level.saturating_add(1), f)
         }
     }
+}
+
+fn write_truncation_info(f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    let indent = " ".repeat(DEBUG_PRINT_DEPTH_LIMIT as usize * INDENT_WIDTH);
+    writeln!(
+        f,
+        "{indent}... Further levels of the tree are truncated because the tree depth limit
+        of {DEBUG_PRINT_DEPTH_LIMIT} has been reached ..."
+    )
 }
 
 /// Prunes from `witness` the given (non-empty) `LabeledTree::SubTree` children.
