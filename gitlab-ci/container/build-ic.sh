@@ -52,8 +52,8 @@ export VERSION="$(git rev-parse HEAD)"
 export IC_VERSION_RC_ONLY="0000000000000000000000000000000000000000"
 
 # fetch all protected branches
-git fetch origin 'refs/heads/master:refs/remotes/origin/master'
-git fetch origin 'refs/heads/rc--*:refs/remotes/origin/rc--*'
+git fetch --force origin 'refs/heads/master:refs/remotes/origin/master'
+git fetch --force origin 'refs/heads/rc--*:refs/remotes/origin/rc--*'
 # check if $VERSION is in any protected branch
 BRANCHES_REGEX='(origin/master|origin/rc--20)'
 if git branch -r --contains $VERSION | grep -qE "$BRANCHES_REGEX"; then
