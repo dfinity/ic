@@ -130,6 +130,7 @@ fn test_reinstall_and_upgrade_canisters_with_state_changes() {
                 data_source: "".to_string(),
                 timestamp_seconds: 1,
                 xdr_permyriad_per_icp: 100,
+                reason: None,
             },
             "<proposal created by test_reinstall_and_upgrade_canisters_with_state_changes>"
                 .to_string(),
@@ -184,6 +185,7 @@ fn test_reinstall_and_upgrade_canisters_with_state_changes() {
                 data_source: "".to_string(),
                 timestamp_seconds: 1,
                 xdr_permyriad_per_icp: 100,
+                reason: None,
             },
             "<proposal created by test_reinstall_and_upgrade_canisters_with_state_changes>"
                 .to_string(),

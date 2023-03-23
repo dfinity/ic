@@ -811,6 +811,7 @@ impl ProposalPayload<UpdateIcpXdrConversionRatePayload> for ProposeXdrIcpConvers
                 .unwrap()
                 .as_secs(),
             xdr_permyriad_per_icp: self.xdr_permyriad_per_icp,
+            reason: None,
         }
     }
 }

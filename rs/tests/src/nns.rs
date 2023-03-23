@@ -159,6 +159,7 @@ pub async fn update_xdr_per_icp(
         data_source: "".to_string(),
         timestamp_seconds,
         xdr_permyriad_per_icp,
+        reason: None,
     };
 
     let proposal_id = submit_external_proposal_with_test_id(

@@ -590,6 +590,7 @@ impl ProposalNeuronBehavior {
                         xdr_permyriad_per_icp: 1000000,
                         data_source: "".to_string(),
                         timestamp_seconds: 0,
+                        reason: None,
                     })
                     .unwrap(),
                 })
