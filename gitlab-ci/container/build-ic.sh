@@ -109,8 +109,9 @@ else
     SSL_OPT=""
 fi
 
+BAZEL_ENV="CARGO_BAZEL_REPIN=true"
 echo_green "Building selected IC artifacts"
-BAZEL_CMD="bazel build --config=local --ic_version='$VERSION' --ic_version_rc_only='$IC_VERSION_RC_ONLY'"
+BAZEL_CMD="$BAZEL_ENV bazel build --config=local --ic_version='$VERSION' --ic_version_rc_only='$IC_VERSION_RC_ONLY'"
 BUILD_BINARIES_CMD=$(
     cat <<-END
     # build binaries

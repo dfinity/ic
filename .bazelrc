@@ -24,24 +24,24 @@ build --strip=never
 build --strategy_regexp=ic-os/.*=local
 
 build --incompatible_remote_results_ignore_disk # Do not apply `--noremote_upload_local_results` to the disk cache.
-build --remote_cache=bazel-remote.idx.dfinity.network
-build --experimental_remote_cache_async
-build --incompatible_remote_build_event_upload_respect_no_cache
+#build --remote_cache=bazel-remote.idx.dfinity.network
+#build --experimental_remote_cache_async
+#build --incompatible_remote_build_event_upload_respect_no_cache
 build --noremote_upload_local_results # Whether to upload locally executed action results to the remote cache.
 build --remote_timeout=30s # Defauilt is 60s.
 build:ci --remote_timeout=5m # Defauilt is 60s.
 
 
 # Does not produce valid JSON. See https://github.com/bazelbuild/bazel/issues/14209
-build --execution_log_json_file=bazel-build-log.json
-build --build_event_binary_file=bazel-bep.pb
+#build --execution_log_json_file=bazel-build-log.json
+#build --build_event_binary_file=bazel-bep.pb
 
-build --bes_results_url=https://dash.zh1-idx1.dfinity.network/invocation/
-build --bes_backend=bes.zh1-idx1.dfinity.network
-build --bes_timeout=30s # Defauilt is no timeout.
-build --bes_upload_mode=fully_async
-build:ci --bes_timeout=180s # Defauilt is no timeout.
-build:ci --bes_upload_mode=wait_for_upload_complete
+#build --bes_results_url=https://dash.zh1-idx1.dfinity.network/invocation/
+#build --bes_backend=bes.zh1-idx1.dfinity.network
+#build --bes_timeout=30s # Defauilt is no timeout.
+#build --bes_upload_mode=fully_async
+#build:ci --bes_timeout=180s # Defauilt is no timeout.
+#build:ci --bes_upload_mode=wait_for_upload_complete
 
 build --remote_local_fallback
 build --workspace_status_command=$(pwd)/bazel/workspace_status.sh
@@ -75,7 +75,7 @@ test --test_env=RUST_BACKTRACE=full
 
 test:precommit --build_tests_only --test_tag_filters="smoke"
 
-build:systest --build_tag_filters= --s3_endpoint=https://s3-upload.zh1-idx1.dfinity.network
+#build:systest --build_tag_filters= --s3_endpoint=https://s3-upload.zh1-idx1.dfinity.network
 test:systest --test_output=streamed --test_tag_filters=
 
 # For sandboxed actions, mount an empty, writable directory at this absolute path

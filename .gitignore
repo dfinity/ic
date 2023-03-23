@@ -1,4 +1,5 @@
 # Created by https://www.gitignore.io/api/rust
+#
 # Edit at https://www.gitignore.io/?templates=rust
 
 # Ignore all files ending in .secret
@@ -103,6 +104,7 @@ prestorecon.o
 **/bin/sandbox_launcher
 **/bin/boundary-node-prober
 **/bin/ic-balance-exporter
+testnet/config/ssh_authorized_keys/admin
 
 # Boundary node control plane binary
 boundary-node-control-plane
