@@ -219,6 +219,24 @@ pipenv --rm
 pipenv install -r requirements.txt
 ```
 
+In case of errors such as:
+```
+pipenv.patched.piptools.exceptions.UnsupportedConstraint: pip-compile does not support URLs as packages, unless they are editable. Perhaps add -e option? (constraint was: file:///ic/ic-py%20%40%20https%3A/github.com/rocklabs-io/ic-py/archive/53c375a1d6c1d09e8d24588142dece550b801cef.zip)
+```
+
+Try deleting your user-installation of `pipenv`.
+```
+pip uninstall virtualenv
+pip uninstall pipenv
+```
+
+Alternatively, it's also possible to run without `pipenv`.
+
+```
+pip install -r requirements.txt
+python3 experiments/..
+```
+
 ## Debugging
 
 For debugging purposes, it is normally useful to instruct python to pop up a debugger on any exception.
