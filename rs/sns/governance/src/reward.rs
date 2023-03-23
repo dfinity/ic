@@ -31,6 +31,17 @@ lazy_static! {
     pub static ref NOMINAL_DAYS_PER_YEAR: Decimal = dec!(365.25);
 
     pub static ref GENESIS: Instant = Instant::from_seconds_since_genesis(dec!(0));
+
+    // 1 year (nominal duration in seconds).
+    //
+    // This limit is just to prevent "insane" values. Being within this limit
+    // does NOT mean that an "advisable" value has been chosen!
+    //
+    // The corresponding minimum is 1 s. (As with the maximum, just because a
+    // value does not violate this limit does not mean it is advisable.)
+    pub static ref MAX_REWARD_ROUND_DURATION_SECONDS: u64 =
+        u64::try_from(*NOMINAL_DAYS_PER_YEAR * *SECONDS_PER_DAY)
+            .expect("Unable to convert a Decimal into a u64.");
 }
 
 // ---- NON-BOILERPLATE CODE STARTS HERE ----------------------------------
@@ -210,7 +221,16 @@ impl VotingRewardsParameters {
             .reward_rate_transition_duration_seconds
             .expect("reward_rate_transition_duration_seconds unset");
 
-        let time_since_genesis = now - *GENESIS;
+        let time_since_genesis = {
+            let result = now - *GENESIS;
+            // For the purposes of determining reward rate, treat times before
+            // genesis the same as at genesis.
+            if result.as_secs() < i2d(0) {
+                Duration { days: i2d(0) }
+            } else {
+                result
+            }
+        };
         if reward_rate_transition_duration_seconds == 0
             || time_since_genesis.as_secs() >= i2d(reward_rate_transition_duration_seconds)
         {
@@ -253,7 +273,11 @@ impl VotingRewardsParameters {
     }
 
     fn round_duration_seconds_defects(&self) -> Vec<String> {
-        require_field_set_and_in_range("round_duration_seconds", &self.round_duration_seconds, 1..)
+        require_field_set_and_in_range(
+            "round_duration_seconds",
+            &self.round_duration_seconds,
+            1..=*MAX_REWARD_ROUND_DURATION_SECONDS,
+        )
     }
 
     fn reward_rate_transition_duration_seconds_defects(&self) -> Vec<String> {
@@ -417,6 +441,16 @@ impl Sub for Instant {
         }
     }
 }
+impl Add<Duration> for Instant {
+    type Output = Instant;
+
+    fn add(self, rhs: Duration) -> Self {
+        Self {
+            days_since_start_time: self.days_since_start_time + rhs.days,
+        }
+    }
+}
+
 impl Mul<Duration> for RewardRate {
     type Output = Decimal;
     fn mul(self, other: Duration) -> Self::Output {
@@ -468,7 +502,8 @@ impl Div<Duration> for Duration {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::tests::{assert_is_err, assert_is_ok};
+    use ic_nervous_system_common::{assert_is_err, assert_is_ok, E8};
+    use pretty_assertions::{assert_eq, assert_ne};
 
     #[test]
     fn linear_map() {
@@ -501,7 +536,7 @@ mod test {
 
     #[test]
     fn test_subject_validates() {
-        assert_is_ok(VOTING_REWARDS_PARAMETERS.validate());
+        assert_is_ok!(VOTING_REWARDS_PARAMETERS.validate());
     }
 
     #[test]
@@ -617,87 +652,123 @@ mod test {
 
     #[test]
     fn test_round_duration_seconds_validation() {
-        assert_is_err(
-            VotingRewardsParameters {
-                round_duration_seconds: None,
-                ..VOTING_REWARDS_PARAMETERS
-            }
-            .validate(),
-        );
-        assert_is_err(
-            VotingRewardsParameters {
-                round_duration_seconds: Some(0),
-                ..VOTING_REWARDS_PARAMETERS
-            }
-            .validate(),
-        );
+        assert_is_err!(VotingRewardsParameters {
+            round_duration_seconds: None,
+            ..VOTING_REWARDS_PARAMETERS
+        }
+        .validate());
+        assert_is_err!(VotingRewardsParameters {
+            round_duration_seconds: Some(0),
+            ..VOTING_REWARDS_PARAMETERS
+        }
+        .validate());
+        assert_is_err!(VotingRewardsParameters {
+            round_duration_seconds: Some(31557601), // 365.25 days + 1 s.
+            ..VOTING_REWARDS_PARAMETERS
+        }
+        .validate());
+        assert_is_ok!(VotingRewardsParameters {
+            round_duration_seconds: Some(31557600), // This is just shy of our "insane" threshold.
+            ..VOTING_REWARDS_PARAMETERS
+        }
+        .validate());
     }
 
     #[test]
     fn test_reward_rate_transition_duration_seconds_validation() {
-        assert_is_err(
-            VotingRewardsParameters {
-                reward_rate_transition_duration_seconds: None,
-                ..VOTING_REWARDS_PARAMETERS
-            }
-            .validate(),
-        );
+        assert_is_err!(VotingRewardsParameters {
+            reward_rate_transition_duration_seconds: None,
+            ..VOTING_REWARDS_PARAMETERS
+        }
+        .validate());
     }
 
     #[test]
     fn test_reward_rate_transition_duration_seconds_validation_accepts_zero() {
-        VotingRewardsParameters {
+        let parameters = VotingRewardsParameters {
             reward_rate_transition_duration_seconds: Some(0),
             ..VOTING_REWARDS_PARAMETERS
+        };
+        assert_is_ok!(parameters.validate());
+
+        // Make sure that the reward_rate_at method doesn't explode when the
+        // reward rate transition duration is zero.
+        for seconds_since_genesis in [
+            0, // The most interesting value.
+            1,
+            2,
+            3,
+            10,
+            100,
+            1_000,
+            10_000,
+            100_000,
+            1_000_000,
+            10_000_000,
+            100_000_000,
+        ] {
+            let extra = Duration::from_secs(Decimal::from(seconds_since_genesis));
+            let observed_reward_rate = parameters.reward_rate_at(*GENESIS + extra);
+            assert_eq!(
+                observed_reward_rate.per_year,
+                i2d(parameters.final_reward_rate_basis_points.unwrap()) / i2d(10_000),
+                "seconds_since_genesis = {}, observed_reward_rate = {:#?} ",
+                seconds_since_genesis,
+                observed_reward_rate,
+            );
         }
-        .validate()
-        .unwrap()
     }
 
     #[test]
     fn test_initial_reward_rate_basis_points_validation() {
-        assert_is_err(
-            VotingRewardsParameters {
-                initial_reward_rate_basis_points: None,
-                ..VOTING_REWARDS_PARAMETERS
-            }
-            .validate(),
-        );
-        assert_is_err(
-            VotingRewardsParameters {
-                initial_reward_rate_basis_points: Some(10_001), // > 100%
-                ..VOTING_REWARDS_PARAMETERS
-            }
-            .validate(),
-        );
+        assert_is_err!(VotingRewardsParameters {
+            initial_reward_rate_basis_points: None,
+            ..VOTING_REWARDS_PARAMETERS
+        }
+        .validate());
+        assert_is_err!(VotingRewardsParameters {
+            initial_reward_rate_basis_points: Some(10_001), // > 100%
+            ..VOTING_REWARDS_PARAMETERS
+        }
+        .validate());
+
+        let valid = VotingRewardsParameters {
+            initial_reward_rate_basis_points: Some(1_00), // 1%
+            ..VOTING_REWARDS_PARAMETERS
+        };
+        assert_is_ok!(valid.validate());
+
+        // reward_rate_at treats times before genesis the same as at genesis.
+        for seconds_before_genesis in [1, 2, 3, 10] {
+            let instant = *GENESIS + Duration::from_secs(i2d(0) - i2d(seconds_before_genesis));
+
+            assert_eq!(
+                valid.reward_rate_at(instant).per_year,
+                i2d(valid.initial_reward_rate_basis_points.unwrap()) / i2d(10_000),
+            );
+        }
     }
 
     #[test]
     fn test_final_reward_rate_basis_points_validation() {
-        assert_is_err(
-            VotingRewardsParameters {
-                final_reward_rate_basis_points: None,
-                ..VOTING_REWARDS_PARAMETERS
-            }
-            .validate(),
-        );
+        assert_is_err!(VotingRewardsParameters {
+            final_reward_rate_basis_points: None,
+            ..VOTING_REWARDS_PARAMETERS
+        }
+        .validate());
 
         let max = VOTING_REWARDS_PARAMETERS
             .initial_reward_rate_basis_points
             .unwrap();
-        assert_is_ok(
-            VotingRewardsParameters {
-                final_reward_rate_basis_points: Some(max),
-                ..VOTING_REWARDS_PARAMETERS
-            }
-            .validate(),
-        );
-        assert_is_err(
-            VotingRewardsParameters {
-                final_reward_rate_basis_points: Some(max + 1),
-                ..VOTING_REWARDS_PARAMETERS
-            }
-            .validate(),
-        );
+        assert_is_ok!(VotingRewardsParameters {
+            final_reward_rate_basis_points: Some(max),
+            ..VOTING_REWARDS_PARAMETERS
+        }
+        .validate());
+        assert_is_err!(VotingRewardsParameters {
+            final_reward_rate_basis_points: Some(max + 1),
+            ..VOTING_REWARDS_PARAMETERS
+        }
+        .validate());
     }
 }
