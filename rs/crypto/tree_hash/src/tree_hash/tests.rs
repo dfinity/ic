@@ -2563,3 +2563,61 @@ fn labeled_tree_conversion() {
         ))
     );
 }
+
+#[test]
+fn labeled_tree_leaf_count() {
+    let tree = LabeledTree::Leaf(());
+    assert_eq!(count_leaves_and_empty_subtrees(&tree), 1);
+
+    let tree: LabeledTree<()> = LabeledTree::SubTree(FlatMap::new());
+    assert_eq!(count_leaves_and_empty_subtrees(&tree), 1);
+
+    // Construct a more complex labeled tree of the form
+    //
+    // + -- 1 -- Leaf(())
+    // |
+    // | -- 2 -- Leaf(())
+    // |
+    // | -- 3 -- EMPTY_SUBTREE
+    // |
+    // | -- 4 -- + -- 5 -- Leaf(())
+    //           |
+    //           | -- 6 -- EMPTY_SUBTREE
+    //           |
+    //           | -- 7 -- + -- 8 -- Leaf(())
+    //           |
+    //           | -- 9 -- + -- 10 -- Leaf(())
+    //                     |
+    //                     | -- 11 -- Leaf(())
+    //
+    let tree = LabeledTree::SubTree(FlatMap::from_key_values(vec![
+        ("1".into(), LabeledTree::Leaf(())),
+        ("2".into(), LabeledTree::Leaf(())),
+        ("3".into(), LabeledTree::SubTree(FlatMap::new())),
+        (
+            "4".into(),
+            LabeledTree::SubTree(FlatMap::from_key_values(vec![
+                ("5".into(), LabeledTree::Leaf(())),
+                ("6".into(), LabeledTree::SubTree(FlatMap::new())),
+                (
+                    "7".into(),
+                    LabeledTree::SubTree(FlatMap::from_key_values(vec![(
+                        "8".into(),
+                        LabeledTree::Leaf(()),
+                    )])),
+                ),
+                (
+                    "9".into(),
+                    LabeledTree::SubTree(FlatMap::from_key_values(vec![
+                        ("10".into(), LabeledTree::Leaf(())),
+                        ("11".into(), LabeledTree::Leaf(())),
+                    ])),
+                ),
+            ])),
+        ),
+    ]));
+
+    // The tree above has 6 leaves and 2 empty subtress. So we expect
+    // count_leaves to return 8.
+    assert_eq!(count_leaves_and_empty_subtrees(&tree), 8);
+}

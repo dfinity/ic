@@ -141,11 +141,14 @@ fn write_hash_tree(tree: &HashTree, level: u8, f: &mut fmt::Formatter<'_>) -> fm
 /// by label. If one or more children could not be pruned (because no such nodes
 /// exist in the witness) the iterator will not be consumed and will point to
 /// the first such child.
+///
+/// Returns a tuple containing the pruned witness and the count of all leaves
+/// and empty subtrees that were "plugged into" the witness during pruning.
 fn prune_witness_subtree<'a, I>(
     witness: &Witness,
     children: &mut Peekable<I>,
     curr_path: &mut Vec<Label>,
-) -> Result<Witness, TreeHashError>
+) -> Result<(Witness, u64), TreeHashError>
 where
     I: Iterator<Item = (&'a Label, &'a LabeledTree<Vec<u8>>)>,
 {
@@ -164,8 +167,8 @@ where
                 });
             }
 
-            let left = prune_witness_subtree(left_tree, children, curr_path)?;
-            let right = prune_witness_subtree(right_tree, children, curr_path)?;
+            let (left, count_left) = prune_witness_subtree(left_tree, children, curr_path)?;
+            let (right, count_right) = prune_witness_subtree(right_tree, children, curr_path)?;
 
             match (&left, &right) {
                 // Both children got pruned, replace by a `Pruned` node.
@@ -176,15 +179,21 @@ where
                     Witness::Pruned {
                         digest: right_digest,
                     },
-                ) => Ok(Witness::Pruned {
-                    digest: compute_fork_digest(left_digest, right_digest),
-                }),
+                ) => Ok((
+                    Witness::Pruned {
+                        digest: compute_fork_digest(left_digest, right_digest),
+                    },
+                    count_left + count_right,
+                )),
 
                 // Still have some (possibly modified) non-pruned nodes, create a `Fork`.
-                _ => Ok(Witness::Fork {
-                    left_tree: Box::new(left),
-                    right_tree: Box::new(right),
-                }),
+                _ => Ok((
+                    Witness::Fork {
+                        left_tree: Box::new(left),
+                        right_tree: Box::new(right),
+                    },
+                    count_left + count_right,
+                )),
             }
         }
 
@@ -195,48 +204,60 @@ where
                     children.next();
 
                     curr_path.push(label.to_owned());
-                    let res = prune_witness_impl(sub_witness, child, curr_path)?;
+                    let (res, count) = prune_witness_impl(sub_witness, child, curr_path)?;
                     curr_path.pop();
 
                     if let Witness::Pruned { digest } = res {
                         // Child was pruned, prune the `Node`.
-                        Ok(Witness::Pruned {
-                            digest: compute_node_digest(label, &digest),
-                        })
+                        Ok((
+                            Witness::Pruned {
+                                digest: compute_node_digest(label, &digest),
+                            },
+                            count,
+                        ))
                     } else {
                         // Return `Node` with (possibly) modified child.
-                        Ok(Witness::Node {
-                            label: label.to_owned(),
-                            sub_witness: Box::new(res),
-                        })
+                        Ok((
+                            Witness::Node {
+                                label: label.to_owned(),
+                                sub_witness: Box::new(res),
+                            },
+                            count,
+                        ))
                     }
                 }
 
                 // Labeled branch to be kept.
-                _ => Ok(witness.to_owned()),
+                _ => Ok((witness.to_owned(), 0)),
             }
         }
 
         // Already pruned `Node` or `Fork`, all done.
-        Witness::Pruned { .. } => Ok(witness.to_owned()),
+        Witness::Pruned { .. } => Ok((witness.to_owned(), 0)),
 
         Witness::Known() => err_inconsistent_partial_tree(curr_path),
     }
 }
 
 /// Recursive implementation of `prune_witness()`.
+///
+/// Returns a tuple containing the pruned witness and the count of all leaves
+/// and empty subtrees that were "plugged into" the witness during pruning.
 fn prune_witness_impl(
     witness: &Witness,
     partial_tree: &LabeledTree<Vec<u8>>,
     curr_path: &mut Vec<Label>,
-) -> Result<Witness, TreeHashError> {
+) -> Result<(Witness, u64), TreeHashError> {
     match partial_tree {
         LabeledTree::SubTree(children) if children.is_empty() => {
             match witness {
                 // Empty `SubTree`, prune it.
-                Witness::Known() => Ok(Witness::Pruned {
-                    digest: empty_subtree_hash(),
-                }),
+                Witness::Known() => Ok((
+                    Witness::Pruned {
+                        digest: empty_subtree_hash(),
+                    },
+                    1, // we plug in the hash for an empty subtree here, so we count it as plugged in "leaf"
+                )),
 
                 // Attempting to prune `SubTree` with children without providing them.
                 _ => err_inconsistent_partial_tree(curr_path),
@@ -274,11 +295,33 @@ fn prune_witness_impl(
                 }
 
                 // Provided 'Leaf`, prune it.
-                Witness::Known() => Ok(Witness::Pruned {
-                    digest: compute_leaf_digest(v),
-                }),
+                Witness::Known() => Ok((
+                    Witness::Pruned {
+                        digest: compute_leaf_digest(v),
+                    },
+                    1,
+                )),
             }
         }
+    }
+}
+
+/// Counts the number of leaves and empty subtree nodes in a labeled tree.
+fn count_leaves_and_empty_subtrees<T>(tree: &LabeledTree<T>) -> u64 {
+    match tree {
+        LabeledTree::SubTree(children) if children.is_empty() => {
+            // Pruning treats empty subtree hashes in the same way as leaves
+            // in that their hash is computed and plugged into the witness if
+            // they are present in the labeled tree, and left in place otherwise.
+            // Hence we also count them here.
+            1
+        }
+        LabeledTree::SubTree(children) if !children.is_empty() => children
+            .iter()
+            .map(|(_, tree)| count_leaves_and_empty_subtrees(tree))
+            .sum(),
+        LabeledTree::SubTree(_) => unreachable!(),
+        LabeledTree::Leaf(_) => 1,
     }
 }
 
@@ -297,7 +340,20 @@ pub fn prune_witness(
     partial_tree: &LabeledTree<Vec<u8>>,
 ) -> Result<Witness, TreeHashError> {
     let mut curr_path = Vec::new();
-    prune_witness_impl(witness, partial_tree, &mut curr_path)
+    let (pruned, plugged_in_count) = prune_witness_impl(witness, partial_tree, &mut curr_path)?;
+
+    if plugged_in_count != count_leaves_and_empty_subtrees(partial_tree) {
+        debug_assert!(
+            false,
+            "Prune witness leaf count mismatch. Labeled tree {:?}, Witness {:?}",
+            partial_tree, witness
+        );
+        return Err(TreeHashError::InconsistentPartialTree {
+            offending_path: vec![],
+        });
+    }
+
+    Ok(pruned)
 }
 
 pub(crate) fn compute_leaf_digest(contents: &[u8]) -> Digest {
