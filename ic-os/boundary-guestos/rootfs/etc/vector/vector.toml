@@ -28,6 +28,14 @@ inputs = ["nginx_access"]
 source = """
 . = parse_json!(.message)
 
+remote_addr, err = to_string(.remote_addr)
+if err != null || remote_addr == "" {
+  .remote_addr_hashed = "N/A"
+} else {
+  .remote_addr_hashed = sha3("" + remote_addr, variant: "SHA3-224")
+  .remote_addr_hashed = truncate(.remote_addr_hashed, limit: 32, ellipsis: false)
+}
+
 del(.remote_user)
 del(.remote_addr)
 del(.remote_port)

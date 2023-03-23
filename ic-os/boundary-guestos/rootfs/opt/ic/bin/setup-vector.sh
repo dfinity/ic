@@ -27,6 +27,7 @@ function read_variables() {
         case "${key}" in
             "elasticsearch_url") ELASTICSEARCH_URL="${value}" ;;
             "elasticsearch_tags") ELASTICSEARCH_TAGS="${value}" ;;
+            "ip_hash_salt") IP_HASH_SALT="${value}" ;;
         esac
     done <"${BN_CONFIG}"
 
@@ -41,6 +42,7 @@ function generate_vector_config() {
     cat >"${ENV_FILE}" <<EOF
 ELASTICSEARCH_URL=${ELASTICSEARCH_URL}
 ELASTICSEARCH_TAGS=${ELASTICSEARCH_TAGS:-}
+IP_HASH_SALT=${IP_HASH_SALT:-}
 EOF
 }
 
