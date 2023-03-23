@@ -174,3 +174,5 @@ BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS = [
 BOUNDARY_NODE_GUESTOS_SEV_RUNTIME_DEPS = [
     "//ic-os/boundary-guestos/envs/dev-sev:hash_and_upload_disk-img",
 ]
+
+COUNTER_CANISTER_RUNTIME_DEPS = ["//rs/tests:src/counter.wat"]
