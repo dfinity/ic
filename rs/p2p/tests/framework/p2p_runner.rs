@@ -99,7 +99,7 @@ fn execute_test(
         );
 
         let (_, p2p_runner) = create_networking_stack(
-            metrics_registry.clone(),
+            &metrics_registry,
             log.clone(),
             rt_handle,
             transport_config,
@@ -118,10 +118,9 @@ fn execute_test(
             Arc::clone(&fake_crypto) as Arc<_>,
             Arc::clone(&fake_crypto) as Arc<_>,
             Arc::clone(&fake_crypto) as Arc<_>,
-            Arc::clone(&fake_crypto) as Arc<_>,
             registry.clone(),
             ingress_hist_reader,
-            &artifact_pools,
+            artifact_pools,
             cycles_account_manager,
             None,
             Box::new(ic_https_outcalls_adapter_client::BrokenCanisterHttpClient {}),
@@ -261,7 +260,7 @@ fn execute_test_chunking_pool(
         );
 
         let (_a, p2p_runner) = create_networking_stack(
-            metrics_registry.clone(),
+            &metrics_registry,
             log.clone(),
             rt_handle,
             transport_config,
@@ -280,10 +279,9 @@ fn execute_test_chunking_pool(
             Arc::clone(&fake_crypto) as Arc<_>,
             Arc::clone(&fake_crypto) as Arc<_>,
             Arc::clone(&fake_crypto) as Arc<_>,
-            Arc::clone(&fake_crypto) as Arc<_>,
             registry.clone(),
             ingress_hist_reader,
-            &artifact_pools,
+            artifact_pools,
             cycles_account_manager,
             None,
             Box::new(ic_https_outcalls_adapter_client::BrokenCanisterHttpClient {}),

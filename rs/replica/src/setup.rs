@@ -12,12 +12,11 @@ use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_client_helpers::subnet::{SubnetListRegistry, SubnetRegistry};
 use ic_registry_local_store::LocalStoreImpl;
 use ic_registry_subnet_type::SubnetType;
-use ic_types::consensus::catchup::{CUPWithOriginalProtobuf, CatchUpPackage};
-use ic_types::{NodeId, RegistryVersion, ReplicaVersion, SubnetId};
-use std::convert::TryFrom;
-use std::env;
-use std::path::PathBuf;
-use std::sync::Arc;
+use ic_types::{
+    consensus::catchup::{CUPWithOriginalProtobuf, CatchUpPackage},
+    {NodeId, RegistryVersion, ReplicaVersion, SubnetId},
+};
+use std::{convert::TryFrom, env, path::PathBuf, sync::Arc};
 
 /// Parse command-line args into `ReplicaArgs`
 pub fn parse_args() -> Result<ReplicaArgs, clap::Error> {

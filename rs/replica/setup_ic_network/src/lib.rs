@@ -15,7 +15,12 @@ use ic_config::{
     artifact_pool::ArtifactPoolConfig, consensus::ConsensusConfig, transport::TransportConfig,
 };
 use ic_consensus::{
-    canister_http, certification,
+    canister_http::{
+        gossip::CanisterHttpGossipImpl, payload_builder::CanisterHttpPayloadBuilderImpl,
+        pool_manager::CanisterHttpPoolManagerImpl,
+    },
+    certification::{setup as certification_setup, CertificationCrypto},
+    consensus::{dkg_key_manager::DkgKeyManager, setup as consensus_setup},
     consensus::{pool_reader::PoolReader, ConsensusCrypto, Membership},
     dkg, ecdsa,
 };
@@ -25,7 +30,7 @@ use ic_ingress_manager::IngressManager;
 use ic_interfaces::{
     artifact_manager::{ArtifactClient, ArtifactManager, ArtifactProcessor},
     consensus_pool::ConsensusPoolCache,
-    crypto::{Crypto, IngressSigVerifier},
+    crypto::IngressSigVerifier,
     execution_environment::IngressHistoryReader,
     messaging::{MessageRouting, XNetPayloadBuilder},
     self_validating_payload::SelfValidatingPayloadBuilder,
@@ -76,13 +81,13 @@ pub enum P2PStateSyncClient {
 
 /// The collection of all artifact pools.
 pub struct ArtifactPools {
-    pub ingress_pool: Arc<RwLock<IngressPoolImpl>>,
-    pub consensus_pool: Arc<RwLock<ConsensusPoolImpl>>,
+    ingress_pool: Arc<RwLock<IngressPoolImpl>>,
+    consensus_pool: Arc<RwLock<ConsensusPoolImpl>>,
     pub consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
-    pub certification_pool: Arc<RwLock<CertificationPoolImpl>>,
-    pub dkg_pool: Arc<RwLock<DkgPoolImpl>>,
-    pub ecdsa_pool: Arc<RwLock<EcdsaPoolImpl>>,
-    pub canister_http_pool: Arc<RwLock<CanisterHttpPoolImpl>>,
+    certification_pool: Arc<RwLock<CertificationPoolImpl>>,
+    dkg_pool: Arc<RwLock<DkgPoolImpl>>,
+    ecdsa_pool: Arc<RwLock<EcdsaPoolImpl>>,
+    canister_http_pool: Arc<RwLock<CanisterHttpPoolImpl>>,
 }
 
 /// The function constructs a P2P instance. Currently, it constructs all the
@@ -94,7 +99,7 @@ pub struct ArtifactPools {
     clippy::new_ret_no_self
 )]
 pub fn create_networking_stack(
-    metrics_registry: MetricsRegistry,
+    metrics_registry: &MetricsRegistry,
     log: ReplicaLogger,
     rt_handle: tokio::runtime::Handle,
     transport_config: TransportConfig,
@@ -112,25 +117,24 @@ pub fn create_networking_stack(
     xnet_payload_builder: Arc<dyn XNetPayloadBuilder>,
     self_validating_payload_builder: Arc<dyn SelfValidatingPayloadBuilder>,
     message_router: Arc<dyn MessageRouting>,
-    crypto: Arc<dyn Crypto + Send + Sync>,
     consensus_crypto: Arc<dyn ConsensusCrypto + Send + Sync>,
-    certifier_crypto: Arc<dyn certification::CertificationCrypto + Send + Sync>,
+    certifier_crypto: Arc<dyn CertificationCrypto + Send + Sync>,
     ingress_sig_crypto: Arc<dyn IngressSigVerifier + Send + Sync>,
     registry_client: Arc<dyn RegistryClient>,
     ingress_history_reader: Box<dyn IngressHistoryReader>,
-    artifact_pools: &ArtifactPools,
+    artifact_pools: ArtifactPools,
     cycles_account_manager: Arc<CyclesAccountManager>,
     local_store_time_reader: Option<Arc<dyn LocalStoreCertifiedTimeReader>>,
     canister_http_adapter_client:
         ic_interfaces_https_outcalls_adapter_client::CanisterHttpAdapterClient,
     registry_poll_delay_duration_ms: u64,
 ) -> (IngressIngestionService, P2PThreadJoiner) {
-    let advert_subscriber = AdvertBroadcaster::new(log.clone(), &metrics_registry);
-
+    let advert_subscriber = AdvertBroadcaster::new(log.clone(), metrics_registry);
+    let consensus_pool_cache = artifact_pools.consensus_pool_cache.clone();
+    let ingress_pool = artifact_pools.ingress_pool.clone();
     // Now we setup the Artifact Pools and the manager.
     let artifact_manager = setup_artifact_manager(
         node_id,
-        Arc::clone(&crypto) as Arc<_>,
         Arc::clone(&consensus_crypto) as Arc<_>,
         Arc::clone(&certifier_crypto) as Arc<_>,
         Arc::clone(&ingress_sig_crypto) as Arc<_>,
@@ -173,21 +177,21 @@ pub fn create_networking_stack(
         let _enter = rt_handle.enter();
         setup_ingress::IngressEventHandler::new_service(
             log.clone(),
-            artifact_pools.ingress_pool.clone(),
+            ingress_pool,
             artifact_manager.clone(),
             node_id,
         )
     };
 
     let p2p_thread = start_p2p(
-        metrics_registry,
+        metrics_registry.clone(),
         log,
         node_id,
         subnet_id,
         transport_config,
         registry_client,
         transport,
-        artifact_pools.consensus_pool_cache.clone(),
+        consensus_pool_cache,
         artifact_manager,
         &advert_subscriber,
     );
@@ -200,11 +204,10 @@ pub fn create_networking_stack(
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
 fn setup_artifact_manager(
     node_id: NodeId,
-    _crypto: Arc<dyn Crypto>,
     // ConsensusCrypto is an extension of the Crypto trait and we can
     // not downcast traits.
     consensus_crypto: Arc<dyn ConsensusCrypto>,
-    certifier_crypto: Arc<dyn certification::CertificationCrypto>,
+    certifier_crypto: Arc<dyn CertificationCrypto>,
     ingress_sig_crypto: Arc<dyn IngressSigVerifier + Send + Sync>,
     subnet_id: SubnetId,
     consensus_config: ConsensusConfig,
@@ -218,7 +221,7 @@ fn setup_artifact_manager(
     self_validating_payload_builder: Arc<dyn SelfValidatingPayloadBuilder>,
     message_router: Arc<dyn MessageRouting>,
     ingress_history_reader: Box<dyn IngressHistoryReader>,
-    artifact_pools: &ArtifactPools,
+    artifact_pools: ArtifactPools,
     malicious_flags: MaliciousFlags,
     cycles_account_manager: Arc<CyclesAccountManager>,
     local_store_time_reader: Option<Arc<dyn LocalStoreCertifiedTimeReader>>,
@@ -280,15 +283,14 @@ fn setup_artifact_manager(
         );
     }
 
-    let consensus_replica_config = ReplicaConfig { node_id, subnet_id };
-    let membership = Membership::new(
+    let replica_config = ReplicaConfig { node_id, subnet_id };
+    let membership = Arc::new(Membership::new(
         artifact_pools.consensus_pool_cache.clone(),
         Arc::clone(&registry_client),
         subnet_id,
-    );
-    let membership = Arc::new(membership);
+    ));
 
-    let ingress_manager = IngressManager::new(
+    let ingress_manager = Arc::new(IngressManager::new(
         artifact_pools.consensus_pool_cache.clone(),
         ingress_history_reader,
         artifact_pools.ingress_pool.clone(),
@@ -300,32 +302,26 @@ fn setup_artifact_manager(
         Arc::clone(&state_reader) as Arc<_>,
         cycles_account_manager,
         malicious_flags.clone(),
-    );
-    let ingress_manager = Arc::new(ingress_manager);
-
-    let canister_http_payload_builder =
-        canister_http::payload_builder::CanisterHttpPayloadBuilderImpl::new(
-            artifact_pools.canister_http_pool.clone(),
-            artifact_pools.consensus_pool_cache.clone(),
-            consensus_crypto.clone(),
-            state_manager.clone(),
-            membership.clone(),
-            subnet_id,
-            registry_client.clone(),
-            &metrics_registry,
-            replica_logger.clone(),
-        );
-
-    let canister_http_payload_builder = Arc::new(canister_http_payload_builder);
-
-    let dkg_key_manager = Arc::new(Mutex::new(
-        ic_consensus::consensus::dkg_key_manager::DkgKeyManager::new(
-            metrics_registry.clone(),
-            Arc::clone(&consensus_crypto),
-            replica_logger.clone(),
-            &PoolReader::new(&*artifact_pools.consensus_pool.read().unwrap()),
-        ),
     ));
+
+    let canister_http_payload_builder = Arc::new(CanisterHttpPayloadBuilderImpl::new(
+        artifact_pools.canister_http_pool.clone(),
+        artifact_pools.consensus_pool_cache.clone(),
+        consensus_crypto.clone(),
+        state_manager.clone(),
+        membership.clone(),
+        subnet_id,
+        registry_client.clone(),
+        &metrics_registry,
+        replica_logger.clone(),
+    ));
+
+    let dkg_key_manager = Arc::new(Mutex::new(DkgKeyManager::new(
+        metrics_registry.clone(),
+        Arc::clone(&consensus_crypto),
+        replica_logger.clone(),
+        &PoolReader::new(&*artifact_pools.consensus_pool.read().unwrap()),
+    )));
 
     {
         // Create the consensus client.
@@ -334,20 +330,20 @@ fn setup_artifact_manager(
             ConsensusArtifact::TAG,
             Box::new(create_consensus_handlers(
                 move |req| advert_broadcaster.send(req.advert.into(), req.dest),
-                ic_consensus::consensus::setup(
-                    consensus_replica_config.clone(),
+                consensus_setup(
+                    replica_config.clone(),
                     consensus_config,
                     Arc::clone(&registry_client),
                     Arc::clone(&membership) as Arc<_>,
                     Arc::clone(&consensus_crypto),
                     Arc::clone(&ingress_manager) as Arc<_>,
-                    Arc::clone(&xnet_payload_builder) as Arc<_>,
-                    Arc::clone(&self_validating_payload_builder) as Arc<_>,
-                    Arc::clone(&canister_http_payload_builder) as Arc<_>,
+                    xnet_payload_builder,
+                    self_validating_payload_builder,
+                    canister_http_payload_builder,
                     Arc::clone(&artifact_pools.dkg_pool) as Arc<_>,
                     Arc::clone(&artifact_pools.ecdsa_pool) as Arc<_>,
                     Arc::clone(&dkg_key_manager) as Arc<_>,
-                    Arc::clone(&message_router) as Arc<_>,
+                    message_router,
                     Arc::clone(&state_manager) as Arc<_>,
                     Arc::clone(&time_source) as Arc<_>,
                     malicious_flags.clone(),
@@ -389,8 +385,8 @@ fn setup_artifact_manager(
             CertificationArtifact::TAG,
             Box::new(create_certification_handlers(
                 move |req| advert_broadcaster.send(req.advert.into(), req.dest),
-                certification::setup(
-                    consensus_replica_config.clone(),
+                certification_setup(
+                    replica_config,
                     Arc::clone(&membership) as Arc<_>,
                     Arc::clone(&certifier_crypto),
                     Arc::clone(&state_manager) as Arc<_>,
@@ -415,7 +411,7 @@ fn setup_artifact_manager(
                 move |req| advert_broadcaster.send(req.advert.into(), req.dest),
                 (
                     dkg::DkgImpl::new(
-                        consensus_replica_config.node_id,
+                        node_id,
                         Arc::clone(&consensus_crypto),
                         Arc::clone(&artifact_pools.consensus_pool_cache),
                         dkg_key_manager,
@@ -453,7 +449,7 @@ fn setup_artifact_manager(
                 move |req| advert_broadcaster.send(req.advert.into(), req.dest),
                 (
                     ecdsa::EcdsaImpl::new(
-                        consensus_replica_config.node_id,
+                        node_id,
                         subnet_id,
                         Arc::clone(&consensus_block_cache),
                         Arc::clone(&consensus_crypto),
@@ -481,7 +477,7 @@ fn setup_artifact_manager(
             Box::new(create_https_outcalls_handlers(
                 move |req| advert_broadcaster.send(req.advert.into(), req.dest),
                 (
-                    canister_http::pool_manager::CanisterHttpPoolManagerImpl::new(
+                    CanisterHttpPoolManagerImpl::new(
                         Arc::clone(&state_manager) as Arc<_>,
                         Arc::new(Mutex::new(canister_http_adapter_client)),
                         Arc::clone(&consensus_crypto),
@@ -492,7 +488,7 @@ fn setup_artifact_manager(
                         metrics_registry.clone(),
                         replica_logger.clone(),
                     ),
-                    canister_http::gossip::CanisterHttpGossipImpl::new(
+                    CanisterHttpGossipImpl::new(
                         Arc::clone(&artifact_pools.consensus_pool_cache),
                         Arc::clone(&state_manager) as Arc<_>,
                         replica_logger,

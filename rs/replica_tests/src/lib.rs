@@ -390,33 +390,25 @@ where
             ..Default::default()
         };
         let temp_node = node_id;
-        let (
-            _,
-            state_manager,
-            query_handler,
-            _,
-            _,
-            _p2p_thread_joiner,
-            ingress_ingestion_service,
-            _,
-            _,
-            _,
-        ) = ic_replica::setup_p2p::construct_ic_stack(
-            logger,
-            tokio::runtime::Handle::current(),
-            tokio::runtime::Handle::current(),
-            config.clone(),
-            subnet_config,
-            temp_node,
-            subnet_id,
-            subnet_type,
-            registry.clone(),
-            crypto,
-            metrics_registry,
-            None,
-            None,
-        )
-        .expect("Failed to setup p2p");
+        let (state_manager, query_handler, _p2p_thread_joiner, ingress_ingestion_service, _) =
+            ic_replica::setup_ic_stack::construct_ic_stack(
+                logger,
+                tokio::runtime::Handle::current(),
+                tokio::runtime::Handle::current(),
+                tokio::runtime::Handle::current(),
+                config.clone(),
+                subnet_config,
+                temp_node,
+                subnet_id,
+                subnet_type,
+                subnet_id,
+                registry.clone(),
+                crypto,
+                metrics_registry,
+                None,
+                None,
+            )
+            .expect("Failed to setup p2p");
 
         let ingress_history_reader =
             IngressHistoryReaderImpl::new(Arc::clone(&state_manager) as Arc<_>);

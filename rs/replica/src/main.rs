@@ -1,12 +1,13 @@
 //! Replica -- Internet Computer
 
 use ic_async_utils::{abort_on_panic, shutdown_signal};
-use ic_config::registry_client::DataProviderConfig;
-use ic_config::{subnet_config::SubnetConfigs, Config};
+use ic_config::{
+    registry_client::DataProviderConfig,
+    {subnet_config::SubnetConfigs, Config},
+};
 use ic_crypto_sha::Sha256;
 use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
-use ic_interfaces::crypto::IngressSigVerifier;
 use ic_interfaces_registry::{LocalStoreCertifiedTimeReader, RegistryClient};
 use ic_logger::{info, new_replica_logger_from_config};
 use ic_metrics::MetricsRegistry;
@@ -17,12 +18,7 @@ use ic_sys::PAGE_SIZE;
 use ic_types::{replica_version::REPLICA_BINARY_HASH, PrincipalId, ReplicaVersion, SubnetId};
 use nix::unistd::{setpgid, Pid};
 use static_assertions::assert_eq_size;
-use std::env;
-use std::io;
-use std::path::PathBuf;
-use std::str::FromStr;
-use std::sync::Arc;
-use std::time::Duration;
+use std::{env, io, path::PathBuf, str::FromStr, sync::Arc, time::Duration};
 use tokio::signal::unix::{signal, SignalKind};
 
 #[cfg(target_os = "linux")]
@@ -275,60 +271,31 @@ fn main() -> io::Result<()> {
         };
 
     info!(logger, "Constructing IC stack");
-    let (
-        crypto,
-        state_manager,
-        _,
-        async_query_handler,
-        _,
-        _p2p_thread_joiner,
-        ingress_ingestion_service,
-        consensus_pool_cache,
-        ingress_message_filter,
-        _xnet_endpoint,
-    ) = ic_replica::setup_p2p::construct_ic_stack(
-        logger.clone(),
-        rt_main.handle().clone(),
-        rt_xnet.handle().clone(),
-        config.clone(),
-        subnet_config,
-        node_id,
-        subnet_id,
-        subnet_type,
-        registry.clone(),
-        crypto,
-        metrics_registry.clone(),
-        cup_with_proto,
-        registry_certified_time_reader,
-    )?;
+    let (_, _, _p2p_thread_joiner, _, _xnet_endpoint) =
+        ic_replica::setup_ic_stack::construct_ic_stack(
+            logger.clone(),
+            rt_main.handle().clone(),
+            rt_http.handle().clone(),
+            rt_xnet.handle().clone(),
+            config.clone(),
+            subnet_config,
+            node_id,
+            subnet_id,
+            subnet_type,
+            root_subnet_id,
+            registry,
+            crypto,
+            metrics_registry.clone(),
+            cup_with_proto,
+            registry_certified_time_reader,
+        )?;
     info!(logger, "Constructed IC stack");
-
-    let malicious_behaviour = &config.malicious_behaviour;
-
-    ic_http_endpoints_public::start_server(
-        rt_http.handle().clone(),
-        &metrics_registry,
-        config.http_handler.clone(),
-        ingress_message_filter,
-        ingress_ingestion_service,
-        async_query_handler,
-        state_manager,
-        registry,
-        Arc::clone(&crypto) as Arc<dyn TlsHandshake + Send + Sync>,
-        Arc::clone(&crypto) as Arc<dyn IngressSigVerifier + Send + Sync>,
-        subnet_id,
-        root_subnet_id,
-        logger.clone(),
-        consensus_pool_cache,
-        subnet_type,
-        malicious_behaviour.malicious_flags.clone(),
-    );
 
     if config
         .adapters_config
         .onchain_observability_enable_grpc_server
     {
-        // Spawns a new grpc server in a new task.  This will continue to run until the Runtime shuts down.
+        // Spawns a new grpc server in a new task. This will continue to run until the Runtime shuts down.
         spawn_onchain_observability_grpc_server(metrics_registry, rt_main.handle().clone());
     }
 
