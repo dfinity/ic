@@ -145,7 +145,8 @@ bazel-cache-perf-test-linux:
     - bazel-test-all
     - .bazel-rules-post-master
   needs:
-    - bazel-test-all
+    - job: bazel-test-all
+      artifacts: false
 
 bazel-test-all-rebuild:
   extends:
@@ -187,7 +188,8 @@ bazel-cache-perf-test-macos:
     - bazel-build-macos
     - .bazel-rules-post-master
   needs:
-    - bazel-build-macos
+    - job: bazel-build-macos
+      artifacts: false
 
 bazel-build-fuzzers:
   extends:
