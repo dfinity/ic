@@ -18,6 +18,16 @@ use std::fmt;
 mod dashboard;
 mod json_rpc;
 
+/// The max number of times we poll a summary method before giving up.
+/// The Chainalysis docs says that the processing should take up to 30 seconds:
+///
+/// > For transfers that are valid and KYT can process, the transfer should process within 30 seconds.
+///
+/// In practice, the registration almost always happened instantaneously.
+///
+/// See: https://docs.chainalysis.com/api/kyt/guides/#workflows-polling-the-summary-endpoints
+const MAX_SUMMARY_POLLS: usize = 10;
+
 /// The number of Wasm pages to use for the canister metadata.
 const METADATA_PAGES: u64 = 16;
 const EVENT_INDEX_ID: MemoryId = MemoryId::new(0);
@@ -341,9 +351,23 @@ fn set_api_key(api_key: String) {
 async fn fetch_utxo_alerts(request: DepositRequest) -> Result<FetchAlertsResponse, Error> {
     let (external_id, alerts) = match kyt_mode() {
         KytMode::Normal => {
-            let external_id = http_register_tx(request.clone()).await?;
-            let alerts = http_get_utxo_alerts(external_id.clone()).await?;
-            (external_id, alerts)
+            let response = http_register_tx(request.clone()).await?;
+            let mut ready = response.ready();
+            if !ready {
+                for _ in 0..MAX_SUMMARY_POLLS {
+                    ready = http_is_transfer_ready(response.external_id.clone()).await?;
+                    if ready {
+                        break;
+                    }
+                }
+            }
+            if !ready {
+                return Err(Error::TemporarilyUnavailable(
+                    "transfer registration took too long".to_string(),
+                ));
+            }
+            let alerts = http_get_utxo_alerts(response.external_id.clone()).await?;
+            (response.external_id, alerts)
         }
         KytMode::AcceptAll => (ic_cdk::api::time().to_string(), vec![]),
         KytMode::RejectAll => (
@@ -379,9 +403,23 @@ async fn fetch_withdrawal_alerts(
 ) -> Result<FetchAlertsResponse, Error> {
     let (external_id, alerts) = match kyt_mode() {
         KytMode::Normal => {
-            let external_id = http_register_withdrawal(withdrawal.clone()).await?;
-            let alerts = http_get_withdrawal_alerts(external_id.clone()).await?;
-            (external_id, alerts)
+            let response = http_register_withdrawal(withdrawal.clone()).await?;
+            let mut ready = response.ready();
+            if !ready {
+                for _ in 0..MAX_SUMMARY_POLLS {
+                    ready = http_is_withdrawal_ready(response.external_id.clone()).await?;
+                    if ready {
+                        break;
+                    }
+                }
+            }
+            if !ready {
+                return Err(Error::TemporarilyUnavailable(
+                    "withdrawal registration took too long".to_string(),
+                ));
+            }
+            let alerts = http_get_withdrawal_alerts(response.external_id.clone()).await?;
+            (response.external_id, alerts)
         }
         KytMode::AcceptAll => (ic_cdk::api::time().to_string(), vec![]),
         KytMode::RejectAll => (
@@ -533,7 +571,9 @@ fn http_request(req: http::HttpRequest) -> http::HttpResponse {
     }
 }
 
-async fn http_register_tx(req: DepositRequest) -> Result<json_rpc::ExternalId, Error> {
+async fn http_register_tx(
+    req: DepositRequest,
+) -> Result<json_rpc::RegisterTransferResponse, Error> {
     let response: json_rpc::RegisterTransferResponse = json_rpc::http_call(
         HttpMethod::POST,
         api_key(),
@@ -548,7 +588,21 @@ async fn http_register_tx(req: DepositRequest) -> Result<json_rpc::ExternalId, E
     .await
     .expect("failed to register transfer")
     .map_err(json_error_to_candid)?;
-    Ok(response.external_id)
+    Ok(response)
+}
+
+async fn http_is_transfer_ready(external_id: json_rpc::ExternalId) -> Result<bool, Error> {
+    let response: json_rpc::TransferSummaryResponse = json_rpc::http_call(
+        HttpMethod::GET,
+        api_key(),
+        format!("v2/transfers/{}", external_id),
+        json_rpc::GetSummaryRequest { external_id },
+    )
+    .await
+    .expect("failed to get a transfer summary")
+    .map_err(json_error_to_candid)?;
+
+    Ok(response.updated_at.is_some())
 }
 
 async fn http_get_utxo_alerts(external_id: json_rpc::ExternalId) -> Result<Vec<Alert>, Error> {
@@ -570,7 +624,7 @@ async fn http_get_utxo_alerts(external_id: json_rpc::ExternalId) -> Result<Vec<A
 
 async fn http_register_withdrawal(
     withdrawal: WithdrawalAttempt,
-) -> Result<json_rpc::ExternalId, Error> {
+) -> Result<json_rpc::RegisterWithdrawalResponse, Error> {
     let response: json_rpc::RegisterWithdrawalResponse = json_rpc::http_call(
         HttpMethod::POST,
         api_key(),
@@ -587,7 +641,21 @@ async fn http_register_withdrawal(
     .await
     .expect("failed to register a withdrawal")
     .map_err(json_error_to_candid)?;
-    Ok(response.external_id)
+    Ok(response)
+}
+
+async fn http_is_withdrawal_ready(external_id: json_rpc::ExternalId) -> Result<bool, Error> {
+    let response: json_rpc::WithdrawalSummaryResponse = json_rpc::http_call(
+        HttpMethod::GET,
+        api_key(),
+        format!("v2/withdrawal-attempts/{}", external_id),
+        json_rpc::GetSummaryRequest { external_id },
+    )
+    .await
+    .expect("failed to get a transfer summary")
+    .map_err(json_error_to_candid)?;
+
+    Ok(response.updated_at.is_some())
 }
 
 async fn http_get_withdrawal_alerts(

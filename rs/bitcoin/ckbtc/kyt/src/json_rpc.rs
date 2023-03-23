@@ -50,7 +50,41 @@ pub struct RegisterTransferRequest {
 #[serde(rename_all = "camelCase")]
 pub struct RegisterTransferResponse {
     pub transfer_reference: String,
+    /// The timestamp when the transfer was last updated, in the UTC ISO 8601 format.
+    /// NOTE: After the initial POST request, this value will be None until KYT processes the transfer.
+    /// We must poll the summary endpoint until updated_at returns a value.
+    ///
+    /// See: https://docs.chainalysis.com/api/kyt/guides/#workflows-polling-the-summary-endpoints
+    pub updated_at: Option<String>,
     pub external_id: ExternalId,
+}
+
+impl RegisterTransferResponse {
+    /// Returns true if the transfer registration completed and it's safe to use the external id to
+    /// fetch alerts.
+    pub fn ready(&self) -> bool {
+        self.updated_at.is_some()
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetSummaryRequest {
+    pub external_id: ExternalId,
+}
+
+// https://docs.chainalysis.com/api/kyt/#transfers-get-a-summary
+#[derive(Debug, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TransferSummaryResponse {
+    pub updated_at: Option<String>,
+}
+
+// https://docs.chainalysis.com/api/kyt/#withdrawal-attempts-get-a-summary
+#[derive(Debug, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WithdrawalSummaryResponse {
+    pub updated_at: Option<String>,
 }
 
 // Register withdrawal
@@ -71,6 +105,14 @@ pub struct RegisterWithdrawalRequest {
 pub struct RegisterWithdrawalResponse {
     pub updated_at: Option<String>,
     pub external_id: ExternalId,
+}
+
+impl RegisterWithdrawalResponse {
+    /// Returns true if the withdrawal registration completed and it's safe to use the external id to
+    /// fetch alerts.
+    pub fn ready(&self) -> bool {
+        self.updated_at.is_some()
+    }
 }
 
 // Alerts
@@ -231,7 +273,8 @@ fn test_registration_response_decoding() {
         response,
         RegisterTransferResponse {
             transfer_reference: "2d9bfc3a47c2c9cfd0170198782979ed327442e5ed1c8a752bced24d490347d4:1H7aVb2RZiBmdbnzazQgVj2hWR3eEZPg6v".to_string(),
-            external_id: "fc8e053e-8833-344d-b025-40559eafd16f".to_string()
+            external_id: "fc8e053e-8833-344d-b025-40559eafd16f".to_string(),
+            updated_at: None,
         }
     );
 }
