@@ -19,7 +19,6 @@ use crate::driver::{
             Outcome, SystemTestGroupError, SystemTestGroupReport, TargetFunctionFailure,
             TargetFunctionSuccess,
         },
-        subprocess_ipc::LogServer,
         task::{DebugKeepaliveTask, EmptyTask},
         task_scheduler::{new_task_scheduler, TaskTable},
     },
@@ -48,7 +47,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use slog::{debug, info, trace, warn, Logger};
+use slog::{debug, info, trace, Logger};
 
 const DEFAULT_TIMEOUT_PER_TEST: Duration = Duration::from_secs(60 * 10); // 10 minutes
 const DEFAULT_OVERALL_TIMEOUT: Duration = Duration::from_secs(60 * 10); // 10 minutes
@@ -96,12 +95,11 @@ impl CliArgs {
 
     /// A convenience method to get the task id of this subprocess, *if* it is in fact a
     /// subprocess.
-    fn subproc_id(&self) -> Option<(TaskId, u32)> {
+    fn subproc_id(&self) -> Option<(TaskId, u64)> {
         match &self.action {
-            SystemTestsSubcommand::SpawnChild {
-                task_id,
-                parent_pid,
-            } => Some((task_id.clone(), *parent_pid)),
+            SystemTestsSubcommand::SpawnChild { task_id, sock_id } => {
+                Some((task_id.clone(), *sock_id))
+            }
             _ => None,
         }
     }
@@ -130,7 +128,7 @@ pub enum SystemTestsSubcommand {
     InteractiveMode,
 
     #[clap(hide = true)]
-    SpawnChild { task_id: TaskId, parent_pid: u32 },
+    SpawnChild { task_id: TaskId, sock_id: u64 },
 }
 
 #[derive(Deserialize, Serialize)]
@@ -774,17 +772,6 @@ impl SystemTestGroup {
                     "Executing parent-process-specific code ..."
                 );
 
-                let log_server = Arc::new(LogServer::new(
-                    group_ctx.log_socket_path(),
-                    broadcaster.create_broadcasting_subscriber(),
-                    group_ctx.logger(),
-                )?);
-
-                let log_server_jh = std::thread::spawn({
-                    let log_server = log_server.clone();
-                    move || log_server.receive_all_events()
-                });
-
                 let action_graph = ActionGraph::from_plan(static_plan);
                 info!(group_ctx.log(), "Generated action_graph");
 
@@ -803,7 +790,6 @@ impl SystemTestGroup {
                     crossbeam_channel::bounded(0);
 
                 broadcaster.subscribe(Box::new({
-                    let group_ctx = group_ctx.clone();
                     let mut report = SystemTestGroupReport::default();
                     let mut is_root_completed = false;
                     move |event| {
@@ -920,20 +906,6 @@ impl SystemTestGroup {
 
                 // await root task's final event and produce appropriate return code
                 let report = terminal_event_receiver.recv().unwrap();
-
-                if let Err(e) = log_server.shutdown() {
-                    warn!(
-                        group_ctx.log(),
-                        "Error when shutting down log server: {e:?}"
-                    );
-                }
-
-                if let Err(e) = log_server_jh.join() {
-                    warn!(
-                        group_ctx.log(),
-                        "Error receiving all events from subprocess: {e:?}"
-                    );
-                }
 
                 if report.is_failure_free() {
                     Ok(Outcome::FromParentProcess(report))
