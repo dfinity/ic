@@ -3,6 +3,9 @@
     "tvl": {
       "candid": "tvl.did",
       "type": "custom",
+      "build": [
+        "bazel build //rs/rosetta-api/tvl:tvl_canister"
+      ],
       "wasm": "../../../bazel-bin/rs/rosetta-api/tvl/tvl_canister.wasm"
     },
     "xrc_mock": {

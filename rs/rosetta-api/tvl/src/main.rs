@@ -1,6 +1,7 @@
 use candid::candid_method;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk_macros::{init, post_upgrade, query};
+use ic_tvl_canister::dashboard::build_dashboard;
 use ic_tvl_canister::metrics::encode_metrics;
 use ic_tvl_canister::types::{TvlArgs, TvlResult, TvlResultError};
 
@@ -39,6 +40,12 @@ fn http_request(req: HttpRequest) -> HttpResponse {
                     .build()
             }
         }
+    } else if req.path() == "/dashboard" {
+        let dashboard: Vec<u8> = build_dashboard();
+        HttpResponseBuilder::ok()
+            .header("Content-Type", "text/html; charset=utf-8")
+            .with_body_and_content_length(dashboard)
+            .build()
     } else {
         HttpResponseBuilder::not_found().build()
     }
