@@ -20,7 +20,7 @@ use crate::driver::{
     event::BroadcastingEventSubscriberFactory,
     event::{Event, TaskId},
     process::{KillFn, Process},
-    subprocess_ipc::log_panic_event,
+    subprocess_ipc::{log_panic_event, LogReceiver, ReportOrFailure},
     task::{Task, TaskHandle},
 };
 
@@ -60,13 +60,18 @@ impl Task for SubprocessTask {
             panic!("Respawned already spawned task '{}'", self.task_id);
         }
 
+        // select a random socket id used for this child process
+        use rand::Rng;
+        let sock_id: u64 = rand::thread_rng().gen();
+        let sock_path = GroupContext::log_socket_path(sock_id);
+
         let mut child_cmd = Command::new(self.group_ctx.exec_path.clone());
         child_cmd
             .arg("--working-dir") // TODO: rename as --group-dir
             .arg(self.group_ctx.group_dir().as_os_str())
             .arg("spawn-child")
             .arg(self.task_id.name())
-            .arg(self.group_ctx.parent_pid.to_string());
+            .arg(sock_id.to_string());
 
         let mut sub = self.sub_fact.create_broadcasting_subscriber();
         (sub)(Event::task_spawned(self.task_id.clone()));
@@ -85,11 +90,26 @@ impl Task for SubprocessTask {
             let task_id = self.task_id.clone();
             let task_state = task_state.clone();
             async move {
+                let log_rcvr = LogReceiver::new(sock_path, log.clone())
+                    .await
+                    .expect("Could not start LogReceiver");
+                let log_jh = tokio::task::spawn(async move { log_rcvr.receive_all().await });
                 let exit_code = proc.block_on_exit().await;
+
                 info!(
                     log,
                     "Task '{task_id}' finished with exit code: {exit_code:?}"
                 );
+
+                use ReportOrFailure::*;
+                match log_jh.await.unwrap() {
+                    Ok(Some(Report(msg))) => (sub)(Event::task_sub_report(task_id.clone(), msg)),
+                    Ok(Some(Failure(msg))) => (sub)(Event::task_caught_panic(task_id.clone(), msg)),
+                    Ok(_) => {}
+                    Err(e) => {
+                        error!(log, "[Driver Error] Reading logs failed: {e:?}");
+                    }
+                }
 
                 let mut task_state = task_state.lock().unwrap();
                 let event = match &*task_state {
