@@ -1,5 +1,6 @@
 use super::*;
 use crate::lazy_tree::LazyFork;
+use crypto::recompute_digest;
 use ic_base_types::NumBytes;
 use ic_crypto_tree_hash::{
     flatmap, FlatMap, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree, MixedHashTree,
@@ -121,6 +122,11 @@ fn enumerate_leaves(t: &LabeledTree<Vec<u8>>, mut f: impl FnMut(LabeledTree<Vec<
 fn assert_same_witness(ht: &HashTree, wg: &WitnessGeneratorImpl, data: &LabeledTree<Vec<u8>>) {
     let ht_witness = ht.witness::<Witness>(data);
     let wg_witness = wg.witness(data).expect("failed to construct a witness");
+
+    assert_eq!(
+        recompute_digest(data, &wg_witness).unwrap(),
+        recompute_digest(data, &ht_witness).unwrap()
+    );
     assert_eq!(
         wg_witness, ht_witness,
         "labeled tree: {:?}, hash_tree: {:?}",
