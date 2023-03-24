@@ -6,8 +6,8 @@ use crate::ckbtc::minter::utils::{
 use crate::{
     ckbtc::lib::{
         activate_ecdsa_signature, create_canister, install_bitcoin_canister, install_kyt,
-        install_ledger, install_minter, subnet_sys, upgrade_kyt, BTC_MIN_CONFIRMATIONS, KYT_FEE,
-        TEST_KEY_LOCAL,
+        install_ledger, install_minter, set_kyt_api_key, subnet_sys, upgrade_kyt,
+        BTC_MIN_CONFIRMATIONS, KYT_FEE, TEST_KEY_LOCAL,
     },
     driver::{
         test_env::TestEnv,
@@ -59,11 +59,21 @@ pub fn test_kyt(env: TestEnv) {
         let mut kyt_canister = create_canister(&runtime).await;
 
         let minting_user = minter_canister.canister_id().get();
+        let agent = assert_create_agent(sys_node.get_public_url().as_str()).await;
+        let agent_principal = agent.get_principal().unwrap();
         let kyt_id = install_kyt(
             &mut kyt_canister,
             &logger,
             &env,
             Principal::from(minting_user),
+            vec![agent_principal],
+        )
+        .await;
+        set_kyt_api_key(
+            &agent,
+            &kyt_id.get().0,
+            agent_principal,
+            "fake key".to_string(),
         )
         .await;
         let ledger_id = install_ledger(&env, &mut ledger_canister, minting_user, &logger).await;
@@ -72,7 +82,6 @@ pub fn test_kyt(env: TestEnv) {
         let minter = Principal::from(minter_id.get());
 
         let ledger = Principal::from(ledger_id.get());
-        let agent = assert_create_agent(sys_node.get_public_url().as_str()).await;
         let universal_canister =
             UniversalCanister::new_with_retries(&agent, sys_node.effective_canister_id(), &logger)
                 .await;

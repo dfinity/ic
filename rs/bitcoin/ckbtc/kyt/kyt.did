@@ -13,15 +13,18 @@ type Alert = record  {
 
 type Mode = variant { Normal; AcceptAll; RejectAll };
 
-type InitArg = record {
+type SetApiKeyArg = record {
     api_key : text;
+    provider : principal;
+};
+
+type InitArg = record {
     minter_id : principal;
     maintainers : vec principal;
     mode : Mode;
 };
 
 type UpgradeArg = record {
-    api_key : opt text;
     minter_id : opt blob;
     maintainers : opt vec blob;
     mode : opt Mode;
@@ -51,6 +54,7 @@ type LifecycleArg = variant {
 type Response = record {
     external_id : text;
     alerts : vec Alert;
+    provider : principal;
 };
 
 service : (LifecycleArg) -> {
@@ -62,7 +66,7 @@ service : (LifecycleArg) -> {
 
     // Sets the API key.
     // Rejects the call if the caller is not a maintainer.
-    set_api_key : (text) -> ();
+    set_api_key : (SetApiKeyArg) -> ();
 
     // A helper method that converts textual TXIDs to candid blobs.
     txid_to_bytes : (text) -> (blob) query;

@@ -4,6 +4,7 @@ use crate::state::{
     ChangeOutput, CkBtcMinterState, FinalizedBtcRetrieval, FinalizedStatus, RetrieveBtcRequest,
     SubmittedBtcTransaction, UtxoCheckStatus,
 };
+use candid::Principal;
 use ic_btc_types::Utxo;
 use icrc_ledger_types::Account;
 use serde::{Deserialize, Serialize};
@@ -91,6 +92,7 @@ pub enum Event {
         utxo: Utxo,
         uuid: String,
         clean: bool,
+        kyt_provider: Principal,
     },
 
     /// Indicates that the given UTXO's value is too small to pay for a KYT check.
@@ -175,8 +177,18 @@ pub fn replay(mut events: impl Iterator<Item = Event>) -> Result<CkBtcMinterStat
             Event::ConfirmedBtcTransaction { txid } => {
                 state.finalize_transaction(&txid);
             }
-            Event::CheckedUtxo { utxo, uuid, clean } => {
-                state.mark_utxo_checked(utxo, uuid, UtxoCheckStatus::from_clean_flag(clean));
+            Event::CheckedUtxo {
+                utxo,
+                uuid,
+                clean,
+                kyt_provider,
+            } => {
+                state.mark_utxo_checked(
+                    utxo,
+                    uuid,
+                    UtxoCheckStatus::from_clean_flag(clean),
+                    kyt_provider,
+                );
             }
             Event::IgnoredUtxo { utxo } => {
                 state.ignore_utxo(utxo);

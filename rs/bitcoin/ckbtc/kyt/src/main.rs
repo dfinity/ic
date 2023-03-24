@@ -3,6 +3,7 @@ use candid::Principal;
 use ic_canisters_http_types as http;
 use ic_cdk::api::management_canister::http_request::{HttpMethod, HttpResponse, TransformArgs};
 use ic_cdk_macros::{init, post_upgrade, query, update};
+use ic_ckbtc_kyt::SetApiKeyArg;
 use ic_ckbtc_kyt::{
     Alert, AlertLevel, DepositRequest, Error, ExposureType, FetchAlertsResponse, KytMode,
     LifecycleArg, WithdrawalAttempt,
@@ -13,6 +14,7 @@ use ic_stable_structures::{DefaultMemoryImpl, RestrictedMemory as RM, StableCell
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::cell::{Cell, RefCell};
+use std::collections::BTreeMap;
 use std::fmt;
 
 mod dashboard;
@@ -82,7 +84,7 @@ fn default_kyt_mode() -> KytMode {
 
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct Config {
-    api_key: String,
+    api_keys: BTreeMap<Principal, String>,
     minter_id: Principal,
     maintainers: Vec<Principal>,
     #[serde(default = "default_kyt_mode")]
@@ -95,7 +97,7 @@ struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            api_key: "".to_string(),
+            api_keys: Default::default(),
             minter_id: Principal::anonymous(),
             maintainers: vec![],
             mode: default_kyt_mode(),
@@ -164,13 +166,17 @@ pub enum EventKind {
     UtxoCheck {
         #[serde(rename = "txid")]
         txid: [u8; 32],
+
         #[serde(rename = "vout")]
         vout: u32,
+
         #[serde(rename = "caller")]
         #[serde(skip_serializing_if = "Option::is_none")]
         caller: Option<Principal>,
+
         #[serde(rename = "external_id")]
         external_id: String,
+
         #[serde(rename = "alerts")]
         alerts: Vec<Alert>,
     },
@@ -179,14 +185,19 @@ pub enum EventKind {
         #[serde(rename = "caller")]
         #[serde(skip_serializing_if = "Option::is_none")]
         caller: Option<Principal>,
+
         #[serde(rename = "id")]
         withdrawal_id: String,
+
         #[serde(rename = "address")]
         address: String,
+
         #[serde(rename = "amount")]
         amount: u64,
+
         #[serde(rename = "external_id")]
         external_id: String,
+
         #[serde(rename = "alerts")]
         alerts: Vec<Alert>,
     },
@@ -197,6 +208,10 @@ pub enum EventKind {
         #[serde(rename = "caller")]
         #[serde(skip_serializing_if = "Option::is_none")]
         caller: Option<Principal>,
+
+        #[serde(rename = "provider")]
+        #[serde(skip_serializing_if = "Option::is_none")]
+        provider: Option<Principal>,
     },
 }
 
@@ -226,8 +241,16 @@ thread_local! {
     static ADDRESS_CHECKS_COUNT: Cell<u64> = Cell::default();
 }
 
-fn api_key() -> String {
-    CONFIG_CELL.with(|cell| cell.borrow().get().api_key.clone())
+fn pick_api_key() -> Result<(Principal, String), Error> {
+    CONFIG_CELL.with(|cell| {
+        cell.borrow()
+            .get()
+            .api_keys
+            .iter()
+            .next()
+            .map(|(p, k)| (*p, k.clone()))
+            .ok_or_else(|| Error::TemporarilyUnavailable("No valid API keys".to_string()))
+    })
 }
 
 fn kyt_mode() -> KytMode {
@@ -283,11 +306,10 @@ fn init(arg: LifecycleArg) {
         LifecycleArg::InitArg(arg) => arg,
         LifecycleArg::UpgradeArg(_) => ic_cdk::trap("expected an InitArg on canister install"),
     };
-
     CONFIG_CELL.with(move |cell| {
         cell.borrow_mut()
             .set(Cbor(Config {
-                api_key: arg.api_key,
+                api_keys: BTreeMap::default(),
                 minter_id: arg.minter_id,
                 maintainers: arg.maintainers,
                 mode: arg.mode,
@@ -306,13 +328,6 @@ fn post_upgrade(arg: LifecycleArg) {
 
     CONFIG_CELL.with(|cell| {
         let mut config = cell.borrow().get().clone();
-        if let Some(api_key) = arg.api_key {
-            config.api_key = api_key;
-            config.last_api_key_update = Some(ic_cdk::api::time());
-            record_event(EventKind::ApiKeySet {
-                caller: Some(ic_cdk::caller()),
-            });
-        }
         if let Some(minter_id) = arg.minter_id {
             config.minter_id = minter_id;
         }
@@ -330,32 +345,33 @@ fn post_upgrade(arg: LifecycleArg) {
 
 #[update(guard = "caller_is_maintainer")]
 #[candid_method(update)]
-fn set_api_key(api_key: String) {
+fn set_api_key(arg: SetApiKeyArg) {
     CONFIG_CELL.with(|cell| {
-        if cell.borrow().get().api_key != api_key {
-            let mut config = cell.borrow().get().clone();
-            config.api_key = api_key;
-            config.last_api_key_update = Some(ic_cdk::api::time());
-            cell.borrow_mut()
-                .set(config)
-                .expect("failed to encode config");
-            record_event(EventKind::ApiKeySet {
-                caller: Some(ic_cdk::caller()),
-            });
-        }
+        let mut config = cell.borrow().get().clone();
+        config.api_keys.insert(arg.provider, arg.api_key);
+        config.last_api_key_update = Some(ic_cdk::api::time());
+        cell.borrow_mut()
+            .set(config)
+            .expect("failed to encode config");
+        record_event(EventKind::ApiKeySet {
+            caller: Some(ic_cdk::caller()),
+            provider: Some(arg.provider),
+        });
     });
 }
 
 #[update(guard = "caller_is_minter")]
 #[candid_method(update)]
 async fn fetch_utxo_alerts(request: DepositRequest) -> Result<FetchAlertsResponse, Error> {
+    let (provider, api_key) = pick_api_key()?;
     let (external_id, alerts) = match kyt_mode() {
         KytMode::Normal => {
-            let response = http_register_tx(request.clone()).await?;
+            let response = http_register_tx(api_key.clone(), request.clone()).await?;
             let mut ready = response.ready();
             if !ready {
                 for _ in 0..MAX_SUMMARY_POLLS {
-                    ready = http_is_transfer_ready(response.external_id.clone()).await?;
+                    ready = http_is_transfer_ready(api_key.clone(), response.external_id.clone())
+                        .await?;
                     if ready {
                         break;
                     }
@@ -366,7 +382,7 @@ async fn fetch_utxo_alerts(request: DepositRequest) -> Result<FetchAlertsRespons
                     "transfer registration took too long".to_string(),
                 ));
             }
-            let alerts = http_get_utxo_alerts(response.external_id.clone()).await?;
+            let alerts = http_get_utxo_alerts(api_key, response.external_id.clone()).await?;
             (response.external_id, alerts)
         }
         KytMode::AcceptAll => (ic_cdk::api::time().to_string(), vec![]),
@@ -393,6 +409,7 @@ async fn fetch_utxo_alerts(request: DepositRequest) -> Result<FetchAlertsRespons
     Ok(FetchAlertsResponse {
         external_id,
         alerts,
+        provider,
     })
 }
 
@@ -401,13 +418,16 @@ async fn fetch_utxo_alerts(request: DepositRequest) -> Result<FetchAlertsRespons
 async fn fetch_withdrawal_alerts(
     withdrawal: WithdrawalAttempt,
 ) -> Result<FetchAlertsResponse, Error> {
+    let (provider, api_key) = pick_api_key()?;
+
     let (external_id, alerts) = match kyt_mode() {
         KytMode::Normal => {
-            let response = http_register_withdrawal(withdrawal.clone()).await?;
+            let response = http_register_withdrawal(api_key.clone(), withdrawal.clone()).await?;
             let mut ready = response.ready();
             if !ready {
                 for _ in 0..MAX_SUMMARY_POLLS {
-                    ready = http_is_withdrawal_ready(response.external_id.clone()).await?;
+                    ready = http_is_withdrawal_ready(api_key.clone(), response.external_id.clone())
+                        .await?;
                     if ready {
                         break;
                     }
@@ -418,7 +438,7 @@ async fn fetch_withdrawal_alerts(
                     "withdrawal registration took too long".to_string(),
                 ));
             }
-            let alerts = http_get_withdrawal_alerts(response.external_id.clone()).await?;
+            let alerts = http_get_withdrawal_alerts(api_key, response.external_id.clone()).await?;
             (response.external_id, alerts)
         }
         KytMode::AcceptAll => (ic_cdk::api::time().to_string(), vec![]),
@@ -446,6 +466,7 @@ async fn fetch_withdrawal_alerts(
     Ok(FetchAlertsResponse {
         external_id,
         alerts,
+        provider,
     })
 }
 
@@ -572,11 +593,12 @@ fn http_request(req: http::HttpRequest) -> http::HttpResponse {
 }
 
 async fn http_register_tx(
+    api_key: String,
     req: DepositRequest,
 ) -> Result<json_rpc::RegisterTransferResponse, Error> {
     let response: json_rpc::RegisterTransferResponse = json_rpc::http_call(
         HttpMethod::POST,
-        api_key(),
+        api_key,
         format!("v2/users/{}/transfers", req.caller),
         json_rpc::RegisterTransferRequest {
             network: json_rpc::Network::Bitcoin,
@@ -591,10 +613,13 @@ async fn http_register_tx(
     Ok(response)
 }
 
-async fn http_is_transfer_ready(external_id: json_rpc::ExternalId) -> Result<bool, Error> {
+async fn http_is_transfer_ready(
+    api_key: String,
+    external_id: json_rpc::ExternalId,
+) -> Result<bool, Error> {
     let response: json_rpc::TransferSummaryResponse = json_rpc::http_call(
         HttpMethod::GET,
-        api_key(),
+        api_key,
         format!("v2/transfers/{}", external_id),
         json_rpc::GetSummaryRequest { external_id },
     )
@@ -605,10 +630,13 @@ async fn http_is_transfer_ready(external_id: json_rpc::ExternalId) -> Result<boo
     Ok(response.updated_at.is_some())
 }
 
-async fn http_get_utxo_alerts(external_id: json_rpc::ExternalId) -> Result<Vec<Alert>, Error> {
+async fn http_get_utxo_alerts(
+    api_key: String,
+    external_id: json_rpc::ExternalId,
+) -> Result<Vec<Alert>, Error> {
     let response: json_rpc::GetAlertsResponse = json_rpc::http_call(
         HttpMethod::GET,
-        api_key(),
+        api_key,
         format!("v2/transfers/{}/alerts", external_id),
         json_rpc::GetAlertsRequest { external_id },
     )
@@ -623,11 +651,12 @@ async fn http_get_utxo_alerts(external_id: json_rpc::ExternalId) -> Result<Vec<A
 }
 
 async fn http_register_withdrawal(
+    api_key: String,
     withdrawal: WithdrawalAttempt,
 ) -> Result<json_rpc::RegisterWithdrawalResponse, Error> {
     let response: json_rpc::RegisterWithdrawalResponse = json_rpc::http_call(
         HttpMethod::POST,
-        api_key(),
+        api_key,
         format!("v2/users/{}/withdrawal-attempts", withdrawal.caller),
         json_rpc::RegisterWithdrawalRequest {
             network: json_rpc::Network::Bitcoin,
@@ -644,10 +673,13 @@ async fn http_register_withdrawal(
     Ok(response)
 }
 
-async fn http_is_withdrawal_ready(external_id: json_rpc::ExternalId) -> Result<bool, Error> {
+async fn http_is_withdrawal_ready(
+    api_key: String,
+    external_id: json_rpc::ExternalId,
+) -> Result<bool, Error> {
     let response: json_rpc::WithdrawalSummaryResponse = json_rpc::http_call(
         HttpMethod::GET,
-        api_key(),
+        api_key,
         format!("v2/withdrawal-attempts/{}", external_id),
         json_rpc::GetSummaryRequest { external_id },
     )
@@ -659,11 +691,12 @@ async fn http_is_withdrawal_ready(external_id: json_rpc::ExternalId) -> Result<b
 }
 
 async fn http_get_withdrawal_alerts(
+    api_key: String,
     external_id: json_rpc::ExternalId,
 ) -> Result<Vec<Alert>, Error> {
     let response: json_rpc::GetAlertsResponse = json_rpc::http_call(
         HttpMethod::GET,
-        api_key(),
+        api_key,
         format!("v2/withdrawal-attempts/{}/alerts", external_id),
         json_rpc::GetAlertsRequest { external_id },
     )

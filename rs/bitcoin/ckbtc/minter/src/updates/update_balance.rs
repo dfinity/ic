@@ -185,9 +185,9 @@ pub async fn update_balance(
             utxo_statuses.push(UtxoStatus::ValueTooSmall(utxo));
             continue;
         }
-        let (uuid, status) = kyt_check_utxo(caller_account.owner, &utxo).await?;
+        let (uuid, status, kyt_provider) = kyt_check_utxo(caller_account.owner, &utxo).await?;
         mutate_state(|s| {
-            crate::state::audit::mark_utxo_checked(s, &utxo, uuid.clone(), status);
+            crate::state::audit::mark_utxo_checked(s, &utxo, uuid.clone(), status, kyt_provider);
         });
         if status == UtxoCheckStatus::Tainted {
             utxo_statuses.push(UtxoStatus::Tainted(utxo.clone()));
@@ -229,7 +229,7 @@ pub async fn update_balance(
 async fn kyt_check_utxo(
     caller: Principal,
     utxo: &Utxo,
-) -> Result<(String, UtxoCheckStatus), UpdateBalanceError> {
+) -> Result<(String, UtxoCheckStatus, Principal), UpdateBalanceError> {
     let kyt_principal = read_state(|s| {
         s.kyt_principal
             .expect("BUG: upgrade procedure must ensure that the KYT principal is set")
@@ -237,8 +237,9 @@ async fn kyt_check_utxo(
             .into()
     });
 
-    if let Some((uuid, status)) = read_state(|s| s.checked_utxos.get(utxo).cloned()) {
-        return Ok((uuid, status));
+    if let Some((uuid, status, api_key_owner)) = read_state(|s| s.checked_utxos.get(utxo).cloned())
+    {
+        return Ok((uuid, status, api_key_owner));
     }
 
     match fetch_utxo_alerts(kyt_principal, caller, utxo)
@@ -257,9 +258,17 @@ async fn kyt_check_utxo(
                     DisplayOutpoint(&utxo.outpoint),
                     response.external_id
                 );
-                Ok((response.external_id, UtxoCheckStatus::Tainted))
+                Ok((
+                    response.external_id,
+                    UtxoCheckStatus::Tainted,
+                    response.provider,
+                ))
             } else {
-                Ok((response.external_id, UtxoCheckStatus::Clean))
+                Ok((
+                    response.external_id,
+                    UtxoCheckStatus::Clean,
+                    response.provider,
+                ))
             }
         }
         Err(KytError::TemporarilyUnavailable(reason)) => {

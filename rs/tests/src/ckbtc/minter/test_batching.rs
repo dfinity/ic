@@ -7,7 +7,8 @@ use crate::ckbtc::minter::utils::{
 use crate::{
     ckbtc::lib::{
         activate_ecdsa_signature, create_canister_at_id, install_kyt, install_ledger,
-        install_minter, subnet_sys, BTC_MIN_CONFIRMATIONS, KYT_FEE, TEST_KEY_LOCAL, TRANSFER_FEE,
+        install_minter, set_kyt_api_key, subnet_sys, BTC_MIN_CONFIRMATIONS, KYT_FEE,
+        TEST_KEY_LOCAL, TRANSFER_FEE,
     },
     driver::{
         test_env::TestEnv,
@@ -81,11 +82,21 @@ pub fn test_batching(env: TestEnv) {
         let mut kyt_canister = create_canister_at_id(&runtime, kyt_id.get()).await;
 
         let minting_user = minter_canister.canister_id().get();
+        let agent = assert_create_agent(sys_node.get_public_url().as_str()).await;
+        let agent_principal = agent.get_principal().unwrap();
         let kyt_id = install_kyt(
             &mut kyt_canister,
             &logger,
             &env,
             Principal::from(minting_user),
+            vec![agent_principal],
+        )
+        .await;
+        set_kyt_api_key(
+            &agent,
+            &kyt_id.get().0,
+            agent_principal,
+            "fake key".to_string(),
         )
         .await;
 
@@ -107,7 +118,6 @@ pub fn test_batching(env: TestEnv) {
 
         let minter = Principal::from(minter_id.get());
         let ledger = Principal::from(ledger_id.get());
-        let agent = assert_create_agent(sys_node.get_public_url().as_str()).await;
 
         activate_ecdsa_signature(sys_node, subnet_sys.subnet_id, TEST_KEY_LOCAL, &logger).await;
 

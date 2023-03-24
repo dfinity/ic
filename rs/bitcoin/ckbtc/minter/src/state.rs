@@ -283,10 +283,10 @@ pub struct CkBtcMinterState {
     pub kyt_fee: u64,
 
     /// The total amount of fees we owe to the KYT provider.
-    pub owed_kyt_amount: u64,
+    pub owed_kyt_amount: BTreeMap<Principal, u64>,
 
     /// A cache of UTXO KYT check statuses.
-    pub checked_utxos: BTreeMap<Utxo, (String, UtxoCheckStatus)>,
+    pub checked_utxos: BTreeMap<Utxo, (String, UtxoCheckStatus, Principal)>,
 
     /// UTXOs whose values are too small to pay the KYT check fee.
     pub ignored_utxos: BTreeSet<Utxo>,
@@ -680,13 +680,23 @@ impl CkBtcMinterState {
     /// again in a [add_utxos] call.
     /// If the UTXO is tainted, we put it in the quarantine area without increasing the owed KYT
     /// amount.
-    fn mark_utxo_checked(&mut self, utxo: Utxo, uuid: String, status: UtxoCheckStatus) {
+    fn mark_utxo_checked(
+        &mut self,
+        utxo: Utxo,
+        uuid: String,
+        status: UtxoCheckStatus,
+        kyt_provider: Principal,
+    ) {
         match status {
             UtxoCheckStatus::Clean => {
-                if self.checked_utxos.insert(utxo, (uuid, status)).is_none() {
+                if self
+                    .checked_utxos
+                    .insert(utxo, (uuid, status, kyt_provider))
+                    .is_none()
+                {
                     // Updated the owed amount only if it's the first time we mark this UTXO as
                     // clean.
-                    self.owed_kyt_amount += self.kyt_fee;
+                    *self.owed_kyt_amount.entry(kyt_provider).or_insert(0) += self.kyt_fee;
                 }
             }
             UtxoCheckStatus::Tainted => {
@@ -826,7 +836,7 @@ impl From<InitArgs> for CkBtcMinterState {
             kyt_fee: args
                 .kyt_fee
                 .unwrap_or(crate::lifecycle::init::DEFAULT_KYT_FEE),
-            owed_kyt_amount: 0,
+            owed_kyt_amount: Default::default(),
             checked_utxos: Default::default(),
             ignored_utxos: Default::default(),
             quarantined_utxos: Default::default(),

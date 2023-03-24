@@ -150,7 +150,7 @@ pub fn encode_metrics(
 
     metrics.encode_gauge(
         "ckbtc_minter_owed_kyt_amount",
-        state::read_state(|s| s.owed_kyt_amount) as f64,
+        state::read_state(|s| s.owed_kyt_amount.iter().map(|e| e.1).sum::<u64>()) as f64,
         "The total amount of ckBTC that minter owes to the KYT canister.",
     )?;
 

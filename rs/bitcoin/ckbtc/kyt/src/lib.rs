@@ -25,8 +25,6 @@ impl fmt::Display for KytMode {
 
 #[derive(Debug, Clone, PartialEq, Eq, CandidType, Deserialize)]
 pub struct InitArg {
-    /// The Chainalysis API key.
-    pub api_key: String,
     /// The principal of the minter canister.
     pub minter_id: Principal,
     /// The list of callers who can update the API key.
@@ -36,8 +34,13 @@ pub struct InitArg {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, CandidType, Deserialize)]
+pub struct SetApiKeyArg {
+    pub api_key: String,
+    pub provider: Principal,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, CandidType, Deserialize)]
 pub struct UpgradeArg {
-    pub api_key: Option<String>,
     pub minter_id: Option<Principal>,
     pub maintainers: Option<Vec<Principal>>,
     pub mode: Option<KytMode>,
@@ -82,6 +85,7 @@ pub struct Alert {
 pub struct FetchAlertsResponse {
     pub external_id: String,
     pub alerts: Vec<Alert>,
+    pub provider: Principal,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, CandidType, Deserialize)]
