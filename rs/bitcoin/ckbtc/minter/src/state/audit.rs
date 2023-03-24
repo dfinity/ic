@@ -5,6 +5,7 @@ use super::{
     SubmittedBtcTransaction, UtxoCheckStatus,
 };
 use crate::storage::record_event;
+use candid::Principal;
 use ic_btc_types::Utxo;
 use icrc_ledger_types::Account;
 
@@ -61,13 +62,15 @@ pub fn mark_utxo_checked(
     utxo: &Utxo,
     uuid: String,
     status: UtxoCheckStatus,
+    kyt_provider: Principal,
 ) {
     record_event(&Event::CheckedUtxo {
         utxo: utxo.clone(),
         uuid: uuid.clone(),
         clean: status.is_clean(),
+        kyt_provider,
     });
-    state.mark_utxo_checked(utxo.clone(), uuid, status);
+    state.mark_utxo_checked(utxo.clone(), uuid, status, kyt_provider);
 }
 
 pub fn ignore_utxo(state: &mut CkBtcMinterState, utxo: Utxo) {

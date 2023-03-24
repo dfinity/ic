@@ -21,7 +21,9 @@ use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_btc_types::Network;
 use ic_canister_client::Sender;
 use ic_cdk::export::Principal;
-use ic_ckbtc_kyt::{InitArg as KytInitArg, KytMode, LifecycleArg, UpgradeArg as KytUpgradeArg};
+use ic_ckbtc_kyt::{
+    InitArg as KytInitArg, KytMode, LifecycleArg, SetApiKeyArg, UpgradeArg as KytUpgradeArg,
+};
 use ic_ckbtc_minter::lifecycle::init::MinterArg;
 use ic_ckbtc_minter::lifecycle::init::{InitArgs as CkbtcMinterInitArgs, Mode};
 use ic_config::subnet_config::ECDSA_SIGNATURE_FEE;
@@ -321,12 +323,12 @@ pub(crate) async fn install_kyt(
     logger: &Logger,
     env: &TestEnv,
     minter_id: Principal,
+    maintainers: Vec<Principal>,
 ) -> CanisterId {
     info!(&logger, "Installing kyt canister ...");
     let kyt_init_args = LifecycleArg::InitArg(KytInitArg {
-        api_key: "".into(),
         minter_id,
-        maintainers: vec![],
+        maintainers,
         mode: KytMode::AcceptAll,
     });
 
@@ -339,10 +341,27 @@ pub(crate) async fn install_kyt(
     kyt_canister.canister_id()
 }
 
+pub(crate) async fn set_kyt_api_key(
+    agent: &ic_agent::Agent,
+    kyt_canister: &Principal,
+    provider: Principal,
+    api_key: String,
+) {
+    let waiter = garcon::Delay::builder()
+        .throttle(std::time::Duration::from_millis(100))
+        .timeout(std::time::Duration::from_secs(60 * 5))
+        .build();
+    agent
+        .update(kyt_canister, "set_api_key")
+        .with_arg(candid::Encode!(&SetApiKeyArg { provider, api_key }).unwrap())
+        .call_and_wait(waiter)
+        .await
+        .expect("failed to set api key");
+}
+
 pub(crate) async fn upgrade_kyt(kyt_canister: &mut Canister<'_>, mode: KytMode) -> CanisterId {
     let kyt_upgrade_arg = LifecycleArg::UpgradeArg(KytUpgradeArg {
         mode: Some(mode),
-        api_key: None,
         maintainers: None,
         minter_id: None,
     });
