@@ -26,8 +26,12 @@ const EXCLUDED: &[&str] = &[
     "$0 ~ /tECDSA/",
     // the replica does not yet check that the effective canister id is valid in all cases
     "$0 ~ /wrong effective canister id.in mangement call/",
-    "$0 ~ /access denied two status to different canisters/",
     "$0 ~ /access denied with different effective canister id/",
+    // TODO(CRP-1951): the replica does not yet implement all delegation checks
+    "$0 ~ /one delegation, too many targets/",
+    "$0 ~ /too many delegations/",
+    "$0 ~ /self-loop in delegations/",
+    "$0 ~ /cycle in delegations/",
     // the replica does not implement proofs of path non-existence
     "$0 ~ /non-existence proofs for non-existing request id/",
     "$0 ~ /module_hash of empty canister/",
