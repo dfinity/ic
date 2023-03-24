@@ -36,7 +36,7 @@ use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{MessageId, SignedIngress},
     replica_config::ReplicaConfig,
-    time, CanisterId, NodeId, PrincipalId, Randomness, RegistryVersion, SubnetId,
+    time, CanisterId, NodeId, NumInstructions, PrincipalId, Randomness, RegistryVersion, SubnetId,
 };
 use rand::distributions::{Distribution, Uniform};
 use slog::{Drain, Logger};
@@ -59,6 +59,7 @@ pub struct DrunOptions {
     pub cfg: Config,
     pub extra_batches: u64,
     pub log_file: Option<PathBuf>,
+    pub instruction_limit: Option<u64>,
 }
 
 /// Deliver a single message to the Message Routing layer
@@ -153,13 +154,25 @@ fn get_registry(
 pub fn run_drun(uo: DrunOptions) -> Result<(), String> {
     let DrunOptions {
         msg_filename,
-        cfg,
+        mut cfg,
         extra_batches,
         log_file,
+        instruction_limit,
     } = uo;
     // Hardcoded magic values to create a ReplicaConfig that parses.
     let subnet_type = SubnetType::System;
-    let subnet_config = SubnetConfigs::default().own_subnet_config(subnet_type);
+    let mut subnet_config = SubnetConfigs::default().own_subnet_config(subnet_type);
+
+    // If an intruction limit was specified, update the config with the provided instruction limit.
+    if let Some(instruction_limit) = instruction_limit {
+        subnet_config.scheduler_config.max_instructions_per_message =
+            NumInstructions::new(instruction_limit);
+        subnet_config
+            .scheduler_config
+            .max_instructions_per_message_without_dts = NumInstructions::new(instruction_limit);
+        cfg.hypervisor.max_query_call_graph_instructions = NumInstructions::new(instruction_limit);
+    }
+
     let subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(0));
     let root_subnet_id = SubnetId::from(PrincipalId::new_subnet_test_id(1));
     let replica_config = ReplicaConfig {

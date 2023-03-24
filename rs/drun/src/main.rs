@@ -13,6 +13,7 @@ const ARG_CONF: &str = "config";
 const ARG_LOG_FILE: &str = "log-file";
 const ARG_MESSAGES: &str = "messages";
 const ARG_EXTRA_BATCHES: &str = "extra-batches";
+const ARG_INSTRUCTION_LIMIT: &str = "instruction-limit";
 
 fn main() -> Result<(), String> {
     // Check if `drun` is running in the canister sandbox mode where it waits
@@ -61,11 +62,19 @@ async fn drun_main() -> Result<(), String> {
             })
             .unwrap_or(DEFAULT_EXTRA_BATCHES);
 
+        let instruction_limit = matches.value_of(ARG_INSTRUCTION_LIMIT).map(|arg| {
+            arg.parse().unwrap_or_else(|err| {
+                eprintln!("Failed to parse ARG_INSTRUCTION_LIMIT\n  {}", err);
+                std::process::exit(1);
+            })
+        });
+
         let uo = DrunOptions {
             msg_filename: matches.value_of(ARG_MESSAGES).unwrap().to_string(),
             cfg,
             extra_batches,
             log_file,
+            instruction_limit,
         };
         run_drun(uo)
     })
@@ -112,6 +121,13 @@ fn get_arg_matches() -> ArgMatches {
                 .long(ARG_LOG_FILE)
                 .value_name("log_file")
                 .help("Log file for the run (default: None).")
+                .takes_value(true),
+        )
+        .arg(
+            Arg::new(ARG_INSTRUCTION_LIMIT)
+                .long(ARG_INSTRUCTION_LIMIT)
+                .value_name("Instruction Limit")
+                .help("Limit on the number of instructions a message is allowed to execute.")
                 .takes_value(true),
         )
         .get_matches()
