@@ -269,7 +269,7 @@ impl CanisterChangeDetails {
 /// record {
 ///   timestamp_nanos : nat64;
 ///   canister_version : nat64;
-///   origin : canister_change_origin;
+///   change_origin : canister_change_origin;
 ///   change_details : canister_change_details;
 /// }
 /// ```
@@ -277,7 +277,7 @@ impl CanisterChangeDetails {
 pub struct CanisterChange {
     timestamp_nanos: u64,
     canister_version: u64,
-    origin: CanisterChangeOrigin,
+    change_origin: CanisterChangeOrigin,
     change_details: CanisterChangeDetails,
 }
 
@@ -285,30 +285,30 @@ impl CanisterChange {
     pub fn new(
         timestamp_nanos: u64,
         canister_version: u64,
-        origin: CanisterChangeOrigin,
+        change_origin: CanisterChangeOrigin,
         change_details: CanisterChangeDetails,
     ) -> CanisterChange {
         CanisterChange {
             timestamp_nanos,
             canister_version,
-            origin,
+            change_origin,
             change_details,
         }
     }
 }
 
-impl From<&CanisterChangeOrigin> for pb_canister_metadata::canister_change::Origin {
+impl From<&CanisterChangeOrigin> for pb_canister_metadata::canister_change::ChangeOrigin {
     fn from(item: &CanisterChangeOrigin) -> Self {
         match item {
             CanisterChangeOrigin::CanisterChangeFromUser(change_from_user) => {
-                pb_canister_metadata::canister_change::Origin::CanisterChangeFromUser(
+                pb_canister_metadata::canister_change::ChangeOrigin::CanisterChangeFromUser(
                     pb_canister_metadata::CanisterChangeFromUser {
                         user_id: Some(change_from_user.user_id.into()),
                     },
                 )
             }
             CanisterChangeOrigin::CanisterChangeFromCanister(change_from_canister) => {
-                pb_canister_metadata::canister_change::Origin::CanisterChangeFromCanister(
+                pb_canister_metadata::canister_change::ChangeOrigin::CanisterChangeFromCanister(
                     pb_canister_metadata::CanisterChangeFromCanister {
                         canister_id: Some(change_from_canister.canister_id.into()),
                         canister_version: change_from_canister.canister_version,
@@ -319,18 +319,20 @@ impl From<&CanisterChangeOrigin> for pb_canister_metadata::canister_change::Orig
     }
 }
 
-impl TryFrom<pb_canister_metadata::canister_change::Origin> for CanisterChangeOrigin {
+impl TryFrom<pb_canister_metadata::canister_change::ChangeOrigin> for CanisterChangeOrigin {
     type Error = ProxyDecodeError;
 
-    fn try_from(value: pb_canister_metadata::canister_change::Origin) -> Result<Self, Self::Error> {
+    fn try_from(
+        value: pb_canister_metadata::canister_change::ChangeOrigin,
+    ) -> Result<Self, Self::Error> {
         match value {
-            pb_canister_metadata::canister_change::Origin::CanisterChangeFromUser(
+            pb_canister_metadata::canister_change::ChangeOrigin::CanisterChangeFromUser(
                 change_from_user,
             ) => Ok(CanisterChangeOrigin::from_user(try_from_option_field(
                 change_from_user.user_id,
                 "user_id",
             )?)),
-            pb_canister_metadata::canister_change::Origin::CanisterChangeFromCanister(
+            pb_canister_metadata::canister_change::ChangeOrigin::CanisterChangeFromCanister(
                 change_from_canister,
             ) => Ok(CanisterChangeOrigin::from_canister(
                 try_from_option_field(change_from_canister.canister_id, "canister_id")?,
@@ -418,7 +420,7 @@ impl From<&CanisterChange> for pb_canister_metadata::CanisterChange {
         Self {
             timestamp_nanos: item.timestamp_nanos,
             canister_version: item.canister_version,
-            origin: Some((&item.origin).into()),
+            change_origin: Some((&item.change_origin).into()),
             change_details: Some((&item.change_details).into()),
         }
     }
@@ -428,12 +430,12 @@ impl TryFrom<pb_canister_metadata::CanisterChange> for CanisterChange {
     type Error = ProxyDecodeError;
 
     fn try_from(value: pb_canister_metadata::CanisterChange) -> Result<Self, Self::Error> {
-        let origin = try_from_option_field(value.origin, "origin")?;
+        let change_origin = try_from_option_field(value.change_origin, "change_origin")?;
         let change_details = try_from_option_field(value.change_details, "change_details")?;
         Ok(Self {
             timestamp_nanos: value.timestamp_nanos,
             canister_version: value.canister_version,
-            origin,
+            change_origin,
             change_details,
         })
     }
