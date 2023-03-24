@@ -187,39 +187,39 @@ path = "bin/spec_compliance_system_test.rs"
 
 [[bin]]
 name = "ic-systest-tecdsa-add-nodes"
-path = "bin/tecdsa_add_nodes_test.rs"
+path = "tecdsa/bin/tecdsa_add_nodes_test.rs"
 
 [[bin]]
 name = "ic-systest-tecdsa-key-rotation"
-path = "bin/tecdsa_key_rotation_test.rs"
+path = "tecdsa/bin/tecdsa_key_rotation_test.rs"
 
 [[bin]]
 name = "ic-systest-tecdsa-remove-nodes"
-path = "bin/tecdsa_remove_nodes_test.rs"
+path = "tecdsa/bin/tecdsa_remove_nodes_test.rs"
 
 [[bin]]
 name = "ic-systest-tecdsa-signature-life-cycle"
-path = "bin/tecdsa_signature_life_cycle_test.rs"
+path = "tecdsa/bin/tecdsa_signature_life_cycle_test.rs"
 
 [[bin]]
 name = "ic-systest-tecdsa-signature-fails-without-cycles"
-path = "bin/tecdsa_signature_fails_without_cycles_test.rs"
+path = "tecdsa/bin/tecdsa_signature_fails_without_cycles_test.rs"
 
 [[bin]]
 name = "ic-systest-tecdsa-signature-from-nns-without-cycles"
-path = "bin/tecdsa_signature_from_nns_without_cycles_test.rs"
+path = "tecdsa/bin/tecdsa_signature_from_nns_without_cycles_test.rs"
 
 [[bin]]
 name = "ic-systest-tecdsa-signature-from-other-subnet"
-path = "bin/tecdsa_signature_from_other_subnet_test.rs"
+path = "tecdsa/bin/tecdsa_signature_from_other_subnet_test.rs"
 
 [[bin]]
 name = "ic-systest-tecdsa-signature-same-subnet"
-path = "bin/tecdsa_signature_same_subnet_test.rs"
+path = "tecdsa/bin/tecdsa_signature_same_subnet_test.rs"
 
 [[bin]]
 name = "ic-systest-tecdsa-signature-timeout"
-path = "bin/tecdsa_signature_timeout_test.rs"
+path = "tecdsa/bin/tecdsa_signature_timeout_test.rs"
 
 [[bin]]
 name = "ic-systest-btc-get-balance"
@@ -235,23 +235,23 @@ path = "bin/rosetta_split_test.rs"
 
 [[bin]]
 name = "ic-systest-ckbtc-minter-basics-test"
-path = "bin/ckbtc_minter_basics_test.rs"
+path = "ckbtc/bin/ckbtc_minter_basics_test.rs"
 
 [[bin]]
 name = "ic-systest-ckbtc-batching"
-path = "bin/ckbtc_minter_batching.rs"
+path = "ckbtc/bin/ckbtc_minter_batching.rs"
 
 [[bin]]
 name = "ic-systest-ckbtc-heartbeat"
-path = "bin/ckbtc_minter_heartbeat.rs"
+path = "ckbtc/bin/ckbtc_minter_heartbeat.rs"
 
 [[bin]]
 name = "ic-systest-ckbtc-retrieve-btc"
-path = "bin/ckbtc_minter_retrieve_btc.rs"
+path = "ckbtc/bin/ckbtc_minter_retrieve_btc.rs"
 
 [[bin]]
 name = "ic-systest-ckbtc-update-balance"
-path = "bin/ckbtc_minter_update_balance.rs"
+path = "ckbtc/bin/ckbtc_minter_update_balance.rs"
 
 [[bin]]
 name = "ic-systest-icrc1-agent-test"
@@ -315,7 +315,7 @@ path = "bin/system_api_security_test.rs"
 
 [[bin]]
 name = "ic-systest-tecdsa-complaint-test"
-path = "bin/tecdsa_complaint_test.rs"
+path = "tecdsa/bin/tecdsa_complaint_test.rs"
 
 [[bin]]
 name = "ic-systest-max-ingress-payload-size-test"

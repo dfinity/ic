@@ -14,7 +14,9 @@ package(default_visibility = [
     "//rs/scenario_tests:__pkg__",
     "//rs/tests:__pkg__",
     "//rs/tests/boundary_nodes:__pkg__",
+    "//rs/tests/ckbtc:__pkg__",
     "//rs/tests/sns:__pkg__",
+    "//rs/tests/tecdsa:__pkg__",
     "//rs/workload_generator:__pkg__",
 ])
 
