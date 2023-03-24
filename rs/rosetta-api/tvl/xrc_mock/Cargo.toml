@@ -12,4 +12,5 @@ candid = "0.8.4"
 ic-base-types = { path = "../../../types/base_types" }
 ic-cdk-macros = "0.6.8"
 ic-cdk = "0.7.0"
+ic-xrc-types = "1.0.0"
 serde = "1.0"
