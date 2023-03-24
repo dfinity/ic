@@ -83,9 +83,12 @@ rust_test(
     name = "orchestrator_test",
     crate = ":lib",
     deps = [
+        "//rs/crypto/temp_crypto",
         "//rs/registry/fake",
+        "//rs/test_utilities/in_memory_logger",
         "//rs/test_utilities/logger",
         "@crate_index//:assert_cmd",
+        "@crate_index//:mockall_0_8_3",
         "@crate_index//:wait-timeout",
     ],
 )

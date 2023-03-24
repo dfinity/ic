@@ -59,6 +59,9 @@ url = "2.1.1"
 
 [dev-dependencies]
 assert_cmd = "0.12"
+ic-crypto-temp-crypto = { path = "../crypto/temp_crypto" }
 ic-registry-client-fake = { path = "../registry/fake" }
+ic-test-utilities-in-memory-logger = { path = "../test_utilities/in_memory_logger" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }
+mockall = "0.8.3"
 wait-timeout = "0.2.0"

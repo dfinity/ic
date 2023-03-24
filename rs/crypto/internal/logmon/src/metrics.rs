@@ -320,6 +320,7 @@ pub enum KeyRotationResult {
     KeyNotRotated,
     RegistryKeyBadOrMissing,
     TransientInternalError,
+    PublicKeyNotFound,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, Eq, IntoStaticStr, PartialOrd, Ord, PartialEq)]

@@ -14,7 +14,7 @@ use ic_config::{
     Config,
 };
 use ic_crypto::CryptoComponentForNonReplicaProcess;
-use ic_interfaces::crypto::PublicKeyRegistrationStatus;
+use ic_interfaces::crypto::IDkgKeyRotationResult;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_nns_constants::REGISTRY_CANISTER_ID;
@@ -219,47 +219,46 @@ impl NodeRegistration {
                 return;
             }
         };
+
+        let key_handler = self.key_handler.clone();
+        if let Err(e) = tokio::task::spawn_blocking(move || {
+            key_handler.check_keys_with_registry(registry_version)
+        })
+        .await
+        .unwrap()
+        {
+            self.metrics.observe_key_rotation_error();
+            warn!(self.log, "Failed to check keys with registry: {e:?}");
+        }
+
         if !self.is_time_to_rotate(registry_version, subnet_id, delta) {
             self.metrics
                 .observe_key_rotation_status(KeyRotationStatus::TooRecent);
             return;
         }
 
+        // Call crypto to check if the local node should rotate its keys, and potentially
+        // try to register the new key, or a previously rotated key that was not yet
+        // registered.
+        // In case registration of a key fails, we will enter this branch
+        // during the next call and retry registration.
         let key_handler = self.key_handler.clone();
+        self.metrics
+            .observe_key_rotation_status(KeyRotationStatus::Rotating);
         match tokio::task::spawn_blocking(move || {
-            key_handler.check_keys_with_registry(registry_version)
+            key_handler.rotate_idkg_dealing_encryption_keys(registry_version)
         })
         .await
         .unwrap()
         {
-            Ok(PublicKeyRegistrationStatus::IDkgDealingEncPubkeyNeedsRegistration(key)) => {
-                // Try to register a key that was previously rotated but is not yet registered.
-                self.register_key(registry_version, key).await;
+            Ok(IDkgKeyRotationResult::IDkgDealingEncPubkeyNeedsRegistration(rotation_outcome)) => {
+                self.register_key(registry_version, PublicKey::from(rotation_outcome))
+                    .await
             }
-            Ok(PublicKeyRegistrationStatus::RotateIDkgDealingEncryptionKeys) => {
-                // Call cypto to rotate the keys and try to register the new key.
-                // In case registration of the new key fails, we will enter the branch above
-                // during the next call and retry registration.
-                let key_handler = self.key_handler.clone();
-                self.metrics
-                    .observe_key_rotation_status(KeyRotationStatus::Rotating);
-                match tokio::task::spawn_blocking(move || {
-                    key_handler.rotate_idkg_dealing_encryption_keys(registry_version)
-                })
-                .await
-                .unwrap()
-                {
-                    Ok(key) => self.register_key(registry_version, key).await,
-                    Err(e) => {
-                        self.metrics.observe_key_rotation_error();
-                        warn!(self.log, "Key rotation error: {e:?}");
-                    }
-                }
-            }
-            Ok(PublicKeyRegistrationStatus::AllKeysRegistered) => {}
+            Ok(IDkgKeyRotationResult::LatestRotationTooRecent) => {}
             Err(e) => {
                 self.metrics.observe_key_rotation_error();
-                warn!(self.log, "Failed to check keys with registry: {e:?}");
+                warn!(self.log, "Key rotation error: {e:?}");
             }
         }
     }
@@ -711,5 +710,609 @@ mod tests {
         assert!(is_time_to_rotate_in_subnet(delta, subnet_size, valid));
         assert!(!is_time_to_rotate_in_subnet(delta, subnet_size, too_recent));
         assert!(!is_time_to_rotate_in_subnet(delta, subnet_size, in_future));
+    }
+
+    mod idkg_dealing_encryption_key_rotation {
+        use super::*;
+        use async_trait::async_trait;
+        use ic_crypto_temp_crypto::EcdsaSubnetConfig;
+        use ic_crypto_tls_interfaces::AllowedClients;
+        use ic_crypto_tls_interfaces::AuthenticatedPeer;
+        use ic_crypto_tls_interfaces::TlsClientHandshakeError;
+        use ic_crypto_tls_interfaces::TlsHandshake;
+        use ic_crypto_tls_interfaces::TlsServerHandshakeError;
+        use ic_crypto_tls_interfaces::TlsStream;
+        use ic_interfaces::crypto::IDkgDealingEncryptionKeyRotationError;
+        use ic_interfaces::crypto::IdkgDealingEncPubKeysCountError;
+        use ic_interfaces::crypto::KeyManager;
+        use ic_interfaces::crypto::ThresholdSigVerifierByPublicKey;
+        use ic_interfaces::crypto::{BasicSigner, CheckKeysWithRegistryError};
+        use ic_interfaces::crypto::{CurrentNodePublicKeysError, KeyRotationOutcome};
+        use ic_logger::replica_logger::no_op_logger;
+        use ic_metrics::MetricsRegistry;
+        use ic_protobuf::registry::subnet::v1::SubnetListRecord;
+        use ic_registry_client_fake::FakeRegistryClient;
+        use ic_registry_keys::{
+            make_crypto_node_key, make_subnet_list_record_key, make_subnet_record_key,
+        };
+        use ic_registry_local_store::LocalStoreImpl;
+        use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+        use ic_test_utilities_in_memory_logger::assertions::LogEntriesAssert;
+        use ic_test_utilities_in_memory_logger::InMemoryReplicaLogger;
+        use ic_types::consensus::CatchUpContentProtobufBytes;
+        use ic_types::crypto::CombinedThresholdSigOf;
+        use ic_types::crypto::CryptoResult;
+        use ic_types::crypto::CurrentNodePublicKeys;
+        use ic_types::crypto::{AlgorithmId, BasicSigOf};
+        use ic_types::registry::RegistryClientError;
+        use ic_types::PrincipalId;
+        use mockall::predicate::*;
+        use mockall::*;
+        use slog::Level;
+        use std::time::UNIX_EPOCH;
+        use tempfile::TempDir;
+        use tokio::net::TcpStream;
+
+        const REGISTRY_VERSION_1: RegistryVersion = RegistryVersion::new(1);
+
+        mock! {
+            pub KeyRotationCryptoComponent{}
+
+            pub trait KeyManager {
+                fn check_keys_with_registry(
+                    &self,
+                    registry_version: RegistryVersion,
+                ) -> Result<(), CheckKeysWithRegistryError>;
+
+                fn current_node_public_keys(
+                    &self,
+                ) -> Result<CurrentNodePublicKeys, CurrentNodePublicKeysError>;
+
+                fn rotate_idkg_dealing_encryption_keys(
+                    &self,
+                    registry_version: RegistryVersion,
+                ) -> Result<IDkgKeyRotationResult, IDkgDealingEncryptionKeyRotationError>;
+
+                fn idkg_dealing_encryption_pubkeys_count(
+                    &self,
+                ) -> Result<usize, IdkgDealingEncPubKeysCountError>;
+            }
+
+            pub trait BasicSigner<MessageId> {
+                fn sign_basic(
+                    &self,
+                    message: &MessageId,
+                    signer: NodeId,
+                    registry_version: RegistryVersion,
+                ) -> CryptoResult<BasicSigOf<MessageId>>;
+            }
+
+            pub trait ThresholdSigVerifierByPublicKey<CatchUpContentProtobufBytes> {
+                fn verify_combined_threshold_sig_by_public_key(
+                    &self,
+                    signature: &CombinedThresholdSigOf<CatchUpContentProtobufBytes>,
+                    message: &CatchUpContentProtobufBytes,
+                    subnet_id: SubnetId,
+                    registry_version: RegistryVersion,
+                ) -> CryptoResult<()>;
+            }
+
+            #[async_trait]
+            pub trait TlsHandshake {
+                async fn perform_tls_server_handshake(
+                    &self,
+                    tcp_stream: TcpStream,
+                    allowed_clients: AllowedClients,
+                    registry_version: RegistryVersion,
+                ) -> Result<(Box<dyn TlsStream>, AuthenticatedPeer), TlsServerHandshakeError>;
+
+                async fn perform_tls_server_handshake_without_client_auth(
+                    &self,
+                    tcp_stream: TcpStream,
+                    registry_version: RegistryVersion,
+                ) -> Result<Box<dyn TlsStream>, TlsServerHandshakeError>;
+
+                async fn perform_tls_client_handshake(
+                    &self,
+                    tcp_stream: TcpStream,
+                    server: NodeId,
+                    registry_version: RegistryVersion,
+                ) -> Result<Box<dyn TlsStream>, TlsClientHandshakeError>;
+            }
+        }
+
+        struct Setup {
+            node_registration: NodeRegistration,
+            subnet_id: SubnetId,
+        }
+
+        impl Setup {
+            fn builder() -> SetupBuilder {
+                SetupBuilder {
+                    check_keys_with_registry_result: None,
+                    rotate_idkg_dealing_encryption_keys_result: None,
+                    logger: None,
+                    without_ecdsa_subnet_config: false,
+                    idkg_dealing_encryption_public_key_in_registry: None,
+                }
+            }
+        }
+
+        struct SetupBuilder {
+            check_keys_with_registry_result: Option<Result<(), CheckKeysWithRegistryError>>,
+            rotate_idkg_dealing_encryption_keys_result:
+                Option<Result<IDkgKeyRotationResult, IDkgDealingEncryptionKeyRotationError>>,
+            logger: Option<ReplicaLogger>,
+            without_ecdsa_subnet_config: bool,
+            idkg_dealing_encryption_public_key_in_registry: Option<PublicKey>,
+        }
+
+        impl SetupBuilder {
+            fn with_check_keys_with_registry_result(
+                mut self,
+                check_keys_with_registry_result: Result<(), CheckKeysWithRegistryError>,
+            ) -> Self {
+                self.check_keys_with_registry_result = Some(check_keys_with_registry_result);
+                self
+            }
+
+            fn with_rotate_idkg_dealing_encryption_keys_result(
+                mut self,
+                rotate_idkg_dealing_encryption_keys_result: Result<
+                    IDkgKeyRotationResult,
+                    IDkgDealingEncryptionKeyRotationError,
+                >,
+            ) -> Self {
+                self.rotate_idkg_dealing_encryption_keys_result =
+                    Some(rotate_idkg_dealing_encryption_keys_result);
+                self
+            }
+
+            fn with_logger(mut self, in_memory_logger: &InMemoryReplicaLogger) -> Self {
+                self.logger = Some(ReplicaLogger::from(in_memory_logger));
+                self
+            }
+
+            fn without_ecdsa_subnet_config(mut self) -> Self {
+                self.without_ecdsa_subnet_config = true;
+                self
+            }
+
+            fn with_idkg_dealing_encryption_public_key_in_registry(
+                mut self,
+                idkg_dealing_encryption_public_key: PublicKey,
+            ) -> Self {
+                self.idkg_dealing_encryption_public_key_in_registry =
+                    Some(idkg_dealing_encryption_public_key);
+                self
+            }
+
+            fn build(self) -> Setup {
+                let temp_dir = TempDir::new().expect("error creating TempDir");
+                let node_id = NodeId::from(PrincipalId::new_node_test_id(42));
+                let registry_data = Arc::new(ProtoRegistryDataProvider::new());
+                let registry_client =
+                    Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
+
+                let subnet_id = SubnetId::new(PrincipalId::new(29, [0xfc; 29]));
+                if !self.without_ecdsa_subnet_config {
+                    let ecdsa_subnet_config = EcdsaSubnetConfig::new(
+                        subnet_id,
+                        Some(node_id),
+                        Some(Duration::from_secs(60 * 60 * 24 * 14)),
+                    );
+                    registry_data
+                        .add(
+                            &make_subnet_record_key(ecdsa_subnet_config.subnet_id),
+                            REGISTRY_VERSION_1,
+                            Some(ecdsa_subnet_config.subnet_record),
+                        )
+                        .expect("Failed to add subnet record.");
+                    let subnet_list_record = SubnetListRecord {
+                        subnets: vec![ecdsa_subnet_config.subnet_id.get().into_vec()],
+                    };
+                    // Set subnetwork list
+                    registry_data
+                        .add(
+                            make_subnet_list_record_key().as_str(),
+                            REGISTRY_VERSION_1,
+                            Some(subnet_list_record),
+                        )
+                        .expect("Failed to add subnet list record key");
+                }
+                if let Some(idkg_dealing_encryption_public_key_in_registry) =
+                    self.idkg_dealing_encryption_public_key_in_registry
+                {
+                    registry_data
+                        .add(
+                            &make_crypto_node_key(node_id, KeyPurpose::IDkgMEGaEncryption),
+                            REGISTRY_VERSION_1,
+                            Some(idkg_dealing_encryption_public_key_in_registry),
+                        )
+                        .expect("failed to add iDKG dealing encryption key to registry");
+                }
+                registry_client.reload();
+
+                let metrics = MetricsRegistry::new();
+                let orchestrator_metrics = Arc::new(OrchestratorMetrics::new(&metrics));
+
+                let mut key_handler = MockKeyRotationCryptoComponent::new();
+                if let Some(check_keys_with_registry_result) = self.check_keys_with_registry_result
+                {
+                    key_handler
+                        .expect_check_keys_with_registry()
+                        .times(1)
+                        .return_const(check_keys_with_registry_result);
+                }
+                if let Some(rotate_idkg_dealing_encryption_keys_result) =
+                    self.rotate_idkg_dealing_encryption_keys_result
+                {
+                    key_handler
+                        .expect_rotate_idkg_dealing_encryption_keys()
+                        .times(1)
+                        .return_const(rotate_idkg_dealing_encryption_keys_result);
+                }
+
+                let local_store = Arc::new(LocalStoreImpl::new(temp_dir.as_ref()));
+                let node_config = Config::new(temp_dir.into_path());
+
+                let node_registration = NodeRegistration::new(
+                    self.logger.unwrap_or_else(|| no_op_logger()),
+                    node_config,
+                    registry_client,
+                    orchestrator_metrics,
+                    node_id,
+                    Arc::new(key_handler),
+                    local_store,
+                );
+
+                Setup {
+                    node_registration,
+                    subnet_id,
+                }
+            }
+        }
+
+        fn valid_idkg_dealing_encryption_public_key() -> PublicKey {
+            PublicKey {
+                version: 0,
+                algorithm: AlgorithmId::MegaSecp256k1 as i32,
+                key_value: hex_decode(
+                    "03e1e1f76e9d834221a26c4a080b65e60d3b6f9c1d6e5b880abf916a364893da2e",
+                ),
+                proof_data: None,
+                timestamp: None,
+            }
+        }
+
+        fn hex_decode<T: AsRef<[u8]>>(data: T) -> Vec<u8> {
+            hex::decode(data).expect("failed to decode hex")
+        }
+
+        #[tokio::test]
+        async fn should_not_log_anything_if_key_rotation_disabled() {
+            let in_memory_logger = InMemoryReplicaLogger::new();
+            let setup = Setup::builder()
+                .without_ecdsa_subnet_config()
+                .with_logger(&in_memory_logger)
+                .build();
+
+            setup
+                .node_registration
+                .check_all_keys_registered_otherwise_register(setup.subnet_id)
+                .await;
+
+            let logs = in_memory_logger.drain_logs();
+            LogEntriesAssert::assert_that(logs).has_len(0);
+        }
+
+        #[tokio::test]
+        async fn should_not_log_anything_if_not_time_to_rotate() {
+            let in_memory_logger = InMemoryReplicaLogger::new();
+            let mut idkg_dealing_encryption_public_key = valid_idkg_dealing_encryption_public_key();
+            idkg_dealing_encryption_public_key.timestamp = Some(
+                SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .expect("error getting current time")
+                    .as_millis() as u64,
+            );
+            let setup = Setup::builder()
+                .with_logger(&in_memory_logger)
+                .with_idkg_dealing_encryption_public_key_in_registry(
+                    idkg_dealing_encryption_public_key,
+                )
+                .with_check_keys_with_registry_result(Ok(()))
+                .build();
+
+            setup
+                .node_registration
+                .check_all_keys_registered_otherwise_register(setup.subnet_id)
+                .await;
+
+            let logs = in_memory_logger.drain_logs();
+            LogEntriesAssert::assert_that(logs).has_len(0);
+        }
+
+        #[tokio::test]
+        async fn should_not_log_anything_if_check_keys_with_registry_succeeds_and_latest_rotation_too_recent(
+        ) {
+            let in_memory_logger = InMemoryReplicaLogger::new();
+            let setup = Setup::builder()
+                .with_check_keys_with_registry_result(Ok(()))
+                .with_rotate_idkg_dealing_encryption_keys_result(Ok(
+                    IDkgKeyRotationResult::LatestRotationTooRecent,
+                ))
+                .with_logger(&in_memory_logger)
+                .build();
+
+            setup
+                .node_registration
+                .check_all_keys_registered_otherwise_register(setup.subnet_id)
+                .await;
+
+            let logs = in_memory_logger.drain_logs();
+            LogEntriesAssert::assert_that(logs).has_len(0);
+        }
+
+        #[tokio::test]
+        async fn should_log_error_if_check_keys_with_registry_returns_public_key_not_found_error() {
+            let in_memory_logger = InMemoryReplicaLogger::new();
+            let setup = Setup::builder()
+                .with_check_keys_with_registry_result(Err(
+                    CheckKeysWithRegistryError::PublicKeyNotFound {
+                        node_id: NodeId::from(PrincipalId::new_node_test_id(42)),
+                        key_purpose: KeyPurpose::IDkgMEGaEncryption,
+                        registry_version: REGISTRY_VERSION_1,
+                    },
+                ))
+                .with_rotate_idkg_dealing_encryption_keys_result(Ok(
+                    IDkgKeyRotationResult::LatestRotationTooRecent,
+                ))
+                .with_logger(&in_memory_logger)
+                .build();
+
+            setup
+                .node_registration
+                .check_all_keys_registered_otherwise_register(setup.subnet_id)
+                .await;
+
+            let logs = in_memory_logger.drain_logs();
+            LogEntriesAssert::assert_that(logs).has_only_one_message_containing(
+                &Level::Warning,
+                "Failed to check keys with registry: PublicKeyNotFound",
+            );
+        }
+
+        #[tokio::test]
+        async fn should_log_error_if_check_keys_with_registry_returns_tls_cert_not_found_error() {
+            let in_memory_logger = InMemoryReplicaLogger::new();
+            let setup = Setup::builder()
+                .with_check_keys_with_registry_result(Err(
+                    CheckKeysWithRegistryError::TlsCertNotFound {
+                        node_id: NodeId::from(PrincipalId::new_node_test_id(42)),
+                        registry_version: REGISTRY_VERSION_1,
+                    },
+                ))
+                .with_rotate_idkg_dealing_encryption_keys_result(Ok(
+                    IDkgKeyRotationResult::LatestRotationTooRecent,
+                ))
+                .with_logger(&in_memory_logger)
+                .build();
+
+            setup
+                .node_registration
+                .check_all_keys_registered_otherwise_register(setup.subnet_id)
+                .await;
+
+            let logs = in_memory_logger.drain_logs();
+            LogEntriesAssert::assert_that(logs).has_only_one_message_containing(
+                &Level::Warning,
+                "Failed to check keys with registry: TlsCertNotFound",
+            );
+        }
+
+        #[tokio::test]
+        async fn should_log_error_if_check_keys_with_registry_returns_internal_error() {
+            let in_memory_logger = InMemoryReplicaLogger::new();
+            let setup = Setup::builder()
+                .with_check_keys_with_registry_result(Err(
+                    CheckKeysWithRegistryError::InternalError {
+                        internal_error: "internal error".to_string(),
+                    },
+                ))
+                .with_rotate_idkg_dealing_encryption_keys_result(Ok(
+                    IDkgKeyRotationResult::LatestRotationTooRecent,
+                ))
+                .with_logger(&in_memory_logger)
+                .build();
+
+            setup
+                .node_registration
+                .check_all_keys_registered_otherwise_register(setup.subnet_id)
+                .await;
+
+            let logs = in_memory_logger.drain_logs();
+            LogEntriesAssert::assert_that(logs).has_only_one_message_containing(
+                &Level::Warning,
+                "Failed to check keys with registry: InternalError",
+            );
+        }
+
+        #[tokio::test]
+        async fn should_log_error_if_check_keys_with_registry_returns_transient_internal_error() {
+            let in_memory_logger = InMemoryReplicaLogger::new();
+            let setup = Setup::builder()
+                .with_check_keys_with_registry_result(Err(
+                    CheckKeysWithRegistryError::TransientInternalError {
+                        internal_error: "internal error".to_string(),
+                    },
+                ))
+                .with_rotate_idkg_dealing_encryption_keys_result(Ok(
+                    IDkgKeyRotationResult::LatestRotationTooRecent,
+                ))
+                .with_logger(&in_memory_logger)
+                .build();
+
+            setup
+                .node_registration
+                .check_all_keys_registered_otherwise_register(setup.subnet_id)
+                .await;
+
+            let logs = in_memory_logger.drain_logs();
+            LogEntriesAssert::assert_that(logs).has_only_one_message_containing(
+                &Level::Warning,
+                "Failed to check keys with registry: TransientInternalError",
+            );
+        }
+
+        #[tokio::test]
+        async fn should_try_to_register_key_if_key_is_rotated() {
+            let in_memory_logger = InMemoryReplicaLogger::new();
+            let setup = Setup::builder()
+                .with_check_keys_with_registry_result(Ok(()))
+                .with_rotate_idkg_dealing_encryption_keys_result(Ok(
+                    IDkgKeyRotationResult::IDkgDealingEncPubkeyNeedsRegistration(
+                        KeyRotationOutcome::KeyRotated {
+                            new_key: valid_idkg_dealing_encryption_public_key(),
+                        },
+                    ),
+                ))
+                .with_logger(&in_memory_logger)
+                .build();
+
+            setup
+                .node_registration
+                .check_all_keys_registered_otherwise_register(setup.subnet_id)
+                .await;
+
+            let logs = in_memory_logger.drain_logs();
+            LogEntriesAssert::assert_that(logs).has_only_one_message_containing(
+                &Level::Info,
+                "Trying to register rotated idkg key...",
+            );
+        }
+
+        #[tokio::test]
+        async fn should_log_error_if_key_rotation_returns_key_generation_error() {
+            let in_memory_logger = InMemoryReplicaLogger::new();
+            let setup = Setup::builder()
+                .with_check_keys_with_registry_result(Ok(()))
+                .with_rotate_idkg_dealing_encryption_keys_result(Err(
+                    IDkgDealingEncryptionKeyRotationError::KeyGenerationError(
+                        "error generation iDKG dealing encryption key".to_string(),
+                    ),
+                ))
+                .with_logger(&in_memory_logger)
+                .build();
+
+            setup
+                .node_registration
+                .check_all_keys_registered_otherwise_register(setup.subnet_id)
+                .await;
+
+            let logs = in_memory_logger.drain_logs();
+            LogEntriesAssert::assert_that(logs).has_only_one_message_containing(
+                &Level::Warning,
+                "Key rotation error: KeyGenerationError(\"error generation iDKG dealing encryption key\")",
+            );
+        }
+
+        #[tokio::test]
+        async fn should_log_error_if_key_rotation_returns_registry_error() {
+            let in_memory_logger = InMemoryReplicaLogger::new();
+            let setup = Setup::builder()
+                .with_check_keys_with_registry_result(Ok(()))
+                .with_rotate_idkg_dealing_encryption_keys_result(Err(
+                    IDkgDealingEncryptionKeyRotationError::RegistryClientError(
+                        RegistryClientError::DecodeError {
+                            error: "error decoding key from registry".to_string(),
+                        },
+                    ),
+                ))
+                .with_logger(&in_memory_logger)
+                .build();
+
+            setup
+                .node_registration
+                .check_all_keys_registered_otherwise_register(setup.subnet_id)
+                .await;
+
+            let logs = in_memory_logger.drain_logs();
+            LogEntriesAssert::assert_that(logs).has_only_one_message_containing(
+                &Level::Warning,
+                "Key rotation error: RegistryClientError(DecodeError { error: \"error decoding key from registry\" })",
+            );
+        }
+
+        #[tokio::test]
+        async fn should_log_error_if_key_rotation_returns_key_rotation_not_enabled() {
+            let in_memory_logger = InMemoryReplicaLogger::new();
+            let setup = Setup::builder()
+                .with_check_keys_with_registry_result(Ok(()))
+                .with_rotate_idkg_dealing_encryption_keys_result(Err(
+                    IDkgDealingEncryptionKeyRotationError::KeyRotationNotEnabled,
+                ))
+                .with_logger(&in_memory_logger)
+                .build();
+
+            setup
+                .node_registration
+                .check_all_keys_registered_otherwise_register(setup.subnet_id)
+                .await;
+
+            let logs = in_memory_logger.drain_logs();
+            LogEntriesAssert::assert_that(logs).has_only_one_message_containing(
+                &Level::Warning,
+                "Key rotation error: KeyRotationNotEnabled",
+            );
+        }
+
+        #[tokio::test]
+        async fn should_log_error_if_key_rotation_returns_public_key_not_found() {
+            let in_memory_logger = InMemoryReplicaLogger::new();
+            let setup = Setup::builder()
+                .with_check_keys_with_registry_result(Ok(()))
+                .with_rotate_idkg_dealing_encryption_keys_result(Err(
+                    IDkgDealingEncryptionKeyRotationError::PublicKeyNotFound,
+                ))
+                .with_logger(&in_memory_logger)
+                .build();
+
+            setup
+                .node_registration
+                .check_all_keys_registered_otherwise_register(setup.subnet_id)
+                .await;
+
+            let logs = in_memory_logger.drain_logs();
+            LogEntriesAssert::assert_that(logs).has_only_one_message_containing(
+                &Level::Warning,
+                "Key rotation error: PublicKeyNotFound",
+            );
+        }
+
+        #[tokio::test]
+        async fn should_log_error_if_key_rotation_returns_transient_internal_error() {
+            let in_memory_logger = InMemoryReplicaLogger::new();
+            let setup = Setup::builder()
+                .with_check_keys_with_registry_result(Ok(()))
+                .with_rotate_idkg_dealing_encryption_keys_result(Err(
+                    IDkgDealingEncryptionKeyRotationError::TransientInternalError(
+                        "rpc error connecting to csp vault".to_string(),
+                    ),
+                ))
+                .with_logger(&in_memory_logger)
+                .build();
+
+            setup
+                .node_registration
+                .check_all_keys_registered_otherwise_register(setup.subnet_id)
+                .await;
+
+            let logs = in_memory_logger.drain_logs();
+            LogEntriesAssert::assert_that(logs).has_only_one_message_containing(
+                &Level::Warning,
+                "Key rotation error: TransientInternalError(\"rpc error connecting to csp vault\")",
+            );
+        }
     }
 }
