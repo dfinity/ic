@@ -301,7 +301,9 @@ impl EcdsaSignerImpl {
             },
             |()| {
                 self.metrics.sign_metrics_inc("sig_shares_received");
-                Some(EcdsaChangeAction::MoveToValidated(id.clone()))
+                Some(EcdsaChangeAction::MoveToValidated(
+                    EcdsaMessage::EcdsaSigShare(share.clone()),
+                ))
             },
         )
     }

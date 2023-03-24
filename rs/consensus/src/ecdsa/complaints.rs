@@ -484,7 +484,9 @@ impl EcdsaComplaintHandlerImpl {
                 },
                 |()| {
                     self.metrics.complaint_metrics_inc("complaint_received");
-                    Some(EcdsaChangeAction::MoveToValidated(id.clone()))
+                    Some(EcdsaChangeAction::MoveToValidated(
+                        EcdsaMessage::EcdsaComplaint(signed_complaint.clone()),
+                    ))
                 },
             )
     }
@@ -613,7 +615,9 @@ impl EcdsaComplaintHandlerImpl {
                 },
                 |()| {
                     self.metrics.complaint_metrics_inc("opening_received");
-                    Some(EcdsaChangeAction::MoveToValidated(id.clone()))
+                    Some(EcdsaChangeAction::MoveToValidated(
+                        EcdsaMessage::EcdsaOpening(signed_opening.clone()),
+                    ))
                 },
             )
     }

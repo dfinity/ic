@@ -10,7 +10,7 @@ use ic_interfaces::{
     },
     consensus_pool::{ChangeAction as ConsensusAction, ChangeSet as CoonsensusChangeSet},
     dkg::{ChangeAction as DkgChangeAction, ChangeSet as DkgChangeSet},
-    ecdsa::{EcdsaChangeAction, EcdsaChangeSet, EcdsaPool},
+    ecdsa::{EcdsaChangeAction, EcdsaChangeSet},
     ingress_pool::{ChangeAction as IngressAction, ChangeSet as IngressChangeSet},
     time_source::TimeSource,
 };
@@ -417,20 +417,17 @@ pub struct EcdsaProcessor<PoolEcdsa> {
     ecdsa_pool: Arc<RwLock<PoolEcdsa>>,
     client: Box<dyn ChangeSetProducer<PoolEcdsa, ChangeSet = EcdsaChangeSet>>,
     ecdsa_pool_update_duration: Histogram,
-    log: ReplicaLogger,
 }
 
 impl<PoolEcdsa> EcdsaProcessor<PoolEcdsa> {
     pub fn new(
         ecdsa_pool: Arc<RwLock<PoolEcdsa>>,
         client: Box<dyn ChangeSetProducer<PoolEcdsa, ChangeSet = EcdsaChangeSet>>,
-        log: ReplicaLogger,
         metrics_registry: &MetricsRegistry,
     ) -> Self {
         Self {
             ecdsa_pool,
             client,
-            log,
             ecdsa_pool_update_duration: metrics_registry.register(
                 Histogram::with_opts(histogram_opts!(
                     "ecdsa_pool_update_duration_seconds",
@@ -446,7 +443,7 @@ impl<PoolEcdsa> EcdsaProcessor<PoolEcdsa> {
     }
 }
 
-impl<PoolEcdsa: MutablePool<EcdsaArtifact, EcdsaChangeSet> + Send + Sync + 'static + EcdsaPool>
+impl<PoolEcdsa: MutablePool<EcdsaArtifact, EcdsaChangeSet> + Send + Sync + 'static>
     ArtifactProcessor<EcdsaArtifact> for EcdsaProcessor<PoolEcdsa>
 {
     fn process_changes(
@@ -477,23 +474,13 @@ impl<PoolEcdsa: MutablePool<EcdsaArtifact, EcdsaChangeSet> + Send + Sync + 'stat
                             ArtifactDestination::AllPeersInSubnet,
                         ))
                     }
-                    EcdsaChangeAction::MoveToValidated(msg_id) => {
-                        if let Some(msg) = ecdsa_pool.unvalidated().get(msg_id) {
-                            match msg {
-                                EcdsaMessage::EcdsaDealingSupport(_) => (),
-                                _ => adverts.push(EcdsaArtifact::message_to_advert_send_request(
-                                    &msg,
-                                    ArtifactDestination::AllPeersInSubnet,
-                                )),
-                            }
-                        } else {
-                            warn!(
-                                self.log,
-                                "EcdsaProcessor::MoveToValidated(): artifact not found: {:?}",
-                                msg_id
-                            );
-                        }
-                    }
+                    EcdsaChangeAction::MoveToValidated(msg) => match msg {
+                        EcdsaMessage::EcdsaDealingSupport(_) => (),
+                        _ => adverts.push(EcdsaArtifact::message_to_advert_send_request(
+                            msg,
+                            ArtifactDestination::AllPeersInSubnet,
+                        )),
+                    },
                     EcdsaChangeAction::RemoveValidated(_) => {}
                     EcdsaChangeAction::RemoveUnvalidated(_) => {}
                     EcdsaChangeAction::HandleInvalid(_, _) => {}

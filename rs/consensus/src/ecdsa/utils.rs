@@ -232,9 +232,9 @@ pub(crate) mod test_utils {
     use ic_test_utilities::types::ids::{node_test_id, NODE_1, NODE_2};
     use ic_types::artifact::EcdsaMessageId;
     use ic_types::consensus::ecdsa::{
-        EcdsaBlockReader, EcdsaComplaint, EcdsaComplaintContent, EcdsaKeyTranscript, EcdsaMessage,
-        EcdsaOpening, EcdsaOpeningContent, EcdsaPayload, EcdsaReshareRequest, EcdsaSigShare,
-        EcdsaUIDGenerator, IDkgTranscriptAttributes, IDkgTranscriptOperationRef,
+        ecdsa_msg_id, EcdsaBlockReader, EcdsaComplaint, EcdsaComplaintContent, EcdsaKeyTranscript,
+        EcdsaMessage, EcdsaOpening, EcdsaOpeningContent, EcdsaPayload, EcdsaReshareRequest,
+        EcdsaSigShare, EcdsaUIDGenerator, IDkgTranscriptAttributes, IDkgTranscriptOperationRef,
         IDkgTranscriptParamsRef, KeyTranscriptCreation, MaskedTranscript, PreSignatureQuadrupleRef,
         RequestId, ReshareOfMaskedParams, ThresholdEcdsaSigInputsRef, TranscriptLookupError,
         TranscriptRef, UnmaskedTranscript,
@@ -1355,8 +1355,8 @@ pub(crate) mod test_utils {
         msg_id: &EcdsaMessageId,
     ) -> bool {
         for action in change_set {
-            if let EcdsaChangeAction::MoveToValidated(id) = action {
-                if *id == *msg_id {
+            if let EcdsaChangeAction::MoveToValidated(msg) = action {
+                if ecdsa_msg_id(msg) == *msg_id {
                     return true;
                 }
             }
