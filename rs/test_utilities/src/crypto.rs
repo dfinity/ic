@@ -10,14 +10,13 @@ use ic_crypto_test_utils_canister_threshold_sigs::{
 };
 use ic_interfaces::crypto::{
     BasicSigVerifier, BasicSigVerifierByPublicKey, BasicSigner, CanisterSigVerifier,
-    CurrentNodePublicKeysError, IDkgDealingEncryptionKeyRotationError, IDkgProtocol,
-    IdkgDealingEncPubKeysCountError, KeyManager, LoadTranscriptResult, NiDkgAlgorithm,
-    PublicKeyRegistrationStatus, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
+    CheckKeysWithRegistryError, CurrentNodePublicKeysError, IDkgDealingEncryptionKeyRotationError,
+    IDkgKeyRotationResult, IDkgProtocol, IdkgDealingEncPubKeysCountError, KeyManager,
+    LoadTranscriptResult, NiDkgAlgorithm, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
     ThresholdSigVerifier, ThresholdSigVerifierByPublicKey, ThresholdSigner,
 };
 use ic_interfaces::crypto::{MultiSigVerifier, MultiSigner};
 use ic_interfaces_registry::RegistryClient;
-use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::crypto::canister_threshold_sig::error::*;
@@ -461,8 +460,8 @@ impl KeyManager for CryptoReturningOk {
     fn check_keys_with_registry(
         &self,
         _registry_version: RegistryVersion,
-    ) -> CryptoResult<PublicKeyRegistrationStatus> {
-        Ok(PublicKeyRegistrationStatus::AllKeysRegistered)
+    ) -> Result<(), CheckKeysWithRegistryError> {
+        Ok(())
     }
 
     fn current_node_public_keys(
@@ -474,7 +473,7 @@ impl KeyManager for CryptoReturningOk {
     fn rotate_idkg_dealing_encryption_keys(
         &self,
         _registry_version: RegistryVersion,
-    ) -> Result<PublicKeyProto, IDkgDealingEncryptionKeyRotationError> {
+    ) -> Result<IDkgKeyRotationResult, IDkgDealingEncryptionKeyRotationError> {
         unimplemented!()
     }
 

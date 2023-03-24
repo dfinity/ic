@@ -16,7 +16,10 @@ use ic_crypto_test_utils::files::temp_dir;
 use ic_crypto_test_utils::tls::x509_certificates::generate_ed25519_cert;
 use ic_crypto_test_utils_keygen::{add_public_key_to_registry, add_tls_cert_to_registry};
 use ic_crypto_utils_time::CurrentSystemTimeSource;
-use ic_interfaces::crypto::{KeyManager, PublicKeyRegistrationStatus};
+use ic_interfaces::crypto::KeyManager;
+use ic_interfaces::crypto::{
+    CheckKeysWithRegistryError, IDkgKeyRotationResult, KeyRotationOutcome,
+};
 use ic_interfaces::time_source::TimeSource;
 use ic_logger::replica_logger::no_op_logger;
 use ic_logger::ReplicaLogger;
@@ -28,7 +31,7 @@ use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_utilities::FastForwardTimeSource;
 use ic_test_utilities_in_memory_logger::assertions::LogEntriesAssert;
 use ic_test_utilities_in_memory_logger::InMemoryReplicaLogger;
-use ic_types::crypto::{AlgorithmId, CryptoError, KeyPurpose};
+use ic_types::crypto::{AlgorithmId, KeyPurpose};
 use ic_types::time::GENESIS;
 use ic_types::{RegistryVersion, Time};
 use ic_types_test_utils::ids::node_test_id;
@@ -174,7 +177,7 @@ fn should_fail_check_keys_with_registry_if_no_keys_are_present_in_registry() {
 
     assert_matches!(
         result,
-        Err(CryptoError::PublicKeyNotFound { key_purpose, .. })
+        Err(CheckKeysWithRegistryError::PublicKeyNotFound { key_purpose, .. })
         if key_purpose == KeyPurpose::NodeSigning
     );
 }
@@ -192,7 +195,7 @@ fn should_fail_check_keys_with_registry_if_node_signing_keys_are_missing_in_regi
 
     assert_matches!(
         result,
-        Err(CryptoError::PublicKeyNotFound { key_purpose, .. })
+        Err(CheckKeysWithRegistryError::PublicKeyNotFound { key_purpose, .. })
         if key_purpose == KeyPurpose::NodeSigning
     )
 }
@@ -210,7 +213,7 @@ fn should_fail_check_keys_with_registry_if_committee_member_keys_are_missing_in_
 
     assert_matches!(
         result,
-        Err(CryptoError::PublicKeyNotFound { key_purpose, .. })
+        Err(CheckKeysWithRegistryError::PublicKeyNotFound { key_purpose, .. })
         if key_purpose == KeyPurpose::CommitteeSigning
     );
 }
@@ -228,7 +231,7 @@ fn should_fail_check_keys_with_registry_if_dkg_dealing_encryption_key_is_missing
 
     assert_eq!(
         result.unwrap_err(),
-        CryptoError::PublicKeyNotFound {
+        CheckKeysWithRegistryError::PublicKeyNotFound {
             node_id: node_test_id(NODE_ID),
             key_purpose: KeyPurpose::DkgDealingEncryption,
             registry_version: REG_V1
@@ -257,7 +260,7 @@ fn should_fail_check_keys_with_registry_if_idkg_dealing_encryption_key_is_missin
 
     assert_matches!(
         result,
-        Err(CryptoError::PublicKeyNotFound { key_purpose, .. })
+        Err(CheckKeysWithRegistryError::PublicKeyNotFound { key_purpose, .. })
         if key_purpose == KeyPurpose::IDkgMEGaEncryption
     );
 }
@@ -276,7 +279,7 @@ fn should_fail_check_keys_with_registry_if_tls_cert_is_missing_in_registry() {
 
     assert_eq!(
         result.unwrap_err(),
-        CryptoError::TlsCertNotFound {
+        CheckKeysWithRegistryError::TlsCertNotFound {
             node_id: node_test_id(NODE_ID),
             registry_version: REG_V1
         }
@@ -308,7 +311,7 @@ fn should_fail_check_keys_with_registry_if_tls_cert_is_malformed() {
 
     assert_matches!(
         result,
-        Err(CryptoError::InternalError { internal_error })
+        Err(CheckKeysWithRegistryError::InternalError { internal_error })
         if internal_error.contains("tls_certificate_error: Some(NodeKeysError { external_public_key_error: Some(ExternalPublicKeyError(\"Malformed certificate: TlsPublicKeyCertCreationError")
     );
 }
@@ -335,7 +338,7 @@ fn should_fail_check_keys_with_registry_if_node_signing_secret_key_is_missing() 
 
     assert_matches!(
         result,
-        Err(CryptoError::InternalError { internal_error })
+        Err(CheckKeysWithRegistryError::InternalError { internal_error })
         if internal_error.contains("node_signing_key_error: Some(NodeKeysError { external_public_key_error: None, local_public_key_error: Some(Mismatch), secret_key_error: Some(NotFound) })")
     );
 }
@@ -362,7 +365,7 @@ fn should_fail_check_keys_with_registry_if_committee_member_secret_key_is_missin
 
     assert_matches!(
         result,
-        Err(CryptoError::InternalError { internal_error })
+        Err(CheckKeysWithRegistryError::InternalError { internal_error })
         if internal_error.contains("committee_signing_key_error: Some(NodeKeysError { external_public_key_error: None, local_public_key_error: Some(Mismatch), secret_key_error: Some(NotFound) })")
     );
 }
@@ -386,7 +389,7 @@ fn should_fail_check_keys_with_registry_if_dkg_dealing_encryption_secret_key_is_
 
     assert_matches!(
         result,
-        Err(CryptoError::InternalError { internal_error })
+        Err(CheckKeysWithRegistryError::InternalError { internal_error })
         if internal_error.contains("dkg_dealing_encryption_key_error: Some(NodeKeysError { external_public_key_error: None, local_public_key_error: Some(Mismatch), secret_key_error: Some(NotFound) })")
     );
 }
@@ -411,7 +414,7 @@ fn should_fail_check_keys_with_registry_if_dkg_dealing_encryption_pubkey_is_malf
 
     assert_matches!(
         result,
-        Err(CryptoError::InternalError { internal_error })
+        Err(CheckKeysWithRegistryError::InternalError { internal_error })
         if internal_error.contains("dkg_dealing_encryption_key_error: Some(NodeKeysError { external_public_key_error: Some(ExternalPublicKeyError(\"Malformed public key")
     );
 }
@@ -438,7 +441,7 @@ fn should_fail_check_keys_with_registry_if_dkg_dealing_encryption_pop_is_missing
 
     assert_matches!(
         result,
-        Err(CryptoError::InternalError{ internal_error })
+        Err(CheckKeysWithRegistryError::InternalError{ internal_error })
         if internal_error.contains("dkg_dealing_encryption_key_error: Some(NodeKeysError { external_public_key_error: Some(ExternalPublicKeyError(\"Malformed public key MissingProofData\")), local_public_key_error: Some(Mismatch), secret_key_error: Some(CannotComputeKeyId) })")
     );
 }
@@ -465,7 +468,7 @@ fn should_fail_check_keys_with_registry_if_dkg_dealing_encryption_pop_is_empty()
 
     assert_matches!(
         result,
-        Err(CryptoError::InternalError { internal_error })
+        Err(CheckKeysWithRegistryError::InternalError { internal_error })
         if internal_error.contains("dkg_dealing_encryption_key_error: Some(NodeKeysError { external_public_key_error: Some(ExternalPublicKeyError(\"Malformed public key MalformedPop")
     );
 }
@@ -492,7 +495,7 @@ fn should_fail_check_keys_with_registry_if_dkg_dealing_encryption_pop_is_malform
 
     assert_matches!(
         result,
-        Err(CryptoError::InternalError { internal_error })
+        Err(CheckKeysWithRegistryError::InternalError { internal_error })
         if internal_error.contains("dkg_dealing_encryption_key_error: Some(NodeKeysError { external_public_key_error: Some(ExternalPublicKeyError(\"Malformed public key MalformedPop")
     );
 }
@@ -519,7 +522,7 @@ fn should_fail_check_keys_with_registry_if_committee_key_pop_is_missing() {
 
     assert_matches!(
         result,
-        Err(CryptoError::InternalError { internal_error })
+        Err(CheckKeysWithRegistryError::InternalError { internal_error })
         if internal_error.contains("committee_signing_key_error: Some(NodeKeysError { external_public_key_error: Some(ExternalPublicKeyError(\"Malformed public key (Missing proof data)\")), local_public_key_error: Some(Mismatch), secret_key_error: Some(CannotComputeKeyId) })")
     );
 }
@@ -546,7 +549,7 @@ fn should_fail_check_keys_with_registry_if_committee_key_pop_is_empty() {
 
     assert_matches!(
         result,
-        Err(CryptoError::InternalError { internal_error })
+        Err(CheckKeysWithRegistryError::InternalError { internal_error })
         if internal_error.contains("committee_signing_key_error: Some(NodeKeysError { external_public_key_error: Some(ExternalPublicKeyError(\"Malformed public key (Malformed Pop)\")), local_public_key_error: Some(Mismatch), secret_key_error: Some(CannotComputeKeyId) })")
     );
 }
@@ -573,7 +576,7 @@ fn should_fail_check_keys_with_registry_if_committee_key_pop_is_malformed() {
 
     assert_matches!(
         result,
-        Err(CryptoError::InternalError { internal_error })
+        Err(CheckKeysWithRegistryError::InternalError { internal_error })
         if internal_error.contains("committee_signing_key_error: Some(NodeKeysError { external_public_key_error: Some(ExternalPublicKeyError(\"Malformed public key (Malformed Pop)\")), local_public_key_error: Some(Mismatch), secret_key_error: Some(CannotComputeKeyId) })")
     );
 }
@@ -599,7 +602,7 @@ fn should_fail_check_keys_with_registry_if_tls_cert_secret_key_is_missing() {
 
     assert_matches!(
         result,
-        Err(CryptoError::InternalError { internal_error })
+        Err(CheckKeysWithRegistryError::InternalError { internal_error })
         if internal_error.contains("tls_certificate_error: Some(NodeKeysError { external_public_key_error: None, local_public_key_error: Some(Mismatch), secret_key_error: Some(NotFound) })")
     );
 }
@@ -625,7 +628,7 @@ fn should_fail_check_keys_with_registry_if_idkg_dealing_encryption_pubkey_algori
 
     assert_matches!(
         result,
-        Err(CryptoError::InternalError { internal_error })
+        Err(CheckKeysWithRegistryError::InternalError { internal_error })
         if internal_error.contains("idkg_dealing_encryption_key_error: Some(NodeKeysError { external_public_key_error: Some(ExternalPublicKeyError(\"Malformed public key: unsupported algorithm")
     );
 }
@@ -650,7 +653,7 @@ fn should_fail_check_keys_with_registry_if_idkg_dealing_encryption_pubkey_is_mal
 
     assert_matches!(
         result,
-        Err(CryptoError::InternalError { internal_error })
+        Err(CheckKeysWithRegistryError::InternalError { internal_error })
         if internal_error.contains("idkg_dealing_encryption_key_error: Some(NodeKeysError { external_public_key_error: Some(ExternalPublicKeyError(\"Malformed public key: I-DKG dealing encryption key malformed\")), local_public_key_error: Some(Mismatch), secret_key_error: Some(CannotComputeKeyId) })")
     );
 }
@@ -674,7 +677,7 @@ fn should_fail_check_keys_with_registry_if_idkg_dealing_encryption_secret_key_is
 
     assert_matches!(
         result,
-        Err(CryptoError::InternalError { internal_error })
+        Err(CheckKeysWithRegistryError::InternalError { internal_error })
         if internal_error.contains("idkg_dealing_encryption_key_error: Some(NodeKeysError { external_public_key_error: None, local_public_key_error: Some(Mismatch), secret_key_error: Some(NotFound) })")
     )
 }
@@ -716,7 +719,7 @@ fn should_log_error_if_idkg_dealing_encryption_secret_key_missing() {
 
     assert_matches!(
         result,
-        Err(CryptoError::InternalError { internal_error })
+        Err(CheckKeysWithRegistryError::InternalError { internal_error })
         if internal_error.contains("idkg_dealing_encryption_key_error: Some(NodeKeysError { external_public_key_error: None, local_public_key_error: Some(Mismatch), secret_key_error: Some(NotFound) })")
     );
     let logs = in_memory_logger.drain_logs();
@@ -728,7 +731,7 @@ fn should_log_error_if_idkg_dealing_encryption_secret_key_missing() {
 }
 
 #[test]
-fn should_return_rotation_needed_from_check_keys_with_registry_if_no_idkg_timestamp_set() {
+fn should_rotate_idkg_dealing_encryption_key_if_no_timestamp_set() {
     let registry_data = Arc::new(ProtoRegistryDataProvider::new());
     let registry_client = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
     let time = FastForwardTimeSource::new();
@@ -748,11 +751,19 @@ fn should_return_rotation_needed_from_check_keys_with_registry_if_no_idkg_timest
         .build();
     registry_client.reload();
 
-    let result = crypto_component.check_keys_with_registry(REG_V1);
+    let initial_idkg_dealing_encryption_public_key = crypto_component
+        .current_node_public_keys()
+        .expect("error getting current node public keys")
+        .idkg_dealing_encryption_public_key
+        .expect("no iDKG dealing encryption public key found");
+    let rotated_idkg_dealing_encryption_public_key = crypto_component
+        .rotate_idkg_dealing_encryption_keys(REG_V1)
+        .expect("error returned when trying to rotate key");
 
     assert_matches!(
-        result,
-        Ok(PublicKeyRegistrationStatus::RotateIDkgDealingEncryptionKeys)
+        rotated_idkg_dealing_encryption_public_key,
+        IDkgKeyRotationResult::IDkgDealingEncPubkeyNeedsRegistration(KeyRotationOutcome::KeyRotated {new_key})
+        if !initial_idkg_dealing_encryption_public_key.equal_ignoring_timestamp(&new_key)
     );
 }
 
@@ -769,7 +780,7 @@ fn should_return_all_keys_registered_from_check_keys_with_registry_if_no_subnet_
 
     let result = crypto.get().check_keys_with_registry(REG_V1);
 
-    assert_matches!(result, Ok(PublicKeyRegistrationStatus::AllKeysRegistered));
+    assert_matches!(result, Ok(()));
 }
 
 #[test]
@@ -792,7 +803,7 @@ fn should_fail_check_keys_with_registry_if_no_idkg_key_in_registry() {
     let result = crypto.get().check_keys_with_registry(REG_V1);
     assert_matches!(
         result,
-        Err(CryptoError::PublicKeyNotFound { key_purpose, .. })
+        Err(CheckKeysWithRegistryError::PublicKeyNotFound { key_purpose, .. })
         if key_purpose == KeyPurpose::IDkgMEGaEncryption
     );
 }
@@ -911,7 +922,7 @@ fn should_fail_check_keys_with_registry_if_registry_node_signing_key_has_no_matc
 
     assert_matches!(
         result,
-        Err(CryptoError::InternalError { internal_error })
+        Err(CheckKeysWithRegistryError::InternalError { internal_error })
         if internal_error.contains("node_signing_key_error: Some(NodeKeysError { external_public_key_error: None, local_public_key_error: Some(Mismatch), secret_key_error: Some(NotFound) })")
     );
 }
@@ -950,7 +961,7 @@ fn should_fail_check_keys_with_registry_if_registry_committee_signing_public_key
     let result = crypto_component.check_keys_with_registry(REG_V2);
     assert_matches!(
         result,
-        Err(CryptoError::InternalError { internal_error })
+        Err(CheckKeysWithRegistryError::InternalError { internal_error })
         if internal_error.contains("committee_signing_key_error: Some(NodeKeysError { external_public_key_error: None, local_public_key_error: Some(Mismatch), secret_key_error: Some(NotFound) })")
     );
 }
@@ -990,7 +1001,7 @@ fn should_fail_check_keys_with_registry_if_registry_dkg_dealing_encryption_key_h
 
     assert_matches!(
         result,
-        Err(CryptoError::InternalError { internal_error })
+        Err(CheckKeysWithRegistryError::InternalError { internal_error })
         if internal_error.contains("dkg_dealing_encryption_key_error: Some(NodeKeysError { external_public_key_error: None, local_public_key_error: Some(Mismatch), secret_key_error: Some(NotFound) })")
     );
 }
@@ -1034,7 +1045,7 @@ fn should_fail_check_keys_with_registry_if_registry_tls_cert_has_no_matching_sec
 
     assert_matches!(
         result,
-        Err(CryptoError::InternalError { internal_error })
+        Err(CheckKeysWithRegistryError::InternalError { internal_error })
         if internal_error.contains("tls_certificate_error: Some(NodeKeysError { external_public_key_error: None, local_public_key_error: Some(Mismatch), secret_key_error: Some(NotFound) })")
     );
 }
@@ -1073,12 +1084,11 @@ fn should_succeed_check_keys_with_registry_if_idkg_dealing_encryption_key_timest
     time.advance_time(Duration::from_millis(2000));
     let result = crypto_component.check_keys_with_registry(REG_V2);
 
-    assert_matches!(result, Ok(PublicKeyRegistrationStatus::AllKeysRegistered));
+    assert_matches!(result, Ok(()));
 }
 
 #[test]
-fn should_return_rotation_needed_from_check_keys_with_registry_if_idkg_dealing_encryption_key_timestamp_too_old(
-) {
+fn should_rotate_idkg_dealing_encryption_key_if_timestamp_too_old() {
     let registry_data = Arc::new(ProtoRegistryDataProvider::new());
     let registry_client = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
     let time = FastForwardTimeSource::new();
@@ -1105,7 +1115,7 @@ fn should_return_rotation_needed_from_check_keys_with_registry_if_idkg_dealing_e
     idkg_dealing_encryption_pk.timestamp = Some(get_timestamp_from_time(time.get_relative_time()));
 
     add_public_key_to_registry(
-        idkg_dealing_encryption_pk,
+        idkg_dealing_encryption_pk.clone(),
         crypto_component.get_node_id(),
         KeyPurpose::IDkgMEGaEncryption,
         Arc::clone(&registry_data),
@@ -1114,11 +1124,14 @@ fn should_return_rotation_needed_from_check_keys_with_registry_if_idkg_dealing_e
     registry_client.reload();
 
     time.advance_time(TWO_WEEKS + Duration::from_secs(1));
-    let result = crypto_component.check_keys_with_registry(REG_V2);
+    let rotated_idkg_dealing_encryption_pk = crypto_component
+        .rotate_idkg_dealing_encryption_keys(REG_V2)
+        .expect("error rotating idkg dealing encryption key");
 
     assert_matches!(
-        result,
-        Ok(PublicKeyRegistrationStatus::RotateIDkgDealingEncryptionKeys)
+        rotated_idkg_dealing_encryption_pk,
+        IDkgKeyRotationResult::IDkgDealingEncPubkeyNeedsRegistration(KeyRotationOutcome::KeyRotated {new_key})
+        if !idkg_dealing_encryption_pk.equal_ignoring_timestamp(&new_key)
     );
 }
 
@@ -1158,7 +1171,7 @@ fn should_return_all_keys_registered_from_check_keys_with_registry_if_no_key_rot
     time.advance_time(TWO_WEEKS + Duration::from_secs(1));
     let result = crypto_component.check_keys_with_registry(REG_V2);
 
-    assert_matches!(result, Ok(PublicKeyRegistrationStatus::AllKeysRegistered));
+    assert_matches!(result, Ok(()));
 }
 
 #[test]
@@ -1197,7 +1210,7 @@ fn should_return_all_keys_registered_from_check_keys_with_registry_if_node_not_i
     time.advance_time(TWO_WEEKS + Duration::from_secs(1));
     let result = crypto_component.check_keys_with_registry(REG_V2);
 
-    assert_matches!(result, Ok(PublicKeyRegistrationStatus::AllKeysRegistered));
+    assert_matches!(result, Ok(()));
 }
 
 #[test]
@@ -1240,7 +1253,7 @@ fn should_return_all_keys_registered_from_check_keys_with_registry_if_no_ecdsa_k
     time.advance_time(TWO_WEEKS + Duration::from_secs(1));
     let result = crypto_component.check_keys_with_registry(REG_V2);
 
-    assert_matches!(result, Ok(PublicKeyRegistrationStatus::AllKeysRegistered));
+    assert_matches!(result, Ok(()));
 }
 
 #[test]
@@ -1282,11 +1295,11 @@ fn should_return_all_keys_registered_from_check_keys_with_registry_if_no_ecdsa_c
     time.advance_time(TWO_WEEKS + Duration::from_secs(1));
     let result = crypto_component.check_keys_with_registry(REG_V2);
 
-    assert_matches!(result, Ok(PublicKeyRegistrationStatus::AllKeysRegistered));
+    assert_matches!(result, Ok(()));
 }
 
 #[test]
-fn should_return_registration_needed_from_check_keys_with_registry_if_local_idkg_dealing_encryption_key_newer_than_in_the_registry(
+fn should_return_registration_needed_from_rotate_idkg_dealing_encryption_keys_if_local_idkg_dealing_encryption_key_newer_than_in_the_registry(
 ) {
     let registry_data = Arc::new(ProtoRegistryDataProvider::new());
     let registry_client = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
@@ -1329,12 +1342,19 @@ fn should_return_registration_needed_from_check_keys_with_registry_if_local_idkg
         .expect("Error rotating iDKG encryption key");
 
     time.advance_time(Duration::from_secs(60 * 60 * 24));
-    let result = crypto_component.check_keys_with_registry(REG_V2);
+    let result = crypto_component
+        .rotate_idkg_dealing_encryption_keys(REG_V2)
+        .expect("error calling rotate_idkg_dealing_encryption_keys");
 
     assert_matches!(
-        result,
-        Ok(PublicKeyRegistrationStatus::IDkgDealingEncPubkeyNeedsRegistration(missing_pk))
-        if missing_pk.equal_ignoring_timestamp(&new_idkg_dealing_encryption_key_to_register)
+        (new_idkg_dealing_encryption_key_to_register, result),
+        (
+            IDkgKeyRotationResult::IDkgDealingEncPubkeyNeedsRegistration(
+                KeyRotationOutcome::KeyRotated {new_key: rotated_key}),
+            IDkgKeyRotationResult::IDkgDealingEncPubkeyNeedsRegistration(
+                KeyRotationOutcome::KeyNotRotated {existing_key: key_to_register})
+        )
+        if rotated_key.equal_ignoring_timestamp(&key_to_register)
     );
 }
 
@@ -1375,10 +1395,10 @@ fn should_not_rotate_key_when_key_rotation_period_too_large_to_handle() {
     );
     registry_client.reload();
 
-    let result = crypto_component.check_keys_with_registry(REG_V2);
+    let result = crypto_component.rotate_idkg_dealing_encryption_keys(REG_V2);
     let logs = in_memory_logger.drain_logs();
 
-    assert_matches!(result, Ok(PublicKeyRegistrationStatus::AllKeysRegistered));
+    assert_matches!(result, Ok(IDkgKeyRotationResult::LatestRotationTooRecent));
     LogEntriesAssert::assert_that(logs).has_only_one_message_containing(
         &Level::Warning,
         "The addition of the key's registration time (2021-05-06 19:17:10 UTC) \
@@ -1427,11 +1447,11 @@ fn should_succeed_check_keys_with_registry_if_idkg_dealing_encryption_key_timest
     time.advance_time(TWO_WEEKS - Duration::from_secs(1));
     let result = crypto_component.check_keys_with_registry(REG_V2);
 
-    assert_matches!(result, Ok(PublicKeyRegistrationStatus::AllKeysRegistered));
+    assert_matches!(result, Ok(()));
 }
 
 #[test]
-fn should_transition_from_all_keys_registered_to_rotation_needed_with_sys_time_source() {
+fn should_transition_from_latest_rotation_too_recent_to_rotating_local_key_with_sys_time_source() {
     let key_rotation_period = Duration::from_secs(5);
     let registry_data = Arc::new(ProtoRegistryDataProvider::new());
     let registry_client = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
@@ -1458,7 +1478,7 @@ fn should_transition_from_all_keys_registered_to_rotation_needed_with_sys_time_s
     idkg_dealing_encryption_pk.timestamp = Some(get_timestamp_from_time(time.get_relative_time()));
 
     add_public_key_to_registry(
-        idkg_dealing_encryption_pk,
+        idkg_dealing_encryption_pk.clone(),
         crypto_component.get_node_id(),
         KeyPurpose::IDkgMEGaEncryption,
         Arc::clone(&registry_data),
@@ -1466,17 +1486,19 @@ fn should_transition_from_all_keys_registered_to_rotation_needed_with_sys_time_s
     );
     registry_client.reload();
 
-    let result = crypto_component.check_keys_with_registry(REG_V2);
+    let result = crypto_component.rotate_idkg_dealing_encryption_keys(REG_V2);
 
-    assert_matches!(result, Ok(PublicKeyRegistrationStatus::AllKeysRegistered));
+    assert_matches!(result, Ok(IDkgKeyRotationResult::LatestRotationTooRecent));
 
     std::thread::sleep(key_rotation_period + Duration::from_secs(1));
 
-    let result = crypto_component.check_keys_with_registry(REG_V2);
-
+    let key_to_register = crypto_component
+        .rotate_idkg_dealing_encryption_keys(REG_V2)
+        .expect("error rotating iDKG dealing encryption key");
     assert_matches!(
-        result,
-        Ok(PublicKeyRegistrationStatus::RotateIDkgDealingEncryptionKeys)
+        key_to_register,
+        IDkgKeyRotationResult::IDkgDealingEncPubkeyNeedsRegistration(KeyRotationOutcome::KeyRotated {new_key})
+        if !new_key.equal_ignoring_timestamp(&idkg_dealing_encryption_pk)
     );
 }
 

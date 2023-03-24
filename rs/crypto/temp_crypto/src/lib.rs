@@ -18,16 +18,16 @@ use ic_crypto_tls_interfaces::{
 use ic_crypto_utils_time::CurrentSystemTimeSource;
 use ic_interfaces::crypto::{
     BasicSigVerifier, BasicSigVerifierByPublicKey, BasicSigner, CanisterSigVerifier,
-    CurrentNodePublicKeysError, IDkgDealingEncryptionKeyRotationError, IDkgProtocol,
-    IdkgDealingEncPubKeysCountError, KeyManager, LoadTranscriptResult, MultiSigVerifier,
-    MultiSigner, NiDkgAlgorithm, PublicKeyRegistrationStatus, ThresholdEcdsaSigVerifier,
+    CheckKeysWithRegistryError, CurrentNodePublicKeysError, IDkgDealingEncryptionKeyRotationError,
+    IDkgKeyRotationResult, IDkgProtocol, IdkgDealingEncPubKeysCountError, KeyManager,
+    LoadTranscriptResult, MultiSigVerifier, MultiSigner, NiDkgAlgorithm, ThresholdEcdsaSigVerifier,
     ThresholdEcdsaSigner, ThresholdSigVerifier, ThresholdSigVerifierByPublicKey, ThresholdSigner,
 };
 use ic_interfaces::time_source::TimeSource;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::replica_logger::no_op_logger;
 use ic_logger::{new_logger, ReplicaLogger};
-use ic_protobuf::registry::crypto::v1::{EcdsaCurve, EcdsaKeyId, PublicKey as PublicKeyProto};
+use ic_protobuf::registry::crypto::v1::{EcdsaCurve, EcdsaKeyId};
 use ic_protobuf::registry::subnet::v1::{EcdsaConfig, SubnetListRecord, SubnetRecord, SubnetType};
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::{
@@ -921,7 +921,7 @@ impl<C: CryptoServiceProvider> KeyManager for TempCryptoComponentGeneric<C> {
     fn check_keys_with_registry(
         &self,
         registry_version: RegistryVersion,
-    ) -> CryptoResult<PublicKeyRegistrationStatus> {
+    ) -> Result<(), CheckKeysWithRegistryError> {
         self.crypto_component
             .check_keys_with_registry(registry_version)
     }
@@ -935,7 +935,7 @@ impl<C: CryptoServiceProvider> KeyManager for TempCryptoComponentGeneric<C> {
     fn rotate_idkg_dealing_encryption_keys(
         &self,
         registry_version: RegistryVersion,
-    ) -> Result<PublicKeyProto, IDkgDealingEncryptionKeyRotationError> {
+    ) -> Result<IDkgKeyRotationResult, IDkgDealingEncryptionKeyRotationError> {
         self.crypto_component
             .rotate_idkg_dealing_encryption_keys(registry_version)
     }
