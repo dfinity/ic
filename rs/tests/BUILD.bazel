@@ -1,6 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load(":system_tests.bzl", "symlink_dir", "system_test", "uvm_config_image")
-load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "DEPENDENCIES", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "DEPENDENCIES", "GRAFANA_RUNTIME_DEPS", "GUESTOS_MALICIOUS_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -40,22 +40,9 @@ rust_test(
     deps = DEPENDENCIES,
 )
 
-CKBTC_RUNTIME_DEPS = [
-    "//rs/rosetta-api/icrc1/ledger:ledger_canister",
-    "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
-    "//rs/bitcoin/ckbtc/kyt:kyt_canister",
-    "@btc_canister//file",
-]
-
 BTC_RUNTIME_DEPS = [
     "@btc_canister//file",
     ":btc_uvm_config_image",
-]
-
-GUESTOS_MALICIOUS_RUNTIME_DEPS = [
-    "//ic-os/guestos/dev-malicious:hash_and_upload_disk-img",
-    "//ic-os/guestos/dev-malicious:hash_and_upload_update-img",
-    "//ic-os/guestos:scripts/build-bootstrap-config-image.sh",
 ]
 
 exports_files([
@@ -260,14 +247,6 @@ system_test(
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_MALICIOUS_RUNTIME_DEPS,
-    deps = DEPENDENCIES + [":tests"],
-)
-
-system_test(
-    name = "tecdsa_complaint_test",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_MALICIOUS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES + [":tests"],
 )
 
@@ -675,96 +654,6 @@ system_test(
     deps = DEPENDENCIES + [":tests"],
 )
 
-system_test(
-    name = "tecdsa_add_nodes_test",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + [":tests"],
-)
-
-system_test(
-    name = "tecdsa_remove_nodes_test",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + [":tests"],
-)
-
-system_test(
-    name = "tecdsa_key_rotation_test",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + [":tests"],
-)
-
-system_test(
-    name = "tecdsa_signature_fails_without_cycles_test",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "system_test_hourly",
-        "system_test_nightly",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + [":tests"],
-)
-
-system_test(
-    name = "tecdsa_signature_from_nns_without_cycles_test",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "system_test_hourly",
-        "system_test_nightly",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + [":tests"],
-)
-
-system_test(
-    name = "tecdsa_signature_from_other_subnet_test",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "system_test_hourly",
-        "system_test_nightly",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + [":tests"],
-)
-
-system_test(
-    name = "tecdsa_signature_life_cycle_test",
-    # Remove when CON-937 is resolved
-    flaky = True,
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + [":tests"],
-)
-
-system_test(
-    name = "tecdsa_signature_same_subnet_test",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "system_test_hourly",
-        "system_test_nightly",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + [":tests"],
-)
-
-system_test(
-    name = "tecdsa_signature_timeout_test",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + [":tests"],
-)
-
 exports_files([
     "src/btc_integration/bitcoin.conf",
     "src/btc_integration/btc_activate.sh",
@@ -880,78 +769,6 @@ system_test(
             "//rs/rosetta-api:rosetta_image.tar",
             "@rosetta-cli//:rosetta-cli",
         ],
-    deps = DEPENDENCIES + [":tests"],
-)
-
-system_test(
-    name = "ckbtc_minter_basics_test",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps =
-        GUESTOS_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS +
-        NNS_CANISTER_RUNTIME_DEPS +
-        CKBTC_RUNTIME_DEPS,
-    deps = DEPENDENCIES + [":tests"],
-)
-
-system_test(
-    name = "ckbtc_minter_batching",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps =
-        GUESTOS_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS +
-        NNS_CANISTER_RUNTIME_DEPS +
-        CKBTC_RUNTIME_DEPS,
-    deps = DEPENDENCIES + [":tests"],
-)
-
-system_test(
-    name = "ckbtc_minter_heartbeat",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps =
-        GUESTOS_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS +
-        NNS_CANISTER_RUNTIME_DEPS +
-        CKBTC_RUNTIME_DEPS,
-    deps = DEPENDENCIES + [":tests"],
-)
-
-system_test(
-    name = "ckbtc_minter_kyt",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps =
-        GUESTOS_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS +
-        NNS_CANISTER_RUNTIME_DEPS +
-        CKBTC_RUNTIME_DEPS,
-    deps = DEPENDENCIES + [":tests"],
-)
-
-system_test(
-    name = "ckbtc_minter_update_balance",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps =
-        GUESTOS_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS +
-        NNS_CANISTER_RUNTIME_DEPS +
-        CKBTC_RUNTIME_DEPS,
-    deps = DEPENDENCIES + [":tests"],
-)
-
-system_test(
-    name = "ckbtc_minter_retrieve_btc",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps =
-        GUESTOS_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS +
-        NNS_CANISTER_RUNTIME_DEPS +
-        CKBTC_RUNTIME_DEPS,
     deps = DEPENDENCIES + [":tests"],
 )
 
