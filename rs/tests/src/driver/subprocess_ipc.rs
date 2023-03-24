@@ -1,30 +1,19 @@
-//! Implements the LogSender and LogReceiver using Unix Domain stream sockets instead of
-//! datagram sockets. This allows for arbitrarily sized messages. Also, a stream is tied to a
-//! specific subprocess and is thus closed when the subprocess exits. A stream therefore
-//! trivially allows to identify the last log message sent by a subprocess, while datagrams and
-//! exit signals are not necessarily correlated.
-//!
-//! While a unix listener can accept multiple connections, we assume that each subprocess uses
-//! a separate unix domain socket; thus the client does not need to identify itself after it
-//! connected.
-//!
-//! The LogReceiver parses out report and failure messages from child processes.
-//!
-//! Every message is preceeded with the length of the messages. All messages are encoded using
-//! `bincode`.
-
 use crate::driver::constants::{PANIC_LOG_PREFIX, SUBREPORT_LOG_PREFIX};
-use crate::driver::event::TaskId;
+use crate::driver::event::{Event, EventSubscriber, TaskId};
 use bincode;
 use serde::{Deserialize, Serialize};
 use slog::{error, warn, Drain, Level, Logger, OwnedKVList, Record};
 use std::{
-    io::{self, Write},
-    os::unix::net::UnixStream,
-    path::Path,
+    io::{self},
+    net::Shutdown,
+    os::unix::net::UnixDatagram,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
-use tokio::net::UnixListener;
+
+const MSG_BUF_SIZE: usize = 64 * 1024; // 64 KiB
+const MSG_TRUNC_SIZE: usize = 60 * 1024;
+const TRUNC_WARNING: &str = "[...]Logged message has been truncated (>64kB)!";
 
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LogEvent {
@@ -39,6 +28,13 @@ impl LogEvent {
         Self {
             task_id,
             log_record,
+        }
+    }
+
+    fn truncate_msg(&self) -> Self {
+        Self {
+            task_id: self.task_id.clone(),
+            log_record: self.log_record.truncate_msg(),
         }
     }
 }
@@ -62,47 +58,85 @@ impl LogRecord {
             msg: record.msg().to_string(),
         }
     }
+
+    pub fn truncate_msg(&self) -> Self {
+        let bytes = self.msg.as_bytes();
+        let mut index = MSG_TRUNC_SIZE;
+        // seek for utf-8 character boundary: cut after a byte with MSB 0.
+        while (bytes[index] & 128) != 0 {
+            index -= 1;
+        }
+        let mut msg = self.msg.clone();
+        msg.truncate(index + 1);
+        msg.push_str(TRUNC_WARNING);
+        Self {
+            level: self.level,
+            file: self.file.clone(),
+            module: self.module.clone(),
+            line: self.line,
+            msg,
+        }
+    }
 }
 
+pub struct SubprocessSender {
+    task_id: TaskId,
+    sock: UnixDatagram,
+    sock_path: PathBuf,
+}
+
+impl SubprocessSender {
+    pub fn new<P: AsRef<Path>>(task_id: TaskId, sock_path: P) -> io::Result<Self> {
+        let sock = UnixDatagram::unbound()?;
+        let sock_path = PathBuf::from(sock_path.as_ref());
+
+        Ok(Self {
+            task_id,
+            sock,
+            sock_path,
+        })
+    }
+
+    #[inline]
+    fn send_log_event(&self, log_event: &LogEvent) {
+        if log_event.log_record.msg.len() > MSG_TRUNC_SIZE {
+            self.send_log_event_(&log_event.truncate_msg());
+        } else {
+            self.send_log_event_(log_event);
+        }
+    }
+
+    #[inline]
+    fn send_log_event_(&self, log_event: &LogEvent) {
+        let buf = bincode::serialize(&log_event)
+            .expect("[should not fail!] could not serialize LogEvent");
+        if let Err(e) = self.sock.send_to(&buf[..], &self.sock_path) {
+            // this object is assumed to be the only log channel available in this process. Thus,
+            // in case of a failure, we just print out to stderr.
+            eprintln!("Could not send log event: {e:?}");
+        }
+    }
+}
+
+#[inline]
 pub fn log_panic_event(log: &slog::Logger, msg: &str) {
     warn!(log, "{PANIC_LOG_PREFIX}{msg}");
 }
 
-pub fn log_report_event(log: &slog::Logger, msg: &str) {
-    warn!(log, "{SUBREPORT_LOG_PREFIX}{msg}");
-}
-
-pub struct LogSender {
-    task_id: TaskId,
-    stream: Mutex<UnixStream>,
-}
-
-impl LogSender {
-    pub fn new<P: AsRef<Path>>(task_id: TaskId, sock_path: P) -> io::Result<Self> {
-        let stream = UnixStream::connect(sock_path.as_ref())?;
-        let stream = Mutex::new(stream);
-
-        Ok(Self { task_id, stream })
-    }
-
-    fn send_log_event(&self, log_event: &LogEvent) {
-        let mut stream = self.stream.lock().expect("could not grab mutex!");
-        let buf = bincode::serialize(&log_event)
-            .expect("[should not fail!] could not serialize LogEvent");
-        let msg_len = buf.len() as u64;
-        if let Err(e) = stream.write_all(&msg_len.to_be_bytes()) {
-            eprintln!("ERROR: when writing msg. lenth to stream (size: {msg_len}): {e:?}");
-            return;
-        }
-        if let Err(e) = stream.write_all(&buf[..]) {
-            // this object is assumed to be the only log channel available in this process. Thus,
-            // in case of a failure, we just print out to stderr.
-            eprintln!("ERROR: when writing log event: {e:?}");
+/// There are no datastructures that actually need to be synchronized between threads. Thus, we can
+/// safely clone this structure. However, because `UnixDatagram` only implement `TryClone` and not
+/// `Clone`, we have to provide a custom implementation of `Clone`.
+impl Clone for SubprocessSender {
+    fn clone(&self) -> Self {
+        Self {
+            task_id: self.task_id.clone(),
+            sock: self.sock.try_clone().expect("could not clone socket"),
+            sock_path: self.sock_path.clone(),
         }
     }
 }
 
-impl Drain for LogSender {
+impl Drain for SubprocessSender {
     type Ok = ();
     type Err = slog::Never;
 
@@ -117,39 +151,33 @@ impl Drain for LogSender {
     }
 }
 
-pub struct LogReceiver {
+pub struct LogServer {
+    sub: Arc<Mutex<Box<dyn EventSubscriber>>>,
     log: Logger,
-    listener: UnixListener,
     box_records: Arc<Mutex<ser::BoxRecords>>,
+    sock: UnixDatagram,
 }
 
-impl LogReceiver {
-    /// Binds a unix domain listener to the given path.
-    pub async fn new<P>(socket_path: P, log: Logger) -> io::Result<Self>
+impl LogServer {
+    pub fn new<P, E>(socket_path: P, sub: E, log: Logger) -> io::Result<Self>
     where
         P: AsRef<Path>,
+        E: EventSubscriber + 'static,
     {
-        let listener = UnixListener::bind(socket_path.as_ref())?;
+        let sock = UnixDatagram::bind(socket_path.as_ref())?;
+        let sub = Arc::new(Mutex::new(Box::new(sub) as Box<dyn EventSubscriber>));
+
         Ok(Self {
+            sub,
             log,
-            listener,
             box_records: Arc::new(Mutex::new(Default::default())),
+            sock,
         })
     }
 
-    /// Accepts exactly one connection and receives all the log messages from that connection.
-    /// The method only returns when the stream is closed or an I/O error occurs.
-    ///
-    /// A return value of `Ok(None)` signifies that neither a report message, nor a failure
-    /// message was received. If either report or failure messages are received multiple times,
-    /// the last such message defines the return value. Any I/O errors are returned
-    /// correspondingly.
-    pub async fn receive_all(&self) -> io::Result<Option<ReportOrFailure>> {
-        use std::io::ErrorKind;
-        use tokio::io::AsyncReadExt;
-
-        let (mut stream, _addr) = self.listener.accept().await?;
-        let mut buf: Vec<u8> = vec![0u8; 4096];
+    /// Consume all events and either log them out or generate a corresponding event.
+    pub fn receive_all_events(&self) -> io::Result<()> {
+        let mut buf = vec![0u8; MSG_BUF_SIZE];
         let mut log = {
             let log = self.log.clone();
             move |r: &'_ slog::Record<'_>| {
@@ -157,183 +185,68 @@ impl LogReceiver {
             }
         };
 
-        let mut report_or_failure = None;
-        // consume all messages
         loop {
-            // read length of the message
-            let msg_len = match stream.read_u64().await {
-                Ok(n) => n as usize,
-                // Eof => stream has been closed
-                Err(e) if e.kind() == ErrorKind::UnexpectedEof => break,
-                Err(e) => return Err(e),
-            };
-            // increase buffer size if necessary
-            if buf.len() < msg_len {
-                buf.resize(msg_len, 0u8);
-            }
-
-            // read message
-            let _ = stream.read_exact(&mut buf[0..msg_len]).await?;
-
-            match bincode::deserialize::<LogEvent>(&buf[0..msg_len]) {
-                Ok(log_event) => {
-                    if let Some(report) = Self::extract_message(SUBREPORT_LOG_PREFIX, &log_event) {
-                        report_or_failure = Some(ReportOrFailure::Report(report));
-                    } else if let Some(Level::Warning) =
-                        Level::from_usize(log_event.log_record.level)
-                    {
-                        if let Some(msg) = Self::extract_message(PANIC_LOG_PREFIX, &log_event) {
-                            report_or_failure = Some(ReportOrFailure::Failure(msg));
+            match self.sock.recv(&mut buf[..]) {
+                Ok(n) if n > 0 => {
+                    // parse message
+                    match bincode::deserialize(&buf[..n]) {
+                        Ok(log_event) => {
+                            self.emit_panic_event(&log_event);
+                            self.emit_subreport_event(&log_event);
+                            let LogEvent {
+                                // for now, when receiving a message, we just ignore the task id and
+                                // rely on the code location of the log message to provide context.
+                                task_id: _task_id,
+                                log_record,
+                            } = log_event;
+                            let mut box_records = self.box_records.lock().unwrap();
+                            box_records.box_record(log_record, &mut log);
+                        }
+                        Err(e) => {
+                            error!(self.log, "Could not parse log event: {e:?}");
                         }
                     }
-
-                    let LogEvent {
-                        // for now, when receiving a message, we just ignore the task id and
-                        // rely on the code location of the log message to provide context.
-                        task_id: _task_id,
-                        log_record,
-                    } = log_event;
-                    let mut box_records = self.box_records.lock().unwrap();
-                    box_records.box_record(log_record, &mut log);
                 }
-                Err(e) => {
-                    error!(self.log, "Could not parse log event: {e:?}");
-                }
+                // channel was shut down
+                Ok(_) => break,
+                Err(e) => return Err(e),
             }
         }
-        Ok(report_or_failure)
+
+        Ok(())
     }
 
-    fn extract_message(prefix: &str, log_event: &LogEvent) -> Option<String> {
-        if let Some(pos) = log_event.log_record.msg.find(prefix) {
-            let start_pos = pos + prefix.len();
-            let msg = (log_event.log_record.msg[start_pos..]).to_string();
-            return Some(msg);
-        }
-        None
-    }
-}
-
-#[derive(Clone, Debug)]
-pub enum ReportOrFailure {
-    Report(String),
-    Failure(String),
-}
-
-impl ReportOrFailure {
-    pub fn msg(&self) -> &str {
-        match self {
-            Self::Report(ref x) => x,
-            Self::Failure(ref x) => x,
+    /// Given a log event, emit the corresponding panic event if the log message contains a panic
+    /// message. This is the counterpart to the [log_panic_event] function.
+    #[inline]
+    fn emit_panic_event(&self, log_event: &LogEvent) {
+        if let Some(Level::Warning) = Level::from_usize(log_event.log_record.level) {
+            if let Some(pos) = log_event.log_record.msg.find(PANIC_LOG_PREFIX) {
+                let task_id = log_event.task_id.clone();
+                let start_pos = pos + PANIC_LOG_PREFIX.len();
+                let msg = (log_event.log_record.msg[start_pos..]).to_string();
+                let mut sub = self.sub.lock().unwrap();
+                (sub)(Event::task_caught_panic(task_id, msg))
+            }
         }
     }
-}
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use assert_matches::assert_matches;
-    use crossbeam_channel::{unbounded, Sender};
-    use rand::Rng;
-    use slog::{info, o, warn};
-    use std::{path::PathBuf, sync::Arc};
-    use tokio::runtime::Runtime;
-
-    #[test]
-    fn can_send_and_receive_messages() {
-        let rt = Runtime::new().expect("failed to create tokio runtime");
-        let sock_path = get_unique_sock_path();
-        let (log_send, log_rcvr_chan) = unbounded();
-        let parent_drain = ParentDrain(log_send);
-        let parent_logger = Logger::root(parent_drain, o!());
-
-        let log_rcvr = rt
-            .block_on(LogReceiver::new(&sock_path, parent_logger))
-            .unwrap();
-        let log_rcvr = Arc::new(log_rcvr);
-
-        let jh = rt.spawn(async move { log_rcvr.receive_all().await });
-
-        let expected_task_id = TaskId::Test("fake_test".to_string());
-        // setup sender
-        let subproc_sender = LogSender::new(expected_task_id, &sock_path).unwrap();
-        let subproc_logger = Logger::root(subproc_sender, o!());
-
-        // send logs
-        info!(subproc_logger, "hello info");
-        warn!(subproc_logger, "hello warn");
-
-        // send panic
-        log_panic_event(&subproc_logger, "oh, a panic!");
-
-        // shutdown log_server
-        std::mem::drop(subproc_logger);
-
-        let info_log_msg = log_rcvr_chan.recv().unwrap();
-        assert_eq!(info_log_msg.level, slog::Level::Info.as_usize());
-        assert_eq!(info_log_msg.msg, "hello info");
-
-        let warn_log_msg = log_rcvr_chan.recv().unwrap();
-        assert_eq!(warn_log_msg.level, slog::Level::Warning.as_usize());
-        assert_eq!(warn_log_msg.msg, "hello warn");
-
-        let report_or_failure = rt.block_on(async move { jh.await }).unwrap().unwrap();
-
-        assert_matches!(report_or_failure, Some(ReportOrFailure::Failure(msg)) if msg == "oh, a panic!");
-    }
-
-    #[test]
-    fn can_receive_failure() {
-        let rt = Runtime::new().expect("failed to create tokio runtime");
-        let sock_path = get_unique_sock_path();
-
-        let (log_send, _log_rcvr_chan) = unbounded();
-        let parent_drain = ParentDrain(log_send);
-        let parent_logger = Logger::root(parent_drain, o!());
-
-        let log_rcvr = rt
-            .block_on(LogReceiver::new(&sock_path, parent_logger))
-            .unwrap();
-        let log_rcvr = Arc::new(log_rcvr);
-
-        let jh = rt.spawn(async move { log_rcvr.receive_all().await });
-
-        let expected_task_id = TaskId::Test("fake_test".to_string());
-        // setup sender
-        let subproc_sender = LogSender::new(expected_task_id, &sock_path).unwrap();
-        let subproc_logger = Logger::root(subproc_sender, o!());
-
-        let expected_msg = "a report from a successful test";
-        // send report
-        log_report_event(&subproc_logger, expected_msg);
-
-        // shutdown log_server
-        std::mem::drop(subproc_logger);
-
-        let report_or_failure = rt.block_on(async move { jh.await }).unwrap().unwrap();
-        assert_matches!(report_or_failure, Some(ReportOrFailure::Report(msg)) if msg == expected_msg);
-    }
-
-    fn get_unique_sock_path() -> PathBuf {
-        let mut rng = rand::thread_rng();
-        let random_n: u64 = rng.gen();
-        let pid = std::process::id();
-        let tmpdir = std::env::temp_dir();
-
-        tmpdir.join(format!("{pid}_{random_n}"))
-    }
-
-    // A slog Drain that takes a log message and sends it to a crossbeam channel.
-    struct ParentDrain(Sender<LogRecord>);
-
-    impl Drain for ParentDrain {
-        type Ok = ();
-        type Err = slog::Never;
-
-        fn log(&self, record: &Record<'_>, _values: &OwnedKVList) -> Result<Self::Ok, Self::Err> {
-            let _ = self.0.send(LogRecord::from_slog_record(record));
-            Ok(())
+    /// Given a log event, emit the corresponding panic event if the log message contains a panic
+    /// message. This is the counterpart to the [log_panic_event] function.
+    #[inline]
+    fn emit_subreport_event(&self, log_event: &LogEvent) {
+        if let Some(pos) = log_event.log_record.msg.find(SUBREPORT_LOG_PREFIX) {
+            let task_id = log_event.task_id.clone();
+            let start_pos = pos + SUBREPORT_LOG_PREFIX.len();
+            let report = (log_event.log_record.msg[start_pos..]).to_string();
+            let mut sub = self.sub.lock().unwrap();
+            (sub)(Event::task_sub_report(task_id, report))
         }
+    }
+
+    /// Shutdown log_server
+    pub fn shutdown(&self) -> io::Result<()> {
+        self.sock.shutdown(Shutdown::Both)
     }
 }
 
@@ -400,6 +313,99 @@ mod ser {
                 self.static_strings.insert(s);
                 s
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::event::EventPayload;
+    use super::*;
+    use crossbeam_channel::{unbounded, Sender};
+    use rand::Rng;
+    use slog::{info, o, warn};
+    use std::sync::Arc;
+
+    #[test]
+    fn can_send_and_receive_messages() {
+        let sock_path = get_unique_sock_path();
+        let (subfact, evt_rcvr) = crate::driver::event::test_utils::create_subfact();
+        let sub = subfact.create_broadcasting_subscriber();
+
+        // setup
+        let (log_send, log_rcvr) = unbounded();
+        let parent_drain = ParentDrain(log_send);
+        let parent_logger = Logger::root(parent_drain, o!());
+
+        // setup log_server
+        let log_server = LogServer::new(&sock_path, sub, parent_logger).unwrap();
+        let log_server = Arc::new(log_server);
+
+        let jh = std::thread::spawn({
+            let log_server = log_server.clone();
+            move || log_server.receive_all_events()
+        });
+
+        let expected_task_id = TaskId::Test("fake_test".to_string());
+        // setup sender
+        let subproc_sender = SubprocessSender::new(expected_task_id.clone(), &sock_path).unwrap();
+        let subproc_logger = Logger::root(subproc_sender, o!());
+        // send logs
+        info!(subproc_logger, "hello info");
+        warn!(subproc_logger, "hello warn");
+        //send huge string
+        let huge_str = (0..(MSG_BUF_SIZE + 1)).map(|_| "x").collect::<String>();
+        info!(subproc_logger, "{}", huge_str);
+        // send panic
+        log_panic_event(&subproc_logger, "oh, a panic!");
+        // shutdown log_server
+        assert!(log_server.shutdown().is_ok());
+        // check received messages
+
+        assert!(jh.join().is_ok());
+
+        let info_log_msg = log_rcvr.recv().unwrap();
+        assert_eq!(info_log_msg.level, slog::Level::Info.as_usize());
+        assert_eq!(info_log_msg.msg, "hello info");
+
+        let warn_log_msg = log_rcvr.recv().unwrap();
+        assert_eq!(warn_log_msg.level, slog::Level::Warning.as_usize());
+        assert_eq!(warn_log_msg.msg, "hello warn");
+
+        assert_eq!(info_log_msg.line + 1, warn_log_msg.line);
+
+        let info_log_msg = log_rcvr.recv().unwrap();
+        assert!(info_log_msg.msg.ends_with(TRUNC_WARNING));
+
+        let panic_event = evt_rcvr.recv().unwrap();
+
+        if let EventPayload::TaskCaughtPanic { task_id, msg } = panic_event.what {
+            assert_eq!(task_id, expected_task_id);
+            assert_eq!(msg, "oh, a panic!");
+        } else {
+            panic!("wrong event type!");
+        }
+    }
+
+    fn get_unique_sock_path() -> PathBuf {
+        let mut rng = rand::thread_rng();
+        let random_n: u64 = rng.gen();
+        let pid = std::process::id();
+        let tmpdir = std::env::temp_dir();
+
+        tmpdir.join(format!("{pid}_{random_n}"))
+    }
+
+    // A slog Drain that takes a log message and sends it to a crossbeam channel.
+    struct ParentDrain(Sender<LogRecord>);
+
+    impl Drain for ParentDrain {
+        type Ok = ();
+        type Err = slog::Never;
+
+        fn log(&self, record: &Record<'_>, _values: &OwnedKVList) -> Result<Self::Ok, Self::Err> {
+            let _ = self.0.send(LogRecord::from_slog_record(record));
+            Ok(())
         }
     }
 }
