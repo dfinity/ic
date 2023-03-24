@@ -1,5 +1,6 @@
 use candid::{Decode, Encode, Nat, Principal};
 use ic_agent::Agent;
+use icrc_ledger_types::block::{BlockCertificate, GetBlocksArgs, GetBlocksResponse};
 use icrc_ledger_types::transaction::{TransferArg, TransferError};
 use icrc_ledger_types::value::MetadataValue as Value;
 use icrc_ledger_types::Account;
@@ -168,5 +169,24 @@ impl Icrc1Agent {
         Ok(
             Decode!(&self.update("icrc1_transfer", &Encode!(&args)?).await?, Result<Nat, TransferError>)?,
         )
+    }
+
+    pub async fn get_blocks(
+        &self,
+        args: GetBlocksArgs,
+    ) -> Result<GetBlocksResponse, Icrc1AgentError> {
+        Ok(Decode!(
+            &self.query("get_blocks", &Encode!(&args)?).await?,
+            GetBlocksResponse
+        )?)
+    }
+
+    pub async fn get_last_block_certificate(&self) -> Result<BlockCertificate, Icrc1AgentError> {
+        Ok(Decode!(
+            &self
+                .query("get_last_block_certificate", &Encode!()?)
+                .await?,
+            BlockCertificate
+        )?)
     }
 }

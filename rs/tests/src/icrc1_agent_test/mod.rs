@@ -7,6 +7,7 @@ use ic_nns_test_utils::itest_helpers::install_rust_canister_from_path;
 use ic_registry_subnet_type::SubnetType;
 use icp_ledger::ArchiveOptions;
 use icrc_ledger_agent::{CallMode, Icrc1Agent};
+use icrc_ledger_types::block::GetBlocksArgs;
 use icrc_ledger_types::transaction::TransferArg;
 use icrc_ledger_types::value::MetadataValue as Value;
 use icrc_ledger_types::Account;
@@ -216,6 +217,18 @@ pub fn test(env: TestEnv) {
             Nat::from(amount),
             agent.balance_of(account2, CallMode::Query).await.unwrap()
         );
+
+        let blocks_request = GetBlocksArgs {
+            start: Nat::from(0),
+            length: Nat::from(10),
+        };
+        let blocks_response = agent.get_blocks(blocks_request).await.unwrap();
+        assert_eq!(Nat::from(0), blocks_response.first_index);
+        assert_eq!(Nat::from(2), blocks_response.chain_length);
+
+        let block_certificate = agent.get_last_block_certificate().await.unwrap();
+        assert!(block_certificate.certificate.is_some());
+        assert_eq!(Nat::from(1), block_certificate.block_index);
     });
 }
 
