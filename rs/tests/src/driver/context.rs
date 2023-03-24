@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use crate::driver::test_env::TestEnv;
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use slog::Logger;
 use std::{
     fs,
@@ -9,7 +9,7 @@ use std::{
     time::SystemTime,
 };
 
-use crate::driver::{constants, event::TaskId, subprocess_ipc::SubprocessSender};
+use crate::driver::{constants, event::TaskId, subprocess_ipc::LogSender};
 
 use slog::debug;
 
@@ -19,7 +19,7 @@ pub struct GroupContext {
     pub group_dir: PathBuf,
     pub filter_tests: Option<String>,
     logger: Logger,
-    pub parent_pid: u32,
+    pub sock_id: u64,
     pub debug_keepalive: bool,
 }
 
@@ -31,13 +31,13 @@ impl GroupContext {
     /// to create the log channel in case we are in a subprocess.
     pub fn new(
         group_dir: PathBuf,
-        subproc_info: Option<(TaskId, u32)>,
+        subproc_info: Option<(TaskId, u64)>,
         filter_tests: Option<String>,
         debug_keepalive: bool,
     ) -> Result<Self> {
         let task_id = subproc_info.as_ref().map(|t| t.0.clone());
-        let parent_pid = subproc_info.map(|t| t.1).unwrap_or_else(std::process::id);
-        let socket_path = Self::log_socket_path_(parent_pid);
+        let sock_id = subproc_info.map(|t| t.1).unwrap_or_default();
+        let socket_path = Self::log_socket_path(sock_id);
         let logger = Self::create_logger(socket_path, task_id)?;
 
         let exec_path = std::env::current_exe().expect("could not acquire parent process path");
@@ -53,7 +53,7 @@ impl GroupContext {
             group_dir,
             filter_tests,
             logger,
-            parent_pid,
+            sock_id,
             debug_keepalive,
         })
     }
@@ -62,17 +62,11 @@ impl GroupContext {
         self.group_dir.clone()
     }
 
-    pub fn log_socket_path(&self) -> PathBuf {
-        let parent_pid = self.parent_pid;
-        PathBuf::from(format!("./log_sock_{parent_pid}"))
-    }
-
-    pub fn log_socket_path_(parent_pid: u32) -> PathBuf {
-        // group_dir.as_ref().join("log_socket_path")
+    pub fn log_socket_path(sock_id: u64) -> PathBuf {
         // XXX: Here, we have to resort to relative path names, because of API limitations. See
         // also:
         // https://unix.stackexchange.com/questions/367008/why-is-socket-path-length-limited-to-a-hundred-chars
-        PathBuf::from(format!("./log_sock_{parent_pid}"))
+        PathBuf::from(format!("./log_sock_{sock_id}"))
     }
 
     pub fn get_root_env(&self) -> Result<TestEnv> {
@@ -174,7 +168,8 @@ impl GroupContext {
     /// Create a logger for this process.
     fn create_logger(sock_path: PathBuf, subproc_id: Option<TaskId>) -> Result<Logger> {
         if let Some(task_id) = subproc_id {
-            let sender = SubprocessSender::new(task_id, sock_path)?;
+            let sender = LogSender::new(task_id, sock_path.clone())
+                .with_context(|| format!("Log socket path: {sock_path:?}"))?;
             let logger = Logger::root(sender, slog::o!());
             Ok(logger)
         } else {
