@@ -26,6 +26,9 @@ go.mod                    @dfinity-lab/teams/idx
 go.sum                    @dfinity-lab/teams/idx
 go_deps.bzl               @dfinity-lab/teams/idx
 
+# [DevEnv]
+.vscode/                  @dfinity-lab/teams/idx
+
 # [Publishing-Artifacts]
 /publish/ @dfinity-lab/teams/idx
 
