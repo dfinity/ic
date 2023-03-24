@@ -556,3 +556,37 @@ mod validate_ingress_expiry {
         .expect("invalid http envelope")
     }
 }
+
+mod canister_id_set {
+    use super::*;
+    use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+    use rand::CryptoRng;
+    use rand::Rng;
+
+    // HTTP requests are limited to 2MB.
+    // A canister ID contains 29 bytes and so there are
+    // at most 72_315 Canister IDs in an HTTP request.
+    const MAXIMAL_NUMBER_OF_CANISTER_IDS_PER_HTTP_REQUEST: u32 = 72_315;
+
+    //TODO CRP-1965: limit number of targets per delegation
+    #[test]
+    fn should_efficiently_intersect_large_canister_id_sets() {
+        let mut rng = reproducible_rng();
+        let number_of_ids = MAXIMAL_NUMBER_OF_CANISTER_IDS_PER_HTTP_REQUEST;
+        let mut first_set = BTreeSet::new();
+        let mut second_set = BTreeSet::new();
+        for _ in 1..=number_of_ids {
+            assert!(first_set.insert(random_canister_id(&mut rng)));
+            assert!(second_set.insert(random_canister_id(&mut rng)));
+        }
+
+        let intersection =
+            CanisterIdSet::Some(first_set).intersect(CanisterIdSet::Some(second_set));
+        // Probability of collision is negligible (around 10^(-60)).
+        assert_matches!(intersection, CanisterIdSet::Some(set) if set.is_empty())
+    }
+
+    fn random_canister_id<R: Rng + CryptoRng>(rng: &mut R) -> CanisterId {
+        CanisterId::from_u64(rng.next_u64())
+    }
+}

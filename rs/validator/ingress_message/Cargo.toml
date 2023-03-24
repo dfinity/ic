@@ -23,7 +23,9 @@ ic-validator = { path = "../../validator" }
 assert_matches = "1.5.0"
 ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-certification-test-utils = { path = "../../certification/test-utils" }
+ic-constants = { path = "../../constants" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../crypto/test_utils/reproducible_rng" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
-ic-validator-http-request-test-utils = { path = "../http_request_test_utils"}
+ic-validator-http-request-test-utils = { path = "../http_request_test_utils" }
 rand = "0.8"
+strum = "0.23.0"
