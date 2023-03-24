@@ -2,6 +2,17 @@
 //! `execute()` is called in the child process only, while `spawn()` is called
 //! in the parent process.
 
+use crate::driver::{
+    constants::LOG_CLOSE_TIMEOUT,
+    context::GroupContext,
+    dsl::SubprocessFn,
+    event::BroadcastingEventSubscriberFactory,
+    event::{Event, TaskId},
+    process::{KillFn, Process},
+    subprocess_ipc::{log_panic_event, LogReceiver, ReportOrFailure},
+    task::{Task, TaskHandle},
+};
+use slog::{crit, error, info, Logger};
 use std::{
     panic::catch_unwind,
     process::Command,
@@ -10,19 +21,7 @@ use std::{
         Arc, Mutex,
     },
 };
-
-use slog::{crit, error, info, Logger};
-use tokio::{runtime::Handle as RtHandle, task::JoinHandle};
-
-use crate::driver::{
-    context::GroupContext,
-    dsl::SubprocessFn,
-    event::BroadcastingEventSubscriberFactory,
-    event::{Event, TaskId},
-    process::{KillFn, Process},
-    subprocess_ipc::log_panic_event,
-    task::{Task, TaskHandle},
-};
+use tokio::{runtime::Handle as RtHandle, task::JoinHandle, time::timeout};
 
 pub struct SubprocessTask {
     task_id: TaskId,
@@ -60,19 +59,29 @@ impl Task for SubprocessTask {
             panic!("Respawned already spawned task '{}'", self.task_id);
         }
 
+        // select a random socket id used for this child process
+        use rand::Rng;
+        let sock_id: u64 = rand::thread_rng().gen();
+        let sock_path = GroupContext::log_socket_path(sock_id);
+
         let mut child_cmd = Command::new(self.group_ctx.exec_path.clone());
         child_cmd
             .arg("--working-dir") // TODO: rename as --group-dir
             .arg(self.group_ctx.group_dir().as_os_str())
             .arg("spawn-child")
             .arg(self.task_id.name())
-            .arg(self.group_ctx.parent_pid.to_string());
+            .arg(sock_id.to_string());
 
         let mut sub = self.sub_fact.create_broadcasting_subscriber();
         (sub)(Event::task_spawned(self.task_id.clone()));
 
         info!(self.group_ctx.log(), "Spawning {:?} ...", child_cmd);
 
+        let log = self.group_ctx.logger();
+        let log_rcvr = self
+            .rt
+            .block_on(LogReceiver::new(sock_path, log.clone()))
+            .expect("Could not start LogReceiver");
         let (proc, kill) = self.rt.block_on(Process::new(
             self.task_id.clone(),
             child_cmd,
@@ -81,15 +90,41 @@ impl Task for SubprocessTask {
 
         let task_state = shared_mutex(TaskState::Running(Box::new(kill)));
         let jh = self.rt.spawn({
-            let log = self.group_ctx.logger();
             let task_id = self.task_id.clone();
             let task_state = task_state.clone();
             async move {
+                let log_jh = tokio::task::spawn(async move { log_rcvr.receive_all().await });
                 let exit_code = proc.block_on_exit().await;
+
                 info!(
                     log,
                     "Task '{task_id}' finished with exit code: {exit_code:?}"
                 );
+
+                // A misbehaving child might have not connected to the parent at all. In such a
+                // case, this join would block forever.
+
+                use ReportOrFailure::*;
+                match timeout(LOG_CLOSE_TIMEOUT, log_jh).await {
+                    Ok(jh_res) => match jh_res.unwrap() {
+                        Ok(Some(Report(msg))) => {
+                            (sub)(Event::task_sub_report(task_id.clone(), msg))
+                        }
+                        Ok(Some(Failure(msg))) => {
+                            (sub)(Event::task_caught_panic(task_id.clone(), msg))
+                        }
+                        Ok(_) => {}
+                        Err(e) => {
+                            error!(log, "[Driver Error] Reading logs failed: {e:?}");
+                        }
+                    },
+                    Err(e) => {
+                        error!(
+                            log,
+                            "Timeout occurred when waiting for log channel to close: {e:?}"
+                        );
+                    }
+                }
 
                 let mut task_state = task_state.lock().unwrap();
                 let event = match &*task_state {
