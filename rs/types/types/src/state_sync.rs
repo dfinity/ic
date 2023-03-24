@@ -68,7 +68,7 @@
 pub mod proto;
 
 use crate::chunkable::ChunkId;
-use ic_protobuf::state::sync::v1 as pb;
+use ic_protobuf::{proxy::ProtoProxy, state::sync::v1 as pb};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
@@ -77,8 +77,15 @@ use std::{
     sync::Arc,
 };
 
-/// Id of the manifest chunk in StateSync artifact.
-pub const MANIFEST_CHUNK: ChunkId = ChunkId::new(0);
+/// The default chunk size used in manifest computation and state sync.
+pub const DEFAULT_CHUNK_SIZE: u32 = 1 << 20; // 1 MiB.
+
+/// ID of the meta-manifest chunk in StateSync artifact.
+pub const META_MANIFEST_CHUNK: ChunkId = ChunkId::new(0);
+
+/// The IDs of file chunks in state sync start from 1 as chunk id 0 is for the meta-manifest.
+/// The chunk id of a file chunk is equal to its index in the chunk table plus 1.
+pub const FILE_CHUNK_ID_OFFSET: usize = 1;
 
 /// Some small files are grouped into chunks during state sync and
 /// they need to use a separate range of chunk id to avoid conflicts with normal chunks.
@@ -90,6 +97,53 @@ pub const MANIFEST_CHUNK: ChunkId = ChunkId::new(0);
 // the length of chunk table will be smaller than 10 * 10 * 1 << 20 + 100 * 1 << 20 = 209_715_200.
 // The real number of canisters and size of state are not even close to the assumption so the value of `FILE_GROUP_CHUNK_ID_OFFSET` is chosen safely.
 pub const FILE_GROUP_CHUNK_ID_OFFSET: u32 = 1 << 30;
+
+/// The IDs of chunks for fetching the manifest in state sync start from this offset.
+//
+// The value of `MANIFEST_CHUNK_ID_OFFSET` is set as 1 << 31 (2_147_483_648).
+// It is within the whole chunk id range (1 << 32) and can avoid collision with normal file chunks and file group chunks.
+// First, the length of the chunk table is smaller than 1_073_741_824 from the analysis for `FILE_GROUP_CHUNK_ID_OFFSET`. Second, each file group chunk contains multiple files.
+// Therefore the number of file groups is smaller than the length of chunk table, and thus much smaller than 1_073_741_824.
+// From another perspective, the number of file group chunks is smaller than 1/128 of the number of canisters because currently it only includes `canister.pbuf` files smaller than 8 KiB.
+// Therefore, the space between `FILE_GROUP_CHUNK_ID_OFFSET` and `MANIFEST_CHUNK_ID_OFFSET` is adequate for file group chunks.
+pub const MANIFEST_CHUNK_ID_OFFSET: u32 = 1 << 31;
+
+/// `MANIFEST_CHUNK_ID_OFFSET` should be greater than `FILE_GROUP_CHUNK_ID_OFFSET` to have valid ID range assignment.
+#[allow(clippy::assertions_on_constants)]
+const _: () = assert!(MANIFEST_CHUNK_ID_OFFSET > FILE_GROUP_CHUNK_ID_OFFSET);
+
+/// The type and associated index (if applicable) of a chunk in state sync.
+#[derive(Debug, PartialEq, Eq)]
+pub enum StateSyncChunk {
+    /// The chunk representing the meta-manifest.
+    MetaManifestChunk,
+    /// Nth file chunk (0-based).
+    FileChunk(u32),
+    /// Chunk grouping multiple small files (index starting from `FILE_GROUP_CHUNK_ID_OFFSET`).
+    FileGroupChunk(u32),
+    /// Nth encoded manifest chunk (0-based).
+    ManifestChunk(u32),
+}
+
+/// Convert a chunk ID to its chunk type and associated index based on chunk ID range assignment.
+/// Note that the conversion only works when `MANIFEST_CHUNK_ID_OFFSET` is greater than `FILE_GROUP_CHUNK_ID_OFFSET`.
+pub fn state_sync_chunk_type(chunk_id: u32) -> StateSyncChunk {
+    const FILE_CHUNK_END_INCLUSIVE: u32 = FILE_GROUP_CHUNK_ID_OFFSET - 1;
+    const FILE_GROUP_CHUNK_END_INCLUSIVE: u32 = MANIFEST_CHUNK_ID_OFFSET - 1;
+    match chunk_id {
+        0 => StateSyncChunk::MetaManifestChunk,
+        1..=FILE_CHUNK_END_INCLUSIVE => {
+            StateSyncChunk::FileChunk(chunk_id - FILE_CHUNK_ID_OFFSET as u32)
+        }
+        FILE_GROUP_CHUNK_ID_OFFSET..=FILE_GROUP_CHUNK_END_INCLUSIVE => {
+            // Note that key of file group chunks mapping is the exact chunk id so it does not need to be offset.
+            StateSyncChunk::FileGroupChunk(chunk_id)
+        }
+        MANIFEST_CHUNK_ID_OFFSET.. => {
+            StateSyncChunk::ManifestChunk(chunk_id - MANIFEST_CHUNK_ID_OFFSET)
+        }
+    }
+}
 
 /// An entry of the file table.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
@@ -164,7 +218,7 @@ impl Deref for Manifest {
 /// ...
 /// [8]: ("canister_states/00..11/software.wasm", 93000, <hash>)
 /// -- CHUNKS
-/// -- chunk indices start from 1 because 0 is the ID of the manifest chunk.
+/// -- chunk indices start from 1 because 0 is the ID of the ,meta-manifest chunk.
 /// [ 1]: (0, 1500, 0, <hash>)
 /// ...
 /// [45]: (8, 93000, 0, <hash>)
@@ -284,25 +338,27 @@ impl fmt::Display for Manifest {
 
 /// Serializes the manifest into a byte array.
 pub fn encode_manifest(manifest: &Manifest) -> Vec<u8> {
-    use prost::Message;
-
-    let pb_manifest = pb::Manifest::from(manifest.clone());
-    let mut buf = vec![];
-    pb_manifest
-        .encode(&mut buf)
-        .expect("failed to encode manifest to protobuf");
-    buf
+    pb::Manifest::proxy_encode(manifest.clone()).expect("Failed to serialize manifest.")
 }
 
 /// Deserializes the manifest from a byte array.
 pub fn decode_manifest(bytes: &[u8]) -> Result<Manifest, String> {
-    use prost::Message;
-
-    let pb_manifest = pb::Manifest::decode(bytes)
-        .map_err(|err| format!("failed to decode Manifest proto {}", err))?;
-    pb_manifest
-        .try_into()
+    pb::Manifest::proxy_decode(bytes)
         .map_err(|err| format!("failed to convert Manifest proto into an object: {}", err))
+}
+
+pub fn encode_meta_manifest(meta_manifest: &MetaManifest) -> Vec<u8> {
+    pb::MetaManifest::proxy_encode(meta_manifest.clone())
+        .expect("Failed to serialize meta-manifest.")
+}
+
+pub fn decode_meta_manifest(bytes: &[u8]) -> Result<MetaManifest, String> {
+    pb::MetaManifest::proxy_decode(bytes).map_err(|err| {
+        format!(
+            "failed to convert MetaManifest proto into an object: {}",
+            err
+        )
+    })
 }
 
 type P2PChunkId = u32;
@@ -332,7 +388,41 @@ impl FileGroupChunks {
         self.0.get(chunk_id)
     }
 
+    pub fn last_chunk_id(&self) -> Option<P2PChunkId> {
+        self.0.last_key_value().map(|(chunk_id, _)| *chunk_id)
+    }
+
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_state_sync_chunk_type() {
+        assert_eq!(state_sync_chunk_type(0), StateSyncChunk::MetaManifestChunk);
+
+        (1..FILE_GROUP_CHUNK_ID_OFFSET)
+            .step_by(100)
+            .chain(std::iter::once(FILE_GROUP_CHUNK_ID_OFFSET - 1))
+            .for_each(|i| assert_eq!(state_sync_chunk_type(i), StateSyncChunk::FileChunk(i - 1)));
+
+        (FILE_GROUP_CHUNK_ID_OFFSET..MANIFEST_CHUNK_ID_OFFSET)
+            .step_by(100)
+            .chain(std::iter::once(MANIFEST_CHUNK_ID_OFFSET - 1))
+            .for_each(|i| assert_eq!(state_sync_chunk_type(i), StateSyncChunk::FileGroupChunk(i)));
+
+        (MANIFEST_CHUNK_ID_OFFSET..=u32::MAX)
+            .step_by(100)
+            .chain(std::iter::once(u32::MAX))
+            .for_each(|i| {
+                assert_eq!(
+                    state_sync_chunk_type(i),
+                    StateSyncChunk::ManifestChunk(i - MANIFEST_CHUNK_ID_OFFSET)
+                )
+            });
     }
 }

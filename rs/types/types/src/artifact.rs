@@ -482,6 +482,9 @@ pub struct StateSyncMessage {
     pub root_hash: CryptoHashOfState,
     /// Absolute path to the checkpoint root directory.
     pub checkpoint_root: std::path::PathBuf,
+    #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
+    #[serde(deserialize_with = "ic_utils::serde_arc::deserialize_arc")]
+    pub meta_manifest: Arc<crate::state_sync::MetaManifest>,
     /// The manifest containing the summary of the content.
     pub manifest: crate::state_sync::Manifest,
     #[serde(serialize_with = "ic_utils::serde_arc::serialize_arc")]
@@ -490,7 +493,7 @@ pub struct StateSyncMessage {
 }
 
 impl ChunkableArtifact for StateSyncMessage {
-    fn get_chunk(self: Box<Self>, _chunk_id: ChunkId) -> Option<ArtifactChunk> {
+    fn get_chunk(self: Box<Self>, chunk_id: ChunkId) -> Option<ArtifactChunk> {
         #[cfg(not(target_family = "unix"))]
         {
             panic!("This method should only be used when the target OS family is unix.");
@@ -499,6 +502,10 @@ impl ChunkableArtifact for StateSyncMessage {
         #[cfg(target_family = "unix")]
         {
             use crate::chunkable::ArtifactChunkData;
+            use crate::state_sync::{
+                encode_manifest, encode_meta_manifest, state_sync_chunk_type, StateSyncChunk,
+                DEFAULT_CHUNK_SIZE,
+            };
             use std::os::unix::fs::FileExt;
 
             let get_single_chunk = |chunk_index: usize| -> Option<Vec<u8>> {
@@ -513,21 +520,45 @@ impl ChunkableArtifact for StateSyncMessage {
             };
 
             let mut payload: Vec<u8> = Vec::new();
-            if _chunk_id == crate::state_sync::MANIFEST_CHUNK {
-                payload = crate::state_sync::encode_manifest(&self.manifest);
-            } else if _chunk_id.get() < FILE_GROUP_CHUNK_ID_OFFSET
-                || self.state_sync_file_group.get(&_chunk_id.get()).is_none()
-            {
-                payload = get_single_chunk((_chunk_id.get() - 1) as usize)?;
-            } else {
-                let chunk_table_indices = self.state_sync_file_group.get(&_chunk_id.get())?;
-                for chunk_table_index in chunk_table_indices {
-                    payload.extend(get_single_chunk(*chunk_table_index as usize)?);
+            match state_sync_chunk_type(chunk_id.get()) {
+                StateSyncChunk::MetaManifestChunk => {
+                    payload = encode_meta_manifest(&self.meta_manifest);
+                }
+                StateSyncChunk::ManifestChunk(index) => {
+                    let index = index as usize;
+                    if index < self.meta_manifest.sub_manifest_hashes.len() {
+                        let encoded_manifest = encode_manifest(&self.manifest);
+                        let start = index * DEFAULT_CHUNK_SIZE as usize;
+                        let end = std::cmp::min(
+                            start + DEFAULT_CHUNK_SIZE as usize,
+                            encoded_manifest.len(),
+                        );
+                        let sub_manifest = encoded_manifest.get(start..end).unwrap_or_else(||
+                            panic!("We cannot get the {}th piece of the encoded manifest. The manifest and/or meta-manifest must be in abnormal state.", index)
+                        );
+                        payload = sub_manifest.to_vec();
+                    } else {
+                        // The chunk request is either malicious or invalid due to the collision between normal file chunks and manifest chunks.
+                        // Neither case could be resolved and a `None` has to be returned in both cases.
+                        return None;
+                    }
+                }
+                StateSyncChunk::FileGroupChunk(index) => {
+                    if let Some(chunk_table_indices) = self.state_sync_file_group.get(&index) {
+                        for chunk_table_index in chunk_table_indices {
+                            payload.extend(get_single_chunk(*chunk_table_index as usize)?);
+                        }
+                    } else {
+                        return None;
+                    }
+                }
+                StateSyncChunk::FileChunk(index) => {
+                    payload = get_single_chunk(index as usize)?;
                 }
             }
 
             Some(ArtifactChunk {
-                chunk_id: _chunk_id,
+                chunk_id,
                 witness: Vec::new(),
                 artifact_chunk_data: ArtifactChunkData::SemiStructuredChunkData(payload),
             })

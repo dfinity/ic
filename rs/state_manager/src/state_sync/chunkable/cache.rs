@@ -97,7 +97,7 @@ impl StateSyncCache {
         fetch_chunks: HashSet<usize>,
         state_sync_file_group: FileGroupChunks,
     ) {
-        // fetch_chunks, as stored by IncompleteState considers the manifest as chunk 0
+        // fetch_chunks, as stored by IncompleteState considers the meta-manifest as chunk 0
         // For the cache we store indices into the manifest's chunk table as
         // missing_chunks.
         debug_assert!(!fetch_chunks.contains(&0));
@@ -105,7 +105,7 @@ impl StateSyncCache {
         for i in fetch_chunks.into_iter() {
             assert_ne!(0, i);
             if i < FILE_GROUP_CHUNK_ID_OFFSET as usize {
-                missing_chunks.insert(i - 1);
+                missing_chunks.insert(i - FILE_CHUNK_ID_OFFSET);
             } else {
                 // If it's a chunk group, the individual chunks are missing in the manifest,
                 // not the group
@@ -118,7 +118,7 @@ impl StateSyncCache {
 
         debug_assert!(missing_chunks
             .iter()
-            .all(|i| *i + 1 < FILE_GROUP_CHUNK_ID_OFFSET as usize));
+            .all(|i| *i + FILE_CHUNK_ID_OFFSET < FILE_GROUP_CHUNK_ID_OFFSET as usize));
 
         // We rename the folder to decouple the cache from active state syncs a bit.
         // Otherwise we'd have to assume that there won't be an active state sync at
@@ -181,6 +181,7 @@ impl StateSyncCache {
 
         match std::mem::replace(&mut sync.state, DownloadState::Blank) {
             DownloadState::Loading {
+                meta_manifest: _,
                 manifest,
                 state_sync_file_group,
                 fetch_chunks,
@@ -192,10 +193,10 @@ impl StateSyncCache {
                     self.push_inner(sync, manifest, fetch_chunks, state_sync_file_group);
                 }
             }
-            DownloadState::Complete(_) | DownloadState::Blank => {
+            DownloadState::Complete(_) | DownloadState::Blank | DownloadState::Prep { .. } => {
                 // Nothing to cache
                 // Sanity check that the folder is gone (if completed, should have been moved to
-                // a permanent checkpoint, if blank, should never have been created)
+                // a permanent checkpoint, if blank or prep, should never have been created)
                 if sync.root.exists() {
                     warn!(
                         self.log,

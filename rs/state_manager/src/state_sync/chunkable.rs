@@ -19,7 +19,9 @@ use ic_types::{
     },
     malicious_flags::MaliciousFlags,
     state_sync::{
-        decode_manifest, FileGroupChunks, Manifest, FILE_GROUP_CHUNK_ID_OFFSET, MANIFEST_CHUNK,
+        decode_manifest, decode_meta_manifest, state_sync_chunk_type, FileGroupChunks, Manifest,
+        MetaManifest, StateSyncChunk, FILE_CHUNK_ID_OFFSET, FILE_GROUP_CHUNK_ID_OFFSET,
+        MANIFEST_CHUNK_ID_OFFSET, META_MANIFEST_CHUNK,
     },
     CryptoHashOfState, Height,
 };
@@ -27,7 +29,7 @@ use std::os::unix::fs::FileExt;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     sync::{Arc, Mutex},
 };
 
@@ -37,19 +39,35 @@ pub mod cache;
 // necessary.
 const ALWAYS_VALIDATE: bool = false;
 
+type SubManifest = Vec<u8>;
 /// The state of the communication with up-to-date nodes.
 #[derive(Clone)]
 enum DownloadState {
-    /// Haven't received any chunks yet, waiting for the manifest chunk.
+    /// Haven't received any chunks yet, waiting for the meta-manifest chunk.
     Blank,
+    /// In the process of assembling the manifest.
+    Prep {
+        /// The received meta-manifest
+        meta_manifest: MetaManifest,
+        /// This field stores the sub-manifests received and can be used to reconstruct the whole manifest.
+        manifest_in_construction: BTreeMap<u32, SubManifest>,
+        /// Set of chunks that still needed to be fetched for the manifest.
+        manifest_chunks: BTreeSet<u32>,
+    },
     /// In the process of loading chunks, have some more to load.
     Loading {
+        /// The received meta-manifest
+        meta_manifest: MetaManifest,
         /// The received manifest
         manifest: Manifest,
         state_sync_file_group: FileGroupChunks,
         /// Set of chunks that still need to be fetched. For the purpose of this
-        /// set chunk 0 is the manifest. To get indices into the manifests's
-        /// chunk table subtract 1.
+        /// set, chunk 0 is the meta-manifest.
+        ///
+        /// To get indices into the manifest's chunk table, subtract 1. Note that
+        /// it does not apply to file group chunks because they are assigned with
+        /// a dedicated chunk id range.
+        /// The manifest chunks are not part of `fetch_chunks` because they are fetched in the `Prep` phase.
         fetch_chunks: HashSet<usize>,
     },
     /// Successfully completed and returned the artifact to P2P, nothing else to
@@ -103,7 +121,15 @@ impl Drop for IncompleteState {
                     .with_label_values(&["aborted_blank"])
                     .observe(elapsed.as_secs_f64());
             }
+            DownloadState::Prep { .. } => {
+                self.metrics
+                    .state_sync_metrics
+                    .duration
+                    .with_label_values(&["aborted_prep"])
+                    .observe(elapsed.as_secs_f64());
+            }
             DownloadState::Loading {
+                meta_manifest: _,
                 manifest: _,
                 state_sync_file_group,
                 fetch_chunks,
@@ -141,6 +167,7 @@ impl Drop for IncompleteState {
         // passing it to the cache might alter the download state
         let description = match self.state {
             DownloadState::Blank => "aborted before receiving any chunks",
+            DownloadState::Prep { .. } => "aborted before receiving the entire manifest",
             DownloadState::Loading { .. } => "aborted before receiving all the chunks",
             DownloadState::Complete(_) => "completed successfully",
         };
@@ -342,10 +369,10 @@ impl IncompleteState {
                                     byte_range.start,
                                     byte_range.end,
                                     src_data.len(),
-                                    new_chunk_idx + 1
+                                    new_chunk_idx + FILE_CHUNK_ID_OFFSET
                                 );
                                 bad_chunks.push(idx);
-                                corrupted_chunks.lock().unwrap().push(new_chunk_idx + 1);
+                                corrupted_chunks.lock().unwrap().push(new_chunk_idx + FILE_CHUNK_ID_OFFSET);
                                 if !validate_data && ALWAYS_VALIDATE {
                                     error!(
                                         log,
@@ -373,11 +400,11 @@ impl IncompleteState {
                                     byte_range.start,
                                     byte_range.end,
                                     err,
-                                    new_chunk_idx + 1
+                                    new_chunk_idx + FILE_CHUNK_ID_OFFSET
                                 );
 
                                 bad_chunks.push(idx);
-                                corrupted_chunks.lock().unwrap().push(new_chunk_idx + 1);
+                                corrupted_chunks.lock().unwrap().push(new_chunk_idx + FILE_CHUNK_ID_OFFSET);
                                 if !validate_data && ALWAYS_VALIDATE {
                                     error!(
                                         log,
@@ -617,9 +644,9 @@ impl IncompleteState {
                                 byte_range.start,
                                 byte_range.end,
                                 src_map.len(),
-                                *dst_chunk_index + 1
+                                *dst_chunk_index + FILE_CHUNK_ID_OFFSET
                             );
-                            corrupted_chunks.lock().unwrap().push(*dst_chunk_index + 1);
+                            corrupted_chunks.lock().unwrap().push(*dst_chunk_index + FILE_CHUNK_ID_OFFSET);
                             continue;
                         }
                         #[cfg(not(target_os = "linux"))]
@@ -643,10 +670,10 @@ impl IncompleteState {
                                     byte_range.start,
                                     byte_range.end,
                                     err,
-                                    *dst_chunk_index + 1
+                                    *dst_chunk_index + FILE_CHUNK_ID_OFFSET
                                 );
 
-                                corrupted_chunks.lock().unwrap().push(*dst_chunk_index + 1);
+                                corrupted_chunks.lock().unwrap().push(*dst_chunk_index + FILE_CHUNK_ID_OFFSET);
                                 if !validate_data && ALWAYS_VALIDATE {
                                     error!(
                                         log,
@@ -748,6 +775,7 @@ impl IncompleteState {
         height: Height,
         root_hash: CryptoHashOfState,
         manifest: &Manifest,
+        meta_manifest: &MetaManifest,
     ) -> Artifact {
         Artifact::StateSync(StateSyncMessage {
             height,
@@ -757,6 +785,7 @@ impl IncompleteState {
                 .unwrap()
                 .raw_path()
                 .to_path_buf(),
+            meta_manifest: Arc::new(meta_manifest.clone()),
             manifest: manifest.clone(),
             // `state_sync_file_group` and `checkpoint_root` are not included in the integrity hash of this artifact.
             // Therefore it is OK to pass a default value here as it is only used when fetching chunks.
@@ -1007,7 +1036,11 @@ impl IncompleteState {
             // diff_script contains indices into the manifest chunk table, but p2p
             // counts the manifest itself as chunk 0, so all other chunk indices are
             // shifted by 1
-            let mut fetch_chunks = diff_script.fetch_chunks.iter().map(|i| *i + 1).collect();
+            let mut fetch_chunks = diff_script
+                .fetch_chunks
+                .iter()
+                .map(|i| *i + FILE_CHUNK_ID_OFFSET)
+                .collect();
 
             let diff_bytes: u64 = diff_script
                 .fetch_chunks
@@ -1086,7 +1119,10 @@ impl IncompleteState {
                 .remaining
                 .sub(zeros_chunks as i64);
 
-            non_zero_chunks.iter().map(|i| *i + 1).collect()
+            non_zero_chunks
+                .iter()
+                .map(|i| *i + FILE_CHUNK_ID_OFFSET)
+                .collect()
         }
     }
 }
@@ -1094,9 +1130,18 @@ impl IncompleteState {
 impl Chunkable for IncompleteState {
     fn chunks_to_download(&self) -> Box<dyn Iterator<Item = ChunkId>> {
         match self.state {
-            DownloadState::Blank => Box::new(std::iter::once(MANIFEST_CHUNK)),
-            DownloadState::Complete(_) => Box::new(std::iter::empty()),
+            DownloadState::Blank => Box::new(std::iter::once(META_MANIFEST_CHUNK)),
+            DownloadState::Prep {
+                meta_manifest: _,
+                manifest_in_construction: _,
+                ref manifest_chunks,
+            } => {
+                #[allow(clippy::needless_collect)]
+                let ids: Vec<_> = manifest_chunks.iter().map(|id| ChunkId::new(*id)).collect();
+                Box::new(ids.into_iter())
+            }
             DownloadState::Loading {
+                meta_manifest: _,
                 manifest: _,
                 state_sync_file_group: _,
                 ref fetch_chunks,
@@ -1108,11 +1153,12 @@ impl Chunkable for IncompleteState {
                     .collect();
                 Box::new(ids.into_iter())
             }
+            DownloadState::Complete(_) => Box::new(std::iter::empty()),
         }
     }
 
     fn add_chunk(&mut self, artifact_chunk: ArtifactChunk) -> Result<Artifact, ArtifactErrorCode> {
-        let ix = artifact_chunk.chunk_id.get() as usize;
+        let ix = artifact_chunk.chunk_id.get();
 
         let payload = match artifact_chunk.artifact_chunk_data {
             ArtifactChunkData::SemiStructuredChunkData(ref payload) => payload,
@@ -1131,32 +1177,133 @@ impl Chunkable for IncompleteState {
 
                 Ok(*artifact.clone())
             }
-
             DownloadState::Blank => {
-                if artifact_chunk.chunk_id == MANIFEST_CHUNK {
-                    let manifest = decode_manifest(payload).map_err(|err| {
+                if artifact_chunk.chunk_id == META_MANIFEST_CHUNK {
+                    let meta_manifest = decode_meta_manifest(payload).map_err(|err| {
                         warn!(
                             self.log,
-                            "Failed to decode manifest chunk for state {}: {}", self.height, err
+                            "Failed to decode meta-manifest chunk for state {}: {}",
+                            self.height,
+                            err
                         );
                         ChunkVerificationFailed
                     })?;
 
+                    crate::manifest::validate_meta_manifest(&meta_manifest, &self.root_hash)
+                        .map_err(|err| {
+                            warn!(self.log, "Received invalid meta-manifest: {}", err);
+                            ChunkVerificationFailed
+                        })?;
+                    let manifest_chunks_len = meta_manifest.sub_manifest_hashes.len();
+                    debug!(
+                        self.log,
+                        "Received META_MANIFEST chunk for state {}, got {} more chunks to download for the manifest",
+                        self.height,
+                        manifest_chunks_len
+                    );
+                    trace!(self.log, "Received meta-manifest:\n{:?}", meta_manifest);
+
+                    assert!(
+                        MANIFEST_CHUNK_ID_OFFSET
+                            .checked_add(manifest_chunks_len as u32)
+                            .is_some(),
+                        "Not enough chunk id space for manifest chunks!"
+                    );
+                    let manifest_chunks = (MANIFEST_CHUNK_ID_OFFSET
+                        ..MANIFEST_CHUNK_ID_OFFSET + manifest_chunks_len as u32)
+                        .collect();
+
+                    self.state = DownloadState::Prep {
+                        meta_manifest,
+                        manifest_in_construction: Default::default(),
+                        manifest_chunks,
+                    };
+
+                    Err(ChunksMoreNeeded)
+                } else {
+                    warn!(
+                        self.log,
+                        "Received non-meta-manifest chunk {} on blank state {}", ix, self.height
+                    );
+                    Err(ChunkVerificationFailed)
+                }
+            }
+            DownloadState::Prep {
+                ref meta_manifest,
+                ref mut manifest_in_construction,
+                ref mut manifest_chunks,
+            } => {
+                let manifest_chunk_index = match state_sync_chunk_type(ix) {
+                    StateSyncChunk::MetaManifestChunk => {
+                        // Have already seen the meta-manifest chunk
+                        return Err(ChunksMoreNeeded);
+                    }
+                    StateSyncChunk::ManifestChunk(index) => index as usize,
+                    _ => {
+                        // Have not requested such chunks
+                        return Err(ChunkVerificationFailed);
+                    }
+                };
+                debug_assert!(ix >= MANIFEST_CHUNK_ID_OFFSET);
+
+                if !manifest_chunks.contains(&ix) {
+                    return Err(ChunksMoreNeeded);
+                }
+
+                crate::manifest::validate_sub_manifest(
+                    manifest_chunk_index,
+                    &payload[..],
+                    meta_manifest,
+                )
+                .map_err(|err| {
+                    warn!(self.log, "Received invalid sub-manifest: {}", err);
+                    ChunkVerificationFailed
+                })?;
+                manifest_in_construction.insert(ix, payload.clone());
+                manifest_chunks.remove(&ix);
+
+                debug!(
+                    self.log,
+                    "Received MANIFEST chunk {} for state {}, got {} more chunks to download",
+                    manifest_chunk_index,
+                    self.height,
+                    manifest_chunks.len()
+                );
+
+                if manifest_chunks.is_empty() {
+                    let length: usize = manifest_in_construction.values().map(|x| x.len()).sum();
+                    let mut encoded_manifest = Vec::with_capacity(length);
+                    // The sub-manifests are stored in a BTreeMap so the manifest can be assembled by adding each sub-manifest in order.
+                    manifest_in_construction
+                        .values()
+                        .for_each(|sub_manifest| encoded_manifest.extend(sub_manifest));
+
+                    // Since manifest version 2, the authenticity of a manifest comes from the meta-manifest hash which is signed in the CUP.
+                    // It implies severe problems if all sub-manifests pass validation but we fail to get a valid manifest from them.
+                    // The replica should panic in such situation otherwise the state sync will stall in the Prep phase.
+                    let manifest = decode_manifest(&encoded_manifest).map_err(|err| {
+                        fatal!(
+                            self.log,
+                            "Received all sub-manifests but failed to decode manifest chunk for state {}: {}", self.height, err
+                        );
+                    })?;
+
                     crate::manifest::validate_manifest(&manifest, &self.root_hash).map_err(
                         |err| {
-                            warn!(self.log, "Received invalid manifest: {}", err);
-                            ChunkVerificationFailed
+                            fatal!(self.log, "Received all sub-manifests but the assembled manifest is invalid: {}", err);
                         },
                     )?;
 
                     debug!(
                         self.log,
-                        "Received MANIFEST chunk for state {}, got {} more chunks to download",
+                        "Received MANIFEST chunks for state {}, got {} more chunks to download",
                         self.height,
                         manifest.chunk_table.len()
                     );
 
                     trace!(self.log, "Received manifest:\n{}", manifest);
+
+                    let meta_manifest = meta_manifest.clone();
 
                     let mut fetch_chunks = self.initialize_state_on_disk(&manifest);
 
@@ -1183,6 +1330,7 @@ impl Chunkable for IncompleteState {
                             self.height,
                             self.root_hash.clone(),
                             &manifest,
+                            &meta_manifest,
                         );
 
                         self.state = DownloadState::Complete(Box::new(artifact.clone()));
@@ -1198,14 +1346,26 @@ impl Chunkable for IncompleteState {
                             warn!(
                                 self.log,
                                 "The chunk table has {} chunks so file group chunks will not be used due to ID conflicts. \
-                                Please consider increasing the id offset (currently: {})",
+                                Please consider increasing the ID offset (currently: {})",
                                 manifest.chunk_table.len(),
                                 FILE_GROUP_CHUNK_ID_OFFSET,
                             );
                         }
+                        // The chunks in the chunk table should not collide with the manifest chunk IDs.
+                        // The `state_sync_file_group` should either be empty or have no chunks in collision with manifest chunk IDs.
+                        // Otherwise, the up-to-date nodes will not be able to serve the requested chunks correctly.
+                        //
+                        // Such a collision can only happen if there is a bug given the current value of the offset.
+                        // See comments of `MANIFEST_CHUNK_ID_OFFSET` and `FILE_GROUP_CHUNK_ID_OFFSET` for analysis.
+                        assert!(manifest.chunk_table.len() < MANIFEST_CHUNK_ID_OFFSET as usize);
+                        if let Some(last_group_chunk) = state_sync_file_group.last_chunk_id() {
+                            assert!(last_group_chunk < MANIFEST_CHUNK_ID_OFFSET)
+                        }
+
                         for (&chunk_id, chunk_table_indices) in state_sync_file_group.iter() {
                             for &chunk_table_index in chunk_table_indices.iter() {
-                                fetch_chunks.remove(&(chunk_table_index as usize + 1));
+                                fetch_chunks
+                                    .remove(&(chunk_table_index as usize + FILE_CHUNK_ID_OFFSET));
                             }
                             // We decide to fetch all the file group chunks unconditionally for two reasons:
                             //     1. `canister.pbuf` files change between checkpoints and are unlikely to be covered in the copy phase.
@@ -1214,6 +1374,7 @@ impl Chunkable for IncompleteState {
                         }
                         let num_fetch_chunks = fetch_chunks.len();
                         self.state = DownloadState::Loading {
+                            meta_manifest,
                             manifest,
                             state_sync_file_group,
                             fetch_chunks,
@@ -1227,23 +1388,15 @@ impl Chunkable for IncompleteState {
                         Err(ChunksMoreNeeded)
                     }
                 } else {
-                    warn!(
-                        self.log,
-                        "Received non-manifest chunk {} on blank state {}", ix, self.height
-                    );
-                    Err(ChunkVerificationFailed)
+                    Err(ChunksMoreNeeded)
                 }
             }
             DownloadState::Loading {
+                ref meta_manifest,
                 ref manifest,
                 ref mut fetch_chunks,
                 ref state_sync_file_group,
             } => {
-                if artifact_chunk.chunk_id == MANIFEST_CHUNK {
-                    // Have already seen the manifest chunk
-                    return Err(ChunksMoreNeeded);
-                }
-
                 debug!(
                     self.log,
                     "Received chunk {} / {} of state {}",
@@ -1252,20 +1405,21 @@ impl Chunkable for IncompleteState {
                     self.height
                 );
 
-                if !fetch_chunks.contains(&(ix)) {
+                if !fetch_chunks.contains(&(ix as usize)) {
                     return Err(ChunksMoreNeeded);
                 }
 
                 // Each index in `chunk_table_indices` is mapped to a piece of payload bytes
                 // with its corresponding start and end position.
-                let (chunk_table_indices, payload_pieces) =
-                    if ix < FILE_GROUP_CHUNK_ID_OFFSET as usize {
+                let (chunk_table_indices, payload_pieces) = match state_sync_chunk_type(ix) {
+                    StateSyncChunk::FileChunk(index) => {
                         // If it is a normal chunk, there is only one index mapped to the whole payload.
-                        (vec![ix as u32 - 1], vec![(0, payload.len())])
-                    } else {
+                        (vec![index], vec![(0, payload.len())])
+                    }
+                    StateSyncChunk::FileGroupChunk(index) => {
                         // If it is a file group chunk, divide it into pieces according to the `FileGroupChunks`.
                         let chunk_table_indices = state_sync_file_group
-                            .get(&(ix as u32))
+                            .get(&index)
                             .ok_or(ChunkVerificationFailed)?
                             .clone();
 
@@ -1283,7 +1437,12 @@ impl Chunkable for IncompleteState {
                             return Err(ChunkVerificationFailed);
                         }
                         (chunk_table_indices, payload_pieces)
-                    };
+                    }
+                    _ => {
+                        // meta-manifest/manifest chunks are not expected in the `Loading` phase.
+                        return Err(ChunksMoreNeeded);
+                    }
+                };
 
                 let log = &self.log;
                 let metrics = &self.metrics;
@@ -1322,7 +1481,7 @@ impl Chunkable for IncompleteState {
                     );
                 }
 
-                fetch_chunks.remove(&ix);
+                fetch_chunks.remove(&(ix as usize));
 
                 if fetch_chunks.is_empty() {
                     debug!(
@@ -1363,6 +1522,7 @@ impl Chunkable for IncompleteState {
                         self.height,
                         self.root_hash.clone(),
                         manifest,
+                        meta_manifest,
                     );
 
                     self.state = DownloadState::Complete(Box::new(artifact.clone()));

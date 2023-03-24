@@ -10,7 +10,7 @@ pub mod tree_diff;
 pub mod tree_hash;
 
 use crate::{
-    manifest::{build_meta_manifest, compute_bundled_manifest, MAX_SUPPORTED_STATE_SYNC_VERSION},
+    manifest::{compute_bundled_manifest, MAX_SUPPORTED_STATE_SYNC_VERSION},
     state_sync::chunkable::cache::StateSyncCache,
     tip::{spawn_tip_thread, TipRequest},
 };
@@ -1817,19 +1817,23 @@ impl StateManagerImpl {
     fn find_checkpoint_by_root_hash(
         &self,
         root_hash: &CryptoHashOfState,
-    ) -> Option<(Height, Manifest)> {
+    ) -> Option<(Height, Manifest, Arc<MetaManifest>)> {
         self.states
             .read()
             .states_metadata
             .iter()
-            .find_map(
-                |(h, metadata)| match (metadata.root_hash(), metadata.manifest()) {
-                    (Some(hash), Some(manifest)) if hash == root_hash => {
-                        Some((*h, manifest.clone()))
-                    }
-                    _ => None,
-                },
-            )
+            .find_map(|(h, metadata)| {
+                let bundled_manifest = metadata.bundled_manifest.clone()?;
+                if &bundled_manifest.root_hash == root_hash {
+                    Some((
+                        *h,
+                        bundled_manifest.manifest,
+                        bundled_manifest.meta_manifest,
+                    ))
+                } else {
+                    None
+                }
+            })
     }
 
     fn on_synced_checkpoint(
@@ -1837,6 +1841,7 @@ impl StateManagerImpl {
         state: ReplicatedState,
         height: Height,
         manifest: Manifest,
+        meta_manifest: Arc<MetaManifest>,
         root_hash: CryptoHashOfState,
     ) {
         if self
@@ -1902,10 +1907,6 @@ impl StateManagerImpl {
             .iter()
             .map(|f| f.size_bytes as i64)
             .sum();
-        // The computation of meta_manifest is temporary in this replica version.
-        // In future versions, meta_manifest will also be part of StateSyncMessage
-        // and can be directly populated here without extra computation.
-        let meta_manifest = build_meta_manifest(&manifest);
 
         states.states_metadata.insert(
             height,
@@ -1914,7 +1915,7 @@ impl StateManagerImpl {
                 bundled_manifest: Some(BundledManifest {
                     root_hash,
                     manifest,
-                    meta_manifest: Arc::new(meta_manifest),
+                    meta_manifest,
                 }),
                 state_sync_file_group: None,
             },
@@ -2520,7 +2521,7 @@ impl StateManager for StateManagerImpl {
                 // Let's see if we already have this state locally.  This might
                 // be the case if we are in subnet recovery mode and
                 // re-introducing some old state with a new height.
-                if let Some((checkpoint_height, manifest)) = self.find_checkpoint_by_root_hash(&root_hash) {
+                if let Some((checkpoint_height, manifest, meta_manifest)) = self.find_checkpoint_by_root_hash(&root_hash) {
                     info!(self.log,
                           "Copying checkpoint {} with root hash {:?} under new height {}",
                           checkpoint_height, root_hash, height);
@@ -2529,7 +2530,7 @@ impl StateManager for StateManagerImpl {
                         Ok(_) => {
                             let state = load_checkpoint(&self.state_layout, height, &self.metrics, self.own_subnet_type, Arc::clone(&self.get_fd_factory()))
                                 .expect("failed to load checkpoint");
-                            self.on_synced_checkpoint(state, height, manifest, root_hash);
+                            self.on_synced_checkpoint(state, height, manifest, meta_manifest, root_hash);
                             return;
                         }
                         Err(e) => {

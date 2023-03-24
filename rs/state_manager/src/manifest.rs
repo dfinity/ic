@@ -15,7 +15,7 @@ use crate::{
 use bit_vec::BitVec;
 use hash::{chunk_hasher, file_hasher, manifest_hasher, ManifestHash};
 use ic_crypto_sha::Sha256;
-use ic_logger::{error, fatal, ReplicaLogger};
+use ic_logger::{error, fatal, warn, ReplicaLogger};
 use ic_replicated_state::PageIndex;
 use ic_state_layout::{CheckpointLayout, ReadOnly};
 use ic_sys::{mmap::ScopedMmap, PAGE_SIZE};
@@ -35,6 +35,8 @@ use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, Weak};
 
+pub use ic_types::state_sync::DEFAULT_CHUNK_SIZE;
+
 /// Initial version.
 pub const STATE_SYNC_V1: u32 = 1;
 
@@ -48,8 +50,6 @@ pub const CURRENT_STATE_SYNC_VERSION: u32 = STATE_SYNC_V2;
 ///
 /// The replica will panic if trying to deal with a manifest with a version higher than this.
 pub const MAX_SUPPORTED_STATE_SYNC_VERSION: u32 = STATE_SYNC_V2;
-
-pub const DEFAULT_CHUNK_SIZE: u32 = 1 << 20; // 1 MiB.
 
 /// When computing a manifest, we recompute the hash of every
 /// `REHASH_EVERY_NTH_CHUNK` chunk, even if we know it to be unchanged and
@@ -902,6 +902,15 @@ pub fn compute_manifest(
     metrics
         .manifest_size
         .set(encode_manifest(&manifest).len() as i64);
+
+    if manifest.chunk_table.len() > FILE_GROUP_CHUNK_ID_OFFSET as usize / 2 {
+        warn!(
+            log,
+            "The chunk table is longer than half of the available chunk ID space in state sync. chunk table length: {}, state sync max chunk id: {}",
+            manifest.chunk_table.len(),
+            FILE_GROUP_CHUNK_ID_OFFSET - 1,
+        );
+    }
     Ok(manifest)
 }
 

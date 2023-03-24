@@ -30,3 +30,11 @@ pub struct Manifest {
     #[prost(message, repeated, tag = "3")]
     pub chunk_table: ::prost::alloc::vec::Vec<ChunkInfo>,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct MetaManifest {
+    #[prost(uint32, tag = "1")]
+    pub version: u32,
+    #[prost(bytes = "vec", repeated, tag = "2")]
+    pub sub_manifest_hashes: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
+}

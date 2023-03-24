@@ -1,5 +1,5 @@
 //! Conversions from Rust to proto structs and back for `StateSync`.
-use crate::state_sync::{ChunkInfo, FileInfo, Manifest};
+use crate::state_sync::{ChunkInfo, FileInfo, Manifest, MetaManifest};
 use ic_protobuf::proxy::try_decode_hash;
 use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::state::sync::v1 as pb;
@@ -41,6 +41,19 @@ impl From<Manifest> for pb::Manifest {
                 .iter()
                 .cloned()
                 .map(|entry| entry.into())
+                .collect(),
+        }
+    }
+}
+
+impl From<MetaManifest> for pb::MetaManifest {
+    fn from(meta_manifest: MetaManifest) -> Self {
+        Self {
+            version: meta_manifest.version,
+            sub_manifest_hashes: meta_manifest
+                .sub_manifest_hashes
+                .iter()
+                .map(|hash| hash.to_vec())
                 .collect(),
         }
     }
@@ -88,5 +101,20 @@ impl TryFrom<pb::Manifest> for Manifest {
                 .map(ChunkInfo::try_from)
                 .collect::<Result<_, _>>()?,
         ))
+    }
+}
+
+impl TryFrom<pb::MetaManifest> for MetaManifest {
+    type Error = ProxyDecodeError;
+
+    fn try_from(meta_manifest: pb::MetaManifest) -> Result<Self, ProxyDecodeError> {
+        Ok(Self {
+            version: meta_manifest.version,
+            sub_manifest_hashes: meta_manifest
+                .sub_manifest_hashes
+                .into_iter()
+                .map(try_decode_hash)
+                .collect::<Result<_, _>>()?,
+        })
     }
 }

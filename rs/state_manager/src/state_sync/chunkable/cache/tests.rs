@@ -44,11 +44,16 @@ impl TestEnvironment {
 /// if the contents make sense.
 fn fake_loading(seed: u32) -> (DownloadState, Manifest, HashSet<usize>, FileGroupChunks) {
     let manifest = Manifest::new(seed, vec![], vec![]);
+    let meta_manifest = MetaManifest {
+        version: 0,
+        sub_manifest_hashes: vec![],
+    };
     let fetch_chunks: HashSet<usize> =
         maplit::hashset! { (seed + 1) as usize, FILE_GROUP_CHUNK_ID_OFFSET as usize };
     let state_sync_file_group =
         FileGroupChunks::new(maplit::btreemap! { FILE_GROUP_CHUNK_ID_OFFSET => vec![3, 4]});
     let state = DownloadState::Loading {
+        meta_manifest,
         manifest: manifest.clone(),
         state_sync_file_group: state_sync_file_group.clone(),
         fetch_chunks: fetch_chunks.clone(),
@@ -59,11 +64,16 @@ fn fake_loading(seed: u32) -> (DownloadState, Manifest, HashSet<usize>, FileGrou
 /// Creates a fake DownloadState::Completed for an empty state.
 fn fake_complete() -> DownloadState {
     let manifest = Manifest::new(0, vec![], vec![]);
+    let meta_manifest = MetaManifest {
+        version: 0,
+        sub_manifest_hashes: vec![],
+    };
     let artifact = Artifact::StateSync(StateSyncMessage {
         height: Height::new(0),
         root_hash: CryptoHashOfState::from(CryptoHash(vec![0; 32])),
         checkpoint_root: PathBuf::new(),
         manifest,
+        meta_manifest: Arc::new(meta_manifest),
         state_sync_file_group: Default::default(),
     });
     DownloadState::Complete(Box::new(artifact))
@@ -73,11 +83,14 @@ fn ungroup_fetch_chunks(
     fetch_chunks: &HashSet<usize>,
     file_groups: &FileGroupChunks,
 ) -> HashSet<usize> {
-    let mut result: HashSet<usize> = fetch_chunks.iter().map(|i| i - 1).collect();
+    let mut result: HashSet<usize> = fetch_chunks
+        .iter()
+        .map(|i| i - FILE_CHUNK_ID_OFFSET)
+        .collect();
     // Replace groups by their elements
     for (key, chunks) in file_groups.iter() {
         if fetch_chunks.contains(&(*key as usize)) {
-            result.remove(&(*key as usize - 1));
+            result.remove(&(*key as usize - FILE_CHUNK_ID_OFFSET));
             result.extend(chunks.iter().map(|i| *i as usize));
         }
     }
@@ -117,6 +130,7 @@ fn incomplete_state_for_tests(
     // if Loading, populate the scratchpad with a file named after the seed
     // contained in manifest
     if let DownloadState::Loading {
+        meta_manifest: _,
         ref manifest,
         state_sync_file_group: _,
         fetch_chunks: _,
