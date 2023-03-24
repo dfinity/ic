@@ -108,7 +108,7 @@ use ic_interfaces::{
     certification::ChangeSet as CertificationChangeSet,
     consensus_pool::ChangeSet as ConsensusChangeSet,
     dkg::ChangeSet as DkgChangeSet,
-    ecdsa::{EcdsaChangeSet, EcdsaPool},
+    ecdsa::EcdsaChangeSet,
     gossip_pool::GossipPool,
     ingress_pool::{ChangeSet as IngressChangeSet, IngressPoolThrottler},
     time_source::{SysTimeSource, TimeSource},
@@ -442,12 +442,7 @@ pub fn create_dkg_handlers<
 }
 
 pub fn create_ecdsa_handlers<
-    PoolEcdsa: MutablePool<EcdsaArtifact, EcdsaChangeSet>
-        + Send
-        + Sync
-        + GossipPool<EcdsaArtifact>
-        + EcdsaPool
-        + 'static,
+    PoolEcdsa: MutablePool<EcdsaArtifact, EcdsaChangeSet> + Send + Sync + GossipPool<EcdsaArtifact> + 'static,
     C: ChangeSetProducer<PoolEcdsa, ChangeSet = EcdsaChangeSet> + 'static,
     G: ArtifactPoolDescriptor<EcdsaArtifact, PoolEcdsa> + 'static,
     S: Fn(AdvertSendRequest<EcdsaArtifact>) + Send + 'static,
@@ -457,14 +452,9 @@ pub fn create_ecdsa_handlers<
     time_source: Arc<SysTimeSource>,
     ecdsa_pool: Arc<RwLock<PoolEcdsa>>,
     metrics_registry: MetricsRegistry,
-    log: ReplicaLogger,
 ) -> ArtifactClientHandle<EcdsaArtifact> {
-    let client = processors::EcdsaProcessor::new(
-        ecdsa_pool.clone(),
-        Box::new(ecdsa),
-        log,
-        &metrics_registry,
-    );
+    let client =
+        processors::EcdsaProcessor::new(ecdsa_pool.clone(), Box::new(ecdsa), &metrics_registry);
     let manager = ArtifactProcessorHandle::new(
         time_source.clone(),
         metrics_registry,

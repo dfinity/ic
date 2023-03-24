@@ -466,7 +466,6 @@ fn setup_artifact_manager(
                 Arc::clone(&time_source) as Arc<_>,
                 Arc::clone(&artifact_pools.ecdsa_pool),
                 metrics_registry.clone(),
-                replica_logger.clone(),
             )),
         );
     }

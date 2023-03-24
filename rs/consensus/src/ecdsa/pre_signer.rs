@@ -699,7 +699,9 @@ impl EcdsaPreSignerImpl {
                 },
                 |()| {
                     self.metrics.pre_sign_metrics_inc("dealing_received");
-                    Some(EcdsaChangeAction::MoveToValidated(id.clone()))
+                    Some(EcdsaChangeAction::MoveToValidated(
+                        EcdsaMessage::EcdsaSignedDealing(signed_dealing.clone()),
+                    ))
                 },
             )
     }
@@ -854,7 +856,9 @@ impl EcdsaPreSignerImpl {
             |_| {
                 self.metrics
                     .pre_sign_metrics_inc("dealing_support_received");
-                Some(EcdsaChangeAction::MoveToValidated(id.clone()))
+                Some(EcdsaChangeAction::MoveToValidated(
+                    EcdsaMessage::EcdsaDealingSupport(support.clone()),
+                ))
             },
         )
     }

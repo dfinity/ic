@@ -388,16 +388,9 @@ impl MutablePool<EcdsaArtifact, EcdsaChangeSet> for EcdsaPoolImpl {
                 EcdsaChangeAction::AddToValidated(message) => {
                     validated_ops.insert(message);
                 }
-                EcdsaChangeAction::MoveToValidated(ref msg_id) => {
-                    if let Some(message) = self.unvalidated.as_pool_section().get(msg_id) {
-                        unvalidated_ops.remove(msg_id.clone());
-                        validated_ops.insert(message.clone());
-                    } else {
-                        warn!(
-                            self.log,
-                            "MoveToValidated:: artifact was not found: {:?}", action
-                        );
-                    }
+                EcdsaChangeAction::MoveToValidated(message) => {
+                    unvalidated_ops.remove(ecdsa_msg_id(&message));
+                    validated_ops.insert(message);
                 }
                 EcdsaChangeAction::RemoveValidated(ref msg_id) => {
                     validated_ops.remove(msg_id.clone());
@@ -821,22 +814,23 @@ mod tests {
                     ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
                     msg_id
                 };
-                let msg_id_2 = {
+                let (msg_id_2, msg_2) = {
                     let ecdsa_dealing =
                         create_ecdsa_dealing(dummy_idkg_transcript_id_for_tests(200));
                     let msg_id = ecdsa_dealing.message_id();
+                    let msg = EcdsaMessage::EcdsaSignedDealing(ecdsa_dealing);
                     ecdsa_pool.insert(UnvalidatedArtifact {
-                        message: EcdsaMessage::EcdsaSignedDealing(ecdsa_dealing),
+                        message: msg.clone(),
                         peer_id: NODE_1,
                         timestamp: time_source.get_relative_time(),
                     });
-                    msg_id
+                    (msg_id, msg)
                 };
                 check_state(&ecdsa_pool, &[msg_id_2.clone()], &[msg_id_1.clone()]);
 
                 ecdsa_pool.apply_changes(
                     &SysTimeSource::new(),
-                    vec![EcdsaChangeAction::MoveToValidated(msg_id_2.clone())],
+                    vec![EcdsaChangeAction::MoveToValidated(msg_2)],
                 );
                 check_state(&ecdsa_pool, &[], &[msg_id_1, msg_id_2]);
             })

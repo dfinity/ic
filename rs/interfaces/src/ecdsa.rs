@@ -10,7 +10,7 @@ use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedI
 #[derive(Debug)]
 pub enum EcdsaChangeAction {
     AddToValidated(EcdsaMessage),
-    MoveToValidated(EcdsaMessageId),
+    MoveToValidated(EcdsaMessage),
     RemoveValidated(EcdsaMessageId),
     RemoveUnvalidated(EcdsaMessageId),
     HandleInvalid(EcdsaMessageId, String),
