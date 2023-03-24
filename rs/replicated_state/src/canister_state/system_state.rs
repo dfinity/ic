@@ -181,7 +181,7 @@ impl CanisterHistory {
         &mut self,
         timestamp_nanos: Time,
         canister_version: u64,
-        origin: CanisterChangeOrigin,
+        change_origin: CanisterChangeOrigin,
         change_details: CanisterChangeDetails,
     ) {
         let changes = Arc::make_mut(&mut self.changes);
@@ -191,7 +191,7 @@ impl CanisterHistory {
         changes.push_back(Arc::new(CanisterChange::new(
             timestamp_nanos.as_nanos_since_unix_epoch(),
             canister_version,
-            origin,
+            change_origin,
             change_details,
         )));
         self.total_num_changes += 1;

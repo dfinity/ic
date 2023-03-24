@@ -28,7 +28,7 @@ message CanisterControllersChange {
 message CanisterChange {
     uint64 timestamp_nanos = 1;
     uint64 canister_version = 2;
-    oneof origin {
+    oneof change_origin {
         CanisterChangeFromUser canister_change_from_user = 3;
         CanisterChangeFromCanister canister_change_from_canister = 4;
     }

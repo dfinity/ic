@@ -42,8 +42,8 @@ pub struct CanisterChange {
     pub timestamp_nanos: u64,
     #[prost(uint64, tag = "2")]
     pub canister_version: u64,
-    #[prost(oneof = "canister_change::Origin", tags = "3, 4")]
-    pub origin: ::core::option::Option<canister_change::Origin>,
+    #[prost(oneof = "canister_change::ChangeOrigin", tags = "3, 4")]
+    pub change_origin: ::core::option::Option<canister_change::ChangeOrigin>,
     #[prost(oneof = "canister_change::ChangeDetails", tags = "5, 6, 7, 8")]
     pub change_details: ::core::option::Option<canister_change::ChangeDetails>,
 }
@@ -51,7 +51,7 @@ pub struct CanisterChange {
 pub mod canister_change {
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum Origin {
+    pub enum ChangeOrigin {
         #[prost(message, tag = "3")]
         CanisterChangeFromUser(super::CanisterChangeFromUser),
         #[prost(message, tag = "4")]
