@@ -13,6 +13,7 @@ DEPENDENCIES = [
     "//rs/crypto/test_utils/canister_sigs",
     "//rs/types/types",
     "@crate_index//:simple_asn1",
+    "@crate_index//:strum",
 ]
 
 DEV_DEPENDENCIES = [
@@ -21,7 +22,9 @@ DEV_DEPENDENCIES = [
     "@crate_index//:assert_matches",
 ]
 
-MACRO_DEPENDENCIES = []
+MACRO_DEPENDENCIES = [
+    "@crate_index//:strum_macros",
+]
 
 DEV_MACRO_DEPENDENCIES = []
 

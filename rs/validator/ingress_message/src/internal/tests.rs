@@ -1,5 +1,626 @@
 use assert_matches::assert_matches;
 
+mod validate_request {
+    use super::*;
+    use crate::RequestValidationError::MissingSignature;
+    use crate::{HttpRequestVerifier, IngressMessageVerifier, TimeProvider};
+    use ic_canister_client_sender::Ed25519KeyPair;
+    use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
+    use ic_registry_client_helpers::node_operator::PrincipalId;
+    use ic_types::messages::Blob;
+    use ic_types::time::GENESIS;
+    use ic_types::{Time, UserId};
+    use ic_validator_http_request_test_utils::DirectAuthenticationScheme::UserKeyPair;
+    use ic_validator_http_request_test_utils::{
+        AuthenticationScheme, DirectAuthenticationScheme, HttpRequestBuilder,
+    };
+    use rand::{CryptoRng, Rng};
+    use std::str::FromStr;
+
+    const CURRENT_TIME: Time = GENESIS;
+
+    mod ingress_expiry {
+        use super::*;
+        use crate::RequestValidationError::InvalidIngressExpiry;
+        use ic_validator_http_request_test_utils::{AuthenticationScheme, DelegationChain};
+        use std::ops::Sub;
+        use std::time::Duration;
+
+        #[test]
+        fn should_error_when_request_expired() {
+            let mut rng = ReproducibleRng::new();
+            for scheme in all_authentication_schemes(&mut rng) {
+                let request = HttpRequestBuilder::default()
+                    .with_authentication(scheme.clone())
+                    .with_ingress_expiry_at(CURRENT_TIME.sub(Duration::from_nanos(1)))
+                    .build();
+
+                let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
+
+                assert_matches!(
+                    result,
+                    Err(InvalidIngressExpiry(_)),
+                    "Test with authentication {:?} failed",
+                    scheme
+                );
+            }
+        }
+
+        #[test]
+        fn should_error_when_request_expiry_too_far_in_future() {
+            let mut rng = ReproducibleRng::new();
+            for scheme in all_authentication_schemes(&mut rng) {
+                let request = HttpRequestBuilder::default()
+                    .with_authentication(scheme.clone())
+                    .with_ingress_expiry_at(
+                        max_ingress_expiry_at(CURRENT_TIME) + Duration::from_nanos(1),
+                    )
+                    .build();
+
+                let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
+
+                assert_matches!(
+                    result,
+                    Err(InvalidIngressExpiry(_)),
+                    "Test with authentication {:?} failed",
+                    scheme
+                );
+            }
+        }
+
+        #[test]
+        fn should_accept_request_when_expiry_within_acceptable_bounds() {
+            let mut rng = ReproducibleRng::new();
+            let acceptable_expiry = Time::from_nanos_since_unix_epoch(rng.gen_range(
+                CURRENT_TIME.as_nanos_since_unix_epoch()
+                    ..=max_ingress_expiry_at(CURRENT_TIME).as_nanos_since_unix_epoch(),
+            ));
+            for scheme in all_authentication_schemes(&mut rng) {
+                let request = HttpRequestBuilder::default()
+                    .with_authentication(scheme.clone())
+                    .with_ingress_expiry_at(acceptable_expiry)
+                    .build();
+
+                let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
+
+                assert_matches!(
+                    result,
+                    Ok(()),
+                    "Test with authentication {:?} failed",
+                    scheme
+                );
+            }
+        }
+
+        fn all_authentication_schemes<R: Rng + CryptoRng>(
+            rng: &mut R,
+        ) -> Vec<AuthenticationScheme> {
+            use strum::EnumCount;
+
+            let schemes = vec![
+                AuthenticationScheme::Anonymous,
+                AuthenticationScheme::Direct(random_user_key_pair(rng)),
+                AuthenticationScheme::Delegation(
+                    DelegationChain::rooted_at(random_user_key_pair(rng))
+                        .delegate_to(random_user_key_pair(rng), CURRENT_TIME)
+                        .build(),
+                ),
+            ];
+            assert_eq!(schemes.len(), AuthenticationScheme::COUNT);
+            schemes
+        }
+    }
+
+    mod anonymous_request {
+        use super::*;
+        use crate::RequestValidationError::AnonymousSignatureNotAllowed;
+        use ic_canister_client_sender::Ed25519KeyPair;
+        use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
+        use ic_validator_http_request_test_utils::AuthenticationScheme::{Anonymous, Direct};
+
+        #[test]
+        fn should_validate_anonymous_request() {
+            let request = HttpRequestBuilder::default()
+                .with_authentication(Anonymous)
+                .with_ingress_expiry_at(CURRENT_TIME)
+                .build();
+
+            let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
+
+            assert_eq!(result, Ok(()));
+        }
+
+        #[test]
+        fn should_error_if_sender_not_anonymous_principal_in_unsigned_request() {
+            let non_anonymous_user_id =
+                UserId::from(PrincipalId::from_str("bfozs-kwa73-7nadi").expect("invalid user id"));
+            let request = HttpRequestBuilder::default()
+                .with_authentication(Anonymous)
+                .with_ingress_expiry_at(CURRENT_TIME)
+                .with_authentication_sender(Blob(non_anonymous_user_id.get().as_slice().to_vec()))
+                .build();
+            assert_eq!(request.sender(), non_anonymous_user_id);
+
+            let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
+
+            assert_matches!(result, Err(MissingSignature(user_id)) if user_id == non_anonymous_user_id);
+        }
+
+        #[test]
+        fn should_error_when_anonymous_request_signed() {
+            let mut rng = ReproducibleRng::new();
+            let request = HttpRequestBuilder::default()
+                .with_ingress_expiry_at(CURRENT_TIME)
+                .with_authentication(Direct(UserKeyPair(Ed25519KeyPair::generate(&mut rng))))
+                .with_authentication_sender_being_anonymous()
+                .build();
+
+            let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
+
+            assert_matches!(result, Err(AnonymousSignatureNotAllowed));
+        }
+    }
+
+    mod authenticated_requests_direct {
+        use super::*;
+        use crate::AuthenticationError;
+        use crate::RequestValidationError::InvalidSignature;
+        use crate::RequestValidationError::UserIdDoesNotMatchPublicKey;
+        use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+        use ic_validator_http_request_test_utils::AuthenticationScheme::Direct;
+        use ic_validator_http_request_test_utils::HttpRequestEnvelopeFactory;
+
+        #[test]
+        fn should_validate_signed_request() {
+            let mut rng = reproducible_rng();
+            let request = HttpRequestBuilder::default()
+                .with_ingress_expiry_at(CURRENT_TIME)
+                .with_authentication(Direct(random_user_key_pair(&mut rng)))
+                .build();
+
+            let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
+
+            assert_eq!(result, Ok(()));
+        }
+
+        #[test]
+        fn should_error_when_signature_corrupted() {
+            let mut rng = reproducible_rng();
+            let request = HttpRequestBuilder::default()
+                .with_ingress_expiry_at(CURRENT_TIME)
+                .with_authentication(auth_with_random_user_key_pair(&mut rng))
+                .corrupt_authentication_sender_signature()
+                .build();
+
+            let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
+
+            assert_matches!(result, Err(InvalidSignature(AuthenticationError::InvalidBasicSignature(e)))
+                if e.contains("Ed25519 signature could not be verified"))
+        }
+
+        #[test]
+        fn should_error_when_public_key_does_not_match_sender() {
+            let mut rng = reproducible_rng();
+            let correct_key_pair = auth_with_random_user_key_pair(&mut rng);
+            let other_key_pair = auth_with_random_user_key_pair(&mut rng);
+            assert_ne!(correct_key_pair, other_key_pair);
+            let request = HttpRequestBuilder::default()
+                .with_ingress_expiry_at(CURRENT_TIME)
+                .with_authentication(correct_key_pair)
+                .with_authentication_sender_public_key(other_key_pair.sender_public_key())
+                .build();
+
+            let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
+
+            assert_matches!(result, Err(UserIdDoesNotMatchPublicKey(_, _)))
+        }
+
+        #[test]
+        fn should_error_when_request_signed_by_other_key_pair() {
+            let mut rng = reproducible_rng();
+            let correct_key_pair = auth_with_random_user_key_pair(&mut rng);
+            let other_key_pair = auth_with_random_user_key_pair(&mut rng);
+            assert_ne!(correct_key_pair, other_key_pair);
+            let request = HttpRequestBuilder::default()
+                .with_ingress_expiry_at(CURRENT_TIME)
+                .with_authentication(correct_key_pair)
+                .with_authentication_sender(other_key_pair.sender())
+                .with_authentication_sender_public_key(other_key_pair.sender_public_key())
+                .build();
+
+            let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
+
+            assert_matches!(result, Err(InvalidSignature(AuthenticationError::InvalidBasicSignature(e)))
+                if e.contains("Ed25519 signature could not be verified"))
+        }
+    }
+
+    mod authenticated_requests_delegations {
+        use super::*;
+        use crate::AuthenticationError::InvalidBasicSignature;
+        use crate::HttpRequestVerifier;
+        use crate::RequestValidationError::CanisterNotInDelegationTargets;
+        use crate::RequestValidationError::InvalidDelegation;
+        use crate::RequestValidationError::InvalidDelegationExpiry;
+        use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+        use ic_types::time::GENESIS;
+        use ic_types::{CanisterId, Time};
+        use ic_validator_http_request_test_utils::{
+            AuthenticationScheme, DelegationChain, DelegationChainBuilder, HttpRequestBuilder,
+        };
+        use rand::{CryptoRng, Rng};
+        use std::time::Duration;
+
+        const MAXIMUM_NUMBER_OF_DELEGATIONS: usize = 20; // !changing this number might be breaking!//
+        const CURRENT_TIME: Time = GENESIS;
+
+        #[test]
+        fn should_validate_empty_delegations() {
+            let mut rng = reproducible_rng();
+            let request = HttpRequestBuilder::default()
+                .with_ingress_expiry_at(CURRENT_TIME)
+                .with_authentication(auth_with_random_user_key_pair(&mut rng))
+                .with_authentication_sender_delegations(Some(Vec::new()))
+                .build();
+
+            let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
+
+            assert_eq!(result, Ok(()))
+        }
+
+        #[test]
+        fn should_validate_delegation_chains_of_length_up_to_20() {
+            let mut rng = reproducible_rng();
+            let mut chain_builder = DelegationChain::rooted_at(random_user_key_pair(&mut rng));
+            for number_of_delegations in 1..=20 {
+                chain_builder =
+                    chain_builder.delegate_to(random_user_key_pair(&mut rng), CURRENT_TIME);
+                let chain = chain_builder.clone().build();
+                assert_eq!(chain.len(), number_of_delegations);
+
+                let request = HttpRequestBuilder::default()
+                    .with_ingress_expiry_at(CURRENT_TIME)
+                    .with_authentication(AuthenticationScheme::Delegation(chain.clone()))
+                    .build();
+
+                let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
+
+                assert_eq!(
+                    result,
+                    Ok(()),
+                    "verification of delegation chain {:?} of length {} failed",
+                    chain,
+                    number_of_delegations
+                );
+            }
+        }
+
+        #[test]
+        fn should_fail_when_delegation_chain_length_just_above_boundary() {
+            let mut rng = reproducible_rng();
+            let request = HttpRequestBuilder::default()
+                .with_ingress_expiry_at(CURRENT_TIME)
+                .with_authentication(AuthenticationScheme::Delegation(
+                    delegation_chain_of_length(
+                        MAXIMUM_NUMBER_OF_DELEGATIONS + 1,
+                        CURRENT_TIME,
+                        &mut rng,
+                    ),
+                ))
+                .build();
+
+            let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
+
+            assert_matches!(result, Err(InvalidDelegation(_)))
+        }
+
+        #[test]
+        fn should_fail_when_delegation_chain_too_long() {
+            let mut rng = reproducible_rng();
+            let number_of_delegations = rng
+                .gen_range(MAXIMUM_NUMBER_OF_DELEGATIONS + 2..=2 * MAXIMUM_NUMBER_OF_DELEGATIONS);
+            let request = HttpRequestBuilder::default()
+                .with_ingress_expiry_at(CURRENT_TIME)
+                .with_authentication(AuthenticationScheme::Delegation(
+                    delegation_chain_of_length(number_of_delegations, CURRENT_TIME, &mut rng),
+                ))
+                .build();
+
+            let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
+
+            assert_matches!(result, Err(InvalidDelegation(_)))
+        }
+
+        #[test]
+        fn should_fail_when_a_single_delegation_expired() {
+            let mut rng = reproducible_rng();
+            let expired_delegation_index = rng.gen_range(1..=MAXIMUM_NUMBER_OF_DELEGATIONS);
+            let one_ns = Duration::from_nanos(1);
+            let expired = CURRENT_TIME - one_ns;
+            let not_expired = CURRENT_TIME;
+            let delegation_chain = grow_delegation_chain(
+                DelegationChain::rooted_at(random_user_key_pair(&mut rng)),
+                MAXIMUM_NUMBER_OF_DELEGATIONS,
+                |index| index == expired_delegation_index,
+                |builder| builder.delegate_to(random_user_key_pair(&mut rng.clone()), expired),
+                |builder| builder.delegate_to(random_user_key_pair(&mut rng.clone()), not_expired),
+            );
+            let request = HttpRequestBuilder::default()
+                .with_ingress_expiry_at(CURRENT_TIME)
+                .with_authentication(AuthenticationScheme::Delegation(delegation_chain.build()))
+                .build();
+
+            let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
+
+            assert_matches!(result, Err(InvalidDelegationExpiry(msg)) if msg.contains(&format!("{expired}")))
+        }
+
+        #[test]
+        fn should_validate_non_expiring_delegation() {
+            let mut rng = reproducible_rng();
+            let never_expire = Time::from_nanos_since_unix_epoch(u64::MAX);
+            let request = HttpRequestBuilder::default()
+                .with_ingress_expiry_at(CURRENT_TIME)
+                .with_authentication(AuthenticationScheme::Delegation(
+                    DelegationChain::rooted_at(random_user_key_pair(&mut rng))
+                        .delegate_to(random_user_key_pair(&mut rng), never_expire)
+                        .build(),
+                ))
+                .build();
+
+            let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
+
+            assert_eq!(result, Ok(()));
+        }
+
+        #[test]
+        fn should_fail_when_single_delegation_signature_corrupted() {
+            let mut rng = reproducible_rng();
+            let corrupted_delegation_index = rng.gen_range(1..=MAXIMUM_NUMBER_OF_DELEGATIONS);
+            let mut key_pair_whose_signature_is_corrupted = None;
+            let delegation_chain = grow_delegation_chain(
+                DelegationChain::rooted_at(random_user_key_pair(&mut rng)),
+                MAXIMUM_NUMBER_OF_DELEGATIONS,
+                |index| index == corrupted_delegation_index,
+                |builder| {
+                    key_pair_whose_signature_is_corrupted = Some(builder.current_end().clone());
+                    builder
+                        .delegate_to(random_user_key_pair(&mut rng.clone()), CURRENT_TIME) // produce a statement signed by the secret key of `key_pair_whose_signature_is_corrupted`
+                        .change_last_delegation(|delegation| delegation.corrupt_signature())
+                    // corrupt signature produced by secret key of `key_pair_whose_signature_is_corrupted`
+                },
+                |builder| builder.delegate_to(random_user_key_pair(&mut rng.clone()), CURRENT_TIME),
+            );
+            let request = HttpRequestBuilder::default()
+                .with_ingress_expiry_at(CURRENT_TIME)
+                .with_authentication(AuthenticationScheme::Delegation(delegation_chain.build()))
+                .build();
+
+            let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
+
+            assert_matches!(result, Err(InvalidDelegation(InvalidBasicSignature(msg)))
+                    if msg.contains(&format!("Ed25519 signature could not be verified: public key {}",
+                        hex::encode(key_pair_whose_signature_is_corrupted
+                        .expect("no delegation was corrupted")
+                        .public_key_raw()))))
+        }
+
+        #[test]
+        fn should_fail_when_delegations_do_not_form_a_chain() {
+            let mut rng = reproducible_rng();
+            let wrong_delegation_index = rng.gen_range(1..=MAXIMUM_NUMBER_OF_DELEGATIONS);
+            let other_key_pair = random_user_key_pair(&mut rng);
+            let delegation_chain = grow_delegation_chain(
+                DelegationChain::rooted_at(random_user_key_pair(&mut rng)),
+                MAXIMUM_NUMBER_OF_DELEGATIONS,
+                |index| index == wrong_delegation_index,
+                |builder| {
+                    builder
+                        .delegate_to(random_user_key_pair(&mut rng.clone()), CURRENT_TIME)
+                        .change_last_delegation(|last_delegation| {
+                            last_delegation.with_public_key(other_key_pair.public_key_der())
+                        })
+                },
+                |builder| builder.delegate_to(random_user_key_pair(&mut rng.clone()), CURRENT_TIME),
+            );
+            let request = HttpRequestBuilder::default()
+                .with_ingress_expiry_at(CURRENT_TIME)
+                .with_authentication(AuthenticationScheme::Delegation(delegation_chain.build()))
+                .build();
+
+            let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
+
+            assert_matches!(result, Err(InvalidDelegation(InvalidBasicSignature(_))));
+        }
+
+        #[test]
+        fn should_validate_request_when_canister_id_among_all_targets() {
+            let mut rng = reproducible_rng();
+            let requested_canister_id = CanisterId::from(42);
+            let request = HttpRequestBuilder::default()
+                .with_ingress_expiry_at(CURRENT_TIME)
+                .with_canister_id(Blob(requested_canister_id.get().to_vec()))
+                .with_authentication(AuthenticationScheme::Delegation(
+                    DelegationChain::rooted_at(random_user_key_pair(&mut rng))
+                        .delegate_to_with_targets(
+                            random_user_key_pair(&mut rng),
+                            CURRENT_TIME,
+                            vec![
+                                CanisterId::from(41),
+                                requested_canister_id,
+                                CanisterId::from(43),
+                            ],
+                        )
+                        .delegate_to(random_user_key_pair(&mut rng), CURRENT_TIME)
+                        .delegate_to_with_targets(
+                            random_user_key_pair(&mut rng),
+                            CURRENT_TIME,
+                            vec![requested_canister_id, CanisterId::from(43)],
+                        )
+                        .build(),
+                ))
+                .build();
+
+            let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
+
+            assert_eq!(result, Ok(()))
+        }
+
+        #[test]
+        fn should_fail_when_requested_canister_id_not_among_all_targets() {
+            let mut rng = reproducible_rng();
+            let requested_canister_id = CanisterId::from(42);
+            let request = HttpRequestBuilder::default()
+                .with_ingress_expiry_at(CURRENT_TIME)
+                .with_canister_id(Blob(requested_canister_id.get().to_vec()))
+                .with_authentication(AuthenticationScheme::Delegation(
+                    DelegationChain::rooted_at(random_user_key_pair(&mut rng))
+                        .delegate_to_with_targets(
+                            random_user_key_pair(&mut rng),
+                            CURRENT_TIME,
+                            vec![CanisterId::from(41), CanisterId::from(43)],
+                        )
+                        .delegate_to(random_user_key_pair(&mut rng), CURRENT_TIME)
+                        .delegate_to_with_targets(
+                            random_user_key_pair(&mut rng),
+                            CURRENT_TIME,
+                            vec![
+                                CanisterId::from(41),
+                                requested_canister_id,
+                                CanisterId::from(43),
+                            ],
+                        )
+                        .build(),
+                ))
+                .build();
+
+            let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
+
+            assert_matches!(result, Err(CanisterNotInDelegationTargets(id)) if id == requested_canister_id);
+        }
+
+        #[test]
+        fn should_fail_when_targets_empty() {
+            let mut rng = reproducible_rng();
+            let requested_canister_id = CanisterId::from(42);
+            let request = HttpRequestBuilder::default()
+                .with_ingress_expiry_at(CURRENT_TIME)
+                .with_canister_id(Blob(requested_canister_id.get().to_vec()))
+                .with_authentication(AuthenticationScheme::Delegation(
+                    DelegationChain::rooted_at(random_user_key_pair(&mut rng))
+                        .delegate_to_with_targets(
+                            random_user_key_pair(&mut rng),
+                            CURRENT_TIME,
+                            vec![],
+                        )
+                        .build(),
+                ))
+                .build();
+
+            let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
+
+            assert_matches!(result, Err(CanisterNotInDelegationTargets(id)) if id == requested_canister_id);
+        }
+
+        #[test]
+        fn should_accept_repeating_target() {
+            let mut rng = reproducible_rng();
+            let requested_canister_id = CanisterId::from(42);
+            let request = HttpRequestBuilder::default()
+                .with_ingress_expiry_at(CURRENT_TIME)
+                .with_canister_id(Blob(requested_canister_id.get().to_vec()))
+                .with_authentication(AuthenticationScheme::Delegation(
+                    DelegationChain::rooted_at(random_user_key_pair(&mut rng))
+                        .delegate_to_with_targets(
+                            random_user_key_pair(&mut rng),
+                            CURRENT_TIME,
+                            vec![
+                                CanisterId::from(41),
+                                requested_canister_id,
+                                requested_canister_id,
+                                requested_canister_id,
+                                CanisterId::from(43),
+                                requested_canister_id,
+                            ],
+                        )
+                        .build(),
+                ))
+                .build();
+
+            let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
+
+            assert_eq!(result, Ok(()))
+        }
+
+        fn delegation_chain_of_length<R: Rng + CryptoRng>(
+            number_of_delegations: usize,
+            delegation_expiration: Time,
+            rng: &mut R,
+        ) -> DelegationChain {
+            grow_delegation_chain(
+                DelegationChain::rooted_at(random_user_key_pair(rng)),
+                number_of_delegations,
+                |_i| true,
+                |builder| builder.delegate_to(random_user_key_pair(rng), delegation_expiration),
+                |_builder| panic!("should not be called because predicate always true"),
+            )
+            .build()
+        }
+
+        /// Grow a chain of delegations in two different manners depending
+        /// on the index of the added delegations in the chain, starting at 1.
+        fn grow_delegation_chain<
+            Predicate: Fn(usize) -> bool,
+            BuilderWhenTrue: FnMut(DelegationChainBuilder) -> DelegationChainBuilder,
+            BuilderWhenFalse: FnMut(DelegationChainBuilder) -> DelegationChainBuilder,
+        >(
+            start: DelegationChainBuilder,
+            number_of_delegations_to_add: usize,
+            predicate: Predicate,
+            mut delegation_when_true: BuilderWhenTrue,
+            mut delegation_when_false: BuilderWhenFalse,
+        ) -> DelegationChainBuilder {
+            assert!(
+                number_of_delegations_to_add > 0,
+                "expected a positive number of delegations to add"
+            );
+            let mut chain_builder = start;
+            let length_at_start = chain_builder.number_of_signed_delegations();
+            for i in 1..=number_of_delegations_to_add {
+                chain_builder = if predicate(i) {
+                    delegation_when_true(chain_builder)
+                } else {
+                    delegation_when_false(chain_builder)
+                }
+            }
+            let length_at_end = chain_builder.number_of_signed_delegations();
+            assert_eq!(
+                length_at_end - length_at_start,
+                number_of_delegations_to_add
+            );
+            chain_builder
+        }
+    }
+    fn auth_with_random_user_key_pair<R: Rng + CryptoRng>(rng: &mut R) -> AuthenticationScheme {
+        AuthenticationScheme::Direct(random_user_key_pair(rng))
+    }
+
+    fn random_user_key_pair<R: Rng + CryptoRng>(rng: &mut R) -> DirectAuthenticationScheme {
+        UserKeyPair(Ed25519KeyPair::generate(rng))
+    }
+
+    fn max_ingress_expiry_at(current_time: Time) -> Time {
+        use ic_constants::{MAX_INGRESS_TTL, PERMITTED_DRIFT_AT_VALIDATOR};
+        current_time + MAX_INGRESS_TTL + PERMITTED_DRIFT_AT_VALIDATOR
+    }
+
+    fn verifier_at_time(current_time: Time) -> IngressMessageVerifier {
+        IngressMessageVerifier::builder()
+            .with_time_provider(TimeProvider::Constant(current_time))
+            .build()
+    }
+}
+
 mod registry {
     use super::*;
     use crate::internal::{
@@ -46,116 +667,5 @@ mod registry {
         registry
             .get_threshold_signing_public_key_for_subnet(root_subnet_id, registry_version)
             .expect("error retrieving root public key")
-    }
-}
-
-mod delegations {
-    use super::*;
-    use crate::RequestValidationError::InvalidDelegation;
-    use crate::{HttpRequestVerifier, IngressMessageVerifier, TimeProvider};
-    use ic_canister_client_sender::Ed25519KeyPair;
-    use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-    use ic_types::time::GENESIS;
-    use ic_types::Time;
-    use ic_validator_http_request_test_utils::DirectAuthenticationScheme::UserKeyPair;
-    use ic_validator_http_request_test_utils::{
-        AuthenticationScheme, DelegationChain, DirectAuthenticationScheme, HttpRequestBuilder,
-    };
-    use rand::{CryptoRng, Rng};
-
-    const MAXIMUM_NUMBER_OF_DELEGATIONS: usize = 20; // !changing this number might be breaking!//
-    const CURRENT_TIME: Time = GENESIS;
-
-    //TODO CRP-1944: add positive test for delegation chain of length 0
-
-    #[test]
-    fn should_allow_delegation_chains_of_length_up_to_20() {
-        let mut rng = reproducible_rng();
-        let mut chain_builder = DelegationChain::rooted_at(random_user_key_pair(&mut rng));
-        for number_of_delegations in 1..=20 {
-            chain_builder = chain_builder.delegate_to(random_user_key_pair(&mut rng), CURRENT_TIME);
-            let chain = chain_builder.clone().build();
-            assert_eq!(chain.len(), number_of_delegations);
-
-            let request = HttpRequestBuilder::default()
-                .with_ingress_expiry_at(CURRENT_TIME)
-                .with_authentication(AuthenticationScheme::Delegation(chain.clone()))
-                .build();
-
-            let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
-
-            assert_eq!(
-                result,
-                Ok(()),
-                "verification of delegation chain {:?} of length {} failed",
-                chain,
-                number_of_delegations
-            );
-        }
-    }
-
-    #[test]
-    fn should_fail_when_delegation_chain_length_just_above_boundary() {
-        let mut rng = reproducible_rng();
-        let request = HttpRequestBuilder::default()
-            .with_ingress_expiry_at(CURRENT_TIME)
-            .with_authentication(AuthenticationScheme::Delegation(
-                delegation_chain_of_length(
-                    MAXIMUM_NUMBER_OF_DELEGATIONS + 1,
-                    CURRENT_TIME,
-                    &mut rng,
-                ),
-            ))
-            .build();
-
-        let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
-
-        assert_matches!(result, Err(InvalidDelegation(_)))
-    }
-
-    #[test]
-    fn should_fail_when_delegation_chain_too_long() {
-        let mut rng = reproducible_rng();
-        let number_of_delegations =
-            rng.gen_range(MAXIMUM_NUMBER_OF_DELEGATIONS + 2..=2 * MAXIMUM_NUMBER_OF_DELEGATIONS);
-        let request = HttpRequestBuilder::default()
-            .with_ingress_expiry_at(CURRENT_TIME)
-            .with_authentication(AuthenticationScheme::Delegation(
-                delegation_chain_of_length(number_of_delegations, CURRENT_TIME, &mut rng),
-            ))
-            .build();
-
-        let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
-
-        assert_matches!(result, Err(InvalidDelegation(_)))
-    }
-
-    fn delegation_chain_of_length<R: Rng + CryptoRng>(
-        number_of_delegations: usize,
-        delegation_expiration: Time,
-        rng: &mut R,
-    ) -> DelegationChain {
-        assert!(
-            number_of_delegations > 0,
-            "expected a positive number of delegations"
-        );
-        let mut chain_builder = DelegationChain::rooted_at(random_user_key_pair(rng));
-        for _ in 0..number_of_delegations {
-            chain_builder =
-                chain_builder.delegate_to(random_user_key_pair(rng), delegation_expiration);
-        }
-        let chain = chain_builder.build();
-        assert_eq!(chain.len(), number_of_delegations);
-        chain
-    }
-
-    fn random_user_key_pair<R: Rng + CryptoRng>(rng: &mut R) -> DirectAuthenticationScheme {
-        UserKeyPair(Ed25519KeyPair::generate(rng))
-    }
-
-    fn verifier_at_time(current_time: Time) -> IngressMessageVerifier {
-        IngressMessageVerifier::builder()
-            .with_time_provider(TimeProvider::Constant(current_time))
-            .build()
     }
 }

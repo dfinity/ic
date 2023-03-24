@@ -9733,10 +9733,12 @@ dependencies = [
  "ic-constants",
  "ic-crypto",
  "ic-crypto-sha",
+ "ic-crypto-test-utils-reproducible-rng",
  "ic-interfaces",
  "ic-test-utilities",
  "ic-types",
  "maplit",
+ "rand 0.8.5",
 ]
 
 [[package]]
@@ -9756,6 +9758,8 @@ dependencies = [
  "ic-crypto-test-utils-reproducible-rng",
  "ic-types",
  "simple_asn1 0.6.2",
+ "strum 0.23.0",
+ "strum_macros 0.23.1",
 ]
 
 [[package]]
@@ -9767,6 +9771,7 @@ dependencies = [
  "hex",
  "ic-canister-client-sender",
  "ic-certification-test-utils",
+ "ic-constants",
  "ic-crypto",
  "ic-crypto-temp-crypto",
  "ic-crypto-test-utils-reproducible-rng",
@@ -9782,6 +9787,7 @@ dependencies = [
  "ic-validator",
  "ic-validator-http-request-test-utils",
  "rand 0.8.5",
+ "strum 0.23.0",
 ]
 
 [[package]]

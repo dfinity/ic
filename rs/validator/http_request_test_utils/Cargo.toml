@@ -15,6 +15,8 @@ ic-crypto-test-utils = { path = "../../crypto/test_utils" }
 ic-crypto-test-utils-canister-sigs = { path = "../../crypto/test_utils/canister_sigs" }
 ic-types = { path = "../../types/types" }
 simple_asn1 = "0.6.1"
+strum = "0.23.0"
+strum_macros = "0.23.0"
 
 [dev-dependencies]
 assert_matches = "1.5.0"
