@@ -127,7 +127,7 @@ pub struct ConsensusImpl {
     malicious_flags: MaliciousFlags,
     log: ReplicaLogger,
     config: ConsensusConfig,
-    local_store_time_reader: Option<Arc<dyn LocalStoreCertifiedTimeReader>>,
+    local_store_time_reader: Arc<dyn LocalStoreCertifiedTimeReader>,
 }
 
 impl ConsensusImpl {
@@ -153,7 +153,7 @@ impl ConsensusImpl {
         malicious_flags: MaliciousFlags,
         metrics_registry: MetricsRegistry,
         logger: ReplicaLogger,
-        local_store_time_reader: Option<Arc<dyn LocalStoreCertifiedTimeReader>>,
+        local_store_time_reader: Arc<dyn LocalStoreCertifiedTimeReader>,
     ) -> Self {
         let payload_builder = Arc::new(PayloadBuilderImpl::new(
             replica_config.subnet_id,
@@ -314,15 +314,13 @@ impl ConsensusImpl {
     /// check whether the subnet should halt because it has not reached
     /// the registry in a long time
     pub fn check_registry_outdated(&self) -> Result<(), String> {
-        if let Some(reader) = &self.local_store_time_reader {
-            let registry_time = reader.read_certified_time();
-            let current_time = self.time_source.get_relative_time();
-            if registry_time + HALT_AFTER_REGISTRY_UNREACHABLE < current_time {
-                return Err(format!(
-                    "registry time: {:?}, current_time: {:?}",
-                    registry_time, current_time
-                ));
-            }
+        let registry_time = self.local_store_time_reader.read_certified_time();
+        let current_time = self.time_source.get_relative_time();
+        if registry_time + HALT_AFTER_REGISTRY_UNREACHABLE < current_time {
+            return Err(format!(
+                "registry time: {:?}, current_time: {:?}",
+                registry_time, current_time
+            ));
         }
         Ok(())
     }
@@ -638,7 +636,7 @@ pub fn setup(
     malicious_flags: MaliciousFlags,
     metrics_registry: MetricsRegistry,
     logger: ReplicaLogger,
-    local_store_time_reader: Option<Arc<dyn LocalStoreCertifiedTimeReader>>,
+    local_store_time_reader: Arc<dyn LocalStoreCertifiedTimeReader>,
     registry_poll_delay_duration_ms: u64,
 ) -> (ConsensusImpl, ConsensusGossipImpl) {
     // Currently, the orchestrator polls the registry every
@@ -767,9 +765,7 @@ mod tests {
             MaliciousFlags::default(),
             metrics_registry,
             no_op_logger(),
-            Some(Arc::new(FakeLocalStoreCertifiedTimeReader::new(
-                time_source.clone(),
-            ))),
+            Arc::new(FakeLocalStoreCertifiedTimeReader::new(time_source.clone())),
         );
         (consensus_impl, pool, time_source)
     }
@@ -825,9 +821,9 @@ mod tests {
             // when the consensus time source and the registry time are equal, consensus
             // should not be halted.
             let registry_time_source = FastForwardTimeSource::new();
-            consensus_impl.local_store_time_reader = Some(Arc::new(
+            consensus_impl.local_store_time_reader = Arc::new(
                 FakeLocalStoreCertifiedTimeReader::new(registry_time_source.clone()),
-            ));
+            );
             registry_time_source
                 .set_time(consensus_impl.time_source.get_relative_time())
                 .unwrap();
@@ -875,9 +871,9 @@ mod tests {
             // when the consensus time source and the registry time are equal, consensus
             // should not be halted.
             let registry_time_source = FastForwardTimeSource::new();
-            consensus_impl.local_store_time_reader = Some(Arc::new(
+            consensus_impl.local_store_time_reader = Arc::new(
                 FakeLocalStoreCertifiedTimeReader::new(registry_time_source.clone()),
-            ));
+            );
             registry_time_source
                 .set_time(consensus_impl.time_source.get_relative_time())
                 .unwrap();

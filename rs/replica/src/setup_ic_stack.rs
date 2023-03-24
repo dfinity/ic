@@ -43,7 +43,7 @@ pub fn construct_ic_stack(
     crypto: Arc<CryptoComponent>,
     metrics_registry: ic_metrics::MetricsRegistry,
     catch_up_package: Option<CUPWithOriginalProtobuf>,
-    local_store_time_reader: Option<Arc<dyn LocalStoreCertifiedTimeReader>>,
+    local_store_time_reader: Arc<dyn LocalStoreCertifiedTimeReader>,
 ) -> std::io::Result<(
     Arc<StateManagerImpl>,
     Arc<dyn QueryHandler<State = ReplicatedState>>,

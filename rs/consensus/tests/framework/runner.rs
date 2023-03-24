@@ -12,6 +12,7 @@ use ic_consensus::{
 use ic_interfaces::time_source::TimeSource;
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_test_utilities::{crypto::CryptoReturningOk, FastForwardTimeSource};
+use ic_test_utilities_registry::FakeLocalStoreCertifiedTimeReader;
 use ic_types::malicious_flags::MaliciousFlags;
 use ic_types::Time;
 use rand::{thread_rng, Rng, RngCore};
@@ -134,6 +135,8 @@ impl<'a> ConsensusRunner<'a> {
             replica_logger.clone(),
             pool_reader,
         )));
+        let fake_local_store_certified_time_reader =
+            Arc::new(FakeLocalStoreCertifiedTimeReader::new(self.time.clone()));
 
         let consensus = ConsensusImpl::new(
             deps.replica_config.clone(),
@@ -155,7 +158,7 @@ impl<'a> ConsensusRunner<'a> {
             MaliciousFlags::default(),
             deps.metrics_registry.clone(),
             replica_logger.clone(),
-            None,
+            fake_local_store_certified_time_reader,
         );
         let dkg = dkg::DkgImpl::new(
             deps.replica_config.node_id,

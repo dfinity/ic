@@ -34,6 +34,7 @@ ic-state-machine-tests = { path = "../state_machine_tests" }
 ic-state-manager = { path = "../state_manager" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }
+ic-test-utilities-registry = { path = "../test_utilities/registry" }
 ic-crypto = { path = "../crypto" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }

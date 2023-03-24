@@ -29,9 +29,10 @@ use ic_replicated_state::{CanisterState, ReplicatedState};
 use ic_state_machine_tests::StateMachine;
 use ic_test_utilities::{
     types::ids::user_anonymous_id, types::messages::SignedIngressBuilder,
-    universal_canister::UNIVERSAL_CANISTER_WASM,
+    universal_canister::UNIVERSAL_CANISTER_WASM, FastForwardTimeSource,
 };
 use ic_test_utilities_logger::with_test_replica_logger;
+use ic_test_utilities_registry::FakeLocalStoreCertifiedTimeReader;
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{SignedIngress, UserQuery},
@@ -352,6 +353,9 @@ where
             ProtoRegistryDataProvider::load_from_file(init_ic.registry_path().as_path());
         let data_provider = Arc::new(data_provider);
         let fake_registry_client = Arc::new(FakeRegistryClient::new(data_provider.clone()));
+        let registry_time_source = FastForwardTimeSource::new();
+        let fake_local_store_certified_time_reader =
+            Arc::new(FakeLocalStoreCertifiedTimeReader::new(registry_time_source));
         fake_registry_client.update_to_latest_version();
         let registry = fake_registry_client.clone() as Arc<dyn RegistryClient + Send + Sync>;
         let crypto = setup_crypto_provider(
@@ -406,7 +410,7 @@ where
                 crypto,
                 metrics_registry,
                 None,
-                None,
+                fake_local_store_certified_time_reader,
             )
             .expect("Failed to setup p2p");
 
