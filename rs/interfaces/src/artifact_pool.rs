@@ -30,6 +30,11 @@ pub trait MutablePool<Artifact: ArtifactKind, C> {
     /// Inserts a message into the unvalidated part of the pool.
     fn insert(&mut self, msg: UnvalidatedArtifact<Artifact::Message>);
 
+    /// Removes a message from the unvalidated part of the pool.
+    fn remove(&mut self, _id: &Artifact::Id) {
+        unimplemented!()
+    }
+
     /// Applies a set of change actions to the pool.
     fn apply_changes(&mut self, time_source: &dyn TimeSource, change_set: C);
 }
