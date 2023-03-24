@@ -23,8 +23,10 @@ use ic_test_utilities::{
     thread_transport::*,
     types::ids::{node_test_id, subnet_test_id},
     xnet_payload_builder::FakeXNetPayloadBuilder,
+    FastForwardTimeSource,
 };
 use ic_test_utilities_metrics::fetch_int_gauge;
+use ic_test_utilities_registry::FakeLocalStoreCertifiedTimeReader;
 use ic_types::{consensus::catchup::CUPWithOriginalProtobuf, replica_config::ReplicaConfig};
 use parking_lot::Mutex;
 use std::sync::Arc;
@@ -79,6 +81,10 @@ fn execute_test(
         let ingress_hist_reader = Box::new(IngressHistoryReaderImpl::new(
             Arc::clone(&state_manager) as Arc<_>,
         ));
+        let time_source = FastForwardTimeSource::new();
+        let fake_local_store_certified_time_reader =
+            Arc::new(FakeLocalStoreCertifiedTimeReader::new(time_source));
+
         let subnet_config = SubnetConfigs::default().own_subnet_config(SubnetType::System);
         let cycles_account_manager = Arc::new(CyclesAccountManager::new(
             subnet_config.scheduler_config.max_instructions_per_message,
@@ -122,7 +128,7 @@ fn execute_test(
             ingress_hist_reader,
             artifact_pools,
             cycles_account_manager,
-            None,
+            fake_local_store_certified_time_reader,
             Box::new(ic_https_outcalls_adapter_client::BrokenCanisterHttpClient {}),
             0,
         );
@@ -247,6 +253,9 @@ fn execute_test_chunking_pool(
             subnet_id,
             subnet_config.cycles_account_manager_config,
         ));
+        let time_source = FastForwardTimeSource::new();
+        let fake_local_store_certified_time_reader =
+            Arc::new(FakeLocalStoreCertifiedTimeReader::new(time_source));
 
         let artifact_pools = init_artifact_pools(
             subnet_id,
@@ -259,7 +268,7 @@ fn execute_test_chunking_pool(
             )),
         );
 
-        let (_a, p2p_runner) = create_networking_stack(
+        let (_, p2p_runner) = create_networking_stack(
             &metrics_registry,
             log.clone(),
             rt_handle,
@@ -283,7 +292,7 @@ fn execute_test_chunking_pool(
             ingress_hist_reader,
             artifact_pools,
             cycles_account_manager,
-            None,
+            fake_local_store_certified_time_reader,
             Box::new(ic_https_outcalls_adapter_client::BrokenCanisterHttpClient {}),
             0,
         );

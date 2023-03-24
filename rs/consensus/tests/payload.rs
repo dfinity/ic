@@ -22,7 +22,9 @@ use ic_test_utilities::{
     xnet_payload_builder::FakeXNetPayloadBuilder,
     FastForwardTimeSource,
 };
-use ic_test_utilities_registry::{setup_registry, SubnetRecordBuilder};
+use ic_test_utilities_registry::{
+    setup_registry, FakeLocalStoreCertifiedTimeReader, SubnetRecordBuilder,
+};
 use ic_types::{
     crypto::CryptoHash, malicious_flags::MaliciousFlags, replica_config::ReplicaConfig,
     CryptoHashOfState, Height,
@@ -122,6 +124,8 @@ fn consensus_produces_expected_batches() {
             no_op_logger(),
             &PoolReader::new(&*consensus_pool.read().unwrap()),
         )));
+        let fake_local_store_certified_time_reader =
+            Arc::new(FakeLocalStoreCertifiedTimeReader::new(time.clone()));
 
         let consensus = ConsensusImpl::new(
             replica_config.clone(),
@@ -143,7 +147,7 @@ fn consensus_produces_expected_batches() {
             MaliciousFlags::default(),
             metrics_registry.clone(),
             no_op_logger(),
-            None,
+            fake_local_store_certified_time_reader,
         );
         let dkg = dkg::DkgImpl::new(
             replica_config.node_id,

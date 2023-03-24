@@ -261,14 +261,11 @@ fn main() -> io::Result<()> {
         &logger.inner_logger.root,
     );
 
-    let registry_certified_time_reader: Option<Arc<dyn LocalStoreCertifiedTimeReader>> =
-        if let Some(DataProviderConfig::LocalStore(path)) =
-            config.registry_client.data_provider.clone()
-        {
-            Some(Arc::new(LocalStoreImpl::new(path)))
-        } else {
-            None
-        };
+    let registry_certified_time_reader: Arc<dyn LocalStoreCertifiedTimeReader> = {
+        let DataProviderConfig::LocalStore(path) =
+            config.registry_client.data_provider.clone().unwrap();
+        Arc::new(LocalStoreImpl::new(path))
+    };
 
     info!(logger, "Constructing IC stack");
     let (_, _, _p2p_thread_joiner, _, _xnet_endpoint) =
