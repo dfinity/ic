@@ -22,12 +22,14 @@ use ic_test_utilities_tmpdir::tmpdir;
 use ic_types::{
     artifact::{Artifact, StateSyncMessage},
     chunkable::{
+        ArtifactChunk, ArtifactChunkData,
         ArtifactErrorCode::{ChunkVerificationFailed, ChunksMoreNeeded},
         ChunkId, Chunkable, ChunkableArtifact,
     },
     consensus::certification::{Certification, CertificationContent},
     crypto::Signed,
     signature::ThresholdSignature,
+    state_sync::MANIFEST_CHUNK_ID_OFFSET,
     xnet::{CertifiedStreamSlice, StreamIndex, StreamSlice},
     CanisterId, CryptoHashOfState, Cycles, Height, RegistryVersion, SubnetId,
 };
@@ -379,41 +381,124 @@ pub fn replace_wasm(state: &mut ReplicatedState, canister_id: CanisterId) {
         .wasm_binary = WasmBinary::new(wasm);
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum StateSyncErrorCode {
+    ChunksMoreNeeded,
+    MetaManifestVerificationFailed,
+    ManifestVerificationFailed,
+    OtherChunkVerificationFailed,
+}
+
 pub fn pipe_state_sync(src: StateSyncMessage, mut dst: Box<dyn Chunkable>) -> StateSyncMessage {
-    pipe_partial_state_sync(&src, &mut *dst, &Default::default())
+    pipe_partial_state_sync(&src, &mut *dst, &Default::default(), false)
         .expect("State sync not completed.")
 }
 
-/// Pipe the manifest (chunk 0) from src to dest and return the StateSyncMessage
-/// if the state sync completes
-pub fn pipe_manifest(src: &StateSyncMessage, dst: &mut dyn Chunkable) -> Option<StateSyncMessage> {
+fn alter_chunk_data(chunk: &mut ArtifactChunk) {
+    let mut chunk_data = match &chunk.artifact_chunk_data {
+        ArtifactChunkData::UnitChunkData(_) => {
+            panic!(
+                "Unexpected artifact chunk data type: {:?}",
+                chunk.artifact_chunk_data
+            );
+        }
+        ArtifactChunkData::SemiStructuredChunkData(chunk_data) => chunk_data.clone(),
+    };
+    match chunk_data.last_mut() {
+        Some(last) => {
+            // Alter the last element of chunk_data.
+            *last = last.wrapping_add(1);
+        }
+        None => {
+            // chunk_data is originally empty. Reset it to some non-empty value.
+            chunk_data = vec![9; 100];
+        }
+    }
+    chunk.artifact_chunk_data = ArtifactChunkData::SemiStructuredChunkData(chunk_data);
+}
+
+/// Pipe the meta-manifest (chunk 0) from src to dest.
+/// Alter the chunk data if `use_bad_chunk` is set to true.
+pub fn pipe_meta_manifest(
+    src: &StateSyncMessage,
+    dst: &mut dyn Chunkable,
+    use_bad_chunk: bool,
+) -> Result<StateSyncMessage, StateSyncErrorCode> {
     let ids: Vec<_> = dst.chunks_to_download().collect();
 
-    // Only the manifest should be requested
+    // Only the meta-manifest should be requested
     assert_eq!(ids, vec! {ChunkId::new(0)});
 
     let id = ids[0];
 
-    let chunk = Box::new(src.clone())
+    let mut chunk = Box::new(src.clone())
         .get_chunk(id)
         .unwrap_or_else(|| panic!("Requested unknown chunk {}", id));
 
+    if use_bad_chunk {
+        alter_chunk_data(&mut chunk);
+    }
+
     match dst.add_chunk(chunk) {
-        Ok(Artifact::StateSync(msg)) => Some(msg),
+        Ok(Artifact::StateSync(msg)) => Ok(msg),
         Ok(artifact) => {
             panic!("Unexpected artifact type: {:?}", artifact);
         }
-        Err(ChunksMoreNeeded) => None,
-        Err(ChunkVerificationFailed) => panic!("Encountered invalid chunk {}", id),
+        Err(ChunksMoreNeeded) => Err(StateSyncErrorCode::ChunksMoreNeeded),
+        Err(ChunkVerificationFailed) => Err(StateSyncErrorCode::MetaManifestVerificationFailed),
     }
 }
 
+/// Pipe the manifest chunks from src to dest and
+/// return the StateSyncMessage if the state sync completes.
+/// Alter the data of the chunk in the middle position if `use_bad_chunk` is set to true.
+pub fn pipe_manifest(
+    src: &StateSyncMessage,
+    dst: &mut dyn Chunkable,
+    use_bad_chunk: bool,
+) -> Result<StateSyncMessage, StateSyncErrorCode> {
+    let ids: Vec<_> = dst.chunks_to_download().collect();
+
+    // Only the manifest chunks should be requested
+    let manifest_chunks: HashSet<_> = (MANIFEST_CHUNK_ID_OFFSET
+        ..MANIFEST_CHUNK_ID_OFFSET + src.meta_manifest.sub_manifest_hashes.len() as u32)
+        .map(|x| ChunkId::new(x))
+        .collect();
+    assert!(ids.iter().all(|id| manifest_chunks.contains(id)));
+
+    for (index, id) in ids.iter().enumerate() {
+        let mut chunk = Box::new(src.clone())
+            .get_chunk(*id)
+            .unwrap_or_else(|| panic!("Requested unknown chunk {}", id));
+
+        if use_bad_chunk && index == ids.len() / 2 {
+            alter_chunk_data(&mut chunk);
+        }
+
+        match dst.add_chunk(chunk) {
+            Ok(Artifact::StateSync(msg)) => {
+                return Ok(msg);
+            }
+            Ok(artifact) => {
+                panic!("Unexpected artifact type: {:?}", artifact);
+            }
+            Err(ChunksMoreNeeded) => (),
+            Err(ChunkVerificationFailed) => {
+                return Err(StateSyncErrorCode::ManifestVerificationFailed)
+            }
+        }
+    }
+    Err(StateSyncErrorCode::ChunksMoreNeeded)
+}
+
 /// Pipe chunks from src to dst, but omit any chunks in omit
+/// Alter the data of the chunk in the middle position if `use_bad_chunk` is set to true.
 pub fn pipe_partial_state_sync(
     src: &StateSyncMessage,
     dst: &mut dyn Chunkable,
     omit: &HashSet<ChunkId>,
-) -> Option<StateSyncMessage> {
+    use_bad_chunk: bool,
+) -> Result<StateSyncMessage, StateSyncErrorCode> {
     loop {
         let ids: Vec<_> = dst.chunks_to_download().collect();
 
@@ -422,28 +507,34 @@ pub fn pipe_partial_state_sync(
         }
 
         let mut omitted_chunks = false;
-        for id in ids {
-            if omit.contains(&id) {
+        for (index, id) in ids.iter().enumerate() {
+            if omit.contains(id) {
                 omitted_chunks = true;
                 continue;
             }
-            let chunk = Box::new(src.clone())
-                .get_chunk(id)
+            let mut chunk = Box::new(src.clone())
+                .get_chunk(*id)
                 .unwrap_or_else(|| panic!("Requested unknown chunk {}", id));
+
+            if use_bad_chunk && index == ids.len() / 2 {
+                alter_chunk_data(&mut chunk);
+            }
 
             match dst.add_chunk(chunk) {
                 Ok(Artifact::StateSync(msg)) => {
-                    return Some(msg);
+                    return Ok(msg);
                 }
                 Ok(artifact) => {
                     panic!("Unexpected artifact type: {:?}", artifact);
                 }
                 Err(ChunksMoreNeeded) => (),
-                Err(ChunkVerificationFailed) => panic!("Encountered invalid chunk {}", id),
+                Err(ChunkVerificationFailed) => {
+                    return Err(StateSyncErrorCode::OtherChunkVerificationFailed)
+                }
             }
         }
         if omitted_chunks {
-            return None;
+            return Err(StateSyncErrorCode::ChunksMoreNeeded);
         }
     }
     unreachable!()

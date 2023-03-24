@@ -20,3 +20,8 @@ message Manifest {
     repeated FileInfo file_table = 2;
     repeated ChunkInfo chunk_table = 3;
 }
+
+message MetaManifest {
+    uint32 version = 1;
+    repeated bytes sub_manifest_hashes = 2;
+}

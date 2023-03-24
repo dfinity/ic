@@ -353,6 +353,56 @@ fn test_validate_sub_manifest() {
         }),
         validate_sub_manifest(num, &[], &meta_manifest)
     );
+
+    // Test that an altered chunk gives a different hash.
+    let sub_manifest_0 = encoded_manifest
+        [0..std::cmp::min(DEFAULT_CHUNK_SIZE as usize, encoded_manifest.len())]
+        .to_vec();
+    let expected_hash = hash_concat!(21u8, b"ic-state-sub-manifest", &sub_manifest_0[..]);
+    assert_eq!(expected_hash, meta_manifest.sub_manifest_hashes[0]);
+
+    let mut bad_chunk = sub_manifest_0;
+    let alter_position = bad_chunk.len() / 2;
+    bad_chunk[alter_position] = bad_chunk[alter_position].wrapping_add(1);
+    let actual_hash = hash_concat!(21u8, b"ic-state-sub-manifest", &bad_chunk[..]);
+
+    assert_eq!(
+        Err(ChunkValidationError::InvalidChunkHash {
+            chunk_ix: 0,
+            expected_hash: expected_hash.to_vec(),
+            actual_hash: actual_hash.to_vec()
+        }),
+        validate_sub_manifest(0, &bad_chunk, &meta_manifest)
+    );
+}
+
+#[test]
+fn test_get_sub_manifest_based_on_index() {
+    let (file_table, chunk_table) = dummy_file_table_and_chunk_table();
+    let manifest = Manifest::new(STATE_SYNC_V2, file_table, chunk_table);
+    let meta_manifest = build_meta_manifest(&manifest);
+    let encoded_manifest = encode_manifest(&manifest);
+
+    let mut assembled_manifest = Vec::new();
+
+    // For each element in the meta-manifest, we can get a corresponding sub-manifest as part of the manifest.
+    let len = meta_manifest.sub_manifest_hashes.len();
+    for index in 0..len {
+        // The same way that `StateSyncMessage` uses to serve a sub-manifest in state sync.
+        let start = index * DEFAULT_CHUNK_SIZE as usize;
+        let end = std::cmp::min(start + DEFAULT_CHUNK_SIZE as usize, encoded_manifest.len());
+        let sub_manifest = encoded_manifest
+            .get(start..end)
+            .expect("failed to get the sub-manifest")
+            .to_vec();
+        assembled_manifest.extend(sub_manifest);
+    }
+    assert_eq!(assembled_manifest, encoded_manifest);
+
+    // Test that we get nothing given an out-of-bound index.
+    let start = len * DEFAULT_CHUNK_SIZE as usize;
+    let end = std::cmp::min(start + DEFAULT_CHUNK_SIZE as usize, encoded_manifest.len());
+    assert!(encoded_manifest.get(start..end).is_none());
 }
 
 #[test]

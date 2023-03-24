@@ -99,6 +99,7 @@ impl ArtifactClient<StateSyncArtifact> for StateSync {
         msg_id: &StateSyncArtifactId,
     ) -> Option<StateSyncMessage> {
         let mut file_group_to_populate: Option<Arc<FileGroupChunks>> = None;
+
         let state_sync_message = self
             .state_manager
             .states
@@ -108,6 +109,7 @@ impl ArtifactClient<StateSyncArtifact> for StateSync {
             .find_map(|(height, metadata)| {
                 if metadata.root_hash() == Some(&msg_id.hash) {
                     let manifest = metadata.manifest()?;
+                    let meta_manifest = metadata.meta_manifest()?;
                     let checkpoint_root =
                         self.state_manager.state_layout.checkpoint(*height).ok()?;
                     let state_sync_file_group = match &metadata.state_sync_file_group {
@@ -125,6 +127,7 @@ impl ArtifactClient<StateSyncArtifact> for StateSync {
                         height: *height,
                         root_hash: msg_id.hash.clone(),
                         checkpoint_root: checkpoint_root.raw_path().to_path_buf(),
+                        meta_manifest,
                         manifest: manifest.clone(),
                         state_sync_file_group,
                     })
@@ -182,12 +185,14 @@ impl ArtifactClient<StateSyncArtifact> for StateSync {
                 if h > filter.height {
                     let metadata = states.states_metadata.get(&h)?;
                     let manifest = metadata.manifest()?;
+                    let meta_manifest = metadata.meta_manifest()?;
                     let checkpoint_root = self.state_manager.state_layout.checkpoint(h).ok()?;
                     let msg = StateSyncMessage {
                         height: h,
                         root_hash: metadata.root_hash()?.clone(),
                         checkpoint_root: checkpoint_root.raw_path().to_path_buf(),
                         manifest: manifest.clone(),
+                        meta_manifest,
                         state_sync_file_group: Default::default(),
                     };
                     Some(StateSyncArtifact::message_to_advert(&msg))
@@ -325,10 +330,12 @@ impl ArtifactProcessor<StateSyncArtifact> for StateSync {
                 self.state_manager.get_fd_factory(),
             )
             .expect("failed to recover checkpoint");
+
             self.state_manager.on_synced_checkpoint(
                 state,
                 height,
                 message.manifest,
+                message.meta_manifest,
                 message.root_hash,
             );
         }

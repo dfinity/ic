@@ -13,7 +13,9 @@ use ic_replicated_state::{
     ReplicatedState, Stream,
 };
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
-use ic_state_manager::{DirtyPageMap, FileType, PageMapType, StateManagerImpl};
+use ic_state_manager::{
+    manifest::build_meta_manifest, DirtyPageMap, FileType, PageMapType, StateManagerImpl,
+};
 use ic_sys::PAGE_SIZE;
 use ic_test_utilities::{
     consensus::fake::FakeVerifier,
@@ -29,11 +31,11 @@ use ic_test_utilities_metrics::{fetch_int_counter_vec, fetch_int_gauge, Labels};
 use ic_test_utilities_tmpdir::tmpdir;
 use ic_types::{
     artifact::{Priority, StateSyncArtifactId},
-    chunkable::ChunkId,
+    chunkable::{ChunkId, ChunkableArtifact},
     crypto::CryptoHash,
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::CallbackId,
-    state_sync::FILE_GROUP_CHUNK_ID_OFFSET,
+    state_sync::{FILE_GROUP_CHUNK_ID_OFFSET, MANIFEST_CHUNK_ID_OFFSET, META_MANIFEST_CHUNK},
     time::Time,
     xnet::{StreamIndex, StreamIndexedQueue},
     CanisterId, CryptoHashOfPartialState, CryptoHashOfState, Height, PrincipalId,
@@ -1858,6 +1860,63 @@ fn can_do_simple_state_sync_transfer() {
 }
 
 #[test]
+fn state_sync_message_returns_none_for_invalid_chunk_requests() {
+    state_manager_test_with_state_sync(|_, src_state_manager, src_state_sync| {
+        let (_height, mut state) = src_state_manager.take_tip();
+        insert_dummy_canister(&mut state, canister_test_id(100));
+
+        src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        let hash = wait_for_checkpoint(&*src_state_manager, height(1));
+        let id = StateSyncArtifactId {
+            height: height(1),
+            hash,
+        };
+
+        let msg = src_state_sync
+            .get_validated_by_identifier(&id)
+            .expect("failed to get state sync messages");
+
+        let normal_chunk_id_end_exclusive = msg.manifest.chunk_table.len() as u32 + 1;
+
+        let file_group_chunk_id_end_exclusive =
+            FILE_GROUP_CHUNK_ID_OFFSET + msg.state_sync_file_group.keys().count() as u32;
+
+        let sub_manifest_chunk_id_end_exclusive =
+            MANIFEST_CHUNK_ID_OFFSET + msg.meta_manifest.sub_manifest_hashes.len() as u32;
+
+        let src = Box::new(msg);
+
+        assert!(src.clone().get_chunk(META_MANIFEST_CHUNK).is_some());
+
+        for i in 1..normal_chunk_id_end_exclusive {
+            assert!(src.clone().get_chunk(ChunkId::new(i)).is_some());
+        }
+
+        assert!(normal_chunk_id_end_exclusive <= FILE_GROUP_CHUNK_ID_OFFSET);
+        for i in (normal_chunk_id_end_exclusive..FILE_GROUP_CHUNK_ID_OFFSET).step_by(100) {
+            assert!(src.clone().get_chunk(ChunkId::new(i)).is_none());
+        }
+
+        for i in FILE_GROUP_CHUNK_ID_OFFSET..file_group_chunk_id_end_exclusive {
+            assert!(src.clone().get_chunk(ChunkId::new(i)).is_some());
+        }
+
+        assert!(file_group_chunk_id_end_exclusive <= MANIFEST_CHUNK_ID_OFFSET);
+        for i in (file_group_chunk_id_end_exclusive..MANIFEST_CHUNK_ID_OFFSET).step_by(100) {
+            assert!(src.clone().get_chunk(ChunkId::new(i)).is_none());
+        }
+
+        for i in MANIFEST_CHUNK_ID_OFFSET..sub_manifest_chunk_id_end_exclusive {
+            assert!(src.clone().get_chunk(ChunkId::new(i)).is_some());
+        }
+
+        for i in (sub_manifest_chunk_id_end_exclusive..=u32::MAX).step_by(100) {
+            assert!(src.clone().get_chunk(ChunkId::new(i)).is_none());
+        }
+    })
+}
+
+#[test]
 fn can_state_sync_from_cache() {
     state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
         let (_height, mut state) = src_state_manager.take_tip();
@@ -1942,10 +2001,13 @@ fn can_state_sync_from_cache() {
             {
                 let mut chunkable = dst_state_sync.create_chunkable_state(&id);
 
-                // First fetch chunk 0 (the manifest), and then ask for all chunks afterwards,
+                // First fetch chunk 0 (the meta-manifest) and manifest chunks, and then ask for all chunks afterwards,
                 // but never receive the chunk for `system_metadata.pbuf` and FILE_GROUP_CHUNK_ID_OFFSET
-                let completion = pipe_partial_state_sync(&msg, &mut *chunkable, &omit);
-                assert!(completion.is_none(), "Unexpectedly completed state sync");
+                let completion = pipe_partial_state_sync(&msg, &mut *chunkable, &omit, false);
+                assert!(
+                    matches!(completion, Err(StateSyncErrorCode::ChunksMoreNeeded)),
+                    "Unexpectedly completed state sync"
+                );
             }
             assert_no_remaining_chunks(dst_metrics);
             // Second state sync continues from first state and successfully finishes
@@ -1958,8 +2020,10 @@ fn can_state_sync_from_cache() {
 
                 let mut chunkable = dst_state_sync.create_chunkable_state(&id);
 
-                let result = pipe_manifest(&msg, &mut *chunkable);
-                assert!(result.is_none());
+                let result = pipe_meta_manifest(&msg, &mut *chunkable, false);
+                assert!(matches!(result, Err(StateSyncErrorCode::ChunksMoreNeeded)));
+                let result = pipe_manifest(&msg, &mut *chunkable, false);
+                assert!(matches!(result, Err(StateSyncErrorCode::ChunksMoreNeeded)));
 
                 let file_group_chunks: HashSet<ChunkId> = msg
                     .state_sync_file_group
@@ -2009,8 +2073,9 @@ fn can_state_sync_from_cache() {
 
                 let mut chunkable = dst_state_sync.create_chunkable_state(&id);
 
-                // The manifest alone is enough to complete the sync
-                let dst_msg = pipe_manifest(&msg, &mut *chunkable).unwrap();
+                // The meta-manifest and manifest are enough to complete the sync
+                let _res = pipe_meta_manifest(&msg, &mut *chunkable, false);
+                let dst_msg = pipe_manifest(&msg, &mut *chunkable, false).unwrap();
 
                 dst_state_sync.process_changes(
                     time_source.as_ref(),
@@ -2040,6 +2105,227 @@ fn can_state_sync_from_cache() {
 
             assert_no_remaining_chunks(dst_metrics);
             assert_error_counters(dst_metrics);
+        })
+    })
+}
+
+#[test]
+fn can_state_sync_after_aborting_in_prep_phase() {
+    state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
+        let (_height, mut state) = src_state_manager.take_tip();
+
+        // Insert large number of canisters so that the encoded manifest is larger than 1 MiB.
+        let num_canisters = 2000;
+        for id in 100..(100 + num_canisters) {
+            insert_dummy_canister(&mut state, canister_test_id(id));
+        }
+
+        let time_source = ic_test_utilities::FastForwardTimeSource::new();
+
+        src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        let hash = wait_for_checkpoint(&*src_state_manager, height(1));
+        let id = StateSyncArtifactId {
+            height: height(1),
+            hash: hash.clone(),
+        };
+
+        let state = src_state_manager.get_latest_state().take();
+
+        let msg = src_state_sync
+            .get_validated_by_identifier(&id)
+            .expect("failed to get state sync messages");
+
+        let meta_manifest = build_meta_manifest(&msg.manifest);
+        assert!(
+            meta_manifest.sub_manifest_hashes.len() >= 2,
+            "The test should run with the manifest chunked in multiple pieces."
+        );
+
+        assert_error_counters(src_metrics);
+
+        state_manager_test_with_state_sync(|dst_metrics, dst_state_manager, dst_state_sync| {
+            // Omit the second piece of the manifest.
+            let omit: HashSet<ChunkId> =
+                maplit::hashset! {ChunkId::new(MANIFEST_CHUNK_ID_OFFSET + 1)};
+
+            // First state sync is destroyed when fetching the manifest chunks in the Prep phase
+            {
+                let mut chunkable = dst_state_sync.create_chunkable_state(&id);
+
+                // First fetch chunk 0 (the meta-manifest) and manifest chunks but never receive chunk(MANIFEST_CHUNK_ID_OFFSET + 1).
+                let completion = pipe_partial_state_sync(&msg, &mut *chunkable, &omit, false);
+                assert!(
+                    matches!(completion, Err(StateSyncErrorCode::ChunksMoreNeeded)),
+                    "Unexpectedly completed state sync"
+                );
+            }
+            assert_no_remaining_chunks(dst_metrics);
+            // Second state sync starts from scratch and successfully finishes
+            {
+                // Same state just higher height
+                let id = StateSyncArtifactId {
+                    height: height(2),
+                    hash: hash.clone(),
+                };
+
+                let mut chunkable = dst_state_sync.create_chunkable_state(&id);
+
+                let result = pipe_meta_manifest(&msg, &mut *chunkable, false);
+                assert!(matches!(result, Err(StateSyncErrorCode::ChunksMoreNeeded)));
+
+                // Chunks in the Prep phase are not involved in the cache mechanism. Therefore, all the manifest chunks have to requested again.
+                let manifest_chunks: HashSet<ChunkId> = (MANIFEST_CHUNK_ID_OFFSET
+                    ..(MANIFEST_CHUNK_ID_OFFSET + meta_manifest.sub_manifest_hashes.len() as u32))
+                    .map(ChunkId::from)
+                    .collect();
+                assert_eq!(manifest_chunks, chunkable.chunks_to_download().collect());
+
+                let result = pipe_manifest(&msg, &mut *chunkable, false);
+                assert!(matches!(result, Err(StateSyncErrorCode::ChunksMoreNeeded)));
+
+                let dst_msg = pipe_state_sync(msg.clone(), chunkable);
+                dst_state_sync.process_changes(
+                    time_source.as_ref(),
+                    vec![UnvalidatedArtifact {
+                        message: dst_msg,
+                        peer_id: node_test_id(0),
+                        timestamp: mock_time(),
+                    }],
+                );
+
+                let recovered_state = dst_state_manager
+                    .get_state_at(height(2))
+                    .expect("Destination state manager didn't receive the state")
+                    .take();
+
+                assert_eq!(height(2), dst_state_manager.latest_state_height());
+                assert_eq!(state, recovered_state);
+                assert_eq!(
+                    *state.as_ref(),
+                    *dst_state_manager.get_latest_state().take()
+                );
+                assert_eq!(vec![height(2)], heights_to_certify(&*dst_state_manager));
+            }
+            assert_no_remaining_chunks(dst_metrics);
+            assert_error_counters(dst_metrics);
+        })
+    })
+}
+
+#[test]
+fn state_sync_can_reject_invalid_chunks() {
+    state_manager_test_with_state_sync(|src_metrics, src_state_manager, src_state_sync| {
+        let (_height, mut state) = src_state_manager.take_tip();
+
+        // Insert large number of canisters so that the encoded manifest is larger than 1 MiB.
+        let num_canisters = 2000;
+        for id in 100..(100 + num_canisters) {
+            insert_dummy_canister(&mut state, canister_test_id(id));
+        }
+
+        let time_source = ic_test_utilities::FastForwardTimeSource::new();
+
+        src_state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        let hash = wait_for_checkpoint(&*src_state_manager, height(1));
+        let id = StateSyncArtifactId {
+            height: height(1),
+            hash,
+        };
+
+        let state = src_state_manager.get_latest_state().take();
+
+        let msg = src_state_sync
+            .get_validated_by_identifier(&id)
+            .expect("failed to get state sync messages");
+
+        assert_error_counters(src_metrics);
+
+        state_manager_test_with_state_sync(|dst_metrics, dst_state_manager, dst_state_sync| {
+            // Provide bad meta-manifest to dst
+            let mut chunkable = dst_state_sync.create_chunkable_state(&id);
+            let result = pipe_meta_manifest(&msg, &mut *chunkable, true);
+            assert!(matches!(
+                result,
+                Err(StateSyncErrorCode::MetaManifestVerificationFailed)
+            ));
+
+            // Provide correct meta-manifest to dst
+            let result = pipe_meta_manifest(&msg, &mut *chunkable, false);
+            assert!(matches!(result, Err(StateSyncErrorCode::ChunksMoreNeeded)));
+
+            // Provide bad sub-manifests to dst
+            // Each time, alter the chunk in the middle of remaining chunks for the current phase. The first half of chunks should be added correctly in this way.
+            loop {
+                let remaining_chunks_before = chunkable.chunks_to_download().count() as i32;
+                let result = pipe_manifest(&msg, &mut *chunkable, true);
+                assert!(matches!(
+                    result,
+                    Err(StateSyncErrorCode::ManifestVerificationFailed)
+                ));
+                let remaining_chunks_after = chunkable.chunks_to_download().count() as i32;
+                let added_chunks = remaining_chunks_before - remaining_chunks_after;
+                // Assert that half of the remaining chunks are added correctly each time.
+                assert_eq!(added_chunks, remaining_chunks_before / 2);
+                // If no more chunks are added, break out of the loop.
+                if added_chunks == 0 {
+                    // Assert that there should be only 1 chunk left in this case.
+                    assert_eq!(remaining_chunks_after, 1);
+                    break;
+                }
+            }
+
+            // Provide correct sub-manifests to dst
+            let result = pipe_manifest(&msg, &mut *chunkable, false);
+            assert!(matches!(result, Err(StateSyncErrorCode::ChunksMoreNeeded)));
+
+            // Provide bad chunks to dst
+            // Each time, alter the chunk in the middle of remaining chunks for the current phase. The first half of chunks should be added correctly in this way.
+            loop {
+                let remaining_chunks_before = chunkable.chunks_to_download().count() as i32;
+                let result =
+                    pipe_partial_state_sync(&msg, &mut *chunkable, &Default::default(), true);
+                assert!(matches!(
+                    result,
+                    Err(StateSyncErrorCode::OtherChunkVerificationFailed)
+                ));
+                let remaining_chunks_after = chunkable.chunks_to_download().count() as i32;
+                let added_chunks = remaining_chunks_before - remaining_chunks_after;
+                // Assert that half of the remaining chunks are added correctly each time.
+                assert_eq!(added_chunks, remaining_chunks_before / 2);
+                // If no more chunks are added, break out of the loop.
+                if added_chunks == 0 {
+                    // Assert that there should be only 1 chunk left in this case.
+                    assert_eq!(remaining_chunks_after, 1);
+                    break;
+                }
+            }
+
+            // Provide correct chunks to dst
+            let dst_msg = pipe_state_sync(msg.clone(), chunkable);
+            dst_state_sync.process_changes(
+                time_source.as_ref(),
+                vec![UnvalidatedArtifact {
+                    message: dst_msg,
+                    peer_id: node_test_id(0),
+                    timestamp: mock_time(),
+                }],
+            );
+
+            let recovered_state = dst_state_manager
+                .get_state_at(height(1))
+                .expect("Destination state manager didn't receive the state")
+                .take();
+
+            assert_eq!(height(1), dst_state_manager.latest_state_height());
+            assert_eq!(state, recovered_state);
+            assert_eq!(
+                *state.as_ref(),
+                *dst_state_manager.get_latest_state().take()
+            );
+            assert_eq!(vec![height(1)], heights_to_certify(&*dst_state_manager));
+
+            assert_error_counters(dst_metrics);
+            assert_no_remaining_chunks(dst_metrics);
         })
     })
 }
@@ -2143,8 +2429,11 @@ fn can_group_small_files_in_state_sync() {
         state_manager_test_with_state_sync(|dst_metrics, dst_state_manager, dst_state_sync| {
             let mut chunkable = dst_state_sync.create_chunkable_state(&id);
 
-            let result = pipe_manifest(&msg, &mut *chunkable);
-            assert!(result.is_none());
+            let result = pipe_meta_manifest(&msg, &mut *chunkable, false);
+            assert!(matches!(result, Err(StateSyncErrorCode::ChunksMoreNeeded)));
+
+            let result = pipe_manifest(&msg, &mut *chunkable, false);
+            assert!(matches!(result, Err(StateSyncErrorCode::ChunksMoreNeeded)));
 
             assert!(chunkable
                 .chunks_to_download()
