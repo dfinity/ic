@@ -25,8 +25,7 @@ build --strategy_regexp=ic-os/.*=local
 
 build --incompatible_remote_results_ignore_disk # Do not apply `--noremote_upload_local_results` to the disk cache.
 build --remote_cache=bazel-remote.idx.dfinity.network
-build      --experimental_remote_cache_async
-build:ci --noexperimental_remote_cache_async
+build --experimental_remote_cache_async
 build --incompatible_remote_build_event_upload_respect_no_cache
 build --noremote_upload_local_results # Whether to upload locally executed action results to the remote cache.
 build --remote_timeout=30s # Defauilt is 60s.
