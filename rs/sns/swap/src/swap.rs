@@ -42,7 +42,7 @@ use ic_sns_governance::{
 use ic_stable_structures::storable::Blob;
 use ic_stable_structures::{BoundedStorable, GrowFailed, Storable};
 use icp_ledger::DEFAULT_TRANSFER_FEE;
-use icrc_ledger_types::{Account, Subaccount};
+use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use itertools::{Either, Itertools};
 use maplit::btreemap;
 use prost::Message;

@@ -1,8 +1,8 @@
 use candid::types::number::Nat;
 use ciborium::value::Value;
 use ic_ledger_core::block::EncodedBlock;
-use icrc_ledger_types::block::Block;
-use icrc_ledger_types::value::Value as BlockValue;
+use icrc_ledger_types::icrc::generic_value::Value as BlockValue;
+use icrc_ledger_types::icrc3::blocks::GenericBlock as Block;
 use serde_bytes::ByteBuf;
 use std::collections::BTreeMap;
 

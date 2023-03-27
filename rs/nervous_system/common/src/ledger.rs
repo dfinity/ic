@@ -9,7 +9,7 @@ use icp_ledger::{
     tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Memo, SendArgs,
     Subaccount as IcpSubaccount, Tokens, TotalSupplyArgs,
 };
-use icrc_ledger_types::{Account, Subaccount};
+use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 
 pub struct IcpLedgerCanister {
     id: CanisterId,

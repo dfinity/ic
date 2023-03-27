@@ -15,7 +15,7 @@ use ic_ledger_core::Tokens;
 use ic_nervous_system_common::ledger::ICRC1Ledger;
 use ic_nervous_system_common::SECONDS_PER_DAY;
 use ic_sns_governance::pb::v1::{ClaimedSwapNeuronStatus, NeuronId};
-use icrc_ledger_types::{Account, Subaccount};
+use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use std::str::FromStr;
 
 pub fn validate_principal(p: &str) -> Result<(), String> {

@@ -35,7 +35,7 @@ use ic_ckbtc_minter::updates::{
     get_withdrawal_account::compute_subaccount, retrieve_btc::RetrieveBtcArgs,
     update_balance::UpdateBalanceArgs,
 };
-use icrc_ledger_types::Account;
+use icrc_ledger_types::icrc1::account::Account;
 use slog::info;
 
 pub fn test_ckbtc_minter_agent(env: TestEnv) {

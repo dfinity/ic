@@ -35,7 +35,7 @@ use ic_sns_swap::{
         TransferableAmount,
     },
 };
-use icrc_ledger_types::Account;
+use icrc_ledger_types::icrc1::account::Account;
 use std::{
     str::FromStr,
     sync::{Arc, Mutex},

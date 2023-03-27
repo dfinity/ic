@@ -26,7 +26,7 @@ use ic_ckbtc_minter::state::{RetrieveBtcRequest, RetrieveBtcStatus};
 use ic_ckbtc_minter::updates::get_withdrawal_account::compute_subaccount;
 use ic_ckbtc_minter::updates::retrieve_btc::RetrieveBtcArgs;
 use icrc_ledger_agent::Icrc1Agent;
-use icrc_ledger_types::transaction::TransferArg;
+use icrc_ledger_types::icrc1::transfer::TransferArg;
 use slog::{debug, info};
 
 pub fn test_heartbeat(env: TestEnv) {

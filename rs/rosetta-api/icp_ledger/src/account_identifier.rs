@@ -2,7 +2,7 @@ use candid::CandidType;
 use dfn_core::CanisterId;
 use ic_base_types::{CanisterIdError, PrincipalId, PrincipalIdError};
 use ic_crypto_sha::Sha224;
-use icrc_ledger_types::Account;
+use icrc_ledger_types::icrc1::account::Account;
 use serde::{de, de::Error, Deserialize, Serialize};
 use std::{
     convert::{TryFrom, TryInto},

@@ -2,7 +2,8 @@ use crate::Block;
 use candid::types::number::Nat;
 use candid::CandidType;
 use ic_ledger_canister_core::ledger::TransferError as CoreTransferError;
-use icrc_ledger_types::transaction::{Burn, Mint, Transaction, Transfer, TransferError};
+use icrc_ledger_types::icrc1::transfer::TransferError;
+use icrc_ledger_types::icrc3::transactions::{Burn, Mint, Transaction, Transfer};
 use serde::Deserialize;
 
 pub fn convert_transfer_error(err: CoreTransferError) -> TransferError {

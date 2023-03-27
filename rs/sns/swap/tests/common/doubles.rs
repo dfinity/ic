@@ -14,7 +14,7 @@ use ic_sns_swap::{
         SettleCommunityFundParticipation,
     },
 };
-use icrc_ledger_types::{Account, Subaccount};
+use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 

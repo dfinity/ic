@@ -16,9 +16,9 @@ use ic_sns_swap::pb::v1::{
     RefreshBuyerTokensResponse as RefreshBuyerTokensRes,
 };
 use icp_ledger::Subaccount;
-use icrc_ledger_types::transaction::{TransferArg, TransferError};
-use icrc_ledger_types::value::MetadataValue as Value;
-use icrc_ledger_types::Account;
+use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
+use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
 
 //nns/gtc/gen/ic_nns_gtc.pb.v1.rs
 use ic_sns_wasm::pb::v1::{

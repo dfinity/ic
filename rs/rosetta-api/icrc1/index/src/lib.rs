@@ -2,10 +2,15 @@ use candid::{CandidType, Nat};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_profiler::{measure_span, SpanStats};
 use ic_cdk::api::stable::{StableReader, StableWriter};
-use icrc_ledger_types::transaction::{
-    GetTransactionsResponse, QueryTxArchiveFn, Transaction, TransactionRange, Transfer,
+use icrc_ledger_types::icrc3::archive::QueryTxArchiveFn;
+use icrc_ledger_types::icrc3::transactions::{
+    GetTransactionsResponse, Transaction, TransactionRange, Transfer,
 };
-use icrc_ledger_types::{Account, ArchivedRange, GetTransactionsRequest, Subaccount};
+
+use icrc_ledger_types::{
+    icrc1::account::Account, icrc1::account::Subaccount, icrc3::archive::ArchivedRange,
+    icrc3::transactions::GetTransactionsRequest,
+};
 use num_traits::cast::ToPrimitive;
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
@@ -496,7 +501,7 @@ mod tests {
 
     use candid::Nat;
     use ic_base_types::{CanisterId, PrincipalId};
-    use icrc_ledger_types::Account;
+    use icrc_ledger_types::icrc1::account::Account;
 
     use proptest::{option, proptest};
 

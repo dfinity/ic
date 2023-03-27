@@ -3,7 +3,7 @@ use crate::logs::{P0, P1};
 use candid::{CandidType, Deserialize};
 use ic_btc_types::{MillisatoshiPerByte, Network, OutPoint, Satoshi, Utxo};
 use ic_canister_log::log;
-use icrc_ledger_types::Account;
+use icrc_ledger_types::icrc1::account::Account;
 use scopeguard::{guard, ScopeGuard};
 use serde::Serialize;
 use serde_bytes::ByteBuf;

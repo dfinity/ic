@@ -8,9 +8,11 @@ use ic_stable_structures::{
     cell::Cell as StableCell, log::Log as StableLog, memory_manager::MemoryManager,
     DefaultMemoryImpl, RestrictedMemory, Storable,
 };
-use icrc_ledger_types::block::{Block as IcrcBlock, BlockRange, GetBlocksArgs};
-use icrc_ledger_types::transaction::{Transaction, TransactionRange};
-use icrc_ledger_types::GetTransactionsRequest;
+use icrc_ledger_types::icrc3::blocks::BlockRange;
+use icrc_ledger_types::icrc3::blocks::GenericBlock as IcrcBlock;
+
+use icrc_ledger_types::icrc3::transactions::Transaction;
+use icrc_ledger_types::icrc3::transactions::{GetTransactionsRequest, TransactionRange};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::cell::RefCell;
@@ -254,7 +256,7 @@ fn get_transactions(req: GetTransactionsRequest) -> TransactionRange {
 /// Get length Blocks starting at start BlockIndex.
 #[query]
 #[candid_method(query)]
-fn get_blocks(req: GetBlocksArgs) -> BlockRange {
+fn get_blocks(req: GetTransactionsRequest) -> BlockRange {
     let (start, length) = req
         .as_start_and_length()
         .unwrap_or_else(|msg| ic_cdk::api::trap(&msg));

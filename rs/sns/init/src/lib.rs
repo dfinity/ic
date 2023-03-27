@@ -24,7 +24,7 @@ use ic_sns_governance::pb::v1::{
 use ic_sns_governance::types::DEFAULT_TRANSFER_FEE;
 use ic_sns_root::pb::v1::SnsRootCanister;
 use ic_sns_swap::pb::v1::Init as SwapInit;
-use icrc_ledger_types::Account;
+use icrc_ledger_types::icrc1::account::Account;
 use lazy_static::lazy_static;
 use maplit::{btreemap, hashset};
 use serde::{Deserialize, Serialize};
@@ -849,7 +849,7 @@ mod test {
     use ic_sns_governance::governance::ValidGovernanceProto;
     use ic_sns_governance::pb::v1::governance::SnsMetadata;
     use ic_sns_governance::types::ONE_MONTH_SECONDS;
-    use icrc_ledger_types::Account;
+    use icrc_ledger_types::icrc1::account::Account;
     use std::collections::BTreeMap;
     use std::convert::TryInto;
 

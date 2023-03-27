@@ -26,7 +26,7 @@ use ic_sns_governance::{
     },
     types::Environment,
 };
-use icrc_ledger_types::{Account, Subaccount};
+use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use maplit::btreemap;
 use rand::{rngs::StdRng, SeedableRng};
 use std::{

@@ -20,7 +20,7 @@ use ic_base_types::PrincipalId;
 use ic_canister_log::log;
 use ic_crypto_sha::Sha256;
 use icp_ledger::DEFAULT_TRANSFER_FEE as NNS_DEFAULT_TRANSFER_FEE;
-use icrc_ledger_types::Account;
+use icrc_ledger_types::icrc1::account::Account;
 use std::collections::{BTreeMap, HashSet};
 use std::convert::TryFrom;
 

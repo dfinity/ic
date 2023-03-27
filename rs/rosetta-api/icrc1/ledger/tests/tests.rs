@@ -6,7 +6,7 @@ use ic_icrc1_ledger_sm_tests::{
     TOKEN_NAME, TOKEN_SYMBOL,
 };
 use ic_ledger_canister_core::archive::ArchiveOptions;
-use icrc_ledger_types::value::MetadataValue as Value;
+use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
 use std::path::PathBuf;
 
 fn ledger_wasm() -> Vec<u8> {

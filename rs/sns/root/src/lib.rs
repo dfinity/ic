@@ -14,7 +14,7 @@ use dfn_core::CanisterId;
 use ic_base_types::{NumBytes, PrincipalId};
 use ic_canister_log::log;
 use ic_sns_swap::pb::v1::GetCanisterStatusRequest;
-use icrc_ledger_types::ArchiveInfo;
+use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 use lazy_static::lazy_static;
 use num_traits::cast::ToPrimitive;
 use std::str::FromStr;

@@ -6,7 +6,7 @@ use crate::pb::v1::{
     NeuronPermissionList, NeuronPermissionType, Vote,
 };
 use ic_base_types::PrincipalId;
-use icrc_ledger_types::Subaccount;
+use icrc_ledger_types::icrc1::account::Subaccount;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashSet};
 use std::convert::{TryFrom, TryInto};

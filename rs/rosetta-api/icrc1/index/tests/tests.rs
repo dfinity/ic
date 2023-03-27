@@ -13,9 +13,11 @@ use ic_ledger_core::{
     tokens::Tokens,
 };
 use ic_state_machine_tests::{CanisterId, StateMachine};
-use icrc_ledger_types::transaction::{Memo, TransferArg, TransferError};
-use icrc_ledger_types::value::MetadataValue as Value;
-use icrc_ledger_types::{Account, ArchiveInfo, Subaccount};
+use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
+use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
+use icrc_ledger_types::{
+    icrc1::account::Account, icrc1::account::Subaccount, icrc3::archive::ArchiveInfo,
+};
 use num_traits::cast::ToPrimitive;
 use std::path::PathBuf;
 use std::time::Duration;

@@ -15,7 +15,7 @@ use ic_base_types::PrincipalId;
 use ic_ckbtc_minter::updates::{
     get_btc_address::GetBtcAddressArgs, get_withdrawal_account::compute_subaccount,
 };
-use icrc_ledger_types::Account;
+use icrc_ledger_types::icrc1::account::Account;
 use slog::info;
 
 pub fn test_ckbtc_addresses(env: TestEnv) {

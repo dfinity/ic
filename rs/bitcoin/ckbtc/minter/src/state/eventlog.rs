@@ -6,7 +6,7 @@ use crate::state::{
 };
 use candid::Principal;
 use ic_btc_types::Utxo;
-use icrc_ledger_types::Account;
+use icrc_ledger_types::icrc1::account::Account;
 use serde::{Deserialize, Serialize};
 
 #[derive(candid::CandidType, Deserialize)]

@@ -71,7 +71,7 @@ async fn test_disburse_succeeds() {
     assert!(neuron_stake_before_disbursal > 0);
 
     // Record SNS ledger balances before disbursal
-    let destination_account = icrc_ledger_types::Account {
+    let destination_account = icrc_ledger_types::icrc1::account::Account {
         owner: user_principal.0,
         subaccount: None,
     };
@@ -248,7 +248,7 @@ fn test_disburse_maturity_succeeds_to_self() {
     let mut env = setup_test_environment_with_one_neuron_with_maturity(earned_maturity_e8s, vec![]);
 
     // Record SNS ledger balance before disbursal.
-    let destination_account = icrc_ledger_types::Account {
+    let destination_account = icrc_ledger_types::icrc1::account::Account {
         owner: env.controller.0,
         subaccount: None,
     };
@@ -341,7 +341,7 @@ fn test_disburse_maturity_succeeds_to_self() {
 fn test_disburse_maturity_succeeds_to_other() {
     let earned_maturity_e8s = 12345678;
     let receiver = PrincipalId::new_user_test_id(111);
-    let destination_account = icrc_ledger_types::Account {
+    let destination_account = icrc_ledger_types::icrc1::account::Account {
         owner: receiver.0,
         subaccount: None,
     };
@@ -349,7 +349,7 @@ fn test_disburse_maturity_succeeds_to_other() {
     let mut env =
         setup_test_environment_with_one_neuron_with_maturity(earned_maturity_e8s, vec![receiver]);
     assert_ne!(env.controller, receiver);
-    let controller_account = icrc_ledger_types::Account {
+    let controller_account = icrc_ledger_types::icrc1::account::Account {
         owner: env.controller.0,
         subaccount: None,
     };
@@ -463,7 +463,7 @@ fn test_disburse_maturity_succeeds_with_multiple_operations() {
     let mut remaining_maturity_e8s = earned_maturity_e8s;
     let percentage_and_destination = vec![(50, receiver), (50, env.controller), (100, receiver)];
     for (i, (percentage, destination)) in percentage_and_destination.iter().enumerate() {
-        let destination_account = icrc_ledger_types::Account {
+        let destination_account = icrc_ledger_types::icrc1::account::Account {
             owner: destination.0,
             subaccount: None,
         };
@@ -510,7 +510,7 @@ fn test_disburse_maturity_succeeds_with_multiple_operations() {
     env.gov_fixture.advance_time_by(7 * ONE_DAY_SECONDS + 10);
     let mut remaining_maturity_e8s = earned_maturity_e8s;
     for (i, (percentage, destination)) in percentage_and_destination.iter().enumerate() {
-        let destination_account = icrc_ledger_types::Account {
+        let destination_account = icrc_ledger_types::icrc1::account::Account {
             owner: destination.0,
             subaccount: None,
         };

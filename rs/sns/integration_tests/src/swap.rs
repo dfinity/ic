@@ -4,8 +4,8 @@ use dfn_candid::candid_one;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_ledger::{InitArgs as LedgerInit, LedgerArgument};
 use ic_ledger_canister_core::archive::ArchiveOptions;
-use icrc_ledger_types::transaction::TransferArg;
-use icrc_ledger_types::Account;
+use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc1::transfer::TransferArg;
 
 use ic_nervous_system_common::{
     assert_is_ok, ledger::compute_neuron_staking_subaccount, ExplosiveTokens, E8, SECONDS_PER_DAY,
@@ -2537,7 +2537,7 @@ fn swap_lifecycle_sad() {
         let observed_balance_e8s = icrc1_balance(
             &state_machine,
             sns_canister_ids.ledger.unwrap().try_into().unwrap(),
-            icrc_ledger_types::Account {
+            icrc_ledger_types::icrc1::account::Account {
                 owner: sns_canister_ids.swap.unwrap().0,
                 subaccount: None,
             },

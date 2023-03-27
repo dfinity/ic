@@ -1,5 +1,5 @@
 {
-  "checksum": "31e70e542f2f053a74c9a89fe289771e33262d44f29c3823e1e1c870ace6699d",
+  "checksum": "fa56a8d86ded05038e981d625133c00f781529f044af7917b5e0b95517a34f84",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -124,7 +124,7 @@
               "target": "abnf"
             },
             {
-              "id": "indexmap 1.9.2",
+              "id": "indexmap 1.9.3",
               "target": "indexmap"
             },
             {
@@ -490,7 +490,7 @@
               "target": "http"
             },
             {
-              "id": "regex 1.7.2",
+              "id": "regex 1.7.3",
               "target": "regex"
             },
             {
@@ -882,7 +882,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "regex 1.7.2",
+              "id": "regex 1.7.3",
               "target": "regex"
             },
             {
@@ -973,7 +973,7 @@
               "target": "actix_router"
             },
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -2141,7 +2141,7 @@
               "target": "askama_shared"
             },
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -2261,7 +2261,7 @@
               "target": "percent_encoding"
             },
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -2509,7 +2509,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -2573,7 +2573,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.67",
+              "id": "async-trait 0.1.68",
               "target": "async_trait"
             }
           ],
@@ -2669,7 +2669,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -2688,13 +2688,13 @@
       },
       "license": "MIT"
     },
-    "async-trait 0.1.67": {
+    "async-trait 0.1.68": {
       "name": "async-trait",
-      "version": "0.1.67",
+      "version": "0.1.68",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/async-trait/0.1.67/download",
-          "sha256": "86ea188f25f0255d8f92797797c97ebf5631fa88178beb1a46fdf5622c9a00e4"
+          "url": "https://crates.io/api/v1/crates/async-trait/0.1.68/download",
+          "sha256": "b9ccdd8f2a161be9bd5c023df56f1b2a0bd1d83872ae53b71a84a12c9bf6e842"
         }
       },
       "targets": [
@@ -2731,11 +2731,11 @@
         "deps": {
           "common": [
             {
-              "id": "async-trait 0.1.67",
+              "id": "async-trait 0.1.68",
               "target": "build_script_build"
             },
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -2743,14 +2743,14 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.5",
+              "id": "syn 2.0.10",
               "target": "syn"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.1.67"
+        "version": "0.1.68"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -3042,7 +3042,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.67",
+              "id": "async-trait 0.1.68",
               "target": "async_trait"
             }
           ],
@@ -3147,7 +3147,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.67",
+              "id": "async-trait 0.1.68",
               "target": "async_trait"
             }
           ],
@@ -3295,7 +3295,7 @@
               "target": "object"
             },
             {
-              "id": "rustc-demangle 0.1.21",
+              "id": "rustc-demangle 0.1.22",
               "target": "rustc_demangle"
             }
           ],
@@ -3852,7 +3852,7 @@
               "target": "peeking_take_while"
             },
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -3860,7 +3860,7 @@
               "target": "quote"
             },
             {
-              "id": "regex 1.7.2",
+              "id": "regex 1.7.3",
               "target": "regex"
             },
             {
@@ -3983,7 +3983,7 @@
               "target": "either"
             },
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -4080,7 +4080,7 @@
               "target": "subtle"
             },
             {
-              "id": "zeroize 1.5.7",
+              "id": "zeroize 1.6.0",
               "target": "zeroize"
             }
           ],
@@ -4501,39 +4501,6 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "bitflags 2.0.2": {
-      "name": "bitflags",
-      "version": "2.0.2",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/bitflags/2.0.2/download",
-          "sha256": "487f1e0fcbe47deb8b0574e646def1c903389d95241dd1bbcc6ce4a715dfc0c1"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "bitflags",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        }
-      ],
-      "library_target_name": "bitflags",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "edition": "2021",
-        "version": "2.0.2"
-      },
-      "license": "MIT OR Apache-2.0"
-    },
     "block-buffer 0.10.4": {
       "name": "block-buffer",
       "version": "0.10.4",
@@ -4729,13 +4696,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "borsh 0.10.2": {
+    "borsh 0.10.3": {
       "name": "borsh",
-      "version": "0.10.2",
+      "version": "0.10.3",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/borsh/0.10.2/download",
-          "sha256": "40f9ca3698b2e4cb7c15571db0abc5551dca417a21ae8140460b50309bb2cc62"
+          "url": "https://crates.io/api/v1/crates/borsh/0.10.3/download",
+          "sha256": "4114279215a005bc675e386011e594e1d9b800918cea18fcadadcce864a2046b"
         }
       },
       "targets": [
@@ -4785,23 +4752,23 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "borsh-derive 0.10.2",
+              "id": "borsh-derive 0.10.3",
               "target": "borsh_derive"
             }
           ],
           "selects": {}
         },
-        "version": "0.10.2"
+        "version": "0.10.3"
       },
       "license": "MIT OR Apache-2.0"
     },
-    "borsh-derive 0.10.2": {
+    "borsh-derive 0.10.3": {
       "name": "borsh-derive",
-      "version": "0.10.2",
+      "version": "0.10.3",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/borsh-derive/0.10.2/download",
-          "sha256": "598b3eacc6db9c3ee57b22707ad8f6a8d2f6d442bfe24ffeb8cbb70ca59e6a35"
+          "url": "https://crates.io/api/v1/crates/borsh-derive/0.10.3/download",
+          "sha256": "0754613691538d51f329cce9af41d7b7ca150bc973056f1156611489475f54f7"
         }
       },
       "targets": [
@@ -4826,11 +4793,11 @@
         "deps": {
           "common": [
             {
-              "id": "borsh-derive-internal 0.10.2",
+              "id": "borsh-derive-internal 0.10.3",
               "target": "borsh_derive_internal"
             },
             {
-              "id": "borsh-schema-derive-internal 0.10.2",
+              "id": "borsh-schema-derive-internal 0.10.3",
               "target": "borsh_schema_derive_internal"
             },
             {
@@ -4838,7 +4805,7 @@
               "target": "proc_macro_crate"
             },
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -4849,17 +4816,17 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.10.2"
+        "version": "0.10.3"
       },
       "license": "Apache-2.0"
     },
-    "borsh-derive-internal 0.10.2": {
+    "borsh-derive-internal 0.10.3": {
       "name": "borsh-derive-internal",
-      "version": "0.10.2",
+      "version": "0.10.3",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/borsh-derive-internal/0.10.2/download",
-          "sha256": "186b734fa1c9f6743e90c95d7233c9faab6360d1a96d4ffa19d9cfd1e9350f8a"
+          "url": "https://crates.io/api/v1/crates/borsh-derive-internal/0.10.3/download",
+          "sha256": "afb438156919598d2c7bad7e1c0adf3d26ed3840dbc010db1a882a65583ca2fb"
         }
       },
       "targets": [
@@ -4884,7 +4851,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -4899,17 +4866,17 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.10.2"
+        "version": "0.10.3"
       },
       "license": "Apache-2.0"
     },
-    "borsh-schema-derive-internal 0.10.2": {
+    "borsh-schema-derive-internal 0.10.3": {
       "name": "borsh-schema-derive-internal",
-      "version": "0.10.2",
+      "version": "0.10.3",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/borsh-schema-derive-internal/0.10.2/download",
-          "sha256": "99b7ff1008316626f485991b960ade129253d4034014616b94f309a15366cc49"
+          "url": "https://crates.io/api/v1/crates/borsh-schema-derive-internal/0.10.3/download",
+          "sha256": "634205cc43f74a1b9046ef87c4540ebda95696ec0f315024860cad7c5b0f5ccd"
         }
       },
       "targets": [
@@ -4934,7 +4901,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -4949,7 +4916,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.10.2"
+        "version": "0.10.3"
       },
       "license": "Apache-2.0"
     },
@@ -5541,7 +5508,7 @@
               "target": "proc_macro_error"
             },
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -5814,7 +5781,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -6175,7 +6142,7 @@
               "target": "ic_types"
             },
             {
-              "id": "lalrpop-util 0.19.8",
+              "id": "lalrpop-util 0.19.9",
               "target": "lalrpop_util"
             },
             {
@@ -6240,7 +6207,7 @@
         "deps": {
           "common": [
             {
-              "id": "lalrpop 0.19.8",
+              "id": "lalrpop 0.19.9",
               "target": "lalrpop"
             }
           ],
@@ -6324,7 +6291,7 @@
               "target": "hex"
             },
             {
-              "id": "lalrpop-util 0.19.8",
+              "id": "lalrpop-util 0.19.9",
               "target": "lalrpop_util"
             },
             {
@@ -6393,7 +6360,7 @@
         "deps": {
           "common": [
             {
-              "id": "lalrpop 0.19.8",
+              "id": "lalrpop 0.19.9",
               "target": "lalrpop"
             }
           ],
@@ -6437,7 +6404,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -6491,7 +6458,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -6824,7 +6791,7 @@
               "target": "pest_vm"
             },
             {
-              "id": "regex 1.7.2",
+              "id": "regex 1.7.3",
               "target": "regex"
             },
             {
@@ -7038,7 +7005,7 @@
           "selects": {
             "cfg(any(target_arch = \"x86_64\", target_arch = \"x86\"))": [
               {
-                "id": "cpufeatures 0.2.5",
+                "id": "cpufeatures 0.2.6",
                 "target": "cpufeatures"
               }
             ]
@@ -7102,7 +7069,7 @@
               "target": "poly1305"
             },
             {
-              "id": "zeroize 1.5.7",
+              "id": "zeroize 1.6.0",
               "target": "zeroize"
             }
           ],
@@ -7410,7 +7377,7 @@
               "target": "inout"
             },
             {
-              "id": "zeroize 1.5.7",
+              "id": "zeroize 1.6.0",
               "target": "zeroize"
             }
           ],
@@ -7632,7 +7599,7 @@
               "target": "clap_lex"
             },
             {
-              "id": "indexmap 1.9.2",
+              "id": "indexmap 1.9.3",
               "target": "indexmap"
             },
             {
@@ -7668,13 +7635,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "clap 4.1.11": {
+    "clap 4.1.13": {
       "name": "clap",
-      "version": "4.1.11",
+      "version": "4.1.13",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/clap/4.1.11/download",
-          "sha256": "42dfd32784433290c51d92c438bb72ea5063797fc3cc9a21a8c4346bebbb2098"
+          "url": "https://crates.io/api/v1/crates/clap/4.1.13/download",
+          "sha256": "3c911b090850d79fc64fe9ea01e28e465f65e821e08813ced95bced72f7a8a9b"
         }
       },
       "targets": [
@@ -7721,7 +7688,7 @@
         "deps": {
           "common": [
             {
-              "id": "bitflags 2.0.2",
+              "id": "bitflags 1.3.2",
               "target": "bitflags"
             },
             {
@@ -7751,13 +7718,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "clap_derive 4.1.9",
+              "id": "clap_derive 4.1.12",
               "target": "clap_derive"
             }
           ],
           "selects": {}
         },
-        "version": "4.1.11"
+        "version": "4.1.13"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -7803,7 +7770,7 @@
               "target": "proc_macro_error"
             },
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -7822,13 +7789,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "clap_derive 4.1.9": {
+    "clap_derive 4.1.12": {
       "name": "clap_derive",
-      "version": "4.1.9",
+      "version": "4.1.12",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/clap_derive/4.1.9/download",
-          "sha256": "fddf67631444a3a3e3e5ac51c36a5e01335302de677bd78759eaa90ab1f46644"
+          "url": "https://crates.io/api/v1/crates/clap_derive/4.1.12/download",
+          "sha256": "9a932373bab67b984c790ddf2c9ca295d8e3af3b7ef92de5a5bacdccdee4b09b"
         }
       },
       "targets": [
@@ -7860,11 +7827,7 @@
               "target": "heck"
             },
             {
-              "id": "proc-macro-error 1.0.4",
-              "target": "proc_macro_error"
-            },
-            {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -7872,14 +7835,14 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.109",
+              "id": "syn 2.0.10",
               "target": "syn"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "4.1.9"
+        "version": "4.1.12"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -8106,7 +8069,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.67",
+              "id": "async-trait 0.1.68",
               "target": "async_trait"
             }
           ],
@@ -8420,7 +8383,7 @@
               "target": "convert_case"
             },
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -8474,7 +8437,7 @@
               "target": "convert_case"
             },
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -8540,7 +8503,7 @@
               "target": "libc"
             },
             {
-              "id": "regex 1.7.2",
+              "id": "regex 1.7.3",
               "target": "regex"
             },
             {
@@ -9158,13 +9121,13 @@
       },
       "license": "Apache-2.0/MIT"
     },
-    "cpufeatures 0.2.5": {
+    "cpufeatures 0.2.6": {
       "name": "cpufeatures",
-      "version": "0.2.5",
+      "version": "0.2.6",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/cpufeatures/0.2.5/download",
-          "sha256": "28d997bd5e24a5928dd43e46dc529867e207907fe0b239c3477d924f7f2ca320"
+          "url": "https://crates.io/api/v1/crates/cpufeatures/0.2.6/download",
+          "sha256": "280a9f2d8b3a38871a3c8a46fb80db65e5e5ed97da80c4d08bf27fb63e35e181"
         }
       },
       "targets": [
@@ -9189,12 +9152,6 @@
         "deps": {
           "common": [],
           "selects": {
-            "aarch64-apple-darwin": [
-              {
-                "id": "libc 0.2.140",
-                "target": "libc"
-              }
-            ],
             "aarch64-linux-android": [
               {
                 "id": "libc 0.2.140",
@@ -9206,11 +9163,17 @@
                 "id": "libc 0.2.140",
                 "target": "libc"
               }
+            ],
+            "cfg(all(target_arch = \"aarch64\", target_vendor = \"apple\"))": [
+              {
+                "id": "libc 0.2.140",
+                "target": "libc"
+              }
             ]
           }
         },
         "edition": "2018",
-        "version": "0.2.5"
+        "version": "0.2.6"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -9906,7 +9869,7 @@
               "target": "rayon"
             },
             {
-              "id": "regex 1.7.2",
+              "id": "regex 1.7.3",
               "target": "regex"
             },
             {
@@ -10683,7 +10646,7 @@
               "target": "subtle"
             },
             {
-              "id": "zeroize 1.5.7",
+              "id": "zeroize 1.6.0",
               "target": "zeroize"
             }
           ],
@@ -10940,6 +10903,52 @@
       },
       "license": "Apache-2.0 OR MIT"
     },
+    "ctor 0.2.0": {
+      "name": "ctor",
+      "version": "0.2.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/ctor/0.2.0/download",
+          "sha256": "dd4056f63fce3b82d852c3da92b08ea59959890813a7f4ce9c0ff85b10cf301b"
+        }
+      },
+      "targets": [
+        {
+          "ProcMacro": {
+            "crate_name": "ctor",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "ctor",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "quote 1.0.26",
+              "target": "quote"
+            },
+            {
+              "id": "syn 2.0.10",
+              "target": "syn"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.2.0"
+      },
+      "license": "Apache-2.0 OR MIT"
+    },
     "curve25519-dalek 3.2.0": {
       "name": "curve25519-dalek",
       "version": "3.2.0",
@@ -10993,7 +11002,7 @@
               "target": "subtle"
             },
             {
-              "id": "zeroize 1.5.7",
+              "id": "zeroize 1.6.0",
               "target": "zeroize"
             }
           ],
@@ -11056,7 +11065,7 @@
               "alias": "subtle"
             },
             {
-              "id": "zeroize 1.5.7",
+              "id": "zeroize 1.6.0",
               "target": "zeroize"
             }
           ],
@@ -11207,7 +11216,7 @@
               "target": "ident_case"
             },
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -11621,7 +11630,7 @@
               "target": "pem_rfc7468"
             },
             {
-              "id": "zeroize 1.5.7",
+              "id": "zeroize 1.6.0",
               "target": "zeroize"
             }
           ],
@@ -11782,7 +11791,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -11832,7 +11841,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -11914,7 +11923,7 @@
               "target": "convert_case"
             },
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -12006,7 +12015,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -12476,7 +12485,7 @@
               "target": "clap"
             },
             {
-              "id": "clap 4.1.11",
+              "id": "clap 4.1.13",
               "target": "clap",
               "alias": "clap_4_0_0"
             },
@@ -12854,7 +12863,7 @@
               "target": "mio"
             },
             {
-              "id": "mockall 0.11.3",
+              "id": "mockall 0.11.4",
               "target": "mockall"
             },
             {
@@ -12998,7 +13007,7 @@
               "target": "priority_queue"
             },
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -13073,7 +13082,7 @@
               "target": "redis"
             },
             {
-              "id": "regex 1.7.2",
+              "id": "regex 1.7.3",
               "target": "regex"
             },
             {
@@ -13110,7 +13119,7 @@
               "target": "rusqlite"
             },
             {
-              "id": "rust_decimal 1.29.0",
+              "id": "rust_decimal 1.29.1",
               "target": "rust_decimal"
             },
             {
@@ -13475,7 +13484,7 @@
               "target": "yansi"
             },
             {
-              "id": "zeroize 1.5.7",
+              "id": "zeroize 1.6.0",
               "target": "zeroize"
             }
           ],
@@ -13489,7 +13498,7 @@
               "target": "async_recursion"
             },
             {
-              "id": "async-trait 0.1.67",
+              "id": "async-trait 0.1.68",
               "target": "async_trait"
             },
             {
@@ -13529,7 +13538,7 @@
               "target": "prost_derive"
             },
             {
-              "id": "rust_decimal_macros 1.29.0",
+              "id": "rust_decimal_macros 1.29.1",
               "target": "rust_decimal_macros"
             },
             {
@@ -13836,7 +13845,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -14182,7 +14191,7 @@
               "target": "thiserror"
             },
             {
-              "id": "zeroize 1.5.7",
+              "id": "zeroize 1.6.0",
               "target": "zeroize"
             }
           ],
@@ -14228,7 +14237,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -14385,7 +14394,7 @@
               "target": "subtle"
             },
             {
-              "id": "zeroize 1.5.7",
+              "id": "zeroize 1.6.0",
               "target": "zeroize"
             }
           ],
@@ -14556,7 +14565,7 @@
               "target": "heck"
             },
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -14614,7 +14623,7 @@
               "target": "num_traits"
             },
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -14671,7 +14680,7 @@
               "target": "log"
             },
             {
-              "id": "regex 1.7.2",
+              "id": "regex 1.7.3",
               "target": "regex"
             }
           ],
@@ -15611,7 +15620,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -16644,7 +16653,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -17262,7 +17271,7 @@
               "target": "argv"
             },
             {
-              "id": "inventory 0.3.4",
+              "id": "inventory 0.3.5",
               "target": "inventory"
             },
             {
@@ -17321,7 +17330,7 @@
               "target": "proc_macro_error"
             },
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -17371,7 +17380,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -17421,7 +17430,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -17429,7 +17438,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.5",
+              "id": "syn 2.0.10",
               "target": "syn"
             }
           ],
@@ -17484,7 +17493,7 @@
               "target": "fallible_iterator"
             },
             {
-              "id": "indexmap 1.9.2",
+              "id": "indexmap 1.9.3",
               "target": "indexmap"
             },
             {
@@ -17677,7 +17686,7 @@
               "target": "http"
             },
             {
-              "id": "indexmap 1.9.2",
+              "id": "indexmap 1.9.3",
               "target": "indexmap"
             },
             {
@@ -18854,7 +18863,7 @@
               "target": "once_cell"
             },
             {
-              "id": "regex 1.7.2",
+              "id": "regex 1.7.3",
               "target": "regex"
             },
             {
@@ -19568,7 +19577,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.67",
+              "id": "async-trait 0.1.68",
               "target": "async_trait"
             }
           ],
@@ -19771,7 +19780,7 @@
               "target": "candid"
             },
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -20425,7 +20434,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.67",
+              "id": "async-trait 0.1.68",
               "target": "async_trait"
             },
             {
@@ -20717,7 +20726,7 @@
               "target": "subtle"
             },
             {
-              "id": "zeroize 1.5.7",
+              "id": "zeroize 1.6.0",
               "target": "zeroize"
             }
           ],
@@ -20934,13 +20943,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "indexmap 1.9.2": {
+    "indexmap 1.9.3": {
       "name": "indexmap",
-      "version": "1.9.2",
+      "version": "1.9.3",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/indexmap/1.9.2/download",
-          "sha256": "1885e79c1fc4b10f0e172c475f458b7f7b93061064d98c3293e98c5ba0c8b399"
+          "url": "https://crates.io/api/v1/crates/indexmap/1.9.3/download",
+          "sha256": "bd070e393353796e801d209ad339e89596eb4c8d430d18ede6a1cced8fafbd99"
         }
       },
       "targets": [
@@ -20986,7 +20995,7 @@
               "target": "hashbrown"
             },
             {
-              "id": "indexmap 1.9.2",
+              "id": "indexmap 1.9.3",
               "target": "build_script_build"
             },
             {
@@ -20997,7 +21006,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.9.2"
+        "version": "1.9.3"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -21064,7 +21073,7 @@
               "target": "number_prefix"
             },
             {
-              "id": "regex 1.7.2",
+              "id": "regex 1.7.3",
               "target": "regex"
             },
             {
@@ -21251,7 +21260,7 @@
               "target": "ahash"
             },
             {
-              "id": "indexmap 1.9.2",
+              "id": "indexmap 1.9.3",
               "target": "indexmap"
             },
             {
@@ -21652,13 +21661,13 @@
       },
       "license": "MIT"
     },
-    "inventory 0.3.4": {
+    "inventory 0.3.5": {
       "name": "inventory",
-      "version": "0.3.4",
+      "version": "0.3.5",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/inventory/0.3.4/download",
-          "sha256": "498ae1c9c329c7972b917506239b557a60386839192f1cf0ca034f345b65db99"
+          "url": "https://crates.io/api/v1/crates/inventory/0.3.5/download",
+          "sha256": "7741301a6d6a9b28ce77c0fb77a4eb116b6bc8f3bef09923f7743d059c4157d3"
         }
       },
       "targets": [
@@ -21684,7 +21693,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "ctor 0.1.26",
+              "id": "ctor 0.2.0",
               "target": "ctor"
             },
             {
@@ -21694,7 +21703,7 @@
           ],
           "selects": {}
         },
-        "version": "0.3.4"
+        "version": "0.3.5"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -22730,7 +22739,7 @@
           "selects": {
             "cfg(target_arch = \"aarch64\")": [
               {
-                "id": "cpufeatures 0.2.5",
+                "id": "cpufeatures 0.2.6",
                 "target": "cpufeatures"
               }
             ]
@@ -22930,13 +22939,13 @@
       },
       "license": "Apache-2.0 OR MIT"
     },
-    "lalrpop 0.19.8": {
+    "lalrpop 0.19.9": {
       "name": "lalrpop",
-      "version": "0.19.8",
+      "version": "0.19.9",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/lalrpop/0.19.8/download",
-          "sha256": "b30455341b0e18f276fa64540aff54deafb54c589de6aca68659c63dd2d5d823"
+          "url": "https://crates.io/api/v1/crates/lalrpop/0.19.9/download",
+          "sha256": "f34313ec00c2eb5c3c87ca6732ea02dcf3af99c3ff7a8fb622ffb99c9d860a87"
         }
       },
       "targets": [
@@ -22982,10 +22991,6 @@
               "target": "ascii_canvas"
             },
             {
-              "id": "atty 0.2.14",
-              "target": "atty"
-            },
-            {
               "id": "bit-set 0.5.3",
               "target": "bit_set"
             },
@@ -22998,11 +23003,15 @@
               "target": "ena"
             },
             {
+              "id": "is-terminal 0.4.5",
+              "target": "is_terminal"
+            },
+            {
               "id": "itertools 0.10.5",
               "target": "itertools"
             },
             {
-              "id": "lalrpop-util 0.19.8",
+              "id": "lalrpop-util 0.19.9",
               "target": "lalrpop_util"
             },
             {
@@ -23014,7 +23023,7 @@
               "target": "pico_args"
             },
             {
-              "id": "regex 1.7.2",
+              "id": "regex 1.7.3",
               "target": "regex"
             },
             {
@@ -23041,17 +23050,17 @@
           "selects": {}
         },
         "edition": "2015",
-        "version": "0.19.8"
+        "version": "0.19.9"
       },
-      "license": "Apache-2.0/MIT"
+      "license": "Apache-2.0 OR MIT"
     },
-    "lalrpop-util 0.19.8": {
+    "lalrpop-util 0.19.9": {
       "name": "lalrpop-util",
-      "version": "0.19.8",
+      "version": "0.19.9",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/lalrpop-util/0.19.8/download",
-          "sha256": "bcf796c978e9b4d983414f4caedc9273aa33ee214c5b887bd55fde84c85d2dc4"
+          "url": "https://crates.io/api/v1/crates/lalrpop-util/0.19.9/download",
+          "sha256": "e5c1f7869c94d214466c5fd432dfed12c379fd87786768d36455892d46b18edd"
         }
       },
       "targets": [
@@ -23082,16 +23091,16 @@
         "deps": {
           "common": [
             {
-              "id": "regex 1.7.2",
+              "id": "regex 1.7.3",
               "target": "regex"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.19.8"
+        "version": "0.19.9"
       },
-      "license": "Apache-2.0/MIT"
+      "license": "Apache-2.0 OR MIT"
     },
     "language-tags 0.3.2": {
       "name": "language-tags",
@@ -23164,7 +23173,7 @@
               "target": "once_cell"
             },
             {
-              "id": "regex 1.7.2",
+              "id": "regex 1.7.3",
               "target": "regex"
             }
           ],
@@ -23215,7 +23224,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -23223,7 +23232,7 @@
               "target": "quote"
             },
             {
-              "id": "regex 1.7.2",
+              "id": "regex 1.7.3",
               "target": "regex"
             },
             {
@@ -25476,7 +25485,7 @@
               "target": "fnv"
             },
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -26842,13 +26851,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "mockall 0.11.3": {
+    "mockall 0.11.4": {
       "name": "mockall",
-      "version": "0.11.3",
+      "version": "0.11.4",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/mockall/0.11.3/download",
-          "sha256": "50e4a1c770583dac7ab5e2f6c139153b783a53a1bbee9729613f193e59828326"
+          "url": "https://crates.io/api/v1/crates/mockall/0.11.4/download",
+          "sha256": "4c84490118f2ee2d74570d114f3d0493cbf02790df303d2707606c3e14e07c96"
         }
       },
       "targets": [
@@ -26903,13 +26912,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "mockall_derive 0.11.3",
+              "id": "mockall_derive 0.11.4",
               "target": "mockall_derive"
             }
           ],
           "selects": {}
         },
-        "version": "0.11.3"
+        "version": "0.11.4"
       },
       "license": "MIT/Apache-2.0"
     },
@@ -27055,13 +27064,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "mockall_derive 0.11.3": {
+    "mockall_derive 0.11.4": {
       "name": "mockall_derive",
-      "version": "0.11.3",
+      "version": "0.11.4",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/mockall_derive/0.11.3/download",
-          "sha256": "832663583d5fa284ca8810bf7015e46c9fff9622d3cf34bd1eea5003fec06dd0"
+          "url": "https://crates.io/api/v1/crates/mockall_derive/0.11.4/download",
+          "sha256": "22ce75669015c4f47b289fd4d4f56e894e4c96003ffdf3ac51313126f94c6cbb"
         }
       },
       "targets": [
@@ -27090,7 +27099,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -27105,7 +27114,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.11.3"
+        "version": "0.11.4"
       },
       "license": "MIT/Apache-2.0"
     },
@@ -27144,7 +27153,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -27198,7 +27207,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -27474,7 +27483,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -28489,7 +28498,7 @@
               "target": "smallvec"
             },
             {
-              "id": "zeroize 1.5.7",
+              "id": "zeroize 1.6.0",
               "target": "zeroize"
             }
           ],
@@ -28607,7 +28616,7 @@
               "target": "smallvec"
             },
             {
-              "id": "zeroize 1.5.7",
+              "id": "zeroize 1.6.0",
               "target": "zeroize"
             }
           ],
@@ -29256,7 +29265,7 @@
               "target": "proc_macro_crate"
             },
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -29409,7 +29418,7 @@
               "target": "hashbrown"
             },
             {
-              "id": "indexmap 1.9.2",
+              "id": "indexmap 1.9.3",
               "target": "indexmap"
             },
             {
@@ -29851,7 +29860,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -30115,7 +30124,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.67",
+              "id": "async-trait 0.1.68",
               "target": "async_trait"
             }
           ],
@@ -30326,7 +30335,7 @@
               "target": "futures_util"
             },
             {
-              "id": "indexmap 1.9.2",
+              "id": "indexmap 1.9.3",
               "target": "indexmap"
             },
             {
@@ -30448,7 +30457,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.67",
+              "id": "async-trait 0.1.68",
               "target": "async_trait"
             }
           ],
@@ -31339,7 +31348,7 @@
               "target": "once_cell"
             },
             {
-              "id": "regex 1.7.2",
+              "id": "regex 1.7.3",
               "target": "regex"
             }
           ],
@@ -31695,7 +31704,7 @@
               "target": "pest_meta"
             },
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -31841,7 +31850,7 @@
               "target": "fixedbitset"
             },
             {
-              "id": "indexmap 1.9.2",
+              "id": "indexmap 1.9.3",
               "target": "indexmap"
             }
           ],
@@ -32041,7 +32050,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -32172,7 +32181,7 @@
               "target": "pkcs8"
             },
             {
-              "id": "zeroize 1.5.7",
+              "id": "zeroize 1.6.0",
               "target": "zeroize"
             }
           ],
@@ -32274,7 +32283,7 @@
               "target": "spki"
             },
             {
-              "id": "zeroize 1.5.7",
+              "id": "zeroize 1.6.0",
               "target": "zeroize"
             }
           ],
@@ -32553,7 +32562,7 @@
           "selects": {
             "cfg(any(target_arch = \"x86_64\", target_arch = \"x86\"))": [
               {
-                "id": "cpufeatures 0.2.5",
+                "id": "cpufeatures 0.2.6",
                 "target": "cpufeatures"
               }
             ]
@@ -32849,7 +32858,7 @@
               "target": "predicates_core"
             },
             {
-              "id": "regex 1.7.2",
+              "id": "regex 1.7.3",
               "target": "regex"
             }
           ],
@@ -32918,7 +32927,7 @@
               "target": "predicates_core"
             },
             {
-              "id": "regex 1.7.2",
+              "id": "regex 1.7.3",
               "target": "regex"
             }
           ],
@@ -33345,7 +33354,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -33454,7 +33463,7 @@
         "deps": {
           "common": [
             {
-              "id": "indexmap 1.9.2",
+              "id": "indexmap 1.9.3",
               "target": "indexmap"
             },
             {
@@ -33564,7 +33573,7 @@
               "target": "once_cell"
             },
             {
-              "id": "toml_edit 0.19.7",
+              "id": "toml_edit 0.19.8",
               "target": "toml_edit"
             }
           ],
@@ -33627,7 +33636,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -33716,7 +33725,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -33871,13 +33880,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "proc-macro2 1.0.53": {
+    "proc-macro2 1.0.54": {
       "name": "proc-macro2",
-      "version": "1.0.53",
+      "version": "1.0.54",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/proc-macro2/1.0.53/download",
-          "sha256": "ba466839c78239c09faf015484e5cc04860f88242cff4d03eb038f04b4699b73"
+          "url": "https://crates.io/api/v1/crates/proc-macro2/1.0.54/download",
+          "sha256": "e472a104799c74b514a57226160104aa483546de37e839ec50e3c2e41dd87534"
         }
       },
       "targets": [
@@ -33918,7 +33927,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "build_script_build"
             },
             {
@@ -33929,7 +33938,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.0.53"
+        "version": "1.0.54"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -34227,7 +34236,7 @@
               "target": "once_cell"
             },
             {
-              "id": "regex 1.7.2",
+              "id": "regex 1.7.3",
               "target": "regex"
             }
           ],
@@ -34517,7 +34526,7 @@
               "target": "prost_types"
             },
             {
-              "id": "regex 1.7.2",
+              "id": "regex 1.7.3",
               "target": "regex"
             },
             {
@@ -34575,7 +34584,7 @@
               "target": "itertools"
             },
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -34876,7 +34885,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -35186,7 +35195,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -36588,7 +36597,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.67",
+              "id": "async-trait 0.1.68",
               "target": "async_trait"
             }
           ],
@@ -36789,7 +36798,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -36797,7 +36806,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.5",
+              "id": "syn 2.0.10",
               "target": "syn"
             }
           ],
@@ -36866,13 +36875,13 @@
       },
       "license": "Apache-2.0 WITH LLVM-exception"
     },
-    "regex 1.7.2": {
+    "regex 1.7.3": {
       "name": "regex",
-      "version": "1.7.2",
+      "version": "1.7.3",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/regex/1.7.2/download",
-          "sha256": "cce168fea28d3e05f158bda4576cf0c844d5045bc2cc3620fa0292ed5bb5814c"
+          "url": "https://crates.io/api/v1/crates/regex/1.7.3/download",
+          "sha256": "8b1f693b24f6ac912f4893ef08244d70b6067480d2f1a46e950c9691e6749d1d"
         }
       },
       "targets": [
@@ -36931,7 +36940,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.7.2"
+        "version": "1.7.3"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -37424,7 +37433,7 @@
               "target": "hmac"
             },
             {
-              "id": "zeroize 1.5.7",
+              "id": "zeroize 1.6.0",
               "target": "zeroize"
             }
           ],
@@ -37779,7 +37788,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -37960,7 +37969,7 @@
               "target": "subtle"
             },
             {
-              "id": "zeroize 1.5.7",
+              "id": "zeroize 1.6.0",
               "target": "zeroize"
             }
           ],
@@ -38052,7 +38061,7 @@
               "target": "subtle"
             },
             {
-              "id": "zeroize 1.5.7",
+              "id": "zeroize 1.6.0",
               "target": "zeroize"
             }
           ],
@@ -38129,13 +38138,13 @@
       },
       "license": "MIT"
     },
-    "rust_decimal 1.29.0": {
+    "rust_decimal 1.29.1": {
       "name": "rust_decimal",
-      "version": "1.29.0",
+      "version": "1.29.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/rust_decimal/1.29.0/download",
-          "sha256": "2b1b21b8760b0ef8ae5b43d40913ff711a2053cb7ff892a34facff7a6365375a"
+          "url": "https://crates.io/api/v1/crates/rust_decimal/1.29.1/download",
+          "sha256": "26bd36b60561ee1fb5ec2817f198b6fd09fa571c897a5e86d1487cfc2b096dfc"
         }
       },
       "targets": [
@@ -38181,7 +38190,7 @@
               "target": "arrayvec"
             },
             {
-              "id": "borsh 0.10.2",
+              "id": "borsh 0.10.3",
               "target": "borsh"
             },
             {
@@ -38209,7 +38218,7 @@
               "target": "rkyv"
             },
             {
-              "id": "rust_decimal 1.29.0",
+              "id": "rust_decimal 1.29.1",
               "target": "build_script_build"
             },
             {
@@ -38224,7 +38233,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.29.0"
+        "version": "1.29.1"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -38233,13 +38242,13 @@
       },
       "license": "MIT"
     },
-    "rust_decimal_macros 1.29.0": {
+    "rust_decimal_macros 1.29.1": {
       "name": "rust_decimal_macros",
-      "version": "1.29.0",
+      "version": "1.29.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/rust_decimal_macros/1.29.0/download",
-          "sha256": "7f4709403426683ccd5e1ef02b24a2468fe87f8df8a2a792743bb369d7656efa"
+          "url": "https://crates.io/api/v1/crates/rust_decimal_macros/1.29.1/download",
+          "sha256": "0e773fd3da1ed42472fdf3cfdb4972948a555bc3d73f5e0bdb99d17e7b54c687"
         }
       },
       "targets": [
@@ -38271,24 +38280,24 @@
               "target": "quote"
             },
             {
-              "id": "rust_decimal 1.29.0",
+              "id": "rust_decimal 1.29.1",
               "target": "rust_decimal"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.29.0"
+        "version": "1.29.1"
       },
       "license": "MIT"
     },
-    "rustc-demangle 0.1.21": {
+    "rustc-demangle 0.1.22": {
       "name": "rustc-demangle",
-      "version": "0.1.21",
+      "version": "0.1.22",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/rustc-demangle/0.1.21/download",
-          "sha256": "7ef03e0a2b150c7a90d01faf6254c9c48a41e95fb2a8c2ac1c6f0d2b9aefc342"
+          "url": "https://crates.io/api/v1/crates/rustc-demangle/0.1.22/download",
+          "sha256": "d4a36c42d1873f9a77c53bde094f9664d9891bc604a45b4798fd2c389ed12e5b"
         }
       },
       "targets": [
@@ -38311,7 +38320,7 @@
           "**"
         ],
         "edition": "2015",
-        "version": "0.1.21"
+        "version": "0.1.22"
       },
       "license": "MIT/Apache-2.0"
     },
@@ -39409,7 +39418,7 @@
               "target": "subtle"
             },
             {
-              "id": "zeroize 1.5.7",
+              "id": "zeroize 1.6.0",
               "target": "zeroize"
             }
           ],
@@ -40136,7 +40145,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -40148,7 +40157,7 @@
               "target": "build_script_build"
             },
             {
-              "id": "syn 2.0.5",
+              "id": "syn 2.0.10",
               "target": "syn"
             }
           ],
@@ -40413,7 +40422,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -40577,7 +40586,7 @@
               "target": "darling"
             },
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -40627,7 +40636,7 @@
         "deps": {
           "common": [
             {
-              "id": "indexmap 1.9.2",
+              "id": "indexmap 1.9.3",
               "target": "indexmap"
             },
             {
@@ -40753,7 +40762,7 @@
               "target": "proc_macro_error"
             },
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -40942,7 +40951,7 @@
           "selects": {
             "cfg(any(target_arch = \"aarch64\", target_arch = \"x86\", target_arch = \"x86_64\"))": [
               {
-                "id": "cpufeatures 0.2.5",
+                "id": "cpufeatures 0.2.6",
                 "target": "cpufeatures"
               }
             ]
@@ -40999,7 +41008,7 @@
           "selects": {
             "cfg(any(target_arch = \"aarch64\", target_arch = \"x86\", target_arch = \"x86_64\"))": [
               {
-                "id": "cpufeatures 0.2.5",
+                "id": "cpufeatures 0.2.6",
                 "target": "cpufeatures"
               }
             ]
@@ -41089,7 +41098,7 @@
           "selects": {
             "cfg(any(target_arch = \"aarch64\", target_arch = \"x86_64\", target_arch = \"x86\"))": [
               {
-                "id": "cpufeatures 0.2.5",
+                "id": "cpufeatures 0.2.6",
                 "target": "cpufeatures"
               }
             ]
@@ -41154,7 +41163,7 @@
           "selects": {
             "cfg(any(target_arch = \"aarch64\", target_arch = \"x86_64\", target_arch = \"x86\"))": [
               {
-                "id": "cpufeatures 0.2.5",
+                "id": "cpufeatures 0.2.6",
                 "target": "cpufeatures"
               }
             ]
@@ -42262,7 +42271,7 @@
               "target": "log"
             },
             {
-              "id": "regex 1.7.2",
+              "id": "regex 1.7.3",
               "target": "regex"
             },
             {
@@ -42548,7 +42557,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -43296,7 +43305,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -43355,7 +43364,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -43457,7 +43466,7 @@
               "target": "heck"
             },
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -43725,7 +43734,7 @@
         "deps": {
           "common": [
             {
-              "id": "rustc-demangle 0.1.21",
+              "id": "rustc-demangle 0.1.22",
               "target": "rustc_demangle"
             },
             {
@@ -43948,7 +43957,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -43976,13 +43985,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "syn 2.0.5": {
+    "syn 2.0.10": {
       "name": "syn",
-      "version": "2.0.5",
+      "version": "2.0.10",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/syn/2.0.5/download",
-          "sha256": "89c2d1c76a26822187a1fbb5964e3fff108bc208f02e820ab9dac1234f6b388a"
+          "url": "https://crates.io/api/v1/crates/syn/2.0.10/download",
+          "sha256": "5aad1363ed6d37b84299588d62d3a7d95b5a5c2d9aad5c85609fda12afaa1f40"
         }
       },
       "targets": [
@@ -44008,6 +44017,7 @@
           "clone-impls",
           "default",
           "derive",
+          "extra-traits",
           "full",
           "parsing",
           "printing",
@@ -44018,7 +44028,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -44033,7 +44043,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "2.0.5"
+        "version": "2.0.10"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -44111,64 +44121,6 @@
         "version": "0.11.3"
       },
       "license": "MIT/Apache-2.0"
-    },
-    "synstructure 0.12.6": {
-      "name": "synstructure",
-      "version": "0.12.6",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/synstructure/0.12.6/download",
-          "sha256": "f36bdaa60a83aca3921b5259d5400cbf5e90fc51931376a9bd4a0eb79aa7210f"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "synstructure",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        }
-      ],
-      "library_target_name": "synstructure",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": [
-          "default",
-          "proc-macro"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "proc-macro2 1.0.53",
-              "target": "proc_macro2"
-            },
-            {
-              "id": "quote 1.0.26",
-              "target": "quote"
-            },
-            {
-              "id": "syn 1.0.109",
-              "target": "syn"
-            },
-            {
-              "id": "unicode-xid 0.2.4",
-              "target": "unicode_xid"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.12.6"
-      },
-      "license": "MIT"
     },
     "take_mut 0.2.2": {
       "name": "take_mut",
@@ -44476,7 +44428,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -44875,7 +44827,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -45122,7 +45074,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -45130,7 +45082,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.5",
+              "id": "syn 2.0.10",
               "target": "syn"
             }
           ],
@@ -46068,7 +46020,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -46777,13 +46729,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "toml_edit 0.19.7": {
+    "toml_edit 0.19.8": {
       "name": "toml_edit",
-      "version": "0.19.7",
+      "version": "0.19.8",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/toml_edit/0.19.7/download",
-          "sha256": "dc18466501acd8ac6a3f615dd29a3438f8ca6bb3b19537138b3106e575621274"
+          "url": "https://crates.io/api/v1/crates/toml_edit/0.19.8/download",
+          "sha256": "239410c8609e8125456927e6707163a3b1fdb40561e4b803bc041f466ccfdc13"
         }
       },
       "targets": [
@@ -46811,7 +46763,7 @@
         "deps": {
           "common": [
             {
-              "id": "indexmap 1.9.2",
+              "id": "indexmap 1.9.3",
               "target": "indexmap"
             },
             {
@@ -46819,14 +46771,14 @@
               "target": "toml_datetime"
             },
             {
-              "id": "winnow 0.3.6",
+              "id": "winnow 0.4.1",
               "target": "winnow"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.19.7"
+        "version": "0.19.8"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -46973,7 +46925,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.67",
+              "id": "async-trait 0.1.68",
               "target": "async_trait"
             },
             {
@@ -47028,7 +46980,7 @@
               "target": "prettyplease"
             },
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -47116,7 +47068,7 @@
               "target": "futures_util"
             },
             {
-              "id": "indexmap 1.9.2",
+              "id": "indexmap 1.9.3",
               "target": "indexmap"
             },
             {
@@ -47529,7 +47481,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -48051,7 +48003,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "async-trait 0.1.67",
+              "id": "async-trait 0.1.68",
               "target": "async_trait"
             },
             {
@@ -48883,9 +48835,6 @@
       "common_attrs": {
         "compile_data_glob": [
           "**"
-        ],
-        "crate_features": [
-          "default"
         ],
         "edition": "2015",
         "version": "0.2.4"
@@ -49748,7 +49697,7 @@
               "target": "heck"
             },
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -50189,7 +50138,7 @@
               "target": "once_cell"
             },
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -50352,7 +50301,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -50604,7 +50553,7 @@
               "target": "flagset"
             },
             {
-              "id": "indexmap 1.9.2",
+              "id": "indexmap 1.9.3",
               "target": "indexmap"
             },
             {
@@ -50716,7 +50665,7 @@
         "deps": {
           "common": [
             {
-              "id": "indexmap 1.9.2",
+              "id": "indexmap 1.9.3",
               "target": "indexmap"
             },
             {
@@ -50795,7 +50744,7 @@
         "deps": {
           "common": [
             {
-              "id": "indexmap 1.9.2",
+              "id": "indexmap 1.9.3",
               "target": "indexmap"
             },
             {
@@ -50841,7 +50790,7 @@
         "deps": {
           "common": [
             {
-              "id": "indexmap 1.9.2",
+              "id": "indexmap 1.9.3",
               "target": "indexmap"
             },
             {
@@ -50962,7 +50911,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "indexmap 1.9.2",
+              "id": "indexmap 1.9.3",
               "target": "indexmap"
             },
             {
@@ -51225,7 +51174,7 @@
               "target": "gimli"
             },
             {
-              "id": "indexmap 1.9.2",
+              "id": "indexmap 1.9.3",
               "target": "indexmap"
             },
             {
@@ -51327,7 +51276,7 @@
               "target": "object"
             },
             {
-              "id": "rustc-demangle 0.1.21",
+              "id": "rustc-demangle 0.1.22",
               "target": "rustc_demangle"
             },
             {
@@ -51520,7 +51469,7 @@
               "target": "cfg_if"
             },
             {
-              "id": "indexmap 1.9.2",
+              "id": "indexmap 1.9.3",
               "target": "indexmap"
             },
             {
@@ -53298,13 +53247,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "winnow 0.3.6": {
+    "winnow 0.4.1": {
       "name": "winnow",
-      "version": "0.3.6",
+      "version": "0.4.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/winnow/0.3.6/download",
-          "sha256": "23d020b441f92996c80d94ae9166e8501e59c7bb56121189dc9eab3bd8216966"
+          "url": "https://crates.io/api/v1/crates/winnow/0.4.1/download",
+          "sha256": "ae8970b36c66498d8ff1d66685dc86b91b29db0c7739899012f63a63814b4b28"
         }
       },
       "targets": [
@@ -53341,7 +53290,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.3.6"
+        "version": "0.4.1"
       },
       "license": "MIT"
     },
@@ -53854,13 +53803,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "zeroize 1.5.7": {
+    "zeroize 1.6.0": {
       "name": "zeroize",
-      "version": "1.5.7",
+      "version": "1.6.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/zeroize/1.5.7/download",
-          "sha256": "c394b5bd0c6f669e7275d9c20aa90ae064cb22e75a1cad54e1b34088034b149f"
+          "url": "https://crates.io/api/v1/crates/zeroize/1.6.0/download",
+          "sha256": "2a0956f1ba7c7909bfb66c2e9e4124ab6f6482560f6628b5aaeba39207c9aad9"
         }
       },
       "targets": [
@@ -53887,27 +53836,27 @@
           "default",
           "zeroize_derive"
         ],
-        "edition": "2018",
+        "edition": "2021",
         "proc_macro_deps": {
           "common": [
             {
-              "id": "zeroize_derive 1.3.3",
+              "id": "zeroize_derive 1.4.0",
               "target": "zeroize_derive"
             }
           ],
           "selects": {}
         },
-        "version": "1.5.7"
+        "version": "1.6.0"
       },
       "license": "Apache-2.0 OR MIT"
     },
-    "zeroize_derive 1.3.3": {
+    "zeroize_derive 1.4.0": {
       "name": "zeroize_derive",
-      "version": "1.3.3",
+      "version": "1.4.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/zeroize_derive/1.3.3/download",
-          "sha256": "44bf07cb3e50ea2003396695d58bf46bc9887a1f362260446fad6bc4e79bd36c"
+          "url": "https://crates.io/api/v1/crates/zeroize_derive/1.4.0/download",
+          "sha256": "57090580b8b26d9fd2288c4ac982b3b3c6446cd8e91112bcf672d5ddb2f17441"
         }
       },
       "targets": [
@@ -53932,7 +53881,7 @@
         "deps": {
           "common": [
             {
-              "id": "proc-macro2 1.0.53",
+              "id": "proc-macro2 1.0.54",
               "target": "proc_macro2"
             },
             {
@@ -53940,18 +53889,14 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.109",
+              "id": "syn 2.0.10",
               "target": "syn"
-            },
-            {
-              "id": "synstructure 0.12.6",
-              "target": "synstructure"
             }
           ],
           "selects": {}
         },
-        "edition": "2018",
-        "version": "1.3.3"
+        "edition": "2021",
+        "version": "1.4.0"
       },
       "license": "Apache-2.0 OR MIT"
     },
@@ -54164,19 +54109,19 @@
     "alloc-stdlib 0.2.2",
     "assert_cmd 0.12.2",
     "bindgen 0.59.2",
-    "borsh 0.10.2",
+    "borsh 0.10.3",
     "brotli 3.3.4",
     "brotli-decompressor 2.3.4",
     "cc 1.0.79",
     "cddl 0.9.1",
     "clap 3.2.23",
-    "clap 4.1.11",
+    "clap 4.1.13",
     "cpp_demangle 0.3.5",
     "difference 2.0.0",
     "escargot 0.5.7",
     "ic-wasm 0.1.5",
     "inferno 0.11.15",
-    "lalrpop 0.19.8",
+    "lalrpop 0.19.9",
     "leb128 0.2.5",
     "multipart 0.18.0",
     "pretty-bytes 0.2.2",
@@ -54188,9 +54133,6 @@
     "direct-cargo-bazel-deps 0.0.1": ""
   },
   "conditions": {
-    "aarch64-apple-darwin": [
-      "aarch64-apple-darwin"
-    ],
     "aarch64-linux-android": [
       "aarch64-linux-android"
     ],
@@ -54217,6 +54159,11 @@
     ],
     "cfg(all(target_arch = \"aarch64\", target_os = \"linux\"))": [
       "aarch64-unknown-linux-gnu"
+    ],
+    "cfg(all(target_arch = \"aarch64\", target_vendor = \"apple\"))": [
+      "aarch64-apple-darwin",
+      "aarch64-apple-ios",
+      "aarch64-apple-ios-sim"
     ],
     "cfg(all(target_arch = \"wasm32\", not(target_os = \"emscripten\")))": [
       "wasm32-unknown-unknown",

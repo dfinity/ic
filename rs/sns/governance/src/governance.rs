@@ -34,7 +34,7 @@ use ic_ic00_types::CanisterInstallMode;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::i2d;
 use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
-use icrc_ledger_types::{Account, Subaccount};
+use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use lazy_static::lazy_static;
 use maplit::hashset;
 use rust_decimal::Decimal;
@@ -130,8 +130,10 @@ pub fn log_prefix() -> String {
 /// The static MEMO used when calculating the SNS Treasury subaccount.
 pub const TREASURY_SUBACCOUNT_NONCE: u64 = 0;
 
-/// Converts bytes to a subaccount
-pub fn bytes_to_subaccount(bytes: &[u8]) -> Result<icrc_ledger_types::Subaccount, GovernanceError> {
+/// Converts bytes to a subaccountpub fn bytes_to_subaccount(bytes: &[u8]) -> Result<icrc_ledger_types::icrc1::account::Subaccount, GovernanceError> {
+pub fn bytes_to_subaccount(
+    bytes: &[u8],
+) -> Result<icrc_ledger_types::icrc1::account::Subaccount, GovernanceError> {
     bytes.try_into().map_err(|_| {
         GovernanceError::new_with_message(ErrorType::PreconditionFailed, "Invalid subaccount")
     })

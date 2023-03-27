@@ -28,9 +28,9 @@ use icp_ledger::{
     TipOfChainRes, TotalSupplyArgs, Transaction, TransferArgs, TransferError, TransferFee,
     TransferFeeArgs, MAX_BLOCKS_PER_REQUEST,
 };
-use icrc_ledger_types::transaction::TransferArg;
-use icrc_ledger_types::value::MetadataValue as Value;
-use icrc_ledger_types::Account;
+use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
+use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc1::transfer::TransferArg;
 use ledger_canister::{Ledger, LEDGER, MAX_MESSAGE_SIZE_BYTES};
 use num_traits::cast::ToPrimitive;
 use std::cell::RefCell;
@@ -223,13 +223,13 @@ async fn send(
 }
 
 async fn icrc1_send(
-    memo: Option<icrc_ledger_types::transaction::Memo>,
+    memo: Option<icrc_ledger_types::icrc1::transfer::Memo>,
     amount: Tokens,
     fee: Option<Nat>,
     from_account: Account,
     to: AccountIdentifier,
     created_at_time: Option<TimeStamp>,
-) -> Result<BlockIndex, icrc_ledger_types::transaction::TransferError> {
+) -> Result<BlockIndex, icrc_ledger_types::icrc1::transfer::TransferError> {
     let from = AccountIdentifier::from(from_account);
     let minting_acc = LEDGER
         .read()
@@ -239,7 +239,7 @@ async fn icrc1_send(
     let now = TimeStamp::from_nanos_since_unix_epoch(ic_cdk::api::time());
     let (operation, effective_fee) = if to == minting_acc {
         if fee.is_some() && fee.as_ref() != Some(&Nat::from(0u64)) {
-            return Err(icrc_ledger_types::transaction::TransferError::BadFee {
+            return Err(icrc_ledger_types::icrc1::transfer::TransferError::BadFee {
                 expected_fee: Nat::from(0u64),
             });
         }
@@ -247,19 +247,19 @@ async fn icrc1_send(
         let balance = ledger.balances.account_balance(&from);
         let min_burn_amount = ledger.transfer_fee.min(balance);
         if amount < min_burn_amount {
-            return Err(icrc_ledger_types::transaction::TransferError::BadBurn {
+            return Err(icrc_ledger_types::icrc1::transfer::TransferError::BadBurn {
                 min_burn_amount: Nat::from(min_burn_amount.get_e8s()),
             });
         }
         if amount == Tokens::ZERO {
-            return Err(icrc_ledger_types::transaction::TransferError::BadBurn {
+            return Err(icrc_ledger_types::icrc1::transfer::TransferError::BadBurn {
                 min_burn_amount: Nat::from(ledger.transfer_fee.get_e8s()),
             });
         }
         (Operation::Burn { from, amount }, Tokens::ZERO)
     } else if from == minting_acc {
         if fee.is_some() && fee.as_ref() != Some(&Nat::from(0u64)) {
-            return Err(icrc_ledger_types::transaction::TransferError::BadFee {
+            return Err(icrc_ledger_types::icrc1::transfer::TransferError::BadFee {
                 expected_fee: Nat::from(0u64),
             });
         }
@@ -267,7 +267,7 @@ async fn icrc1_send(
     } else {
         let expected_fee = LEDGER.read().unwrap().transfer_fee;
         if fee.is_some() && fee.as_ref() != Some(&Nat::from(expected_fee.get_e8s())) {
-            return Err(icrc_ledger_types::transaction::TransferError::BadFee {
+            return Err(icrc_ledger_types::icrc1::transfer::TransferError::BadFee {
                 expected_fee: Nat::from(expected_fee.get_e8s()),
             });
         }
@@ -771,7 +771,7 @@ async fn transfer_candid(arg: TransferArgs) -> Result<BlockIndex, TransferError>
 #[candid_method(update, rename = "icrc1_transfer")]
 async fn icrc1_transfer(
     arg: TransferArg,
-) -> Result<Nat, icrc_ledger_types::transaction::TransferError> {
+) -> Result<Nat, icrc_ledger_types::icrc1::transfer::TransferError> {
     let to = AccountIdentifier::from(arg.to);
     let from_account = Account {
         owner: ic_cdk::api::caller(),
@@ -785,7 +785,7 @@ async fn icrc1_transfer(
                 Nat::from(account_balance(AccountIdentifier::from(from_account)).get_e8s());
             assert!(balance < arg.amount);
             return Err(
-                icrc_ledger_types::transaction::TransferError::InsufficientFunds { balance },
+                icrc_ledger_types::icrc1::transfer::TransferError::InsufficientFunds { balance },
             );
         }
     };

@@ -6,7 +6,7 @@ use crate::{
 use candid::{CandidType, Deserialize, Principal};
 use ic_canister_log::log;
 use ic_ic00_types::{ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId};
-use icrc_ledger_types::{Account, Subaccount};
+use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use serde::Serialize;
 
 #[derive(CandidType, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]

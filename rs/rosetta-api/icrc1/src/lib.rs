@@ -12,9 +12,11 @@ use ic_ledger_core::{
     timestamp::TimeStamp,
     tokens::Tokens,
 };
-use icrc_ledger_types::transaction::Memo;
-use icrc_ledger_types::Account;
+use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc1::transfer::Memo;
+use num_traits::ToPrimitive;
 use serde::{Deserialize, Serialize};
+use serde_bytes::ByteBuf;
 use std::collections::HashMap;
 
 #[derive(Serialize, Deserialize, Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -175,6 +177,87 @@ impl Transaction {
     }
 }
 
+impl TryFrom<icrc_ledger_types::icrc3::transactions::Transaction> for Transaction {
+    type Error = String;
+    fn try_from(
+        value: icrc_ledger_types::icrc3::transactions::Transaction,
+    ) -> Result<Self, Self::Error> {
+        if let Some(mint) = value.mint {
+            let amount = mint
+                .amount
+                .0
+                .to_u64()
+                .ok_or_else(|| "Could not convert Nat to u64".to_owned())?;
+            let operation = Operation::Mint {
+                to: mint.to,
+                amount,
+            };
+            return Ok(Self {
+                operation,
+                created_at_time: mint.created_at_time,
+                memo: mint.memo,
+            });
+        }
+        if let Some(burn) = value.burn {
+            let amount = burn
+                .amount
+                .0
+                .to_u64()
+                .ok_or_else(|| "Could not convert Nat to u64".to_owned())?;
+            let operation = Operation::Burn {
+                from: burn.from,
+                amount,
+            };
+            return Ok(Self {
+                operation,
+                created_at_time: burn.created_at_time,
+                memo: burn.memo,
+            });
+        }
+        if let Some(transfer) = value.transfer {
+            let amount = transfer
+                .amount
+                .0
+                .to_u64()
+                .ok_or_else(|| "Could not convert Nat to u64".to_owned())?;
+            match transfer.fee {
+                Some(fee) => {
+                    let fee = fee
+                        .0
+                        .to_u64()
+                        .ok_or_else(|| "Could not convert Nat to u64".to_owned())?;
+
+                    let operation = Operation::Transfer {
+                        to: transfer.to,
+                        amount,
+                        from: transfer.from,
+                        fee: Some(fee),
+                    };
+                    return Ok(Self {
+                        operation,
+                        created_at_time: transfer.created_at_time,
+                        memo: transfer.memo,
+                    });
+                }
+                None => {
+                    let operation = Operation::Transfer {
+                        to: transfer.to,
+                        amount,
+                        from: transfer.from,
+                        fee: None,
+                    };
+                    return Ok(Self {
+                        operation,
+                        created_at_time: transfer.created_at_time,
+                        memo: transfer.memo,
+                    });
+                }
+            }
+        }
+        Err("Transaction has neither mint, burn nor transfer operation".to_owned())
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Block {
     #[serde(rename = "phash")]
@@ -199,6 +282,60 @@ pub struct Block {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(rename = "fee_col_block")]
     pub fee_collector_block_index: Option<u64>,
+}
+
+impl TryFrom<icrc_ledger_types::icrc3::blocks::Block> for Block {
+    type Error = String;
+    fn try_from(value: icrc_ledger_types::icrc3::blocks::Block) -> Result<Self, Self::Error> {
+        match value.parent_hash {
+            Some(hash) => {
+                let parent_hash = Some(HashOf::new(match TryInto::<[u8; 32]>::try_into(
+                    hash.as_slice().to_vec(),
+                ) {
+                    Ok(array) => Ok(array),
+                    Err(_) => Err("Could not convert ByteBuf to HashOf".to_owned()),
+                }?));
+
+                Ok(Self {
+                    parent_hash,
+                    transaction: value.transaction.try_into()?,
+                    effective_fee: value.effective_fee,
+                    timestamp: value.timestamp,
+                    fee_collector: value.fee_collector,
+                    fee_collector_block_index: value.fee_collector_block_index,
+                })
+            }
+            None => Ok(Self {
+                parent_hash: None,
+                transaction: value.transaction.try_into()?,
+                effective_fee: value.effective_fee,
+                timestamp: value.timestamp,
+                fee_collector: value.fee_collector,
+                fee_collector_block_index: value.fee_collector_block_index,
+            }),
+        }
+    }
+}
+
+impl From<Block> for icrc_ledger_types::icrc3::blocks::Block {
+    fn from(value: Block) -> Self {
+        let transaction: icrc_ledger_types::icrc3::transactions::Transaction = value.clone().into();
+        let timestamp = value.timestamp;
+        let parent_hash = value
+            .parent_hash
+            .map(|hashof| ByteBuf::from(hashof.as_slice()));
+        let effective_fee = value.effective_fee;
+        let fee_collector = value.fee_collector;
+        let fee_collector_block_index = value.fee_collector_block_index;
+        Self {
+            parent_hash,
+            transaction,
+            effective_fee,
+            timestamp,
+            fee_collector,
+            fee_collector_block_index,
+        }
+    }
 }
 
 type TaggedBlock = Required<Block, 55799>;
@@ -273,3 +410,72 @@ impl BlockType for Block {
 }
 
 pub type LedgerBalances = Balances<HashMap<Account, Tokens>>;
+
+#[cfg(test)]
+mod tests {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    use candid::Principal;
+    use ic_ledger_core::{
+        block::{BlockType, FeeCollector},
+        timestamp::TimeStamp,
+        Tokens,
+    };
+    use icrc_ledger_types::icrc1::{account::Account, transfer::Memo};
+    use serde_bytes::ByteBuf;
+
+    use crate::{Block, Operation, Transaction};
+
+    #[test]
+    fn test_generic_icrc_conversions() {
+        let from = Principal::anonymous();
+        let to = Principal::anonymous();
+        let amount = 10_000_000_u64;
+        let fee = Some(10_000_u64);
+        let created_at_time = Some(
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_millis() as u64,
+        );
+        let memo = Some(Memo(ByteBuf::from(r#"testbytes"#)));
+        let operation = Operation::Transfer {
+            from: from.into(),
+            to: to.into(),
+            amount,
+            fee,
+        };
+        let icrc1_transaction = Transaction {
+            operation,
+            created_at_time,
+            memo,
+        };
+
+        let icrc1_block_parent = Block::from_transaction(
+            None,
+            icrc1_transaction.clone(),
+            TimeStamp::from_nanos_since_unix_epoch(created_at_time.unwrap()),
+            Tokens::from_e8s(fee.unwrap()),
+            Some(FeeCollector::from(Account::from(from))),
+        );
+        let icrc1_block = Block::from_transaction(
+            Some(<Block as BlockType>::block_hash(
+                &icrc1_block_parent.encode(),
+            )),
+            icrc1_transaction.clone(),
+            TimeStamp::from_nanos_since_unix_epoch(created_at_time.unwrap()),
+            Tokens::from_e8s(fee.unwrap()),
+            Some(FeeCollector::from(Account::from(from))),
+        );
+        let generic_block: icrc_ledger_types::icrc3::blocks::Block = icrc1_block.clone().into();
+        let derived_icrc1_block: Block = generic_block.try_into().unwrap();
+        // Test conversion from Block to icrc_ledger_types::icrc1::blocks::Block | icrc_ledger_types::icrc1::blocks::Block to Block | Block to icrc_ledger_types::icrc1::transactions::Transaction
+        assert_eq!(icrc1_block, derived_icrc1_block);
+
+        let generic_transaction: icrc_ledger_types::icrc3::transactions::Transaction =
+            icrc1_block.into();
+        let derived_icrc1_transaction: Transaction = generic_transaction.try_into().unwrap();
+        // Test conversion from icrc_ledger_types::icrc1::transactions::Transaction to Transaction
+        assert_eq!(icrc1_transaction, derived_icrc1_transaction);
+    }
+}

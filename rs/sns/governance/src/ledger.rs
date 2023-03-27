@@ -8,8 +8,8 @@ use ic_icrc1_client::{ICRC1Client, Runtime};
 use ic_ledger_core::{block::BlockIndex, Tokens};
 pub use ic_nervous_system_common::ledger::ICRC1Ledger;
 use ic_nervous_system_common::NervousSystemError;
-use icrc_ledger_types::transaction::{Memo, TransferArg};
-use icrc_ledger_types::{Account, Subaccount};
+use icrc_ledger_types::icrc1::account::{Account, Subaccount};
+use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg};
 
 // A ICRC1 client runtime that uses dfn_* functionalities
 struct DfnRuntime {}

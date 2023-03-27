@@ -52,7 +52,7 @@ use ic_sns_swap::{
     swap::{apportion_approximately_equally, principal_to_subaccount},
 };
 use icp_ledger::DEFAULT_TRANSFER_FEE;
-use icrc_ledger_types::Account;
+use icrc_ledger_types::icrc1::account::Account;
 use maplit::btreemap;
 use std::{
     collections::HashSet,

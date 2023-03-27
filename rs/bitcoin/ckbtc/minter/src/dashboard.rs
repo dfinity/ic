@@ -2,7 +2,7 @@ use crate::address;
 use crate::state;
 use crate::tx::{DisplayAmount, DisplayTxid};
 use ic_btc_types::Network;
-use icrc_ledger_types::Account;
+use icrc_ledger_types::icrc1::account::Account;
 use std::io::Write;
 
 fn with_utf8_buffer(f: impl FnOnce(&mut Vec<u8>)) -> String {

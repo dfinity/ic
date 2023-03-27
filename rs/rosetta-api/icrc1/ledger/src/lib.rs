@@ -21,12 +21,13 @@ use ic_ledger_core::{
     timestamp::TimeStamp,
     tokens::Tokens,
 };
-use icrc_ledger_types::block::{GetBlocksResponse, QueryBlockArchiveFn};
-use icrc_ledger_types::transaction::{
-    GetTransactionsResponse, QueryTxArchiveFn, Transaction as Tx,
+use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc3::transactions::Transaction as Tx;
+use icrc_ledger_types::icrc3::{blocks::GetBlocksResponse, transactions::GetTransactionsResponse};
+use icrc_ledger_types::{
+    icrc::generic_metadata_value::MetadataValue as Value,
+    icrc3::archive::{ArchivedRange, QueryBlockArchiveFn, QueryTxArchiveFn},
 };
-use icrc_ledger_types::value::MetadataValue as Value;
-use icrc_ledger_types::{Account, ArchivedRange};
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 use std::borrow::Cow;
@@ -428,12 +429,10 @@ impl Ledger {
 
     /// Returns blocks in the specified range.
     pub fn get_blocks(&self, start: BlockIndex, length: usize) -> GetBlocksResponse {
-        let (first_index, local_blocks, archived_blocks) = self.query_blocks(
-            start,
-            length,
-            |enc_block| icrc1_block_from_encoded(enc_block),
-            |canister_id| QueryBlockArchiveFn::new(canister_id, "get_blocks"),
-        );
+        let (first_index, local_blocks, archived_blocks) =
+            self.query_blocks(start, length, icrc1_block_from_encoded, |canister_id| {
+                QueryBlockArchiveFn::new(canister_id, "get_blocks")
+            });
 
         GetBlocksResponse {
             first_index: Nat::from(first_index),

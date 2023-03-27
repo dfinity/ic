@@ -22,7 +22,7 @@ use ic_sns_test_utils::state_test_helpers::setup_sns_canisters;
 use ic_state_machine_tests::StateMachine;
 use icp_ledger::DEFAULT_TRANSFER_FEE as NNS_DEFAULT_TRANSFER_FEE;
 use icp_ledger::{AccountIdentifier, BinaryAccountBalanceArgs, Subaccount as IcpSubaccount};
-use icrc_ledger_types::Account;
+use icrc_ledger_types::icrc1::account::Account;
 use std::ops::Sub;
 
 fn icrc1_account_to_icp_accountidentifier(account: Account) -> AccountIdentifier {
