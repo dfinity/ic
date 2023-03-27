@@ -145,11 +145,8 @@ impl EcdsaComplaintHandlerImpl {
                         match self.resolve_ref(transcript_ref, block_reader, "validate_complaints")
                         {
                             Some(transcript) => {
-                                let action = self.crypto_verify_complaint(
-                                    &id,
-                                    &transcript,
-                                    &signed_complaint,
-                                );
+                                let action =
+                                    self.crypto_verify_complaint(id, &transcript, signed_complaint);
                                 if let Some(EcdsaChangeAction::MoveToValidated(_)) = action {
                                     validated_complaints.insert(key);
                                 }
@@ -266,9 +263,9 @@ impl EcdsaComplaintHandlerImpl {
                         match self.resolve_ref(transcript_ref, block_reader, "validate_openings") {
                             Some(transcript) => {
                                 let action = self.crypto_verify_opening(
-                                    &id,
+                                    id,
                                     &transcript,
-                                    &signed_opening,
+                                    signed_opening,
                                     &signed_complaint,
                                 );
                                 if let Some(EcdsaChangeAction::MoveToValidated(_)) = action {
@@ -417,22 +414,22 @@ impl EcdsaComplaintHandlerImpl {
     /// Helper to verify the complaint
     fn crypto_verify_complaint(
         &self,
-        id: &EcdsaMessageId,
+        id: EcdsaMessageId,
         transcript: &IDkgTranscript,
-        signed_complaint: &EcdsaComplaint,
+        signed_complaint: EcdsaComplaint,
     ) -> Option<EcdsaChangeAction> {
         let complaint = signed_complaint.get();
 
         // Verify the signature
         if let Err(error) = self
             .crypto
-            .verify(signed_complaint, transcript.registry_version)
+            .verify(&signed_complaint, transcript.registry_version)
         {
             if error.is_reproducible() {
                 self.metrics
                     .complaint_errors_inc("verify_complaint_signature_permanent");
                 return Some(EcdsaChangeAction::HandleInvalid(
-                    id.clone(),
+                    id,
                     format!(
                         "Complaint signature validation(permanent error): {}, error = {:?}",
                         signed_complaint, error
@@ -452,43 +449,40 @@ impl EcdsaComplaintHandlerImpl {
             }
         }
 
-        self.crypto
-            .verify_complaint(
-                transcript,
-                signed_complaint.signature.signer,
-                &complaint.idkg_complaint,
-            )
-            .map_or_else(
-                |error| {
-                    if error.is_reproducible() {
-                        self.metrics
-                            .complaint_errors_inc("verify_complaint_permanent");
-                        Some(EcdsaChangeAction::HandleInvalid(
-                            id.clone(),
-                            format!(
-                                "Complaint validation(permanent error): {}, error = {:?}",
-                                signed_complaint, error
-                            ),
-                        ))
-                    } else {
-                        debug!(
-                            self.log,
-                            "Complaint validation(transient error): {}, error = {:?}",
-                            signed_complaint,
-                            error
-                        );
-                        self.metrics
-                            .complaint_errors_inc("verify_complaint_transient");
-                        None
-                    }
-                },
-                |()| {
-                    self.metrics.complaint_metrics_inc("complaint_received");
-                    Some(EcdsaChangeAction::MoveToValidated(
-                        EcdsaMessage::EcdsaComplaint(signed_complaint.clone()),
-                    ))
-                },
-            )
+        match self.crypto.verify_complaint(
+            transcript,
+            signed_complaint.signature.signer,
+            &complaint.idkg_complaint,
+        ) {
+            Err(error) if error.is_reproducible() => {
+                self.metrics
+                    .complaint_errors_inc("verify_complaint_permanent");
+                Some(EcdsaChangeAction::HandleInvalid(
+                    id,
+                    format!(
+                        "Complaint validation(permanent error): {}, error = {:?}",
+                        signed_complaint, error
+                    ),
+                ))
+            }
+            Err(error) => {
+                debug!(
+                    self.log,
+                    "Complaint validation(transient error): {}, error = {:?}",
+                    signed_complaint,
+                    error
+                );
+                self.metrics
+                    .complaint_errors_inc("verify_complaint_transient");
+                None
+            }
+            Ok(()) => {
+                self.metrics.complaint_metrics_inc("complaint_received");
+                Some(EcdsaChangeAction::MoveToValidated(
+                    EcdsaMessage::EcdsaComplaint(signed_complaint),
+                ))
+            }
+        }
     }
 
     /// Helper to create a signed opening
@@ -545,9 +539,9 @@ impl EcdsaComplaintHandlerImpl {
     /// Helper to verify the opening
     fn crypto_verify_opening(
         &self,
-        id: &EcdsaMessageId,
+        id: EcdsaMessageId,
         transcript: &IDkgTranscript,
-        signed_opening: &EcdsaOpening,
+        signed_opening: EcdsaOpening,
         signed_complaint: &EcdsaComplaint,
     ) -> Option<EcdsaChangeAction> {
         let opening = signed_opening.get();
@@ -556,13 +550,13 @@ impl EcdsaComplaintHandlerImpl {
         // Verify the signature
         if let Err(error) = self
             .crypto
-            .verify(signed_opening, transcript.registry_version)
+            .verify(&signed_opening, transcript.registry_version)
         {
             if error.is_reproducible() {
                 self.metrics
                     .complaint_errors_inc("verify_opening_signature_permanent");
                 return Some(EcdsaChangeAction::HandleInvalid(
-                    id.clone(),
+                    id,
                     format!(
                         "Opening signature validation(permanent error): {}, error = {:?}",
                         signed_opening, error
@@ -582,44 +576,39 @@ impl EcdsaComplaintHandlerImpl {
         }
 
         // Verify the opening
-        self.crypto
-            .verify_opening(
-                transcript,
-                signed_opening.signature.signer,
-                &opening.idkg_opening,
-                &complaint.idkg_complaint,
-            )
-            .map_or_else(
-                |error| {
-                    if error.is_reproducible() {
-                        self.metrics
-                            .complaint_errors_inc("verify_opening_permanent");
-                        Some(EcdsaChangeAction::HandleInvalid(
-                            id.clone(),
-                            format!(
-                                "Opening validation(permanent error): {}, error = {:?}",
-                                signed_opening, error
-                            ),
-                        ))
-                    } else {
-                        debug!(
-                            self.log,
-                            "Opening validation(transient error): {}, error = {:?}",
-                            signed_opening,
-                            error
-                        );
-                        self.metrics
-                            .complaint_errors_inc("verify_opening_transient");
-                        None
-                    }
-                },
-                |()| {
-                    self.metrics.complaint_metrics_inc("opening_received");
-                    Some(EcdsaChangeAction::MoveToValidated(
-                        EcdsaMessage::EcdsaOpening(signed_opening.clone()),
-                    ))
-                },
-            )
+        match self.crypto.verify_opening(
+            transcript,
+            signed_opening.signature.signer,
+            &opening.idkg_opening,
+            &complaint.idkg_complaint,
+        ) {
+            Err(error) if error.is_reproducible() => {
+                self.metrics
+                    .complaint_errors_inc("verify_opening_permanent");
+                Some(EcdsaChangeAction::HandleInvalid(
+                    id,
+                    format!(
+                        "Opening validation(permanent error): {}, error = {:?}",
+                        signed_opening, error
+                    ),
+                ))
+            }
+            Err(error) => {
+                debug!(
+                    self.log,
+                    "Opening validation(transient error): {}, error = {:?}", signed_opening, error
+                );
+                self.metrics
+                    .complaint_errors_inc("verify_opening_transient");
+                None
+            }
+            Ok(()) => {
+                self.metrics.complaint_metrics_inc("opening_received");
+                Some(EcdsaChangeAction::MoveToValidated(
+                    EcdsaMessage::EcdsaOpening(signed_opening),
+                ))
+            }
+        }
     }
 
     /// Checks if the complainer already issued a complaint for the given
@@ -1025,7 +1014,7 @@ mod tests {
                 let transcript = create_transcript(id, &[NODE_2]);
                 let complaint = create_complaint(id, NODE_2, NODE_3);
                 let changeset: Vec<_> = complaint_handler
-                    .crypto_verify_complaint(&complaint.message_id(), &transcript, &complaint)
+                    .crypto_verify_complaint(complaint.message_id(), &transcript, complaint.clone())
                     .into_iter()
                     .collect();
                 // assert that the mock complaint does not pass real crypto check
@@ -1308,7 +1297,12 @@ mod tests {
                 let complaint = create_complaint(id, NODE_2, NODE_3);
                 let opening = create_opening(id, NODE_2, NODE_3, NODE_4);
                 let changeset: Vec<_> = complaint_handler
-                    .crypto_verify_opening(&opening.message_id(), &transcript, &opening, &complaint)
+                    .crypto_verify_opening(
+                        opening.message_id(),
+                        &transcript,
+                        opening.clone(),
+                        &complaint,
+                    )
                     .into_iter()
                     .collect();
                 // assert that the mock opening does not pass real crypto check

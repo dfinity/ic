@@ -231,7 +231,7 @@ impl EcdsaPreSignerImpl {
                         ))
                     } else {
                         let action =
-                            self.crypto_verify_dealing(&id, &transcript_params, &signed_dealing);
+                            self.crypto_verify_dealing(id, &transcript_params, signed_dealing);
                         if let Some(EcdsaChangeAction::MoveToValidated(_)) = action {
                             validated_dealings.insert(key);
                         }
@@ -467,10 +467,10 @@ impl EcdsaPreSignerImpl {
                             ))
                         } else {
                             let action = self.crypto_verify_dealing_support(
-                                &id,
+                                id,
                                 &transcript_params,
                                 signed_dealing,
-                                &support,
+                                support,
                                 ecdsa_pool.stats(),
                             );
                             if let Some(EcdsaChangeAction::MoveToValidated(_)) = action {
@@ -669,41 +669,38 @@ impl EcdsaPreSignerImpl {
     /// Helper to do public verification of a dealing received for a transcript we are building
     fn crypto_verify_dealing(
         &self,
-        id: &EcdsaMessageId,
+        id: EcdsaMessageId,
         transcript_params: &IDkgTranscriptParams,
-        signed_dealing: &SignedIDkgDealing,
+        signed_dealing: SignedIDkgDealing,
     ) -> Option<EcdsaChangeAction> {
-        IDkgProtocol::verify_dealing_public(&*self.crypto, transcript_params, signed_dealing)
-            .map_or_else(
-                |error| {
-                    if error.is_reproducible() {
-                        self.metrics.pre_sign_errors_inc("verify_dealing_permanent");
-                        Some(EcdsaChangeAction::HandleInvalid(
-                            id.clone(),
-                            format!(
-                                "Dealing validation(permanent error): {}, error = {:?}",
-                                signed_dealing, error
-                            ),
-                        ))
-                    } else {
-                        // Defer in case of transient errors
-                        debug!(
-                            self.log,
-                            "Dealing validation(transient error): {}, error = {:?}",
-                            signed_dealing,
-                            error
-                        );
-                        self.metrics.pre_sign_errors_inc("verify_dealing_transient");
-                        None
-                    }
-                },
-                |()| {
-                    self.metrics.pre_sign_metrics_inc("dealing_received");
-                    Some(EcdsaChangeAction::MoveToValidated(
-                        EcdsaMessage::EcdsaSignedDealing(signed_dealing.clone()),
-                    ))
-                },
-            )
+        match IDkgProtocol::verify_dealing_public(&*self.crypto, transcript_params, &signed_dealing)
+        {
+            Err(error) if error.is_reproducible() => {
+                self.metrics.pre_sign_errors_inc("verify_dealing_permanent");
+                Some(EcdsaChangeAction::HandleInvalid(
+                    id,
+                    format!(
+                        "Dealing validation(permanent error): {}, error = {:?}",
+                        signed_dealing, error
+                    ),
+                ))
+            }
+            Err(error) => {
+                // Defer in case of transient errors
+                debug!(
+                    self.log,
+                    "Dealing validation(transient error): {}, error = {:?}", signed_dealing, error
+                );
+                self.metrics.pre_sign_errors_inc("verify_dealing_transient");
+                None
+            }
+            Ok(()) => {
+                self.metrics.pre_sign_metrics_inc("dealing_received");
+                Some(EcdsaChangeAction::MoveToValidated(
+                    EcdsaMessage::EcdsaSignedDealing(signed_dealing),
+                ))
+            }
+        }
     }
 
     /// Helper to corrupt the signed crypto dealing for malicious testing
@@ -827,10 +824,10 @@ impl EcdsaPreSignerImpl {
     /// Helper to verify a support share for a dealing
     fn crypto_verify_dealing_support(
         &self,
-        id: &EcdsaMessageId,
+        id: EcdsaMessageId,
         transcript_params: &IDkgTranscriptParams,
         signed_dealing: &SignedIDkgDealing,
-        support: &IDkgDealingSupport,
+        support: IDkgDealingSupport,
         stats: &dyn EcdsaStats,
     ) -> Option<EcdsaChangeAction> {
         let start = std::time::Instant::now();
@@ -840,27 +837,27 @@ impl EcdsaPreSignerImpl {
             support.sig_share.signer,
             transcript_params.registry_version(),
         );
-        stats.record_support_validation(support, start.elapsed());
+        stats.record_support_validation(&support, start.elapsed());
 
-        ret.map_or_else(
-            |error| {
+        match ret {
+            Err(error) => {
                 self.metrics.pre_sign_errors_inc("verify_dealing_support");
                 Some(EcdsaChangeAction::HandleInvalid(
-                    id.clone(),
+                    id,
                     format!(
                         "Support validation failed: {}, error = {:?}",
                         support, error
                     ),
                 ))
-            },
-            |_| {
+            }
+            Ok(_) => {
                 self.metrics
                     .pre_sign_metrics_inc("dealing_support_received");
                 Some(EcdsaChangeAction::MoveToValidated(
-                    EcdsaMessage::EcdsaDealingSupport(support.clone()),
+                    EcdsaMessage::EcdsaDealingSupport(support),
                 ))
-            },
-        )
+            }
+        }
     }
 
     /// Helper to load the transcripts the given transcript config is dependent on.
@@ -1674,7 +1671,7 @@ mod tests {
                 .unwrap();
                 let dealing = create_dealing(id, NODE_2);
                 let changeset: Vec<_> = pre_signer
-                    .crypto_verify_dealing(&dealing.message_id(), &params, &dealing)
+                    .crypto_verify_dealing(dealing.message_id(), &params, dealing.clone())
                     .into_iter()
                     .collect();
                 // assert that the mock dealing does not pass real crypto check
@@ -2134,10 +2131,10 @@ mod tests {
                 let (dealing, support) = create_support(id, NODE_2, NODE_3);
                 let changeset: Vec<_> = pre_signer
                     .crypto_verify_dealing_support(
-                        &support.message_id(),
+                        support.message_id(),
                         &params,
                         &dealing,
-                        &support,
+                        support.clone(),
                         &(EcdsaStatsNoOp {}),
                     )
                     .into_iter()
