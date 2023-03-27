@@ -5,7 +5,10 @@ use ic_replicated_state::{
     PageIndex, PageMap,
 };
 use ic_sys::{PageBytes, PAGE_SIZE};
-use nix::sys::mman::{mmap, mprotect, MapFlags, ProtFlags};
+use nix::{
+    errno::Errno,
+    sys::mman::{mmap, mprotect, MapFlags, ProtFlags},
+};
 use std::{
     cell::{Cell, RefCell},
     ops::Range,
@@ -428,6 +431,7 @@ pub fn sigsegv_fault_handler_old(
                 PAGE_SIZE,
                 nix::sys::mman::ProtFlags::PROT_READ | nix::sys::mman::ProtFlags::PROT_WRITE,
             )
+            .map_err(print_enomem_help)
             .unwrap()
         };
         tracker
@@ -447,6 +451,7 @@ pub fn sigsegv_fault_handler_old(
                 PAGE_SIZE,
                 nix::sys::mman::ProtFlags::PROT_READ | nix::sys::mman::ProtFlags::PROT_WRITE,
             )
+            .map_err(print_enomem_help)
             .unwrap()
         };
         // Page contents initialization is optional. For example, if the memory tracker
@@ -468,6 +473,7 @@ pub fn sigsegv_fault_handler_old(
                 PAGE_SIZE,
                 nix::sys::mman::ProtFlags::PROT_READ,
             )
+            .map_err(print_enomem_help)
             .unwrap()
         };
         tracker
@@ -611,6 +617,7 @@ pub fn sigsegv_fault_handler_new(
                         range_size_in_bytes(&prefetch_range),
                         ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
                     )
+                    .map_err(print_enomem_help)
                     .unwrap()
                 };
                 dirty_bitmap.mark_range(&prefetch_range);
@@ -674,6 +681,7 @@ fn map_unaccessed_pages(
                     range_size_in_bytes(&mprotect_range),
                     page_protection_flags,
                 )
+                .map_err(print_enomem_help)
                 .unwrap()
             };
             mprotect_range
@@ -712,6 +720,7 @@ fn map_unaccessed_pages(
                     range_size_in_bytes(&mprotect_range),
                     ProtFlags::PROT_READ | ProtFlags::PROT_WRITE,
                 )
+                .map_err(print_enomem_help)
                 .unwrap()
             };
 
@@ -744,6 +753,7 @@ fn map_unaccessed_pages(
                         range_size_in_bytes(&mprotect_range),
                         ProtFlags::PROT_READ,
                     )
+                    .map_err(print_enomem_help)
                     .unwrap()
                 };
             }
@@ -772,6 +782,16 @@ fn range_from_count(page: PageIndex, count: usize) -> Range<PageIndex> {
 
 fn range_count(range: &Range<PageIndex>) -> usize {
     (range.end.get() - range.start.get()) as usize
+}
+
+fn print_enomem_help(errno: Errno) -> Errno {
+    if let Errno::ENOMEM = errno {
+        eprintln!(
+            "This failure is likely caused by the `vm.max_map_count` limit.\n\
+             Try increasing the limit: `sudo sysctl -w vm.max_map_count=2097152`."
+        );
+    }
+    errno
 }
 
 #[cfg(test)]
