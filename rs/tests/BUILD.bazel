@@ -1,5 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 load(":system_tests.bzl", "symlink_dir", "system_test", "uvm_config_image")
+load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "DEPENDENCIES", "GRAFANA_RUNTIME_DEPS", "GUESTOS_MALICIOUS_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 
 package(default_visibility = ["//visibility:public"])
@@ -617,6 +618,16 @@ system_test(
     deps = DEPENDENCIES + [":tests"],
 )
 
+exports_files([
+    "src/orchestrator/orchestrator_universal_vm_activation.sh",
+])
+
+copy_file(
+    name = "static-file-server_image",
+    src = "@static-file-server//image",
+    out = "static-file-server.tar",
+)
+
 system_test(
     name = "sr_nns_failover_nodes_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -630,7 +641,8 @@ system_test(
         UNIVERSAL_VM_RUNTIME_DEPS +
         NNS_CANISTER_RUNTIME_DEPS +
         SUBNET_RECOVERY_RUNTIME_DEPS + [
-            ":src/orchestrator/universal_vm_activation.sh",
+            ":src/orchestrator/orchestrator_universal_vm_activation.sh",
+            ":static-file-server_image",
         ],
     deps = DEPENDENCIES + [":tests"],
 )
@@ -788,10 +800,41 @@ exports_files([
 ])
 
 CANISTER_HTTP_RUNTIME_DEPS = [
-    ":src/canister_http/universal_vm_activation.sh",
-    "//ic-os/guestos:rootfs/dev-certs/canister_http_test_ca.cert",
-    "//ic-os/guestos:rootfs/dev-certs/canister_http_test_ca.key",
+    ":http_uvm_config_image",
 ]
+
+copy_file(
+    name = "httpbin_image",
+    src = "@httpbin//image",
+    out = "httpbin.tar",
+)
+
+copy_file(
+    name = "minica_image",
+    src = "@minica//image",
+    out = "minica.tar",
+)
+
+uvm_config_image(
+    name = "http_uvm_config_image",
+    srcs = [
+        ":httpbin_image",
+        ":minica_image",
+        ":src/canister_http/universal_vm_activation.sh",
+        "//ic-os/guestos:rootfs/dev-certs/canister_http_test_ca.cert",
+        "//ic-os/guestos:rootfs/dev-certs/canister_http_test_ca.key",
+    ],
+    mode = "664",
+    modes = {
+        "activate": "775",
+    },
+    remap_paths = {
+        "/universal_vm_activation.sh": "/activate",
+        "/canister_http_test_ca.cert": "/cert.pem",
+        "/canister_http_test_ca.key": "/key.pem",
+    },
+    tags = ["manual"],  # this target will be built if required as a dependency of another target
+)
 
 system_test(
     name = "canister_http_test",
@@ -880,7 +923,9 @@ system_test(
         "system_test_pre_master",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + CANISTER_HTTP_RUNTIME_DEPS + IC_HS_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + CANISTER_HTTP_RUNTIME_DEPS + IC_HS_RUNTIME_DEPS + [
+        "//ic-os/guestos:rootfs/dev-certs/canister_http_test_ca.cert",
+    ],
     deps = DEPENDENCIES + [":tests"],
 )
 
@@ -891,7 +936,9 @@ system_test(
         "system_test_pre_master",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + CANISTER_HTTP_RUNTIME_DEPS + IC_HS_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + CANISTER_HTTP_RUNTIME_DEPS + IC_HS_RUNTIME_DEPS + [
+        "//ic-os/guestos:rootfs/dev-certs/canister_http_test_ca.cert",
+    ],
     deps = DEPENDENCIES + [":tests"],
 )
 
