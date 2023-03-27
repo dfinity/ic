@@ -1602,7 +1602,7 @@ where
 
 fn trunc_error(err_str: String) -> String {
     let mut short_e = err_str.replace('\n', "\\n ");
-    short_e.truncate(160);
+    short_e.truncate(200);
     short_e.push_str("...");
     short_e
 }

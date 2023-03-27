@@ -1,13 +1,11 @@
-use crate::canister_http::lib::{
-    get_pem_content, get_universal_vm_activation_script, get_universal_vm_address, PemType,
-};
+use crate::canister_http::lib::get_universal_vm_address;
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
     HasDependencies, HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
     SubnetSnapshot, TopologySnapshot,
 };
-use crate::driver::universal_vm::{insert_file_to_config, UniversalVm, UniversalVms};
+use crate::driver::universal_vm::UniversalVm;
 use ic_registry_routing_table::canister_id_into_u64;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
@@ -49,26 +47,15 @@ pub fn config_impl(env: TestEnv) {
     env.ensure_group_setup_created();
 
     // Set up Universal VM with HTTP Bin testing service
-    let activate_script = &get_universal_vm_activation_script(&env)[..];
-    let config_dir = env
-        .single_activate_script_config_dir(UNIVERSAL_VM_NAME, activate_script)
-        .unwrap();
-    let _ = insert_file_to_config(
-        config_dir.clone(),
-        "cert.pem",
-        get_pem_content(&env, &PemType::PemCert).as_bytes(),
+    env::set_var(
+        "SSL_CERT_FILE",
+        env.get_dependency_path("ic-os/guestos/rootfs/dev-certs/canister_http_test_ca.cert"),
     );
-    let _ = insert_file_to_config(
-        config_dir.clone(),
-        "key.pem",
-        get_pem_content(&env, &PemType::PemKey).as_bytes(),
-    );
-    env::set_var("SSL_CERT_FILE", config_dir.as_path().join("cert.pem"));
     env::remove_var("NIX_SSL_CERT_FILE");
     env::set_var("IC_TEST_DATA", env.get_dependency_path("rs/tests/ic-hs"));
 
     UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
-        .with_config_dir(config_dir)
+        .with_config_img(env.get_dependency_path("rs/tests/http_uvm_config_image.zst"))
         .start(&env)
         .expect("failed to set up universal VM");
 

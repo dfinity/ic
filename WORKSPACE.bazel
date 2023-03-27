@@ -195,10 +195,31 @@ load(
 )
 
 container_pull(
+    name = "static-file-server",
+    digest = "sha256:c21bed6db05fe08f2da128fe96f5f5a06633348fb5bb37bf3581e6501c6b528a",
+    registry = "registry.gitlab.com/dfinity-lab/open/public-docker-registry",
+    repository = "halverneus/static-file-server",
+)
+
+container_pull(
     name = "bitcoind",
     digest = "sha256:17c7dd21690f3be34630db7389d2f0bff14649e27a964afef03806a6d631e0f1",
     registry = "registry.gitlab.com/dfinity-lab/open/public-docker-registry",
     repository = "kylemanna/bitcoind",
+)
+
+container_pull(
+    name = "httpbin",
+    digest = "sha256:506a878e386b4c3014088b9089e692ecb3cb6a35fb35c9d68c1ac300ce9ab984",
+    registry = "registry.gitlab.com/dfinity-lab/open/public-docker-registry",
+    repository = "dfinity/httpbin",
+)
+
+container_pull(
+    name = "minica",
+    digest = "sha256:c67e2c1885d438b5927176295d41aaab8a72dd9e1272ba85054bfc78191d05b0",
+    registry = "registry.gitlab.com/dfinity-lab/open/public-docker-registry",
+    repository = "ryantk/minica",
 )
 
 container_pull(

@@ -52,23 +52,8 @@ pub fn config(env: TestEnv) {
     env.ensure_group_setup_created();
 
     // Set up Universal VM with HTTP Bin testing service
-    let activate_script = &get_universal_vm_activation_script(&env)[..];
-    let config_dir = env
-        .single_activate_script_config_dir(UNIVERSAL_VM_NAME, activate_script)
-        .unwrap();
-    let _ = insert_file_to_config(
-        config_dir.clone(),
-        "cert.pem",
-        get_pem_content(&env, &PemType::PemCert).as_bytes(),
-    );
-    let _ = insert_file_to_config(
-        config_dir.clone(),
-        "key.pem",
-        get_pem_content(&env, &PemType::PemKey).as_bytes(),
-    );
-
     UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
-        .with_config_dir(config_dir)
+        .with_config_img(env.get_dependency_path("rs/tests/http_uvm_config_image.zst"))
         .start(&env)
         .expect("failed to set up universal VM");
 
