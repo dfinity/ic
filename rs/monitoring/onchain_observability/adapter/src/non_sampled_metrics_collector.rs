@@ -24,17 +24,18 @@ const TIMEOUT_LENGTH_SEC: Duration = Duration::from_secs(30);
 const MAX_ATTEMPTS: u64 = 5;
 
 // Represents the non-sampled metrics collected from replica from an individual gRPC request
-#[derive(Clone, Debug)]
-pub struct CollectedMetrics {
+#[derive(Clone, Debug, PartialEq)]
+
+pub struct NonSampledMetrics {
     // Represents last restart time for the replica providing peer metrics. Can be used to
     // determine if metric counters were reset since last gRPC query.
     pub replica_last_start_time: SystemTime,
-    pub peer_metrics: HashMap<NodeId, PeerMetrics>,
+    pub peer_metrics: HashMap<NodeId, PeerCounterMetrics>,
 }
 
 // The non-sampled peer metrics obtained from gRPC request.
-#[derive(Clone, Debug)]
-pub struct PeerMetrics {
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct PeerCounterMetrics {
     // The number of times a peer connection was disconnected and a reconnect was attempted
     pub num_retries: u64,
     // Total bytes the reporting replica received from the peer
@@ -43,13 +44,23 @@ pub struct PeerMetrics {
     pub bytes_sent: u64,
 }
 
+impl PeerCounterMetrics {
+    pub fn subtract(&self, other: &Self) -> Self {
+        PeerCounterMetrics {
+            num_retries: self.num_retries - other.num_retries,
+            bytes_received: self.bytes_received - other.bytes_received,
+            bytes_sent: self.bytes_sent - other.bytes_sent,
+        }
+    }
+}
+
 // Sends a gRPC request to the replica to collect the relevant metrics.
 // Response will be filtered on peer ids passed as a parameter.  This is to resolve any
 // possible discrepancies between peers from latest registry version (source of truth) and prometheus metrics.
 pub async fn collect_metrics_for_peers(
     mut client: OnchainObservabilityServiceClient<Channel>,
     peer_ids: &HashSet<NodeId>,
-) -> Result<CollectedMetrics, MetricsCollectError> {
+) -> Result<NonSampledMetrics, MetricsCollectError> {
     let request = OnchainObservabilityServiceGetMetricsDataRequest {
         requested_metrics: vec![
             PROCESS_START_TIME_METRIC.to_string(),
@@ -84,11 +95,11 @@ pub async fn collect_metrics_for_peers(
     ))
 }
 
-// Takes raw string gRPC response and converts into CollectedMetrics struct
+// Takes raw string gRPC response and converts into NonSampledMetrics struct
 pub fn parse_metrics_response(
     response: String,
     peer_ids: &HashSet<NodeId>,
-) -> Result<CollectedMetrics, MetricsCollectError> {
+) -> Result<NonSampledMetrics, MetricsCollectError> {
     let lines = response.lines().map(|s| Ok(s.to_string()));
     let scraped_metrics = Scrape::parse(lines).map_err(|_| {
         MetricsCollectError::MetricParseFailure("prometheus scrape error".to_string())
@@ -129,7 +140,7 @@ pub fn parse_metrics_response(
         // treating this as an error may misrepresent the data
         let num_retries = *retry_count_for_peers.get(peer_id).unwrap_or(&0);
 
-        let current_peer_metrics = PeerMetrics {
+        let current_peer_metrics = PeerCounterMetrics {
             num_retries,
             bytes_received: bytes_received_for_peers[peer_id],
             bytes_sent: bytes_sent_for_peers[peer_id],
@@ -137,7 +148,7 @@ pub fn parse_metrics_response(
         peer_metrics_map.insert(*peer_id, current_peer_metrics);
     }
 
-    Ok(CollectedMetrics {
+    Ok(NonSampledMetrics {
         replica_last_start_time,
         peer_metrics: peer_metrics_map,
     })
@@ -226,4 +237,150 @@ fn extract_peer_counts_for_metric(
     Ok(metric_for_peers)
 }
 
-// TODO(NET-1313) add unit test
+// A helper function to isolate the counts for the current reporting interval.
+// If replica restarted since the last report, then the latest cumulative counts are already within
+// the report window
+pub fn derive_peer_counters_for_current_report_interval(
+    metrics_report_start: &NonSampledMetrics,
+    metrics_report_end: &NonSampledMetrics,
+) -> HashMap<NodeId, PeerCounterMetrics> {
+    if metrics_report_end.replica_last_start_time > metrics_report_start.replica_last_start_time {
+        return metrics_report_end.peer_metrics.clone();
+    }
+
+    // Used as a no-op baseline if a new peer is added between reports
+    let zero_counters = PeerCounterMetrics::default();
+
+    let delta_peer_metrics_map = metrics_report_end
+        .peer_metrics
+        .iter()
+        .map(|(peer_id, latest_metric_counts)| {
+            let baseline_counts = metrics_report_start
+                .peer_metrics
+                .get(peer_id)
+                .unwrap_or(&zero_counters);
+            (*peer_id, latest_metric_counts.subtract(baseline_counts))
+        })
+        .collect();
+
+    // We cannot modify the existing struct directly since we need to preserve the cumulative counts
+    // as a baseline for the following report, so store the delta counts as a new struct
+    delta_peer_metrics_map
+}
+
+#[cfg(test)]
+mod test {
+    use crate::{
+        derive_peer_counters_for_current_report_interval, NonSampledMetrics, PeerCounterMetrics,
+    };
+    use ic_types_test_utils::ids::{NODE_1, NODE_2};
+    use std::{
+        collections::HashMap,
+        time::{Duration, SystemTime},
+    };
+
+    // Test the derive_peer_counters_for_current_report_interval() function
+    // Verify that if replica start time changes, the latest set of metrics are used directly
+    #[test]
+    fn test_derive_peer_counters_for_current_report_interval_last_start_changed() {
+        let replica_restart = SystemTime::now();
+
+        let old_metrics = NonSampledMetrics {
+            replica_last_start_time: replica_restart,
+            peer_metrics: HashMap::from([(
+                NODE_1,
+                PeerCounterMetrics {
+                    num_retries: 3,
+                    bytes_received: 400,
+                    bytes_sent: 1000,
+                },
+            )]),
+        };
+
+        let new_metrics = NonSampledMetrics {
+            replica_last_start_time: replica_restart + Duration::from_secs(1000),
+            peer_metrics: HashMap::from([(
+                NODE_1,
+                PeerCounterMetrics {
+                    num_retries: 5,
+                    bytes_received: 1000,
+                    bytes_sent: 3000,
+                },
+            )]),
+        };
+
+        let delta_metrics =
+            derive_peer_counters_for_current_report_interval(&old_metrics, &new_metrics);
+
+        assert_eq!(delta_metrics, new_metrics.peer_metrics);
+    }
+
+    // Test the derive_peer_counters_for_current_report_interval() function
+    // Verify that if replica start time remains constant, the delta is computed for existing peers and
+    // new peers use the cumulative counts
+    #[test]
+    fn test_derive_peer_counters_for_current_report_interval_no_replica_restart() {
+        let replica_restart = SystemTime::now();
+
+        let old_metrics = NonSampledMetrics {
+            replica_last_start_time: replica_restart,
+            peer_metrics: HashMap::from([(
+                NODE_1,
+                PeerCounterMetrics {
+                    num_retries: 3,
+                    bytes_received: 400,
+                    bytes_sent: 1000,
+                },
+            )]),
+        };
+
+        let new_metrics = NonSampledMetrics {
+            replica_last_start_time: replica_restart,
+            peer_metrics: HashMap::from([
+                (
+                    NODE_1,
+                    PeerCounterMetrics {
+                        num_retries: 5,
+                        bytes_received: 1000,
+                        bytes_sent: 3000,
+                    },
+                ),
+                (
+                    NODE_2,
+                    PeerCounterMetrics {
+                        num_retries: 7,
+                        bytes_received: 800,
+                        bytes_sent: 200,
+                    },
+                ),
+            ]),
+        };
+
+        let delta_metrics =
+            derive_peer_counters_for_current_report_interval(&old_metrics, &new_metrics);
+
+        // NODE_1 metrics should = new - old
+        // NODE_2 should = new since it is a newly added node
+        let expected_delta = HashMap::from([
+            (
+                NODE_1,
+                PeerCounterMetrics {
+                    num_retries: 2,
+                    bytes_received: 600,
+                    bytes_sent: 2000,
+                },
+            ),
+            (
+                NODE_2,
+                PeerCounterMetrics {
+                    num_retries: 7,
+                    bytes_received: 800,
+                    bytes_sent: 200,
+                },
+            ),
+        ]);
+        assert_eq!(delta_metrics, expected_delta);
+    }
+}
+
+// TODO(NET-1313) add unit test for grpc

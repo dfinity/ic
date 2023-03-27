@@ -34,4 +34,6 @@ tokio = { version = "1.15.0", features = ["full"] }
 tonic = "0.8.3"
 tower = { version = "0.4.11", features = ["util"] }
 url = "2.1.1"
+
 [dev-dependencies]
+ic-types-test-utils = { path = "../../../types/types_test_utils" }

@@ -14,7 +14,8 @@ use ic_interfaces::crypto::{BasicSigner, ErrorReproducibility, KeyManager};
 use ic_logger::{error, info, new_replica_logger_from_config, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_onchain_observability_adapter::{
-    collect_metrics_for_peers, Config, Flags, MetricsCollectError, SampledMetricsCollector,
+    collect_metrics_for_peers, derive_peer_counters_for_current_report_interval, Config, Flags,
+    MetricsCollectError, PeerCounterMetrics, SampledMetricsCollector,
 };
 use ic_onchain_observability_service::onchain_observability_service_client::OnchainObservabilityServiceClient;
 use ic_registry_client::client::{RegistryClient, RegistryClientImpl};
@@ -97,19 +98,26 @@ pub async fn main() {
     let grpc_client =
         setup_onchain_observability_adapter_client(PathBuf::from(config.uds_socket_path));
 
-    let peer_ids = get_peer_ids(node_id, &registry_client);
+    let mut peer_ids = get_peer_ids(node_id, &registry_client);
 
-    // TODO(NET-1368) - Collect metrics every 60 minutes, compute delta, and skip log entry if metric collection failed
-    let collected_metrics = collect_metrics_for_peers(grpc_client.clone(), &peer_ids)
-        .await
-        .expect("Failed to retrieve metrics");
-    let replica_last_start = collected_metrics.replica_last_start_time;
-
+    // Collect an initial set of metrics to set a baseline.  On failure, skip report and try again at next reporting interval.
+    // Without a baseline, we cannot derive the counts for the current reporting interval.
+    let mut non_sampled_metrics_at_report_start = loop {
+        match collect_metrics_for_peers(grpc_client.clone(), &peer_ids).await {
+            Ok(metrics) => break metrics,
+            Err(_e) => { /* TODO(NET-1338) record error */ }
+        }
+        tokio::time::sleep(config.report_length_sec).await;
+    };
     let mut sampling_interval = interval(config.sampling_interval_sec);
     sampling_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
-    let mut sampler = SampledMetricsCollector::new_with_client(grpc_client);
+    let mut sampler = SampledMetricsCollector::new_with_client(grpc_client.clone());
     let mut start_time = SystemTime::now();
 
+    // Continuously collect and send reports. There are 2 types of metrics - sampled and non-sampled.
+    // Sampled will be collected periodically and averaged at the end of the reporting interval.
+    // Non-sampled will be collected once at the start and end and the delta will be computed.
+    // On failure, the report will be skipped and attempted again at the next interval.
     loop {
         sampling_interval.tick().await;
         if let Err(e) = sampler.sample().await {
@@ -120,8 +128,28 @@ pub async fn main() {
             .expect("Negative system time must not happen")
             >= config.report_length_sec
         {
+            // Refresh peer ids
+            peer_ids = get_peer_ids(node_id, &registry_client);
+            // TODO(NET-1373) - remove expect and skip report instead
+            let non_sampled_metrics_at_report_end =
+                collect_metrics_for_peers(grpc_client.clone(), &peer_ids)
+                    .await
+                    .expect("Failed to collect non-sampled metrics");
+
             let end_time = SystemTime::now();
+
+            // The gRPC response provides cumulative metric counts since replica last restart, so we may need to adjust counts for the current reporting window.
+            let peer_counters_for_current_interval =
+                derive_peer_counters_for_current_report_interval(
+                    &non_sampled_metrics_at_report_start,
+                    &non_sampled_metrics_at_report_end,
+                );
+            let replica_last_start_time = non_sampled_metrics_at_report_end.replica_last_start_time;
+
+            // TODO(NET-1374) Refactor sampling code interface and check that peers match between
+            // sampling and non-sampling
             let up_time_peer_labels = sampler.aggregate();
+
             // TODO NET-1328 - remove panic and handle failed conversion gracefully
             let uptime: HashMap<NodeId, f32> = up_time_peer_labels
                 .iter()
@@ -138,7 +166,14 @@ pub async fn main() {
                 "Completed Report: interval{:?}-{:?} uptime% {:?}", start_time, end_time, uptime
             );
 
-            let report = prepare_report(node_id, start_time, end_time, uptime, replica_last_start);
+            let report = prepare_report(
+                node_id,
+                start_time,
+                end_time,
+                replica_last_start_time,
+                &uptime,
+                &peer_counters_for_current_interval,
+            );
 
             for signature_attempts in 0..MAX_CRYPTO_SIGNATURE_ATTEMPTS {
                 match sign_report(crypto_component.clone(), report.clone(), node_id).await {
@@ -169,6 +204,8 @@ pub async fn main() {
                     }
                 }
             }
+            // Reset the baseline
+            non_sampled_metrics_at_report_start = non_sampled_metrics_at_report_end;
             sampler.clear();
             start_time = SystemTime::now();
         }
@@ -282,15 +319,21 @@ fn prepare_report(
     reporting_node_id: NodeId,
     start_time: SystemTime,
     end_time: SystemTime,
-    uptime_percent: HashMap<NodeId, f32>,
     replica_last_start_time: SystemTime,
+    uptime_percent: &HashMap<NodeId, f32>,
+    peer_counters: &HashMap<NodeId, PeerCounterMetrics>,
 ) -> Report {
     // First, prepare the peer data
-    let peer_reports = uptime_percent
+    let peer_reports: Vec<PeerReport> = peer_counters
         .iter()
-        .map(|(peer_id, uptime)| PeerReport {
-            peer_id_binary: peer_id.get().to_vec(),
-            peer_uptime_percent: *uptime,
+        .map(|(peer_id, non_sampled_counts)| {
+            PeerReport {
+                peer_id_binary: peer_id.get().to_vec(),
+                peer_uptime_percent: uptime_percent[peer_id], // TODO(NET-1374) don't assume both hashmaps have same set of peers
+                num_retries: non_sampled_counts.num_retries,
+                connection_bytes_received: non_sampled_counts.bytes_received,
+                connection_bytes_sent: non_sampled_counts.bytes_sent,
+            }
         })
         .collect();
 

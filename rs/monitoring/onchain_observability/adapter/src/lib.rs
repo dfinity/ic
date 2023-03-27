@@ -6,13 +6,16 @@ mod config;
 mod flags;
 /// Error handling
 mod metrics_parse_error;
+/// Temporary helpers for node id
+mod non_sampled_metrics_collector;
 /// Provides a sampling API to fetch single instance of metric and aggregate
 mod sampled_metrics_collector;
-/// Temporary helpers for node id
-mod static_metric_collector;
 
 pub use config::Config;
 pub use flags::Flags;
 pub use metrics_parse_error::MetricsCollectError;
+pub use non_sampled_metrics_collector::{
+    collect_metrics_for_peers, derive_peer_counters_for_current_report_interval, NonSampledMetrics,
+    PeerCounterMetrics,
+};
 pub use sampled_metrics_collector::SampledMetricsCollector;
-pub use static_metric_collector::{collect_metrics_for_peers, CollectedMetrics, PeerMetrics};

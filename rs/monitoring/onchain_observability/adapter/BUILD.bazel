@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:private"])
 
@@ -33,8 +33,8 @@ DEPENDENCIES = [
     "@crate_index//:url",
 ]
 
-MACRO_DEPENDENCIES = [
-    "@crate_index//:async-trait",
+DEV_DEPENDENCIES = [
+    "//rs/types/types_test_utils",
 ]
 
 ALIASES = {}
@@ -44,16 +44,20 @@ rust_library(
     srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate_name = "ic_onchain_observability_adapter",
-    proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.1.0",
     deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "adapter_test",
+    crate = ":adapter",
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
 rust_binary(
     name = "ic-onchain-observability-adapter",
     srcs = ["src/main.rs"],
     aliases = ALIASES,
-    proc_macro_deps = MACRO_DEPENDENCIES,
     visibility = ["//publish:__subpackages__"],
     deps = DEPENDENCIES + [":adapter"],
 )

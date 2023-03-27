@@ -7571,6 +7571,7 @@ dependencies = [
  "ic-registry-client-helpers",
  "ic-registry-local-store",
  "ic-types",
+ "ic-types-test-utils",
  "itertools",
  "prometheus-parse",
  "rand 0.8.5",
