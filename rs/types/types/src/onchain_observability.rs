@@ -22,6 +22,9 @@ pub struct Report {
 pub struct PeerReport {
     pub peer_id_binary: Vec<u8>,
     pub peer_uptime_percent: f32,
+    pub num_retries: u64,
+    pub connection_bytes_received: u64,
+    pub connection_bytes_sent: u64,
 }
 
 impl SignedBytesWithoutDomainSeparator for Report {
