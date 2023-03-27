@@ -233,9 +233,11 @@ function setup_pre_isolation_canisters() {
     local -r SRC_CANISTERS_PATH="${BOOT_DIR}/pre_isolation_canisters.txt"
     local -r DST_CANISTERS_PATH="/run/ic-node/etc/nginx/conf.d/pre_isolation_canisters.conf"
 
+    # Make sure the file exists
+    touch "${DST_CANISTERS_PATH}"
+
     if [[ ! -f "${SRC_CANISTERS_PATH}" ]]; then
         err "missing pre_isolation_canisters.txt file: ${SRC_CANISTERS_PATH}; continuing with an empty one"
-        touch "${DST_CANISTERS_PATH}"
         return
     fi
 
