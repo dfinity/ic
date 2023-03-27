@@ -176,6 +176,7 @@ rust_bench(
     name = "heap_bench",
     testonly = True,
     srcs = ["benches/heap.rs"],
+    compile_data = glob(["benches/test-data/*"]),
     data = DATA,
     env = ENV,
     deps = [
