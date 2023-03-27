@@ -1037,3 +1037,36 @@ fn composite_query_recursive() {
         "Query calls re-entering the same canister are not allowed yet."
     );
 }
+
+#[test]
+fn composite_query_chained_calls() {
+    let mut test = ExecutionTestBuilder::new().with_composite_queries().build();
+
+    let canister_a = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+    let canister_b = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+
+    let b = wasm().message_payload().append_and_reply().build();
+
+    let a = wasm().composite_query(
+        canister_b,
+        call_args()
+            .other_side(b.clone())
+            .on_reply(wasm().composite_query(canister_b, call_args().other_side(b.clone()))),
+    );
+
+    let result = test
+        .query(
+            UserQuery {
+                source: user_test_id(2),
+                receiver: canister_a,
+                method_name: "composite_query".to_string(),
+                method_payload: a.build(),
+                ingress_expiry: 0,
+                nonce: None,
+            },
+            Arc::new(test.state().clone()),
+            vec![],
+        )
+        .unwrap();
+    assert_eq!(result, WasmResult::Reply(b));
+}
