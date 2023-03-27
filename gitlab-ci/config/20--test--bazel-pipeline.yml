@@ -169,6 +169,7 @@ bazel-build-macos:
     BAZEL_COMMAND: "build"
     BAZEL_EXTRA_ARGS: "--config macos_ci"
     BAZEL_TARGETS: "//rs/... //publish/binaries/..."
+  timeout: 90 minutes
 
 macos-openssl-static-binaries:
   extends:
