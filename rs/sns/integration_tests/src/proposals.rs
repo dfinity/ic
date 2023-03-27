@@ -1,6 +1,6 @@
 use canister_test::Canister;
 use ic_ledger_core::Tokens;
-use icrc_ledger_types::Account;
+use icrc_ledger_types::icrc1::account::Account;
 use std::collections::BTreeMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 

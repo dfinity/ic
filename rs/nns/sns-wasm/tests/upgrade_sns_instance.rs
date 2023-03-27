@@ -46,8 +46,8 @@ use ic_sns_wasm::pb::v1::{
 };
 use ic_state_machine_tests::StateMachine;
 use ic_types::Cycles;
-use icrc_ledger_types::transaction::{NumTokens, TransferArg, TransferError};
-use icrc_ledger_types::Account;
+use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc1::transfer::{NumTokens, TransferArg, TransferError};
 
 #[test]
 fn upgrade_root_sns_canister_via_sns_wasms() {

@@ -4,13 +4,19 @@ use ic_icrc1::{endpoints::StandardRecord, hash::Hash, Block, Operation, Transact
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::block::{BlockIndex, BlockType, HashOf};
 use ic_state_machine_tests::{CanisterId, ErrorCode, StateMachine};
-use icrc_ledger_types::block::{Block as IcrcBlock, BlockRange, GetBlocksResponse};
-use icrc_ledger_types::transaction::{
-    GetTransactionsResponse, Transaction as Tx, TransactionRange, Transfer,
-};
-use icrc_ledger_types::transaction::{Memo, TransferArg, TransferError};
-use icrc_ledger_types::value::MetadataValue as Value;
-use icrc_ledger_types::{Account, ArchiveInfo, GetTransactionsRequest, Subaccount};
+use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
+use icrc_ledger_types::icrc1::account::{Account, Subaccount};
+use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
+use icrc_ledger_types::icrc3::archive::ArchiveInfo;
+use icrc_ledger_types::icrc3::blocks::BlockRange;
+use icrc_ledger_types::icrc3::blocks::GenericBlock as IcrcBlock;
+use icrc_ledger_types::icrc3::blocks::GetBlocksResponse;
+use icrc_ledger_types::icrc3::transactions::GetTransactionsRequest;
+use icrc_ledger_types::icrc3::transactions::GetTransactionsResponse;
+use icrc_ledger_types::icrc3::transactions::Transaction as Tx;
+use icrc_ledger_types::icrc3::transactions::TransactionRange;
+use icrc_ledger_types::icrc3::transactions::Transfer;
+
 use num_traits::ToPrimitive;
 use proptest::prelude::*;
 use proptest::test_runner::{Config as TestRunnerConfig, TestCaseResult, TestRunner};
@@ -1153,17 +1159,10 @@ pub fn test_archiving<T>(
             memo: None,
             created_at_time: None,
         };
-        assert_eq!(
-            get_archive_transaction(&env, archive_principal, i)
-                .unwrap()
-                .transfer
-                .as_ref(),
-            Some(&expected_tx)
-        );
-        assert_eq!(
-            archived_transactions[i as usize].transfer.as_ref(),
-            Some(&expected_tx)
-        );
+        let tx = get_archive_transaction(&env, archive_principal, i).unwrap();
+        assert_eq!(tx.transfer.as_ref(), Some(&expected_tx));
+        let tx = archived_transactions[i as usize].clone();
+        assert_eq!(tx.transfer.as_ref(), Some(&expected_tx));
     }
 
     // Check that requesting non-existing blocks does not crash the ledger.
@@ -1180,10 +1179,9 @@ pub fn test_archiving<T>(
         .expect("failed to upgrade the archive canister");
 
     for i in 1..NUM_BLOCKS_TO_ARCHIVE {
+        let tx = get_archive_transaction(&env, archive_principal, i).unwrap();
         assert_eq!(
-            get_archive_transaction(&env, archive_principal, i)
-                .unwrap()
-                .transfer,
+            tx.transfer,
             Some(Transfer {
                 from: Account {
                     owner: p1.0,
@@ -1574,17 +1572,17 @@ pub fn test_fee_collector_blocks<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(I
 where
     T: CandidType,
 {
-    fn value_as_u64(value: icrc_ledger_types::value::Value) -> u64 {
+    fn value_as_u64(value: icrc_ledger_types::icrc::generic_value::Value) -> u64 {
         match value {
-            icrc_ledger_types::value::Value::Nat(n) => {
+            icrc_ledger_types::icrc::generic_value::Value::Nat(n) => {
                 n.0.to_u64().expect("Bloc index must be a u64")
             }
             value => panic!("Expected Value::Nat but found {:?}", value),
         }
     }
 
-    fn value_as_account(value: icrc_ledger_types::value::Value) -> Account {
-        use icrc_ledger_types::value::Value;
+    fn value_as_account(value: icrc_ledger_types::icrc::generic_value::Value) -> Account {
+        use icrc_ledger_types::icrc::generic_value::Value;
 
         match value {
             Value::Array(array) => match &array[..] {
@@ -1608,10 +1606,10 @@ where
     }
 
     fn fee_collector_from_block(
-        block: icrc_ledger_types::value::Value,
+        block: icrc_ledger_types::icrc::generic_value::Value,
     ) -> (Option<Account>, Option<u64>) {
         match block {
-            icrc_ledger_types::value::Value::Map(block_map) => {
+            icrc_ledger_types::icrc::generic_value::Value::Map(block_map) => {
                 let fee_collector = block_map
                     .get("fee_col")
                     .map(|fee_collector| value_as_account(fee_collector.clone()));

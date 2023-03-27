@@ -11,7 +11,7 @@ use bitcoin::network::constants::Network as BtcNetwork;
 use bitcoin::util::psbt::serialize::{Deserialize, Serialize};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_btc_types::{Network, OutPoint, Satoshi, Utxo};
-use icrc_ledger_types::Account;
+use icrc_ledger_types::icrc1::account::Account;
 use proptest::proptest;
 use proptest::{
     array::uniform20,

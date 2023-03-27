@@ -7,7 +7,7 @@ use super::{
 use crate::storage::record_event;
 use candid::Principal;
 use ic_btc_types::Utxo;
-use icrc_ledger_types::Account;
+use icrc_ledger_types::icrc1::account::Account;
 
 pub fn accept_retrieve_btc_request(state: &mut CkBtcMinterState, request: RetrieveBtcRequest) {
     record_event(&Event::AcceptedRetrieveBtcRequest(request.clone()));

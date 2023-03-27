@@ -9,7 +9,7 @@ use ic_icrc1_benchmark_worker::{BatchArgs, BatchResult};
 use ic_icrc1_index::{
     GetAccountTransactionsArgs, GetTransactions, GetTransactionsErr, GetTransactionsResult,
 };
-use icrc_ledger_types::Account;
+use icrc_ledger_types::icrc1::account::Account;
 
 const USERS: u32 = 3;
 

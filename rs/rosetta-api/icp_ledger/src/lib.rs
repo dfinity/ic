@@ -9,7 +9,7 @@ use ic_ledger_core::{
     balances::Balances,
     block::{BlockType, EncodedBlock, FeeCollector, HashOf, HASH_LENGTH},
 };
-use icrc_ledger_types::Account;
+use icrc_ledger_types::icrc1::account::Account;
 use on_wire::{FromWire, IntoWire};
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;

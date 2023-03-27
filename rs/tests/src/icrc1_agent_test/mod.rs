@@ -7,10 +7,11 @@ use ic_nns_test_utils::itest_helpers::install_rust_canister_from_path;
 use ic_registry_subnet_type::SubnetType;
 use icp_ledger::ArchiveOptions;
 use icrc_ledger_agent::{CallMode, Icrc1Agent};
-use icrc_ledger_types::block::GetBlocksArgs;
-use icrc_ledger_types::transaction::TransferArg;
-use icrc_ledger_types::value::MetadataValue as Value;
-use icrc_ledger_types::Account;
+use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc1::transfer::TransferArg;
+use icrc_ledger_types::{
+    icrc::generic_metadata_value::MetadataValue as Value, icrc3::blocks::GetBlocksRequest,
+};
 
 use crate::{
     driver::{
@@ -215,7 +216,7 @@ pub fn test(env: TestEnv) {
             agent.balance_of(account2, CallMode::Query).await.unwrap()
         );
 
-        let blocks_request = GetBlocksArgs {
+        let blocks_request = GetBlocksRequest {
             start: Nat::from(0),
             length: Nat::from(10),
         };

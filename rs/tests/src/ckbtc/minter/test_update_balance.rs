@@ -25,7 +25,7 @@ use ic_ckbtc_minter::state::Mode;
 use ic_ckbtc_minter::updates::get_withdrawal_account::compute_subaccount;
 use ic_ckbtc_minter::updates::update_balance::UtxoStatus;
 use icrc_ledger_agent::Icrc1Agent;
-use icrc_ledger_types::Account;
+use icrc_ledger_types::icrc1::account::Account;
 use slog::{debug, info};
 
 /// Test update_balance method of the minter canister.

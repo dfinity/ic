@@ -30,8 +30,8 @@ use ic_test_utilities::universal_canister::{
 };
 use ic_types::ingress::WasmResult;
 use ic_types::Cycles;
-use icrc_ledger_types::transaction::{TransferArg, TransferError};
-use icrc_ledger_types::Account;
+use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
 use num_traits::ToPrimitive;
 use on_wire::{FromWire, IntoWire, NewType};
 use prost::Message;

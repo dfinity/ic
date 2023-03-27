@@ -16,7 +16,7 @@ use icp_ledger::{
     AccountIdentifier, ApprovalKey, Block, LedgerBalances, Memo, Operation, PaymentError,
     Transaction, TransferError, TransferFee, DEFAULT_TRANSFER_FEE,
 };
-use icrc_ledger_types::Account;
+use icrc_ledger_types::icrc1::account::Account;
 use intmap::IntMap;
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};

@@ -26,7 +26,7 @@ use ic_sns_governance::proposal::{
     PROPOSAL_URL_CHAR_MAX,
 };
 use ic_sns_governance::types::native_action_ids;
-use icrc_ledger_types::Subaccount;
+use icrc_ledger_types::icrc1::account::Subaccount;
 use pretty_bytes::converter;
 use prost::Message;
 use rand::{rngs::StdRng, RngCore, SeedableRng};

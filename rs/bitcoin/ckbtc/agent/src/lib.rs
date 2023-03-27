@@ -9,7 +9,7 @@ use ic_ckbtc_minter::updates::{
     retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError, RetrieveBtcOk},
     update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus},
 };
-use icrc_ledger_types::{Account, Subaccount};
+use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use std::collections::BTreeMap;
 
 #[derive(Debug)]

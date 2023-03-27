@@ -11,7 +11,7 @@ use ic_icrc1_ledger::{InitArgs as LedgerInitArgs, LedgerArgument};
 use ic_state_machine_tests::StateMachine;
 use ic_test_utilities_load_wasm::load_wasm;
 use icp_ledger::ArchiveOptions;
-use icrc_ledger_types::Account;
+use icrc_ledger_types::icrc1::account::Account;
 use std::path::PathBuf;
 use std::str::FromStr;
 

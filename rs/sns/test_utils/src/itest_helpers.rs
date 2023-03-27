@@ -49,8 +49,8 @@ use ic_sns_root::{
 };
 use ic_sns_swap::pb::v1::Init as SwapInit;
 use ic_types::{CanisterId, PrincipalId};
-use icrc_ledger_types::transaction::TransferArg;
-use icrc_ledger_types::{Account, Subaccount};
+use icrc_ledger_types::icrc1::account::{Account, Subaccount};
+use icrc_ledger_types::icrc1::transfer::TransferArg;
 use maplit::btreemap;
 use on_wire::IntoWire;
 use std::future::Future;

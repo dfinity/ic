@@ -27,8 +27,8 @@ use ic_ckbtc_minter::updates::{
     retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError},
 };
 use icrc_ledger_agent::Icrc1Agent;
-use icrc_ledger_types::transaction::TransferArg;
-use icrc_ledger_types::Account;
+use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc1::transfer::TransferArg;
 use slog::{debug, info};
 
 /// Test retrieve_btc method of the minter canister.

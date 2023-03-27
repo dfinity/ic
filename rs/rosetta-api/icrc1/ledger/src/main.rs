@@ -13,10 +13,17 @@ use ic_ledger_canister_core::ledger::{
     apply_transaction, archive_blocks, LedgerAccess, LedgerContext, LedgerData,
 };
 use ic_ledger_core::{timestamp::TimeStamp, tokens::Tokens};
-use icrc_ledger_types::block::{BlockCertificate, GetBlocksArgs, GetBlocksResponse};
-use icrc_ledger_types::transaction::{GetTransactionsResponse, TransferArg, TransferError};
-use icrc_ledger_types::value::MetadataValue as Value;
-use icrc_ledger_types::{Account, ArchiveInfo, GetTransactionsRequest};
+use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
+use icrc_ledger_types::icrc3::blocks::BlockCertificate;
+use icrc_ledger_types::{
+    icrc::generic_metadata_value::MetadataValue as Value,
+    icrc3::{
+        archive::ArchiveInfo,
+        blocks::{GetBlocksRequest, GetBlocksResponse},
+        transactions::{GetTransactionsRequest, GetTransactionsResponse},
+    },
+};
 use num_traits::ToPrimitive;
 use serde_bytes::ByteBuf;
 use std::cell::RefCell;
@@ -381,7 +388,7 @@ fn get_transactions(req: GetTransactionsRequest) -> GetTransactionsResponse {
 
 #[query]
 #[candid_method(query)]
-fn get_blocks(req: GetBlocksArgs) -> GetBlocksResponse {
+fn get_blocks(req: GetBlocksRequest) -> GetBlocksResponse {
     let (start, length) = req
         .as_start_and_length()
         .unwrap_or_else(|msg| ic_cdk::api::trap(&msg));

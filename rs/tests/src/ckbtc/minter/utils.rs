@@ -37,8 +37,12 @@ use ic_ckbtc_minter::updates::retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError};
 use ic_ckbtc_minter::updates::update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus};
 use ic_universal_canister::{management, wasm};
 use icrc_ledger_agent::{CallMode, Icrc1Agent, Icrc1AgentError};
-use icrc_ledger_types::transaction::GetTransactionsResponse;
-use icrc_ledger_types::{Account, BlockIndex, GetTransactionsRequest, Subaccount};
+use icrc_ledger_types::{
+    icrc1::account::Account,
+    icrc1::account::Subaccount,
+    icrc1::transfer::BlockIndex,
+    icrc3::transactions::{GetTransactionsRequest, GetTransactionsResponse},
+};
 use slog::{debug, info, Logger};
 use std::time::{Duration, Instant};
 

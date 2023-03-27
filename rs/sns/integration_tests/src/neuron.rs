@@ -46,8 +46,8 @@ use ic_sns_test_utils::itest_helpers::{
 };
 use ic_sns_test_utils::now_seconds;
 use ic_types::PrincipalId;
-use icrc_ledger_types::transaction::{Memo, TransferArg};
-use icrc_ledger_types::{Account, Subaccount};
+use icrc_ledger_types::icrc1::account::{Account, Subaccount};
+use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg};
 use maplit::btreemap;
 use rust_decimal_macros::dec;
 use std::time::SystemTime;

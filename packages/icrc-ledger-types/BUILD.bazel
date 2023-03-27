@@ -4,12 +4,9 @@ package(default_visibility = ["//visibility:public"])
 
 rust_library(
     name = "icrc_ledger_types",
-    srcs = [
-        "src/block.rs",
-        "src/lib.rs",
-        "src/transaction.rs",
-        "src/value.rs",
-    ],
+    srcs = glob(
+        ["src/**"],
+    ),
     deps = [
         "@crate_index//:candid",
         "@crate_index//:hex",

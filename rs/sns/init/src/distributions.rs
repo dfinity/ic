@@ -17,7 +17,7 @@ use ic_sns_governance::pb::v1::{
 };
 use ic_sns_governance::types::ONE_MONTH_SECONDS;
 use ic_sns_swap::swap::{SALE_NEURON_MEMO_RANGE_END, SALE_NEURON_MEMO_RANGE_START};
-use icrc_ledger_types::Account;
+use icrc_ledger_types::icrc1::account::Account;
 use maplit::btreemap;
 use std::collections::BTreeMap;
 
@@ -589,7 +589,7 @@ mod test {
     use ic_sns_governance::pb::v1::{NervousSystemParameters, NeuronId, NeuronPermission};
     use ic_sns_governance::types::{ONE_MONTH_SECONDS, ONE_YEAR_SECONDS};
     use ic_sns_swap::swap::SALE_NEURON_MEMO_RANGE_START;
-    use icrc_ledger_types::Account;
+    use icrc_ledger_types::icrc1::account::Account;
     use std::str::FromStr;
 
     fn create_canister_ids() -> SnsCanisterIds {

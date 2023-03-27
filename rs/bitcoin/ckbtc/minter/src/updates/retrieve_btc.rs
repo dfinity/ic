@@ -4,8 +4,8 @@ use candid::{CandidType, Deserialize, Nat, Principal};
 use ic_base_types::PrincipalId;
 use ic_canister_log::log;
 use ic_icrc1_client_cdk::{CdkRuntime, ICRC1Client};
-use icrc_ledger_types::transaction::{TransferArg, TransferError};
-use icrc_ledger_types::Account;
+use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
 use num_traits::cast::ToPrimitive;
 
 use super::{get_btc_address::init_ecdsa_public_key, get_withdrawal_account::compute_subaccount};

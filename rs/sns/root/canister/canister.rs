@@ -31,7 +31,7 @@ use prost::Message;
 
 use ic_ic00_types::IC_00;
 use ic_sns_root::types::Environment;
-use icrc_ledger_types::ArchiveInfo;
+use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 
 const STABLE_MEM_BUFFER_SIZE: u32 = 100 * 1024 * 1024; // 100MiB
 

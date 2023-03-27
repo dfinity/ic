@@ -6,7 +6,7 @@ use ic_icrc1_index::{
     encode_metrics, GetAccountTransactionsArgs, GetTransactionsResult, InitArgs,
     ListSubaccountsArgs,
 };
-use icrc_ledger_types::Subaccount;
+use icrc_ledger_types::icrc1::account::Subaccount;
 
 fn main() {}
 

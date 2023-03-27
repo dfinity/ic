@@ -1,9 +1,9 @@
 use candid::{Decode, Encode, Nat, Principal};
 use ic_agent::Agent;
-use icrc_ledger_types::block::{BlockCertificate, GetBlocksArgs, GetBlocksResponse};
-use icrc_ledger_types::transaction::{TransferArg, TransferError};
-use icrc_ledger_types::value::MetadataValue as Value;
-use icrc_ledger_types::Account;
+use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
+use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
+use icrc_ledger_types::icrc3::blocks::{BlockCertificate, GetBlocksRequest, GetBlocksResponse};
 
 #[derive(Debug)]
 pub enum Icrc1AgentError {
@@ -173,7 +173,7 @@ impl Icrc1Agent {
 
     pub async fn get_blocks(
         &self,
-        args: GetBlocksArgs,
+        args: GetBlocksRequest,
     ) -> Result<GetBlocksResponse, Icrc1AgentError> {
         Ok(Decode!(
             &self.query("get_blocks", &Encode!(&args)?).await?,

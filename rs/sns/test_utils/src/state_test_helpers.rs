@@ -21,7 +21,7 @@ use ic_sns_root::pb::v1::{
     RegisterDappCanistersResponse,
 };
 use ic_sns_root::{CanisterIdRecord, CanisterStatusResultV2};
-use icrc_ledger_types::Account;
+use icrc_ledger_types::icrc1::account::Account;
 
 use ic_sns_swap::pb::v1::params::NeuronBasketConstructionParameters;
 use ic_sns_swap::pb::v1::{

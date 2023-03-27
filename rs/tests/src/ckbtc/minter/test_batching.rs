@@ -27,7 +27,7 @@ use ic_ckbtc_agent::CkBtcMinterAgent;
 use ic_ckbtc_minter::state::RetrieveBtcStatus;
 use ic_ckbtc_minter::updates::get_withdrawal_account::compute_subaccount;
 use icrc_ledger_agent::Icrc1Agent;
-use icrc_ledger_types::transaction::TransferArg;
+use icrc_ledger_types::icrc1::transfer::TransferArg;
 use serde::Serialize;
 use serde_bytes::ByteBuf;
 use slog::{debug, info};

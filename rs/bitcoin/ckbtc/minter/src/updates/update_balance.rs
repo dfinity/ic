@@ -7,9 +7,9 @@ use ic_btc_types::{GetUtxosError, GetUtxosResponse, Utxo};
 use ic_canister_log::log;
 use ic_ckbtc_kyt::Error as KytError;
 use ic_icrc1_client_cdk::{CdkRuntime, ICRC1Client};
-use icrc_ledger_types::transaction::{Memo, MAX_MEMO_LENGTH};
-use icrc_ledger_types::transaction::{TransferArg, TransferError};
-use icrc_ledger_types::{Account, Subaccount};
+use icrc_ledger_types::icrc1::account::{Account, Subaccount};
+use icrc_ledger_types::icrc1::transfer::{Memo, MAX_MEMO_LENGTH};
+use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
 use serde::Serialize;
 
 use super::get_btc_address::init_ecdsa_public_key;

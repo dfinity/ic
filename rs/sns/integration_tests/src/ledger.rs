@@ -7,8 +7,8 @@ use ic_ledger_core::tokens::TOKEN_SUBDIVIDABLE_BY;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common_test_keys::TEST_USER1_KEYPAIR;
 use ic_sns_governance::pb::v1::manage_neuron_response::Command as CommandResponse;
-use icrc_ledger_types::transaction::{Memo, TransferArg};
-use icrc_ledger_types::Account;
+use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg};
 
 use ic_sns_governance::pb::v1::manage_neuron::claim_or_refresh::{By, MemoAndController};
 use ic_sns_governance::pb::v1::manage_neuron::{ClaimOrRefresh, Command, Disburse};

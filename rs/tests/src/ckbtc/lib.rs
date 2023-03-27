@@ -42,7 +42,7 @@ use ic_registry_subnet_features::{EcdsaConfig, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
 use ic_types_test_utils::ids::subnet_test_id;
 use icp_ledger::ArchiveOptions;
-use icrc_ledger_types::Account;
+use icrc_ledger_types::icrc1::account::Account;
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
 use serde::Serialize;
 use slog::{debug, info, Logger};

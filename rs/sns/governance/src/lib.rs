@@ -127,9 +127,12 @@ fn field_err(field_name: &str, field_value: impl Debug, defect: &str) -> Result<
     ))
 }
 
-pub fn account_from_proto(account: pb::v1::Account) -> Result<icrc_ledger_types::Account, String> {
+pub fn account_from_proto(
+    account: pb::v1::Account,
+) -> Result<icrc_ledger_types::icrc1::account::Account, String> {
     let owner = *validate_required_field("owner", &account.owner)?;
-    let subaccount: Option<icrc_ledger_types::Subaccount> = match account.subaccount {
+    let subaccount: Option<icrc_ledger_types::icrc1::account::Subaccount> = match account.subaccount
+    {
         Some(s) => match s.subaccount.as_slice().try_into() {
             Ok(s) => Ok(Some(s)),
             Err(_) => Err(format!(
@@ -139,13 +142,13 @@ pub fn account_from_proto(account: pb::v1::Account) -> Result<icrc_ledger_types:
         },
         None => Ok(None),
     }?;
-    Ok(icrc_ledger_types::Account {
+    Ok(icrc_ledger_types::icrc1::account::Account {
         owner: owner.0,
         subaccount,
     })
 }
 
-pub fn account_to_proto(account: icrc_ledger_types::Account) -> pb::v1::Account {
+pub fn account_to_proto(account: icrc_ledger_types::icrc1::account::Account) -> pb::v1::Account {
     let maybe_subaccount_pb = account.subaccount.map(|subaccount| SubaccountProto {
         subaccount: subaccount.into(),
     });

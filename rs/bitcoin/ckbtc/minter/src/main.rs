@@ -20,7 +20,7 @@ use ic_ckbtc_minter::{
     state::eventlog::{Event, GetEventsArg},
     storage,
 };
-use icrc_ledger_types::Account;
+use icrc_ledger_types::icrc1::account::Account;
 
 #[init]
 fn init(args: MinterArg) {
