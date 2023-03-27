@@ -28,7 +28,7 @@ use crate::canister_requests;
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
-    HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt,
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt,
 };
 use crate::generic_workload_engine::engine::Engine;
 use crate::generic_workload_engine::metrics::{LoadTestMetricsProvider, RequestOutcome};
@@ -52,7 +52,6 @@ const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1);
 
 /// Default configuration for this test
 pub fn config(env: TestEnv) {
-    env.ensure_group_setup_created();
     InternetComputer::new()
         .add_subnet(Subnet::new(SubnetType::Application).add_nodes(NODES_COUNT))
         .setup_and_start(&env)
@@ -66,7 +65,6 @@ pub fn config(env: TestEnv) {
 
 /// SLO test configuration with a NNS subnet and an app subnet with the same number of nodes as used on mainnet
 pub fn two_third_latency_config(env: TestEnv) {
-    env.ensure_group_setup_created();
     InternetComputer::new()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(40))
         .add_subnet(

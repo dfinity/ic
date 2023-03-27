@@ -59,7 +59,6 @@ use slog::info;
 use std::convert::TryFrom;
 
 pub fn config(env: TestEnv) {
-    env.ensure_group_setup_created();
     env.ssh_keygen(ADMIN).expect("ssh admin keygen failed");
 
     InternetComputer::new()

@@ -32,9 +32,7 @@ use ic_types::Height;
 
 use crate::canister_http::lib::install_nns_canisters;
 use crate::driver::test_env::{SshKeyGen, TestEnv};
-use crate::driver::test_env_api::{
-    HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, ADMIN,
-};
+use crate::driver::test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, ADMIN};
 use crate::nns::get_subnet_list_from_registry;
 use crate::nns::{
     self, get_software_version_from_snapshot, submit_create_application_subnet_proposal,
@@ -50,7 +48,6 @@ const APP_PRE_MASTER: usize = 4;
 
 // Small IC for correctness test pre-master
 pub fn pre_master_config(env: TestEnv) {
-    env.ensure_group_setup_created();
     env.ssh_keygen(ADMIN).expect("ssh-keygen failed");
 
     InternetComputer::new()

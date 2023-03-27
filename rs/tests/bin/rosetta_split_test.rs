@@ -3,7 +3,7 @@ use anyhow::Result;
 
 use ic_tests::driver::group::{SystemTestGroup, SystemTestSubGroup};
 use ic_tests::driver::test_env::{SshKeyGen, TestEnv};
-use ic_tests::driver::test_env_api::{HasGroupSetup, ADMIN};
+use ic_tests::driver::test_env_api::ADMIN;
 use ic_tests::{rosetta_tests, systest};
 use rosetta_tests::tests;
 
@@ -30,6 +30,5 @@ fn main() -> Result<()> {
 }
 
 fn group_setup(env: TestEnv) {
-    env.ensure_group_setup_created();
     env.ssh_keygen(ADMIN).expect("ssh-keygen failed");
 }

@@ -25,9 +25,7 @@ use crate::{
     driver::{
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
-        test_env_api::{
-            HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, TopologySnapshot,
-        },
+        test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, TopologySnapshot},
     },
     util::UniversalCanister,
 };
@@ -55,7 +53,6 @@ const XNET_MSG_SIZE: usize = 2 * 1024 * 1024 - 20;
 /// max_block_payload_size still fits through.
 /// It also allows us to test the limit in the XNet setting properly.
 pub fn max_payload_size_config(env: TestEnv) {
-    env.ensure_group_setup_created();
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
@@ -80,7 +77,6 @@ const DW_MSG_SIZE: usize = 2 * 1000 * 1000;
 /// The configuration that is used for the dual workload test.
 /// In this configuration, all sizes are set to 2MiB.
 pub fn dual_workload_config(env: TestEnv) {
-    env.ensure_group_setup_created();
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)

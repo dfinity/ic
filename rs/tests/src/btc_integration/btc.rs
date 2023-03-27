@@ -22,8 +22,8 @@ use std::sync::Arc;
 use crate::ckbtc::lib::install_bitcoin_canister;
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
-    retry, retry_async, HasDependencies, HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot,
-    IcNodeContainer, SshSession, ADMIN, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+    retry, retry_async, HasDependencies, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+    SshSession, ADMIN, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
 };
 use crate::driver::universal_vm::UniversalVms;
 use crate::util::runtime_from_url;
@@ -44,7 +44,6 @@ use std::{io::Read, path::Path};
 const UNIVERSAL_VM_NAME: &str = "btc-node";
 
 pub fn config(env: TestEnv) {
-    env.ensure_group_setup_created();
     let logger = env.logger();
     // Regtest bitcoin node listens on 18444
     // docker bitcoind image uses 8332 for the rpc server

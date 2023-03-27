@@ -14,8 +14,7 @@ use crate::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::TEST_USER1_STARTING_TOKENS;
 use crate::driver::test_env_api::{
-    GetFirstHealthyNodeSnapshot, HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot,
-    NnsCustomizations,
+    GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot, NnsCustomizations,
 };
 use crate::generic_workload_engine::engine::Engine;
 use crate::generic_workload_engine::metrics::{LoadTestMetrics, LoadTestOutcome, RequestOutcome};
@@ -253,8 +252,6 @@ pub fn workload_static_testnet_sale_bot(env: TestEnv) {
 }
 
 fn setup(env: TestEnv, sale_participants: Vec<SaleParticipant>) {
-    env.ensure_group_setup_created();
-
     PrometheusVm::default()
         .start(&env)
         .expect("failed to start prometheus VM");

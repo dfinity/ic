@@ -49,8 +49,6 @@ pub fn install_nns_canisters(env: &TestEnv) {
 }
 
 pub fn config(env: TestEnv) {
-    env.ensure_group_setup_created();
-
     // Set up Universal VM with HTTP Bin testing service
     UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
         .with_config_img(env.get_dependency_path("rs/tests/http_uvm_config_image.zst"))

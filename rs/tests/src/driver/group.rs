@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use crate::driver::{
     farm::Farm,
-    test_env_api::FarmBaseUrl,
+    test_env_api::{FarmBaseUrl, HasGroupSetup},
     {
         action_graph::ActionGraph,
         context::{GroupContext, ProcessContext},
@@ -701,6 +701,9 @@ impl SystemTestGroup {
         if is_parent_process {
             let root_env = group_ctx.get_root_env().unwrap();
             FarmBaseUrl::new_or_default(args.farm_base_url).write_attribute(&root_env);
+            if self.with_farm {
+                root_env.create_group_setup();
+            }
             debug!(group_ctx.log(), "Created group context: {:?}", group_ctx);
         }
 

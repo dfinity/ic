@@ -38,7 +38,6 @@ const DKG_INTERVAL: u64 = 9;
 const SUBNET_SIZE: usize = 3;
 
 pub fn setup(env: TestEnv) {
-    env.ensure_group_setup_created();
     env.ssh_keygen(ADMIN).expect("ssh-keygen failed");
     InternetComputer::new()
         .add_subnet(

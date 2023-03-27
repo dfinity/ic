@@ -2,8 +2,8 @@ use crate::canister_http::lib::get_universal_vm_address;
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
-    HasDependencies, HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-    SubnetSnapshot, TopologySnapshot,
+    HasDependencies, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, SubnetSnapshot,
+    TopologySnapshot,
 };
 use crate::driver::universal_vm::UniversalVm;
 use ic_registry_routing_table::canister_id_into_u64;
@@ -43,8 +43,6 @@ pub fn config_impl(env: TestEnv) {
     use hyper::Client;
     use hyper_tls::HttpsConnector;
     use std::env;
-
-    env.ensure_group_setup_created();
 
     // Set up Universal VM with HTTP Bin testing service
     env::set_var(

@@ -43,7 +43,6 @@ use std::convert::TryFrom;
 const DKG_INTERVAL: u64 = 9;
 
 pub fn config(env: TestEnv) {
-    env.ensure_group_setup_created();
     env.ssh_keygen(ADMIN).expect("ssh admin keygen failed");
     InternetComputer::new()
         .add_subnet(

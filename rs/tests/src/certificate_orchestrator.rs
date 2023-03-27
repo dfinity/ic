@@ -18,8 +18,7 @@ use crate::{
         ic::InternetComputer,
         test_env::TestEnv,
         test_env_api::{
-            GetFirstHealthyNodeSnapshot, HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot,
-            IcNodeContainer,
+            GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
         },
     },
     util::delay,
@@ -41,7 +40,6 @@ use slog::info;
 use tokio::runtime::Runtime;
 
 pub fn config(env: TestEnv) {
-    env.ensure_group_setup_created();
     InternetComputer::new()
         .add_fast_single_node_subnet(SubnetType::System)
         .add_fast_single_node_subnet(SubnetType::Application)

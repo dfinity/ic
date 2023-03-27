@@ -43,7 +43,6 @@ use ic_registry_subnet_type::SubnetType;
 use slog::info;
 
 pub fn config_single_host(env: TestEnv) {
-    env.ensure_group_setup_created();
     PrometheusVm::default()
         .start(&env)
         .expect("failed to start prometheus VM");

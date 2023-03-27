@@ -4,7 +4,7 @@ end::catalog[] */
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::test_env::{SshKeyGen, TestEnv};
 use crate::driver::test_env_api::{
-    HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt, ADMIN,
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt, ADMIN,
 };
 use crate::tecdsa::tecdsa_signature_test::{
     get_public_key_with_logger, get_signature_with_logger, make_key, verify_signature, KEY_ID1,
@@ -20,7 +20,6 @@ use slog::info;
 use super::tecdsa_signature_test::{enable_ecdsa_signing, DKG_INTERVAL};
 
 pub fn config(env: TestEnv) {
-    env.ensure_group_setup_created();
     env.ssh_keygen(ADMIN).expect("ssh-keygen failed");
     let malicious_behaviour =
         MaliciousBehaviour::new(true).set_maliciously_corrupt_ecdsa_dealings();

@@ -32,13 +32,15 @@ fn get_all_e2e_test_scenarios() -> HashMap<String, SystemTestGroup> {
             "test_without_errors".to_string(),
             SystemTestGroup::new()
                 .with_setup(setup_to_succeed)
-                .add_test(systest!(test_to_succeed)),
+                .add_test(systest!(test_to_succeed))
+                .without_farm(),
         ),
         (
             "test_with_panic".to_string(),
             SystemTestGroup::new()
                 .with_setup(setup_to_succeed)
-                .add_test(systest!(test_to_fail)),
+                .add_test(systest!(test_to_fail))
+                .without_farm(),
         ),
         (
             "test_with_two_panics".to_string(),
@@ -46,33 +48,38 @@ fn get_all_e2e_test_scenarios() -> HashMap<String, SystemTestGroup> {
                 .with_setup(setup_to_succeed)
                 .add_test(systest!(test_to_succeed))
                 .add_test(systest!(test_to_fail))
-                .add_test(systest!(test_to_fail_2)),
+                .add_test(systest!(test_to_fail_2))
+                .without_farm(),
         ),
         (
             "test_with_setup_panic".to_string(),
             SystemTestGroup::new()
                 .with_setup(setup_to_panic)
-                .add_test(systest!(test_to_fail)),
+                .add_test(systest!(test_to_fail))
+                .without_farm(),
         ),
         (
             "test_that_runs_out_of_time".to_string(),
             SystemTestGroup::new()
                 .with_setup(setup_to_succeed)
                 .add_test(systest!(never_ending_task))
-                .with_timeout_per_test(Duration::from_secs(10)),
+                .with_timeout_per_test(Duration::from_secs(10))
+                .without_farm(),
         ),
         (
             "test_duplicate_tasks".to_string(),
             SystemTestGroup::new()
                 .with_setup(setup_to_succeed)
                 .add_parallel(SystemTestSubGroup::new().add_test(systest!(test_to_succeed)))
-                .add_test(systest!(test_to_succeed)),
+                .add_test(systest!(test_to_succeed))
+                .without_farm(),
         ),
         (
             "test_that_runs_1_parallel_task".to_string(),
             SystemTestGroup::new()
                 .with_setup(setup_to_succeed)
-                .add_parallel(SystemTestSubGroup::new().add_test(systest!(test_to_succeed_3sec))),
+                .add_parallel(SystemTestSubGroup::new().add_test(systest!(test_to_succeed_3sec)))
+                .without_farm(),
         ),
         (
             "test_that_runs_2_parallel_tasks".to_string(),
@@ -82,7 +89,8 @@ fn get_all_e2e_test_scenarios() -> HashMap<String, SystemTestGroup> {
                     SystemTestSubGroup::new()
                         .add_test(systest!(test_to_succeed_5sec))
                         .add_test(systest!(test_to_succeed_3sec)),
-                ),
+                )
+                .without_farm(),
         ),
         (
             "test_that_runs_3_parallel_tasks".to_string(),
@@ -93,7 +101,8 @@ fn get_all_e2e_test_scenarios() -> HashMap<String, SystemTestGroup> {
                         .add_test(systest!(test_to_succeed_3sec))
                         .add_test(systest!(test_to_succeed_5sec))
                         .add_test(systest!(test_to_succeed_7sec)),
-                ),
+                )
+                .without_farm(),
         ),
         (
             "test_that_runs_3_parallel_tasks_one_of_which_fails".to_string(),
@@ -104,7 +113,8 @@ fn get_all_e2e_test_scenarios() -> HashMap<String, SystemTestGroup> {
                         .add_test(systest!(test_to_succeed_3sec))
                         .add_test(systest!(test_to_fail_5sec))
                         .add_test(systest!(test_to_succeed_7sec)),
-                ),
+                )
+                .without_farm(),
         ),
         (
             "test_that_runs_2_parallel_tasks_then_one_task_then_2_parallel_tasks".to_string(),
@@ -120,7 +130,8 @@ fn get_all_e2e_test_scenarios() -> HashMap<String, SystemTestGroup> {
                     SystemTestSubGroup::new()
                         .add_test(systest!(test_to_succeed_5sec))
                         .add_test(systest!(test_to_succeed_7sec)),
-                ),
+                )
+                .without_farm(),
         ),
         (
             "test_that_runs_2_parallel_tasks_then_one_failing_task_then_2_parallel_tasks"
@@ -137,21 +148,24 @@ fn get_all_e2e_test_scenarios() -> HashMap<String, SystemTestGroup> {
                     SystemTestSubGroup::new()
                         .add_test(systest!(test_to_succeed_5sec))
                         .add_test(systest!(test_to_succeed_7sec)),
-                ),
+                )
+                .without_farm(),
         ),
         (
             "test_group_timeout_in_test_task".to_string(),
             SystemTestGroup::new()
                 .with_overall_timeout(Duration::from_secs(5))
                 .with_setup(setup_to_succeed)
-                .add_test(systest!(never_ending_task)),
+                .add_test(systest!(never_ending_task))
+                .without_farm(),
         ),
         (
             "test_group_timeout_in_setup_task".to_string(),
             SystemTestGroup::new()
                 .with_overall_timeout(Duration::from_secs(5))
                 .with_setup(never_ending_task)
-                .add_test(systest!(test_to_succeed)),
+                .add_test(systest!(test_to_succeed))
+                .without_farm(),
         ),
     ])
 }

@@ -25,7 +25,7 @@ use crate::{
     driver::{
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
-        test_env_api::{HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer},
+        test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer},
     },
     util::{assert_malicious_from_topo, UniversalCanister},
 };
@@ -43,7 +43,6 @@ const MSG_LEN: usize = 8;
 const RND_SEED: u64 = 42;
 
 pub fn config(env: TestEnv) {
-    env.ensure_group_setup_created();
     let malicious_behaviour =
         MaliciousBehaviour::new(true).set_maliciously_propose_equivocating_blocks();
     InternetComputer::new()

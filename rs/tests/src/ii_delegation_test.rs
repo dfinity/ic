@@ -3,8 +3,7 @@ use std::time::Duration;
 use crate::driver::ic::InternetComputer;
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
-    GetFirstHealthyNodeSnapshot, HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot,
-    IcNodeContainer,
+    GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
 };
 use crate::util::delegations::*;
 use crate::util::{
@@ -18,7 +17,6 @@ use ic_universal_canister::wasm;
 use slog::info;
 
 pub fn config(env: TestEnv) {
-    env.ensure_group_setup_created();
     InternetComputer::new()
         .add_fast_single_node_subnet(SubnetType::System)
         .add_fast_single_node_subnet(SubnetType::System)

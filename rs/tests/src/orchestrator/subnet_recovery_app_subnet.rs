@@ -53,7 +53,6 @@ const UNASSIGNED_NODES: i32 = 3;
 /// Setup an IC with the given number of unassigned nodes and
 /// an app subnet with the given number of nodes
 pub fn setup(app_nodes: i32, unassigned_nodes: i32, env: TestEnv) {
-    env.ensure_group_setup_created();
     env.ssh_keygen(ADMIN).expect("ssh-keygen failed");
     let mut ic = InternetComputer::new()
         .add_subnet(

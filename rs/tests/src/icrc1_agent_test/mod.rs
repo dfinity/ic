@@ -16,15 +16,12 @@ use crate::{
     driver::{
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
-        test_env_api::{
-            HasDependencies, HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-        },
+        test_env_api::{HasDependencies, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer},
     },
     util::{assert_create_agent, block_on, runtime_from_url},
 };
 
 pub fn config(env: TestEnv) {
-    env.ensure_group_setup_created();
     InternetComputer::new()
         .add_subnet(Subnet::fast_single_node(SubnetType::Application))
         .setup_and_start(&env)

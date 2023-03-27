@@ -8,7 +8,7 @@ use crate::driver::test_env_api::retry;
 use crate::driver::test_env_api::HasDependencies;
 use crate::driver::test_env_api::HasVmName;
 use crate::driver::test_env_api::ADMIN;
-use crate::driver::test_env_api::{HasGroupSetup, HasTestEnv, SshSession};
+use crate::driver::test_env_api::{HasTestEnv, SshSession};
 use crate::driver::universal_vm::{DeployedUniversalVm, UniversalVm, UniversalVms};
 use anyhow::bail;
 use reqwest;
@@ -41,7 +41,6 @@ fn workload_vm_name(vm_id: &str) -> String {
 }
 
 pub fn distributed_config(env: TestEnv, uvm_labels: Vec<String>) {
-    env.ensure_group_setup_created();
     let log = env.logger();
     uvm_labels.into_iter().for_each(|label| {
         let uvm_name = workload_vm_name(&label);

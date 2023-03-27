@@ -22,9 +22,9 @@ use crate::{
         ic::{InternetComputer, Subnet},
         test_env::{SshKeyGen, TestEnv},
         test_env_api::{
-            retry_async, HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, HasVm, HasWasm,
-            IcNodeContainer, NnsInstallationExt, RetrieveIpv4Addr, SshSession, ADMIN,
-            READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+            retry_async, HasPublicApiUrl, HasTopologySnapshot, HasVm, HasWasm, IcNodeContainer,
+            NnsInstallationExt, RetrieveIpv4Addr, SshSession, ADMIN, READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
         },
     },
     util::{assert_create_agent, delay},
@@ -195,7 +195,6 @@ pub fn mk_setup(bn_https_config: BoundaryNodeHttpsConfig) -> impl Fn(TestEnv) {
 }
 
 fn setup(bn_https_config: BoundaryNodeHttpsConfig, env: TestEnv) {
-    env.ensure_group_setup_created();
     env.ssh_keygen(ADMIN).expect("ssh-keygen failed");
 
     let logger = env.logger();

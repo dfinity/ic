@@ -47,8 +47,6 @@ const DKG_INTERVAL: u64 = 9;
 const SUBNET_SIZE: usize = 3;
 
 pub fn setup(env: TestEnv) {
-    env.ensure_group_setup_created();
-
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)

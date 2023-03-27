@@ -29,7 +29,7 @@ end::catalog[] */
 
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasGroupSetup, HasPublicApiUrl};
+use crate::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
 use crate::types::*;
 use crate::util::*;
 use candid::{Decode, Encode};
@@ -811,7 +811,6 @@ pub fn canister_can_manage_other_canister_batched(env: TestEnv) {
 }
 
 pub fn config_compute_allocation(env: TestEnv) {
-    env.ensure_group_setup_created();
     InternetComputer::new()
         .add_subnet(Subnet::fast_single_node(SubnetType::System))
         .add_subnet(Subnet::fast_single_node(SubnetType::Application))

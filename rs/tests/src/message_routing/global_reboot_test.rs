@@ -29,8 +29,7 @@ use std::time::Duration;
 
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
-    HasDependencies, HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer,
-    IcNodeSnapshot,
+    HasDependencies, HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer, IcNodeSnapshot,
 };
 use crate::util::{
     assert_nodes_health_statuses, assert_subnet_can_make_progress, block_on, runtime_from_url,
@@ -52,7 +51,6 @@ const PAYLOAD_SIZE_BYTES: u64 = 1024;
 const MSG_EXEC_TIME_SEC: u64 = 15;
 
 pub fn config(env: TestEnv) {
-    env.ensure_group_setup_created();
     (0..SUBNETS_COUNT)
         .fold(InternetComputer::new(), |ic, _idx| {
             ic.add_fast_single_node_subnet(SubnetType::Application)

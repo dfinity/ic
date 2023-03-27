@@ -28,8 +28,8 @@ end::catalog[] */
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::test_env::{SshKeyGen, TestEnv};
 use crate::driver::test_env_api::{
-    HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
-    NnsInstallationExt, SshSession, ADMIN,
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, NnsInstallationExt,
+    SshSession, ADMIN,
 };
 use crate::nns::{
     await_proposal_execution, submit_external_proposal_with_test_id,
@@ -63,7 +63,6 @@ enum Proposal<T: CandidType> {
 }
 
 pub fn config(env: TestEnv) {
-    env.ensure_group_setup_created();
     env.ssh_keygen(ADMIN).expect("ssh-keygen failed");
     InternetComputer::new()
         .add_subnet(Subnet::fast(SubnetType::System, 1))
