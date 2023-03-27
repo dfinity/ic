@@ -1,3 +1,5 @@
+#![cfg(target_os = "linux")]
+
 mod guest;
 pub use guest::send_command;
 

@@ -5,7 +5,7 @@ edition = "2021"
 
 [[bin]]
 name = "ic-balance-exporter"
-src = "src/main.rs"
+path = "src/main.rs"
 
 [dependencies]
 anyhow = "1.0.56"

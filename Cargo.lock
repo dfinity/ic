@@ -9605,7 +9605,6 @@ dependencies = [
  "ic-tvl-canister",
  "num-traits",
  "proptest",
- "xrc-mock",
 ]
 
 [[package]]
