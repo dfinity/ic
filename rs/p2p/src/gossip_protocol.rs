@@ -68,12 +68,7 @@ use ic_logger::{info, replica_logger::ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::subnet::v1::GossipConfig;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
-use ic_types::{
-    artifact::{ArtifactDestination, ArtifactFilter},
-    crypto::CryptoHash,
-    p2p::GossipAdvert,
-    NodeId, SubnetId,
-};
+use ic_types::{artifact::ArtifactFilter, crypto::CryptoHash, p2p::GossipAdvert, NodeId, SubnetId};
 use lru::LruCache;
 use parking_lot::{Mutex, RwLock};
 use std::collections::HashMap;
@@ -106,7 +101,7 @@ pub trait Gossip {
     fn on_gossip_chunk(&self, gossip_chunk: Self::GossipChunk, peer_id: NodeId);
 
     /// The method broadcasts the given advert to other peers.
-    fn broadcast_advert(&self, advert_request: Self::GossipAdvert, dst: ArtifactDestination);
+    fn broadcast_advert(&self, advert_request: Self::GossipAdvert);
 
     /// The method reacts to a retransmission request from another peer.
     fn on_gossip_retransmission_request(
@@ -302,16 +297,14 @@ impl Gossip for GossipImpl {
     }
 
     /// The method broadcasts the given advert to other peers.
-    fn broadcast_advert(&self, advert: GossipAdvert, dst: ArtifactDestination) {
+    fn broadcast_advert(&self, advert: GossipAdvert) {
         let _timer = self
             .gossip_metrics
             .op_duration
             .with_label_values(&["out_advert"])
             .start_timer();
 
-        let (peers, label) = match dst {
-            ArtifactDestination::AllPeersInSubnet => (self.get_current_peer_ids(), "all_peers"),
-        };
+        let (peers, label) = (self.get_current_peer_ids(), "all_peers");
         self.metrics
             .adverts_by_action
             .with_label_values(&[label])

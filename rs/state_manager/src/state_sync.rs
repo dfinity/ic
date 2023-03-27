@@ -14,8 +14,8 @@ use ic_interfaces_state_manager::{StateManager, CERT_CERTIFIED};
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_types::{
     artifact::{
-        Advert, AdvertSendRequest, ArtifactDestination, ArtifactKind, ArtifactTag, Priority,
-        StateSyncArtifactId, StateSyncFilter, StateSyncMessage,
+        Advert, ArtifactKind, ArtifactTag, Priority, StateSyncArtifactId, StateSyncFilter,
+        StateSyncMessage,
     },
     chunkable::Chunkable,
     crypto::crypto_hash,
@@ -304,7 +304,7 @@ impl ArtifactProcessor<StateSyncArtifact> for StateSync {
         &self,
         _time_source: &dyn TimeSource,
         artifacts: Vec<UnvalidatedArtifact<StateSyncMessage>>,
-    ) -> (Vec<AdvertSendRequest<StateSyncArtifact>>, ProcessingResult) {
+    ) -> (Vec<Advert<StateSyncArtifact>>, ProcessingResult) {
         // Processes received state sync artifacts.
         for UnvalidatedArtifact {
             message,
@@ -344,17 +344,8 @@ impl ArtifactProcessor<StateSyncArtifact> for StateSync {
             height: self.state_manager.states.read().last_advertised,
         };
         let artifacts = self.get_all_validated_by_filter(&filter);
-        let artifacts: Vec<AdvertSendRequest<StateSyncArtifact>> = artifacts
-            .iter()
-            .cloned()
-            .map(|advert| AdvertSendRequest {
-                advert,
-                dest: ArtifactDestination::AllPeersInSubnet,
-            })
-            .collect();
-
         if let Some(artifact) = artifacts.last() {
-            self.state_manager.states.write().last_advertised = artifact.advert.id.height;
+            self.state_manager.states.write().last_advertised = artifact.id.height;
         }
 
         (artifacts, ProcessingResult::StateUnchanged)

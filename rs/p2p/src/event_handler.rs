@@ -77,7 +77,7 @@ use ic_logger::{debug, error, replica_logger::ReplicaLogger, warn};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy};
 use ic_types::{
-    artifact::{ArtifactDestination, ArtifactFilter, ArtifactTag},
+    artifact::{ArtifactFilter, ArtifactTag},
     p2p::GossipAdvert,
     NodeId,
 };
@@ -486,7 +486,7 @@ impl AdvertBroadcaster {
     }
 
     /// The method broadcasts the given advert.
-    pub fn send(&self, advert: GossipAdvert, dst: ArtifactDestination) {
+    pub fn send(&self, advert: GossipAdvert) {
         let (lock, cvar) = &*self.started;
         let mut started = lock.lock().unwrap();
         while !*started {
@@ -501,7 +501,7 @@ impl AdvertBroadcaster {
                 let c_gossip = self.gossip.read().as_ref().unwrap().clone();
                 self.threadpool.execute(move || {
                     let _permit = permit;
-                    c_gossip.broadcast_advert(advert, dst);
+                    c_gossip.broadcast_advert(advert);
                 });
             }
             Err(TryAcquireError::Closed) => {
@@ -524,7 +524,6 @@ pub mod tests {
     use ic_interfaces_transport::TransportPayload;
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities::{p2p::p2p_test_setup_logger, types::ids::node_test_id};
-    use ic_types::artifact::ArtifactDestination;
     use tokio::time::{sleep, Duration};
 
     struct TestThrottle();
@@ -607,7 +606,7 @@ pub mod tests {
         }
 
         /// The method broadcasts the given advert.
-        fn broadcast_advert(&self, _advert: Self::GossipAdvert, _dst: ArtifactDestination) {
+        fn broadcast_advert(&self, _advert: Self::GossipAdvert) {
             TestGossip::increment_or_set(&self.num_advert_bcasts, self.node_id);
         }
 
@@ -683,7 +682,7 @@ pub mod tests {
     async fn broadcast_advert(count: usize, handler: &AdvertBroadcaster) {
         for i in 0..count {
             let message = make_gossip_advert(i as u64);
-            handler.send(message, ArtifactDestination::AllPeersInSubnet);
+            handler.send(message);
         }
     }
 
