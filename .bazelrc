@@ -36,8 +36,8 @@ build:ci --remote_timeout=5m # Defauilt is 60s.
 build --execution_log_json_file=bazel-build-log.json
 build --build_event_binary_file=bazel-bep.pb
 
-build --bes_results_url=https://dash.zh1-idx1.dfinity.network/invocation/
-build --bes_backend=bes.zh1-idx1.dfinity.network
+build --bes_results_url=https://dash.idx.dfinity.network/invocation/
+build --bes_backend=bes.idx.dfinity.network
 build --bes_timeout=30s # Defauilt is no timeout.
 build --bes_upload_mode=fully_async
 # TODO(IDX-2718): Uncomment when bes service will be stable.
