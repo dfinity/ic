@@ -15,8 +15,8 @@ ARG BUILD_TYPE=
 
 # Service worker version and sha256; only if SW is `true` the service worker from npm is used
 ARG SW=
-ARG sw_version=1.6.0
-ARG sw_sha256=6683d32d621be23b357491d6cdfa8c95b57f3e81562bfe0af3c15b6b93787ae0  
+ARG sw_version=1.6.1
+ARG sw_sha256=2cb8665dc17dda3a14d269cd56c9eb1ac8118788cb125c6bc9558d9dfed77ff9  
 
 #
 # First build stage: download software (service worker) that frequently changes, build and verify it (such that it
