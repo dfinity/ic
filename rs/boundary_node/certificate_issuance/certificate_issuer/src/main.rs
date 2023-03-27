@@ -150,7 +150,9 @@ async fn main() -> Result<(), Error> {
 
     // Orchestrator
     let agent = {
-        let client = reqwest::Client::builder().build()?;
+        static USER_AGENT: &str = "Ic-Certificate-Issuer";
+        let client = reqwest::Client::builder().user_agent(USER_AGENT).build()?;
+
         let transport = ReqwestHttpReplicaV2Transport::create_with_client(
             cli.orchestrator_uri.to_string(),
             client,
