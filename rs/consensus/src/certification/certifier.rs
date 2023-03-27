@@ -2,8 +2,7 @@ use super::verifier::VerifierImpl;
 use super::CertificationCrypto;
 use crate::consensus::{membership::Membership, utils};
 use ic_interfaces::{
-    artifact_manager::ArtifactPoolDescriptor,
-    artifact_pool::ChangeSetProducer,
+    artifact_pool::{ChangeSetProducer, PriorityFnAndFilterProducer},
     certification::{CertificationPool, ChangeAction, ChangeSet, Verifier, VerifierError},
     consensus_pool::ConsensusPoolCache,
     validation::ValidationError,
@@ -62,7 +61,7 @@ struct CertifierMetrics {
     execution_time: Histogram,
 }
 
-impl<Pool: CertificationPool> ArtifactPoolDescriptor<CertificationArtifact, Pool>
+impl<Pool: CertificationPool> PriorityFnAndFilterProducer<CertificationArtifact, Pool>
     for CertifierGossipImpl
 {
     // The priority function requires just the height of the artifact to decide if

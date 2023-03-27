@@ -3,7 +3,7 @@
 pub use crate::canister_http::pool_manager::CanisterHttpPoolManagerImpl;
 use crate::consensus::utils::registry_version_at_height;
 use ic_interfaces::{
-    artifact_manager::ArtifactPoolDescriptor, canister_http::CanisterHttpPool,
+    artifact_pool::PriorityFnAndFilterProducer, canister_http::CanisterHttpPool,
     consensus_pool::ConsensusPoolCache,
 };
 use ic_interfaces_state_manager::StateManager;
@@ -16,7 +16,7 @@ use ic_types::{
 };
 use std::{collections::BTreeSet, sync::Arc};
 
-/// The canonical implementation of [`ArtifactPoolDescriptor`]
+/// The canonical implementation of [`PriorityFnAndFilterProducer`]
 pub struct CanisterHttpGossipImpl {
     consensus_cache: Arc<dyn ConsensusPoolCache>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
@@ -38,7 +38,7 @@ impl CanisterHttpGossipImpl {
     }
 }
 
-impl<Pool: CanisterHttpPool> ArtifactPoolDescriptor<CanisterHttpArtifact, Pool>
+impl<Pool: CanisterHttpPool> PriorityFnAndFilterProducer<CanisterHttpArtifact, Pool>
     for CanisterHttpGossipImpl
 {
     fn get_priority_function(

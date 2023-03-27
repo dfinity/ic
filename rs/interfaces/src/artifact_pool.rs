@@ -1,7 +1,11 @@
 //! The artifact pool public interface.
 use crate::time_source::TimeSource;
 use derive_more::From;
-use ic_types::{artifact::ArtifactKind, replica_version::ReplicaVersion, CountBytes, NodeId, Time};
+use ic_types::{
+    artifact::{ArtifactKind, PriorityFn},
+    replica_version::ReplicaVersion,
+    CountBytes, NodeId, Time,
+};
 use serde::{Deserialize, Serialize};
 
 pub trait ChangeSetProducer<Pool>: Send {
@@ -37,6 +41,17 @@ pub trait MutablePool<Artifact: ArtifactKind, C> {
 
     /// Applies a set of change actions to the pool.
     fn apply_changes(&mut self, time_source: &dyn TimeSource, change_set: C);
+}
+
+/// Consensus to gossip interface.
+pub trait PriorityFnAndFilterProducer<Artifact: ArtifactKind, Pool>: Send + Sync {
+    /// Return a priority function that matches the given consensus pool.
+    fn get_priority_function(&self, pool: &Pool) -> PriorityFn<Artifact::Id, Artifact::Attribute>;
+
+    /// Return a filter that represents what artifacts are needed.
+    fn get_filter(&self) -> Artifact::Filter {
+        Artifact::Filter::default()
+    }
 }
 
 /// Contains different errors that can happen on artifact acceptance check.

@@ -1,8 +1,7 @@
 use crate::*;
 use ic_interfaces::{
-    artifact_manager::ArtifactPoolDescriptor,
-    artifact_pool::UnvalidatedArtifact,
     artifact_pool::{ChangeSetProducer, MutablePool},
+    artifact_pool::{PriorityFnAndFilterProducer, UnvalidatedArtifact},
     consensus_pool::ChangeSet,
     consensus_pool::ConsensusPool,
     time_source::TimeSource,
@@ -19,7 +18,7 @@ struct PoolProcessor<A: ArtifactKind, P: MutablePool<ConsensusArtifact, ChangeSe
     mutation_source: Box<dyn ChangeSetProducer<P, ChangeSet = ChangeSet>>,
     // describes internal state that validated pool is in. this state
     // can be used for optimizing the protocol.
-    gossip_state: Box<dyn ArtifactPoolDescriptor<A, P> + Send + Sync>,
+    gossip_state: Box<dyn PriorityFnAndFilterProducer<A, P> + Send + Sync>,
     time_source: Arc<dyn TimeSource>,
     receiver: Receiver<UnvalidatedPoolEvent<A::Message>>,
     priority_fn_sender: watch::Sender<PriorityFn<A::Id, A::Attribute>>,
@@ -33,7 +32,7 @@ impl<P: MutablePool<ConsensusArtifact, ChangeSet> + ConsensusPool> ConsensusPool
     fn new(
         pool: P,
         mutation_source: Box<dyn ChangeSetProducer<P, ChangeSet = ChangeSet>>,
-        gossip_state: Box<dyn ArtifactPoolDescriptor<ConsensusArtifact, P> + Send + Sync>,
+        gossip_state: Box<dyn PriorityFnAndFilterProducer<ConsensusArtifact, P> + Send + Sync>,
         time_source: Arc<dyn TimeSource>,
         receiver: Receiver<UnvalidatedPoolEvent<ConsensusMessage>>,
         priority_fn_sender: watch::Sender<
@@ -104,7 +103,7 @@ impl ConsensusPoolProcessorHandle {
     >(
         pool: P,
         mutation_source: Box<dyn ChangeSetProducer<P, ChangeSet = ChangeSet>>,
-        gossip_state: Box<dyn ArtifactPoolDescriptor<ConsensusArtifact, P> + Send + Sync>,
+        gossip_state: Box<dyn PriorityFnAndFilterProducer<ConsensusArtifact, P> + Send + Sync>,
         time_source: Arc<dyn TimeSource>,
     ) -> Self {
         let (sender, receiver) = channel(8);

@@ -3,8 +3,8 @@
 
 use ic_constants::{MAX_INGRESS_TTL, PERMITTED_DRIFT_AT_ARTIFACT_MANAGER};
 use ic_interfaces::{
-    artifact_manager::{ArtifactClient, ArtifactPoolDescriptor},
-    artifact_pool::{ArtifactPoolError, ReplicaVersionMismatch},
+    artifact_manager::ArtifactClient,
+    artifact_pool::{ArtifactPoolError, PriorityFnAndFilterProducer, ReplicaVersionMismatch},
     gossip_pool::GossipPool,
     ingress_pool::IngressPoolThrottler,
     time_source::TimeSource,
@@ -62,7 +62,7 @@ fn check_protocol_version<T: HasVersion>(artifact: &T) -> Result<(), ReplicaVers
 
 impl<
         Pool: GossipPool<ConsensusArtifact> + Send + Sync,
-        T: ArtifactPoolDescriptor<ConsensusArtifact, Pool> + 'static,
+        T: PriorityFnAndFilterProducer<ConsensusArtifact, Pool> + 'static,
     > ArtifactClient<ConsensusArtifact> for ConsensusClient<Pool, T>
 {
     /// The method checks if the protocol version in the *Consensus* message is
@@ -257,7 +257,7 @@ pub struct CertificationClient<Pool, T> {
     /// The certification pool, protected by a read-write lock and automatic
     /// reference counting.
     pool: Arc<RwLock<Pool>>,
-    /// The `ArtifactPoolDescriptor` client.
+    /// The `PriorityFnAndFilterProducer` client.
     priority_fn_and_filter: T,
 }
 
@@ -273,7 +273,7 @@ impl<Pool, T> CertificationClient<Pool, T> {
 
 impl<
         Pool: GossipPool<CertificationArtifact> + Send + Sync,
-        T: ArtifactPoolDescriptor<CertificationArtifact, Pool> + 'static,
+        T: PriorityFnAndFilterProducer<CertificationArtifact, Pool> + 'static,
     > ArtifactClient<CertificationArtifact> for CertificationClient<Pool, T>
 {
     /// The method checks if the certification pool contains a certification
@@ -348,7 +348,7 @@ impl<Pool, T> DkgClient<Pool, T> {
 
 impl<
         Pool: GossipPool<DkgArtifact> + Send + Sync,
-        T: ArtifactPoolDescriptor<DkgArtifact, Pool> + 'static,
+        T: PriorityFnAndFilterProducer<DkgArtifact, Pool> + 'static,
     > ArtifactClient<DkgArtifact> for DkgClient<Pool, T>
 {
     /// The method checks if the protocol version is correct.
@@ -408,7 +408,7 @@ impl<Pool, T> EcdsaClient<Pool, T> {
 
 impl<
         Pool: GossipPool<EcdsaArtifact> + Send + Sync,
-        T: ArtifactPoolDescriptor<EcdsaArtifact, Pool> + 'static,
+        T: PriorityFnAndFilterProducer<EcdsaArtifact, Pool> + 'static,
     > ArtifactClient<EcdsaArtifact> for EcdsaClient<Pool, T>
 {
     fn has_artifact(&self, msg_id: &EcdsaMessageId) -> bool {
@@ -449,7 +449,7 @@ impl<Pool, T> CanisterHttpClient<Pool, T> {
 
 impl<
         Pool: GossipPool<CanisterHttpArtifact> + Send + Sync,
-        T: ArtifactPoolDescriptor<CanisterHttpArtifact, Pool> + 'static,
+        T: PriorityFnAndFilterProducer<CanisterHttpArtifact, Pool> + 'static,
     > ArtifactClient<CanisterHttpArtifact> for CanisterHttpClient<Pool, T>
 {
     fn has_artifact(&self, msg_id: &CanisterHttpResponseId) -> bool {
