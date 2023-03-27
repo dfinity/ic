@@ -1,3 +1,5 @@
+#![cfg(target_os = "linux")]
+
 use clap::{Args, Parser};
 use vsock_lib::protocol::{Command, NodeIdData, NotifyData, UpgradeData};
 use vsock_lib::send_command;

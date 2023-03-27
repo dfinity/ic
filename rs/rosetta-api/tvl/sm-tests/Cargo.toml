@@ -6,7 +6,6 @@ edition = "2021"
 [dependencies]
 candid = "0.8.1"
 ic-tvl-canister = { path = "../" }
-xrc-mock = { path = "../xrc_mock" }
 ic-base-types = { path = "../../../types/base_types" }
 ic-nns-governance = { path = "../../../nns/governance" }
 ic-nns-test-utils = { path = "../../../nns/test_utils" }
