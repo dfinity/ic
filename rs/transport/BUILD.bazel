@@ -55,10 +55,11 @@ rust_test(
     deps = DEPENDENCIES + DEV_DEPENDENCIES,
 )
 
-# Test is flaky. Tracked in NET-1207.
+# Test is flaky.
 rust_test_suite_with_extra_srcs(
     name = "integration_tests",
     size = "small",
+    timeout = "moderate",
     srcs = glob(
         ["tests/**/*.rs"],
         exclude = ["tests/common/**"],
