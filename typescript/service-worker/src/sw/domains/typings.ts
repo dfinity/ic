@@ -7,19 +7,10 @@ export const domainLookupHeaders = {
 };
 
 export const domainStorageProperties = {
-  name: 'ic-domains',
+  name: 'ic-domains-v2',
   version: 2,
   store: DomainStorageStores.Hosts,
 };
-
-export interface V1DBHostsItem {
-  canister:
-    | {
-        id: string;
-        gateway: string;
-      }
-    | false;
-}
 
 export interface DBHostsItem {
   canister:

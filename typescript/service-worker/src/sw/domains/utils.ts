@@ -60,7 +60,7 @@ export function isRawDomain(hostname: string, mainNet = isMainNet): boolean {
 export function maybeResolveCanisterFromHostName(
   hostname: string
 ): Principal | null {
-  const subdomains = hostname.split('.').reverse();
+  const subdomains = hostname.split('.');
   // raw ic domain in handled as a normal web2 request
   if (isRawDomain(hostname)) {
     return null;
