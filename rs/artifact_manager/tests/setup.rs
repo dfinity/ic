@@ -1,8 +1,8 @@
 use ic_artifact_manager::manager;
 use ic_artifact_pool::consensus_pool::ConsensusPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
-use ic_interfaces::artifact_manager::{ArtifactPoolDescriptor, *};
-use ic_interfaces::artifact_pool::ChangeSetProducer;
+use ic_interfaces::artifact_manager::*;
+use ic_interfaces::artifact_pool::{ChangeSetProducer, PriorityFnAndFilterProducer};
 use ic_interfaces::consensus_pool::ChangeSet;
 use ic_interfaces::time_source::SysTimeSource;
 use ic_logger::replica_logger::{no_op_logger, ReplicaLogger};
@@ -19,7 +19,7 @@ use std::sync::{Arc, RwLock};
 
 struct UnimplementedConsensusPoolDescriptor {}
 
-impl ArtifactPoolDescriptor<ConsensusArtifact, ConsensusPoolImpl>
+impl PriorityFnAndFilterProducer<ConsensusArtifact, ConsensusPoolImpl>
     for UnimplementedConsensusPoolDescriptor
 {
     fn get_priority_function(

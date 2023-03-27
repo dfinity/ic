@@ -100,10 +100,10 @@ mod processors;
 
 use crossbeam_channel::{Receiver, RecvTimeoutError, Sender};
 use ic_interfaces::{
-    artifact_manager::{
-        ArtifactClient, ArtifactPoolDescriptor, ArtifactProcessor, ProcessingResult,
+    artifact_manager::{ArtifactClient, ArtifactProcessor, ProcessingResult},
+    artifact_pool::{
+        ChangeSetProducer, MutablePool, PriorityFnAndFilterProducer, UnvalidatedArtifact,
     },
-    artifact_pool::{ChangeSetProducer, MutablePool, UnvalidatedArtifact},
     canister_http::CanisterHttpChangeSet,
     certification::ChangeSet as CertificationChangeSet,
     consensus_pool::ChangeSet as ConsensusChangeSet,
@@ -342,7 +342,7 @@ pub fn create_consensus_handlers<
         + GossipPool<ConsensusArtifact>
         + 'static,
     C: ChangeSetProducer<PoolConsensus, ChangeSet = ConsensusChangeSet> + 'static,
-    G: ArtifactPoolDescriptor<ConsensusArtifact, PoolConsensus> + 'static,
+    G: PriorityFnAndFilterProducer<ConsensusArtifact, PoolConsensus> + 'static,
     S: Fn(Advert<ConsensusArtifact>) + Send + 'static,
 >(
     send_advert: S,
@@ -381,7 +381,7 @@ pub fn create_certification_handlers<
         + Sync
         + 'static,
     C: ChangeSetProducer<PoolCertification, ChangeSet = CertificationChangeSet> + 'static,
-    G: ArtifactPoolDescriptor<CertificationArtifact, PoolCertification> + 'static,
+    G: PriorityFnAndFilterProducer<CertificationArtifact, PoolCertification> + 'static,
     S: Fn(Advert<CertificationArtifact>) + Send + 'static,
 >(
     send_advert: S,
@@ -416,7 +416,7 @@ pub fn create_certification_handlers<
 pub fn create_dkg_handlers<
     PoolDkg: MutablePool<DkgArtifact, DkgChangeSet> + Send + Sync + GossipPool<DkgArtifact> + 'static,
     C: ChangeSetProducer<PoolDkg, ChangeSet = DkgChangeSet> + 'static,
-    G: ArtifactPoolDescriptor<DkgArtifact, PoolDkg> + 'static,
+    G: PriorityFnAndFilterProducer<DkgArtifact, PoolDkg> + 'static,
     S: Fn(Advert<DkgArtifact>) + Send + 'static,
 >(
     send_advert: S,
@@ -444,7 +444,7 @@ pub fn create_dkg_handlers<
 pub fn create_ecdsa_handlers<
     PoolEcdsa: MutablePool<EcdsaArtifact, EcdsaChangeSet> + Send + Sync + GossipPool<EcdsaArtifact> + 'static,
     C: ChangeSetProducer<PoolEcdsa, ChangeSet = EcdsaChangeSet> + 'static,
-    G: ArtifactPoolDescriptor<EcdsaArtifact, PoolEcdsa> + 'static,
+    G: PriorityFnAndFilterProducer<EcdsaArtifact, PoolEcdsa> + 'static,
     S: Fn(Advert<EcdsaArtifact>) + Send + 'static,
 >(
     send_advert: S,
@@ -475,7 +475,7 @@ pub fn create_https_outcalls_handlers<
         + Sync
         + 'static,
     C: ChangeSetProducer<PoolCanisterHttp, ChangeSet = CanisterHttpChangeSet> + 'static,
-    G: ArtifactPoolDescriptor<CanisterHttpArtifact, PoolCanisterHttp> + Send + Sync + 'static,
+    G: PriorityFnAndFilterProducer<CanisterHttpArtifact, PoolCanisterHttp> + Send + Sync + 'static,
     S: Fn(Advert<CanisterHttpArtifact>) + Send + 'static,
 >(
     send_advert: S,

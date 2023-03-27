@@ -185,8 +185,7 @@ use crate::ecdsa::signer::{EcdsaSigner, EcdsaSignerImpl};
 use crate::ecdsa::utils::EcdsaBlockReaderImpl;
 
 use ic_interfaces::{
-    artifact_manager::ArtifactPoolDescriptor,
-    artifact_pool::ChangeSetProducer,
+    artifact_pool::{ChangeSetProducer, PriorityFnAndFilterProducer},
     consensus_pool::ConsensusBlockCache,
     crypto::IDkgProtocol,
     ecdsa::{EcdsaChangeSet, EcdsaPool},
@@ -454,7 +453,7 @@ impl EcdsaPriorityFnArgs {
     }
 }
 
-impl<Pool: EcdsaPool> ArtifactPoolDescriptor<EcdsaArtifact, Pool> for EcdsaGossipImpl {
+impl<Pool: EcdsaPool> PriorityFnAndFilterProducer<EcdsaArtifact, Pool> for EcdsaGossipImpl {
     fn get_priority_function(
         &self,
         _ecdsa_pool: &Pool,

@@ -10,8 +10,7 @@ use crate::ecdsa::{
     utils::inspect_ecdsa_initializations,
 };
 use ic_interfaces::{
-    artifact_manager::ArtifactPoolDescriptor,
-    artifact_pool::ChangeSetProducer,
+    artifact_pool::{ChangeSetProducer, PriorityFnAndFilterProducer},
     consensus_pool::ConsensusPoolCache,
     dkg::{ChangeAction, ChangeSet, DkgPool},
     validation::{ValidationError, ValidationResult},
@@ -1277,7 +1276,7 @@ impl<T: DkgPool> ChangeSetProducer<T> for DkgImpl {
 // If a node happens to disconnect, it would send out dealings based on
 // its previous state after it reconnects, regardless of whether it has sent
 // them before.
-impl<Pool: DkgPool> ArtifactPoolDescriptor<DkgArtifact, Pool> for DkgGossipImpl {
+impl<Pool: DkgPool> PriorityFnAndFilterProducer<DkgArtifact, Pool> for DkgGossipImpl {
     fn get_priority_function(
         &self,
         dkg_pool: &Pool,

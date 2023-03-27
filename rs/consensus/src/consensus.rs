@@ -54,8 +54,7 @@ use crate::consensus::{
 };
 use ic_config::consensus::ConsensusConfig;
 use ic_interfaces::{
-    artifact_manager::ArtifactPoolDescriptor,
-    artifact_pool::ChangeSetProducer,
+    artifact_pool::{ChangeSetProducer, PriorityFnAndFilterProducer},
     canister_http::CanisterHttpPayloadBuilder,
     consensus_pool::ConsensusPool,
     dkg::DkgPool,
@@ -587,7 +586,9 @@ impl ConsensusGossipImpl {
     }
 }
 
-impl<Pool: ConsensusPool> ArtifactPoolDescriptor<ConsensusArtifact, Pool> for ConsensusGossipImpl {
+impl<Pool: ConsensusPool> PriorityFnAndFilterProducer<ConsensusArtifact, Pool>
+    for ConsensusGossipImpl
+{
     /// Return a priority function that matches the given consensus pool.
     fn get_priority_function(
         &self,

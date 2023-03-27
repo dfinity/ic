@@ -4,8 +4,9 @@ mod p2p;
 
 use crate::p2p::P2P;
 use ic_interfaces::{
-    artifact_manager::ArtifactPoolDescriptor,
-    artifact_pool::{ChangeSetProducer, MutablePool, UnvalidatedArtifact},
+    artifact_pool::{
+        ChangeSetProducer, MutablePool, PriorityFnAndFilterProducer, UnvalidatedArtifact,
+    },
     consensus_pool::ChangeSet,
     consensus_pool::ConsensusPool,
     time_source::TimeSource,
@@ -79,7 +80,7 @@ pub fn start_consensus_p2p<
 >(
     pool: P,
     mutation_source: Box<dyn ChangeSetProducer<P, ChangeSet = ChangeSet>>,
-    gossip_state: Box<dyn ArtifactPoolDescriptor<ConsensusArtifact, P> + Send + Sync>,
+    gossip_state: Box<dyn PriorityFnAndFilterProducer<ConsensusArtifact, P> + Send + Sync>,
     time_source: Arc<dyn TimeSource>,
 ) -> ConsensusP2P {
     let pool_processor_handle =
