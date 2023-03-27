@@ -65,9 +65,9 @@ pub fn test_tvl(tvl_wasm: Vec<u8>, xrc_wasm: Vec<u8>) {
     env.tick();
 
     let get_tvl_result: TvlResult = get_tvl(&env, tvl_id).unwrap();
-    // 11 ICP locked in neurons.
-    // ICP price is 10$, hence tvl should be 110$.
-    assert_eq!(get_tvl_result.tvl, Nat::from(110));
+    // 3 neurons with respectively 10 ICP, 1 ICP and 0.1 ICP locked.
+    // ICP price is 10$, hence tvl should be 111$.
+    assert_eq!(get_tvl_result.tvl, Nat::from(111));
 
     let upgrade_args = tvl_init_args(governance_id, xrc_id);
     env.upgrade_canister(tvl_id, tvl_wasm, Encode!(&upgrade_args).unwrap())

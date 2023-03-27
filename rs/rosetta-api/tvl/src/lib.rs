@@ -87,8 +87,8 @@ pub async fn get_tvl() -> Result<TvlResult, TvlResultError> {
                 last_ts_icp_locked,
                 crate::memory::EntryType::LockedIcp as u32,
             )) {
-                let lock_amount_f64 = (locked_amount / E8S) as f64;
-                let price_f64 = (price / E8S) as f64;
+                let lock_amount_f64 = locked_amount as f64 / E8S as f64;
+                let price_f64 = price as f64 / E8S as f64;
                 let tvl = Nat::from((price_f64 * lock_amount_f64) as u64);
 
                 return Ok(TvlResult {
