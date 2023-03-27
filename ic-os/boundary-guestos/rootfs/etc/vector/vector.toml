@@ -32,7 +32,7 @@ remote_addr, err = to_string(.remote_addr)
 if err != null || remote_addr == "" {
   .remote_addr_hashed = "N/A"
 } else {
-  .remote_addr_hashed = sha3("" + remote_addr, variant: "SHA3-224")
+  .remote_addr_hashed = sha3("${IP_HASH_SALT}" + remote_addr, variant: "SHA3-224")
   .remote_addr_hashed = truncate(.remote_addr_hashed, limit: 32, ellipsis: false)
 }
 
