@@ -68,7 +68,7 @@ impl<
         &self,
         time_source: &dyn TimeSource,
         artifacts: Vec<UnvalidatedArtifact<ConsensusMessage>>,
-    ) -> (Vec<AdvertSendRequest<ConsensusArtifact>>, ProcessingResult) {
+    ) -> (Vec<Advert<ConsensusArtifact>>, ProcessingResult) {
         {
             let mut consensus_pool = self.consensus_pool.write().unwrap();
             for artifact in artifacts {
@@ -101,10 +101,7 @@ impl<
             );
             match change_action {
                 ConsensusAction::AddToValidated(to_add) => {
-                    adverts.push(ConsensusArtifact::message_to_advert_send_request(
-                        to_add,
-                        ArtifactDestination::AllPeersInSubnet,
-                    ));
+                    adverts.push(ConsensusArtifact::message_to_advert(to_add));
                     if let ConsensusMessage::BlockProposal(p) = to_add {
                         let rank = p.clone().content.decompose().1.rank();
                         debug!(
@@ -114,10 +111,7 @@ impl<
                     }
                 }
                 ConsensusAction::MoveToValidated(to_move) => {
-                    adverts.push(ConsensusArtifact::message_to_advert_send_request(
-                        to_move,
-                        ArtifactDestination::AllPeersInSubnet,
-                    ));
+                    adverts.push(ConsensusArtifact::message_to_advert(to_move));
                     if let ConsensusMessage::BlockProposal(p) = to_move {
                         let rank = p.clone().content.decompose().1.rank();
                         debug!(
@@ -185,7 +179,7 @@ impl<PoolIngress: MutablePool<IngressArtifact, IngressChangeSet> + Send + Sync +
         &self,
         time_source: &dyn TimeSource,
         artifacts: Vec<UnvalidatedArtifact<SignedIngress>>,
-    ) -> (Vec<AdvertSendRequest<IngressArtifact>>, ProcessingResult) {
+    ) -> (Vec<Advert<IngressArtifact>>, ProcessingResult) {
         {
             let mut ingress_pool = self.ingress_pool.write().unwrap();
             for artifact in artifacts {
@@ -208,14 +202,11 @@ impl<PoolIngress: MutablePool<IngressArtifact, IngressChangeSet> + Send + Sync +
                     integrity_hash,
                 )) => {
                     if *source_node_id == self.node_id {
-                        adverts.push(AdvertSendRequest {
-                            advert: Advert {
-                                size: *size,
-                                id: message_id.clone(),
-                                attribute: attribute.clone(),
-                                integrity_hash: integrity_hash.clone(),
-                            },
-                            dest: ArtifactDestination::AllPeersInSubnet,
+                        adverts.push(Advert {
+                            size: *size,
+                            id: message_id.clone(),
+                            attribute: attribute.clone(),
+                            integrity_hash: integrity_hash.clone(),
                         });
                     }
                 }
@@ -272,10 +263,7 @@ impl<
         &self,
         time_source: &dyn TimeSource,
         artifacts: Vec<UnvalidatedArtifact<CertificationMessage>>,
-    ) -> (
-        Vec<AdvertSendRequest<CertificationArtifact>>,
-        ProcessingResult,
-    ) {
+    ) -> (Vec<Advert<CertificationArtifact>>, ProcessingResult) {
         {
             let mut certification_pool = self.certification_pool.write().unwrap();
             for artifact in artifacts {
@@ -295,16 +283,10 @@ impl<
         for action in change_set.iter() {
             match action {
                 CertificationChangeAction::AddToValidated(msg) => {
-                    adverts.push(CertificationArtifact::message_to_advert_send_request(
-                        msg,
-                        ArtifactDestination::AllPeersInSubnet,
-                    ))
+                    adverts.push(CertificationArtifact::message_to_advert(msg));
                 }
                 CertificationChangeAction::MoveToValidated(msg) => {
-                    adverts.push(CertificationArtifact::message_to_advert_send_request(
-                        msg,
-                        ArtifactDestination::AllPeersInSubnet,
-                    ))
+                    adverts.push(CertificationArtifact::message_to_advert(msg));
                 }
                 CertificationChangeAction::HandleInvalid(msg, reason) => {
                     self.invalidated_artifacts.inc();
@@ -364,7 +346,7 @@ impl<PoolDkg: MutablePool<DkgArtifact, DkgChangeSet> + Send + Sync + 'static>
         &self,
         time_source: &dyn TimeSource,
         artifacts: Vec<UnvalidatedArtifact<dkg::Message>>,
-    ) -> (Vec<AdvertSendRequest<DkgArtifact>>, ProcessingResult) {
+    ) -> (Vec<Advert<DkgArtifact>>, ProcessingResult) {
         {
             let mut dkg_pool = self.dkg_pool.write().unwrap();
             for artifact in artifacts {
@@ -378,16 +360,10 @@ impl<PoolDkg: MutablePool<DkgArtifact, DkgChangeSet> + Send + Sync + 'static>
             for change_action in change_set.iter() {
                 match change_action {
                     DkgChangeAction::AddToValidated(to_add) => {
-                        adverts.push(DkgArtifact::message_to_advert_send_request(
-                            to_add,
-                            ArtifactDestination::AllPeersInSubnet,
-                        ))
+                        adverts.push(DkgArtifact::message_to_advert(to_add));
                     }
                     DkgChangeAction::MoveToValidated(message) => {
-                        adverts.push(DkgArtifact::message_to_advert_send_request(
-                            message,
-                            ArtifactDestination::AllPeersInSubnet,
-                        ))
+                        adverts.push(DkgArtifact::message_to_advert(message));
                     }
                     DkgChangeAction::HandleInvalid(msg, reason) => {
                         self.invalidated_artifacts.inc();
@@ -450,7 +426,7 @@ impl<PoolEcdsa: MutablePool<EcdsaArtifact, EcdsaChangeSet> + Send + Sync + 'stat
         &self,
         time_source: &dyn TimeSource,
         artifacts: Vec<UnvalidatedArtifact<EcdsaMessage>>,
-    ) -> (Vec<AdvertSendRequest<EcdsaArtifact>>, ProcessingResult) {
+    ) -> (Vec<Advert<EcdsaArtifact>>, ProcessingResult) {
         {
             let mut ecdsa_pool = self.ecdsa_pool.write().unwrap();
             for artifact in artifacts {
@@ -469,17 +445,11 @@ impl<PoolEcdsa: MutablePool<EcdsaArtifact, EcdsaChangeSet> + Send + Sync + 'stat
                     // 2. For relayed ecdsa support messages: don't notify any peers.
                     // 3. For other relayed messages: still notify peers.
                     EcdsaChangeAction::AddToValidated(msg) => {
-                        adverts.push(EcdsaArtifact::message_to_advert_send_request(
-                            msg,
-                            ArtifactDestination::AllPeersInSubnet,
-                        ))
+                        adverts.push(EcdsaArtifact::message_to_advert(msg));
                     }
                     EcdsaChangeAction::MoveToValidated(msg) => match msg {
                         EcdsaMessage::EcdsaDealingSupport(_) => (),
-                        _ => adverts.push(EcdsaArtifact::message_to_advert_send_request(
-                            msg,
-                            ArtifactDestination::AllPeersInSubnet,
-                        )),
+                        _ => adverts.push(EcdsaArtifact::message_to_advert(msg)),
                     },
                     EcdsaChangeAction::RemoveValidated(_) => {}
                     EcdsaChangeAction::RemoveUnvalidated(_) => {}
@@ -529,10 +499,7 @@ impl<
         &self,
         time_source: &dyn TimeSource,
         artifacts: Vec<UnvalidatedArtifact<CanisterHttpResponseShare>>,
-    ) -> (
-        Vec<AdvertSendRequest<CanisterHttpArtifact>>,
-        ProcessingResult,
-    ) {
+    ) -> (Vec<Advert<CanisterHttpArtifact>>, ProcessingResult) {
         {
             let mut pool = self.canister_http_pool.write().unwrap();
             for artifact in artifacts {
@@ -547,16 +514,10 @@ impl<
         for change_action in change_set.iter() {
             match change_action {
                 CanisterHttpChangeAction::AddToValidated(share, _) => {
-                    adverts.push(CanisterHttpArtifact::message_to_advert_send_request(
-                        share,
-                        ArtifactDestination::AllPeersInSubnet,
-                    ))
+                    adverts.push(CanisterHttpArtifact::message_to_advert(share));
                 }
                 CanisterHttpChangeAction::MoveToValidated(msg) => {
-                    adverts.push(CanisterHttpArtifact::message_to_advert_send_request(
-                        msg,
-                        ArtifactDestination::AllPeersInSubnet,
-                    ));
+                    adverts.push(CanisterHttpArtifact::message_to_advert(msg));
                 }
                 CanisterHttpChangeAction::RemoveContent(_) => {}
                 CanisterHttpChangeAction::RemoveValidated(_) => {}

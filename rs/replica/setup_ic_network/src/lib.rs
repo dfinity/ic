@@ -249,7 +249,7 @@ fn setup_artifact_manager(
             Arc::clone(&time_source) as Arc<_>,
             metrics_registry,
             client_on_state_change,
-            move |req| advert_broadcaster.send(req.advert.into(), req.dest),
+            move |req| advert_broadcaster.send(req.into()),
         );
 
         backends.insert(
@@ -270,7 +270,7 @@ fn setup_artifact_manager(
             Arc::clone(&time_source) as Arc<_>,
             metrics_registry.clone(),
             Box::new(client.clone()) as Box<_>,
-            move |req| advert_broadcaster.send(req.advert.into(), req.dest),
+            move |req| advert_broadcaster.send(req.into()),
         );
 
         backends.insert(
@@ -329,7 +329,7 @@ fn setup_artifact_manager(
         backends.insert(
             ConsensusArtifact::TAG,
             Box::new(create_consensus_handlers(
-                move |req| advert_broadcaster.send(req.advert.into(), req.dest),
+                move |req| advert_broadcaster.send(req.into()),
                 consensus_setup(
                     replica_config.clone(),
                     consensus_config,
@@ -366,7 +366,7 @@ fn setup_artifact_manager(
         backends.insert(
             IngressArtifact::TAG,
             Box::new(create_ingress_handlers(
-                move |req| advert_broadcaster.send(req.advert.into(), req.dest),
+                move |req| advert_broadcaster.send(req.into()),
                 Arc::clone(&time_source) as Arc<_>,
                 Arc::clone(&artifact_pools.ingress_pool),
                 ingress_manager,
@@ -384,7 +384,7 @@ fn setup_artifact_manager(
         backends.insert(
             CertificationArtifact::TAG,
             Box::new(create_certification_handlers(
-                move |req| advert_broadcaster.send(req.advert.into(), req.dest),
+                move |req| advert_broadcaster.send(req.into()),
                 certification_setup(
                     replica_config,
                     Arc::clone(&membership) as Arc<_>,
@@ -408,7 +408,7 @@ fn setup_artifact_manager(
         backends.insert(
             DkgArtifact::TAG,
             Box::new(create_dkg_handlers(
-                move |req| advert_broadcaster.send(req.advert.into(), req.dest),
+                move |req| advert_broadcaster.send(req.into()),
                 (
                     dkg::DkgImpl::new(
                         node_id,
@@ -446,7 +446,7 @@ fn setup_artifact_manager(
         backends.insert(
             EcdsaArtifact::TAG,
             Box::new(create_ecdsa_handlers(
-                move |req| advert_broadcaster.send(req.advert.into(), req.dest),
+                move |req| advert_broadcaster.send(req.into()),
                 (
                     ecdsa::EcdsaImpl::new(
                         node_id,
@@ -474,7 +474,7 @@ fn setup_artifact_manager(
         backends.insert(
             CanisterHttpArtifact::TAG,
             Box::new(create_https_outcalls_handlers(
-                move |req| advert_broadcaster.send(req.advert.into(), req.dest),
+                move |req| advert_broadcaster.send(req.into()),
                 (
                     CanisterHttpPoolManagerImpl::new(
                         Arc::clone(&state_manager) as Arc<_>,

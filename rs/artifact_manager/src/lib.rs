@@ -192,7 +192,7 @@ pub struct ArtifactProcessorHandle<Artifact: ArtifactKind + 'static> {
 }
 
 impl<Artifact: ArtifactKind + 'static> ArtifactProcessorHandle<Artifact> {
-    pub fn new<S: Fn(AdvertSendRequest<Artifact>) + Send + 'static>(
+    pub fn new<S: Fn(Advert<Artifact>) + Send + 'static>(
         time_source: Arc<SysTimeSource>,
         metrics_registry: MetricsRegistry,
         client: Box<dyn ArtifactProcessor<Artifact>>,
@@ -235,7 +235,7 @@ impl<Artifact: ArtifactKind + 'static> ArtifactProcessorHandle<Artifact> {
 
     // The artifact processor thread loop
     #[allow(clippy::too_many_arguments)]
-    fn process_messages<S: Fn(AdvertSendRequest<Artifact>) + Send + 'static>(
+    fn process_messages<S: Fn(Advert<Artifact>) + Send + 'static>(
         time_source: Arc<SysTimeSource>,
         client: Box<dyn ArtifactProcessor<Artifact>>,
         send_advert: Box<S>,
@@ -302,7 +302,7 @@ pub fn create_ingress_handlers<
         + GossipPool<IngressArtifact>
         + IngressPoolThrottler
         + 'static,
-    S: Fn(AdvertSendRequest<IngressArtifact>) + Send + 'static,
+    S: Fn(Advert<IngressArtifact>) + Send + 'static,
 >(
     send_advert: S,
     time_source: Arc<SysTimeSource>,
@@ -343,7 +343,7 @@ pub fn create_consensus_handlers<
         + 'static,
     C: ChangeSetProducer<PoolConsensus, ChangeSet = ConsensusChangeSet> + 'static,
     G: ArtifactPoolDescriptor<ConsensusArtifact, PoolConsensus> + 'static,
-    S: Fn(AdvertSendRequest<ConsensusArtifact>) + Send + 'static,
+    S: Fn(Advert<ConsensusArtifact>) + Send + 'static,
 >(
     send_advert: S,
     (consensus, consensus_gossip): (C, G),
@@ -382,7 +382,7 @@ pub fn create_certification_handlers<
         + 'static,
     C: ChangeSetProducer<PoolCertification, ChangeSet = CertificationChangeSet> + 'static,
     G: ArtifactPoolDescriptor<CertificationArtifact, PoolCertification> + 'static,
-    S: Fn(AdvertSendRequest<CertificationArtifact>) + Send + 'static,
+    S: Fn(Advert<CertificationArtifact>) + Send + 'static,
 >(
     send_advert: S,
     (certifier, certifier_gossip): (C, G),
@@ -417,7 +417,7 @@ pub fn create_dkg_handlers<
     PoolDkg: MutablePool<DkgArtifact, DkgChangeSet> + Send + Sync + GossipPool<DkgArtifact> + 'static,
     C: ChangeSetProducer<PoolDkg, ChangeSet = DkgChangeSet> + 'static,
     G: ArtifactPoolDescriptor<DkgArtifact, PoolDkg> + 'static,
-    S: Fn(AdvertSendRequest<DkgArtifact>) + Send + 'static,
+    S: Fn(Advert<DkgArtifact>) + Send + 'static,
 >(
     send_advert: S,
     (dkg, dkg_gossip): (C, G),
@@ -445,7 +445,7 @@ pub fn create_ecdsa_handlers<
     PoolEcdsa: MutablePool<EcdsaArtifact, EcdsaChangeSet> + Send + Sync + GossipPool<EcdsaArtifact> + 'static,
     C: ChangeSetProducer<PoolEcdsa, ChangeSet = EcdsaChangeSet> + 'static,
     G: ArtifactPoolDescriptor<EcdsaArtifact, PoolEcdsa> + 'static,
-    S: Fn(AdvertSendRequest<EcdsaArtifact>) + Send + 'static,
+    S: Fn(Advert<EcdsaArtifact>) + Send + 'static,
 >(
     send_advert: S,
     (ecdsa, ecdsa_gossip): (C, G),
@@ -476,7 +476,7 @@ pub fn create_https_outcalls_handlers<
         + 'static,
     C: ChangeSetProducer<PoolCanisterHttp, ChangeSet = CanisterHttpChangeSet> + 'static,
     G: ArtifactPoolDescriptor<CanisterHttpArtifact, PoolCanisterHttp> + Send + Sync + 'static,
-    S: Fn(AdvertSendRequest<CanisterHttpArtifact>) + Send + 'static,
+    S: Fn(Advert<CanisterHttpArtifact>) + Send + 'static,
 >(
     send_advert: S,
     (pool_manager, canister_http_gossip): (C, G),

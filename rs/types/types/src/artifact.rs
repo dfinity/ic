@@ -217,17 +217,6 @@ pub trait ArtifactKind: Sized {
     /// Returns the advert of the given message.
     fn message_to_advert(msg: &<Self as ArtifactKind>::Message) -> Advert<Self>;
 
-    /// Returns the advert send request to be sent to P2P.
-    fn message_to_advert_send_request(
-        msg: &<Self as ArtifactKind>::Message,
-        dest: ArtifactDestination,
-    ) -> AdvertSendRequest<Self> {
-        AdvertSendRequest {
-            advert: Self::message_to_advert(msg),
-            dest,
-        }
-    }
-
     /// Checks if the given advert matches what is computed from the message.
     /// Returns the advert derived from artifact on mismatch.
     fn check_advert(
@@ -313,31 +302,6 @@ where
             }),
         }
     }
-}
-
-/// The type of advert gossip for a particular artifact,
-/// as determined by the client
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum ArtifactDestination {
-    /// The client considers the artifact to be critical and
-    /// requests all peers be notified. This is the default
-    /// class of service provided by the networking layer,
-    /// if the optimizations are not enabled.
-    AllPeersInSubnet,
-}
-
-impl ArtifactDestination {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Self::AllPeersInSubnet => "all_peers_in_subnet",
-        }
-    }
-}
-
-/// Wrapper to generate the advert send requests
-pub struct AdvertSendRequest<Artifact: ArtifactKind> {
-    pub advert: Advert<Artifact>,
-    pub dest: ArtifactDestination,
 }
 
 // -----------------------------------------------------------------------------

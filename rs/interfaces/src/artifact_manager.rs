@@ -160,7 +160,7 @@ pub trait ArtifactProcessor<Artifact: artifact::ArtifactKind>: Send {
         &self,
         time_source: &dyn TimeSource,
         new_artifacts: Vec<UnvalidatedArtifact<Artifact::Message>>,
-    ) -> (Vec<artifact::AdvertSendRequest<Artifact>>, ProcessingResult);
+    ) -> (Vec<artifact::Advert<Artifact>>, ProcessingResult);
 }
 
 /// The Artifact Manager stores artifacts to be used by this and other nodes in

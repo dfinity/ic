@@ -1642,7 +1642,7 @@ fn delivers_state_adverts_once() {
 
         let (adverts, _) = state_sync.process_changes(time_source.as_ref(), Default::default());
         assert_eq!(adverts.len(), 1);
-        assert_eq!(adverts[0].advert.id, id);
+        assert_eq!(adverts[0].id, id);
         assert!(state_sync.has_artifact(&id));
 
         let (adverts, _) = state_sync.process_changes(time_source.as_ref(), Default::default());

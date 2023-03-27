@@ -9,7 +9,7 @@ use ic_interfaces::time_source::TimeSource;
 use ic_replica_setup_ic_network::{
     TestArtifact, TestArtifactAttribute, TestArtifactId, TestArtifactMessage,
 };
-use ic_types::artifact::{Advert, AdvertSendRequest, ArtifactDestination, ArtifactId, Priority};
+use ic_types::artifact::{Advert, ArtifactId, Priority};
 use ic_types::chunkable::Chunkable;
 use ic_types::crypto::CryptoHash;
 use ic_types::filetree_sync::{
@@ -44,19 +44,16 @@ impl ArtifactProcessor<TestArtifact> for ArtifactChunkingTestImpl {
         &self,
         _time_source: &dyn TimeSource,
         _artifacts: Vec<UnvalidatedArtifact<FileTreeSyncArtifact>>,
-    ) -> (Vec<AdvertSendRequest<TestArtifact>>, ProcessingResult) {
+    ) -> (Vec<Advert<TestArtifact>>, ProcessingResult) {
         let mut unvalidated_pool = self.file_tree_sync_unvalidated_pool.lock();
         let mut validated_pool = self.file_tree_sync_validated_pool.lock();
         let adverts = unvalidated_pool
             .iter()
-            .map(|(artifact_id, artifact)| AdvertSendRequest {
-                advert: Advert {
-                    attribute: artifact.id.to_string(),
-                    size: 0,
-                    id: artifact.id.clone(),
-                    integrity_hash: CryptoHash(artifact_id.clone().into_bytes()),
-                },
-                dest: ArtifactDestination::AllPeersInSubnet,
+            .map(|(artifact_id, artifact)| Advert {
+                attribute: artifact.id.to_string(),
+                size: 0,
+                id: artifact.id.clone(),
+                integrity_hash: CryptoHash(artifact_id.clone().into_bytes()),
             })
             .collect::<Vec<_>>();
         let changed = if !adverts.is_empty() {
