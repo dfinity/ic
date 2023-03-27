@@ -19,6 +19,20 @@ type Operation = variant {
         amount : Tokens;
         fee : Tokens;
     };
+    Approve : record {
+        from : AccountIdentifier;
+        spender : AccountIdentifier;
+        allowance_e8s : int;
+        fee : Tokens;
+        expires_at : opt Timestamp;
+    };
+    TransferFrom : record {
+        from : AccountIdentifier;
+        to : AccountIdentifier;
+        spender : AccountIdentifier;
+        amount : Tokens;
+        fee : Tokens;
+    };
 };
 
 type Transaction = record {
