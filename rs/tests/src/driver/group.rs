@@ -47,7 +47,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use slog::{debug, info, trace, Logger};
+use slog::{debug, error, info, trace, Logger};
 
 const DEFAULT_TIMEOUT_PER_TEST: Duration = Duration::from_secs(60 * 10); // 10 minutes
 const DEFAULT_OVERALL_TIMEOUT: Duration = Duration::from_secs(60 * 10); // 10 minutes
@@ -706,6 +706,7 @@ impl SystemTestGroup {
             }
             debug!(group_ctx.log(), "Created group context: {:?}", group_ctx);
         }
+        let with_farm = self.with_farm;
 
         let broadcaster = Arc::new(EventBroadcaster::start());
         if is_parent_process {
@@ -787,6 +788,7 @@ impl SystemTestGroup {
                     "Scheduler is now subscribed to broadcaster"
                 );
 
+                let ctx = group_ctx.clone();
                 // subscribe to the root task's terminal events
                 // Note: synchronization is done via a zero-capacity crossbeam channel
                 let (terminal_event_sender, terminal_event_receiver) =
@@ -910,6 +912,9 @@ impl SystemTestGroup {
                 // await root task's final event and produce appropriate return code
                 let report = terminal_event_receiver.recv().unwrap();
 
+                if with_farm {
+                    Self::delete_farm_group(ctx);
+                }
                 if report.is_failure_free() {
                     Ok(Outcome::FromParentProcess(report))
                 } else {
@@ -940,6 +945,20 @@ impl SystemTestGroup {
                 // to all SystemTestGroup instances, not only those used with Farm.
                 bail!("Tests failed: {e:?}")
             }
+        }
+    }
+
+    fn delete_farm_group(ctx: GroupContext) {
+        let ctx_ = ctx.clone();
+        info!(ctx.log(), "Deleting farm group.");
+        let env = get_setup_env(ctx);
+        let group_setup = GroupSetup::read_attribute(&env);
+        let farm_url = env.get_farm_url().unwrap();
+        let farm = Farm::new(farm_url, env.logger());
+        let group_name = group_setup.farm_group_name;
+        match farm.delete_group(&group_name) {
+            Ok(()) => info!(ctx_.log(), "Successfully deleted farm group."),
+            Err(e) => error!(ctx_.log(), "Failed to delete farm group:, {:?}", e),
         }
     }
 }
