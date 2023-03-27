@@ -36,8 +36,8 @@ use crate::{
         ic::InternetComputer,
         test_env::{TestEnv, TestEnvAttribute},
         test_env_api::{
-            GetFirstHealthyNodeSnapshot, HasDependencies, HasGroupSetup, HasPublicApiUrl,
-            HasTopologySnapshot, HasWasm, IcNodeContainer,
+            GetFirstHealthyNodeSnapshot, HasDependencies, HasPublicApiUrl, HasTopologySnapshot,
+            HasWasm, IcNodeContainer,
         },
     },
     util::{block_on, delay},
@@ -59,7 +59,6 @@ const AGGREGATOR_CANISTER_VERSION: &str = "v1";
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1_000);
 
 fn config_for_security_testing(env: &TestEnv) {
-    env.ensure_group_setup_created();
     InternetComputer::new()
         .add_fast_single_node_subnet(SubnetType::System)
         .add_fast_single_node_subnet(SubnetType::Application)

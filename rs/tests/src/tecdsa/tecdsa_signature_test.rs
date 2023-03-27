@@ -118,7 +118,6 @@ pub(crate) fn empty_subnet_update() -> UpdateSubnetPayload {
 /// with ECDSA enabled.
 pub fn config_without_ecdsa_on_nns(test_env: TestEnv) {
     use crate::driver::test_env_api::*;
-    test_env.ensure_group_setup_created();
     test_env.ssh_keygen(ADMIN).expect("ssh-keygen failed");
     InternetComputer::new()
         .add_subnet(
@@ -159,7 +158,6 @@ pub fn config_without_ecdsa_on_nns(test_env: TestEnv) {
 /// Creates one system subnet and two application subnets.
 pub fn config(test_env: TestEnv) {
     use crate::driver::test_env_api::*;
-    test_env.ensure_group_setup_created();
     test_env.ssh_keygen(ADMIN).expect("ssh-keygen failed");
     InternetComputer::new()
         .add_subnet(

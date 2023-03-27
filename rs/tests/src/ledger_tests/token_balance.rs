@@ -31,7 +31,7 @@ end::catalog[] */
 use crate::driver::ic::InternetComputer;
 use crate::driver::test_env::{SshKeyGen, TestEnv};
 use crate::driver::test_env_api::{
-    HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt, ADMIN,
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt, ADMIN,
 };
 use crate::util::{
     block_on, get_icp_balance, runtime_from_url, transact_icp, transact_icp_subaccount,
@@ -54,7 +54,6 @@ use slog::info;
 use std::convert::TryFrom;
 
 pub fn config(env: TestEnv) {
-    env.ensure_group_setup_created();
     env.ssh_keygen(ADMIN).expect("ssh-keygen failed");
     InternetComputer::new()
         .add_fast_single_node_subnet(SubnetType::System)

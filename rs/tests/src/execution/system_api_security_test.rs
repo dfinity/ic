@@ -5,9 +5,7 @@
 
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{
-    HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-};
+use crate::driver::test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer};
 use crate::util::*;
 use core::fmt::Write;
 use ic_agent::export::Principal;
@@ -20,7 +18,6 @@ use std::{time::Duration, time::Instant};
 use tokio::time::sleep_until;
 
 pub fn config(env: TestEnv) {
-    env.ensure_group_setup_created();
     InternetComputer::new()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
         .add_subnet(Subnet::new(SubnetType::Application).add_nodes(1))

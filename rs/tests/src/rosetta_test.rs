@@ -24,8 +24,7 @@ use icp_ledger::{
 use crate::driver::ic::InternetComputer;
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
-    HasDependencies, HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-    NnsCanisterEnvVars,
+    HasDependencies, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsCanisterEnvVars,
 };
 use crate::util::block_on;
 use canister_test::{Canister, RemoteTestRuntime, Runtime};
@@ -52,7 +51,6 @@ lazy_static! {
 }
 
 pub fn config(env: TestEnv) {
-    env.ensure_group_setup_created();
     InternetComputer::new()
         .add_fast_single_node_subnet(SubnetType::System)
         //.add_subnet(Subnet::new(SubnetType::System).add_nodes(2))

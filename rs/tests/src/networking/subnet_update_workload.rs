@@ -28,9 +28,9 @@ use crate::{
         prometheus_vm::{HasPrometheus, PrometheusVm},
         test_env::TestEnv,
         test_env_api::{
-            retry_async, HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, HasVmName,
-            IcNodeContainer, NnsInstallationExt, RetrieveIpv4Addr, SshSession, SubnetSnapshot,
-            ADMIN, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+            retry_async, HasPublicApiUrl, HasTopologySnapshot, HasVmName, IcNodeContainer,
+            NnsInstallationExt, RetrieveIpv4Addr, SshSession, SubnetSnapshot, ADMIN,
+            READY_WAIT_TIMEOUT, RETRY_BACKOFF,
         },
     },
     util::{agent_observes_canister_module, assert_canister_counter_with_retries, block_on},
@@ -86,7 +86,6 @@ pub fn config(
     use_boundary_node: bool,
     boot_image_minimal_size_gibibytes: Option<ImageSizeGiB>,
 ) {
-    env.ensure_group_setup_created();
     let logger = env.logger();
     PrometheusVm::default()
         .start(&env)

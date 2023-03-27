@@ -4,7 +4,7 @@ use anyhow::Result;
 
 use ic_tests::driver::group::SystemTestGroup;
 use ic_tests::driver::test_env::TestEnv;
-use ic_tests::driver::test_env_api::{HasDependencies, HasGroupSetup, SshSession, ADMIN};
+use ic_tests::driver::test_env_api::{HasDependencies, SshSession, ADMIN};
 use ic_tests::driver::universal_vm::{UniversalVm, UniversalVms};
 use ic_tests::systest;
 use slog::info;
@@ -20,7 +20,6 @@ fn main() -> Result<()> {
 }
 
 pub fn setup(env: TestEnv) {
-    env.ensure_group_setup_created();
     UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
         .with_config_img(
             env.get_dependency_path("rs/tests/replicable_mock_test_uvm_config_image.zst"),

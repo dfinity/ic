@@ -18,9 +18,7 @@ end::catalog[] */
 
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::{
-    HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer,
-};
+use crate::driver::test_env_api::{HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer};
 use crate::util::{block_on, UniversalCanister};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
@@ -33,7 +31,6 @@ const DKG_INTERVAL: u64 = 14;
 const NOTARY_DELAY: Duration = Duration::from_millis(100);
 
 pub fn config(env: TestEnv) {
-    env.ensure_group_setup_created();
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)

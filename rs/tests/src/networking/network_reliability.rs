@@ -20,8 +20,8 @@ end::catalog[] */
 use crate::driver::ic::{AmountOfMemoryKiB, InternetComputer, NrOfVCPUs, Subnet, VmResources};
 use crate::driver::test_env::{SshKeyGen, TestEnv};
 use crate::driver::test_env_api::{
-    HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
-    NnsInstallationExt, SshSession, ADMIN, DEVICE_NAME,
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, NnsInstallationExt,
+    SshSession, ADMIN, DEVICE_NAME,
 };
 use crate::util::{
     self, agent_observes_canister_module, assert_canister_counter_with_retries, block_on,
@@ -78,7 +78,6 @@ pub struct Config {
 }
 
 pub fn setup(env: TestEnv, config: Config) {
-    env.ensure_group_setup_created();
     env.ssh_keygen(ADMIN).expect("ssh-keygen failed");
     let vm_resources = VmResources {
         vcpus: Some(NrOfVCPUs::new(8)),

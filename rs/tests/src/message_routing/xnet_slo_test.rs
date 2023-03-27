@@ -28,7 +28,7 @@ use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::pot_dsl::{PotSetupFn, SysTestFn};
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
-    HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt,
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt,
 };
 use crate::util::{block_on, runtime_from_url};
 use canister_test::{Canister, Runtime};
@@ -106,7 +106,6 @@ impl Config {
 
 // Generic setup
 fn setup(env: TestEnv, config: Config) {
-    env.ensure_group_setup_created();
     (0..config.subnets)
         .fold(InternetComputer::new(), |ic, _idx| {
             ic.add_subnet(Subnet::new(SubnetType::Application).add_nodes(config.nodes_per_subnet))

@@ -22,8 +22,7 @@ use crate::{
     driver::{
         test_env::TestEnv,
         test_env_api::{
-            HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer,
-            NnsInstallationExt,
+            HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer, NnsInstallationExt,
         },
     },
     nns::remove_nodes_via_endpoint,
@@ -45,8 +44,6 @@ const REMOVE_NODES_COUNT: usize = (NODES_COUNT / 3) + 1;
 const RND_SEED: u64 = 42;
 
 pub fn config(env: TestEnv) {
-    env.ensure_group_setup_created();
-
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)

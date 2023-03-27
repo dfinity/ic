@@ -32,8 +32,8 @@ use crate::{
         prometheus_vm::{HasPrometheus, PrometheusVm},
         test_env::TestEnv,
         test_env_api::{
-            retry, HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer,
-            IcNodeSnapshot, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+            retry, HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer, IcNodeSnapshot,
+            READY_WAIT_TIMEOUT, RETRY_BACKOFF,
         },
     },
     util::{block_on, MetricsFetcher},
@@ -71,7 +71,6 @@ fn config(env: TestEnv, execution_delay_factor: f64, state_sync_delay_factor: f6
     let execution_delay_ms = (execution_delay_factor * TARGET_FR_MS as f64) as u64;
     let state_sync_delay_ms = (state_sync_delay_factor * DKG_INTERVAL_TIME_MS as f64) as u64;
 
-    env.ensure_group_setup_created();
     PrometheusVm::default()
         .with_scrape_interval(Duration::from_secs(5))
         .start(&env)

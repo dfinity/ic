@@ -1,5 +1,4 @@
 use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::HasGroupSetup;
 use crate::driver::test_env_api::HasPublicApiUrl;
 use crate::driver::test_env_api::HasTopologySnapshot;
 use crate::driver::test_env_api::IcNodeContainer;
@@ -16,8 +15,6 @@ use std::{fs::File, io::Write};
 const UNIVERSAL_VM_NAME: &str = "btc-node";
 
 pub fn config(env: TestEnv) {
-    env.ensure_group_setup_created();
-
     // Regtest bitcoin node listens on 18444
     // docker bitcoind image uses 8332 for the rpc server
     // https://en.bitcoinwiki.org/wiki/Running_Bitcoind

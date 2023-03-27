@@ -37,7 +37,6 @@ use slog::info;
 use std::str::FromStr;
 
 pub fn config(env: TestEnv) {
-    env.ensure_group_setup_created();
     env.ssh_keygen(ADMIN).expect("ssh-keygen failed");
     InternetComputer::new()
         .add_fast_single_node_subnet(SubnetType::System)

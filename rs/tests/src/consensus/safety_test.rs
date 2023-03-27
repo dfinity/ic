@@ -32,13 +32,11 @@ use ic_types::malicious_behaviour::MaliciousBehaviour;
 use crate::driver::{
     ic::{InternetComputer, Subnet},
     test_env::TestEnv,
-    test_env_api::HasGroupSetup,
 };
 
 use super::liveness_with_equivocation_test;
 
 pub fn config(env: TestEnv) {
-    env.ensure_group_setup_created();
     let malicious_beh = MaliciousBehaviour::new(true)
         .set_maliciously_propose_empty_blocks()
         .set_maliciously_notarize_all()

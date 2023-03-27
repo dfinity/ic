@@ -23,7 +23,7 @@ use crate::driver::{
     boundary_node::{BoundaryNode, BoundaryNodeVm},
     ic::{InternetComputer, Subnet},
     test_env::TestEnv,
-    test_env_api::{retry_async, HasGroupSetup, READY_WAIT_TIMEOUT, RETRY_BACKOFF},
+    test_env_api::{retry_async, READY_WAIT_TIMEOUT, RETRY_BACKOFF},
     universal_vm::UniversalVm,
 };
 use crate::util::block_on;
@@ -40,7 +40,6 @@ const BN_NAME: &str = "socks-bn";
 
 pub fn config(env: TestEnv) {
     let logger = env.logger();
-    env.ensure_group_setup_created();
 
     // Set up Universal VM with HTTP Bin testing service
 

@@ -42,7 +42,6 @@ const SUBNET_SIZE: usize = 4;
 const NUM_READ_RETRIES: usize = 10;
 
 pub fn config(env: TestEnv) {
-    env.ensure_group_setup_created();
     env.ssh_keygen(ADMIN).expect("ssh admin keygen failed");
     InternetComputer::new()
         .add_subnet(

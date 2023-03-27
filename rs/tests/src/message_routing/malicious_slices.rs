@@ -26,7 +26,7 @@ use crate::driver::pot_dsl::{PotSetupFn, SysTestFn};
 use crate::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
-    HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, SubnetSnapshot,
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, SubnetSnapshot,
 };
 use crate::util::{block_on, runtime_from_url, MetricsFetcher};
 use canister_test::Runtime;
@@ -76,7 +76,6 @@ impl Config {
 
 // Generic setup
 fn setup(env: TestEnv, config: Config, malicious_behavior: MaliciousBehaviour) {
-    env.ensure_group_setup_created();
     PrometheusVm::default()
         .start(&env)
         .expect("failed to start prometheus VM");

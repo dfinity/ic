@@ -31,9 +31,7 @@ use crate::{
     driver::{
         ic::{InternetComputer, Subnet},
         test_env::TestEnv,
-        test_env_api::{
-            HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer,
-        },
+        test_env_api::{HasPublicApiUrl, HasTopologySnapshot, HasVm, IcNodeContainer},
     },
     util::*,
 };
@@ -50,7 +48,6 @@ const MAX_NODES: usize = 4;
 const RND_SEED: u64 = 42;
 
 pub fn config(env: TestEnv) {
-    env.ensure_group_setup_created();
     InternetComputer::new()
         .add_fast_single_node_subnet(SubnetType::System)
         .add_subnet(

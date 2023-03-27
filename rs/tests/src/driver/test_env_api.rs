@@ -944,39 +944,35 @@ impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
 }
 
 pub trait HasGroupSetup {
-    fn ensure_group_setup_created(&self);
+    fn create_group_setup(&self);
 }
 
 impl HasGroupSetup for TestEnv {
-    fn ensure_group_setup_created(&self) {
-        let is_group_setup_existing = self.get_json_path(GroupSetup::attribute_name()).exists();
-        // This `if` is executed only for Bazel runs.
-        if !is_group_setup_existing {
-            let log = self.logger();
-            let group_setup = GroupSetup::from_bazel_env();
-            let farm_base_url = FarmBaseUrl::read_attribute(self);
-            let farm = Farm::new(farm_base_url.into(), self.logger());
-            let group_spec = GroupSpec {
-                vm_allocation: None,
-                required_host_features: vec![],
-                preferred_network: None,
-                metadata: None,
-            };
-            farm.create_group(
-                &group_setup.farm_group_name,
-                group_setup.group_timeout,
-                group_spec,
-                self,
-            )
-            .unwrap();
-            group_setup.write_attribute(self);
-            info!(
-                log,
-                "Created new Farm group {}\nReplica logs will appear in Kibana: {}",
-                group_setup.farm_group_name,
-                kibana_link(&group_setup.farm_group_name)
-            );
-        }
+    fn create_group_setup(&self) {
+        let log = self.logger();
+        let group_setup = GroupSetup::from_bazel_env();
+        let farm_base_url = FarmBaseUrl::read_attribute(self);
+        let farm = Farm::new(farm_base_url.into(), self.logger());
+        let group_spec = GroupSpec {
+            vm_allocation: None,
+            required_host_features: vec![],
+            preferred_network: None,
+            metadata: None,
+        };
+        farm.create_group(
+            &group_setup.farm_group_name,
+            group_setup.group_timeout,
+            group_spec,
+            self,
+        )
+        .unwrap();
+        group_setup.write_attribute(self);
+        info!(
+            log,
+            "Created new Farm group {}\nReplica logs will appear in Kibana: {}",
+            group_setup.farm_group_name,
+            kibana_link(&group_setup.farm_group_name)
+        );
     }
 }
 

@@ -16,8 +16,8 @@ use crate::{
         ic::InternetComputer,
         test_env::{SshKeyGen, TestEnv},
         test_env_api::{
-            HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, IcNodeSnapshot,
-            NnsInstallationExt, SubnetSnapshot, TopologySnapshot,
+            HasPublicApiUrl, HasTopologySnapshot, IcNodeSnapshot, NnsInstallationExt,
+            SubnetSnapshot, TopologySnapshot,
         },
     },
     orchestrator::utils::ssh_access::{
@@ -35,7 +35,6 @@ use ic_registry_subnet_type::SubnetType;
 use std::net::IpAddr;
 
 pub fn config(env: TestEnv) {
-    env.ensure_group_setup_created();
     env.ssh_keygen("admin")
         .expect("Failed to generate ssh admin keys");
 

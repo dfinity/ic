@@ -26,7 +26,7 @@ use crate::{
     driver::{
         ic::{InternetComputer, Subnet},
         test_env::{SshKeyGen, TestEnv},
-        test_env_api::{HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot, HasVm},
+        test_env_api::{HasPublicApiUrl, HasTopologySnapshot, HasVm},
     },
     nns::{submit_external_proposal_with_test_id, vote_execute_proposal_assert_executed},
     orchestrator::utils::rw_message::install_nns_and_check_progress,
@@ -50,7 +50,6 @@ const UPDATE_MSG_3: &str = "However this prose will NOT be persisted for future 
 const UNASSIGNED_NODES_COUNT: usize = 3; // must be >= 3, currently tested for X=3, f=1 and N=4
 
 pub fn config(env: TestEnv) {
-    env.ensure_group_setup_created();
     env.ssh_keygen("admin")
         .expect("Failed to generate ssh admin keys");
 

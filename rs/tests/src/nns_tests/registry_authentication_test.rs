@@ -18,7 +18,7 @@ end::catalog[] */
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::test_env::{HasIcPrepDir, TestEnv};
 use crate::driver::test_env_api::{
-    GetFirstHealthyNodeSnapshot, HasGroupSetup, HasPublicApiUrl, NnsCanisterEnvVars,
+    GetFirstHealthyNodeSnapshot, HasPublicApiUrl, NnsCanisterEnvVars,
 };
 use crate::util::{block_on, runtime_from_url};
 use hyper::{
@@ -44,7 +44,6 @@ use std::convert::Infallible;
 use std::net::SocketAddr;
 
 pub fn setup(env: TestEnv) {
-    env.ensure_group_setup_created();
     InternetComputer::new()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
         .setup_and_start(&env)

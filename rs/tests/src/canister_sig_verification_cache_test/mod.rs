@@ -23,8 +23,8 @@ end::catalog[] */
 use crate::driver::ic::InternetComputer;
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
-    GetFirstHealthyNodeSnapshot, HasGroupSetup, HasPublicApiUrl, HasTopologySnapshot,
-    IcNodeContainer, IcNodeSnapshot,
+    GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
+    IcNodeSnapshot,
 };
 use crate::util::delegations::*;
 use crate::util::{agent_with_identity, block_on, random_ed25519_identity, MetricsFetcher};
@@ -57,7 +57,6 @@ const NUM_USERS_RANGE: RangeInclusive<usize> = 5..=15;
 const NUM_CALLS_PER_USER_RANGE: RangeInclusive<usize> = 5..=15;
 
 pub fn config(env: TestEnv) {
-    env.ensure_group_setup_created();
     // one system subnet for NNS
     // another system subnet for II
     // and the application subnet for the counter canister

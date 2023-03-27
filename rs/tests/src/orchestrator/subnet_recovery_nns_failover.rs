@@ -48,7 +48,6 @@ const SUBNET_SIZE: usize = 3;
 pub const UNIVERSAL_VM_NAME: &str = "httpbin";
 
 pub fn setup(env: TestEnv) {
-    env.ensure_group_setup_created();
     env.ssh_keygen(ADMIN).expect("ssh-keygen failed");
     InternetComputer::new()
         .with_name("broken")
