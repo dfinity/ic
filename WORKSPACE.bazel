@@ -46,9 +46,9 @@ http_archive(
 
 git_repository(
     name = "rules_rust",
-    commit = "1b6d0bdaefee12846bd6eba4b7b8f598d7a2da59",
+    commit = "0ebd7aa2ed02bffb545a4980946f1ea9b5f5d347",
     remote = "https://github.com/dfinity-lab/rules_rust.git",
-    shallow_since = "1671727029 +0000",
+    shallow_since = "1679674976 +0000",
 )
 
 load("@rules_rust//rust:repositories.bzl", "rules_rust_dependencies", "rust_register_toolchains")
