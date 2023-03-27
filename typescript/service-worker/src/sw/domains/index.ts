@@ -1,8 +1,7 @@
 import { Principal } from '@dfinity/principal';
-import { IDBPDatabase, IDBPObjectStore, IDBPTransaction } from 'idb';
 import { ICHostInfoEvent } from '../../typings';
 import { isMainNet } from '../requests/utils';
-import { DBValue, Storage } from '../storage';
+import { Storage } from '../storage';
 import { MalformedCanisterError } from './errors';
 import { ResolverMapper } from './mapper';
 import { DEFAULT_GATEWAY, hostnameCanisterIdMap } from './static';
@@ -11,7 +10,6 @@ import {
   DomainsStorageDBSchema,
   domainLookupHeaders,
   domainStorageProperties,
-  V1DBHostsItem,
 } from './typings';
 import {
   apiGateways,
@@ -46,60 +44,10 @@ export class CanisterResolver {
       name: domainStorageProperties.name,
       version: domainStorageProperties.version,
       stores: {
-        init: [CanisterResolver.migrateStorage],
+        init: [domainStorageProperties.store],
         default: domainStorageProperties.store,
       },
     });
-  }
-
-  private static async migrateStorage(
-    db: IDBPDatabase<unknown>,
-    oldVersion: number,
-    transaction: IDBPTransaction<unknown, string[], 'versionchange'>
-  ): Promise<
-    IDBPObjectStore<unknown, ArrayLike<string>, string, 'versionchange'>
-  > {
-    switch (oldVersion) {
-      default: {
-        return db.createObjectStore(domainStorageProperties.store as string);
-      }
-
-      case 1: {
-        const oldStore = transaction.objectStore(domainStorageProperties.store);
-        const oldKeys = await oldStore.getAllKeys();
-        const newItems = await Promise.all(
-          oldKeys.map(async (key) => {
-            const oldValue = await oldStore.get(key);
-            const canister =
-              oldValue.body.canister === false
-                ? false
-                : { id: oldValue.body.canister.id };
-            const value: DBValue<DBHostsItem> = {
-              expireAt: oldValue.expireAt,
-              body: {
-                canister,
-              },
-            };
-
-            return {
-              value,
-              key,
-            };
-          })
-        );
-
-        db.deleteObjectStore(domainStorageProperties.store);
-
-        const store = db.createObjectStore(
-          domainStorageProperties.store as string
-        );
-        for (const item of newItems) {
-          await store.put(item.value, item.key);
-        }
-
-        return store;
-      }
-    }
   }
 
   async saveICHostInfo(event: ICHostInfoEvent): Promise<void> {
@@ -112,8 +60,8 @@ export class CanisterResolver {
   }
 
   /**
-   * Gets the current gateway. On mainnet this is always `DEFAULT_API_BOUNDARY_NODE`,
-   * on testnets this is based on the current URL, see `getTestnetGateway` for more information.
+   * Gets the current gateway. On mainnet this is always `DEFAULT_GATEWAY`,
+   * on testnets this is based on the current URL, see `getRootDomain` for more information.
    * @returns The current gateway.
    */
   async getCurrentGateway(mainNet = isMainNet): Promise<URL> {
@@ -129,6 +77,7 @@ export class CanisterResolver {
    * `${self.location.protocol}//${canisterId}.${gatewayHostname}/${path}`,
    * and will return the following:
    * `${self.location.protocol}//${gatewayHostname}`.
+   * If no canister ID is found in the hostname, the full hostname will be returned.
    *
    * For example:
    * `https://rwlgt-iiaaa-aaaaa-aaaaa-cai.small04.testnet.dfinity.network/some-path/`,
@@ -138,10 +87,28 @@ export class CanisterResolver {
    * @returns The gateway for the testnet hosting the service worker.
    */
   public getRootDomain(): URL {
-    const splitHostname = self.location.hostname.split('.');
-    splitHostname.shift();
+    const hostnameParts = self.location.hostname.split('.').reverse();
+    const rootDomainParts: string[] = [];
 
-    return new URL(`${self.location.protocol}//${splitHostname.join('.')}`);
+    for (const part of hostnameParts) {
+      try {
+        // we don't need the canister ID at this point,
+        // but if we have found a canister ID then we know that we've found the full root domain,
+        // so we return it
+        Principal.fromText(part);
+        return new URL(
+          `${self.location.protocol}//${rootDomainParts.reverse().join('.')}`
+        );
+      } catch (_) {
+        // domain part is not a canister ID,
+        // so we can assume it is part of the root domain
+        rootDomainParts.push(part);
+      }
+    }
+
+    // this part of the code will be reached if we never find a canister ID in the domain
+    // this will happen if we are on a custom domain and it should return the full hostname
+    return new URL(`${self.location.protocol}//${self.location.hostname}`);
   }
 
   resolveLookupFromUrl(domain: URL): Principal | null {

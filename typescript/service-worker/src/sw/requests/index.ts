@@ -69,19 +69,18 @@ export class RequestProcessor {
       return assetResponse.response;
     }
 
-    if (
-      isRawDomain(this.url.hostname) ||
-      !this.url.hostname.endsWith(canisterResolver.getRootDomain().hostname)
-    ) {
-      return await this.directRequestHandler();
+    // make sure that we don't make a request against the service worker's origin,
+    // else we'll end up in a service worker loading loop
+    if (this.url.hostname === self.location.hostname) {
+      console.error(
+        `URL ${JSON.stringify(
+          this.url.toString()
+        )} did not resolve to a canister ID.`
+      );
+      return new Response('Could not find the canister ID.', { status: 404 });
     }
 
-    console.error(
-      `URL ${JSON.stringify(
-        this.url.toString()
-      )} did not resolve to a canister ID.`
-    );
-    return new Response('Could not find the canister ID.', { status: 404 });
+    return await this.directRequestHandler();
   }
 
   /**
