@@ -8,9 +8,16 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[derive(Copy, Clone)]
+pub enum PostSetupAction {
+    PerformCheckpoint,
+    None,
+}
+
 fn initialize_execution_test(
     wasm: &[u8],
     initialization_arg: &[u8],
+    post_setup_action: PostSetupAction,
     cell: &RefCell<Option<(ExecutionTest, CanisterId)>>,
 ) {
     const LARGE_INSTRUCTION_LIMIT: u64 = 1_000_000_000_000;
@@ -39,7 +46,12 @@ fn initialize_execution_test(
     if let WasmResult::Reject(s) = result {
         panic!("Installation rejected: {}", s)
     }
-    test.checkpoint_canister_memories();
+    match post_setup_action {
+        PostSetupAction::PerformCheckpoint => {
+            test.checkpoint_canister_memories();
+        }
+        PostSetupAction::None => {}
+    }
 
     // Execute a message to synce the new memory so that time isn't included in
     // benchmarks.
@@ -57,6 +69,7 @@ pub fn update_bench(
     method: &str,
     payload: &[u8],
     throughput: Option<Throughput>,
+    post_setup_action: PostSetupAction,
 ) {
     let cell = RefCell::new(None);
 
@@ -68,7 +81,7 @@ pub fn update_bench(
         bench.iter_custom(|iters| {
             let mut total_duration = Duration::ZERO;
             for _ in 0..iters {
-                initialize_execution_test(wasm, initialization_arg, &cell);
+                initialize_execution_test(wasm, initialization_arg, post_setup_action, &cell);
                 let mut setup = cell.borrow_mut();
                 let (test, canister_id) = setup.as_mut().unwrap();
                 let start = Instant::now();
@@ -93,6 +106,7 @@ pub fn query_bench(
     method: &str,
     payload: &[u8],
     throughput: Option<Throughput>,
+    post_setup_action: PostSetupAction,
 ) {
     let cell = RefCell::new(None);
 
@@ -103,7 +117,7 @@ pub fn query_bench(
     group.bench_function(name, |bench| {
         bench.iter_batched(
             || {
-                initialize_execution_test(wasm, initialization_arg, &cell);
+                initialize_execution_test(wasm, initialization_arg, post_setup_action, &cell);
             },
             |()| {
                 let mut setup = cell.borrow_mut();
