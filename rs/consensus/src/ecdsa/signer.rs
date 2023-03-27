@@ -142,9 +142,9 @@ impl EcdsaSignerImpl {
                         ) {
                             Some(sig_inputs) => {
                                 let action = self.crypto_verify_signature_share(
-                                    &id,
+                                    id,
                                     &sig_inputs,
-                                    &share,
+                                    share,
                                     ecdsa_pool.stats(),
                                 );
                                 if let Some(EcdsaChangeAction::MoveToValidated(_)) = action {
@@ -264,9 +264,9 @@ impl EcdsaSignerImpl {
     /// Helper to verify the signature share
     fn crypto_verify_signature_share(
         &self,
-        id: &EcdsaMessageId,
+        id: EcdsaMessageId,
         sig_inputs: &ThresholdEcdsaSigInputs,
-        share: &EcdsaSigShare,
+        share: EcdsaSigShare,
         stats: &dyn EcdsaStats,
     ) -> Option<EcdsaChangeAction> {
         let start = std::time::Instant::now();
@@ -278,34 +278,33 @@ impl EcdsaSignerImpl {
         );
         stats.record_sig_share_validation(&share.request_id, start.elapsed());
 
-        ret.map_or_else(
-            |error| {
-                if error.is_reproducible() {
-                    self.metrics.sign_errors_inc("verify_sig_share_permanent");
-                    Some(EcdsaChangeAction::HandleInvalid(
-                        id.clone(),
-                        format!(
-                            "Share validation(permanent error): {}, error = {:?}",
-                            share, error
-                        ),
-                    ))
-                } else {
-                    // Defer in case of transient errors
-                    debug!(
-                        self.log,
-                        "Share validation(transient error): {}, error = {:?}", share, error
-                    );
-                    self.metrics.sign_errors_inc("verify_sig_share_transient");
-                    None
-                }
-            },
-            |()| {
+        match ret {
+            Err(error) if error.is_reproducible() => {
+                self.metrics.sign_errors_inc("verify_sig_share_permanent");
+                Some(EcdsaChangeAction::HandleInvalid(
+                    id,
+                    format!(
+                        "Share validation(permanent error): {}, error = {:?}",
+                        share, error
+                    ),
+                ))
+            }
+            Err(error) => {
+                // Defer in case of transient errors
+                debug!(
+                    self.log,
+                    "Share validation(transient error): {}, error = {:?}", share, error
+                );
+                self.metrics.sign_errors_inc("verify_sig_share_transient");
+                None
+            }
+            Ok(()) => {
                 self.metrics.sign_metrics_inc("sig_shares_received");
                 Some(EcdsaChangeAction::MoveToValidated(
-                    EcdsaMessage::EcdsaSigShare(share.clone()),
+                    EcdsaMessage::EcdsaSigShare(share),
                 ))
-            },
-        )
+            }
+        }
     }
 
     /// Checks if the signer node has already issued a signature share for the
@@ -864,9 +863,9 @@ mod tests {
                 let share = create_signature_share(NODE_2, id);
                 let changeset: Vec<_> = signer
                     .crypto_verify_signature_share(
-                        &share.message_id(),
+                        share.message_id(),
                         &sig_inputs,
-                        &share,
+                        share.clone(),
                         &(EcdsaStatsNoOp {}),
                     )
                     .into_iter()
