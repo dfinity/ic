@@ -697,7 +697,7 @@ impl PublicRandomSeedGenerator for RemoteCspVault {
                 .new_public_seed(context_with_timeout(self.rpc_timeout)),
         )
         .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
-            Err(PublicRandomSeedGeneratorError::InternalError {
+            Err(PublicRandomSeedGeneratorError::TransientInternalError {
                 internal_error: rpc_error.to_string(),
             })
         })
