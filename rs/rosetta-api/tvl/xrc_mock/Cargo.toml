@@ -3,10 +3,6 @@ name = "xrc-mock"
 version = "0.1.0"
 edition = "2021"
 
-[[bin]]
-name = "xrc-mock"
-path = "main.rs"
-
 [dependencies]
 candid = "0.8.4"
 ic-base-types = { path = "../../../types/base_types" }

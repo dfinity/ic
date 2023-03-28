@@ -78,6 +78,20 @@ type GetExchangeRateResult = variant {
     Err: ExchangeRateError;
 };
 
-service : (nat64) -> {
+type Response = variant {
+    ExchangeRate: record {
+        base_asset: opt Asset;
+        quote_asset: opt Asset;
+        metadata: opt ExchangeRateMetadata;
+        rate: nat64;
+    };
+    Error: ExchangeRateError;
+};
+
+type InitPayload = record {
+    response: Response;
+};
+
+service : (InitPayload) -> {
     "get_exchange_rate": (GetExchangeRateRequest) -> (GetExchangeRateResult);
 }

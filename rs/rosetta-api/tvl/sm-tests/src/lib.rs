@@ -3,6 +3,7 @@ use ic_nns_test_utils::common::NnsInitPayloadsBuilder;
 use ic_nns_test_utils::state_test_helpers::setup_nns_canisters;
 use ic_state_machine_tests::{CanisterId, StateMachine};
 use ic_tvl_canister::types::{TvlArgs as TVLInitArgs, TvlResult, TvlResultError};
+use xrc_mock::{ExchangeRate, Response, XrcMockInitPayload};
 
 pub fn get_tvl(
     env: &StateMachine,
@@ -28,7 +29,15 @@ pub fn setup(xrc_wasm: Vec<u8>) -> (StateMachine, CanisterId, CanisterId) {
 
     pub const GOVERNANCE_CANISTER_ID: CanisterId = CanisterId::from_u64(1);
 
-    let xrc_args: u64 = 1_000_000_000; // This corresponds to an ICP price of 10$
+    let xrc_args = XrcMockInitPayload {
+        response: Response::ExchangeRate(ExchangeRate {
+            base_asset: None,
+            quote_asset: None,
+            metadata: None,
+            rate: 1_000_000_000, // This corresponds to an ICP price of 10$
+        }),
+    };
+
     let xrc_args = Encode!(&xrc_args).unwrap();
     let xrc_id = env.install_canister(xrc_wasm, xrc_args, None).unwrap();
 

@@ -25,15 +25,6 @@ MACRO_DEPENDENCIES = [
     "@crate_index//:ic-cdk-macros",
 ]
 
-rust_canister(
-    name = "xrc_mock",
-    srcs = ["xrc_mock/main.rs"],
-    crate_name = "xrc_mock_canister",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    service_file = ":xrc_mock/xrc.did",
-    deps = DEPENDENCIES,
-)
-
 rust_library(
     name = "tvl",
     srcs = glob(["src/**/*.rs"]),
@@ -85,7 +76,7 @@ DEV_ENV = {
     "SNS_SWAP_CANISTER_WASM_PATH": "$(rootpath //rs/sns/swap:sns-swap-canister)",
     "ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root:root-canister)",
     "GOVERNANCE_DIR": "rs/nns/governance",
-    "XRC_WASM_PATH": "$(rootpath //rs/rosetta-api/tvl:xrc_mock)",
+    "XRC_WASM_PATH": "$(rootpath //rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister)",
     "GOVERNANCE_WASM": "$(rootpath //rs/nns/governance:governance-canister)",
     "TVL_WASM": "$(rootpath //rs/rosetta-api/tvl:tvl_canister)",
 }
@@ -115,6 +106,7 @@ DEPENDENCIES_TEST = [
     "//rs/registry/subnet_type",
     "//rs/registry/transport",
     "//rs/rosetta-api/tvl",
+    "//rs/rosetta-api/tvl/xrc_mock",
     "//rs/rosetta-api/tvl/sm-tests",
     "//rs/rosetta-api/icp_ledger",
     "//rs/rosetta-api/icrc1",
@@ -144,7 +136,7 @@ DEPENDENCIES_TEST = [
 ]
 
 DEV_DATA = [
-    "//rs/rosetta-api/tvl:xrc_mock",
+    "//rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister",
     "//rs/rosetta-api/tvl:tvl_canister",
     "//rs/canister_sandbox",
     "//rs/canister_sandbox/sandbox_launcher",
