@@ -130,6 +130,34 @@ pub fn build_dashboard() -> Vec<u8> {
                     </thead>
                     <tbody>{}</tbody>
                 </table>
+                <h3>Quarantined utxos</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Txid</th>
+                            <th>Vout</th>
+                            <th>Height</th>
+                            <th>Value (BTC)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {}
+                    </tbody>
+                </table>
+                <h3>Ignored utxos</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Txid</th>
+                            <th>Vout</th>
+                            <th>Height</th>
+                            <th>Value (BTC)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {}
+                    </tbody>
+                </table>
                 <h3>Account to utxo</h3>
                 <table>
                     <thead>
@@ -162,6 +190,8 @@ pub fn build_dashboard() -> Vec<u8> {
         build_finalized_requests(),
         build_available_utxos(),
         build_unconfirmed_change(),
+        build_quarantined_utxos(),
+        build_ignored_utxos(),
         build_account_to_utxos_table(),
         build_update_balance_principals(),
         build_retrieve_btc_principals(),
@@ -419,6 +449,52 @@ pub fn build_available_utxos() -> String {
             )
             .unwrap();
         })
+    })
+}
+
+pub fn build_quarantined_utxos() -> String {
+    with_utf8_buffer(|buf| {
+        state::read_state(|s| {
+            for utxo in &s.quarantined_utxos {
+                writeln!(
+                    buf,
+                    "<tr>
+                    <td>{}</td>
+                    <td>{}</td>
+                    <td>{}</td>
+                    <td>{}</td>
+                </tr>",
+                    txid_link(&utxo.outpoint.txid),
+                    utxo.outpoint.vout,
+                    utxo.height,
+                    DisplayAmount(utxo.value)
+                )
+                .unwrap()
+            }
+        });
+    })
+}
+
+pub fn build_ignored_utxos() -> String {
+    with_utf8_buffer(|buf| {
+        state::read_state(|s| {
+            for utxo in &s.ignored_utxos {
+                writeln!(
+                    buf,
+                    "<tr>
+                    <td>{}</td>
+                    <td>{}</td>
+                    <td>{}</td>
+                    <td>{}</td>
+                </tr>",
+                    txid_link(&utxo.outpoint.txid),
+                    utxo.outpoint.vout,
+                    utxo.height,
+                    DisplayAmount(utxo.value)
+                )
+                .unwrap()
+            }
+        });
     })
 }
 
