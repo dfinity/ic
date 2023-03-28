@@ -976,7 +976,6 @@ fn ingress_history_roundtrip_encode() {
 #[test]
 fn ingress_history_split() {
     use IngressState::*;
-    let own_subnet_id = subnet_test_id(13);
     let canister_1 = canister_test_id(1);
     let canister_2 = canister_test_id(2);
 
@@ -1031,22 +1030,16 @@ fn ingress_history_split() {
     );
 
     // Try a no-op split first.
-    let routing_table = RoutingTable::try_from(btreemap! {
-        CanisterIdRange{ start: canister_1, end: canister_2 } => own_subnet_id,
-    })
-    .unwrap();
+    let is_local_canister = |_: &CanisterId| true;
 
     // All messages should be retained.
     assert_eq!(
         ingress_history,
-        ingress_history.clone().split(own_subnet_id, &routing_table)
+        ingress_history.clone().split(is_local_canister)
     );
 
     // Do an actual split, with only canister_2 hosted by own_subnet_id.
-    let routing_table = RoutingTable::try_from(btreemap! {
-        CanisterIdRange{ start: canister_2, end: canister_2 } => own_subnet_id,
-    })
-    .unwrap();
+    let is_local_canister = |canister_id: &CanisterId| canister_id == &canister_2;
 
     // Expect all messages for canister_2; as well as all terminal statuses; to be retained.
     let mut expected = IngressHistoryState::new();
@@ -1058,10 +1051,7 @@ fn ingress_history_split() {
     // Bump `next_terminal_time` to the time of the oldest terminal state (canister_1, Completed).
     expected.forget_terminal_statuses(NumBytes::from(u64::MAX));
 
-    assert_eq!(
-        expected,
-        ingress_history.split(own_subnet_id, &routing_table)
-    );
+    assert_eq!(expected, ingress_history.split(is_local_canister));
 }
 
 #[derive(Clone)]

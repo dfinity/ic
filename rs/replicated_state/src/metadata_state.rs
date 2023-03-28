@@ -1523,13 +1523,16 @@ impl IngressHistoryState {
         statuses.values().map(|status| status.payload_bytes()).sum()
     }
 
-    /// Splits the ingress history (as part of subnet splitting), retaining:
+    /// Prunes the ingress history (as part of subnet splitting), retaining:
     ///
     ///  * all terminal states (since they are immutable and will get pruned); and
-    ///  * all non-terminal states for ingress messages addressed to `own_subnet_id`
+    ///  * all non-terminal states for ingress messages addressed to `new_subnet_id`
     ///    (as determined by the provided routing table).
     #[allow(dead_code)]
-    fn split(self, new_subnet_id: SubnetId, routing_table: &RoutingTable) -> Self {
+    fn split<F>(self, is_local_canister: F) -> Self
+    where
+        F: Fn(&CanisterId) -> bool,
+    {
         // Take apart `self` and put it back together, in order for the compiler to
         // enforce an explicit decision whenever any structural changes are made.
         let Self {
@@ -1539,11 +1542,11 @@ impl IngressHistoryState {
             memory_usage: _,
         } = self;
 
-        // Implements the filter described in the doc comment above.
+        // Filters for messages in terminal states or addressed to `new_subnet_id`.
         let should_retain = |status: &IngressStatus| match status {
             IngressStatus::Known {
                 receiver, state, ..
-            } => state.is_terminal() || routing_table.route(*receiver) == Some(new_subnet_id),
+            } => state.is_terminal() || is_local_canister(&CanisterId::new(*receiver).unwrap()),
             IngressStatus::Unknown => false,
         };
 
