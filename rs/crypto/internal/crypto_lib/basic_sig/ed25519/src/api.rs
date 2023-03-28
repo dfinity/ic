@@ -115,13 +115,13 @@ pub fn verify(
 /// * `MalformedPublicKey` if the public key is malformed
 /// * `SignatureVerification` if the signature is invalid
 /// * `MalformedSignature` if the signature is malformed
-pub fn verify_batch_vartime(
+pub fn verify_batch(
     key_signature_map: &[(&types::PublicKeyBytes, &types::SignatureBytes)],
     msg: &[u8],
     seed: Seed,
 ) -> CryptoResult<()> {
     let mut batch_verifier = ed25519_consensus::batch::Verifier::new();
-    for (pk, &sig) in key_signature_map {
+    for (pk, sig) in key_signature_map {
         let verification_key = ed25519_consensus::VerificationKey::try_from(pk.0).map_err(|e| {
             CryptoError::MalformedPublicKey {
                 algorithm: AlgorithmId::Ed25519,

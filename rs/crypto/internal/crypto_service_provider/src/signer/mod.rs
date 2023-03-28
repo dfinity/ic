@@ -209,23 +209,22 @@ impl CspSigner for Csp {
 }
 
 impl CspSigVerifier for Csp {
-    fn verify_batch_vartime(
+    fn verify_batch(
         &self,
         key_signature_pairs: &[(CspPublicKey, CspSignature)],
         msg: &[u8],
         algorithm_id: AlgorithmId,
     ) -> CryptoResult<()> {
         // check that the public keys' `AlgorithmId` field is consistent with `algorithm_id`
-        for (pk, _sig) in key_signature_pairs {
+        for (pk, sig) in key_signature_pairs.iter() {
             if pk.algorithm_id() != algorithm_id {
                 return Err(CryptoError::SignatureVerification {
                     algorithm: pk.algorithm_id(),
-                    public_key_bytes: Vec::<u8>::new(),
-                    sig_bytes: Vec::<u8>::new(),
+                    public_key_bytes: pk.pk_bytes().to_vec(),
+                    sig_bytes: sig.as_ref().to_vec(),
                     internal_error: format!(
-                        "Invalid public key type: expected {} but found {}",
-                        algorithm_id,
-                        pk.algorithm_id(),
+                        "Invalid public key type: expected {algorithm_id} but found {}",
+                        pk.algorithm_id()
                     ),
                 });
             };
@@ -246,15 +245,14 @@ impl CspSigVerifier for Csp {
                             CspSignature::Ed25519(bytes) => bytes.0.to_owned(),
                             sig => {
                                 return Err(CryptoError::SignatureVerification {
-                                    algorithm: sig.algorithm(),
-                                    public_key_bytes: Vec::<u8>::new(),
-                                    sig_bytes: Vec::<u8>::new(),
+                                    algorithm: pk.algorithm_id(),
+                                    public_key_bytes: pk.pk_bytes().to_vec(),
+                                    sig_bytes: sig.as_ref().to_vec(),
                                     internal_error: format!(
-                                        "Invalid signature type: expected {} but found {}",
-                                        algorithm_id,
-                                        sig.algorithm(),
-                                    ),
-                                });
+                                    "Invalid signature type: expected {algorithm_id} but found {}",
+                                    sig.algorithm()
+                                ),
+                                })
                             }
                         };
                         let mut pk_bytes = [0u8; 32];
@@ -272,12 +270,12 @@ impl CspSigVerifier for Csp {
                     .iter()
                     .map(|(pk_bytes, sig_bytes)| (pk_bytes, sig_bytes))
                     .collect();
-                ed25519::api::verify_batch_vartime(&pairs_of_refs[..], msg, seed)?;
+                ed25519::api::verify_batch(&pairs_of_refs[..], msg, seed)?;
             }
             // use iterative verification for other `AlgorithmId`s
             _ => {
                 for (pk, sig) in key_signature_pairs {
-                    self.verify(sig, msg, algorithm_id, pk.to_owned())?;
+                    self.verify(sig, msg, algorithm_id, (*pk).to_owned())?;
                 }
             }
         }

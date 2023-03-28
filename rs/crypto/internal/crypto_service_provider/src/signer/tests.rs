@@ -25,6 +25,7 @@ use ic_crypto_secrets_containers::SecretArray;
 use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
 use rand::Rng;
 use std::collections::HashSet;
+use strum::IntoEnumIterator;
 
 const KEY_ID: [u8; 32] = [0u8; 32];
 
@@ -325,88 +326,351 @@ mod verify_secp256k1 {
 }
 
 mod verify_ed25519 {
+    use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+
     use super::*;
+    use rand::{CryptoRng, Rng};
+
+    const FIXED_BATCH_SIZE: usize = 10;
 
     // Here we only test with a single test vector: an extensive test with the
     // entire test vector suite is done at the crypto lib level.
     #[test]
     fn should_correctly_verify() {
-        let (_, pk, msg, sig) = csp_testvec(RFC8032_ED25519_SHA_ABC);
-        let csp = Csp::builder()
-            .with_vault(LocalCspVault::builder().with_mock_stores().build())
-            .build();
+        let mut rng = reproducible_rng();
+        let msg = utils::random_message(&mut rng);
+        let Fixture { csp, pk, sig } = Fixture::new(&msg[..], &mut rng);
 
-        assert!(csp.verify(&sig, &msg, AlgorithmId::Ed25519, pk).is_ok());
+        assert_eq!(csp.verify(&sig, &msg, AlgorithmId::Ed25519, pk), Ok(()));
+    }
+
+    /// Runs basic tests for batch verification of Ed25519 signatures for different input sizes.
+    /// More extensive tests can be found in the tests of `ic-crypto-internal-basic-sig-ed25519` crate.
+    #[test]
+    fn should_correctly_verify_batch_consistently_with_non_batched() {
+        let mut rng = reproducible_rng();
+        let msg = utils::random_message(&mut rng);
+
+        for batch_size in [1, 2, 3, 4, 5, 10, 20, 50, 100] {
+            let fixtures = Fixture::new_batch(&msg[..], batch_size, &mut rng);
+            let key_sig_pairs = utils::copy_key_sig_pairs(&fixtures[..]);
+
+            for csp in fixtures.iter().map(|f| &f.csp) {
+                assert_eq!(
+                    csp.verify_batch(&key_sig_pairs[..], &msg[..], AlgorithmId::Ed25519),
+                    Ok(())
+                );
+            }
+
+            for Fixture { csp, pk, sig } in fixtures.iter() {
+                assert_eq!(
+                    csp.verify(sig, &msg[..], AlgorithmId::Ed25519, pk.to_owned()),
+                    Ok(())
+                );
+            }
+        }
     }
 
     #[test]
-    fn should_fail_to_verify_under_wrong_signature() {
-        let (_, pk, msg, sig) = csp_testvec(RFC8032_ED25519_SHA_ABC);
-        let (_, _, _, wrong_sig) = csp_testvec(RFC8032_ED25519_1);
+    fn should_correctly_verify_with_other_csp() {
+        let mut rng = reproducible_rng();
+        let msg = utils::random_message(&mut rng);
+        let Fixture { csp: _, pk, sig } = Fixture::new(&msg[..], &mut rng);
+
+        assert_eq!(
+            utils::new_csp(&mut rng).verify(&sig, &msg, AlgorithmId::Ed25519, pk),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn should_correctly_verify_batch_with_other_csp() {
+        let mut rng = reproducible_rng();
+        let msg = utils::random_message(&mut rng);
+
+        let fixtures = Fixture::new_batch(&msg[..], FIXED_BATCH_SIZE, &mut rng);
+        let key_sig_pairs = utils::copy_key_sig_pairs(&fixtures[..]);
+        let csp = utils::new_csp(&mut rng);
+
+        assert_eq!(
+            csp.verify_batch(&key_sig_pairs[..], &msg[..], AlgorithmId::Ed25519),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn should_fail_to_verify_under_signature_with_wrong_public_key() {
+        let mut rng = reproducible_rng();
+        let msg = utils::random_message(&mut rng);
+        let Fixture { csp, pk, sig } = Fixture::new(&msg[..], &mut rng);
+        let Fixture { sig: wrong_sig, .. } = Fixture::new(&msg[..], &mut rng);
         assert_ne!(sig, wrong_sig);
-        let csp = Csp::builder()
-            .with_vault(LocalCspVault::builder().with_mock_stores().build())
-            .build();
 
-        let result = csp.verify(&wrong_sig, &msg, AlgorithmId::Ed25519, pk);
+        assert_matches!(
+            csp.verify(&wrong_sig, &msg, AlgorithmId::Ed25519, pk),
+            Err(CryptoError::SignatureVerification { .. })
+        );
+    }
 
-        assert!(result.unwrap_err().is_signature_verification_error());
+    #[test]
+    fn should_fail_to_verify_batch_under_signature_with_wrong_public_key() {
+        let mut rng = reproducible_rng();
+        let msg = utils::random_message(&mut rng);
+
+        let fixtures = Fixture::new_batch(&msg[..], FIXED_BATCH_SIZE, &mut rng);
+        let mut key_sig_pairs = utils::copy_key_sig_pairs(&fixtures[..]);
+        let csp = &fixtures[0].csp;
+
+        let Fixture { sig: wrong_sig, .. } = Fixture::new(&msg[..], &mut rng);
+
+        let (_pk, sig) = utils::random_from(&mut key_sig_pairs[..], &mut rng);
+        assert_ne!(*sig, wrong_sig);
+        *sig = wrong_sig;
+
+        assert_matches!(
+            csp.verify_batch(&key_sig_pairs[..], &msg[..], AlgorithmId::Ed25519),
+            Err(CryptoError::SignatureVerification { .. })
+        );
     }
 
     #[test]
     fn should_fail_to_verify_under_wrong_message() {
-        let (_, pk, msg, sig) = csp_testvec(RFC8032_ED25519_SHA_ABC);
+        let mut rng = reproducible_rng();
+        let msg = utils::random_message(&mut rng);
+        let Fixture { csp, pk, sig } = Fixture::new(&msg[..], &mut rng);
         let wrong_msg = b"wrong message";
         assert_ne!(msg, wrong_msg);
-        let csp = Csp::builder()
-            .with_vault(LocalCspVault::builder().with_mock_stores().build())
-            .build();
 
-        let result = csp.verify(&sig, wrong_msg, AlgorithmId::Ed25519, pk);
+        assert_matches!(
+            csp.verify(&sig, wrong_msg, AlgorithmId::Ed25519, pk),
+            Err(CryptoError::SignatureVerification { .. })
+        );
+    }
 
-        assert!(result.unwrap_err().is_signature_verification_error());
+    #[test]
+    fn should_fail_to_verify_batch_under_wrong_message() {
+        let mut rng = reproducible_rng();
+        let msg = utils::random_message(&mut rng);
+
+        let fixtures = Fixture::new_batch(&msg[..], FIXED_BATCH_SIZE, &mut rng);
+        let key_sig_pairs = utils::copy_key_sig_pairs(&fixtures[..]);
+        let csp = &fixtures[0].csp;
+
+        let wrong_msg = utils::random_message(&mut rng);
+        assert_ne!(msg, wrong_msg);
+
+        assert_matches!(
+            csp.verify_batch(&key_sig_pairs[..], &wrong_msg[..], AlgorithmId::Ed25519),
+            Err(CryptoError::SignatureVerification { .. })
+        );
     }
 
     #[test]
     fn should_fail_to_verify_under_wrong_public_key() {
-        let (_, pk, msg, sig) = csp_testvec(RFC8032_ED25519_SHA_ABC);
-        let (_, wrong_pk, _, _) = csp_testvec(RFC8032_ED25519_1);
+        let mut rng = reproducible_rng();
+        let msg = utils::random_message(&mut rng);
+        let Fixture { csp, pk, sig } = Fixture::new(&msg[..], &mut rng);
+        let Fixture { pk: wrong_pk, .. } = Fixture::new(&msg[..], &mut rng);
         assert_ne!(pk, wrong_pk);
-        let csp = Csp::builder()
-            .with_vault(LocalCspVault::builder().with_mock_stores().build())
-            .build();
 
-        let result = csp.verify(&sig, &msg, AlgorithmId::Ed25519, wrong_pk);
+        assert_matches!(
+            csp.verify(&sig, &msg, AlgorithmId::Ed25519, wrong_pk),
+            Err(CryptoError::SignatureVerification { .. })
+        );
+    }
 
-        assert!(result.unwrap_err().is_signature_verification_error());
+    #[test]
+    fn should_fail_to_verify_batch_under_wrong_public_key() {
+        let mut rng = reproducible_rng();
+        let msg = utils::random_message(&mut rng);
+
+        let fixtures = Fixture::new_batch(&msg[..], FIXED_BATCH_SIZE, &mut rng);
+        let mut key_sig_pairs = utils::copy_key_sig_pairs(&fixtures[..]);
+        let csp = &fixtures[0].csp;
+
+        let Fixture { pk: wrong_pk, .. } = Fixture::new(&msg[..], &mut rng);
+
+        let (pk, _sig) = utils::random_from(&mut key_sig_pairs[..], &mut rng);
+        assert_ne!(*pk, wrong_pk);
+        *pk = wrong_pk;
+
+        assert_matches!(
+            csp.verify_batch(&key_sig_pairs[..], &msg[..], AlgorithmId::Ed25519),
+            Err(CryptoError::SignatureVerification { .. })
+        );
     }
 
     #[test]
     fn should_fail_to_verify_if_signature_has_wrong_type() {
-        let (_, pk, msg, _) = csp_testvec(RFC8032_ED25519_SHA_ABC);
+        let mut rng = reproducible_rng();
+        let msg = utils::random_message(&mut rng);
+        let Fixture { csp, pk, sig: _ } = Fixture::new(&msg[..], &mut rng);
         let sig_with_wrong_type =
             CspSignature::multi_bls12381_individual_from_hex(TESTVEC_MULTI_BLS12_381_1_SIG);
-        let csp = Csp::builder()
-            .with_vault(LocalCspVault::builder().with_mock_stores().build())
-            .build();
 
-        let result = csp.verify(&sig_with_wrong_type, &msg, AlgorithmId::Ed25519, pk);
+        assert_matches!(
+            csp.verify(&sig_with_wrong_type, &msg, AlgorithmId::Ed25519, pk),
+            Err(CryptoError::SignatureVerification { .. })
+        );
+    }
 
-        assert!(result.unwrap_err().is_signature_verification_error());
+    #[test]
+    fn should_fail_to_verify_batch_if_signature_has_wrong_type() {
+        let mut rng = reproducible_rng();
+        let msg = utils::random_message(&mut rng);
+
+        let fixtures = Fixture::new_batch(&msg[..], FIXED_BATCH_SIZE, &mut rng);
+        let mut key_sig_pairs = utils::copy_key_sig_pairs(&fixtures[..]);
+        let csp = &fixtures[0].csp;
+
+        let sig_with_wrong_type =
+            CspSignature::multi_bls12381_individual_from_hex(TESTVEC_MULTI_BLS12_381_1_SIG);
+
+        let (_pk, sig) = utils::random_from(&mut key_sig_pairs[..], &mut rng);
+        *sig = sig_with_wrong_type;
+
+        assert_matches!(
+            csp.verify_batch(&key_sig_pairs[..], &msg[..], AlgorithmId::Ed25519),
+            Err(CryptoError::SignatureVerification { .. })
+        );
     }
 
     #[test]
     fn should_fail_to_verify_if_signer_public_key_has_wrong_type() {
-        let (_, _, msg, sig) = csp_testvec(RFC8032_ED25519_SHA_ABC);
+        let mut rng = reproducible_rng();
+        let msg = utils::random_message(&mut rng);
+        let Fixture { csp, pk: _, sig } = Fixture::new(&msg[..], &mut rng);
         let pk_with_wrong_type =
             CspPublicKey::multi_bls12381_from_hex(TESTVEC_MULTI_BLS12_381_1_PK);
-        let csp = Csp::builder()
-            .with_vault(LocalCspVault::builder().with_mock_stores().build())
-            .build();
 
-        let result = csp.verify(&sig, &msg, AlgorithmId::Ed25519, pk_with_wrong_type);
+        assert_matches!(
+            csp.verify(&sig, &msg, AlgorithmId::Ed25519, pk_with_wrong_type),
+            Err(CryptoError::SignatureVerification { .. })
+        );
+    }
 
-        assert!(result.unwrap_err().is_signature_verification_error());
+    #[test]
+    fn should_fail_to_verify_batch_if_signer_public_key_has_wrong_type() {
+        let mut rng = reproducible_rng();
+        let msg = utils::random_message(&mut rng);
+
+        let fixtures = Fixture::new_batch(&msg[..], FIXED_BATCH_SIZE, &mut rng);
+        let mut key_sig_pairs = utils::copy_key_sig_pairs(&fixtures[..]);
+        let csp = &fixtures[0].csp;
+
+        let pk_with_wrong_type =
+            CspPublicKey::multi_bls12381_from_hex(TESTVEC_MULTI_BLS12_381_1_PK);
+
+        let (pk, _sig) = utils::random_from(&mut key_sig_pairs[..], &mut rng);
+        *pk = pk_with_wrong_type;
+
+        assert_matches!(
+            csp.verify_batch(&key_sig_pairs[..], &msg[..], AlgorithmId::Ed25519),
+            Err(CryptoError::SignatureVerification { .. })
+        );
+    }
+
+    #[test]
+    fn should_fail_to_verify_under_wrong_algorithm_id() {
+        let mut rng = reproducible_rng();
+        let msg = utils::random_message(&mut rng);
+
+        let Fixture { csp, pk, sig } = Fixture::new(&msg[..], &mut rng);
+
+        for wrong_algorithm_id in AlgorithmId::iter().filter(|id| *id != AlgorithmId::Ed25519) {
+            assert_matches!(
+                csp.verify(&sig, &msg[..], wrong_algorithm_id, pk.to_owned()),
+                Err(CryptoError::SignatureVerification { .. })
+            );
+        }
+    }
+
+    #[test]
+    fn should_fail_to_verify_batch_under_wrong_algorithm_id() {
+        let mut rng = reproducible_rng();
+        let msg = utils::random_message(&mut rng);
+
+        let fixtures = Fixture::new_batch(&msg[..], FIXED_BATCH_SIZE, &mut rng);
+        let key_sig_pairs = utils::copy_key_sig_pairs(&fixtures[..]);
+
+        for wrong_algorithm_id in AlgorithmId::iter().filter(|id| *id != AlgorithmId::Ed25519) {
+            assert_matches!(
+                fixtures[0].csp.verify_batch(&key_sig_pairs[..], &msg[..], wrong_algorithm_id),
+                Err(e) if e.to_string().contains("Invalid public key type")
+            );
+        }
+    }
+
+    mod utils {
+        use super::*;
+
+        const RANDOM_MSG_MAX_LEN: usize = 100;
+
+        pub fn new_csp<R: Rng + CryptoRng>(rng: &mut R) -> Csp {
+            Csp::builder()
+                .with_vault(
+                    LocalCspVault::builder()
+                        .with_rng(Seed::from_rng(rng).into_rng())
+                        .build(),
+                )
+                .build()
+        }
+
+        pub fn random_message<R: Rng + CryptoRng>(rng: &mut R) -> Vec<u8> {
+            let mut msg = vec![0u8; rng.gen_range(0..RANDOM_MSG_MAX_LEN)];
+            rng.fill_bytes(&mut msg[..]);
+            msg
+        }
+
+        pub fn copy_key_sig_pairs(fixtures: &[Fixture]) -> Vec<(CspPublicKey, CspSignature)> {
+            fixtures
+                .iter()
+                .map(|f| (f.pk.clone(), f.sig.clone()))
+                .collect()
+        }
+
+        pub fn random_from<'a, T, R: Rng + CryptoRng>(
+            values: &'a mut [T],
+            rng: &mut R,
+        ) -> &'a mut T {
+            debug_assert!(!values.is_empty());
+            &mut values[rng.gen_range(0..values.len())]
+        }
+    }
+
+    pub struct Fixture {
+        pub csp: Csp,
+        pub pk: CspPublicKey,
+        pub sig: CspSignature,
+    }
+
+    impl Fixture {
+        /// * Generates a [`Csp`] seeded with `rng`.
+        /// * Generates a random Ed25519 key pair by copying the `csp`'s node signing key pair.
+        /// * Signs `msg` using the private key.
+        pub fn new<R: Rng + CryptoRng>(msg: &[u8], rng: &mut R) -> Self {
+            let csp = utils::new_csp(rng);
+            let pk = csp
+                .csp_vault
+                .gen_node_signing_key_pair()
+                .expect("Failed to generate a key pair");
+
+            let sig = csp
+                .csp_vault
+                .as_ref()
+                .sign(
+                    AlgorithmId::Ed25519,
+                    msg,
+                    KeyId::try_from(&pk).expect("Failed to convert CspPublicKey to KeyId"),
+                )
+                .expect("Failed to generate a signature");
+
+            Self { csp, pk, sig }
+        }
+
+        pub fn new_batch<R: Rng + CryptoRng>(msg: &[u8], size: usize, rng: &mut R) -> Vec<Self> {
+            (0..size).map(|_| Fixture::new(msg, rng)).collect()
+        }
     }
 }
 
@@ -518,6 +782,7 @@ mod multi {
         let result = verifier.verify_pop(&pop, algorithm, incompatible_public_key);
         assert!(result.unwrap_err().is_pop_verification_error());
     }
+
     #[test]
     fn pop_verification_fails_gracefully_on_incompatible_algorithm_id() {
         let [csp, verifier] = csp_and_verifier_with_different_seeds();
@@ -619,7 +884,7 @@ mod multi {
                 vec![public_key1, public_key2],
                 combined_signature,
                 message,
-                AlgorithmId::MultiBls12_381
+                AlgorithmId::MultiBls12_381,
             )
             .is_ok());
     }
@@ -715,7 +980,7 @@ mod batch {
         let key_signature_pairs = vec![(pk, sig)];
         let algorithm_id = AlgorithmId::Ed25519;
 
-        let result = verifier.verify_batch_vartime(&key_signature_pairs, &msg, algorithm_id);
+        let result = verifier.verify_batch(&key_signature_pairs, &msg, algorithm_id);
 
         assert_matches!(result, Ok(()));
     }

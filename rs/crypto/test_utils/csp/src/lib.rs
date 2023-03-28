@@ -87,7 +87,7 @@ mock! {
     }
 
     pub trait CspSigVerifier{
-        fn verify_batch_vartime(
+        fn verify_batch(
             &self,
             key_signature_pairs: &[(CspPublicKey, CspSignature)],
             msg: &[u8],

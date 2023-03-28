@@ -857,14 +857,14 @@ pub trait ThresholdEcdsaSignerCspVault {
 #[derive(Serialize, Deserialize, Debug)]
 pub enum PublicRandomSeedGeneratorError {
     /// Internal error, e.g., an RPC error.
-    InternalError { internal_error: String },
+    TransientInternalError { internal_error: String },
 }
 
 impl From<PublicRandomSeedGeneratorError> for CryptoError {
-    fn from(error: PublicRandomSeedGeneratorError) -> CryptoError {
-        match error {
-            PublicRandomSeedGeneratorError::InternalError { internal_error } => {
-                CryptoError::InternalError { internal_error }
+    fn from(e: PublicRandomSeedGeneratorError) -> CryptoError {
+        match e {
+            PublicRandomSeedGeneratorError::TransientInternalError { internal_error } => {
+                CryptoError::TransientInternalError { internal_error }
             }
         }
     }

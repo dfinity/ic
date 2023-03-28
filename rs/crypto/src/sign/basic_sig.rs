@@ -44,24 +44,25 @@ impl BasicSigVerifierInternal {
         Ok(BasicSignatureBatch { signatures_map })
     }
 
-    pub fn verify_basic_sig_batch_vartime<S: CspSigVerifier, H: Signable>(
+    pub fn verify_basic_sig_batch<S: CspSigVerifier, H: Signable>(
         csp_signer: &S,
         registry: &dyn RegistryClient,
-        signature: &BasicSignatureBatch<H>,
+        signatures: &BasicSignatureBatch<H>,
         message: &H,
         registry_version: RegistryVersion,
     ) -> CryptoResult<()> {
-        if signature.signatures_map.is_empty() {
+        if signatures.signatures_map.is_empty() {
             return Err(CryptoError::InvalidArgument {
-                message: "Empty BasicSignatureBatch. At least one signature should be included in the batch."
+            message:
+                "Empty BasicSignatureBatch. At least one signature should be included in the batch."
                     .to_string(),
-            });
+        });
         };
         let mut pk_sig_pairs =
-            Vec::<(CspPublicKey, CspSignature)>::with_capacity(signature.signatures_map.len());
+            Vec::<(CspPublicKey, CspSignature)>::with_capacity(signatures.signatures_map.len());
         let mut first_algorithm_id: Option<AlgorithmId> = None;
 
-        for (signer, signature) in signature.signatures_map.iter() {
+        for (signer, signature) in signatures.signatures_map.iter() {
             let pk_proto =
                 key_from_registry(registry, *signer, KeyPurpose::NodeSigning, registry_version)?;
 
@@ -70,11 +71,11 @@ impl BasicSigVerifierInternal {
                 Some(algorithm_id) => {
                     if algorithm_id != this_algorithm_id {
                         return Err(CryptoError::InvalidArgument {
-                            message: format!(
-                                "Inconsistent input AlgorithmIds in batched basic sig verification: {}, {}",
-                                algorithm_id, this_algorithm_id
-                            ),
-                        });
+                        message: format!(
+                            "Inconsistent input AlgorithmIds in batched basic sig verification: {}, {}",
+                            algorithm_id, this_algorithm_id
+                        ),
+                    });
                     }
                 }
                 None => first_algorithm_id = Some(this_algorithm_id),
@@ -88,7 +89,7 @@ impl BasicSigVerifierInternal {
         // 1) it's checked that `signature_map` is not empty, and
         // 2) it's checked that at least `pk_proto` is well-formed,
         // and thus `this_algorithm_id` is never `None` at this point in code.
-        csp_signer.verify_batch_vartime(
+        csp_signer.verify_batch(
             &pk_sig_pairs[..],
             &message.as_signed_bytes(),
             first_algorithm_id.expect("Something went wrong with the AlgorithmId assignment"),

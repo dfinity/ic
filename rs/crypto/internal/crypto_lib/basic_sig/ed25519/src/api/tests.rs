@@ -212,8 +212,7 @@ mod wycheproof {
 mod verify {
     use crate::types::{PublicKeyBytes, SecretKeyBytes, SignatureBytes};
     use crate::{
-        keypair_from_rng, public_key_from_der, public_key_to_der, sign, verify,
-        verify_batch_vartime,
+        keypair_from_rng, public_key_from_der, public_key_to_der, sign, verify, verify_batch,
     };
     use ic_crypto_internal_seed::Seed;
     use ic_crypto_internal_test_vectors::ed25519::Ed25519TestVector::RFC8032_ED25519_1;
@@ -253,23 +252,23 @@ mod verify {
             sig_copy
         };
 
-        let verify_consistent_error =
-            |key_sig_pairs: &[(&PublicKeyBytes, &SignatureBytes)], msg: &[u8], seed: Seed| {
-                let verification_returned_error = key_sig_pairs
-                    .iter()
-                    .map(|(pk, sig)| verify(sig, msg, pk))
-                    .collect::<Result<Vec<_>, _>>()
-                    .is_err();
-                assert!(verification_returned_error);
+        let verify_consistent_error = |key_sig_pairs: &[(&PublicKeyBytes, &SignatureBytes)],
+                                       msg: &[u8],
+                                       seed: Seed| {
+            let verification_returned_error = key_sig_pairs
+                .iter()
+                .map(|(pk, sig)| verify(sig, msg, pk))
+                .collect::<Result<Vec<_>, _>>()
+                .is_err();
+            assert!(verification_returned_error);
 
-                let batch_verification_returned_error =
-                    verify_batch_vartime(key_sig_pairs, msg, seed).is_err();
-                // one-by-one and batch verification should return consistent verification results
-                assert_eq!(
-                    verification_returned_error,
-                    batch_verification_returned_error
-                );
-            };
+            let batch_verification_returned_error = verify_batch(key_sig_pairs, msg, seed).is_err();
+            // one-by-one and batch verification should return consistent verification results
+            assert_eq!(
+                verification_returned_error,
+                batch_verification_returned_error
+            );
+        };
 
         for input_size in INPUT_SIZES {
             for _ in 0..NUM_ITERATIONS {
@@ -296,7 +295,7 @@ mod verify {
                     .collect();
 
                 // everything correct, should verify correctly
-                verify_batch_vartime(&key_sig_pairs, &msg, Seed::from_rng(&mut rng))?;
+                verify_batch(&key_sig_pairs, &msg, Seed::from_rng(&mut rng))?;
 
                 // corrupt each signature by flipping a bit and check that both batched and non-batched verification return an error
                 {
