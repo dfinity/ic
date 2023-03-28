@@ -36,6 +36,7 @@ faketime
 fdisk
 iproute2
 isc-dhcp-client
+jq
 less
 lvm2
 net-tools
