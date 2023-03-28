@@ -88,8 +88,6 @@ symlink_dir(
     },
 )
 
-SUBNET_RECOVERY_RUNTIME_DEPS = [":recovery/binaries"]
-
 symlink_dir(
     name = "backup/binaries",
     targets = {
@@ -99,10 +97,6 @@ symlink_dir(
         "//rs/canister_sandbox": "canister_sandbox",
     },
 )
-
-BACKUP_RUNTIME_DEPS = [":backup/binaries"]
-
-MAINNET_REVISION_RUNTIME_DEPS = ["//testnet:mainnet_nns_revision"]
 
 rust_binary(
     name = "test-driver-e2e-scenarios",
@@ -180,17 +174,6 @@ system_test(
 )
 
 system_test(
-    name = "node_assign_test",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "system_test_pre_master",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + [":tests"],
-)
-
-system_test(
     name = "global_reboot_test",
     flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -199,28 +182,6 @@ system_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + ["//rs/rust_canisters/xnet_test:xnet-test-canister"],
-    deps = DEPENDENCIES + [":tests"],
-)
-
-system_test(
-    name = "node_reassignment_test",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "system_test_pre_master",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + [":tests"],
-)
-
-system_test(
-    name = "ssh_access_to_nodes_test",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "system_test_pre_master",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES + [":tests"],
 )
 
@@ -272,17 +233,6 @@ system_test(
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS,
-    deps = DEPENDENCIES + [":tests"],
-)
-
-system_test(
-    name = "node_registration_test",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "system_test_pre_master",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES + [":tests"],
 )
 
@@ -492,132 +442,6 @@ system_test(
     deps = DEPENDENCIES + [":tests"],
 )
 
-system_test(
-    name = "sr_app_same_nodes_test",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "subnet_recovery",
-        "system_test_pre_master",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
-    deps = DEPENDENCIES + [":tests"],
-)
-
-system_test(
-    name = "sr_app_same_nodes_enable_tecdsa_test",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "subnet_recovery",
-        "system_test_hourly",
-        "system_test_nightly",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
-    deps = DEPENDENCIES + [":tests"],
-)
-
-system_test(
-    name = "sr_app_same_nodes_with_tecdsa_test",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "subnet_recovery",
-        "system_test_hourly",
-        "system_test_nightly",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
-    deps = DEPENDENCIES + [":tests"],
-)
-
-system_test(
-    name = "sr_app_failover_nodes_test",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "subnet_recovery",
-        "system_test_pre_master",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
-    deps = DEPENDENCIES + [":tests"],
-)
-
-system_test(
-    name = "sr_app_failover_nodes_enable_tecdsa_test",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "subnet_recovery",
-        "system_test_hourly",
-        "system_test_nightly",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
-    deps = DEPENDENCIES + [":tests"],
-)
-
-system_test(
-    name = "sr_app_failover_nodes_with_tecdsa_test",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "subnet_recovery",
-        "system_test_hourly",
-        "system_test_nightly",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
-    deps = DEPENDENCIES + [":tests"],
-)
-
-system_test(
-    name = "sr_app_no_upgrade_test",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "subnet_recovery",
-        "system_test_pre_master",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
-    deps = DEPENDENCIES + [":tests"],
-)
-
-system_test(
-    name = "sr_app_no_upgrade_enable_tecdsa_test",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "subnet_recovery",
-        "system_test_hourly",
-        "system_test_nightly",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
-    deps = DEPENDENCIES + [":tests"],
-)
-
-system_test(
-    name = "sr_app_no_upgrade_with_tecdsa_test",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "subnet_recovery",
-        "system_test_hourly",
-        "system_test_nightly",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
-    deps = DEPENDENCIES + [":tests"],
-)
-
-system_test(
-    name = "sr_nns_same_nodes_test",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "subnet_recovery",
-        "system_test_pre_master",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
-    deps = DEPENDENCIES + [":tests"],
-)
-
 exports_files([
     "src/orchestrator/orchestrator_universal_vm_activation.sh",
 ])
@@ -629,25 +453,6 @@ copy_file(
 )
 
 system_test(
-    name = "sr_nns_failover_nodes_test",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "subnet_recovery",
-        "system_test_pre_master",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps =
-        GUESTOS_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS +
-        NNS_CANISTER_RUNTIME_DEPS +
-        SUBNET_RECOVERY_RUNTIME_DEPS + [
-            ":src/orchestrator/orchestrator_universal_vm_activation.sh",
-            ":static-file-server_image",
-        ],
-    deps = DEPENDENCIES + [":tests"],
-)
-
-system_test(
     name = "network_reliability_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
@@ -655,14 +460,6 @@ system_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + [":src/counter.wat"],
-    deps = DEPENDENCIES + [":tests"],
-)
-
-system_test(
-    name = "rotate_ecdsa_idkg_key_test",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES + [":tests"],
 )
 
@@ -697,55 +494,6 @@ system_test(
         UNIVERSAL_VM_RUNTIME_DEPS +
         NNS_CANISTER_RUNTIME_DEPS +
         BTC_RUNTIME_DEPS,
-    deps = DEPENDENCIES + [":tests"],
-)
-
-system_test(
-    name = "downgrade_app_subnet_with_ecdsa_test",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps =
-        GUESTOS_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS +
-        NNS_CANISTER_RUNTIME_DEPS +
-        MAINNET_REVISION_RUNTIME_DEPS,
-    deps = DEPENDENCIES + [":tests"],
-)
-
-system_test(
-    name = "upgrade_downgrade_app_subnet_test",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps =
-        GUESTOS_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS +
-        NNS_CANISTER_RUNTIME_DEPS +
-        MAINNET_REVISION_RUNTIME_DEPS,
-    deps = DEPENDENCIES + [":tests"],
-)
-
-system_test(
-    name = "backup_manager_test",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps =
-        GUESTOS_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS +
-        NNS_CANISTER_RUNTIME_DEPS +
-        MAINNET_REVISION_RUNTIME_DEPS +
-        BACKUP_RUNTIME_DEPS,
-    deps = DEPENDENCIES + [":tests"],
-)
-
-system_test(
-    name = "upgrade_downgrade_nns_subnet_test",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps =
-        GUESTOS_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS +
-        NNS_CANISTER_RUNTIME_DEPS +
-        MAINNET_REVISION_RUNTIME_DEPS,
     deps = DEPENDENCIES + [":tests"],
 )
 
@@ -1041,42 +789,6 @@ system_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS,
-    deps = DEPENDENCIES + [":tests"],
-)
-
-system_test(
-    name = "upgrade_with_alternative_urls",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "system_test_hourly",
-        "system_test_nightly",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],
-    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + [":tests"],
-)
-
-system_test(
-    name = "unstuck_subnet_test",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "system_test_hourly",
-        "system_test_nightly",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],
-    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + [":tests"],
-)
-
-system_test(
-    name = "unassigned_node_upgrade_test",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "system_test_hourly",
-        "system_test_nightly",
-    ],
-    target_compatible_with = ["@platforms//os:linux"],
-    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES + [":tests"],
 )
 

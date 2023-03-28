@@ -163,7 +163,7 @@ path = "bin/ii_delegation_test.rs"
 
 [[bin]]
 name = "ic-systest-rotate-ecdsa-idkg-key"
-path = "bin/rotate_ecdsa_idkg_key_test.rs"
+path = "orchestrator/bin/rotate_ecdsa_idkg_key_test.rs"
 
 [[bin]]
 name = "ic-systest-canister-http"
@@ -267,19 +267,19 @@ path = "bin/create_subnet_pre_master_test.rs"
 
 [[bin]]
 name = "ic-systest-node-assign-test"
-path = "bin/node_assign_test.rs"
+path = "orchestrator/bin/node_assign_test.rs"
 
 [[bin]]
 name = "ic-systest-node-reassignment-test"
-path = "bin/node_reassignment_test.rs"
+path = "orchestrator/bin/node_reassignment_test.rs"
 
 [[bin]]
 name = "ic-systest-ssh-access-to-nodes-test"
-path = "bin/ssh_access_to_nodes_test.rs"
+path = "orchestrator/bin/ssh_access_to_nodes_test.rs"
 
 [[bin]]
 name = "ic-systest-node-registration-test"
-path = "bin/node_registration_test.rs"
+path = "orchestrator/bin/node_registration_test.rs"
 
 [[bin]]
 name = "ic-systest-rejoin-test"
@@ -371,19 +371,19 @@ path = "bin/general_execution_test.rs"
 
 [[bin]]
 name = "ic-systest-downgrade-app-subnet-with-ecdsa"
-path = "bin/downgrade_app_subnet_with_ecdsa_test.rs"
+path = "orchestrator/bin/downgrade_app_subnet_with_ecdsa_test.rs"
 
 [[bin]]
 name = "ic-systest-upgrade-downgrade-app-subnet"
-path = "bin/upgrade_downgrade_app_subnet_test.rs"
+path = "orchestrator/bin/upgrade_downgrade_app_subnet_test.rs"
 
 [[bin]]
 name = "ic-systest-upgrade-downgrade-nns-subnet"
-path = "bin/upgrade_downgrade_nns_subnet_test.rs"
+path = "orchestrator/bin/upgrade_downgrade_nns_subnet_test.rs"
 
 [[bin]]
 name = "ic-systest-backup-manager"
-path = "bin/backup_manager_test.rs"
+path = "orchestrator/bin/backup_manager_test.rs"
 
 [[bin]]
 name = "ic-systest-mainnet"
@@ -399,47 +399,47 @@ path = "bin/remote_replicable_mock_test.rs"
 
 [[bin]]
 name = "ic-systest-subnet-recovery-app-same-nodes"
-path = "bin/sr_app_same_nodes_test.rs"
+path = "orchestrator/bin/sr_app_same_nodes_test.rs"
 
 [[bin]]
 name = "ic-systest-subnet-recovery-app-failover-nodes"
-path = "bin/sr_app_failover_nodes_test.rs"
+path = "orchestrator/bin/sr_app_failover_nodes_test.rs"
 
 [[bin]]
 name = "ic-systest-subnet-recovery-app-no-upgrade"
-path = "bin/sr_app_no_upgrade_test.rs"
+path = "orchestrator/bin/sr_app_no_upgrade_test.rs"
 
 [[bin]]
 name = "ic-systest-subnet-recovery-app-same-nodes-enable-tecdsa"
-path = "bin/sr_app_same_nodes_enable_tecdsa_test.rs"
+path = "orchestrator/bin/sr_app_same_nodes_enable_tecdsa_test.rs"
 
 [[bin]]
 name = "ic-systest-subnet-recovery-app-failover-nodes-enable-tecdsa"
-path = "bin/sr_app_failover_nodes_enable_tecdsa_test.rs"
+path = "orchestrator/bin/sr_app_failover_nodes_enable_tecdsa_test.rs"
 
 [[bin]]
 name = "ic-systest-subnet-recovery-app-no-upgrade-enable-tecdsa"
-path = "bin/sr_app_no_upgrade_enable_tecdsa_test.rs"
+path = "orchestrator/bin/sr_app_no_upgrade_enable_tecdsa_test.rs"
 
 [[bin]]
 name = "ic-systest-subnet-recovery-app-same-nodes-with-tecdsa"
-path = "bin/sr_app_same_nodes_with_tecdsa_test.rs"
+path = "orchestrator/bin/sr_app_same_nodes_with_tecdsa_test.rs"
 
 [[bin]]
 name = "ic-systest-subnet-recovery-app-failover-nodes-with-tecdsa"
-path = "bin/sr_app_failover_nodes_with_tecdsa_test.rs"
+path = "orchestrator/bin/sr_app_failover_nodes_with_tecdsa_test.rs"
 
 [[bin]]
 name = "ic-systest-subnet-recovery-app-no-upgrade-with-tecdsa"
-path = "bin/sr_app_no_upgrade_with_tecdsa_test.rs"
+path = "orchestrator/bin/sr_app_no_upgrade_with_tecdsa_test.rs"
 
 [[bin]]
 name = "ic-systest-subnet-recovery-nns-same-nodes"
-path = "bin/sr_nns_same_nodes_test.rs"
+path = "orchestrator/bin/sr_nns_same_nodes_test.rs"
 
 [[bin]]
 name = "ic-systest-subnet-recovery-nns-failover-nodes"
-path = "bin/sr_nns_failover_nodes_test.rs"
+path = "orchestrator/bin/sr_nns_failover_nodes_test.rs"
 
 [[bin]]
 name = "ic-systest-network-reliability"
@@ -447,15 +447,15 @@ path = "bin/network_reliability_test.rs"
 
 [[bin]]
 name = "ic-systest-unstuck-subnet"
-path = "bin/unstuck_subnet_test.rs"
+path = "orchestrator/bin/unstuck_subnet_test.rs"
 
 [[bin]]
 name = "ic-systest-unassigned-node-upgrade"
-path = "bin/unassigned_node_upgrade_test.rs"
+path = "orchestrator/bin/unassigned_node_upgrade_test.rs"
 
 [[bin]]
 name = "ic-systest-upgrade-with-alternative-urls"
-path = "bin/upgrade_with_alternative_urls.rs"
+path = "orchestrator/bin/upgrade_with_alternative_urls.rs"
 
 [[bin]]
 name = "ic-systest-distributed"
