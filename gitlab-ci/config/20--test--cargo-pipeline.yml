@@ -22,12 +22,6 @@ gen-cargo-pipeline:
         ../../ ../../ic-os -v --out=../../child-pipeline.yml
       
       cd -
-      # Parse list of tags from current runner and return the first one that is two symbols.
-      # This is most likely DC tag. Therefore set it for all child cargo pipelines to also run them all in the current DC.
-      # This technique will make DC selection self regulating: DC that can't run jobs (because it is full or broken)
-      # will not run `gen-cargo-pipeline` either.
-      DC=$(echo "${CI_RUNNER_TAGS}" | jq -r 'map(select(length == 2)) | .[0]')
-      echo "DC_TAG=$DC" >> dc.env
 
   artifacts:
     paths:
@@ -44,7 +38,6 @@ cargo-pipeline:
       optional: true
   variables:
     CI_PARENT_PIPELINE_SOURCE: "${CI_PIPELINE_SOURCE}"
-    SELECTED_DC: "$DC_TAG"
   trigger:
     include:
       - artifact: child-pipeline.yml

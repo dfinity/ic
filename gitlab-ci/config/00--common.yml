@@ -269,26 +269,6 @@ after_script:
     - dfinity
     - ubuntu
 
-.ubuntu-cargo-docker-k8s-pinned-dc:
-  extends: .ubuntu-cargo-docker
-  tags:
-    # We dynamically set tags to
-    # - pin jobs to one DC
-    # - distribute jobs between docker and k8s runners
-    - $SELECTED_DC # 'zh', 'sf' or 'ch'
-    - dfinity
-    - ubuntu
-
-.ubuntu-docker-k8s-pinned-dc:
-  extends: .ubuntu-docker-k8s
-  tags:
-    # We dynamically set tags to
-    # - pin jobs to one DC
-    # - distribute jobs between docker and k8s runners
-    - $SELECTED_DC # 'zh', 'sf' or 'ch'
-    - dfinity
-    - ubuntu
-
 .macos-cargo-native:
   extends:
     - .cargo-build-env-base
