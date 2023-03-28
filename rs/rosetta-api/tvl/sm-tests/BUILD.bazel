@@ -27,6 +27,7 @@ DEPENDENCIES = [
     "//rs/registry/subnet_type",
     "//rs/registry/transport",
     "//rs/rosetta-api/tvl",
+    "//rs/rosetta-api/tvl/xrc_mock",
     "//rs/rosetta-api/icp_ledger",
     "//rs/rosetta-api/icrc1",
     "//rs/rust_canisters/canister_test",
