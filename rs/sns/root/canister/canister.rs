@@ -73,7 +73,7 @@ impl Environment for CanisterEnvironment {
 #[async_trait]
 impl ManagementCanisterClient for RealManagementCanisterClient {
     async fn canister_status(
-        &mut self,
+        &self,
         canister_id_record: &CanisterIdRecord,
     ) -> Result<CanisterStatusResultV2, CanisterCallError> {
         call(IC_00, "canister_status", candid_one, canister_id_record)
@@ -82,7 +82,7 @@ impl ManagementCanisterClient for RealManagementCanisterClient {
     }
 
     async fn update_settings(
-        &mut self,
+        &self,
         request: &UpdateSettingsArgs,
     ) -> Result<EmptyBlob, CanisterCallError> {
         call(IC_00, "update_settings", candid_one, request)
@@ -105,7 +105,7 @@ impl RealLedgerCanisterClient {
 
 #[async_trait]
 impl LedgerCanisterClient for RealLedgerCanisterClient {
-    async fn archives(&mut self) -> Result<Vec<ArchiveInfo>, CanisterCallError> {
+    async fn archives(&self) -> Result<Vec<ArchiveInfo>, CanisterCallError> {
         call(self.ledger_canister_id, "archives", candid_one, ())
             .await
             .map_err(CanisterCallError::from)
@@ -216,8 +216,8 @@ async fn get_sns_canisters_summary_(
     let canister_env = CanisterEnvironment {};
     SnsRootCanister::get_sns_canisters_summary(
         &STATE,
-        &mut RealManagementCanisterClient::new(),
-        &mut create_ledger_client(),
+        &RealManagementCanisterClient::new(),
+        &create_ledger_client(),
         &canister_env,
         update_canister_list,
     )
@@ -299,7 +299,7 @@ async fn register_dapp_canister_(
     };
     let RegisterDappCanistersResponse {} = SnsRootCanister::register_dapp_canisters(
         &STATE,
-        &mut RealManagementCanisterClient::new(),
+        &RealManagementCanisterClient::new(),
         dfn_core::api::id(),
         request,
     )
@@ -330,7 +330,7 @@ async fn register_dapp_canisters_(
 ) -> RegisterDappCanistersResponse {
     SnsRootCanister::register_dapp_canisters(
         &STATE,
-        &mut RealManagementCanisterClient::new(),
+        &RealManagementCanisterClient::new(),
         dfn_core::api::id(),
         request,
     )
@@ -363,7 +363,7 @@ fn set_dapp_controllers() {
 async fn set_dapp_controllers_(request: SetDappControllersRequest) -> SetDappControllersResponse {
     SnsRootCanister::set_dapp_controllers(
         &STATE,
-        &mut RealManagementCanisterClient::new(),
+        &RealManagementCanisterClient::new(),
         dfn_core::api::id(),
         dfn_core::api::caller(),
         &request,
@@ -409,9 +409,9 @@ fn canister_heartbeat() {
 /// to run_periodic_tasks.
 async fn canister_heartbeat_() {
     let now = CanisterEnvironment {}.now();
-    let mut ledger_client = create_ledger_client();
+    let ledger_client = create_ledger_client();
 
-    SnsRootCanister::run_periodic_tasks(&STATE, &mut ledger_client, now).await
+    SnsRootCanister::run_periodic_tasks(&STATE, &ledger_client, now).await
 }
 
 /// Resources to serve for a given http_request

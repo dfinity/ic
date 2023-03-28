@@ -8814,6 +8814,7 @@ dependencies = [
  "comparable",
  "dfn_candid",
  "dfn_core",
+ "futures",
  "ic-base-types",
  "ic-canister-log",
  "ic-canisters-http-types",
