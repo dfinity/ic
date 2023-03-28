@@ -146,34 +146,19 @@ pub async fn main() {
                 );
             let replica_last_start_time = non_sampled_metrics_at_report_end.replica_last_start_time;
 
-            // TODO(NET-1374) Refactor sampling code interface and check that peers match between
-            // sampling and non-sampling
             let up_time_peer_labels = sampler.aggregate();
-
-            // TODO NET-1328 - remove panic and handle failed conversion gracefully
-            let uptime: HashMap<NodeId, f32> = up_time_peer_labels
-                .iter()
-                .map(|(node_label, percent)| {
-                    (
-                        convert_peer_label_to_node_id(node_label, &peer_ids).unwrap(),
-                        *percent,
-                    )
-                })
-                .collect();
-
-            info!(
-                logger,
-                "Completed Report: interval{:?}-{:?} uptime% {:?}", start_time, end_time, uptime
-            );
 
             let report = prepare_report(
                 node_id,
                 start_time,
                 end_time,
                 replica_last_start_time,
-                &uptime,
-                &peer_counters_for_current_interval,
+                peer_counters_for_current_interval,
+                up_time_peer_labels,
+                &peer_ids,
             );
+
+            info!(logger, "Completed Report: report {:?}", report);
 
             for signature_attempts in 0..MAX_CRYPTO_SIGNATURE_ATTEMPTS {
                 match sign_report(crypto_component.clone(), report.clone(), node_id).await {
@@ -320,22 +305,33 @@ fn prepare_report(
     start_time: SystemTime,
     end_time: SystemTime,
     replica_last_start_time: SystemTime,
-    uptime_percent: &HashMap<NodeId, f32>,
-    peer_counters: &HashMap<NodeId, PeerCounterMetrics>,
+    counter_metrics: HashMap<NodeId, PeerCounterMetrics>,
+    uptime_peer_labels: HashMap<String, f32>,
+    peer_ids: &HashSet<NodeId>,
 ) -> Report {
-    // First, prepare the peer data
-    let peer_reports: Vec<PeerReport> = peer_counters
+    // Convert uptime from peer label into peer ids
+    let uptime_peer_ids: HashMap<NodeId, f32> = uptime_peer_labels
         .iter()
-        .map(|(peer_id, non_sampled_counts)| {
-            PeerReport {
-                peer_id_binary: peer_id.get().to_vec(),
-                peer_uptime_percent: uptime_percent[peer_id], // TODO(NET-1374) don't assume both hashmaps have same set of peers
-                num_retries: non_sampled_counts.num_retries,
-                connection_bytes_received: non_sampled_counts.bytes_received,
-                connection_bytes_sent: non_sampled_counts.bytes_sent,
+        .filter_map(|(node_label, percent)| {
+            match convert_peer_label_to_node_id(node_label, peer_ids) {
+                Ok(node_id) => Some((node_id, *percent)),
+                Err(_) => None,
             }
         })
         .collect();
+
+    let mut peer_reports: Vec<PeerReport> = vec![];
+    for peer in peer_ids {
+        if counter_metrics.get(peer).is_some() && uptime_peer_ids.get(peer).is_some() {
+            peer_reports.push(PeerReport {
+                peer_id_binary: peer.get().to_vec(),
+                peer_uptime_percent: uptime_peer_ids[peer],
+                num_retries: counter_metrics[peer].num_retries,
+                connection_bytes_received: counter_metrics[peer].bytes_received,
+                connection_bytes_sent: counter_metrics[peer].bytes_sent,
+            });
+        }
+    }
 
     // Next, append the reporting-node-specific fields
     Report {
