@@ -47,7 +47,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use slog::{debug, error, info, trace, Logger};
+use slog::{debug, error, info, trace, warn, Logger};
 
 const DEFAULT_TIMEOUT_PER_TEST: Duration = Duration::from_secs(60 * 10); // 10 minutes
 const DEFAULT_OVERALL_TIMEOUT: Duration = Duration::from_secs(60 * 10); // 10 minutes
@@ -956,6 +956,12 @@ impl SystemTestGroup {
         let farm_url = env.get_farm_url().unwrap();
         let farm = Farm::new(farm_url, env.logger());
         let group_name = group_setup.farm_group_name;
+        if farm
+            .set_group_ttl(&group_name, Duration::from_secs(30))
+            .is_err()
+        {
+            warn!(ctx_.log(), "Failed to bump TTL before deleting group.");
+        }
         match farm.delete_group(&group_name) {
             Ok(()) => info!(ctx_.log(), "Successfully deleted farm group."),
             Err(e) => error!(ctx_.log(), "Failed to delete farm group:, {:?}", e),
