@@ -767,7 +767,7 @@ impl From<Operation> for CandidOperation {
     Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord,
 )]
 pub struct CandidTransaction {
-    pub operation: CandidOperation,
+    pub operation: Option<CandidOperation>,
     pub memo: Memo,
     pub icrc1_memo: Option<ByteBuf>,
     pub created_at_time: TimeStamp,
@@ -793,7 +793,7 @@ impl From<Block> for CandidBlock {
             transaction: CandidTransaction {
                 memo: transaction.memo,
                 icrc1_memo: transaction.icrc1_memo,
-                operation: transaction.operation.into(),
+                operation: Some(transaction.operation.into()),
                 created_at_time: transaction.created_at_time.unwrap_or(timestamp),
             },
             timestamp,
