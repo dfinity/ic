@@ -14,8 +14,9 @@ use ic_interfaces::crypto::{BasicSigner, ErrorReproducibility, KeyManager};
 use ic_logger::{error, info, new_replica_logger_from_config, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_onchain_observability_adapter::{
-    collect_metrics_for_peers, derive_peer_counters_for_current_report_interval, Config, Flags,
-    MetricsCollectError, PeerCounterMetrics, SampledMetricsCollector,
+    collect_metrics_for_peers, derive_peer_counters_for_current_report_interval,
+    CanisterPublishError, Config, Flags, MetricsCollectError, PeerCounterMetrics,
+    SampledMetricsCollector,
 };
 use ic_onchain_observability_service::onchain_observability_service_client::OnchainObservabilityServiceClient;
 use ic_registry_client::client::{RegistryClient, RegistryClientImpl};
@@ -28,6 +29,7 @@ use ic_types::{
 };
 use rand::Rng;
 use serde_json::to_string_pretty;
+use sha2::Digest;
 use std::{
     collections::{HashMap, HashSet},
     path::PathBuf,
@@ -49,6 +51,9 @@ const MAX_CRYPTO_SIGNATURE_ATTEMPTS: u64 = 5;
 const PREPARE_SOME_METHOD: &str = "prepare_some";
 const GET_CERTIFICATE_METHOD: &str = "get_certificate";
 const COMMIT_METHOD: &str = "commit";
+const FIND_METHOD: &str = "find";
+
+const FIND_REPORT_SLEEP_DURATION: Duration = Duration::from_secs(10);
 
 #[tokio::main]
 pub async fn main() {
@@ -166,12 +171,28 @@ pub async fn main() {
                         if let Err(e) = send_report_to_canister(
                             &canister_client,
                             canister_id,
-                            signed_report,
+                            &signed_report,
                             &logger,
                         )
                         .await
                         {
-                            error!(logger, "Failed to send report: {:?}", e);
+                            warn!(logger, "Send report may have failed: {:?}", e);
+                        }
+                        // Add a delay to allocate sufficient time in case data is commited by another node
+                        sleep(FIND_REPORT_SLEEP_DURATION).await;
+
+                        match is_report_published(&canister_client, canister_id, &signed_report)
+                            .await
+                        {
+                            Ok(_is_published) => {
+                                // TODO (NET-1338) record metric depending on result
+                            }
+                            Err(e) => {
+                                error!(
+                                    logger,
+                                    "Could not check whether report was published {:?}", e
+                                );
+                            }
                         }
                         break;
                     }
@@ -194,6 +215,54 @@ pub async fn main() {
             sampler.clear();
             start_time = SystemTime::now();
         }
+    }
+}
+
+async fn is_report_published(
+    canister_client: &Agent,
+    canister_id: CanisterId,
+    report: &SignedReport,
+) -> Result<bool, CanisterPublishError> {
+    let encoded_report = Encode!(&report).or_else(|_| {
+        Err(CanisterPublishError::SerializationFailure(
+            "Report encoding".to_string(),
+        ))
+    })?;
+
+    let hash: [u8; 32] = sha2::Sha256::digest(&encoded_report).into();
+
+    let encoded_arg = Encode!(&hash).or_else(|_| {
+        Err(CanisterPublishError::SerializationFailure(
+            "Find query arg encoding".to_string(),
+        ))
+    })?;
+
+    // Running as replicated query to avoid hitting a lagging node
+    let encoded_option = canister_client
+        .execute_update(
+            &canister_id,
+            &canister_id,
+            FIND_METHOD,
+            encoded_arg,
+            generate_nonce(),
+        )
+        .await
+        .map_err(|e| {
+            CanisterPublishError::CanisterClientFailure(format!("find() query failed: {:?}", e))
+        })?
+        .ok_or_else(|| {
+            CanisterPublishError::CanisterClientFailure("Empty response from find()".to_string())
+        })?;
+
+    let index_option = Decode!(&encoded_option, Option<u64>).or_else(|_| {
+        Err(CanisterPublishError::SerializationFailure(
+            "Canister client response decoding".to_string(),
+        ))
+    })?;
+
+    match index_option {
+        Some(_) => Ok(true),
+        None => Ok(false),
     }
 }
 
@@ -374,22 +443,28 @@ async fn sign_report(
 async fn send_report_to_canister(
     canister_client: &Agent,
     canister_id: CanisterId,
-    report: SignedReport,
+    report: &SignedReport,
     logger: &ReplicaLogger,
-) -> Result<(), String> {
+) -> Result<(), CanisterPublishError> {
     // Introducing some jitter to break synchronization across replicas and reduce probability that multiple replicas
     // initiate a request at the same time, which can cause canister client calls to fail. TODO(NET-1343) - integrate into retry logic
     let mut rng = rand::thread_rng();
-    let random_sleep_duration = 2 * rng.gen_range(0..5);
-    sleep(Duration::from_secs(random_sleep_duration)).await;
+    let random_sleep_duration_sec = 2 * rng.gen_range(0..5);
+    sleep(Duration::from_secs(random_sleep_duration_sec)).await;
 
     // Step 1 - the canister API requires us to call prepare_some(Vec<Vec<u8>>) to prepare the data. Note that this requires 2 levels of encoding.
     // First we encode the report itself to vec<u8>.  However, the API expects vec<vec<u8> so we must then wrap it in another vector.
     // Finally, the canister client expects a candid-encoded representation of the method arguments, so we must re-encode this back into another Vec<u8>.
-    let encoded_report =
-        Encode!(&report).or_else(|_| Err("Error serializing report to candid".to_string()))?;
-    let candid_prepare_some_arg = Encode!(&vec![encoded_report])
-        .or_else(|_| Err("Error encoding prepare_some() args".to_string()))?;
+    let encoded_report = Encode!(&report).or_else(|_| {
+        Err(CanisterPublishError::SerializationFailure(
+            "Report encoding".to_string(),
+        ))
+    })?;
+    let candid_prepare_some_arg = Encode!(&vec![encoded_report]).or_else(|_| {
+        Err(CanisterPublishError::SerializationFailure(
+            "prepare_some() arg encoding".to_string(),
+        ))
+    })?;
 
     canister_client
         .execute_update(
@@ -400,27 +475,46 @@ async fn send_report_to_canister(
             generate_nonce(),
         )
         .await
-        .map_err(|e| format!("Canister client prepare_some() query failed: {e}"))?
+        .map_err(|e| {
+            CanisterPublishError::CanisterClientFailure(format!(
+                "prepare_some() query failed: {:?}",
+                e
+            ))
+        })?
         .ok_or_else(|| {
-            "Canister client unexpectedly received empty response from prepare_some()".to_string()
+            CanisterPublishError::CanisterClientFailure(
+                "Empty response from prepare_some()".to_string(),
+            )
         })?;
 
     // Step 2 - We must call get_certificate() to obtain the certificate corresponding to the prepared data.
     // This is used later to confirm we are not attempting to publish stale data.
-    let encoded_empty_arg = Encode!(&Vec::<u8>::new())
-        .or_else(|_| Err("Error encoding get_certificate() args".to_string()))?;
+    let encoded_empty_arg = Encode!(&Vec::<u8>::new()).or_else(|_| {
+        Err(CanisterPublishError::SerializationFailure(
+            "get_certificate() args encoding".to_string(),
+        ))
+    })?;
 
     let encoded_certificate = canister_client
         .execute_query(&canister_id, GET_CERTIFICATE_METHOD, encoded_empty_arg)
         .await
-        .map_err(|e| format!("Canister client get_certificate() query failed: {e}"))?
+        .map_err(|e| {
+            CanisterPublishError::CanisterClientFailure(format!(
+                "get_certificate() query failed: {:?}",
+                e
+            ))
+        })?
         .ok_or_else(|| {
-            "Canister client unexpectedly received empty response from get_certificate()"
-                .to_string()
+            CanisterPublishError::CanisterClientFailure(
+                "Empty response from get_certificate()".to_string(),
+            )
         })?;
 
-    let decoded_certificate_opt = Decode!(&encoded_certificate, Option<Vec<u8>>)
-        .or_else(|_| Err("Error deserializing certificate into optional type".to_string()))?;
+    let decoded_certificate_opt = Decode!(&encoded_certificate, Option<Vec<u8>>).or_else(|_| {
+        Err(CanisterPublishError::SerializationFailure(
+            "Certificate decoding".to_string(),
+        ))
+    })?;
 
     // Step 3 - We must commit the data using the certificate
     // If certificate is not found, that means there was no pending data and we can assume
@@ -436,8 +530,11 @@ async fn send_report_to_canister(
         }
     };
 
-    let candid_commit_arg =
-        Encode!(&certificate).or_else(|_| Err("Error encoding commit() args".to_string()))?;
+    let candid_commit_arg = Encode!(&certificate).or_else(|_| {
+        Err(CanisterPublishError::SerializationFailure(
+            "commit() args encoding".to_string(),
+        ))
+    })?;
 
     match canister_client
         .execute_update(
@@ -455,8 +552,11 @@ async fn send_report_to_canister(
         // TODO: Convert canister client to strongly typed error so that we can also
         // check for timeouts
         Ok(Some(encoded_block_number)) => {
-            let decoded_result = Decode!(&encoded_block_number, Option<u64>)
-                .or_else(|_| Err("Error decoding block".to_string()))?;
+            let decoded_result = Decode!(&encoded_block_number, Option<u64>).or_else(|_| {
+                Err(CanisterPublishError::SerializationFailure(
+                    "block decoding".to_string(),
+                ))
+            })?;
             if let Some(block) = decoded_result {
                 info!(
                     logger,
@@ -466,7 +566,11 @@ async fn send_report_to_canister(
                 warn!(logger, "Commit was skipped due to no pending data");
             }
         }
-        Ok(None) => return Err("Commit() did not return a valid response".to_string()),
+        Ok(None) => {
+            return Err(CanisterPublishError::CanisterClientFailure(
+                "Commit() did not return a valid response".to_string(),
+            ))
+        }
         Err(e) => {
             warn!(
                 logger,

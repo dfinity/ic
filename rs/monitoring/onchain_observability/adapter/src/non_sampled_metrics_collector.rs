@@ -1,4 +1,4 @@
-use crate::metrics_parse_error::MetricsCollectError;
+use crate::error_types::MetricsCollectError;
 use ic_base_types::{NodeId, PrincipalId};
 use ic_onchain_observability_service::{
     onchain_observability_service_client::OnchainObservabilityServiceClient,

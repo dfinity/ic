@@ -1,4 +1,4 @@
-use crate::metrics_parse_error::MetricsCollectError;
+use crate::error_types::MetricsCollectError;
 use ic_onchain_observability_service::{
     onchain_observability_service_client::OnchainObservabilityServiceClient,
     OnchainObservabilityServiceGetMetricsDataRequest,
@@ -65,6 +65,9 @@ impl SampledMetricsCollector {
     pub fn aggregate(&mut self) -> HashMap<String, f32> {
         // Peer up time = (# responses in connected state) / (total responses)
         let mut up_time = HashMap::new();
+        if self.num_samples == 0 {
+            return up_time;
+        }
 
         for (peer_id, connected_count) in self.connected_state_count.iter() {
             let percent = ((*connected_count as f32) * 100.0) / (self.num_samples as f32);
