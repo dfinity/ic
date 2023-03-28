@@ -8,9 +8,11 @@ use crate::pb::v1::{
     RegisterDappCanistersRequest, RegisterDappCanistersResponse, SetDappControllersRequest,
     SetDappControllersResponse, SnsRootCanister,
 };
+use crate::types::Environment;
 use async_trait::async_trait;
 use candid::{CandidType, Decode, Deserialize, Encode};
 use dfn_core::CanisterId;
+use futures::{future::join_all, join};
 use ic_base_types::{NumBytes, PrincipalId};
 use ic_canister_log::log;
 use ic_sns_swap::pb::v1::GetCanisterStatusRequest;
@@ -20,11 +22,12 @@ use num_traits::cast::ToPrimitive;
 use std::str::FromStr;
 use std::{cell::RefCell, collections::BTreeSet, thread::LocalKey};
 
-use crate::types::Environment;
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 
 const ONE_DAY_SECONDS: u64 = 24 * 60 * 60;
+// The number of dapp canisters that can be registered with the SNS Root
+const DAPP_CANISTER_REGISTRATION_LIMIT: usize = 100;
 
 // Copied from /rs/replicated_state/src/canister_state/system_state.rs
 lazy_static! {
@@ -285,14 +288,14 @@ impl From<(Option<i32>, String)> for CanisterCallError {
 #[async_trait]
 pub trait ManagementCanisterClient {
     async fn canister_status(
-        &mut self,
+        &self,
         canister_id_record: &CanisterIdRecord,
     ) -> Result<CanisterStatusResultV2, CanisterCallError>;
 
     /// Our use case for this is to set controllers of dapp canisters, but this
     /// can be used in other ways as well.
     async fn update_settings(
-        &mut self,
+        &self,
         settings: &UpdateSettingsArgs,
     ) -> Result<EmptyBlob, CanisterCallError>;
 }
@@ -301,7 +304,7 @@ pub trait ManagementCanisterClient {
 /// A trait for querying the icrc1 ledger from SNS Root.
 #[async_trait]
 pub trait LedgerCanisterClient {
-    async fn archives(&mut self) -> Result<Vec<ArchiveInfo>, CanisterCallError>;
+    async fn archives(&self) -> Result<Vec<ArchiveInfo>, CanisterCallError>;
 }
 
 fn swap_remove_if<T>(v: &mut Vec<T>, predicate: impl Fn(&T) -> bool) {
@@ -457,12 +460,11 @@ impl SnsRootCanister {
     /// SnsRootCanister::register_dapp_canister).
     pub async fn get_sns_canisters_summary(
         self_ref: &'static LocalKey<RefCell<Self>>,
-        management_canister_client: &mut impl ManagementCanisterClient,
-        ledger_canister_client: &mut impl LedgerCanisterClient,
+        management_canister_client: &impl ManagementCanisterClient,
+        ledger_canister_client: &impl LedgerCanisterClient,
         env: &impl Environment,
         update_canister_list: bool,
     ) -> GetSnsCanistersSummaryResponse {
-        let own_canister_id = env.canister_id();
         let current_timestamp_seconds = env.now();
 
         // Optionally update the canister list
@@ -495,64 +497,36 @@ impl SnsRootCanister {
             )
         });
 
-        // Get root status.
-        let root_status = match get_root_status(env, governance_canister_id).await {
-            Ok(status) => Some(status),
-            Err(err) => {
-                log!(ERROR, "Getting root status failed: {}", err);
-                None
-            }
-        };
-
-        let root_canister_summary = Some(CanisterSummary {
-            canister_id: Some(own_canister_id.into()),
-            status: root_status,
-        });
-
-        // Get governance status.
-        let governance_canister_summary = Some(
-            get_owned_canister_summary(management_canister_client, governance_canister_id).await,
+        let (
+            root_canister_summary,
+            governance_canister_summary,
+            ledger_canister_summary,
+            index_canister_summary,
+            swap_canister_summary,
+            dapp_canister_summaries,
+            archive_canister_summaries,
+        ) = join!(
+            get_root_status(env, governance_canister_id),
+            get_owned_canister_summary(management_canister_client, governance_canister_id),
+            get_owned_canister_summary(management_canister_client, ledger_canister_id),
+            get_owned_canister_summary(management_canister_client, index_canister_id),
+            get_swap_status(env, swap_canister_id),
+            join_all(dapp_canister_ids.into_iter().map(|dapp_canister_id| {
+                get_owned_canister_summary(management_canister_client, dapp_canister_id)
+            })),
+            join_all(archive_canister_ids.into_iter().map(|archive_canister_id| {
+                get_owned_canister_summary(management_canister_client, archive_canister_id)
+            }))
         );
 
-        // Get status of ledger.
-        let ledger_canister_summary =
-            Some(get_owned_canister_summary(management_canister_client, ledger_canister_id).await);
-
-        // Get status of index.
-        let index_canister_summary =
-            Some(get_owned_canister_summary(management_canister_client, index_canister_id).await);
-
-        // Get status of swap.
-        let swap_status = get_swap_status(env, swap_canister_id).await;
-        let swap_canister_summary = Some(CanisterSummary {
-            canister_id: Some(swap_canister_id),
-            status: swap_status,
-        });
-
-        // Get status of dapp canister(s).
-        let mut dapp_canister_summaries = vec![];
-        for dapp_canister_id in dapp_canister_ids {
-            let dapp_summary =
-                get_owned_canister_summary(management_canister_client, dapp_canister_id).await;
-            dapp_canister_summaries.push(dapp_summary);
-        }
-
-        // Get status of archive canister(s).
-        let mut archive_canister_summaries = vec![];
-        for archive_canister_id in archive_canister_ids {
-            let archive_summary =
-                get_owned_canister_summary(management_canister_client, archive_canister_id).await;
-            archive_canister_summaries.push(archive_summary);
-        }
-
         let response = GetSnsCanistersSummaryResponse {
-            root: root_canister_summary,
-            governance: governance_canister_summary,
-            ledger: ledger_canister_summary,
-            swap: swap_canister_summary,
-            dapps: dapp_canister_summaries,
-            archives: archive_canister_summaries,
-            index: index_canister_summary,
+            root: Some(root_canister_summary),
+            governance: Some(governance_canister_summary),
+            ledger: Some(ledger_canister_summary),
+            swap: Some(swap_canister_summary),
+            dapps: dapp_canister_summaries.into_iter().collect(),
+            archives: archive_canister_summaries.into_iter().collect(),
+            index: Some(index_canister_summary),
         };
 
         // We have to call `fill_controller_field` on all the statuses to
@@ -592,7 +566,7 @@ impl SnsRootCanister {
     ///   2. set_dapp_controllers (currently in review).
     pub async fn register_dapp_canisters(
         self_ref: &'static LocalKey<RefCell<Self>>,
-        management_canister_client: &mut impl ManagementCanisterClient,
+        management_canister_client: &impl ManagementCanisterClient,
         root_canister_id: CanisterId,
         request: RegisterDappCanistersRequest,
     ) -> RegisterDappCanistersResponse {
@@ -623,7 +597,7 @@ impl SnsRootCanister {
     // (functions that return Result are easier to test than those that panic.)
     async fn try_register_dapp_canisters(
         self_ref: &'static LocalKey<RefCell<Self>>,
-        management_canister_client: &mut impl ManagementCanisterClient,
+        management_canister_client: &impl ManagementCanisterClient,
         root_canister_id: CanisterId,
         request: RegisterDappCanistersRequest,
     ) -> Result<RegisterDappCanistersResponse, Vec<(PrincipalId, String)>> {
@@ -634,7 +608,12 @@ impl SnsRootCanister {
             panic!("Invalid RegisterDappCanistersRequest: canister_ids field must not be empty.");
         }
         // Deduplicate the canisters in the request
-        let canisters_to_register = request.canister_ids.into_iter().collect::<BTreeSet<_>>();
+        let canisters_to_register = request
+            .canister_ids
+            .into_iter()
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>();
 
         let (sns_canister_ids, dapps) = {
             let ListSnsCanistersResponse {
@@ -665,23 +644,32 @@ impl SnsRootCanister {
 
         let mut errors = Vec::new();
 
-        for canister_to_register in canisters_to_register {
+        let canisters_registered_count = dapps.len();
+
+        let available_registrations =
+            DAPP_CANISTER_REGISTRATION_LIMIT.saturating_sub(canisters_registered_count);
+
+        for canister_to_register in canisters_to_register.iter().take(available_registrations) {
             match Self::register_canister(
                 self_ref,
                 management_canister_client,
                 root_canister_id,
                 &sns_canister_ids[..],
                 &dapps[..],
-                canister_to_register,
+                *canister_to_register,
                 testflight,
             )
             .await
             {
                 Ok(_) => {}
                 Err(reason) => {
-                    errors.push((canister_to_register, reason));
+                    errors.push((*canister_to_register, reason));
                 }
             }
+        }
+
+        for excess_canister in canisters_to_register.iter().skip(available_registrations) {
+            errors.push((*excess_canister, format!("Dapp Canister registration limit of {} was reached. No more canisters can be registered until a current canister is deregistered.", DAPP_CANISTER_REGISTRATION_LIMIT)));
         }
 
         if !errors.is_empty() {
@@ -694,7 +682,7 @@ impl SnsRootCanister {
     /// Register a single canister.
     async fn register_canister(
         self_ref: &'static LocalKey<RefCell<SnsRootCanister>>,
-        management_canister_client: &mut impl ManagementCanisterClient,
+        management_canister_client: &impl ManagementCanisterClient,
         root_canister_id: CanisterId,
         sns_canister_ids: &[PrincipalId],
         dapps: &[PrincipalId],
@@ -779,7 +767,7 @@ impl SnsRootCanister {
     /// Only the swap canister can use this functionality.
     pub async fn set_dapp_controllers<'a>(
         self_ref: &'static LocalKey<RefCell<Self>>,
-        management_canister_client: &'a mut impl ManagementCanisterClient,
+        management_canister_client: &'a impl ManagementCanisterClient,
         own_canister_id: CanisterId,
         caller: PrincipalId,
         request: &'a SetDappControllersRequest,
@@ -903,7 +891,7 @@ impl SnsRootCanister {
     /// Runs periodic tasks that are not directly triggered by user input.
     pub async fn run_periodic_tasks(
         self_ref: &'static LocalKey<RefCell<Self>>,
-        ledger_client: &mut impl LedgerCanisterClient,
+        ledger_client: &impl LedgerCanisterClient,
         current_timestamp_seconds: u64,
     ) {
         let should_poll_archives = self_ref.with(|state| {
@@ -927,7 +915,7 @@ impl SnsRootCanister {
     /// Polls for new archives canisters from the
     async fn poll_for_new_archive_canisters(
         self_ref: &'static LocalKey<RefCell<Self>>,
-        ledger_client: &mut impl LedgerCanisterClient,
+        ledger_client: &impl LedgerCanisterClient,
         current_timestamp_seconds: u64,
     ) {
         log!(INFO, "Polling for new archive canisters");
@@ -1025,61 +1013,90 @@ impl SnsRootCanister {
 /// Get the canister status of the Root canister controlled by the given Governance canister.
 /// Root cannot get its own status because only the controller of a canister is able to
 /// query the canister's status, and Root is solely controlled by Governance.
-async fn get_root_status(
-    env: &impl Environment,
-    governance_id: PrincipalId,
-) -> Result<CanisterStatusResultV2, String> {
-    env.call_canister(
-        CanisterId::new(governance_id).unwrap(),
-        "get_root_canister_status",
-        Encode!(&()).unwrap(),
-    )
-    .await
-    .map_err(|err| {
-        let code = err.0.unwrap_or_default();
-        let msg = err.1;
-        format!(
-            "Could not get root status from governance: {}: {}",
-            code, msg
+async fn get_root_status(env: &impl Environment, governance_id: PrincipalId) -> CanisterSummary {
+    let Ok(canister_id) = CanisterId::new(governance_id) else {
+        log!(ERROR,
+        "The recorded Governance principal id, '{}', is not a valid CanisterId. Cannot check root status.", governance_id);
+        return CanisterSummary::new_with_no_status(env.canister_id().into());
+    };
+
+    let summary = match env
+        .call_canister(
+            canister_id,
+            "get_root_canister_status",
+            Encode!(&()).unwrap(),
         )
-    })
-    .and_then(|result| {
-        Decode!(&result, CanisterStatusResultV2)
-            .map_err(|e| format!("Could not decode response: {:?}", e))
-    })
+        .await
+        .map_err(|(code, msg)| {
+            format!(
+                "Could not get root status from governance: {}: {}",
+                code.unwrap_or_default(),
+                msg
+            )
+        })
+        .and_then(|result| {
+            Decode!(&result, CanisterStatusResultV2)
+                .map_err(|e| format!("Could not decode response: {:?}", e))
+        }) {
+        Ok(summary) => Some(summary),
+        Err(err) => {
+            log!(ERROR, "Getting root status failed: {}", err);
+            None
+        }
+    };
+
+    CanisterSummary {
+        canister_id: Some(env.canister_id().into()),
+        status: summary,
+    }
 }
 
-async fn get_swap_status(
-    env: &impl Environment,
-    swap_id: PrincipalId,
-) -> Option<CanisterStatusResultV2> {
-    let response: Result<CanisterStatusResultV2, (Option<i32>, String)> = env
+async fn get_swap_status(env: &impl Environment, swap_id: PrincipalId) -> CanisterSummary {
+    let Ok(canister_id) = CanisterId::new(swap_id) else {
+        log!(ERROR,
+        "The recorded Swap principal id, '{}', is not a valid CanisterId.", swap_id);
+       return CanisterSummary::new_with_no_status(swap_id);
+    };
+
+    let status = match env
         .call_canister(
-            CanisterId::new(swap_id).unwrap(),
+            canister_id,
             "get_canister_status",
             Encode!(&GetCanisterStatusRequest {}).unwrap(),
         )
         .await
-        .map(|bytes| Decode!(&bytes, CanisterStatusResultV2).unwrap());
-
-    match response {
-        Ok(canister_status) => Some(canister_status),
+        .map_err(|(code, msg)| {
+            format!(
+                "Could not get swap status from swap: {}: {}",
+                code.unwrap_or_default(),
+                msg
+            )
+        })
+        .and_then(|bytes| {
+            Decode!(&bytes, CanisterStatusResultV2)
+                .map_err(|e| format!("Could not decode response: {:?}", e))
+        }) {
+        Ok(summary) => Some(summary),
         Err(err) => {
             log!(
                 ERROR,
-                "Couldn't get the CanisterStatus of the SNS Swap Canister({}). This may be \
-                due to the Swap concluding and the canister stopping. Err: {:?}",
+                "Unable to get the status of swap canister_id {}. Reason: {:?}",
                 swap_id,
                 err
             );
 
             None
         }
+    };
+
+    CanisterSummary {
+        canister_id: Some(swap_id),
+        status,
     }
 }
 
 async fn get_owned_canister_summary(
-    management_canister_client: &mut impl ManagementCanisterClient,
+    management_canister_client: &impl ManagementCanisterClient,
     canister_id: PrincipalId,
 ) -> CanisterSummary {
     let canister_id_record = match CanisterIdRecord::try_from(canister_id) {
@@ -1100,7 +1117,7 @@ async fn get_owned_canister_summary(
         .canister_status(&canister_id_record)
         .await
     {
-        Ok(canister_status_result_v2) => canister_status_result_v2,
+        Ok(canister_status_result_v2) => Some(canister_status_result_v2),
         Err(err) => {
             // Log an error and return a CanisterSummary with no status
             log!(
@@ -1109,13 +1126,13 @@ async fn get_owned_canister_summary(
                 canister_id,
                 err
             );
-            return CanisterSummary::new_with_no_status(canister_id);
+            None
         }
     };
 
     CanisterSummary {
         canister_id: Some(canister_id),
-        status: Some(status),
+        status,
     }
 }
 
@@ -1125,6 +1142,7 @@ mod tests {
     use crate::pb::v1::{set_dapp_controllers_request::CanisterIds, ListSnsCanistersResponse};
     use candid::Principal;
     use dfn_core::api::now;
+    use futures::FutureExt;
     use std::collections::VecDeque;
     use std::sync::{Arc, Mutex};
     use std::time::SystemTime;
@@ -1143,16 +1161,41 @@ mod tests {
 
     #[derive(Debug)]
     struct MockManagementCanisterClient {
-        calls: VecDeque<ManagementCanisterClientCall>,
+        calls: Arc<futures::lock::Mutex<VecDeque<ManagementCanisterClientCall>>>,
+    }
+
+    impl MockManagementCanisterClient {
+        fn new<T>(calls: T) -> Self
+        where
+            VecDeque<ManagementCanisterClientCall>: From<T>,
+        {
+            Self {
+                calls: Arc::new(futures::lock::Mutex::new(calls.into())),
+            }
+        }
+
+        // Asserts that expected calls have been used (i.e. calls is now empty)
+        fn assert_all_calls_consumed(&self) {
+            assert!(
+                self.calls
+                    .lock()
+                    .now_or_never()
+                    .expect("Could not get lock")
+                    .is_empty(),
+                "Not all expected calls were used by MockManagementCanisterClient: {:#?}",
+                self
+            );
+        }
     }
 
     #[async_trait]
     impl ManagementCanisterClient for MockManagementCanisterClient {
         async fn canister_status(
-            &mut self,
+            &self,
             observed_canister_id_record: &CanisterIdRecord,
         ) -> Result<CanisterStatusResultV2, CanisterCallError> {
-            let (expected_canister_id, result) = match self.calls.pop_front().expect(
+            let mut calls = self.calls.lock().await;
+            let (expected_canister_id, result) = match calls.pop_front().expect(
                 "MockManagementCanisterClient calls stack for is exhausted, \
                 but another `canister_status` call was expected.",
             ) {
@@ -1177,10 +1220,11 @@ mod tests {
         }
 
         async fn update_settings(
-            &mut self,
+            &self,
             observed_update_settings_args: &UpdateSettingsArgs,
         ) -> Result<EmptyBlob, CanisterCallError> {
-            let (expected_update_settings_args, result) = match self.calls.pop_front().expect(
+            let mut calls = self.calls.lock().await;
+            let (expected_update_settings_args, result) = match calls.pop_front().expect(
                 "MockManagementCanisterClient calls stack is exhausted, \
                  but another update_settings was expected.",
             ) {
@@ -1213,13 +1257,25 @@ mod tests {
 
     #[derive(Debug, Clone)]
     struct MockLedgerCanisterClient {
-        calls: VecDeque<LedgerCanisterClientCall>,
+        calls: Arc<futures::lock::Mutex<VecDeque<LedgerCanisterClientCall>>>,
+    }
+
+    impl MockLedgerCanisterClient {
+        fn new<T>(calls: T) -> Self
+        where
+            VecDeque<LedgerCanisterClientCall>: From<T>,
+        {
+            Self {
+                calls: Arc::new(futures::lock::Mutex::new(calls.into())),
+            }
+        }
     }
 
     #[async_trait]
     impl LedgerCanisterClient for MockLedgerCanisterClient {
-        async fn archives(&mut self) -> Result<Vec<ArchiveInfo>, CanisterCallError> {
-            match self.calls.pop_front().unwrap() {
+        async fn archives(&self) -> Result<Vec<ArchiveInfo>, CanisterCallError> {
+            let mut calls = self.calls.lock().await;
+            match calls.pop_front().unwrap() {
                 LedgerCanisterClientCall::Archives { result } => result,
             }
         }
@@ -1360,30 +1416,27 @@ mod tests {
         let dapp_canister_id_2 = PrincipalId::new_user_test_id(6);
         let user_id = PrincipalId::new_user_test_id(7);
 
-        let mut management_canister_client = MockManagementCanisterClient {
-            calls: vec![
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: dapp_canister_id_1,
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        sns_root_canister_id,
-                        user_id,
-                    ])),
-                },
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: dapp_canister_id_2,
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        sns_root_canister_id,
-                        user_id,
-                    ])),
-                },
-            ]
-            .into(),
-        };
+        let management_canister_client = MockManagementCanisterClient::new(vec![
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: dapp_canister_id_1,
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    sns_root_canister_id,
+                    user_id,
+                ])),
+            },
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: dapp_canister_id_2,
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    sns_root_canister_id,
+                    user_id,
+                ])),
+            },
+        ]);
 
         // Step 2: Call the code under test.
         let result = SnsRootCanister::register_dapp_canisters(
             &SNS_ROOT_CANISTER,
-            &mut management_canister_client,
+            &management_canister_client,
             sns_root_canister_id.try_into().unwrap(),
             RegisterDappCanistersRequest {
                 canister_ids: vec![dapp_canister_id_1, dapp_canister_id_2],
@@ -1393,11 +1446,7 @@ mod tests {
 
         // Step 3: Inspect results.
         assert_eq!(result, RegisterDappCanistersResponse {}, "{result:#?}");
-        assert_eq!(
-            management_canister_client.calls.len(),
-            0,
-            "{management_canister_client:#?}"
-        );
+        management_canister_client.assert_all_calls_consumed();
         SNS_ROOT_CANISTER.with(|r| {
             assert_eq!(
                 *r.borrow(),
@@ -1423,28 +1472,25 @@ mod tests {
         let dapp_canister_id_1 = PrincipalId::new_user_test_id(5);
         let dapp_canister_id_2 = PrincipalId::new_user_test_id(6);
 
-        let mut management_canister_client = MockManagementCanisterClient {
-            calls: vec![
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: dapp_canister_id_1,
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        sns_root_canister_id,
-                    ])),
-                },
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: dapp_canister_id_2,
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        sns_root_canister_id,
-                    ])),
-                },
-            ]
-            .into(),
-        };
+        let management_canister_client = MockManagementCanisterClient::new(vec![
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: dapp_canister_id_1,
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    sns_root_canister_id,
+                ])),
+            },
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: dapp_canister_id_2,
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    sns_root_canister_id,
+                ])),
+            },
+        ]);
 
         // Step 2: Call the code under test.
         let result = SnsRootCanister::register_dapp_canisters(
             &SNS_ROOT_CANISTER,
-            &mut management_canister_client,
+            &management_canister_client,
             sns_root_canister_id.try_into().unwrap(),
             RegisterDappCanistersRequest {
                 canister_ids: vec![dapp_canister_id_1, dapp_canister_id_2],
@@ -1454,11 +1500,7 @@ mod tests {
 
         // Step 3: Inspect results.
         assert_eq!(result, RegisterDappCanistersResponse {}, "{result:#?}");
-        assert_eq!(
-            management_canister_client.calls.len(),
-            0,
-            "{management_canister_client:#?}"
-        );
+        management_canister_client.assert_all_calls_consumed();
         SNS_ROOT_CANISTER.with(|r| {
             assert_eq!(
                 *r.borrow(),
@@ -1482,20 +1524,18 @@ mod tests {
         let sns_root_canister_id = PrincipalId::new_user_test_id(4);
         let dapp_canister_id_1 = PrincipalId::new_user_test_id(5);
 
-        let mut management_canister_client = MockManagementCanisterClient {
-            calls: vec![ManagementCanisterClientCall::CanisterStatus {
+        let management_canister_client =
+            MockManagementCanisterClient::new(vec![ManagementCanisterClientCall::CanisterStatus {
                 expected_canister_id: dapp_canister_id_1,
                 result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
                     sns_root_canister_id,
                 ])),
-            }]
-            .into(),
-        };
+            }]);
 
         // Step 2: Call the code under test.
         let result = SnsRootCanister::register_dapp_canisters(
             &SNS_ROOT_CANISTER,
-            &mut management_canister_client,
+            &management_canister_client,
             sns_root_canister_id.try_into().unwrap(),
             RegisterDappCanistersRequest {
                 canister_ids: vec![dapp_canister_id_1, dapp_canister_id_1],
@@ -1505,11 +1545,7 @@ mod tests {
 
         // Step 3: Inspect results.
         assert_eq!(result, RegisterDappCanistersResponse {}, "{result:#?}");
-        assert_eq!(
-            management_canister_client.calls.len(),
-            0,
-            "{management_canister_client:#?}"
-        );
+        management_canister_client.assert_all_calls_consumed();
         SNS_ROOT_CANISTER.with(|r| {
             assert_eq!(
                 *r.borrow(),
@@ -1533,29 +1569,26 @@ mod tests {
         let sns_root_canister_id = PrincipalId::new_user_test_id(4);
         let dapp_canister_id_1 = PrincipalId::new_user_test_id(5);
 
-        let mut management_canister_client = MockManagementCanisterClient {
-            calls: vec![
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: dapp_canister_id_1,
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        sns_root_canister_id,
-                    ])),
-                },
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: dapp_canister_id_1,
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        sns_root_canister_id,
-                    ])),
-                },
-            ]
-            .into(),
-        };
+        let management_canister_client = MockManagementCanisterClient::new(vec![
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: dapp_canister_id_1,
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    sns_root_canister_id,
+                ])),
+            },
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: dapp_canister_id_1,
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    sns_root_canister_id,
+                ])),
+            },
+        ]);
 
         // Step 2: Attempt to add the same canister twice.
         for _ in 0..2 {
             SnsRootCanister::register_dapp_canisters(
                 &SNS_ROOT_CANISTER,
-                &mut management_canister_client,
+                &management_canister_client,
                 sns_root_canister_id.try_into().unwrap(),
                 RegisterDappCanistersRequest {
                     canister_ids: vec![dapp_canister_id_1],
@@ -1614,13 +1647,11 @@ mod tests {
         ] {
             let result = std::panic::catch_unwind(|| {
                 tokio::runtime::Runtime::new().unwrap().block_on(async {
-                    let mut management_canister_client = MockManagementCanisterClient {
-                        calls: vec![].into(),
-                    };
+                    let management_canister_client = MockManagementCanisterClient::new(vec![]);
 
                     SnsRootCanister::register_dapp_canisters(
                         &SNS_ROOT_CANISTER,
-                        &mut management_canister_client,
+                        &management_canister_client,
                         sns_root_canister_id.try_into().unwrap(),
                         RegisterDappCanistersRequest {
                             canister_ids: vec![canister_id],
@@ -1647,21 +1678,19 @@ mod tests {
         let dapp_canister_id_1 = PrincipalId::new_user_test_id(5);
 
         // Don't make root the controller
-        let mut management_canister_client = MockManagementCanisterClient {
-            calls: vec![ManagementCanisterClientCall::CanisterStatus {
+        let management_canister_client =
+            MockManagementCanisterClient::new(vec![ManagementCanisterClientCall::CanisterStatus {
                 expected_canister_id: dapp_canister_id_1,
                 result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
                     user_id,
                 ])),
-            }]
-            .into(),
-        };
+            }]);
 
         // Step 2: Call the code under test.
         // We panic here
         SnsRootCanister::register_dapp_canisters(
             &SNS_ROOT_CANISTER,
-            &mut management_canister_client,
+            &management_canister_client,
             sns_root_canister_id.try_into().unwrap(),
             RegisterDappCanistersRequest {
                 canister_ids: vec![dapp_canister_id_1],
@@ -1680,21 +1709,19 @@ mod tests {
         let sns_root_canister_id = PrincipalId::new_user_test_id(4);
         let dapp_canister_id = PrincipalId::new_user_test_id(5);
 
-        let mut management_canister_client = MockManagementCanisterClient {
-            calls: vec![ManagementCanisterClientCall::CanisterStatus {
+        let management_canister_client =
+            MockManagementCanisterClient::new(vec![ManagementCanisterClientCall::CanisterStatus {
                 expected_canister_id: dapp_canister_id,
                 result: Err(CanisterCallError {
                     code: None,
                     description: "You don't control that canister.".to_string(),
                 }),
-            }]
-            .into(),
-        };
+            }]);
 
         // Step 2: Call the code under test.
         let result = SnsRootCanister::register_dapp_canisters(
             &SNS_ROOT_CANISTER,
-            &mut management_canister_client,
+            &management_canister_client,
             sns_root_canister_id.try_into().unwrap(),
             RegisterDappCanistersRequest {
                 canister_ids: vec![dapp_canister_id],
@@ -1723,55 +1750,52 @@ mod tests {
         let dapp_canister_id_4 = PrincipalId::new_user_test_id(8);
 
         // Don't make root the controller
-        let mut management_canister_client = MockManagementCanisterClient {
-            calls: vec![
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: dapp_canister_id_1,
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        sns_root_canister_id,
-                    ])),
+        let management_canister_client = MockManagementCanisterClient::new(vec![
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: dapp_canister_id_1,
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    sns_root_canister_id,
+                ])),
+            },
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: dapp_canister_id_2,
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    user_id,
+                ])),
+            },
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: dapp_canister_id_3,
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    sns_root_canister_id,
+                    user_id,
+                ])),
+            },
+            ManagementCanisterClientCall::UpdateSettings {
+                update_settings_args: UpdateSettingsArgs {
+                    canister_id: dapp_canister_id_3,
+                    settings: CanisterSettingsArgs::controller(sns_root_canister_id),
                 },
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: dapp_canister_id_2,
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        user_id,
-                    ])),
-                },
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: dapp_canister_id_3,
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        sns_root_canister_id,
-                        user_id,
-                    ])),
-                },
-                ManagementCanisterClientCall::UpdateSettings {
-                    update_settings_args: UpdateSettingsArgs {
-                        canister_id: dapp_canister_id_3,
-                        settings: CanisterSettingsArgs::controller(sns_root_canister_id),
-                    },
-                    result: Ok(EmptyBlob {}),
-                },
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: dapp_canister_id_3,
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        sns_root_canister_id,
-                    ])),
-                },
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: dapp_canister_id_4,
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        user_id,
-                    ])),
-                },
-            ]
-            .into(),
-        };
+                result: Ok(EmptyBlob {}),
+            },
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: dapp_canister_id_3,
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    sns_root_canister_id,
+                ])),
+            },
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: dapp_canister_id_4,
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    user_id,
+                ])),
+            },
+        ]);
 
         // Step 2: Call the code under test.
         // We panic here
         let result = SnsRootCanister::try_register_dapp_canisters(
             &SNS_ROOT_CANISTER,
-            &mut management_canister_client,
+            &management_canister_client,
             sns_root_canister_id.try_into().unwrap(),
             RegisterDappCanistersRequest {
                 canister_ids: vec![
@@ -1786,11 +1810,7 @@ mod tests {
         .unwrap_err();
 
         // Step 3: Inspect results.
-        assert_eq!(
-            management_canister_client.calls.len(),
-            0,
-            "{management_canister_client:#?}"
-        );
+        management_canister_client.assert_all_calls_consumed();
 
         let message = "Canister is not controlled by this SNS root canister".to_string();
         assert_eq!(result.len(), 2);
@@ -1825,8 +1845,8 @@ mod tests {
         // We're passing user_id here because a value is required, but it will
         // be overwritten later
         let dummy_status = CanisterStatusResultV2::dummy_with_controllers(vec![user_id]);
-        let mut management_canister_client = MockManagementCanisterClient {
-            calls: vec![ManagementCanisterClientCall::CanisterStatus {
+        let management_canister_client =
+            MockManagementCanisterClient::new(vec![ManagementCanisterClientCall::CanisterStatus {
                 expected_canister_id: dapp_canister_id_1,
                 result: Ok(CanisterStatusResultV2 {
                     settings: DefiniteCanisterSettingsArgs {
@@ -1835,15 +1855,13 @@ mod tests {
                     },
                     ..dummy_status
                 }),
-            }]
-            .into(),
-        };
+            }]);
 
         // Step 2: Call the code under test.
         // We panic here
         SnsRootCanister::register_dapp_canisters(
             &SNS_ROOT_CANISTER,
-            &mut management_canister_client,
+            &management_canister_client,
             sns_root_canister_id.try_into().unwrap(),
             RegisterDappCanistersRequest {
                 canister_ids: vec![dapp_canister_id_1],
@@ -1867,77 +1885,74 @@ mod tests {
         let dapp_canister_id_3 = PrincipalId::new_user_test_id(7);
 
         // Don't make root the controller
-        let mut management_canister_client = MockManagementCanisterClient {
-            calls: vec![
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: dapp_canister_id_1,
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        sns_root_canister_id,
-                        user_id,
-                    ])),
+        let management_canister_client = MockManagementCanisterClient::new(vec![
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: dapp_canister_id_1,
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    sns_root_canister_id,
+                    user_id,
+                ])),
+            },
+            ManagementCanisterClientCall::UpdateSettings {
+                update_settings_args: UpdateSettingsArgs {
+                    canister_id: dapp_canister_id_1,
+                    settings: CanisterSettingsArgs::controller(sns_root_canister_id),
                 },
-                ManagementCanisterClientCall::UpdateSettings {
-                    update_settings_args: UpdateSettingsArgs {
-                        canister_id: dapp_canister_id_1,
-                        settings: CanisterSettingsArgs::controller(sns_root_canister_id),
-                    },
-                    result: Ok(EmptyBlob {}),
+                result: Ok(EmptyBlob {}),
+            },
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: dapp_canister_id_1,
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    sns_root_canister_id,
+                ])),
+            },
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: dapp_canister_id_2,
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    user_id,
+                    sns_root_canister_id,
+                ])),
+            },
+            ManagementCanisterClientCall::UpdateSettings {
+                update_settings_args: UpdateSettingsArgs {
+                    canister_id: dapp_canister_id_2,
+                    settings: CanisterSettingsArgs::controller(sns_root_canister_id),
                 },
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: dapp_canister_id_1,
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        sns_root_canister_id,
-                    ])),
+                result: Ok(EmptyBlob {}),
+            },
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: dapp_canister_id_2,
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    sns_root_canister_id,
+                ])),
+            },
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: dapp_canister_id_3,
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    dapp_canister_id_1,
+                    sns_root_canister_id,
+                    dapp_canister_id_3,
+                ])),
+            },
+            ManagementCanisterClientCall::UpdateSettings {
+                update_settings_args: UpdateSettingsArgs {
+                    canister_id: dapp_canister_id_3,
+                    settings: CanisterSettingsArgs::controller(sns_root_canister_id),
                 },
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: dapp_canister_id_2,
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        user_id,
-                        sns_root_canister_id,
-                    ])),
-                },
-                ManagementCanisterClientCall::UpdateSettings {
-                    update_settings_args: UpdateSettingsArgs {
-                        canister_id: dapp_canister_id_2,
-                        settings: CanisterSettingsArgs::controller(sns_root_canister_id),
-                    },
-                    result: Ok(EmptyBlob {}),
-                },
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: dapp_canister_id_2,
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        sns_root_canister_id,
-                    ])),
-                },
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: dapp_canister_id_3,
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        dapp_canister_id_1,
-                        sns_root_canister_id,
-                        dapp_canister_id_3,
-                    ])),
-                },
-                ManagementCanisterClientCall::UpdateSettings {
-                    update_settings_args: UpdateSettingsArgs {
-                        canister_id: dapp_canister_id_3,
-                        settings: CanisterSettingsArgs::controller(sns_root_canister_id),
-                    },
-                    result: Ok(EmptyBlob {}),
-                },
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: dapp_canister_id_3,
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        sns_root_canister_id,
-                    ])),
-                },
-            ]
-            .into(),
-        };
+                result: Ok(EmptyBlob {}),
+            },
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: dapp_canister_id_3,
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    sns_root_canister_id,
+                ])),
+            },
+        ]);
 
         // Step 2: Call the code under test.
         let result = SnsRootCanister::register_dapp_canisters(
             &SNS_ROOT_CANISTER,
-            &mut management_canister_client,
+            &management_canister_client,
             sns_root_canister_id.try_into().unwrap(),
             RegisterDappCanistersRequest {
                 canister_ids: vec![dapp_canister_id_1, dapp_canister_id_2, dapp_canister_id_3],
@@ -1947,11 +1962,7 @@ mod tests {
 
         // Step 3: Inspect results.
         assert_eq!(result, RegisterDappCanistersResponse {}, "{result:#?}");
-        assert_eq!(
-            management_canister_client.calls.len(),
-            0,
-            "{management_canister_client:#?}"
-        );
+        management_canister_client.assert_all_calls_consumed();
         SNS_ROOT_CANISTER.with(|r| {
             assert_eq!(
                 *r.borrow(),
@@ -1987,14 +1998,12 @@ mod tests {
         let original_sns_root_canister = SNS_ROOT_CANISTER.with(|r| r.borrow().clone());
         let sns_root_canister_id = PrincipalId::new_user_test_id(3);
 
-        let mut management_canister_client = MockManagementCanisterClient {
-            calls: vec![].into(),
-        };
+        let management_canister_client = MockManagementCanisterClient::new(vec![]);
 
         // Step 2: Call the code under test.
         let result = SnsRootCanister::register_dapp_canisters(
             &SNS_ROOT_CANISTER,
-            &mut management_canister_client,
+            &management_canister_client,
             sns_root_canister_id.try_into().unwrap(),
             RegisterDappCanistersRequest {
                 canister_ids: vec![DAPP_CANISTER_ID.with(|i| *i)],
@@ -2004,11 +2013,7 @@ mod tests {
 
         // Step 3: Inspect results.
         assert_eq!(result, RegisterDappCanistersResponse {}, "{result:#?}");
-        assert_eq!(
-            management_canister_client.calls.len(),
-            0,
-            "{management_canister_client:#?}"
-        );
+        management_canister_client.assert_all_calls_consumed();
         // Assert no change (because we already knew about the dapp).
         SNS_ROOT_CANISTER.with(|r| {
             assert_eq!(*r.borrow(), original_sns_root_canister);
@@ -2032,36 +2037,33 @@ mod tests {
         }
         let sns_root_canister_id = PrincipalId::new_user_test_id(3);
 
-        let mut management_canister_client = MockManagementCanisterClient {
-            calls: vec![
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: DAPP_CANISTER_ID.with(|i| *i),
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        sns_root_canister_id,
-                        PrincipalId::new_user_test_id(9999),
-                    ])),
+        let management_canister_client = MockManagementCanisterClient::new(vec![
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: DAPP_CANISTER_ID.with(|i| *i),
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    sns_root_canister_id,
+                    PrincipalId::new_user_test_id(9999),
+                ])),
+            },
+            ManagementCanisterClientCall::UpdateSettings {
+                update_settings_args: UpdateSettingsArgs {
+                    canister_id: DAPP_CANISTER_ID.with(|i| *i),
+                    settings: CanisterSettingsArgs::controller(sns_root_canister_id),
                 },
-                ManagementCanisterClientCall::UpdateSettings {
-                    update_settings_args: UpdateSettingsArgs {
-                        canister_id: DAPP_CANISTER_ID.with(|i| *i),
-                        settings: CanisterSettingsArgs::controller(sns_root_canister_id),
-                    },
-                    result: Ok(EmptyBlob {}),
-                },
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: DAPP_CANISTER_ID.with(|i| *i),
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        sns_root_canister_id,
-                    ])),
-                },
-            ]
-            .into(),
-        };
+                result: Ok(EmptyBlob {}),
+            },
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: DAPP_CANISTER_ID.with(|i| *i),
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    sns_root_canister_id,
+                ])),
+            },
+        ]);
 
         // Step 2: Call the code under test.
         let result = SnsRootCanister::register_dapp_canisters(
             &SNS_ROOT_CANISTER,
-            &mut management_canister_client,
+            &management_canister_client,
             sns_root_canister_id.try_into().unwrap(),
             RegisterDappCanistersRequest {
                 canister_ids: vec![DAPP_CANISTER_ID.with(|i| *i)],
@@ -2071,11 +2073,7 @@ mod tests {
 
         // Step 3: Inspect results.
         assert_eq!(result, RegisterDappCanistersResponse {}, "{result:#?}");
-        assert_eq!(
-            management_canister_client.calls.len(),
-            0,
-            "{management_canister_client:#?}"
-        );
+        management_canister_client.assert_all_calls_consumed();
         SNS_ROOT_CANISTER.with(|r| {
             assert_eq!(
                 *r.borrow().dapp_canister_ids,
@@ -2083,6 +2081,90 @@ mod tests {
                 vec![DAPP_CANISTER_ID.with(|i| *i)],
             );
         });
+    }
+
+    #[tokio::test]
+    // cpumi-3qaaa-aaaaa-aadeq-cai is CanisterId::from(201), which shows this does not fail at an earlier limit
+    #[should_panic(
+        expected = "cpumi-3qaaa-aaaaa-aadeq-cai: Dapp Canister registration limit of 100 was reached. No more canisters can be registered until a current canister is deregistered."
+    )]
+    async fn register_dapp_canisters_fails_at_limit_number() {
+        // Step 1: Prepare the world.
+        thread_local! {
+            static SNS_ROOT_CANISTER: RefCell<SnsRootCanister> = RefCell::new(SnsRootCanister {
+                governance_canister_id: Some(PrincipalId::new_user_test_id(1)),
+                ledger_canister_id: Some(PrincipalId::new_user_test_id(2)),
+                swap_canister_id: Some(PrincipalId::new_user_test_id(99)),
+                dapp_canister_ids: vec![],
+                archive_canister_ids: vec![],
+                index_canister_id: Some(PrincipalId::new_user_test_id(3)),
+                ..Default::default()
+            });
+        }
+        let sns_root_canister_id = PrincipalId::new_user_test_id(3);
+
+        let canister_ids: Vec<PrincipalId> =
+            (100..200).map(|id| CanisterId::from(id).get()).collect();
+
+        let calls = canister_ids
+            .iter()
+            .flat_map(|id| {
+                vec![
+                    ManagementCanisterClientCall::CanisterStatus {
+                        expected_canister_id: *id,
+                        result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                            sns_root_canister_id,
+                            PrincipalId::new_user_test_id(9999),
+                        ])),
+                    },
+                    ManagementCanisterClientCall::UpdateSettings {
+                        update_settings_args: UpdateSettingsArgs {
+                            canister_id: *id,
+                            settings: CanisterSettingsArgs::controller(sns_root_canister_id),
+                        },
+                        result: Ok(EmptyBlob {}),
+                    },
+                    ManagementCanisterClientCall::CanisterStatus {
+                        expected_canister_id: *id,
+                        result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                            sns_root_canister_id,
+                        ])),
+                    },
+                ]
+            })
+            .collect::<Vec<_>>();
+
+        let management_canister_client = MockManagementCanisterClient::new(calls);
+
+        // Step 2: Max out the registered dapps, and confirm they were registered.
+        SnsRootCanister::register_dapp_canisters(
+            &SNS_ROOT_CANISTER,
+            &management_canister_client,
+            sns_root_canister_id.try_into().unwrap(),
+            RegisterDappCanistersRequest {
+                canister_ids: canister_ids.clone(),
+            },
+        )
+        .await;
+
+        SNS_ROOT_CANISTER.with(|r| {
+            assert_eq!(
+                *r.borrow().dapp_canister_ids,
+                // Check that root became aware that it controls the dapp canister.
+                canister_ids
+            );
+        });
+
+        // Step 3: Attempt to register another dapp, which should trigger panic
+        SnsRootCanister::register_dapp_canisters(
+            &SNS_ROOT_CANISTER,
+            &management_canister_client,
+            sns_root_canister_id.try_into().unwrap(),
+            RegisterDappCanistersRequest {
+                canister_ids: vec![CanisterId::from(201).get()],
+            },
+        )
+        .await;
     }
 
     #[test]
@@ -2110,29 +2192,26 @@ mod tests {
         let new_controller_principal_id = PrincipalId::new_user_test_id(5);
 
         // Step 1.1: Prepare helpers.
-        let mut management_canister_client = MockManagementCanisterClient {
-            calls: vec![
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: PrincipalId::new_user_test_id(3),
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        sns_root_canister_id.get(),
-                    ])),
+        let management_canister_client = MockManagementCanisterClient::new(vec![
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: PrincipalId::new_user_test_id(3),
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    sns_root_canister_id.get(),
+                ])),
+            },
+            ManagementCanisterClientCall::UpdateSettings {
+                update_settings_args: UpdateSettingsArgs {
+                    canister_id: PrincipalId::new_user_test_id(3),
+                    settings: CanisterSettingsArgs::controller(new_controller_principal_id),
                 },
-                ManagementCanisterClientCall::UpdateSettings {
-                    update_settings_args: UpdateSettingsArgs {
-                        canister_id: PrincipalId::new_user_test_id(3),
-                        settings: CanisterSettingsArgs::controller(new_controller_principal_id),
-                    },
-                    result: Ok(EmptyBlob {}),
-                },
-            ]
-            .into(),
-        };
+                result: Ok(EmptyBlob {}),
+            },
+        ]);
 
         // Step 2: Run code under test.
         let response = SnsRootCanister::set_dapp_controllers(
             &STATE,
-            &mut management_canister_client,
+            &management_canister_client,
             sns_root_canister_id,
             STATE.with(|state| state.borrow().swap_canister_id.unwrap()),
             &SetDappControllersRequest {
@@ -2150,10 +2229,7 @@ mod tests {
                 failed_updates: vec![]
             }
         );
-        assert!(
-            management_canister_client.calls.is_empty(),
-            "{management_canister_client:#?}",
-        );
+        management_canister_client.assert_all_calls_consumed();
         let state = &STATE.with(|state| state.borrow().clone());
         assert!(state.dapp_canister_ids.is_empty(), "{state:#?}",);
     }
@@ -2177,24 +2253,21 @@ mod tests {
         let new_controller_principal_id = PrincipalId::new_user_test_id(5);
 
         // Step 1.1: Prepare helpers.
-        let mut management_canister_client = MockManagementCanisterClient {
-            calls: vec![
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: PrincipalId::new_user_test_id(3),
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        sns_root_canister_id.get(),
-                    ])),
+        let management_canister_client = MockManagementCanisterClient::new(vec![
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: PrincipalId::new_user_test_id(3),
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    sns_root_canister_id.get(),
+                ])),
+            },
+            ManagementCanisterClientCall::UpdateSettings {
+                update_settings_args: UpdateSettingsArgs {
+                    canister_id: PrincipalId::new_user_test_id(3),
+                    settings: CanisterSettingsArgs::controller(new_controller_principal_id),
                 },
-                ManagementCanisterClientCall::UpdateSettings {
-                    update_settings_args: UpdateSettingsArgs {
-                        canister_id: PrincipalId::new_user_test_id(3),
-                        settings: CanisterSettingsArgs::controller(new_controller_principal_id),
-                    },
-                    result: Ok(EmptyBlob {}),
-                },
-            ]
-            .into(),
-        };
+                result: Ok(EmptyBlob {}),
+            },
+        ]);
 
         // Step 2: Run code under test.
         // We except to panic here, because we're passing the governance canister
@@ -2202,7 +2275,7 @@ mod tests {
         // can only be used by the swap canister – see NNS1-1989.
         let _response = SnsRootCanister::set_dapp_controllers(
             &STATE,
-            &mut management_canister_client,
+            &management_canister_client,
             sns_root_canister_id,
             STATE.with(|state| state.borrow().governance_canister_id.unwrap()),
             &SetDappControllersRequest {
@@ -2233,24 +2306,21 @@ mod tests {
         let new_controller_principal_id = PrincipalId::new_user_test_id(5);
 
         // Step 1.1: Prepare helpers.
-        let mut management_canister_client = MockManagementCanisterClient {
-            calls: vec![
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: PrincipalId::new_user_test_id(3),
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        sns_root_canister_id.get(),
-                    ])),
+        let management_canister_client = MockManagementCanisterClient::new(vec![
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: PrincipalId::new_user_test_id(3),
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    sns_root_canister_id.get(),
+                ])),
+            },
+            ManagementCanisterClientCall::UpdateSettings {
+                update_settings_args: UpdateSettingsArgs {
+                    canister_id: PrincipalId::new_user_test_id(3),
+                    settings: CanisterSettingsArgs::controller(new_controller_principal_id),
                 },
-                ManagementCanisterClientCall::UpdateSettings {
-                    update_settings_args: UpdateSettingsArgs {
-                        canister_id: PrincipalId::new_user_test_id(3),
-                        settings: CanisterSettingsArgs::controller(new_controller_principal_id),
-                    },
-                    result: Ok(EmptyBlob {}),
-                },
-            ]
-            .into(),
-        };
+                result: Ok(EmptyBlob {}),
+            },
+        ]);
 
         // Step 2: Run code under test.
         // We except to panic here, because we're passing the governance canister
@@ -2258,7 +2328,7 @@ mod tests {
         // can only be used by the swap canister – see NNS1-1989.
         let _response = SnsRootCanister::set_dapp_controllers(
             &STATE,
-            &mut management_canister_client,
+            &management_canister_client,
             sns_root_canister_id,
             STATE.with(|state| state.borrow().governance_canister_id.unwrap()),
             &SetDappControllersRequest {
@@ -2289,55 +2359,52 @@ mod tests {
         let new_controller_principal_id = PrincipalId::new_user_test_id(5);
 
         // Step 1.1: Prepare helpers.
-        let mut management_canister_client = MockManagementCanisterClient {
-            calls: vec![
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: PrincipalId::new_user_test_id(4),
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        sns_root_canister_id.get(),
-                    ])),
+        let management_canister_client = MockManagementCanisterClient::new(vec![
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: PrincipalId::new_user_test_id(4),
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    sns_root_canister_id.get(),
+                ])),
+            },
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: PrincipalId::new_user_test_id(5),
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    sns_root_canister_id.get(),
+                ])),
+            },
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: PrincipalId::new_user_test_id(6),
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    sns_root_canister_id.get(),
+                ])),
+            },
+            ManagementCanisterClientCall::UpdateSettings {
+                update_settings_args: UpdateSettingsArgs {
+                    canister_id: PrincipalId::new_user_test_id(4),
+                    settings: CanisterSettingsArgs::controller(new_controller_principal_id),
                 },
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: PrincipalId::new_user_test_id(5),
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        sns_root_canister_id.get(),
-                    ])),
+                result: Ok(EmptyBlob {}),
+            },
+            ManagementCanisterClientCall::UpdateSettings {
+                update_settings_args: UpdateSettingsArgs {
+                    canister_id: PrincipalId::new_user_test_id(5),
+                    settings: CanisterSettingsArgs::controller(new_controller_principal_id),
                 },
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: PrincipalId::new_user_test_id(6),
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        sns_root_canister_id.get(),
-                    ])),
+                result: Ok(EmptyBlob {}),
+            },
+            ManagementCanisterClientCall::UpdateSettings {
+                update_settings_args: UpdateSettingsArgs {
+                    canister_id: PrincipalId::new_user_test_id(6),
+                    settings: CanisterSettingsArgs::controller(new_controller_principal_id),
                 },
-                ManagementCanisterClientCall::UpdateSettings {
-                    update_settings_args: UpdateSettingsArgs {
-                        canister_id: PrincipalId::new_user_test_id(4),
-                        settings: CanisterSettingsArgs::controller(new_controller_principal_id),
-                    },
-                    result: Ok(EmptyBlob {}),
-                },
-                ManagementCanisterClientCall::UpdateSettings {
-                    update_settings_args: UpdateSettingsArgs {
-                        canister_id: PrincipalId::new_user_test_id(5),
-                        settings: CanisterSettingsArgs::controller(new_controller_principal_id),
-                    },
-                    result: Ok(EmptyBlob {}),
-                },
-                ManagementCanisterClientCall::UpdateSettings {
-                    update_settings_args: UpdateSettingsArgs {
-                        canister_id: PrincipalId::new_user_test_id(6),
-                        settings: CanisterSettingsArgs::controller(new_controller_principal_id),
-                    },
-                    result: Ok(EmptyBlob {}),
-                },
-            ]
-            .into(),
-        };
+                result: Ok(EmptyBlob {}),
+            },
+        ]);
 
         // Step 2: Run code under test.
         let response = SnsRootCanister::set_dapp_controllers(
             &STATE,
-            &mut management_canister_client,
+            &management_canister_client,
             sns_root_canister_id,
             STATE.with(|state| state.borrow().swap_canister_id.unwrap()),
             &SetDappControllersRequest {
@@ -2361,10 +2428,7 @@ mod tests {
                 failed_updates: vec![]
             }
         );
-        assert!(
-            management_canister_client.calls.is_empty(),
-            "{management_canister_client:#?}",
-        );
+        management_canister_client.assert_all_calls_consumed();
         let state = &STATE.with(|state| state.borrow().clone());
         assert!(
             state.dapp_canister_ids == vec![PrincipalId::new_user_test_id(3)],
@@ -2397,14 +2461,12 @@ mod tests {
         );
 
         // Step 1.1: Prepare helpers.
-        let mut management_canister_client = MockManagementCanisterClient {
-            calls: vec![].into(),
-        };
+        let management_canister_client = MockManagementCanisterClient::new(vec![]);
 
         // Step 2: Run code under test.
         SnsRootCanister::set_dapp_controllers(
             &STATE,
-            &mut management_canister_client,
+            &management_canister_client,
             sns_root_canister_id,
             not_authorized,
             &SetDappControllersRequest {
@@ -2436,33 +2498,30 @@ mod tests {
         assert!(not_swap != STATE.with(|state| state.borrow().swap_canister_id.unwrap()));
 
         // Step 1.1: Prepare helpers.
-        let mut management_canister_client = MockManagementCanisterClient {
-            calls: vec![
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: PrincipalId::new_user_test_id(3),
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        sns_root_canister_id.get(),
-                    ])),
+        let management_canister_client = MockManagementCanisterClient::new(vec![
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: PrincipalId::new_user_test_id(3),
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    sns_root_canister_id.get(),
+                ])),
+            },
+            ManagementCanisterClientCall::UpdateSettings {
+                update_settings_args: UpdateSettingsArgs {
+                    canister_id: PrincipalId::new_user_test_id(3),
+                    settings: CanisterSettingsArgs::controllers(vec![
+                        new_controller_principal_id,
+                        sns_root_canister_id.into(),
+                    ]),
                 },
-                ManagementCanisterClientCall::UpdateSettings {
-                    update_settings_args: UpdateSettingsArgs {
-                        canister_id: PrincipalId::new_user_test_id(3),
-                        settings: CanisterSettingsArgs::controllers(vec![
-                            new_controller_principal_id,
-                            sns_root_canister_id.into(),
-                        ]),
-                    },
-                    result: Ok(EmptyBlob {}),
-                },
-            ]
-            .into(),
-        };
+                result: Ok(EmptyBlob {}),
+            },
+        ]);
 
         // Step 2: Run code under test.
         let original_state = STATE.with(|state| state.borrow().clone());
         let response = SnsRootCanister::set_dapp_controllers(
             &STATE,
-            &mut management_canister_client,
+            &management_canister_client,
             sns_root_canister_id,
             STATE.with(|state| state.borrow().swap_canister_id.unwrap()),
             &SetDappControllersRequest {
@@ -2483,10 +2542,7 @@ mod tests {
                 failed_updates: vec![]
             }
         );
-        assert!(
-            management_canister_client.calls.is_empty(),
-            "{management_canister_client:#?}",
-        );
+        management_canister_client.assert_all_calls_consumed();
 
         // State should be unchanged, because sns root is STILL a controller of dapp_canisters.
         let state = STATE.with(|state| state.borrow().clone());
@@ -2531,16 +2587,14 @@ mod tests {
 
         let expected_archive_canister_id = CanisterId::from_u64(99);
 
-        let mut ledger_canister_client = MockLedgerCanisterClient {
-            calls: vec![LedgerCanisterClientCall::Archives {
+        let ledger_canister_client =
+            MockLedgerCanisterClient::new(vec![LedgerCanisterClientCall::Archives {
                 result: Ok(vec![ArchiveInfo {
                     canister_id: expected_archive_canister_id.into(),
                     block_range_start: Default::default(),
                     block_range_end: Default::default(),
                 }]),
-            }]
-            .into(),
-        };
+            }]);
 
         let now = now()
             .duration_since(SystemTime::UNIX_EPOCH)
@@ -2550,7 +2604,7 @@ mod tests {
         // Step 2: Call the code under test.
         SnsRootCanister::poll_for_new_archive_canisters(
             &SNS_ROOT_CANISTER,
-            &mut ledger_canister_client,
+            &ledger_canister_client,
             now,
         )
         .await;
@@ -2569,8 +2623,8 @@ mod tests {
         let expected_archive_canister_ids =
             vec![CanisterId::from_u64(99), CanisterId::from_u64(100)];
 
-        let mut ledger_canister_client = MockLedgerCanisterClient {
-            calls: vec![LedgerCanisterClientCall::Archives {
+        let ledger_canister_client =
+            MockLedgerCanisterClient::new(vec![LedgerCanisterClientCall::Archives {
                 result: Ok(vec![
                     ArchiveInfo {
                         canister_id: expected_archive_canister_ids[0].into(),
@@ -2583,9 +2637,7 @@ mod tests {
                         block_range_end: Default::default(),
                     },
                 ]),
-            }]
-            .into(),
-        };
+            }]);
 
         let now = now()
             .duration_since(SystemTime::UNIX_EPOCH)
@@ -2595,7 +2647,7 @@ mod tests {
         // Step 2: Call the code under test.
         SnsRootCanister::poll_for_new_archive_canisters(
             &SNS_ROOT_CANISTER,
-            &mut ledger_canister_client,
+            &ledger_canister_client,
             now,
         )
         .await;
@@ -2618,32 +2670,29 @@ mod tests {
         let expected_archive_canister_ids =
             vec![CanisterId::from_u64(99), CanisterId::from_u64(100)];
 
-        let mut ledger_canister_client = MockLedgerCanisterClient {
-            calls: vec![
-                LedgerCanisterClientCall::Archives {
-                    result: Ok(vec![ArchiveInfo {
+        let ledger_canister_client = MockLedgerCanisterClient::new(vec![
+            LedgerCanisterClientCall::Archives {
+                result: Ok(vec![ArchiveInfo {
+                    canister_id: expected_archive_canister_ids[0].into(),
+                    block_range_start: Default::default(),
+                    block_range_end: Default::default(),
+                }]),
+            },
+            LedgerCanisterClientCall::Archives {
+                result: Ok(vec![
+                    ArchiveInfo {
                         canister_id: expected_archive_canister_ids[0].into(),
                         block_range_start: Default::default(),
                         block_range_end: Default::default(),
-                    }]),
-                },
-                LedgerCanisterClientCall::Archives {
-                    result: Ok(vec![
-                        ArchiveInfo {
-                            canister_id: expected_archive_canister_ids[0].into(),
-                            block_range_start: Default::default(),
-                            block_range_end: Default::default(),
-                        },
-                        ArchiveInfo {
-                            canister_id: expected_archive_canister_ids[1].into(),
-                            block_range_start: Default::default(),
-                            block_range_end: Default::default(),
-                        },
-                    ]),
-                },
-            ]
-            .into(),
-        };
+                    },
+                    ArchiveInfo {
+                        canister_id: expected_archive_canister_ids[1].into(),
+                        block_range_start: Default::default(),
+                        block_range_end: Default::default(),
+                    },
+                ]),
+            },
+        ]);
 
         let now = now()
             .duration_since(SystemTime::UNIX_EPOCH)
@@ -2653,7 +2702,7 @@ mod tests {
         // Step 2: Call the code under test.
         SnsRootCanister::poll_for_new_archive_canisters(
             &SNS_ROOT_CANISTER,
-            &mut ledger_canister_client,
+            &ledger_canister_client,
             now,
         )
         .await;
@@ -2667,7 +2716,7 @@ mod tests {
 
         SnsRootCanister::poll_for_new_archive_canisters(
             &SNS_ROOT_CANISTER,
-            &mut ledger_canister_client,
+            &ledger_canister_client,
             now + ONE_DAY_SECONDS,
         )
         .await;
@@ -2693,44 +2742,41 @@ mod tests {
             CanisterId::from_u64(102),
         ];
 
-        let mut ledger_canister_client = MockLedgerCanisterClient {
-            calls: vec![
-                LedgerCanisterClientCall::Archives {
-                    result: Ok(vec![
-                        ArchiveInfo {
-                            canister_id: expected_archive_canister_ids[0].into(),
-                            block_range_start: Default::default(),
-                            block_range_end: Default::default(),
-                        },
-                        ArchiveInfo {
-                            canister_id: expected_archive_canister_ids[1].into(),
-                            block_range_start: Default::default(),
-                            block_range_end: Default::default(),
-                        },
-                    ]),
-                },
-                LedgerCanisterClientCall::Archives {
-                    result: Ok(vec![
-                        ArchiveInfo {
-                            canister_id: expected_archive_canister_ids[0].into(),
-                            block_range_start: Default::default(),
-                            block_range_end: Default::default(),
-                        },
-                        ArchiveInfo {
-                            canister_id: expected_archive_canister_ids[2].into(),
-                            block_range_start: Default::default(),
-                            block_range_end: Default::default(),
-                        },
-                        ArchiveInfo {
-                            canister_id: expected_archive_canister_ids[3].into(),
-                            block_range_start: Default::default(),
-                            block_range_end: Default::default(),
-                        },
-                    ]),
-                },
-            ]
-            .into(),
-        };
+        let ledger_canister_client = MockLedgerCanisterClient::new(vec![
+            LedgerCanisterClientCall::Archives {
+                result: Ok(vec![
+                    ArchiveInfo {
+                        canister_id: expected_archive_canister_ids[0].into(),
+                        block_range_start: Default::default(),
+                        block_range_end: Default::default(),
+                    },
+                    ArchiveInfo {
+                        canister_id: expected_archive_canister_ids[1].into(),
+                        block_range_start: Default::default(),
+                        block_range_end: Default::default(),
+                    },
+                ]),
+            },
+            LedgerCanisterClientCall::Archives {
+                result: Ok(vec![
+                    ArchiveInfo {
+                        canister_id: expected_archive_canister_ids[0].into(),
+                        block_range_start: Default::default(),
+                        block_range_end: Default::default(),
+                    },
+                    ArchiveInfo {
+                        canister_id: expected_archive_canister_ids[2].into(),
+                        block_range_start: Default::default(),
+                        block_range_end: Default::default(),
+                    },
+                    ArchiveInfo {
+                        canister_id: expected_archive_canister_ids[3].into(),
+                        block_range_start: Default::default(),
+                        block_range_end: Default::default(),
+                    },
+                ]),
+            },
+        ]);
 
         let now = now()
             .duration_since(SystemTime::UNIX_EPOCH)
@@ -2740,7 +2786,7 @@ mod tests {
         // Step 2: Call the code under test.
         SnsRootCanister::poll_for_new_archive_canisters(
             &SNS_ROOT_CANISTER,
-            &mut ledger_canister_client,
+            &ledger_canister_client,
             now,
         )
         .await;
@@ -2756,7 +2802,7 @@ mod tests {
         // the previous archive canisters.
         SnsRootCanister::poll_for_new_archive_canisters(
             &SNS_ROOT_CANISTER,
-            &mut ledger_canister_client,
+            &ledger_canister_client,
             now + ONE_DAY_SECONDS,
         )
         .await;
@@ -2781,44 +2827,41 @@ mod tests {
         let expected_archive_canister_ids =
             vec![CanisterId::from_u64(99), CanisterId::from_u64(100)];
 
-        let mut ledger_canister_client = MockLedgerCanisterClient {
-            calls: vec![
-                LedgerCanisterClientCall::Archives {
-                    result: Ok(vec![ArchiveInfo {
+        let ledger_canister_client = MockLedgerCanisterClient::new(vec![
+            LedgerCanisterClientCall::Archives {
+                result: Ok(vec![ArchiveInfo {
+                    canister_id: expected_archive_canister_ids[0].into(),
+                    block_range_start: Default::default(),
+                    block_range_end: Default::default(),
+                }]),
+            },
+            LedgerCanisterClientCall::Archives {
+                result: Err(CanisterCallError {
+                    code: None,
+                    description: "This is an error".to_string(),
+                }),
+            },
+            LedgerCanisterClientCall::Archives {
+                result: Ok(vec![
+                    ArchiveInfo {
                         canister_id: expected_archive_canister_ids[0].into(),
                         block_range_start: Default::default(),
                         block_range_end: Default::default(),
-                    }]),
-                },
-                LedgerCanisterClientCall::Archives {
-                    result: Err(CanisterCallError {
-                        code: None,
-                        description: "This is an error".to_string(),
-                    }),
-                },
-                LedgerCanisterClientCall::Archives {
-                    result: Ok(vec![
-                        ArchiveInfo {
-                            canister_id: expected_archive_canister_ids[0].into(),
-                            block_range_start: Default::default(),
-                            block_range_end: Default::default(),
-                        },
-                        ArchiveInfo {
-                            canister_id: expected_archive_canister_ids[1].into(),
-                            block_range_start: Default::default(),
-                            block_range_end: Default::default(),
-                        },
-                    ]),
-                },
-                LedgerCanisterClientCall::Archives {
-                    result: Err(CanisterCallError {
-                        code: None,
-                        description: "This is also an error".to_string(),
-                    }),
-                },
-            ]
-            .into(),
-        };
+                    },
+                    ArchiveInfo {
+                        canister_id: expected_archive_canister_ids[1].into(),
+                        block_range_start: Default::default(),
+                        block_range_end: Default::default(),
+                    },
+                ]),
+            },
+            LedgerCanisterClientCall::Archives {
+                result: Err(CanisterCallError {
+                    code: None,
+                    description: "This is also an error".to_string(),
+                }),
+            },
+        ]);
 
         let now = now()
             .duration_since(SystemTime::UNIX_EPOCH)
@@ -2830,7 +2873,7 @@ mod tests {
         // The first call should result in new archives being returned
         SnsRootCanister::poll_for_new_archive_canisters(
             &SNS_ROOT_CANISTER,
-            &mut ledger_canister_client,
+            &ledger_canister_client,
             now,
         )
         .await;
@@ -2846,7 +2889,7 @@ mod tests {
         // latest_ledger_archive_poll_timestamp_seconds, but no new archive canisters
         SnsRootCanister::poll_for_new_archive_canisters(
             &SNS_ROOT_CANISTER,
-            &mut ledger_canister_client,
+            &ledger_canister_client,
             now + ONE_DAY_SECONDS,
         )
         .await;
@@ -2862,7 +2905,7 @@ mod tests {
         // canisters
         SnsRootCanister::poll_for_new_archive_canisters(
             &SNS_ROOT_CANISTER,
-            &mut ledger_canister_client,
+            &ledger_canister_client,
             now + (2 * ONE_DAY_SECONDS),
         )
         .await;
@@ -2877,7 +2920,7 @@ mod tests {
         // latest_ledger_archive_poll_timestamp_seconds, but no new archive canisters
         SnsRootCanister::poll_for_new_archive_canisters(
             &SNS_ROOT_CANISTER,
-            &mut ledger_canister_client,
+            &ledger_canister_client,
             now + (3 * ONE_DAY_SECONDS),
         )
         .await;
@@ -2928,32 +2971,29 @@ mod tests {
         let expected_archive_canister_ids =
             vec![CanisterId::from_u64(99), CanisterId::from_u64(100)];
 
-        let mut ledger_canister_client = MockLedgerCanisterClient {
-            calls: vec![
-                LedgerCanisterClientCall::Archives {
-                    result: Ok(vec![ArchiveInfo {
+        let ledger_canister_client = MockLedgerCanisterClient::new(vec![
+            LedgerCanisterClientCall::Archives {
+                result: Ok(vec![ArchiveInfo {
+                    canister_id: expected_archive_canister_ids[0].into(),
+                    block_range_start: Default::default(),
+                    block_range_end: Default::default(),
+                }]),
+            },
+            LedgerCanisterClientCall::Archives {
+                result: Ok(vec![
+                    ArchiveInfo {
                         canister_id: expected_archive_canister_ids[0].into(),
                         block_range_start: Default::default(),
                         block_range_end: Default::default(),
-                    }]),
-                },
-                LedgerCanisterClientCall::Archives {
-                    result: Ok(vec![
-                        ArchiveInfo {
-                            canister_id: expected_archive_canister_ids[0].into(),
-                            block_range_start: Default::default(),
-                            block_range_end: Default::default(),
-                        },
-                        ArchiveInfo {
-                            canister_id: expected_archive_canister_ids[1].into(),
-                            block_range_start: Default::default(),
-                            block_range_end: Default::default(),
-                        },
-                    ]),
-                },
-            ]
-            .into(),
-        };
+                    },
+                    ArchiveInfo {
+                        canister_id: expected_archive_canister_ids[1].into(),
+                        block_range_start: Default::default(),
+                        block_range_end: Default::default(),
+                    },
+                ]),
+            },
+        ]);
 
         let now = now()
             .duration_since(SystemTime::UNIX_EPOCH)
@@ -2961,8 +3001,7 @@ mod tests {
             .as_secs();
 
         // Step 2: Call the code under test.
-        SnsRootCanister::run_periodic_tasks(&SNS_ROOT_CANISTER, &mut ledger_canister_client, now)
-            .await;
+        SnsRootCanister::run_periodic_tasks(&SNS_ROOT_CANISTER, &ledger_canister_client, now).await;
 
         // Step 3: Inspect results.
         assert_archive_poll_state_change(
@@ -2973,12 +3012,8 @@ mod tests {
 
         // Running periodic tasks one second in the future should
         // result in no change to state.
-        SnsRootCanister::run_periodic_tasks(
-            &SNS_ROOT_CANISTER,
-            &mut ledger_canister_client,
-            now + 1,
-        )
-        .await;
+        SnsRootCanister::run_periodic_tasks(&SNS_ROOT_CANISTER, &ledger_canister_client, now + 1)
+            .await;
 
         assert_archive_poll_state_change(
             &SNS_ROOT_CANISTER,
@@ -2990,7 +3025,7 @@ mod tests {
         // result in a new poll.
         SnsRootCanister::run_periodic_tasks(
             &SNS_ROOT_CANISTER,
-            &mut ledger_canister_client,
+            &ledger_canister_client,
             now + ONE_DAY_SECONDS,
         )
         .await;
@@ -3024,92 +3059,86 @@ mod tests {
                 )
             });
 
-        let mut management_canister_client = MockManagementCanisterClient {
-            calls: vec![
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: governance_canister_id,
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        root_canister_id.get(),
-                    ])),
-                },
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: ledger_canister_id,
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        root_canister_id.get(),
-                    ])),
-                },
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: index_canister_id,
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        root_canister_id.get(),
-                    ])),
-                },
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: expected_archive_canister_ids[0].get(),
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        root_canister_id.get(),
-                    ])),
-                },
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: governance_canister_id,
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        root_canister_id.get(),
-                    ])),
-                },
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: ledger_canister_id,
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        root_canister_id.get(),
-                    ])),
-                },
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: index_canister_id,
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        root_canister_id.get(),
-                    ])),
-                },
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: expected_archive_canister_ids[0].get(),
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        root_canister_id.get(),
-                    ])),
-                },
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: expected_archive_canister_ids[1].get(),
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        root_canister_id.get(),
-                    ])),
-                },
-            ]
-            .into(),
-        };
+        let management_canister_client = MockManagementCanisterClient::new(vec![
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: governance_canister_id,
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    root_canister_id.get(),
+                ])),
+            },
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: ledger_canister_id,
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    root_canister_id.get(),
+                ])),
+            },
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: index_canister_id,
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    root_canister_id.get(),
+                ])),
+            },
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: expected_archive_canister_ids[0].get(),
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    root_canister_id.get(),
+                ])),
+            },
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: governance_canister_id,
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    root_canister_id.get(),
+                ])),
+            },
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: ledger_canister_id,
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    root_canister_id.get(),
+                ])),
+            },
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: index_canister_id,
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    root_canister_id.get(),
+                ])),
+            },
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: expected_archive_canister_ids[0].get(),
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    root_canister_id.get(),
+                ])),
+            },
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: expected_archive_canister_ids[1].get(),
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    root_canister_id.get(),
+                ])),
+            },
+        ]);
 
-        let mut ledger_canister_client = MockLedgerCanisterClient {
-            calls: vec![
-                LedgerCanisterClientCall::Archives {
-                    result: Ok(vec![ArchiveInfo {
+        let ledger_canister_client = MockLedgerCanisterClient::new(vec![
+            LedgerCanisterClientCall::Archives {
+                result: Ok(vec![ArchiveInfo {
+                    canister_id: expected_archive_canister_ids[0].into(),
+                    block_range_start: Default::default(),
+                    block_range_end: Default::default(),
+                }]),
+            },
+            LedgerCanisterClientCall::Archives {
+                result: Ok(vec![
+                    ArchiveInfo {
                         canister_id: expected_archive_canister_ids[0].into(),
                         block_range_start: Default::default(),
                         block_range_end: Default::default(),
-                    }]),
-                },
-                LedgerCanisterClientCall::Archives {
-                    result: Ok(vec![
-                        ArchiveInfo {
-                            canister_id: expected_archive_canister_ids[0].into(),
-                            block_range_start: Default::default(),
-                            block_range_end: Default::default(),
-                        },
-                        ArchiveInfo {
-                            canister_id: expected_archive_canister_ids[1].into(),
-                            block_range_start: Default::default(),
-                            block_range_end: Default::default(),
-                        },
-                    ]),
-                },
-            ]
-            .into(),
-        };
+                    },
+                    ArchiveInfo {
+                        canister_id: expected_archive_canister_ids[1].into(),
+                        block_range_start: Default::default(),
+                        block_range_end: Default::default(),
+                    },
+                ]),
+            },
+        ]);
 
         let now = now()
             .duration_since(SystemTime::UNIX_EPOCH)
@@ -3166,8 +3195,7 @@ mod tests {
             };
 
         // Step 2: Call the code under test.
-        SnsRootCanister::run_periodic_tasks(&SNS_ROOT_CANISTER, &mut ledger_canister_client, now)
-            .await;
+        SnsRootCanister::run_periodic_tasks(&SNS_ROOT_CANISTER, &ledger_canister_client, now).await;
 
         // We should now have a single Archive canister registered.
         assert_archive_poll_state_change(
@@ -3178,8 +3206,8 @@ mod tests {
 
         let first_result = SnsRootCanister::get_sns_canisters_summary(
             &SNS_ROOT_CANISTER,
-            &mut management_canister_client,
-            &mut ledger_canister_client,
+            &management_canister_client,
+            &ledger_canister_client,
             &env,
             false,
         )
@@ -3194,8 +3222,8 @@ mod tests {
 
         let second_result = SnsRootCanister::get_sns_canisters_summary(
             &SNS_ROOT_CANISTER,
-            &mut management_canister_client,
-            &mut ledger_canister_client,
+            &management_canister_client,
+            &ledger_canister_client,
             &env,
             true,
         )
@@ -3220,10 +3248,7 @@ mod tests {
             expected_archive_canister_ids.to_vec()
         );
 
-        assert!(
-            management_canister_client.calls.is_empty(),
-            "management_canister_client.calls should be empty"
-        );
+        management_canister_client.assert_all_calls_consumed();
     }
 
     #[tokio::test]
@@ -3261,79 +3286,74 @@ mod tests {
         let expected_dapp_canisters_principal_ids =
             EXPECTED_DAPP_CANISTERS_PRINCIPAL_IDS.with(|i| i.clone());
 
-        let mut management_canister_client = MockManagementCanisterClient {
-            calls: vec![
-                // First set of calls
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: governance_canister_id,
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        root_canister_id.get(),
-                    ])),
-                },
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: ledger_canister_id,
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        root_canister_id.get(),
-                    ])),
-                },
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: index_canister_id,
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        root_canister_id.get(),
-                    ])),
-                },
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: expected_dapp_canisters_principal_ids[0],
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        root_canister_id.get(),
-                    ])),
-                },
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: expected_dapp_canisters_principal_ids[1],
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        root_canister_id.get(),
-                    ])),
-                },
-                // Second set of calls
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: governance_canister_id,
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        root_canister_id.get(),
-                    ])),
-                },
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: ledger_canister_id,
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        root_canister_id.get(),
-                    ])),
-                },
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: index_canister_id,
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        root_canister_id.get(),
-                    ])),
-                },
-                // Error call
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: expected_dapp_canisters_principal_ids[0],
-                    result: Err(CanisterCallError {
-                        code: Some(0),
-                        description: "Error calling status on dapp".to_string(),
-                    }),
-                },
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: expected_dapp_canisters_principal_ids[1],
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        root_canister_id.get(),
-                    ])),
-                },
-            ]
-            .into(),
-        };
+        let management_canister_client = MockManagementCanisterClient::new(vec![
+            // First set of calls
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: governance_canister_id,
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    root_canister_id.get(),
+                ])),
+            },
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: ledger_canister_id,
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    root_canister_id.get(),
+                ])),
+            },
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: index_canister_id,
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    root_canister_id.get(),
+                ])),
+            },
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: expected_dapp_canisters_principal_ids[0],
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    root_canister_id.get(),
+                ])),
+            },
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: expected_dapp_canisters_principal_ids[1],
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    root_canister_id.get(),
+                ])),
+            },
+            // Second set of calls
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: governance_canister_id,
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    root_canister_id.get(),
+                ])),
+            },
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: ledger_canister_id,
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    root_canister_id.get(),
+                ])),
+            },
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: index_canister_id,
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    root_canister_id.get(),
+                ])),
+            },
+            // Error call
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: expected_dapp_canisters_principal_ids[0],
+                result: Err(CanisterCallError {
+                    code: Some(0),
+                    description: "Error calling status on dapp".to_string(),
+                }),
+            },
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: expected_dapp_canisters_principal_ids[1],
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    root_canister_id.get(),
+                ])),
+            },
+        ]);
 
-        let mut ledger_canister_client = MockLedgerCanisterClient {
-            calls: vec![].into(),
-        };
+        let ledger_canister_client = MockLedgerCanisterClient::new(vec![]);
 
         let now = now()
             .duration_since(SystemTime::UNIX_EPOCH)
@@ -3394,8 +3414,8 @@ mod tests {
         // Call the code under test which consumes the first set of calls
         let result_1 = SnsRootCanister::get_sns_canisters_summary(
             &SNS_ROOT_CANISTER,
-            &mut management_canister_client,
-            &mut ledger_canister_client,
+            &management_canister_client,
+            &ledger_canister_client,
             &env,
             false,
         )
@@ -3418,8 +3438,8 @@ mod tests {
         // Call the code under test which consumes the second set of calls
         let result_2 = SnsRootCanister::get_sns_canisters_summary(
             &SNS_ROOT_CANISTER,
-            &mut management_canister_client,
-            &mut ledger_canister_client,
+            &management_canister_client,
+            &ledger_canister_client,
             &env,
             false,
         )
@@ -3439,10 +3459,7 @@ mod tests {
         );
         assert!(result_2.dapps[1].status.is_some());
 
-        assert!(
-            management_canister_client.calls.is_empty(),
-            "management_canister_client.calls should be empty"
-        );
+        management_canister_client.assert_all_calls_consumed();
     }
 
     #[tokio::test]
@@ -3480,79 +3497,74 @@ mod tests {
         let expected_archive_canisters_principal_ids =
             EXPECTED_ARCHIVE_CANISTERS_PRINCIPAL_IDS.with(|i| i.clone());
 
-        let mut management_canister_client = MockManagementCanisterClient {
-            calls: vec![
-                // First set of calls
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: governance_canister_id,
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        root_canister_id.get(),
-                    ])),
-                },
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: ledger_canister_id,
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        root_canister_id.get(),
-                    ])),
-                },
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: index_canister_id,
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        root_canister_id.get(),
-                    ])),
-                },
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: expected_archive_canisters_principal_ids[0],
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        root_canister_id.get(),
-                    ])),
-                },
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: expected_archive_canisters_principal_ids[1],
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        root_canister_id.get(),
-                    ])),
-                },
-                // Second set of calls
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: governance_canister_id,
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        root_canister_id.get(),
-                    ])),
-                },
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: ledger_canister_id,
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        root_canister_id.get(),
-                    ])),
-                },
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: index_canister_id,
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        root_canister_id.get(),
-                    ])),
-                },
-                // Error call
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: expected_archive_canisters_principal_ids[0],
-                    result: Err(CanisterCallError {
-                        code: Some(0),
-                        description: "Error calling status on dapp".to_string(),
-                    }),
-                },
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: expected_archive_canisters_principal_ids[1],
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        root_canister_id.get(),
-                    ])),
-                },
-            ]
-            .into(),
-        };
+        let management_canister_client = MockManagementCanisterClient::new(vec![
+            // First set of calls
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: governance_canister_id,
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    root_canister_id.get(),
+                ])),
+            },
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: ledger_canister_id,
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    root_canister_id.get(),
+                ])),
+            },
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: index_canister_id,
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    root_canister_id.get(),
+                ])),
+            },
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: expected_archive_canisters_principal_ids[0],
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    root_canister_id.get(),
+                ])),
+            },
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: expected_archive_canisters_principal_ids[1],
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    root_canister_id.get(),
+                ])),
+            },
+            // Second set of calls
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: governance_canister_id,
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    root_canister_id.get(),
+                ])),
+            },
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: ledger_canister_id,
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    root_canister_id.get(),
+                ])),
+            },
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: index_canister_id,
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    root_canister_id.get(),
+                ])),
+            },
+            // Error call
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: expected_archive_canisters_principal_ids[0],
+                result: Err(CanisterCallError {
+                    code: Some(0),
+                    description: "Error calling status on dapp".to_string(),
+                }),
+            },
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: expected_archive_canisters_principal_ids[1],
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    root_canister_id.get(),
+                ])),
+            },
+        ]);
 
-        let mut ledger_canister_client = MockLedgerCanisterClient {
-            calls: vec![].into(),
-        };
+        let ledger_canister_client = MockLedgerCanisterClient::new(vec![]);
 
         let now = now()
             .duration_since(SystemTime::UNIX_EPOCH)
@@ -3613,8 +3625,8 @@ mod tests {
         // Call the code under test which consumes the first set of calls
         let result_1 = SnsRootCanister::get_sns_canisters_summary(
             &SNS_ROOT_CANISTER,
-            &mut management_canister_client,
-            &mut ledger_canister_client,
+            &management_canister_client,
+            &ledger_canister_client,
             &env,
             false,
         )
@@ -3637,8 +3649,8 @@ mod tests {
         // Call the code under test which consumes the second set of calls
         let result_2 = SnsRootCanister::get_sns_canisters_summary(
             &SNS_ROOT_CANISTER,
-            &mut management_canister_client,
-            &mut ledger_canister_client,
+            &management_canister_client,
+            &ledger_canister_client,
             &env,
             false,
         )
@@ -3658,10 +3670,7 @@ mod tests {
         );
         assert!(result_2.archives[1].status.is_some());
 
-        assert!(
-            management_canister_client.calls.is_empty(),
-            "management_canister_client.calls should be empty"
-        );
+        management_canister_client.assert_all_calls_consumed();
     }
 
     #[test]
@@ -3737,51 +3746,46 @@ mod tests {
         let expected_dapp_canisters_principal_ids =
             EXPECTED_DAPP_CANISTERS_PRINCIPAL_IDS.with(|i| i.clone());
 
-        let mut management_canister_client = MockManagementCanisterClient {
-            calls: vec![
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: governance_canister_id,
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        extra_controller_id,
-                        root_canister_id.get(),
-                    ])),
-                },
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: ledger_canister_id,
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        extra_controller_id,
-                        root_canister_id.get(),
-                    ])),
-                },
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: index_canister_id,
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        extra_controller_id,
-                        root_canister_id.get(),
-                    ])),
-                },
-                // Error call
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: expected_dapp_canisters_principal_ids[0],
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        extra_controller_id,
-                        root_canister_id.get(),
-                    ])),
-                },
-                ManagementCanisterClientCall::CanisterStatus {
-                    expected_canister_id: expected_dapp_canisters_principal_ids[1],
-                    result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
-                        extra_controller_id,
-                        root_canister_id.get(),
-                    ])),
-                },
-            ]
-            .into(),
-        };
+        let management_canister_client = MockManagementCanisterClient::new(vec![
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: governance_canister_id,
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    extra_controller_id,
+                    root_canister_id.get(),
+                ])),
+            },
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: ledger_canister_id,
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    extra_controller_id,
+                    root_canister_id.get(),
+                ])),
+            },
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: index_canister_id,
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    extra_controller_id,
+                    root_canister_id.get(),
+                ])),
+            },
+            // Error call
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: expected_dapp_canisters_principal_ids[0],
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    extra_controller_id,
+                    root_canister_id.get(),
+                ])),
+            },
+            ManagementCanisterClientCall::CanisterStatus {
+                expected_canister_id: expected_dapp_canisters_principal_ids[1],
+                result: Ok(CanisterStatusResultV2::dummy_with_controllers(vec![
+                    extra_controller_id,
+                    root_canister_id.get(),
+                ])),
+            },
+        ]);
 
-        let mut ledger_canister_client = MockLedgerCanisterClient {
-            calls: vec![].into(),
-        };
+        let ledger_canister_client = MockLedgerCanisterClient::new(vec![]);
 
         let now = now()
             .duration_since(SystemTime::UNIX_EPOCH)
@@ -3829,8 +3833,8 @@ mod tests {
             index,
         } = SnsRootCanister::get_sns_canisters_summary(
             &SNS_ROOT_CANISTER,
-            &mut management_canister_client,
-            &mut ledger_canister_client,
+            &management_canister_client,
+            &ledger_canister_client,
             &env,
             false,
         )
@@ -3856,9 +3860,6 @@ mod tests {
             assert_eq!(archive.status.unwrap().controller(), extra_controller_id);
         }
 
-        assert!(
-            management_canister_client.calls.is_empty(),
-            "management_canister_client.calls should be empty"
-        );
+        management_canister_client.assert_all_calls_consumed();
     }
 }
