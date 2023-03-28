@@ -191,16 +191,59 @@ impl CanisterHttpPayloadBuilder for CanisterHttpPayloadBuilderImpl {
             }
         };
 
+        let mut accumulated_size = 0;
+        let mut candidates = vec![];
+        let mut timeouts = vec![];
         let mut divergence_responses = vec![];
+
+        // Metrics counters
+        let mut unique_includable_responses = 0;
+        let mut timeouts_included = 0;
+        let mut total_share_count = 0;
+        let mut active_shares = 0;
+        let mut responses_included = 0;
+        let mut unique_responses_count = 0;
+
+        // Check the state for timeouts NOTE: We can not use the existing
+        // timed out artifacts for this task, since we don't have consensus
+        // on them. For example a malicious node might publish a single
+        // timed out metadata share and we would pick it up to generate a
+        // time out response. Instead, we scan the state metadata for timed
+        // out requests and generate time out responses based on that
+        if let Ok(state) = self
+            .state_manager
+            .get_state_at(validation_context.certified_height)
+        {
+            // Iterate over all outstanding canister http requests
+            for (callback_id, request) in state
+                .get_ref()
+                .metadata
+                .subnet_call_context_manager
+                .canister_http_request_contexts
+                .iter()
+            {
+                unique_includable_responses += 1;
+                let candidate_size = callback_id.count_bytes();
+                let size = NumBytes::new((accumulated_size + candidate_size) as u64);
+                if size >= max_payload_size {
+                    // All timeouts have the same size, so we can stop iterating.
+                    break;
+                } else if request.time + CANISTER_HTTP_TIMEOUT_INTERVAL < validation_context.time
+                    && !delivered_ids.contains(callback_id)
+                {
+                    timeouts_included += 1;
+                    timeouts.push(*callback_id);
+                    accumulated_size += candidate_size;
+                }
+            }
+        }
 
         // Since aggegating the signatures is expensive, we don't want to do the
         // size checks after aggregation. Also we don't want to hold the lock on
         // the pool while aggregating. Therefore, we pick the candidates for the
         // payload first, then aggregate the signatures in a second step
-        let (mut candidates, timeouts) = {
+        {
             let pool_access = self.pool.read().unwrap();
-            let mut total_share_count = 0;
-            let mut active_shares = 0;
 
             // Get share candidates to include in the block
             let share_candidates = pool_access
@@ -229,8 +272,6 @@ impl CanisterHttpPayloadBuilder for CanisterHttpPayloadBuilderImpl {
 
             self.metrics.total_shares.set(total_share_count);
             self.metrics.active_shares.set(active_shares);
-
-            let mut unique_responses_count = 0;
 
             let responses =
                 response_candidates_by_callback_id
@@ -277,50 +318,6 @@ impl CanisterHttpPayloadBuilder for CanisterHttpPayloadBuilderImpl {
                         }
                     });
 
-            // Select from the response candidates those that will fit into the
-            // payload.
-            let mut accumulated_size = 0;
-            let mut candidates = vec![];
-            let mut unique_includable_responses = 0;
-            let mut responses_included = 0;
-            let mut timeouts_included = 0;
-
-            // Check the state for timeouts NOTE: We can not use the existing
-            // timed out artifacts for this task, since we don't have consensus
-            // on them. For example a malicious node might publish a single
-            // timed out metadata share and we would pick it up to generate a
-            // time out response. Instead, we scan the state metadata for timed
-            // out requests and generate time out responses based on that
-            let mut timeouts = vec![];
-            if let Ok(state) = self
-                .state_manager
-                .get_state_at(validation_context.certified_height)
-            {
-                // Iterate over all outstanding canister http requests
-                for (callback_id, request) in state
-                    .get_ref()
-                    .metadata
-                    .subnet_call_context_manager
-                    .canister_http_request_contexts
-                    .iter()
-                {
-                    unique_includable_responses += 1;
-                    let candidate_size = callback_id.count_bytes();
-                    let size = NumBytes::new((accumulated_size + candidate_size) as u64);
-                    if size >= max_payload_size {
-                        // All timeouts have the same size, so we can stop iterating.
-                        break;
-                    } else if request.time + CANISTER_HTTP_TIMEOUT_INTERVAL
-                        < validation_context.time
-                        && !delivered_ids.contains(callback_id)
-                    {
-                        timeouts_included += 1;
-                        timeouts.push(*callback_id);
-                        accumulated_size += candidate_size;
-                    }
-                }
-            }
-
             for (metadata, shares, content) in responses {
                 unique_includable_responses += 1;
                 // FIXME: This MUST be the same size calculation as
@@ -337,15 +334,13 @@ impl CanisterHttpPayloadBuilder for CanisterHttpPayloadBuilderImpl {
                     accumulated_size += candidate_size;
                 }
             }
-
-            self.metrics.included_timeouts.set(timeouts_included);
-            self.metrics.unique_responses.set(unique_responses_count);
-            self.metrics
-                .unique_includable_responses
-                .set(unique_includable_responses);
-
-            (candidates, timeouts)
         };
+
+        self.metrics.included_timeouts.set(timeouts_included);
+        self.metrics.unique_responses.set(unique_responses_count);
+        self.metrics
+            .unique_includable_responses
+            .set(unique_includable_responses);
 
         // Now that we have the candidates, aggregate the signatures and construct the payload
         let payload = CanisterHttpPayload {
