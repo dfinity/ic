@@ -18,6 +18,7 @@ DEPENDENCIES = [
     "//rs/http_endpoints/metrics",
     "//rs/http_endpoints/public",
     "//rs/https_outcalls/client",
+    "//rs/ic_os/sev",
     "//rs/interfaces",
     "//rs/interfaces/bitcoin_adapter_client",
     "//rs/interfaces/certified_stream_store",

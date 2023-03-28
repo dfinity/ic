@@ -18,7 +18,8 @@ mock! {
             &self,
             peer_id: &NodeId,
             peer_addr: SocketAddr,
-            registry_version: RegistryVersion,
+            lastest_registry_version: RegistryVersion,
+            earliest_registry_version: RegistryVersion,
         );
 
         fn stop_connection(

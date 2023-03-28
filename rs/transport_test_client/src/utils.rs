@@ -2,10 +2,14 @@
 
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
 use ic_crypto_tls_interfaces::TlsHandshake;
+use ic_protobuf::registry::subnet::v1::SubnetListRecord;
 use ic_registry_client_fake::FakeRegistryClient;
-use ic_registry_keys::make_crypto_tls_cert_key;
+use ic_registry_keys::{
+    make_crypto_tls_cert_key, make_subnet_list_record_key, make_subnet_record_key,
+};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_types::{NodeId, PrincipalId, RegistryVersion};
+use ic_test_utilities_registry::test_subnet_record;
+use ic_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
 use notify::{watcher, RecursiveMode, Watcher};
 use std::convert::TryFrom;
 use std::fs;
@@ -23,12 +27,18 @@ pub fn to_node_id(node_id: u8) -> NodeId {
 
 // The suggestion is ridiculously complicated and unreadable
 #[allow(clippy::needless_range_loop)]
+#[allow(clippy::type_complexity)]
 pub fn create_crypto(
     node_index: usize,
     nodes: usize,
     node_id: NodeId,
+    subnet_id: SubnetId,
     registry_version: RegistryVersion,
-) -> Result<Arc<dyn TlsHandshake + Send + Sync>> {
+) -> Result<(
+    Arc<ProtoRegistryDataProvider>,
+    Arc<FakeRegistryClient>,
+    Arc<dyn TlsHandshake + Send + Sync>,
+)> {
     if node_index == 1 {
         for i in 1..(nodes + 1) {
             let filename = format!("tls_pubkey_cert.{}", i);
@@ -59,6 +69,29 @@ pub fn create_crypto(
             Some(tls_pubkey_cert.to_proto()),
         )
         .expect("failed to add TLS cert to registry");
+    let subnet_list_record = SubnetListRecord {
+        subnets: vec![subnet_id.get().to_vec()],
+    };
+    data_provider
+        .add(
+            make_subnet_list_record_key().as_str(),
+            registry_version,
+            Some(subnet_list_record),
+        )
+        .expect("Could not add subnet list");
+    let mut subnet_record = test_subnet_record();
+    for i in 1..(nodes + 1) {
+        subnet_record
+            .membership
+            .push(to_node_id(i as u8).get().to_vec());
+    }
+    data_provider
+        .add(
+            &make_subnet_record_key(subnet_id),
+            registry_version,
+            Some(subnet_record),
+        )
+        .expect("Could not add subnet record.");
     let (tx, rx) = channel();
     let mut watcher = watcher(tx, Duration::from_secs(10)).unwrap();
     watcher.watch("./", RecursiveMode::NonRecursive).unwrap();
@@ -106,5 +139,5 @@ pub fn create_crypto(
         }
     }
     registry.update_to_latest_version();
-    Ok(Arc::new(crypto))
+    Ok((data_provider, registry, Arc::new(crypto)))
 }

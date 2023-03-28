@@ -48,7 +48,8 @@ pub trait Transport: Send + Sync {
         &self,
         peer_id: &NodeId,
         peer_addr: SocketAddr,
-        registry_version: RegistryVersion,
+        latest_registry_version: RegistryVersion,
+        earliest_registry_version: RegistryVersion,
     );
 
     /// Terminates the connection with the peer.

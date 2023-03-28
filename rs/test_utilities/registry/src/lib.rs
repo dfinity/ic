@@ -167,7 +167,7 @@ pub fn test_subnet_record() -> SubnetRecord {
         max_instructions_per_message: 5_000_000_000,
         max_instructions_per_round: 7_000_000_000,
         max_instructions_per_install_code: 200_000_000_000,
-        features: None,
+        features: Some(SubnetFeatures::default()),
         max_number_of_canisters: 0,
         ssh_readonly_access: vec![],
         ssh_backup_access: vec![],

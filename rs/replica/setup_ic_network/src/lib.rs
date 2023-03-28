@@ -24,8 +24,9 @@ use ic_consensus::{
     consensus::{pool_reader::PoolReader, ConsensusCrypto, Membership},
     dkg, ecdsa,
 };
-use ic_crypto_tls_interfaces::TlsHandshake;
+use ic_crypto_tls_interfaces::{TlsHandshake, TlsStream};
 use ic_cycles_account_manager::CyclesAccountManager;
+use ic_icos_sev_interfaces::ValidateAttestedStream;
 use ic_ingress_manager::IngressManager;
 use ic_interfaces::{
     artifact_manager::{ArtifactClient, ArtifactManager, ArtifactProcessor},
@@ -111,6 +112,7 @@ pub fn create_networking_stack(
     // constructs it from the 'transport_config'.
     transport: Option<Arc<dyn Transport>>,
     tls_handshake: Arc<dyn TlsHandshake + Send + Sync>,
+    sev_handshake: Arc<dyn ValidateAttestedStream<Box<dyn TlsStream>> + Send + Sync>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     state_sync_client: P2PStateSyncClient,
@@ -132,6 +134,9 @@ pub fn create_networking_stack(
     let advert_subscriber = AdvertBroadcaster::new(log.clone(), metrics_registry);
     let consensus_pool_cache = artifact_pools.consensus_pool_cache.clone();
     let ingress_pool = artifact_pools.ingress_pool.clone();
+    let oldest_registry_version_in_use = artifact_pools
+        .consensus_pool_cache
+        .get_oldest_registry_version_in_use();
     // Now we setup the Artifact Pools and the manager.
     let artifact_manager = setup_artifact_manager(
         node_id,
@@ -165,8 +170,10 @@ pub fn create_networking_stack(
             node_id,
             transport_config.clone(),
             registry_client.get_latest_version(),
+            oldest_registry_version_in_use,
             metrics_registry.clone(),
             tls_handshake,
+            sev_handshake,
             rt_handle.clone(),
             log.clone(),
             false,
