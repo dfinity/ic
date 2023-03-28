@@ -25,7 +25,7 @@ include:
 .cargo-build-docker:
   needs: []  # don't wait on other jobs by default
   extends:
-    - .ubuntu-cargo-docker-k8s-pinned-dc
+    - .ubuntu-cargo-docker-k8s
     - .rules-parent-pipeline
   stage: cargo-build
 
