@@ -34,8 +34,8 @@ use ic_canister_client::Sender;
 use ic_config::subnet_config::ECDSA_SIGNATURE_FEE;
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_ic00_types::{
-    ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId, Payload, SignWithECDSAArgs,
-    SignWithECDSAReply,
+    DerivationPath, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId, Payload,
+    SignWithECDSAArgs, SignWithECDSAReply,
 };
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nns_common::types::{NeuronId, ProposalId};
@@ -218,7 +218,7 @@ pub(crate) async fn get_public_key_with_logger(
 ) -> Result<VerifyingKey, AgentError> {
     let public_key_request = ECDSAPublicKeyArgs {
         canister_id: None,
-        derivation_path: vec![],
+        derivation_path: DerivationPath::new(vec![]),
         key_id,
     };
 
@@ -300,7 +300,7 @@ pub(crate) async fn get_signature_with_logger(
 ) -> Result<Signature, AgentError> {
     let signature_request = SignWithECDSAArgs {
         message_hash: *message_hash,
-        derivation_path: Vec::new(),
+        derivation_path: DerivationPath::new(Vec::new()),
         key_id,
     };
 

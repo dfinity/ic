@@ -10,7 +10,9 @@ use ic_btc_types::{
 use ic_canister_log::log;
 use ic_cdk::api::call::RejectionCode;
 use ic_ckbtc_kyt::{DepositRequest, Error as KytError, FetchAlertsResponse};
-use ic_ic00_types::{EcdsaCurve, EcdsaKeyId, SignWithECDSAArgs, SignWithECDSAReply};
+use ic_ic00_types::{
+    DerivationPath, EcdsaCurve, EcdsaKeyId, SignWithECDSAArgs, SignWithECDSAReply,
+};
 use serde::de::DeserializeOwned;
 use std::fmt;
 
@@ -225,7 +227,7 @@ pub async fn send_transaction(
 /// Signs a message hash using the tECDSA API.
 pub async fn sign_with_ecdsa(
     key_name: String,
-    derivation_path: Vec<Vec<u8>>,
+    derivation_path: DerivationPath,
     message_hash: [u8; 32],
 ) -> Result<Vec<u8>, CallError> {
     const CYCLES_PER_SIGNATURE: u64 = 25_000_000_000;

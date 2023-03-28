@@ -6,8 +6,8 @@ use ic_config::{
     subnet_config::{CyclesAccountManagerConfig, SubnetConfig},
 };
 use ic_ic00_types::{
-    self as ic00, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInstallMode, EcdsaCurve,
-    EcdsaKeyId, HttpMethod, TransformContext, TransformFunc,
+    self as ic00, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInstallMode, DerivationPath,
+    EcdsaCurve, EcdsaKeyId, HttpMethod, TransformContext, TransformFunc,
 };
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
@@ -393,7 +393,7 @@ fn simulate_sign_with_ecdsa_cost(
             call_args().other_side(
                 Encode!(&ic00::SignWithECDSAArgs {
                     message_hash: [0; 32],
-                    derivation_path: Vec::new(),
+                    derivation_path: DerivationPath::new(Vec::new()),
                     key_id: ecdsa_key
                 })
                 .unwrap(),

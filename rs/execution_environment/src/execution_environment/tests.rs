@@ -7,7 +7,7 @@ use ic_base_types::{NumBytes, NumSeconds};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_ic00_types::{
     self as ic00, CanisterHttpRequestArgs, CanisterIdRecord, CanisterStatusResultV2,
-    CanisterStatusType, EcdsaCurve, EcdsaKeyId, EmptyBlob, HttpMethod, Method,
+    CanisterStatusType, DerivationPath, EcdsaCurve, EcdsaKeyId, EmptyBlob, HttpMethod, Method,
     Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
     TransformContext, TransformFunc, IC_00,
 };
@@ -949,7 +949,7 @@ fn subnet_canister_request_bad_candid_payload() {
         .unwrap_err();
     assert_eq!(ErrorCode::InvalidManagementPayload, err.code());
     assert_eq!(
-        "Error decoding candid: Cannot parse header 010203",
+        "Error decoding candid: Custom(Cannot parse header 010203\n\nCaused by:\n    binary parser error: io error)",
         err.description()
     );
 }
@@ -1693,7 +1693,7 @@ fn ecdsa_signature_fee_charged() {
     let canister_id = test.universal_canister().unwrap();
     let esda_args = ic00::SignWithECDSAArgs {
         message_hash: [1; 32],
-        derivation_path: vec![],
+        derivation_path: DerivationPath::new(vec![]),
         key_id: ecdsa_key,
     };
     let run = wasm()
@@ -1761,7 +1761,7 @@ fn ecdsa_signature_rejected_without_fee() {
     let canister_id = test.universal_canister().unwrap();
     let esda_args = ic00::SignWithECDSAArgs {
         message_hash: [1; 32],
-        derivation_path: vec![],
+        derivation_path: DerivationPath::new(vec![]),
         key_id: ecdsa_key,
     };
     let run = wasm()
@@ -1798,7 +1798,7 @@ fn ecdsa_signature_with_unknown_key_rejected() {
     let canister_id = test.universal_canister().unwrap();
     let esda_args = ic00::SignWithECDSAArgs {
         message_hash: [1; 32],
-        derivation_path: vec![],
+        derivation_path: DerivationPath::new(vec![]),
         key_id: wrong_key.clone(),
     };
     let run = wasm()
@@ -1834,7 +1834,7 @@ fn ecdsa_public_key_req_with_unknown_key_rejected() {
     let canister_id = test.universal_canister().unwrap();
     let esda_args = ic00::ECDSAPublicKeyArgs {
         canister_id: None,
-        derivation_path: vec![],
+        derivation_path: DerivationPath::new(vec![]),
         key_id: wrong_key.clone(),
     };
     let run = wasm()
@@ -1871,7 +1871,7 @@ fn ecdsa_signature_fee_ignored_for_nns() {
     let canister_id = test.universal_canister().unwrap();
     let esda_args = ic00::SignWithECDSAArgs {
         message_hash: [1; 32],
-        derivation_path: vec![],
+        derivation_path: DerivationPath::new(vec![]),
         key_id: ecdsa_key,
     };
     let run = wasm()
@@ -1936,7 +1936,7 @@ fn ecdsa_signature_queue_fills_up() {
     let canister_id = test.universal_canister().unwrap();
     let esda_args = ic00::SignWithECDSAArgs {
         message_hash: [1; 32],
-        derivation_path: vec![],
+        derivation_path: DerivationPath::new(vec![]),
         key_id: ecdsa_key,
     };
     let run = wasm()
