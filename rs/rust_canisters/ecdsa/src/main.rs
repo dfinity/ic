@@ -2,7 +2,9 @@ use candid::{candid_method, CandidType, Encode};
 use dfn_core::api::{call_bytes, Funds};
 use ic_cdk::api::print;
 use ic_cdk_macros::update;
-use ic_ic00_types::{EcdsaCurve, EcdsaKeyId, Method as Ic00Method, SignWithECDSAArgs, IC_00};
+use ic_ic00_types::{
+    DerivationPath, EcdsaCurve, EcdsaKeyId, Method as Ic00Method, SignWithECDSAArgs, IC_00,
+};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, CandidType)]
@@ -32,7 +34,7 @@ async fn get_sig(options: Options) {
         &Ic00Method::SignWithECDSA.to_string(),
         &Encode!(&SignWithECDSAArgs {
             message_hash: [0; 32],
-            derivation_path: options.derivation_path,
+            derivation_path: DerivationPath::new(options.derivation_path),
             key_id: EcdsaKeyId {
                 curve: EcdsaCurve::Secp256k1,
                 name: options.key_name,

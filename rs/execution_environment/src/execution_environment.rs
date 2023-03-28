@@ -481,7 +481,7 @@ impl ExecutionEnvironment {
                                     .sign_with_ecdsa(
                                         (**request).clone(),
                                         args.message_hash,
-                                        args.derivation_path,
+                                        args.derivation_path.get(),
                                         args.key_id,
                                         registry_settings.max_ecdsa_queue_size,
                                         &mut state,
@@ -822,7 +822,7 @@ impl ExecutionEnvironment {
                                         self.get_ecdsa_public_key(
                                             pubkey,
                                             canister_id,
-                                            args.derivation_path,
+                                            args.derivation_path.get(),
                                             &args.key_id,
                                         )
                                         .map(|res| res.encode()),

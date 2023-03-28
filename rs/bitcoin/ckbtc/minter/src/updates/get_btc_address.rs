@@ -5,7 +5,9 @@ use crate::{
 };
 use candid::{CandidType, Deserialize, Principal};
 use ic_canister_log::log;
-use ic_ic00_types::{ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId};
+use ic_ic00_types::{
+    DerivationPath, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaCurve, EcdsaKeyId,
+};
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use serde::Serialize;
 
@@ -43,7 +45,7 @@ pub async fn get_btc_address(args: GetBtcAddressArgs) -> String {
 }
 
 /// Fetches the ECDSA public key of the canister
-async fn ecdsa_public_key(key_name: String, derivation_path: Vec<Vec<u8>>) -> ECDSAPublicKey {
+async fn ecdsa_public_key(key_name: String, derivation_path: DerivationPath) -> ECDSAPublicKey {
     // Retrieve the public key of this canister at the given derivation path
     // from the ECDSA API.
     let res: (ECDSAPublicKeyResponse,) = ic_cdk::call(
@@ -75,7 +77,7 @@ pub async fn init_ecdsa_public_key() {
     }
     let key_name = read_state(|s| s.ecdsa_key_name.clone());
     log!(P1, "Fetching the ECDSA public key {}", &key_name);
-    let ecdsa_public_key = ecdsa_public_key(key_name, vec![]).await;
+    let ecdsa_public_key = ecdsa_public_key(key_name, DerivationPath::new(vec![])).await;
     log!(
         P1,
         "ECDSA public key set to {}, chain code to {}",

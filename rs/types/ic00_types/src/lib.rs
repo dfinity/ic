@@ -12,19 +12,29 @@ use ic_protobuf::state::canister_metadata::v1 as pb_canister_metadata;
 use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
 use ic_protobuf::{proxy::ProxyDecodeError, registry::crypto::v1 as pb_registry_crypto};
 use num_traits::cast::ToPrimitive;
-use serde::Serialize;
+use serde::{Deserializer, Serialize};
 use std::{collections::BTreeSet, convert::TryFrom, error::Error, fmt, slice::Iter, str::FromStr};
 use strum_macros::{Display, EnumIter, EnumString};
 
-/// The id of the management canister.
-pub const IC_00: CanisterId = CanisterId::ic_00();
-pub const MAX_CONTROLLERS: usize = 10;
-const WASM_HASH_LENGTH: usize = 32;
 pub use http::{
     CanisterHttpRequestArgs, CanisterHttpResponsePayload, HttpHeader, HttpMethod, TransformArgs,
     TransformContext, TransformFunc,
 };
 pub use provisional::{ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs};
+
+/// The id of the management canister.
+pub const IC_00: CanisterId = CanisterId::ic_00();
+pub const MAX_CONTROLLERS: usize = 10;
+const WASM_HASH_LENGTH: usize = 32;
+/// The maximum length of a BIP32 derivation path
+///
+/// The extended public key format uses a byte to represent the derivation
+/// level of a key, thus BIP32 derivations with more than 255 path elements
+/// are not interoperable with other software.
+///
+/// See https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki#serialization-format
+/// for details
+const MAXIMUM_DERIVATION_PATH_LENGTH: usize = 255;
 
 /// Methods exported by ic:00.
 #[derive(Debug, EnumString, EnumIter, Display, Copy, Clone)]
@@ -66,7 +76,7 @@ pub enum Method {
 fn candid_error_to_user_error(err: candid::Error) -> UserError {
     UserError::new(
         ErrorCode::InvalidManagementPayload,
-        format!("Error decoding candid: {}", err),
+        format!("Error decoding candid: {:?}", err),
     )
 }
 
@@ -1255,6 +1265,120 @@ fn ecdsa_key_id_round_trip() {
     }
 }
 
+#[derive(CandidType, Clone, Debug, PartialEq, Eq)]
+pub struct DerivationPath(Vec<Vec<u8>>);
+
+impl DerivationPath {
+    pub fn new(path: Vec<Vec<u8>>) -> Self {
+        Self(path)
+    }
+
+    pub fn get(&self) -> Vec<Vec<u8>> {
+        self.0.clone()
+    }
+}
+
+impl<'de> Deserialize<'de> for DerivationPath {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let decoded: Vec<Vec<u8>> = Deserialize::deserialize(deserializer)?;
+        if decoded.len() > MAXIMUM_DERIVATION_PATH_LENGTH {
+            Err(serde::de::Error::custom(format!(
+                "Derivation path length {} exceeds maximum allowed {}",
+                decoded.len(),
+                MAXIMUM_DERIVATION_PATH_LENGTH
+            )))
+        } else {
+            Ok(DerivationPath::new(decoded))
+        }
+    }
+}
+
+impl Payload<'_> for DerivationPath {}
+
+#[test]
+fn verify_max_derivation_path_length() {
+    for i in 0..=MAXIMUM_DERIVATION_PATH_LENGTH {
+        let path = DerivationPath::new(vec![vec![0_u8, 32]; i]);
+        let encoded = path.encode();
+        assert_eq!(DerivationPath::decode(&encoded).unwrap(), path);
+
+        let sign_with_ecdsa = SignWithECDSAArgs {
+            message_hash: [1; 32],
+            derivation_path: path.clone(),
+            key_id: EcdsaKeyId {
+                curve: EcdsaCurve::Secp256k1,
+                name: "test".to_string(),
+            },
+        };
+
+        let encoded = sign_with_ecdsa.encode();
+        assert_eq!(
+            SignWithECDSAArgs::decode(&encoded).unwrap(),
+            sign_with_ecdsa
+        );
+
+        let ecdsa_public_key = ECDSAPublicKeyArgs {
+            canister_id: None,
+            derivation_path: path,
+            key_id: EcdsaKeyId {
+                curve: EcdsaCurve::Secp256k1,
+                name: "test".to_string(),
+            },
+        };
+
+        let encoded = ecdsa_public_key.encode();
+        assert_eq!(
+            ECDSAPublicKeyArgs::decode(&encoded).unwrap(),
+            ecdsa_public_key
+        );
+    }
+
+    for i in MAXIMUM_DERIVATION_PATH_LENGTH + 1..=MAXIMUM_DERIVATION_PATH_LENGTH + 100 {
+        let path = DerivationPath::new(vec![vec![0_u8, 32]; i]);
+        let encoded = path.encode();
+        let res = DerivationPath::decode(&encoded).unwrap_err();
+        assert_eq!(res.code(), ErrorCode::InvalidManagementPayload);
+        assert!(res.description().contains(&format!(
+            "Deserialize error: Derivation path length {} exceeds maximum allowed {}",
+            i, MAXIMUM_DERIVATION_PATH_LENGTH
+        )));
+
+        let sign_with_ecdsa = SignWithECDSAArgs {
+            message_hash: [1; 32],
+            derivation_path: path.clone(),
+            key_id: EcdsaKeyId {
+                curve: EcdsaCurve::Secp256k1,
+                name: "test".to_string(),
+            },
+        };
+
+        let encoded = sign_with_ecdsa.encode();
+        let res = SignWithECDSAArgs::decode(&encoded).unwrap_err();
+        assert_eq!(res.code(), ErrorCode::InvalidManagementPayload);
+        assert!(res.description().contains(&format!(
+            "Deserialize error: Derivation path length {} exceeds maximum allowed {}",
+            i, MAXIMUM_DERIVATION_PATH_LENGTH
+        )));
+
+        let ecsda_public_key = ECDSAPublicKeyArgs {
+            canister_id: None,
+            derivation_path: path,
+            key_id: EcdsaKeyId {
+                curve: EcdsaCurve::Secp256k1,
+                name: "test".to_string(),
+            },
+        };
+
+        let encoded = ecsda_public_key.encode();
+        let res = ECDSAPublicKeyArgs::decode(&encoded).unwrap_err();
+        assert_eq!(res.code(), ErrorCode::InvalidManagementPayload);
+        assert!(res.description().contains(&format!(
+            "Deserialize error: Derivation path length {} exceeds maximum allowed {}",
+            i, MAXIMUM_DERIVATION_PATH_LENGTH
+        )));
+    }
+}
+
 /// Represents the argument of the sign_with_ecdsa API.
 /// ```text
 /// (record {
@@ -1263,10 +1387,10 @@ fn ecdsa_key_id_round_trip() {
 ///   key_id : ecdsa_key_id;
 /// })
 /// ```
-#[derive(CandidType, Deserialize, Debug)]
+#[derive(CandidType, Deserialize, Debug, PartialEq, Eq)]
 pub struct SignWithECDSAArgs {
     pub message_hash: [u8; 32],
-    pub derivation_path: Vec<Vec<u8>>,
+    pub derivation_path: DerivationPath,
     pub key_id: EcdsaKeyId,
 }
 
@@ -1288,10 +1412,10 @@ impl Payload<'_> for SignWithECDSAReply {}
 ///   key_id : ecdsa_key_id;
 /// })
 /// ```
-#[derive(CandidType, Deserialize, Debug)]
+#[derive(CandidType, Deserialize, Debug, PartialEq, Eq)]
 pub struct ECDSAPublicKeyArgs {
     pub canister_id: Option<CanisterId>,
-    pub derivation_path: Vec<Vec<u8>>,
+    pub derivation_path: DerivationPath,
     pub key_id: EcdsaKeyId,
 }
 

@@ -16,7 +16,8 @@ use ic_config::{
 use ic_embedders::wasmtime_embedder::system_api_complexity::{cpu, overhead};
 use ic_error_types::RejectCode;
 use ic_ic00_types::{
-    self as ic00, CanisterIdRecord, CanisterStatusType, EcdsaCurve, EmptyBlob, Method, Payload as _,
+    self as ic00, CanisterIdRecord, CanisterStatusType, DerivationPath, EcdsaCurve, EmptyBlob,
+    Method, Payload as _,
 };
 use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_logger::replica_logger::no_op_logger;
@@ -2833,7 +2834,7 @@ fn ecdsa_signature_agreements_metric_is_updated() {
 
     let payload = Encode!(&SignWithECDSAArgs {
         message_hash: [0; 32],
-        derivation_path: Vec::new(),
+        derivation_path: DerivationPath::new(Vec::new()),
         key_id: ecdsa_key
     })
     .unwrap();
@@ -2997,7 +2998,7 @@ fn consumed_cycles_ecdsa_outcalls_are_added_to_consumed_cycles_total() {
         Method::SignWithECDSA,
         Encode!(&SignWithECDSAArgs {
             message_hash: [0; 32],
-            derivation_path: Vec::new(),
+            derivation_path: DerivationPath::new(Vec::new()),
             key_id: ecdsa_key
         })
         .unwrap(),

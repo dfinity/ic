@@ -3,6 +3,7 @@ use crate::logs::{P0, P1};
 use candid::{CandidType, Deserialize};
 use ic_btc_types::{MillisatoshiPerByte, Network, OutPoint, Satoshi, Utxo};
 use ic_canister_log::log;
+use ic_ic00_types::DerivationPath;
 use icrc_ledger_types::icrc1::account::Account;
 use scopeguard::{guard, ScopeGuard};
 use serde::Serialize;
@@ -513,7 +514,9 @@ pub async fn sign_transaction(
         let pkhash = tx::hash160(&pubkey);
 
         let sighash = sighasher.sighash(i, &pkhash);
-        let sec1_signature = management::sign_with_ecdsa(key_name.clone(), path, sighash).await?;
+        let sec1_signature =
+            management::sign_with_ecdsa(key_name.clone(), DerivationPath::new(path), sighash)
+                .await?;
 
         signed_inputs.push(tx::SignedInput {
             signature: signature::EncodedSignature::from_sec1(&sec1_signature),

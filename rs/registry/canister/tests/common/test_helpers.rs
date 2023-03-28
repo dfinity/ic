@@ -5,7 +5,7 @@ use canister_test::{Canister, Runtime};
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_node_key_generation::generate_node_keys_once;
-use ic_ic00_types::{ECDSAPublicKeyArgs, EcdsaKeyId, Method as Ic00Method};
+use ic_ic00_types::{DerivationPath, ECDSAPublicKeyArgs, EcdsaKeyId, Method as Ic00Method};
 use ic_nns_common::registry::encode_or_panic;
 use ic_nns_test_utils::itest_helpers::{
     set_up_registry_canister, set_up_universal_canister, try_call_via_universal_canister,
@@ -250,7 +250,7 @@ pub async fn wait_for_ecdsa_setup(
 ) {
     let public_key_request = ECDSAPublicKeyArgs {
         canister_id: None,
-        derivation_path: vec![],
+        derivation_path: DerivationPath::new(vec![]),
         key_id: key_id.clone(),
     };
     let mut public_key_result = None;
