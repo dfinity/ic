@@ -25,6 +25,7 @@ Coverage::
 
 end::catalog[] */
 
+use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
 use slog::info;
@@ -52,11 +53,13 @@ pub fn config(env: TestEnv) {
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
+                .with_features(SubnetFeatures::default())
                 .add_nodes(SUBNET_SIZE)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL)),
         )
         .add_subnet(
             Subnet::new(SubnetType::Application)
+                .with_features(SubnetFeatures::default())
                 .add_nodes(SUBNET_SIZE)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL)),
         )

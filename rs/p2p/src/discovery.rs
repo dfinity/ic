@@ -17,6 +17,9 @@ impl GossipImpl {
     // Update the peer manager state based on the latest registry value.
     pub(crate) fn refresh_topology(&self) {
         let latest_registry_version = self.registry_client.get_latest_version();
+        let earliest_registry_version = self
+            .consensus_pool_cache
+            .get_oldest_registry_version_in_use();
         self.metrics
             .registry_version_used
             .set(latest_registry_version.get() as i64);
@@ -45,7 +48,12 @@ impl GossipImpl {
                     // to attempt a re-addition on the next refresh cycle.
                     self.remove_peer(node_id)
                 }
-                Some(peer_addr) => self.add_peer(*node_id, peer_addr, latest_registry_version),
+                Some(peer_addr) => self.add_peer(
+                    *node_id,
+                    peer_addr,
+                    latest_registry_version,
+                    earliest_registry_version,
+                ),
             }
         }
     }

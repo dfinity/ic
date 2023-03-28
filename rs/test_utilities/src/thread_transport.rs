@@ -178,7 +178,8 @@ impl Transport for ThreadPort {
         &self,
         node_id: &NodeId,
         _peer_addr: SocketAddr,
-        _registry_version: RegistryVersion,
+        _latest_registry_version: RegistryVersion,
+        _earliest_registry_version: RegistryVersion,
     ) {
         info!(
             self.log,

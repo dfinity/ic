@@ -584,7 +584,8 @@ impl GossipImpl {
         &self,
         peer_id: NodeId,
         peer_addr: SocketAddr,
-        registry_version: RegistryVersion,
+        latest_registry_version: RegistryVersion,
+        earliest_registry_version: RegistryVersion,
     ) {
         // Only add other peers to the peer list.
         if peer_id == self.node_id {
@@ -596,8 +597,12 @@ impl GossipImpl {
                 info!(self.log, "Peer {:0} added.", peer_id);
                 // Hold the lock for the duration of all operations.
                 v.insert(PeerContext::new());
-                self.transport
-                    .start_connection(&peer_id, peer_addr, registry_version);
+                self.transport.start_connection(
+                    &peer_id,
+                    peer_addr,
+                    latest_registry_version,
+                    earliest_registry_version,
+                );
                 self.receive_check_caches.write().insert(
                     peer_id,
                     ReceiveCheckCache::new(self.gossip_config.receive_check_cache_size as usize),

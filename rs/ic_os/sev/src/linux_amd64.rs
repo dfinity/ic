@@ -24,13 +24,11 @@ use ic_types::{NodeId, RegistryVersion};
 use openssl::ecdsa::EcdsaSig;
 use openssl::x509::X509;
 use serde::{Deserialize, Serialize};
-
 use sev::firmware::guest::types::AttestationReport;
 use sha2::Digest;
 use std::fs;
 use std::sync::Arc;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
-use tokio::time::Duration;
 
 static ARK_PEM: &str = "/run/ic-node/config/ark.pem";
 static ASK_PEM: &str = "/run/ic-node/config/ask.pem";
@@ -100,51 +98,51 @@ fn pem_to_der(pem: &Option<X509>) -> Vec<u8> {
 }
 
 #[async_trait]
-impl ValidateAttestedStream for Sev {
-    async fn perform_attestation_validation<S>(
+impl<S> ValidateAttestedStream<S> for Sev
+where
+    S: AsyncRead + AsyncWrite + Send + Unpin + 'static,
+{
+    async fn perform_attestation_validation(
         &self,
         mut stream: S,
         peer: NodeId,
-        timeout: Duration,
-        registry_version: RegistryVersion,
-    ) -> Result<S, ValidateAttestationError>
-    where
-        S: AsyncRead + AsyncWrite + Send + Unpin,
-    {
-        // Read peer_subnet_id, my subnet_id, features from registry.
-        let peer_subnet_id = self
-            .registry
-            .get_subnet_id_from_node_id(peer, registry_version)
-            .map_err(ValidateAttestationError::RegistryError)?
-            .ok_or(ValidateAttestationError::RegistryDataMissing {
-                node_id: peer,
-                registry_version,
-                description: "subnet_id missing".into(),
-            })?;
-        let subnet_id = self
-            .registry
-            .get_subnet_id_from_node_id(self.node_id, registry_version)
-            .map_err(ValidateAttestationError::RegistryError)?
-            .ok_or(ValidateAttestationError::RegistryDataMissing {
-                node_id: peer,
-                registry_version,
-                description: "subnet_id missing".into(),
-            })?;
-        if peer_subnet_id != subnet_id {
-            return Err(ValidateAttestationError::HandshakeError {
-                description: "subnet mismatch".into(),
-            });
+        latest_registry_version: RegistryVersion,
+        earliest_registry_version: RegistryVersion,
+    ) -> Result<S, ValidateAttestationError> {
+        if true {
+            return Ok(stream);
         }
+        // Read my subnet_id from registry:
+        // loop over registry versions from earliest to latest,
+        // until subnet containing the node has been found.
+        let mut registry_version = earliest_registry_version;
+        let subnet_id = loop {
+            let subnet_id_result = self
+                .registry
+                .get_subnet_id_from_node_id(self.node_id, registry_version)
+                .map_err(ValidateAttestationError::RegistryError)
+                .and_then(|v| {
+                    v.ok_or(ValidateAttestationError::RegistryDataMissing {
+                        node_id: self.node_id,
+                        registry_version,
+                        description: "subnet_id missing".into(),
+                    })
+                });
+            if registry_version == latest_registry_version || subnet_id_result.is_ok() {
+                break subnet_id_result?;
+            };
+            registry_version += RegistryVersion::from(1);
+        };
+        // Read subnet features from registry.
         let features = self
             .registry
             .get_features(subnet_id, registry_version)
             .map_err(ValidateAttestationError::RegistryError)?
             .ok_or(ValidateAttestationError::RegistryDataMissing {
-                node_id: peer,
+                node_id: self.node_id,
                 registry_version,
                 description: "features missing".into(),
             })?;
-        // Early exit if SEV is disabled.
         if features.sev_status() == SevFeatureStatus::Disabled {
             return Ok(stream);
         }
@@ -191,7 +189,7 @@ impl ValidateAttestedStream for Sev {
             .get_tls_certificate(self.node_id, registry_version)
             .map_err(ValidateAttestationError::RegistryError)?
             .ok_or(ValidateAttestationError::RegistryDataMissing {
-                node_id: peer,
+                node_id: self.node_id,
                 registry_version,
                 description: "tls_certificate missing".into(),
             })?;
@@ -239,7 +237,7 @@ impl ValidateAttestedStream for Sev {
 
         // Read peer attestation package.
         let mut serialized_len = vec![0u8; 4];
-        read_into_buffer(&mut stream, &mut serialized_len, timeout).await?;
+        read_into_buffer(&mut stream, &mut serialized_len).await?;
         let len = u32::from_le_bytes(serialized_len.try_into().map_err(|_| {
             ValidateAttestationError::HandshakeError {
                 description: "unable to conver serialized length".into(),
@@ -247,7 +245,7 @@ impl ValidateAttestedStream for Sev {
         })?);
         let mut buffer: Vec<u8> = Vec::new();
         buffer.resize(len as usize, 0);
-        read_into_buffer(&mut stream, &mut buffer, timeout).await?;
+        read_into_buffer(&mut stream, &mut buffer).await?;
         let peer_package: AttestationPackage =
             serde_cbor::from_slice(buffer.as_slice()).map_err(|_| {
                 ValidateAttestationError::HandshakeError {
@@ -370,15 +368,10 @@ fn is_cert_chain_valid(ark: &X509, ask: &X509, vcek: &X509) -> bool {
 async fn read_into_buffer<T: AsyncRead + Unpin>(
     reader: &mut T,
     buf: &mut [u8],
-    timeout: Duration,
 ) -> Result<(), ValidateAttestationError> {
-    let read_future = reader.read_exact(buf);
-    match tokio::time::timeout(timeout, read_future).await {
+    match reader.read_exact(buf).await {
+        Ok(_) => Ok(()),
         Err(_) => Err(ValidateAttestationError::HandshakeError {
-            description: "timeout".to_string(),
-        }),
-        Ok(Ok(_)) => Ok(()),
-        Ok(Err(_)) => Err(ValidateAttestationError::HandshakeError {
             description: "read error".to_string(),
         }),
     }

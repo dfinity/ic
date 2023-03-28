@@ -6,6 +6,7 @@ use ic_crypto::CryptoComponent;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::ExecutionServices;
 use ic_https_outcalls_adapter_client::setup_canister_http_client;
+use ic_icos_sev::Sev;
 use ic_interfaces::execution_environment::QueryHandler;
 use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_p2p::IngressIngestionService;
@@ -104,7 +105,9 @@ pub fn construct_ic_stack(
         replica_logger.clone(),
         catch_up_package,
     );
+
     // ---------- REPLICATED STATE DEPS FOLLOW ----------
+    let sev_handshake = Arc::new(Sev::new(node_id, registry.clone()));
     let consensus_pool_cache = artifact_pools.consensus_pool_cache.clone();
     let verifier = Arc::new(VerifierImpl::new(crypto.clone()));
     let state_manager = Arc::new(StateManagerImpl::new(
@@ -231,6 +234,7 @@ pub fn construct_ic_stack(
         subnet_id,
         None,
         Arc::clone(&crypto) as Arc<_>,
+        sev_handshake,
         Arc::clone(&state_manager) as Arc<_>,
         Arc::clone(&state_manager) as Arc<_>,
         P2PStateSyncClient::Client(state_sync),

@@ -18,7 +18,6 @@ rust_library(
     }) + [
         "//rs/ic_os/sev_interfaces",
         "//rs/interfaces/registry",
-        "//rs/interfaces/transport",
         "//rs/registry/helpers",
         "//rs/registry/subnet_features",
         "//rs/types/types",
@@ -26,6 +25,7 @@ rust_library(
         "@crate_index//:serde",
         "@crate_index//:serde_cbor",
         "@crate_index//:sha2",
+        "@crate_index//:thiserror",
         "@crate_index//:tokio",
     ],
 )

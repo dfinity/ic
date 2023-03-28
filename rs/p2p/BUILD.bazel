@@ -42,6 +42,7 @@ DEV_DEPENDENCIES = [
     "//rs/cycles_account_manager",
     "//rs/execution_environment",
     "//rs/https_outcalls/client",
+    "//rs/ic_os/sev",
     "//rs/interfaces/transport/mocks",
     "//rs/registry/client",
     "//rs/registry/fake",

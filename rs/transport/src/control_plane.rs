@@ -42,6 +42,8 @@ const CONNECT_RETRY_SECONDS: u64 = 3;
 
 /// Time to wait for the TLS handshake (for both client/server sides)
 const TLS_HANDSHAKE_TIMEOUT_SECONDS: u64 = 30;
+/// Time to wait for the SEV handshake (for both client/server sides)
+const SEV_HANDSHAKE_TIMEOUT_SECONDS: u64 = 10;
 
 const CONNECT_TASK_NAME: &str = "connect";
 const ACCEPT_TASK_NAME: &str = "accept";
@@ -61,14 +63,16 @@ impl TransportImpl {
         &self,
         peer_id: &NodeId,
         peer_addr: SocketAddr,
-        registry_version: RegistryVersion,
+        latest_registry_version: RegistryVersion,
+        earliest_registry_version: RegistryVersion,
     ) {
         let role = connection_role(&self.node_id, peer_id);
         // If we are the server, we should add the peer to the allowed_clients.
         if role == ConnectionRole::Server {
             self.allowed_clients.blocking_write().insert(*peer_id);
         }
-        *self.registry_version.blocking_write() = registry_version;
+        *self.latest_registry_version.blocking_write() = latest_registry_version;
+        *self.earliest_registry_version.blocking_write() = earliest_registry_version;
         let mut peer_map = self.peer_map.blocking_write();
         if peer_map.get(peer_id).is_some() {
             return;
@@ -425,14 +429,18 @@ impl TransportImpl {
         &self,
         stream: TcpStream,
     ) -> Result<(NodeId, Box<dyn TlsStream>), TransportTlsHandshakeError> {
-        let registry_version = *self.registry_version.read().await;
+        let latest_registry_version = *self.latest_registry_version.read().await;
+        let earliest_registry_version = *self.earliest_registry_version.read().await;
         let current_allowed_clients = self.allowed_clients.read().await.clone();
         let allowed_clients = AllowedClients::new_with_nodes(current_allowed_clients)
             .map_err(|_| TransportTlsHandshakeError::InvalidArgument)?;
         let (tls_stream, authenticated_peer) = match tokio::time::timeout(
             Duration::from_secs(TLS_HANDSHAKE_TIMEOUT_SECONDS),
-            self.crypto
-                .perform_tls_server_handshake(stream, allowed_clients, registry_version),
+            self.crypto.perform_tls_server_handshake(
+                stream,
+                allowed_clients,
+                latest_registry_version,
+            ),
         )
         .await
         {
@@ -441,6 +449,21 @@ impl TransportImpl {
             Ok(Err(err)) => Err(TransportTlsHandshakeError::Internal(format!("{:?}", err))),
         }?;
         let AuthenticatedPeer::Node(peer_id) = authenticated_peer;
+        let tls_stream = match tokio::time::timeout(
+            Duration::from_secs(SEV_HANDSHAKE_TIMEOUT_SECONDS),
+            self.sev_handshake.perform_attestation_validation(
+                tls_stream,
+                peer_id,
+                latest_registry_version,
+                earliest_registry_version,
+            ),
+        )
+        .await
+        {
+            Err(_) => Err(TransportTlsHandshakeError::DeadlineExceeded),
+            Ok(Ok(tls_stream)) => Ok(tls_stream),
+            Ok(Err(err)) => Err(TransportTlsHandshakeError::Internal(format!("{:?}", err))),
+        }?;
         Ok((peer_id, tls_stream))
     }
 
@@ -450,18 +473,35 @@ impl TransportImpl {
         peer_id: NodeId,
         stream: TcpStream,
     ) -> Result<Box<dyn TlsStream>, TransportTlsHandshakeError> {
-        let registry_version = *self.registry_version.read().await;
-        match tokio::time::timeout(
+        let latest_registry_version = *self.latest_registry_version.read().await;
+        let earliest_registry_version = *self.earliest_registry_version.read().await;
+        let tls_stream = match tokio::time::timeout(
             Duration::from_secs(TLS_HANDSHAKE_TIMEOUT_SECONDS),
             self.crypto
-                .perform_tls_client_handshake(stream, peer_id, registry_version),
+                .perform_tls_client_handshake(stream, peer_id, latest_registry_version),
         )
         .await
         {
             Err(_) => Err(TransportTlsHandshakeError::DeadlineExceeded),
             Ok(Ok(tls_stream)) => Ok(tls_stream),
             Ok(Err(err)) => Err(TransportTlsHandshakeError::Internal(format!("{:?}", err))),
-        }
+        }?;
+        let tls_stream = match tokio::time::timeout(
+            Duration::from_secs(SEV_HANDSHAKE_TIMEOUT_SECONDS),
+            self.sev_handshake.perform_attestation_validation(
+                tls_stream,
+                peer_id,
+                latest_registry_version,
+                earliest_registry_version,
+            ),
+        )
+        .await
+        {
+            Err(_) => Err(TransportTlsHandshakeError::DeadlineExceeded),
+            Ok(Ok(tls_stream)) => Ok(tls_stream),
+            Ok(Err(err)) => Err(TransportTlsHandshakeError::Internal(format!("{:?}", err))),
+        }?;
+        Ok(tls_stream)
     }
 
     /// Initilizes a client

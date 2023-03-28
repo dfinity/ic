@@ -2,6 +2,7 @@ use futures::FutureExt;
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_config::transport::TransportConfig;
 use ic_crypto_tls_interfaces::TlsHandshake;
+use ic_icos_sev::Sev;
 use ic_interfaces_transport::{
     Transport, TransportChannelId, TransportError, TransportEvent, TransportEventHandler,
     TransportPayload,
@@ -524,8 +525,8 @@ fn connect_nodes_to_central_node<T>(central_node_data: &PeerData<T>, peer_data: 
     for peer_data_i in peer_data {
         let (peer_i, peer_i_addr, peer_i_id, _) = peer_data_i;
 
-        central_node.start_connection(peer_i_id, *peer_i_addr, REG_V1);
-        peer_i.start_connection(central_node_id, *central_node_addr, REG_V1);
+        central_node.start_connection(peer_i_id, *peer_i_addr, REG_V1, REG_V1);
+        peer_i.start_connection(central_node_id, *central_node_addr, REG_V1, REG_V1);
     }
 }
 
@@ -610,13 +611,16 @@ fn test_event_handler_drop() {
         listening_port: peer_port,
         ..Default::default()
     };
+    let sev_handshake = Arc::new(Sev::new(NODE_ID_1, registry_and_data.registry));
 
     let peer = create_transport(
         NODE_ID_1,
         peer_config,
         registry_version,
+        registry_version,
         MetricsRegistry::new(),
         Arc::new(crypto),
+        sev_handshake,
         rt.handle().clone(),
         no_op_logger(),
         false,

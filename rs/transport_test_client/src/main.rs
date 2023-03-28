@@ -39,6 +39,7 @@ use ic_config::{
     logger::{Config as LoggerConfig, LogTarget},
     transport::TransportConfig,
 };
+use ic_icos_sev::Sev;
 use ic_interfaces_transport::{
     Transport, TransportChannelId, TransportError, TransportEvent, TransportPayload,
 };
@@ -144,10 +145,18 @@ impl TestClient {
     }
 
     fn start_connection(&self) {
-        self.transport
-            .start_connection(&self.prev, self.prev_node_record, self.registry_version);
-        self.transport
-            .start_connection(&self.next, self.next_node_record, self.registry_version);
+        self.transport.start_connection(
+            &self.prev,
+            self.prev_node_record,
+            self.registry_version,
+            self.registry_version,
+        );
+        self.transport.start_connection(
+            &self.next,
+            self.next_node_record,
+            self.registry_version,
+            self.registry_version,
+        );
     }
 
     fn stop_connection(&self) {
@@ -516,12 +525,14 @@ fn task_main(
 
     println!("creating crypto... [Node: {}]", node_id_val);
     let registry_version = REG_V1;
-    let crypto = match create_crypto(node_number, 3, node_id, registry_version) {
-        Ok(crypto) => crypto,
-        Err(_) => {
-            panic!("unable to create crypto");
-        }
-    };
+    let (_data_provider, registry, crypto) =
+        match create_crypto(node_number, 3, node_id, subnet_id, registry_version) {
+            Ok(crypto) => crypto,
+            Err(_) => {
+                panic!("unable to create crypto");
+            }
+        };
+    let sev_handshake = Arc::new(Sev::new(node_id, registry));
 
     println!("starting transport...");
     println!("starting transport... [Node: {}]", node_id_val);
@@ -529,8 +540,10 @@ fn task_main(
         node_id,
         config_and_records.config.clone(),
         registry_version,
+        registry_version,
         MetricsRegistry::new(),
         crypto,
+        sev_handshake,
         rt.handle().clone(),
         log.clone(),
         false,

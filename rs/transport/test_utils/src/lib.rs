@@ -3,17 +3,22 @@ use ic_base_types::{NodeId, RegistryVersion};
 use ic_config::transport::TransportConfig;
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
 use ic_crypto_tls_interfaces::TlsHandshake;
+use ic_icos_sev::Sev;
 use ic_interfaces_transport::{
     Transport, TransportChannelId, TransportError, TransportEvent, TransportEventHandler,
     TransportPayload,
 };
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
+use ic_protobuf::registry::subnet::v1::SubnetListRecord;
 use ic_registry_client_fake::FakeRegistryClient;
-use ic_registry_keys::make_crypto_tls_cert_key;
+use ic_registry_keys::{
+    make_crypto_tls_cert_key, make_subnet_list_record_key, make_subnet_record_key,
+};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+use ic_test_utilities_registry::test_subnet_record;
 use ic_transport::transport::create_transport;
-use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3, NODE_4};
+use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3, NODE_4, SUBNET_1};
 use std::{collections::HashMap, convert::Infallible, net::SocketAddr, str::FromStr, sync::Arc};
 use tokio::{net::TcpSocket, task::JoinHandle};
 use tower::{util::BoxCloneService, Service, ServiceExt};
@@ -70,6 +75,30 @@ pub struct RegistryAndDataProvider {
 impl RegistryAndDataProvider {
     pub fn new() -> Self {
         let data_provider = Arc::new(ProtoRegistryDataProvider::new());
+        let subnet_list_record = SubnetListRecord {
+            subnets: vec![SUBNET_1.get().to_vec()],
+        };
+        data_provider
+            .add(
+                make_subnet_list_record_key().as_str(),
+                REG_V1,
+                Some(subnet_list_record),
+            )
+            .expect("Could not add subnet list");
+        let mut subnet_record = test_subnet_record();
+        subnet_record.membership = vec![
+            NODE_ID_1.get().to_vec(),
+            NODE_ID_2.get().to_vec(),
+            NODE_ID_3.get().to_vec(),
+            NODE_ID_4.get().to_vec(),
+        ];
+        data_provider
+            .add(
+                &make_subnet_record_key(SUBNET_1),
+                REG_V1,
+                Some(subnet_record),
+            )
+            .expect("Could not add subnet record.");
         let registry = Arc::new(FakeRegistryClient::new(Arc::clone(&data_provider) as Arc<_>));
         Self {
             data_provider,
@@ -105,12 +134,16 @@ where
         send_queue_size: 10,
         ..Default::default()
     };
+    let sev_handshake = Arc::new(Sev::new(node_id, registry_and_data.registry.clone()));
+
     let peer = create_transport(
         node_id,
         config,
         registry_version,
+        registry_version,
         MetricsRegistry::new(),
         crypto,
+        sev_handshake,
         rt_handle,
         log,
         use_h2,
@@ -228,13 +261,16 @@ impl TestPeerBuilder {
             send_queue_size: self.send_queue_size,
             ..Default::default()
         };
+        let sev_handshake = Arc::new(Sev::new(self.node_id, self.registry_data.registry.clone()));
 
         let transport = create_transport(
             self.node_id,
             node_config,
             self.registry_version,
+            self.registry_version,
             MetricsRegistry::new(),
             crypto,
+            sev_handshake,
             self.rt_handle,
             self.log,
             self.h2,
@@ -343,6 +379,7 @@ impl TestTopologyBuilder {
                         id_2,
                         peer_2.addr,
                         self.registry_data.data_provider.latest_version(),
+                        self.registry_data.data_provider.latest_version(),
                     )
                 }
             }
@@ -377,13 +414,16 @@ pub fn start_connection_between_two_peers(
         send_queue_size,
         ..Default::default()
     };
+    let sev_handshake = Arc::new(Sev::new(node_1, registry_and_data.registry.clone()));
 
     let peer_a = create_transport(
         node_1,
         peer_a_config,
         registry_version,
+        registry_version,
         MetricsRegistry::new(),
         Arc::new(crypto_1),
+        sev_handshake,
         rt_handle.clone(),
         logger.clone(),
         use_h2,
@@ -398,13 +438,16 @@ pub fn start_connection_between_two_peers(
         send_queue_size,
         ..Default::default()
     };
+    let sev_handshake = Arc::new(Sev::new(node_2, registry_and_data.registry));
 
     let peer_b = create_transport(
         node_2,
         peer_b_config,
         registry_version,
+        registry_version,
         MetricsRegistry::new(),
         Arc::new(crypto_2),
+        sev_handshake,
         rt_handle,
         logger,
         use_h2,
@@ -412,8 +455,8 @@ pub fn start_connection_between_two_peers(
     peer_b.set_event_handler(event_handler_2);
     let peer_2_addr = SocketAddr::from_str(&format!("127.0.0.1:{}", peer2_port)).unwrap();
 
-    peer_a.start_connection(&node_2, peer_2_addr, REG_V1);
+    peer_a.start_connection(&node_2, peer_2_addr, REG_V1, REG_V1);
     let peer_1_addr = SocketAddr::from_str(&format!("127.0.0.1:{}", peer1_port)).unwrap();
-    peer_b.start_connection(&node_1, peer_1_addr, REG_V1);
+    peer_b.start_connection(&node_1, peer_1_addr, REG_V1, REG_V1);
     (peer_a, peer_b)
 }

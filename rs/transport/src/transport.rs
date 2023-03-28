@@ -70,7 +70,8 @@ use crate::metrics::{ControlPlaneMetrics, DataPlaneMetrics, SendQueueMetrics};
 use crate::types::TransportImpl;
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_config::transport::TransportConfig;
-use ic_crypto_tls_interfaces::TlsHandshake;
+use ic_crypto_tls_interfaces::{TlsHandshake, TlsStream};
+use ic_icos_sev_interfaces::ValidateAttestedStream;
 use ic_interfaces_transport::{
     Transport, TransportChannelId, TransportError, TransportEventHandler, TransportPayload,
 };
@@ -91,9 +92,11 @@ impl TransportImpl {
     fn new(
         node_id: NodeId,
         config: TransportConfig,
-        registry_version: RegistryVersion,
+        latest_registry_version: RegistryVersion,
+        earliest_registry_version: RegistryVersion,
         metrics_registry: MetricsRegistry,
         crypto: Arc<dyn TlsHandshake + Send + Sync>,
+        sev_handshake: Arc<dyn ValidateAttestedStream<Box<dyn TlsStream>> + Send + Sync>,
         rt_handle: Handle,
         log: ReplicaLogger,
         use_h2: bool,
@@ -106,7 +109,9 @@ impl TransportImpl {
             config,
             allowed_clients: RwLock::new(BTreeSet::<NodeId>::new()),
             crypto,
-            registry_version: RwLock::new(registry_version),
+            sev_handshake,
+            latest_registry_version: RwLock::new(latest_registry_version),
+            earliest_registry_version: RwLock::new(earliest_registry_version),
             rt_handle,
             data_plane_metrics: DataPlaneMetrics::new(metrics_registry.clone()),
             control_plane_metrics: ControlPlaneMetrics::new(metrics_registry.clone()),
@@ -127,9 +132,11 @@ impl TransportImpl {
 pub fn create_transport(
     node_id: NodeId,
     transport_config: TransportConfig,
-    registry_version: RegistryVersion,
+    latest_registry_version: RegistryVersion,
+    earliest_registry_version: RegistryVersion,
     metrics_registry: MetricsRegistry,
     crypto: Arc<dyn TlsHandshake + Send + Sync>,
+    sev_handshake: Arc<dyn ValidateAttestedStream<Box<dyn TlsStream>> + Send + Sync>,
     rt_handle: Handle,
     log: ReplicaLogger,
     use_h2: bool,
@@ -137,9 +144,11 @@ pub fn create_transport(
     TransportImpl::new(
         node_id,
         transport_config,
-        registry_version,
+        latest_registry_version,
+        earliest_registry_version,
         metrics_registry,
         crypto,
+        sev_handshake,
         rt_handle,
         log,
         use_h2,
@@ -167,13 +176,19 @@ impl Transport for TransportImpl {
         &self,
         peer_id: &NodeId,
         peer_addr: SocketAddr,
-        registry_version: RegistryVersion,
+        latest_registry_version: RegistryVersion,
+        earliest_registry_version: RegistryVersion,
     ) {
         info!(
             self.log,
             "Transport::start_connection(): peer_id = {:?}", peer_id
         );
-        self.start_peer_connection(peer_id, peer_addr, registry_version);
+        self.start_peer_connection(
+            peer_id,
+            peer_addr,
+            latest_registry_version,
+            earliest_registry_version,
+        );
     }
 
     /// Remove the peer from the set of valid neighbors, and tear down the

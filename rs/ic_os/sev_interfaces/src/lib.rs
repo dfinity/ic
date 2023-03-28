@@ -3,8 +3,6 @@ use core::fmt;
 use ic_types::registry::RegistryClientError;
 use ic_types::{NodeId, RegistryVersion};
 use std::fmt::{Display, Formatter};
-use tokio::io::{AsyncRead, AsyncWrite};
-use tokio::time::Duration;
 
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum ValidateAttestationError {
@@ -25,15 +23,16 @@ impl Display for ValidateAttestationError {
     }
 }
 
+// Perform mutual attestation over a stream.
+// The registry_version is that of the latest CUP and is used
+// to determine if SEV-SNP is enabled on the subnet.
 #[async_trait]
-pub trait ValidateAttestedStream {
-    async fn perform_attestation_validation<S>(
+pub trait ValidateAttestedStream<S> {
+    async fn perform_attestation_validation(
         &self,
         mut stream: S,
         peer: NodeId,
-        timeout: Duration,
-        registry_version: RegistryVersion,
-    ) -> Result<S, ValidateAttestationError>
-    where
-        S: AsyncRead + AsyncWrite + Send + Unpin;
+        latest_registry_version: RegistryVersion,
+        earliest_registry_version: RegistryVersion,
+    ) -> Result<S, ValidateAttestationError>;
 }
