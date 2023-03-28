@@ -126,24 +126,14 @@ pub fn parse_metrics_response(
     let mut peer_metrics_map = HashMap::new();
 
     for peer_id in peer_ids.iter() {
-        if bytes_received_for_peers.get(peer_id).is_none()
-            || bytes_received_for_peers.get(peer_id).is_none()
-        {
-            // We will skip the peer report if some fields are missing (except num retries, explained below)
-            // However, we can still publish the larger log entry without the peer. Otherwise, a down peer with missing prometheus metrics
-            // for its peer id label (ex. bytes received) could prevent a recently-restarted reporting replica from publishing any data
-            continue;
-        }
-
-        // Unlike other metrics, we will still fill in a missing retry metric as 0. If there are 0 retries to peer connection since reporting replica restart, then
-        // this prometheus metric will not be not be recorded for the given peer label.  Since this is indicative of a healthy peer and could be a common case,
-        // treating this as an error may misrepresent the data
         let num_retries = *retry_count_for_peers.get(peer_id).unwrap_or(&0);
+        let bytes_received = *bytes_received_for_peers.get(peer_id).unwrap_or(&0);
+        let bytes_sent = *bytes_sent_for_peers.get(peer_id).unwrap_or(&0);
 
         let current_peer_metrics = PeerCounterMetrics {
             num_retries,
-            bytes_received: bytes_received_for_peers[peer_id],
-            bytes_sent: bytes_sent_for_peers[peer_id],
+            bytes_received,
+            bytes_sent,
         };
         peer_metrics_map.insert(*peer_id, current_peer_metrics);
     }
