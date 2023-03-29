@@ -1,7 +1,7 @@
 use crate::{
     driver::test_env_api::*,
     nns::{
-        get_governance_canister, submit_bless_replica_version_proposal,
+        get_governance_canister, submit_update_elected_replica_versions_proposal,
         submit_update_subnet_replica_version_proposal, vote_execute_proposal_assert_executed,
     },
     util::runtime_from_url,
@@ -217,13 +217,14 @@ async fn bless_replica_version_with_sha(
         "Blessing replica version {} with sha256 {}", replica_version, sha256
     );
 
-    let proposal_id = submit_bless_replica_version_proposal(
+    let proposal_id = submit_update_elected_replica_versions_proposal(
         &governance_canister,
         proposal_sender.clone(),
         test_neuron_id,
         replica_version,
         sha256.clone(),
         upgrade_url,
+        vec![],
     )
     .await;
     vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;
@@ -310,13 +311,14 @@ pub(crate) async fn bless_replica_version_with_urls(
         "Blessing replica version {} with sha256 {}", replica_version, sha256
     );
 
-    let proposal_id = submit_bless_replica_version_proposal(
+    let proposal_id = submit_update_elected_replica_versions_proposal(
         &governance_canister,
         proposal_sender.clone(),
         test_neuron_id,
         replica_version,
         sha256,
         release_package_urls,
+        vec![],
     )
     .await;
     vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;
