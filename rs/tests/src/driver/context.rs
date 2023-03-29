@@ -101,20 +101,29 @@ impl GroupContext {
     fn create_setup_dir(&self) -> Result<PathBuf> {
         let root_env_path = self.group_dir.join(constants::ROOT_ENV_DIR);
         let setup_path = self.group_dir.join(constants::GROUP_SETUP_DIR);
-
         debug!(
             self.logger,
             "Ensuring directory {:?} exists ...", setup_path
         );
-        self.ensure_dir(setup_path.clone())?;
-
-        debug!(
-            self.logger,
-            "Copying configuration from {:?} to {:?} ...", root_env_path, setup_path
-        );
-        // todo: this function should eventually just `fork` the root environment.
-        TestEnv::shell_copy(&root_env_path, &setup_path)?;
-
+        if !setup_path.is_dir() {
+            debug!(
+                self.logger,
+                "Directory {:?} doesn't exist, creating ...", setup_path
+            );
+            let setup_path_tmp = self.group_dir.join("setup_tmp");
+            debug!(
+                self.logger,
+                "Copying configuration from {:?} to {:?} ...", root_env_path, setup_path_tmp
+            );
+            // todo: this function should eventually just `fork` the root environment.
+            TestEnv::shell_copy(&root_env_path, &setup_path_tmp)?;
+            debug!(
+                self.logger,
+                "Renaming directory from {:?} to {:?} ...", setup_path_tmp, setup_path
+            );
+            // This should be an atomic operation.
+            fs::rename(setup_path_tmp, setup_path.clone())?;
+        }
         Ok(setup_path)
     }
 
