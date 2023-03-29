@@ -357,7 +357,9 @@ impl CkBtcMinterState {
         if let Some(mode) = mode {
             self.mode = mode;
         }
-        self.kyt_principal = kyt_principal;
+        if let Some(kyt_principal) = kyt_principal {
+            self.kyt_principal = Some(kyt_principal);
+        }
         if let Some(kyt_fee) = kyt_fee {
             self.kyt_fee = kyt_fee;
         }
