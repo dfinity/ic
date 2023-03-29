@@ -114,6 +114,7 @@ impl BackupManager {
 
         let downloads = Arc::new(Mutex::new(true));
         let disk_threshold_warn = config.disk_threshold_warn;
+        let blacklisted = Arc::new(config.blacklisted_nodes.unwrap_or_default());
 
         for s in config.subnets {
             let notification_client = NotificationClient {
@@ -143,6 +144,7 @@ impl BackupManager {
                 daily_replays,
                 do_cold_storage,
                 thread_id: s.thread_id,
+                blacklisted_nodes: blacklisted.clone(),
                 log: log.clone(),
             };
             let sync_period = std::time::Duration::from_secs(s.sync_period_secs);
