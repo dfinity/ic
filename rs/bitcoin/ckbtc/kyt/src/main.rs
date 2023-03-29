@@ -239,17 +239,45 @@ thread_local! {
 
     static UTXO_CHECKS_COUNT: Cell<u64> = Cell::default();
     static ADDRESS_CHECKS_COUNT: Cell<u64> = Cell::default();
+
+    /// The provider we used for the last KYT call.
+    static LAST_USED_PROVIDER: Cell<Option<Principal>> = Cell::default();
 }
 
 fn pick_api_key() -> Result<(Principal, String), Error> {
-    CONFIG_CELL.with(|cell| {
-        cell.borrow()
-            .get()
-            .api_keys
-            .iter()
-            .next()
-            .map(|(p, k)| (*p, k.clone()))
-            .ok_or_else(|| Error::TemporarilyUnavailable("No valid API keys".to_string()))
+    CONFIG_CELL.with(|cfg_cell| {
+        let cfg_value = cfg_cell.borrow();
+        let cfg = cfg_value.get();
+        pick_api_key_from(&cfg.api_keys)
+    })
+}
+
+fn pick_api_key_from(api_keys: &BTreeMap<Principal, String>) -> Result<(Principal, String), Error> {
+    fn first_key_value(map: &BTreeMap<Principal, String>) -> Option<(Principal, String)> {
+        map.first_key_value().map(|(p, k)| (*p, k.clone()))
+    }
+
+    if api_keys.is_empty() {
+        return Err(Error::TemporarilyUnavailable(
+            "No valid API keys".to_string(),
+        ));
+    }
+
+    LAST_USED_PROVIDER.with(|cell| {
+        let (provider, api_key) = match cell.get() {
+            Some(last_provider) =>
+            // Find the next lexicographically larger provider or wrap around to the first entry.
+            // Note that the keys in a BTreeMap are sorted.
+            {
+                api_keys
+                    .iter()
+                    .find_map(|(p, k)| (*p > last_provider).then_some((*p, k.clone())))
+                    .unwrap_or_else(|| first_key_value(api_keys).unwrap())
+            }
+            None => first_key_value(api_keys).unwrap(),
+        };
+        cell.set(Some(provider));
+        Ok((provider, api_key))
     })
 }
 
@@ -337,6 +365,7 @@ fn post_upgrade(arg: LifecycleArg) {
         if let Some(mode) = arg.mode {
             config.mode = mode;
         }
+
         cell.borrow_mut()
             .set(config)
             .expect("failed to update the config cell");
@@ -751,6 +780,20 @@ fn test_date_formatting() {
         format_timestamp(1677770607672807382),
         "2023-03-02T15:23:27+00:00".to_string()
     );
+}
+
+#[test]
+fn test_key_rotation() {
+    let mut m = BTreeMap::new();
+    m.insert(Principal::management_canister(), "A".to_string());
+    m.insert(Principal::anonymous(), "B".to_string());
+
+    assert_eq!(pick_api_key_from(&m).unwrap().1, "A");
+    assert_eq!(pick_api_key_from(&m).unwrap().1, "B");
+    assert_eq!(pick_api_key_from(&m).unwrap().1, "A");
+
+    let result = pick_api_key_from(&BTreeMap::new());
+    assert!(result.is_err(), "expected an error, got: {:?}", result);
 }
 
 #[test]
