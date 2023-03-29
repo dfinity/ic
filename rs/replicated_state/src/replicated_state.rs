@@ -313,15 +313,17 @@ impl std::fmt::Display for StateError {
 /// various resources while respecting the relevant configured limits.
 pub struct MemoryTaken {
     /// Execution memory accounts for canister memory reservation where
-    /// specified and the actual canister memory usage where no explicit
-    /// memory reservation has been made.
+    /// specified and the actual canister memory usage (including
+    /// Wasm custom sections) where no explicit memory reservation
+    /// has been made.
     execution: NumBytes,
     /// Memory taken by canister messages.
     messages: NumBytes,
     /// Memory taken by Wasm Custom Sections.
     wasm_custom_sections: NumBytes,
-    /// Total memory taken. This is a sum of all other fields on application
-    /// subnets and excludes canister message memory on system subnets.
+    /// Total memory taken. This is the sum of execution and messages fields
+    /// on application subnets and excludes canister message memory
+    /// on system subnets.
     total: NumBytes,
 }
 

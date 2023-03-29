@@ -527,11 +527,9 @@ impl StreamHandlerImpl {
         let memory_taken = state.memory_taken();
         let execution_memory_taken = memory_taken.execution();
         let message_memory_taken = memory_taken.messages();
-        let wasm_custom_sections_memory_taken = memory_taken.wasm_custom_sections();
         let subnet_available_memory = self.subnet_memory_capacity.get() as i64
             - execution_memory_taken.get() as i64
-            - message_memory_taken.get() as i64
-            - wasm_custom_sections_memory_taken.get() as i64;
+            - message_memory_taken.get() as i64;
         let subnet_available_message_memory =
             self.subnet_message_memory_capacity.get() as i64 - message_memory_taken.get() as i64;
         let mut subnet_available_memory =
