@@ -34,7 +34,7 @@ use crate::{
 };
 use crate::{
     nns::{
-        self, submit_bless_replica_version_proposal,
+        self, submit_update_elected_replica_versions_proposal,
         submit_update_unassigned_node_version_proposal, vote_execute_proposal_assert_executed,
     },
     orchestrator::utils::ssh_access::{
@@ -122,13 +122,14 @@ pub fn test(env: TestEnv) {
         let test_neuron_id = NeuronId(TEST_NEURON_1_ID);
         let proposal_sender = Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR);
 
-        let proposal_id = submit_bless_replica_version_proposal(
+        let proposal_id = submit_update_elected_replica_versions_proposal(
             &governance_canister,
             proposal_sender.clone(),
             test_neuron_id,
             new_replica_version.clone(),
             sha256,
             vec![upgrade_url],
+            vec![],
         )
         .await;
         vote_execute_proposal_assert_executed(&governance_canister, proposal_id).await;

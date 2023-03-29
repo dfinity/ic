@@ -624,10 +624,10 @@ impl Recovery {
         ))
     }
 
-    /// Return an [AdminStep] step blessing the given [ReplicaVersion].
+    /// Return an [AdminStep] step electing the given [ReplicaVersion].
     /// Existence of artifacts for the given version is checked beforehand, thus
     /// generation of this step may fail if the version is invalid.
-    pub fn bless_replica_version(
+    pub fn elect_replica_version(
         &self,
         upgrade_version: &ReplicaVersion,
     ) -> RecoveryResult<impl Step> {
@@ -636,7 +636,7 @@ impl Recovery {
             logger: self.logger.clone(),
             ic_admin_cmd: self
                 .admin_helper
-                .get_propose_to_bless_replica_version_flexible_command(
+                .get_propose_to_update_elected_replica_versions_command(
                     upgrade_version,
                     &upgrade_url,
                     sha256,

@@ -283,7 +283,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
 
             StepType::BlessVersion => {
                 if let Some(upgrade_version) = &self.params.upgrade_version {
-                    let step = self.recovery.bless_replica_version(upgrade_version)?;
+                    let step = self.recovery.elect_replica_version(upgrade_version)?;
                     Ok(Box::new(step))
                 } else {
                     Err(RecoveryError::StepSkipped)

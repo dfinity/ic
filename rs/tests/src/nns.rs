@@ -31,16 +31,14 @@ use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{p2p, CanisterId, PrincipalId, ReplicaVersion, SubnetId};
+use registry_canister::mutations::do_update_elected_replica_versions::UpdateElectedReplicaVersionsPayload;
+use registry_canister::mutations::do_update_subnet_replica::UpdateSubnetReplicaVersionPayload;
 use registry_canister::mutations::{
     do_add_nodes_to_subnet::AddNodesToSubnetPayload,
     do_change_subnet_membership::ChangeSubnetMembershipPayload,
     do_create_subnet::CreateSubnetPayload,
     do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
     do_update_unassigned_nodes_config::UpdateUnassignedNodesConfigPayload,
-};
-use registry_canister::mutations::{
-    do_bless_replica_version::BlessReplicaVersionPayload,
-    do_update_subnet_replica::UpdateSubnetReplicaVersionPayload,
 };
 use slog::info;
 use slog::Logger;
@@ -451,60 +449,58 @@ pub async fn submit_external_proposal_with_test_id<T: CandidType>(
     .await
 }
 
-/// Submits a proposal for blessing a replica software version.
+/// Submits a proposal for electing or unelecting a replica software versions.
 ///
 /// # Arguments
 ///
-/// * `governance`   - Governance canister
-/// * `sender`       - Sender of the proposal
-/// * `neuron_id`    - ID of the proposing neuron. This neuron will automatically
-///   vote in favor of the proposal.
-/// * `version`      - Replica software version
-/// * `sha256`       - Claimed SHA256 of the replica image file
-/// * `upgrade_urls` - URLs leading to the replica image file
+/// * `governance`          - Governance canister
+/// * `sender`              - Sender of the proposal
+/// * `neuron_id`           - ID of the proposing neuron. This neuron
+///   will automatically vote in favor of the proposal.
+/// * `version`             - Replica software version to elect
+/// * `sha256`              - Claimed SHA256 of the replica image file
+/// * `upgrade_urls`        - URLs leading to the replica image file
+/// * `versions_to_unelect` - Replica versions to remove from registry
 ///
 /// Note: The existing replica *may or may not* check that the
 /// provided `sha256` corresponds to the image checksum. In case
 /// this proposal is adopted, the replica *assumes* that the file
 /// under `upgrade_url` has the provided `sha256`. If there has
-/// been a mismatch (or if the image has been forged after blessing),
+/// been a mismatch (or if the image has been forged after election),
 /// the replica will reject the follow-up proposal for updating the
 /// replica version.
 ///
 /// Eventually returns the identifier of the newly submitted proposal.
-pub async fn submit_bless_replica_version_proposal(
+pub async fn submit_update_elected_replica_versions_proposal(
     governance: &Canister<'_>,
     sender: Sender,
     neuron_id: NeuronId,
     version: ReplicaVersion,
     sha256: String,
     upgrade_urls: Vec<String>,
+    versions_to_unelect: Vec<String>,
 ) -> ProposalId {
     submit_external_update_proposal_allowing_error(
         governance,
         sender,
         neuron_id,
-        NnsFunction::BlessReplicaVersion,
-        BlessReplicaVersionPayload {
-            replica_version_id: String::from(version.clone()),
-            binary_url: "".into(),
-            sha256_hex: "".into(),
-            node_manager_binary_url: "".into(),
-            node_manager_sha256_hex: "".into(),
-            release_package_url: "".into(),
-            release_package_sha256_hex: sha256.clone(),
-            release_package_urls: Some(upgrade_urls),
+        NnsFunction::UpdateElectedReplicaVersions,
+        UpdateElectedReplicaVersionsPayload {
+            replica_version_to_elect: Some(String::from(version.clone())),
+            release_package_sha256_hex: Some(sha256.clone()),
+            release_package_urls: upgrade_urls,
+            replica_versions_to_unelect: versions_to_unelect,
             guest_launch_measurement_sha256_hex: None,
         },
         format!(
-            "Bless replica version: {} with hash: {}",
+            "Elect replica version: {} with hash: {}",
             String::from(version),
             sha256
         ),
         "".to_string(),
     )
     .await
-    .expect("submit_bless_replica_version_proposal failed")
+    .expect("submit_update_elected_replica_versions_proposal failed")
 }
 
 /// Submits a proposal for updating a subnet replica software version.

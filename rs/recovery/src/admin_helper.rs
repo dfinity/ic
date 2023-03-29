@@ -99,19 +99,24 @@ impl AdminHelper {
         ic_admin
     }
 
-    pub fn get_propose_to_bless_replica_version_flexible_command(
+    pub fn get_propose_to_update_elected_replica_versions_command(
         &self,
         upgrade_version: &ReplicaVersion,
         upgrade_url: &Url,
         sha256: String,
     ) -> IcAdmin {
         let mut ic_admin = self.get_ic_admin_cmd_base(&self.neuron_args);
-        ic_admin.push("propose-to-bless-replica-version-flexible".to_string());
-        ic_admin.push(format!("\"{}\"", upgrade_version));
-        ic_admin.push(format!("\"{}\"", upgrade_url));
-        ic_admin.push(format!("\"{}\"", sha256));
+        ic_admin.push("propose-to-update-elected-replica-versions".to_string());
+        ic_admin.push("--replica-version-to-elect".to_string());
+        ic_admin.push(format!("\"{upgrade_version}\""));
+        ic_admin.push("--release-package-urls".to_string());
+        ic_admin.push(format!("\"{upgrade_url}\""));
+        ic_admin.push("--release-package-sha256-hex".to_string());
+        ic_admin.push(format!("\"{sha256}\""));
         ic_admin.push("--summary".to_string());
-        ic_admin.push(format!("\"Bless replica version {}.\"", upgrade_version));
+        ic_admin.push(format!(
+            "\"Elect new replica binary revision (commit {upgrade_version})\""
+        ));
         AdminHelper::add_proposer_args(&mut ic_admin, &self.neuron_args);
         ic_admin
     }
