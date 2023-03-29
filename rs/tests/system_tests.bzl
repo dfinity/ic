@@ -57,7 +57,7 @@ run_system_test = rule(
         "src": attr.label(executable = True, cfg = "exec"),
         "env": attr.string_dict(allow_empty = True),
         "runtime_deps": attr.label_list(allow_files = True),
-        "version_file": attr.label(allow_single_file = True, default = "//ic-os/guestos/dev:version.txt"),
+        "version_file": attr.label(allow_single_file = True, default = "//ic-os/guestos/envs/dev:version.txt"),
     },
 )
 

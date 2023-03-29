@@ -121,8 +121,8 @@ BUILD_IMAGES_CMD=$(
     cat <<-END
     # build guestos images
     mkdir -p "${DISK_DIR}/guestos"
-    $BAZEL_CMD //ic-os/guestos/prod
-    bazel cquery --output=files //ic-os/guestos/prod | xargs -I {} cp {} "${DISK_DIR}/guestos"
+    $BAZEL_CMD //ic-os/guestos/envs/prod
+    bazel cquery --output=files //ic-os/guestos/envs/prod | xargs -I {} cp {} "${DISK_DIR}/guestos"
     # build hostos images
     mkdir -p "${DISK_DIR}/hostos"
     $BAZEL_CMD //ic-os/hostos/envs/prod

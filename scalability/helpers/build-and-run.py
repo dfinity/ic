@@ -48,14 +48,14 @@ def build_icos():
 
     subprocess.check_output(
         shlex.split(
-            "./gitlab-ci/container/container-run.sh bazel run --config=systest //ic-os/guestos/dev:upload_disk-img"
+            "./gitlab-ci/container/container-run.sh bazel run --config=systest //ic-os/guestos/envs/dev:upload_disk-img"
         ),
         cwd=ic_root,
     )
     version = None
     url = None
     sha256_url = None
-    with open(os.path.join(ic_root, "bazel-bin/ic-os/guestos/dev/upload_disk-img.urls")) as f:
+    with open(os.path.join(ic_root, "bazel-bin/ic-os/guestos/envs/dev/upload_disk-img.urls")) as f:
         for line in f.readlines():
             print(line)
             m = re.match(
@@ -70,7 +70,7 @@ def build_icos():
                 sha256_url = line.strip()
                 print(f"Determining sha256 sum from : {sha256_url}")
 
-    version = open(os.path.join(ic_root, "bazel-bin/ic-os/guestos/dev/version.txt"), "r").read().strip()
+    version = open(os.path.join(ic_root, "bazel-bin/ic-os/guestos/envs/dev/version.txt"), "r").read().strip()
     print(colored(f"Running version {version}", "blue"))
 
     sha256 = (

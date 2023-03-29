@@ -37,7 +37,7 @@ You can also use bazel to do a testnet deployment. For documentation on this pro
 == Upgrade GuestOS
 The GuestOS disk layout contains two sets of system partitions, called partition sets "A" and "B".
 
-image:media/guestOS_disk-layout.png[]
+image:doc/media/guestOS_disk-layout.png[]
 
 Above is the guestOS disk layout—partition set "A" in green, partition set "B" in blue.
 

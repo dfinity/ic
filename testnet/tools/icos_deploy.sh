@@ -300,8 +300,8 @@ echo "--------------------------------------------------------------------------
 # rm -f ${HOME}/disk.*
 
 # echo "**** Build disk image"
-# bazel build //ic-os/guestos/dev/...
-# cp bazel-bin/ic-os/guestos/dev/disk.img "${MEDIA_PATH}/disk.img"
+# bazel build //ic-os/guestos/envs/dev/...
+# cp bazel-bin/ic-os/guestos/envs/dev/disk.img "${MEDIA_PATH}/disk.img"
 
 # Wait on the destroy to finish
 echo "**** Finishing destroy"

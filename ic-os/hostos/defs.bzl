@@ -17,10 +17,11 @@ def image_deps(mode, _malicious = False):
       mode: Variant to be built, dev or prod.
       _malicious: Unused, but currently needed to fit generic build structure.
     Returns:
-      A dict containing all file inputs to build this image.
+      A dict containing inputs to build this image.
     """
 
     deps = {
+        # Define rootfs and bootfs
         "bootfs": {
             # base layer
             ":rootfs-tree.tar": "/",
@@ -32,23 +33,25 @@ def image_deps(mode, _malicious = False):
             # additional files to install
             "//publish/binaries:vsock_host": "/opt/ic/bin/vsock-host:0755",
         },
+
+        # Set various configuration values
+        "base_image": Label("//ic-os/hostos:rootfs/docker-base." + mode),
+        "docker_context": Label("//ic-os/hostos:rootfs-files"),
+        "partition_table": Label("//ic-os/hostos:partitions.csv"),
+        "volume_table": Label("//ic-os/hostos:volumes.csv"),
+        "rootfs_size": "3G",
+        "bootfs_size": "100M",
+        "grub_config": Label("//ic-os/hostos:grub.cfg"),
+        "extra_boot_args": Label("//ic-os/hostos:rootfs/extra_boot_args"),
+
+        # Add any custom partitions to the manifest
+        "custom_partitions": _custom_partitions,
     }
-
-    deps["base_image"] = "//ic-os/hostos:rootfs/docker-base." + mode
-    deps["docker_context"] = Label("//ic-os/hostos:rootfs-files")
-    deps["partition_table"] = Label("//ic-os/hostos:partitions.csv")
-    deps["volume_table"] = Label("//ic-os/hostos:volumes.csv")
-    deps["rootfs_size"] = "3G"
-    deps["bootfs_size"] = "100M"
-    deps["grub_config"] = Label("//ic-os/hostos:grub.cfg")
-
-    # Add any custom partitions to the manifest
-    deps["custom_partitions"] = _custom_partitions
-
-    deps["extra_boot_args"] = Label("//ic-os/hostos:rootfs/extra_boot_args")
 
     return deps
 
+# Inject a step building an LVM partition. This depends on boot and root built
+# earlier in the pipeline, and is depended on by the final disk image.
 def _custom_partitions():
     lvm_image(
         name = "partition-hostlvm.tar",

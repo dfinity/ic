@@ -358,10 +358,10 @@ def diff_hash_lists(out_file, context, fs):
     touch ic-os/guestos/rootfs/expected.hash-list
 
     # Run Bazel to produce a hash listing for your local environment:
-    bazel build //ic-os/guestos/dev:rootfs-tree.tar --disk_cache= --remote_cache=
+    bazel build //ic-os/guestos/envs/dev:rootfs-tree.tar --disk_cache= --remote_cache=
 
     # Copy hash listing produced by Bazel to expected.hash-list:
-    cp bazel-bin/ic-os/guestos/dev/rootfs-tree.tar.hash-list ic-os/guestos/rootfs/expected.hash-list
+    cp bazel-bin/ic-os/guestos/envs/dev/rootfs-tree.tar.hash-list ic-os/guestos/rootfs/expected.hash-list
 
     # Commit and push expected.hash-list, then check CI logs to see the diff:
     git add ic-os/guestos/rootfs/expected.hash-list && git commit -m "Debugging (NOT TO BE MERGED)"
