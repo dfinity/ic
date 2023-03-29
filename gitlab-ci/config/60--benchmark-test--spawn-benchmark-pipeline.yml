@@ -33,6 +33,8 @@ maximum-capacity-canister-http:
       git fetch
       GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
 
+      $SHELL_WRAPPER pip3 install -r requirements.txt
+
       echo '{"test_ledger_accounts":["b3gus-edhie-77egn-fejju-pt4xd-zz2pt-7v22l-rrts4-a3ebi-fcm4d-wae"]}' > test-accounts.json
       export TESTNET_LOG="testnet_deployment.log"
       $SHELL_WRAPPER timeout 1h ./testnet/tools/icos_deploy.sh "$TESTNET" --git-revision "$GIT_REVISION" --no-boundary-nodes  --ansible-args "-e @$PWD/test-accounts.json" &> $TESTNET_LOG
@@ -52,7 +54,6 @@ maximum-capacity-canister-http:
       "${CI_PROJECT_DIR}/artifacts/release/ic-admin" --nns-url="$NNS_URL" propose-to-update-subnet --features http_requests --subnet 1 --test-neuron-proposer --summary "Updating a subnet"
 
       cd ./scalability
-      $SHELL_WRAPPER pip3 install -r requirements.txt
 
       $SHELL_WRAPPER python3 experiments/run_mixed_workload_experiment.py --testnet "$TESTNET" --wg_testnet "$TESTNET" --wg_subnet 2 --initial_rps=50 --increment_rps=50 --target_rps=150 --max_rps=400 --workload workloads/canister-http-benchmark.toml
 
@@ -80,10 +81,10 @@ maximum-capacity-system-baseline-query:
       git fetch
       GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
 
+      $SHELL_WRAPPER pip3 install -r requirements.txt
+
       $SHELL_WRAPPER timeout 1h ./testnet/tools/icos_deploy.sh $TESTNET --git-revision "$GIT_REVISION" --no-boundary-nodes
       cd ./scalability
-
-      $SHELL_WRAPPER pip3 install -r requirements.txt
 
       $SHELL_WRAPPER python3 experiments/run_system_baseline_experiment.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --initial_rps=100 --increment_rps=50 --target_rps=4400 --max_rps=40000
 
@@ -109,10 +110,10 @@ maximum-capacity-system-baseline-update:
       git fetch
       GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
 
+      $SHELL_WRAPPER pip3 install -r requirements.txt
+
       $SHELL_WRAPPER timeout 1h ./testnet/tools/icos_deploy.sh $TESTNET --git-revision "$GIT_REVISION" --no-boundary-nodes
       cd ./scalability
-
-      $SHELL_WRAPPER pip3 install -r requirements.txt
 
       $SHELL_WRAPPER python3 experiments/run_system_baseline_experiment.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --use_updates=True --initial_rps=100 --increment_rps=20 --target_rps=800 --max_rps=2000
 
@@ -140,10 +141,10 @@ maximum-capacity-large-memory-query:
       git fetch
       GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
 
+      $SHELL_WRAPPER pip3 install -r requirements.txt
+
       $SHELL_WRAPPER timeout 1h ./testnet/tools/icos_deploy.sh $TESTNET --git-revision "$GIT_REVISION" --no-boundary-nodes
       cd ./scalability
-
-      $SHELL_WRAPPER pip3 install -r requirements.txt
 
       $SHELL_WRAPPER python3 experiments/run_large_memory_experiment.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --initial_rps=20 --increment_rps=5 --target_rps=160 --max_rps=1000
 
@@ -169,10 +170,10 @@ maximum-capacity-large-memory-update:
       git fetch
       GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
 
+      $SHELL_WRAPPER pip3 install -r requirements.txt
+
       $SHELL_WRAPPER timeout 1h ./testnet/tools/icos_deploy.sh $TESTNET --git-revision "$GIT_REVISION" --no-boundary-nodes
       cd ./scalability
-
-      $SHELL_WRAPPER pip3 install -r requirements.txt
 
       $SHELL_WRAPPER python3 experiments/run_large_memory_experiment.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --use_updates=True --initial_rps=10 --increment_rps=3 --target_rps=25 --max_rps=500
 
@@ -198,10 +199,10 @@ maximum-capacity-multiple-large-memory-update:
       git fetch
       GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
 
+      $SHELL_WRAPPER pip3 install -r requirements.txt
+
       $SHELL_WRAPPER timeout 1h ./testnet/tools/icos_deploy.sh $TESTNET --git-revision "$GIT_REVISION" --no-boundary-nodes
       cd ./scalability
-
-      $SHELL_WRAPPER pip3 install -r requirements.txt
 
       $SHELL_WRAPPER python3 experiments/run_large_memory_experiment.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --use_updates=True --initial_rps=20 --increment_rps=10 --target_rps=25 --max_rps=100 --num_canisters 15 --payload_size 5000000 --use_updates=True --iter_duration 900
 
@@ -227,10 +228,10 @@ maximum-capacity-mixed-workloads:
       git fetch
       GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
 
+      $SHELL_WRAPPER pip3 install -r requirements.txt
+
       $SHELL_WRAPPER timeout 1h ./testnet/tools/icos_deploy.sh $TESTNET --git-revision "$GIT_REVISION" --no-boundary-nodes
       cd ./scalability
-
-      $SHELL_WRAPPER pip3 install -r requirements.txt
 
       $SHELL_WRAPPER python3 experiments/run_mixed_workload_experiment.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --workload workloads/mixed-query-update.toml --initial_rps=20 --increment_rps=5 --target_rps=160 --max_rps=1000
 
@@ -256,10 +257,10 @@ maximum-capacity-mixed-counter-memory:
       git fetch
       GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
 
+      $SHELL_WRAPPER pip3 install -r requirements.txt
+
       $SHELL_WRAPPER timeout 1h ./testnet/tools/icos_deploy.sh $TESTNET --git-revision "$GIT_REVISION" --no-boundary-nodes
       cd ./scalability
-
-      $SHELL_WRAPPER pip3 install -r requirements.txt
 
       # These are equivalent to maximum-capacity-large-memory-update.
       # We just run the counter canister alongside it.
@@ -287,10 +288,10 @@ maximum-capacity-qr:
       git fetch
       GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
 
+      $SHELL_WRAPPER pip3 install -r requirements.txt
+
       $SHELL_WRAPPER timeout 1h ./testnet/tools/icos_deploy.sh $TESTNET --git-revision "$GIT_REVISION" --no-boundary-nodes
       cd ./scalability
-
-      $SHELL_WRAPPER pip3 install -r requirements.txt
 
       $SHELL_WRAPPER experiments/run_mixed_workload_experiment.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --workload workloads/qr.toml --initial_rps=10 --increment_rps=5 --target_rps=25 --max_rps=150
 
@@ -315,10 +316,10 @@ maximum-capacity-sha256:
       git fetch
       GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
 
+      $SHELL_WRAPPER pip3 install -r requirements.txt
+
       $SHELL_WRAPPER timeout 1h ./testnet/tools/icos_deploy.sh $TESTNET --git-revision "$GIT_REVISION" --no-boundary-nodes
       cd ./scalability
-
-      $SHELL_WRAPPER pip3 install -r requirements.txt
 
       $SHELL_WRAPPER experiments/run_mixed_workload_experiment.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --workload workloads/sha256.toml --initial_rps=10 --increment_rps=5 --target_rps=25 --max_rps=150
 
@@ -344,10 +345,10 @@ benchmark-response-payload:
       git fetch
       GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
 
+      $SHELL_WRAPPER pip3 install -r requirements.txt
+
       $SHELL_WRAPPER timeout 1h ./testnet/tools/icos_deploy.sh $TESTNET --git-revision "$GIT_REVISION" --no-boundary-nodes
       cd ./scalability
-
-      $SHELL_WRAPPER pip3 install -r requirements.txt
 
       $SHELL_WRAPPER timeout 90m python3 experiments/run_large_payload_experiment.py --testnet "$TESTNET" --wg_testnet "$TESTNET" --wg_subnet 2
 
@@ -374,10 +375,10 @@ benchmark-xnet:
       git fetch
       GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
 
+      $SHELL_WRAPPER pip3 install -r requirements.txt
+
       $SHELL_WRAPPER timeout 1h ./testnet/tools/icos_deploy.sh $TESTNET --git-revision "$GIT_REVISION" --no-boundary-nodes
       cd ./scalability
-
-      $SHELL_WRAPPER pip3 install -r requirements.txt
 
       $SHELL_WRAPPER python3 experiments/run_xnet_experiment.py --testnet $TESTNET --hosts_ini_filename=hosts_single_node_subnets.ini
 
@@ -406,11 +407,11 @@ statesync-experiment:
       git fetch
       GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
 
+      $SHELL_WRAPPER pip3 install -r requirements.txt
+
       # Note that this benchmark needs unassigned nodes
       $SHELL_WRAPPER timeout 1h ./testnet/tools/icos_deploy.sh $TESTNET --git-revision "$GIT_REVISION" --dkg-interval-length 14 --no-boundary-nodes
       cd ./scalability
-
-      $SHELL_WRAPPER pip3 install -r requirements.txt
 
       $SHELL_WRAPPER python3 experiments/run_statesync_experiment.py --testnet $TESTNET
 
@@ -460,13 +461,13 @@ system-baseline-query-performance-test-nightly:
 
       GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
 
+      $SHELL_WRAPPER pip3 install -r requirements.txt
+
       # Note that this benchmark needs unassigned nodes
       $SHELL_WRAPPER timeout 1h ./testnet/tools/icos_deploy.sh $TESTNET --git-revision "$GIT_REVISION" --no-boundary-nodes
 
       # Run system baseline performance evaluation
       cd ./scalability
-
-      $SHELL_WRAPPER pip3 install -r requirements.txt
 
       $SHELL_WRAPPER timeout 1h python3 experiments/run_system_baseline_experiment.py --testnet "$TESTNET" --wg_subnet 2 --wg_testnet $TESTNET --iter_duration 300 --target_rps=600  --use_updates=False
 
@@ -493,13 +494,13 @@ system-baseline-update-performance-test-nightly:
 
       GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
 
+      $SHELL_WRAPPER pip3 install -r requirements.txt
+
       # Note that this benchmark needs unassigned nodes
       $SHELL_WRAPPER timeout 1h ./testnet/tools/icos_deploy.sh $TESTNET --git-revision "$GIT_REVISION" --no-boundary-nodes
 
       # Run system baseline performance evaluation
       cd ./scalability
-
-      $SHELL_WRAPPER pip3 install -r requirements.txt
 
       $SHELL_WRAPPER timeout 1h python3 experiments/run_system_baseline_experiment.py --testnet "$TESTNET" --wg_subnet 2 --wg_testnet $TESTNET --iter_duration 300 --target_rps=60 --use_updates=True
 
@@ -527,12 +528,12 @@ heavy-memory-update-performance-test-nightly:
 
       GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
 
+      $SHELL_WRAPPER pip3 install -r requirements.txt
+
       $SHELL_WRAPPER timeout 1h ./testnet/tools/icos_deploy.sh $TESTNET --git-revision "$GIT_REVISION" --no-boundary-nodes
 
       # Run heavy memory update performance evaluation
       cd ./scalability
-
-      $SHELL_WRAPPER pip3 install -r requirements.txt
 
       $SHELL_WRAPPER timeout 1h python3 experiments/run_large_memory_experiment.py --testnet "$TESTNET" --wg_testnet "$TESTNET" --wg_subnet 2 --iter_duration 300 --target_rps=15 --use_updates=True
 
@@ -559,11 +560,11 @@ large-response-downloading-nightly:
 
       GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
 
+      $SHELL_WRAPPER pip3 install -r requirements.txt
+
       $SHELL_WRAPPER timeout 1h ./testnet/tools/icos_deploy.sh $TESTNET --git-revision "$GIT_REVISION" --no-boundary-nodes
 
       cd ./scalability
-
-      $SHELL_WRAPPER pip3 install -r requirements.txt
 
       $SHELL_WRAPPER timeout 1h python3 experiments/run_large_payload_experiment.py --testnet "$TESTNET" --wg_testnet "$TESTNET" --wg_subnet 2 --iter_duration 300 --datapoints 2048
 
@@ -594,11 +595,11 @@ xnet-nightly:
 
       GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
 
+      $SHELL_WRAPPER pip3 install -r requirements.txt
+
       $SHELL_WRAPPER timeout 1h ./testnet/tools/icos_deploy.sh $TESTNET --git-revision "$GIT_REVISION" --no-boundary-nodes
 
       cd ./scalability
-
-      $SHELL_WRAPPER pip3 install -r requirements.txt
 
       $SHELL_WRAPPER timeout 1h python3 experiments/run_xnet_experiment.py --testnet "$TESTNET" --iter_duration 300 --datapoints=500
 
@@ -649,13 +650,13 @@ sns-deployment-test-nightly:
       git fetch
       GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
 
+      $SHELL_WRAPPER pip3 install -r requirements.txt
+
       # For the SNS deployment, we need to make sure we boot the testnet with some test accounts
       echo '{"init_ledger_accounts":["5b315d2f6702cb3a27d826161797d7b2c2e131cd312aece51d4d5574d1247087"]}' > test-accounts.json
       $SHELL_WRAPPER timeout 1h ./testnet/tools/icos_deploy.sh medium09 --git-revision "$GIT_REVISION" --hosts-ini sns_hosts.ini --ansible-args "-e @$PWD/test-accounts.json"
 
       cd ./scalability
-
-      $SHELL_WRAPPER pip3 install -r requirements.txt
 
       $SHELL_WRAPPER python3 experiments/run_sns_experiment.py --testnet medium09 --interactive=False
 
@@ -677,10 +678,10 @@ tecdsa:
       git fetch
       GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
 
+      $SHELL_WRAPPER pip3 install -r requirements.txt
+
       $SHELL_WRAPPER timeout 1h ./testnet/tools/icos_deploy.sh $TESTNET --git-revision "$GIT_REVISION" --no-boundary-nodes
       cd ./scalability
-
-      $SHELL_WRAPPER pip3 install -r requirements.txt
 
       $SHELL_WRAPPER experiments/run_tecdsa.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET
 
@@ -705,10 +706,10 @@ delegated-identity-bench:
       git fetch
       GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
 
+      $SHELL_WRAPPER pip3 install -r requirements.txt
+
       $SHELL_WRAPPER timeout 1h ./testnet/tools/icos_deploy.sh $TESTNET --git-revision "$GIT_REVISION" --no-boundary-nodes
       cd ./scalability
-
-      $SHELL_WRAPPER pip3 install -r requirements.txt
 
       $SHELL_WRAPPER python3 experiments/run_delegation_experiment.py --testnet $TESTNET --num_procs 64 --iter_duration 30 --num_identities 200 --rps 30,100,200,500,1000
 
@@ -728,10 +729,10 @@ maximum-capacity-boundary-nodes-queries:
       git fetch
       GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "$DISKIMG_BRANCH")
 
+      $SHELL_WRAPPER pip3 install -r requirements.txt
+
       $SHELL_WRAPPER timeout 1h ./testnet/tools/icos_deploy.sh $TESTNET --git-revision "$GIT_REVISION" --boundary-dev-image
       cd ./scalability
-
-      $SHELL_WRAPPER pip3 install -r requirements.txt
 
       $SHELL_WRAPPER python3 experiments/run_boundary_node_baseline_experiment.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --targets https://"$TESTNET".testnet.dfinity.network --use_updates=False --no_instrument=True --datapoints=100~2000~5000
 

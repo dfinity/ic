@@ -14,10 +14,8 @@ gen-cargo-pipeline:
       set -euo pipefail
       ssh-add -L
 
-      cd gitlab-ci/src/
-
-      # set-up python dev
       pip3 install -r requirements.txt
+      cd gitlab-ci/src/
       $SHELL_WRAPPER python3 gen_gitlab_cargo_pipeline/gen_pipeline.py \
         ../../ ../../ic-os -v --out=../../child-pipeline.yml
       

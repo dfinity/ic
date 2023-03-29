@@ -3,9 +3,7 @@
 Usage:
 
 -----
-cd gitlab-ci/tools/git_statistics
-python3 -m venv env
-source env/bin/activate
 pip install -r requirements.txt
-python git_statistics.py
+cd gitlab-ci/tools/git_statistics
+python3 git_statistics.py
 ----
