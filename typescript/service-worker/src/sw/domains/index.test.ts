@@ -1,14 +1,8 @@
 import { Principal } from '@dfinity/principal';
-import { IDBPDatabase, IDBPTransaction } from 'idb';
 import { mockLocation } from '../../mocks/location';
 import { MalformedCanisterError } from './errors';
-import {
-  DBHostsItem,
-  domainLookupHeaders,
-  domainStorageProperties,
-} from './typings';
-import { Storage, CreateStoreFn, DBValue } from '../storage';
 import * as resolverImport from './index';
+import { domainLookupHeaders } from './typings';
 
 let CanisterResolver: typeof resolverImport.CanisterResolver;
 
@@ -96,7 +90,7 @@ describe('Canister resolver lookups', () => {
 
     // N calls for the same domain should only do one fetch
     const numberOfCalls = 10;
-    let lookups: (Principal | null)[] = [];
+    const lookups: (Principal | null)[] = [];
     for (let i = 0; i < numberOfCalls; ++i) {
       lookups.push(
         await resolver.lookup(new URL('https://www.customdappdomain.io'))
@@ -201,5 +195,35 @@ describe('Canister resolver lookups', () => {
 
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     expect(error).toBeInstanceOf(MalformedCanisterError);
+  });
+
+  it('should accept https protocols on lookup', async () => {
+    const resolver = await CanisterResolver.setup();
+    const canister = Principal.fromText('rdmx6-jaaaa-aaaaa-aaadq-cai');
+    const requestUrl = `https://${canister.toText()}.icp0.io`;
+    const request = new Request(requestUrl, {
+      headers: {
+        host: requestUrl,
+      },
+    });
+
+    const lookup = await resolver.lookupFromHttpRequest(request);
+
+    expect(lookup?.toText()).toEqual(canister.toText());
+  });
+
+  it('should not resolve non https protocols on lookup', async () => {
+    const resolver = await CanisterResolver.setup();
+    const canister = Principal.fromText('rdmx6-jaaaa-aaaaa-aaadq-cai');
+    const requestUrl = `custom-protocol://${canister.toText()}.icp0.io`;
+    const request = new Request(requestUrl, {
+      headers: {
+        host: requestUrl,
+      },
+    });
+
+    const lookup = await resolver.lookupFromHttpRequest(request);
+
+    expect(lookup).toBeNull();
   });
 });
