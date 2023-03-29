@@ -57,9 +57,11 @@ impl Encode for UpstreamEncoder {
                         r#"
 upstream {node_id} {{
     server {socket_addr};
+    keepalive 50;
 }}
 upstream {node_id}-query {{
     server {socket_addr} max_conns=50;
+    keepalive 50;
 }}
 "#
                     )
