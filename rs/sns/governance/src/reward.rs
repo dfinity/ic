@@ -224,7 +224,8 @@ impl VotingRewardsParameters {
         let time_since_genesis = {
             let result = now - *GENESIS;
             // For the purposes of determining reward rate, treat times before
-            // genesis the same as at genesis.
+            // genesis the same as at genesis. This is not expected to occur in
+            // practice. This code is just being extra defensive.
             if result.as_secs() < i2d(0) {
                 Duration { days: i2d(0) }
             } else {
