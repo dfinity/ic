@@ -5,6 +5,17 @@ use ic_interfaces::execution_environment::{
 use ic_types::NumInstructions;
 use std::sync::{Arc, Condvar, Mutex};
 
+// The upper bound on the number of supported execution slices.
+//
+// It is set to 400 because 500 the number of rounds in an epoch,
+// which the interval between two checkpoints.
+//
+// Note that currently the maximum number of slices:
+// - for update messages is 10.
+// - for upgrade messages is 100.
+// See constants in `rs/config/src/subnet_config.rs`
+const MAX_NUM_SLICES: i64 = 400;
+
 // Indicates the current state of execution.
 // It start with `Running` and may transition to `Paused`.
 // From `Paused` it transitions either to `Running` or `Aborted`.
@@ -34,6 +45,14 @@ struct State {
     // Invariant: it does not exceed `total_instruction_limit`.
     instructions_executed: i64,
 
+    // The number of remaining execution slices.
+    //
+    // Note that normally execution finishes when `instructions_executed`
+    // exceeds `total_instruction_limit`. This counter is used as an additional
+    // safeguard to guarantee fast progress for the case when each slice does
+    // not use all its available instructions.
+    slices_left: i64,
+
     // The execution complexity accumulated at the beginning of the round.
     execution_complexity: ExecutionComplexity,
 }
@@ -41,12 +60,22 @@ struct State {
 impl State {
     fn new(total_instruction_limit: i64, max_slice_instruction_limit: i64) -> Self {
         let max_slice_instruction_limit = max_slice_instruction_limit.min(total_instruction_limit);
+
+        let max_num_slices =
+            (total_instruction_limit / max_slice_instruction_limit.max(1)).min(MAX_NUM_SLICES);
+
+        // Since the number of slices is a secondary limit and just a safeguard
+        // in addition to the primary limit of instructions, we can give it some
+        // slack to ensure that it doesn't interfere in regular cases.
+        let max_num_slices_with_slack = (2 * max_num_slices).clamp(4, MAX_NUM_SLICES);
+
         let result = Self {
             execution_status: ExecutionStatus::Running,
             total_instruction_limit,
             max_slice_instruction_limit,
             slice_instruction_limit: max_slice_instruction_limit,
             instructions_executed: 0,
+            slices_left: max_num_slices_with_slack,
             execution_complexity: ExecutionComplexity::default(),
         };
         result.check_invariants();
@@ -73,7 +102,7 @@ impl State {
     /// Returns true if the current slice is sufficient to reach the total
     /// instruction limit.
     fn is_last_slice(&self) -> bool {
-        self.slice_instruction_limit >= self.total_instructions_left()
+        self.slice_instruction_limit >= self.total_instructions_left() || self.slices_left <= 1
     }
 
     /// Computes the limit for the next slice taking into account
@@ -83,8 +112,7 @@ impl State {
         let newly_executed = self.newly_executed(instruction_counter);
         let carry_over = (newly_executed - self.slice_instruction_limit).max(0);
         (self.max_slice_instruction_limit - carry_over)
-            .min(self.total_instructions_left())
-            .max(0)
+            .clamp(0, self.total_instructions_left().max(0))
     }
 
     /// Returns the number of instructions executed in the current slice.
@@ -113,6 +141,7 @@ impl State {
             .saturating_add(self.newly_executed(instruction_counter));
         self.slice_instruction_limit = self.next_slice_instruction_limit(instruction_counter);
         self.execution_complexity = execution_complexity;
+        self.slices_left -= 1;
         self.check_invariants();
     }
 
