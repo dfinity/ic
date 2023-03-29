@@ -7,8 +7,8 @@
             "build": [
                 "bazel build //rs/bitcoin/ckbtc/minter:ckbtc_minter"
             ],
-            "wasm": "../../../../../bazel-bin/rs/bitcoin/ckbtc/minter/ckbtc_minter.wasm",
-            "candid": "../../minter/ckbtc_minter.did",
+            "wasm": "../../../../bazel-bin/rs/bitcoin/ckbtc/minter/ckbtc_minter.wasm",
+            "candid": "../minter/ckbtc_minter.did",
             "shrink": false
         },
         "ledger": {
@@ -16,8 +16,8 @@
             "build": [
                 "bazel build //rs/rosetta-api/icrc1/ledger:ledger_canister"
             ],
-            "wasm": "../../../../../bazel-bin/rs/rosetta-api/icrc1/ledger/ledger_canister.wasm",
-            "candid": "../../../../rosetta-api/icrc1/ledger/icrc1.did",
+            "wasm": "../../../../bazel-bin/rs/rosetta-api/icrc1/ledger/ledger_canister.wasm",
+            "candid": "../../../rosetta-api/icrc1/ledger/icrc1.did",
             "shrink": false
         },
         "archive": {
@@ -25,8 +25,8 @@
             "build": [
                 "bazel build //rs/rosetta-api/icrc1/archive:archive_canister"
             ],
-            "wasm": "../../../../../bazel-bin/rs/rosetta-api/icrc1/archive/archive_canister.wasm",
-            "candid": "../../../../rosetta-api/icrc1/archive/archive.did",
+            "wasm": "../../../../bazel-bin/rs/rosetta-api/icrc1/archive/archive_canister.wasm",
+            "candid": "../../../rosetta-api/icrc1/archive/archive.did",
             "shrink": false
         },
         "index": {
@@ -34,8 +34,8 @@
             "build": [
                 "bazel build //rs/rosetta-api/icrc1/index:index_canister"
             ],
-            "wasm": "../../../../../bazel-bin/rs/rosetta-api/icrc1/index/index_canister.wasm",
-            "candid": "../../../../rosetta-api/icrc1/index/index.did",
+            "wasm": "../../../../bazel-bin/rs/rosetta-api/icrc1/index/index_canister.wasm",
+            "candid": "../../../rosetta-api/icrc1/index/index.did",
             "shrink": false
         },
         "kyt": {
@@ -43,8 +43,8 @@
             "build": [
                 "bazel build //rs/bitcoin/ckbtc/kyt:kyt_canister"
             ],
-            "wasm": "../../../../../bazel-bin/rs/bitcoin/ckbtc/kyt/kyt_canister.wasm",
-            "candid": "../../kyt/kyt.did",
+            "wasm": "../../../../bazel-bin/rs/bitcoin/ckbtc/kyt/kyt_canister.wasm",
+            "candid": "../kyt/kyt.did",
             "shrink": false
         }
     },
