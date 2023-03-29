@@ -4,7 +4,7 @@ use anyhow::{Context, Error};
 use axum::{handler::Handler, routing::get, Extension, Router};
 use candid::Principal;
 use clap::Args;
-use hyper::{self, Body, Request, Response, StatusCode, Uri};
+use hyper::{self, Body, Request, Response, StatusCode};
 use ic_agent::Agent;
 use opentelemetry::{
     global,
@@ -15,7 +15,9 @@ use opentelemetry::{
 use opentelemetry_prometheus::PrometheusExporter;
 use prometheus::{Encoder, TextEncoder};
 
-use crate::{headers::HeadersData, logging::add_trace_layer, validate::Validate};
+use crate::http::request::HttpRequest;
+use crate::http::response::HttpResponse;
+use crate::{logging::add_trace_layer, validate::Validate};
 
 /// The options for metrics
 #[derive(Args)]
@@ -48,21 +50,12 @@ impl MetricParams {
 impl<T: Validate> Validate for WithMetrics<T> {
     fn validate(
         &self,
-        required: bool,
-        headers_data: &HeadersData,
-        canister_id: &Principal,
         agent: &Agent,
-        uri: &Uri,
-        response_body: &[u8],
+        canister_id: &Principal,
+        request: &HttpRequest,
+        response: &HttpResponse,
     ) -> Result<(), Cow<'static, str>> {
-        let out = self.0.validate(
-            required,
-            headers_data,
-            canister_id,
-            agent,
-            uri,
-            response_body,
-        );
+        let out = self.0.validate(agent, canister_id, request, response);
 
         let mut status = if out.is_ok() { "ok" } else { "fail" };
         if cfg!(feature = "skip_body_verification") {

@@ -5,48 +5,34 @@ use std::{
         atomic::{AtomicUsize, Ordering},
         Arc,
     },
-    time::Duration,
 };
 
 use anyhow::bail;
 use axum::extract::{ConnectInfo, FromRef, State};
-use futures::StreamExt;
-use http_body::{LengthLimitError, Limited};
 use hyper::{
-    body,
     http::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE},
     Body, Request, Response, StatusCode, Uri,
 };
 use ic_agent::{agent_error::HttpErrorPayload, export::Principal, Agent, AgentError};
+use ic_response_verification::MAX_VERIFICATION_VERSION;
+use ic_utils::interfaces::http_request::HeaderField;
 use ic_utils::{
     call::{AsyncCall, SyncCall},
-    interfaces::http_request::{
-        HeaderField, HttpRequestCanister, HttpRequestStreamingCallbackAny, HttpResponse,
-        StreamingCallbackHttpResponse, StreamingStrategy, Token,
-    },
+    interfaces::http_request::HttpRequestCanister,
 };
-use tracing::{enabled, info, instrument, trace, warn, Level};
+use tracing::{enabled, info, instrument, trace, Level};
 
+use crate::error::ErrorFactory;
+use crate::http::request::HttpRequest;
+use crate::http::response::{AgentResponseAny, HttpResponse};
 use crate::{
     canister_id,
-    headers::extract_headers_data,
-    proxy::{AppState, HandleError, HyperService, REQUEST_BODY_SIZE_LIMIT},
+    proxy::{AppState, HandleError, HyperService},
     validate::Validate,
 };
 
-type HttpResponseAny = HttpResponse<Token, HttpRequestStreamingCallbackAny>;
-
-// Limit the total number of calls to an HTTP Request loop to 1000 for now.
-const MAX_HTTP_REQUEST_STREAM_CALLBACK_CALL_COUNT: usize = 1000;
-
-// Limit the number of Stream Callbacks buffered
-const STREAM_CALLBACK_BUFFFER: usize = 2;
-
 // The maximum length of a body we should log as tracing.
 const MAX_LOG_BODY_SIZE: usize = 100;
-
-static REQUIRE_CERTIFICATION_HEADER: HeaderName =
-    HeaderName::from_static("x-icx-require-certification");
 
 /// https://internetcomputer.org/docs/current/references/ic-interface-spec#reject-codes
 struct ReplicaErrorCodes;
@@ -177,62 +163,48 @@ async fn process_request_inner(
 ) -> Result<Response<Body>, anyhow::Error> {
     let canister_id = match canister_id {
         None => {
-            if request.uri().path().starts_with("/api") {
+            return if request.uri().path().starts_with("/api") {
                 info!("forwarding");
                 let proxied_request =
                     create_proxied_request(&addr.ip(), replica_uri.clone(), request)?;
                 let response = client.call(proxied_request).await?;
                 let (parts, body) = response.into_parts();
-                return Ok(Response::from_parts(parts, body.into()));
+                Ok(Response::from_parts(parts, body.into()))
             } else {
-                return Ok(Response::builder()
+                Ok(Response::builder()
                     .status(StatusCode::BAD_REQUEST)
                     .body("Could not find a canister id to forward to.".into())
-                    .unwrap());
+                    .unwrap())
             }
         }
         Some(canister_id) => canister_id,
     };
+
+    trace!(
+        "<< {} {} {:?}",
+        request.method(),
+        request.uri(),
+        request.version()
+    );
+
     let (parts, body) = request.into_parts();
-    let certification_required = parts.headers.contains_key(&REQUIRE_CERTIFICATION_HEADER);
-
-    trace!("<< {} {} {:?}", parts.method, parts.uri, parts.version);
-
-    let method = parts.method;
-    let uri = parts.uri.to_string();
-    let headers = parts
-        .headers
-        .iter()
-        .filter_map(|(name, value)| {
-            Some(HeaderField(
-                name.as_str().into(),
-                value.to_str().ok()?.into(),
-            ))
-        })
-        .inspect(|HeaderField(name, value)| {
-            trace!("<< {}: {}", name, value);
-        })
-        .collect::<Vec<_>>();
-
-    // Limit request body size
-    let body = Limited::new(body, REQUEST_BODY_SIZE_LIMIT);
-    let entire_body = match body::to_bytes(body).await {
-        Ok(data) => data,
-        Err(err) => {
-            if err.downcast_ref::<LengthLimitError>().is_some() {
+    let http_request = HttpRequest::from((
+        &parts,
+        match HttpRequest::read_body(body).await {
+            Ok(data) => data,
+            Err(ErrorFactory::PayloadTooLarge) => {
                 return Ok(Response::builder()
                     .status(StatusCode::PAYLOAD_TOO_LARGE)
-                    .body(Body::from("Request size exceeds limit"))?);
+                    .body(Body::from("Request size exceeds limit"))?)
             }
-            bail!("Failed to read body: {err}");
-        }
-    }
-    .to_vec();
+            Err(e) => bail!(e),
+        },
+    ));
 
     trace!("<<");
     if enabled!(Level::TRACE) {
         let body = String::from_utf8_lossy(
-            &entire_body[0..usize::min(entire_body.len(), MAX_LOG_BODY_SIZE)],
+            &http_request.body[0..usize::min(http_request.body.len(), MAX_LOG_BODY_SIZE)],
         );
         trace!(
             "<< \"{}\"{}",
@@ -246,152 +218,70 @@ async fn process_request_inner(
     }
 
     let canister = HttpRequestCanister::create(&agent, canister_id);
+    let header_fields = http_request
+        .headers
+        .iter()
+        .map(|(name, value)| HeaderField(name.into(), value.into()));
     let query_result = canister
         .http_request_custom(
-            method.as_str(),
-            uri.as_str(),
-            headers.iter().cloned(),
-            &entire_body,
+            &http_request.method,
+            http_request.uri.to_string().as_str(),
+            header_fields.clone(),
+            &http_request.body,
+            Some(&u128::from(MAX_VERIFICATION_VERSION)),
         )
         .call()
         .await;
 
-    fn handle_result(
-        result: Result<(HttpResponseAny,), AgentError>,
-    ) -> Result<HttpResponseAny, Result<Response<Body>, anyhow::Error>> {
-        // If the result is a Replica error, returns the 500 code and message. There is no information
-        // leak here because a user could use `dfx` to get the same reply.
-        match result {
-            Ok((http_response,)) => Ok(http_response),
-
-            Err(AgentError::ReplicaError {
-                reject_code: ReplicaErrorCodes::DESTINATION_INVALID,
-                reject_message,
-            }) => Err(Ok(Response::builder()
-                .status(StatusCode::NOT_FOUND)
-                .body(reject_message.into())
-                .unwrap())),
-
-            Err(AgentError::ReplicaError {
-                reject_code,
-                reject_message,
-            }) => Err(Ok(Response::builder()
-                .status(StatusCode::BAD_GATEWAY)
-                .body(format!(r#"Replica Error ({}): "{}""#, reject_code, reject_message).into())
-                .unwrap())),
-
-            Err(AgentError::HttpError(HttpErrorPayload {
-                status: 451,
-                content_type,
-                content,
-            })) => Err(Ok(content_type
-                .into_iter()
-                .fold(Response::builder(), |r, c| r.header(CONTENT_TYPE, c))
-                .status(451)
-                .body(content.into())
-                .unwrap())),
-
-            Err(AgentError::ResponseSizeExceededLimit()) => Err(Ok(Response::builder()
-                .status(StatusCode::INSUFFICIENT_STORAGE)
-                .body("Response size exceeds limit".into())
-                .unwrap())),
-
-            Err(e) => Err(Err(e.into())),
-        }
-    }
-
-    let http_response = match handle_result(query_result) {
+    let agent_response = match handle_result(query_result) {
         Ok(http_response) => http_response,
         Err(response_or_error) => return response_or_error,
     };
 
-    let http_response = if http_response.upgrade == Some(true) {
-        let waiter = garcon::Delay::builder()
-            .throttle(Duration::from_millis(500))
-            .timeout(Duration::from_secs(15))
-            .build();
+    let agent_response = if agent_response.upgrade == Some(true) {
         let update_result = canister
             .http_request_update_custom(
-                method.as_str(),
-                uri.as_str(),
-                headers.iter().cloned(),
-                &entire_body,
+                &http_request.method,
+                http_request.uri.to_string().as_str(),
+                header_fields.clone(),
+                &http_request.body,
+                Some(&u128::from(MAX_VERIFICATION_VERSION)),
             )
-            .call_and_wait(waiter)
+            .call_and_wait()
             .await;
         match handle_result(update_result) {
             Ok(http_response) => http_response,
             Err(response_or_error) => return response_or_error,
         }
     } else {
-        http_response
+        agent_response
     };
 
-    let mut builder = Response::builder().status(StatusCode::from_u16(http_response.status_code)?);
-    for HeaderField(name, value) in &http_response.headers {
-        builder = builder.header(name.as_ref(), value.as_ref());
+    let http_response = HttpResponse::from((&agent, agent_response));
+    let mut response_builder =
+        Response::builder().status(StatusCode::from_u16(http_response.status_code)?);
+    for (name, value) in &http_response.headers {
+        response_builder = response_builder.header(name, value);
     }
 
-    let headers_data = extract_headers_data(&http_response.headers);
-    let body = if enabled!(Level::TRACE) {
-        Some(http_response.body.clone())
-    } else {
-        None
-    };
-    let is_streaming = http_response.streaming_strategy.is_some();
-    let response = if let Some(streaming_strategy) = http_response.streaming_strategy {
-        let body = http_response.body;
-        let body = futures::stream::once(async move { Ok(body) });
-        let body = match streaming_strategy {
-            StreamingStrategy::Callback(callback) => body::Body::wrap_stream(
-                body.chain(futures::stream::try_unfold(
-                    (agent.clone(), callback.callback.0, Some(callback.token)),
-                    move |(agent, callback, callback_token)| async move {
-                        let callback_token = match callback_token {
-                            Some(callback_token) => callback_token,
-                            None => return Ok(None),
-                        };
+    // At the moment verification is only performed if the response is not using a streaming
+    // strategy. Performing verification for those requests would required to join all the chunks
+    // and this could cause memory issues and possibly create DOS attack vectors.
+    if !http_response.has_streaming_body {
+        let validation = validator.validate(&agent, &canister_id, &http_request, &http_response);
 
-                        let canister = HttpRequestCanister::create(&agent, callback.principal);
-                        match canister
-                            .http_request_stream_callback(&callback.method, callback_token)
-                            .call()
-                            .await
-                        {
-                            Ok((StreamingCallbackHttpResponse { body, token },)) => {
-                                Ok(Some((body, (agent, callback, token))))
-                            }
-                            Err(e) => {
-                                warn!("Error happened during streaming: {}", e);
-                                Err(e)
-                            }
-                        }
-                    },
-                ))
-                .take(MAX_HTTP_REQUEST_STREAM_CALLBACK_CALL_COUNT)
-                .map(|x| async move { x })
-                .buffered(STREAM_CALLBACK_BUFFFER),
-            ),
-        };
-
-        builder.body(body)?
-    } else {
-        let body_valid = validator.validate(
-            certification_required,
-            &headers_data,
-            &canister_id,
-            &agent,
-            &parts.uri,
-            &http_response.body,
-        );
-        if body_valid.is_err() {
+        if validation.is_err() {
             return Ok(Response::builder()
                 .status(StatusCode::INTERNAL_SERVER_ERROR)
-                .body(body_valid.unwrap_err().into())
+                .body(validation.unwrap_err().into())
                 .unwrap());
         }
-        builder.body(http_response.body.into())?
-    };
+    }
+
+    let response = response_builder.body(match http_response.streaming_body {
+        Some(body) => body,
+        None => Body::from(http_response.body.clone()),
+    })?;
 
     if enabled!(Level::TRACE) {
         trace!(
@@ -406,14 +296,17 @@ async fn process_request_inner(
             trace!(">> {}: {}", name, value);
         }
 
-        let body = body.unwrap_or_else(|| b"... streaming ...".to_vec());
+        let body = match http_response.has_streaming_body {
+            true => b"... streaming ...".to_vec(),
+            false => http_response.body.clone(),
+        };
 
         trace!(">>");
         trace!(
             ">> \"{}\"{}",
             String::from_utf8_lossy(&body[..usize::min(MAX_LOG_BODY_SIZE, body.len())])
                 .escape_default(),
-            if is_streaming {
+            if http_response.has_streaming_body {
                 "... streaming".to_string()
             } else if body.len() > MAX_LOG_BODY_SIZE {
                 format!("... {} bytes total", body.len())
@@ -424,4 +317,48 @@ async fn process_request_inner(
     }
 
     Ok(response)
+}
+
+fn handle_result(
+    result: Result<(AgentResponseAny,), AgentError>,
+) -> Result<AgentResponseAny, Result<Response<Body>, anyhow::Error>> {
+    // If the result is a Replica error, returns the 500 code and message. There is no information
+    // leak here because a user could use `dfx` to get the same reply.
+    match result {
+        Ok((http_response,)) => Ok(http_response),
+
+        Err(AgentError::ReplicaError {
+            reject_code: ReplicaErrorCodes::DESTINATION_INVALID,
+            reject_message,
+        }) => Err(Ok(Response::builder()
+            .status(StatusCode::NOT_FOUND)
+            .body(reject_message.into())
+            .unwrap())),
+
+        Err(AgentError::ReplicaError {
+            reject_code,
+            reject_message,
+        }) => Err(Ok(Response::builder()
+            .status(StatusCode::BAD_GATEWAY)
+            .body(format!(r#"Replica Error ({}): "{}""#, reject_code, reject_message).into())
+            .unwrap())),
+
+        Err(AgentError::HttpError(HttpErrorPayload {
+            status: 451,
+            content_type,
+            content,
+        })) => Err(Ok(content_type
+            .into_iter()
+            .fold(Response::builder(), |r, c| r.header(CONTENT_TYPE, c))
+            .status(451)
+            .body(content.into())
+            .unwrap())),
+
+        Err(AgentError::ResponseSizeExceededLimit()) => Err(Ok(Response::builder()
+            .status(StatusCode::INSUFFICIENT_STORAGE)
+            .body("Response size exceeds limit".into())
+            .unwrap())),
+
+        Err(e) => Err(Err(e.into())),
+    }
 }

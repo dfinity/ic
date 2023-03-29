@@ -625,6 +625,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "backoff"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b62ddb9cb1ec0a098ad4bbf9344d0713fa193ae1a80af55febcff2627b6a00c1"
+dependencies = [
+ "getrandom 0.2.8",
+ "instant",
+ "rand 0.8.5",
+]
+
+[[package]]
 name = "backtrace"
 version = "0.3.67"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1057,7 +1068,7 @@ dependencies = [
  "glob",
  "humantime 2.1.0",
  "hyper",
- "ic-agent",
+ "ic-agent 0.22.0",
  "ic-error-types",
  "ic-utils 0.22.0",
  "indoc",
@@ -1358,7 +1369,7 @@ dependencies = [
 name = "canister-test"
 version = "0.8.0"
 dependencies = [
- "backoff",
+ "backoff 0.3.0",
  "candid",
  "cargo_metadata",
  "dfn_candid",
@@ -1476,7 +1487,7 @@ dependencies = [
  "garcon",
  "hyper",
  "hyper-rustls",
- "ic-agent",
+ "ic-agent 0.22.0",
  "ic-utils 0.22.0",
  "idna 0.3.0",
  "instant-acme",
@@ -3561,7 +3572,7 @@ dependencies = [
  "clap 3.2.23",
  "dfn_candid",
  "garcon",
- "ic-agent",
+ "ic-agent 0.22.0",
  "ic-base-types",
  "ic-identity-hsm",
  "ic-nns-constants",
@@ -4174,7 +4185,6 @@ dependencies = [
  "hex",
  "http",
  "http-body",
- "hyper",
  "hyper-rustls",
  "ic-verify-bls-signature",
  "k256 0.11.6",
@@ -4193,6 +4203,44 @@ dependencies = [
  "sha2 0.10.6",
  "simple_asn1 0.6.2",
  "thiserror",
+ "url",
+]
+
+[[package]]
+name = "ic-agent"
+version = "0.23.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "59cadbe5208d33c651ea55d56eb1c38a6f917dc836cc93973faa4bb0a95b71b5"
+dependencies = [
+ "async-trait",
+ "backoff 0.4.0",
+ "base32",
+ "base64 0.13.1",
+ "byteorder",
+ "candid",
+ "futures-util",
+ "hex",
+ "http",
+ "http-body",
+ "hyper",
+ "hyper-rustls",
+ "ic-certification 0.23.2",
+ "ic-verify-bls-signature",
+ "k256 0.11.6",
+ "leb128",
+ "mime",
+ "pkcs8 0.9.0",
+ "rand 0.8.5",
+ "ring",
+ "rustls 0.20.8",
+ "sec1",
+ "serde",
+ "serde_bytes",
+ "serde_cbor",
+ "sha2 0.10.6",
+ "simple_asn1 0.6.2",
+ "thiserror",
+ "tokio",
  "url",
 ]
 
@@ -4318,7 +4366,7 @@ dependencies = [
  "futures",
  "humantime 2.1.0",
  "hyper",
- "ic-agent",
+ "ic-agent 0.22.0",
  "indoc",
  "mockall 0.11.3",
  "opentelemetry 0.17.0",
@@ -4496,13 +4544,13 @@ name = "ic-canister-client"
 version = "0.8.0"
 dependencies = [
  "async-trait",
- "backoff",
+ "backoff 0.3.0",
  "futures-util",
  "hex",
  "hyper",
  "hyper-tls",
  "ic-canister-client-sender",
- "ic-certification",
+ "ic-certification 0.8.0",
  "ic-certification-test-utils",
  "ic-crypto-ecdsa-secp256k1",
  "ic-crypto-test-utils",
@@ -4774,6 +4822,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-certification"
+version = "0.23.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "beb68e0ea2fe6b533ddab6ae2142274f9669acacbacd83ac64bb1cd268d33104"
+dependencies = [
+ "hex",
+ "serde",
+ "serde_bytes",
+ "sha2 0.10.6",
+]
+
+[[package]]
 name = "ic-certification-test-utils"
 version = "0.1.0"
 dependencies = [
@@ -4815,7 +4875,7 @@ version = "0.1.0"
 dependencies = [
  "candid",
  "garcon",
- "ic-agent",
+ "ic-agent 0.22.0",
  "ic-canisters-http-types",
  "ic-ckbtc-minter",
  "ic-icrc1",
@@ -5262,7 +5322,7 @@ dependencies = [
  "assert_matches",
  "base64 0.11.0",
  "hex",
- "ic-certification",
+ "ic-certification 0.8.0",
  "ic-certification-test-utils",
  "ic-crypto",
  "ic-crypto-internal-basic-sig-der-utils",
@@ -6336,9 +6396,9 @@ dependencies = [
  "http",
  "hyper",
  "hyper-tls",
- "ic-agent",
+ "ic-agent 0.22.0",
  "ic-async-utils",
- "ic-certification",
+ "ic-certification 0.8.0",
  "ic-config",
  "ic-crypto-tls-interfaces",
  "ic-crypto-tls-interfaces-mocks",
@@ -6741,7 +6801,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0ec2335ec6c8bf1fdeb8b034c2a81c87a5b8373b6d919b8fee0c67ca2f14aa93"
 dependencies = [
  "hex",
- "ic-agent",
+ "ic-agent 0.22.0",
  "num-bigint 0.4.3",
  "pkcs11",
  "sha2 0.10.6",
@@ -6926,8 +6986,8 @@ dependencies = [
  "candid",
  "clap 3.2.23",
  "dfn_protobuf",
- "ic-agent",
- "ic-certification",
+ "ic-agent 0.22.0",
+ "ic-certification 0.8.0",
  "ic-ledger-canister-blocks-synchronizer-test-utils",
  "ic-ledger-canister-core",
  "ic-ledger-core",
@@ -8036,7 +8096,7 @@ dependencies = [
  "hyper",
  "hyper-tls",
  "ic-canister-client",
- "ic-certification",
+ "ic-certification 0.8.0",
  "ic-certification-test-utils",
  "ic-crypto",
  "ic-crypto-tree-hash",
@@ -8436,6 +8496,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-response-verification"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4f4e57f65dc2b5567f11e0508b3648518097fe9fcd443389eb0057b91a3c5acd"
+dependencies = [
+ "base64 0.13.1",
+ "candid",
+ "flate2",
+ "http",
+ "ic-certification 0.23.2",
+ "leb128",
+ "log",
+ "miracl_core_bls12381",
+ "nom 7.1.3",
+ "sha2 0.10.6",
+ "thiserror",
+]
+
+[[package]]
 name = "ic-rosetta-api"
 version = "1.8.0"
 dependencies = [
@@ -8451,7 +8530,7 @@ dependencies = [
  "futures",
  "garcon",
  "hex",
- "ic-agent",
+ "ic-agent 0.22.0",
  "ic-base-types",
  "ic-canister-client",
  "ic-canister-client-sender",
@@ -9706,7 +9785,28 @@ dependencies = [
  "async-trait",
  "candid",
  "garcon",
- "ic-agent",
+ "ic-agent 0.22.0",
+ "leb128",
+ "num-bigint 0.4.3",
+ "once_cell",
+ "paste 1.0.12",
+ "semver",
+ "serde",
+ "serde_bytes",
+ "strum 0.24.1",
+ "strum_macros 0.24.3",
+ "thiserror",
+]
+
+[[package]]
+name = "ic-utils"
+version = "0.23.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7a66ae113ea8e759a874aa7cc3bc296273274b61fcf67b4bb6bb273c67aad02e"
+dependencies = [
+ "async-trait",
+ "candid",
+ "ic-agent 0.23.2",
  "leb128",
  "num-bigint 0.4.3",
  "once_cell",
@@ -9818,7 +9918,7 @@ dependencies = [
 name = "ic-workload-generator"
 version = "0.8.0"
 dependencies = [
- "backoff",
+ "backoff 0.3.0",
  "byte-unit",
  "candid",
  "chrono",
@@ -10039,7 +10139,7 @@ version = "0.1.0"
 dependencies = [
  "candid",
  "garcon",
- "ic-agent",
+ "ic-agent 0.22.0",
  "icrc-ledger-types",
 ]
 
@@ -10057,7 +10157,7 @@ dependencies = [
 
 [[package]]
 name = "icx-proxy"
-version = "0.10.1"
+version = "0.11.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -10073,8 +10173,9 @@ dependencies = [
  "http-body",
  "hyper",
  "hyper-rustls",
- "ic-agent",
- "ic-utils 0.22.0",
+ "ic-agent 0.23.2",
+ "ic-response-verification",
+ "ic-utils 0.23.2",
  "itertools",
  "lazy-regex",
  "opentelemetry 0.17.0",
@@ -10086,7 +10187,9 @@ dependencies = [
  "serde_cbor",
  "serde_json",
  "sha2 0.10.6",
+ "thiserror",
  "tokio",
+ "tokio-test",
  "tower",
  "tower-http",
  "tracing",
@@ -11330,6 +11433,12 @@ dependencies = [
  "winapi 0.2.8",
  "ws2_32-sys",
 ]
+
+[[package]]
+name = "miracl_core_bls12381"
+version = "4.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d07cbe42e2a8dd41df582fb8e00fc24d920b5561cc301fcb6d14e2e0434b500f"
 
 [[package]]
 name = "mockall"
@@ -14615,7 +14724,7 @@ dependencies = [
  "hyper",
  "hyper-rustls",
  "hyper-tls",
- "ic-agent",
+ "ic-agent 0.22.0",
  "ic-artifact-pool",
  "ic-backup",
  "ic-base-types",
@@ -14623,7 +14732,7 @@ dependencies = [
  "ic-canister-client",
  "ic-canister-client-sender",
  "ic-cdk 0.6.10",
- "ic-certification",
+ "ic-certification 0.8.0",
  "ic-ckbtc-agent",
  "ic-ckbtc-minter",
  "ic-config",
@@ -15032,6 +15141,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "syn"
+version = "2.0.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bcc02725fd69ab9f26eab07fad303e2497fad6fb9eba4f96c4d1687bdf704ad9"
+dependencies = [
+ "proc-macro2 1.0.52",
+ "quote 1.0.26",
+ "unicode-ident",
+]
+
+[[package]]
 name = "sync_wrapper"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -15244,7 +15364,7 @@ dependencies = [
  "hyper",
  "hyper-rustls",
  "hyper-tls",
- "ic-agent",
+ "ic-agent 0.22.0",
  "ic-artifact-pool",
  "ic-backup",
  "ic-base-types",
@@ -15252,7 +15372,7 @@ dependencies = [
  "ic-canister-client",
  "ic-canister-client-sender",
  "ic-cdk 0.6.10",
- "ic-certification",
+ "ic-certification 0.8.0",
  "ic-ckbtc-agent",
  "ic-ckbtc-kyt",
  "ic-ckbtc-minter",
@@ -15378,22 +15498,22 @@ checksum = "222a222a5bfe1bba4a77b45ec488a741b3cb8872e5e499451fd7d0129c9c7c3d"
 
 [[package]]
 name = "thiserror"
-version = "1.0.39"
+version = "1.0.40"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a5ab016db510546d856297882807df8da66a16fb8c4101cb8b30054b0d5b2d9c"
+checksum = "978c9a314bd8dc99be594bc3c175faaa9794be04a5a5e153caba6915336cebac"
 dependencies = [
  "thiserror-impl",
 ]
 
 [[package]]
 name = "thiserror-impl"
-version = "1.0.39"
+version = "1.0.40"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5420d42e90af0c38c3290abcca25b9b3bdf379fc9f55c528f53a269d9c9a267e"
+checksum = "f9456a42c5b0d803c8cd86e73dd7cc9edd429499f37a3550d286d5e86720569f"
 dependencies = [
  "proc-macro2 1.0.52",
  "quote 1.0.26",
- "syn 1.0.109",
+ "syn 2.0.8",
 ]
 
 [[package]]

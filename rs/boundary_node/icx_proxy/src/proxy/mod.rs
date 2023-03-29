@@ -17,8 +17,8 @@ use crate::{
 const KB: usize = 1024;
 const MB: usize = 1024 * KB;
 
-const REQUEST_BODY_SIZE_LIMIT: usize = 10 * MB;
-const RESPONSE_BODY_SIZE_LIMIT: usize = 10 * MB;
+pub const REQUEST_BODY_SIZE_LIMIT: usize = 10 * MB;
+pub const RESPONSE_BODY_SIZE_LIMIT: usize = 10 * MB;
 
 /// The options for the proxy server
 pub struct ProxyOpts {

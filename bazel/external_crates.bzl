@@ -446,6 +446,13 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                     "hyper",
                 ],
             ),
+            "ic-agent-0_23": crate.spec(
+                package = "ic-agent",
+                version = "^0.23.2",
+                features = [
+                    "hyper",
+                ],
+            ),
             "ic-btc-validation": crate.spec(
                 git = "https://github.com/dfinity/bitcoin-canister",
                 rev = "0e996988693f2d55fc9533c44dc20ae5310a1894",
@@ -478,11 +485,21 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 package = "ic-stable-structures",
                 version = "^0.2.0",
             ),
+            "ic-response-verification": crate.spec(
+                version = "^0.1.0",
+            ),
             "ic-test-state-machine-client": crate.spec(
                 version = "^1.0.0",
             ),
             "ic-utils": crate.spec(
                 version = "^0.22.0",
+                features = [
+                    "raw",
+                ],
+            ),
+            "ic-utils-0_23": crate.spec(
+                package = "ic-utils",
+                version = "^0.23.2",
                 features = [
                     "raw",
                 ],
