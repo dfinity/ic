@@ -8,6 +8,7 @@ import { DEFAULT_GATEWAY, hostnameCanisterIdMap } from './static';
 import {
   DBHostsItem,
   DomainsStorageDBSchema,
+  acceptedLookupUrlProtocols,
   domainLookupHeaders,
   domainStorageProperties,
 } from './typings';
@@ -128,12 +129,18 @@ export class CanisterResolver {
   }
 
   async lookupFromHttpRequest(request: Request): Promise<Principal | null> {
+    const url = new URL(request.url);
+
+    if (!acceptedLookupUrlProtocols.has(url.protocol)) {
+      return null;
+    }
+
     const canister = maybeResolveCanisterFromHeaders(request.headers);
     if (canister) {
       return canister;
     }
 
-    return await this.lookup(new URL(request.url));
+    return await this.lookup(url);
   }
 
   async lookup(domain: URL): Promise<Principal | null> {

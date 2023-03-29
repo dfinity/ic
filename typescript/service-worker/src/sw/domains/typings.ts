@@ -2,6 +2,15 @@ export enum DomainStorageStores {
   Hosts = 'hosts',
 }
 
+export enum AcceptedLookupUrlProtocol {
+  Http = 'http:',
+  Https = 'https:',
+}
+
+export const acceptedLookupUrlProtocols = new Set(
+  Object.values(AcceptedLookupUrlProtocol).map(String)
+);
+
 export const domainLookupHeaders = {
   canisterId: 'x-ic-canister-id',
 };
