@@ -40,6 +40,11 @@ use ic_types::{
     xnet::{StreamIndex, StreamIndexedQueue},
     CanisterId, CryptoHashOfPartialState, CryptoHashOfState, Height, PrincipalId,
 };
+use nix::sys::time::TimeValLike;
+use nix::sys::{
+    stat::{utimensat, UtimensatFlags},
+    time::TimeSpec,
+};
 use proptest::prelude::*;
 use std::path::Path;
 use std::sync::Arc;
@@ -3564,13 +3569,13 @@ fn remove_old_diverged_checkpoint() {
                 let path = state_manager
                     .state_layout()
                     .diverged_checkpoint_path(height(1));
-                if std::process::Command::new("touch")
-                    .args(["-d", "19700101", path.to_str().unwrap()])
-                    .spawn()
-                    .is_err()
-                {
-                    return;
-                }
+                let Ok(_) = utimensat(
+                    None,
+                    &path,
+                    &TimeSpec::zero(),
+                    &TimeSpec::zero(),
+                    UtimensatFlags::NoFollowSymlink,
+                ) else { return };
                 let (_, state) = state_manager.take_tip();
                 state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
                 let (_, state) = state_manager.take_tip();
@@ -3646,13 +3651,13 @@ fn dont_remove_diverged_checkpoint_if_there_was_no_progress() {
                 let path = state_manager
                     .state_layout()
                     .diverged_checkpoint_path(height(2));
-                if std::process::Command::new("touch")
-                    .args(["-d", "19700101", path.to_str().unwrap()])
-                    .spawn()
-                    .is_err()
-                {
-                    return;
-                }
+                let Ok(_) = utimensat(
+                    None,
+                    &path,
+                    &TimeSpec::zero(),
+                    &TimeSpec::zero(),
+                    UtimensatFlags::NoFollowSymlink,
+                ) else { return };
 
                 panic!();
             }),
