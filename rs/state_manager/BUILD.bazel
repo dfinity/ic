@@ -102,6 +102,7 @@ rust_test(
         "@crate_index//:assert_matches",
         "@crate_index//:crossbeam-channel",
         "@crate_index//:maplit",
+        "@crate_index//:nix",
         "@crate_index//:proptest",
         "@crate_index//:scoped_threadpool",
         "@crate_index//:tempfile",
