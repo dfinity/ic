@@ -16,11 +16,11 @@ The Ubuntu-based IC OS is built by:
 The entire disk image can be built using the following command:
 
 ----
-bazel build //ic-os/guestos/prod/...
+bazel build //ic-os/guestos/envs/prod/...
 ----
 
 "prod" can be replaced with "dev" for the dev variant. The built image can be
-found at `/ic/bazel-bin/ic-os/guestos/prod/disk-img.tar{.gz,.zst}`
+found at `/ic/bazel-bin/ic-os/guestos/envs/prod/disk-img.tar{.gz,.zst}`
 
 See notes below on the individual build steps.
 

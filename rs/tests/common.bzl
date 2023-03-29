@@ -151,8 +151,8 @@ MACRO_DEPENDENCIES = [
 ]
 
 GUESTOS_RUNTIME_DEPS = [
-    "//ic-os/guestos/dev:hash_and_upload_disk-img",
-    "//ic-os/guestos/dev:hash_and_upload_update-img",
+    "//ic-os/guestos/envs/dev:hash_and_upload_disk-img",
+    "//ic-os/guestos/envs/dev:hash_and_upload_update-img",
     "//ic-os/guestos:scripts/build-bootstrap-config-image.sh",
 ]
 
@@ -178,7 +178,7 @@ BOUNDARY_NODE_GUESTOS_SEV_RUNTIME_DEPS = [
 COUNTER_CANISTER_RUNTIME_DEPS = ["//rs/tests:src/counter.wat"]
 
 GUESTOS_MALICIOUS_RUNTIME_DEPS = [
-    "//ic-os/guestos/dev-malicious:hash_and_upload_disk-img",
-    "//ic-os/guestos/dev-malicious:hash_and_upload_update-img",
+    "//ic-os/guestos/envs/dev-malicious:hash_and_upload_disk-img",
+    "//ic-os/guestos/envs/dev-malicious:hash_and_upload_update-img",
     "//ic-os/guestos:scripts/build-bootstrap-config-image.sh",
 ]

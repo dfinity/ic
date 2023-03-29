@@ -31,7 +31,7 @@ REPOS_TO_SCAN = [
             ),
             Project(
                 "guestos",
-                "ic/ic-os/guestos/prod",
+                "ic/ic-os/guestos/envs/prod",
                 "https://gitlab.com/dfinity-lab/public/ic/-/tree/master/ic-os/guestos/rootfs",
             ),
         ],

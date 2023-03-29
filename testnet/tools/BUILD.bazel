@@ -1,17 +1,17 @@
 genrule(
     name = "icos_deploy",
     srcs = [
-        "//ic-os/guestos/dev:version.txt",
-        "//ic-os/guestos/dev:hash_and_upload_disk-img",
-        "//ic-os/guestos/dev:hash_and_upload_update-img",
-        "//ic-os/guestos/prod:hash_and_upload_update-img",
+        "//ic-os/guestos/envs/dev:version.txt",
+        "//ic-os/guestos/envs/dev:hash_and_upload_disk-img",
+        "//ic-os/guestos/envs/dev:hash_and_upload_update-img",
+        "//ic-os/guestos/envs/prod:hash_and_upload_update-img",
         "//ic-os/boundary-guestos/envs/prod:hash_and_upload_disk-img",
         "//publish/binaries:legacy_upload",
         "//publish/canisters:upload",
     ],
     outs = ["icos_deploy_script"],
     cmd = """
-    VERSION="$$(cat $(location //ic-os/guestos/dev:version.txt))"
+    VERSION="$$(cat $(location //ic-os/guestos/envs/dev:version.txt))"
 
     cat <<EOF > $@
 #!/usr/bin/env bash

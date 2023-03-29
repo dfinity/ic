@@ -5,7 +5,7 @@
 # We build and push artifacts to S3:
 # * [bazel] //publish/canister      -> ic/<sha256>/canisters
 # * [bazel] //publish/binaries      -> ic/<sha256>/binaries
-# * [bazel] //ic-os/guestos/prod:*  -> ic/<sha256>/guest-os/update-img
+# * [bazel] //ic-os/guestos/envs/prod:*  -> ic/<sha256>/guest-os/update-img
 # We build the same set of artifacts:
 # * build-ic                        -> ic/<sha256>/build-ic/canisters
 #                                   -> ic/<sha256>/build-ic/binaries

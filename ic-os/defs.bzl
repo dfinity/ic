@@ -468,16 +468,16 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
     if vuln_scan:
         native.sh_binary(
             name = "vuln-scan",
-            srcs = ["//ic-os:vuln-scan.sh"],
+            srcs = ["//ic-os:vuln-scan/vuln-scan.sh"],
             data = [
                 "@trivy//:trivy",
                 ":rootfs-tree.tar",
-                "//ic-os:vuln-scan.html",
+                "//ic-os:vuln-scan/vuln-scan.html",
             ],
             env = {
                 "trivy_path": "$(rootpath @trivy//:trivy)",
                 "DOCKER_TAR": "$(rootpaths :rootfs-tree.tar)",
-                "TEMPLATE_FILE": "$(rootpath //ic-os:vuln-scan.html)",
+                "TEMPLATE_FILE": "$(rootpath //ic-os:vuln-scan/vuln-scan.html)",
             },
         )
 
@@ -518,16 +518,16 @@ def boundary_node_icos_build(name, image_deps, mode = None, sev = False, visibil
 
     native.sh_binary(
         name = "vuln-scan",
-        srcs = ["//ic-os:vuln-scan.sh"],
+        srcs = ["//ic-os:vuln-scan/vuln-scan.sh"],
         data = [
             "@trivy//:trivy",
             ":rootfs-tree.tar",
-            "//ic-os:vuln-scan.html",
+            "//ic-os:vuln-scan/vuln-scan.html",
         ],
         env = {
             "trivy_path": "$(rootpath @trivy//:trivy)",
             "DOCKER_TAR": "$(rootpaths :rootfs-tree.tar)",
-            "TEMPLATE_FILE": "$(rootpath //ic-os:vuln-scan.html)",
+            "TEMPLATE_FILE": "$(rootpath //ic-os:vuln-scan/vuln-scan.html)",
         },
     )
 
@@ -755,16 +755,16 @@ def boundary_api_guestos_build(name, image_deps, mode = None, visibility = None)
 
     native.sh_binary(
         name = "vuln-scan",
-        srcs = ["//ic-os:vuln-scan.sh"],
+        srcs = ["//ic-os:vuln-scan/vuln-scan.sh"],
         data = [
             "@trivy//:trivy",
             ":rootfs-tree.tar",
-            "//ic-os:vuln-scan.html",
+            "//ic-os:vuln-scan/vuln-scan.html",
         ],
         env = {
             "trivy_path": "$(rootpath @trivy//:trivy)",
             "DOCKER_TAR": "$(rootpaths :rootfs-tree.tar)",
-            "TEMPLATE_FILE": "$(rootpath //ic-os:vuln-scan.html)",
+            "TEMPLATE_FILE": "$(rootpath //ic-os:vuln-scan/vuln-scan.html)",
         },
     )
 
