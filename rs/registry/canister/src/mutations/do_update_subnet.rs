@@ -24,6 +24,7 @@ impl Registry {
         println!("{}do_update_subnet: {:?}", LOG_PREFIX, payload);
 
         self.validate_update_payload_ecdsa_config(&payload);
+        self.validate_update_sev_feature(&payload);
 
         let subnet_id = payload.subnet_id;
 
@@ -108,6 +109,27 @@ impl Registry {
                     )
             }
         }
+    }
+
+    /// Validates that the SEV feature is not changed on an existing subnet.
+    /// Panics if the SEV feature is attempted to be changed.
+    fn validate_update_sev_feature(&self, payload: &UpdateSubnetPayload) {
+        if payload.features.is_none() {
+            return;
+        }
+        let subnet_id = payload.subnet_id;
+        let subnet_record = self.get_subnet_or_panic(subnet_id);
+        if let Some(old_features) = subnet_record.features {
+            let old_features = SubnetFeatures::from(old_features);
+            if payload.features.unwrap().sev_status == old_features.sev_status {
+                return;
+            }
+        }
+        panic!(
+            "{}Proposal attempts to change sev_status for Subnet '{}', \
+                        but sev_status can only be set during subnet creation.",
+            LOG_PREFIX, subnet_id
+        );
     }
 
     fn mutations_to_enable_subnet_signing(
@@ -347,7 +369,7 @@ mod tests {
     use ic_ic00_types::{EcdsaCurve, EcdsaKeyId};
     use ic_nervous_system_common_test_keys::{TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL};
     use ic_protobuf::registry::subnet::v1::{GossipConfig, SubnetRecord};
-    use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;
+    use ic_registry_subnet_features::{SevFeatureStatus, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
     use ic_registry_subnet_type::SubnetType;
     use ic_test_utilities::types::ids::subnet_test_id;
     use ic_types::p2p::{
@@ -1107,6 +1129,40 @@ mod tests {
             idkg_key_rotation_period_ms: None,
         });
 
+        registry.do_update_subnet(payload);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Proposal attempts to change sev_status for Subnet 'ge6io-epiam-aaaaa-aaaap-yai', \
+                    but sev_status can only be set during subnet creation."
+    )]
+    fn test_sev_status_cannot_be_changed() {
+        let mut registry = invariant_compliant_registry();
+
+        let (mutate_request, mut node_ids) = prepare_registry_with_nodes(2);
+        registry.maybe_apply_mutation_internal(mutate_request.mutations);
+
+        let mut subnet_list_record = registry.get_subnet_list_record();
+
+        // Create the subnet we will update that changes sev_status
+        let subnet_record = get_invariant_compliant_subnet_record(vec![node_ids.pop().unwrap()]);
+
+        let subnet_id = subnet_test_id(1000);
+        registry.maybe_apply_mutation_internal(add_fake_subnet(
+            subnet_id,
+            &mut subnet_list_record,
+            subnet_record,
+        ));
+
+        let mut payload = make_empty_update_payload(subnet_id);
+        payload.features = Some(SubnetFeatures {
+            canister_sandboxing: false,
+            http_requests: false,
+            sev_status: Some(SevFeatureStatus::SecureEnabled),
+        });
+
+        // Should panic because we are changing SubnetFeatures
         registry.do_update_subnet(payload);
     }
 
