@@ -60,9 +60,6 @@ pub trait PriorityFnAndFilterProducer<Artifact: ArtifactKind, Pool>: Send + Sync
 /// rejection reasons.
 #[derive(Debug, From)]
 pub enum ArtifactPoolError {
-    /// Error if not enough quota for a peer in the unvalidated pool for an
-    /// artifact.
-    InsufficientQuotaError,
     /// Message has expired.
     MessageExpired,
     /// Message expiry is too far in the future.

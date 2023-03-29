@@ -168,7 +168,7 @@ impl<Pool: GossipPool<IngressArtifact> + IngressPoolThrottler + Send + Sync + 's
     fn check_artifact_acceptance(
         &self,
         msg: &SignedIngress,
-        peer_id: &NodeId,
+        _peer_id: &NodeId,
     ) -> Result<(), ArtifactPoolError> {
         #[cfg(feature = "malicious_code")]
         {
@@ -199,7 +199,6 @@ impl<Pool: GossipPool<IngressArtifact> + IngressPoolThrottler + Send + Sync + 's
             );
             Err(ArtifactPoolError::MessageExpiryTooLong)
         } else {
-            self.pool.read().unwrap().check_quota(msg, peer_id)?;
             Ok(())
         }
     }

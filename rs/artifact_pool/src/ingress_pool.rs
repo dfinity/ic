@@ -1,13 +1,10 @@
 /// Ingress Pool provides storage for all ingress messages in artifact_pool
 /// Logically it can be viewed as part of the artifact pool
 /// But we keep it separated for code readability
-use crate::{
-    metrics::{PoolMetrics, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED},
-    peer_index::PeerIndex,
-};
+use crate::metrics::{PoolMetrics, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED};
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_interfaces::{
-    artifact_pool::{ArtifactPoolError, HasTimestamp, MutablePool, UnvalidatedArtifact},
+    artifact_pool::{HasTimestamp, MutablePool, UnvalidatedArtifact},
     gossip_pool::GossipPool,
     ingress_pool::{
         ChangeAction, ChangeSet, IngressPool, IngressPoolObject, IngressPoolSelect,
@@ -22,7 +19,7 @@ use ic_types::{
     artifact::IngressMessageId,
     artifact_kind::IngressArtifact,
     messages::{MessageId, SignedIngress, EXPECTED_MESSAGE_ID_LENGTH},
-    CountBytes, NodeId, Time,
+    CountBytes, Time,
 };
 use prometheus::IntCounter;
 use std::collections::BTreeMap;
@@ -186,7 +183,6 @@ pub struct IngressPoolImpl {
     validated: IngressPoolSection<ValidatedIngressArtifact>,
     unvalidated: IngressPoolSection<UnvalidatedIngressArtifact>,
     // Track unvalidated pool quota usage only
-    peer_index: PeerIndex,
     ingress_pool_max_count: usize,
     ingress_pool_max_bytes: usize,
     ingress_messages_throttled: IntCounter,
@@ -218,7 +214,6 @@ impl IngressPoolImpl {
                 POOL_INGRESS,
                 POOL_TYPE_UNVALIDATED,
             )),
-            peer_index: PeerIndex::new(config.ingress_pool_unvalidated_capacity_per_peer),
             log,
         }
     }
@@ -232,7 +227,6 @@ impl IngressPoolImpl {
         match self.unvalidated.remove(message_id) {
             Some(unvalidated_artifact) => {
                 let size = unvalidated_artifact.message.signed_ingress.count_bytes();
-                self.peer_index.remove(unvalidated_artifact.peer_id, size);
                 Some((unvalidated_artifact, size))
             }
             None => {
@@ -264,7 +258,6 @@ impl MutablePool<IngressArtifact, ChangeSet> for IngressPoolImpl {
         let timestamp = artifact.timestamp;
         let size = ingress_pool_obj.count_bytes();
 
-        self.peer_index.insert(peer_id, size);
         debug!(
             self.log,
             "ingress_message_insert_unvalidated";
@@ -351,10 +344,7 @@ impl MutablePool<IngressArtifact, ChangeSet> for IngressPoolImpl {
                 }
                 ChangeAction::PurgeBelowExpiry(expiry) => {
                     let _unused = self.validated.purge_below(expiry);
-                    for artifact in self.unvalidated.purge_below(expiry) {
-                        let size = artifact.message.signed_ingress.count_bytes();
-                        self.peer_index.remove(artifact.peer_id, size);
-                    }
+                    let _unused = self.unvalidated.purge_below(expiry);
                 }
             }
         }
@@ -362,17 +352,6 @@ impl MutablePool<IngressArtifact, ChangeSet> for IngressPoolImpl {
 }
 
 impl GossipPool<IngressArtifact> for IngressPoolImpl {
-    fn check_quota(
-        &self,
-        message: &SignedIngress,
-        peer_id: &NodeId,
-    ) -> Result<(), ArtifactPoolError> {
-        if self.peer_index.get_remaining_quota(peer_id) < message.count_bytes() {
-            return Err(ArtifactPoolError::InsufficientQuotaError);
-        }
-        Ok(())
-    }
-
     /// Check if an Ingress message exists by its hash
     fn contains(&self, id: &IngressMessageId) -> bool {
         self.unvalidated.exists(id) || self.validated.exists(id)
