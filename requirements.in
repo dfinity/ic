@@ -14,8 +14,9 @@ toml
 https://github.com/rocklabs-io/ic-py/archive/53c375a1d6c1d09e8d24588142dece550b801cef.zip
 uuid
 pydot
-matplotlib>=3.6.2
+matplotlib>=3.6.2, <3.7
 pytest
+pytest-cov
 cvss==2.5
 jira==3.4.1
 nested_lookup==0.2.25
@@ -23,3 +24,10 @@ node_semver==0.9.0
 packaging==21.3
 parse==1.19.0
 python_gitlab==3.12.0
+# gitlab_statistics
+pandas
+#policy-monitoring
+psutil
+func-timeout
+slack-sdk
+elasticsearch

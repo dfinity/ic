@@ -19,6 +19,7 @@ dependencies-check:
     - |
       set -euo pipefail
       $SHELL_WRAPPER cargo install cargo-audit --version "${CARGO_AUDIT_VERSION}"
+      pip3 install -r requirements.txt
       cd "${CI_PROJECT_DIR}"/gitlab-ci/src/dependencies/
       $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_merge_job.py
   # TODO(PSEC-970)
@@ -45,6 +46,7 @@ dependency-scan-nightly:
       node --version
       npm --version
       cd "${CI_PROJECT_DIR}"/gitlab-ci/src/dependencies
+      pip install -r requirements.txt
       $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_periodic_job.py
       $SHELL_WRAPPER python3 job/npm_scanner_periodic_job.py
       $SHELL_WRAPPER python3 job/bazel_trivy_container_ic_scanner_periodic_job.py
@@ -66,6 +68,7 @@ dependency-scan-release-cut:
       set -euo pipefail
       $SHELL_WRAPPER cargo install cargo-audit --version "${CARGO_AUDIT_VERSION}"
       cd "${CI_PROJECT_DIR}"/gitlab-ci/src/dependencies
+      pip install -r requirements.txt
       $SHELL_WRAPPER python3 job/bazel_rust_ic_scanner_release_job.py
   # TODO(PSEC-970)
   # Remove allow_failure : true after testing on the CI
