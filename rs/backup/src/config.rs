@@ -1,7 +1,7 @@
 use ic_config::{ConfigSource, ConfigValidate};
 use ic_types::{ReplicaVersion, SubnetId};
 use serde::{Deserialize, Serialize};
-use std::{fs::File, io::Write, path::PathBuf};
+use std::{fs::File, io::Write, net::IpAddr, path::PathBuf};
 use url::Url;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -38,6 +38,7 @@ pub struct Config {
     pub disk_threshold_warn: u32,
     pub slack_token: String,
     pub cold_storage: Option<ColdStorage>,
+    pub blacklisted_nodes: Option<Vec<IpAddr>>,
     pub subnets: Vec<SubnetConfig>,
 }
 

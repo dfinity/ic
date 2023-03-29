@@ -41,6 +41,7 @@ pub struct BackupHelper {
     pub daily_replays: usize,
     pub do_cold_storage: bool,
     pub thread_id: u32,
+    pub blacklisted_nodes: Arc<Vec<IpAddr>>,
     pub log: Logger,
 }
 
@@ -334,6 +335,7 @@ impl BackupHelper {
         shuf_nodes.shuffle(&mut thread_rng());
         Ok(shuf_nodes
             .iter()
+            .filter(|ip| !self.blacklisted_nodes.contains(ip))
             .take(num_nodes)
             .cloned()
             .collect::<Vec<_>>())

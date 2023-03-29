@@ -192,6 +192,7 @@ pub fn test(env: TestEnv) {
         disk_threshold_warn: 75,
         slack_token: "NO_TOKEN_IN_TESTING".to_string(),
         cold_storage,
+        blacklisted_nodes: None,
         subnets: vec![subnet],
     };
     let config_str =
