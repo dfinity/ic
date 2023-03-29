@@ -8,7 +8,6 @@ mod height_index;
 pub mod ingress_pool;
 mod inmemory_pool;
 mod metrics;
-mod peer_index;
 mod pool_common;
 #[cfg(test)]
 mod test_utils;
