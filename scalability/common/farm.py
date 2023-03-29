@@ -226,8 +226,8 @@ class Farm(object):
         if FLAGS.farm_group_name is not None:
             self.group_name = FLAGS.farm_group_name
         else:
-            if "CI_PIPELINE_ID" in os.environ:
-                test_id = os.environ["CI_PIPELINE_ID"]
+            if "CI_JOB_ID" in os.environ:
+                test_id = os.environ["CI_JOB_ID"]
             else:
                 now = time.strftime("%Y-%M-%d-%H-%m-%S")
                 test_id = getpass.getuser() + "-" + now + "-" + str(uuid.uuid4())
