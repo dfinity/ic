@@ -281,12 +281,11 @@ sh_test(
         "//ic-os/guestos/envs/dev:version.txt",
     ],
     env_inherit = [
-        "CI_PIPELINE_ID",
-        "CI_RUNNER_TAGS",
+        "CI_PROJECT_DIR",
         "HOME",
     ],
     tags = [
-        "local",
+        "no-sandbox",
         "requires-network",
     ],
 )

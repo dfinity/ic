@@ -20,9 +20,9 @@ echo "GIT_TREE_STATUS $git_tree_status"
 
 echo "HOME ${HOME}"
 
-if [[ -n "${CI_JOB_NAME:-}" ]]; then
-    echo "CI_JOB_NAME ${CI_JOB_NAME}"
-fi
+test -n "${CI_JOB_ID:-}" && echo "CI_JOB_ID ${CI_JOB_ID}"
+test -n "${CI_JOB_NAME:-}" && echo "CI_JOB_NAME ${CI_JOB_NAME}"
+test -n "${CI_RUNNER_TAGS:-}" && echo "CI_RUNNER_TAGS ${CI_RUNNER_TAGS}"
 
 if [[ -n "${USER:-}" ]]; then
     echo "USER ${USER}"
