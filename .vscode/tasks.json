@@ -3,8 +3,23 @@
     "tasks": [
         {
             "label": "Generate rust-project.json",
-            "command": "bazel",
-            "args": ["run", "//:gen_rust_project"],
+            "command": "./.vscode/gen-rust-project",
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": "build",
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "never",
+                "panel": "dedicated",
+            },
+            "runOptions": {
+                "runOn": "folderOpen"
+                }
+        },
+        {
+            "label": "Install recommended extensions",
+            "command": "./.vscode/extensions",
             "options": {
                 "cwd": "${workspaceFolder}"
             },

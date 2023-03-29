@@ -8,5 +8,15 @@
     { "source": "${localEnv:HOME}/.ssh", "target": "/home/ubuntu/.ssh", "type": "bind" },
     { "source": "${localEnv:HOME}/.aws", "target": "/home/ubuntu/.aws", "type": "bind" },
     { "source": "${localEnv:HOME}/.config", "target": "/home/ubuntu/.config", "type": "bind" }
-  ]
+  ],
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "rust-lang.rust-analyzer",
+        "vadimcn.vscode-lldb",
+        "bazelbuild.vscode-bazel",
+        "bungcip.better-toml"
+      ]
+    }
+  }
 }
