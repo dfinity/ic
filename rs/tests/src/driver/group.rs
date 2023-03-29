@@ -957,7 +957,7 @@ impl SystemTestGroup {
         let farm = Farm::new(farm_url, env.logger());
         let group_name = group_setup.farm_group_name;
         if farm
-            .set_group_ttl(&group_name, Duration::from_secs(30))
+            .set_group_ttl(&group_name, Duration::from_secs(120))
             .is_err()
         {
             warn!(ctx_.log(), "Failed to bump TTL before deleting group.");
