@@ -173,6 +173,7 @@ pub struct CanisterStateBuilder {
     call_contexts: Vec<CallContext>,
     inputs: Vec<RequestOrResponse>,
     time_of_last_allocation_charge: Time,
+    certified_data: Vec<u8>,
 }
 
 impl CanisterStateBuilder {
@@ -251,6 +252,11 @@ impl CanisterStateBuilder {
         self
     }
 
+    pub fn with_certified_data(mut self, certified_data: Vec<u8>) -> Self {
+        self.certified_data = certified_data;
+        self
+    }
+
     pub fn build(self) -> CanisterState {
         let mut system_state = match self.status {
             CanisterStatusType::Running => SystemState::new_running(
@@ -274,6 +280,7 @@ impl CanisterStateBuilder {
         };
 
         system_state.memory_allocation = self.memory_allocation;
+        system_state.certified_data = self.certified_data;
 
         // Add ingress messages to the canister's queues.
         for ingress in self.ingress_queue.into_iter() {
@@ -357,6 +364,7 @@ impl Default for CanisterStateBuilder {
             call_contexts: Vec::default(),
             inputs: Vec::default(),
             time_of_last_allocation_charge: UNIX_EPOCH,
+            certified_data: vec![],
         }
     }
 }
