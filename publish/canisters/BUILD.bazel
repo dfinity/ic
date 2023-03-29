@@ -13,6 +13,7 @@ CANISTERS = {
     "http_counter.wasm": "//rs/tests/test_canisters/http_counter",
     "ic-ckbtc-minter.wasm": "//rs/bitcoin/ckbtc/minter:ckbtc_minter",
     "ic-ckbtc-minter_debug.wasm": "//rs/bitcoin/ckbtc/minter:ckbtc_minter_debug",
+    "ic-ckbtc-kyt.wasm": "//rs/bitcoin/ckbtc/kyt:kyt_canister",
     "ic-icrc1-index.wasm": "//rs/rosetta-api/icrc1/index:index_canister",
     "ic-icrc1-ledger.wasm": "//rs/rosetta-api/icrc1/ledger:ledger_canister",
     "ic-nervous-system-common-test-canister.wasm": "//rs/nervous_system/common/test_canister",
