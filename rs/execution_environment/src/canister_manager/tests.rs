@@ -3302,10 +3302,12 @@ fn install_code_preserves_system_state_and_scheduler_state() {
     let canister_id = canister_test_id(456);
 
     // Create a canister with various attributes to later ensure they are preserved.
+    let certified_data = vec![42];
     let original_canister = CanisterStateBuilder::new()
         .with_canister_id(canister_id)
         .with_status(CanisterStatusType::Running)
         .with_controller(controller)
+        .with_certified_data(certified_data.clone())
         .with_call_context(CallContextBuilder::new().build())
         .with_input(
             RequestBuilder::default()
@@ -3351,17 +3353,19 @@ fn install_code_preserves_system_state_and_scheduler_state() {
     // No heap delta.
     assert_eq!(res.unwrap().heap_delta, NumBytes::from(0));
 
-    // Verify the system state is preserved except for global timer and canister version.
+    // Verify the system state is preserved except for certified data, global timer, and canister version.
     let mut new_state = state
         .canister_state(&canister_id)
         .unwrap()
         .system_state
         .clone();
+    assert_eq!(new_state.certified_data, Vec::<u8>::new());
     assert_eq!(new_state.global_timer, CanisterTimer::Inactive);
     assert_eq!(
         new_state.canister_version,
         original_canister.system_state.canister_version + 1
     );
+    new_state.certified_data = original_canister.system_state.certified_data.clone();
     new_state.global_timer = original_canister.system_state.global_timer;
     new_state.canister_version = original_canister.system_state.canister_version;
     assert_eq!(new_state, original_canister.system_state);
@@ -3396,17 +3400,19 @@ fn install_code_preserves_system_state_and_scheduler_state() {
     // No heap delta.
     assert_eq!(res.unwrap().heap_delta, NumBytes::from(0));
 
-    // Verify the system state is preserved except for global timer and canister version.
+    // Verify the system state is preserved except for certified data, global timer, and canister version.
     let mut new_state = state
         .canister_state(&canister_id)
         .unwrap()
         .system_state
         .clone();
+    assert_eq!(new_state.certified_data, Vec::<u8>::new());
     assert_eq!(new_state.global_timer, CanisterTimer::Inactive);
     assert_eq!(
         new_state.canister_version,
         original_canister.system_state.canister_version + 2
     );
+    new_state.certified_data = original_canister.system_state.certified_data.clone();
     new_state.global_timer = original_canister.system_state.global_timer;
     new_state.canister_version = original_canister.system_state.canister_version;
     assert_eq!(new_state, original_canister.system_state);
@@ -3418,6 +3424,12 @@ fn install_code_preserves_system_state_and_scheduler_state() {
     );
 
     // 3. UPGRADE
+    // reset certified_data cleared by install and reinstall in the previous steps
+    state
+        .canister_state_mut(&canister_id)
+        .unwrap()
+        .system_state
+        .certified_data = certified_data;
     let instructions_before_upgrade = as_num_instructions(round_limits.instructions);
     let (instructions_left, res, canister) = install_code(
         &canister_manager,

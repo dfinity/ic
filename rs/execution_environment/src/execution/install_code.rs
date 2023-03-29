@@ -109,6 +109,10 @@ impl InstallCodeHelper {
         &self.canister
     }
 
+    pub fn clear_certified_data(&mut self) {
+        self.canister.system_state.certified_data = Vec::new();
+    }
+
     pub fn deactivate_global_timer(&mut self) {
         self.canister.system_state.global_timer = CanisterTimer::Inactive;
     }
