@@ -1,11 +1,11 @@
 {
   "recommendations": [
-    "rust-lang.rust-analyzer",  // to use rust-analyzer, the most in-detph Rust LSP
-    "vadimcn.vscode-lldb",      // to debug rust code
-    "bazelbuild.vscode-bazel",  // for .bazel files
-    "bungcip.better-toml",      // for .toml files
-    "ms-vscode-remote.vscode-remote-extensionpack",   // to remote ssh into the machines
+    "rust-lang.rust-analyzer",
+    "vadimcn.vscode-lldb",
+    "bazelbuild.vscode-bazel",
+    "bungcip.better-toml",
+    "ms-vscode-remote.vscode-remote-extensionpack",
     "ms-vscode-remote.remote-ssh",
-    "ms-vscode-remote.remote-containers"              // to use the bazel build container with all the dependencies not yet in Bazel
+    "ms-vscode-remote.remote-containers"
   ]
 }
