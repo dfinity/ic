@@ -3610,14 +3610,19 @@ fn checkpoints_have_growing_mtime() {
                 .modified()
                 .unwrap()
         };
+        // The first checkpoint is special since the tip was created from scratch, compare two next
+        // ones.
         let (_, state) = state_manager.take_tip();
         state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
         wait_for_checkpoint(&state_manager, height(1));
-        std::thread::sleep(std::time::Duration::from_secs(2));
         let (_, state) = state_manager.take_tip();
         state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
         wait_for_checkpoint(&state_manager, height(2));
-        assert!(checkpoint_age(1) < checkpoint_age(2));
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        let (_, state) = state_manager.take_tip();
+        state_manager.commit_and_certify(state, height(3), CertificationScope::Full);
+        wait_for_checkpoint(&state_manager, height(3));
+        assert!(checkpoint_age(2) < checkpoint_age(3));
     });
 }
 
