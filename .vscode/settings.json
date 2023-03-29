@@ -9,5 +9,5 @@
     "rust-analyzer.procMacro.server": ".vscode/proc-macro-srv-wrapper",
     "rust-analyzer.check.overrideCommand": [ ".vscode/bazel-check-wrapper" ],
     "rust-analyzer.cargo.buildScripts.overrideCommand": [ ".vscode/bazel-check-wrapper" ],
-    "rust-analyzer.rustfmt.overrideCommand": [ "bazel", "run", "//:rustfmt" ]
+    "editor.formatOnSave": false
 }
