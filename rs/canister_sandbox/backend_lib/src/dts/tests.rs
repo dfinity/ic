@@ -8,6 +8,8 @@ use ic_interfaces::execution_environment::{
 };
 use ic_types::NumInstructions;
 
+use crate::dts::MAX_NUM_SLICES;
+
 use super::{DeterministicTimeSlicingHandler, PausedExecution};
 
 #[test]
@@ -60,6 +62,17 @@ fn dts_state_updates_saturating() {
     assert_eq!(state.instructions_executed, i64::MAX);
     assert_eq!(state.total_instructions_left(), 2500 - i64::MAX);
     assert!(state.is_last_slice());
+}
+
+#[test]
+fn dts_max_num_slices() {
+    let mut state = super::State::new(1000000, 100);
+    let mut iterations = 0;
+    while !state.is_last_slice() {
+        state.update(99, ExecutionComplexity::default());
+        iterations += 1;
+    }
+    assert!(iterations <= MAX_NUM_SLICES);
 }
 
 #[test]
@@ -146,6 +159,33 @@ fn invalid_instructions() {
             limit: NumInstructions::from(1000)
         })
     );
+    drop(dts);
+    control_thread.join().unwrap();
+}
+
+#[test]
+fn max_num_slices() {
+    let (tx, rx): (Sender<PausedExecution>, Receiver<PausedExecution>) = mpsc::channel();
+    let dts = DeterministicTimeSlicingHandler::new(1000000, 100, move |_slice, paused| {
+        tx.send(paused).unwrap();
+    });
+    let control_thread = thread::spawn(move || {
+        for _ in 0..MAX_NUM_SLICES - 1 {
+            let paused_execution = rx.recv().unwrap();
+            paused_execution.resume();
+        }
+    });
+
+    let mut result = Ok(0);
+    for i in 0..MAX_NUM_SLICES {
+        result = dts.out_of_instructions(99, Default::default());
+        if i < MAX_NUM_SLICES - 1 {
+            assert!(result.is_ok());
+        } else {
+            assert!(result.is_err());
+        }
+    }
+    assert_eq!(result, Err(HypervisorError::InstructionLimitExceeded));
     drop(dts);
     control_thread.join().unwrap();
 }
