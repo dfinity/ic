@@ -30,13 +30,15 @@ mod convert {
             HeapType::Extern => wasmtime::Val::ExternRef(None),
             HeapType::Any
             | HeapType::Eq
-            | HeapType::Data
             | HeapType::Array
             | HeapType::I31
-            | HeapType::Index(_) => panic!(
-                "Unable to handle heap type {:?}. The GC proposal isn't supported",
-                heap_type
-            ),
+            | HeapType::Index(_)
+            | HeapType::Struct => {
+                panic!(
+                    "Unable to handle heap type {:?}. The GC proposal isn't supported",
+                    heap_type
+                )
+            }
         }
     }
 
@@ -261,28 +263,36 @@ fn define_spectest_exports(linker: &mut Linker<()>, mut store: &mut Store<()>) {
         Val::I32(666),
     )
     .unwrap();
-    linker.define("spectest", "global_i32", global_i32).unwrap();
+    linker
+        .define(&mut store, "spectest", "global_i32", global_i32)
+        .unwrap();
     let global_i64 = Global::new(
         &mut store,
         GlobalType::new(ValType::I64, Mutability::Const),
         Val::I64(666),
     )
     .unwrap();
-    linker.define("spectest", "global_i64", global_i64).unwrap();
+    linker
+        .define(&mut store, "spectest", "global_i64", global_i64)
+        .unwrap();
     let global_f32 = Global::new(
         &mut store,
         GlobalType::new(ValType::F32, Mutability::Const),
         Val::F32(0),
     )
     .unwrap();
-    linker.define("spectest", "global_f32", global_f32).unwrap();
+    linker
+        .define(&mut store, "spectest", "global_f32", global_f32)
+        .unwrap();
     let global_f64 = Global::new(
         &mut store,
         GlobalType::new(ValType::F64, Mutability::Const),
         Val::F64(0),
     )
     .unwrap();
-    linker.define("spectest", "global_f64", global_f64).unwrap();
+    linker
+        .define(&mut store, "spectest", "global_f64", global_f64)
+        .unwrap();
 
     let table = Table::new(
         &mut store,
@@ -290,10 +300,14 @@ fn define_spectest_exports(linker: &mut Linker<()>, mut store: &mut Store<()>) {
         Val::FuncRef(None),
     )
     .unwrap();
-    linker.define("spectest", "table", table).unwrap();
+    linker
+        .define(&mut store, "spectest", "table", table)
+        .unwrap();
 
     let memory = Memory::new(&mut store, MemoryType::new(1, Some(2))).unwrap();
-    linker.define("spectest", "memory", memory).unwrap();
+    linker
+        .define(&mut store, "spectest", "memory", memory)
+        .unwrap();
 }
 
 struct TestState<'a> {

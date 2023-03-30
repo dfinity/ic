@@ -1187,19 +1187,19 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^0.2",
             ),
             "wasm-encoder": crate.spec(
-                version = "^0.20.0",
+                version = "^0.23.0",
             ),
             "wasm-smith": crate.spec(
                 version = "^0.12.4",
             ),
             "wasmparser": crate.spec(
-                version = "^0.95.0",
+                version = "^0.100.0",
             ),
             "wasmprinter": crate.spec(
-                version = "^0.2.45",
+                version = "^0.2.50",
             ),
             "wasmtime": crate.spec(
-                version = "^5.0.1",
+                version = "^6.0.1",
                 default_features = False,
                 features = [
                     "cranelift",
@@ -1208,16 +1208,16 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 ],
             ),
             "wasmtime-environ": crate.spec(
-                version = "^5.0.1",
+                version = "^6.0.1",
             ),
             "wasmtime-runtime": crate.spec(
-                version = "^5.0.1",
+                version = "^6.0.1",
             ),
             "wast": crate.spec(
-                version = "^48.0.0",
+                version = "^53.0.0",
             ),
             "wat": crate.spec(
-                version = "^1.0.52",
+                version = "^1.0.57",
             ),
             "webpki": crate.spec(
                 version = "^0.21.4",
