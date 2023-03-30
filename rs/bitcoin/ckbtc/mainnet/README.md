@@ -204,3 +204,56 @@ bazel build //rs/registry/admin:ic-admin
     --wasm-module-sha256 $WASM_SHA256 \
     --summary-file ./archive_proposal.md
 ```
+
+## KYT canister [pjihx-aaaaa-aaaar-qaaka-cai](https://dashboard.internetcomputer.org/canister/pjihx-aaaaa-aaaar-qaaka-cai)
+
+Encoding the init args:
+
+```shell
+didc encode -d ../kyt/kyt.did -t '(LifecycleArg)' '(variant { InitArg = record { minter_id = principal "mqygn-kiaaa-aaaar-qaadq-cai"; maintainers = vec {}; mode = variant { Normal }}})' | xxd -r -p > kyt_arg.bin
+```
+
+Submitting the install proposal:
+
+```shell
+bazel build //rs/registry/admin:ic-admin
+
+../../../../bazel-bin/rs/registry/admin/ic-admin \
+    --use-hsm \
+    --key-id $KEY_ID \
+    --slot 0 \
+    --pin $HSM_PIN \
+    --nns-url "https://ic0.app" \
+    propose-to-change-nns-canister \
+    --proposer $NEURON_ID \
+    --canister-id pjihx-aaaaa-aaaar-qaaka-cai \
+    --mode install \
+    --wasm-module-path ./ic-ckbtc-kyt.wasm.gz \
+    --wasm-module-sha256 $WASM_SHA256 \
+    --arg kyt_arg.bin \
+    --summary-file ./kyt_proposal.md
+```
+
+Submitting an upgrade proposal:
+
+```shell
+didc encode -d kyt.did -t '(LifecycleArg)' '(variant { UpgradeArg = record { maintainers = opt vec { principal "pzc5r-ctmyf-4menu-zt2d3-y57i4-hodcg-dfvpi-bfj3w-7jqef-d7s35-xqe" } } })' | xxd -r -p > kyt_upgrade_arg.bin
+```
+
+```shell
+bazel build //rs/registry/admin:ic-admin
+
+../../../../bazel-bin/rs/registry/admin/ic-admin \
+    --use-hsm \
+    --key-id $KEY_ID \
+    --slot 0 \
+    --pin $HSM_PIN \
+    --nns-url "https://ic0.app" \
+    propose-to-change-nns-canister \
+    --proposer $NEURON_ID \
+    --canister-id pjihx-aaaaa-aaaar-qaaka-cai \
+    --mode upgrade \
+    --wasm-module-path ./ic-ckbtc-kyt.wasm.gz \
+    --wasm-module-sha256 $WASM_SHA256 \
+    --summary-file ./kyt_upgrade.md
+```

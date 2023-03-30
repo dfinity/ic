@@ -1,12 +1,15 @@
 {
+  "archive": {
+    "ic": "nbsys-saaaa-aaaar-qaaga-cai"
+  },
   "index": {
     "ic": "n5wcd-faaaa-aaaar-qaaea-cai"
   },
+  "kyt": {
+    "ic": "pjihx-aaaaa-aaaar-qaaka-cai"
+  },
   "ledger": {
     "ic": "mxzaz-hqaaa-aaaar-qaada-cai"
-  },
-  "archive": {
-    "ic": "nbsys-saaaa-aaaar-qaaga-cai"
   },
   "minter": {
     "ic": "mqygn-kiaaa-aaaar-qaadq-cai"
