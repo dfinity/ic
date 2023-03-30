@@ -4821,9 +4821,12 @@ impl Governance {
     ///
     /// Preconditions:
     /// - the given `neuron_id` already exists in `self.proto.neurons`
+    /// - the permissions are not changed (it's easy to update permissions
+    ///   via `manage_neuron` and doing it here would require updating
+    ///   `principal_to_neuron_ids_index`)
     /// - the followees are not changed (it's easy to update followees
-    ///   via existing code paths and doing it here would require updating
-    ///   function followee indices)
+    ///   via `manage_neuron` and doing it here would require updating
+    ///   `function_followee_index`)
     #[cfg(feature = "test")]
     pub fn update_neuron(&mut self, neuron: Neuron) -> Result<(), GovernanceError> {
         let neuron_id = &neuron.id.as_ref().expect("Neuron must have a NeuronId");
@@ -4841,6 +4844,14 @@ impl Governance {
                 ));
             }
         };
+
+        // Must NOT clobber permissions.
+        if old_neuron.permissions != neuron.permissions {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "Cannot update neuron's permissions via update_neuron.".to_string(),
+            ));
+        }
 
         // Must NOT clobber followees.
         if old_neuron.followees != neuron.followees {
