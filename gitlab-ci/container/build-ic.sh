@@ -7,12 +7,16 @@ usage() {
     cat <<EOF
 Utility script for building IC.
 
-Usage: $0 -b -c -i
+Usage: $0 [ --binaries | -b ] [ --canisters | -c ] [ --icos | -i ] [--no-release | -n ]
 
-    -b  Build IC Binaries
-    -c  Build IC Canisters
-    -i  Build IC-OS Images
-    -h  Print help
+    --binaries   | -b   Build IC Binaries
+    --canisters  | -c   Build IC Canisters
+    --icos       | -i   Build IC-OS Images
+    --no-release | -n   Non-Release Build
+    --help       | -h   Print help
+
+Non-Release Build, is for non-protected branches (revision is not in rc--* or master).
+
 EOF
 }
 
@@ -28,6 +32,7 @@ echo_green() { echo -e "${GREEN}${1}${NOCOLOR}"; }
 export BUILD_BIN=false
 export BUILD_CAN=false
 export BUILD_IMG=false
+export RELEASE=true
 
 if [ "$#" == 0 ]; then
     echo_red "ERROR: Please specify one of '-b', '-c' or '-i'" >&2
@@ -35,29 +40,39 @@ if [ "$#" == 0 ]; then
     usage && exit 1
 fi
 
-while getopts ':bcih' opt; do
-    case "$opt" in
-        b) BUILD_BIN=true ;;
-        c) BUILD_CAN=true ;;
-        i) BUILD_IMG=true ;;
-        h) usage && exit 0 ;;
-        :) echo_red "Option requires an argument.\n" && usage && exit 1 ;;
+while getopts ':bcinh-:' OPT; do
+    if [ "$OPT" = "-" ]; then
+        OPT="${OPTARG%%=*}"
+        OPTARG="${OPTARG#$OPT}"
+        OPTARG="${OPTARG#=}"
+    fi
+    case "$OPT" in
+        h | help) usage && exit 0 ;;
+        b | binaries) BUILD_BIN=true ;;
+        c | canisters) BUILD_CAN=true ;;
+        i | icos) BUILD_IMG=true ;;
+        n | non-release | no-release | norelease) RELEASE=false ;;
+        ??*) echo_red "Invalid option --$OPT" && usage && exit 1 ;;
         ?) echo_red "Invalid command option.\n" && usage && exit 1 ;;
     esac
 done
 shift "$(($OPTIND - 1))"
 
+if ! "$BUILD_BIN" && ! "$BUILD_CAN" && ! "$BUILD_IMG"; then
+    echo_red "ERROR: Please specify one of '-b', '-c' or '-i'" >&2
+    echo ""
+    usage && exit 1
+fi
+
 export ROOT_DIR="$(git rev-parse --show-toplevel)"
 export VERSION="$(git rev-parse HEAD)"
-export IC_VERSION_RC_ONLY="0000000000000000000000000000000000000000"
 
-# fetch all protected branches
-git fetch --force origin 'refs/heads/master:refs/remotes/origin/master'
-git fetch --force origin 'refs/heads/rc--*:refs/remotes/origin/rc--*'
-# check if $VERSION is in any protected branch
-BRANCHES_REGEX='(origin/master|origin/rc--20)'
-if git branch -r --contains $VERSION | grep -qE "$BRANCHES_REGEX"; then
-    IC_VERSION_RC_ONLY="$VERSION"
+if "$RELEASE"; then
+    export IC_VERSION_RC_ONLY="$VERSION"
+    echo_red "\nBuilding release revision (master or rc--*)! Use '--no-release' for non-release revision!\n" && sleep 2
+else
+    export IC_VERSION_RC_ONLY="0000000000000000000000000000000000000000"
+    echo_red "\nBuilding non-release revision!\n" && sleep 2
 fi
 
 export BINARIES_DIR=artifacts/release
