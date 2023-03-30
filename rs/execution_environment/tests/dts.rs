@@ -2085,7 +2085,7 @@ fn dts_global_timer_periodic_works() {
 
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
-        NumInstructions::from(50_000),
+        NumInstructions::from(60_000),
     );
 
     let binary = UNIVERSAL_CANISTER_WASM.to_vec();
@@ -2131,7 +2131,7 @@ fn dts_global_timer_resume_after_abort() {
 
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
-        NumInstructions::from(50_000),
+        NumInstructions::from(60_000),
     );
 
     let binary = UNIVERSAL_CANISTER_WASM.to_vec();
@@ -2186,7 +2186,7 @@ fn dts_global_timer_does_not_prevent_canister_from_stopping() {
 
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
-        NumInstructions::from(50_000),
+        NumInstructions::from(60_000),
     );
 
     let binary = UNIVERSAL_CANISTER_WASM.to_vec();
@@ -2285,7 +2285,7 @@ fn dts_global_timer_does_not_prevent_upgrade() {
 
     let env = dts_env(
         NumInstructions::from(1_000_000_000),
-        NumInstructions::from(50_000),
+        NumInstructions::from(60_000),
     );
 
     let binary = UNIVERSAL_CANISTER_WASM.to_vec();

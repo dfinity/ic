@@ -503,6 +503,7 @@ pub struct SandboxSafeSystemState {
     ic00_aliases: BTreeSet<CanisterId>,
     global_timer: CanisterTimer,
     canister_version: u64,
+    controllers: BTreeSet<PrincipalId>,
 }
 
 impl SandboxSafeSystemState {
@@ -526,6 +527,7 @@ impl SandboxSafeSystemState {
         dirty_page_overhead: NumInstructions,
         global_timer: CanisterTimer,
         canister_version: u64,
+        controllers: BTreeSet<PrincipalId>,
     ) -> Self {
         Self {
             canister_id,
@@ -546,6 +548,7 @@ impl SandboxSafeSystemState {
             ic00_aliases,
             global_timer,
             canister_version,
+            controllers,
         }
     }
 
@@ -606,6 +609,7 @@ impl SandboxSafeSystemState {
             dirty_page_overhead,
             system_state.global_timer,
             system_state.canister_version,
+            system_state.controllers.clone(),
         )
     }
 
@@ -857,6 +861,10 @@ impl SandboxSafeSystemState {
         } else {
             Ok(NumInstructions::from(inst))
         }
+    }
+
+    pub fn is_controller(&self, principal_id: &PrincipalId) -> bool {
+        self.controllers.contains(principal_id)
     }
 }
 

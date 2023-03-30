@@ -317,6 +317,11 @@ lazy_static! {
             Module::Test.from_ic0("mint_cycles", Param1(1_i64), Result::I64),
             12_000_004,
         ),
+        common::Benchmark(
+            "ic0_is_controller()",
+            Module::Test.from_ic0("is_controller", Params2(0, 29), Result::I32),
+            905_000_004,
+        ),
     ];
 }
 

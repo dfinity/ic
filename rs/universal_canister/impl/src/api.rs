@@ -69,6 +69,8 @@ mod ic0 {
         pub fn canister_version() -> u64;
 
         pub fn mint_cycles(amount: u64) -> u64;
+
+        pub fn is_controller(src: u32, size: u32) -> u32;
     }
 }
 
@@ -386,6 +388,10 @@ pub fn trap_with(message: &str) -> ! {
 /// Mint cycles (only works on CMC).
 pub fn mint_cycles(amount: u64) -> u64 {
     unsafe { ic0::mint_cycles(amount) }
+}
+
+pub fn is_controller(data: &[u8]) -> u32 {
+    unsafe { ic0::is_controller(data.as_ptr() as u32, data.len() as u32) }
 }
 
 use std::panic;

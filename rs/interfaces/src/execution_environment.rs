@@ -937,6 +937,13 @@ pub trait SystemApi {
     ///
     /// Returns the amount of cycles added to the canister's balance.
     fn ic0_mint_cycles(&mut self, amount: u64) -> HypervisorResult<u64>;
+
+    /// Checks whether the principal identified by src/size is one of the
+    /// controllers of the canister. If yes, then a value of 1 is returned,
+    /// otherwise a 0 is returned. It can be called multiple times.
+    ///
+    /// This system call traps if src+size exceeds the size of the WebAssembly memory.
+    fn ic0_is_controller(&self, src: u32, size: u32, heap: &[u8]) -> HypervisorResult<u32>;
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]

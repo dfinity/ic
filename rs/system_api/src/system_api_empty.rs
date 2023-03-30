@@ -278,4 +278,8 @@ impl SystemApi for SystemApiEmpty {
     ) -> HypervisorResult<(NumPages, NumInstructions)> {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
+
+    fn ic0_is_controller(&self, _: u32, _: u32, _: &[u8]) -> HypervisorResult<u32> {
+        unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
+    }
 }
