@@ -821,7 +821,7 @@ impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
     }
 
     fn get_initial_replica_version(&self) -> Result<ReplicaVersion> {
-        let dep_rel_path = std::env::var("VERSION_FILE")?;
+        let dep_rel_path = std::env::var("IC_VERSION_FILE")?;
         let replica_ver = self.read_dependency_to_string(dep_rel_path)?;
         Ok(ReplicaVersion::try_from(replica_ver)?)
     }
