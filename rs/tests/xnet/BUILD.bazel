@@ -1,0 +1,66 @@
+load("//rs/tests:system_tests.bzl", "system_test")
+load("//rs/tests:common.bzl", "DEPENDENCIES", "GRAFANA_RUNTIME_DEPS", "GUESTOS_MALICIOUS_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "NNS_CANISTER_RUNTIME_DEPS")
+
+package(default_visibility = ["//visibility:public"])
+
+system_test(
+    name = "xnet_slo_120_subnets_staging_test",
+    flaky = False,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "system_test_staging",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    test_timeout = "eternal",
+    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + ["//rs/rust_canisters/xnet_test:xnet-test-canister"],
+    deps = DEPENDENCIES + ["//rs/tests"],
+)
+
+system_test(
+    name = "xnet_slo_3_subnets_hotfix_test",
+    flaky = False,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "system_test_hotfix",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    test_timeout = "long",
+    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + ["//rs/rust_canisters/xnet_test:xnet-test-canister"],
+    deps = DEPENDENCIES + ["//rs/tests"],
+)
+
+system_test(
+    name = "xnet_slo_3_subnets_test",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "system_test_nightly",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    test_timeout = "long",
+    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + ["//rs/rust_canisters/xnet_test:xnet-test-canister"],
+    deps = DEPENDENCIES + ["//rs/tests"],
+)
+
+system_test(
+    name = "xnet_slo_29_subnets_test",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "system_test_nightly",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    test_timeout = "eternal",
+    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + ["//rs/rust_canisters/xnet_test:xnet-test-canister"],
+    deps = DEPENDENCIES + ["//rs/tests"],
+)
+
+system_test(
+    name = "xnet_malicious_slices",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "system_test_nightly",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    test_timeout = "long",
+    runtime_deps = GUESTOS_MALICIOUS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + ["//rs/rust_canisters/xnet_test:xnet-test-canister"],
+    deps = DEPENDENCIES + ["//rs/tests"],
+)

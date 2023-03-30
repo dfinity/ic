@@ -167,23 +167,23 @@ path = "orchestrator/bin/rotate_ecdsa_idkg_key_test.rs"
 
 [[bin]]
 name = "ic-systest-canister-http"
-path = "bin/canister_http_test.rs"
+path = "canister_http/bin/canister_http_test.rs"
 
 [[bin]]
 name = "ic-systest-canister-http-socks"
-path = "bin/canister_http_socks_test.rs"
+path = "canister_http/bin/canister_http_socks_test.rs"
 
 [[bin]]
 name = "ic-systest-canister-http-correctness"
-path = "bin/canister_http_correctness_test.rs"
+path = "canister_http/bin/canister_http_correctness_test.rs"
 
 [[bin]]
 name = "ic-systest-spec-compliance-application"
-path = "bin/spec_compliance_application_test.rs"
+path = "spec_compliance/bin/spec_compliance_application_test.rs"
 
 [[bin]]
 name = "ic-systest-spec-compliance-system"
-path = "bin/spec_compliance_system_test.rs"
+path = "spec_compliance/bin/spec_compliance_system_test.rs"
 
 [[bin]]
 name = "ic-systest-tecdsa-add-nodes"
@@ -263,7 +263,7 @@ path = "bin/workload_counter_canister_test.rs"
 
 [[bin]]
 name = "ic-systest-create-subnet-pre-master-test"
-path = "bin/create_subnet_pre_master_test.rs"
+path = "nns/bin/create_subnet_pre_master_test.rs"
 
 [[bin]]
 name = "ic-systest-node-assign-test"
@@ -479,7 +479,7 @@ path = "bin/canister_sig_verification_cache_test.rs"
 
 [[bin]]
 name = "ic-systest-xnet-malicious-slices"
-path = "bin/xnet_malicious_slices.rs"
+path = "xnet/bin/xnet_malicious_slices.rs"
 
 [[bin]]
 name = "ic-systest-canister-global-reboot-test"
