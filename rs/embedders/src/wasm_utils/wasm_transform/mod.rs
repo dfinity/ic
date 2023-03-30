@@ -1,8 +1,8 @@
 use std::ops::Range;
 
 use wasmparser::{
-    BinaryReaderError, DataKind, Element, ElementItem, ElementKind, Export, Global, Import,
-    MemoryType, Operator, Parser, Payload, TableType, Type, ValType,
+    BinaryReaderError, DataKind, Element, ElementKind, Export, Global, Import, MemoryType,
+    Operator, Parser, Payload, TableType, Type, ValType,
 };
 
 mod convert;
@@ -276,36 +276,19 @@ impl<'a> Module<'a> {
                                 break;
                             }
                         }
-                        let item_reader = element.items.get_items_reader()?;
-                        let items = item_reader.into_iter().collect::<Result<Vec<_>, _>>()?;
-                        let items = match items.get(0) {
-                            Some(ElementItem::Func(_)) => {
-                                let mut func_items = vec![];
-                                for item in items {
-                                    match item {
-                                        ElementItem::Func(inx) => func_items.push(inx),
-                                        ElementItem::Expr(_) => {
-                                            return Err(Error::UnexpectedElementType)
-                                        }
-                                    }
-                                }
-                                ElementItems::Functions(func_items)
+                        let items = match element.items.clone() {
+                            wasmparser::ElementItems::Functions(reader) => {
+                                let functions =
+                                    reader.into_iter().collect::<Result<Vec<_>, _>>()?;
+                                ElementItems::Functions(functions)
                             }
-                            Some(ElementItem::Expr(_)) => {
-                                let mut const_items = vec![];
-                                for item in items {
-                                    match item {
-                                        ElementItem::Expr(expr) => {
-                                            const_items.push(convert::const_expr(expr)?);
-                                        }
-                                        ElementItem::Func(_) => {
-                                            return Err(Error::UnexpectedElementType)
-                                        }
-                                    }
-                                }
-                                ElementItems::ConstExprs(const_items)
+                            wasmparser::ElementItems::Expressions(reader) => {
+                                let exprs = reader
+                                    .into_iter()
+                                    .map(|expr| convert::const_expr(expr?))
+                                    .collect::<Result<Vec<_>, _>>()?;
+                                ElementItems::ConstExprs(exprs)
                             }
-                            None => ElementItems::Functions(vec![]),
                         };
                         elements.push((element, items));
                     }
@@ -361,7 +344,7 @@ impl<'a> Module<'a> {
                     range: _,
                 } => {
                     if num != 1 {
-                        return Err(Error::UnknownVersion(num));
+                        return Err(Error::UnknownVersion(num as u32));
                     }
                 }
                 Payload::UnknownSection {
@@ -384,7 +367,7 @@ impl<'a> Module<'a> {
                 | Payload::ComponentAliasSection(_)
                 | Payload::ComponentTypeSection(_)
                 | Payload::ComponentCanonicalSection(_)
-                | Payload::ComponentStartSection(_)
+                | Payload::ComponentStartSection { start: _, range: _ }
                 | Payload::ComponentImportSection(_)
                 | Payload::ComponentExportSection(_)
                 | Payload::End(_) => {}
