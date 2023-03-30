@@ -1,4 +1,4 @@
-use ic_base_types::NumSeconds;
+use ic_base_types::{NumSeconds, PrincipalIdBlobParseError};
 use ic_config::{
     embedders::Config as EmbeddersConfig, flag_status::FlagStatus, subnet_config::SchedulerConfig,
 };
@@ -33,6 +33,7 @@ use ic_types::{
     time, CanisterTimer, CountBytes, Cycles, NumBytes, NumInstructions, Time,
 };
 use std::{
+    collections::BTreeSet,
     convert::{From, TryInto},
     panic::{catch_unwind, UnwindSafe},
     sync::Arc,
@@ -192,6 +193,7 @@ fn test_canister_init_support() {
     assert_api_supported(api.ic0_certified_data_set(0, 0, &[]));
     assert_api_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
+    assert_api_supported(api.ic0_is_controller(0, 0, &[]));
     check_stable_apis_support(api, true);
 }
 
@@ -249,6 +251,7 @@ fn test_canister_update_support() {
     assert_api_supported(api.ic0_certified_data_set(0, 0, &[]));
     assert_api_supported(api.ic0_canister_status());
     assert_api_supported(api.ic0_mint_cycles(0));
+    assert_api_supported(api.ic0_is_controller(0, 0, &[]));
     check_stable_apis_support(api, true);
 }
 
@@ -306,6 +309,7 @@ fn test_canister_replicated_query_support() {
     assert_api_not_supported(api.ic0_certified_data_set(0, 0, &[]));
     assert_api_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
+    assert_api_supported(api.ic0_is_controller(0, 0, &[]));
     check_stable_apis_support(api, true);
 }
 
@@ -363,6 +367,7 @@ fn test_canister_pure_query_support() {
     assert_api_not_supported(api.ic0_certified_data_set(0, 0, &[]));
     assert_api_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
+    assert_api_supported(api.ic0_is_controller(0, 0, &[]));
     check_stable_apis_support(api, true);
 }
 
@@ -430,6 +435,7 @@ fn test_canister_stateful_query_support() {
     assert_api_not_supported(api.ic0_certified_data_set(0, 0, &[]));
     assert_api_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
+    assert_api_supported(api.ic0_is_controller(0, 0, &[]));
     check_stable_apis_support(api, true);
 }
 
@@ -487,6 +493,7 @@ fn test_reply_api_support_on_nns() {
     assert_api_supported(api.ic0_certified_data_set(0, 0, &[]));
     assert_api_supported(api.ic0_canister_status());
     assert_api_supported(api.ic0_mint_cycles(0));
+    assert_api_supported(api.ic0_is_controller(0, 0, &[]));
     check_stable_apis_support(api, true);
 }
 
@@ -544,6 +551,7 @@ fn test_reply_api_support_non_nns() {
     assert_api_supported(api.ic0_certified_data_set(0, 0, &[]));
     assert_api_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
+    assert_api_supported(api.ic0_is_controller(0, 0, &[]));
     check_stable_apis_support(api, true);
 }
 
@@ -604,6 +612,7 @@ fn test_reject_api_support_on_nns() {
     assert_api_supported(api.ic0_certified_data_set(0, 0, &[]));
     assert_api_supported(api.ic0_canister_status());
     assert_api_supported(api.ic0_mint_cycles(0));
+    assert_api_supported(api.ic0_is_controller(0, 0, &[]));
     check_stable_apis_support(api, true);
 }
 
@@ -664,6 +673,7 @@ fn test_reject_api_support_non_nns() {
     assert_api_supported(api.ic0_certified_data_set(0, 0, &[]));
     assert_api_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
+    assert_api_supported(api.ic0_is_controller(0, 0, &[]));
     check_stable_apis_support(api, true);
 }
 
@@ -721,6 +731,7 @@ fn test_pre_upgrade_support() {
     assert_api_supported(api.ic0_certified_data_set(0, 0, &[]));
     assert_api_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
+    assert_api_supported(api.ic0_is_controller(0, 0, &[]));
     check_stable_apis_support(api, true);
 }
 
@@ -778,6 +789,7 @@ fn test_start_support() {
     assert_api_not_supported(api.ic0_certified_data_set(0, 0, &[]));
     assert_api_not_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
+    assert_api_supported(api.ic0_is_controller(0, 0, &[]));
     check_stable_apis_support(api, false);
 }
 
@@ -835,6 +847,7 @@ fn test_cleanup_support() {
     assert_api_not_supported(api.ic0_certified_data_set(0, 0, &[]));
     assert_api_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
+    assert_api_supported(api.ic0_is_controller(0, 0, &[]));
     check_stable_apis_support(api, true);
 }
 
@@ -897,6 +910,7 @@ fn test_inspect_message_support() {
     assert_api_not_supported(api.ic0_certified_data_set(0, 0, &[]));
     assert_api_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
+    assert_api_supported(api.ic0_is_controller(0, 0, &[]));
     check_stable_apis_support(api, true);
 }
 
@@ -955,6 +969,7 @@ fn test_canister_heartbeat_support() {
     assert_api_supported(api.ic0_certified_data_set(0, 0, &[]));
     assert_api_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
+    assert_api_supported(api.ic0_is_controller(0, 0, &[]));
     check_stable_apis_support(api, true);
 }
 
@@ -1012,6 +1027,7 @@ fn test_canister_heartbeat_support_nns() {
     assert_api_supported(api.ic0_certified_data_set(0, 0, &[]));
     assert_api_supported(api.ic0_canister_status());
     assert_api_supported(api.ic0_mint_cycles(0));
+    assert_api_supported(api.ic0_is_controller(0, 0, &[]));
     check_stable_apis_support(api, true);
 }
 
@@ -1820,4 +1836,41 @@ fn ic0_global_timer_set_is_propagated_from_sandbox() {
         system_state.global_timer,
         CanisterTimer::Active(Time::from_nanos_since_unix_epoch(2))
     );
+}
+
+#[test]
+fn ic0_is_controller_test() {
+    let mut system_state = SystemStateBuilder::default().build();
+    system_state.controllers = BTreeSet::from([user_test_id(1).get(), user_test_id(2).get()]);
+    let api = get_system_api(
+        ApiTypeBuilder::build_update_api(),
+        &system_state,
+        CyclesAccountManagerBuilder::new().build(),
+    );
+    // Users IDs 1 and 2 are controllers, hence ic0_is_controller should return 1,
+    // otherwise, it should return 0.
+    for i in 1..5 {
+        let controller = user_test_id(i).get();
+        assert_eq!(
+            api.ic0_is_controller(0, controller.as_slice().len() as u32, controller.as_slice())
+                .unwrap(),
+            (i <= 2) as u32
+        );
+    }
+}
+
+#[test]
+fn ic0_is_controller_invalid_principal_id() {
+    let api = get_system_api(
+        ApiTypeBuilder::build_update_api(),
+        &SystemStateBuilder::default().build(),
+        CyclesAccountManagerBuilder::new().build(),
+    );
+    let controller = [0u8; 70];
+    assert!(matches!(
+        api.ic0_is_controller(0, controller.len() as u32, &controller),
+        Err(HypervisorError::InvalidPrincipalId(
+            PrincipalIdBlobParseError(..)
+        ))
+    ));
 }

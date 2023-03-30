@@ -17,7 +17,7 @@ use universal_canister::Ops;
 /// `rs/universal_canister`.
 pub const UNIVERSAL_CANISTER_WASM: &[u8] = include_bytes!("universal-canister.wasm");
 pub const UNIVERSAL_CANISTER_WASM_SHA256: [u8; 32] =
-    hex!("0892a4666fe6a35e524916f687ca2803c652e5f6eb4a23b5d35ea6af2542b6c9");
+    hex!("cf13dfde0aaf4139933651766943cdb8824b47fe37a099994ab7f524e75f7656");
 
 /// A succinct shortcut for creating a `PayloadBuilder`, which is used to encode
 /// instructions to be executed by the UC.
@@ -437,6 +437,12 @@ impl PayloadBuilder {
     pub fn instruction_counter_is_at_least(mut self, amount: u64) -> Self {
         self = self.push_int64(amount);
         self.0.push(Ops::InstructionCounterIsAtLeast as u8);
+        self
+    }
+
+    pub fn is_controller(mut self, data: &[u8]) -> Self {
+        self = self.push_bytes(data);
+        self.0.push(Ops::IsController as u8);
         self
     }
 

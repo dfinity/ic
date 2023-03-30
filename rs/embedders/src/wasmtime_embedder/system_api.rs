@@ -1431,6 +1431,30 @@ pub(crate) fn syscalls<S: SystemApi>(
         .unwrap();
 
     linker
+        .func_wrap("ic0", "is_controller", {
+            let log = log.clone();
+            move |mut caller: Caller<'_, StoreData<S>>, src: i32, size: i32| {
+                charge_for_system_api_call(
+                    &log,
+                    canister_id,
+                    &mut caller,
+                    system_api_complexity::overhead::IS_CONTROLLER,
+                    size as u32,
+                    ExecutionComplexity {
+                        cpu: system_api_complexity::cpu::IS_CONTROLLER,
+                        ..Default::default()
+                    },
+                    NumInstructions::from(0),
+                    stable_memory_dirty_page_limit,
+                )?;
+                with_memory_and_system_api(&mut caller, |system_api, memory| {
+                    system_api.ic0_is_controller(src as u32, size as u32, memory)
+                })
+            }
+        })
+        .unwrap();
+
+    linker
         .func_wrap("ic0", "data_certificate_copy", {
             move |mut caller: Caller<'_, StoreData<S>>, dst: u32, offset: u32, size: u32| {
                 observe_execution_complexity(

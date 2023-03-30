@@ -190,9 +190,10 @@ mod tests {
     fn sandbox_safe_system_state() -> SandboxSafeSystemState {
         let mut ic00_aliases = BTreeSet::new();
         ic00_aliases.insert(canister_test_id(0));
+        let controller = user_test_id(0).get();
         SandboxSafeSystemState::new_internal(
             canister_test_id(0),
-            user_test_id(0).get(),
+            controller,
             CanisterStatusView::Running,
             NumSeconds::from(3600),
             MemoryAllocation::BestEffort,
@@ -212,6 +213,7 @@ mod tests {
             SchedulerConfig::application_subnet().dirty_page_overhead,
             CanisterTimer::Inactive,
             0,
+            BTreeSet::from([controller]),
         )
     }
 

@@ -590,6 +590,16 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 },
             )],
         ),
+        (
+            "is_controller",
+            vec![(
+                API_VERSION_IC0,
+                FunctionSignature {
+                    param_types: vec![ValType::I32, ValType::I32],
+                    return_type: vec![ValType::I32],
+                },
+            )],
+        ),
     ];
 
     valid_system_apis

@@ -104,5 +104,6 @@ try_from_u8!(
         TrapIfNeq = 74,
         MintCycles = 75,
         OneWayCallNew = 76,
+        IsController = 77,
     }
 );

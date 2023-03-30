@@ -392,6 +392,10 @@ fn eval(ops_bytes: OpsBytes) {
                     ONE_WAY_CALL,
                 );
             }
+            Ops::IsController => {
+                let data = stack.pop_blob();
+                stack.push_int(api::is_controller(&data));
+            }
         }
     }
 }

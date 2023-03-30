@@ -35,6 +35,7 @@ pub mod overhead {
     pub const STABLE64_READ: NumInstructions = NumInstructions::new(20);
     pub const STABLE64_WRITE: NumInstructions = NumInstructions::new(20);
     pub const PERFORMANCE_COUNTER: NumInstructions = NumInstructions::new(200);
+    pub const IS_CONTROLLER: NumInstructions = NumInstructions::new(1_000);
 }
 
 ///
@@ -104,4 +105,5 @@ pub mod cpu {
     pub const MSG_CYCLES_ACCEPT128: CpuComplexity = from_nanos(80);
     pub const CERTIFIED_DATA_SET: CpuComplexity = from_nanos(70);
     pub const PERFORMANCE_COUNTER: CpuComplexity = from_nanos(50);
+    pub const IS_CONTROLLER: CpuComplexity = from_nanos(200);
 }

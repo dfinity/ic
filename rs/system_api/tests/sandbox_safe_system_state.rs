@@ -26,6 +26,7 @@ use ic_types::{
     messages::MAX_INTER_CANISTER_PAYLOAD_IN_BYTES, ComputeAllocation, Cycles, NumInstructions,
 };
 use prometheus::IntCounter;
+use std::collections::BTreeSet;
 use std::convert::From;
 use std::sync::Arc;
 
@@ -324,6 +325,28 @@ fn mint_cycles_fails_caller_not_on_nns() {
         api.ic0_canister_cycle_balance().unwrap() - balance_before,
         0
     );
+}
+
+#[test]
+fn is_controller_test() {
+    let mut system_state = SystemStateBuilder::default().build();
+    system_state.controllers = BTreeSet::from([user_test_id(1).get(), user_test_id(2).get()]);
+
+    let sandbox_safe_system_state = SandboxSafeSystemState::new(
+        &system_state,
+        CyclesAccountManagerBuilder::new().build(),
+        &NetworkTopology::default(),
+        SchedulerConfig::application_subnet().dirty_page_overhead,
+    );
+
+    // Users IDs 1 and 2 are controllers, hence is_controller should return true,
+    // otherwise, it should return false.
+    for i in 1..5 {
+        assert_eq!(
+            sandbox_safe_system_state.is_controller(&user_test_id(i).get()),
+            i <= 2
+        );
+    }
 }
 
 #[test]
