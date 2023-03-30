@@ -182,3 +182,7 @@ GUESTOS_MALICIOUS_RUNTIME_DEPS = [
     "//ic-os/guestos/envs/dev-malicious:hash_and_upload_update-img",
     "//ic-os/guestos:scripts/build-bootstrap-config-image.sh",
 ]
+
+CANISTER_HTTP_RUNTIME_DEPS = [
+    "//rs/tests:http_uvm_config_image",
+]
