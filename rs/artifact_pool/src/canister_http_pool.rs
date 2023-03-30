@@ -7,9 +7,8 @@ use crate::{
     pool_common::PoolSection,
 };
 use ic_interfaces::{
-    artifact_pool::{MutablePool, UnvalidatedArtifact, ValidatedArtifact},
+    artifact_pool::{MutablePool, UnvalidatedArtifact, ValidatedArtifact, ValidatedPoolReader},
     canister_http::{CanisterHttpChangeAction, CanisterHttpChangeSet, CanisterHttpPool},
-    gossip_pool::GossipPool,
     time_source::TimeSource,
 };
 use ic_metrics::MetricsRegistry;
@@ -152,7 +151,7 @@ impl MutablePool<CanisterHttpArtifact, CanisterHttpChangeSet> for CanisterHttpPo
     }
 }
 
-impl GossipPool<CanisterHttpArtifact> for CanisterHttpPoolImpl {
+impl ValidatedPoolReader<CanisterHttpArtifact> for CanisterHttpPoolImpl {
     fn contains(&self, id: &CanisterHttpResponseId) -> bool {
         self.unvalidated.contains_key(id) || self.validated.contains_key(id)
     }

@@ -54,6 +54,31 @@ pub trait PriorityFnAndFilterProducer<Artifact: ArtifactKind, Pool>: Send + Sync
     }
 }
 
+/// ValidatedPoolReader trait is the generic interface used by P2P to interact
+/// with the validated portion of an artifact pool without resulting in any mutations.
+/// Every pool needs to implement this trait.
+pub trait ValidatedPoolReader<T: ArtifactKind> {
+    /// Check if an artifact exists by its Id.
+    fn contains(&self, id: &T::Id) -> bool;
+
+    /// Get a validated artifact by its identifier
+    ///
+    /// #Returns:
+    /// - 'Some`: Artifact from the validated pool.
+    /// - `None`: Artifact does not exist in the validated pool.
+    fn get_validated_by_identifier(&self, id: &T::Id) -> Option<T::Message>;
+
+    /// Get all validated artifacts by the filter
+    /// See interfaces/src/artifact_manager.rs for more details
+    ///
+    /// #Returns:
+    /// A iterator over all the validated artifacts.
+    fn get_all_validated_by_filter(
+        &self,
+        filter: &T::Filter,
+    ) -> Box<dyn Iterator<Item = T::Message> + '_>;
+}
+
 /// Contains different errors that can happen on artifact acceptance check.
 /// In our P2P protocol none of the errors from 'ArtifactPoolError' are
 /// handled by the caller. So the enum is used only for tracking different

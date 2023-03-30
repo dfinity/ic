@@ -3,9 +3,8 @@ use crate::{
     pool_common::PoolSection,
 };
 use ic_interfaces::{
-    artifact_pool::{MutablePool, UnvalidatedArtifact, ValidatedArtifact},
+    artifact_pool::{MutablePool, UnvalidatedArtifact, ValidatedArtifact, ValidatedPoolReader},
     dkg::{ChangeAction, ChangeSet, DkgPool},
-    gossip_pool::GossipPool,
     time_source::TimeSource,
 };
 use ic_metrics::MetricsRegistry;
@@ -146,7 +145,7 @@ impl MutablePool<DkgArtifact, ChangeSet> for DkgPoolImpl {
     }
 }
 
-impl GossipPool<DkgArtifact> for DkgPoolImpl {
+impl ValidatedPoolReader<DkgArtifact> for DkgPoolImpl {
     fn contains(&self, hash: &CryptoHashOf<dkg::Message>) -> bool {
         self.unvalidated.contains_key(hash) || self.validated.contains_key(hash)
     }

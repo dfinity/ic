@@ -4,8 +4,7 @@
 use crate::metrics::{PoolMetrics, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED};
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_interfaces::{
-    artifact_pool::{HasTimestamp, MutablePool, UnvalidatedArtifact},
-    gossip_pool::GossipPool,
+    artifact_pool::{HasTimestamp, MutablePool, UnvalidatedArtifact, ValidatedPoolReader},
     ingress_pool::{
         ChangeAction, ChangeSet, IngressPool, IngressPoolObject, IngressPoolSelect,
         IngressPoolThrottler, PoolSection, SelectResult, UnvalidatedIngressArtifact,
@@ -351,7 +350,7 @@ impl MutablePool<IngressArtifact, ChangeSet> for IngressPoolImpl {
     }
 }
 
-impl GossipPool<IngressArtifact> for IngressPoolImpl {
+impl ValidatedPoolReader<IngressArtifact> for IngressPoolImpl {
     /// Check if an Ingress message exists by its hash
     fn contains(&self, id: &IngressMessageId) -> bool {
         self.unvalidated.exists(id) || self.validated.exists(id)
