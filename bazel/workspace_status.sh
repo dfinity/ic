@@ -18,6 +18,9 @@ echo "GIT_BRANCH $git_branch"
 git_tree_status=$(git diff-index --quiet HEAD -- && echo 'Clean' || echo 'Modified')
 echo "GIT_TREE_STATUS $git_tree_status"
 
+WORKSPACE_ROOT="$(git rev-parse --show-toplevel)"
+echo "STABLE_WORKSPACE_ROOT ${WORKSPACE_ROOT}"
+
 echo "HOME ${HOME}"
 
 test -n "${CI_JOB_ID:-}" && echo "CI_JOB_ID ${CI_JOB_ID}"
@@ -31,4 +34,4 @@ elif [[ -n "${HOSTUSER:-}" ]]; then
 fi
 
 # Generate a file that changes every time bazel runs. It can be used as dependency for targets we want to always rebuild.
-date '+%s' >"$(git rev-parse --show-toplevel)/bazel-timestamp.txt"
+date '+%s' >"${WORKSPACE_ROOT}/bazel-timestamp.txt"

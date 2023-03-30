@@ -15,19 +15,20 @@ def _run_system_test(ctx):
         content = """#!/bin/bash
             set -eEuo pipefail
             RUNFILES="$PWD"
+            VERSION_FILE="$(cat $VERSION_FILE_PATH)"
             cd "$TEST_TMPDIR"
             mkdir root_env
             cp -Rs "$RUNFILES" root_env/dependencies/
+            cp -v "$VERSION_FILE" root_env/dependencies/volatile-status.txt
             "$RUNFILES/{test_executable}" --working-dir . "$@" run
         """.format(
             test_executable = ctx.executable.src.short_path,
         ),
     )
 
-    # we pass the volatile_status.txt file as a runtime dependency, so the
-    # test driver binary can read metadata from this file and pass it to farm.
-    # volatile_status.txt is written by bazel/workspace_status.sh.
-    runtime_deps = [depset([ctx.version_file, ctx.file.version_file])]
+    # version_file_path contains the "direct" path to the volatile status file.
+    # The wrapper script copies this file instead of receiving ing as bazel dependency to not invalidate the cache.
+    runtime_deps = [depset([ctx.file.version_file_path, ctx.file.ic_version_file])]
     for target in ctx.attr.runtime_deps:
         runtime_deps.append(target.files)
 
@@ -46,7 +47,7 @@ def _run_system_test(ctx):
             ),
         ),
         RunEnvironmentInfo(
-            environment = dict(ctx.attr.env.items() + [("VERSION_FILE", ctx.file.version_file.short_path)]),
+            environment = dict(ctx.attr.env.items() + [("VERSION_FILE_PATH", ctx.file.version_file_path.short_path), ("IC_VERSION_FILE", ctx.file.ic_version_file.short_path)]),
         ),
     ]
 
@@ -57,7 +58,8 @@ run_system_test = rule(
         "src": attr.label(executable = True, cfg = "exec"),
         "env": attr.string_dict(allow_empty = True),
         "runtime_deps": attr.label_list(allow_files = True),
-        "version_file": attr.label(allow_single_file = True, default = "//ic-os/guestos/envs/dev:version.txt"),
+        "ic_version_file": attr.label(allow_single_file = True, default = "//ic-os/guestos/envs/dev:version.txt"),
+        "version_file_path": attr.label(allow_single_file = True, default = "//bazel:version_file_path"),
     },
 )
 

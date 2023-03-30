@@ -1,5 +1,5 @@
 """
-Rules to return ic version.
+Rules to return various information about the workspace, current invocation etc.
 """
 
 load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
@@ -36,4 +36,26 @@ ic_version_or_git_sha = rule(
         "_ic_version_or_git_sha_sh": attr.label(executable = True, cfg = "exec", default = ":ic_version_or_git_sha_sh"),
         "_bazel_timestamp": attr.label(default = "//:bazel-timestamp"),
     },
+)
+
+def _version_file_path_impl(ctx):
+    """
+    Returns the file containing the full path to the volatile status file.
+
+    It can be used to read the volatile status directly, not as a bazel dependency.
+    Bazel don't track direct reads and therefore changing volatile status file will not invalidate the cache.
+    Documentation says "Bazel pretends that the volatile file never changes": https://bazel.build/docs/user-manual#workspace-status
+    However this behaviour is only limited to the local cache: https://github.com/bazelbuild/bazel/issues/10075
+    """
+    out = ctx.actions.declare_file(ctx.label.name)
+    ctx.actions.run(
+        executable = "awk",
+        arguments = ["-v", "out=" + out.path, '/^STABLE_WORKSPACE_ROOT / { printf "%s/bazel-out/volatile-status.txt", $2 > out }', ctx.info_file.path],
+        inputs = [ctx.info_file],
+        outputs = [out],
+    )
+    return [DefaultInfo(files = depset([out]), runfiles = ctx.runfiles(files = [out]))]
+
+version_file_path = rule(
+    implementation = _version_file_path_impl,
 )
