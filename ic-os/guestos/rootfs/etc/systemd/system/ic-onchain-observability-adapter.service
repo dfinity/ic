@@ -18,7 +18,7 @@ Environment=RUST_BACKTRACE=1
 # an onchain-observability-adapter-service-specific version of ic.json5 of which only the parts related to crypto
 # and registry are relevant. Then, we will merge this with adapter-specific-config to generate the full config
 ExecStartPre=+/opt/ic/bin/generate-replica-config.sh -i /opt/ic/share/ic.json5.template -o /run/ic-node/config/onchain-observability-adapter-replica-config.json5
-ExecStartPre=+/opt/ic/bin/generate-onchain-observability-adapter-config.sh -o /run/ic-node/config/onchain-observability-adapter-specific-config.json
+ExecStartPre=+/opt/ic/bin/generate-onchain-observability-adapter-config.sh -o /run/ic-node/config/onchain-observability-adapter-specific-config.json -t /boot/config/onchain_observability_overrides.json
 ExecStart=/opt/ic/bin/ic-onchain-observability-adapter --adapter-specific-config-file /run/ic-node/config/onchain-observability-adapter-specific-config.json --replica-config-file /run/ic-node/config/onchain-observability-adapter-replica-config.json5
 NotifyAccess=main
 #TODO: once this service is complete, we can change to "always"

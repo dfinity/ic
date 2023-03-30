@@ -107,6 +107,9 @@ options may be specified:
     The URL of the socks proxy to use. To be used in
     systems tests only.
 
+  --onchain_observability_overrides overrides
+    The overrides struct (report length, sampling interval) for the onchain observability config. To be used by system tests
+
     Be sure to properly quote the string.
 EOF
 }
@@ -127,6 +130,8 @@ function build_ic_bootstrap_tar() {
     local REPLICA_LOG_DEBUG_OVERRIDES
     local MALICIOUS_BEHAVIOR
     local BITCOIND_ADDR
+    local ONCHAIN_OBSERVABILITY_OVERRIDES
+
     while true; do
         if [ $# == 0 ]; then
             break
@@ -186,6 +191,9 @@ function build_ic_bootstrap_tar() {
             --socks_proxy)
                 SOCKS_PROXY="$2"
                 ;;
+            --onchain_observability_overrides)
+                ONCHAIN_OBSERVABILITY_OVERRIDES="$2"
+                ;;
             *)
                 echo "Unrecognized option: $1"
                 usage
@@ -236,6 +244,9 @@ EOF
     fi
     if [ "${SOCKS_PROXY}" != "" ]; then
         echo "socks_proxy=${SOCKS_PROXY}" >"${BOOTSTRAP_TMPDIR}/socks_proxy.conf"
+    fi
+    if [ "${ONCHAIN_OBSERVABILITY_OVERRIDES}" != "" ]; then
+        echo ${ONCHAIN_OBSERVABILITY_OVERRIDES} >"${BOOTSTRAP_TMPDIR}/onchain_observability_overrides.json"
     fi
     if [ "${IC_CRYPTO}" != "" ]; then
         cp -r "${IC_CRYPTO}" "${BOOTSTRAP_TMPDIR}/ic_crypto"

@@ -8,13 +8,34 @@ Usage:
   Generates the params specific to the onchain observability adapter.
 
   -o outfile: output ic-onchain-observability-adapter.json file
+
+  -t test overrides: json of params that will override any existing values for system testings
 EOF
 }
 
-while getopts "o:" OPT; do
+# Adds override fields to config and outputs the new config.
+#
+# Arguments:
+# - $1: original config
+# - $2: override config
+function apply_overrides() {
+    local config=$1
+    local overrides=$2
+
+    for key in $(cat "$overrides" | jq 'keys[]'); do
+        local value=$(cat "$overrides" | jq -r .$key)
+        config=$(echo $config | jq ".$key |= $value")
+    done
+    echo $config
+}
+
+while getopts "o:t:" OPT; do
     case "${OPT}" in
         o)
             OUT_FILE="${OPTARG}"
+            ;;
+        t)
+            OVERRIDES="${OPTARG}"
             ;;
         *)
             usage
@@ -28,16 +49,22 @@ if [ "${OUT_FILE}" == "" ]; then
     exit 1
 fi
 
-# Set "canister_client_url": "{URL}" to enable service
-# TODO: Update report length to 1hr
-echo '{
+# Set "canister_id": "{ID}" to enable service
+# ex. "canister_id": "3kvk3-xyaaa-aaaae-qaesq-cai"
+CONFIG='{
     "logger": {
         "format": "json",
         "level": "info"
     },
-    "report_length_sec": 180,
+    "report_length_sec": 3600,
     "sampling_interval_sec": 60
-}' >$OUT_FILE
+}'
+
+if [ "${OVERRIDES}" != "" -a -e "${OVERRIDES}" ]; then
+    echo $(apply_overrides "${CONFIG}" "${OVERRIDES}") >$OUT_FILE
+else
+    echo "${CONFIG}" >$OUT_FILE
+fi
 
 # umask for service is set to be restricted, but this file needs to be
 # world-readable

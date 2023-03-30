@@ -47,6 +47,8 @@ The +ic-bootstrap.tar+ may contain multiple files and/or subdirectories. The fol
 
 - +socks_proxy.conf+ (file): Configure socks proxy (optional)
 
+- +onchain_observability_overrides.json+ (file): Configure onchain onchain_observability overrides (optional)
+
 Not all files are needed in all bootstrap behaviors. See detailed specifications of the configuration parameters as well as the xref:behaviors[behaviors] section below.
 
 ==== +network.conf+: Network configuration parameters
@@ -170,6 +172,12 @@ to lack of external system to contact.
 Configuration for socks proxy. Must be a file of key/value pairs separated by “=” (one per line) with the following possible keys:
 
 - +socks_proxy+: URL of the socks proxy to use. E.g socks5://socksproxy.com:1080.
+
+==== +onchain_observability_overrides.json+: configure onchain observability overrides
+
+A json object containing config-values that will override the existing values in the onchain observability config. Key names must match those in the actual config 
+
+- +onchain_observability_overrides+: Struct containing the overrides
 
 [[behaviors]]
 == Behaviors

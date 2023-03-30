@@ -37,6 +37,7 @@ pub type NodeVms = BTreeMap<NodeId, AllocatedVm>;
 const CONF_IMG_FNAME: &str = "config_disk.img";
 const BITCOIND_ADDR_PATH: &str = "bitcoind_addr";
 const SOCKS_PROXY_PATH: &str = "socks_proxy";
+const ONCHAIN_OBSERVABILITY_PATH: &str = "onchain_observability_overrides";
 
 fn mk_compressed_img_path() -> std::string::String {
     format!("{}.gz", CONF_IMG_FNAME)
@@ -58,6 +59,12 @@ pub fn init_ic(
 
     if let Some(socks_proxy) = &ic.socks_proxy {
         test_env.write_json_object(SOCKS_PROXY_PATH, &socks_proxy)?;
+    }
+
+    if let Some(onchain_observability_overrides) = &ic.onchain_observability_overrides {
+        let serialized_overrides = serde_json::to_string(&onchain_observability_overrides)?;
+
+        test_env.write_json_object(ONCHAIN_OBSERVABILITY_PATH, &serialized_overrides)?;
     }
 
     // In production, this dummy hash is not actually checked and exists
@@ -335,6 +342,10 @@ pub fn create_config_disk_image(
     // --socks_proxy indicates that a socks proxy is available to the system test environment.
     if let Ok(arg) = test_env.read_json_object::<String, _>(SOCKS_PROXY_PATH) {
         cmd.arg("--socks_proxy").arg(arg);
+    }
+    // --onchain_observability_overrides indicates that system test is overriding the parameters in the adapter config
+    if let Ok(arg) = test_env.read_json_object::<String, _>(ONCHAIN_OBSERVABILITY_PATH) {
+        cmd.arg("--onchain_observability_overrides").arg(arg);
     }
     let key = "PATH";
     let old_path = match std::env::var(key) {
