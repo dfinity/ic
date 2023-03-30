@@ -64,13 +64,7 @@ pub fn test_ckbtc_minter_agent(env: TestEnv) {
         )
         .await;
 
-        set_kyt_api_key(
-            &agent,
-            &kyt_id.get().0,
-            agent_principal,
-            "fake key".to_string(),
-        )
-        .await;
+        set_kyt_api_key(&agent, &kyt_id.get().0, "fake key".to_string()).await;
 
         let ledger_id = install_ledger(&env, &mut ledger_canister, minting_user, &logger).await;
         let minter_id =

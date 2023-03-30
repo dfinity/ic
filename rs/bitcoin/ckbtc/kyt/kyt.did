@@ -15,7 +15,6 @@ type Mode = variant { Normal; AcceptAll; RejectAll };
 
 type SetApiKeyArg = record {
     api_key : text;
-    provider : principal;
 };
 
 type InitArg = record {

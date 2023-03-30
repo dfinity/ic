@@ -344,7 +344,6 @@ pub(crate) async fn install_kyt(
 pub(crate) async fn set_kyt_api_key(
     agent: &ic_agent::Agent,
     kyt_canister: &Principal,
-    provider: Principal,
     api_key: String,
 ) {
     let waiter = garcon::Delay::builder()
@@ -353,7 +352,7 @@ pub(crate) async fn set_kyt_api_key(
         .build();
     agent
         .update(kyt_canister, "set_api_key")
-        .with_arg(candid::Encode!(&SetApiKeyArg { provider, api_key }).unwrap())
+        .with_arg(candid::Encode!(&SetApiKeyArg { api_key }).unwrap())
         .call_and_wait(waiter)
         .await
         .expect("failed to set api key");
