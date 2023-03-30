@@ -33,7 +33,7 @@ use slog::info;
 use crate::{
     driver::{
         ic::{InternetComputer, Subnet},
-        test_env::{SshKeyGen, TestEnv},
+        test_env::TestEnv,
         test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer},
     },
     nns::{add_nodes_to_subnet, change_subnet_membership, remove_nodes_via_endpoint},
@@ -47,9 +47,6 @@ const DKG_INTERVAL: u64 = 14;
 const SUBNET_SIZE: usize = 4;
 
 pub fn config(env: TestEnv) {
-    env.ssh_keygen("admin")
-        .expect("Failed to generate ssh admin keys");
-
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)

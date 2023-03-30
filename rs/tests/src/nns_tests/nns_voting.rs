@@ -38,9 +38,9 @@ end::catalog[] */
 use rand_chacha::ChaCha8Rng;
 use slog::info;
 
-use crate::driver::test_env::{SshKeyGen, TestEnv};
+use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt, ADMIN,
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt,
 };
 use crate::util::{block_on, runtime_from_url};
 
@@ -76,7 +76,6 @@ const RND_SEED: u64 = 42;
 /// combine tests that are being run in similar environments. Please, keep this
 /// in mind when writing your tests!
 pub fn config(env: TestEnv) {
-    env.ssh_keygen(ADMIN).expect("ssh-keygen failed");
     InternetComputer::new()
         .add_fast_single_node_subnet(SubnetType::System)
         .setup_and_start(&env)

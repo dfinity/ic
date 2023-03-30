@@ -135,9 +135,9 @@ use super::config::NODES_INFO;
 use super::driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR;
 use super::farm::{DnsRecord, PlaynetCertificate};
 use super::test_setup::GroupSetup;
-use crate::driver::constants::{self, kibana_link};
+use crate::driver::constants::{self, kibana_link, SSH_USERNAME};
 use crate::driver::farm::{Farm, GroupSpec};
-use crate::driver::test_env::{HasIcPrepDir, TestEnv, TestEnvAttribute};
+use crate::driver::test_env::{HasIcPrepDir, SshKeyGen, TestEnv, TestEnvAttribute};
 use crate::util::{create_agent, delay};
 use anyhow::{anyhow, bail, Result};
 use async_trait::async_trait;
@@ -567,7 +567,7 @@ impl IcNodeSnapshot {
 
     /// Is it accessible via ssh with the `admin` user.
     pub fn can_login_as_admin_via_ssh(&self) -> Result<bool> {
-        let sess = self.get_ssh_session(ADMIN)?;
+        let sess = self.get_ssh_session()?;
         let mut channel = sess.channel_session()?;
         channel.exec("echo ready")?;
         let mut s = String::new();
@@ -970,6 +970,7 @@ impl HasGroupSetup for TestEnv {
         )
         .unwrap();
         group_setup.write_attribute(self);
+        self.ssh_keygen().expect("ssh key generation failed");
         info!(
             log,
             "Created new Farm group {}\nReplica logs will appear in Kibana: {}",
@@ -1100,13 +1101,13 @@ impl<T: HasDependencies> HasWasm for T {
 
 pub trait SshSession {
     /// Return an SSH session to the machine referenced from self authenticating with the given user.
-    fn get_ssh_session(&self, user: &str) -> Result<Session>;
+    fn get_ssh_session(&self) -> Result<Session>;
 
     /// Try a number of times to establish an SSH session to the machine referenced from self authenticating with the given user.
-    fn block_on_ssh_session(&self, user: &str) -> Result<Session>;
+    fn block_on_ssh_session(&self) -> Result<Session>;
 
-    fn block_on_bash_script(&self, user: &str, script: &str) -> Result<String> {
-        let session = self.block_on_ssh_session(user)?;
+    fn block_on_bash_script(&self, script: &str) -> Result<String> {
+        let session = self.block_on_ssh_session()?;
         self.block_on_bash_script_from_session(&session, script)
     }
 
@@ -1537,31 +1538,29 @@ where
     }
 }
 
-pub const ADMIN: &str = "admin";
-// Name of the network interfaces on the Node.
-pub const DEVICE_NAME: &str = "enp1s0";
-
-pub fn get_ssh_session_from_env(env: &TestEnv, user: &str, ip: IpAddr) -> Result<Session> {
+pub fn get_ssh_session_from_env(env: &TestEnv, ip: IpAddr) -> Result<Session> {
     let tcp = TcpStream::connect((ip, 22))?;
     let mut sess = Session::new()?;
     sess.set_tcp_stream(tcp);
     sess.handshake()?;
-    let priv_key_path = env.get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR).join(user);
-    sess.userauth_pubkey_file(user, None, priv_key_path.as_path(), None)?;
+    let priv_key_path = env
+        .get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR)
+        .join(SSH_USERNAME);
+    sess.userauth_pubkey_file(SSH_USERNAME, None, priv_key_path.as_path(), None)?;
     Ok(sess)
 }
 
 impl SshSession for IcNodeSnapshot {
-    fn get_ssh_session(&self, user: &str) -> Result<Session> {
+    fn get_ssh_session(&self) -> Result<Session> {
         let node_record = self.raw_node_record();
         let connection_endpoint = node_record.http.unwrap();
         let ip_addr = IpAddr::from_str(&connection_endpoint.ip_addr)?;
-        get_ssh_session_from_env(&self.env, user, ip_addr)
+        get_ssh_session_from_env(&self.env, ip_addr)
     }
 
-    fn block_on_ssh_session(&self, user: &str) -> Result<Session> {
+    fn block_on_ssh_session(&self) -> Result<Session> {
         retry(self.env.logger(), SSH_RETRY_TIMEOUT, RETRY_BACKOFF, || {
-            self.get_ssh_session(user)
+            self.get_ssh_session()
         })
     }
 }

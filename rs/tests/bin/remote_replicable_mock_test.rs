@@ -4,7 +4,7 @@ use anyhow::Result;
 
 use ic_tests::driver::group::SystemTestGroup;
 use ic_tests::driver::test_env::TestEnv;
-use ic_tests::driver::test_env_api::{HasDependencies, SshSession, ADMIN};
+use ic_tests::driver::test_env_api::{HasDependencies, SshSession};
 use ic_tests::driver::universal_vm::{UniversalVm, UniversalVms};
 use ic_tests::systest;
 use slog::info;
@@ -32,7 +32,9 @@ pub fn setup(env: TestEnv) {
 pub fn test(env: TestEnv) {
     let logger = env.logger();
     let universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
-    let session = universal_vm.block_on_ssh_session(ADMIN).unwrap();
+    let session = universal_vm
+        .block_on_ssh_session()
+        .expect("Failed to ssh into VM.");
 
     info!(
         logger,

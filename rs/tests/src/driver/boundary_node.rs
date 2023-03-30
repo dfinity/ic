@@ -20,8 +20,7 @@ use crate::{
         test_env_api::{
             get_ssh_session_from_env, retry, AcquirePlaynetCertificate, CreatePlaynetDnsRecords,
             HasDependencies, HasPublicApiUrl, HasTestEnv, HasTopologySnapshot, HasVmName,
-            IcNodeContainer, RetrieveIpv4Addr, SshSession, ADMIN, READY_WAIT_TIMEOUT,
-            RETRY_BACKOFF,
+            IcNodeContainer, RetrieveIpv4Addr, SshSession, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
         },
         test_setup::GroupSetup,
     },
@@ -617,13 +616,13 @@ impl HasVmName for BoundaryNodeSnapshot {
 }
 
 impl SshSession for BoundaryNodeSnapshot {
-    fn get_ssh_session(&self, user: &str) -> Result<Session> {
-        get_ssh_session_from_env(&self.env, user, IpAddr::V6(self.vm.ipv6))
+    fn get_ssh_session(&self) -> Result<Session> {
+        get_ssh_session_from_env(&self.env, IpAddr::V6(self.vm.ipv6))
     }
 
-    fn block_on_ssh_session(&self, user: &str) -> Result<Session> {
+    fn block_on_ssh_session(&self) -> Result<Session> {
         retry(self.env.logger(), READY_WAIT_TIMEOUT, RETRY_BACKOFF, || {
-            self.get_ssh_session(user)
+            self.get_ssh_session()
         })
     }
 }
@@ -681,7 +680,7 @@ echo "$ipv4"
 impl RetrieveIpv4Addr for BoundaryNodeSnapshot {
     fn block_on_ipv4(&self) -> Result<Ipv4Addr> {
         use anyhow::Context;
-        let ipv4_string = self.block_on_bash_script(ADMIN, IPV4_RETRIEVE_SH_SCRIPT)?;
+        let ipv4_string = self.block_on_bash_script(IPV4_RETRIEVE_SH_SCRIPT)?;
         ipv4_string
             .trim()
             .parse::<Ipv4Addr>()

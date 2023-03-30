@@ -7,10 +7,10 @@ use crate::driver::{
     // TODO: Uncomment this once spm41 is fixed for virsh
     //farm::HostFeature,
     ic::{AmountOfMemoryKiB, InternetComputer, Subnet, VmResources},
-    test_env::{SshKeyGen, TestEnv},
+    test_env::TestEnv,
     test_env_api::{
         retry_async, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt,
-        RetrieveIpv4Addr, SshSession, ADMIN, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+        RetrieveIpv4Addr, SshSession, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
     },
 };
 
@@ -28,7 +28,7 @@ use slog::info;
 const BOUNDARY_NODE_SNP_NAME: &str = "boundary-node-snp-1";
 
 fn exec_ssh_command(vm: &dyn SshSession, command: &str) -> Result<(String, i32), Error> {
-    let mut channel = vm.block_on_ssh_session(ADMIN)?.channel_session()?;
+    let mut channel = vm.block_on_ssh_session()?.channel_session()?;
 
     channel.exec(command)?;
 
@@ -40,8 +40,6 @@ fn exec_ssh_command(vm: &dyn SshSession, command: &str) -> Result<(String, i32),
 }
 
 pub fn config(env: TestEnv) {
-    env.ssh_keygen(ADMIN).expect("ssh-keygen failed");
-
     let logger = env.logger();
 
     InternetComputer::new()
@@ -151,7 +149,7 @@ pub fn snp_kernel_test(env: TestEnv) {
     let boundary_node_vm = deployed_boundary_node.get_snapshot().unwrap();
     // SSH into Boundary Nodes and execute "uname -a"
     let result = boundary_node_vm
-        .block_on_bash_script(ADMIN, KERNEL_TEST_BASH)
+        .block_on_bash_script(KERNEL_TEST_BASH)
         .unwrap();
     info!(logger, "kernel test result = '{}'", result.trim(),);
     if !result.trim().contains("snp") {
@@ -185,7 +183,7 @@ pub fn snp_basic_test(env: TestEnv) {
     let boundary_node_vm = deployed_boundary_node.get_snapshot().unwrap();
     // SSH into Boundary Nodes and execute test bash to check that SNP is enabled
     let result = boundary_node_vm
-        .block_on_bash_script(ADMIN, SNP_TEST_BASH)
+        .block_on_bash_script(SNP_TEST_BASH)
         .unwrap();
     info!(logger, "SNP test result = '{}'", result.trim(),);
     if !result.trim().contains(SNP_BASH_OUTPUT) {

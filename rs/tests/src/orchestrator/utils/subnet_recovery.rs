@@ -85,7 +85,7 @@ pub(crate) fn halt_subnet(
     }
 
     info!(logger, "Breaking the app subnet by halting it",);
-    let s = app_node.get_ssh_session(ADMIN).unwrap();
+    let s = app_node.block_on_ssh_session().unwrap();
     let message_str = execute_bash_command(
         &s,
         "journalctl -n1 -o json --output-fields='__CURSOR'".to_string(),
@@ -200,7 +200,7 @@ pub(crate) fn assert_node_is_unassigned(node: &IcNodeSnapshot, logger: &Logger) 
     let check =
         r#"[ "$(ls -A /var/lib/ic/data/ic_state)" ] && echo "assigned" || echo "unassigned""#;
     retry(logger.clone(), secs(300), secs(10), || {
-        let s = match node.get_ssh_session(ADMIN) {
+        let s = match node.get_ssh_session() {
             Ok(s) => s,
             Err(e) => bail!("Failed to create SSH session: {:?}", e),
         };

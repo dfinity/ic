@@ -29,8 +29,8 @@ use crate::{
         test_env::TestEnv,
         test_env_api::{
             retry_async, HasPublicApiUrl, HasTopologySnapshot, HasVmName, IcNodeContainer,
-            NnsInstallationExt, RetrieveIpv4Addr, SshSession, SubnetSnapshot, ADMIN,
-            READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+            NnsInstallationExt, RetrieveIpv4Addr, SshSession, SubnetSnapshot, READY_WAIT_TIMEOUT,
+            RETRY_BACKOFF,
         },
     },
     util::{agent_observes_canister_module, assert_canister_counter_with_retries, block_on},
@@ -66,7 +66,7 @@ const RESPONSES_COLLECTION_EXTRA_TIMEOUT: Duration = Duration::from_secs(30); //
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(2); // This param can be slightly tweaked (1-2 sec), if the workload fails to dispatch requests precisely on time.
 
 fn exec_ssh_command(vm: &dyn SshSession, command: &str) -> Result<(String, i32), Error> {
-    let mut channel = vm.block_on_ssh_session(ADMIN)?.channel_session()?;
+    let mut channel = vm.block_on_ssh_session()?.channel_session()?;
 
     channel.exec(command)?;
 

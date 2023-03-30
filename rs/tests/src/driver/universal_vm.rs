@@ -14,7 +14,7 @@ use crate::driver::test_env::{TestEnv, TestEnvAttribute};
 use crate::driver::test_env_api::HasIcDependencies;
 use crate::driver::test_env_api::{
     get_ssh_session_from_env, retry, HasDependencies, HasTestEnv, HasVmName, RetrieveIpv4Addr,
-    SshSession, ADMIN, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+    SshSession, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
 };
 use crate::driver::test_setup::GroupSetup;
 use anyhow::{bail, Result};
@@ -29,6 +29,8 @@ use std::os::unix::prelude::PermissionsExt;
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
+
+use crate::driver::constants::SSH_USERNAME;
 
 /// A builder for the initial configuration of a universal VM.
 /// See: https://github.com/dfinity-lab/farm/tree/master/universal-vm
@@ -123,7 +125,7 @@ impl UniversalVm {
         let universal_vm_dir = env.get_path(univm_path);
 
         // Setup SSH image
-        env.ssh_keygen(ADMIN)?;
+        env.ssh_keygen()?;
         let config_ssh_dir = env.get_universal_vm_config_ssh_dir(&self.name);
         setup_ssh(env, config_ssh_dir.clone())?;
         let config_ssh_img = universal_vm_dir.join(CONF_SSH_IMG_FNAME);
@@ -299,8 +301,8 @@ fn setup_ssh(env: &TestEnv, config_dir: PathBuf) -> Result<()> {
     let config_dir_ssh_dir = config_dir.join(CONFIG_DIR_SSH_AUTHORIZED_KEYS_DIR);
     fs::create_dir_all(config_dir_ssh_dir.clone())?;
     fs::copy(
-        ssh_authorized_pub_keys_dir.join(ADMIN),
-        config_dir_ssh_dir.join(ADMIN),
+        ssh_authorized_pub_keys_dir.join(SSH_USERNAME),
+        config_dir_ssh_dir.join(SSH_USERNAME),
     )?;
     Ok(())
 }
@@ -330,14 +332,14 @@ impl DeployedUniversalVm {
 }
 
 impl SshSession for DeployedUniversalVm {
-    fn get_ssh_session(&self, user: &str) -> Result<Session> {
+    fn get_ssh_session(&self) -> Result<Session> {
         let vm = self.get_vm()?;
-        get_ssh_session_from_env(&self.env, user, IpAddr::V6(vm.ipv6))
+        get_ssh_session_from_env(&self.env, IpAddr::V6(vm.ipv6))
     }
 
-    fn block_on_ssh_session(&self, user: &str) -> Result<Session> {
+    fn block_on_ssh_session(&self) -> Result<Session> {
         retry(self.env.logger(), READY_WAIT_TIMEOUT, RETRY_BACKOFF, || {
-            self.get_ssh_session(user)
+            self.get_ssh_session()
         })
     }
 }
@@ -360,7 +362,7 @@ echo "$ipv4"
 impl RetrieveIpv4Addr for DeployedUniversalVm {
     fn block_on_ipv4(&self) -> Result<Ipv4Addr> {
         use anyhow::Context;
-        let ipv4_string = self.block_on_bash_script(ADMIN, IPV4_RETRIEVE_SH_SCRIPT)?;
+        let ipv4_string = self.block_on_bash_script(IPV4_RETRIEVE_SH_SCRIPT)?;
         ipv4_string
             .trim()
             .parse::<Ipv4Addr>()

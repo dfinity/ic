@@ -17,11 +17,12 @@ Runbook::
 
 end::catalog[] */
 
+use crate::driver::constants::DEVICE_NAME;
 use crate::driver::ic::{AmountOfMemoryKiB, InternetComputer, NrOfVCPUs, Subnet, VmResources};
-use crate::driver::test_env::{SshKeyGen, TestEnv};
+use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
     HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, NnsInstallationExt,
-    SshSession, ADMIN, DEVICE_NAME,
+    SshSession,
 };
 use crate::util::{
     self, agent_observes_canister_module, assert_canister_counter_with_retries, block_on,
@@ -78,7 +79,6 @@ pub struct Config {
 }
 
 pub fn setup(env: TestEnv, config: Config) {
-    env.ssh_keygen(ADMIN).expect("ssh-keygen failed");
     let vm_resources = VmResources {
         vcpus: Some(NrOfVCPUs::new(8)),
         memory_kibibytes: Some(AmountOfMemoryKiB::new(50331648)), // 48GiB
@@ -387,7 +387,9 @@ fn stress_node_periodically(
         };
 
         // Session is an expensive resource, so we create it once per node.
-        let session = node.block_on_ssh_session(ADMIN).unwrap();
+        let session = node
+            .block_on_ssh_session()
+            .expect("Failed to ssh into node");
 
         loop {
             // First keep the node in unstressed mode.

@@ -25,7 +25,7 @@ end::catalog[] */
 use crate::{
     driver::{
         ic::{InternetComputer, Subnet},
-        test_env::{SshKeyGen, TestEnv},
+        test_env::TestEnv,
         test_env_api::{HasPublicApiUrl, HasTopologySnapshot, HasVm},
     },
     nns::{submit_external_proposal_with_test_id, vote_execute_proposal_assert_executed},
@@ -50,9 +50,6 @@ const UPDATE_MSG_3: &str = "However this prose will NOT be persisted for future 
 const UNASSIGNED_NODES_COUNT: usize = 3; // must be >= 3, currently tested for X=3, f=1 and N=4
 
 pub fn config(env: TestEnv) {
-    env.ssh_keygen("admin")
-        .expect("Failed to generate ssh admin keys");
-
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)

@@ -18,7 +18,7 @@ use std::collections::HashSet;
 use std::time::Duration;
 
 use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::test_env::{SshKeyGen, TestEnv};
+use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::HasPublicApiUrl;
 use crate::driver::test_env_api::HasTopologySnapshot;
 use crate::driver::test_env_api::IcNodeContainer;
@@ -118,7 +118,6 @@ pub(crate) fn empty_subnet_update() -> UpdateSubnetPayload {
 /// with ECDSA enabled.
 pub fn config_without_ecdsa_on_nns(test_env: TestEnv) {
     use crate::driver::test_env_api::*;
-    test_env.ssh_keygen(ADMIN).expect("ssh-keygen failed");
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
@@ -158,7 +157,6 @@ pub fn config_without_ecdsa_on_nns(test_env: TestEnv) {
 /// Creates one system subnet and two application subnets.
 pub fn config(test_env: TestEnv) {
     use crate::driver::test_env_api::*;
-    test_env.ssh_keygen(ADMIN).expect("ssh-keygen failed");
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
