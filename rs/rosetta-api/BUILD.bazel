@@ -8,6 +8,10 @@ load("@rules_pkg//pkg:mappings.bzl", "pkg_attributes", "pkg_mkdirs")
 
 package(default_visibility = ["//visibility:public"])
 
+exports_files([
+    "log_config.yml",
+])
+
 DEPENDENCIES = [
     "//rs/canister_client",
     "//rs/canister_client/sender",

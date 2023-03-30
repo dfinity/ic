@@ -74,7 +74,13 @@ pub fn load_wasm(manifest_dir: impl AsRef<Path>, binary_name: &str, features: &[
         .manifest_path(&cargo_toml_path)
         .no_deps()
         .exec()
-        .expect("Failed to run cargo metadata")
+        .unwrap_or_else(|e| {
+            panic!(
+                "Failed to run cargo metadata on {}: {}",
+                cargo_toml_path.display(),
+                e
+            )
+        })
         .target_directory;
 
     // We use a different target path to stop the native cargo build
