@@ -36,7 +36,6 @@ pub struct InitArg {
 #[derive(Debug, Clone, PartialEq, Eq, CandidType, Deserialize)]
 pub struct SetApiKeyArg {
     pub api_key: String,
-    pub provider: Principal,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, CandidType, Deserialize)]

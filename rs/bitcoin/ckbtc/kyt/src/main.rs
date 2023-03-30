@@ -376,15 +376,18 @@ fn post_upgrade(arg: LifecycleArg) {
 #[candid_method(update)]
 fn set_api_key(arg: SetApiKeyArg) {
     CONFIG_CELL.with(|cell| {
+        let caller = ic_cdk::api::caller();
         let mut config = cell.borrow().get().clone();
-        config.api_keys.insert(arg.provider, arg.api_key);
+        config.api_keys.insert(caller, arg.api_key);
         config.last_api_key_update = Some(ic_cdk::api::time());
+
         cell.borrow_mut()
             .set(config)
             .expect("failed to encode config");
         record_event(EventKind::ApiKeySet {
-            caller: Some(ic_cdk::caller()),
-            provider: Some(arg.provider),
+            caller: Some(caller),
+            // The provider can only be the caller for now.
+            provider: None,
         });
     });
 }
