@@ -120,9 +120,9 @@ crate_repositories()
 
 http_archive(
     name = "rules_motoko",
-    sha256 = "9b677fc5d3b42749d13b7734b3a87d4d40135499a189e843ae3f183965e255b7",
-    strip_prefix = "rules_motoko-0.1.0",
-    urls = ["https://github.com/dfinity/rules_motoko/archive/refs/tags/v0.1.0.zip"],
+    sha256 = "b08c9419b1aebd3d781a79142797df8fcf5f7187bbc266ba3a93df093636be3e",
+    strip_prefix = "rules_motoko-0.2.0",
+    urls = ["https://github.com/dfinity/rules_motoko/archive/refs/tags/v0.2.0.tar.gz"],
 )
 
 http_archive(
@@ -130,9 +130,9 @@ http_archive(
     build_file_content = """
 filegroup(name = "sources", srcs = glob(["*.mo"]), visibility = ["//visibility:public"])
       """,
-    sha256 = "582d1c90faa65047354ae7530f09160dd7e04882991287ced7ea7a72bd89d06e",
-    strip_prefix = "motoko-base-moc-0.6.24/src",
-    urls = ["https://github.com/dfinity/motoko-base/archive/refs/tags/moc-0.6.24.zip"],
+    sha256 = "b143d641b31b13fe2d21832d7372dccb067ea1a740396e9fd50af3fe9e713247",
+    strip_prefix = "motoko-base-moc-0.8.5/src",
+    urls = ["https://github.com/dfinity/motoko-base/archive/refs/tags/moc-0.8.5.tar.gz"],
 )
 
 load("@rules_motoko//motoko:repositories.bzl", "rules_motoko_dependencies")

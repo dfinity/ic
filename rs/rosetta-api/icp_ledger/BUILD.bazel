@@ -62,6 +62,9 @@ motoko_library(
 motoko_binary(
     name = "ledger_proxy",
     entry = "wasm/Proxy.mo",
+    # TODO(FI-671): Use this motoko_binary in tests instead of picking up the pre-built version.
+    # Motoko 0.8.5 emits an internal compiler error on this code, we have to wait for a fix.
+    tags = ["manual"],
     deps = [":ledger_mo_lib"],
 )
 
