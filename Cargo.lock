@@ -9119,6 +9119,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-starter-tests"
+version = "0.8.0"
+dependencies = [
+ "anyhow",
+ "garcon",
+ "ic-agent 0.22.0",
+ "reqwest",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
 name = "ic-state-layout"
 version = "0.8.0"
 dependencies = [
