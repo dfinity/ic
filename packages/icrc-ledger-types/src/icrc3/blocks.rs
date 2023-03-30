@@ -1,28 +1,11 @@
 use candid::{CandidType, Deserialize, Nat};
 use serde_bytes::ByteBuf;
 
-use crate::{
-    icrc::generic_value::Value,
-    icrc1::{account::Account, transfer::BlockIndex},
-};
+use crate::{icrc::generic_value::Value, icrc1::transfer::BlockIndex};
 
-use super::{
-    archive::{ArchivedRange, QueryBlockArchiveFn},
-    transactions::Transaction,
-};
+use super::archive::{ArchivedRange, QueryBlockArchiveFn};
 
 pub type GenericBlock = Value;
-
-// Representation of a Block supporting the Icrc3 Standard
-#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct Block {
-    pub parent_hash: Option<ByteBuf>,
-    pub transaction: Transaction,
-    pub effective_fee: Option<u64>,
-    pub timestamp: u64,
-    pub fee_collector: Option<Account>,
-    pub fee_collector_block_index: Option<u64>,
-}
 
 #[derive(Debug, CandidType, Deserialize)]
 pub struct GetBlocksResponse {
