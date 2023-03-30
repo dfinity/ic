@@ -31,3 +31,14 @@ psutil
 func-timeout
 slack-sdk
 elasticsearch
+# extra requirements that were previously in docker container, not sure what they are used for (potentially remove later)
+honeycomb-beeline
+junit-xml
+libhoney
+pygithub
+elasticsearch-dsl
+freezegun
+mypy
+pylint
+pytest-shutil
+xmltodict

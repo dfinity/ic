@@ -123,4 +123,8 @@ RUN mv /usr/bin/docker /usr/bin/docker-bin
 COPY ./files/containers.conf /etc/containers/containers.conf
 COPY ./files/docker.sh /usr/bin/docker
 
+# Install all python requirements
+COPY ./files/requirements.txt /tmp/requirements.txt
+RUN pip3 install --ignore-installed -r /tmp/requirements.txt
+
 ENTRYPOINT ["/entrypoint.sh"]
