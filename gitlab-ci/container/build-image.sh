@@ -44,6 +44,8 @@ if [ "${ONLY_BAZEL:-false}" == "true" ]; then
     exit 0
 fi
 
+cp "$REPO_ROOT"/requirements.txt "$REPO_ROOT"/gitlab-ci/container/files
+
 # build the dependencies image
 DOCKER_BUILDKIT=1 docker build "${build_args[@]}" \
     -t ic-build-src:"$DOCKER_IMG_TAG" \
