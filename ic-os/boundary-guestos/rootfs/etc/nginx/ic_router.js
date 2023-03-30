@@ -108,7 +108,7 @@ function extractCanisterIdFromReferer(r) {
   }
 
   const idx = refererHeader.indexOf("?");
-  if (i != -1) {
+  if (idx == -1) {
     return "";
   }
 
