@@ -1,28 +1,45 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("@rules_motoko//motoko:defs.bzl", "external_actor", "motoko_binary")
 
 package(default_visibility = ["//visibility:public"])
 
+# The motoko compiler fails to map float types in the Governance init arg to
+# appropriate Motoko types.
 genrule(
-    name = "lifeline_actor",
+    name = "patch_governance.did",
     srcs = [
-        "lifeline.mo",
         "//rs/nns/governance:canister/governance.did",
-        "//rs/nns/handlers/root:canister/root.did",
     ],
-    outs = ["lifeline.wasm"],
+    outs = ["patched_governance.did"],
     cmd_bash = """
-    set -e
-    mkdir idl
-    cat $(location //rs/nns/governance:canister/governance.did) | sed 's|service : (Governance) -> |service : |g' > idl/rrkah-fqaaa-aaaaa-aaaaq-cai.did
-    cp $(location //rs/nns/handlers/root:canister/root.did) idl/r7inp-6aaaa-aaaaa-aaabq-cai.did
-    $(location @build_bazel_rules_motoko_toolchain//:moc) --actor-idl idl \
-      --actor-alias governance rrkah-fqaaa-aaaaa-aaaaq-cai \
-      --actor-alias root r7inp-6aaaa-aaaaa-aaabq-cai \
-      -o lifeline.wasm \
-      -c $(location lifeline.mo)
-    cp lifeline.wasm $@
+    cat $(location //rs/nns/governance:canister/governance.did) | sed 's|service : (Governance) -> |service : |g' > $@
 """,
-    exec_tools = ["@build_bazel_rules_motoko_toolchain//:moc"],
+    visibility = ["//visibility:private"],
+)
+
+external_actor(
+    name = "governance",
+    idl = ":patched_governance.did",
+    principal = "rrkah-fqaaa-aaaaa-aaaaq-cai",
+    visibility = ["//visibility:private"],
+)
+
+external_actor(
+    name = "root",
+    idl = "//rs/nns/handlers/root:canister/root.did",
+    principal = "r7inp-6aaaa-aaaaa-aaabq-cai",
+    visibility = ["//visibility:private"],
+)
+
+motoko_binary(
+    name = "lifeline_canister",
+    entry = "lifeline.mo",
+    idl_out = "lifeline.did",
+    wasm_out = "lifeline.wasm",
+    deps = [
+        ":governance",
+        ":root",
+    ],
 )
 
 rust_library(
