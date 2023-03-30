@@ -512,6 +512,21 @@ async fn manage_neuron_(manage_neuron: ManageNeuron) -> ManageNeuronResponse {
         .await
 }
 
+#[cfg(feature = "test")]
+#[export_name = "canister_update update_neuron"]
+/// Test only feature. Update neuron parameters.
+fn update_neuron() {
+    println!("{}update_neuron", LOG_PREFIX);
+    over(candid_one, update_neuron_)
+}
+
+#[cfg(feature = "test")]
+#[candid_method(update, rename = "update_neuron")]
+/// Internal method for calling update_neuron.
+fn update_neuron_(neuron: Neuron) -> Option<GovernanceError> {
+    governance_mut().update_neuron(neuron).err()
+}
+
 /// Returns the full neuron corresponding to the neuron id or subaccount.
 #[export_name = "canister_query get_full_neuron_by_id_or_subaccount"]
 fn get_full_neuron_by_id_or_subaccount() {
@@ -844,9 +859,18 @@ fn http_request() {
 // the .wasm; using `candid::export_service` here would involve unecessary
 // runtime computation
 
+#[cfg(not(feature = "test"))]
 #[export_name = "canister_query __get_candid_interface_tmp_hack"]
 fn expose_candid() {
     over(candid, |_: ()| include_str!("governance.did").to_string())
+}
+
+#[cfg(feature = "test")]
+#[export_name = "canister_query __get_candid_interface_tmp_hack"]
+fn expose_candid() {
+    over(candid, |_: ()| {
+        include_str!("governance_test.did").to_string()
+    })
 }
 
 // When run on native this prints the candid service definition of this
@@ -868,6 +892,7 @@ fn main() {
 #[cfg(any(target_arch = "wasm32", test))]
 fn main() {}
 
+#[cfg(not(feature = "test"))]
 #[test]
 fn check_governance_candid_file() {
     let did_path = std::path::PathBuf::from(
@@ -883,9 +908,30 @@ fn check_governance_candid_file() {
     if did_contents != expected {
         panic!(
             "Generated candid definition does not match canister/governance.did. \
-            Run `bazel run :generate_did > canister/governance.did` (no nix and/or direnv) or \
-            `cargo run --bin governance-canister > canister/governance.did` in \
+            Run `bazel run :generate_did > canister/governance.did` (no nix and/or direnv) in \
             rs/nns/governance to update canister/governance.did."
+        )
+    }
+}
+
+#[cfg(feature = "test")]
+#[test]
+fn check_governance_candid_file() {
+    let did_path = std::path::PathBuf::from(
+        std::env::var_os("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR env var undefined"),
+    )
+    .join("canister/governance_test.did");
+    let did_contents = String::from_utf8(std::fs::read(did_path).unwrap()).unwrap();
+
+    // See comments in main above
+    candid::export_service!();
+    let expected = __export_service();
+
+    if did_contents != expected {
+        panic!(
+            "Generated candid definition does not match canister/governance_test.did. \
+            Run `bazel run :generate_test_did > canister/governance_test.did` (no nix and/or direnv) in \
+            rs/nns/governance to update canister/governance_test.did."
         )
     }
 }

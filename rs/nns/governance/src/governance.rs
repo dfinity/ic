@@ -2347,6 +2347,55 @@ impl Governance {
         }
     }
 
+    /// Updates a neuron in the list of neurons.
+    ///
+    /// Preconditions:
+    /// - the given `neuron` already exists in `self.proto.neurons`
+    /// - the controller principal is self-authenticating
+    /// - the hot keys are not changed (it's easy to update hot keys
+    ///   via `manage_neuron` and doing it here would require updating
+    ///   `principal_to_neuron_ids_index`)
+    /// - the followees are not changed (it's easy to update followees
+    ///   via `manage_neuron` and doing it here would require updating
+    ///   `topic_followee_index`)
+    #[cfg(feature = "test")]
+    pub fn update_neuron(&mut self, neuron: Neuron) -> Result<(), GovernanceError> {
+        let neuron_id = &neuron.id.as_ref().expect("Neuron must have a NeuronId");
+
+        // Must clobber an existing neuron.
+        let old_neuron = self.get_neuron_mut(neuron_id)?;
+
+        // The controller principal is self-authenticating.
+        if !neuron.controller.unwrap().is_self_authenticating() {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "Cannot update neuron, controller PrincipalId must be self-authenticating"
+                    .to_string(),
+            ));
+        }
+
+        // Must NOT clobber hot keys.
+        if old_neuron.hot_keys != neuron.hot_keys {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "Cannot update neuron's hot_keys via update_neuron.".to_string(),
+            ));
+        }
+
+        // Must NOT clobber followees.
+        if old_neuron.followees != neuron.followees {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "Cannot update neuron's followees via update_neuron.".to_string(),
+            ));
+        }
+
+        // Now that neuron has been validated, update old_neuron.
+        *old_neuron = neuron;
+
+        Ok(())
+    }
+
     /// Add a neuron to the list of neurons and update
     /// `principal_to_neuron_ids_index`
     ///
