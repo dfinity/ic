@@ -4,7 +4,7 @@
 
 set -eEuo pipefail
 
-: "${RCLONE_S3_ENDPOINT:=http://proxy-global.dfinity.systems:8080}"
+: "${RCLONE_S3_ENDPOINT:=http://proxy-global.dfinity.network:8080}"
 
 if (curl --connect-timeout 5 --head ${RCLONE_S3_ENDPOINT}); then
     echo "Trying rclone trough the s3 proxy '${RCLONE_S3_ENDPOINT}' ..." >&2
