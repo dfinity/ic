@@ -2,10 +2,9 @@ use crate::height_index::HeightIndex;
 use crate::metrics::{PoolMetrics, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED};
 use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
 use ic_interfaces::{
-    artifact_pool::{MutablePool, UnvalidatedArtifact},
+    artifact_pool::{MutablePool, UnvalidatedArtifact, ValidatedPoolReader},
     certification::{CertificationPool, ChangeAction, ChangeSet},
     consensus_pool::HeightIndexedPool,
-    gossip_pool::GossipPool,
     time_source::TimeSource,
 };
 use ic_logger::ReplicaLogger;
@@ -255,7 +254,7 @@ impl CertificationPool for CertificationPoolImpl {
     }
 }
 
-impl GossipPool<CertificationArtifact> for CertificationPoolImpl {
+impl ValidatedPoolReader<CertificationArtifact> for CertificationPoolImpl {
     fn contains(&self, id: &CertificationMessageId) -> bool {
         // TODO: this is a very inefficient implementation as we compute all hashes
         // every time.

@@ -204,8 +204,7 @@ pub(crate) mod tests {
     use super::*;
     use ic_artifact_pool::ingress_pool::IngressPoolImpl;
     use ic_interfaces::{
-        artifact_pool::{MutablePool, UnvalidatedArtifact},
-        gossip_pool::GossipPool,
+        artifact_pool::{MutablePool, UnvalidatedArtifact, ValidatedPoolReader},
         ingress_pool::{
             ChangeSet, IngressPool, PoolSection, UnvalidatedIngressArtifact,
             ValidatedIngressArtifact,
@@ -360,7 +359,7 @@ pub(crate) mod tests {
         }
     }
 
-    impl<'a> GossipPool<IngressArtifact> for IngressPoolTestAccess<'a> {
+    impl<'a> ValidatedPoolReader<IngressArtifact> for IngressPoolTestAccess<'a> {
         fn contains(&self, id: &IngressMessageId) -> bool {
             self.0.contains(id)
         }

@@ -9,12 +9,13 @@
 
 use crate::metrics::{EcdsaPoolMetrics, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED};
 use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
-use ic_interfaces::artifact_pool::{IntoInner, MutablePool, UnvalidatedArtifact};
+use ic_interfaces::artifact_pool::{
+    IntoInner, MutablePool, UnvalidatedArtifact, ValidatedPoolReader,
+};
 use ic_interfaces::ecdsa::{
     EcdsaChangeAction, EcdsaChangeSet, EcdsaPool, EcdsaPoolSection, EcdsaPoolSectionOp,
     EcdsaPoolSectionOps, MutableEcdsaPoolSection,
 };
-use ic_interfaces::gossip_pool::GossipPool;
 use ic_interfaces::time_source::{SysTimeSource, TimeSource};
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
@@ -418,7 +419,7 @@ impl MutablePool<EcdsaArtifact, EcdsaChangeSet> for EcdsaPoolImpl {
     }
 }
 
-impl GossipPool<EcdsaArtifact> for EcdsaPoolImpl {
+impl ValidatedPoolReader<EcdsaArtifact> for EcdsaPoolImpl {
     fn contains(&self, msg_id: &EcdsaMessageId) -> bool {
         self.unvalidated.as_pool_section().contains(msg_id)
             || self.validated.as_pool_section().contains(msg_id)

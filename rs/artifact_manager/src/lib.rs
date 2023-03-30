@@ -103,13 +103,13 @@ use ic_interfaces::{
     artifact_manager::{ArtifactClient, ArtifactProcessor, ProcessingResult},
     artifact_pool::{
         ChangeSetProducer, MutablePool, PriorityFnAndFilterProducer, UnvalidatedArtifact,
+        ValidatedPoolReader,
     },
     canister_http::CanisterHttpChangeSet,
     certification::ChangeSet as CertificationChangeSet,
     consensus_pool::ChangeSet as ConsensusChangeSet,
     dkg::ChangeSet as DkgChangeSet,
     ecdsa::EcdsaChangeSet,
-    gossip_pool::GossipPool,
     ingress_pool::{ChangeSet as IngressChangeSet, IngressPoolThrottler},
     time_source::{SysTimeSource, TimeSource},
 };
@@ -299,7 +299,7 @@ pub fn create_ingress_handlers<
     PoolIngress: MutablePool<IngressArtifact, IngressChangeSet>
         + Send
         + Sync
-        + GossipPool<IngressArtifact>
+        + ValidatedPoolReader<IngressArtifact>
         + IngressPoolThrottler
         + 'static,
     S: Fn(Advert<IngressArtifact>) + Send + 'static,
@@ -339,7 +339,7 @@ pub fn create_consensus_handlers<
     PoolConsensus: MutablePool<ConsensusArtifact, ConsensusChangeSet>
         + Send
         + Sync
-        + GossipPool<ConsensusArtifact>
+        + ValidatedPoolReader<ConsensusArtifact>
         + 'static,
     C: ChangeSetProducer<PoolConsensus, ChangeSet = ConsensusChangeSet> + 'static,
     G: PriorityFnAndFilterProducer<ConsensusArtifact, PoolConsensus> + 'static,
@@ -376,7 +376,7 @@ pub fn create_consensus_handlers<
 
 pub fn create_certification_handlers<
     PoolCertification: MutablePool<CertificationArtifact, CertificationChangeSet>
-        + GossipPool<CertificationArtifact>
+        + ValidatedPoolReader<CertificationArtifact>
         + Send
         + Sync
         + 'static,
@@ -414,7 +414,11 @@ pub fn create_certification_handlers<
 }
 
 pub fn create_dkg_handlers<
-    PoolDkg: MutablePool<DkgArtifact, DkgChangeSet> + Send + Sync + GossipPool<DkgArtifact> + 'static,
+    PoolDkg: MutablePool<DkgArtifact, DkgChangeSet>
+        + Send
+        + Sync
+        + ValidatedPoolReader<DkgArtifact>
+        + 'static,
     C: ChangeSetProducer<PoolDkg, ChangeSet = DkgChangeSet> + 'static,
     G: PriorityFnAndFilterProducer<DkgArtifact, PoolDkg> + 'static,
     S: Fn(Advert<DkgArtifact>) + Send + 'static,
@@ -442,7 +446,11 @@ pub fn create_dkg_handlers<
 }
 
 pub fn create_ecdsa_handlers<
-    PoolEcdsa: MutablePool<EcdsaArtifact, EcdsaChangeSet> + Send + Sync + GossipPool<EcdsaArtifact> + 'static,
+    PoolEcdsa: MutablePool<EcdsaArtifact, EcdsaChangeSet>
+        + Send
+        + Sync
+        + ValidatedPoolReader<EcdsaArtifact>
+        + 'static,
     C: ChangeSetProducer<PoolEcdsa, ChangeSet = EcdsaChangeSet> + 'static,
     G: PriorityFnAndFilterProducer<EcdsaArtifact, PoolEcdsa> + 'static,
     S: Fn(Advert<EcdsaArtifact>) + Send + 'static,
@@ -470,7 +478,7 @@ pub fn create_ecdsa_handlers<
 
 pub fn create_https_outcalls_handlers<
     PoolCanisterHttp: MutablePool<CanisterHttpArtifact, CanisterHttpChangeSet>
-        + GossipPool<CanisterHttpArtifact>
+        + ValidatedPoolReader<CanisterHttpArtifact>
         + Send
         + Sync
         + 'static,

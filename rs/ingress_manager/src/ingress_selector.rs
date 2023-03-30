@@ -490,9 +490,8 @@ mod tests {
     use assert_matches::assert_matches;
     use ic_ic00_types::{CanisterIdRecord, Payload, IC_00};
     use ic_interfaces::{
-        artifact_pool::{MutablePool, UnvalidatedArtifact},
+        artifact_pool::{MutablePool, UnvalidatedArtifact, ValidatedPoolReader},
         execution_environment::IngressHistoryError,
-        gossip_pool::GossipPool,
         ingress_pool::ChangeAction,
         time_source::{SysTimeSource, TimeSource},
     };

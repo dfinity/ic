@@ -4,8 +4,9 @@
 use ic_constants::{MAX_INGRESS_TTL, PERMITTED_DRIFT_AT_ARTIFACT_MANAGER};
 use ic_interfaces::{
     artifact_manager::ArtifactClient,
-    artifact_pool::{ArtifactPoolError, PriorityFnAndFilterProducer, ReplicaVersionMismatch},
-    gossip_pool::GossipPool,
+    artifact_pool::{
+        ArtifactPoolError, PriorityFnAndFilterProducer, ReplicaVersionMismatch, ValidatedPoolReader,
+    },
     ingress_pool::IngressPoolThrottler,
     time_source::TimeSource,
 };
@@ -61,7 +62,7 @@ fn check_protocol_version<T: HasVersion>(artifact: &T) -> Result<(), ReplicaVers
 }
 
 impl<
-        Pool: GossipPool<ConsensusArtifact> + Send + Sync,
+        Pool: ValidatedPoolReader<ConsensusArtifact> + Send + Sync,
         T: PriorityFnAndFilterProducer<ConsensusArtifact, Pool> + 'static,
     > ArtifactClient<ConsensusArtifact> for ConsensusClient<Pool, T>
 {
@@ -156,7 +157,7 @@ impl<Pool> IngressClient<Pool> {
     }
 }
 
-impl<Pool: GossipPool<IngressArtifact> + IngressPoolThrottler + Send + Sync + 'static>
+impl<Pool: ValidatedPoolReader<IngressArtifact> + IngressPoolThrottler + Send + Sync + 'static>
     ArtifactClient<IngressArtifact> for IngressClient<Pool>
 {
     /// The method checks whether the given signed ingress bytes constitutes a
@@ -271,7 +272,7 @@ impl<Pool, T> CertificationClient<Pool, T> {
 }
 
 impl<
-        Pool: GossipPool<CertificationArtifact> + Send + Sync,
+        Pool: ValidatedPoolReader<CertificationArtifact> + Send + Sync,
         T: PriorityFnAndFilterProducer<CertificationArtifact, Pool> + 'static,
     > ArtifactClient<CertificationArtifact> for CertificationClient<Pool, T>
 {
@@ -346,7 +347,7 @@ impl<Pool, T> DkgClient<Pool, T> {
 }
 
 impl<
-        Pool: GossipPool<DkgArtifact> + Send + Sync,
+        Pool: ValidatedPoolReader<DkgArtifact> + Send + Sync,
         T: PriorityFnAndFilterProducer<DkgArtifact, Pool> + 'static,
     > ArtifactClient<DkgArtifact> for DkgClient<Pool, T>
 {
@@ -406,7 +407,7 @@ impl<Pool, T> EcdsaClient<Pool, T> {
 }
 
 impl<
-        Pool: GossipPool<EcdsaArtifact> + Send + Sync,
+        Pool: ValidatedPoolReader<EcdsaArtifact> + Send + Sync,
         T: PriorityFnAndFilterProducer<EcdsaArtifact, Pool> + 'static,
     > ArtifactClient<EcdsaArtifact> for EcdsaClient<Pool, T>
 {
@@ -447,7 +448,7 @@ impl<Pool, T> CanisterHttpClient<Pool, T> {
 }
 
 impl<
-        Pool: GossipPool<CanisterHttpArtifact> + Send + Sync,
+        Pool: ValidatedPoolReader<CanisterHttpArtifact> + Send + Sync,
         T: PriorityFnAndFilterProducer<CanisterHttpArtifact, Pool> + 'static,
     > ArtifactClient<CanisterHttpArtifact> for CanisterHttpClient<Pool, T>
 {

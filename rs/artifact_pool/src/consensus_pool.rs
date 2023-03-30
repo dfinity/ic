@@ -9,13 +9,12 @@ use crate::{
 };
 use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
 use ic_interfaces::{
-    artifact_pool::MutablePool,
+    artifact_pool::{MutablePool, ValidatedPoolReader},
     consensus_pool::{
         ChangeAction, ChangeSet, ConsensusBlockCache, ConsensusBlockChain, ConsensusPool,
         ConsensusPoolCache, HeightIndexedPool, HeightRange, PoolSection,
         UnvalidatedConsensusArtifact, ValidatedConsensusArtifact,
     },
-    gossip_pool::GossipPool,
     time_source::TimeSource,
 };
 use ic_logger::ReplicaLogger;
@@ -572,7 +571,7 @@ impl MutablePool<ConsensusArtifact, ChangeSet> for ConsensusPoolImpl {
     }
 }
 
-impl GossipPool<ConsensusArtifact> for ConsensusPoolImpl {
+impl ValidatedPoolReader<ConsensusArtifact> for ConsensusPoolImpl {
     fn contains(&self, id: &ConsensusMessageId) -> bool {
         self.unvalidated.contains(id) || self.validated.contains(id)
     }
