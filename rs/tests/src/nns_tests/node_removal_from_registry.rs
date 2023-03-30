@@ -22,9 +22,9 @@ Success::
 end::catalog[] */
 
 use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::test_env::{SshKeyGen, TestEnv};
+use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt, ADMIN,
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt,
 };
 use crate::nns::{submit_external_proposal_with_test_id, vote_execute_proposal_assert_executed};
 use crate::util::runtime_from_url;
@@ -38,7 +38,6 @@ use registry_canister::mutations::node_management::do_remove_nodes::RemoveNodesP
 use slog::info;
 
 pub fn config(env: TestEnv) {
-    env.ssh_keygen(ADMIN).expect("ssh-keygen failed");
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)

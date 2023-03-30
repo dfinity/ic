@@ -7,7 +7,6 @@ use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::retry;
 use crate::driver::test_env_api::HasDependencies;
 use crate::driver::test_env_api::HasVmName;
-use crate::driver::test_env_api::ADMIN;
 use crate::driver::test_env_api::{HasTestEnv, SshSession};
 use crate::driver::universal_vm::{DeployedUniversalVm, UniversalVm, UniversalVms};
 use anyhow::bail;
@@ -89,7 +88,7 @@ fn await_docker_start(universal_vm: &DeployedUniversalVm) {
 
         info!(log, "Obtaining SSH session for {} ...", uvm_name);
 
-        let session = universal_vm.get_ssh_session(ADMIN)?;
+        let session = universal_vm.get_ssh_session()?;
 
         info!(log, "Obtained SSH session for {}", uvm_name);
 
@@ -130,7 +129,7 @@ fn await_docker_completion(universal_vm: &DeployedUniversalVm, timeout: Duration
     let f = || -> Result<(), anyhow::Error> {
         let _log = env.logger();
         let uvm_name = universal_vm.vm_name();
-        let session = universal_vm.get_ssh_session(ADMIN)?;
+        let session = universal_vm.get_ssh_session()?;
         let is_docker_running = universal_vm.block_on_bash_script_from_session(
             &session,
             &format!(
@@ -167,10 +166,7 @@ fn fetch_docker_log(universal_vm: &DeployedUniversalVm) {
         let uvm_name = universal_vm.vm_name();
         let target_path = env.base_path().join(format!("{}.log", &uvm_name));
         let r = {
-            let session = universal_vm
-                .block_on_ssh_session(ADMIN)
-                .unwrap_or_else(|_| panic!("Failed to create session for {}", &uvm_name));
-
+            let session = universal_vm.get_ssh_session()?;
             // Save Docker logs
             universal_vm.block_on_bash_script_from_session(
                 &session,

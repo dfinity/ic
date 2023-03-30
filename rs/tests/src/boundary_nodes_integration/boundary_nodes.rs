@@ -20,11 +20,10 @@ use crate::{
     driver::{
         boundary_node::{BoundaryNode, BoundaryNodeVm},
         ic::{InternetComputer, Subnet},
-        test_env::{SshKeyGen, TestEnv},
+        test_env::TestEnv,
         test_env_api::{
             retry_async, HasPublicApiUrl, HasTopologySnapshot, HasVm, HasWasm, IcNodeContainer,
-            NnsInstallationExt, RetrieveIpv4Addr, SshSession, ADMIN, READY_WAIT_TIMEOUT,
-            RETRY_BACKOFF,
+            NnsInstallationExt, RetrieveIpv4Addr, SshSession, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
         },
     },
     util::{assert_create_agent, delay},
@@ -100,7 +99,7 @@ impl Drop for PanicHandler {
 }
 
 fn exec_ssh_command(vm: &dyn SshSession, command: &str) -> Result<(String, i32), Error> {
-    let mut channel = vm.block_on_ssh_session(ADMIN)?.channel_session()?;
+    let mut channel = vm.block_on_ssh_session()?.channel_session()?;
 
     channel.exec(command)?;
 
@@ -195,8 +194,6 @@ pub fn mk_setup(bn_https_config: BoundaryNodeHttpsConfig) -> impl Fn(TestEnv) {
 }
 
 fn setup(bn_https_config: BoundaryNodeHttpsConfig, env: TestEnv) {
-    env.ssh_keygen(ADMIN).expect("ssh-keygen failed");
-
     let logger = env.logger();
 
     InternetComputer::new()

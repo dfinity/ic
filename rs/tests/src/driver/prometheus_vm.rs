@@ -12,13 +12,13 @@ use serde_json::json;
 use slog::{debug, info};
 
 use crate::driver::{
+    constants::SSH_USERNAME,
     farm::HostFeature,
     ic::{AmountOfMemoryKiB, ImageSizeGiB, NrOfVCPUs, VmAllocationStrategy, VmResources},
     resource::{DiskImage, ImageType},
     test_env::TestEnv,
     test_env_api::{
         retry, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, SshSession, TopologySnapshot,
-        ADMIN,
     },
     test_setup::GroupSetup,
     universal_vm::{UniversalVm, UniversalVms},
@@ -131,7 +131,7 @@ mkdir -p -m 755 {PROMETHEUS_SCRAPING_TARGETS_DIR}
 for name in replica orchestrator node_exporter; do
   echo '[]' > "{PROMETHEUS_SCRAPING_TARGETS_DIR}/$name.json"
 done
-chown -R {ADMIN}:users {PROMETHEUS_SCRAPING_TARGETS_DIR}
+chown -R {SSH_USERNAME}:users {PROMETHEUS_SCRAPING_TARGETS_DIR}
 "#
                 ),
             )
@@ -209,7 +209,7 @@ impl HasPrometheus for TestEnv {
         // Setup an SSH session to the prometheus VM which we'll use to scp the JSON files.
         let deployed_prometheus_vm = self.get_deployed_universal_vm(&vm_name).unwrap();
         let session = deployed_prometheus_vm
-            .block_on_ssh_session(ADMIN)
+            .block_on_ssh_session()
             .unwrap_or_else(|e| panic!("Failed to setup SSH session to {vm_name} because: {e:?}!"));
 
         // scp the scraping target JSON files to prometheus VM.
@@ -253,7 +253,7 @@ impl HasPrometheus for TestEnv {
         );
 
         // First create a tarball of the p8s data directory.
-        let tarball_full_path = PathBuf::from("/home").join(ADMIN).join(tarball);
+        let tarball_full_path = PathBuf::from("/home").join(SSH_USERNAME).join(tarball);
         // Note that p8s is configured with --enable-feature=memory-snapshot-on-shutdown.
         // This causes p8s to snapshot its memory to its data directory on shutdown.
         // This means we can remove most of the contents of the wal directory
@@ -269,7 +269,7 @@ sudo tar -cf "{tarball_full_path:?}" \
     "#,
         );
         let session = deployed_prometheus_vm
-            .block_on_ssh_session(ADMIN)
+            .block_on_ssh_session()
             .expect("Failed to setup SSH session to {vm_name}");
         deployed_prometheus_vm
             .block_on_bash_script_from_session(&session, create_tarball_script)

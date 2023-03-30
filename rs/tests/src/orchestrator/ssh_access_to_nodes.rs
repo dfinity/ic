@@ -14,7 +14,7 @@ end::catalog[] */
 use crate::{
     driver::{
         ic::InternetComputer,
-        test_env::{SshKeyGen, TestEnv},
+        test_env::TestEnv,
         test_env_api::{
             HasPublicApiUrl, HasTopologySnapshot, IcNodeSnapshot, NnsInstallationExt,
             SubnetSnapshot, TopologySnapshot,
@@ -35,9 +35,6 @@ use ic_registry_subnet_type::SubnetType;
 use std::net::IpAddr;
 
 pub fn config(env: TestEnv) {
-    env.ssh_keygen("admin")
-        .expect("Failed to generate ssh admin keys");
-
     InternetComputer::new()
         .add_fast_single_node_subnet(SubnetType::System)
         .add_fast_single_node_subnet(SubnetType::Application)

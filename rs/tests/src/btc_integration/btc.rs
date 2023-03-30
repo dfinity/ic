@@ -23,7 +23,7 @@ use crate::ckbtc::lib::install_bitcoin_canister;
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
     retry, retry_async, HasDependencies, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-    SshSession, ADMIN, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
+    SshSession, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
 };
 use crate::driver::universal_vm::UniversalVms;
 use crate::util::runtime_from_url;
@@ -82,8 +82,8 @@ pub fn config(env: TestEnv) {
 fn get_bitcoind_log(env: &TestEnv) {
     let f = || -> Result<(), anyhow::Error> {
         let r = {
-            let universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME).unwrap();
-            let session = universal_vm.block_on_ssh_session(ADMIN).unwrap();
+            let universal_vm = env.get_deployed_universal_vm(UNIVERSAL_VM_NAME)?;
+            let session = universal_vm.get_ssh_session()?;
 
             // Give log file user permission to copy it from the host.
             universal_vm.block_on_bash_script_from_session(

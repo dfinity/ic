@@ -22,7 +22,10 @@ use std::time::Duration;
 ///   |- tear_down/
 ///         |- ic_prep
 ///         |- test.log          <-- prefix :: finalization_log
-
+/// Username for the ssh session.
+pub const SSH_USERNAME: &str = "admin";
+// Name of the network interfaces on the Node.
+pub const DEVICE_NAME: &str = "enp1s0";
 // Name of the tests directory within the group directory.
 pub const TESTS_DIR: &str = "tests";
 

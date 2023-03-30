@@ -26,10 +26,10 @@ Success::
 end::catalog[] */
 
 use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::test_env::{SshKeyGen, TestEnv};
+use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
     HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, NnsInstallationExt,
-    SshSession, ADMIN,
+    SshSession,
 };
 use crate::nns::{
     await_proposal_execution, submit_external_proposal_with_test_id,
@@ -63,7 +63,6 @@ enum Proposal<T: CandidType> {
 }
 
 pub fn config(env: TestEnv) {
-    env.ssh_keygen(ADMIN).expect("ssh-keygen failed");
     InternetComputer::new()
         .add_subnet(Subnet::fast(SubnetType::System, 1))
         .add_subnet(Subnet::fast(SubnetType::Application, 2))
@@ -322,7 +321,7 @@ pub fn override_firewall_rules_with_priority(env: TestEnv) {
         .next()
         .unwrap();
 
-    let session = node.block_on_ssh_session(ADMIN).unwrap();
+    let session = node.block_on_ssh_session().unwrap();
     info!(
         log,
         "Calling curl {} from node {}",

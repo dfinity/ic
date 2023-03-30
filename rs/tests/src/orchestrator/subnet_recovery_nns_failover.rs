@@ -23,9 +23,10 @@ end::catalog[] */
 
 use super::utils::rw_message::install_nns_and_check_progress;
 use crate::canister_http::lib::get_universal_vm_address;
+use crate::driver::constants::SSH_USERNAME;
 use crate::driver::driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR;
 use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::test_env::SshKeyGen;
+
 use crate::driver::universal_vm::{insert_file_to_config, UniversalVm, UniversalVms};
 use crate::driver::{test_env::TestEnv, test_env_api::*};
 use crate::orchestrator::utils::rw_message::{
@@ -48,7 +49,6 @@ const SUBNET_SIZE: usize = 3;
 pub const UNIVERSAL_VM_NAME: &str = "httpbin";
 
 pub fn setup(env: TestEnv) {
-    env.ssh_keygen(ADMIN).expect("ssh-keygen failed");
     InternetComputer::new()
         .with_name("broken")
         .add_subnet(
@@ -157,7 +157,7 @@ pub fn test(env: TestEnv) {
         dir: recovery_dir,
         nns_url: parent_nns_node.get_public_url(),
         replica_version: Some(ic_version.clone()),
-        key_file: Some(ssh_authorized_priv_keys_dir.join(ADMIN)),
+        key_file: Some(ssh_authorized_priv_keys_dir.join(SSH_USERNAME)),
         test_mode: true,
     };
     let subnet_args = NNSRecoveryFailoverNodesArgs {

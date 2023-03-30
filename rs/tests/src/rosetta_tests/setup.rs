@@ -22,7 +22,6 @@ use crate::driver::{
     test_env::TestEnv,
     test_env_api::{
         HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, SubnetSnapshot,
-        ADMIN,
     },
 };
 use crate::rosetta_tests::lib::hex2addr;
@@ -324,7 +323,9 @@ echo \"Rosetta container started \"
     let deployed_universal_vm = env.get_deployed_universal_vm(vm_name).unwrap();
     let vm = deployed_universal_vm.get_vm().unwrap();
     // let _vm_ipv6 = vm.ipv6;
-    let session = deployed_universal_vm.block_on_ssh_session(ADMIN).unwrap();
+    let session = deployed_universal_vm
+        .block_on_ssh_session()
+        .expect("Failed to establish ssh session.");
     let out = deployed_universal_vm
         .block_on_bash_script_from_session(&session, "uname -a")
         .unwrap();

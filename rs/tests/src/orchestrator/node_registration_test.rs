@@ -16,7 +16,7 @@ end::catalog[] */
 
 use super::utils::rw_message::install_nns_and_check_progress;
 use super::utils::ssh_access::execute_bash_command;
-use crate::driver::test_env::SshKeyGen;
+
 use crate::driver::{ic::InternetComputer, test_env::TestEnv, test_env_api::*};
 use crate::nns::get_governance_canister;
 use crate::util::{block_on, runtime_from_url};
@@ -37,7 +37,6 @@ use slog::info;
 use std::str::FromStr;
 
 pub fn config(env: TestEnv) {
-    env.ssh_keygen(ADMIN).expect("ssh-keygen failed");
     InternetComputer::new()
         .add_fast_single_node_subnet(SubnetType::System)
         .with_unassigned_nodes(1)
@@ -139,7 +138,7 @@ EOT
     let node = topo.unassigned_nodes().next().expect("no unassigned nodes");
     info!(logger, "unassigned node: {:?}", node.get_ip_addr());
     let s = node
-        .block_on_ssh_session(ADMIN)
+        .block_on_ssh_session()
         .expect("Failed to establish SSH session");
     info!(logger, "Rotate keys on the unassigned node and restart it",);
 

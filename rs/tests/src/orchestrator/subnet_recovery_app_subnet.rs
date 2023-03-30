@@ -28,9 +28,10 @@ Success::
 end::catalog[] */
 
 use super::utils::rw_message::install_nns_and_check_progress;
+use crate::driver::constants::SSH_USERNAME;
 use crate::driver::driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR};
 use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::test_env::SshKeyGen;
+
 use crate::driver::{test_env::TestEnv, test_env_api::*};
 use crate::orchestrator::utils::rw_message::{
     can_read_msg, cert_state_makes_progress_with_retries, store_message,
@@ -53,7 +54,6 @@ const UNASSIGNED_NODES: i32 = 3;
 /// Setup an IC with the given number of unassigned nodes and
 /// an app subnet with the given number of nodes
 pub fn setup(app_nodes: i32, unassigned_nodes: i32, env: TestEnv) {
-    env.ssh_keygen(ADMIN).expect("ssh-keygen failed");
     let mut ic = InternetComputer::new()
         .add_subnet(
             Subnet::fast_single_node(SubnetType::System)
@@ -204,7 +204,7 @@ pub fn app_subnet_recovery_test(env: TestEnv, upgrade: bool, ecdsa: bool) {
     let ssh_authorized_priv_keys_dir = env.get_path(SSH_AUTHORIZED_PRIV_KEYS_DIR);
     let ssh_authorized_pub_keys_dir = env.get_path(SSH_AUTHORIZED_PUB_KEYS_DIR);
 
-    let pub_key = file_sync_helper::read_file(&ssh_authorized_pub_keys_dir.join(ADMIN))
+    let pub_key = file_sync_helper::read_file(&ssh_authorized_pub_keys_dir.join(SSH_USERNAME))
         .expect("Couldn't read public key");
 
     let recovery_dir = env.get_dependency_path("rs/tests");
@@ -215,7 +215,7 @@ pub fn app_subnet_recovery_test(env: TestEnv, upgrade: bool, ecdsa: bool) {
         dir: recovery_dir,
         nns_url: nns_node.get_public_url(),
         replica_version: Some(master_version.clone()),
-        key_file: Some(ssh_authorized_priv_keys_dir.join(ADMIN)),
+        key_file: Some(ssh_authorized_priv_keys_dir.join(SSH_USERNAME)),
         test_mode: true,
     };
 

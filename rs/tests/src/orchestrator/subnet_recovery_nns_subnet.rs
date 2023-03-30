@@ -18,9 +18,10 @@ Success::
 end::catalog[] */
 
 use super::utils::rw_message::install_nns_and_check_progress;
+use crate::driver::constants::SSH_USERNAME;
 use crate::driver::driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR;
 use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::test_env::SshKeyGen;
+
 use crate::driver::{test_env::TestEnv, test_env_api::*};
 use crate::orchestrator::utils::rw_message::{
     can_read_msg, cannot_store_msg, cert_state_makes_progress_with_retries, store_message,
@@ -38,7 +39,6 @@ const DKG_INTERVAL: u64 = 9;
 const SUBNET_SIZE: usize = 3;
 
 pub fn setup(env: TestEnv) {
-    env.ssh_keygen(ADMIN).expect("ssh-keygen failed");
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
@@ -109,7 +109,7 @@ pub fn test(env: TestEnv) {
         dir: recovery_dir,
         nns_url: upload_node.get_public_url(),
         replica_version: Some(ic_version),
-        key_file: Some(ssh_authorized_priv_keys_dir.join(ADMIN)),
+        key_file: Some(ssh_authorized_priv_keys_dir.join(SSH_USERNAME)),
         test_mode: true,
     };
 

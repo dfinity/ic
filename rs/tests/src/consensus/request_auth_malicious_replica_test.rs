@@ -27,9 +27,9 @@ end::catalog[] */
 
 use crate::crypto::request_signature_test::{expiry_time, random_ecdsa_identity, sign_update};
 use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::test_env::{SshKeyGen, TestEnv};
+use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
-    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, ADMIN,
+    HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot,
 };
 use crate::util::*;
 use ic_agent::export::Principal;
@@ -47,7 +47,6 @@ use std::convert::TryFrom;
 use url::Url;
 
 pub fn config(env: TestEnv) {
-    env.ssh_keygen(ADMIN).expect("ssh-keygen failed");
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)

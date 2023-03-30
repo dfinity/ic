@@ -25,7 +25,7 @@ use crate::util::block_on;
 use crate::{
     driver::{
         ic::{InternetComputer, Subnet},
-        test_env::{SshKeyGen, TestEnv},
+        test_env::TestEnv,
         test_env_api::*,
     },
     orchestrator::utils::upgrade::get_assigned_replica_version,
@@ -42,7 +42,6 @@ const SUBNET_SIZE: usize = 4;
 const NUM_READ_RETRIES: usize = 10;
 
 pub fn config(env: TestEnv) {
-    env.ssh_keygen(ADMIN).expect("ssh admin keygen failed");
     InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
@@ -88,7 +87,7 @@ pub fn test(test_env: TestEnv) {
     info!(logger, "Upgrade started");
 
     let sess = nns_node
-        .block_on_ssh_session(ADMIN)
+        .block_on_ssh_session()
         .expect("Failed to establish SSH session");
 
     info!(logger, "Wait for 'hash mismatch' in the replica's log.");
@@ -113,7 +112,7 @@ pub fn test(test_env: TestEnv) {
     info!(logger, "Stopping orchestrator...");
     for n in &nodes {
         let s = n
-            .block_on_ssh_session(ADMIN)
+            .block_on_ssh_session()
             .expect("Failed to establish SSH session");
         execute_bash_command(&s, "sudo systemctl stop ic-replica".to_string()).unwrap();
     }
@@ -133,7 +132,7 @@ pub fn test(test_env: TestEnv) {
     );
     for n in &nodes {
         let s = n
-            .block_on_ssh_session(ADMIN)
+            .block_on_ssh_session()
             .expect("Failed to establish SSH session");
         if let Err(err) = execute_bash_command(&s, command.clone()) {
             panic!("{}", err)
@@ -143,7 +142,7 @@ pub fn test(test_env: TestEnv) {
     info!(logger, "Starting orchestrator...");
     for n in &nodes {
         let s = n
-            .block_on_ssh_session(ADMIN)
+            .block_on_ssh_session()
             .expect("Failed to establish SSH session");
         execute_bash_command(&s, "sudo systemctl start ic-replica".to_string()).unwrap();
     }
