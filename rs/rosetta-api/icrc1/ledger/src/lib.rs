@@ -6,6 +6,7 @@ use candid::{
     CandidType, Principal,
 };
 use ic_base_types::PrincipalId;
+use ic_crypto_tree_hash::{Label, MixedHashTree};
 use ic_icrc1::blocks::icrc1_block_from_encoded;
 use ic_icrc1::{Block, LedgerBalances, Transaction};
 use ic_ledger_canister_core::{
@@ -363,15 +364,26 @@ impl Ledger {
     /// The canister code must call set_certified_data with the value this function returns after
     /// each successful modification of the ledger.
     pub fn root_hash(&self) -> [u8; 32] {
-        use ic_crypto_tree_hash::{Label, MixedHashTree as T};
-        let tree = match self.blockchain().last_hash {
-            Some(hash) => T::Labeled(
-                Label::from("tip_hash"),
-                Box::new(T::Leaf(hash.as_slice().to_vec())),
-            ),
-            None => T::Empty,
-        };
-        tree.digest().0
+        self.construct_hash_tree().digest().0
+    }
+
+    pub fn construct_hash_tree(&self) -> MixedHashTree {
+        match self.blockchain().last_hash {
+            Some(hash) => {
+                let last_block_index = self.blockchain().chain_length().checked_sub(1).unwrap();
+                MixedHashTree::Fork(Box::new((
+                    MixedHashTree::Labeled(
+                        Label::from("last_block_index"),
+                        Box::new(MixedHashTree::Leaf(last_block_index.to_be_bytes().to_vec())),
+                    ),
+                    MixedHashTree::Labeled(
+                        Label::from("tip_hash"),
+                        Box::new(MixedHashTree::Leaf(hash.as_slice().to_vec())),
+                    ),
+                )))
+            }
+            None => MixedHashTree::Empty,
+        }
     }
 
     fn query_blocks<ArchiveFn, B>(

@@ -2,6 +2,7 @@ use std::convert::TryFrom;
 
 use candid::{Encode, Nat, Principal};
 use canister_test::{Canister, PrincipalId};
+use ic_crypto_tree_hash::{LookupStatus, MixedHashTree};
 use ic_icrc1_ledger::{InitArgs, LedgerArgument};
 use ic_nns_test_utils::itest_helpers::install_rust_canister_from_path;
 use ic_registry_subnet_type::SubnetType;
@@ -224,10 +225,26 @@ pub fn test(env: TestEnv) {
         assert_eq!(Nat::from(0), blocks_response.first_index);
         assert_eq!(Nat::from(2), blocks_response.chain_length);
 
-        let block_certificate = agent.get_last_block_certificate().await.unwrap();
-        assert!(block_certificate.certificate.is_some());
-        assert_eq!(Nat::from(1), block_certificate.block_index);
+        let data_certificate = agent.get_data_certificate().await.unwrap();
+        assert!(data_certificate.certificate.is_some());
+
+        use LookupStatus::Found;
+        let hash_tree: MixedHashTree = serde_cbor::from_slice(&data_certificate.hash_tree).unwrap();
+
+        assert_eq!(
+            hash_tree.lookup(&[b"last_block_index"]),
+            Found(&mleaf((1_u64).to_be_bytes()))
+        );
+
+        assert_eq!(
+            hash_tree.lookup(&[b"tip_hash"]),
+            Found(&mleaf(blocks_response.blocks[1].hash()))
+        );
     });
+}
+
+fn mleaf<B: AsRef<[u8]>>(blob: B) -> MixedHashTree {
+    MixedHashTree::Leaf(blob.as_ref().to_vec())
 }
 
 pub async fn install_icrc1_ledger<'a>(

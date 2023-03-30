@@ -3,7 +3,7 @@ use ic_agent::Agent;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
-use icrc_ledger_types::icrc3::blocks::{BlockCertificate, GetBlocksRequest, GetBlocksResponse};
+use icrc_ledger_types::icrc3::blocks::{DataCertificate, GetBlocksRequest, GetBlocksResponse};
 
 #[derive(Debug)]
 pub enum Icrc1AgentError {
@@ -181,12 +181,10 @@ impl Icrc1Agent {
         )?)
     }
 
-    pub async fn get_last_block_certificate(&self) -> Result<BlockCertificate, Icrc1AgentError> {
+    pub async fn get_data_certificate(&self) -> Result<DataCertificate, Icrc1AgentError> {
         Ok(Decode!(
-            &self
-                .query("get_last_block_certificate", &Encode!()?)
-                .await?,
-            BlockCertificate
+            &self.query("get_data_certificate", &Encode!()?).await?,
+            DataCertificate
         )?)
     }
 }

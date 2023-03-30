@@ -15,7 +15,7 @@ use ic_ledger_canister_core::ledger::{
 use ic_ledger_core::{timestamp::TimeStamp, tokens::Tokens};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
-use icrc_ledger_types::icrc3::blocks::BlockCertificate;
+use icrc_ledger_types::icrc3::blocks::DataCertificate;
 use icrc_ledger_types::{
     icrc::generic_metadata_value::MetadataValue as Value,
     icrc3::{
@@ -397,12 +397,13 @@ fn get_blocks(req: GetBlocksRequest) -> GetBlocksResponse {
 
 #[query]
 #[candid_method(query)]
-fn get_last_block_certificate() -> BlockCertificate {
-    let last_block_index =
-        Access::with_ledger(|ledger| ledger.blockchain().chain_length().checked_sub(1).unwrap());
-    BlockCertificate {
-        block_index: last_block_index,
+fn get_data_certificate() -> DataCertificate {
+    let hash_tree = Access::with_ledger(|ledger| ledger.construct_hash_tree());
+    let mut tree_buf = vec![];
+    ciborium::ser::into_writer(&hash_tree, &mut tree_buf).unwrap();
+    DataCertificate {
         certificate: ic_cdk::api::data_certificate().map(ByteBuf::from),
+        hash_tree: ByteBuf::from(tree_buf),
     }
 }
 

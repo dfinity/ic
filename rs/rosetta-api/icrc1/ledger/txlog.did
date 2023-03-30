@@ -181,13 +181,13 @@ type GetBlocksResponse = record {
 };
 
 // Certificate for the block at `block_index`.
-type BlockCertificate = record {
-    block_index : nat64;
+type DataCertificate = record {
     certificate : opt blob;
+    hash_tree : blob;
 }
 
 service : {
   get_transactions : (GetTransactionsRequest) -> (GetTransactionsResponse) query;
   get_blocks : (GetBlocksArgs) -> (GetBlocksResponse) query;  
-  get_last_block_certificate : () -> (BlockCertificate) query;
+  get_data_certificate : () -> (DataCertificate) query;
 }
