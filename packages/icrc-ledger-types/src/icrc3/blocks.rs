@@ -49,7 +49,7 @@ impl GetBlocksRequest {
 }
 
 #[derive(Debug, CandidType, Deserialize)]
-pub struct BlockCertificate {
-    pub block_index: u64,
+pub struct DataCertificate {
     pub certificate: Option<serde_bytes::ByteBuf>,
+    pub hash_tree: serde_bytes::ByteBuf,
 }
