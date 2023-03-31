@@ -177,20 +177,13 @@ impl FractionalDeveloperVotingPower {
                 .clone(),
         };
 
-        let default_followees = parameters
-            .default_followees
-            .as_ref()
-            .expect("NervousSystemParameters.default_followees must be present")
-            .followees
-            .clone();
-
         Ok(Neuron {
             id: Some(NeuronId {
                 id: subaccount.to_vec(),
             }),
             permissions: vec![permission],
             cached_neuron_stake_e8s: stake_e8s,
-            followees: default_followees,
+            followees: btreemap! {},
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(dissolve_delay_seconds)),
             voting_power_percentage_multiplier,
             vesting_period_seconds,

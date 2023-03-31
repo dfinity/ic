@@ -850,7 +850,7 @@ pub enum TargetLedger {
 
 impl GovernanceCanisterFixtureBuilder {
     pub fn new() -> Self {
-        GovernanceCanisterFixtureBuilder::default()
+        Self::default()
     }
 
     pub fn create(self) -> GovernanceCanisterFixture {

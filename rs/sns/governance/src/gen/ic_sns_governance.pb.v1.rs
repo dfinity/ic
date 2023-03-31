@@ -956,6 +956,9 @@ pub struct NervousSystemParameters {
     /// <https://wiki.internetcomputer.org/wiki/Network_Nervous_System#Proposal_decision_and_wait-for-quiet>
     #[prost(uint64, optional, tag = "18")]
     pub wait_for_quiet_deadline_increase_seconds: ::core::option::Option<u64>,
+    /// TODO NNS1-2169: This field currently has no effect.
+    /// TODO NNS1-2169: Design and implement this feature.
+    ///
     /// The set of default followees that every newly created neuron will follow
     /// per function. This is specified as a mapping of proposal functions to followees.
     ///
