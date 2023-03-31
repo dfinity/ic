@@ -10,7 +10,6 @@ docker-generate-runner-list:
   script:
     -  |
         set -euo pipefail
-        pip install -r requirements.txt
         ./gitlab-ci/src/gitlab_runners_check/create-gitlab-runner-jobs.py
   artifacts:
     paths:
