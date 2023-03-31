@@ -9,6 +9,7 @@ use ic_protobuf::{
     state::{
         canister_metadata::v1::{self as pb_canister_metadata},
         canister_state_bits::v1::{self as pb_canister_state_bits, ConsumedCyclesByUseCase},
+        ingress::v1 as pb_ingress,
         queues::v1 as pb_queues,
         system_metadata::v1 as pb_metadata,
     },
@@ -854,11 +855,7 @@ impl StateLayout {
     ///   h ∈ self.diverged_state_heights()
     pub fn remove_diverged_state_marker(&self, height: Height) -> Result<(), LayoutError> {
         let path = self.diverged_state_marker_path(height);
-        std::fs::remove_file(&path).map_err(|err| LayoutError::IoError {
-            path,
-            message: "Failed to remove diverged state marker.".to_string(),
-            io_err: err,
-        })
+        remove_existing_file(&path)
     }
 
     /// Removes a diverged checkpoint given its height.
@@ -1209,6 +1206,10 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
         self.root.join("system_metadata.pbuf").into()
     }
 
+    pub fn ingress_history(&self) -> ProtoFileWith<pb_ingress::IngressHistoryState, Permissions> {
+        self.root.join("ingress_history.pbuf").into()
+    }
+
     pub fn subnet_queues(&self) -> ProtoFileWith<pb_queues::CanisterQueues, Permissions> {
         self.root.join("subnet_queues.pbuf").into()
     }
@@ -1320,6 +1321,26 @@ fn open_for_read(path: &Path) -> Result<std::fs::File, LayoutError> {
         })
 }
 
+/// Removes the given file, returning an error if the file does not exist, as
+/// well as for any other I/O error.
+fn remove_existing_file(path: &Path) -> Result<(), LayoutError> {
+    std::fs::remove_file(path).map_err(|err| LayoutError::IoError {
+        path: path.to_path_buf(),
+        message: "failed to remove file from disk".to_string(),
+        io_err: err,
+    })
+}
+
+/// Tries removing the given file. Returns `Ok(())` if the file was deleted or
+/// did not exist; or a `LayoutError::IoError` otherwise.
+fn try_remove_file(path: &Path) -> Result<(), LayoutError> {
+    if path.exists() {
+        remove_existing_file(path)
+    } else {
+        Ok(())
+    }
+}
+
 pub struct ProtoFileWith<T, Permissions> {
     path: PathBuf,
     content_tag: PhantomData<T>,
@@ -1329,6 +1350,11 @@ pub struct ProtoFileWith<T, Permissions> {
 impl<T, Permission> ProtoFileWith<T, Permission> {
     pub fn raw_path(&self) -> &Path {
         &self.path
+    }
+
+    /// Removes the file if it exists, else does nothing.
+    pub fn try_remove_file(&self) -> Result<(), LayoutError> {
+        try_remove_file(&self.path)
     }
 }
 
@@ -1474,14 +1500,7 @@ where
     }
 
     pub fn delete_file(&self) -> Result<(), LayoutError> {
-        if self.path.exists() {
-            std::fs::remove_file(&self.path).map_err(|err| LayoutError::IoError {
-                path: self.path.clone(),
-                message: "failed to delete wasm binary from disk".to_string(),
-                io_err: err,
-            })?
-        }
-        Ok(())
+        try_remove_file(&self.path)
     }
 }
 

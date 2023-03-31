@@ -10,6 +10,7 @@ pub mod tree_diff;
 pub mod tree_hash;
 
 use crate::{
+    checkpoint::SEPARATE_INGRESS_HISTORY,
     manifest::{compute_bundled_manifest, MAX_SUPPORTED_STATE_SYNC_VERSION},
     state_sync::chunkable::cache::StateSyncCache,
     tip::{spawn_tip_thread, TipRequest},
@@ -2223,6 +2224,7 @@ impl StateManagerImpl {
                 &self.metrics.checkpoint_metrics,
                 &mut scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS),
                 self.get_fd_factory(),
+                SEPARATE_INGRESS_HISTORY,
             )
         };
         let elapsed = start.elapsed();

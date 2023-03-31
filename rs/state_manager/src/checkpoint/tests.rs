@@ -1,13 +1,12 @@
 use super::*;
 use crate::{spawn_tip_thread, StateManagerMetrics, NUMBER_OF_CHECKPOINT_THREADS};
-use ic_base_types::NumSeconds;
+use ic_base_types::{NumBytes, NumSeconds};
 use ic_ic00_types::CanisterStatusType;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::execution_state::WasmBinary,
-    canister_state::execution_state::WasmMetadata,
-    page_map::{self, TestPageAllocatorFileDescriptorImpl},
+    canister_state::execution_state::{WasmBinary, WasmMetadata},
+    page_map::{Buffer, TestPageAllocatorFileDescriptorImpl},
     testing::ReplicatedStateTesting,
     CallContextManager, CanisterStatus, ExecutionState, ExportedFunctions, NumWasmPages, PageIndex,
 };
@@ -22,9 +21,13 @@ use ic_test_utilities::{
 };
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_tmpdir::tmpdir;
-use ic_types::malicious_flags::MaliciousFlags;
-use ic_types::messages::StopCanisterContext;
-use ic_types::{CanisterId, Cycles, ExecutionRound, Height};
+use ic_types::{
+    ingress::{IngressState, IngressStatus},
+    malicious_flags::MaliciousFlags,
+    messages::StopCanisterContext,
+    time::UNIX_EPOCH,
+    CanisterId, Cycles, ExecutionRound, Height,
+};
 use ic_wasm_types::CanisterModule;
 use std::collections::BTreeSet;
 
@@ -60,10 +63,11 @@ fn mark_readonly(path: &std::path::Path) -> std::io::Result<()> {
     std::fs::set_permissions(path, permissions)
 }
 
-fn make_checkpoint_and_get_state(
+fn make_checkpoint_and_get_state_impl(
     state: &ReplicatedState,
     height: Height,
     tip_channel: &Sender<TipRequest>,
+    separate_ingress_history: bool,
 ) -> ReplicatedState {
     make_checkpoint(
         state,
@@ -72,9 +76,18 @@ fn make_checkpoint_and_get_state(
         &state_manager_metrics().checkpoint_metrics,
         &mut thread_pool(),
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
+        separate_ingress_history,
     )
     .unwrap_or_else(|err| panic!("Expected make_checkpoint to succeed, got {:?}", err))
     .1
+}
+
+fn make_checkpoint_and_get_state(
+    state: &ReplicatedState,
+    height: Height,
+    tip_channel: &Sender<TipRequest>,
+) -> ReplicatedState {
+    make_checkpoint_and_get_state_impl(state, height, tip_channel, SEPARATE_INGRESS_HISTORY)
 }
 
 #[test]
@@ -180,6 +193,7 @@ fn scratchpad_dir_is_deleted_if_checkpointing_failed() {
             &state_manager_metrics.checkpoint_metrics,
             &mut thread_pool(),
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
+            SEPARATE_INGRESS_HISTORY,
         );
 
         match replicated_state {
@@ -278,7 +292,7 @@ fn can_recover_from_a_checkpoint() {
 
         // Verify that the deserialized stable memory is correctly retrieved.
         let mut data = vec![0, 0, 0, 0];
-        let buf = page_map::Buffer::new(
+        let buf = Buffer::new(
             canister
                 .execution_state
                 .as_ref()
@@ -593,5 +607,54 @@ fn can_recover_subnet_queues() {
             original_state.subnet_queues(),
             recovered_state.subnet_queues()
         );
+    });
+}
+
+#[test]
+fn can_recover_ingress_history() {
+    with_test_replica_logger(|log| {
+        let tmp = tmpdir("checkpoint");
+        let root = tmp.path().to_path_buf();
+        let layout = StateLayout::try_new(log.clone(), root, &MetricsRegistry::new()).unwrap();
+        let tip_handler = layout.capture_tip_handler();
+        let state_manager_metrics = state_manager_metrics();
+        let (_tip_thread, tip_channel) = spawn_tip_thread(
+            log,
+            tip_handler,
+            layout,
+            state_manager_metrics,
+            MaliciousFlags::default(),
+        );
+
+        let own_subnet_type = SubnetType::Application;
+        let subnet_id = subnet_test_id(1);
+        let mut state = ReplicatedState::new(subnet_id, own_subnet_type);
+
+        // Add a message to the ingress history, to later verify that it gets recovered.
+        state.set_ingress_status(
+            message_test_id(7),
+            IngressStatus::Known {
+                state: IngressState::Done,
+                receiver: subnet_id.get(),
+                user_id: user_test_id(1),
+                time: UNIX_EPOCH,
+            },
+            NumBytes::from(u64::MAX),
+        );
+
+        // Checkpoint with old representation (ingress history in system_metadata.pbuf).
+        let mut height = Height::new(42);
+        let state2 = make_checkpoint_and_get_state_impl(&state, height, &tip_channel, false);
+        assert_eq!(state2, state);
+
+        // Simulate an upgrade to new representation (separate `ingress_history.pbuf`).
+        height.inc_assign();
+        let state3 = make_checkpoint_and_get_state_impl(&state2, height, &tip_channel, true);
+        assert_eq!(state3, state);
+
+        // And a downgrade to the old representation.
+        height.inc_assign();
+        let state4 = make_checkpoint_and_get_state_impl(&state3, height, &tip_channel, false);
+        assert_eq!(state4, state);
     });
 }
