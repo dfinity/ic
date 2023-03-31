@@ -12,6 +12,7 @@ use ic_types::{
     },
     CanisterId, PrincipalId, RegistryVersion, Time, UserId,
 };
+use std::collections::HashSet;
 use std::{collections::BTreeSet, convert::TryFrom, fmt};
 
 #[cfg(test)]
@@ -143,6 +144,7 @@ pub enum AuthenticationError {
     WebAuthnError(String),
     DelegationTargetError(String),
     DelegationTooLongError { length: usize, maximum: usize },
+    DelegationContainsCyclesError { public_key: Vec<u8> },
 }
 
 impl fmt::Display for AuthenticationError {
@@ -157,6 +159,11 @@ impl fmt::Display for AuthenticationError {
                 f,
                 "Chain of delegations is too long: got {} delegations, but at most {} are allowed",
                 length, maximum
+            ),
+            DelegationContainsCyclesError { public_key } => write!(
+                f,
+                "Chain of delegations contains at least one cycle: first repeating public key encountered {}",
+                hex::encode(public_key)
             ),
         }
     }
@@ -293,10 +300,7 @@ fn validate_signature(
     validate_sender_delegation_length(&signature.sender_delegation)?;
     validate_sender_delegation_expiry(&signature.sender_delegation, current_time)?;
     let empty_vec = Vec::new();
-    let signed_delegations = match &signature.sender_delegation {
-        None => &empty_vec,
-        Some(delegations) => delegations,
-    };
+    let signed_delegations = signature.sender_delegation.as_ref().unwrap_or(&empty_vec);
 
     let (pubkey, targets) = validate_delegations(
         validator,
@@ -367,6 +371,7 @@ fn validate_delegations(
     mut pubkey: Vec<u8>,
     registry_version: RegistryVersion,
 ) -> Result<(Vec<u8>, CanisterIdSet), RequestValidationError> {
+    ensure_delegations_does_not_contain_cycles(&pubkey, signed_delegations)?;
     // Initially, assume that the delegations target all possible canister IDs.
     let mut targets = CanisterIdSet::All;
 
@@ -383,6 +388,23 @@ fn validate_delegations(
     }
 
     Ok((pubkey, targets))
+}
+
+fn ensure_delegations_does_not_contain_cycles(
+    sender_public_key: &[u8],
+    signed_delegations: &[SignedDelegation],
+) -> Result<(), RequestValidationError> {
+    let mut observed_public_keys = HashSet::with_capacity(signed_delegations.len() + 1);
+    observed_public_keys.insert(sender_public_key);
+    for delegation in signed_delegations {
+        let current_public_key = delegation.delegation().pubkey();
+        if !observed_public_keys.insert(current_public_key) {
+            return Err(InvalidDelegation(DelegationContainsCyclesError {
+                public_key: current_public_key.clone(),
+            }));
+        }
+    }
+    Ok(())
 }
 
 fn validate_delegation(

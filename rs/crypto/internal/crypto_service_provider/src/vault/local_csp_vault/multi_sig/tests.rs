@@ -180,7 +180,7 @@ fn should_generate_verifiable_pop() {
 #[test]
 fn should_multi_sign_and_verify_with_generated_key() {
     let mut rng = reproducible_rng();
-    let csp_vault = LocalCspVault::builder().with_rng(rng.clone()).build();
+    let csp_vault = LocalCspVault::builder().with_rng(rng.fork()).build();
     let (csp_pub_key, csp_pop) = csp_vault
         .gen_committee_signing_key_pair()
         .expect("failed to generate keys");
@@ -190,7 +190,7 @@ fn should_multi_sign_and_verify_with_generated_key() {
     let msg: Vec<u8> = (0..msg_len).map(|_| rng.gen::<u8>()).collect();
 
     let verifier = Csp::builder()
-        .with_vault(LocalCspVault::builder().with_rng(rng.clone()).build())
+        .with_vault(LocalCspVault::builder().with_rng(rng.fork()).build())
         .build();
     let sig = csp_vault
         .multi_sign(AlgorithmId::MultiBls12_381, &msg, key_id)

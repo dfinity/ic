@@ -386,6 +386,25 @@ impl DelegationChainBuilder {
     }
 }
 
+/// Construct a delegation chain rooted at the first element in the vector
+/// of direct authentication schemes that delegates to the next element.
+impl From<(Vec<DirectAuthenticationScheme>, Time)> for DelegationChainBuilder {
+    fn from((schemes, expiration): (Vec<DirectAuthenticationScheme>, Time)) -> Self {
+        assert!(
+            !schemes.is_empty(),
+            "cannot build delegation chain from empty vector of authentication schemes"
+        );
+        let mut builder = None;
+        for scheme in schemes.into_iter() {
+            builder = match builder {
+                None => Some(DelegationChain::rooted_at(scheme)),
+                Some(prev_builder) => Some(prev_builder.delegate_to(scheme, expiration)),
+            }
+        }
+        builder.expect("cannot be empty")
+    }
+}
+
 pub fn flip_a_bit_mut(input: &mut [u8]) {
     *input
         .last_mut()
