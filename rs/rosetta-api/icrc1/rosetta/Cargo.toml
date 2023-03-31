@@ -1,0 +1,20 @@
+[package]
+name = "ic-icrc-rosetta"
+version = "0.1.0"
+authors = ["The Internet Computer Project Developers"]
+description = "Build Once. Integrate Your Blockchain Everywhere. "
+default-run = "ic-icrc-rosetta"
+edition = "2021"
+
+
+[[bin]]
+name = "ic-icrc-rosetta"
+path = "src/main.rs"
+
+[dependencies]
+rusqlite = { version = "~0.28.0", features = ["bundled"] }
+anyhow = { version = "1.0", default-features = false }
+tempfile = "3.1.0"
+
+[lib]
+path = "src/lib.rs"
