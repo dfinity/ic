@@ -206,7 +206,7 @@ impl TryFrom<Vec<pb::WasmMethod>> for ExportedFunctions {
 }
 
 /// Represent a wasm binary.
-#[derive(debug_stub_derive::DebugStub)]
+#[derive(Debug)]
 pub struct WasmBinary {
     /// The raw canister module provided by the user. Remains immutable after
     /// creating a WasmBinary object.
@@ -362,7 +362,7 @@ impl SandboxMemoryHandle {
 /// persist `ExecutionState`.
 // Do ***NOT*** derive PartialEq, Eq, Serialization or
 // Deserialization for `ExecutionState`.
-#[derive(Clone, debug_stub_derive::DebugStub)]
+#[derive(Clone, Debug)]
 pub struct ExecutionState {
     /// The path where Canister memory is located. Needs to be stored in
     /// ExecutionState in order to perform the exec system call.
@@ -386,7 +386,6 @@ pub struct ExecutionState {
 
     /// The persistent heap of the module. The size of this memory is expected
     /// to fit in a `u32`.
-    #[debug_stub = "PageMap"]
     pub wasm_memory: Memory,
 
     /// The canister stable memory which is persisted across canister upgrades.

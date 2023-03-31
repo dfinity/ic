@@ -37,9 +37,7 @@ DEPENDENCIES = [
     "@crate_index//:uuid",
 ]
 
-MACRO_DEPENDENCIES = [
-    "@crate_index//:debug_stub_derive",
-]
+MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
     "//rs/bitcoin/test-utils",
