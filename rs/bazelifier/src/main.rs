@@ -135,7 +135,6 @@ struct ProtogenFile<'a> {
 
 static MACRO_CRATES: &[&str] = &[
     "async-trait",
-    "debug_stub_derive",
     "derive_more",
     "dfn_macro",
     "fe-derive",
