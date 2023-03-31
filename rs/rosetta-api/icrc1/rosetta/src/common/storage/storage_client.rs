@@ -29,7 +29,57 @@ impl StorageClient {
             .lock()
             .unwrap()
             .execute("PRAGMA foreign_keys = 1", [])?;
+        storage_client.create_tables()?;
         Ok(storage_client)
+    }
+
+    fn create_tables(&self) -> anyhow::Result<()> {
+        let open_connection = self.storage_connection.lock().unwrap();
+        open_connection.execute(
+            r#"
+            CREATE TABLE IF NOT EXISTS blocks (
+                hash BLOB NOT NULL,
+                serialized_block BLOB NOT NULL,
+                parent_hash BLOB,
+                idx INTEGER NOT NULL PRIMARY KEY,
+                verified BOOLEAN)
+            "#,
+            [],
+        )?;
+        open_connection.execute(
+            r#"
+            CREATE TABLE IF NOT EXISTS transactions (
+                block_idx INTEGER NOT NULL,
+                tx_hash BLOB NOT NULL,
+                operation_type VARCHAR(255) NOT NULL,
+                from_principal BLOB,
+                from_subaccount BLOB,
+                to_principal BLOB,
+                to_subaccount BLOB,
+                memo BLOB,
+                amount INTEGER,
+                fee INTEGER,
+                transaction_created_at_time INTEGER,
+                PRIMARY KEY(block_idx),
+                FOREIGN KEY(block_idx) REFERENCES blocks(idx)
+            )
+            "#,
+            [],
+        )?;
+        open_connection.execute(
+            r#"
+            CREATE TABLE IF NOT EXISTS account_balance_history (
+                principal BLOB NOT NULL,
+                subaccount BLOB NOT NULL,
+                block_idx  NOT NULL,
+                tokens INTEGER NOT NULL,
+                PRIMARY KEY(principal,subaccount,block_idx)
+                FOREIGN KEY(block_idx) REFERENCES blocks(idx)
+            )
+            "#,
+            [],
+        )?;
+        Ok(())
     }
 }
 
