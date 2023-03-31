@@ -3,6 +3,7 @@ This module defines utilities for building Rust canisters.
 """
 
 load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("@rules_motoko//motoko:defs.bzl", "motoko_binary")
 
 def _wasm_rust_transition_impl(_settings, _attr):
     return {
@@ -50,7 +51,7 @@ wasm_rust_binary_rule = rule(
 )
 
 def rust_canister(name, service_file, **kwargs):
-    """Defines a rust program that builds into a WebAssembly module.
+    """Defines a Rust program that builds into a WebAssembly module.
 
     Args:
       name: the name of the target that produces a Wasm module.
@@ -87,6 +88,32 @@ def rust_canister(name, service_file, **kwargs):
     inject_version_into_wasm(
         name = name,
         src_wasm = name + ".opt",
+        version_file = "//bazel:rc_only_version.txt",
+    )
+
+def motoko_canister(name, entry, deps):
+    """Defines a Motoko program that builds into a WebAssembly module.
+
+    Args:
+      name: the name of the target that produces a Wasm module.
+      entry: path to this canister's main Motoko source file.
+      deps: list of actor dependencies, e.g., external_actor targets from @rules_motoko.
+    """
+
+    raw_wasm = entry.replace(".mo", ".wasm")
+    raw_did = entry.replace(".mo", ".did")
+
+    motoko_binary(
+        name = name + "_raw",
+        entry = entry,
+        idl_out = raw_did,
+        wasm_out = raw_wasm,
+        deps = deps,
+    )
+
+    inject_version_into_wasm(
+        name = name,
+        src_wasm = raw_wasm,
         version_file = "//bazel:rc_only_version.txt",
     )
 

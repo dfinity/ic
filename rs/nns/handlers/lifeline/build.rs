@@ -120,11 +120,11 @@ fn compile_lifeline(out: &Path) -> Result<PathBuf, BuildError> {
         .arg("--actor-idl")
         .arg(out)
         .arg("-o")
-        .arg(out.join("lifeline.wasm"))
+        .arg(out.join("lifeline_canister.wasm"))
         .output()?;
 
     if output.status.success() {
-        Ok(out.join("lifeline.wasm"))
+        Ok(out.join("lifeline_canister.wasm"))
     } else {
         Err(BuildError::MocFailure(output))
     }
