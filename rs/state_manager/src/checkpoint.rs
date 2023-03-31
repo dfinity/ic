@@ -22,6 +22,10 @@ use std::time::{Duration, Instant};
 #[cfg(test)]
 mod tests;
 
+/// Controls whether the ingress history is written to a separate
+/// `ingress_history.pbuf` file; or bundled with the rest of system metadata.
+pub const SEPARATE_INGRESS_HISTORY: bool = false;
+
 /// Creates a checkpoint of the node state using specified directory
 /// layout. Returns a new state that is equivalent to the given one
 /// and a result of the operation.
@@ -39,6 +43,7 @@ pub(crate) fn make_checkpoint(
     metrics: &CheckpointMetrics,
     thread_pool: &mut scoped_threadpool::Pool,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
+    separate_ingress_history: bool,
 ) -> Result<(CheckpointLayout<ReadOnly>, ReplicatedState), CheckpointError> {
     {
         let _timer = metrics
@@ -49,6 +54,7 @@ pub(crate) fn make_checkpoint(
             .send(TipRequest::SerializeToTip {
                 height,
                 replicated_state: Box::new(state.clone()),
+                separate_ingress_history,
             })
             .unwrap();
     }
@@ -96,6 +102,7 @@ pub(crate) fn make_checkpoint(
 
     Ok((cp, state))
 }
+
 /// Calls [load_checkpoint] with a newly created thread pool.
 /// See [load_checkpoint] for further details.
 pub fn load_checkpoint_parallel<P: ReadPolicy + Send + Sync>(
@@ -137,10 +144,16 @@ pub fn load_checkpoint<P: ReadPolicy + Send + Sync>(
             .with_label_values(&["system_metadata"])
             .start_timer();
 
-        let mut metadata = ic_replicated_state::SystemMetadata::try_from(
-            checkpoint_layout.system_metadata().deserialize()?,
-        )
-        .map_err(|err| into_checkpoint_error("SystemMetadata".into(), err))?;
+        let mut metadata_proto = checkpoint_layout.system_metadata().deserialize()?;
+        let ingress_history_proto = checkpoint_layout.ingress_history().deserialize_opt()?;
+        if ingress_history_proto.is_some() {
+            // `ingress_history` should be present in either `system_metadata.pbuf` or
+            // `ingress_history.pbuf`, but not both.
+            assert!(metadata_proto.ingress_history.is_none());
+            metadata_proto.ingress_history = ingress_history_proto;
+        }
+        let mut metadata = ic_replicated_state::SystemMetadata::try_from(metadata_proto)
+            .map_err(|err| into_checkpoint_error("SystemMetadata".into(), err))?;
         metadata.own_subnet_type = own_subnet_type;
         metadata
     };

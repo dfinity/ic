@@ -6,6 +6,7 @@ use crate::{
 use crossbeam_channel::{unbounded, Sender};
 use ic_logger::{fatal, info, ReplicaLogger};
 use ic_protobuf::state::canister_metadata::v1::CanisterMetadata;
+use ic_protobuf::state::system_metadata::v1::SystemMetadata;
 #[allow(unused)]
 use ic_replicated_state::{
     canister_state::execution_state::SandboxMemory, CanisterState, NumWasmPages, PageMap,
@@ -64,6 +65,7 @@ pub(crate) enum TipRequest {
     SerializeToTip {
         height: Height,
         replicated_state: Box<ReplicatedState>,
+        separate_ingress_history: bool,
     },
     /// Run one round of tip defragmentation.
     DefragTip {
@@ -210,6 +212,7 @@ pub(crate) fn spawn_tip_thread(
                         TipRequest::SerializeToTip {
                             height,
                             replicated_state,
+                            separate_ingress_history,
                         } => {
                             let _timer = request_timer(&metrics, "serialize_to_tip");
                             serialize_to_tip(
@@ -224,6 +227,7 @@ pub(crate) fn spawn_tip_thread(
                                     );
                                 }),
                                 &mut thread_pool,
+                                separate_ingress_history,
                             )
                             .unwrap_or_else(|err| {
                                 fatal!(log, "Failed to serialize to tip @{}: {}", height, err);
@@ -301,9 +305,21 @@ fn serialize_to_tip(
     state: &ReplicatedState,
     tip: &CheckpointLayout<RwPolicy<TipHandler>>,
     thread_pool: &mut scoped_threadpool::Pool,
+    separate_ingress_history: bool,
 ) -> Result<(), CheckpointError> {
-    tip.system_metadata()
-        .serialize(state.system_metadata().into())?;
+    if separate_ingress_history {
+        // Take out ingress history from system_metadata and serialize it separately.
+        let mut system_metadata: SystemMetadata = state.system_metadata().into();
+        let ingress_history = system_metadata.ingress_history.take().unwrap();
+        tip.system_metadata().serialize(system_metadata)?;
+        tip.ingress_history().serialize(ingress_history)?;
+    } else {
+        // Serialize full system_metadata, including ingress history.
+        tip.system_metadata()
+            .serialize(state.system_metadata().into())?;
+        // Delete ingress history file if present.
+        tip.ingress_history().try_remove_file()?;
+    }
 
     tip.subnet_queues()
         .serialize((state.subnet_queues()).into())?;
