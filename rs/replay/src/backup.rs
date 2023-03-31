@@ -292,6 +292,8 @@ pub(crate) fn deserialize_consensus_artifacts(
             RandomBeacon::try_from(
                 pb::RandomBeacon::decode(buffer.as_slice()).expect("Protobuf decoding failed"),
             )
+            // TODO: Remove after switching to ProxyDecodeError
+            .map_err(|e| format!("{}", e))
             .unwrap_or_else(|err| panic!("{}", deserialization_error(&rb_path, err)))
             .into_message(),
         );
@@ -381,6 +383,7 @@ pub(crate) fn deserialize_consensus_artifacts(
     }
 }
 
+// TODO: Replace String with ProxyDecodeError once structures have been migrated
 fn deserialization_error(file: &Path, err: String) -> String {
     format!("Couldn't deserialize artifact {:?}: {}", file, err)
 }

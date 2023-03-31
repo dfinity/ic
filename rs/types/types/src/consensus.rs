@@ -8,8 +8,11 @@ use crate::{
     signature::*,
     *,
 };
-use ic_protobuf::log::block_log_entry::v1::BlockLogEntry;
 use ic_protobuf::types::v1 as pb;
+use ic_protobuf::{
+    log::block_log_entry::v1::BlockLogEntry,
+    proxy::{try_from_option_field, ProxyDecodeError},
+};
 use serde::{Deserialize, Serialize};
 use std::cmp::PartialOrd;
 use std::convert::TryInto;
@@ -562,23 +565,18 @@ impl From<&RandomBeacon> for pb::RandomBeacon {
 }
 
 impl TryFrom<pb::RandomBeacon> for RandomBeacon {
-    type Error = String;
+    type Error = ProxyDecodeError;
     fn try_from(beacon: pb::RandomBeacon) -> Result<Self, Self::Error> {
         Ok(Signed {
             content: RandomBeaconContent {
                 version: ReplicaVersion::try_from(beacon.version.as_str())
-                    .map_err(|e| format!("RandomBeacon replica version failed to parse {:?}", e))?,
+                    .map_err(|e| ProxyDecodeError::ReplicaVersionParseError(Box::new(e)))?,
                 height: Height::from(beacon.height),
                 parent: CryptoHashOf::from(CryptoHash(beacon.parent)),
             },
             signature: ThresholdSignature {
                 signature: CombinedThresholdSigOf::new(CombinedThresholdSig(beacon.signature)),
-                signer: NiDkgId::try_from(
-                    beacon
-                        .signer
-                        .ok_or_else(|| String::from("Error: RandomBeacon signer not present"))?,
-                )
-                .map_err(|e| format!("Unable to decode Random beacon signer {:?}", e))?,
+                signer: try_from_option_field(beacon.signer, "RandomBeacon::signer")?,
             },
         })
     }

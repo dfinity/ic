@@ -99,7 +99,10 @@ impl TryFrom<pb::CatchUpContent> for CatchUpContent {
             content
                 .random_beacon
                 .ok_or_else(|| String::from("Error: CUP missing block"))?,
-        )?;
+        )
+        // TODO: Remove after switching to ProxyDecodeError
+        .map_err(|e| format!("{}", e))?;
+
         Ok(Self::new(
             HashedBlock {
                 hash: CryptoHashOf::from(CryptoHash(content.block_hash)),
