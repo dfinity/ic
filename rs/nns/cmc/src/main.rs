@@ -1,17 +1,18 @@
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::cmp::{max, min};
 use std::collections::{btree_map::Entry, BTreeMap, BTreeSet};
 use std::convert::TryInto;
-use std::time::{Duration, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use candid::{candid_method, CandidType, Encode};
 use cycles_minting_canister::*;
 use dfn_candid::{candid_one, CandidOne};
 use dfn_core::{
-    api::{call_with_cleanup, caller, set_certified_data},
+    api::{call_with_cleanup, caller},
     over, over_async, over_init, over_may_reject, stable,
 };
 use dfn_protobuf::protobuf;
+use environment::Environment;
 use ic_crypto_tree_hash::{
     flatmap, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree, WitnessGenerator,
     WitnessGeneratorImpl,
@@ -26,10 +27,15 @@ use icp_ledger::{
 };
 use on_wire::{FromWire, IntoWire, NewType};
 
+use exchange_rate_canister::{
+    RealExchangeRateCanisterClient, UpdateExchangeRateCallState, UpdateExchangeRateError,
+};
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
 use serde::{Deserialize, Serialize};
 
+mod environment;
+mod exchange_rate_canister;
 mod limiter;
 
 /// The past 30 days are used for the average ICP/XDR rate.
@@ -38,6 +44,8 @@ const NUM_DAYS_FOR_ICP_XDR_AVERAGE: usize = 30;
 const ICP_XDR_CONVERSION_RATE_CACHE_SIZE: usize = 60;
 pub const LABEL_ICP_XDR_CONVERSION_RATE: &[u8] = b"ICP_XDR_CONVERSION_RATE";
 pub const LABEL_AVERAGE_ICP_XDR_CONVERSION_RATE: &[u8] = b"AVERAGE_ICP_XDR_CONVERSION_RATE";
+
+const ONE_MINUTE_SECONDS: u64 = 60;
 
 /// The maximum number of notification statuses to store.
 const MAX_NOTIFY_HISTORY: usize = 1_000_000;
@@ -50,6 +58,7 @@ const MAX_MATURITY_MODULATION_PERMYRIAD: i32 = 500;
 
 thread_local! {
     static STATE: RefCell<Option<State>> = RefCell::new(None);
+    static UPDATE_EXCHANGE_RATE_CALL_STATE: Cell<UpdateExchangeRateCallState> = Cell::new(UpdateExchangeRateCallState::Inactive);
 }
 
 fn with_state<R>(f: impl FnOnce(&State) -> R) -> R {
@@ -63,6 +72,21 @@ fn with_state_mut<R>(f: impl FnOnce(&mut State) -> R) -> R {
             .as_mut()
             .expect("cmc state not initialized"))
     })
+}
+
+pub struct CanisterEnvironment;
+
+impl Environment for CanisterEnvironment {
+    fn now_timestamp_seconds(&self) -> u64 {
+        dfn_core::api::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .expect("Could not get the duration.")
+            .as_secs()
+    }
+
+    fn set_certified_data(&self, data: &[u8]) {
+        dfn_core::api::set_certified_data(data)
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, CandidType, Eq, PartialEq)]
@@ -646,28 +670,6 @@ fn get_icp_xdr_conversion_rate_() {
     over(candid_one, |_: ()| get_icp_xdr_conversion_rate())
 }
 
-#[export_name = "canister_update set_icp_xdr_conversion_rate"]
-fn set_icp_xdr_conversion_rate_() {
-    let caller = caller();
-
-    assert_eq!(
-        caller,
-        GOVERNANCE_CANISTER_ID.into(),
-        "{} is not authorized to call this method: {}",
-        caller,
-        "set_icp_xdr_conversion_rate"
-    );
-
-    over(
-        candid_one,
-        |proposed_conversion_rate: UpdateIcpXdrConversionRatePayload| -> Result<(), String> {
-            let rate: IcpXdrConversionRate = proposed_conversion_rate.into();
-            update_recent_icp_xdr_rates(&rate);
-            set_icp_xdr_conversion_rate(rate)
-        },
-    );
-}
-
 #[export_name = "canister_query get_average_icp_xdr_conversion_rate"]
 fn get_average_icp_xdr_conversion_rate_() {
     with_state(|state| {
@@ -761,9 +763,33 @@ fn compute_average_icp_xdr_rate_at_time(
     }
 }
 
+#[export_name = "canister_update set_icp_xdr_conversion_rate"]
+fn set_icp_xdr_conversion_rate_() {
+    let caller = caller();
+
+    assert_eq!(
+        caller,
+        GOVERNANCE_CANISTER_ID.into(),
+        "{} is not authorized to call this method: {}",
+        caller,
+        "set_icp_xdr_conversion_rate"
+    );
+
+    over(
+        candid_one,
+        |proposed_conversion_rate: UpdateIcpXdrConversionRatePayload| -> Result<(), String> {
+            let env = CanisterEnvironment;
+            let rate: IcpXdrConversionRate = proposed_conversion_rate.into();
+            update_recent_icp_xdr_rates(&rate);
+            set_icp_xdr_conversion_rate(&env, rate)
+        },
+    );
+}
+
 /// Validates the proposed conversion rate, sets it in state, and sets the
 /// canister's certified data
 fn set_icp_xdr_conversion_rate(
+    env: &impl Environment,
     proposed_conversion_rate: IcpXdrConversionRate,
 ) -> Result<(), String> {
     print(format!(
@@ -790,7 +816,7 @@ fn set_icp_xdr_conversion_rate(
         state.icp_xdr_conversion_rate = Some(proposed_conversion_rate);
 
         let witness_generator = convert_data_to_mixed_hash_tree(state);
-        set_certified_data(&witness_generator.hash_tree().digest().0[..]);
+        env.set_certified_data(&witness_generator.hash_tree().digest().0[..]);
 
         Ok(())
     })
@@ -1677,6 +1703,43 @@ fn post_upgrade(args: CyclesCanisterInitPayload) {
     STATE.with(|state| state.replace(Some(new_state)));
 }
 
+#[export_name = "canister_heartbeat"]
+fn canister_heartbeat() {
+    if with_state(|state| state.exchange_rate_canister_id.is_some()) {
+        let future = update_exchange_rate();
+        dfn_core::api::futures::spawn(future);
+    }
+}
+
+async fn update_exchange_rate() {
+    let xrc_client = match with_state(|state| state.exchange_rate_canister_id) {
+        Some(exchange_rate_canister_id) => {
+            RealExchangeRateCanisterClient::new(exchange_rate_canister_id)
+        }
+        None => {
+            print("[cycles] Exchange rate canister ID must be set to call the XRC");
+            return;
+        }
+    };
+    let env = CanisterEnvironment;
+    let periodic_result = exchange_rate_canister::update_exchange_rate(
+        &UPDATE_EXCHANGE_RATE_CALL_STATE,
+        &env,
+        &xrc_client,
+    )
+    .await;
+    if let Err(ref error) = periodic_result {
+        match error {
+            UpdateExchangeRateError::FailedToRetrieveRate(_)
+            | UpdateExchangeRateError::FailedToSetRate(_) => {
+                print(format!("[cycles] {}", error));
+            }
+            UpdateExchangeRateError::NewRateNotNeeded
+            | UpdateExchangeRateError::UpdateAlreadyInProgress => {}
+        }
+    }
+}
+
 #[export_name = "canister_query http_request"]
 fn http_request() {
     dfn_http_metrics::serve_metrics(encode_metrics);
@@ -1724,7 +1787,7 @@ mod tests {
     use ic_types_test_utils::ids::{subnet_test_id, user_test_id};
     use rand::Rng;
 
-    fn init_test_state() {
+    pub(crate) fn init_test_state() {
         init(CyclesCanisterInitPayload {
             ledger_canister_id: CanisterId::ic_00(),
             governance_canister_id: CanisterId::ic_00(),
