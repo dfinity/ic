@@ -81,7 +81,7 @@ rust_library(
 
 rust_binary(
     name = "instrument-wasm",
-    srcs = ["src/wasm_utils/instrument_wasm.rs"],
+    srcs = ["bin/instrument_wasm.rs"],
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = DEPENDENCIES + [":embedders"],

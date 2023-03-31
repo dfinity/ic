@@ -58,7 +58,7 @@ wat = "1.0.57"
 
 [[bin]]
 name = "instrument-wasm"
-path = "src/wasm_utils/instrument_wasm.rs"
+path = "bin/instrument_wasm.rs"
 
 [[bench]]
 name = "compilation"
