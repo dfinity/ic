@@ -251,9 +251,6 @@ pub struct ManifestDelta {
 /// in such a way that the receiver can split it back just by looking at the manifest.
 pub(crate) fn build_file_group_chunks(manifest: &Manifest) -> FileGroupChunks {
     let mut file_group_chunks: BTreeMap<u32, Vec<u32>> = BTreeMap::new();
-    if manifest.chunk_table.len() >= FILE_GROUP_CHUNK_ID_OFFSET as usize {
-        return FileGroupChunks::new(file_group_chunks);
-    }
     let mut chunk_id_p2p = FILE_GROUP_CHUNK_ID_OFFSET;
     let mut chunk_table_indices: Vec<u32> = Vec::new();
 

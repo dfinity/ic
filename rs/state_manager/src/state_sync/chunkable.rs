@@ -1341,26 +1341,15 @@ impl Chunkable for IncompleteState {
                         Ok(artifact)
                     } else {
                         let state_sync_file_group = build_file_group_chunks(&manifest);
-                        if manifest.chunk_table.len() >= FILE_GROUP_CHUNK_ID_OFFSET as usize {
-                            assert!(state_sync_file_group.is_empty());
-                            warn!(
-                                self.log,
-                                "The chunk table has {} chunks so file group chunks will not be used due to ID conflicts. \
-                                Please consider increasing the ID offset (currently: {})",
-                                manifest.chunk_table.len(),
-                                FILE_GROUP_CHUNK_ID_OFFSET,
-                            );
-                        }
-                        // The chunks in the chunk table should not collide with the manifest chunk IDs.
-                        // The `state_sync_file_group` should either be empty or have no chunks in collision with manifest chunk IDs.
-                        // Otherwise, the up-to-date nodes will not be able to serve the requested chunks correctly.
-                        //
-                        // Such a collision can only happen if there is a bug given the current value of the offset.
-                        // See comments of `MANIFEST_CHUNK_ID_OFFSET` and `FILE_GROUP_CHUNK_ID_OFFSET` for analysis.
-                        assert!(manifest.chunk_table.len() < MANIFEST_CHUNK_ID_OFFSET as usize);
-                        if let Some(last_group_chunk) = state_sync_file_group.last_chunk_id() {
-                            assert!(last_group_chunk < MANIFEST_CHUNK_ID_OFFSET)
-                        }
+
+                        // The chunks in the chunk table should not collide with the file group chunk IDs.
+                        assert!(manifest.chunk_table.len() < FILE_GROUP_CHUNK_ID_OFFSET as usize);
+
+                        // The file group chunk IDs should not collide with the manifest chunk IDs.
+                        assert!(
+                            FILE_GROUP_CHUNK_ID_OFFSET + state_sync_file_group.len() as u32 - 1
+                                < MANIFEST_CHUNK_ID_OFFSET
+                        );
 
                         for (&chunk_id, chunk_table_indices) in state_sync_file_group.iter() {
                             for &chunk_table_index in chunk_table_indices.iter() {
