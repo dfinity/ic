@@ -374,6 +374,10 @@ impl FileGroupChunks {
         FileGroupChunks(value)
     }
 
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
     pub fn keys(&self) -> impl Iterator<Item = &ManifestChunkTableIndex> {
         self.0.keys()
     }

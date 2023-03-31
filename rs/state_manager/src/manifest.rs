@@ -9,13 +9,14 @@ mod tests {
 use super::CheckpointError;
 use crate::{
     manifest::hash::{meta_manifest_hasher, sub_manifest_hasher},
-    BundledManifest, DirtyPages, FileType, ManifestMetrics, CRITICAL_ERROR_REUSED_CHUNK_HASH,
+    BundledManifest, DirtyPages, FileType, ManifestMetrics,
+    CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS, CRITICAL_ERROR_REUSED_CHUNK_HASH,
     LABEL_VALUE_HASHED, LABEL_VALUE_HASHED_AND_COMPARED, LABEL_VALUE_REUSED,
 };
 use bit_vec::BitVec;
 use hash::{chunk_hasher, file_hasher, manifest_hasher, ManifestHash};
 use ic_crypto_sha::Sha256;
-use ic_logger::{error, fatal, warn, ReplicaLogger};
+use ic_logger::{error, fatal, ReplicaLogger};
 use ic_replicated_state::PageIndex;
 use ic_state_layout::{CheckpointLayout, ReadOnly};
 use ic_sys::{mmap::ScopedMmap, PAGE_SIZE};
@@ -23,7 +24,7 @@ use ic_types::{
     crypto::CryptoHash,
     state_sync::{
         encode_manifest, ChunkInfo, FileGroupChunks, FileInfo, Manifest, MetaManifest,
-        FILE_GROUP_CHUNK_ID_OFFSET,
+        FILE_CHUNK_ID_OFFSET, FILE_GROUP_CHUNK_ID_OFFSET,
     },
     CryptoHashOfState, Height,
 };
@@ -903,13 +904,20 @@ pub fn compute_manifest(
         .manifest_size
         .set(encode_manifest(&manifest).len() as i64);
 
-    if manifest.chunk_table.len() > FILE_GROUP_CHUNK_ID_OFFSET as usize / 2 {
-        warn!(
+    metrics
+        .chunk_table_length
+        .set(manifest.chunk_table.len() as i64);
+
+    let file_chunk_id_range_length = FILE_GROUP_CHUNK_ID_OFFSET as usize - FILE_CHUNK_ID_OFFSET;
+    if manifest.chunk_table.len() > file_chunk_id_range_length / 2 {
+        error!(
             log,
-            "The chunk table is longer than half of the available chunk ID space in state sync. chunk table length: {}, state sync max chunk id: {}",
+            "{}: The chunk table is longer than half of the available ID space for file chunks in state sync. chunk table length: {}, file chunk ID range length: {}",
+            CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS,
             manifest.chunk_table.len(),
-            FILE_GROUP_CHUNK_ID_OFFSET - 1,
+            file_chunk_id_range_length,
         );
+        metrics.chunk_id_usage_nearing_limits_critical.inc();
     }
     Ok(manifest)
 }

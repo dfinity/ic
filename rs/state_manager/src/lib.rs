@@ -83,6 +83,10 @@ const CRITICAL_ERROR_REUSED_CHUNK_HASH: &str =
 /// Critical error tracking unexpectedly corrupted chunks.
 const CRITICAL_ERROR_STATE_SYNC_CORRUPTED_CHUNKS: &str = "state_sync_corrupted_chunks";
 
+/// Critical error tracking that chunk ID space usage of any state sync chunk type is nearing the limit.
+const CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS: &str =
+    "state_sync_chunk_id_usage_nearing_limits";
+
 /// How long to keep archived and diverged states.
 const ARCHIVED_DIVERGED_CHECKPOINT_MAX_AGE: Duration = Duration::from_secs(30 * 24 * 60 * 60); // 30 days
 
@@ -131,6 +135,10 @@ pub struct ManifestMetrics {
     chunk_bytes: IntCounterVec,
     reused_chunk_hash_error_count: IntCounter,
     manifest_size: IntGauge,
+    chunk_table_length: IntGauge,
+    file_group_chunks: IntGauge,
+    sub_manifest_chunks: IntGauge,
+    chunk_id_usage_nearing_limits_critical: IntCounter,
 }
 
 #[derive(Clone)]
@@ -180,7 +188,7 @@ impl CheckpointMetrics {
 
         let tip_handler_request_duration = metrics_registry.histogram_vec(
             "state_manager_tip_handler_request_duration_seconds",
-            "Duration to ecxecute requests to Tip handling thread in seconds.",
+            "Duration to execute requests to Tip handling thread in seconds.",
             // 1ms, 2ms, 5ms, 10ms, 20ms, 50ms, …, 10s, 20s, 50s
             decimal_buckets(-3, 1),
             &["request"],
@@ -376,7 +384,22 @@ impl ManifestMetrics {
 
         let manifest_size = metrics_registry.int_gauge(
             "state_manager_manifest_state_size_bytes",
-            "Size of manifest in bytes.",
+            "Size of the encoded manifest in bytes.",
+        );
+
+        let chunk_table_length = metrics_registry.int_gauge(
+            "state_manager_manifest_chunk_table_length",
+            "Number of chunks in the manifest chunk table.",
+        );
+
+        let file_group_chunks = metrics_registry.int_gauge(
+            "state_manager_file_group_chunks",
+            "Number of virtual chunks containing the grouped small files.",
+        );
+
+        let sub_manifest_chunks = metrics_registry.int_gauge(
+            "state_manager_sub_manifest_chunks",
+            "Number of chunks of the manifest after it is encoded and split into sub-manifests.",
         );
 
         Self {
@@ -388,6 +411,11 @@ impl ManifestMetrics {
             reused_chunk_hash_error_count: metrics_registry
                 .error_counter(CRITICAL_ERROR_REUSED_CHUNK_HASH),
             manifest_size,
+            chunk_table_length,
+            file_group_chunks,
+            sub_manifest_chunks,
+            chunk_id_usage_nearing_limits_critical: metrics_registry
+                .error_counter(CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS),
         }
     }
 }
@@ -412,7 +440,7 @@ impl StateSyncMetrics {
 
         let remaining = metrics_registry.int_gauge(
             "state_sync_remaining_chunks",
-            "Number of chunks not syncronized yet of all active state syncs",
+            "Number of chunks not synchronized yet of all active state syncs",
         );
 
         let duration = metrics_registry.histogram_vec(
@@ -626,7 +654,7 @@ struct SharedState {
     certifications_metadata: CertificationsMetadata,
     /// Metadata for each checkpoint
     states_metadata: StatesMetadata,
-    /// A list of states present in the memory.  This list is guranteed to not be
+    /// A list of states present in the memory.  This list is guaranteed to not be
     /// empty as it should always contain the state at height=0.
     snapshots: VecDeque<Snapshot>,
     /// The last checkpoint that was advertised.
@@ -1238,7 +1266,7 @@ struct CreateCheckpointResult {
     state_metadata: StateMetadata,
     // TipRequest to compute manifest.
     compute_manifest_request: TipRequest,
-    // Other TipRequests to perform after the copmute manifest.
+    // Other TipRequests to perform after the compute manifest.
     tip_requests: Vec<TipRequest>,
 }
 
@@ -1798,7 +1826,7 @@ impl StateManagerImpl {
                         .unwrap();
                 }
                 if !page_map.unflushed_delta_is_empty() {
-                    // Clone and send page map for asynchornous flushing to disc. The unflushed deltas are
+                    // Clone and send page map for asynchronous flushing to disc. The unflushed deltas are
                     // emptied in the original to ensure we don't flush twice.
                     self.tip_channel
                         .send(TipRequest::FlushPageMapDelta {

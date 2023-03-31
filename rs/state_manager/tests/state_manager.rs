@@ -1884,7 +1884,7 @@ fn state_sync_message_returns_none_for_invalid_chunk_requests() {
         let normal_chunk_id_end_exclusive = msg.manifest.chunk_table.len() as u32 + 1;
 
         let file_group_chunk_id_end_exclusive =
-            FILE_GROUP_CHUNK_ID_OFFSET + msg.state_sync_file_group.keys().count() as u32;
+            FILE_GROUP_CHUNK_ID_OFFSET + msg.state_sync_file_group.len() as u32;
 
         let sub_manifest_chunk_id_end_exclusive =
             MANIFEST_CHUNK_ID_OFFSET + msg.meta_manifest.sub_manifest_hashes.len() as u32;
@@ -2426,7 +2426,7 @@ fn can_group_small_files_in_state_sync() {
         //
         // Note that the file size estimation in this test is based on the current serialization mechanism
         // and if the assertion does not hold, we will need to revisit this test and check the file size.
-        let num_file_group_chunks = msg.state_sync_file_group.keys().count();
+        let num_file_group_chunks = msg.state_sync_file_group.len();
         assert!(num_file_group_chunks > 1);
 
         assert_error_counters(src_metrics);
