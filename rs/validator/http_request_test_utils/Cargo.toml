@@ -11,9 +11,12 @@ ic-crypto-internal-basic-sig-der-utils = { path = "../../crypto/internal/crypto_
 ic-crypto-iccsa = { path = "../../crypto/iccsa" }
 ic-crypto-internal-basic-sig-iccsa-test-utils = { path = "../../crypto/internal/crypto_lib/basic_sig/iccsa/test_utils" }
 ic-crypto-internal-threshold-sig-bls12381 = { path = "../../crypto/internal/crypto_lib/threshold_sig/bls12_381" }
+ic-crypto-internal-types = { path = "../../crypto/internal/crypto_lib/types" }
+ic-crypto-secrets-containers = { path = "../../crypto/secrets_containers" }
 ic-crypto-test-utils = { path = "../../crypto/test_utils" }
 ic-crypto-test-utils-canister-sigs = { path = "../../crypto/test_utils/canister_sigs" }
 ic-types = { path = "../../types/types" }
+rand = "0.8"
 simple_asn1 = "0.6.1"
 strum = "0.23.0"
 strum_macros = "0.23.0"

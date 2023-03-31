@@ -1,5 +1,5 @@
 use ic_canister_client_sender::{ed25519_public_key_to_der, Ed25519KeyPair};
-use ic_certification_test_utils::serialize_to_cbor;
+use ic_certification_test_utils::{generate_root_of_trust, serialize_to_cbor};
 use ic_crypto_internal_basic_sig_iccsa_test_utils::CanisterState;
 use ic_crypto_internal_threshold_sig_bls12381::types::SecretKeyBytes;
 use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
@@ -9,6 +9,7 @@ use ic_types::messages::{
     MessageId, SignedDelegation, SignedIngressContent,
 };
 use ic_types::{CanisterId, PrincipalId, Time};
+use rand::{CryptoRng, Rng};
 use simple_asn1::OID;
 use std::convert::identity;
 use strum_macros::EnumCount;
@@ -139,14 +140,60 @@ pub enum AuthenticationScheme {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
+pub struct CanisterSigner {
+    pub seed: Vec<u8>,
+    pub canister_id: CanisterId,
+    pub root_public_key: ThresholdSigPublicKey,
+    pub root_secret_key: SecretKeyBytes,
+}
+
+impl CanisterSigner {
+    pub fn canister_public_key_raw(&self) -> Vec<u8> {
+        use ic_crypto_test_utils::canister_signatures::canister_sig_pub_key_to_bytes;
+        canister_sig_pub_key_to_bytes(self.canister_id, &self.seed)
+    }
+
+    pub fn sign<T: Signable>(&self, message: &T) -> CanisterSig {
+        use ic_certification_test_utils::CertificateBuilder;
+        use ic_certification_test_utils::CertificateData;
+        use ic_crypto_iccsa::types::Signature;
+        use ic_crypto_internal_basic_sig_iccsa_test_utils::{
+            new_canister_state_tree, witness_from_tree,
+        };
+
+        let canister_state = {
+            let message_to_sign = message.as_signed_bytes();
+            let canister_state_tree = new_canister_state_tree(&self.seed, &message_to_sign);
+            let mixed_tree = witness_from_tree(canister_state_tree);
+            let hash_tree_digest = mixed_tree.digest();
+
+            CanisterState {
+                seed: self.seed.to_vec(),
+                msg: message_to_sign,
+                witness: mixed_tree,
+                root_digest: hash_tree_digest,
+            }
+        };
+
+        let certificate_data = CertificateData::CanisterData {
+            canister_id: self.canister_id,
+            certified_data: canister_state.root_digest,
+        };
+        let (_cert, _root_pk, cbor_cert) = CertificateBuilder::new(certificate_data)
+            .with_root_of_trust(self.root_public_key, self.root_secret_key.clone())
+            .build();
+        let sig_with_canister_witness = Signature {
+            certificate: Blob(cbor_cert),
+            tree: canister_state.witness,
+        };
+        CanisterSig(serialize_to_cbor(&sig_with_canister_witness))
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum DirectAuthenticationScheme {
     UserKeyPair(Ed25519KeyPair),
-    CanisterSignature {
-        seed: Vec<u8>,
-        canister_id: CanisterId,
-        root_public_key: ThresholdSigPublicKey,
-        root_secret_key: SecretKeyBytes,
-    },
+    CanisterSignature(CanisterSigner),
 }
 
 pub trait HttpRequestEnvelopeFactory {
@@ -196,12 +243,11 @@ impl HttpRequestEnvelopeFactory for AuthenticationScheme {
 
 impl DirectAuthenticationScheme {
     pub fn public_key_raw(&self) -> Vec<u8> {
-        use ic_crypto_test_utils::canister_signatures::canister_sig_pub_key_to_bytes;
         match self {
             DirectAuthenticationScheme::UserKeyPair(keypair) => keypair.public_key.to_vec(),
-            DirectAuthenticationScheme::CanisterSignature {
-                seed, canister_id, ..
-            } => canister_sig_pub_key_to_bytes(*canister_id, seed),
+            DirectAuthenticationScheme::CanisterSignature(signer) => {
+                signer.canister_public_key_raw()
+            }
         }
     }
 
@@ -225,21 +271,7 @@ impl DirectAuthenticationScheme {
             DirectAuthenticationScheme::UserKeyPair(keypair) => {
                 keypair.sign(&message.as_signed_bytes()).to_vec()
             }
-            DirectAuthenticationScheme::CanisterSignature {
-                seed,
-                canister_id,
-                root_public_key,
-                root_secret_key,
-            } => {
-                canister_signature_for_message(
-                    message.as_signed_bytes(),
-                    *canister_id,
-                    seed,
-                    *root_public_key,
-                    root_secret_key.clone(),
-                )
-                .0
-            }
+            DirectAuthenticationScheme::CanisterSignature(signer) => signer.sign(message).0,
         }
     }
 
@@ -354,50 +386,7 @@ impl DelegationChainBuilder {
     }
 }
 
-fn canister_signature_for_message(
-    message: Vec<u8>,
-    canister_id: CanisterId,
-    seed: &[u8],
-    root_public_key: ThresholdSigPublicKey,
-    root_secret_key: SecretKeyBytes,
-) -> CanisterSig {
-    use ic_certification_test_utils::CertificateBuilder;
-    use ic_certification_test_utils::CertificateData;
-    use ic_crypto_iccsa::types::Signature;
-
-    let canister_state = canister_state_with_message(message, seed);
-    let certificate_data = CertificateData::CanisterData {
-        canister_id,
-        certified_data: canister_state.root_digest,
-    };
-    let (_cert, _root_pk, cbor_cert) = CertificateBuilder::new(certificate_data)
-        .with_root_of_trust(root_public_key, root_secret_key)
-        .build();
-    let sig_with_canister_witness = Signature {
-        certificate: Blob(cbor_cert),
-        tree: canister_state.witness,
-    };
-    CanisterSig(serialize_to_cbor(&sig_with_canister_witness))
-}
-
-fn canister_state_with_message(message: Vec<u8>, seed: &[u8]) -> CanisterState {
-    use ic_crypto_internal_basic_sig_iccsa_test_utils::{
-        new_canister_state_tree, witness_from_tree,
-    };
-
-    let canister_state_tree = new_canister_state_tree(seed, &message[..]);
-    let mixed_tree = witness_from_tree(canister_state_tree);
-    let hash_tree_digest = mixed_tree.digest();
-
-    CanisterState {
-        seed: seed.to_vec(),
-        msg: message,
-        witness: mixed_tree,
-        root_digest: hash_tree_digest,
-    }
-}
-
-fn flip_a_bit_mut(input: &mut [u8]) {
+pub fn flip_a_bit_mut(input: &mut [u8]) {
     *input
         .last_mut()
         .expect("cannot flip a bit in an empty slice!") ^= 1;
@@ -466,4 +455,46 @@ fn oid_canister_signature() -> OID {
     // (iso.org.dod.internet.private.enterprise.dfinity.mechanisms.canister-signature)
     // See https://internetcomputer.org/docs/current/references/ic-interface-spec#canister-signatures
     oid!(1, 3, 6, 1, 4, 1, 56387, 1, 2)
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct RootOfTrust {
+    pub public_key: ThresholdSigPublicKey,
+    pub secret_key: SecretKeyBytes,
+}
+
+impl RootOfTrust {
+    pub fn new_random<R: Rng + CryptoRng>(rng: &mut R) -> Self {
+        let (public_key, secret_key) = generate_root_of_trust(rng);
+        RootOfTrust {
+            public_key,
+            secret_key,
+        }
+    }
+}
+
+pub fn hard_coded_root_of_trust() -> RootOfTrust {
+    use ic_crypto_internal_types::sign::threshold_sig::public_key::bls12_381;
+    use ic_crypto_secrets_containers::SecretArray;
+
+    const ROOT_OF_TRUST_PUBLIC_KEY_BYTES: [u8; 96] = [
+        152, 219, 31, 20, 68, 111, 213, 221, 156, 86, 221, 18, 142, 166, 221, 206, 74, 193, 225,
+        199, 24, 146, 180, 58, 0, 224, 163, 131, 175, 49, 45, 203, 92, 166, 2, 191, 98, 128, 79,
+        191, 103, 152, 95, 3, 230, 140, 98, 80, 23, 139, 212, 185, 70, 195, 15, 58, 10, 73, 28,
+        186, 83, 34, 195, 148, 210, 6, 115, 167, 155, 233, 213, 229, 174, 102, 44, 112, 231, 238,
+        186, 167, 154, 241, 122, 206, 52, 52, 127, 205, 84, 203, 97, 160, 135, 103, 43, 74,
+    ];
+    const ROOT_OF_TRUST_SECRET_KEY: [u8; 32] = [
+        91, 5, 19, 183, 21, 92, 188, 34, 41, 208, 100, 138, 160, 79, 45, 79, 251, 98, 10, 131, 65,
+        199, 151, 20, 46, 28, 231, 217, 89, 240, 217, 154,
+    ];
+    let public_key =
+        ThresholdSigPublicKey::from(bls12_381::PublicKeyBytes(ROOT_OF_TRUST_PUBLIC_KEY_BYTES));
+    let secret_key = SecretKeyBytes::new(SecretArray::new_and_dont_zeroize_argument(
+        &ROOT_OF_TRUST_SECRET_KEY,
+    ));
+    RootOfTrust {
+        public_key,
+        secret_key,
+    }
 }
