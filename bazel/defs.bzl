@@ -4,23 +4,35 @@ Utilities for building IC replica and canisters.
 
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 
-def gzip_compress(name, srcs, **kwargs):
-    """GZip-compresses source files.
+_COMPRESS_CONCURENCY = 16
 
-    Args:
-      name: name of the compressed file.
-      srcs: list of input labels.
-      **kwargs: any additional arguments to pass to genrule.
+def _compress_resources(_os, _input_size):
+    """ The function returns resource hints to bazel so it can properly schedule actions.
+
+    Check https://bazel.build/rules/lib/actions#run for `resource_set` parameter to find documentation of the function, possible arguments and expected return value.
     """
-    native.genrule(
-        name = "_compress_" + name,
-        exec_tools = ["@pigz"],
-        srcs = srcs,
-        outs = [name],
-        message = "Compressing into %s" % name,
-        cmd_bash = "$(location @pigz) --no-name $(SRCS) --stdout > $@",
-        **kwargs
+    return {"cpu": _COMPRESS_CONCURENCY}
+
+def _gzip_compress(ctx):
+    """GZip-compresses source files.
+    """
+    out = ctx.actions.declare_file(ctx.label.name)
+    ctx.actions.run_shell(
+        command = "{pigz} --processes {concurency} --no-name {srcs} --stdout > {out}".format(pigz = ctx.file._pigz.path, concurency = _COMPRESS_CONCURENCY, srcs = " ".join([s.path for s in ctx.files.srcs]), out = out.path),
+        inputs = ctx.files.srcs,
+        outputs = [out],
+        tools = [ctx.file._pigz],
+        resource_set = _compress_resources,
     )
+    return [DefaultInfo(files = depset([out]), runfiles = ctx.runfiles(files = [out]))]
+
+gzip_compress = rule(
+    implementation = _gzip_compress,
+    attrs = {
+        "srcs": attr.label_list(allow_files = True),
+        "_pigz": attr.label(allow_single_file = True, default = "@pigz"),
+    },
+)
 
 def rust_test_suite_with_extra_srcs(name, srcs, extra_srcs, **kwargs):
     """ A rule for creating a test suite for a set of `rust_test` targets.
