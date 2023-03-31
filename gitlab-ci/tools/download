@@ -50,7 +50,7 @@ fi
 
 if [ -z "${BASE_URL:-}" ]; then
     BASE_URL="https://download.dfinity.systems"
-    PROXY_URL="http://download.proxy.dfinity.systems:8080"
+    PROXY_URL="http://download.proxy-global.dfinity.network:8080"
     if curl --connect-timeout 5 --head "${PROXY_URL}" >&2; then
         BASE_URL="${PROXY_URL}"
     fi
