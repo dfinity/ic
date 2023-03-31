@@ -1,10 +1,10 @@
 use crate::{
     compute_bundled_manifest, release_lock_and_persist_metadata, CheckpointError, PageMapType,
-    SharedState, StateManagerMetrics, MAX_SUPPORTED_STATE_SYNC_VERSION,
-    NUMBER_OF_CHECKPOINT_THREADS,
+    SharedState, StateManagerMetrics, CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS,
+    MAX_SUPPORTED_STATE_SYNC_VERSION, NUMBER_OF_CHECKPOINT_THREADS,
 };
 use crossbeam_channel::{unbounded, Sender};
-use ic_logger::{fatal, info, ReplicaLogger};
+use ic_logger::{error, fatal, info, ReplicaLogger};
 use ic_protobuf::state::canister_metadata::v1::CanisterMetadata;
 #[allow(unused)]
 use ic_replicated_state::{
@@ -15,6 +15,7 @@ use ic_state_layout::{
     error::LayoutError, CanisterStateBits, CheckpointLayout, ExecutionStateBits, ReadOnly,
     RwPolicy, StateLayout, TipHandler,
 };
+use ic_types::state_sync::{FILE_GROUP_CHUNK_ID_OFFSET, MANIFEST_CHUNK_ID_OFFSET};
 use ic_types::{malicious_flags::MaliciousFlags, CanisterId, Height};
 use ic_utils::fs::defrag_file_partially;
 use ic_utils::thread::parallel_map;
@@ -627,6 +628,8 @@ fn handle_compute_manifest_request(
         checkpoint_layout.height(),
     );
 
+    let num_file_group_chunks = crate::manifest::build_file_group_chunks(&manifest).len();
+
     let bundled_manifest = compute_bundled_manifest(manifest);
 
     #[cfg(feature = "malicious_code")]
@@ -641,6 +644,48 @@ fn handle_compute_manifest_request(
         bundled_manifest.root_hash,
         checkpoint_layout.height()
     );
+
+    metrics
+        .manifest_metrics
+        .file_group_chunks
+        .set(num_file_group_chunks as i64);
+
+    let file_group_chunk_id_range_length =
+        (MANIFEST_CHUNK_ID_OFFSET - FILE_GROUP_CHUNK_ID_OFFSET) as usize;
+    if num_file_group_chunks > file_group_chunk_id_range_length / 2 {
+        error!(
+            log,
+            "{}: The number of file group chunks is greater than half of the available ID space in state sync. Number of file group chunks: {}, file group chunk ID range length: {}",
+            CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS,
+            num_file_group_chunks,
+            file_group_chunk_id_range_length,
+        );
+        metrics
+            .manifest_metrics
+            .chunk_id_usage_nearing_limits_critical
+            .inc();
+    }
+
+    let num_sub_manifest_chunks = bundled_manifest.meta_manifest.sub_manifest_hashes.len();
+    metrics
+        .manifest_metrics
+        .sub_manifest_chunks
+        .set(num_sub_manifest_chunks as i64);
+
+    let sub_manifest_chunk_id_range_length = u32::MAX - MANIFEST_CHUNK_ID_OFFSET + 1;
+    if num_sub_manifest_chunks > sub_manifest_chunk_id_range_length as usize / 2 {
+        error!(
+            log,
+            "{}: The number of sub-manifest chunks is greater than half of the available ID space in state sync. Number of sub-manifest chunks: {}, sub-manifest chunk ID range length: {}",
+            CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS,
+            num_sub_manifest_chunks,
+            sub_manifest_chunk_id_range_length,
+        );
+        metrics
+            .manifest_metrics
+            .chunk_id_usage_nearing_limits_critical
+            .inc();
+    }
 
     let mut states = states.write();
 
