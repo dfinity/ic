@@ -3039,7 +3039,7 @@ fn consumed_cycles_ecdsa_outcalls_are_added_to_consumed_cycles_total() {
     assert_eq!(
         fetch_gauge_vec(
             test.metrics_registry(),
-            "consumed_cycles_since_replica_started",
+            "replicated_state_consumed_cycles_from_replica_start",
         ),
         metric_vec(&[(&[("use_case", "ECDSAOutcalls")], fee.get() as f64),]),
     );
@@ -3140,7 +3140,7 @@ fn consumed_cycles_http_outcalls_are_added_to_consumed_cycles_total() {
     assert_eq!(
         fetch_gauge_vec(
             test.metrics_registry(),
-            "consumed_cycles_since_replica_started",
+            "replicated_state_consumed_cycles_from_replica_start",
         ),
         metric_vec(&[(&[("use_case", "HTTPOutcalls")], fee.get() as f64),]),
     );
@@ -3175,7 +3175,7 @@ fn consumed_cycles_since_replica_started_are_updated_from_valid_canisters() {
     assert_eq!(
         fetch_gauge_vec(
             test.metrics_registry(),
-            "consumed_cycles_since_replica_started",
+            "replicated_state_consumed_cycles_from_replica_start",
         ),
         metric_vec(&[(&[("use_case", "Instructions")], removed_cycles.get() as f64),]),
     );
@@ -3219,7 +3219,7 @@ fn consumed_cycles_since_replica_started_are_updated_from_deleted_canisters() {
     assert_eq!(
         fetch_gauge_vec(
             test.metrics_registry(),
-            "consumed_cycles_since_replica_started",
+            "replicated_state_consumed_cycles_from_replica_start",
         ),
         metric_vec(&[
             (&[("use_case", "Instructions")], removed_cycles.get() as f64),

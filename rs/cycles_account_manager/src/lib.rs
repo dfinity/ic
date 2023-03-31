@@ -575,18 +575,20 @@ impl CyclesAccountManager {
         prepayment_for_response_execution: Cycles,
         prepayment_for_response_transmission: Cycles,
         subnet_size: usize,
-    ) -> Result<(), CanisterOutOfCyclesError> {
+    ) -> Result<Vec<(CyclesUseCase, Cycles)>, CanisterOutOfCyclesError> {
         // The total amount charged consists of:
         //   - the fee to do the xnet call (request + response)
         //   - the fee to send the request (by size)
         //   - the fee for the largest possible response
         //   - the fee for executing the largest allowed response when it eventually arrives.
-        let fee = self.scale_cost(
+        let transmission_fee = self.scale_cost(
             self.config.xnet_call_fee
                 + self.config.xnet_byte_transmission_fee * request.payload_size_bytes().get(),
             subnet_size,
-        ) + prepayment_for_response_transmission
-            + prepayment_for_response_execution;
+        ) + prepayment_for_response_transmission;
+
+        let fee = transmission_fee + prepayment_for_response_execution;
+
         self.withdraw_with_threshold(
             canister_id,
             cycles_balance,
@@ -598,7 +600,18 @@ impl CyclesAccountManager {
                 canister_compute_allocation,
                 subnet_size,
             ),
-        )
+        )?;
+
+        Ok(Vec::from([
+            (
+                CyclesUseCase::Instructions,
+                prepayment_for_response_execution,
+            ),
+            (
+                CyclesUseCase::RequestAndResponseTransmission,
+                transmission_fee,
+            ),
+        ]))
     }
 
     /// Returns the amount of cycles required for executing the longest-running

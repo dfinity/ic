@@ -433,7 +433,7 @@ pub struct CanisterStateBits {
     /// Canister version.
     #[prost(uint64, tag = "34")]
     pub canister_version: u64,
-    #[prost(message, repeated, tag = "35")]
+    #[prost(message, repeated, tag = "36")]
     pub consumed_cycles_since_replica_started_by_use_cases:
         ::prost::alloc::vec::Vec<ConsumedCyclesByUseCase>,
     #[prost(oneof = "canister_state_bits::CanisterStatus", tags = "11, 12, 13")]
@@ -482,7 +482,7 @@ pub enum CyclesUseCase {
     ComputeAllocation = 2,
     IngressInduction = 3,
     Instructions = 4,
-    RequestTransmissionAndProcessing = 5,
+    RequestAndResponseTransmission = 5,
     Uninstall = 6,
     CanisterCreation = 7,
     EcdsaOutcalls = 8,
@@ -502,8 +502,8 @@ impl CyclesUseCase {
             CyclesUseCase::ComputeAllocation => "CYCLES_USE_CASE_COMPUTE_ALLOCATION",
             CyclesUseCase::IngressInduction => "CYCLES_USE_CASE_INGRESS_INDUCTION",
             CyclesUseCase::Instructions => "CYCLES_USE_CASE_INSTRUCTIONS",
-            CyclesUseCase::RequestTransmissionAndProcessing => {
-                "CYCLES_USE_CASE_REQUEST_TRANSMISSION_AND_PROCESSING"
+            CyclesUseCase::RequestAndResponseTransmission => {
+                "CYCLES_USE_CASE_REQUEST_AND_RESPONSE_TRANSMISSION"
             }
             CyclesUseCase::Uninstall => "CYCLES_USE_CASE_UNINSTALL",
             CyclesUseCase::CanisterCreation => "CYCLES_USE_CASE_CANISTER_CREATION",
