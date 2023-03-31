@@ -118,6 +118,11 @@ pub enum AuthenticationError {
 
     /// Delegation chain is too long.
     DelegationTooLongError { length: usize, maximum: usize },
+
+    /// Delegation chain contains at least one cycle, meaning that a public key delegates to a public key,
+    /// which was already encountered before in the chain of delegations.
+    /// Note that if both keys are equal, then this delegation is self-signed, which is also forbidden.
+    DelegationContainsCyclesError { public_key: Vec<u8> },
 }
 
 impl Display for AuthenticationError {
@@ -136,6 +141,11 @@ impl Display for AuthenticationError {
                 f,
                 "Chain of delegations is too long: got {} delegations, but at most {} are allowed",
                 length, maximum
+            ),
+            AuthenticationError::DelegationContainsCyclesError { public_key } => write!(
+                f,
+                "Chain of delegations contains at least one cycle: first repeating public key encountered {}",
+                hex::encode(public_key)
             ),
         }
     }

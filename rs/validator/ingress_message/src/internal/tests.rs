@@ -378,6 +378,7 @@ mod validate_request {
 
     mod authenticated_requests_delegations {
         use super::*;
+        use crate::AuthenticationError::DelegationContainsCyclesError;
         use crate::AuthenticationError::InvalidBasicSignature;
         use crate::AuthenticationError::InvalidCanisterSignature;
         use crate::HttpRequestVerifier;
@@ -499,17 +500,18 @@ mod validate_request {
 
         #[test]
         fn should_fail_when_a_single_delegation_expired() {
-            let mut rng = reproducible_rng();
-            let expired_delegation_index = rng.gen_range(1..=MAXIMUM_NUMBER_OF_DELEGATIONS);
+            let mut rng1 = reproducible_rng();
+            let mut rng2 = rng1.fork();
+            let expired_delegation_index = rng1.gen_range(1..=MAXIMUM_NUMBER_OF_DELEGATIONS);
             let one_ns = Duration::from_nanos(1);
             let expired = CURRENT_TIME - one_ns;
             let not_expired = CURRENT_TIME;
             let delegation_chain = grow_delegation_chain(
-                DelegationChain::rooted_at(random_user_key_pair(&mut rng)),
+                DelegationChain::rooted_at(random_user_key_pair(&mut rng1)),
                 MAXIMUM_NUMBER_OF_DELEGATIONS,
                 |index| index == expired_delegation_index,
-                |builder| builder.delegate_to(random_user_key_pair(&mut rng.clone()), expired),
-                |builder| builder.delegate_to(random_user_key_pair(&mut rng.clone()), not_expired),
+                |builder| builder.delegate_to(random_user_key_pair(&mut rng1), expired),
+                |builder| builder.delegate_to(random_user_key_pair(&mut rng2), not_expired),
             );
             let request = HttpRequestBuilder::default()
                 .with_ingress_expiry_at(CURRENT_TIME)
@@ -541,21 +543,22 @@ mod validate_request {
 
         #[test]
         fn should_fail_when_single_delegation_signature_corrupted() {
-            let mut rng = reproducible_rng();
-            let corrupted_delegation_index = rng.gen_range(1..=MAXIMUM_NUMBER_OF_DELEGATIONS);
+            let mut rng1 = reproducible_rng();
+            let mut rng2 = rng1.fork();
+            let corrupted_delegation_index = rng1.gen_range(1..=MAXIMUM_NUMBER_OF_DELEGATIONS);
             let mut key_pair_whose_signature_is_corrupted = None;
             let delegation_chain = grow_delegation_chain(
-                DelegationChain::rooted_at(random_user_key_pair(&mut rng)),
+                DelegationChain::rooted_at(random_user_key_pair(&mut rng1)),
                 MAXIMUM_NUMBER_OF_DELEGATIONS,
                 |index| index == corrupted_delegation_index,
                 |builder| {
                     key_pair_whose_signature_is_corrupted = Some(builder.current_end().clone());
                     builder
-                        .delegate_to(random_user_key_pair(&mut rng.clone()), CURRENT_TIME) // produce a statement signed by the secret key of `key_pair_whose_signature_is_corrupted`
+                        .delegate_to(random_user_key_pair(&mut rng1), CURRENT_TIME) // produce a statement signed by the secret key of `key_pair_whose_signature_is_corrupted`
                         .change_last_delegation(|delegation| delegation.corrupt_signature())
                     // corrupt signature produced by secret key of `key_pair_whose_signature_is_corrupted`
                 },
-                |builder| builder.delegate_to(random_user_key_pair(&mut rng.clone()), CURRENT_TIME),
+                |builder| builder.delegate_to(random_user_key_pair(&mut rng2), CURRENT_TIME),
             );
             let request = HttpRequestBuilder::default()
                 .with_ingress_expiry_at(CURRENT_TIME)
@@ -573,21 +576,22 @@ mod validate_request {
 
         #[test]
         fn should_fail_when_delegations_do_not_form_a_chain() {
-            let mut rng = reproducible_rng();
-            let wrong_delegation_index = rng.gen_range(1..=MAXIMUM_NUMBER_OF_DELEGATIONS);
-            let other_key_pair = random_user_key_pair(&mut rng);
+            let mut rng1 = reproducible_rng();
+            let mut rng2 = rng1.fork();
+            let wrong_delegation_index = rng1.gen_range(1..=MAXIMUM_NUMBER_OF_DELEGATIONS);
+            let other_key_pair = random_user_key_pair(&mut rng1);
             let delegation_chain = grow_delegation_chain(
-                DelegationChain::rooted_at(random_user_key_pair(&mut rng)),
+                DelegationChain::rooted_at(random_user_key_pair(&mut rng1)),
                 MAXIMUM_NUMBER_OF_DELEGATIONS,
                 |index| index == wrong_delegation_index,
                 |builder| {
                     builder
-                        .delegate_to(random_user_key_pair(&mut rng.clone()), CURRENT_TIME)
+                        .delegate_to(random_user_key_pair(&mut rng1), CURRENT_TIME)
                         .change_last_delegation(|last_delegation| {
                             last_delegation.with_public_key(other_key_pair.public_key_der())
                         })
                 },
-                |builder| builder.delegate_to(random_user_key_pair(&mut rng.clone()), CURRENT_TIME),
+                |builder| builder.delegate_to(random_user_key_pair(&mut rng2), CURRENT_TIME),
             );
             let request = HttpRequestBuilder::default()
                 .with_ingress_expiry_at(CURRENT_TIME)
@@ -772,6 +776,84 @@ mod validate_request {
             assert_eq!(result, Ok(()))
         }
 
+        #[test]
+        fn should_fail_when_delegations_self_signed() {
+            let mut rng = reproducible_rng();
+            let mut key_pairs = random_user_key_pairs(3, &mut rng);
+            let duplicated_key_pair = key_pairs[1].clone();
+            key_pairs.insert(1, duplicated_key_pair.clone());
+            let chain_with_self_signed_delegations =
+                DelegationChainBuilder::from((key_pairs, CURRENT_TIME)).build();
+            let request = HttpRequestBuilder::default()
+                .with_ingress_expiry_at(CURRENT_TIME)
+                .with_authentication(AuthenticationScheme::Delegation(
+                    chain_with_self_signed_delegations,
+                ))
+                .build();
+
+            let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
+
+            assert_matches!(result, Err(InvalidDelegation(DelegationContainsCyclesError{public_key}))
+            if public_key == duplicated_key_pair.public_key_der())
+        }
+
+        #[test]
+        fn should_fail_when_start_of_delegations_self_signed() {
+            let mut rng = reproducible_rng();
+            let mut key_pairs = random_user_key_pairs(2, &mut rng);
+            let duplicated_key_pair = key_pairs[0].clone();
+            key_pairs.insert(0, duplicated_key_pair.clone());
+            let chain_with_self_signed_delegations =
+                DelegationChainBuilder::from((key_pairs, CURRENT_TIME)).build();
+            let request = HttpRequestBuilder::default()
+                .with_ingress_expiry_at(CURRENT_TIME)
+                .with_authentication(AuthenticationScheme::Delegation(
+                    chain_with_self_signed_delegations,
+                ))
+                .build();
+
+            let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
+
+            assert_matches!(result, Err(InvalidDelegation(DelegationContainsCyclesError{public_key}))
+                if public_key == duplicated_key_pair.public_key_der())
+        }
+
+        #[test]
+        fn should_fail_when_delegation_chain_contains_a_cycle_with_start_of_chain() {
+            let mut rng = reproducible_rng();
+            let mut key_pairs = random_user_key_pairs(2, &mut rng);
+            let duplicated_key_pair = key_pairs[0].clone();
+            key_pairs.push(duplicated_key_pair.clone());
+            let chain_with_cycle = DelegationChainBuilder::from((key_pairs, CURRENT_TIME)).build();
+            let request = HttpRequestBuilder::default()
+                .with_ingress_expiry_at(CURRENT_TIME)
+                .with_authentication(AuthenticationScheme::Delegation(chain_with_cycle))
+                .build();
+
+            let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
+
+            assert_matches!(result, Err(InvalidDelegation(DelegationContainsCyclesError {public_key}))
+                if public_key == duplicated_key_pair.public_key_der())
+        }
+
+        #[test]
+        fn should_fail_when_delegation_chain_contains_a_cycle() {
+            let mut rng = reproducible_rng();
+            let mut key_pairs = random_user_key_pairs(3, &mut rng);
+            let duplicated_key_pair = key_pairs[1].clone();
+            key_pairs.push(duplicated_key_pair.clone());
+            let chain_with_cycle = DelegationChainBuilder::from((key_pairs, CURRENT_TIME)).build();
+            let request = HttpRequestBuilder::default()
+                .with_ingress_expiry_at(CURRENT_TIME)
+                .with_authentication(AuthenticationScheme::Delegation(chain_with_cycle))
+                .build();
+
+            let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
+
+            assert_matches!(result, Err(InvalidDelegation(DelegationContainsCyclesError {public_key}))
+                if public_key == duplicated_key_pair.public_key_der())
+        }
+
         fn delegation_chain_of_length<R: Rng + CryptoRng>(
             number_of_delegations: usize,
             delegation_expiration: Time,
@@ -848,6 +930,18 @@ mod validate_request {
 
     fn random_user_key_pair<R: Rng + CryptoRng>(rng: &mut R) -> DirectAuthenticationScheme {
         UserKeyPair(Ed25519KeyPair::generate(rng))
+    }
+
+    fn random_user_key_pairs<R: Rng + CryptoRng>(
+        number_of_kay_pairs: usize,
+        rng: &mut R,
+    ) -> Vec<DirectAuthenticationScheme> {
+        assert!(number_of_kay_pairs > 0);
+        let mut key_pairs = Vec::with_capacity(number_of_kay_pairs);
+        for _ in 0..number_of_kay_pairs {
+            key_pairs.push(random_user_key_pair(rng));
+        }
+        key_pairs
     }
 
     fn canister_signature_with_hard_coded_root_of_trust() -> DirectAuthenticationScheme {

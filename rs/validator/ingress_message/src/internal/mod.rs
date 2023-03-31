@@ -258,6 +258,9 @@ fn to_authentication_lib_error(error: ic_validator::AuthenticationError) -> Auth
         ic_validator::AuthenticationError::DelegationTooLongError { length, maximum } => {
             AuthenticationError::DelegationTooLongError { length, maximum }
         }
+        ic_validator::AuthenticationError::DelegationContainsCyclesError { public_key } => {
+            AuthenticationError::DelegationContainsCyclesError { public_key }
+        }
     }
 }
 
