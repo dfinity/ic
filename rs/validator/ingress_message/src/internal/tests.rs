@@ -2,22 +2,31 @@ use assert_matches::assert_matches;
 
 mod validate_request {
     use super::*;
+    use crate::internal::IngressMessageVerifierBuilder;
     use crate::RequestValidationError::MissingSignature;
     use crate::{HttpRequestVerifier, IngressMessageVerifier, TimeProvider};
     use ic_canister_client_sender::Ed25519KeyPair;
+    use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
     use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
     use ic_registry_client_helpers::node_operator::PrincipalId;
     use ic_types::messages::Blob;
     use ic_types::time::GENESIS;
+    use ic_types::CanisterId;
     use ic_types::{Time, UserId};
-    use ic_validator_http_request_test_utils::DirectAuthenticationScheme::UserKeyPair;
+    use ic_validator_http_request_test_utils::DirectAuthenticationScheme::{
+        CanisterSignature, UserKeyPair,
+    };
     use ic_validator_http_request_test_utils::{
-        AuthenticationScheme, DirectAuthenticationScheme, HttpRequestBuilder,
+        hard_coded_root_of_trust, AuthenticationScheme, CanisterSigner, DirectAuthenticationScheme,
+        HttpRequestBuilder, RootOfTrust,
     };
     use rand::{CryptoRng, Rng};
     use std::str::FromStr;
 
     const CURRENT_TIME: Time = GENESIS;
+    const CANISTER_SIGNATURE_SEED: [u8; 1] = [42];
+    const CANISTER_ID_SIGNER: CanisterId = CanisterId::from_u64(1185);
+    const CANISTER_ID_WRONG_SIGNER: CanisterId = CanisterId::from_u64(1186);
 
     mod ingress_expiry {
         use super::*;
@@ -81,7 +90,10 @@ mod validate_request {
                     .with_ingress_expiry_at(acceptable_expiry)
                     .build();
 
-                let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
+                let result = default_verifier()
+                    .with_root_of_trust(hard_coded_root_of_trust().public_key)
+                    .build()
+                    .validate_request(&request);
 
                 assert_matches!(
                     result,
@@ -100,13 +112,14 @@ mod validate_request {
             let schemes = vec![
                 AuthenticationScheme::Anonymous,
                 AuthenticationScheme::Direct(random_user_key_pair(rng)),
+                AuthenticationScheme::Direct(canister_signature_with_hard_coded_root_of_trust()),
                 AuthenticationScheme::Delegation(
                     DelegationChain::rooted_at(random_user_key_pair(rng))
                         .delegate_to(random_user_key_pair(rng), CURRENT_TIME)
                         .build(),
                 ),
             ];
-            assert_eq!(schemes.len(), AuthenticationScheme::COUNT);
+            assert_eq!(schemes.len(), AuthenticationScheme::COUNT + 1);
             schemes
         }
     }
@@ -161,7 +174,7 @@ mod validate_request {
         }
     }
 
-    mod authenticated_requests_direct {
+    mod authenticated_requests_direct_ed25519 {
         use super::*;
         use crate::AuthenticationError;
         use crate::RequestValidationError::InvalidSignature;
@@ -188,7 +201,7 @@ mod validate_request {
             let mut rng = reproducible_rng();
             let request = HttpRequestBuilder::default()
                 .with_ingress_expiry_at(CURRENT_TIME)
-                .with_authentication(auth_with_random_user_key_pair(&mut rng))
+                .with_authentication(Direct(random_user_key_pair(&mut rng)))
                 .corrupt_authentication_sender_signature()
                 .build();
 
@@ -235,13 +248,142 @@ mod validate_request {
         }
     }
 
+    mod authenticated_requests_direct_canister_signature {
+        use super::*;
+        use crate::AuthenticationError::InvalidCanisterSignature;
+        use crate::RequestValidationError::InvalidSignature;
+        use crate::RequestValidationError::UserIdDoesNotMatchPublicKey;
+        use ic_validator_http_request_test_utils::AuthenticationScheme::Direct;
+        use ic_validator_http_request_test_utils::{flip_a_bit_mut, HttpRequestEnvelopeFactory};
+
+        #[test]
+        fn should_validate_request_signed_by_canister() {
+            let mut rng = reproducible_rng();
+            let root_of_trust = RootOfTrust::new_random(&mut rng);
+            let request = HttpRequestBuilder::default()
+                .with_ingress_expiry_at(CURRENT_TIME)
+                .with_authentication(Direct(canister_signature(root_of_trust.clone())))
+                .build();
+
+            let result = default_verifier()
+                .with_root_of_trust(root_of_trust.public_key)
+                .build()
+                .validate_request(&request);
+
+            assert_eq!(result, Ok(()));
+        }
+
+        #[test]
+        fn should_error_when_root_of_trust_wrong() {
+            let mut rng = reproducible_rng();
+            let root_of_trust = RootOfTrust::new_random(&mut rng);
+            let another_root_of_trust = RootOfTrust::new_random(&mut rng);
+            assert_ne!(root_of_trust.public_key, another_root_of_trust.public_key);
+            let request = HttpRequestBuilder::default()
+                .with_ingress_expiry_at(CURRENT_TIME)
+                .with_authentication(Direct(canister_signature(root_of_trust)))
+                .build();
+
+            let result = default_verifier()
+                .with_root_of_trust(another_root_of_trust.public_key)
+                .build()
+                .validate_request(&request);
+
+            assert_matches!(result, Err(InvalidSignature(InvalidCanisterSignature(_))));
+        }
+
+        #[test]
+        fn should_error_when_signature_corrupted() {
+            let mut rng = reproducible_rng();
+            let root_of_trust = RootOfTrust::new_random(&mut rng);
+            let request = HttpRequestBuilder::default()
+                .with_ingress_expiry_at(CURRENT_TIME)
+                .with_authentication(Direct(canister_signature(root_of_trust.clone())))
+                .corrupt_authentication_sender_signature()
+                .build();
+
+            let result = default_verifier()
+                .with_root_of_trust(root_of_trust.public_key)
+                .build()
+                .validate_request(&request);
+
+            assert_matches!(result, Err(InvalidSignature(InvalidCanisterSignature(_))));
+        }
+
+        #[test]
+        fn should_error_when_public_key_does_not_match_sender_because_seed_corrupted() {
+            let mut rng = reproducible_rng();
+            let root_of_trust = RootOfTrust::new_random(&mut rng);
+            let signer = CanisterSigner {
+                seed: CANISTER_SIGNATURE_SEED.to_vec(),
+                canister_id: CANISTER_ID_SIGNER,
+                root_public_key: root_of_trust.public_key,
+                root_secret_key: root_of_trust.secret_key,
+            };
+            let signer_with_different_seed = {
+                let mut other = signer.clone();
+                flip_a_bit_mut(&mut other.seed);
+                other
+            };
+            assert_ne!(signer, signer_with_different_seed);
+            let request = HttpRequestBuilder::default()
+                .with_ingress_expiry_at(CURRENT_TIME)
+                .with_authentication(Direct(CanisterSignature(signer)))
+                .with_authentication_sender_public_key(
+                    Direct(CanisterSignature(signer_with_different_seed)).sender_public_key(),
+                )
+                .build();
+
+            let result = default_verifier()
+                .with_root_of_trust(root_of_trust.public_key)
+                .build()
+                .validate_request(&request);
+
+            assert_matches!(result, Err(UserIdDoesNotMatchPublicKey(_, _)));
+        }
+
+        #[test]
+        fn should_error_when_public_key_does_not_match_sender_because_canister_id_corrupted() {
+            let mut rng = reproducible_rng();
+            let root_of_trust = RootOfTrust::new_random(&mut rng);
+            let signer = CanisterSigner {
+                seed: CANISTER_SIGNATURE_SEED.to_vec(),
+                canister_id: CANISTER_ID_SIGNER,
+                root_public_key: root_of_trust.public_key,
+                root_secret_key: root_of_trust.secret_key,
+            };
+            let signer_with_different_canister_id = {
+                let mut other = signer.clone();
+                other.canister_id = CANISTER_ID_WRONG_SIGNER;
+                other
+            };
+            assert_ne!(signer, signer_with_different_canister_id);
+            let request = HttpRequestBuilder::default()
+                .with_ingress_expiry_at(CURRENT_TIME)
+                .with_authentication(Direct(CanisterSignature(signer)))
+                .with_authentication_sender_public_key(
+                    Direct(CanisterSignature(signer_with_different_canister_id))
+                        .sender_public_key(),
+                )
+                .build();
+
+            let result = default_verifier()
+                .with_root_of_trust(root_of_trust.public_key)
+                .build()
+                .validate_request(&request);
+
+            assert_matches!(result, Err(UserIdDoesNotMatchPublicKey(_, _)));
+        }
+    }
+
     mod authenticated_requests_delegations {
         use super::*;
         use crate::AuthenticationError::InvalidBasicSignature;
+        use crate::AuthenticationError::InvalidCanisterSignature;
         use crate::HttpRequestVerifier;
-        use crate::RequestValidationError::CanisterNotInDelegationTargets;
         use crate::RequestValidationError::InvalidDelegation;
         use crate::RequestValidationError::InvalidDelegationExpiry;
+        use crate::RequestValidationError::{CanisterNotInDelegationTargets, InvalidSignature};
         use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
         use ic_types::time::GENESIS;
         use ic_types::{CanisterId, Time};
@@ -294,6 +436,28 @@ mod validate_request {
                 );
             }
         }
+        #[test]
+        fn should_validate_delegation_chains_of_length_up_to_20_containing_a_canister_signature() {
+            let mut rng = reproducible_rng();
+            let root_of_trust = RootOfTrust::new_random(&mut rng);
+            let delegation_chain = delegation_chain_with_a_canister_signature(
+                MAXIMUM_NUMBER_OF_DELEGATIONS,
+                CURRENT_TIME,
+                root_of_trust.clone(),
+                &mut rng,
+            );
+            let request = HttpRequestBuilder::default()
+                .with_ingress_expiry_at(CURRENT_TIME)
+                .with_authentication(AuthenticationScheme::Delegation(delegation_chain.build()))
+                .build();
+
+            let result = default_verifier()
+                .with_root_of_trust(root_of_trust.public_key)
+                .build()
+                .validate_request(&request);
+
+            assert_eq!(result, Ok(()));
+        }
 
         #[test]
         fn should_fail_when_delegation_chain_length_just_above_boundary() {
@@ -305,7 +469,8 @@ mod validate_request {
                         MAXIMUM_NUMBER_OF_DELEGATIONS + 1,
                         CURRENT_TIME,
                         &mut rng,
-                    ),
+                    )
+                    .build(),
                 ))
                 .build();
 
@@ -322,7 +487,8 @@ mod validate_request {
             let request = HttpRequestBuilder::default()
                 .with_ingress_expiry_at(CURRENT_TIME)
                 .with_authentication(AuthenticationScheme::Delegation(
-                    delegation_chain_of_length(number_of_delegations, CURRENT_TIME, &mut rng),
+                    delegation_chain_of_length(number_of_delegations, CURRENT_TIME, &mut rng)
+                        .build(),
                 ))
                 .build();
 
@@ -431,6 +597,60 @@ mod validate_request {
             let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
 
             assert_matches!(result, Err(InvalidDelegation(InvalidBasicSignature(_))));
+        }
+
+        #[test]
+        fn should_fail_with_invalid_delegation_when_intermediate_delegation_is_an_unverifiable_canister_signature(
+        ) {
+            let mut rng = reproducible_rng();
+            let root_of_trust = RootOfTrust::new_random(&mut rng);
+            let other_root_of_trust = RootOfTrust::new_random(&mut rng);
+            assert_ne!(root_of_trust.public_key, other_root_of_trust.public_key);
+            let delegation_chain = delegation_chain_with_a_canister_signature(
+                MAXIMUM_NUMBER_OF_DELEGATIONS - 1,
+                CURRENT_TIME,
+                root_of_trust,
+                &mut rng,
+            )
+            .delegate_to(random_user_key_pair(&mut rng), CURRENT_TIME);
+            let request = HttpRequestBuilder::default()
+                .with_ingress_expiry_at(CURRENT_TIME)
+                .with_authentication(AuthenticationScheme::Delegation(delegation_chain.build()))
+                .build();
+
+            let result = default_verifier()
+                .with_root_of_trust(other_root_of_trust.public_key)
+                .build()
+                .validate_request(&request);
+
+            assert_matches!(result, Err(InvalidDelegation(InvalidCanisterSignature(_))));
+        }
+
+        #[test]
+        fn should_fail_with_invalid_signature_when_last_delegation_is_an_unverifiable_canister_signature(
+        ) {
+            let mut rng = reproducible_rng();
+            let root_of_trust = RootOfTrust::new_random(&mut rng);
+            let other_root_of_trust = RootOfTrust::new_random(&mut rng);
+            assert_ne!(root_of_trust.public_key, other_root_of_trust.public_key);
+            let delegation_chain = delegation_chain_of_length(
+                MAXIMUM_NUMBER_OF_DELEGATIONS - 1,
+                CURRENT_TIME,
+                &mut rng,
+            )
+            .delegate_to(canister_signature(root_of_trust), CURRENT_TIME)
+            .build();
+            let request = HttpRequestBuilder::default()
+                .with_ingress_expiry_at(CURRENT_TIME)
+                .with_authentication(AuthenticationScheme::Delegation(delegation_chain))
+                .build();
+
+            let result = default_verifier()
+                .with_root_of_trust(other_root_of_trust.public_key)
+                .build()
+                .validate_request(&request);
+
+            assert_matches!(result, Err(InvalidSignature(InvalidCanisterSignature(_))));
         }
 
         #[test]
@@ -556,7 +776,7 @@ mod validate_request {
             number_of_delegations: usize,
             delegation_expiration: Time,
             rng: &mut R,
-        ) -> DelegationChain {
+        ) -> DelegationChainBuilder {
             grow_delegation_chain(
                 DelegationChain::rooted_at(random_user_key_pair(rng)),
                 number_of_delegations,
@@ -564,7 +784,27 @@ mod validate_request {
                 |builder| builder.delegate_to(random_user_key_pair(rng), delegation_expiration),
                 |_builder| panic!("should not be called because predicate always true"),
             )
-            .build()
+        }
+
+        fn delegation_chain_with_a_canister_signature<R: Rng + CryptoRng>(
+            number_of_delegations: usize,
+            delegation_expiration: Time,
+            root_of_trust: RootOfTrust,
+            rng: &mut R,
+        ) -> DelegationChainBuilder {
+            let canister_delegation_index = rng.gen_range(1..=number_of_delegations);
+            grow_delegation_chain(
+                DelegationChain::rooted_at(random_user_key_pair(rng)),
+                number_of_delegations,
+                |index| index == canister_delegation_index,
+                |builder| {
+                    builder.delegate_to(
+                        canister_signature(root_of_trust.clone()),
+                        delegation_expiration,
+                    )
+                },
+                |builder| builder.delegate_to(random_user_key_pair(rng), delegation_expiration),
+            )
         }
 
         /// Grow a chain of delegations in two different manners depending
@@ -601,6 +841,7 @@ mod validate_request {
             chain_builder
         }
     }
+
     fn auth_with_random_user_key_pair<R: Rng + CryptoRng>(rng: &mut R) -> AuthenticationScheme {
         AuthenticationScheme::Direct(random_user_key_pair(rng))
     }
@@ -609,13 +850,30 @@ mod validate_request {
         UserKeyPair(Ed25519KeyPair::generate(rng))
     }
 
+    fn canister_signature_with_hard_coded_root_of_trust() -> DirectAuthenticationScheme {
+        canister_signature(hard_coded_root_of_trust())
+    }
+
+    fn canister_signature(root_of_trust: RootOfTrust) -> DirectAuthenticationScheme {
+        CanisterSignature(CanisterSigner {
+            seed: CANISTER_SIGNATURE_SEED.to_vec(),
+            canister_id: CANISTER_ID_SIGNER,
+            root_public_key: root_of_trust.public_key,
+            root_secret_key: root_of_trust.secret_key,
+        })
+    }
+
     fn max_ingress_expiry_at(current_time: Time) -> Time {
         use ic_constants::{MAX_INGRESS_TTL, PERMITTED_DRIFT_AT_VALIDATOR};
         current_time + MAX_INGRESS_TTL + PERMITTED_DRIFT_AT_VALIDATOR
     }
 
+    fn default_verifier() -> IngressMessageVerifierBuilder {
+        IngressMessageVerifier::builder().with_time_provider(TimeProvider::Constant(CURRENT_TIME))
+    }
+
     fn verifier_at_time(current_time: Time) -> IngressMessageVerifier {
-        IngressMessageVerifier::builder()
+        default_verifier()
             .with_time_provider(TimeProvider::Constant(current_time))
             .build()
     }

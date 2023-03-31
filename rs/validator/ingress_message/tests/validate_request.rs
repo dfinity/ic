@@ -8,7 +8,7 @@ use ic_validator_http_request_test_utils::DirectAuthenticationScheme::{
     CanisterSignature, UserKeyPair,
 };
 use ic_validator_http_request_test_utils::{
-    AuthenticationScheme, DelegationChain, HttpRequestBuilder,
+    AuthenticationScheme, CanisterSigner, DelegationChain, HttpRequestBuilder,
 };
 use ic_validator_ingress_message::IngressMessageVerifier;
 use ic_validator_ingress_message::TimeProvider;
@@ -103,12 +103,14 @@ fn should_validate_signed_request_from_canister() {
         .build();
     let request = HttpRequestBuilder::default()
         .with_ingress_expiry_at(current_time)
-        .with_authentication(AuthenticationScheme::Direct(CanisterSignature {
-            seed: CANISTER_SIGNATURE_SEED.to_vec(),
-            canister_id: CANISTER_ID_SIGNER,
-            root_public_key,
-            root_secret_key,
-        }))
+        .with_authentication(AuthenticationScheme::Direct(CanisterSignature(
+            CanisterSigner {
+                seed: CANISTER_SIGNATURE_SEED.to_vec(),
+                canister_id: CANISTER_ID_SIGNER,
+                root_public_key,
+                root_secret_key,
+            },
+        )))
         .build();
 
     let result = verifier.validate_request(&request);
@@ -128,12 +130,12 @@ fn should_validate_signed_request_with_delegation_from_canister() {
     let request = HttpRequestBuilder::default()
         .with_ingress_expiry_at(current_time)
         .with_authentication(AuthenticationScheme::Delegation(
-            DelegationChain::rooted_at(CanisterSignature {
+            DelegationChain::rooted_at(CanisterSignature(CanisterSigner {
                 seed: CANISTER_SIGNATURE_SEED.to_vec(),
                 canister_id: CANISTER_ID_SIGNER,
                 root_public_key,
                 root_secret_key,
-            })
+            }))
             .delegate_to(
                 UserKeyPair(Ed25519KeyPair::generate(&mut rng)),
                 current_time,
