@@ -16,7 +16,6 @@ gitlab-ci-config-validation:
   script:
     - |
       set -xeuo pipefail
-      pip install -r requirements.txt
       cd gitlab-ci/src
       python3 gitlab_config/main.py --job-list-validate
       python3 gitlab_config/main.py --cfg-validate
@@ -37,6 +36,5 @@ python-gitlab-ci-tests:
   script:
     - |
       set -xeuo pipefail
-      pip install -r requirements.txt
       cd gitlab-ci/src
       pytest -v -o junit_family=xunit1 --junitxml=../../test_report.xml --cov=. --cov-report=term --cov-report=term-missing --cov-report=html --cov-branch

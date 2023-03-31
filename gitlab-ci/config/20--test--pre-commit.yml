@@ -9,7 +9,6 @@ pre-commit:
   script:
     - |
       set -eEuo pipefail
-      pip3 install -r requirements.txt
       pip3 install pre-commit
       # Make sure CI can pull from the private repo.
       if ! pre-commit run -a --hook-stage=manual ; then
