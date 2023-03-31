@@ -842,26 +842,40 @@ impl ExecutionEnvironment {
                 let cycles = msg.take_cycles();
                 match &msg {
                     CanisterCall::Request(request) => {
-                        let res =
-                            match ComputeInitialEcdsaDealingsArgs::decode(request.method_payload())
-                            {
-                                Err(err) => Some(err),
-                                Ok(args) => match get_master_ecdsa_public_key(
-                                    ecdsa_subnet_public_keys,
-                                    self.own_subnet_id,
-                                    &args.key_id,
-                                ) {
-                                    Err(err) => Some(err),
-                                    Ok(_) => self
-                                        .compute_initial_ecdsa_dealings(
-                                            &mut state,
+                        let res = match state.find_subnet_id(*msg.sender()) {
+                            Err(err) => Some(err),
+                            Ok(sender_subnet_id) => {
+                                if sender_subnet_id != state.metadata.network_topology.nns_subnet_id
+                                {
+                                    Some(UserError::new(
+                                        ErrorCode::CanisterContractViolation,
+                                        format!(
+                                            "{} is called by {}. It can only be called by NNS.",
+                                            Ic00Method::ComputeInitialEcdsaDealings,
                                             msg.sender(),
-                                            args,
-                                            request,
-                                        )
-                                        .map_or_else(Some, |()| None),
-                                },
-                            };
+                                        ),
+                                    ))
+                                } else {
+                                    match ComputeInitialEcdsaDealingsArgs::decode(
+                                        request.method_payload(),
+                                    ) {
+                                        Err(err) => Some(err),
+                                        Ok(args) => match get_master_ecdsa_public_key(
+                                            ecdsa_subnet_public_keys,
+                                            self.own_subnet_id,
+                                            &args.key_id,
+                                        ) {
+                                            Err(err) => Some(err),
+                                            Ok(_) => self
+                                                .compute_initial_ecdsa_dealings(
+                                                    &mut state, args, request,
+                                                )
+                                                .map_or_else(Some, |()| None),
+                                        },
+                                    }
+                                }
+                            }
+                        };
                         res.map(|err| (Err(err), cycles))
                     }
                     CanisterCall::Ingress(_) => {
@@ -1809,22 +1823,9 @@ impl ExecutionEnvironment {
     fn compute_initial_ecdsa_dealings(
         &self,
         state: &mut ReplicatedState,
-        sender: &PrincipalId,
         args: ComputeInitialEcdsaDealingsArgs,
         request: &Request,
     ) -> Result<(), UserError> {
-        let sender_subnet_id = state.find_subnet_id(*sender)?;
-
-        if sender_subnet_id != state.metadata.network_topology.nns_subnet_id {
-            return Err(UserError::new(
-                ErrorCode::CanisterContractViolation,
-                format!(
-                    "{} is called by {}. It can only be called by NNS.",
-                    Ic00Method::ComputeInitialEcdsaDealings,
-                    sender,
-                ),
-            ));
-        }
         let nodes = args.get_set_of_nodes()?;
         let registry_version = args.get_registry_version();
         state
