@@ -1,12 +1,15 @@
 use candid::CandidType;
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
+use ic_xrc_types::ExchangeRate;
 use icp_ledger::{
     AccountIdentifier, BlockIndex, Memo, SendArgs, Subaccount, Tokens, DEFAULT_TRANSFER_FEE,
 };
 use serde::{Deserialize, Serialize};
 
 pub const DEFAULT_CYCLES_PER_XDR: u128 = 1_000_000_000_000u128; // 1T cycles = 1 XDR
+
+pub const PERMYRIAD_DECIMAL_PLACES: u32 = 4;
 
 pub const CREATE_CANISTER_REFUND_FEE: Tokens = Tokens::from_e8s(DEFAULT_TRANSFER_FEE.get_e8s() * 4);
 pub const TOP_UP_CANISTER_REFUND_FEE: Tokens = Tokens::from_e8s(DEFAULT_TRANSFER_FEE.get_e8s() * 2);
@@ -320,6 +323,25 @@ pub struct IcpXdrConversionRate {
     pub xdr_permyriad_per_icp: u64,
 }
 
+impl From<ExchangeRate> for IcpXdrConversionRate {
+    fn from(value: ExchangeRate) -> Self {
+        // Convert rate to permyriad rate.
+        let power_diff = PERMYRIAD_DECIMAL_PLACES.abs_diff(value.metadata.decimals);
+        let operation: fn(u64, u64) -> u64 =
+            match value.metadata.decimals.cmp(&PERMYRIAD_DECIMAL_PLACES) {
+                std::cmp::Ordering::Greater => u64::saturating_div,
+                std::cmp::Ordering::Less => u64::saturating_mul,
+                std::cmp::Ordering::Equal => |rate, _| rate,
+            };
+        let xdr_permyriad_per_icp = operation(value.rate, 10u64.pow(power_diff));
+
+        Self {
+            timestamp_seconds: value.timestamp,
+            xdr_permyriad_per_icp,
+        }
+    }
+}
+
 impl From<UpdateIcpXdrConversionRatePayload> for IcpXdrConversionRate {
     fn from(val: UpdateIcpXdrConversionRatePayload) -> Self {
         IcpXdrConversionRate {
@@ -338,6 +360,8 @@ pub struct IcpXdrConversionRateCertifiedResponse {
 
 #[cfg(test)]
 mod tests {
+    use ic_xrc_types::{Asset, AssetClass, ExchangeRateMetadata};
+
     use super::*;
 
     #[test]
@@ -359,5 +383,44 @@ mod tests {
             .to_cycles(Tokens::new(123, 0).unwrap()),
             31952666407731u128.into()
         );
+    }
+
+    fn new_exchange_rate(rate: u64, decimals: u32) -> ExchangeRate {
+        ExchangeRate {
+            base_asset: Asset {
+                symbol: "ICP".into(),
+                class: AssetClass::Cryptocurrency,
+            },
+            quote_asset: Asset {
+                symbol: "CXDR".into(),
+                class: AssetClass::FiatCurrency,
+            },
+            timestamp: 0,
+            rate,
+            metadata: ExchangeRateMetadata {
+                decimals,
+                base_asset_num_queried_sources: 0,
+                base_asset_num_received_rates: 0,
+                quote_asset_num_queried_sources: 0,
+                quote_asset_num_received_rates: 0,
+                standard_deviation: 0,
+                forex_timestamp: None,
+            },
+        }
+    }
+
+    #[test]
+    fn exchange_rate_to_conversion_rate() {
+        let exchange_rate = new_exchange_rate(4_916_453_360, 9);
+        let conversion_rate = IcpXdrConversionRate::from(exchange_rate);
+        assert_eq!(conversion_rate.xdr_permyriad_per_icp, 49_164);
+
+        let exchange_rate = new_exchange_rate(491, 2);
+        let conversion_rate = IcpXdrConversionRate::from(exchange_rate);
+        assert_eq!(conversion_rate.xdr_permyriad_per_icp, 49_100);
+
+        let exchange_rate = new_exchange_rate(49_164, 4);
+        let conversion_rate = IcpXdrConversionRate::from(exchange_rate);
+        assert_eq!(conversion_rate.xdr_permyriad_per_icp, 49_164);
     }
 }

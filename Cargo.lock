@@ -2413,6 +2413,7 @@ dependencies = [
 name = "cycles-minting-canister"
 version = "0.8.0"
 dependencies = [
+ "async-trait",
  "base64 0.13.1",
  "build-info",
  "build-info-build",
@@ -2421,6 +2422,7 @@ dependencies = [
  "dfn_core",
  "dfn_http_metrics",
  "dfn_protobuf",
+ "futures",
  "ic-base-types",
  "ic-certified-map",
  "ic-crypto-getrandom-for-wasm",
@@ -2434,6 +2436,7 @@ dependencies = [
  "ic-protobuf",
  "ic-types",
  "ic-types-test-utils",
+ "ic-xrc-types",
  "icp-ledger",
  "lazy_static",
  "on_wire",

@@ -37,6 +37,7 @@ DEPENDENCIES = [
 
 MACRO_DEPENDENCIES = [
     "//rs/nervous_system/common/build_metadata",
+    "@crate_index//:async-trait",
 ]
 
 BUILD_DEPENDENCIES = [
@@ -79,6 +80,7 @@ rust_canister(
 rust_test(
     name = "cmc_test",
     crate = ":cmc",
+    deps = DEPENDENCIES + ["@crate_index//:futures"],
 )
 
 rust_test(
@@ -88,5 +90,8 @@ rust_test(
     env = {
         "CARGO_MANIFEST_DIR": "rs/nns/cmc",
     },
-    deps = ["//rs/types/types_test_utils"],
+    deps = [
+        "//rs/types/types_test_utils",
+        "@crate_index//:futures",
+    ],
 )
