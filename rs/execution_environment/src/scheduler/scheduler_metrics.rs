@@ -203,7 +203,7 @@ impl SchedulerMetrics {
                 "Number of cycles consumed since replica started",
             ),
             consumed_cycles_since_replica_started_by_use_case: metrics_registry.gauge_vec(
-                "consumed_cycles_since_replica_started",
+                "replicated_state_consumed_cycles_from_replica_start",
                 "Number of cycles consumed since replica started by use cases.",
                 &["use_case"],
             ),

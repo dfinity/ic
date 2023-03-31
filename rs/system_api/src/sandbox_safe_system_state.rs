@@ -59,7 +59,7 @@ pub struct SystemStateChanges {
     pub(super) new_certified_data: Option<Vec<u8>>,
     pub(super) callback_updates: Vec<CallbackUpdate>,
     cycles_balance_change: CyclesBalanceChange,
-    cycles_consumed_for_pushing_requests: Cycles,
+    consumed_cycles_by_use_case: BTreeMap<CyclesUseCase, Cycles>,
     call_context_balance_taken: BTreeMap<CallContextId, Cycles>,
     request_slots_used: BTreeMap<CanisterId, usize>,
     requests: Vec<Request>,
@@ -72,7 +72,7 @@ impl Default for SystemStateChanges {
             new_certified_data: None,
             callback_updates: vec![],
             cycles_balance_change: CyclesBalanceChange::zero(),
-            cycles_consumed_for_pushing_requests: Cycles::zero(),
+            consumed_cycles_by_use_case: BTreeMap::new(),
             call_context_balance_taken: BTreeMap::new(),
             request_slots_used: BTreeMap::new(),
             requests: vec![],
@@ -267,10 +267,10 @@ impl SystemStateChanges {
     ) -> HypervisorResult<()> {
         // Verify total cycle change is not positive and update cycles balance.
         self.validate_cycle_change(system_state.canister_id == CYCLES_MINTING_CANISTER_ID)?;
-        self.apply_balance_changes(system_state);
+        let consumed_cycles = self.apply_balance_changes(system_state);
 
         // Observe consumed cycles.
-        system_state.observe_consumed_cycles(self.cycles_consumed_for_pushing_requests);
+        system_state.observe_consumed_cycles(consumed_cycles);
 
         // Verify we don't accept more cycles than are available from each call
         // context and update each call context balance
@@ -425,13 +425,13 @@ impl SystemStateChanges {
     }
 
     /// Applies the balance change to the given state.
-    pub fn apply_balance_changes(&self, state: &mut SystemState) {
+    pub fn apply_balance_changes(&self, state: &mut SystemState) -> Cycles {
         let balance_before = state.balance();
-        let removed_consumed_cycles = self.cycles_consumed_for_pushing_requests;
-        state.remove_cycles(
-            removed_consumed_cycles,
-            CyclesUseCase::RequestTransmissionAndProcessing,
-        );
+        let mut removed_consumed_cycles = Cycles::new(0);
+        for (use_case, amount) in self.consumed_cycles_by_use_case.iter() {
+            state.remove_cycles(*amount, *use_case);
+            removed_consumed_cycles += *amount;
+        }
 
         // The final balance of the canister should reflect `cycles_balance_change`.
         // Since we removed `removed_consumed_cycles` above, we need to add it back
@@ -460,16 +460,26 @@ impl SystemStateChanges {
                 debug_assert_eq!(balance_before - removed, state.balance());
             }
         }
+        removed_consumed_cycles
+    }
+
+    fn add_consumed_cycles(&mut self, consumed_cycles: &[(CyclesUseCase, Cycles)]) {
+        for (use_case, amount) in consumed_cycles.iter() {
+            *self
+                .consumed_cycles_by_use_case
+                .entry(*use_case)
+                .or_insert_with(|| Cycles::new(0)) += *amount;
+        }
     }
 
     #[cfg(test)]
     fn default_with_cycles_changes(
         cycles_balance_change: CyclesBalanceChange,
-        cycles_consumed_for_pushing_requests: Cycles,
+        consumed_cycles_by_use_case: BTreeMap<CyclesUseCase, Cycles>,
     ) -> SystemStateChanges {
         SystemStateChanges {
             cycles_balance_change,
-            cycles_consumed_for_pushing_requests,
+            consumed_cycles_by_use_case,
             ..Default::default()
         }
     }
@@ -691,7 +701,11 @@ impl SandboxSafeSystemState {
     /// Same as [`update_balance_change`], but asserts the balance has decreased
     /// and marks the difference as cycles consumed (i.e. burned and not
     /// transferred).
-    fn update_balance_change_consuming(&mut self, new_balance: Cycles) {
+    fn update_balance_change_consuming(
+        &mut self,
+        new_balance: Cycles,
+        consumed_cycles: &[(CyclesUseCase, Cycles)],
+    ) {
         let old_balance = self.cycles_balance();
         assert!(
             new_balance <= old_balance,
@@ -699,9 +713,9 @@ impl SandboxSafeSystemState {
             old_balance,
             new_balance
         );
-        let consumed = old_balance - new_balance;
+
         self.system_state_changes
-            .cycles_consumed_for_pushing_requests += consumed;
+            .add_consumed_cycles(consumed_cycles);
         self.update_balance_change(new_balance);
     }
 
@@ -805,24 +819,21 @@ impl SandboxSafeSystemState {
         prepayment_for_response_transmission: Cycles,
     ) -> Result<(), Request> {
         let mut new_balance = self.cycles_balance();
-        if self
-            .cycles_account_manager
-            .withdraw_request_cycles(
-                self.canister_id,
-                &mut new_balance,
-                self.freeze_threshold,
-                self.memory_allocation,
-                canister_current_memory_usage,
-                compute_allocation,
-                &msg,
-                prepayment_for_response_execution,
-                prepayment_for_response_transmission,
-                self.subnet_size,
-            )
-            .is_err()
-        {
-            return Err(msg);
-        }
+        let consumed_cycles = match self.cycles_account_manager.withdraw_request_cycles(
+            self.canister_id,
+            &mut new_balance,
+            self.freeze_threshold,
+            self.memory_allocation,
+            canister_current_memory_usage,
+            compute_allocation,
+            &msg,
+            prepayment_for_response_execution,
+            prepayment_for_response_transmission,
+            self.subnet_size,
+        ) {
+            Ok(consumed_cycles) => consumed_cycles,
+            Err(_) => return Err(msg),
+        };
 
         // If the request is targeted to IC_00 or one of the known subnets
         // count it towards the available slots for IC_00 requests.
@@ -847,7 +858,7 @@ impl SandboxSafeSystemState {
         }
         self.system_state_changes.requests.push(msg);
         *used_slots += 1;
-        self.update_balance_change_consuming(new_balance);
+        self.update_balance_change_consuming(new_balance, &consumed_cycles);
         Ok(())
     }
 
@@ -870,8 +881,10 @@ impl SandboxSafeSystemState {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use ic_base_types::NumSeconds;
-    use ic_replicated_state::SystemState;
+    use ic_replicated_state::{canister_state::system_state::CyclesUseCase, SystemState};
     use ic_test_utilities::types::ids::{canister_test_id, user_test_id};
     use ic_types::Cycles;
 
@@ -894,7 +907,7 @@ mod tests {
         let consumed = Cycles::new(100_000);
         let system_state_changes = SystemStateChanges::default_with_cycles_changes(
             CyclesBalanceChange::Removed(removed),
-            consumed,
+            BTreeMap::from([(CyclesUseCase::RequestAndResponseTransmission, consumed)]),
         );
 
         system_state_changes.apply_balance_changes(&mut system_state);
@@ -907,7 +920,7 @@ mod tests {
         let consumed = Cycles::new(600_000);
         let system_state_changes = SystemStateChanges::default_with_cycles_changes(
             CyclesBalanceChange::Removed(removed),
-            consumed,
+            BTreeMap::from([(CyclesUseCase::RequestAndResponseTransmission, consumed)]),
         );
 
         system_state_changes.apply_balance_changes(&mut system_state);
@@ -920,7 +933,7 @@ mod tests {
         let consumed = Cycles::new(100_000);
         let system_state_changes = SystemStateChanges::default_with_cycles_changes(
             CyclesBalanceChange::Added(added),
-            consumed,
+            BTreeMap::from([(CyclesUseCase::RequestAndResponseTransmission, consumed)]),
         );
 
         system_state_changes.apply_balance_changes(&mut system_state);
@@ -933,7 +946,7 @@ mod tests {
         let consumed = Cycles::new(600_000);
         let system_state_changes = SystemStateChanges::default_with_cycles_changes(
             CyclesBalanceChange::Added(added),
-            consumed,
+            BTreeMap::from([(CyclesUseCase::RequestAndResponseTransmission, consumed)]),
         );
 
         system_state_changes.apply_balance_changes(&mut system_state);

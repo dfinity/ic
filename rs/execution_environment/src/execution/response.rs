@@ -195,7 +195,7 @@ impl ResponseHelper {
 
         self.canister.system_state.add_cycles(
             self.refund_for_response_transmission,
-            CyclesUseCase::RequestTransmissionAndProcessing,
+            CyclesUseCase::RequestAndResponseTransmission,
         );
     }
 

@@ -246,10 +246,7 @@ fn correct_charging_source_canister_for_a_request() {
         SMALL_APP_SUBNET_MAX_SIZE,
     );
 
-    system_state.add_cycles(
-        refund_cycles,
-        CyclesUseCase::RequestTransmissionAndProcessing,
-    );
+    system_state.add_cycles(refund_cycles, CyclesUseCase::RequestAndResponseTransmission);
 
     // MAX_NUM_INSTRUCTIONS also gets partially refunded in the real
     // ExecutionEnvironmentImpl::execute_canister_response()
@@ -383,7 +380,7 @@ fn call_increases_cycles_consumed_metric() {
         *system_state
             .canister_metrics
             .get_consumed_cycles_since_replica_started_by_use_cases()
-            .get(&CyclesUseCase::RequestTransmissionAndProcessing)
+            .get(&CyclesUseCase::RequestAndResponseTransmission)
             .unwrap(),
         NominalCycles::from(0)
     );

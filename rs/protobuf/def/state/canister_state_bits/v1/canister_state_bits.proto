@@ -196,7 +196,7 @@ enum CyclesUseCase {
     CYCLES_USE_CASE_COMPUTE_ALLOCATION = 2;
     CYCLES_USE_CASE_INGRESS_INDUCTION = 3;
     CYCLES_USE_CASE_INSTRUCTIONS = 4;
-    CYCLES_USE_CASE_REQUEST_TRANSMISSION_AND_PROCESSING = 5;
+    CYCLES_USE_CASE_REQUEST_AND_RESPONSE_TRANSMISSION = 5;
     CYCLES_USE_CASE_UNINSTALL = 6;
     CYCLES_USE_CASE_CANISTER_CREATION = 7;
     CYCLES_USE_CASE_ECDSA_OUTCALLS = 8;
@@ -267,5 +267,6 @@ message CanisterStateBits {
   optional uint64 global_timer_nanos = 33;
   // Canister version.
   uint64 canister_version = 34;
-  repeated ConsumedCyclesByUseCase consumed_cycles_since_replica_started_by_use_cases = 35;
+  reserved 35;
+  repeated ConsumedCyclesByUseCase consumed_cycles_since_replica_started_by_use_cases = 36;
 }
