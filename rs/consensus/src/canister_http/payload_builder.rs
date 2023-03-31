@@ -46,6 +46,17 @@ use std::{
 mod tests;
 mod utils;
 
+enum CandidateOrDivergence {
+    Candidate(
+        (
+            CanisterHttpResponseMetadata,
+            BTreeSet<BasicSignature<CanisterHttpResponseMetadata>>,
+            CanisterHttpResponse,
+        ),
+    ),
+    Divergence(CanisterHttpResponseDivergence),
+}
+
 /// Implementation of the [`CanisterHttpPayloadBuilder`].
 pub struct CanisterHttpPayloadBuilderImpl {
     pool: Arc<RwLock<dyn CanisterHttpPool>>,
@@ -192,6 +203,8 @@ impl CanisterHttpPayloadBuilder for CanisterHttpPayloadBuilderImpl {
         };
 
         let mut accumulated_size = 0;
+        let mut responses_included = 0;
+
         let mut candidates = vec![];
         let mut timeouts = vec![];
         let mut divergence_responses = vec![];
@@ -201,7 +214,6 @@ impl CanisterHttpPayloadBuilder for CanisterHttpPayloadBuilderImpl {
         let mut timeouts_included = 0;
         let mut total_share_count = 0;
         let mut active_shares = 0;
-        let mut responses_included = 0;
         let mut unique_responses_count = 0;
 
         // Check the state for timeouts NOTE: We can not use the existing
@@ -273,65 +285,79 @@ impl CanisterHttpPayloadBuilder for CanisterHttpPayloadBuilderImpl {
             self.metrics.total_shares.set(total_share_count);
             self.metrics.active_shares.set(active_shares);
 
-            let responses =
-                response_candidates_by_callback_id
-                    .into_iter()
-                    .filter_map(|(_, grouped_shares)| {
-                        if let Some((metadata, shares)) =
-                            grouped_shares.iter().find(|(_, shares)| {
-                                unique_responses_count += 1;
-                                let signers: BTreeSet<_> =
-                                    shares.iter().map(|share| share.signature.signer).collect();
-                                // We need at least threshold different signers to include the response
-                                signers.len() >= threshold
+            let candidates_and_divergences = response_candidates_by_callback_id
+                .into_iter()
+                .filter_map(|(_, grouped_shares)| {
+                    if let Some((metadata, shares)) = grouped_shares.iter().find(|(_, shares)| {
+                        unique_responses_count += 1;
+                        let signers: BTreeSet<_> =
+                            shares.iter().map(|share| share.signature.signer).collect();
+                        // We need at least threshold different signers to include the response
+                        signers.len() >= threshold
+                    }) {
+                        // A set of grouped shares large enough to meet the
+                        // threshold was found, we should produce a result.
+                        pool_access
+                            .get_response_content_by_hash(&metadata.content_hash)
+                            .map(|content| {
+                                CandidateOrDivergence::Candidate((
+                                    metadata.clone(),
+                                    shares.iter().map(|share| share.signature.clone()).collect(),
+                                    content,
+                                ))
                             })
-                        {
-                            // A set of grouped shares large enough to meet the
-                            // threshold was found, we should produce a result.
-                            pool_access
-                                .get_response_content_by_hash(&metadata.content_hash)
-                                .map(|content| {
-                                    (
-                                        metadata.clone(),
-                                        shares
-                                            .iter()
-                                            .map(|share| share.signature.clone())
-                                            .collect(),
-                                        content,
-                                    )
-                                })
-                        } else {
-                            // No set of grouped shares large enough was found
-                            // so now we check whether we have divergence.
-                            if grouped_shares_meet_divergence_criteria(
-                                &grouped_shares,
-                                faults_tolerated,
-                            ) {
-                                divergence_responses.push(CanisterHttpResponseDivergence {
+                    } else {
+                        // No set of grouped shares large enough was found
+                        // so now we check whether we have divergence.
+                        if grouped_shares_meet_divergence_criteria(
+                            &grouped_shares,
+                            faults_tolerated,
+                        ) {
+                            Some(CandidateOrDivergence::Divergence(
+                                CanisterHttpResponseDivergence {
                                     shares: grouped_shares
                                         .into_iter()
                                         .flat_map(|(_, shares)| shares.into_iter().cloned())
                                         .collect(),
-                                });
-                            }
+                                },
+                            ))
+                        } else {
+                            // If not, we don't include this response candidate at all
                             None
                         }
-                    });
+                    }
+                });
 
-            for (metadata, shares, content) in responses {
+            for candidate_or_divergence in candidates_and_divergences {
                 unique_includable_responses += 1;
                 // FIXME: This MUST be the same size calculation as
                 // CanisterHttpResponseWithConsensus::count_bytes. This
                 // should be explicit in the code
-                let candidate_size = size_of::<CanisterHttpResponseProof>() + content.count_bytes();
-                let size = NumBytes::new((accumulated_size + candidate_size) as u64);
-                if size < max_payload_size {
-                    if responses_included >= CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK {
-                        break;
+
+                match candidate_or_divergence {
+                    CandidateOrDivergence::Candidate((metadata, shares, content)) => {
+                        let candidate_size =
+                            size_of::<CanisterHttpResponseProof>() + content.count_bytes();
+                        let size = NumBytes::new((accumulated_size + candidate_size) as u64);
+                        if size < max_payload_size {
+                            candidates.push((metadata.clone(), shares, content));
+                            responses_included += 1;
+                            accumulated_size += candidate_size;
+                        }
                     }
-                    candidates.push((metadata.clone(), shares, content));
-                    responses_included += 1;
-                    accumulated_size += candidate_size;
+                    CandidateOrDivergence::Divergence(divergence) => {
+                        let divergence_size = divergence.count_bytes();
+                        let size = NumBytes::new((accumulated_size + divergence_size) as u64);
+                        if size < max_payload_size {
+                            divergence_responses.push(divergence);
+                            responses_included += 1;
+                            accumulated_size += divergence_size;
+                        }
+                    }
+                }
+
+                if responses_included >= CANISTER_HTTP_MAX_RESPONSES_PER_BLOCK {
+                    break;
                 }
             }
         };
@@ -398,7 +424,6 @@ impl CanisterHttpPayloadBuilder for CanisterHttpPayloadBuilderImpl {
         }
 
         // Check size of the payload
-        // TODO: Account for size of timeouts
         let payload_size = payload
             .responses
             .iter()
