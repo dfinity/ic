@@ -567,6 +567,12 @@ pub struct CanisterHttpResponseDivergence {
     pub shares: Vec<CanisterHttpResponseShare>,
 }
 
+impl CountBytes for CanisterHttpResponseDivergence {
+    fn count_bytes(&self) -> usize {
+        self.shares.iter().map(|share| share.count_bytes()).sum()
+    }
+}
+
 /// Metadata about some [`CanisterHttpResponseContent`].
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct CanisterHttpResponseMetadata {
@@ -574,6 +580,12 @@ pub struct CanisterHttpResponseMetadata {
     pub timeout: Time,
     pub content_hash: CryptoHashOf<CanisterHttpResponse>,
     pub registry_version: RegistryVersion,
+}
+
+impl CountBytes for CanisterHttpResponseMetadata {
+    fn count_bytes(&self) -> usize {
+        size_of::<CanisterHttpResponseMetadata>()
+    }
 }
 
 impl crate::crypto::SignedBytesWithoutDomainSeparator for CanisterHttpResponseMetadata {

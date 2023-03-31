@@ -1,4 +1,4 @@
-use crate::{crypto::threshold_sig::ni_dkg::NiDkgId, crypto::*, NodeId};
+use crate::{crypto::threshold_sig::ni_dkg::NiDkgId, crypto::*, CountBytes, NodeId};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -8,6 +8,12 @@ use std::collections::BTreeMap;
 pub struct BasicSignature<T> {
     pub signature: BasicSigOf<T>,
     pub signer: NodeId,
+}
+
+impl<T> CountBytes for BasicSignature<T> {
+    fn count_bytes(&self) -> usize {
+        self.signature.get_ref().count_bytes() + std::mem::size_of::<NodeId>()
+    }
 }
 
 /// `BasicSigned<T>` captures a value of type T and a BasicSignature on it
