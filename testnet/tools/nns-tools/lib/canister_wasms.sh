@@ -49,7 +49,7 @@ _canister_download_name_for_nns_canister_type() {
     local CANISTER_TYPE=$1
 
     if [ "$CANISTER_TYPE" == "lifeline" ]; then
-        echo "$CANISTER_TYPE"
+        echo "$CANISTER_TYPE"_canister
     elif [ "$CANISTER_TYPE" == "ledger" ]; then
         echo "ledger-canister_notify-method"
     else

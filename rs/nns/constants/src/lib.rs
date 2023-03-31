@@ -35,7 +35,7 @@ pub const NNS_CANISTER_WASMS: [&str; 13] = [
     "root-canister",
     "cycles-minting-canister",
     // The lifeline is built differently, which explains why its wasm has a different name pattern.
-    "lifeline",
+    "lifeline_canister",
     "genesis-token-canister",
     "identity-canister",
     "nns-ui-canister",

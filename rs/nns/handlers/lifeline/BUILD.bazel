@@ -1,5 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
-load("@rules_motoko//motoko:defs.bzl", "external_actor", "motoko_binary")
+load("@rules_motoko//motoko:defs.bzl", "external_actor")
+load("//bazel:canisters.bzl", "motoko_canister")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -31,11 +32,9 @@ external_actor(
     visibility = ["//visibility:private"],
 )
 
-motoko_binary(
+motoko_canister(
     name = "lifeline_canister",
     entry = "lifeline.mo",
-    idl_out = "lifeline.did",
-    wasm_out = "lifeline.wasm",
     deps = [
         ":governance",
         ":root",

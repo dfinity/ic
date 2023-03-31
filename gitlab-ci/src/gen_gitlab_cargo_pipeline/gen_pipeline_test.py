@@ -289,7 +289,7 @@ def test_log_rdeps():
         "ic-wasm-utils": "ic-wasm-types",
         "ic-workload-generator": "ic-canister-client",
         "ledger-canister": "candid",
-        "lifeline": "candid",
+        "lifeline_canister": "candid",
         "memory_tracker": "ic-logger",
         "orchestrator": "candid",
         "phantom_newtype": "candid",

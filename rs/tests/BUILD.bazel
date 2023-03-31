@@ -73,7 +73,7 @@ symlink_dir(
         "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method": "ledger-canister_notify-method",
         "//rs/nns/handlers/root:root-canister": "root-canister",
         "//rs/nns/cmc:cycles-minting-canister": "cycles-minting-canister",
-        "//rs/nns/handlers/lifeline:lifeline.wasm": "lifeline",
+        "//rs/nns/handlers/lifeline:lifeline_canister": "lifeline_canister",
         "//rs/nns/gtc:genesis-token-canister": "genesis-token-canister",
         "//rs/nns/sns-wasm:sns-wasm-canister": "sns-wasm-canister",
     },
