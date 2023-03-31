@@ -2,6 +2,7 @@ use crate::canister_control::{
     get_canister_id, perform_execute_generic_nervous_system_function_call,
     upgrade_canister_directly,
 };
+use crate::pb::v1::DefaultFollowees;
 use crate::pb::v1::{
     get_neuron_response, get_proposal_response,
     governance::{
@@ -15,7 +16,7 @@ use crate::pb::v1::{
     },
     neuron::{DissolveState, Followees},
     proposal, Account as AccountProto, Ballot, ClaimSwapNeuronsError, ClaimSwapNeuronsRequest,
-    ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus, DefaultFollowees, DeregisterDappCanisters,
+    ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus, DeregisterDappCanisters,
     DisburseMaturityInProgress, Empty, GetMetadataRequest, GetMetadataResponse, GetMode,
     GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
     GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
@@ -532,45 +533,35 @@ pub fn validate_id_to_nervous_system_functions(
 }
 
 /// Requires that the neurons identified in base.parameters.default_followees
-/// exist (i.e. be in base.neurons). default_followees can be None.
+/// exist (i.e. be in base.neurons).
 ///
 /// Assumes that base.parameters is Some.
 ///
 /// If the validation fails, an Err is returned containing a string that explains why
 /// base is invalid.
+///
+/// TODO NNS1-2169: default followees are not currently supported.
 pub fn validate_default_followees(base: &GovernanceProto) -> Result<(), String> {
-    let function_id_to_followee = match &base
-        .parameters
+    base.parameters
         .as_ref()
         .expect("GovernanceProto.parameters is not populated.")
         .default_followees
-    {
-        None => return Ok(()),
-        Some(default_followees) => &default_followees.followees,
-    };
-
-    let neuron_id_to_neuron = &base.neurons;
-
-    // Iterate over neurons in default_followees.
-    for followees in function_id_to_followee.values() {
-        for followee in &followees.followees {
-            // each followee must be a neuron that exists in governance
-            if !neuron_id_to_neuron.contains_key(&followee.to_string()) {
-                return Err(format!(
-                    "Unknown neuron listed as a default followee: {} neuron_id_to_neurons: {:?}",
-                    followee, neuron_id_to_neuron,
-                ));
+        .as_ref()
+        .ok_or_else(|| "GovernanceProto.parameters.default_followees must be set".to_string())
+        .and_then(|default_followees| {
+            if default_followees.followees.is_empty() {
+                Ok(())
+            } else {
+                Err(format!(
+                    "DefaultFollowees.default_followees must be empty, but found {:?}",
+                    default_followees.followees
+                ))
             }
-        }
-    }
-
-    Ok(())
+        })
 }
 
-/// Requires that the neurons identified in base.parameters.neurons have their
+/// Requires that the neurons identified in base.neurons have their
 /// voting_power_percentage_multiplier within the expected range of 0 to 100.
-///
-/// Assumes that base.parameters is Some.
 ///
 /// If the validation fails, an Err is returned containing a string that explains why
 /// base is invalid.
@@ -2570,6 +2561,7 @@ impl Governance {
 
     /// Returns the default followees that a newly claimed neuron will have, as defined in
     /// the nervous system parameters' default_followees.
+    /// TODO NNS1-2169: default followees are not currently supported.
     fn default_followees_or_panic(&self) -> DefaultFollowees {
         self.nervous_system_parameters_or_panic()
             .default_followees
@@ -3516,7 +3508,6 @@ impl Governance {
         // Safe to do with the validation step above
         let neuron_minimum_stake_e8s = self.neuron_minimum_stake_e8s_or_panic();
         let max_followees_per_function = self.max_followees_per_function_or_panic();
-        let default_followees = self.default_followees_or_panic().followees;
         let neuron_claimer_permissions = self.neuron_claimer_permissions_or_panic();
 
         let mut swap_neurons = vec![];
@@ -3554,10 +3545,7 @@ impl Governance {
                 neuron_fees_e8s: 0,
                 created_timestamp_seconds: now,
                 aging_since_timestamp_seconds: now,
-                followees: neuron_parameter.construct_followees(
-                    &self.list_valid_function_ids(),
-                    default_followees.clone(),
-                ),
+                followees: neuron_parameter.construct_followees(),
                 maturity_e8s_equivalent: 0,
                 dissolve_state: Some(DissolveState::DissolveDelaySeconds(
                     neuron_parameter.get_dissolve_delay_seconds_or_panic(),
@@ -4910,16 +4898,6 @@ impl Governance {
             subaccount: Some(subaccount),
         }
     }
-
-    /// Returns the list of all valid function_ids that can, for example, be followed on. This
-    /// includes the registered GenericNervousSystemFunctions
-    pub fn list_valid_function_ids(&self) -> Vec<u64> {
-        Action::native_function_ids()
-            .into_iter()
-            .chain(self.proto.id_to_nervous_system_functions.keys().copied())
-            .filter(|function_id| *function_id != *NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER_ID)
-            .collect()
-    }
 }
 
 fn err_if_another_upgrade_is_in_progress(
@@ -5389,45 +5367,6 @@ mod tests {
         let mut proto = basic_governance_proto();
         proto.parameters = None;
         assert!(ValidGovernanceProto::try_from(proto).is_err());
-    }
-
-    #[test]
-    fn test_governance_proto_default_followees_must_exist() {
-        let mut proto = basic_governance_proto();
-
-        let neuron_id = NeuronId { id: "A".into() };
-
-        // Populate default_followees with a neuron that does not exist yet.
-        let mut function_id_to_followees = BTreeMap::new();
-        function_id_to_followees.insert(
-            1, // action ID.
-            Followees {
-                followees: vec![neuron_id.clone()],
-            },
-        );
-        proto.parameters.as_mut().unwrap().default_followees = Some(DefaultFollowees {
-            followees: function_id_to_followees,
-        });
-
-        // assert that proto is not valid, due to referring to an unknown neuron.
-        assert!(ValidGovernanceProto::try_from(proto.clone()).is_err());
-
-        // Create the neuron so that proto is now valid.
-        proto.neurons.insert(
-            neuron_id.to_string(),
-            Neuron {
-                id: Some(neuron_id),
-                ..Default::default()
-            },
-        );
-
-        // Assert that proto has become valid.
-        ValidGovernanceProto::try_from(proto.clone()).unwrap_or_else(|e| {
-            panic!(
-                "Still invalid even after adding the required neuron: {:?}: {}",
-                proto, e
-            )
-        });
     }
 
     #[test]

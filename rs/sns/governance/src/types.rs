@@ -1,10 +1,6 @@
 use crate::{
     governance::{log_prefix, Governance, TimeWarp, NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER},
     logs::{ERROR, INFO},
-    pb::sns_root_types::{
-        set_dapp_controllers_request::CanisterIds, RegisterDappCanistersRequest,
-        SetDappControllersRequest,
-    },
     pb::v1::{
         claim_swap_neurons_request::NeuronParameters,
         claim_swap_neurons_response::{ClaimSwapNeuronsResult, ClaimedSwapNeurons, SwapNeuron},
@@ -19,12 +15,19 @@ use crate::{
         nervous_system_function::FunctionType,
         neuron::Followees,
         proposal::Action,
-        ClaimSwapNeuronsError, ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus, DefaultFollowees,
+        ClaimSwapNeuronsError, ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus,
         DeregisterDappCanisters, Empty, ExecuteGenericNervousSystemFunction, GovernanceError,
         ManageNeuronResponse, Motion, NervousSystemFunction, NervousSystemParameters, Neuron,
         NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType, ProposalId,
         RegisterDappCanisters, RewardEvent, TransferSnsTreasuryFunds, UpgradeSnsToNextVersion,
         Vote, VotingRewardsParameters,
+    },
+    pb::{
+        sns_root_types::{
+            set_dapp_controllers_request::CanisterIds, RegisterDappCanistersRequest,
+            SetDappControllersRequest,
+        },
+        v1::DefaultFollowees,
     },
     proposal::ValidGenericNervousSystemFunction,
 };
@@ -34,6 +37,7 @@ use ic_canister_log::log;
 use ic_ic00_types::CanisterInstallModeError;
 use ic_ledger_core::{tokens::Tokens, tokens::TOKEN_SUBDIVIDABLE_BY};
 use ic_nervous_system_common::{validate_proposal_url, NervousSystemError};
+use maplit::btreemap;
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
     convert::TryFrom,
@@ -587,22 +591,21 @@ impl NervousSystemParameters {
     }
 
     /// Validates that the nervous system parameter default_followees is well-formed.
+    /// TODO NNS1-2169: default followees are not currently supported
     fn validate_default_followees(&self) -> Result<(), String> {
-        let default_followees = self
-            .default_followees
+        self.default_followees
             .as_ref()
-            .ok_or_else(|| "NervousSystemParameters.default_followees must be set".to_string())?;
-
-        let max_followees_per_function = self.validate_max_followees_per_function()?;
-
-        if default_followees.followees.len() > max_followees_per_function as usize {
-            return Err(format!(
-                "NervousSystemParameters.default_followees must have size less than {}",
-                max_followees_per_function
-            ));
-        }
-
-        Ok(())
+            .ok_or_else(|| "NervousSystemParameters.default_followees must be set".to_string())
+            .and_then(|default_followees| {
+                if default_followees.followees.is_empty() {
+                    Ok(())
+                } else {
+                    Err(format!(
+                        "DefaultFollowees.default_followees must be empty, but found {:?}",
+                        default_followees.followees
+                    ))
+                }
+            })
     }
 
     /// Validates that the nervous system parameter max_number_of_neurons is well-formed.
@@ -1661,22 +1664,16 @@ impl NeuronParameters {
 
     /// Adds `self.followees` entries in `base_followees` that are
     /// keyed by `function_ids_to_follow`.
-    pub(crate) fn construct_followees(
-        &self,
-        function_ids_to_follow: &[u64],
-        base_followees: BTreeMap<u64, Followees>,
-    ) -> BTreeMap<u64, Followees> {
-        let mut final_followees = base_followees;
-
-        for function_id in function_ids_to_follow {
-            final_followees
-                .entry(*function_id)
-                .or_insert(Followees { followees: vec![] })
-                .followees
-                .extend(self.followees.clone());
+    pub(crate) fn construct_followees(&self) -> BTreeMap<u64, Followees> {
+        if self.followees.is_empty() {
+            BTreeMap::new()
+        } else {
+            let catch_all = u64::from(&Action::Unspecified(Empty {}));
+            let followees = Followees {
+                followees: self.followees.clone(),
+            };
+            btreemap! { catch_all => followees }
         }
-
-        final_followees
     }
 
     pub(crate) fn construct_auto_staking_maturity(&self) -> Option<bool> {
@@ -2122,9 +2119,9 @@ pub(crate) mod tests {
 
     #[test]
     fn test_nervous_system_parameters_validate() {
-        assert!(NervousSystemParameters::with_default_values()
+        NervousSystemParameters::with_default_values()
             .validate()
-            .is_ok());
+            .unwrap();
 
         let invalid_params = vec![
             NervousSystemParameters {
@@ -2168,13 +2165,6 @@ pub(crate) mod tests {
                 initial_voting_period_seconds: Some(
                     NervousSystemParameters::INITIAL_VOTING_PERIOD_SECONDS_CEILING + 1,
                 ),
-                ..NervousSystemParameters::with_default_values()
-            },
-            NervousSystemParameters {
-                max_followees_per_function: Some(0),
-                default_followees: Some(DefaultFollowees {
-                    followees: btreemap! {12 => Followees { followees: vec![NeuronId { id: vec![] }] }},
-                }),
                 ..NervousSystemParameters::with_default_values()
             },
             NervousSystemParameters {
@@ -2275,15 +2265,12 @@ pub(crate) mod tests {
     #[test]
     fn test_inherit_from() {
         let default_params = NervousSystemParameters::with_default_values();
-        let followees = DefaultFollowees {
-            followees: btreemap! { 1 => Followees { followees: vec![] } },
-        };
 
         let proposed_params = NervousSystemParameters {
             transaction_fee_e8s: Some(124),
             max_number_of_neurons: Some(566),
             max_number_of_proposals_with_ballots: Some(9801),
-            default_followees: Some(followees.clone()),
+            default_followees: Some(Default::default()),
             ..Default::default()
         };
 
@@ -2292,39 +2279,7 @@ pub(crate) mod tests {
             transaction_fee_e8s: Some(124),
             max_number_of_neurons: Some(566),
             max_number_of_proposals_with_ballots: Some(9801),
-            default_followees: Some(followees),
-            ..default_params
-        };
-
-        assert_eq!(new_params, expected_params);
-    }
-
-    /// Test that the nervous system parameter default_followees can be cleared by
-    /// inheriting an empty default_followees.
-    #[test]
-    fn test_inherit_from_inherits_default_followees() {
-        let default_params = NervousSystemParameters::with_default_values();
-        let followees = DefaultFollowees {
-            followees: btreemap! { 1 => Followees { followees: vec![] } },
-        };
-
-        let proposed_params = NervousSystemParameters {
-            default_followees: Some(DefaultFollowees {
-                followees: btreemap! {},
-            }),
-            ..Default::default()
-        };
-
-        let current_params = NervousSystemParameters {
-            default_followees: Some(followees),
-            ..default_params.clone()
-        };
-
-        let new_params = proposed_params.inherit_from(&current_params);
-        let expected_params = NervousSystemParameters {
-            default_followees: Some(DefaultFollowees {
-                followees: btreemap! {},
-            }),
+            default_followees: Some(Default::default()),
             ..default_params
         };
 
@@ -2788,10 +2743,9 @@ pub(crate) mod tests {
         }
     }
 
-    #[test]
-    fn test_neuron_parameters_validate() {
-        let valid_default = || -> NeuronParameters {
-            NeuronParameters {
+    impl NeuronParameters {
+        fn validate_default() -> Self {
+            Self {
                 controller: Some(*TEST_USER1_PRINCIPAL),
                 hotkey: Some(*TEST_USER2_PRINCIPAL),
                 stake_e8s: Some(E8S_PER_TOKEN),
@@ -2800,43 +2754,46 @@ pub(crate) mod tests {
                 neuron_id: Some(NeuronId::new_test_neuron_id(0)),
                 followees: vec![NeuronId::new_test_neuron_id(1)],
             }
-        };
+        }
+    }
 
+    #[test]
+    fn test_neuron_parameters_validate() {
         let neuron_minimum_stake_e8s = E8S_PER_TOKEN;
         let max_followees_per_function = 1;
 
         // Assert that the default is valid
-        assert!(valid_default()
+        NeuronParameters::validate_default()
             .validate(neuron_minimum_stake_e8s, max_followees_per_function)
-            .is_ok());
+            .unwrap();
 
         let invalid_neuron_parameters = vec![
             NeuronParameters {
                 controller: None, // No controller specified
-                ..valid_default()
+                ..NeuronParameters::validate_default()
             },
             NeuronParameters {
                 stake_e8s: None, // No stake specified
-                ..valid_default()
+                ..NeuronParameters::validate_default()
             },
             NeuronParameters {
                 stake_e8s: Some(0), // Stake is less than neuron_minimum_stake_e8s
-                ..valid_default()
+                ..NeuronParameters::validate_default()
             },
             NeuronParameters {
                 neuron_id: None, // No memo specified
-                ..valid_default()
+                ..NeuronParameters::validate_default()
             },
             NeuronParameters {
                 dissolve_delay_seconds: None, // No dissolve_delay_seconds specified
-                ..valid_default()
+                ..NeuronParameters::validate_default()
             },
             NeuronParameters {
                 followees: vec![
                     NeuronId::new_test_neuron_id(1),
                     NeuronId::new_test_neuron_id(2),
                 ],
-                ..valid_default()
+                ..NeuronParameters::validate_default()
             },
         ];
 
@@ -2850,23 +2807,19 @@ pub(crate) mod tests {
         let valid_neuron_parameters = vec![
             NeuronParameters {
                 hotkey: None, // Hotkey can be unspecified
-                ..valid_default()
+                ..NeuronParameters::validate_default()
             },
             NeuronParameters {
                 dissolve_delay_seconds: Some(0), // Dissolve delay can be 0
-                ..valid_default()
+                ..NeuronParameters::validate_default()
             },
         ];
 
         // Assert all valid neuron parameters produce valid results
         for neuron_parameter in valid_neuron_parameters {
-            assert!(
-                neuron_parameter
-                    .validate(neuron_minimum_stake_e8s, max_followees_per_function)
-                    .is_ok(),
-                "{:#?}",
-                neuron_parameter
-            );
+            neuron_parameter
+                .validate(neuron_minimum_stake_e8s, max_followees_per_function)
+                .unwrap_or_else(|err| panic!("Validation failed for {neuron_parameter:#?}: {err}"));
         }
     }
 
@@ -2948,5 +2901,53 @@ pub(crate) mod tests {
             format!("permissions: {neuron_permission_list}"),
             format!("permissions: [Unspecified, ConfigureDissolveState, ManagePrincipals, SubmitProposal, Vote, Disburse, Split, MergeMaturity, DisburseMaturity, StakeMaturity, ManageVotingPermission, <Invalid permission ({invalid_permission})>]")
         );
+    }
+
+    #[test]
+    fn test_construct_followees() {
+        let b0 = NeuronId::new_test_neuron_id(10);
+        let p0 = NeuronParameters {
+            followees: vec![],
+            neuron_id: Some(b0.clone()),
+            ..NeuronParameters::validate_default()
+        };
+        let b1 = NeuronId::new_test_neuron_id(11);
+        let p1 = NeuronParameters {
+            followees: vec![b0.clone()],
+            neuron_id: Some(b1),
+            ..NeuronParameters::validate_default()
+        };
+        let b2 = NeuronId::new_test_neuron_id(12);
+        let p2 = NeuronParameters {
+            followees: vec![b0.clone()],
+            neuron_id: Some(b2),
+            ..NeuronParameters::validate_default()
+        };
+        let w = u64::from(&Action::Unspecified(Empty {}));
+        {
+            let test_signature = |nid: &str| format!("Test followees of {nid}");
+            assert_eq!(
+                p0.construct_followees(),
+                btreemap! {},
+                "{}",
+                test_signature("b0")
+            );
+            assert_eq!(
+                p1.construct_followees(),
+                btreemap! {
+                    w => Followees { followees: vec![b0.clone()] },
+                },
+                "{}",
+                test_signature("b1")
+            );
+            assert_eq!(
+                p2.construct_followees(),
+                btreemap! {
+                    w => Followees { followees: vec![b0] },
+                },
+                "{}",
+                test_signature("b2")
+            );
+        }
     }
 }
