@@ -6,6 +6,8 @@ mod config;
 mod error_types;
 /// Config settings from command line
 mod flags;
+/// Metrics for the adapter
+mod metrics;
 /// Temporary helpers for node id
 mod non_sampled_metrics_collector;
 /// Provides a sampling API to fetch single instance of metric and aggregate
@@ -14,6 +16,7 @@ mod sampled_metrics_collector;
 pub use config::Config;
 pub use error_types::{CanisterPublishError, MetricsCollectError};
 pub use flags::Flags;
+pub use metrics::OnchainObservabilityAdapterMetrics;
 pub use non_sampled_metrics_collector::{
     collect_metrics_for_peers, derive_peer_counters_for_current_report_interval, NonSampledMetrics,
     PeerCounterMetrics,

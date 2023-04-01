@@ -1,4 +1,4 @@
-use crate::error_types::MetricsCollectError;
+use crate::{error_types::MetricsCollectError, OnchainObservabilityAdapterMetrics};
 use ic_onchain_observability_service::{
     onchain_observability_service_client::OnchainObservabilityServiceClient,
     OnchainObservabilityServiceGetMetricsDataRequest,
@@ -20,14 +20,19 @@ pub struct SampledMetricsCollector {
     num_samples: u64,
     connected_state_count: HashMap<String, usize>,
     client: OnchainObservabilityServiceClient<Channel>,
+    adapter_metrics: OnchainObservabilityAdapterMetrics,
 }
 
 impl SampledMetricsCollector {
-    pub fn new_with_client(client: OnchainObservabilityServiceClient<Channel>) -> Self {
+    pub fn new(
+        client: OnchainObservabilityServiceClient<Channel>,
+        adapter_metrics: OnchainObservabilityAdapterMetrics,
+    ) -> Self {
         SampledMetricsCollector {
             num_samples: 0,
             connected_state_count: HashMap::new(),
             client,
+            adapter_metrics,
         }
     }
 
@@ -54,10 +59,15 @@ impl SampledMetricsCollector {
                 Ok(())
             }
             Err(status) => {
+                self.adapter_metrics
+                    .failed_grpc_request
+                    .with_label_values(&["sampled", &status.code().to_string()])
+                    .inc();
+
                 return Err(MetricsCollectError::RpcRequestFailure(format!(
                     "Request failed {:?}",
                     status.code()
-                )))
+                )));
             }
         }
     }

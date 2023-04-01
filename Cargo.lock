@@ -7632,6 +7632,7 @@ dependencies = [
  "async-trait",
  "candid",
  "clap 3.2.23",
+ "ic-adapter-metrics-server",
  "ic-async-utils",
  "ic-base-types",
  "ic-canister-client",
@@ -7647,6 +7648,7 @@ dependencies = [
  "ic-types",
  "ic-types-test-utils",
  "itertools",
+ "prometheus 0.12.0",
  "prometheus-parse",
  "rand 0.8.5",
  "serde",
@@ -7666,6 +7668,7 @@ dependencies = [
 name = "ic-onchain-observability-server"
 version = "0.1.0"
 dependencies = [
+ "ic-adapter-metrics",
  "ic-async-utils",
  "ic-metrics",
  "ic-onchain-observability-service",

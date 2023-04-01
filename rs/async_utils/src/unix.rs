@@ -14,6 +14,8 @@ use std::{
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tonic::transport::server::Connected;
 
+const FIRST_SOCKET_FD: i32 = 3;
+
 /// The function uses the passed 'path' for creating a unix domain socket
 /// for serving inter-process communication requests.
 pub fn incoming_from_path<P: AsRef<std::path::Path>>(
@@ -71,6 +73,24 @@ pub unsafe fn incoming_from_second_systemd_socket(
 ) -> AsyncStream<Result<UnixStream, std::io::Error>, impl futures::Future<Output = ()>> {
     const SOCKET_FD: i32 = 4; // see https://www.freedesktop.org/software/systemd/man/sd_listen_fds.html
     let uds = listener_from_systemd_socket(SOCKET_FD);
+    async_stream::stream! {
+        loop {
+            let item = uds.accept().map_ok(|(st, _)| UnixStream(st)).await;
+
+            yield item;
+        }
+    }
+}
+
+/// # Safety
+///  To ensure safety caller needs to ensure that the FD for Socket(n) exists and only consumed once.
+/// See https://www.freedesktop.org/software/systemd/man/sd_listen_fds.html
+/// First socket would correspond to socket_num = 1, second = 2, so on.
+pub unsafe fn incoming_from_nth_systemd_socket(
+    socket_num: i32,
+) -> AsyncStream<Result<UnixStream, std::io::Error>, impl futures::Future<Output = ()>> {
+    let socket_fd = FIRST_SOCKET_FD + socket_num - 1;
+    let uds = listener_from_systemd_socket(socket_fd);
     async_stream::stream! {
         loop {
             let item = uds.accept().map_ok(|(st, _)| UnixStream(st)).await;

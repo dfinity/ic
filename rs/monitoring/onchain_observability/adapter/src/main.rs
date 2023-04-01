@@ -5,7 +5,8 @@
 /// systemd socket ic-os/guestos/rootfs/etc/systemd/system/ic-onchain-observability-adapter.socket
 use candid::{Decode, Encode};
 use clap::Parser;
-use ic_async_utils::abort_on_panic;
+use ic_adapter_metrics_server::start_metrics_grpc;
+use ic_async_utils::{abort_on_panic, incoming_from_nth_systemd_socket};
 use ic_base_types::{CanisterId, NodeId};
 use ic_canister_client::{Agent, Sender};
 use ic_config::registry_client::DataProviderConfig;
@@ -15,8 +16,8 @@ use ic_logger::{error, info, new_replica_logger_from_config, warn, ReplicaLogger
 use ic_metrics::MetricsRegistry;
 use ic_onchain_observability_adapter::{
     collect_metrics_for_peers, derive_peer_counters_for_current_report_interval,
-    CanisterPublishError, Config, Flags, MetricsCollectError, PeerCounterMetrics,
-    SampledMetricsCollector,
+    CanisterPublishError, Config, Flags, MetricsCollectError, OnchainObservabilityAdapterMetrics,
+    PeerCounterMetrics, SampledMetricsCollector,
 };
 use ic_onchain_observability_service::onchain_observability_service_client::OnchainObservabilityServiceClient;
 use ic_registry_client::client::{RegistryClient, RegistryClientImpl};
@@ -73,10 +74,13 @@ pub async fn main() {
     let canister_id =
         CanisterId::from_str(&config.canister_id).expect("Failed to parse canister id");
 
-    // TODO (NET-1332): Switch to adapter-specific metrics registry
     let metrics_registry = MetricsRegistry::global();
-
     let (logger, _async_log_guard) = new_replica_logger_from_config(&config.logger);
+    let onchain_observability_adapter_metrics =
+        OnchainObservabilityAdapterMetrics::new(&metrics_registry);
+
+    let stream = unsafe { incoming_from_nth_systemd_socket(1) };
+    start_metrics_grpc(metrics_registry.clone(), logger.clone(), stream);
 
     info!(
         logger,
@@ -108,7 +112,13 @@ pub async fn main() {
     // Collect an initial set of metrics to set a baseline.  On failure, skip report and try again at next reporting interval.
     // Without a baseline, we cannot derive the counts for the current reporting interval.
     let mut non_sampled_metrics_at_report_start = loop {
-        match collect_metrics_for_peers(grpc_client.clone(), &peer_ids).await {
+        match collect_metrics_for_peers(
+            grpc_client.clone(),
+            &peer_ids,
+            &onchain_observability_adapter_metrics,
+        )
+        .await
+        {
             Ok(metrics) => break metrics,
             Err(_e) => { /* TODO(NET-1338) record error */ }
         }
@@ -116,7 +126,10 @@ pub async fn main() {
     };
     let mut sampling_interval = interval(config.sampling_interval_sec);
     sampling_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
-    let mut sampler = SampledMetricsCollector::new_with_client(grpc_client.clone());
+    let mut sampler = SampledMetricsCollector::new(
+        grpc_client.clone(),
+        onchain_observability_adapter_metrics.clone(),
+    );
     let mut start_time = SystemTime::now();
 
     // Continuously collect and send reports. There are 2 types of metrics - sampled and non-sampled.
@@ -133,13 +146,20 @@ pub async fn main() {
             .expect("Negative system time must not happen")
             >= config.report_length_sec
         {
+            onchain_observability_adapter_metrics
+                .reports_attempted
+                .inc();
+
             // Refresh peer ids
             peer_ids = get_peer_ids(node_id, &registry_client);
             // TODO(NET-1373) - remove expect and skip report instead
-            let non_sampled_metrics_at_report_end =
-                collect_metrics_for_peers(grpc_client.clone(), &peer_ids)
-                    .await
-                    .expect("Failed to collect non-sampled metrics");
+            let non_sampled_metrics_at_report_end = collect_metrics_for_peers(
+                grpc_client.clone(),
+                &peer_ids,
+                &onchain_observability_adapter_metrics,
+            )
+            .await
+            .expect("Failed to collect non-sampled metrics");
 
             let end_time = SystemTime::now();
 
@@ -184,8 +204,11 @@ pub async fn main() {
                         match is_report_published(&canister_client, canister_id, &signed_report)
                             .await
                         {
-                            Ok(_is_published) => {
-                                // TODO (NET-1338) record metric depending on result
+                            Ok(is_published) => {
+                                onchain_observability_adapter_metrics
+                                    .reports_published_to_canister
+                                    .with_label_values(&[&is_published.to_string()])
+                                    .inc();
                             }
                             Err(e) => {
                                 error!(
@@ -201,7 +224,9 @@ pub async fn main() {
                             || signature_attempts == MAX_CRYPTO_SIGNATURE_ATTEMPTS - 1
                         {
                             // "Reproducible" represents a fundamental issue with the crypto setup
-                            // TODO (NET-1338) convert to metric counter
+                            onchain_observability_adapter_metrics
+                                .failed_crypto_signature
+                                .inc();
                             error!(logger, "Failed to sign report, skipping {:?}", e);
                             break;
                         }

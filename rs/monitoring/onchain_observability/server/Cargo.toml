@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+ic-adapter-metrics = { path = "../../adapter_metrics" }
 ic-async-utils = { path = "../../../async_utils" }
 ic-metrics = { path = "../../../monitoring/metrics" }
 ic-onchain-observability-service = { path = "../service" }

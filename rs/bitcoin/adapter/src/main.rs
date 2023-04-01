@@ -1,6 +1,6 @@
 use clap::Parser;
 use ic_adapter_metrics_server::start_metrics_grpc;
-use ic_async_utils::{abort_on_panic, shutdown_signal};
+use ic_async_utils::{abort_on_panic, incoming_from_nth_systemd_socket, shutdown_signal};
 use ic_btc_adapter::{
     cli::Cli, config::IncomingSource, spawn_grpc_server, start_router, AdapterState,
     BlockchainState, GetSuccessorsHandler,
@@ -42,9 +42,8 @@ pub async fn main() {
     // Systemd Socket config: ic-os/guestos/rootfs/etc/systemd/system/ic-https-outcalls-adapter.socket
     // Systemd Service config: ic-os/guestos/rootfs/etc/systemd/system/ic-https-outcalls-adapter.service
     if config.incoming_source == IncomingSource::Systemd {
-        unsafe {
-            start_metrics_grpc(metrics_registry.clone(), logger.clone());
-        }
+        let stream = unsafe { incoming_from_nth_systemd_socket(2) };
+        start_metrics_grpc(metrics_registry.clone(), logger.clone(), stream);
     }
 
     // TODO: establish what the buffer size should be

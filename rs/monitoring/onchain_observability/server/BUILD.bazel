@@ -9,6 +9,7 @@ rust_library(
     version = "0.1.0",
     deps = [
         "//rs/async_utils",
+        "//rs/monitoring/adapter_metrics",
         "//rs/monitoring/metrics",
         "//rs/monitoring/onchain_observability/service",
         "@crate_index//:prometheus",

@@ -8,7 +8,8 @@ pub use self::{
     http::{receive_body, receive_body_without_timeout, BodyReceiveError},
     hyper::ExecuteOnTokioRuntime,
     unix::{
-        incoming_from_first_systemd_socket, incoming_from_path, incoming_from_second_systemd_socket,
+        incoming_from_first_systemd_socket, incoming_from_nth_systemd_socket, incoming_from_path,
+        incoming_from_second_systemd_socket,
     },
 };
 
