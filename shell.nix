@@ -94,6 +94,9 @@ in
         pkgs.dosfstools
         pkgs.mtools
         pkgs.zstd
+
+        # dependencies for libusb-sys cargo library
+        pkgs.libusb
       ]
       ++ pkgs.lib.optionals pkgs.stdenv.isLinux [
         # provides the `taskset` command, which we use to fix core affinity in the shell
