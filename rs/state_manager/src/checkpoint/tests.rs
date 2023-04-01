@@ -136,11 +136,15 @@ fn can_make_a_checkpoint() {
             .join("canister_states")
             .join("000000000000000a0101");
 
-        let expected_paths = vec![
+        let mut expected_paths = vec![
+            checkpoint_path.join("subnet_queues.pbuf"),
             checkpoint_path.join("system_metadata.pbuf"),
             canister_path.join("queues.pbuf"),
             canister_path.join("canister.pbuf"),
         ];
+        if SEPARATE_INGRESS_HISTORY {
+            expected_paths.push(checkpoint_path.join("ingress_history.pbuf"));
+        }
 
         for path in expected_paths {
             assert!(path.exists(), "Expected path {} to exist", path.display());

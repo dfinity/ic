@@ -13,6 +13,7 @@ use ic_replicated_state::{
     ReplicatedState, Stream,
 };
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
+use ic_state_manager::checkpoint::SEPARATE_INGRESS_HISTORY;
 use ic_state_manager::{
     manifest::build_meta_manifest, DirtyPageMap, FileType, PageMapType, StateManagerImpl,
 };
@@ -1689,11 +1690,15 @@ fn state_sync_message_contains_manifest() {
             .get_validated_by_identifier(&id)
             .expect("failed to get state sync messages");
 
-        // Expecting 2 files, as we don't have canisters in the default state.
+        // Expecting 3 files, as we don't have canisters in the default state.
         //
-        // 1. "system_metadata.pbuf"
+        // 1. "ingress_history.pbuf"
         // 2. "subnet_queues.pbuf"
-        assert_eq!(2, msg.manifest.file_table.len());
+        // 3. "system_metadata.pbuf"
+        assert_eq!(
+            if SEPARATE_INGRESS_HISTORY { 3 } else { 2 },
+            msg.manifest.file_table.len()
+        );
 
         // Check that all the files are accessible
         for file_info in msg.manifest.file_table.iter() {

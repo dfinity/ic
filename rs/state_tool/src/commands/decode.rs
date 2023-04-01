@@ -1,10 +1,12 @@
 //! Displays a pretty-printed debug view of a state file.
 
 use ic_protobuf::state::{
-    canister_state_bits::v1 as pb_canister, queues::v1 as pb_queues,
+    canister_state_bits::v1 as pb_canister, ingress::v1 as pb_ingress, queues::v1 as pb_queues,
     system_metadata::v1 as pb_metadata,
 };
-use ic_replicated_state::{canister_state::CanisterQueues, SystemMetadata};
+use ic_replicated_state::{
+    canister_state::CanisterQueues, metadata_state::IngressHistoryState, SystemMetadata,
+};
 use ic_state_layout::{CanisterStateBits, ProtoFileWith, ReadOnly};
 use std::convert::TryFrom;
 use std::path::PathBuf;
@@ -19,6 +21,9 @@ pub fn do_decode(path: PathBuf) -> Result<(), String> {
     match fname {
         "system_metadata.pbuf" => {
             display_proto::<pb_metadata::SystemMetadata, SystemMetadata>(path.clone())
+        }
+        "ingress_history.pbuf" => {
+            display_proto::<pb_ingress::IngressHistoryState, IngressHistoryState>(path.clone())
         }
         "queues.pbuf" => display_proto::<pb_queues::CanisterQueues, CanisterQueues>(path.clone()),
         "subnet_queues.pbuf" => {
