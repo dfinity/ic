@@ -7,6 +7,7 @@ Wants=bootstrap-ic-node.service
 # For creating the crypto component, this needs ic-crypto-csp service running.
 After=ic-crypto-csp.service
 Wants=ic-crypto-csp.service
+Requires=ic-onchain-observability-adapter-metrics.socket
 StartLimitIntervalSec=0
 
 [Service]
@@ -26,3 +27,4 @@ Restart=on-failure
 
 [Install]
 WantedBy=ic-replica.service
+Also=ic-onchain-observability-adapter-metrics.socket

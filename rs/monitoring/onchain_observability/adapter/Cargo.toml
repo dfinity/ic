@@ -8,6 +8,7 @@ edition = "2021"
 async-trait = "0.1.31"
 candid = "0.8.1"
 clap = { version = "3.1.6", features = ["derive"] }
+ic-adapter-metrics-server = { path = "../../adapter_metrics_server" }
 ic-async-utils = { path = "../../../async_utils" }
 ic-base-types = { path = "../../../types/base_types" }
 ic-canister-client = { path = "../../../canister_client" }
@@ -22,6 +23,7 @@ ic-registry-client-helpers = { path = "../../../registry/helpers" }
 ic-registry-local-store = { path = "../../../registry/local_store" }
 ic-types = { path = "../../../types/types" }
 itertools = "0.10.5"
+prometheus = { version = "0.12.0", features = [ "process" ] }
 prometheus-parse = "0.2.3"
 rand = "0.8"
 sha2 = "0.9.9"

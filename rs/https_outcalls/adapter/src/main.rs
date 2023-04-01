@@ -5,7 +5,10 @@
 /// systemd socket ic-os/guestos/rootfs/etc/systemd/system/ic-https-outcalls-adapter.socket
 use clap::Parser;
 use ic_adapter_metrics_server::start_metrics_grpc;
-use ic_async_utils::{abort_on_panic, incoming_from_first_systemd_socket, incoming_from_path};
+use ic_async_utils::{
+    abort_on_panic, incoming_from_first_systemd_socket, incoming_from_nth_systemd_socket,
+    incoming_from_path,
+};
 use ic_https_outcalls_adapter::{AdapterServer, Cli, IncomingSource};
 use ic_logger::{error, info, new_replica_logger_from_config};
 use ic_metrics::MetricsRegistry;
@@ -38,9 +41,8 @@ pub async fn main() {
     // Systemd Socket config: ic-os/guestos/rootfs/etc/systemd/system/ic-https-outcalls-adapter.socketi
     // Systemd Service config: ic-os/guestos/rootfs/etc/systemd/system/ic-https-outcalls-adapter.service
     if config.incoming_source == IncomingSource::Systemd {
-        unsafe {
-            start_metrics_grpc(metrics_registry.clone(), logger.clone());
-        }
+        let stream = unsafe { incoming_from_nth_systemd_socket(2) };
+        start_metrics_grpc(metrics_registry.clone(), logger.clone(), stream);
     }
 
     info!(

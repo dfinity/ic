@@ -1,4 +1,4 @@
-use crate::error_types::MetricsCollectError;
+use crate::{error_types::MetricsCollectError, OnchainObservabilityAdapterMetrics};
 use ic_base_types::{NodeId, PrincipalId};
 use ic_onchain_observability_service::{
     onchain_observability_service_client::OnchainObservabilityServiceClient,
@@ -60,6 +60,7 @@ impl PeerCounterMetrics {
 pub async fn collect_metrics_for_peers(
     mut client: OnchainObservabilityServiceClient<Channel>,
     peer_ids: &HashSet<NodeId>,
+    adapter_metrics: &OnchainObservabilityAdapterMetrics,
 ) -> Result<NonSampledMetrics, MetricsCollectError> {
     let request = OnchainObservabilityServiceGetMetricsDataRequest {
         requested_metrics: vec![
@@ -78,12 +79,16 @@ pub async fn collect_metrics_for_peers(
             Ok(response) => {
                 return parse_metrics_response(response.into_inner().metrics_data, peer_ids)
             }
-            Err(e) => {
-                // TODO(NET-1338) add metric to track when grpc fails
+            Err(status) => {
+                adapter_metrics
+                    .failed_grpc_request
+                    .with_label_values(&["non_sampled", &status.code().to_string()])
+                    .inc();
+
                 if attempt == MAX_ATTEMPTS - 1 {
                     return Err(MetricsCollectError::RpcRequestFailure(format!(
                         "Request failed: {:?}",
-                        e
+                        status
                     )));
                 }
             }

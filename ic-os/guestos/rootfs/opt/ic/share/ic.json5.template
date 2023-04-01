@@ -130,6 +130,7 @@
         https_outcalls_uds_path: "/run/ic-node/https-outcalls-adapter/socket",
         https_outcalls_uds_metrics_path: "/run/ic-node/https-outcalls-adapter/metrics",
         onchain_observability_enable_grpc_server: false,
+        onchain_observability_uds_metrics_path: "/run/ic-node/onchain-observability-adapter/metrics",
     },
 
     // ==================================================

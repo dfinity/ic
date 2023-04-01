@@ -1,12 +1,17 @@
+use futures::stream::Stream;
 use ic_adapter_metrics_service::{
     adapter_metrics_service_server::{AdapterMetricsService, AdapterMetricsServiceServer},
     ScrapeResponse,
 };
-use ic_async_utils::incoming_from_second_systemd_socket;
 use ic_logger::{error, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use protobuf::Message;
-use tonic::{transport::Server, Code, Request, Response, Status};
+use std::error::Error;
+use tokio::io::{AsyncRead, AsyncWrite};
+use tonic::{
+    transport::{server::Connected, Server},
+    Code, Request, Response, Status,
+};
 
 /// Adapter metrics server
 ///
@@ -39,21 +44,23 @@ impl AdapterMetricsService for Metrics {
     }
 }
 
-/// Starts metrics gRPC server.
-///
-/// # Safety
-/// Expects a socket FD at file descriptor location 4 for which it is the only consumer.
-pub unsafe fn start_metrics_grpc(metrics: MetricsRegistry, logger: ReplicaLogger) {
+/// Starts metrics gRPC server with a valid stream (this can be used to configure which socket to listen to).
+pub fn start_metrics_grpc<T, E>(
+    metrics: MetricsRegistry,
+    logger: ReplicaLogger,
+    stream: impl Stream<Item = Result<T, E>> + Send + 'static,
+) where
+    T: Send + Sync + Unpin + AsyncRead + AsyncWrite + Connected + 'static,
+    E: Send + Sync + Unpin + Error + 'static,
+{
     tokio::spawn(async move {
         let adapter_metrics = Metrics::new(metrics);
 
         // If metrics server shuts down we should not panic the adapter
         Server::builder()
             .add_service(AdapterMetricsServiceServer::new(adapter_metrics))
-            // 'incoming_from_second_systemd_socket' is unsafe since it tries to convert FD(4) to
-            // a unix listener. This only safe if FD(4) is presesnt and FD(4) is only consumed once.
-            .serve_with_incoming(incoming_from_second_systemd_socket())
+            .serve_with_incoming(stream)
             .await
-            .map_err(|e| error!(logger, "Canister Http adapter crashed: {}", e))
+            .map_err(|e| error!(logger, "Metrics grpc server crashed: {}", e))
     });
 }

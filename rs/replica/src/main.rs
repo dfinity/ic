@@ -11,7 +11,7 @@ use ic_http_endpoints_metrics::MetricsHttpEndpoint;
 use ic_interfaces_registry::{LocalStoreCertifiedTimeReader, RegistryClient};
 use ic_logger::{info, new_replica_logger_from_config};
 use ic_metrics::MetricsRegistry;
-use ic_onchain_observability_server::spawn_onchain_observability_grpc_server;
+use ic_onchain_observability_server::spawn_onchain_observability_grpc_server_and_register_metrics;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replica::setup;
 use ic_sys::PAGE_SIZE;
@@ -288,12 +288,19 @@ fn main() -> io::Result<()> {
         )?;
     info!(logger, "Constructed IC stack");
 
+    // TODO(NET-1366) - remove this flag once confident that starting gRPC is stable
     if config
         .adapters_config
         .onchain_observability_enable_grpc_server
     {
         // Spawns a new grpc server in a new task. This will continue to run until the Runtime shuts down.
-        spawn_onchain_observability_grpc_server(metrics_registry, rt_main.handle().clone());
+        spawn_onchain_observability_grpc_server_and_register_metrics(
+            metrics_registry,
+            rt_main.handle().clone(),
+            config
+                .adapters_config
+                .onchain_observability_uds_metrics_path,
+        );
     }
 
     std::thread::sleep(Duration::from_millis(5000));
