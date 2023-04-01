@@ -662,6 +662,7 @@ impl Governance {
                 settled_proposals: vec![],
                 distributed_e8s_equivalent: 0,
                 end_timestamp_seconds: Some(now),
+                rounds_since_last_distribution: Some(0),
             })
         }
 
@@ -4571,6 +4572,7 @@ impl Governance {
             settled_proposals: considered_proposals,
             distributed_e8s_equivalent,
             end_timestamp_seconds: Some(reward_event_end_timestamp_seconds),
+            rounds_since_last_distribution: Some(new_rounds_count),
         })
     }
 
@@ -5871,6 +5873,13 @@ mod tests {
             governance.proto.latest_reward_event,
             original_latest_reward_event
         );
+        assert_eq!(
+            original_latest_reward_event
+                .as_ref()
+                .unwrap()
+                .rounds_since_last_distribution,
+            Some(0)
+        );
 
         // Step 4: Repeat, but with a twist: this time, there is indeed a
         // proposal that's ready to settle. Because of this, calling
@@ -5906,9 +5915,13 @@ mod tests {
             final_latest_reward_event.settled_proposals,
             vec![proposal_id]
         );
+        assert_eq!(
+            final_latest_reward_event.rounds_since_last_distribution,
+            Some(wait_days)
+        );
 
         // Inspect the amount distributed in final_latest_reward_event. In
-        // principal, we could calculate this exactly, but it's someone
+        // principle, we could calculate this exactly, but it's someone
         // complicated, because the reward rate varies. To make this assertion a
         // simpler, we instead calculate a range that the reward amount must
         // fall within. That window is pretty small, and should be sufficient to

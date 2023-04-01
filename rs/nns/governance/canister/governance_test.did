@@ -352,6 +352,7 @@ type Result_5 = variant { Ok : NeuronInfo; Err : GovernanceError };
 type Result_6 = variant { Ok : NodeProvider; Err : GovernanceError };
 type Result_7 = variant { Committed : Committed; Aborted : record {} };
 type RewardEvent = record {
+  rounds_since_last_distribution : opt nat64;
   day_after_genesis : nat64;
   actual_timestamp_seconds : nat64;
   total_available_e8s_equivalent : nat64;

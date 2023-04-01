@@ -2326,6 +2326,7 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
         settled_proposals: vec![],
         distributed_e8s_equivalent: 0,
         total_available_e8s_equivalent: 0,
+        rounds_since_last_distribution: Some(0),
     };
 
     assert_eq!(*gov.latest_reward_event(), expected_initial_event);
@@ -2339,7 +2340,7 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
     gov.run_periodic_tasks().now_or_never();
     // A reward event should have happened, albeit an empty one, i.e.,
     // given that no voting took place, no rewards were distributed.
-    // Total availalbe rewards in the first reward period is 100.
+    // Total available rewards in the first reward period is 100.
     assert_eq!(
         *gov.latest_reward_event(),
         RewardEvent {
@@ -2348,6 +2349,7 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
             settled_proposals: vec![],
             distributed_e8s_equivalent: 0,
             total_available_e8s_equivalent: 100,
+            rounds_since_last_distribution: Some(1),
         }
     );
 
@@ -2392,6 +2394,7 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
                 settled_proposals: vec![],
                 distributed_e8s_equivalent: 0,
                 total_available_e8s_equivalent,
+                rounds_since_last_distribution: Some(3), // 2 reward periods elapsed + 1 rollover round
             }
         );
     }
@@ -2441,6 +2444,7 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
             settled_proposals: vec![proposal_id],
             distributed_e8s_equivalent: expected_distributed_e8s_equivalent,
             total_available_e8s_equivalent: expected_available_e8s_equivalent,
+            rounds_since_last_distribution: Some(fully_elapsed_reward_rounds),
         }
     );
 
@@ -2475,6 +2479,7 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
             settled_proposals: vec![],
             distributed_e8s_equivalent: 0,
             total_available_e8s_equivalent: 99,
+            rounds_since_last_distribution: Some(1),
         }
     );
 
@@ -2509,6 +2514,7 @@ async fn test_restricted_proposals_are_not_eligible_for_voting_rewards() {
         fake_driver.get_fake_cmc(),
     );
     gov.run_periodic_tasks().now_or_never();
+    // Initial reward event
     assert_eq!(
         *gov.latest_reward_event(),
         RewardEvent {
@@ -2517,6 +2523,7 @@ async fn test_restricted_proposals_are_not_eligible_for_voting_rewards() {
             settled_proposals: vec![],
             distributed_e8s_equivalent: 0,
             total_available_e8s_equivalent: 0,
+            rounds_since_last_distribution: Some(0),
         }
     );
 
@@ -2565,6 +2572,7 @@ async fn test_restricted_proposals_are_not_eligible_for_voting_rewards() {
             settled_proposals: vec![],
             distributed_e8s_equivalent: 0,
             total_available_e8s_equivalent: 338006,
+            rounds_since_last_distribution: Some(1),
         }
     );
 
@@ -2650,6 +2658,7 @@ fn test_reward_distribution_skips_deleted_neurons() {
             settled_proposals: vec![],
             distributed_e8s_equivalent: 0,
             total_available_e8s_equivalent: 0,
+            rounds_since_last_distribution: Some(0),
         }
     );
 
@@ -2666,6 +2675,7 @@ fn test_reward_distribution_skips_deleted_neurons() {
             // only 1/4 is actually distributed.
             distributed_e8s_equivalent: 25,
             total_available_e8s_equivalent: 100,
+            rounds_since_last_distribution: Some(1),
         }
     );
     assert_eq!(
@@ -2715,6 +2725,7 @@ async fn test_genesis_in_the_future_in_supported() {
             settled_proposals: vec![],
             distributed_e8s_equivalent: 0,
             total_available_e8s_equivalent: 0,
+            rounds_since_last_distribution: Some(0),
         }
     );
 
@@ -2772,6 +2783,7 @@ async fn test_genesis_in_the_future_in_supported() {
             settled_proposals: vec![],
             distributed_e8s_equivalent: 0,
             total_available_e8s_equivalent: 0,
+            rounds_since_last_distribution: Some(0),
         }
     );
     // ... even though the short proposal is ready to settle
@@ -2839,6 +2851,7 @@ async fn test_genesis_in_the_future_in_supported() {
             settled_proposals: vec![],
             distributed_e8s_equivalent: 0,
             total_available_e8s_equivalent: 0,
+            rounds_since_last_distribution: Some(0),
         }
     );
     // The long early proposal should now be ready to settle
@@ -2872,6 +2885,7 @@ async fn test_genesis_in_the_future_in_supported() {
             settled_proposals: vec![long_early_proposal_pid, short_proposal_pid],
             distributed_e8s_equivalent: 2,
             total_available_e8s_equivalent: 100,
+            rounds_since_last_distribution: Some(1),
         }
     );
 
@@ -2890,6 +2904,7 @@ async fn test_genesis_in_the_future_in_supported() {
             total_available_e8s_equivalent: gov
                 .latest_reward_event()
                 .total_available_e8s_equivalent,
+            rounds_since_last_distribution: Some(1),
         }
     );
 
@@ -2973,6 +2988,7 @@ fn compute_maturities(
         settled_proposals: vec![],
         distributed_e8s_equivalent: 0,
         total_available_e8s_equivalent: 0,
+        rounds_since_last_distribution: Some(0),
     };
 
     assert_eq!(*gov.latest_reward_event(), expected_initial_event);
@@ -3010,6 +3026,7 @@ fn compute_maturities(
             // is the job of the caller
             distributed_e8s_equivalent: actual_reward_event.distributed_e8s_equivalent,
             total_available_e8s_equivalent: reward_pot_e8s,
+            rounds_since_last_distribution: Some(1),
         }
     );
     assert!(
@@ -12120,6 +12137,7 @@ async fn distribute_rewards_load_test() {
             settled_proposals: vec![],
             distributed_e8s_equivalent: 0,
             total_available_e8s_equivalent: 0,
+            rounds_since_last_distribution: Some(1),
         }),
 
         ..Default::default()
