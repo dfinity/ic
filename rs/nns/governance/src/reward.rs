@@ -98,23 +98,41 @@ pub fn rewards_pool_to_distribute_in_supply_fraction_for_one_day(
 }
 
 impl RewardEvent {
-    // The amount from self that should go into some future (nonempty)
-    // RewardEvent.
-    //
-    // Of course, if self is nonempty (i.e. settled_proposals is nonempty), then
-    // this returns 0.
-    //
-    // Otherwise, this returns total_available_e8s_equivalent.
-    //
-    // (Not to be confused with the amount that came from an earlier RewardEvent
-    // into this one. self is the source of the roll over in this method, not
-    // destination.)
-    pub(crate) fn rollover_e8s_equivalent(&self) -> u64 {
-        if self.settled_proposals.is_empty() {
+    /// Calculates the total_available_e8s_equivalent in this event that should
+    /// be "rolled over" into the next `RewardEvent`.
+    ///
+    /// Behavior:
+    /// - If rewards were distributed for this event, then no available_icp_e8s
+    ///   should be rolled over, so this function returns 0.
+    /// - Otherwise, this function returns
+    ///   `total_available_e8s_equivalent`.
+    pub(crate) fn e8s_equivalent_to_be_rolled_over(&self) -> u64 {
+        if self.rewards_rolled_over() {
             self.total_available_e8s_equivalent
         } else {
             0
         }
+    }
+
+    /// Calculates the rounds_since_last_distribution in this event that should
+    /// be "rolled over" into the next `RewardEvent`.
+    ///
+    /// Behavior:
+    /// - If rewards were distributed for this event, then no rounds should be
+    ///   rolled over, so this function returns 0.
+    /// - Otherwise, this function returns
+    ///   `rounds_since_last_distribution`.
+    pub(crate) fn rounds_since_last_distribution_to_be_rolled_over(&self) -> u64 {
+        if self.rewards_rolled_over() {
+            self.rounds_since_last_distribution.unwrap_or(0)
+        } else {
+            0
+        }
+    }
+
+    /// Whether this is a "rollover event", where no rewards were distributed.
+    pub(crate) fn rewards_rolled_over(&self) -> bool {
+        self.settled_proposals.is_empty()
     }
 }
 

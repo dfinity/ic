@@ -1483,6 +1483,26 @@ message RewardEvent {
 
   // The total amount of rewards that was available during the reward event.
   uint64 total_available_e8s_equivalent = 5;
+
+  // In some cases, the rewards that would have been distributed in one round are 
+  // "rolled over" into the next reward event. This field keeps track of how many
+  // rounds have passed since the last time rewards were distributed (rather 
+  // than being rolled over).
+  // 
+  // For the genesis reward event, this field will be zero.
+  //
+  // In normal operation, this field will almost always be 1. There are two 
+  // reasons that rewards might not be distributed in a given round.
+  //
+  // 1. "Missed" rounds: there was a long period when we did calculate rewards 
+  //    (longer than 1 round). (I.e. distribute_rewards was not called by 
+  //    heartbeat for whatever reason, most likely some kind of bug.)
+  //
+  // 2. Rollover: We tried to distribute rewards, but there were no proposals 
+  //    settled to distribute rewards for. 
+  //
+  // In both of these cases, the rewards purse rolls over into the next round.
+  optional uint64 rounds_since_last_distribution = 6;
 }
 
 message KnownNeuron {

@@ -1170,6 +1170,26 @@ pub struct RewardEvent {
     /// making similar changes.
     #[prost(uint64, optional, tag = "5")]
     pub end_timestamp_seconds: ::core::option::Option<u64>,
+    /// In some cases, the rewards that would have been distributed in one round are
+    /// "rolled over" into the next reward event. This field keeps track of how many
+    /// rounds have passed since the last time rewards were distributed (rather
+    /// than being rolled over).
+    ///
+    /// For the genesis reward event, this field will be zero.
+    ///
+    /// In normal operation, this field will almost always be 1. There are two
+    /// reasons that rewards might not be distributed in a given round.
+    ///
+    /// 1. "Missed" rounds: there was a long period when we did calculate rewards
+    ///     (longer than 1 round). (I.e. distribute_rewards was not called by
+    ///     heartbeat for whatever reason, most likely some kind of bug.)
+    ///
+    /// 2. Rollover: We tried to distribute rewards, but there were no proposals
+    ///     settled to distribute rewards for.
+    ///
+    /// In both of these cases, the rewards purse rolls over into the next round.
+    #[prost(uint64, optional, tag = "6")]
+    pub rounds_since_last_distribution: ::core::option::Option<u64>,
 }
 /// The representation of the whole governance system, containting all
 /// information about the governance system that must be kept

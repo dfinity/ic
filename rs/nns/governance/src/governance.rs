@@ -2150,6 +2150,7 @@ impl Governance {
                 settled_proposals: vec![],
                 distributed_e8s_equivalent: 0,
                 total_available_e8s_equivalent: 0,
+                rounds_since_last_distribution: Some(0),
             })
         }
 
@@ -6960,41 +6961,44 @@ impl Governance {
         println!("{}distribute_rewards. Supply: {:?}", LOG_PREFIX, supply);
         let now = self.env.now();
 
+        let latest_reward_event = self.latest_reward_event();
+
         // Which reward rounds (i.e. days) require rewards? (Usually, there is
         // just one of these, but we support rewarding many consecutive rounds.)
         let day_after_genesis =
             (now - self.proto.genesis_timestamp_seconds) / REWARD_DISTRIBUTION_PERIOD_SECONDS;
-        if day_after_genesis <= self.latest_reward_event().day_after_genesis {
+        let last_event_day_after_genesis = latest_reward_event.day_after_genesis;
+        let days = last_event_day_after_genesis..day_after_genesis;
+        let new_rounds_count = days.clone().count();
+
+        if new_rounds_count == 0 {
             // This may happen, in case consider_distributing_rewards was called
             // several times at almost the same time. This is
             // harmless, just abandon.
             return;
         }
-        if day_after_genesis > 1 + self.latest_reward_event().day_after_genesis {
+
+        if new_rounds_count > 1 {
             println!(
                 "{}More than one reward round (i.e. days) has passed since the last \
                  RewardEvent. This could mean that rewards are being rolled over, \
                  or earlier rounds were missed. It is now {} full days since \
                  IC genesis, and the last distribution nominally happened at {} \
                  full days since IC genesis.",
-                LOG_PREFIX,
-                day_after_genesis,
-                self.latest_reward_event().day_after_genesis
+                LOG_PREFIX, day_after_genesis, last_event_day_after_genesis
             );
         }
-        let days = self.latest_reward_event().day_after_genesis..day_after_genesis;
+
         let fraction: f64 = days
             .map(crate::reward::rewards_pool_to_distribute_in_supply_fraction_for_one_day)
             .sum();
 
-        let rolling_over_from_previous_reward_event_e8s_equivalent = self
-            .proto
-            .latest_reward_event
-            .as_ref()
-            .unwrap_or(&RewardEvent::default())
-            .rollover_e8s_equivalent();
+        let rolling_over_from_previous_reward_event_e8s_equivalent =
+            latest_reward_event.e8s_equivalent_to_be_rolled_over();
         let total_available_e8s_equivalent_float = (supply.get_e8s() as f64) * fraction
             + rolling_over_from_previous_reward_event_e8s_equivalent as f64;
+        let rounds_since_last_distribution = (new_rounds_count as u64)
+            .saturating_add(latest_reward_event.rounds_since_last_distribution_to_be_rolled_over());
 
         let as_of_timestamp_seconds =
             self.most_recent_fully_elapsed_reward_round_end_timestamp_seconds();
@@ -7143,6 +7147,7 @@ impl Governance {
             settled_proposals: considered_proposals,
             distributed_e8s_equivalent: actually_distributed_e8s_equivalent,
             total_available_e8s_equivalent: total_available_e8s_equivalent_float as u64,
+            rounds_since_last_distribution: Some(rounds_since_last_distribution),
         })
     }
 
