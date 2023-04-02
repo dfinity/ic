@@ -129,6 +129,7 @@ async fn install_canister(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let _ = agent
         .update(&Principal::management_canister(), "install_code")
+        .with_effective_canister_id(canister_id)
         .with_arg(&Encode!(&InstallCodeArgs {
             canister_id: canister_id.into(),
             wasm_module,
