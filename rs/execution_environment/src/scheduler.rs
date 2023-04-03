@@ -564,6 +564,7 @@ impl SchedulerImpl {
                         // is pending.
                     }
                     NextExecution::None | NextExecution::StartNew => {
+                        // TODO: RUN-599 Alternate the order to avoid heartbeats starvation?
                         if canister.exports_heartbeat_method() {
                             canister
                                 .system_state

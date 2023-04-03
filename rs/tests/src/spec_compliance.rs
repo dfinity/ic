@@ -22,6 +22,10 @@ const EXCLUDED: &[&str] = &[
     "(1 == 0)",
     // tECDSA is not enabled in the test yet
     "$0 ~ /tECDSA/",
+    // TODO(CRP-1961): enable the test on limiting the number of delegations to 4
+    "$0 ~ /too many delegations/",
+    // TODO(CRP-1951): the replica does not yet implement all delegation checks
+    "$0 ~ /one delegation, too many targets/",
     // the replica does not yet check that the effective canister id is valid in all cases
     "$0 ~ /wrong effective canister id.in mangement call/",
     "$0 ~ /access denied with different effective canister id/",
