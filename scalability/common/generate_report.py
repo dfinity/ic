@@ -246,7 +246,7 @@ def generate_report(base, githash, timestamp):
                 for f in os.listdir(path)
                 if f.startswith("summary_machine_") or f.startswith("summary_workload_")
             ]
-            print("Workload generator summaray files: ", files)
+            print("Workload generator summary files: ", files)
             evaluated_summaries = None
             if len(files) > 0:
                 files = sorted(files)
