@@ -1,7 +1,8 @@
-use std::{cell::Cell, thread::LocalKey};
+use std::{cell::RefCell, thread::LocalKey};
 
 use crate::{
-    environment::Environment, set_icp_xdr_conversion_rate, with_state, ONE_MINUTE_SECONDS,
+    environment::Environment, mutate_state, read_state, set_icp_xdr_conversion_rate, State,
+    ONE_MINUTE_SECONDS,
 };
 use async_trait::async_trait;
 use candid::CandidType;
@@ -60,37 +61,54 @@ impl ExchangeRateCanisterClient for RealExchangeRateCanisterClient {
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, CandidType, Eq, PartialEq, Debug)]
-pub enum UpdateExchangeRateCallState {
+pub enum UpdateExchangeRateState {
     Inactive,
     InProgress,
+}
+
+impl Default for UpdateExchangeRateState {
+    fn default() -> Self {
+        Self::Inactive
+    }
 }
 
 /// Only one UpdateExchangeRateGuard can be created at a time.
 /// Assign UpdateExchangeRateGuard::new() to a local variable before calling the
 /// Exchange Rate Canister to ensure there are no simultaneous calls.
-struct UpdateExchangeRateGuard(&'static LocalKey<Cell<UpdateExchangeRateCallState>>);
+struct UpdateExchangeRateGuard(&'static LocalKey<RefCell<Option<State>>>);
 
 impl UpdateExchangeRateGuard {
     /// Set the calling status to active.
     fn new(
-        xrc_call_state: &'static LocalKey<Cell<UpdateExchangeRateCallState>>,
+        safe_state: &'static LocalKey<RefCell<Option<State>>>,
     ) -> Result<Self, UpdateExchangeRateError> {
-        if xrc_call_state.with(|c| c.get() == UpdateExchangeRateCallState::InProgress) {
+        let current_call_state = read_state(safe_state, |state| {
+            state
+                .update_exchange_rate_canister_state
+                .unwrap_or_default()
+        });
+
+        if current_call_state == UpdateExchangeRateState::InProgress {
             return Err(UpdateExchangeRateError::UpdateAlreadyInProgress);
         }
 
-        xrc_call_state.with(|c| c.set(UpdateExchangeRateCallState::InProgress));
-        Ok(Self(xrc_call_state))
+        mutate_state(safe_state, |state| {
+            state
+                .update_exchange_rate_canister_state
+                .replace(UpdateExchangeRateState::InProgress);
+        });
+
+        Ok(Self(safe_state))
     }
 
     async fn with_guard<F>(
-        xrc_call_state: &'static LocalKey<Cell<UpdateExchangeRateCallState>>,
+        safe_state: &'static LocalKey<RefCell<Option<State>>>,
         future: F,
     ) -> Result<(), UpdateExchangeRateError>
     where
         F: std::future::Future<Output = Result<(), UpdateExchangeRateError>>,
     {
-        let _guard = Self::new(xrc_call_state)?;
+        let _guard = Self::new(safe_state)?;
         future.await
     }
 }
@@ -98,8 +116,11 @@ impl UpdateExchangeRateGuard {
 impl Drop for UpdateExchangeRateGuard {
     /// On drop, set the calling status to inactive.
     fn drop(&mut self) {
-        self.0
-            .with(|c| c.set(UpdateExchangeRateCallState::Inactive));
+        mutate_state(self.0, |state| {
+            state
+                .update_exchange_rate_canister_state
+                .replace(UpdateExchangeRateState::Inactive)
+        });
     }
 }
 
@@ -214,17 +235,17 @@ impl std::fmt::Display for UpdateExchangeRateError {
 /// this function contains a guard to ensure multiple calls cannot be made until
 /// the prior call is complete.
 pub async fn update_exchange_rate(
-    xrc_call_state: &'static LocalKey<Cell<UpdateExchangeRateCallState>>,
+    safe_state: &'static LocalKey<RefCell<Option<State>>>,
     env: &impl Environment,
     xrc_client: &impl ExchangeRateCanisterClient,
 ) -> Result<(), UpdateExchangeRateError> {
-    UpdateExchangeRateGuard::with_guard(xrc_call_state, async {
+    UpdateExchangeRateGuard::with_guard(safe_state, async {
         let now_timestamp_seconds = env.now_timestamp_seconds();
         let current_minute_seconds =
             round_down_to_multiple_of(now_timestamp_seconds, ONE_MINUTE_SECONDS);
 
         let current_icp_xdr_conversion_rate =
-            with_state(|state| state.icp_xdr_conversion_rate.clone());
+            read_state(safe_state, |state| state.icp_xdr_conversion_rate.clone());
         if !requires_new_rate(&current_icp_xdr_conversion_rate, current_minute_seconds) {
             return Err(UpdateExchangeRateError::NewRateNotNeeded);
         }
@@ -234,7 +255,9 @@ pub async fn update_exchange_rate(
             Ok(exchange_rate) => {
                 // TODO(ER-4018): validate the rate
                 let icp_xdr_conversion_rate = IcpXdrConversionRate::from(exchange_rate);
-                if let Err(error) = set_icp_xdr_conversion_rate(env, icp_xdr_conversion_rate) {
+                if let Err(error) =
+                    set_icp_xdr_conversion_rate(safe_state, env, icp_xdr_conversion_rate)
+                {
                     return Err(UpdateExchangeRateError::FailedToSetRate(error));
                 }
             }
@@ -286,7 +309,7 @@ mod test {
 
     use super::*;
 
-    use crate::{environment::Environment, tests::init_test_state};
+    use crate::environment::Environment;
 
     use futures::FutureExt;
     use ic_xrc_types::ExchangeRateMetadata;
@@ -422,11 +445,12 @@ mod test {
 
     #[test]
     fn test_periodic_does_not_call_while_there_is_another_active_call() {
-        init_test_state();
-
         // Set to active to trigger the error.
         thread_local! {
-            static XRC_CALL_STATE: Cell<UpdateExchangeRateCallState> = Cell::new(UpdateExchangeRateCallState::InProgress);
+            static STATE: RefCell<Option<State>> = RefCell::new(Some(State {
+                update_exchange_rate_canister_state: Some(UpdateExchangeRateState::InProgress),
+                ..State::default()
+            }));
         }
         let env = TestExchangeRateCanisterEnvironment {
             now_timestamp_seconds: 1680044700,
@@ -436,7 +460,7 @@ mod test {
             vec![Ok(new_exchange_rate(env.now_timestamp_seconds()))].into(),
         );
 
-        let result = update_exchange_rate(&XRC_CALL_STATE, &env, &xrc_client)
+        let result = update_exchange_rate(&STATE, &env, &xrc_client)
             .now_or_never()
             .unwrap();
 
@@ -449,10 +473,8 @@ mod test {
 
     #[test]
     fn test_periodic_does_not_call_if_new_rate_is_not_required() {
-        init_test_state();
-
         thread_local! {
-            static XRC_CALL_STATE: Cell<UpdateExchangeRateCallState> = Cell::new(UpdateExchangeRateCallState::Inactive);
+            static STATE: RefCell<Option<State>> = RefCell::new(Some(State::default()));
         }
 
         let env = TestExchangeRateCanisterEnvironment {
@@ -462,7 +484,7 @@ mod test {
         let xrc_client = MockExchangeRateCanisterClient::new(
             vec![Ok(new_exchange_rate(env.now_timestamp_seconds()))].into(),
         );
-        let result = update_exchange_rate(&XRC_CALL_STATE, &env, &xrc_client)
+        let result = update_exchange_rate(&STATE, &env, &xrc_client)
             .now_or_never()
             .unwrap();
 
@@ -475,10 +497,8 @@ mod test {
 
     #[test]
     fn test_periodic_calls_the_xrc_and_call_fails() {
-        init_test_state();
-
         thread_local! {
-            static XRC_CALL_STATE: Cell<UpdateExchangeRateCallState> = Cell::new(UpdateExchangeRateCallState::Inactive);
+            static STATE: RefCell<Option<State>> = RefCell::new(Some(State::default()));
         }
 
         let env = TestExchangeRateCanisterEnvironment {
@@ -491,7 +511,7 @@ mod test {
             ))]
             .into(),
         );
-        let result = update_exchange_rate(&XRC_CALL_STATE, &env, &xrc_client)
+        let result = update_exchange_rate(&STATE, &env, &xrc_client)
             .now_or_never()
             .unwrap();
 
@@ -503,10 +523,8 @@ mod test {
 
     #[test]
     fn test_periodic_calls_the_xrc_and_setting_rate_fails() {
-        init_test_state();
-
         thread_local! {
-            static XRC_CALL_STATE: Cell<UpdateExchangeRateCallState> = Cell::new(UpdateExchangeRateCallState::Inactive);
+            static STATE: RefCell<Option<State>> = RefCell::new(Some(State::default()));
         }
 
         let env = TestExchangeRateCanisterEnvironment {
@@ -515,7 +533,7 @@ mod test {
         };
         // Set the rate timestamp to zero to trigger an error while setting the rate.
         let xrc_client = MockExchangeRateCanisterClient::new(vec![Ok(new_exchange_rate(0))].into());
-        let result = update_exchange_rate(&XRC_CALL_STATE, &env, &xrc_client)
+        let result = update_exchange_rate(&STATE, &env, &xrc_client)
             .now_or_never()
             .unwrap();
 
@@ -527,10 +545,8 @@ mod test {
 
     #[test]
     fn test_periodic_calls_the_xrc_and_sets_the_rate() {
-        init_test_state();
-
         thread_local! {
-            static XRC_CALL_STATE: Cell<UpdateExchangeRateCallState> = Cell::new(UpdateExchangeRateCallState::Inactive);
+            static STATE: RefCell<Option<State>> = RefCell::new(Some(State::default()));
         }
 
         let env = TestExchangeRateCanisterEnvironment {
@@ -541,13 +557,14 @@ mod test {
             vec![Ok(new_exchange_rate(env.now_timestamp_seconds()))].into(),
         );
 
-        let result = update_exchange_rate(&XRC_CALL_STATE, &env, &xrc_client)
+        let result = update_exchange_rate(&STATE, &env, &xrc_client)
             .now_or_never()
             .unwrap();
 
         assert!(matches!(result, Ok(_)), "{:?}", result);
         assert!(xrc_client.calls.lock().unwrap().is_empty());
-        let icp_xdr_conversion_rate = with_state(|state| state.icp_xdr_conversion_rate.clone());
+        let icp_xdr_conversion_rate =
+            read_state(&STATE, |state| state.icp_xdr_conversion_rate.clone());
         assert!(
             matches!(icp_xdr_conversion_rate, Some(rate) if rate.xdr_permyriad_per_icp == 200_000 && rate.timestamp_seconds == 1680044700)
         );
