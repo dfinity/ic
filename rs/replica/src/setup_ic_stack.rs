@@ -117,6 +117,9 @@ pub fn construct_ic_stack(
         replica_logger.clone(),
         &metrics_registry,
         &config.state_manager,
+        // In order for the state manager to start, it needs to know the height of the last
+        // CUP and/or certification. This information part of the persisted consensus pool.
+        // Hence the need of the dependency on consensus here.
         Some(consensus_pool_cache.starting_height()),
         config.malicious_behaviour.malicious_flags.clone(),
     ));
