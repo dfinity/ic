@@ -40,3 +40,19 @@ rust_fuzz_test_binary(
     proc_macro_deps = MACRO_DEPENDENCIES,
     deps = WASM_EXECUTOR_FUZZER_DEPENDENCIES,
 )
+
+EMBEDDERS_FUZZER_DEPENDENCIES = [
+    "//rs/config",
+    "//rs/embedders",
+    "//rs/monitoring/logger",
+    "//rs/types/wasm_types",
+    "@crate_index//:libfuzzer-sys",
+    "@crate_index//:wasm-smith",
+]
+
+rust_fuzz_test_binary(
+    name = "compile_wasm_using_embedder",
+    srcs = ["fuzz_targets/compile_wasm_using_embedder.rs"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = EMBEDDERS_FUZZER_DEPENDENCIES,
+)
