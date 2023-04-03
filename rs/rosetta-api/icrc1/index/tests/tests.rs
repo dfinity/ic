@@ -1,3 +1,4 @@
+use assert_matches::assert_matches;
 use candid::{Decode, Encode, Nat};
 use ic_base_types::PrincipalId;
 use ic_icrc1::{Block, Operation, Transaction};
@@ -319,7 +320,10 @@ fn test() {
 
     assert_eq!(ledger_id, index_ledger_id(&env, index_id));
 
-    env.run_until_completion(10_000);
+    for _ in 0..100 {
+        env.advance_time(Duration::from_secs(60));
+        env.tick();
+    }
 
     // add some transactions
     mint(&env, ledger_id, account(1), 100000); // block=0
@@ -399,8 +403,9 @@ fn test_wait_time() {
     transfer(&env, ledger_id, account(2), account(1), 10); // block=3
     burn(&env, ledger_id, account(1), 10000); // block=4
 
-    env.advance_time(Duration::from_secs(60));
+    env.advance_time(Duration::from_secs(10));
     env.tick();
+
     let txs = get_account_transactions(&env, index_id, account(1), None, u64::MAX);
     assert!(!txs.transactions.is_empty());
 
@@ -435,6 +440,7 @@ fn test_upgrade() {
     transfer(&env, ledger_id, account(1), account(2), 1); // block=1
 
     env.advance_time(Duration::from_secs(60));
+    env.tick();
     // upgrade the Index
     env.upgrade_canister(index_id, index_wasm(), vec![])
         .expect("Failed to upgrade the Index canister");
@@ -443,6 +449,43 @@ fn test_upgrade() {
     let txs = txs.transactions;
     check_mint(0, account(1), 100000, txs.get(1).unwrap());
     check_transfer(1, account(1), account(2), 1, txs.get(0).unwrap());
+}
+
+#[test]
+fn test_ledger_stopped() {
+    let env = StateMachine::new();
+    let ledger_id = install_ledger(&env, vec![], default_archive_options());
+    let index_id = install_index(&env, ledger_id);
+
+    mint(&env, ledger_id, account(1), 100000); // block=0
+    transfer(&env, ledger_id, account(1), account(2), 1); // block=1
+
+    env.advance_time(Duration::from_secs(60));
+    env.tick();
+
+    let txs = get_account_transactions(&env, index_id, account(1), None, u64::MAX);
+    let txs = txs.transactions;
+    check_mint(0, account(1), 100000, txs.get(1).unwrap());
+    check_transfer(1, account(1), account(2), 1, txs.get(0).unwrap());
+
+    let stop_result = env.stop_canister(ledger_id);
+    assert_matches!(stop_result, Ok(_));
+
+    env.advance_time(Duration::from_secs(60));
+    env.tick();
+
+    let start_result = env.start_canister(ledger_id);
+    assert_matches!(start_result, Ok(_));
+
+    mint(&env, ledger_id, account(1), 100000); // block=2
+    transfer(&env, ledger_id, account(1), account(2), 1); // block=3
+    env.advance_time(Duration::from_secs(60));
+    env.tick();
+
+    let txs = get_account_transactions(&env, index_id, account(1), None, u64::MAX);
+    let txs = txs.transactions;
+    check_mint(2, account(1), 100000, txs.get(1).unwrap());
+    check_transfer(3, account(1), account(2), 1, txs.get(0).unwrap());
 }
 
 #[test]
@@ -471,7 +514,10 @@ fn test_index_archived_txs() {
 
     // install the index and let it index all the transaction
     let index_id = install_index(&env, ledger_id);
-    env.run_until_completion(10_000);
+    for _ in 0..10 {
+        env.advance_time(Duration::from_secs(60));
+        env.tick();
+    }
     let txs = get_account_transactions(&env, index_id, account(1), None, u64::MAX);
     let txs = txs.transactions;
     assert_eq!(num_txs, txs.len() as u64);
@@ -510,7 +556,10 @@ fn test_index_archived_txs_paging() {
 
     // install the index and let it index all the transaction
     let index_id = install_index(&env, ledger_id);
-    env.run_until_completion(10_000);
+    for _ in 0..10 {
+        env.advance_time(Duration::from_secs(60));
+        env.tick();
+    }
 
     // check that the index has exactly indexed num_txs transactions
     let txs = get_account_transactions(&env, index_id, account(1), None, u64::MAX);
