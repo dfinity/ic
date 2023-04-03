@@ -18,6 +18,7 @@ use ic_types::{
 };
 
 use byte_unit::Byte;
+use futures::StreamExt;
 use itertools::Either;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -120,14 +121,36 @@ impl Engine {
 
     // Goes over all agents and makes sure they are connected and the corresponding
     // replicas are healthy.
+    //
+    // This function will never return if one of the agents remains unhealthy.
     pub async fn wait_for_all_agents_to_be_healthy(&self) {
-        println!("Waiting for all replicas to be healthy!");
-        for agent in &self.agents {
-            while !agent.is_replica_healthy().await {
+        let before = Instant::now();
+        let mut all_healthy = false;
+        println!("Waiting for all replicas to be healthy.");
+        while !all_healthy {
+            all_healthy = true;
+            let agents = &self.agents;
+            let results =
+                futures::stream::iter(agents.iter().map(|agent| agent.is_replica_healthy()))
+                    .buffered(self.agents.len())
+                    .collect::<Vec<_>>();
+            let all_res = results.await;
+            for (n, res) in all_res.iter().enumerate() {
+                if !res {
+                    all_healthy = false;
+                    let rep = &agents[n];
+                    println!(
+                        "Replica {} is not healthy.  Elapsed: {:?}",
+                        rep.url,
+                        before.elapsed()
+                    )
+                }
+            }
+            if !all_healthy {
                 tokio::time::sleep(Duration::from_secs(1)).await;
             }
         }
-        println!("All replicas are healthy!");
+        println!("All replicas are healthy.  Elapsed: {:?}", before.elapsed());
     }
 
     /// Execute requests in rps mode with the given number of requests per
