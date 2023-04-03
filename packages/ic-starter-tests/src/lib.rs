@@ -60,7 +60,7 @@ pub struct ReplicaStarterConfig {
 impl Default for ReplicaStarterConfig {
     fn default() -> Self {
         Self {
-            timeout_after: Duration::from_secs(10),
+            timeout_after: Duration::from_secs(25),
         }
     }
 }
