@@ -23,9 +23,11 @@ use std::time::Duration;
 
 fn new_remote_csp_vault(rt_handle: &tokio::runtime::Handle) -> Arc<dyn CspVault> {
     let socket_path = start_new_remote_csp_vault_server_for_test(rt_handle);
-    let remote_csp_vault = RemoteCspVault::new_for_test(&socket_path, rt_handle.clone(), None)
-        .expect("Could not create RemoteCspVault");
-    Arc::new(remote_csp_vault)
+    Arc::new(
+        RemoteCspVault::builder(socket_path, rt_handle.clone())
+            .build()
+            .expect("Could not create RemoteCspVault"),
+    )
 }
 
 fn new_remote_csp_vault_with_local_csp_vault<C: CspVault + 'static>(
@@ -33,15 +35,17 @@ fn new_remote_csp_vault_with_local_csp_vault<C: CspVault + 'static>(
     local_csp_vault: Arc<C>,
 ) -> Arc<dyn CspVault> {
     let (socket_path, sks_dir, listener) = setup_listener(rt_handle);
-    let server = TarpcCspVaultServerImpl::new_for_test(local_csp_vault, listener);
+    let server = TarpcCspVaultServerImpl::builder_for_test(local_csp_vault).build(listener);
 
     rt_handle.spawn(async move {
         let _move_temp_dir_here_to_ensure_it_is_not_cleaned_up = sks_dir;
         server.run().await;
     });
-    let remote_csp_vault = RemoteCspVault::new_for_test(&socket_path, rt_handle.clone(), None)
-        .expect("Could not create RemoteCspVault");
-    Arc::new(remote_csp_vault)
+    Arc::new(
+        RemoteCspVault::builder(socket_path, rt_handle.clone())
+            .build()
+            .expect("Could not create RemoteCspVault"),
+    )
 }
 
 // Starts a fresh CSP Vault server instance for testing, and creates a CSP Vault client
@@ -53,7 +57,10 @@ fn new_csp_vault_for_test_with_timeout(
 ) -> Arc<dyn CspVault> {
     let socket_path = start_new_remote_csp_vault_server_for_test(rt_handle);
     Arc::new(
-        RemoteCspVault::new_for_test(&socket_path, rt_handle.clone(), Some(timeout))
+        RemoteCspVault::builder(socket_path, rt_handle.clone())
+            .with_rpc_timeout(timeout)
+            .with_long_rpc_timeout(timeout)
+            .build()
             .expect("Could not create RemoteCspVault"),
     )
 }

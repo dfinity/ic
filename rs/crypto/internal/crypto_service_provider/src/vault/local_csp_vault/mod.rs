@@ -82,7 +82,10 @@ pub struct LocalCspVault<
     metrics: Arc<CryptoMetrics>,
 }
 
-impl LocalCspVault<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore, ProtoPublicKeyStore> {
+pub type ProdLocalCspVault =
+    LocalCspVault<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore, ProtoPublicKeyStore>;
+
+impl ProdLocalCspVault {
     /// Creates a production-grade local CSP vault.
     ///
     /// For test purposes, it might be more appropriate to use the provided builder.
@@ -108,6 +111,36 @@ impl LocalCspVault<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore, ProtoPublicK
             canister_secret_key_store,
             public_key_store,
             Arc::new(CurrentSystemTimeSource::new(new_logger!(&logger))),
+            metrics,
+            logger,
+        )
+    }
+
+    pub fn new_in_dir(
+        key_store_dir: &Path,
+        metrics: Arc<CryptoMetrics>,
+        logger: ReplicaLogger,
+    ) -> Self {
+        const SKS_DATA_FILENAME: &str = "sks_data.pb";
+        const PUBLIC_KEY_STORE_DATA_FILENAME: &str = "public_keys.pb";
+        const CANISTER_SKS_DATA_FILENAME: &str = "canister_sks_data.pb";
+
+        let node_secret_key_store =
+            ProtoSecretKeyStore::open(key_store_dir, SKS_DATA_FILENAME, Some(new_logger!(logger)));
+        let canister_secret_key_store = ProtoSecretKeyStore::open(
+            key_store_dir,
+            CANISTER_SKS_DATA_FILENAME,
+            Some(new_logger!(logger)),
+        );
+        let public_key_store = ProtoPublicKeyStore::open(
+            key_store_dir,
+            PUBLIC_KEY_STORE_DATA_FILENAME,
+            new_logger!(logger),
+        );
+        Self::new(
+            node_secret_key_store,
+            canister_secret_key_store,
+            public_key_store,
             metrics,
             logger,
         )

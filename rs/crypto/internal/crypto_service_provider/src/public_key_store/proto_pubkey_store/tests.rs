@@ -3,7 +3,6 @@
 use crate::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
 use crate::public_key_store::PublicKeyAddError;
 use crate::public_key_store::{PublicKeySetOnceError, PublicKeyStore};
-use crate::PUBLIC_KEY_STORE_DATA_FILENAME;
 use assert_matches::assert_matches;
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_csp_test_utils::files::mk_temp_dir_with_permissions;
@@ -137,7 +136,7 @@ fn should_log_when_adding_idkg_public_key() {
     let temp_dir = temp_dir();
     let mut store = ProtoPublicKeyStore::open(
         temp_dir.path(),
-        PUBLIC_KEY_STORE_DATA_FILENAME,
+        PUBLIC_KEYS_FILE,
         ReplicaLogger::from(&in_memory_logger),
     );
 
@@ -261,7 +260,7 @@ fn should_preserve_order_of_rotating_pubkeys() {
 #[should_panic(expected = "error parsing public key store data")]
 fn should_panic_on_opening_corrupt_pubkey_store() {
     let temp_dir = tempfile::tempdir().expect("failed to create temp dir");
-    let corrupt_store_file = temp_dir.path().join(PUBLIC_KEY_STORE_DATA_FILENAME);
+    let corrupt_store_file = temp_dir.path().join(PUBLIC_KEYS_FILE);
     fs::write(corrupt_store_file, b"corrupt store content").expect("failed to write store");
 
     public_key_store(&temp_dir);
@@ -785,7 +784,7 @@ mod retain_most_recent_idkg_public_keys_up_to_inclusive {
         let in_memory_logger = InMemoryReplicaLogger::new();
         let mut store = ProtoPublicKeyStore::open(
             temp_dir.path(),
-            PUBLIC_KEY_STORE_DATA_FILENAME,
+            PUBLIC_KEYS_FILE,
             ReplicaLogger::from(&in_memory_logger),
         );
         add_idkg_dealing_encryption_public_keys(
@@ -938,7 +937,7 @@ fn generate_node_keys_in_temp_dir() -> (NodePublicKeys, TempDir) {
 }
 
 fn read_from_public_key_store_file(crypto_root: &Path) -> NodePublicKeys {
-    let pk_file = crypto_root.join(PUBLIC_KEY_STORE_DATA_FILENAME);
+    let pk_file = crypto_root.join(PUBLIC_KEYS_FILE);
     let pk_store_bytes = fs::read(pk_file).expect("failed to read public key store");
     use prost::Message;
     NodePublicKeys::decode(&*pk_store_bytes).expect("failed to decode public key store")
@@ -952,15 +951,11 @@ fn temp_dir() -> TempDir {
 }
 
 fn public_key_store(temp_dir: &TempDir) -> ProtoPublicKeyStore {
-    ProtoPublicKeyStore::open(
-        temp_dir.path(),
-        PUBLIC_KEY_STORE_DATA_FILENAME,
-        no_op_logger(),
-    )
+    ProtoPublicKeyStore::open(temp_dir.path(), PUBLIC_KEYS_FILE, no_op_logger())
 }
 
 fn public_key_store_last_modification_time(temp_dir: &TempDir) -> SystemTime {
-    fs::metadata(temp_dir.path().join(PUBLIC_KEY_STORE_DATA_FILENAME))
+    fs::metadata(temp_dir.path().join(PUBLIC_KEYS_FILE))
         .expect("cannot read metadata of public key store")
         .modified()
         .expect("cannot ready system time")
