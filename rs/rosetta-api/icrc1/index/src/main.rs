@@ -1,23 +1,24 @@
 use candid::candid_method;
 use ic_base_types::CanisterId;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_cdk_macros::{heartbeat, init, post_upgrade, pre_upgrade, query, update};
+use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
 use ic_icrc1_index::{
     encode_metrics, GetAccountTransactionsArgs, GetTransactionsResult, InitArgs,
     ListSubaccountsArgs,
 };
 use icrc_ledger_types::icrc1::account::Subaccount;
+use std::time::Duration;
 
 fn main() {}
 
 #[init]
 fn init(args: InitArgs) {
     ic_icrc1_index::init(args);
-}
-
-#[heartbeat]
-async fn heartbeat() {
-    ic_icrc1_index::heartbeat().await;
+    ic_cdk_timers::set_timer(Duration::from_secs(1), || {
+        ic_cdk::spawn(async {
+            let _ = ic_icrc1_index::build_index().await;
+        })
+    });
 }
 
 #[update]

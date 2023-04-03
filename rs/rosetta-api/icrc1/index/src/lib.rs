@@ -6,16 +6,17 @@ use icrc_ledger_types::icrc3::archive::QueryTxArchiveFn;
 use icrc_ledger_types::icrc3::transactions::{
     GetTransactionsResponse, Transaction, TransactionRange, Transfer,
 };
-
 use icrc_ledger_types::{
     icrc1::account::Account, icrc1::account::Subaccount, icrc3::archive::ArchivedRange,
     icrc3::transactions::GetTransactionsRequest,
 };
 use num_traits::cast::ToPrimitive;
+use scopeguard::{guard, ScopeGuard};
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::collections::{btree_map, BTreeMap};
 use std::ops::Bound::{Included, Unbounded};
+use std::time::Duration;
 
 // Maximum number of subaccounts that can be returned
 // by [list_subaccounts]
@@ -26,8 +27,9 @@ const MAX_SUBACCOUNTS_PER_RESPONSE: usize = 1000;
 const MAX_TRANSACTIONS_PER_RESPONSE: usize = 1000;
 
 // One second in nanosecond
-const SEC_NANOS: f64 = 1_000_000_000_f64;
-const DEFAULT_MAX_WAIT_TIME_NANOS: f64 = 60_f64 * SEC_NANOS;
+const SEC_NANOS: u64 = 1_000_000_000;
+const DEFAULT_MAX_WAIT_TIME_NANOS: u64 = 60_u64 * SEC_NANOS;
+const DEFAULT_RETRY_WAIT_TIME_NANOS: u64 = 10_u64 * SEC_NANOS;
 
 const LOG_PREFIX: &str = "[ic-icrc1-index] ";
 
@@ -41,12 +43,8 @@ struct Index {
     // The next txid to query from the Ledger
     pub next_txid: u64,
 
-    // Whether there is a [heartbeat] running right now
-    pub is_heartbeat_running: bool,
-
-    // Next time to call [build_index]
-    #[serde(default)]
-    pub next_build_index_time: u64,
+    // Whether there is a build_index running right now
+    pub is_build_index_running: bool,
 
     // The index of transactions per account
     pub account_index: BTreeMap<PrincipalId, BTreeMap<Subaccount, Vec<u64>>>,
@@ -60,8 +58,7 @@ impl Index {
         Self {
             ledger_id: init_args.ledger_id,
             next_txid: 0,
-            is_heartbeat_running: false,
-            next_build_index_time: 0,
+            is_build_index_running: false,
             account_index: BTreeMap::new(),
             accounts_num: 0,
         }
@@ -83,26 +80,6 @@ fn with_index_mut<R>(f: impl FnOnce(&mut Index) -> R) -> R {
 
 pub fn ledger_id() -> CanisterId {
     with_index(|idx| idx.ledger_id)
-}
-
-struct HeartbeatGuard;
-
-impl HeartbeatGuard {
-    fn new() -> Option<HeartbeatGuard> {
-        with_index_mut(|idx| {
-            if idx.is_heartbeat_running {
-                return None;
-            }
-            idx.is_heartbeat_running = true;
-            Some(HeartbeatGuard {})
-        })
-    }
-}
-
-impl Drop for HeartbeatGuard {
-    fn drop(&mut self) {
-        with_index_mut(|idx| idx.is_heartbeat_running = false)
-    }
 }
 
 #[derive(CandidType, Clone, Debug, candid::Deserialize)]
@@ -175,21 +152,6 @@ pub fn list_subaccounts(list_subaccounts_args: ListSubaccountsArgs) -> Vec<Subac
     )
 }
 
-pub async fn heartbeat() {
-    let _guard = match HeartbeatGuard::new() {
-        Some(guard) => guard,
-        None => return,
-    };
-
-    if ic_cdk::api::time() < with_index(|idx| idx.next_build_index_time) {
-        return;
-    }
-
-    if let Err(err) = build_index().await {
-        ic_cdk::eprintln!("{}Failed to fetch blocks: {}", LOG_PREFIX, err);
-    }
-}
-
 async fn get_transactions_from_ledger(
     start: u64,
     length: usize,
@@ -223,7 +185,23 @@ async fn get_transactions_from_archive(
     Ok(res)
 }
 
-async fn build_index() -> Result<(), String> {
+pub async fn build_index() -> Result<(), String> {
+    if with_index(|idx| idx.is_build_index_running) {
+        return Err("build_index already running".to_string());
+    }
+    with_index_mut(|idx| {
+        idx.is_build_index_running = true;
+    });
+    let failure_guard = guard((), |_| {
+        with_index_mut(|idx| {
+            idx.is_build_index_running = false;
+        });
+        ic_cdk_timers::set_timer(Duration::from_nanos(DEFAULT_RETRY_WAIT_TIME_NANOS), || {
+            ic_cdk::spawn(async {
+                let _ = build_index().await;
+            })
+        });
+    });
     let next_txid = with_index(|idx| idx.next_txid);
     let res = get_transactions_from_ledger(next_txid, MAX_TRANSACTIONS_PER_RESPONSE).await?;
     let mut tx_indexed_cout: usize = 0;
@@ -267,9 +245,17 @@ async fn build_index() -> Result<(), String> {
         "{}Indexed: {} waiting : {}",
         LOG_PREFIX,
         tx_indexed_cout,
-        wait_time
+        wait_time / SEC_NANOS
     );
-    with_index_mut(|idx| idx.next_build_index_time = ic_cdk::api::time() + wait_time);
+    ScopeGuard::into_inner(failure_guard);
+    with_index_mut(|idx| {
+        idx.is_build_index_running = false;
+    });
+    ic_cdk_timers::set_timer(Duration::from_nanos(wait_time), || {
+        ic_cdk::spawn(async {
+            let _ = build_index().await;
+        })
+    });
     Ok(())
 }
 
@@ -277,11 +263,11 @@ async fn build_index() -> Result<(), String> {
 pub fn compute_wait_time(indexed_tx_count: usize) -> u64 {
     if indexed_tx_count >= MAX_TRANSACTIONS_PER_RESPONSE {
         // If we indexed more than MAX_SPEED_THRESHOLD,
-        // we index again on the next heartbeat.
+        // we index again on the next build_index call.
         return 0;
     }
     ((1_f64 - indexed_tx_count as f64 / MAX_TRANSACTIONS_PER_RESPONSE as f64)
-        * DEFAULT_MAX_WAIT_TIME_NANOS) as u64
+        * DEFAULT_MAX_WAIT_TIME_NANOS as f64) as u64
 }
 
 fn index_transaction(txid: u64, transaction: Transaction) -> Result<(), String> {
@@ -506,8 +492,7 @@ mod tests {
     use proptest::{option, proptest};
 
     use crate::{
-        add_tx, get_account_transactions_ids, with_index, GetAccountTransactionsArgs,
-        HeartbeatGuard, Index, INDEX,
+        add_tx, get_account_transactions_ids, with_index, GetAccountTransactionsArgs, Index, INDEX,
     };
 
     fn account(n: u64) -> Account {
@@ -534,8 +519,7 @@ mod tests {
             *idx.borrow_mut() = Some(Index {
                 ledger_id: CanisterId::from_u64(42),
                 next_txid: 0,
-                is_heartbeat_running: false,
-                next_build_index_time: 0,
+                is_build_index_running: false,
                 account_index,
                 accounts_num: 0,
             });
@@ -665,7 +649,7 @@ mod tests {
         fn test_compute_wait_time(indexed_tx_count in 0..10_000_usize) {
             let wait_time = crate::compute_wait_time(indexed_tx_count);
             let next_wait_time = crate::compute_wait_time(indexed_tx_count + 1);
-            assert!(wait_time <= 100 * crate::SEC_NANOS as u64);
+            assert!(wait_time <= 100 * crate::SEC_NANOS);
             assert!(next_wait_time <= wait_time);
         }
     }
@@ -714,22 +698,5 @@ mod tests {
         assert_eq!(6, add_tx_for(2, 1));
         assert_eq!(7, add_tx_for(2, 3));
         assert_eq!(8, add_tx_for(2, 10));
-    }
-
-    #[test]
-    fn heartbeat_guard_test() {
-        init_state(vec![]);
-
-        let guard = HeartbeatGuard::new().unwrap();
-
-        // should not allow to create another guard
-        // while the previous one is still open
-        assert!(HeartbeatGuard::new().is_none());
-
-        drop(guard);
-
-        // should allow to create a new guard after the
-        // previous ones have been closed
-        assert!(HeartbeatGuard::new().is_some());
     }
 }

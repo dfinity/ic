@@ -6713,6 +6713,7 @@ dependencies = [
 name = "ic-icrc1-index"
 version = "0.8.0"
 dependencies = [
+ "assert_matches",
  "async-trait",
  "candid",
  "ciborium",
@@ -6721,6 +6722,7 @@ dependencies = [
  "ic-canisters-http-types",
  "ic-cdk 0.6.10",
  "ic-cdk-macros",
+ "ic-cdk-timers",
  "ic-icrc1",
  "ic-icrc1-ledger",
  "ic-ledger-canister-core",
@@ -6731,6 +6733,7 @@ dependencies = [
  "icrc-ledger-types",
  "num-traits",
  "proptest",
+ "scopeguard",
  "serde",
  "serde_json",
 ]
