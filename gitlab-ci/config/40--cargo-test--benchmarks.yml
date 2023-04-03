@@ -1,6 +1,6 @@
 benchmarks:
   extends:
-    - .ubuntu-cargo-docker-k8s
+    - .ubuntu-cargo-k8s
     - .rules-benchmarks-schedule
   stage: cargo-test
   needs: []
@@ -11,9 +11,6 @@ benchmarks:
   variables:
     RUST_BACKTRACE: 1
     CARGO_BENCH_TIMEOUT: 34200 # 9.5h
-  tags:
-    - dfinity
-    - ubuntu
   script:
     - cd "${CI_PROJECT_DIR}/rs"
     - |

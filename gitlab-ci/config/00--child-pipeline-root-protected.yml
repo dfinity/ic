@@ -3,9 +3,8 @@ include:
 
 .ubuntu-docker-protected:
   extends:
-    - .ubuntu-cargo-docker
-    - .ic-build-image
+    - .ubuntu-k8s
 
-.ubuntu-docker-k8s-protected:
+.ubuntu-k8s-protected:
   extends:
-    - .ubuntu-docker-protected
+    - .ubuntu-k8s

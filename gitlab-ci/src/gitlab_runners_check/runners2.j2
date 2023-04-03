@@ -5,7 +5,7 @@ include:
 {%- for item in items %}
 runner-{{item.id}}:
   extends: 
-    - .ubuntu-cargo-docker
+    - .ubuntu-cargo
     - .rules-parent-pipeline
   stage: test
   interruptible: false

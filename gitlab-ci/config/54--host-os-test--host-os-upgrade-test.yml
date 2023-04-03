@@ -1,6 +1,6 @@
 .host-e2e-test-base:
   extends:
-    - .ubuntu-docker-k8s-protected
+    - .ubuntu-k8s-protected
     - .rules-parent-pipeline-autorun-on-trigger
     - .rules-hostos
   stage: host-os-test

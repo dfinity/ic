@@ -7,7 +7,7 @@
 
 .wait-for-parent-pipeline-job:
   extends:
-    - .ubuntu-docker-k8s
+    - .ubuntu-k8s
     - .rules-parent-pipeline-autorun-on-trigger
   stage: test
   variables:

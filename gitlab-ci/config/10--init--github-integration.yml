@@ -1,6 +1,6 @@
 no-interrupt:
   extends:
-    - .ubuntu-cargo-docker-k8s
+    - .ubuntu-cargo-k8s
     - .rules-any-schedule
   stage: init
   interruptible: False
@@ -9,7 +9,7 @@ no-interrupt:
 
 cargo-audit:
   extends:
-    - .ubuntu-cargo-docker-k8s
+    - .ubuntu-cargo-k8s
     - .rules-cargo-audit-schedule
   stage: init
   script:

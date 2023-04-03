@@ -7,7 +7,7 @@ dependencies-check:
     # commit in the master branch. This would cause the job to
     # fail even if it has successfully passed. 
   extends: 
-    - .ubuntu-docker-k8s
+    - .ubuntu-k8s
   rules :
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
   needs: []  # don't wait on other jobs
@@ -27,7 +27,7 @@ dependencies-check:
 
 dependency-scan-nightly:
   extends: 
-    - .ubuntu-docker-k8s
+    - .ubuntu-k8s
     - .rules-dependency-scan-schedule
   needs: []  # don't wait on other jobs
   stage: test
@@ -54,7 +54,7 @@ dependency-scan-nightly:
 
 dependency-scan-release-cut:
   extends: 
-    - .ubuntu-docker-k8s
+    - .ubuntu-k8s
     - .rules-dependency-scan-release-cut
   needs: []  # don't wait on other jobs
   stage: test

@@ -1,6 +1,6 @@
 devcontainer-build:
   extends:
-    - .ubuntu-cargo-docker-k8s
+    - .ubuntu-cargo-k8s
   rules:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       changes:

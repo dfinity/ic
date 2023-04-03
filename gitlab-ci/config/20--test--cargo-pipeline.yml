@@ -1,12 +1,9 @@
 gen-cargo-pipeline:
   extends:
-    - .ubuntu-cargo-docker-k8s
+    - .ubuntu-cargo-k8s
     - .cargo-rules-autorun-on-trigger
   # Child pipeline must be generated in a stage prior to the one where it runs
   stage: init
-  tags:
-    - dfinity
-    - ubuntu
   variables:
     PYTHONPATH : ${CI_PROJECT_DIR}/gitlab-ci/src
   script:
@@ -17,7 +14,7 @@ gen-cargo-pipeline:
       cd gitlab-ci/src/
       $SHELL_WRAPPER python3 gen_gitlab_cargo_pipeline/gen_pipeline.py \
         ../../ ../../ic-os -v --out=../../child-pipeline.yml
-      
+
       cd -
 
   artifacts:

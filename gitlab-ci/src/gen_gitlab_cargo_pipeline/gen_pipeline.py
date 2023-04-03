@@ -284,6 +284,7 @@ def generate_gitlab_yaml(
             fout.write("  FARM_SHARD: %s\n" % random.randint(1, FARM_RATE_LIMIT))
             fout.write("  CDPRNET: cdpr0%s\n" % (random.randint(1, 5)))
             fout.write("  GIT_REVISION: $CI_COMMIT_SHA\n")
+            fout.write("  GIT_CLONE_PATH: $CI_BUILDS_DIR/$CI_CONCURRENT_ID/$CI_PROJECT_NAME\n")
 
         if gitlab_ci_config_changes:
             fout.write("  GITLAB_CI_CONFIG_CHANGED: 'true'\n")
