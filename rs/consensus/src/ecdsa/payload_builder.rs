@@ -427,6 +427,7 @@ fn create_summary_payload_helper(
             key_id: ecdsa_payload.key_transcript.key_id.clone(),
         },
     };
+    ecdsa_summary.uid_generator.update_height(height)?;
     update_summary_refs(height, &mut ecdsa_summary, block_reader)?;
     Ok(Some(ecdsa_summary))
 }
