@@ -10,7 +10,6 @@ import time
 import cbor
 import gflags
 import requests
-import vmtools
 
 FLAGS = gflags.FLAGS
 
@@ -335,29 +334,11 @@ def wait_ssh_up(host, timeout=FLAGS.timeout):
     raise TimeoutError("Time out waiting for IC instance to come up.")
 
 
-def _get_artifact_version(artifact, kind):
-    if isinstance(artifact, vmtools.SystemImage):
-        artifact = artifact.local_path
-
-    get_artifact_version = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)),
-        "..",
-        "..",
-        "guestos",
-        "tests",
-        "scripts",
-        "get-artifact-version.sh",
-    )
-    process = subprocess.Popen([get_artifact_version, kind, artifact], stdout=subprocess.PIPE)
-    return process.stdout.read().decode("utf-8").strip()
-
-
-def get_disk_image_version(image):
-    return _get_artifact_version(image, "--disk")
-
-
 def get_upgrade_image_version(image):
-    return _get_artifact_version(image, "--upgrade")
+    command_line = f'tar xOzf "{image}" --occurrence=1 ./VERSION.TXT || tar xOzf "{image}" --occurrence=1 ./version.txt'
+
+    process = subprocess.Popen(command_line, shell=True, stdout=subprocess.PIPE)
+    return process.stdout.read().decode("utf-8").strip()
 
 
 def build_ssh_extra_config():
