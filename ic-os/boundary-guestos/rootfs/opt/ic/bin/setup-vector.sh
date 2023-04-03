@@ -28,6 +28,9 @@ function read_variables() {
             "elasticsearch_url") ELASTICSEARCH_URL="${value}" ;;
             "elasticsearch_tags") ELASTICSEARCH_TAGS="${value}" ;;
             "ip_hash_salt") IP_HASH_SALT="${value}" ;;
+            "logging_url") LOGGING_URL="${value}" ;;
+            "logging_user") LOGGING_USER="${value}" ;;
+            "logging_password") LOGGING_PASSWORD="${value}" ;;
         esac
     done <"${BN_CONFIG}"
 
@@ -43,6 +46,9 @@ function generate_vector_config() {
 ELASTICSEARCH_URL=${ELASTICSEARCH_URL}
 ELASTICSEARCH_TAGS=${ELASTICSEARCH_TAGS:-}
 IP_HASH_SALT=${IP_HASH_SALT:-}
+CLICKHOUSE_URL=${LOGGING_URL:-}
+CLICKHOUSE_USER=${LOGGING_USER:-}
+CLICKHOUSE_PASSWORD=${LOGGING_PASSWORD:-}
 EOF
 }
 

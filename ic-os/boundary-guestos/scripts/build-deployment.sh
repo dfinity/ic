@@ -50,6 +50,9 @@ Arguments:
        --cert-issuer-enc-key            specify an encryption key for certificate-issuer
        --pre-isolation-canisters        specify a set of pre-domain-isolation canisters
        --ip-hash-salt                   specify a salt for hashing ip values
+       --logging-url                    specify an endpoint for our logging backend
+       --logging-user                   specify a user for our logging backend
+       --logging-password               specify a password for our logging backend
   -x,  --debug                          enable verbose console output
 '
     exit 1
@@ -115,6 +118,15 @@ for argument in "${@}"; do
             ;;
         --ip-hash-salt=*)
             IP_HASH_SALT="${argument#*=}"
+            ;;
+        --logging-url=*)
+            LOGGING_URL="${argument#*=}"
+            ;;
+        --logging-user=*)
+            LOGGING_USER="${argument#*=}"
+            ;;
+        --logging-password=*)
+            LOGGING_PASSWORD="${argument#*=}"
             ;;
         *)
             echo "Error: Argument \"${argument#}\" is not supported for $0"
@@ -542,6 +554,28 @@ function copy_ip_hash_salt() {
     done
 }
 
+function copy_logging_credentials() {
+    if [[ -z "${LOGGING_URL:-}" || -z "${LOGGING_USER:-}" || -z "${LOGGING_PASSWORD:-}" ]]; then
+        err "logging credentials have not been provided, continuing without configuring logging"
+        return
+    fi
+
+    for n in $NODES; do
+        declare -n NODE=$n
+        if [[ "${NODE["type"]}" != "boundary" ]]; then
+            continue
+        fi
+
+        local SUBNET_IDX="${NODE["subnet_idx"]}"
+        local NODE_IDX="${NODE["node_idx"]}"
+        local NODE_PREFIX="${DEPLOYMENT}.${SUBNET_IDX}.${NODE_IDX}"
+
+        echo "logging_url=${LOGGING_URL}" >>"${CONFIG_DIR}/${NODE_PREFIX}/bn_vars.conf"
+        echo "logging_user=${LOGGING_USER}" >>"${CONFIG_DIR}/${NODE_PREFIX}/bn_vars.conf"
+        echo "logging_password=${LOGGING_PASSWORD}" >>"${CONFIG_DIR}/${NODE_PREFIX}/bn_vars.conf"
+    done
+}
+
 function build_tarball() {
     for n in $NODES; do
         declare -n NODE=$n
@@ -595,6 +629,7 @@ function main() {
     generate_certificate_issuer_config
     copy_pre_isolation_canisters
     copy_ip_hash_salt
+    copy_logging_credentials
     build_tarball
     build_removable_media
     remove_temporary_directories
