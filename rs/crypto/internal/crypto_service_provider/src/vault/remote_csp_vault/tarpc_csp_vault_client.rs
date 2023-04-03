@@ -11,7 +11,9 @@ use crate::vault::api::{
     ThresholdEcdsaSignerCspVault, ThresholdSignatureCspVault, ValidatePksAndSksError,
 };
 use crate::vault::remote_csp_vault::codec::{CspVaultClientObserver, ObservableCodec};
-use crate::vault::remote_csp_vault::{remote_vault_codec_builder, TarpcCspVaultClient};
+use crate::vault::remote_csp_vault::{
+    remote_vault_codec_builder, TarpcCspVaultClient, FOUR_GIGA_BYTES,
+};
 use crate::{ExternalPublicKeys, TlsHandshakeCspVault};
 use core::future::Future;
 use ic_crypto_internal_seed::Seed;
@@ -42,7 +44,7 @@ use ic_types::crypto::{AlgorithmId, CurrentNodePublicKeys};
 use ic_types::{NodeId, NumberOfNodes, Randomness};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use tarpc::serde_transport;
@@ -55,6 +57,7 @@ use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
 #[cfg(test)]
 use ic_logger::new_replica_logger_from_config;
+use ic_logger::replica_logger::no_op_logger;
 #[cfg(test)]
 use slog_async::AsyncGuard;
 
@@ -103,53 +106,117 @@ impl RemoteCspVault {
         logger: ReplicaLogger,
         metrics: Arc<CryptoMetrics>,
     ) -> Result<Self, RemoteCspVaultError> {
-        let conn = rt_handle
-            .block_on(UnixStream::connect(socket_path))
-            .map_err(|e| RemoteCspVaultError::TransportError {
-                server_address: socket_path.to_string_lossy().to_string(),
-                message: e.to_string(),
-            })?;
-        let transport = serde_transport::new(
-            remote_vault_codec_builder().new_framed(conn),
-            ObservableCodec::new(
-                Bincode::default(),
-                CspVaultClientObserver::new(new_logger!(&logger), metrics.clone()),
-            ),
-        );
-        let client = {
-            let _enter_guard = rt_handle.enter();
-            TarpcCspVaultClient::new(Default::default(), transport).spawn()
-        };
-        debug!(logger, "Instantiated remote CSP vault client");
-        Ok(RemoteCspVault {
-            tarpc_csp_client: client,
+        RemoteCspVaultBuilder::new(socket_path.to_path_buf(), rt_handle)
+            .with_logger(logger)
+            .with_metrics(metrics)
+            .build()
+    }
+
+    pub fn builder(
+        socket_path: PathBuf,
+        rt_handle: tokio::runtime::Handle,
+    ) -> RemoteCspVaultBuilder {
+        RemoteCspVaultBuilder::new(socket_path, rt_handle)
+    }
+}
+
+pub struct RemoteCspVaultBuilder {
+    socket_path: PathBuf,
+    rt_handle: tokio::runtime::Handle,
+    max_frame_length: usize,
+    rpc_timeout: Duration,
+    long_rpc_timeout: Duration,
+    logger: ReplicaLogger,
+    metrics: Arc<CryptoMetrics>,
+    #[cfg(test)]
+    _logger_guard: Option<AsyncGuard>,
+}
+
+impl RemoteCspVaultBuilder {
+    pub fn new(socket_path: PathBuf, rt_handle: tokio::runtime::Handle) -> Self {
+        RemoteCspVaultBuilder {
+            socket_path,
+            rt_handle,
+            max_frame_length: FOUR_GIGA_BYTES,
             rpc_timeout: DEFAULT_RPC_TIMEOUT,
             long_rpc_timeout: LONG_RPC_TIMEOUT,
-            tokio_runtime_handle: rt_handle,
-            logger,
-            metrics,
+            logger: no_op_logger(),
+            metrics: Arc::new(CryptoMetrics::none()),
             #[cfg(test)]
             _logger_guard: None,
-        })
+        }
     }
 
     #[cfg(test)]
-    pub fn new_for_test(
-        socket_path: &Path,
-        rt_handle: tokio::runtime::Handle,
-        override_timeout: Option<Duration>,
-    ) -> Result<Self, RemoteCspVaultError> {
+    pub fn new_for_test(socket_path: PathBuf, rt_handle: tokio::runtime::Handle) -> Self {
         let (logger, guard) = new_replica_logger_from_config(&LoggerConfig::default());
-        let mut csp_vault = Self::new(
-            socket_path,
-            rt_handle,
-            logger,
-            Arc::new(CryptoMetrics::none()),
-        )?;
-        csp_vault.rpc_timeout = override_timeout.unwrap_or(DEFAULT_RPC_TIMEOUT);
-        csp_vault.long_rpc_timeout = override_timeout.unwrap_or(LONG_RPC_TIMEOUT);
-        csp_vault._logger_guard = Some(guard);
-        Ok(csp_vault)
+        let mut builder = Self::new(socket_path, rt_handle);
+        builder.logger = logger;
+        builder._logger_guard = Some(guard);
+        builder
+    }
+
+    pub fn with_rpc_timeout(mut self, timeout: Duration) -> Self {
+        self.rpc_timeout = timeout;
+        self
+    }
+
+    pub fn with_long_rpc_timeout(mut self, timeout: Duration) -> Self {
+        self.long_rpc_timeout = timeout;
+        self
+    }
+
+    pub fn with_max_frame_length(mut self, new_length: usize) -> Self {
+        self.max_frame_length = new_length;
+        self
+    }
+
+    pub fn with_logger(mut self, logger: ReplicaLogger) -> Self {
+        self.logger = logger;
+        self
+    }
+
+    pub fn with_metrics(mut self, metrics: Arc<CryptoMetrics>) -> Self {
+        self.metrics = metrics;
+        self
+    }
+
+    pub fn build(self) -> Result<RemoteCspVault, RemoteCspVaultError> {
+        let conn = self
+            .rt_handle
+            .block_on(UnixStream::connect(&self.socket_path))
+            .map_err(|e| RemoteCspVaultError::TransportError {
+                server_address: self.socket_path.to_string_lossy().to_string(),
+                message: e.to_string(),
+            })?;
+        let transport = serde_transport::new(
+            remote_vault_codec_builder()
+                .max_frame_length(self.max_frame_length)
+                .new_framed(conn),
+            ObservableCodec::new(
+                Bincode::default(),
+                CspVaultClientObserver::new(new_logger!(&self.logger), self.metrics.clone()),
+            ),
+        );
+        let client = {
+            let _enter_guard = self.rt_handle.enter();
+            TarpcCspVaultClient::new(Default::default(), transport).spawn()
+        };
+        debug!(self.logger, "Instantiated remote CSP vault client");
+        Ok(RemoteCspVault {
+            tarpc_csp_client: client,
+            rpc_timeout: self.rpc_timeout,
+            long_rpc_timeout: self.long_rpc_timeout,
+            tokio_runtime_handle: self.rt_handle,
+            logger: self.logger,
+            metrics: self.metrics,
+            #[cfg(test)]
+            _logger_guard: self._logger_guard,
+        })
+    }
+
+    pub fn build_expecting_ok(self) -> RemoteCspVault {
+        self.build().expect("error building RemoteCspVault")
     }
 }
 

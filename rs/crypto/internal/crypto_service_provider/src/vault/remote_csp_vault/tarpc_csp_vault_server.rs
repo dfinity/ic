@@ -1,7 +1,5 @@
 use crate::api::{CspCreateMEGaKeyError, CspThresholdSignError};
 use crate::key_id::KeyId;
-use crate::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
-use crate::secret_key_store::proto_store::ProtoSecretKeyStore;
 use crate::types::{CspPop, CspPublicCoefficients, CspPublicKey, CspSignature};
 use crate::vault::api::{
     CspBasicSignatureError, CspBasicSignatureKeygenError, CspMultiSignatureError,
@@ -9,11 +7,10 @@ use crate::vault::api::{
     CspTlsKeygenError, CspTlsSignError, PublicRandomSeedGeneratorError, ValidatePksAndSksError,
 };
 use crate::vault::api::{CspPublicKeyStoreError, CspVault};
-use crate::vault::local_csp_vault::LocalCspVault;
-use crate::vault::remote_csp_vault::PksAndSksContainsErrors;
+use crate::vault::local_csp_vault::{LocalCspVault, ProdLocalCspVault};
 use crate::vault::remote_csp_vault::{remote_vault_codec_builder, TarpcCspVault};
+use crate::vault::remote_csp_vault::{PksAndSksContainsErrors, FOUR_GIGA_BYTES};
 use crate::ExternalPublicKeys;
-use crate::{CANISTER_SKS_DATA_FILENAME, PUBLIC_KEY_STORE_DATA_FILENAME, SKS_DATA_FILENAME};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors::{
@@ -42,7 +39,6 @@ use ic_types::crypto::canister_threshold_sig::error::{
 use ic_types::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use ic_types::crypto::{AlgorithmId, CurrentNodePublicKeys};
 use ic_types::{NodeId, NumberOfNodes, Randomness};
-use rand::rngs::OsRng;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use std::sync::Arc;
@@ -59,6 +55,7 @@ pub struct TarpcCspVaultServerImpl<C: CspVault> {
     local_csp_vault: Arc<C>,
     listener: UnixListener,
     thread_pool: ThreadPool,
+    max_frame_length: usize,
     #[allow(unused)]
     logger: ReplicaLogger,
 }
@@ -514,70 +511,101 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
     }
 }
 
-impl
-    TarpcCspVaultServerImpl<
-        LocalCspVault<OsRng, ProtoSecretKeyStore, ProtoSecretKeyStore, ProtoPublicKeyStore>,
-    >
-{
-    pub fn new(
-        key_store_dir: &Path,
-        listener: UnixListener,
-        logger: ReplicaLogger,
-        metrics: Arc<CryptoMetrics>,
-    ) -> Self {
-        let node_secret_key_store =
-            ProtoSecretKeyStore::open(key_store_dir, SKS_DATA_FILENAME, Some(new_logger!(&logger)));
-        let canister_secret_key_store = ProtoSecretKeyStore::open(
-            key_store_dir,
-            CANISTER_SKS_DATA_FILENAME,
-            Some(new_logger!(&logger)),
-        );
-        let public_key_store = ProtoPublicKeyStore::open(
-            key_store_dir,
-            PUBLIC_KEY_STORE_DATA_FILENAME,
-            new_logger!(&logger),
-        );
-        let local_csp_server = Arc::new(LocalCspVault::new(
-            node_secret_key_store,
-            canister_secret_key_store,
-            public_key_store,
-            metrics,
-            new_logger!(&logger),
-        ));
-        Self::new_with_local_csp_vault(local_csp_server, listener, logger)
+type VaultFactory<C> = dyn Fn(&ReplicaLogger, Arc<CryptoMetrics>) -> Arc<C> + Send + Sync;
+
+pub struct TarpcCspVaultServerImplBuilder<C> {
+    local_csp_vault_factory: Box<VaultFactory<C>>,
+    threadpool_builder: threadpool::Builder,
+    max_frame_length: usize,
+    logger: ReplicaLogger,
+    metrics: Arc<CryptoMetrics>,
+}
+
+impl TarpcCspVaultServerImplBuilder<ProdLocalCspVault> {
+    pub fn new(key_store_dir: &Path) -> Self {
+        let key_store_path = key_store_dir.to_path_buf();
+        let local_csp_vault_factory = Box::new(move |logger: &ReplicaLogger, metrics| {
+            Arc::new(LocalCspVault::new_in_dir(
+                &key_store_path,
+                metrics,
+                new_logger!(logger),
+            ))
+        });
+        Self::new_internal(local_csp_vault_factory)
     }
 }
 
-impl<C: CspVault> TarpcCspVaultServerImpl<C> {
-    /// Creates a remote CSP vault server for testing.
+impl<C: 'static + Send + Sync> TarpcCspVaultServerImplBuilder<C> {
+    pub fn new_with_local_csp_vault(local_csp_vault: Arc<C>) -> Self {
+        let local_csp_vault_factory =
+            Box::new(move |_logger: &ReplicaLogger, _metrics| Arc::clone(&local_csp_vault));
+        Self::new_internal(local_csp_vault_factory)
+    }
+}
+
+impl<C> TarpcCspVaultServerImplBuilder<C> {
+    fn new_internal(local_csp_vault_factory: Box<VaultFactory<C>>) -> Self {
+        TarpcCspVaultServerImplBuilder {
+            local_csp_vault_factory,
+            // defaults the number of threads to the number of CPUs
+            threadpool_builder: threadpool::Builder::new().thread_name("ic-crypto-csp".to_string()),
+            max_frame_length: FOUR_GIGA_BYTES,
+            logger: no_op_logger(),
+            metrics: Arc::new(CryptoMetrics::none()),
+        }
+    }
+
+    pub fn with_logger(mut self, logger: ReplicaLogger) -> Self {
+        self.logger = logger;
+        self
+    }
+
+    pub fn with_metrics(mut self, metrics: Arc<CryptoMetrics>) -> Self {
+        self.metrics = metrics;
+        self
+    }
+
+    pub fn with_max_frame_length(mut self, max_frame_length: usize) -> Self {
+        self.max_frame_length = max_frame_length;
+        self
+    }
+}
+
+impl<C: CspVault> TarpcCspVaultServerImplBuilder<C> {
+    pub fn build(&self, listener: UnixListener) -> TarpcCspVaultServerImpl<C> {
+        let local_csp_vault: Arc<C> =
+            (self.local_csp_vault_factory)(&self.logger, Arc::clone(&self.metrics));
+        TarpcCspVaultServerImpl {
+            local_csp_vault,
+            listener,
+            thread_pool: self.threadpool_builder.clone().build(),
+            max_frame_length: self.max_frame_length,
+            logger: new_logger!(&self.logger),
+        }
+    }
+}
+
+impl TarpcCspVaultServerImpl<ProdLocalCspVault> {
+    pub fn builder(key_store_dir: &Path) -> TarpcCspVaultServerImplBuilder<ProdLocalCspVault> {
+        TarpcCspVaultServerImplBuilder::new(key_store_dir)
+    }
+}
+
+impl<C: CspVault + 'static> TarpcCspVaultServerImpl<C> {
+    /// Creates a remote CSP vault server builder for testing.
     ///
     /// Note: This MUST NOT be used in production as the secrecy of the secret
     /// key store is not guaranteed.
-    pub fn new_for_test(local_csp_vault: Arc<C>, listener: UnixListener) -> Self {
-        Self::new_with_local_csp_vault(local_csp_vault, listener, no_op_logger())
-    }
-
-    fn new_with_local_csp_vault(
-        local_csp_vault: Arc<C>,
-        listener: UnixListener,
-        logger: ReplicaLogger,
-    ) -> Self {
-        let thread_pool = threadpool::Builder::new()
-            .thread_name("ic-crypto-csp".to_string())
-            .build(); // defaults the number of threads to the number of CPUs
-        Self {
-            local_csp_vault,
-            listener,
-            thread_pool,
-            logger,
-        }
+    pub fn builder_for_test(local_csp_vault: Arc<C>) -> TarpcCspVaultServerImplBuilder<C> {
+        TarpcCspVaultServerImplBuilder::new_with_local_csp_vault(local_csp_vault)
     }
 }
 
 impl<C: CspVault + 'static> TarpcCspVaultServerImpl<C> {
     pub async fn run(self) {
         // Wrap data in telegrams with a length header.
-        let codec_builder = remote_vault_codec_builder();
+        let mut codec_builder = remote_vault_codec_builder();
+        codec_builder.max_frame_length(self.max_frame_length);
 
         // Listen for connections; spawns one `tokio` task per client.
         loop {

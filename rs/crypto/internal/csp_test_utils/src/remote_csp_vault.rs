@@ -1,8 +1,6 @@
 use crate::files::mk_temp_dir_with_permissions;
-use ic_crypto_internal_logmon::metrics::CryptoMetrics;
-use ic_logger::replica_logger::no_op_logger;
+use ic_crypto_internal_csp::vault::remote_csp_vault::TarpcCspVaultServerImpl;
 use std::path::PathBuf;
-use std::sync::Arc;
 use tempfile::TempDir;
 use tokio::net::UnixListener;
 
@@ -26,12 +24,7 @@ pub fn get_temp_file_path() -> PathBuf {
 /// a socket path at which the server is listening.
 pub fn start_new_remote_csp_vault_server_for_test(rt_handle: &tokio::runtime::Handle) -> PathBuf {
     let (socket_path, sks_dir, listener) = setup_listener(rt_handle);
-    let server = ic_crypto_internal_csp::vault::remote_csp_vault::TarpcCspVaultServerImpl::new(
-        sks_dir.path(),
-        listener,
-        no_op_logger(),
-        Arc::new(CryptoMetrics::none()),
-    );
+    let server = TarpcCspVaultServerImpl::builder(sks_dir.path()).build(listener);
     rt_handle.spawn(async move {
         let _move_temp_dir_here_to_ensure_it_is_not_cleaned_up = sks_dir;
         server.run().await;
@@ -42,12 +35,7 @@ pub fn start_new_remote_csp_vault_server_in_temp_dir(
     rt_handle: &tokio::runtime::Handle,
 ) -> (TempDir, PathBuf) {
     let (socket_path, sks_dir, listener) = setup_listener(rt_handle);
-    let server = ic_crypto_internal_csp::vault::remote_csp_vault::TarpcCspVaultServerImpl::new(
-        sks_dir.path(),
-        listener,
-        no_op_logger(),
-        Arc::new(CryptoMetrics::none()),
-    );
+    let server = TarpcCspVaultServerImpl::builder(sks_dir.path()).build(listener);
     rt_handle.spawn(async move {
         server.run().await;
     });

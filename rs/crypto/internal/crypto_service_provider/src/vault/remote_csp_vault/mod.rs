@@ -37,12 +37,13 @@ mod tarpc_csp_vault_client;
 mod tarpc_csp_vault_server;
 
 use crate::key_id::KeyId;
+pub use crate::vault::local_csp_vault::ProdLocalCspVault;
 use crate::ExternalPublicKeys;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use std::sync::Arc;
-pub use tarpc_csp_vault_client::RemoteCspVault;
-pub use tarpc_csp_vault_server::TarpcCspVaultServerImpl;
+pub use tarpc_csp_vault_client::{RemoteCspVault, RemoteCspVaultBuilder};
+pub use tarpc_csp_vault_server::{TarpcCspVaultServerImpl, TarpcCspVaultServerImplBuilder};
 use tokio_util::codec::length_delimited::Builder;
 use tokio_util::codec::LengthDelimitedCodec;
 
@@ -242,12 +243,10 @@ pub async fn run_csp_vault_server(
     logger: ReplicaLogger,
     metrics: CryptoMetrics,
 ) {
-    let server = tarpc_csp_vault_server::TarpcCspVaultServerImpl::new(
-        sks_dir,
-        listener,
-        logger,
-        Arc::new(metrics),
-    );
+    let server = TarpcCspVaultServerImpl::builder(sks_dir)
+        .with_logger(logger)
+        .with_metrics(Arc::new(metrics))
+        .build(listener);
     server.run().await
 }
 

@@ -29,7 +29,6 @@ use crate::api::{
     CspTlsHandshakeSignerProvider, NiDkgCspClient, NodePublicKeyDataError,
     ThresholdSignatureCspClient,
 };
-use crate::public_key_store::proto_pubkey_store::ProtoPublicKeyStore;
 use crate::secret_key_store::SecretKeyStore;
 use crate::types::{CspPublicKey, ExternalPublicKeys};
 use crate::vault::api::{
@@ -42,17 +41,12 @@ use ic_logger::{info, new_logger, replica_logger::no_op_logger, ReplicaLogger};
 use ic_types::crypto::CurrentNodePublicKeys;
 use key_id::KeyId;
 use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
-use secret_key_store::proto_store::ProtoSecretKeyStore;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
 
 #[cfg(test)]
 mod tests;
-
-const SKS_DATA_FILENAME: &str = "sks_data.pb";
-const PUBLIC_KEY_STORE_DATA_FILENAME: &str = "public_keys.pb";
-const CANISTER_SKS_DATA_FILENAME: &str = "canister_sks_data.pb";
 
 /// Describes the interface of the crypto service provider (CSP), e.g. for
 /// signing and key generation. The Csp struct implements this trait.
@@ -193,25 +187,8 @@ impl Csp {
             logger,
             "Proceeding with an in-replica csp_vault, CryptoConfig: {:?}", config
         );
-        let secret_key_store = ProtoSecretKeyStore::open(
+        let csp_vault = Arc::new(LocalCspVault::new_in_dir(
             &config.crypto_root,
-            SKS_DATA_FILENAME,
-            Some(new_logger!(&logger)),
-        );
-        let canister_key_store = ProtoSecretKeyStore::open(
-            &config.crypto_root,
-            CANISTER_SKS_DATA_FILENAME,
-            Some(new_logger!(&logger)),
-        );
-        let public_key_store = ProtoPublicKeyStore::open(
-            &config.crypto_root,
-            PUBLIC_KEY_STORE_DATA_FILENAME,
-            new_logger!(&logger),
-        );
-        let csp_vault = Arc::new(LocalCspVault::new(
-            secret_key_store,
-            canister_key_store,
-            public_key_store,
             metrics.clone(),
             new_logger!(&logger),
         ));
