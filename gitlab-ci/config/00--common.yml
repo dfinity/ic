@@ -45,68 +45,6 @@ variables:
     elasticsearch-node-0.testnet.dfinity.systems:443,
     elasticsearch-node-1.testnet.dfinity.systems:443,
     elasticsearch-node-2.testnet.dfinity.systems:443
-  CI_PRE_CLONE_SCRIPT: |
-    # This script caches the git repo on the host.
-
-    # MacOS note: the gitlab runner will ignore this var on MacOS since config does not have
-    # pre_clone_script set in the runner config
-
-    echo -e "\e[0Ksection_start:$(date +%s):pre_clone_script[collapsed=true]\r\e[0KClick here to see the pre_clone_script"
-    set -eExuo pipefail
-
-    GIT_CACHE_PATH="/cache/git-v3/@{CI_PROJECT_PATH}/@{CI_CONCURRENT_ID}"
-    mkdir -p "@{GIT_CACHE_PATH}"
-
-    JOB_ID_FILE="@{GIT_CACHE_PATH}/CI_JOB_ID.bak"
-    touch "@{JOB_ID_FILE}"
-    if [ "$(cat @{JOB_ID_FILE})" == "@{CI_JOB_ID}" ]; then
-        RETRY_DELAY=@(( RANDOM % 60 + 60))
-        echo "Sleeping @{RETRY_DELAY} second(s) before retry ..."
-        sleep "@{RETRY_DELAY}"
-    fi
-    trap 'echo -n "@{CI_JOB_ID}" > "@{JOB_ID_FILE}"' EXIT
-
-    export GIT_TRACE=1
-    export GIT_CURL_VERBOSE=1
-    git config --global --add safe.directory "@{GIT_CACHE_PATH}"
-    pushd "@{GIT_CACHE_PATH}"
-    
-    # Step 1. Seed the repo if it doesn't exit or has been corrupted.
-    # On CI we've observed partial downloads of the repo [e.g. missing .git dir]
-    if ! git fsck; then
-      echo "Cloning fresh git repository"
-      find . -mindepth 1 -delete
-      time git clone --depth=500 "@{CI_REPOSITORY_URL}" .
-    fi
-
-    # Step 2. Fetch the commit sha into the cache.
-    # CI_REPOSITORY_URL contains the CI_JOB_TOKEN.
-    # The cached one will have come from a previous job, and thus its token
-    # is invalid. So just update the token.
-    git remote set-url origin "@{CI_REPOSITORY_URL}"
-
-    # Fetch the target commit sha into the cache.
-    # If this fails, for example if the repo has become corrupted, then wipe
-    # the cache and perform a fresh clone.
-    if ! time git fetch origin "@{CI_COMMIT_SHA}"; then
-      echo "Git fetch into local cached failed. Making a clean git clone"
-      find . -mindepth 1 -delete
-      time git clone --depth=500 "@{CI_REPOSITORY_URL}" .
-    fi
-    popd
-
-    # Step 3. Clone a fresh working repo from the cache.
-
-    # This directory should not exist unless something changed on GitLab,
-    # or someone has bind mounted it from the runner. To be safe just delete it.
-    rm -fr "@{CI_PROJECT_DIR}"
-    mkdir -p "@{CI_PROJECT_DIR}"
-
-    pushd "@{CI_PROJECT_DIR}"
-    time git clone "@{GIT_CACHE_PATH}" .
-    git checkout "@{CI_COMMIT_SHA}"
-    git remote set-url origin "@{CI_REPOSITORY_URL}"
-    popd
 
 before_script:
   - |
@@ -134,22 +72,15 @@ before_script:
     if [ "${CI_DISPOSABLE_ENVIRONMENT:-false}" != "true" ]; then
       # MacOS + shell builds
       export CARGO_TARGET_DIR="$CI_PROJECT_DIR/target"
-    else
-    # GitLab may not preserve some file permissions that are chowned in the pre clone script.
-    # And the files will all be owned by root.
-    # Some commands care about the permissions of the configs they use. For example, Ansible will refuse
-    # to use a cfg file that a different user owns.
-      sudo chown "$(id -u):$(id -g)" -R "${CI_PROJECT_DIR}"
-      sudo find "${CI_PROJECT_DIR}" -type d -exec chmod 0755 '{}' \;
     fi
-
-    # set all git dirs safe
-    git config --global --add safe.directory '*'
 
     # docker login for RO to overcome anonymous pull limit of 100 pulls / 6h
     # enterprise logged in account has 5000 pulls / 24h
     if [ "$(uname)" == "Linux" ]; then
       docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD_RO"
+
+      # set ownership to ic-build container's user
+      sudo chown "$(id -u):$(id -g)" -R "${CI_PROJECT_DIR}"
     fi
 
   - echo -e "\e[0Ksection_end:$(date +%s):before_script\r\e[0K"
@@ -215,32 +146,17 @@ after_script:
 
       set +x
 
-.ubuntu-docker:
+.ubuntu-k8s:
   extends:
     - .build-env-base
     - .ic-build-image
-  tags:
-    - dfinity
-    - docker
-    - ubuntu
 
-.ubuntu-docker-k8s:
-  extends:
-    - .build-env-base
-    - .ic-build-image
-  tags:
-    # distribute jobs between docker and k8s runners
-    - dfinity
-    - ubuntu
-
-# docker & k8s
 .bazel-build-k8s:
   extends:
-    - .ubuntu-docker-k8s
+    - .ubuntu-k8s
     - .ic-build-bazel-image
   tags:
-    - dfinity
-    - ubuntu
+    - dfinity-ic
     # Run in ZH since BuildFarm is in ZH
     - zh
   variables:
@@ -248,26 +164,14 @@ after_script:
     BAZEL_EXTRA_ARGS: "--repository_cache=/cache/bazel"
     BAZEL_CI_CONFIG: "--config=ci"
 
-.ubuntu-cargo-docker:
+.ubuntu-cargo-k8s:
   extends:
     - .cargo-build-env-base
-    - .ubuntu-docker
+    - .ubuntu-k8s
     - .ic-build-image
-  # Here is how docker builds work:
-  # - The $CI_COMMIT_SHA is checked out at: /builds/dfinity/ic
-  # - The repo is built with $BUILD_COMMAND
-  # - Build results are stored in non-persisted /cargo_target
-  # - The container is destroyed and all non-persisted data is dropped, including /cargo_target
   variables:
     # This MUST match the directory used in our `build-ic.sh` script
     RUSTFLAGS: "--remap-path-prefix=${CI_PROJECT_DIR}=/ic"
-
-.ubuntu-cargo-docker-k8s:
-  extends: .ubuntu-cargo-docker
-  tags:
-    # distribute jobs between docker and k8s runners
-    - dfinity
-    - ubuntu
 
 .macos-cargo-native:
   extends:

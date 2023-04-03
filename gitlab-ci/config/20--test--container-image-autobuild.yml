@@ -1,6 +1,6 @@
 container-autobuild-protected:
-  extends: 
-    - .ubuntu-cargo-docker
+  extends:
+    - .ubuntu-cargo-k8s
   rules:
     # Run immediatly on Dockerfile changes pushed to a protected branch - such as master.
     - if: '$CI_COMMIT_REF_PROTECTED == "true" && $CI_PIPELINE_SOURCE == "push"'
@@ -35,7 +35,7 @@ container-autobuild-protected:
 
 container-autobuild:
   extends:
-    - .ubuntu-cargo-docker-k8s
+    - .ubuntu-cargo-k8s
     - .rules-prs-dockerfile-changes
   needs: []
   stage: test

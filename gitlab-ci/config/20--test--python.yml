@@ -1,6 +1,6 @@
 gitlab-ci-config-validation:
   extends:
-    - .ubuntu-docker-k8s
+    - .ubuntu-k8s
     - .rules-pipeline-no-merge-train
   needs:
     job: gen-cargo-pipeline
@@ -22,7 +22,7 @@ gitlab-ci-config-validation:
       
 python-gitlab-ci-tests:
   extends:
-    - .ubuntu-docker-k8s
+    - .ubuntu-k8s
     - .rules-pipeline-no-merge-train
   needs: []
   stage: test

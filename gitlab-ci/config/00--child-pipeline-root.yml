@@ -18,14 +18,14 @@ include:
 .cargo-build-docker-protected:
   needs: []  # don't wait on other jobs by default
   extends:
-    - .ubuntu-docker-k8s-protected
+    - .ubuntu-k8s-protected
     - .rules-parent-pipeline
   stage: cargo-build
 
 .cargo-build-docker:
   needs: []  # don't wait on other jobs by default
   extends:
-    - .ubuntu-cargo-docker-k8s
+    - .ubuntu-k8s
     - .rules-parent-pipeline
   stage: cargo-build
 

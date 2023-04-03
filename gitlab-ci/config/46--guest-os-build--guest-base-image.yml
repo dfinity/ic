@@ -33,7 +33,7 @@
 
 build-base-images:
   extends:
-    - .ubuntu-docker-k8s
+    - .ubuntu-k8s
     - .rules-dockerfile-base-changes
   stage: guest-os-build
   needs: []
@@ -43,7 +43,7 @@ build-base-images:
 
 build-push-base-images:
   extends:
-    - .ubuntu-docker-k8s
+    - .ubuntu-k8s
     - .rules-build-base-images-schedule
   stage: guest-os-build
   needs: []

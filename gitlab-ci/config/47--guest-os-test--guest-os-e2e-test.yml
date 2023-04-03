@@ -1,9 +1,6 @@
-# job can run in docker or in k8s
 .e2e-test-base:
   extends:
-    # Use untrusted builders for e2e tests.
-    # The trusted builders don't work with IPv6 right now.
-    - .ubuntu-docker-k8s
+    - .ubuntu-k8s
     - .rules-parent-pipeline
   stage: guest-os-test
   retry: 2

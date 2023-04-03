@@ -1,6 +1,6 @@
 .prod-test:
   extends:
-    - .ubuntu-cargo-docker-k8s
+    - .ubuntu-cargo-k8s
     - .rules-prod-tests
   stage: prod-tests
   dependencies: []  # don't copy artifacts from other jobs by default
@@ -10,9 +10,6 @@
     when: always
     paths:
       - $CI_JOB_STAGE/$CI_JOB_NAME
-  tags:
-    - dfinity
-    - ubuntu
 
 .prod-stress-test:
   extends: .prod-test

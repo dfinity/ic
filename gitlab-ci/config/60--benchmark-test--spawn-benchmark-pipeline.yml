@@ -1,6 +1,6 @@
 .benchmark-test:
   extends:
-    - .ubuntu-cargo-docker-k8s
+    - .ubuntu-cargo-k8s
     - .rules-benchmark-tests
   stage: benchmark-tests
   resource_group: $TESTNET
@@ -15,9 +15,6 @@
     when: always
     paths:
       - $CI_JOB_STAGE/$CI_JOB_NAME
-  tags:
-    - dfinity
-    - ubuntu
   timeout: 3 hours
 
 # BENCHMARK SUITE maximum capacity for Canister HTTP calls
@@ -398,7 +395,7 @@ statesync-experiment:
 
 .benchmark-spot-test:
   extends:
-    - .ubuntu-cargo-docker-k8s
+    - .ubuntu-cargo-k8s
     - .rules-benchmark-spot-tests
   stage: benchmark-spot-tests
   resource_group: $TESTNET
@@ -416,9 +413,6 @@ statesync-experiment:
     when: always
     paths:
       - $CI_JOB_STAGE/$CI_JOB_NAME
-  tags:
-    - dfinity
-    - ubuntu
   timeout: 1 hour
 
 # Checks system performance with query calls
@@ -581,7 +575,7 @@ xnet-nightly:
 
 .sns-tests:
   extends:
-    - .ubuntu-cargo-docker-k8s
+    - .ubuntu-cargo-k8s
     - .rules-sns-tests
   stage: sns-tests
   resource_group: $TESTNET
@@ -597,9 +591,6 @@ xnet-nightly:
     when: always
     paths:
       - $CI_JOB_STAGE/$CI_JOB_NAME
-  tags:
-    - dfinity
-    - ubuntu
   timeout: 1 hour
 
 sns-deployment-test-nightly:
