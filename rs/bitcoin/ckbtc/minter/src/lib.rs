@@ -1,5 +1,6 @@
 use crate::address::BitcoinAddress;
 use crate::logs::{P0, P1};
+use crate::queries::WithdrawalFee;
 use candid::{CandidType, Deserialize};
 use ic_btc_types::{MillisatoshiPerByte, Network, OutPoint, Satoshi, Utxo};
 use ic_canister_log::log;
@@ -126,7 +127,7 @@ async fn estimate_fee_per_vbyte() -> Option<MillisatoshiPerByte> {
             }
             if fees.len() >= 100 {
                 state::mutate_state(|s| s.last_fee_per_vbyte = fees.clone());
-                Some(fees[49])
+                Some(fees[50])
             } else {
                 log!(
                     P0,
@@ -799,7 +800,8 @@ pub fn estimate_fee(
     available_utxos: &BTreeSet<Utxo>,
     maybe_amount: Option<u64>,
     median_fee_millisatoshi_per_vbyte: u64,
-) -> u64 {
+    kyt_fee: u64,
+) -> WithdrawalFee {
     const DEFAULT_INPUT_COUNT: u64 = 3;
     // One output for the caller and one for the change.
     const DEFAULT_OUTPUT_COUNT: u64 = 2;
@@ -825,9 +827,13 @@ pub fn estimate_fee(
     let minter_fee = MINTER_FEE_PER_INPUT * input_count
         + MINTER_FEE_PER_OUTPUT * DEFAULT_OUTPUT_COUNT
         + MINTER_FEE_CONSTANT;
-
     // We subtract one from the outputs because the minter's output
     // does not participate in fees distribution.
-    (vsize * median_fee_millisatoshi_per_vbyte / 1000 + minter_fee)
-        / (DEFAULT_OUTPUT_COUNT - 1).max(1)
+    let bitcoin_fee =
+        vsize * median_fee_millisatoshi_per_vbyte / 1000 / (DEFAULT_OUTPUT_COUNT - 1).max(1);
+    let minter_fee = minter_fee / (DEFAULT_OUTPUT_COUNT - 1).max(1);
+    WithdrawalFee {
+        minter_fee: kyt_fee + minter_fee,
+        bitcoin_fee,
+    }
 }

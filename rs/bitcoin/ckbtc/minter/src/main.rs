@@ -7,7 +7,7 @@ use ic_ckbtc_minter::dashboard::build_dashboard;
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::lifecycle::{self, init::MinterArg};
 use ic_ckbtc_minter::metrics::encode_metrics;
-use ic_ckbtc_minter::queries::{EstimateFeeArg, RetrieveBtcStatusRequest};
+use ic_ckbtc_minter::queries::{EstimateFeeArg, RetrieveBtcStatusRequest, WithdrawalFee};
 use ic_ckbtc_minter::state::{read_state, RetrieveBtcStatus};
 use ic_ckbtc_minter::tasks::{schedule_now, TaskType};
 use ic_ckbtc_minter::updates::retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError, RetrieveBtcOk};
@@ -140,10 +140,21 @@ async fn update_balance(args: UpdateBalanceArgs) -> Result<Vec<UtxoStatus>, Upda
 
 #[candid_method(query)]
 #[query]
-fn estimate_fee(arg: EstimateFeeArg) -> u64 {
+fn estimate_withdrawal_fee(arg: EstimateFeeArg) -> WithdrawalFee {
     read_state(|s| {
-        ic_ckbtc_minter::estimate_fee(&s.available_utxos, arg.amount, s.last_fee_per_vbyte[49])
+        ic_ckbtc_minter::estimate_fee(
+            &s.available_utxos,
+            arg.amount,
+            s.last_fee_per_vbyte[50],
+            s.kyt_fee,
+        )
     })
+}
+
+#[candid_method(query)]
+#[query]
+fn get_deposit_fee() -> u64 {
+    read_state(|s| s.kyt_fee)
 }
 
 #[candid_method(query)]

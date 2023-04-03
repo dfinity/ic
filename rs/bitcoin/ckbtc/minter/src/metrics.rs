@@ -144,7 +144,7 @@ pub fn encode_metrics(
 
     metrics.encode_gauge(
         "ckbtc_minter_median_fee_per_vbyte",
-        state::read_state(|s| s.last_fee_per_vbyte[49]) as f64,
+        state::read_state(|s| s.last_fee_per_vbyte[50]) as f64,
         "Median Bitcoin transaction fee per vbyte in Satoshi.",
     )?;
 

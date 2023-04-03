@@ -251,7 +251,10 @@ service : (minter_arg : MinterArg) -> {
 
     /// Returns an estimate of the user's fee (in Satoshi) for a
     /// retrieve_btc request based on the current status of the Bitcoin network.
-    estimate_fee : (record { amount : opt nat64 }) -> (nat64) query;
+    estimate_withdrawal_fee : (record { amount : opt nat64 }) -> (record { bitcoin_fee: nat64; minter_fee: nat64;}) query;
+
+    /// Returns the fee that the minter will charge for a bitcoin deposit.
+    get_deposit_fee: () -> (nat64) query;
 
     // Returns the account to which the caller should deposit ckBTC
     // before withdrawing BTC using the [retrieve_btc] endpoint.

@@ -554,7 +554,8 @@ proptest! {
 
         let target = total_value / 2;
 
-        let fee_estimate = estimate_fee(&utxos, Some(target), fee_per_vbyte);
+        let fee_estimate = estimate_fee(&utxos, Some(target), fee_per_vbyte, crate::lifecycle::init::DEFAULT_KYT_FEE);
+        let fee_estimate = fee_estimate.minter_fee + fee_estimate.bitcoin_fee - crate::lifecycle::init::DEFAULT_KYT_FEE;
 
         let (unsigned_tx, _, _) = build_unsigned_transaction(
             &mut utxos,
@@ -885,14 +886,15 @@ proptest! {
     ) {
         const SMALLEST_TX_SIZE_VBYTES: u64 = 140; // one input, two outputs
         const MIN_MINTER_FEE: u64 = 312;
+        let kyt_fee: u64 = crate::lifecycle::init::DEFAULT_KYT_FEE;
 
-        let estimate = estimate_fee(&utxos, amount, fee_per_vbyte);
+        let estimate = estimate_fee(&utxos, amount, fee_per_vbyte, kyt_fee);
         let lower_bound = MIN_MINTER_FEE + SMALLEST_TX_SIZE_VBYTES * fee_per_vbyte / 1000;
-
+        let estimate_amount = estimate.minter_fee + estimate.bitcoin_fee;
         prop_assert!(
-            estimate >= lower_bound,
+            estimate_amount >= lower_bound,
             "The fee estimate {} is below the lower bound {}",
-            estimate,
+            estimate_amount,
             lower_bound
         );
     }
