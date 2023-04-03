@@ -1,7 +1,8 @@
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::cmp::{max, min};
 use std::collections::{btree_map::Entry, BTreeMap, BTreeSet};
 use std::convert::TryInto;
+use std::thread::LocalKey;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use candid::{candid_method, CandidType, Encode};
@@ -28,7 +29,7 @@ use icp_ledger::{
 use on_wire::{FromWire, IntoWire, NewType};
 
 use exchange_rate_canister::{
-    RealExchangeRateCanisterClient, UpdateExchangeRateCallState, UpdateExchangeRateError,
+    RealExchangeRateCanisterClient, UpdateExchangeRateError, UpdateExchangeRateState,
 };
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
@@ -58,7 +59,6 @@ const MAX_MATURITY_MODULATION_PERMYRIAD: i32 = 500;
 
 thread_local! {
     static STATE: RefCell<Option<State>> = RefCell::new(None);
-    static UPDATE_EXCHANGE_RATE_CALL_STATE: Cell<UpdateExchangeRateCallState> = Cell::new(UpdateExchangeRateCallState::Inactive);
 }
 
 fn with_state<R>(f: impl FnOnce(&State) -> R) -> R {
@@ -67,6 +67,25 @@ fn with_state<R>(f: impl FnOnce(&State) -> R) -> R {
 
 fn with_state_mut<R>(f: impl FnOnce(&mut State) -> R) -> R {
     STATE.with(|cell| {
+        f(cell
+            .borrow_mut()
+            .as_mut()
+            .expect("cmc state not initialized"))
+    })
+}
+
+fn read_state<R>(
+    safe_state: &'static LocalKey<RefCell<Option<State>>>,
+    f: impl FnOnce(&State) -> R,
+) -> R {
+    safe_state.with(|cell| f(cell.borrow().as_ref().expect("cmc state not initialized")))
+}
+
+fn mutate_state<R>(
+    safe_state: &'static LocalKey<RefCell<Option<State>>>,
+    f: impl FnOnce(&mut State) -> R,
+) -> R {
+    safe_state.with(|cell| {
         f(cell
             .borrow_mut()
             .as_mut()
@@ -90,7 +109,7 @@ impl Environment for CanisterEnvironment {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, CandidType, Eq, PartialEq)]
-enum NotificationStatus {
+pub enum NotificationStatus {
     /// We are waiting for a reply from ledger to complete the notification processing.
     Processing,
     /// The cached result of a completed canister top up.
@@ -100,51 +119,51 @@ enum NotificationStatus {
 }
 
 #[derive(Serialize, Deserialize, Clone, CandidType, Eq, PartialEq, Debug)]
-struct State {
-    ledger_canister_id: CanisterId,
+pub struct State {
+    pub ledger_canister_id: CanisterId,
 
-    governance_canister_id: CanisterId,
+    pub governance_canister_id: CanisterId,
 
     /// An ID that provides an interface to a canister that provides exchange
     /// rate information such as the [XRC](https://github.com/dfinity/exchange-rate-canister).
-    exchange_rate_canister_id: Option<CanisterId>,
+    pub exchange_rate_canister_id: Option<CanisterId>,
 
     /// Account used to burn funds.
-    minting_account_id: Option<AccountIdentifier>,
+    pub minting_account_id: Option<AccountIdentifier>,
 
-    authorized_subnets: BTreeMap<PrincipalId, Vec<SubnetId>>,
+    pub authorized_subnets: BTreeMap<PrincipalId, Vec<SubnetId>>,
 
-    default_subnets: Vec<SubnetId>,
+    pub default_subnets: Vec<SubnetId>,
 
     /// How many XDR 1 ICP is worth, along with a timestamp.
-    icp_xdr_conversion_rate: Option<IcpXdrConversionRate>,
+    pub icp_xdr_conversion_rate: Option<IcpXdrConversionRate>,
 
     /// The average ICP/XDR rate over `NUM_DAYS_FOR_ICP_XDR_AVERAGE` days. The
     /// timestamp is the UNIX epoch time in seconds at the start of the last
     /// considered day, which should correspond to midnight of the current
     /// day.
-    average_icp_xdr_conversion_rate: Option<IcpXdrConversionRate>,
+    pub average_icp_xdr_conversion_rate: Option<IcpXdrConversionRate>,
 
     /// The recent ICP/XDR rates used to compute the average rate.
-    recent_icp_xdr_rates: Option<Vec<IcpXdrConversionRate>>,
+    pub recent_icp_xdr_rates: Option<Vec<IcpXdrConversionRate>>,
 
     /// How many cycles 1 XDR is worth.
-    cycles_per_xdr: Cycles,
+    pub cycles_per_xdr: Cycles,
 
     /// How many cycles are allowed to be minted in an hour.
-    cycles_limit: Cycles,
+    pub cycles_limit: Cycles,
 
     /// Maintain a count of how many cycles have been minted in the last hour.
-    limiter: limiter::Limiter,
+    pub limiter: limiter::Limiter,
 
-    total_cycles_minted: Cycles,
+    pub total_cycles_minted: Cycles,
 
-    blocks_notified: Option<BTreeMap<BlockIndex, NotificationStatus>>,
-    last_purged_notification: Option<BlockIndex>,
+    pub blocks_notified: Option<BTreeMap<BlockIndex, NotificationStatus>>,
+    pub last_purged_notification: Option<BlockIndex>,
 
     /// The current maturity modulation in basis points (permyriad), i.e.,
     /// a value of 123 corresponds to 1.23%.
-    maturity_modulation_permyriad: Option<i32>,
+    pub maturity_modulation_permyriad: Option<i32>,
 
     /// Maintains the mapping of subnet types to subnet ids. Users can choose to
     /// deploy their canisters on subnets with specific characteristics by
@@ -161,7 +180,10 @@ struct State {
     ///
     /// Each subnet can be assigned to at most one type and cannot be a default
     /// or an authorized subnet.
-    subnet_types_to_subnets: Option<BTreeMap<String, BTreeSet<SubnetId>>>,
+    pub subnet_types_to_subnets: Option<BTreeMap<String, BTreeSet<SubnetId>>>,
+
+    /// This is used to ensure that only one exchange rate update is being performed at a time from heartbeat.
+    pub update_exchange_rate_canister_state: Option<UpdateExchangeRateState>,
 }
 
 impl State {
@@ -230,6 +252,7 @@ impl Default for State {
             last_purged_notification: Some(0),
             maturity_modulation_permyriad: Some(0),
             subnet_types_to_subnets: Some(BTreeMap::new()),
+            update_exchange_rate_canister_state: Some(UpdateExchangeRateState::Inactive),
         }
     }
 }
@@ -781,7 +804,7 @@ fn set_icp_xdr_conversion_rate_() {
             let env = CanisterEnvironment;
             let rate: IcpXdrConversionRate = proposed_conversion_rate.into();
             update_recent_icp_xdr_rates(&rate);
-            set_icp_xdr_conversion_rate(&env, rate)
+            set_icp_xdr_conversion_rate(&STATE, &env, rate)
         },
     );
 }
@@ -789,6 +812,7 @@ fn set_icp_xdr_conversion_rate_() {
 /// Validates the proposed conversion rate, sets it in state, and sets the
 /// canister's certified data
 fn set_icp_xdr_conversion_rate(
+    safe_state: &'static LocalKey<RefCell<Option<State>>>,
     env: &impl Environment,
     proposed_conversion_rate: IcpXdrConversionRate,
 ) -> Result<(), String> {
@@ -801,7 +825,7 @@ fn set_icp_xdr_conversion_rate(
         return Err("Proposed conversion rate must be greater than 0".to_string());
     }
 
-    with_state_mut(|state| {
+    mutate_state(safe_state, |state| {
         if let Some(current_conversion_rate) = state.icp_xdr_conversion_rate.as_ref() {
             if proposed_conversion_rate.timestamp_seconds
                 <= current_conversion_rate.timestamp_seconds
@@ -1722,12 +1746,8 @@ async fn update_exchange_rate() {
         }
     };
     let env = CanisterEnvironment;
-    let periodic_result = exchange_rate_canister::update_exchange_rate(
-        &UPDATE_EXCHANGE_RATE_CALL_STATE,
-        &env,
-        &xrc_client,
-    )
-    .await;
+    let periodic_result =
+        exchange_rate_canister::update_exchange_rate(&STATE, &env, &xrc_client).await;
     if let Err(ref error) = periodic_result {
         match error {
             UpdateExchangeRateError::FailedToRetrieveRate(_)
