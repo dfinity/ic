@@ -18,7 +18,7 @@ rosetta-release:
       # - Abort the release if the image with that version was already published.
       if docker manifest inspect "dfinity/rosetta-api:$VERSION_TAG"; then
           echo Rosetta version "$ROSETTA_RELEASE_VERSION" is already published on DockerHub
-          exit 1
+          exit 0
       fi
 
       # - Build an publish the image
