@@ -12,7 +12,6 @@
 host-os-upgrade-test:
   # This test runs VMs on the CI runner, which can be unreliable and slow. This
   # test is soon to be replaced with Farm tests: NODE-565
-  allow_failure: true
   extends:
     - .host-e2e-test-base
   needs:

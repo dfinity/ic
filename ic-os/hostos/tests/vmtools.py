@@ -156,14 +156,17 @@ class Machine(object):
     def stop(self):
         """Stop the virtual machine."""
         if self.process:
-            self.process.terminate()
+            os.system(f"sudo kill -TERM {self.process.pid}")
+
             try:
-                self.process.poll(1)
+                self.process.wait(1)
                 self.process = None
                 return
             except Exception:
                 pass
-            self.process.kill()
+
+            os.system(f"sudo kill -KILL {self.process.pid}")
+
             self.process.wait()
             self.process = None
             return
@@ -198,6 +201,7 @@ class QEMUConfig(object):
 
     def _build_base_cmdline(self):
         return [
+            "sudo",
             "qemu-system-x86_64",
             "-machine",
             "type=q35,accel=kvm",
