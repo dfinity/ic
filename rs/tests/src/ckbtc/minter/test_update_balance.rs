@@ -18,14 +18,20 @@ use crate::{
 };
 use bitcoincore_rpc::RpcApi;
 use candid::Principal;
+use ic_agent::identity::Secp256k1Identity;
 use ic_base_types::PrincipalId;
 use ic_ckbtc_agent::CkBtcMinterAgent;
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::state::Mode;
 use ic_ckbtc_minter::updates::get_withdrawal_account::compute_subaccount;
+use ic_ckbtc_minter::updates::update_balance::UpdateBalanceArgs;
 use ic_ckbtc_minter::updates::update_balance::UtxoStatus;
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::account::Account;
+use k256::elliptic_curve::SecretKey;
+use rand::rngs::OsRng;
+use rand::SeedableRng;
+use rand_chacha::ChaChaRng;
 use slog::{debug, info};
 
 /// Test update_balance method of the minter canister.
@@ -81,7 +87,13 @@ pub fn test_update_balance(env: TestEnv) {
         let universal_canister =
             UniversalCanister::new_with_retries(&agent, sys_node.effective_canister_id(), &logger)
                 .await;
-        activate_ecdsa_signature(sys_node, subnet_sys.subnet_id, TEST_KEY_LOCAL, &logger).await;
+        activate_ecdsa_signature(
+            sys_node.clone(),
+            subnet_sys.subnet_id,
+            TEST_KEY_LOCAL,
+            &logger,
+        )
+        .await;
 
         let ledger_agent = Icrc1Agent {
             agent: agent.clone(),
@@ -95,9 +107,13 @@ pub fn test_update_balance(env: TestEnv) {
         let caller = agent
             .get_principal()
             .expect("Error while getting principal.");
+        debug!(&logger, "New identity principal: {}", caller);
         let subaccount0 = compute_subaccount(PrincipalId::from(caller), 0);
         let subaccount1 = compute_subaccount(PrincipalId::from(caller), 567);
         let subaccount2 = compute_subaccount(PrincipalId::from(caller), 890);
+        let subaccount3 = compute_subaccount(PrincipalId::from(caller), 42);
+        let subaccount4 = compute_subaccount(PrincipalId::from(caller), 84);
+
         let account1 = Account {
             owner: caller,
             subaccount: Some(subaccount1),
@@ -106,11 +122,17 @@ pub fn test_update_balance(env: TestEnv) {
             owner: caller,
             subaccount: Some(subaccount2),
         };
+        let account3 = Account {
+            owner: caller,
+            subaccount: Some(subaccount3),
+        };
 
         // Get the BTC address of the caller's sub-accounts.
         let btc_address0 = get_btc_address(&minter_agent, &logger, subaccount0).await;
         let btc_address1 = get_btc_address(&minter_agent, &logger, subaccount1).await;
         let btc_address2 = get_btc_address(&minter_agent, &logger, subaccount2).await;
+        let btc_address3 = get_btc_address(&minter_agent, &logger, subaccount3).await;
+        let btc_address4 = get_btc_address(&minter_agent, &logger, subaccount4).await;
 
         // -- beginning of test logic --
 
@@ -228,5 +250,66 @@ pub fn test_update_balance(env: TestEnv) {
         )
         .await;
         assert_no_new_utxo(&minter_agent, &subaccount2).await;
+        upgrade_canister_with_args(
+            &mut minter_canister,
+            &UpgradeArgs {
+                mode: Some(Mode::GeneralAvailability),
+                ..UpgradeArgs::default()
+            },
+        )
+        .await;
+        generate_blocks(&btc_rpc, &logger, 1, &btc_address3);
+        generate_blocks(&btc_rpc, &logger, BTC_MIN_CONFIRMATIONS, &btc_address4);
+        wait_for_bitcoin_balance(
+            &universal_canister,
+            &logger,
+            BTC_MIN_CONFIRMATIONS as u64 * BTC_BLOCK_SIZE,
+            &btc_address4,
+        )
+        .await;
+
+        // We create a new agent with a different identity
+        // to have caller != new_caller
+        let agent = assert_create_agent(sys_node.get_public_url().as_str()).await;
+        let mut mutable_agent = agent;
+        let mut rng = ChaChaRng::from_rng(OsRng).unwrap();
+        let identity = Secp256k1Identity::from_private_key(SecretKey::random(&mut rng));
+        mutable_agent.set_identity(identity);
+        let minter_agent = CkBtcMinterAgent {
+            agent: mutable_agent.clone(),
+            minter_canister_id: minter,
+        };
+
+        let new_caller = mutable_agent
+            .get_principal()
+            .expect("Error while getting principal.");
+        assert!(caller != new_caller);
+        debug!(&logger, "New identity principal: {}", caller);
+
+        // owner stays the same as previously
+        // only the caller changes.
+        let update_result = minter_agent
+            .update_balance(UpdateBalanceArgs {
+                owner: Some(caller),
+                subaccount: Some(subaccount3),
+            })
+            .await
+            .expect("Error while calling update_balance")
+            .unwrap();
+        assert!(!update_result.is_empty());
+        for update_balance_entry in &update_result {
+            if let UtxoStatus::Minted { block_index, .. } = &update_balance_entry {
+                assert_mint_transaction(
+                    &ledger_agent,
+                    &logger,
+                    *block_index,
+                    &account3,
+                    BTC_BLOCK_SIZE - KYT_FEE,
+                )
+                .await;
+            } else {
+                panic!("expected to have one minted utxo, got: {:?}", update_result);
+            }
+        }
     });
 }
