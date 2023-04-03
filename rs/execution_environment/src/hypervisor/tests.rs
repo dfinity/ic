@@ -955,6 +955,8 @@ fn ic0_canister_version_returns_correct_value() {
     );
 
     let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
+    // Update increases the `canister_version` ony AFTER the execution,
+    // so the result is plus 0, as no update has been finished yet.
     let expected_ctr: u64 = 1;
     assert_eq!(
         result,
@@ -965,7 +967,8 @@ fn ic0_canister_version_returns_correct_value() {
     test.upgrade_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
     let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
-    let expected_ctr: u64 = 2;
+    // Plus 1 for the previous ingress message.
+    let expected_ctr: u64 = 2 + 1;
     assert_eq!(
         result,
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
@@ -976,7 +979,8 @@ fn ic0_canister_version_returns_correct_value() {
     test.install_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
     let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
-    let expected_ctr: u64 = 4;
+    // Plus 2 for the previous ingress messages.
+    let expected_ctr: u64 = 4 + 2;
     assert_eq!(
         result,
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
@@ -992,7 +996,8 @@ fn ic0_canister_version_returns_correct_value() {
     )
     .unwrap();
     let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
-    let expected_ctr: u64 = 6;
+    // Plus 3 for the previous ingress messages.
+    let expected_ctr: u64 = 6 + 3;
     assert_eq!(
         result,
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
@@ -1002,7 +1007,8 @@ fn ic0_canister_version_returns_correct_value() {
     test.reinstall_canister(canister_id, UNIVERSAL_CANISTER_WASM.to_vec())
         .unwrap();
     let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
-    let expected_ctr: u64 = 7;
+    // Plus 4 for the previous ingress messages.
+    let expected_ctr: u64 = 7 + 4;
     assert_eq!(
         result,
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
@@ -1011,7 +1017,8 @@ fn ic0_canister_version_returns_correct_value() {
     test.update_freezing_threshold(canister_id, NumSeconds::from(1))
         .unwrap();
     let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
-    let expected_ctr: u64 = 8;
+    // Plus 5 for the previous ingress messages.
+    let expected_ctr: u64 = 8 + 5;
     assert_eq!(
         result,
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
@@ -1020,7 +1027,8 @@ fn ic0_canister_version_returns_correct_value() {
     test.canister_update_allocations_settings(canister_id, None, None)
         .unwrap();
     let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
-    let expected_ctr: u64 = 9;
+    // Plus 6 for the previous ingress messages.
+    let expected_ctr: u64 = 9 + 6;
     assert_eq!(
         result,
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
@@ -1029,7 +1037,8 @@ fn ic0_canister_version_returns_correct_value() {
     test.canister_update_allocations_settings(canister_id, Some(1000), None)
         .unwrap_err();
     let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
-    let expected_ctr: u64 = 9;
+    // Plus 7 for the previous ingress messages.
+    let expected_ctr: u64 = 9 + 7;
     assert_eq!(
         result,
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
@@ -1038,7 +1047,8 @@ fn ic0_canister_version_returns_correct_value() {
     test.set_controller(canister_id, canister_id.into())
         .unwrap();
     let result = test.ingress(canister_id, "update", ctr.clone()).unwrap();
-    let expected_ctr: u64 = 10;
+    // Plus 8 for the previous ingress messages.
+    let expected_ctr: u64 = 10 + 8;
     assert_eq!(
         result,
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
@@ -1046,11 +1056,35 @@ fn ic0_canister_version_returns_correct_value() {
 
     test.uninstall_code(canister_id).unwrap_err();
     let result = test.ingress(canister_id, "update", ctr).unwrap();
-    let expected_ctr: u64 = 10;
+    // Plus 9 for the previous ingress messages.
+    let expected_ctr: u64 = 10 + 9;
     assert_eq!(
         result,
         WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
     );
+}
+
+#[test]
+fn ic0_canister_version_does_not_change_on_trap_or_queries() {
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.universal_canister().unwrap();
+    let trap = wasm().trap().build();
+    let ctr = wasm().canister_version().reply_int64().build();
+
+    for _ in 0..3 {
+        let result = test.ingress(canister_id, "update", trap.clone());
+        assert!(result.is_err());
+
+        let result = test
+            .non_replicated_query(canister_id, "query", ctr.clone())
+            .unwrap();
+        // Neither the trap nor the query should change the version.
+        let expected_ctr: u64 = 1;
+        assert_eq!(
+            result,
+            WasmResult::Reply(expected_ctr.to_le_bytes().to_vec())
+        );
+    }
 }
 
 #[test]
