@@ -1036,7 +1036,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^0.4.38",
             ),
             "tarpc": crate.spec(
-                version = "^0.31",
+                version = "^0.32",
                 features = [
                     "full",
                 ],

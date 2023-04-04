@@ -36,68 +36,89 @@ mod rpc_connection {
     const MAX_FRAME_LENGTH_FOR_TEST: usize = 1_000;
 
     #[test]
-    fn should_reconnect_after_request_from_client_to_server_too_large() {
+    fn should_reconnect_after_request_from_client_cannot_be_sent_because_too_large() {
         let (vault, _temp_dir) = local_vault_in_temp_dir();
         let env = RemoteVaultEnvironment::start_server_with_local_csp_vault(Arc::new(vault));
         let client_cannot_send_large_request = vault_client_with_short_timeouts(&env)
             .with_max_frame_length(MAX_FRAME_LENGTH_FOR_TEST)
             .build_expecting_ok();
-        test_client(&client_cannot_send_large_request);
+        let node_signing_public_key = client_cannot_send_large_request
+            .gen_node_signing_key_pair()
+            .expect("failed generating node signing key pair");
+        let key_id = KeyId::try_from(&node_signing_public_key).unwrap();
 
+        let signature = sign_message(Small, key_id, &client_cannot_send_large_request);
+        assert_matches!(signature, Ok(_));
+
+        let signature = sign_message(TooLarge, key_id, &client_cannot_send_large_request);
+        assert_matches!(signature, Err(InternalError {internal_error}) if internal_error.contains("the client failed to send the request"));
+
+        let signature = sign_message(Small, key_id, &client_cannot_send_large_request);
+        assert_matches!(signature, Ok(_));
+    }
+
+    #[test]
+    fn should_reconnect_after_request_from_client_cannot_be_received_by_server_because_too_large() {
         let (vault, _temp_dir) = local_vault_in_temp_dir();
         let server_cannot_receive_large_request =
             TarpcCspVaultServerImplBuilder::new_with_local_csp_vault(Arc::new(vault))
                 .with_max_frame_length(MAX_FRAME_LENGTH_FOR_TEST);
         let env = RemoteVaultEnvironment::start_server(server_cannot_receive_large_request);
         let client = vault_client_with_short_timeouts(&env).build_expecting_ok();
-        test_client(&client);
+        let node_signing_public_key = client
+            .gen_node_signing_key_pair()
+            .expect("failed generating node signing key pair");
+        let key_id = KeyId::try_from(&node_signing_public_key).unwrap();
 
-        fn test_client(client: &RemoteCspVault) {
-            let node_signing_public_key = client
-                .gen_node_signing_key_pair()
-                .expect("failed generating node signing key pair");
-            let key_id = KeyId::try_from(&node_signing_public_key).unwrap();
+        let signature = sign_message(Small, key_id, &client);
+        assert_matches!(signature, Ok(_));
 
-            let signature = sign_message(Small, key_id, client);
-            assert_matches!(signature, Ok(_));
+        let signature = sign_message(TooLarge, key_id, &client);
+        assert_matches!(signature, Err(InternalError {internal_error}) if internal_error.contains("the connection to the server was already shutdown"));
 
-            let signature = sign_message(TooLarge, key_id, client);
-            assert_matches!(signature, Err(InternalError {internal_error}) if internal_error.contains("the client disconnected from the server"));
-
-            let signature = sign_message(Small, key_id, client);
-            // TODO CRP-1822: with reconnection feature this should now be an `Ok(_)` result
-            assert_matches!(signature, Err(InternalError {internal_error}) if internal_error.contains("the client disconnected from the server"));
-        }
+        let signature = sign_message(Small, key_id, &client);
+        // TODO CRP-1822: with reconnection feature this should now be an `Ok(_)` result
+        assert_matches!(signature, Err(InternalError {internal_error}) if internal_error.contains("the connection to the server was already shutdown"));
     }
 
     #[test]
-    fn should_reconnect_after_response_from_server_to_client_too_large() {
+    fn should_reconnect_after_response_from_server_cannot_be_received_by_client_because_too_large()
+    {
         let (vault, _temp_dir) = local_vault_in_temp_dir();
         let env = RemoteVaultEnvironment::start_server_with_local_csp_vault(Arc::new(vault));
         let client_cannot_receive_large_response = vault_client_with_short_timeouts(&env)
             .with_max_frame_length(40)
             .build_expecting_ok();
-        test_client(&client_cannot_receive_large_response);
+        let client = &client_cannot_receive_large_response;
 
+        assert_matches!(client.gen_node_signing_key_pair(), Ok(_)); //encoded response from server has 38 bytes
+        assert_matches!(client.idkg_gen_dealing_encryption_key_pair(), Ok(_)); //encoded response from server has 39 bytes
+
+        let keys = client.current_node_public_keys_with_timestamps(); //encoded response from server has 93 bytes
+        assert_matches!(keys, Err(CspPublicKeyStoreError::TransientInternalError(msg)) if msg.contains("an error occurred while waiting for the server response"));
+
+        // TODO CRP-1822: with reconnection feature this should now be an `Ok(_)` result
+        assert_matches!(client.idkg_gen_dealing_encryption_key_pair(),
+        Err(CspCreateMEGaKeyError::TransientInternalError {internal_error}) if internal_error.contains("the connection to the server was already shutdown"));
+    }
+
+    #[test]
+    fn should_reconnect_after_response_from_server_cannot_be_sent_because_too_large() {
         let (vault, _temp_dir) = local_vault_in_temp_dir();
         let server_cannot_send_large_response =
             TarpcCspVaultServerImplBuilder::new_with_local_csp_vault(Arc::new(vault))
                 .with_max_frame_length(40);
         let env = RemoteVaultEnvironment::start_server(server_cannot_send_large_response);
         let client = vault_client_with_short_timeouts(&env).build_expecting_ok();
-        test_client(&client);
+        assert_matches!(&client.gen_node_signing_key_pair(), Ok(_)); //encoded response from server has 38 bytes
+        assert_matches!(&client.idkg_gen_dealing_encryption_key_pair(), Ok(_)); //encoded response from server has 39 bytes
 
-        fn test_client(client: &RemoteCspVault) {
-            assert_matches!(client.gen_node_signing_key_pair(), Ok(_)); //encoded response from server has 38 bytes
-            assert_matches!(client.idkg_gen_dealing_encryption_key_pair(), Ok(_)); //encoded response from server has 39 bytes
+        let keys = &client.current_node_public_keys_with_timestamps(); //encoded response from server has 93 bytes
+        assert_matches!(keys, Err(CspPublicKeyStoreError::TransientInternalError(msg)) if msg.contains("the connection to the server was already shutdown"));
 
-            let keys = client.current_node_public_keys_with_timestamps(); //encoded response from server has 93 bytes
-            assert_matches!(keys, Err(CspPublicKeyStoreError::TransientInternalError(msg)) if msg.contains("the client disconnected from the server"));
-
-            // TODO CRP-1822: with reconnection feature this should now be an `Ok(_)` result
-            assert_matches!(client.idkg_gen_dealing_encryption_key_pair(),
-            Err(CspCreateMEGaKeyError::TransientInternalError {internal_error}) if internal_error.contains("the client disconnected from the server"));
-        }
+        // TODO CRP-1822: with reconnection feature this should now be an `Ok(_)` result
+        assert_matches!(&client.idkg_gen_dealing_encryption_key_pair(),
+        Err(CspCreateMEGaKeyError::TransientInternalError {internal_error}) if internal_error.contains("the connection to the server was already shutdown"));
     }
 
     #[test]
@@ -116,12 +137,12 @@ mod rpc_connection {
 
         env.shutdown_server_now();
         let signature = sign_message(Small, key_id, &client);
-        assert_matches!(signature, Err(InternalError {internal_error}) if internal_error.contains("the client disconnected from the server"));
+        assert_matches!(signature, Err(InternalError {internal_error}) if internal_error.contains("the connection to the server was already shutdown"));
 
         env.restart_server();
         let signature = sign_message(Small, key_id, &client);
         // TODO CRP-1822: with reconnection feature this should now be an `Ok(_)` result
-        assert_matches!(signature, Err(InternalError {internal_error}) if internal_error.contains("the client disconnected from the server"));
+        assert_matches!(signature, Err(InternalError {internal_error}) if internal_error.contains("the connection to the server was already shutdown"));
     }
 
     #[test]
