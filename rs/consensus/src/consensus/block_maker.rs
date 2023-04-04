@@ -5,7 +5,6 @@ use crate::{
         metrics::{BlockMakerMetrics, EcdsaPayloadMetrics},
         payload_builder::PayloadBuilder,
         pool_reader::PoolReader,
-        prelude::*,
         utils::*,
         ConsensusCrypto,
     },
@@ -19,7 +18,14 @@ use ic_logger::{debug, error, trace, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_replicated_state::ReplicatedState;
-use ic_types::{consensus::dkg, replica_config::ReplicaConfig, time::current_time};
+use ic_types::{
+    batch::{BatchPayload, ValidationContext},
+    consensus::{dkg, hashed, Block, BlockProposal, HasRank, Payload, RandomBeacon, Rank},
+    crypto::CryptoHashOf,
+    replica_config::ReplicaConfig,
+    time::current_time,
+    CountBytes, Height, NodeId, RegistryVersion,
+};
 use std::{
     sync::{Arc, RwLock},
     time::Duration,
@@ -657,8 +663,10 @@ mod tests {
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
+    use ic_types::consensus::dkg;
+    use ic_types::consensus::{HasHeight, HasVersion};
+    use ic_types::crypto::CryptoHash;
     use ic_types::*;
-    use ic_types::{batch::*, consensus::dkg};
     use std::sync::{Arc, RwLock};
 
     #[test]

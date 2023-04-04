@@ -5,7 +5,6 @@
 use crate::consensus::{
     metrics::{BatchStats, BlockStats},
     pool_reader::PoolReader,
-    prelude::*,
     utils::{crypto_hashable_to_seed, get_block_hash_string, lookup_replica_version},
 };
 use crate::ecdsa::utils::EcdsaBlockReaderImpl;
@@ -15,18 +14,23 @@ use ic_ic00_types::{EcdsaKeyId, SetupInitialDKGResponse};
 use ic_interfaces::messaging::{MessageRouting, MessageRoutingError};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{debug, error, info, trace, warn, ReplicaLogger};
-use ic_protobuf::log::consensus_log_entry::v1::ConsensusLogEntry;
-use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
-use ic_protobuf::registry::subnet::v1::InitialNiDkgTranscriptRecord;
+use ic_protobuf::{
+    log::consensus_log_entry::v1::ConsensusLogEntry,
+    registry::{crypto::v1::PublicKey as PublicKeyProto, subnet::v1::InitialNiDkgTranscriptRecord},
+};
 use ic_types::{
+    batch::{Batch, BatchMessages, CanisterHttpPayload},
     canister_http::*,
-    consensus::ecdsa::{CompletedSignature, EcdsaBlockReader},
+    consensus::{
+        ecdsa::{self, CompletedSignature, EcdsaBlockReader},
+        Block, BlockPayload,
+    },
     crypto::{
         canister_threshold_sig::MasterEcdsaPublicKey,
         threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTranscript},
     },
-    messages::{CallbackId, Response},
-    ReplicaVersion,
+    messages::{CallbackId, Payload, RejectContext, Response},
+    CanisterId, Cycles, Height, PrincipalId, Randomness, ReplicaVersion, SubnetId,
 };
 use std::collections::BTreeMap;
 
@@ -417,7 +421,7 @@ fn generate_dkg_response_payload(
     low_threshold: Option<&Result<NiDkgTranscript, String>>,
     high_threshold: Option<&Result<NiDkgTranscript, String>>,
     log: &ReplicaLogger,
-) -> Option<messages::Payload> {
+) -> Option<Payload> {
     match (low_threshold, high_threshold) {
         (Some(Ok(low_threshold_transcript)), Some(Ok(high_threshold_transcript))) => {
             info!(
@@ -446,19 +450,17 @@ fn generate_dkg_response_payload(
                 subnet_threshold_public_key,
             };
 
-            Some(messages::Payload::Data(initial_transcript_records.encode()))
+            Some(Payload::Data(initial_transcript_records.encode()))
         }
-        (Some(Err(err_str1)), Some(Err(err_str2))) => {
-            Some(messages::Payload::Reject(messages::RejectContext {
-                code: ic_error_types::RejectCode::CanisterReject,
-                message: format!("{}{}", err_str1, err_str2),
-            }))
-        }
-        (Some(Err(err_str)), _) => Some(messages::Payload::Reject(messages::RejectContext {
+        (Some(Err(err_str1)), Some(Err(err_str2))) => Some(Payload::Reject(RejectContext {
+            code: ic_error_types::RejectCode::CanisterReject,
+            message: format!("{}{}", err_str1, err_str2),
+        })),
+        (Some(Err(err_str)), _) => Some(Payload::Reject(RejectContext {
             code: ic_error_types::RejectCode::CanisterReject,
             message: err_str.to_string(),
         })),
-        (_, Some(Err(err_str))) => Some(messages::Payload::Reject(messages::RejectContext {
+        (_, Some(Err(err_str))) => Some(Payload::Reject(RejectContext {
             code: ic_error_types::RejectCode::CanisterReject,
             message: err_str.to_string(),
         })),

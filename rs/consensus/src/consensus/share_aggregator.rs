@@ -3,10 +3,17 @@
 //! from random beacon shares, Notarizations from notarization shares and
 //! Finalizations from finalization shares.
 use crate::consensus::{
-    membership::Membership, pool_reader::PoolReader, prelude::*, utils, ConsensusCrypto,
+    membership::Membership, pool_reader::PoolReader,
+    random_tape_maker::RANDOM_TAPE_CHECK_MAX_HEIGHT_RANGE, utils, ConsensusCrypto,
 };
 use ic_interfaces::messaging::MessageRouting;
 use ic_logger::ReplicaLogger;
+use ic_types::consensus::{
+    CatchUpContent, ConsensusMessage, ConsensusMessageHashable, FinalizationContent, HasHeight,
+    RandomTapeContent,
+};
+use ic_types::crypto::Signed;
+use ic_types::Height;
 use std::cmp::min;
 use std::sync::Arc;
 
@@ -184,11 +191,20 @@ mod tests {
     use ic_interfaces::consensus_pool::ConsensusPool;
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities::{
-        consensus::fake::*,
+        consensus::fake::{FakeContentSigner, FakeSigner},
         message_routing::FakeMessageRouting,
         types::ids::{node_test_id, subnet_test_id},
     };
     use ic_test_utilities_registry::SubnetRecordBuilder;
+    use ic_types::{
+        consensus::{
+            Block, CatchUpPackageShare, CatchUpShareContent, FinalizationShare, HashedBlock,
+            HashedRandomBeacon, NotarizationShare, RandomBeacon, RandomBeaconShare,
+        },
+        crypto::{CryptoHash, CryptoHashOf},
+        signature::ThresholdSignatureShare,
+        NodeId,
+    };
     use std::sync::Arc;
 
     #[test]

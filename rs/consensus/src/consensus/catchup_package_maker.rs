@@ -13,8 +13,8 @@
 //! At the moment, we will start to make a CatchUpPackage once a DKG summary
 //! block is considered finalized.
 use crate::consensus::{
-    membership::Membership, pool_reader::PoolReader, prelude::*,
-    utils::active_high_threshold_transcript, ConsensusCrypto,
+    membership::Membership, pool_reader::PoolReader, utils::active_high_threshold_transcript,
+    ConsensusCrypto,
 };
 use ic_interfaces::messaging::MessageRouting;
 use ic_interfaces_state_manager::{
@@ -22,7 +22,13 @@ use ic_interfaces_state_manager::{
 };
 use ic_logger::{debug, error, trace, ReplicaLogger};
 use ic_replicated_state::ReplicatedState;
-use ic_types::replica_config::ReplicaConfig;
+use ic_types::{
+    consensus::{
+        Block, CatchUpContent, CatchUpPackage, CatchUpPackageShare, CatchUpShareContent,
+        HasCommittee, HasHeight, HashedBlock, HashedRandomBeacon,
+    },
+    replica_config::ReplicaConfig,
+};
 use std::sync::Arc;
 
 /// CatchUpPackage maker is responsible for creating beacon shares
@@ -247,6 +253,7 @@ mod tests {
         types::ids::{node_test_id, subnet_test_id},
     };
     use ic_test_utilities_registry::SubnetRecordBuilder;
+    use ic_types::{crypto::CryptoHash, CryptoHashOfState, Height};
     use std::sync::{Arc, RwLock};
 
     #[test]

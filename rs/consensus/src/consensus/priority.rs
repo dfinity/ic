@@ -1,9 +1,14 @@
 //! This module provides two public interfaces, compute_attribute and
 //! get_priority_function.
 
-use crate::consensus::{metrics::ConsensusGossipMetrics, pool_reader::PoolReader, prelude::*};
+use crate::consensus::{metrics::ConsensusGossipMetrics, pool_reader::PoolReader};
 use ic_interfaces::consensus_pool::{ConsensusPool, HeightIndexedPool, HeightRange};
-use ic_types::artifact::{ConsensusMessageId, Priority, Priority::*, PriorityFn};
+use ic_types::{
+    artifact::{ConsensusMessageId, Priority, Priority::*, PriorityFn},
+    consensus::{Block, ConsensusMessageAttribute, HasBlockHash, HasHeight},
+    crypto::CryptoHashOf,
+    Height,
+};
 use prometheus::Histogram;
 use std::collections::BTreeSet;
 
@@ -212,7 +217,11 @@ mod tests {
     use super::*;
     use crate::consensus::mocks::{dependencies, Dependencies};
     use ic_metrics::MetricsRegistry;
-    use ic_test_utilities::{consensus::fake::*, types::ids::node_test_id};
+    use ic_test_utilities::{consensus::fake::FakeContent, types::ids::node_test_id};
+    use ic_types::consensus::{
+        ConsensusMessageHashable, Finalization, FinalizationContent, Notarization,
+        NotarizationContent,
+    };
 
     /// Create dummy test metrics to pass into get_priority_function
     fn test_metrics() -> ConsensusGossipMetrics {

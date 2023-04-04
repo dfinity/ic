@@ -14,7 +14,6 @@ mod notary;
 mod payload;
 pub mod payload_builder;
 pub mod pool_reader;
-mod prelude;
 mod priority;
 mod purger;
 mod random_beacon_maker;
@@ -43,7 +42,6 @@ use crate::consensus::{
     notary::Notary,
     payload_builder::PayloadBuilderImpl,
     pool_reader::PoolReader,
-    prelude::*,
     priority::get_priority_function,
     purger::Purger,
     random_beacon_maker::RandomBeaconMaker,
@@ -56,7 +54,7 @@ use ic_config::consensus::ConsensusConfig;
 use ic_interfaces::{
     artifact_pool::{ChangeSetProducer, PriorityFnAndFilterProducer},
     canister_http::CanisterHttpPayloadBuilder,
-    consensus_pool::ConsensusPool,
+    consensus_pool::{ChangeAction, ChangeSet, ConsensusPool},
     dkg::DkgPool,
     ecdsa::EcdsaPool,
     ingress_manager::IngressSelector,
@@ -73,8 +71,10 @@ use ic_replicated_state::ReplicatedState;
 use ic_types::{
     artifact::{ConsensusMessageFilter, ConsensusMessageId, PriorityFn},
     artifact_kind::ConsensusArtifact,
+    consensus::{BlockPayload, ConsensusMessageAttribute, ConsensusMessageHashable},
     malicious_flags::MaliciousFlags,
     replica_config::ReplicaConfig,
+    Height, Time,
 };
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -698,6 +698,7 @@ mod tests {
         FastForwardTimeSource,
     };
     use ic_test_utilities_registry::{FakeLocalStoreCertifiedTimeReader, SubnetRecordBuilder};
+    use ic_types::{crypto::CryptoHash, CryptoHashOfState, SubnetId};
     use std::borrow::Borrow;
     use std::sync::Arc;
     use std::time::Duration;

@@ -15,12 +15,16 @@
 //!
 //! 3. Replicated states below the certified height recorded in the block
 //! in the latest CatchUpPackage can be purged.
-use crate::consensus::{metrics::PurgerMetrics, pool_reader::PoolReader, prelude::*};
-use ic_interfaces::{consensus_pool::HeightRange, messaging::MessageRouting};
+use crate::consensus::{metrics::PurgerMetrics, pool_reader::PoolReader};
+use ic_interfaces::{
+    consensus_pool::{ChangeAction, ChangeSet, HeightRange},
+    messaging::MessageRouting,
+};
 use ic_interfaces_state_manager::StateManager;
 use ic_logger::{trace, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
+use ic_types::Height;
 use std::{cell::RefCell, sync::Arc};
 
 /// The Purger sub-component.
@@ -302,6 +306,7 @@ mod tests {
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities::message_routing::MockMessageRouting;
+    use ic_types::{crypto::CryptoHash, CryptoHashOfState};
     use std::sync::{Arc, RwLock};
 
     #[test]

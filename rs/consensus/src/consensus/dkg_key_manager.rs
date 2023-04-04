@@ -3,17 +3,15 @@
 //! there is something to do. On high-level, it's responsible of spawning
 //! threads triggering long-running CSP operation and book-keeping of
 //! thread-handles.
-use crate::consensus::{
-    pool_reader::PoolReader, prelude::threshold_sig::ni_dkg::NiDkgTranscript, prelude::*,
-    ConsensusCrypto,
-};
+use crate::consensus::{pool_reader::PoolReader, ConsensusCrypto};
 use ic_interfaces::crypto::{ErrorReproducibility, LoadTranscriptResult, NiDkgAlgorithm};
 use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_types::{
-    consensus::{dkg::Summary, BlockPayload},
+    consensus::{dkg::Summary, BlockPayload, HasHeight},
     crypto::threshold_sig::ni_dkg::{
-        errors::load_transcript_error::DkgLoadTranscriptError, NiDkgId, NiDkgTag, NiDkgTargetSubnet,
+        errors::load_transcript_error::DkgLoadTranscriptError, NiDkgId, NiDkgTag,
+        NiDkgTargetSubnet, NiDkgTranscript,
     },
     Height,
 };

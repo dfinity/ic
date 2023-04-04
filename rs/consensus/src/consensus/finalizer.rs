@@ -18,10 +18,10 @@
 //! become finalized.
 use crate::consensus::{
     batch_delivery::deliver_batches,
+    crypto::ConsensusCrypto,
     membership::Membership,
     metrics::{BatchStats, BlockStats, FinalizerMetrics},
     pool_reader::PoolReader,
-    prelude::*,
 };
 use ic_interfaces::{
     ingress_manager::IngressSelector,
@@ -30,9 +30,12 @@ use ic_interfaces::{
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{debug, trace, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_types::replica_config::ReplicaConfig;
-use std::cell::RefCell;
-use std::sync::Arc;
+use ic_types::{
+    consensus::{Block, FinalizationContent, FinalizationShare},
+    replica_config::ReplicaConfig,
+    Height, ReplicaVersion,
+};
+use std::{cell::RefCell, sync::Arc};
 
 pub struct Finalizer {
     replica_config: ReplicaConfig,
@@ -319,14 +322,20 @@ mod tests {
         types::ids::{node_test_id, subnet_test_id},
     };
     use ic_test_utilities_registry::SubnetRecordBuilder;
+    use ic_types::consensus::{HasHeight, HashedBlock};
+    use ic_types::messages::Payload;
     use ic_types::{
         crypto::threshold_sig::ni_dkg::{
             NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet, NiDkgTranscript,
         },
         messages::{CallbackId, Request},
     };
-    use std::collections::BTreeMap;
-    use std::{collections::BTreeSet, str::FromStr, sync::Arc};
+    use ic_types::{CanisterId, Cycles, PrincipalId, RegistryVersion, SubnetId};
+    use std::{
+        collections::{BTreeMap, BTreeSet},
+        str::FromStr,
+        sync::Arc,
+    };
 
     /// Given a single block, just finalize it
     #[test]
@@ -591,8 +600,8 @@ mod tests {
 
         // Deserialize the `SetupInitialDKGResponse` and check the subnet id
         let payload = match &result[0].response_payload {
-            messages::Payload::Data(data) => data,
-            messages::Payload::Reject(_) => panic!("Payload was rejected unexpectedly"),
+            Payload::Data(data) => data,
+            Payload::Reject(_) => panic!("Payload was rejected unexpectedly"),
         };
         let initial_transcript_records = SetupInitialDKGResponse::decode(payload).unwrap();
         assert_eq!(

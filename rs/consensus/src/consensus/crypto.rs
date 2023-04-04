@@ -1,13 +1,23 @@
-use crate::consensus::prelude::*;
 use ic_interfaces::{crypto::*, validation::ValidationResult};
-use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealing, SignedIDkgDealing};
 use ic_types::{
     canister_http::CanisterHttpResponseMetadata,
-    consensus::ecdsa::{EcdsaComplaintContent, EcdsaOpeningContent},
-    crypto::{
-        threshold_sig::ni_dkg::{DkgId, NiDkgId},
-        CryptoError,
+    consensus::{
+        dkg,
+        ecdsa::{EcdsaComplaintContent, EcdsaOpeningContent},
+        hashed::Hashed,
+        Block, CatchUpContent, FinalizationContent, HashedBlock, NotarizationContent,
+        RandomBeaconContent, RandomTapeContent,
     },
+    crypto::{
+        canister_threshold_sig::idkg::{IDkgDealing, SignedIDkgDealing},
+        threshold_sig::ni_dkg::{DkgId, NiDkgId},
+        CryptoError, CryptoHashOf, CryptoHashable, CryptoResult, Signable, Signed,
+    },
+    signature::{
+        BasicSignature, BasicSignatureBatch, MultiSignature, MultiSignatureShare,
+        ThresholdSignature, ThresholdSignatureShare,
+    },
+    NodeId, RegistryVersion,
 };
 use std::collections::BTreeMap;
 
@@ -37,15 +47,12 @@ pub trait SignVerify<Message, Signature, KeySelector> {
 }
 
 impl<Message: Signable, C: BasicSigner<Message> + BasicSigVerifier<Message>>
-    SignVerify<
-        hashed::Hashed<CryptoHashOf<Message>, Message>,
-        BasicSignature<Message>,
-        RegistryVersion,
-    > for C
+    SignVerify<Hashed<CryptoHashOf<Message>, Message>, BasicSignature<Message>, RegistryVersion>
+    for C
 {
     fn sign(
         &self,
-        message: &hashed::Hashed<CryptoHashOf<Message>, Message>,
+        message: &Hashed<CryptoHashOf<Message>, Message>,
         signer: NodeId,
         selector: RegistryVersion,
     ) -> CryptoResult<BasicSignature<Message>> {
@@ -54,7 +61,7 @@ impl<Message: Signable, C: BasicSigner<Message> + BasicSigVerifier<Message>>
     }
     fn verify(
         &self,
-        message: &Signed<hashed::Hashed<CryptoHashOf<Message>, Message>, BasicSignature<Message>>,
+        message: &Signed<Hashed<CryptoHashOf<Message>, Message>, BasicSignature<Message>>,
         selector: RegistryVersion,
     ) -> ValidationResult<CryptoError> {
         self.verify_basic_sig(
@@ -492,7 +499,10 @@ mod tests {
 
     use super::*;
     use ic_test_utilities::types::ids::node_test_id;
-    use ic_types::messages::MessageId;
+    use ic_types::{
+        crypto::{CombinedMultiSig, CombinedMultiSigOf, IndividualMultiSig, IndividualMultiSigOf},
+        messages::MessageId,
+    };
 
     struct AggregateImpl {}
     /// Fake Aggregate implementation
