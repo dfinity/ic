@@ -9,11 +9,13 @@
 // annotated with `#[candid_method(query/update)]` to be able to generate the
 // did definition of the method.
 
+use std::borrow::Cow;
 use std::boxed::Box;
+use std::str::FromStr;
 use std::time::SystemTime;
 
 use async_trait::async_trait;
-use candid::candid_method;
+use candid::{candid_method, Decode, Encode};
 use dfn_candid::{candid, candid_one};
 use dfn_core::{
     api::{arg_data, call_with_callbacks, caller, now, reject_message},
@@ -33,13 +35,16 @@ use ic_nervous_system_common::{
 use ic_nns_common::{
     access_control::{check_caller_is_gtc, check_caller_is_ledger, check_caller_is_root},
     pb::v1::{CanisterAuthzInfo, NeuronId as NeuronIdProto, ProposalId as ProposalIdProto},
-    types::{NeuronId, ProposalId},
+    types::{CallCanisterProposal, NeuronId, ProposalId},
 };
 use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, LEDGER_CANISTER_ID};
 use ic_nns_governance::pb::v1::governance::GovernanceCachedMetrics;
 use ic_nns_governance::{
     encode_metrics,
-    governance::{Environment, Governance, HeapGrowthPotential, TimeWarp, CMC},
+    governance::{
+        BitcoinNetwork, BitcoinSetConfigProposal, Environment, Governance, HeapGrowthPotential,
+        TimeWarp, CMC,
+    },
     pb::v1::{
         claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshNeuronFromAccountResponseResult,
         governance_error::ErrorType,
@@ -187,7 +192,7 @@ impl Environment for CanisterEnv {
         let mt = NnsFunction::from_i32(update.nns_function).ok_or_else(||
             // No update type specified.
             GovernanceError::new(ErrorType::PreconditionFailed))?;
-        let payload = &update.payload;
+
         let reply = move || {
             governance_mut().set_proposal_execution_status(proposal_id, Ok(()));
         };
@@ -221,7 +226,8 @@ impl Environment for CanisterEnv {
             );
         };
         let (canister_id, method) = mt.canister_and_function()?;
-        let err = call_with_callbacks(canister_id, method, payload, reply, reject);
+        let effective_payload = get_effective_payload(mt, &update.payload);
+        let err = call_with_callbacks(canister_id, method, &effective_payload, reply, reject);
         if err != 0 {
             Err(GovernanceError::new(ErrorType::PreconditionFailed))
         } else {
@@ -848,6 +854,80 @@ fn http_request() {
     dfn_http_metrics::serve_metrics(|metrics_encoder| {
         encode_metrics(governance(), metrics_encoder)
     });
+}
+
+// Processes the payload received and transforms it into a form the intended canister expects.
+fn get_effective_payload(mt: NnsFunction, payload: &[u8]) -> Cow<[u8]> {
+    const BITCOIN_SET_CONFIG_METHOD_NAME: &str = "set_config";
+    const BITCOIN_MAINNET_CANISTER_ID: &str = "ghsi2-tqaaa-aaaan-aaaca-cai";
+    const BITCOIN_TESTNET_CANISTER_ID: &str = "g4xu7-jiaaa-aaaan-aaaaq-cai";
+
+    match mt {
+        NnsFunction::BitcoinSetConfig => {
+            // Decode the payload to get the network.
+            let payload = Decode!(payload, BitcoinSetConfigProposal)
+                .expect("payload must be a valid BitcoinSetConfigProposal.");
+
+            // Convert it to a call canister payload.
+            let canister_id = CanisterId::from_str(match payload.network {
+                BitcoinNetwork::Mainnet => BITCOIN_MAINNET_CANISTER_ID,
+                BitcoinNetwork::Testnet => BITCOIN_TESTNET_CANISTER_ID,
+            })
+            .expect("bitcoin canister id must be valid.");
+
+            let encoded_payload = Encode!(&CallCanisterProposal {
+                canister_id,
+                method_name: BITCOIN_SET_CONFIG_METHOD_NAME.to_string(),
+                payload: payload.payload
+            })
+            .unwrap();
+
+            Cow::Owned(encoded_payload)
+        }
+
+        // NOTE: Methods are listed explicitly as opposed to using the `_` wildcard so
+        // that adding a new function causes a compile error here, ensuring that the developer
+        // makes an explicit decision on how the payload is handled.
+        NnsFunction::Unspecified
+        | NnsFunction::AssignNoid
+        | NnsFunction::CreateSubnet
+        | NnsFunction::AddNodeToSubnet
+        | NnsFunction::RemoveNodesFromSubnet
+        | NnsFunction::ChangeSubnetMembership
+        | NnsFunction::NnsCanisterInstall
+        | NnsFunction::NnsCanisterUpgrade
+        | NnsFunction::NnsRootUpgrade
+        | NnsFunction::RecoverSubnet
+        | NnsFunction::BlessReplicaVersion
+        | NnsFunction::RetireReplicaVersion
+        | NnsFunction::UpdateElectedReplicaVersions
+        | NnsFunction::UpdateNodeOperatorConfig
+        | NnsFunction::UpdateSubnetReplicaVersion
+        | NnsFunction::UpdateConfigOfSubnet
+        | NnsFunction::IcpXdrConversionRate
+        | NnsFunction::ClearProvisionalWhitelist
+        | NnsFunction::SetAuthorizedSubnetworks
+        | NnsFunction::SetFirewallConfig
+        | NnsFunction::AddFirewallRules
+        | NnsFunction::RemoveFirewallRules
+        | NnsFunction::UpdateFirewallRules
+        | NnsFunction::StopOrStartNnsCanister
+        | NnsFunction::RemoveNodes
+        | NnsFunction::UninstallCode
+        | NnsFunction::UpdateNodeRewardsTable
+        | NnsFunction::AddOrRemoveDataCenters
+        | NnsFunction::UpdateUnassignedNodesConfig
+        | NnsFunction::RemoveNodeOperators
+        | NnsFunction::RerouteCanisterRanges
+        | NnsFunction::PrepareCanisterMigration
+        | NnsFunction::CompleteCanisterMigration
+        | NnsFunction::AddSnsWasm
+        | NnsFunction::UpdateSubnetType
+        | NnsFunction::ChangeSubnetTypeAssignment
+        | NnsFunction::UpdateAllowedPrincipals
+        | NnsFunction::UpdateSnsWasmSnsSubnetIds
+        | NnsFunction::InsertSnsWasmUpgradePathEntries => Cow::Borrowed(payload),
+    }
 }
 
 // This makes this Candid service self-describing, so that for example Candid

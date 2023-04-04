@@ -1,10 +1,13 @@
-use dfn_core::api::{call, call_with_funds, CanisterId, Funds};
+use dfn_core::api::{call, call_bytes, call_with_funds, print, CanisterId, Funds};
 use ic_ic00_types::{CanisterInstallMode::Install, InstallCodeArgs};
 use ic_nervous_system_root::{
     start_canister, stop_canister, AddCanisterProposal, CanisterAction, CanisterIdRecord,
     StopOrStartCanisterProposal,
 };
-use ic_nns_common::registry::{encode_or_panic, get_value, mutate_registry};
+use ic_nns_common::{
+    registry::{encode_or_panic, get_value, mutate_registry},
+    types::CallCanisterProposal,
+};
 use ic_protobuf::registry::nns::v1::{NnsCanisterRecord, NnsCanisterRecords};
 use ic_protobuf::types::v1 as pb;
 use ic_registry_keys::make_nns_canister_records_key;
@@ -152,4 +155,27 @@ pub async fn stop_or_start_nns_canister(proposal: StopOrStartCanisterProposal) {
         CanisterAction::Start => start_canister(proposal.canister_id).await,
         CanisterAction::Stop => stop_canister(proposal.canister_id).await,
     }
+}
+
+pub async fn call_canister(proposal: CallCanisterProposal) {
+    print(format!(
+        "Calling {}::{}...",
+        proposal.canister_id, proposal.method_name,
+    ));
+
+    let res = call_bytes(
+        proposal.canister_id,
+        &proposal.method_name,
+        &proposal.payload,
+        Funds::zero(),
+    )
+    .await
+    .map_err(|(code, msg)| format!("Error: {}:{}", code.unwrap_or_default(), msg));
+
+    print(format!(
+        "Call {}::{} returned {:?}",
+        proposal.canister_id, proposal.method_name, res,
+    ));
+
+    res.unwrap();
 }

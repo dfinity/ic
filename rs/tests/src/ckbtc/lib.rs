@@ -14,11 +14,10 @@ use crate::{
     util::{assert_create_agent, runtime_from_url, MessageCanister},
 };
 use candid::Encode;
-use candid::{CandidType, Deserialize};
 use canister_test::{ic00::EcdsaKeyId, Canister, Runtime};
 use dfn_candid::candid;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
-use ic_btc_types::Network;
+use ic_btc_types::{Config, Fees, Flag, Network, NetworkSnakeCase};
 use ic_canister_client::Sender;
 use ic_cdk::export::Principal;
 use ic_ckbtc_kyt::{
@@ -26,13 +25,17 @@ use ic_ckbtc_kyt::{
 };
 use ic_ckbtc_minter::lifecycle::init::MinterArg;
 use ic_ckbtc_minter::lifecycle::init::{InitArgs as CkbtcMinterInitArgs, Mode};
-use ic_config::subnet_config::ECDSA_SIGNATURE_FEE;
+use ic_config::{
+    execution_environment::{BITCOIN_MAINNET_CANISTER_ID, BITCOIN_TESTNET_CANISTER_ID},
+    subnet_config::ECDSA_SIGNATURE_FEE,
+};
 use ic_ic00_types::CanisterIdRecord;
 use ic_ic00_types::ProvisionalCreateCanisterWithCyclesArgs;
 use ic_icrc1_ledger::{InitArgs, LedgerArgument};
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
+use ic_nns_constants::ROOT_CANISTER_ID;
 use ic_nns_governance::pb::v1::{NnsFunction, ProposalStatus};
 use ic_nns_test_utils::{
     governance::submit_external_update_proposal, ids::TEST_NEURON_1_ID,
@@ -44,7 +47,6 @@ use ic_types_test_utils::ids::subnet_test_id;
 use icp_ledger::ArchiveOptions;
 use icrc_ledger_types::icrc1::account::Account;
 use registry_canister::mutations::do_update_subnet::UpdateSubnetPayload;
-use serde::Serialize;
 use slog::{debug, info, Logger};
 use std::str::FromStr;
 use std::time::Duration;
@@ -59,7 +61,6 @@ pub(crate) const RETRIEVE_BTC_MIN_AMOUNT: u64 = 100;
 
 pub const TIMEOUT_SHORT: Duration = Duration::from_secs(300);
 
-const BITCOIN_TESTNET_CANISTER_ID: &str = "g4xu7-jiaaa-aaaan-aaaaq-cai";
 // const KYT_CANISTER_ID: &str = "g4xu7-jiaaa-aaaan-aaaaq-cai";
 
 /// Maximum time (in nanoseconds) spend in queue at 0 to make the minter treat requests rigth away
@@ -377,16 +378,26 @@ pub(crate) async fn install_bitcoin_canister(
     logger: &Logger,
     env: &TestEnv,
 ) -> CanisterId {
+    install_bitcoin_canister_with_network(runtime, logger, env, NetworkSnakeCase::Regtest).await
+}
+
+pub(crate) async fn install_bitcoin_canister_with_network(
+    runtime: &Runtime,
+    logger: &Logger,
+    env: &TestEnv,
+    network: NetworkSnakeCase,
+) -> CanisterId {
     info!(&logger, "Installing bitcoin canister ...");
-    let mut bitcoin_canister = create_canister_at_id(
-        runtime,
-        PrincipalId::from_str(BITCOIN_TESTNET_CANISTER_ID).unwrap(),
-    )
-    .await;
+    let canister_id = match network {
+        NetworkSnakeCase::Mainnet => BITCOIN_MAINNET_CANISTER_ID,
+        NetworkSnakeCase::Regtest | NetworkSnakeCase::Testnet => BITCOIN_TESTNET_CANISTER_ID,
+    };
+    let mut bitcoin_canister =
+        create_canister_at_id(runtime, PrincipalId::from_str(canister_id).unwrap()).await;
 
     let args = Config {
         stability_threshold: 6,
-        network: NetworkInPayload::Regtest,
+        network,
         blocks_source: Principal::management_canister(),
         syncing: Flag::Enabled,
         fees: Fees {
@@ -409,75 +420,11 @@ pub(crate) async fn install_bitcoin_canister(
         Some(Encode!(&args).unwrap()),
     )
     .await;
+
+    bitcoin_canister
+        .set_controller_with_retries(ROOT_CANISTER_ID.get())
+        .await
+        .unwrap();
+
     bitcoin_canister.canister_id()
-}
-
-#[derive(CandidType, Deserialize)]
-pub struct Config {
-    pub stability_threshold: u128,
-    pub network: NetworkInPayload,
-
-    /// The principal from which blocks are retrieved.
-    ///
-    /// Setting this source to the management canister means that the blocks will be
-    /// fetched directly from the replica, and that's what is used in production.
-    pub blocks_source: Principal,
-
-    pub syncing: Flag,
-
-    pub fees: Fees,
-
-    /// Flag to control access to the apis provided by the canister.
-    pub api_access: Flag,
-}
-
-#[derive(CandidType, Serialize, Deserialize)]
-pub enum Flag {
-    #[serde(rename = "enabled")]
-    Enabled,
-    #[serde(rename = "disabled")]
-    Disabled,
-}
-
-#[derive(CandidType, Serialize, Deserialize)]
-pub enum NetworkInPayload {
-    #[serde(rename = "mainnet")]
-    Mainnet,
-    #[serde(rename = "testnet")]
-    Testnet,
-    #[serde(rename = "regtest")]
-    Regtest,
-}
-
-#[derive(CandidType, Serialize, Deserialize, PartialEq, Eq, Debug, Clone, Default)]
-pub struct Fees {
-    /// The base fee to charge for all `get_utxos` requests.
-    pub get_utxos_base: u128,
-
-    /// The number of cycles to charge per 10 instructions.
-    pub get_utxos_cycles_per_ten_instructions: u128,
-
-    /// The maximum amount of cycles that can be charged in a `get_utxos` request.
-    /// A request must send at least this amount for it to be accepted.
-    pub get_utxos_maximum: u128,
-
-    /// The flat fee to charge for a `get_balance` request.
-    pub get_balance: u128,
-
-    /// The maximum amount of cycles that can be charged in a `get_balance` request.
-    /// A request must send at least this amount for it to be accepted.
-    pub get_balance_maximum: u128,
-
-    /// The flat fee to charge for a `get_current_fee_percentiles` request.
-    pub get_current_fee_percentiles: u128,
-
-    /// The maximum amount of cycles that can be charged in a `get_current_fee_percentiles` request.
-    /// A request must send at least this amount for it to be accepted.
-    pub get_current_fee_percentiles_maximum: u128,
-
-    /// The base fee to charge for all `send_transaction` requests.
-    pub send_transaction_base: u128,
-
-    /// The number of cycles to charge for each byte in the transaction.
-    pub send_transaction_per_byte: u128,
 }

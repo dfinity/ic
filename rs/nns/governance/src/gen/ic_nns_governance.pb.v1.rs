@@ -2954,6 +2954,7 @@ pub enum NnsFunction {
     /// The specified versions to unelect are removed from the registry and the elected versions record.
     /// This ensures that the replica cannot upgrade to these versions anymore.
     UpdateElectedReplicaVersions = 38,
+    BitcoinSetConfig = 39,
 }
 impl NnsFunction {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -3007,6 +3008,7 @@ impl NnsFunction {
             NnsFunction::UpdateElectedReplicaVersions => {
                 "NNS_FUNCTION_UPDATE_ELECTED_REPLICA_VERSIONS"
             }
+            NnsFunction::BitcoinSetConfig => "NNS_FUNCTION_BITCOIN_SET_CONFIG",
         }
     }
 }

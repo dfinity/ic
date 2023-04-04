@@ -84,10 +84,10 @@ const QUERY_EXECUTION_THREADS_TOTAL: usize = 2;
 const QUERY_SCHEDULING_TIME_SLICE_PER_CANISTER: Duration = Duration::from_millis(20);
 
 // The ID of the Bitcoin testnet canister.
-const BITCOIN_TESTNET_CANISTER_ID: &str = "g4xu7-jiaaa-aaaan-aaaaq-cai";
+pub const BITCOIN_TESTNET_CANISTER_ID: &str = "g4xu7-jiaaa-aaaan-aaaaq-cai";
 
 // The ID of the Bitcoin mainnet canister.
-const BITCOIN_MAINNET_CANISTER_ID: &str = "ghsi2-tqaaa-aaaan-aaaca-cai";
+pub const BITCOIN_MAINNET_CANISTER_ID: &str = "ghsi2-tqaaa-aaaan-aaaca-cai";
 
 // The ID of the "soft launch" Bitcoin mainnet canister.
 // This is a canister that will be used to run the bitcoin mainnet state pre-launch
