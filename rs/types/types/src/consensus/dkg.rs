@@ -68,22 +68,17 @@ impl From<&Message> for pb::DkgMessage {
 }
 
 impl TryFrom<pb::DkgMessage> for Message {
-    type Error = String;
+    type Error = ProxyDecodeError;
     fn try_from(message: pb::DkgMessage) -> Result<Self, Self::Error> {
         Ok(Self {
             content: DealingContent::new_with_replica_version(
-                ReplicaVersion::try_from(message.replica_version).map_err(|err| {
-                    format!("Couldn't deserialize the replica version: {:?}", err)
-                })?,
-                bincode::deserialize(&message.dealing)
-                    .map_err(|err| format!("Couldn't deserialize the dealing: {:?}", err))?,
-                NiDkgId::try_from(message.dkg_id.expect("No Dkg id found"))
-                    .map_err(|err| format!("Couldn't deserialize the Dkg id: {:?}", err))?,
+                ReplicaVersion::try_from(message.replica_version)?,
+                bincode::deserialize(&message.dealing)?,
+                try_from_option_field(message.dkg_id, "DkgId not found")?,
             ),
             signature: BasicSignature {
                 signature: BasicSigOf::from(BasicSig(message.signature)),
-                signer: node_id_try_from_protobuf(message.signer.expect("No signer found"))
-                    .map_err(|err| format!("Couldn't parse the node id: {:?}", err))?,
+                signer: node_id_try_from_option(message.signer)?,
             },
         })
     }
