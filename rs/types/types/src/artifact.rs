@@ -216,23 +216,6 @@ pub trait ArtifactKind: Sized {
 
     /// Returns the advert of the given message.
     fn message_to_advert(msg: &<Self as ArtifactKind>::Message) -> Advert<Self>;
-
-    /// Checks if the given advert matches what is computed from the message.
-    /// Returns the advert derived from artifact on mismatch.
-    fn check_advert(
-        msg: &<Self as ArtifactKind>::Message,
-        advert: &Advert<Self>,
-    ) -> Result<(), Advert<Self>>
-    where
-        Advert<Self>: Eq,
-    {
-        let computed = Self::message_to_advert(msg);
-        if advert == &computed {
-            Ok(())
-        } else {
-            Err(computed)
-        }
-    }
 }
 
 /// A helper type that represents a type-indexed Advert.

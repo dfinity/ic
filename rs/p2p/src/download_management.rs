@@ -1070,7 +1070,7 @@ pub mod tests {
             mut _msg: artifact::Artifact,
             _advert: GossipAdvert,
             _peer_id: &NodeId,
-        ) -> Result<(), OnArtifactError<artifact::Artifact>> {
+        ) -> Result<(), OnArtifactError> {
             Ok(())
         }
 
