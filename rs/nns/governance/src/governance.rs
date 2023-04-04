@@ -524,6 +524,7 @@ impl NnsFunction {
             NnsFunction::InsertSnsWasmUpgradePathEntries => {
                 (SNS_WASM_CANISTER_ID, "insert_upgrade_path_entries")
             }
+            NnsFunction::BitcoinSetConfig => (ROOT_CANISTER_ID, "call_canister"),
         };
         Ok((canister_id, method))
     }
@@ -1179,6 +1180,7 @@ impl Proposal {
                             | NnsFunction::NnsRootUpgrade
                             | NnsFunction::StopOrStartNnsCanister
                             | NnsFunction::AddSnsWasm
+                            | NnsFunction::BitcoinSetConfig
                             | NnsFunction::InsertSnsWasmUpgradePathEntries => {
                                 Topic::NetworkCanisterManagement
                             }
@@ -8377,6 +8379,21 @@ impl TimeWarp {
             timestamp_s - ((-self.delta_s) as u64)
         }
     }
+}
+
+#[derive(candid::CandidType, serde::Serialize, candid::Deserialize, Clone, Debug, Copy)]
+pub enum BitcoinNetwork {
+    #[serde(rename = "mainnet")]
+    Mainnet,
+    #[serde(rename = "testnet")]
+    Testnet,
+}
+
+// A proposal payload to set the Bitcoin configuration.
+#[derive(candid::CandidType, serde::Serialize, candid::Deserialize, Clone, Debug)]
+pub struct BitcoinSetConfigProposal {
+    pub network: BitcoinNetwork,
+    pub payload: Vec<u8>,
 }
 
 #[cfg(test)]

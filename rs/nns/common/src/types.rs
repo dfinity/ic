@@ -112,3 +112,11 @@ pub struct UpdateIcpXdrConversionRatePayload {
     pub xdr_permyriad_per_icp: u64,
     pub reason: Option<UpdateIcpXdrConversionRatePayloadReason>,
 }
+
+// A proposal payload to call a canister.
+#[derive(candid::CandidType, serde::Serialize, candid::Deserialize, Clone, Debug)]
+pub struct CallCanisterProposal {
+    pub canister_id: CanisterId,
+    pub method_name: String,
+    pub payload: Vec<u8>,
+}

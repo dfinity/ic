@@ -14,6 +14,7 @@ dfn_json = { path = "../../rust_canisters/dfn_json" }
 futures = "0.3.8"
 ic-icrc1 = { path = "../../rosetta-api/icrc1" }
 ic-base-types = { path = "../../types/base_types"}
+ic-btc-types = { path = "../../bitcoin/types/public" }
 ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-config = { path = "../../config" }
 ic-crypto-node-key-generation = { path = "../../crypto/node_key_generation" }

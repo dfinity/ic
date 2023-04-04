@@ -9,7 +9,7 @@ use ic_nervous_system_root::{
     change_canister, AddCanisterProposal, CanisterIdRecord, ChangeCanisterProposal,
     StopOrStartCanisterProposal, LOG_PREFIX,
 };
-use ic_nns_common::access_control::check_caller_is_governance;
+use ic_nns_common::{access_control::check_caller_is_governance, types::CallCanisterProposal};
 use ic_nns_handler_root::{
     canister_management,
     root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot},
@@ -154,4 +154,14 @@ fn stop_or_start_nns_canister() {
             canister_management::stop_or_start_nns_canister(proposal).await
         },
     );
+}
+
+#[export_name = "canister_update call_canister"]
+fn call_canister() {
+    check_caller_is_governance();
+    over_async(candid, |(proposal,): (CallCanisterProposal,)| async move {
+        // Starts the proposal execution, which will continue after this function has returned.
+        let future = canister_management::call_canister(proposal);
+        dfn_core::api::futures::spawn(future);
+    });
 }

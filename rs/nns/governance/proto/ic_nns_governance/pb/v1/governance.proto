@@ -533,6 +533,8 @@ enum NnsFunction {
   // The specified versions to unelect are removed from the registry and the elected versions record. 
   // This ensures that the replica cannot upgrade to these versions anymore.
   NNS_FUNCTION_UPDATE_ELECTED_REPLICA_VERSIONS = 38;
+
+  NNS_FUNCTION_BITCOIN_SET_CONFIG = 39;
 }
 
 // Payload of a proposal that calls a function on another NNS

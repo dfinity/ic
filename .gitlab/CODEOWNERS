@@ -220,6 +220,7 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/test_utilities/src/wasmtime_instance.rs         @dfinity-lab/teams/runtime-owners
 /rs/tests/                              @dfinity-lab/teams/ic-testing-verification
 /rs/tests/bin/basic_health_test.rs        @dfinity-lab/teams/ic-testing-verification
+/rs/tests/bin/bitcoin_set_config_proposal_test.rs @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/execution-owners
 /rs/tests/bin/boundary_node_integration_test.rs @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/boundarynode-team
 /rs/tests/bin/boundary_nodes_snp_test.rs @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/boundarynode-team
 /rs/tests/bin/boundary_node_update_workload_test.rs @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/boundarynode-team @dfinity-lab/teams/networking-team

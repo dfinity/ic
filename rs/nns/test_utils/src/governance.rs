@@ -10,6 +10,7 @@ use std::time::Duration;
 use candid::{CandidType, Encode};
 use canister_test::{Canister, Wasm};
 use dfn_candid::{candid, candid_one};
+use ic_btc_types::SetConfigRequest;
 use ic_canister_client_sender::Sender;
 use ic_ic00_types::CanisterInstallMode;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
@@ -18,6 +19,7 @@ use ic_nervous_system_root::{
 };
 use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_constants::ROOT_CANISTER_ID;
+use ic_nns_governance::governance::{BitcoinNetwork, BitcoinSetConfigProposal};
 use ic_nns_governance::pb::v1::add_or_remove_node_provider::Change;
 use ic_nns_governance::pb::v1::proposal::Action;
 use ic_nns_governance::pb::v1::{
@@ -587,4 +589,28 @@ pub async fn maybe_upgrade_root_controlled_canister_to_self(
     )
     .await;
     canister.set_wasm(wasm_clone);
+}
+
+pub async fn bitcoin_set_config_by_proposal(
+    network: BitcoinNetwork,
+    governance: &Canister<'_>,
+    set_config_request: SetConfigRequest,
+) -> ProposalId {
+    let proposal = BitcoinSetConfigProposal {
+        network,
+        payload: Encode!(&set_config_request).unwrap(),
+    };
+
+    // Submitting a proposal also implicitly records a vote from the proposer,
+    // which with TEST_NEURON_1 is enough to trigger execution.
+    submit_external_update_proposal(
+        governance,
+        Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
+        NeuronId(TEST_NEURON_1_ID),
+        NnsFunction::BitcoinSetConfig,
+        proposal,
+        "Set Bitcoin Config".to_string(),
+        "".to_string(),
+    )
+    .await
 }

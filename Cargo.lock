@@ -7579,6 +7579,7 @@ dependencies = [
  "dfn_json",
  "futures",
  "ic-base-types",
+ "ic-btc-types",
  "ic-canister-client-sender",
  "ic-config",
  "ic-crypto-node-key-generation",

@@ -1,6 +1,6 @@
 //! Types used to support the candid API.
 
-use candid::{CandidType, Deserialize};
+use candid::{CandidType, Deserialize, Principal};
 use serde::Serialize;
 use serde_bytes::ByteBuf;
 
@@ -277,4 +277,97 @@ impl std::fmt::Display for SendTransactionError {
             }
         }
     }
+}
+
+/// A request to update the canister's config.
+#[derive(CandidType, Deserialize, Default)]
+pub struct SetConfigRequest {
+    pub stability_threshold: Option<u128>,
+
+    /// Whether or not to enable/disable syncing of blocks from the network.
+    pub syncing: Option<Flag>,
+
+    /// The fees to charge for the various endpoints.
+    pub fees: Option<Fees>,
+
+    /// Whether or not to enable/disable the bitcoin apis.
+    pub api_access: Option<Flag>,
+
+    /// Whether or not to enable/disable the bitcoin apis if not fully synced.
+    pub disable_api_if_not_fully_synced: Option<Flag>,
+}
+
+#[derive(CandidType, Serialize, Deserialize, PartialEq, Eq, Copy, Clone, Debug, Default)]
+pub enum Flag {
+    #[serde(rename = "enabled")]
+    #[default]
+    Enabled,
+    #[serde(rename = "disabled")]
+    Disabled,
+}
+
+/// The payload used to initialize the canister.
+#[derive(CandidType, Deserialize, Debug)]
+pub struct Config {
+    pub stability_threshold: u128,
+    pub network: NetworkSnakeCase,
+
+    /// The principal from which blocks are retrieved.
+    ///
+    /// Setting this source to the management canister means that the blocks will be
+    /// fetched directly from the replica, and that's what is used in production.
+    pub blocks_source: Principal,
+
+    pub syncing: Flag,
+
+    pub fees: Fees,
+
+    /// Flag to control access to the apis provided by the canister.
+    pub api_access: Flag,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            stability_threshold: 0,
+            network: NetworkSnakeCase::Regtest,
+            blocks_source: Principal::management_canister(),
+            syncing: Flag::Enabled,
+            fees: Fees::default(),
+            api_access: Flag::Enabled,
+        }
+    }
+}
+
+#[derive(CandidType, Serialize, Deserialize, PartialEq, Eq, Debug, Clone, Default)]
+pub struct Fees {
+    /// The base fee to charge for all `get_utxos` requests.
+    pub get_utxos_base: u128,
+
+    /// The number of cycles to charge per 10 instructions.
+    pub get_utxos_cycles_per_ten_instructions: u128,
+
+    /// The maximum amount of cycles that can be charged in a `get_utxos` request.
+    /// A request must send at least this amount for it to be accepted.
+    pub get_utxos_maximum: u128,
+
+    /// The flat fee to charge for a `get_balance` request.
+    pub get_balance: u128,
+
+    /// The maximum amount of cycles that can be charged in a `get_balance` request.
+    /// A request must send at least this amount for it to be accepted.
+    pub get_balance_maximum: u128,
+
+    /// The flat fee to charge for a `get_current_fee_percentiles` request.
+    pub get_current_fee_percentiles: u128,
+
+    /// The maximum amount of cycles that can be charged in a `get_current_fee_percentiles` request.
+    /// A request must send at least this amount for it to be accepted.
+    pub get_current_fee_percentiles_maximum: u128,
+
+    /// The base fee to charge for all `send_transaction` requests.
+    pub send_transaction_base: u128,
+
+    /// The number of cycles to charge for each byte in the transaction.
+    pub send_transaction_per_byte: u128,
 }
