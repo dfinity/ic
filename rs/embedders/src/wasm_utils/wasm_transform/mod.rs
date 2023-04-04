@@ -1,11 +1,13 @@
 use std::ops::Range;
 
 use wasmparser::{
-    BinaryReaderError, DataKind, Element, ElementKind, Export, Global, Import, MemoryType,
-    Operator, Parser, Payload, TableType, Type, ValType,
+    BinaryReaderError, Element, ElementKind, Export, Global, Import, MemoryType, Operator, Parser,
+    Payload, TableType, Type, ValType,
 };
 
 mod convert;
+use convert::internal_to_encoder;
+use convert::parser_to_internal;
 
 pub enum InstOrBytes<'a> {
     Inst(Operator<'a>),
@@ -46,30 +48,6 @@ pub enum DataSegmentKind<'a> {
         /// The initialization operator for the data segment.
         offset_expr: Operator<'a>,
     },
-}
-
-impl<'a> DataSegmentKind<'a> {
-    pub fn from_data_kind(kind: DataKind<'a>) -> Result<Self, Error> {
-        Ok(match kind {
-            DataKind::Passive => DataSegmentKind::Passive,
-            DataKind::Active {
-                memory_index,
-                offset_expr,
-            } => {
-                let ops: Vec<_> = offset_expr
-                    .get_operators_reader()
-                    .into_iter()
-                    .collect::<Result<_, _>>()?;
-                match ops.as_slice() {
-                    [_, Operator::End] => DataSegmentKind::Active {
-                        memory_index,
-                        offset_expr: ops[0].clone(),
-                    },
-                    _ => return Err(Error::InvalidConstExpr),
-                }
-            }
-        })
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -226,12 +204,8 @@ impl<'a> Module<'a> {
                     data = data_section_reader
                         .into_iter()
                         .map(|sec| {
-                            sec.map_err(Error::from).and_then(|sec| {
-                                Ok(DataSegment {
-                                    kind: DataSegmentKind::from_data_kind(sec.kind)?,
-                                    data: sec.data,
-                                })
-                            })
+                            sec.map_err(Error::from)
+                                .and_then(|data| parser_to_internal::data_segment(data))
                         })
                         .collect::<Result<_, _>>()?;
                 }
@@ -276,20 +250,7 @@ impl<'a> Module<'a> {
                                 break;
                             }
                         }
-                        let items = match element.items.clone() {
-                            wasmparser::ElementItems::Functions(reader) => {
-                                let functions =
-                                    reader.into_iter().collect::<Result<Vec<_>, _>>()?;
-                                ElementItems::Functions(functions)
-                            }
-                            wasmparser::ElementItems::Expressions(reader) => {
-                                let exprs = reader
-                                    .into_iter()
-                                    .map(|expr| convert::const_expr(expr?))
-                                    .collect::<Result<Vec<_>, _>>()?;
-                                ElementItems::ConstExprs(exprs)
-                            }
-                        };
+                        let items = parser_to_internal::element_items(element.items.clone())?;
                         elements.push((element, items));
                     }
                 }
@@ -414,12 +375,12 @@ impl<'a> Module<'a> {
                 let params = ty
                     .params()
                     .iter()
-                    .map(convert::val_type)
+                    .map(internal_to_encoder::val_type)
                     .collect::<Vec<_>>();
                 let results = ty
                     .results()
                     .iter()
-                    .map(convert::val_type)
+                    .map(internal_to_encoder::val_type)
                     .collect::<Vec<_>>();
                 types.function(params, results);
             }
@@ -429,7 +390,11 @@ impl<'a> Module<'a> {
         if !self.imports.is_empty() {
             let mut imports = wasm_encoder::ImportSection::new();
             for import in self.imports {
-                imports.import(import.module, import.name, convert::import_type(import.ty));
+                imports.import(
+                    import.module,
+                    import.name,
+                    internal_to_encoder::import_type(import.ty),
+                );
             }
             module.section(&imports);
         }
@@ -445,7 +410,7 @@ impl<'a> Module<'a> {
         if !self.tables.is_empty() {
             let mut tables = wasm_encoder::TableSection::new();
             for table in self.tables {
-                tables.table(convert::table_type(table));
+                tables.table(internal_to_encoder::table_type(table));
             }
             module.section(&tables);
         }
@@ -453,7 +418,7 @@ impl<'a> Module<'a> {
         if !self.memories.is_empty() {
             let mut memories = wasm_encoder::MemorySection::new();
             for memory in self.memories {
-                memories.memory(convert::memory_type(memory));
+                memories.memory(internal_to_encoder::memory_type(memory));
             }
             module.section(&memories);
         }
@@ -462,8 +427,8 @@ impl<'a> Module<'a> {
             let mut globals = wasm_encoder::GlobalSection::new();
             for global in self.globals {
                 globals.global(
-                    convert::global_type(global.ty),
-                    &convert::const_expr(global.init_expr)?,
+                    internal_to_encoder::global_type(global.ty),
+                    &internal_to_encoder::const_expr(global.init_expr)?,
                 );
             }
             module.section(&globals);
@@ -472,7 +437,11 @@ impl<'a> Module<'a> {
         if !self.exports.is_empty() {
             let mut exports = wasm_encoder::ExportSection::new();
             for export in self.exports {
-                exports.export(export.name, convert::export_kind(export.kind), export.index);
+                exports.export(
+                    export.name,
+                    internal_to_encoder::export_kind(export.kind),
+                    export.index,
+                );
             }
             module.section(&exports);
         }
@@ -484,10 +453,10 @@ impl<'a> Module<'a> {
         if !self.elements.is_empty() {
             let mut elements = wasm_encoder::ElementSection::new();
             for (element, items) in self.elements {
-                let element_items = convert::element_items(&items);
+                let element_items = internal_to_encoder::element_items(&items);
                 match element.kind {
                     ElementKind::Passive => {
-                        elements.passive(convert::val_type(&element.ty), element_items);
+                        elements.passive(internal_to_encoder::val_type(&element.ty), element_items);
                     }
                     ElementKind::Active {
                         table_index,
@@ -507,13 +476,14 @@ impl<'a> Module<'a> {
                         };
                         elements.active(
                             table_index,
-                            &convert::const_expr(offset_expr)?,
-                            convert::val_type(&element.ty),
+                            &internal_to_encoder::const_expr(offset_expr)?,
+                            internal_to_encoder::val_type(&element.ty),
                             element_items,
                         );
                     }
                     ElementKind::Declared => {
-                        elements.declared(convert::val_type(&element.ty), element_items);
+                        elements
+                            .declared(internal_to_encoder::val_type(&element.ty), element_items);
                     }
                 }
             }
@@ -535,10 +505,12 @@ impl<'a> Module<'a> {
             } in self.code_sections
             {
                 let mut function = wasm_encoder::Function::new(
-                    locals.into_iter().map(|(c, t)| (c, convert::val_type(&t))),
+                    locals
+                        .into_iter()
+                        .map(|(c, t)| (c, internal_to_encoder::val_type(&t))),
                 );
                 for op in instructions {
-                    function.instruction(&convert::op(&op)?);
+                    function.instruction(&internal_to_encoder::op(&op)?);
                 }
                 code.function(&function);
             }
@@ -551,7 +523,7 @@ impl<'a> Module<'a> {
             for segment in self.data {
                 temp_const_exprs.push(wasm_encoder::ConstExpr::empty());
                 let len = temp_const_exprs.len();
-                data.segment(convert::data_segment(
+                data.segment(internal_to_encoder::data_segment(
                     segment,
                     temp_const_exprs.get_mut(len - 1).unwrap(),
                 )?);
