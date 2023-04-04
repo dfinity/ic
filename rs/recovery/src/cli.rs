@@ -146,10 +146,8 @@ fn execute_steps<
         steps.resume(next_step);
     }
 
-    while let Some((step_type, step)) = steps.next() {
-        print_step(logger, &format!("{:?}", step_type));
+    while let Some((_, step)) = steps.next() {
         execute_step_after_consent(logger, step);
-
         if let Err(e) = steps.get_state().save() {
             warn!(logger, "Failed to save the recovery state: {}", e);
         }
