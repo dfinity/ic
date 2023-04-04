@@ -23,7 +23,7 @@ use ic_types::{
     malicious_flags::MaliciousFlags,
     messages::SignedIngress,
     single_chunked::*,
-    NodeId, ReplicaVersion,
+    ReplicaVersion,
 };
 use std::sync::{Arc, RwLock};
 
@@ -71,11 +71,7 @@ impl<
     ///
     /// If the version is correct, the message is returned in an
     /// `ArtifactAcceptance` enum.
-    fn check_artifact_acceptance(
-        &self,
-        msg: &ConsensusMessage,
-        _peer_id: &NodeId,
-    ) -> Result<(), ArtifactPoolError> {
+    fn check_artifact_acceptance(&self, msg: &ConsensusMessage) -> Result<(), ArtifactPoolError> {
         check_protocol_version(msg)?;
         Ok(())
     }
@@ -166,11 +162,7 @@ impl<Pool: ValidatedPoolReader<IngressArtifact> + IngressPoolThrottler + Send + 
     /// To this end, the method converts the signed bytes into a `SignedIngress`
     /// message (if possible) and verifies that the message expiry time is
     /// neither in the past nor too far in the future.
-    fn check_artifact_acceptance(
-        &self,
-        msg: &SignedIngress,
-        _peer_id: &NodeId,
-    ) -> Result<(), ArtifactPoolError> {
+    fn check_artifact_acceptance(&self, msg: &SignedIngress) -> Result<(), ArtifactPoolError> {
         #[cfg(feature = "malicious_code")]
         {
             if self.malicious_flags.maliciously_disable_ingress_validation {
@@ -355,11 +347,7 @@ impl<
     ///
     /// If this is the case, the artifact is returned wrapped in an
     /// `ArtifactAcceptance` enum.
-    fn check_artifact_acceptance(
-        &self,
-        msg: &DkgMessage,
-        _peer_id: &NodeId,
-    ) -> Result<(), ArtifactPoolError> {
+    fn check_artifact_acceptance(&self, msg: &DkgMessage) -> Result<(), ArtifactPoolError> {
         check_protocol_version(msg)?;
         Ok(())
     }

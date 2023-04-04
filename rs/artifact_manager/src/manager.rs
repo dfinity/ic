@@ -90,12 +90,12 @@ impl ArtifactManager for ArtifactManagerImpl {
         msg: artifact::Artifact,
         advert: p2p::GossipAdvert,
         peer_id: &NodeId,
-    ) -> Result<(), OnArtifactError<artifact::Artifact>> {
+    ) -> Result<(), OnArtifactError> {
         let tag: ArtifactTag = (&msg).into();
         if let Some(client) = self.clients.get(&tag) {
             return client.on_artifact(msg, advert, *peer_id);
         }
-        Err(OnArtifactError::NotProcessed(Box::new(msg)))
+        Err(OnArtifactError::NotProcessed)
     }
 
     /// The method checks if any of the artifact clients already have the
@@ -194,12 +194,13 @@ impl ArtifactManager for ArtifactManagerImpl {
 /// the top-level types.
 pub trait ArtifactManagerBackend: Send + Sync {
     /// The method is called when an artifact is received.
+    #[allow(clippy::result_large_err)]
     fn on_artifact(
         &self,
         msg: artifact::Artifact,
         advert: p2p::GossipAdvert,
         peer_id: NodeId,
-    ) -> Result<(), OnArtifactError<artifact::Artifact>>;
+    ) -> Result<(), OnArtifactError>;
 
     /// The method indicates whether an artifact exists.
     fn has_artifact(&self, msg_id: &artifact::ArtifactId) -> bool;
@@ -229,6 +230,23 @@ pub trait ArtifactManagerBackend: Send + Sync {
     ) -> Option<Box<dyn Chunkable + Send + Sync>>;
 }
 
+/// Checks if the given advert matches what is computed from the message.
+/// Returns the advert derived from artifact on mismatch.
+fn check_advert<Artifact: ArtifactKind>(
+    msg: &Artifact::Message,
+    advert: &Advert<Artifact>,
+) -> Result<(), Advert<Artifact>>
+where
+    Advert<Artifact>: Eq,
+{
+    let computed = Artifact::message_to_advert(msg);
+    if advert == &computed {
+        Ok(())
+    } else {
+        Err(computed)
+    }
+}
+
 /// Trait implementation for `ArtifactManagerBackend`.
 impl<Artifact: ArtifactKind> ArtifactManagerBackend for ArtifactClientHandle<Artifact>
 where
@@ -251,17 +269,14 @@ where
         artifact: artifact::Artifact,
         advert: p2p::GossipAdvert,
         peer_id: NodeId,
-    ) -> Result<(), OnArtifactError<artifact::Artifact>> {
+    ) -> Result<(), OnArtifactError> {
         match (artifact.try_into(), advert.try_into()) {
             (Ok(message), Ok(advert)) => {
-                Artifact::check_advert(&message, &advert).map_err(|expected| {
-                    AdvertMismatchError {
-                        received: advert.into(),
-                        expected: expected.into(),
-                    }
+                check_advert(&message, &advert).map_err(|expected| AdvertMismatchError {
+                    received: advert.into(),
+                    expected: expected.into(),
                 })?;
-                self.pool_reader
-                    .check_artifact_acceptance(&message, &peer_id)?;
+                self.pool_reader.check_artifact_acceptance(&message)?;
                 // this sends to an unbounded channel, which is what we want here
                 self.processor_handle.on_artifact(UnvalidatedArtifact {
                     message,
@@ -271,7 +286,7 @@ where
 
                 Ok(())
             }
-            (Err(artifact), _) => Err(OnArtifactError::NotProcessed(Box::new(artifact))),
+            (Err(_), _) => Err(OnArtifactError::NotProcessed),
             (_, Err(advert)) => Err(OnArtifactError::MessageConversionfailed(advert)),
         }
     }

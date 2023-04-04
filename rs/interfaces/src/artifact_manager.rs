@@ -12,12 +12,11 @@ use ic_types::{artifact, chunkable, p2p, NodeId};
 /// An error type that combines 'NotProcessed' status with an actual
 /// error that might be returned by artifact pools. It is used as
 /// the return type for the `on_artifact` function of `ArtifactManager`.
-pub enum OnArtifactError<T> {
-    NotProcessed(Box<T>),
+pub enum OnArtifactError {
+    NotProcessed,
     AdvertMismatch(AdvertMismatchError),
     ArtifactPoolError(ArtifactPoolError),
     MessageConversionfailed(p2p::GossipAdvert),
-    Throttled,
 }
 
 #[derive(Debug)]
@@ -38,11 +37,7 @@ pub trait ArtifactClient<Artifact: artifact::ArtifactKind>: Send + Sync {
     /// 'ArtifactProcessor' component afterwards. Otherwise it will be rejected.
     ///
     /// The default implementation is to accept unconditionally.
-    fn check_artifact_acceptance(
-        &self,
-        _msg: &Artifact::Message,
-        _peer_id: &NodeId,
-    ) -> Result<(), ArtifactPoolError> {
+    fn check_artifact_acceptance(&self, _msg: &Artifact::Message) -> Result<(), ArtifactPoolError> {
         Ok(())
     }
 
@@ -168,12 +163,13 @@ pub trait ArtifactManager: Send + Sync {
     /// an error has occurred.
     ///
     /// See `ArtifactClient::on_artifact` for more details.
+    #[allow(clippy::result_large_err)]
     fn on_artifact(
         &self,
         msg: artifact::Artifact,
         advert: p2p::GossipAdvert,
         peer_id: &NodeId,
-    ) -> Result<(), OnArtifactError<artifact::Artifact>>;
+    ) -> Result<(), OnArtifactError>;
 
     /// Check if the artifact specified by the id already exists in the
     /// corresponding artifact pool.
