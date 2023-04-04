@@ -7,6 +7,14 @@ type HttpRequest = record {
   url: text;
   headers: vec HeaderField;
   body: blob;
+  certificate_version: opt nat;
+};
+
+type HttpUpdateRequest = record {
+  method: text;
+  url: text;
+  headers: vec HeaderField;
+  body: blob;
 };
 
 type HttpResponse = record {
@@ -35,5 +43,5 @@ type StreamingStrategy = variant {
 
 service : {
   http_request: (request: HttpRequest) -> (HttpResponse) query;
-  http_request_update: (request: HttpRequest) -> (HttpResponse);
+  http_request_update: (request: HttpUpdateRequest) -> (HttpResponse);
 }

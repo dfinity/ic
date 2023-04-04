@@ -8,6 +8,7 @@ export interface HttpRequest {
   method: string;
   body: Uint8Array;
   headers: Array<HeaderField>;
+  certificate_version: [] | [bigint];
 }
 export interface HttpResponse {
   body: Uint8Array;
@@ -15,6 +16,12 @@ export interface HttpResponse {
   upgrade: [] | [boolean];
   streaming_strategy: [] | [StreamingStrategy];
   status_code: number;
+}
+export interface HttpUpdateRequest {
+  url: string;
+  method: string;
+  body: Uint8Array;
+  headers: Array<HeaderField>;
 }
 export interface StreamingCallbackHttpResponse {
   token: [] | [Token];
@@ -26,5 +33,5 @@ export type StreamingStrategy = {
 export type Token = { type: <T>() => IDL.Type<T> };
 export interface _SERVICE {
   http_request: ActorMethod<[HttpRequest], HttpResponse>;
-  http_request_update: ActorMethod<[HttpRequest], HttpResponse>;
+  http_request_update: ActorMethod<[HttpUpdateRequest], HttpResponse>;
 }

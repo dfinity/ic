@@ -14,6 +14,7 @@ export const idlFactory: IDL.InterfaceFactory = ({ IDL }) => {
     method: IDL.Text,
     body: IDL.Vec(IDL.Nat8),
     headers: IDL.Vec(HeaderField),
+    certificate_version: IDL.Opt(IDL.Nat),
   });
   const StreamingStrategy = IDL.Variant({
     Callback: IDL.Record({
@@ -32,8 +33,14 @@ export const idlFactory: IDL.InterfaceFactory = ({ IDL }) => {
     streaming_strategy: IDL.Opt(StreamingStrategy),
     status_code: IDL.Nat16,
   });
+  const HttpUpdateRequest = IDL.Record({
+    url: IDL.Text,
+    method: IDL.Text,
+    body: IDL.Vec(IDL.Nat8),
+    headers: IDL.Vec(HeaderField),
+  });
   return IDL.Service({
     http_request: IDL.Func([HttpRequest], [HttpResponse], ['query']),
-    http_request_update: IDL.Func([HttpRequest], [HttpResponse], []),
+    http_request_update: IDL.Func([HttpUpdateRequest], [HttpResponse], []),
   });
 };

@@ -2,6 +2,10 @@
 
 ## Unreleased 
 
+## 1.7.0 
+
+- Integrate verification logic with `@dfinity/response-verification` package 
+
 ## 1.6.1 (2023-03-26)
 
 - Create a new IndexedDB database instead of upgrading the version of the existing one, this allows Service Worker releases to be rolled back easily
