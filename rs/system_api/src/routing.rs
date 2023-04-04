@@ -228,7 +228,22 @@ fn route_ecdsa_message(
             ))),
             Some(subnet_topology) => {
                 if subnet_topology.ecdsa_keys_held.contains(key_id) {
-                    Ok((*subnet_id).get())
+                    match signing_must_be_enabled {
+                        EcdsaSubnetKind::HoldsAndSignWithKey => {
+                            if network_topology
+                                .ecdsa_signing_subnets(key_id)
+                                .contains(subnet_id)
+                            {
+                                Ok((*subnet_id).get())
+                            } else {
+                                Err(ResolveDestinationError::EcdsaKeyError(format!(
+                                    "Subnet {} is not enabled to sign with ECDSA key {}",
+                                    subnet_id, key_id,
+                                )))
+                            }
+                        }
+                        EcdsaSubnetKind::OnlyHoldsKey => Ok((*subnet_id).get()),
+                    }
                 } else {
                     Err(ResolveDestinationError::EcdsaKeyError(format!(
                         "Requested ECDSA key {} on subnet {}, subnet has keys: {}",
@@ -529,5 +544,42 @@ mod tests {
             .unwrap(),
             PrincipalId::new_subnet_test_id(0)
         )
+    }
+
+    #[test]
+    fn route_ecdsa_message_subnet_can_sign() {
+        // subnet_test_id(0) is enabled to sign with key_id1()
+        assert_eq!(
+            route_ecdsa_message(
+                &key_id1(),
+                &network_with_ecdsa_subnets(),
+                &Some(subnet_test_id(0)),
+                EcdsaSubnetKind::HoldsAndSignWithKey
+            )
+            .unwrap(),
+            subnet_test_id(0).get()
+        );
+    }
+
+    #[test]
+    fn route_ecdsa_message_subnet_cannot_sign() {
+        // subnet_test_id(1) is not enabled to sign with key_id1()
+        let key_id = key_id1();
+        let subnet_id = subnet_test_id(1);
+        match route_ecdsa_message(
+            &key_id,
+            &network_with_ecdsa_subnets(),
+            &Some(subnet_id),
+            EcdsaSubnetKind::HoldsAndSignWithKey,
+        ) {
+            Err(ResolveDestinationError::EcdsaKeyError(msg)) => assert_eq!(
+                msg,
+                format!(
+                    "Subnet {} is not enabled to sign with ECDSA key {}",
+                    subnet_id, key_id,
+                )
+            ),
+            _ => panic!("Unexpected result."),
+        };
     }
 }
