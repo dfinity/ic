@@ -183,6 +183,8 @@ pub fn test(env: TestEnv) {
     let config = Config {
         version: 1,
         push_metrics: false,
+        metrics_urls: vec![],
+        network_name: "testnet".to_string(),
         backup_instance: "backup_test_node".to_string(),
         nns_url: Some(nns_node.get_public_url()),
         nns_pem: nns_public_key,

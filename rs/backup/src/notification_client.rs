@@ -1,8 +1,11 @@
 use crate::util::block_on;
 use slog::{error, info, Logger};
+use url::Url;
 
 pub struct NotificationClient {
     pub push_metrics: bool,
+    pub metrics_urls: Vec<Url>,
+    pub network_name: String,
     pub backup_instance: String,
     pub slack_token: String,
     pub subnet: String,
@@ -39,7 +42,6 @@ impl NotificationClient {
             message
         );
         let content_type = "Content-type: application/json".to_string();
-
         self.http_post_request(url, content_type, data_str)
     }
 
@@ -55,22 +57,24 @@ impl NotificationClient {
         if !self.push_metrics {
             return;
         }
-
-        let url = format!(
-            "http://prometheus.mainnet.dfinity.network:9091/metrics/job/backup-pod/instance/{}/ic_subnet/{}",
-            self.backup_instance,
-            self.subnet
-        );
-        let content_type = "Content-type: application/octet-stream".to_string();
-
-        self.http_post_request(url, content_type, message);
+        for url in &self.metrics_urls {
+            let url_str = format!(
+                "{}metrics/job/backup-pod/instance/{}/ic_subnet/{}",
+                url.as_str(),
+                self.backup_instance,
+                self.subnet
+            );
+            let content_type = "Content-type: application/octet-stream".to_string();
+            self.http_post_request(url_str, content_type, message.clone());
+        }
     }
 
     pub fn push_metrics_restored_height(&self, height: u64) {
         let message = format!(
             "# TYPE backup_last_restored_height gauge\n\
             # HELP backup_last_restored_height The height of the last restored state on a backup pod.\n\
-            backup_last_restored_height{{ic=\"mercury\"}} {}\n",
+            backup_last_restored_height{{ic=\"{}\"}} {}\n",
+            self.network_name,
             height
         );
         self.push_metrics(message)
@@ -80,8 +84,8 @@ impl NotificationClient {
         let message = format!(
             "# TYPE backup_last_synced_height gauge\n\
             # HELP backup_last_synced_height The height of the last synchronized state on a backup pod.\n\
-            backup_last_synced_height{{ic=\"mercury\"}} {}\n",
-            height
+            backup_last_synced_height{{ic=\"{}\"}} {}\n",
+            self.network_name, height
         );
         self.push_metrics(message)
     }
@@ -90,8 +94,8 @@ impl NotificationClient {
         let message = format!(
             "# TYPE backup_replay_time_minutes gauge\n\
             # HELP backup_replay_time_minutes Time spent on a replay.\n\
-            backup_replay_time_minutes{{ic=\"mercury\"}} {}\n",
-            minutes
+            backup_replay_time_minutes{{ic=\"{}\"}} {}\n",
+            self.network_name, minutes
         );
         self.push_metrics(message)
     }
@@ -100,8 +104,8 @@ impl NotificationClient {
         let message = format!(
             "# TYPE backup_sync_minutes gauge\n\
             # HELP backup_sync_minutes The time it took a backup pod to sync artifacts from NNS nodes.\n\
-            backup_sync_minutes{{ic=\"mercury\"}} {}\n",
-            minutes
+            backup_sync_minutes{{ic=\"{}\"}} {}\n",
+            self.network_name, minutes
         );
         self.push_metrics(message)
     }
@@ -110,9 +114,9 @@ impl NotificationClient {
         let message = format!(
             "# TYPE backup_disk_usage gauge\n\
             # HELP backup_disk_usage The allocation percentage of some resource on a backup pod.\n\
-            backup_disk_usage{{ic=\"mercury\", resource=\"space\"}} {}\n\
-            backup_disk_usage{{ic=\"mercury\", resource=\"inodes\"}} {}\n",
-            space, inodes
+            backup_disk_usage{{ic=\"{}\", resource=\"space\"}} {}\n\
+            backup_disk_usage{{ic=\"{}\", resource=\"inodes\"}} {}\n",
+            self.network_name, space, self.network_name, inodes
         );
         self.push_metrics(message)
     }
@@ -121,8 +125,8 @@ impl NotificationClient {
         let message = format!(
             "# TYPE backup_version_number gauge\n\
             # HELP backup_version_number The current version of the ic-backup tool that is running on this pod.\n\
-            backup_version_number{{ic=\"mercury\"}} {}\n",
-            version
+            backup_version_number{{ic=\"{}\"}} {}\n",
+            self.network_name, version
         );
         self.push_metrics(message)
     }

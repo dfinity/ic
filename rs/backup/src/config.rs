@@ -29,6 +29,8 @@ pub struct ColdStorage {
 pub struct Config {
     pub version: u32,
     pub push_metrics: bool,
+    pub metrics_urls: Vec<Url>,
+    pub network_name: String,
     pub backup_instance: String,
     pub nns_url: Option<Url>,
     pub nns_pem: PathBuf,

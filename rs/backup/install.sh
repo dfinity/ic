@@ -22,7 +22,7 @@ PUBLIC_KEY_NAME="ic_public_key.pem"
 PUBLIC_KEY_FILE="${TMP_DIR}/${PUBLIC_KEY_NAME}"
 BACKUP_INSTANCE=$(hostname -a)
 
-DEFAULT_BUILD_ID="0f5b9d911101155b84ffb2045a59d84298382541"
+DEFAULT_BUILD_ID="9cf06aa158795d297cb0db9980920545ebfc12b1"
 echo "Enter the BUILD_ID of the proper ic-backup version:"
 echo "(default: ${DEFAULT_BUILD_ID}):"
 read BUILD_ID
@@ -85,8 +85,10 @@ chmod +x ${BACKUP_EXE}
 
 read -r -d '' CONFIG <<-EOM
 {
-    "version": 24,
+    "version": 25,
     "push_metrics": ${PUSH_METRICS},
+    "metrics_urls": [],
+    "network_name": "mercury",
     "backup_instance": "${BACKUP_INSTANCE}",
     "nns_url": "${NNS_URL}",
     "nns_pem": "${WORK_DIR}/$PUBLIC_KEY_NAME",
@@ -103,6 +105,7 @@ read -r -d '' CONFIG <<-EOM
     "disk_threshold_warn": 75,
     "slack_token": "<INSERT SLACK TOKEN>",
     "cold_storage": null,
+    "blacklisted_nodes": [],
     "subnets": []
 }
 EOM
