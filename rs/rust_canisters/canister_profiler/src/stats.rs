@@ -114,8 +114,9 @@ impl ProfilerSink for &mut SpanStats {
 
 fn update_histogram(histogram: &mut Histogram, sample: u64) {
     for (i, v) in histogram.iter_mut().enumerate() {
-        if BUCKETS[i] <= sample {
+        if BUCKETS[i] >= sample {
             *v += 1;
+            break;
         }
     }
 }
