@@ -19,6 +19,7 @@ webpack(
         "style.css",
         "sw.js",
         "sw.js.map",
+        "web_bg.wasm",
     ],
     args = [
         "--config",

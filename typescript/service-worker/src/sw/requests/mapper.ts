@@ -1,3 +1,4 @@
+import { HeaderField } from '../../http-interface/canister_http_interface_types';
 import { parseSafeInteger } from '../../utils';
 import {
   RequestCacheControlHeader,
@@ -37,6 +38,28 @@ export class RequestMapper {
       });
 
     return cacheControl;
+  }
+
+  static toResponseVerificationHeaders(
+    headers: HeaderField[]
+  ): [string, string][] {
+    const finalHeaders: [string, string][] = [];
+    headers.forEach(([key, multiValues]) => {
+      multiValues.split(',').forEach((value) => {
+        finalHeaders.push([key.toLowerCase(), value]);
+      });
+    });
+
+    return finalHeaders;
+  }
+
+  static fromResponseVerificationHeaders(headers: [string, string][]): Headers {
+    const finalHeaders = new Headers();
+    headers.forEach(([key, value]) => {
+      finalHeaders.append(key, value);
+    });
+
+    return finalHeaders;
   }
 
   static toResponseCacheControlHeader(

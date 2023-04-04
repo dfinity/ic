@@ -1,16 +1,18 @@
-import { concat } from '@dfinity/agent';
 import { Principal } from '@dfinity/principal';
-import { decode as base64ArraybufferDecode } from 'base64-arraybuffer';
-import { HttpRequest } from '../../http-interface/canister_http_interface_types';
+import {
+  getMaxVerificationVersion,
+  getMinVerificationVersion,
+  verifyRequestResponsePair,
+} from '@dfinity/response-verification';
 import { ResponseCache } from '../cache';
 import { CanisterResolver } from '../domains';
 import { isRawDomain } from '../domains/utils';
-import { streamContent } from '../streaming';
-import { validateBody } from '../validation';
-import { VerifiedResponse, cacheHeaders } from './typings';
+import { RequestMapper } from './mapper';
+import { VerifiedResponse, cacheHeaders, maxCertTimeOffsetNs } from './typings';
 import {
   createAgentAndActor,
   decodeBody,
+  fetchAsset,
   shouldFetchRootKey,
   updateRequestApiGateway,
 } from './utils';
@@ -118,90 +120,39 @@ export class RequestProcessor {
     canisterId: Principal
   ): Promise<VerifiedResponse> {
     try {
+      const minAllowedVerificationVersion = getMinVerificationVersion();
+      const desiredVerificationVersion = getMaxVerificationVersion();
+
       const [agent, actor] = await createAgentAndActor(
         gatewayUrl,
         canisterId,
         shouldFetchRootKey
       );
-      const requestHeaders: [string, string][] = [['Host', this.url.hostname]];
-      this.request.headers.forEach((value, key) => {
-        if (key.toLowerCase() === 'if-none-match') {
-          // Drop the if-none-match header because we do not want a "304 not modified" response back.
-          // See TT-30.
-          return;
-        }
-        requestHeaders.push([key, value]);
+      const result = await fetchAsset({
+        agent,
+        actor,
+        request: this.request,
+        canisterId,
+        certificateVersion: desiredVerificationVersion,
       });
 
-      // If the accept encoding isn't given, add it because we want to save bandwidth.
-      if (!this.request.headers.has('Accept-Encoding')) {
-        requestHeaders.push(['Accept-Encoding', 'gzip, deflate, identity']);
-      }
+      if (!result.ok) {
+        let errMessage = 'Failed to fetch response';
+        if (result.error instanceof Error) {
+          console.error(result.error);
+          errMessage = result.error.message;
+        }
 
-      const httpRequest: HttpRequest = {
-        method: this.request.method,
-        url: this.url.pathname + this.url.search,
-        headers: requestHeaders,
-        body: new Uint8Array(await this.request.arrayBuffer()),
-      };
-
-      let httpResponse = await actor.http_request(httpRequest);
-      const upgradeCall =
-        httpResponse.upgrade.length === 1 && httpResponse.upgrade[0];
-
-      if (upgradeCall) {
-        // repeat the request as an update call
-        httpResponse = await actor.http_request_update(httpRequest);
-      }
-
-      // Redirects are blocked for query calls only: if this response has the upgrade to update call flag set,
-      // the update call is allowed to redirect. This is safe because the response (including the headers) will go through consensus.
-      if (
-        !upgradeCall &&
-        httpResponse.status_code >= 300 &&
-        httpResponse.status_code < 400
-      ) {
-        console.error(
-          'Due to security reasons redirects are blocked on the IC until further notice!'
-        );
         return {
-          response: new Response(
-            'Due to security reasons redirects are blocked on the IC until further notice!',
-            { status: 500 }
-          ),
+          response: new Response(errMessage, { status: 500 }),
           certifiedHeaders: new Headers(),
         };
       }
 
-      const headers = new Headers();
-
-      let certificate: ArrayBuffer | undefined;
-      let tree: ArrayBuffer | undefined;
-      let encoding = '';
-      for (const [key, value] of httpResponse.headers) {
+      const assetFetchResult = result.data;
+      const responseHeaders = new Headers();
+      for (const [key, value] of assetFetchResult.response.headers) {
         const headerKey = key.trim().toLowerCase();
-        switch (headerKey) {
-          case 'ic-certificate':
-            {
-              const fields = value.split(/,/);
-              for (const f of fields) {
-                const matchParts = f.match(/^(.*)=:(.*):$/) ?? [];
-                const [, name, b64Value] = [...matchParts].map((x) => x.trim());
-                const value = base64ArraybufferDecode(b64Value);
-
-                if (name === 'certificate') {
-                  certificate = value;
-                } else if (name === 'tree') {
-                  tree = value;
-                }
-              }
-            }
-            continue;
-          case 'content-encoding':
-            encoding = value.trim();
-            break;
-        }
-
         if (cacheHeaders.includes(headerKey)) {
           // cache headers are remove since those are handled by
           // cache storage within the service worker. If returned they would
@@ -211,84 +162,72 @@ export class RequestProcessor {
           continue;
         }
 
-        headers.append(key, value);
+        responseHeaders.append(key, value);
       }
 
-      // if we do streaming, body contains the first chunk
-      let buffer = new ArrayBuffer(0);
-      buffer = concat(buffer, httpResponse.body);
-      if (httpResponse.streaming_strategy.length !== 0) {
-        buffer = concat(
-          buffer,
-          await streamContent(
-            agent,
-            canisterId,
-            httpResponse.streaming_strategy[0]
-          )
+      // update calls are certified since they've went through consensus
+      if (assetFetchResult.updateCall) {
+        const decodedResponseBody = decodeBody(
+          assetFetchResult.response.body,
+          assetFetchResult.response.encoding
         );
+
+        return {
+          response: new Response(decodedResponseBody, {
+            status: assetFetchResult.response.statusCode,
+            headers: responseHeaders,
+          }),
+          certifiedHeaders: responseHeaders,
+        };
       }
-      const body = new Uint8Array(buffer);
-      const identity = decodeBody(body, encoding);
 
-      // when an update call is used, the response certification is checked by
-      // agent-js
-      let bodyValid = upgradeCall;
-      if (!upgradeCall && certificate && tree) {
-        // Try to validate the body as is.
-        bodyValid = await validateBody(
-          canisterId,
-          this.url.pathname,
-          body.buffer,
-          certificate,
-          tree,
-          agent,
-          shouldFetchRootKey
+      const currentTimeNs = BigInt.asUintN(64, BigInt(Date.now() * 1_000_000)); // from ms to nanoseconds
+      const assetCertification = verifyRequestResponsePair(
+        {
+          headers: assetFetchResult.request.headers,
+          method: assetFetchResult.request.method,
+          url: assetFetchResult.request.url,
+        },
+        {
+          statusCode: assetFetchResult.response.statusCode,
+          body: assetFetchResult.response.body,
+          headers: assetFetchResult.response.headers,
+        },
+        canisterId.toUint8Array(),
+        currentTimeNs,
+        maxCertTimeOffsetNs,
+        new Uint8Array(agent.rootKey),
+        minAllowedVerificationVersion
+      );
+
+      if (assetCertification.passed && assetCertification.response) {
+        const decodedResponseBody = decodeBody(
+          assetFetchResult.response.body,
+          assetFetchResult.response.encoding
         );
-
-        if (!bodyValid) {
-          // If that didn't work, try to validate its identity version. This is for
-          // backward compatibility.
-          bodyValid = await validateBody(
-            canisterId,
-            this.url.pathname,
-            identity.buffer,
-            certificate,
-            tree,
-            agent,
-            shouldFetchRootKey
+        const certifiedResponseHeaders =
+          RequestMapper.fromResponseVerificationHeaders(
+            assetCertification.response.headers
           );
-        }
-      }
-      if (bodyValid) {
-        // todo: add certified headers when available from response-verification integration
-        const certifiedHeaders = new Headers();
 
         return {
-          response: new Response(identity.buffer, {
-            status: httpResponse.status_code,
-            headers,
+          response: new Response(decodedResponseBody, {
+            status: assetCertification.response.statusCode,
+            headers: responseHeaders,
           }),
-          certifiedHeaders,
-        };
-      } else {
-        console.error('BODY DOES NOT PASS VERIFICATION');
-        return {
-          response: new Response('Body does not pass verification', {
-            status: 500,
-          }),
-          certifiedHeaders: new Headers(),
+          certifiedHeaders: certifiedResponseHeaders,
         };
       }
-    } catch (e) {
-      console.error('Failed to fetch response:', e);
-
-      return {
-        response: new Response(`Failed to fetch response: ${String(e)}`, {
-          status: 500,
-        }),
-        certifiedHeaders: new Headers(),
-      };
+    } catch (err) {
+      console.error(String(err));
     }
+
+    return {
+      response: new Response('Body does not pass verification', {
+        status: 500,
+      }),
+      certifiedHeaders: new Headers(),
+    };
   }
 
   /**

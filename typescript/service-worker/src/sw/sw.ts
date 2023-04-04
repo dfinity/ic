@@ -1,3 +1,4 @@
+import initResponseVerification from '@dfinity/response-verification';
 import { ServiceWorkerEvents } from '../typings';
 import { CanisterResolver } from './domains';
 import { handleErrorResponse } from './views/error';
@@ -12,7 +13,7 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
   // upon activation take control of all clients (tabs & windows)
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(initResponseVerification().then(() => self.clients.claim()));
 });
 
 // Intercept and proxy all fetch requests made by the browser or DOM on this scope.

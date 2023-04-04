@@ -27,6 +27,7 @@ def image_deps(mode, sev = False):
             "//typescript/service-worker:style.css": "/var/www/html/style.css:0644",
             "//typescript/service-worker:sw.js": "/var/www/html/sw.js:0644",
             "//typescript/service-worker:sw.js.map": "/var/www/html/sw.js.map:0644",
+            "//typescript/service-worker:web_bg.wasm": "/var/www/html/web_bg.wasm:0644",
         },
         "prod": {},
     }

@@ -13,12 +13,16 @@ const webpackConfig = (env: NodeJS.ProcessEnv): Configuration => {
       sw: path.join(__dirname, 'src/sw/sw.ts'),
     },
     mode: isDevelopment ? 'development' : 'production',
-    target: 'web',
+    target: 'webworker',
     devtool: 'source-map',
     output: {
       path: path.join(__dirname, isDevelopment ? 'dist-dev' : 'dist-prod'),
       filename: '[name].js',
       publicPath: '/',
+      assetModuleFilename: (pathData) =>
+        pathData.filename?.endsWith('.wasm')
+          ? '[name].wasm'
+          : '[hash][ext][query]',
     },
     module: {
       rules: [

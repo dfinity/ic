@@ -13,10 +13,10 @@ import { Principal } from '@dfinity/principal';
 import fetch from 'jest-fetch-mock';
 import { HttpRequest } from '../../http-interface/canister_http_interface_types';
 import { CanisterResolver } from '../domains';
-import { RequestProcessor } from './index';
+import { RequestProcessor, maxCertTimeOffsetNs } from './index';
 
 const CANISTER_ID = 'qoctq-giaaa-aaaaa-aaaea-cai';
-const CERT_MAX_TIME_OFFSET = 300_000; // 5 Minutes
+const maxCertTimeOffsetMs = Number(maxCertTimeOffsetNs) / 1_000_000;
 const INVALID_ROOT_KEY =
   '308182301d060d2b0601040182dc7c0503010201060c2b0601040182dc7c050302010361008fcd89d93d038059ceec489f42bbb93fb873a890e9c748dd864741198e822dd24dbb984f7a735bcc75b6abb5d42832ea153c7f7a01e3f9b03b9a67ae4e4dfb00901cb20139ac5f787fae28cc7da755cf2064702220aa7c92282e17b9935169ae';
 
@@ -301,7 +301,7 @@ it('should accept valid certification for index.html fallback', async () => {
 
 it('should accept almost (but not yet) expired certificate', async () => {
   jest.setSystemTime(
-    TEST_DATA.query_call.certificate_time + CERT_MAX_TIME_OFFSET
+    TEST_DATA.query_call.certificate_time + maxCertTimeOffsetMs
   );
   const queryHttpPayload = createHttpQueryResponsePayload(
     TEST_DATA.query_call.body,
@@ -322,7 +322,7 @@ it('should accept almost (but not yet) expired certificate', async () => {
 
 it('should reject expired certificate', async () => {
   jest.setSystemTime(
-    TEST_DATA.query_call.certificate_time + CERT_MAX_TIME_OFFSET + 1
+    TEST_DATA.query_call.certificate_time + maxCertTimeOffsetMs + 1
   );
   const queryHttpPayload = createHttpQueryResponsePayload(
     TEST_DATA.query_call.body,
@@ -404,7 +404,8 @@ it('should reject certificate for different asset', async () => {
 
 it('should accept certificate time almost (but not quite) too far in the future', async () => {
   jest.setSystemTime(
-    TEST_DATA.query_call.certificate_time - CERT_MAX_TIME_OFFSET
+    // we add 1 extra ms since we lose nanosecond precision due to timers being only available in ms
+    TEST_DATA.query_call.certificate_time - maxCertTimeOffsetMs + 1
   );
   const queryHttpPayload = createHttpQueryResponsePayload(
     TEST_DATA.query_call.body,
@@ -425,7 +426,7 @@ it('should accept certificate time almost (but not quite) too far in the future'
 
 it('should reject certificate with time too far in the future', async () => {
   jest.setSystemTime(
-    TEST_DATA.query_call.certificate_time - CERT_MAX_TIME_OFFSET - 1
+    TEST_DATA.query_call.certificate_time - maxCertTimeOffsetMs - 1
   );
   const queryHttpPayload = createHttpQueryResponsePayload(
     TEST_DATA.query_call.body,

@@ -1,8 +1,14 @@
-import { Actor, ActorSubclass, HttpAgent } from '@dfinity/agent';
+import { Actor, ActorSubclass, HttpAgent, concat } from '@dfinity/agent';
 import { Principal } from '@dfinity/principal';
 import { inflate, ungzip } from 'pako';
 import { idlFactory } from '../../http-interface/canister_http_interface';
-import { _SERVICE } from '../../http-interface/canister_http_interface_types';
+import {
+  HttpRequest,
+  _SERVICE,
+} from '../../http-interface/canister_http_interface_types';
+import { streamContent } from '../streaming';
+import { NotAllowedRequestRedirectError } from './errors';
+import { FetchAssetOptions, FetchAssetResult, HTTPHeaders } from './typings';
 
 export const shouldFetchRootKey = Boolean(process.env.FORCE_FETCH_ROOT_KEY);
 export const isMainNet = !shouldFetchRootKey;
@@ -94,3 +100,109 @@ export async function updateRequestApiGateway(
     requestInit
   );
 }
+
+/**
+ * Fetch a requested asset and handles upgrade calls when required.
+ *
+ * @param canisterId Canister holding the asset
+ * @returns Fetched asset
+ */
+export const fetchAsset = async ({
+  actor,
+  agent,
+  canisterId,
+  request,
+  certificateVersion,
+}: FetchAssetOptions): Promise<FetchAssetResult> => {
+  try {
+    const url = new URL(request.url);
+
+    const requestHeaders: [string, string][] = [['Host', url.hostname]];
+    request.headers.forEach((value, key) => {
+      if (key.toLowerCase() === 'if-none-match') {
+        // Drop the if-none-match header because we do not want a "304 not modified" response back.
+        // See TT-30.
+        return;
+      }
+      requestHeaders.push([key, value]);
+    });
+
+    // If the accept encoding isn't given, add it because we want to save bandwidth.
+    if (!request.headers.has('Accept-Encoding')) {
+      requestHeaders.push(['Accept-Encoding', 'gzip, deflate, identity']);
+    }
+
+    const httpRequest: HttpRequest = {
+      method: request.method,
+      url: url.pathname + url.search,
+      headers: requestHeaders,
+      body: new Uint8Array(await request.arrayBuffer()),
+      certificate_version: [BigInt(certificateVersion)],
+    };
+
+    let httpResponse = await actor.http_request(httpRequest);
+    const upgradeCall =
+      httpResponse.upgrade.length === 1 && httpResponse.upgrade[0];
+    const bodyEncoding =
+      httpResponse.headers
+        .filter(([key]) => key.toLowerCase() === HTTPHeaders.ContentEncoding)
+        ?.map((header) => header[1].trim())
+        .pop() ?? '';
+
+    if (upgradeCall) {
+      const { certificate_version, ...httpUpdateRequest } = httpRequest;
+
+      // repeat the request as an update call
+      httpResponse = await actor.http_request_update(httpUpdateRequest);
+    }
+
+    // Redirects are blocked for query calls only: if this response has the upgrade to update call flag set,
+    // the update call is allowed to redirect. This is safe because the response (including the headers) will go through consensus.
+    if (
+      !upgradeCall &&
+      httpResponse.status_code >= 300 &&
+      httpResponse.status_code < 400
+    ) {
+      throw new NotAllowedRequestRedirectError();
+    }
+
+    // if we do streaming, body contains the first chunk
+    let buffer = new ArrayBuffer(0);
+    buffer = concat(buffer, httpResponse.body);
+    if (httpResponse.streaming_strategy.length !== 0) {
+      buffer = concat(
+        buffer,
+        await streamContent(
+          agent,
+          canisterId,
+          httpResponse.streaming_strategy[0]
+        )
+      );
+    }
+    const responseBody = new Uint8Array(buffer);
+
+    return {
+      ok: true,
+      data: {
+        updateCall: upgradeCall,
+        request: {
+          body: httpRequest.body,
+          method: httpRequest.method,
+          url: httpRequest.url,
+          headers: httpRequest.headers.map(([key, value]) => [key, value]),
+        },
+        response: {
+          encoding: bodyEncoding,
+          body: responseBody,
+          statusCode: httpResponse.status_code,
+          headers: httpResponse.headers.map(([key, value]) => [key, value]),
+        },
+      },
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e,
+    };
+  }
+};

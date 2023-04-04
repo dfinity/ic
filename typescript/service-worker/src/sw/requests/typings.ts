@@ -1,9 +1,15 @@
+import { ActorSubclass, HttpAgent } from '@dfinity/agent';
+import { _SERVICE } from '../../http-interface/canister_http_interface_types';
+import { Principal } from '@dfinity/principal';
+
 export enum HTTPHeaders {
   Vary = 'vary',
   CacheControl = 'cache-control',
   Range = 'range',
+  ContentEncoding = 'content-encoding',
 }
 
+export const maxCertTimeOffsetNs = BigInt.asUintN(64, BigInt(300_000_000_000));
 export const cacheHeaders = [HTTPHeaders.CacheControl.toString()];
 
 export enum HTTPRequestMethod {
@@ -42,4 +48,42 @@ export interface HeaderDirectiveEntry {
 export interface VerifiedResponse {
   response: Response;
   certifiedHeaders: Headers;
+}
+
+export interface FetchAssetRequest {
+  url: string;
+  method: string;
+  body: Uint8Array;
+  headers: [string, string][];
+}
+
+export interface FetchAssetResponse {
+  body: Uint8Array;
+  encoding: string;
+  headers: [string, string][];
+  statusCode: number;
+}
+
+export interface FetchAssetData {
+  updateCall: boolean;
+  request: FetchAssetRequest;
+  response: FetchAssetResponse;
+}
+
+export type FetchAssetResult =
+  | {
+      ok: false;
+      error: unknown;
+    }
+  | {
+      ok: true;
+      data: FetchAssetData;
+    };
+
+export interface FetchAssetOptions {
+  request: Request;
+  canisterId: Principal;
+  agent: HttpAgent;
+  actor: ActorSubclass<_SERVICE>;
+  certificateVersion: number;
 }

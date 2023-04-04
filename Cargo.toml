@@ -310,7 +310,7 @@ members = [
 
 resolver = "2"
 
-exclude = ["universal_canister/impl"]
+exclude = ["universal_canister/impl", "typescript/service-worker/test_utils"]
 
 [profile.release]
 # Add debug information to the release build (does NOT reduce the level of optimization!)
