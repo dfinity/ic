@@ -7,7 +7,7 @@ use crate::{
     canister_settings::{CanisterSettings, CanisterSettingsBuilder},
     hypervisor::Hypervisor,
     types::{IngressResponse, Response},
-    util::GOVERNANCE_CANISTER_ID,
+    util::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID},
 };
 use ic_base_types::NumSeconds;
 use ic_config::flag_status::FlagStatus;
@@ -15,7 +15,7 @@ use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_ic00_types::{
     CanisterInstallMode, CanisterStatusResultV2, CanisterStatusType, InstallCodeArgs,
-    Method as Ic00Method,
+    Method as Ic00Method, Payload as ICOOPayload, UpdateSettingsArgs,
 };
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, IngressHistoryWriter, SubnetAvailableMemory,
@@ -328,7 +328,6 @@ impl CanisterManager {
             | Ok(Ic00Method::UninstallCode)
             | Ok(Ic00Method::StopCanister)
             | Ok(Ic00Method::DeleteCanister) |
-            Ok(Ic00Method::UpdateSettings)|
             Ok(Ic00Method::InstallCode) |
             Ok(Ic00Method::SetController) => {
                 match effective_canister_id {
@@ -349,6 +348,49 @@ impl CanisterManager {
                         }
                     },
                     None =>  Err(UserError::new(
+                        ErrorCode::InvalidManagementPayload,
+                        format!("Failed to decode payload for ic00 method: {}", method_name),
+                    )),
+                }
+            },
+
+            Ok(Ic00Method::UpdateSettings) => {
+                match effective_canister_id {
+                    Some(canister_id) => {
+                        let update_settings_args = UpdateSettingsArgs::decode(ingress.arg())?;
+                        let settings = CanisterSettings::try_from(update_settings_args.settings)?;
+
+                        let canister = match state.canister_state(&canister_id) {
+                            Some(canister) => Ok(canister),
+                            None => Err(UserError::new(
+                                ErrorCode::CanisterNotFound,
+                                format!(
+                                    "Canister {} not found",
+                                    canister_id,
+                                ),
+                            ))
+                        }?;
+
+                        if self.should_skip_controller_check_for_taggr(canister, &settings) {
+                            // Skip controller check in case the change is targeting the Taggr
+                            // canister and the NNS root is being added as an additional controller.
+                            // This is a one-off allowed operation to anyone that would help recover
+                            // the Taggr canister. See also proposal https://dashboard.internetcomputer.org/proposal/115067.
+                            Ok(())
+                        } else {
+                            match canister.controllers().contains(&sender.get()) {
+                                true => Ok(()),
+                                false => Err(UserError::new(
+                                    ErrorCode::CanisterInvalidController,
+                                    format!(
+                                        "Only controllers of canister {} can call ic00 method {}",
+                                        canister_id, method_name,
+                                    ),
+                                )),
+                            }
+                        }
+                    },
+                    None => Err(UserError::new(
                         ErrorCode::InvalidManagementPayload,
                         format!("Failed to decode payload for ic00 method: {}", method_name),
                     )),
@@ -459,6 +501,33 @@ impl CanisterManager {
         }
     }
 
+    fn should_skip_controller_check_for_taggr(
+        &self,
+        canister: &CanisterState,
+        settings: &CanisterSettings,
+    ) -> bool {
+        let canister_id = canister.canister_id();
+        let taggr_canister_id = CanisterId::from_str("6qfxa-ryaaa-aaaai-qbhsq-cai").unwrap();
+        if canister_id == taggr_canister_id
+            && canister.system_state.controllers.len() == 1
+            && canister
+                .system_state
+                .controllers
+                .contains(&taggr_canister_id.get())
+        {
+            if let Some(new_controllers) = settings.controllers() {
+                return new_controllers.len() == 2
+                    && new_controllers.contains(&canister_id.get())
+                    && new_controllers.contains(&ROOT_CANISTER_ID.get())
+                    && Option::is_none(&settings.controller())
+                    && Option::is_none(&settings.compute_allocation())
+                    && Option::is_none(&settings.memory_allocation())
+                    && Option::is_none(&settings.freezing_threshold());
+            }
+        }
+        false
+    }
+
     /// Tries to apply the requested settings on the canister identified by
     /// `canister_id`.
     pub(crate) fn update_settings(
@@ -468,8 +537,16 @@ impl CanisterManager {
         canister: &mut CanisterState,
         round_limits: &mut RoundLimits,
     ) -> Result<(), CanisterManagerError> {
-        // Verify controller.
-        validate_controller(canister, &sender)?;
+        if self.should_skip_controller_check_for_taggr(canister, &settings) {
+            // Skip controller check in case the change is targeting the Taggr
+            // canister and the NNS root is being added as an additional controller.
+            // This is a one-off allowed operation to anyone that would help recover
+            // the Taggr canister. See also proposal https://dashboard.internetcomputer.org/proposal/115067.
+        } else {
+            // Verify controller.
+            validate_controller(canister, &sender)?;
+        }
+
         validate_compute_allocation(
             round_limits.compute_allocation_used,
             canister,
