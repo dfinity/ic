@@ -12,6 +12,7 @@ use ic_types::{
 use std::{mem, sync::Arc};
 
 pub(crate) const GOVERNANCE_CANISTER_ID: CanisterId = CanisterId::from_u64(1);
+pub(crate) const ROOT_CANISTER_ID: CanisterId = CanisterId::from_u64(3);
 
 /// Sends responses to their callers.
 ///

@@ -71,7 +71,7 @@ use ic_types::{
 use ic_wasm_types::{CanisterModule, WasmValidationError};
 use lazy_static::lazy_static;
 use maplit::{btreemap, btreeset};
-use std::{collections::BTreeSet, convert::TryFrom, sync::Arc};
+use std::{collections::BTreeSet, convert::TryFrom, str::FromStr, sync::Arc};
 
 use super::InstallCodeResult;
 use prometheus::IntCounter;
@@ -4436,6 +4436,93 @@ fn update_settings_makes_subnet_oversubscribed() {
         .subnet_message(Method::UpdateSettings, args.encode())
         .unwrap_err();
     assert_eq!(ErrorCode::SubnetOversubscribed, err.code());
+}
+
+#[test]
+fn can_add_nns_root_as_controller_to_taggr_canister() {
+    let canister_manager = CanisterManagerBuilder::default().build();
+
+    let taggr_canister_id = CanisterId::from_str("6qfxa-ryaaa-aaaai-qbhsq-cai").unwrap();
+    let mut canister_state = CanisterStateBuilder::new()
+        .with_controller(taggr_canister_id)
+        .with_canister_id(taggr_canister_id)
+        .with_cycles(*INITIAL_CYCLES)
+        .build();
+
+    let mut round_limits = RoundLimits {
+        instructions: as_round_instructions(EXECUTION_PARAMETERS.instruction_limits.message()),
+        execution_complexity: ExecutionComplexity::MAX,
+        subnet_available_memory: (*MAX_SUBNET_AVAILABLE_MEMORY),
+        compute_allocation_used: 0,
+    };
+
+    let root_canister_id = CanisterId::from_str("r7inp-6aaaa-aaaaa-aaabq-cai").unwrap();
+
+    // Set the NNS root as additional controller.
+    let settings = CanisterSettings::new(
+        None,
+        Some(vec![taggr_canister_id.get(), root_canister_id.get()]),
+        None,
+        None,
+        None,
+    );
+    canister_manager
+        .update_settings(
+            user_test_id(1).get(),
+            settings,
+            &mut canister_state,
+            &mut round_limits,
+        )
+        .unwrap();
+    assert_eq!(canister_state.system_state.controllers.len(), 2);
+    assert!(canister_state
+        .system_state
+        .controllers
+        .contains(&taggr_canister_id.get()));
+    assert!(canister_state
+        .system_state
+        .controllers
+        .contains(&root_canister_id.get()));
+
+    // Try to set the controller to only NNS: should fail because the sender is not the controller
+    // and the hack is only allowed once.
+    let settings =
+        CanisterSettings::new(None, Some(vec![root_canister_id.get()]), None, None, None);
+    canister_manager
+        .update_settings(
+            user_test_id(1).get(),
+            settings,
+            &mut canister_state,
+            &mut round_limits,
+        )
+        .unwrap_err();
+    assert_eq!(canister_state.system_state.controllers.len(), 2);
+    assert!(canister_state
+        .system_state
+        .controllers
+        .contains(&taggr_canister_id.get()));
+    assert!(canister_state
+        .system_state
+        .controllers
+        .contains(&root_canister_id.get()));
+
+    // Set the controller back to only the taggr canister. Since the request is
+    // coming from the taggr canister, it should succeed.
+    let settings =
+        CanisterSettings::new(None, Some(vec![taggr_canister_id.get()]), None, None, None);
+    canister_manager
+        .update_settings(
+            taggr_canister_id.get(),
+            settings,
+            &mut canister_state,
+            &mut round_limits,
+        )
+        .unwrap();
+    assert_eq!(canister_state.system_state.controllers.len(), 1);
+    assert!(canister_state
+        .system_state
+        .controllers
+        .contains(&taggr_canister_id.get()));
 }
 
 #[test]
