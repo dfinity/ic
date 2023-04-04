@@ -4,8 +4,8 @@ Description= Socket for metrics for the IC onchain observability adapter
 [Socket]
 ListenStream=/run/ic-node/onchain-observability-adapter/metrics
 Service=ic-onchain-observability-adapter.service
-SocketUser=ic-replica
-SocketGroup=ic-replica
+SocketUser=onchain-observability
+SocketGroup=onchain-observability
 SocketMode=0660
 
 [Install]
