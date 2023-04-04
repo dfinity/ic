@@ -471,11 +471,13 @@ fn list_nervous_system_functions_() -> ListNervousSystemFunctionsResponse {
 /// Returns the latest reward event.
 #[export_name = "canister_query get_latest_reward_event"]
 fn get_latest_reward_event() {
-    over(candid, |()| -> RewardEvent {
-        let event = governance().latest_reward_event();
-        log!(INFO, "get_latest_reward_event returns {}; ", event);
-        event
-    });
+    log!(INFO, "get_latest_reward_event");
+    over(candid, |()| get_latest_reward_event_());
+}
+
+#[candid_method(query, rename = "get_latest_reward_event")]
+fn get_latest_reward_event_() -> RewardEvent {
+    governance().latest_reward_event()
 }
 
 /// Returns the root canister's status.
