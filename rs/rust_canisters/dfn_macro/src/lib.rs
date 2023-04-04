@@ -300,6 +300,14 @@ pub fn query(
 }
 
 #[proc_macro_attribute]
+pub fn composite_query(
+    attr: proc_macro::TokenStream,
+    item: proc_macro::TokenStream,
+) -> proc_macro::TokenStream {
+    handle_errors(dfn_macro("composite_query", attr, item))
+}
+
+#[proc_macro_attribute]
 pub fn update(
     attr: proc_macro::TokenStream,
     item: proc_macro::TokenStream,

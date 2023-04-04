@@ -1,6 +1,6 @@
 //! This module contains a canister used for XNet integration test.
 use dfn_core::api;
-use dfn_macro::query;
+use dfn_macro::composite_query;
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::cmp::min;
@@ -75,7 +75,7 @@ fn touch_memory(num_pages: usize) {
 
 /// Initializes network topology and instructs this canister to start sending
 /// requests to other canisters.
-#[query]
+#[composite_query]
 async fn start(arguments: Arguments) -> Vec<Message> {
     let calltrees = arguments.calltrees;
 
