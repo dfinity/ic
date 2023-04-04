@@ -3,12 +3,14 @@
 use crate::consensus::{
     membership::{Membership, MembershipError},
     pool_reader::PoolReader,
-    prelude::*,
     utils::active_low_threshold_transcript,
     ConsensusCrypto,
 };
 use ic_logger::{error, trace, ReplicaLogger};
-use ic_types::replica_config::ReplicaConfig;
+use ic_types::{
+    consensus::{HasCommittee, RandomBeacon, RandomBeaconContent, RandomBeaconShare},
+    replica_config::ReplicaConfig,
+};
 use std::sync::Arc;
 
 /// Random beacon maker is responsible for creating beacon shares

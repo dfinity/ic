@@ -27,7 +27,6 @@ use crate::consensus::{
     membership::{Membership, MembershipError},
     metrics::NotaryMetrics,
     pool_reader::PoolReader,
-    prelude::*,
     utils::{find_lowest_ranked_proposals, get_adjusted_notary_delay},
     ConsensusCrypto,
 };
@@ -36,7 +35,14 @@ use ic_interfaces_state_manager::StateManager;
 use ic_logger::{error, trace, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::ReplicatedState;
-use ic_types::replica_config::ReplicaConfig;
+use ic_types::{
+    consensus::{
+        Block, BlockProposal, HasBlockHash, HasHeight, HasRank, NotarizationContent,
+        NotarizationShare, RandomBeacon, Rank,
+    },
+    replica_config::ReplicaConfig,
+    Height,
+};
 use std::sync::Arc;
 
 pub struct Notary {

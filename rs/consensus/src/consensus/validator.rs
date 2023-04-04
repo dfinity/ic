@@ -4,11 +4,11 @@
 
 use crate::{
     consensus::{
+        crypto::ConsensusCrypto,
         membership::{Membership, MembershipError},
         metrics::ValidatorMetrics,
         payload_builder::PayloadBuilder,
         pool_reader::PoolReader,
-        prelude::*,
         utils::{
             active_high_threshold_transcript, active_low_threshold_transcript,
             find_lowest_ranked_proposals, is_time_to_make_block, lookup_replica_version,
@@ -18,12 +18,12 @@ use crate::{
     },
     dkg, ecdsa,
 };
-use ic_interfaces::time_source::TimeSource;
 use ic_interfaces::{
     consensus::{PayloadPermanentError, PayloadTransientError},
     consensus_pool::*,
     dkg::DkgPool,
     messaging::MessageRouting,
+    time_source::TimeSource,
     validation::{ValidationError, ValidationResult},
 };
 use ic_interfaces_registry::RegistryClient;
@@ -31,10 +31,18 @@ use ic_interfaces_state_manager::{StateHashError, StateManager};
 use ic_logger::{trace, warn, ReplicaLogger};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
-    crypto::{threshold_sig::ni_dkg::NiDkgId, CryptoError},
+    batch::ValidationContext,
+    consensus::{
+        Block, BlockPayload, BlockProposal, CatchUpContent, CatchUpPackage, CatchUpShareContent,
+        Committee, ConsensusMessage, ConsensusMessageHashable, FinalizationContent, HasCommittee,
+        HasHeight, HasRank, Notarization, NotarizationContent, RandomBeacon, RandomBeaconContent,
+        RandomBeaconShare, RandomTape, RandomTapeContent, RandomTapeShare, Rank,
+    },
+    crypto::{threshold_sig::ni_dkg::NiDkgId, CryptoError, CryptoHashOf, Signed},
     registry::RegistryClientError,
     replica_config::ReplicaConfig,
-    ReplicaVersion,
+    signature::{MultiSignature, MultiSignatureShare, ThresholdSignatureShare},
+    Height, NodeId, NodeIndex, RegistryVersion, ReplicaVersion,
 };
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::{Arc, RwLock};
@@ -1629,7 +1637,13 @@ pub mod test {
         FastForwardTimeSource,
     };
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
+    use ic_types::consensus::{
+        Finalization, FinalizationShare, HashedBlock, HashedRandomBeacon, NotarizationShare,
+    };
+    use ic_types::crypto::{CombinedMultiSig, CombinedMultiSigOf, CryptoHash};
     use ic_types::replica_config::ReplicaConfig;
+    use ic_types::signature::ThresholdSignature;
+    use ic_types::{CryptoHashOfState, Time};
     use std::borrow::Borrow;
     use std::sync::{Arc, RwLock};
 

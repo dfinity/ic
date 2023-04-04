@@ -1,24 +1,30 @@
 //! Consensus utility functions
-use crate::consensus::{membership::Membership, pool_reader::PoolReader, prelude::*};
-use ic_interfaces::consensus::{PayloadTransientError, PayloadValidationError};
-use ic_interfaces::validation::ValidationError;
-use ic_interfaces::{consensus_pool::ConsensusPoolCache, time_source::TimeSource};
+use crate::consensus::{crypto::Aggregate, membership::Membership, pool_reader::PoolReader};
+use ic_interfaces::{
+    consensus::{PayloadTransientError, PayloadValidationError},
+    consensus_pool::ConsensusPoolCache,
+    time_source::TimeSource,
+    validation::ValidationError,
+};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
 use ic_logger::{error, warn, ReplicaLogger};
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_client_helpers::subnet::{NotarizationDelaySettings, SubnetRegistry};
 use ic_replicated_state::ReplicatedState;
-use ic_types::replica_config::ReplicaConfig;
 use ic_types::{
-    consensus::Rank,
+    consensus::{Block, BlockProposal, HasCommittee, HasHeight, HasRank, Rank},
     crypto::{
         threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript},
-        CryptoHashable,
+        CryptoHash, CryptoHashable, Signed,
     },
+    replica_config::ReplicaConfig,
+    Height, RegistryVersion, ReplicaVersion, SubnetId,
 };
-use std::collections::{BTreeMap, BTreeSet};
-use std::time::Duration;
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    time::Duration,
+};
 
 /// The acceptable gap between the finalized height and the certified height. If
 /// the actual gap is greater than this, consensus starts slowing down the block
@@ -558,6 +564,10 @@ pub(crate) fn get_subnet_record(
 mod tests {
     use super::*;
     use ic_test_utilities::types::ids::node_test_id;
+    use ic_types::{
+        crypto::{ThresholdSigShare, ThresholdSigShareOf},
+        signature::ThresholdSignatureShare,
+    };
 
     /// Test that two shares with the same content are grouped together, and
     /// that a different share is grouped by itself

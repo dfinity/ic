@@ -25,15 +25,28 @@
 use crate::consensus::{
     membership::{Membership, MembershipError},
     pool_reader::PoolReader,
-    prelude::*,
     utils::active_low_threshold_transcript,
     ConsensusCrypto,
 };
 use ic_interfaces::messaging::MessageRouting;
 use ic_logger::{error, trace, ReplicaLogger};
-use ic_types::replica_config::ReplicaConfig;
-use std::cmp::{max, min};
-use std::sync::Arc;
+use ic_types::{
+    consensus::{HasCommittee, RandomTape, RandomTapeContent, RandomTapeShare},
+    replica_config::ReplicaConfig,
+    Height,
+};
+use std::{
+    cmp::{max, min},
+    sync::Arc,
+};
+
+// In some cases, expected_height might fall too much behind the finalized
+// height; for example, when a node is attempting to catch up via a CUP during
+// whose creation other nodes finalized many heights. To prevent overworking
+// consensus in such cases, random_tape_maker and share_aggregator check at most
+// the below given amount of heights to see if the node should create or
+// aggregate random tape shares.
+pub(crate) const RANDOM_TAPE_CHECK_MAX_HEIGHT_RANGE: u64 = 16;
 
 pub struct RandomTapeMaker {
     replica_config: ReplicaConfig,
@@ -182,6 +195,7 @@ mod tests {
     use ic_interfaces::artifact_pool::MutablePool;
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities::{consensus::fake::*, message_routing::FakeMessageRouting};
+    use ic_types::consensus::{ConsensusMessage, HasHeight};
 
     // Returns the vector of heights for which `changes` contains a ChangeAction
     // that adds a random tape share for that height to the validated pool.
