@@ -539,6 +539,8 @@ mod tests {
                 //
                 edge(message_test_id(4)),
                 E::StartSubtree,
+                edge("error_code"),
+                E::VisitBlob(b"IC0101".to_vec()),
                 edge("reject_code"),
                 leb_num(1),
                 edge("reject_message"),
@@ -557,6 +559,8 @@ mod tests {
                 //
                 edge(message_test_id(6)),
                 E::StartSubtree,
+                edge("error_code"),
+                E::VisitBlob(b"IC0516".to_vec()),
                 edge("reject_code"),
                 leb_num(4),
                 edge("reject_message"),
