@@ -404,6 +404,7 @@ type WaitForQuietState = record { current_deadline_timestamp_seconds : nat64 };
 service : (Governance) -> {
   claim_swap_neurons : (ClaimSwapNeuronsRequest) -> (ClaimSwapNeuronsResponse);
   get_build_metadata : () -> (text) query;
+  get_latest_reward_event : () -> (RewardEvent) query;
   get_metadata : (record {}) -> (GetMetadataResponse) query;
   get_mode : (record {}) -> (GetModeResponse) query;
   get_nervous_system_parameters : (null) -> (NervousSystemParameters) query;

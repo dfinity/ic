@@ -431,6 +431,7 @@ service : (Governance) -> {
   get_full_neuron_by_id_or_subaccount : (NeuronIdOrSubaccount) -> (
       Result_2,
     ) query;
+  get_latest_reward_event : () -> (RewardEvent) query;
   get_metrics : () -> (Result_3) query;
   get_monthly_node_provider_rewards : () -> (Result_4);
   get_most_recent_monthly_node_provider_rewards : () -> (

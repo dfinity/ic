@@ -695,14 +695,16 @@ fn execute_eligible_proposals() {
     });
 }
 
-/// Provides information about the last reward event.
+/// Returns the latest reward event.
 #[export_name = "canister_query get_latest_reward_event"]
 fn get_latest_reward_event() {
-    over(candid, |()| -> &RewardEvent {
-        let event = governance().latest_reward_event();
-        println!("{}get_latest_reward_event returns {}; ", LOG_PREFIX, event);
-        event
-    });
+    println!("{}get_latest_reward_event", LOG_PREFIX);
+    over(candid, |()| get_latest_reward_event_());
+}
+
+#[candid_method(query, rename = "get_latest_reward_event")]
+fn get_latest_reward_event_() -> RewardEvent {
+    governance().latest_reward_event().clone()
 }
 
 /// Return the Neuron IDs of all Neurons that have `caller()` as their
