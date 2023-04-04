@@ -274,6 +274,7 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
     sha256sum(
         name = "disk-img.tar.zst.sha256",
         srcs = [":disk-img.tar.zst"],
+        visibility = ["//visibility:public"],
     )
 
     gzip_compress(
@@ -396,6 +397,7 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
         name = "disk-img-url",
         target = ":upload_disk-img",
         basenames = ["upload_disk-img_disk-img.tar.zst.url"],
+        visibility = ["//visibility:public"],
         tags = ["manual"],
     )
 
