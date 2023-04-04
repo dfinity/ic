@@ -33,6 +33,13 @@ rust_fuzz_test_binary(
     deps = DEPENDENCIES,
 )
 
+rust_fuzz_test_binary(
+    name = "cbor_deserialize_dealing",
+    srcs = ["fuzz_targets/cbor_deserialize_dealing.rs"],
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
 sh_test(
     name = "fuzz_test",
     srcs = ["fuzz_test.sh"],
