@@ -3,7 +3,6 @@ use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use anyhow::{bail, Result};
 use clap::Parser;
-use config_writer_common::config_updater_loop::config_updater_loop;
 use config_writer_common::config_writer::ConfigWriter;
 use config_writer_common::filters::{NodeIDRegexFilter, TargetGroupFilter, TargetGroupFilterList};
 use futures_util::FutureExt;
@@ -100,20 +99,51 @@ fn main() -> Result<()> {
         )));
     };
 
+    // We need to filter old nodes for host node exporters, but not for everything else
+    // To do that, we will create 2 separate updated nodes, with different filters for them
+    let jobs = vec![
+        jobs::JOB_NODE_EXPORTER_GUEST,
+        jobs::JOB_ORCHESTRATOR,
+        jobs::JOB_REPLICA,
+    ];
+
+    let filters = Arc::new(TargetGroupFilterList::new(filters_vec));
+    let config_updater_loop = config_writer_common::config_updater_loop::config_updater_loop(
+        log.clone(),
+        ic_discovery.clone(),
+        filters.clone(),
+        stop_signal_rcv.clone(),
+        jobs,
+        update_signal_rcv.clone(),
+        PrometheusConfigBuilder::new(),
+        ConfigWriter::new(cli_args.generation_dir.clone(), filters, log.clone()),
+        metrics.clone(),
+    );
+    let config_join_handle = std::thread::spawn(config_updater_loop);
+    handles.push(config_join_handle);
+
+    // creating the filters vector again because of ownership
+    let mut filters_vec: Vec<Box<dyn TargetGroupFilter>> = vec![];
+    if let Some(filter_node_id_regex) = &cli_args.filter_node_id_regex {
+        filters_vec.push(Box::new(NodeIDRegexFilter::new(
+            filter_node_id_regex.clone(),
+        )));
+    };
+    // Second loop, with the old machines filter
+    let jobs = vec![jobs::JOB_NODE_EXPORTER_HOST];
+
     filters_vec.push(Box::new(OldMachinesFilter {}));
 
     let filters = Arc::new(TargetGroupFilterList::new(filters_vec));
-    let config_builder = PrometheusConfigBuilder::new();
-    let config_updater_loop = config_updater_loop(
+    let config_updater_loop = config_writer_common::config_updater_loop::config_updater_loop(
         log.clone(),
         ic_discovery,
         filters.clone(),
         stop_signal_rcv,
-        // jobs.into_iter().map(|(job, _)| job).collect(),
-        jobs::jobs_list(),
+        jobs,
         update_signal_rcv,
-        config_builder,
-        ConfigWriter::new(cli_args.generation_dir, filters, log),
+        PrometheusConfigBuilder::new(),
+        ConfigWriter::new(cli_args.generation_dir, filters, log.clone()),
         metrics,
     );
     let config_join_handle = std::thread::spawn(config_updater_loop);
