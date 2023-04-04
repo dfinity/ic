@@ -92,7 +92,7 @@ pub enum Event {
         utxo: Utxo,
         uuid: String,
         clean: bool,
-        kyt_provider: Principal,
+        kyt_provider: Option<Principal>,
     },
 
     /// Indicates that the given UTXO's value is too small to pay for a KYT check.
@@ -183,6 +183,17 @@ pub fn replay(mut events: impl Iterator<Item = Event>) -> Result<CkBtcMinterStat
                 clean,
                 kyt_provider,
             } => {
+                let kyt_provider = match kyt_provider
+                    .or_else(|| state.kyt_principal.map(|cid| Principal::from(cid)))
+                {
+                    Some(p) => p,
+                    None => {
+                        return Err(ReplayLogError::InconsistentLog(format!(
+                            "Found CheckUTXO {} event with no provider and KYT principal",
+                            uuid,
+                        )))
+                    }
+                };
                 state.mark_utxo_checked(
                     utxo,
                     uuid,
