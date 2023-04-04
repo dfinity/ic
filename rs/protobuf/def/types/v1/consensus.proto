@@ -43,6 +43,22 @@ message Block {
 	bytes payload_hash = 11;
 }
 
+message ConsensusMessage {
+	oneof msg {
+		RandomBeacon random_beacon = 1;
+		Finalization finalization = 2;
+		Notarization notarization = 3;
+		BlockProposal block_proposal = 4;
+		// missing: RandomBeaconShare = 5;
+		// missing: NotarizationShare = 6;
+		// missing: FinalizationShare = 7;
+		RandomTape random_tape = 8;
+		// missing: RandomTapeShare = 9;
+		CatchUpPackage cup = 10;
+		// missing: CatchUpPackageShare = 11;
+	}
+}
+
 message BlockProposal {
 	bytes hash = 1;
 	Block value = 2;
@@ -56,6 +72,14 @@ message RandomBeacon {
 	bytes parent = 3;
 	bytes signature = 4;
 	NiDkgId signer = 5;
+}
+
+message RandomBeaconShare {
+	string version = 1;
+	uint64 height = 2;
+	bytes parent = 3;
+	bytes signature = 4;
+	NodeId signer = 5;
 }
 
 message RandomTape {

@@ -588,6 +588,35 @@ impl TryFrom<pb::RandomBeacon> for RandomBeacon {
 pub type RandomBeaconShare =
     Signed<RandomBeaconContent, ThresholdSignatureShare<RandomBeaconContent>>;
 
+impl From<&RandomBeaconShare> for pb::RandomBeaconShare {
+    fn from(random_beacon: &RandomBeaconShare) -> Self {
+        Self {
+            version: random_beacon.content.version.to_string(),
+            height: random_beacon.content.height.get(),
+            parent: random_beacon.content.parent.clone().get().0,
+            signature: random_beacon.signature.signature.clone().get().0,
+            signer: Some(node_id_into_protobuf(random_beacon.signature.signer)),
+        }
+    }
+}
+
+impl TryFrom<pb::RandomBeaconShare> for RandomBeaconShare {
+    type Error = ProxyDecodeError;
+    fn try_from(beacon: pb::RandomBeaconShare) -> Result<Self, Self::Error> {
+        Ok(Signed {
+            content: RandomBeaconContent {
+                version: ReplicaVersion::try_from(beacon.version.as_str())
+                    .map_err(|e| ProxyDecodeError::ReplicaVersionParseError(Box::new(e)))?,
+                height: Height::from(beacon.height),
+                parent: CryptoHashOf::from(CryptoHash(beacon.parent)),
+            },
+            signature: ThresholdSignatureShare {
+                signature: ThresholdSigShareOf::new(ThresholdSigShare(beacon.signature)),
+                signer: node_id_try_from_option(beacon.signer)?,
+            },
+        })
+    }
+}
 /// RandomTapeContent holds the content that is signed in the random tape,
 /// which is the height and the replica version used to create the random
 /// tape.
