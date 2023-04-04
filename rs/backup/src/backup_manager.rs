@@ -119,6 +119,8 @@ impl BackupManager {
         for s in config.subnets {
             let notification_client = NotificationClient {
                 push_metrics: config.push_metrics,
+                metrics_urls: config.metrics_urls.clone(),
+                network_name: config.network_name.clone(),
                 backup_instance: config.backup_instance.clone(),
                 slack_token: config.slack_token.clone(),
                 subnet: s.subnet_id.to_string(),

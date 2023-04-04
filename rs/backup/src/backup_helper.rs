@@ -462,7 +462,11 @@ impl BackupHelper {
                 Err(e.to_string())
             }
             Ok(Some(stdout)) => {
-                let log_file_name = format!("{}_{}.log", self.subnet_id, start_height);
+                let timestamp = Utc::now().timestamp();
+                let log_file_name = format!(
+                    "{}_{:010}_{:012}.log",
+                    self.subnet_id, timestamp, start_height
+                );
                 let mut file = File::create(self.logs_dir().join(log_file_name))
                     .map_err(|err| format!("Error creating log file: {:?}", err))?;
                 file.write_all(stdout.as_bytes())
