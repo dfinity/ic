@@ -29,17 +29,43 @@ use ic_wasm_types::CanisterModule;
 
 use libfuzzer_sys::fuzz_target;
 use std::{collections::BTreeSet, path::PathBuf, sync::Arc};
-use wasm_smith::Module;
+mod ic_wasm;
+use ic_wasm::ICWasmConfig;
+use wasm_smith::ConfiguredModule;
 
 // The fuzzer creates valid wasms and tries to execute a query method via WasmExecutor.
 // The fuzzing success rate directly depends upon the IC valid wasm corpus provided.
 // The fuzz test is only compiled but not executed by CI.
 //
-// TODO (PSEC-1169)
-// Adapt wasm-smith to produce IC valid wasm
-//
 // To execute the fuzzer run
-// bazel run --@rules_rust//rust/toolchain/channel=nightly --build_tag_filters=fuzz_test //rs/embedders/fuzz:wasm_executor_fuzzer -- corpus/
+// bazel run --@rules_rust//rust/toolchain/channel=nightly --build_tag_filters=fuzz_test //rs/embedders/fuzz:execute_with_wasm_executor -- corpus/
+
+fuzz_target!(|module: ConfiguredModule<ICWasmConfig>| {
+    let wasm = module.module.to_bytes();
+    let canister_module = CanisterModule::new(wasm);
+    let wasm_binary = WasmBinary::new(canister_module);
+
+    let wasm_method = WasmMethod::Query("test".to_string());
+    let func_ref = FuncRef::Method(wasm_method.clone());
+    let wasm_methods = BTreeSet::from([wasm_method]);
+
+    let embedder_config = Config::default();
+    let log = no_op_logger();
+    let metrics_registry = MetricsRegistry::new();
+    let fd_factory = Arc::new(TestPageAllocatorFileDescriptorImpl::new());
+
+    let wasm_executor = WasmExecutorImpl::new(
+        WasmtimeEmbedder::new(embedder_config, log.clone()),
+        &metrics_registry,
+        log,
+        fd_factory,
+    );
+
+    let execution_state = setup_execution_state(wasm_binary, wasm_methods);
+    let wasm_execution_input = setup_wasm_execution_input(func_ref);
+    let (_compilation_result, _execution_result) =
+        Arc::new(wasm_executor).execute(wasm_execution_input, &execution_state);
+});
 
 fn setup_wasm_execution_input(func_ref: FuncRef) -> WasmExecutionInput {
     const DEFAULT_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(5_000_000_000);
@@ -93,6 +119,9 @@ fn setup_execution_state(
     wasm_binary: Arc<WasmBinary>,
     wasm_methods: BTreeSet<WasmMethod>,
 ) -> ExecutionState {
+    // TODO (PSEC-1204)
+    // Get the globals and exported functions from the wasm module before initializing
+    // the execution state
     ExecutionState::new(
         PathBuf::new(),
         wasm_binary,
@@ -103,30 +132,3 @@ fn setup_execution_state(
         WasmMetadata::default(),
     )
 }
-
-fuzz_target!(|module: Module| {
-    let wasm = module.to_bytes();
-    let canister_module = CanisterModule::new(wasm);
-    let wasm_binary = WasmBinary::new(canister_module);
-
-    let wasm_method = WasmMethod::Query("test".to_string());
-    let func_ref = FuncRef::Method(wasm_method.clone());
-    let wasm_methods = BTreeSet::from([wasm_method]);
-
-    let embedder_config = Config::default();
-    let log = no_op_logger();
-    let metrics_registry = MetricsRegistry::new();
-    let fd_factory = Arc::new(TestPageAllocatorFileDescriptorImpl::new());
-
-    let wasm_executor = WasmExecutorImpl::new(
-        WasmtimeEmbedder::new(embedder_config, log.clone()),
-        &metrics_registry,
-        log,
-        fd_factory,
-    );
-
-    let execution_state = setup_execution_state(wasm_binary, wasm_methods);
-    let wasm_execution_input = setup_wasm_execution_input(func_ref);
-    let (_compilation_result, _execution_result) =
-        Arc::new(wasm_executor).execute(wasm_execution_input, &execution_state);
-});
