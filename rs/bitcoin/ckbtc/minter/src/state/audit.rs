@@ -68,7 +68,7 @@ pub fn mark_utxo_checked(
         utxo: utxo.clone(),
         uuid: uuid.clone(),
         clean: status.is_clean(),
-        kyt_provider,
+        kyt_provider: Some(kyt_provider),
     });
     state.mark_utxo_checked(utxo.clone(), uuid, status, kyt_provider);
 }
