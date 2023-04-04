@@ -98,6 +98,7 @@ pub use ic_base_types::{
     RegistryVersion, SubnetId,
 };
 pub use ic_crypto_internal_types::NodeIndex;
+use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use ic_protobuf::types::v1 as pb;
 use phantom_newtype::{AmountOf, Id};
 use serde::{Deserialize, Serialize};
@@ -168,13 +169,23 @@ pub fn node_id_into_protobuf(id: NodeId) -> pb::NodeId {
     }
 }
 
-/// From its protobuf definition convert to a NodeId.  Normally, we would
-/// use `impl TryFrom<pb::NodeId> for NodeId` here however we cannot as
-/// both `Id` and `pb::NodeId` are defined in other crates.
+/// TODO: Deprecated. Remove in favor of [`node_id_try_from_option`].
 pub fn node_id_try_from_protobuf(value: pb::NodeId) -> Result<NodeId, PrincipalIdBlobParseError> {
     // All fields in Protobuf definition are required hence they are encoded in
     // `Option`.  We simply treat them as required here though.
     let principal_id = PrincipalId::try_from(value.principal_id.unwrap())?;
+    Ok(NodeId::from(principal_id))
+}
+
+/// From its protobuf definition convert to a NodeId.  Normally, we would
+/// use `impl TryFrom<Option<pb::NodeId>> for NodeId` here however we cannot
+/// as both `Id` and `pb::NodeId` are defined in other crates.
+pub fn node_id_try_from_option(value: Option<pb::NodeId>) -> Result<NodeId, ProxyDecodeError> {
+    let value: pb::NodeId = try_from_option_field(value, "NodeId missing")?;
+    let inner: pb::PrincipalId = try_from_option_field(value.principal_id, "PrincipalId missing")?;
+
+    let principal_id = PrincipalId::try_from(inner)
+        .map_err(|e| ProxyDecodeError::InvalidPrincipalId(Box::new(e)))?;
     Ok(NodeId::from(principal_id))
 }
 

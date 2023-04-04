@@ -638,6 +638,41 @@ pub struct Block {
     pub payload_hash: ::prost::alloc::vec::Vec<u8>,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::large_enum_variant)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ConsensusMessage {
+    #[prost(oneof = "consensus_message::Msg", tags = "1, 2, 3, 4, 8, 10")]
+    pub msg: ::core::option::Option<consensus_message::Msg>,
+}
+/// Nested message and enum types in `ConsensusMessage`.
+pub mod consensus_message {
+    #[derive(serde::Serialize, serde::Deserialize)]
+    #[allow(clippy::large_enum_variant)]
+    #[allow(clippy::derive_partial_eq_without_eq)]
+    #[derive(Clone, PartialEq, ::prost::Oneof)]
+    pub enum Msg {
+        #[prost(message, tag = "1")]
+        RandomBeacon(super::RandomBeacon),
+        #[prost(message, tag = "2")]
+        Finalization(super::Finalization),
+        #[prost(message, tag = "3")]
+        Notarization(super::Notarization),
+        #[prost(message, tag = "4")]
+        BlockProposal(super::BlockProposal),
+        /// missing: RandomBeaconShare = 5;
+        /// missing: NotarizationShare = 6;
+        /// missing: FinalizationShare = 7;
+        #[prost(message, tag = "8")]
+        RandomTape(super::RandomTape),
+        /// missing: RandomTapeShare = 9;
+        ///
+        /// missing: CatchUpPackageShare = 11;
+        #[prost(message, tag = "10")]
+        Cup(super::CatchUpPackage),
+    }
+}
+#[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BlockProposal {
@@ -664,6 +699,21 @@ pub struct RandomBeacon {
     pub signature: ::prost::alloc::vec::Vec<u8>,
     #[prost(message, optional, tag = "5")]
     pub signer: ::core::option::Option<NiDkgId>,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RandomBeaconShare {
+    #[prost(string, tag = "1")]
+    pub version: ::prost::alloc::string::String,
+    #[prost(uint64, tag = "2")]
+    pub height: u64,
+    #[prost(bytes = "vec", tag = "3")]
+    pub parent: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", tag = "4")]
+    pub signature: ::prost::alloc::vec::Vec<u8>,
+    #[prost(message, optional, tag = "5")]
+    pub signer: ::core::option::Option<NodeId>,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]

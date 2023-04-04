@@ -356,6 +356,10 @@ fn build_types_proto(def: &Path, out: &Path) {
     config.type_attribute(".types.v1.SubnetId", "#[derive(Eq, Hash)]");
     config.type_attribute(".types.v1.NiDkgId", "#[derive(Eq, Hash)]");
     config.type_attribute(".types.v1.PrincipalId", "#[derive(Eq, Hash)]");
+    config.type_attribute(
+        ".types.v1.ConsensusMessage",
+        "#[allow(clippy::large_enum_variant)]",
+    );
     let files = [
         def.join("types/v1/ic00_types.proto"),
         def.join("types/v1/types.proto"),
