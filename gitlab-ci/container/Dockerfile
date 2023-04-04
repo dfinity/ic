@@ -127,4 +127,11 @@ COPY ./files/docker.sh /usr/bin/docker
 COPY ./files/requirements.txt /tmp/requirements.txt
 RUN pip3 install --ignore-installed -r /tmp/requirements.txt
 
+# Add mold linker
+ARG mold_platform="mold-1.11.0-x86_64-linux"
+RUN curl -L https://github.com/rui314/mold/releases/download/v1.11.0/$mold_platform.tar.gz --output $mold_platform && \ 
+    tar xvf $mold_platform && \
+    mv $mold_platform/bin/mold /usr/bin/mold && \ 
+    rm -rf $mold_platform
+
 ENTRYPOINT ["/entrypoint.sh"]
