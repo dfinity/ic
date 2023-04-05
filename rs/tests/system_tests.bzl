@@ -83,7 +83,7 @@ def system_test(name, runtime_deps = [], tags = [], test_timeout = "long", flaky
 
     rust_binary(
         name = bin_name,
-        srcs = ["bin/" + name + ".rs"],
+        srcs = [name + ".rs"],
         **kwargs
     )
 

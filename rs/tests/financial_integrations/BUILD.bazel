@@ -1,0 +1,55 @@
+load("//rs/tests:system_tests.bzl", "system_test")
+load("//rs/tests:common.bzl", "DEPENDENCIES", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+
+package(default_visibility = ["//visibility:public"])
+
+BTC_RUNTIME_DEPS = [
+    "@btc_canister//file",
+    "//rs/tests:btc_uvm_config_image",
+]
+
+LEDGER_CANISTER_RUNTIME_DEPS = [
+    "//rs/rosetta-api/icrc1/ledger:ledger_canister",
+]
+
+system_test(
+    name = "btc_get_balance_test",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS +
+        UNIVERSAL_VM_RUNTIME_DEPS +
+        NNS_CANISTER_RUNTIME_DEPS +
+        BTC_RUNTIME_DEPS,
+    deps = DEPENDENCIES + ["//rs/tests"],
+)
+
+system_test(
+    name = "icrc1_agent_test",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS + LEDGER_CANISTER_RUNTIME_DEPS,
+    deps = DEPENDENCIES + ["//rs/tests"],
+)
+
+system_test(
+    name = "token_fault_tolerance_test",
+    flaky = False,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "system_test_hourly",
+        "system_test_nightly",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
+    deps = DEPENDENCIES + ["//rs/tests"],
+)
+
+system_test(
+    name = "transaction_ledger_correctness_test",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
+    deps = DEPENDENCIES + ["//rs/tests"],
+)

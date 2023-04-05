@@ -1418,7 +1418,7 @@ pub trait SnsCanisterEnvVars {
 
 impl SnsCanisterEnvVars for TestEnv {
     fn set_sns_canisters_env_vars(&self) -> Result<()> {
-        self.set_canister_env_vars("rs/tests/sns/sns-canisters")
+        self.set_canister_env_vars("rs/tests/nns/sns/sns-canisters")
     }
 }
 

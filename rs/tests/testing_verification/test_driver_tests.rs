@@ -9,7 +9,7 @@ use std::{
 };
 use tempfile::Builder;
 
-const BINARY_PATH: &str = "rs/tests/test-driver-e2e-scenarios";
+const BINARY_PATH: &str = "rs/tests/testing_verification/test-driver-e2e-scenarios";
 
 fn assert_name_and_message_eq(test_result: &TestResultSummary, name: &str, message: Option<&str>) {
     assert_eq!(test_result.name, name);

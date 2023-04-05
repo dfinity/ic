@@ -188,3 +188,5 @@ GUESTOS_MALICIOUS_RUNTIME_DEPS = [
 CANISTER_HTTP_RUNTIME_DEPS = [
     "//rs/tests:http_uvm_config_image",
 ]
+
+XNET_TEST_CANISTER_RUNTIME_DEPS = ["//rs/rust_canisters/xnet_test:xnet-test-canister"]
