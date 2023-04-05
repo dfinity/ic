@@ -8230,7 +8230,10 @@ version = "0.8.0"
 dependencies = [
  "bytes",
  "candid",
+ "ic-base-types",
+ "ic-nervous-system-common-test-keys",
  "ic-protobuf",
+ "ic-registry-keys",
  "ic-registry-transport-protobuf-generator",
  "ic-test-utilities-compare-dirs",
  "prost",

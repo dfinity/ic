@@ -439,10 +439,10 @@ mod tests {
             req.to_string(),
             "RegistryAtomicMutateRequest{ \
             mutations: [\
-            insert(italy), \
-            upsert(bolivia), \
-            update(guatemala), \
-            delete(someone is going to get offended if i put a real country here)], \
+            RegistryMutation { mutation_type: insert, key: italy, value: europe }, \
+            RegistryMutation { mutation_type: upsert, key: bolivia, value: south america }, \
+            RegistryMutation { mutation_type: update, key: guatemala, value: north america }, \
+            RegistryMutation { mutation_type: delete, key: someone is going to get offended if i put a real country here, value:  }], \
             preconditions on keys: [africa, asia] }"
         )
     }

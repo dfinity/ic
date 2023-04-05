@@ -51,7 +51,11 @@ impl Registry {
     pub fn check_global_state_invariants(&self, mutations: &[RegistryMutation]) {
         println!(
             "{}check_global_state_invariants: {:?}",
-            LOG_PREFIX, mutations
+            LOG_PREFIX,
+            mutations
+                .iter()
+                .map(RegistryMutation::to_string)
+                .collect::<Vec<_>>()
         );
 
         let snapshot = self.take_latest_snapshot_with_mutations(mutations);

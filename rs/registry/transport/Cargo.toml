@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 candid = "0.8.1"
 ic-protobuf = { path = "../../protobuf" }
+ic-base-types = { path = "../../types/base_types" }
 prost = "0.11.0"
 bytes = "1.0.1"
 serde = { version = "1.0.99", features = ["derive"] }
@@ -13,4 +14,6 @@ serde = { version = "1.0.99", features = ["derive"] }
 [dev-dependencies]
 ic-registry-transport-protobuf-generator = { path = "./protobuf_generator" }
 ic-test-utilities-compare-dirs = { path = "../../test_utilities/compare_dirs" }
+ic-registry-keys = { path = "../keys" }
+ic-nervous-system-common-test-keys = { path = "../../nervous_system/common/test_keys" }
 tempfile = "3.1.0"
