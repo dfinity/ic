@@ -12,6 +12,7 @@ use ic_replicated_state::{
     page_map::PageIndex, testing::ReplicatedStateTesting, Memory, NumWasmPages, PageMap,
     ReplicatedState, Stream,
 };
+use ic_state_layout::{CheckpointLayout, ReadOnly};
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_state_manager::checkpoint::SEPARATE_INGRESS_HISTORY;
 use ic_state_manager::{
@@ -4060,6 +4061,66 @@ fn can_uninstall_code_state_machine() {
         0
     );
     assert!(!canister_layout.wasm().raw_path().exists());
+}
+
+#[test]
+fn tip_is_initialized_correctly() {
+    state_manager_test(|_metrics, state_manager| {
+        let (_height, mut state) = state_manager.take_tip();
+
+        // One canister with some data
+        insert_dummy_canister(&mut state, canister_test_id(100));
+        let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
+        let execution_state = canister_state.execution_state.as_mut().unwrap();
+        execution_state
+            .wasm_memory
+            .page_map
+            .update(&[(PageIndex::new(1), &[99u8; PAGE_SIZE])]);
+        execution_state
+            .stable_memory
+            .page_map
+            .update(&[(PageIndex::new(1), &[99u8; PAGE_SIZE])]);
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+
+        state_manager.flush_tip_channel();
+
+        let tip_layout = CheckpointLayout::<ReadOnly>::new_untracked(
+            state_manager.state_layout().raw_path().join("tip"),
+            height(1),
+        )
+        .unwrap();
+
+        // No protobuf files in the tip
+        assert!(!tip_layout.system_metadata().raw_path().exists());
+        assert!(!tip_layout.subnet_queues().raw_path().exists());
+        assert_eq!(tip_layout.canister_ids().unwrap().len(), 1);
+        let canister_layout = tip_layout
+            .canister(&tip_layout.canister_ids().unwrap()[0])
+            .unwrap();
+        assert!(!canister_layout.queues().raw_path().exists());
+        assert!(!canister_layout.canister_metadata().raw_path().exists());
+        assert!(canister_layout.wasm().raw_path().exists());
+        assert!(canister_layout.vmemory_0().exists());
+        assert!(canister_layout.stable_memory_blob().exists());
+
+        let (_height, state) = state_manager.take_tip();
+        state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+
+        let checkpoint_layout = state_manager.state_layout().checkpoint(height(2)).unwrap();
+
+        // All files are in the checkpoint
+        assert!(checkpoint_layout.system_metadata().raw_path().exists());
+        assert!(checkpoint_layout.subnet_queues().raw_path().exists());
+        assert_eq!(checkpoint_layout.canister_ids().unwrap().len(), 1);
+        let canister_layout = checkpoint_layout
+            .canister(&checkpoint_layout.canister_ids().unwrap()[0])
+            .unwrap();
+        assert!(canister_layout.queues().raw_path().exists());
+        assert!(canister_layout.canister_metadata().raw_path().exists());
+        assert!(canister_layout.wasm().raw_path().exists());
+        assert!(canister_layout.vmemory_0().exists());
+        assert!(canister_layout.stable_memory_blob().exists());
+    });
 }
 
 proptest! {
