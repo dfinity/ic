@@ -22,7 +22,7 @@ REPOS_TO_SCAN = [
         "nns-dapp",
         "https://github.com/dfinity/nns-dapp",
         [Project("frontend", "nns-dapp/frontend")],
-        16,
+        18,
     ),
     Repository(
         "internet-identity",
