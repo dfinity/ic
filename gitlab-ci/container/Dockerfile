@@ -71,8 +71,9 @@ RUN curl --fail https://sh.rustup.rs -sSf \
 # Since we are cloning multiple NPM repos, we need to have multiple node versions installed 
 # to switch between them for comptability. 
 ARG nvm_version=v0.39.1
+ARG dependency_mgmt_agent_js_node_version=16
 ARG node_version=17
-ARG dependency_mgmt_nns_dapp_node_version=16
+ARG dependency_mgmt_nns_dapp_node_version=18
 ARG dependency_mgmt_default_node_version=19
 ENV NVM_DIR=/opt/nvm
 RUN mkdir $NVM_DIR && \
@@ -94,9 +95,10 @@ RUN curl --fail \
          --output /usr/bin/didc-linux64 && chmod +x /usr/bin/didc-linux64
 
 RUN . /opt/nvm/nvm.sh && \
+    nvm install ${dependency_mgmt_agent_js_node_version} && \
+    nvm install ${node_version} && \
     nvm install ${dependency_mgmt_nns_dapp_node_version} && \
     nvm install ${dependency_mgmt_default_node_version} && \
-    nvm install ${node_version} && \
     npm install -g @vscode/dev-container-cli
 
 USER ${UID}
