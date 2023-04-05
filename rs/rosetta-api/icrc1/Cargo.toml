@@ -20,3 +20,4 @@ serde_bytes = "0.11"
 
 [dev-dependencies]
 leb128 = "0.2.4"
+proptest = "1.0"

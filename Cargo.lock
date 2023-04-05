@@ -6582,7 +6582,17 @@ name = "ic-icrc-rosetta"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "candid",
+ "ciborium",
+ "ic-icrc1",
+ "ic-icrc1-ledger",
+ "ic-ledger-core",
+ "icrc-ledger-types",
+ "num-traits",
+ "proptest",
  "rusqlite",
+ "serde",
+ "serde_bytes",
  "tempfile",
 ]
 
@@ -6600,6 +6610,7 @@ dependencies = [
  "icrc-ledger-types",
  "leb128",
  "num-traits",
+ "proptest",
  "serde",
  "serde_bytes",
 ]

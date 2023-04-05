@@ -27,6 +27,7 @@ MACRO_DEPENDENCIES = [
 DEV_DEPENDENCIES = [
     # Keep sorted.
     "@crate_index//:leb128",
+    "@crate_index//:proptest",
 ]
 
 MACRO_DEV_DEPENDENCIES = []

@@ -1,51 +1,51 @@
 use candid::types::number::Nat;
-use ciborium::value::Value;
+use ciborium::value::Value as CiboriumValue;
 use ic_ledger_core::block::EncodedBlock;
-use icrc_ledger_types::icrc::generic_value::Value as BlockValue;
-use icrc_ledger_types::icrc3::blocks::GenericBlock as Block;
+use icrc_ledger_types::icrc::generic_value::Value as GenericValue;
+use icrc_ledger_types::icrc3::blocks::GenericBlock;
 use serde_bytes::ByteBuf;
 use std::collections::BTreeMap;
 
-pub fn icrc1_block_from_encoded(encoded_block: &EncodedBlock) -> Block {
-    let value: Value =
+pub fn icrc1_block_from_encoded(encoded_block: &EncodedBlock) -> GenericBlock {
+    let value: CiboriumValue =
         ciborium::de::from_reader(encoded_block.as_slice()).expect("failed to decode block");
     icrc1_block_from_value(&value)
 }
 
-fn icrc1_block_from_value(value: &Value) -> Block {
+fn icrc1_block_from_value(value: &CiboriumValue) -> GenericBlock {
     match value {
-        Value::Integer(int) => {
+        CiboriumValue::Integer(int) => {
             let v: i128 = (*int).into();
             let uv: u128 = v
                 .try_into()
                 .expect("blocks should not contain negative integers");
-            BlockValue::Nat(Nat::from(uv))
+            GenericValue::Nat(Nat::from(uv))
         }
-        Value::Bytes(bytes) => BlockValue::Blob(ByteBuf::from(bytes.to_vec())),
-        Value::Text(text) => BlockValue::Text(text.to_string()),
-        Value::Tag(_tag, value) => icrc1_block_from_value(value),
-        Value::Array(values) => {
+        CiboriumValue::Bytes(bytes) => GenericValue::Blob(ByteBuf::from(bytes.to_vec())),
+        CiboriumValue::Text(text) => GenericValue::Text(text.to_string()),
+        CiboriumValue::Array(values) => {
             let mut vec = Vec::new();
             for v in values.iter() {
                 vec.push(icrc1_block_from_value(v));
             }
-            BlockValue::Array(vec)
+            GenericValue::Array(vec)
         }
-        Value::Map(map) => {
+        CiboriumValue::Map(map) => {
             let mut result = BTreeMap::new();
             for (k, v) in map.iter() {
                 let key_id = match k {
-                    Value::Text(text) => text.to_string(),
+                    CiboriumValue::Text(text) => text.to_string(),
                     _ => panic!("icrc1 block value key should be a string, not: {:?}", k),
                 };
                 result.insert(key_id, icrc1_block_from_value(v));
             }
 
-            BlockValue::Map(result)
+            GenericValue::Map(result)
         }
-        Value::Bool(_) => panic!("boolean values not supported in icrc1 blocks"),
-        Value::Null => panic!("Null values not supported in icrc1 blocks"),
-        Value::Float(_) => panic!("float values not supported in icrc1 blocks"),
+        CiboriumValue::Bool(_) => panic!("boolean values not supported in icrc1 blocks"),
+        CiboriumValue::Null => panic!("Null values not supported in icrc1 blocks"),
+        CiboriumValue::Float(_) => panic!("float values not supported in icrc1 blocks"),
+        CiboriumValue::Tag(_tag, value) => icrc1_block_from_value(value),
         _ => panic!("unsupported value type: {:?}", value),
     }
 }

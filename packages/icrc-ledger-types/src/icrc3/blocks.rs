@@ -1,9 +1,7 @@
+use super::archive::{ArchivedRange, QueryBlockArchiveFn};
+use crate::{icrc::generic_value::Value, icrc1::transfer::BlockIndex};
 use candid::{CandidType, Deserialize, Nat};
 use serde_bytes::ByteBuf;
-
-use crate::{icrc::generic_value::Value, icrc1::transfer::BlockIndex};
-
-use super::archive::{ArchivedRange, QueryBlockArchiveFn};
 
 pub type GenericBlock = Value;
 
