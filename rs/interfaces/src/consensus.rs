@@ -12,10 +12,46 @@ use crate::{
         InvalidSelfValidatingPayload, SelfValidatingPayloadValidationError,
         SelfValidatingTransientValidationError,
     },
-    validation::ValidationError,
+    validation::{ValidationError, ValidationResult},
 };
 use ic_base_types::{NumBytes, SubnetId};
-use ic_types::registry::RegistryClientError;
+use ic_types::{
+    batch::{BatchPayload, ValidationContext},
+    consensus::{block_maker::SubnetRecords, Payload},
+    registry::RegistryClientError,
+    Height, Time,
+};
+
+/// The [`PayloadBuilder`] is responsible for creating and validating payload that
+/// is included in consensus blocks.
+pub trait PayloadBuilder: Send + Sync {
+    /// Produces a payload that is valid given `past_payloads` and `context`.
+    ///
+    /// `past_payloads` contains the `Payloads` from all blocks above the
+    /// certified height provided in `context`, in descending block height
+    /// order.
+    fn get_payload(
+        &self,
+        height: Height,
+        past_payloads: &[(Height, Time, Payload)],
+        context: &ValidationContext,
+        subnet_records: &SubnetRecords,
+    ) -> BatchPayload;
+
+    /// Checks whether the provided `payload` is valid given `past_payloads` and
+    /// `context`.
+    ///
+    /// `past_payloads` contains the `Payloads` from all blocks above the
+    /// certified height provided in `context`, in descending block height
+    /// order.
+    fn validate_payload(
+        &self,
+        height: Height,
+        payload: &Payload,
+        past_payloads: &[(Height, Time, Payload)],
+        context: &ValidationContext,
+    ) -> ValidationResult<PayloadValidationError>;
+}
 
 #[derive(Debug)]
 pub enum PayloadPermanentError {

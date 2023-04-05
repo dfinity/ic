@@ -25,7 +25,6 @@ pub mod validator;
 #[cfg(all(test, feature = "proptest"))]
 mod proptests;
 
-pub use block_maker::SubnetRecords;
 pub use crypto::ConsensusCrypto;
 pub use membership::Membership;
 pub use metrics::ValidatorMetrics;

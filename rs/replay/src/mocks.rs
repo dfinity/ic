@@ -1,8 +1,10 @@
-use ic_consensus::consensus::{payload_builder::PayloadBuilder, SubnetRecords};
-use ic_interfaces::{consensus::PayloadValidationError, validation::ValidationResult};
+use ic_interfaces::{
+    consensus::{PayloadBuilder, PayloadValidationError},
+    validation::ValidationResult,
+};
 use ic_types::{
     batch::{BatchPayload, ValidationContext},
-    consensus::Payload,
+    consensus::{block_maker::SubnetRecords, Payload},
     Height, Time,
 };
 
