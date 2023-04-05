@@ -232,7 +232,7 @@ RUN \
     fi
 
 # Include the dev root CA cert
-COPY dev-certs/canister_http_test_ca.cert /usr/local/share/ca-certificates/dev-root-ca.crt
+COPY --chmod=644 dev-certs/canister_http_test_ca.cert /usr/local/share/ca-certificates/dev-root-ca.crt
 RUN update-ca-certificates
 
 FROM output_${BUILD_TYPE}
