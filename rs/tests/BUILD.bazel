@@ -80,6 +80,20 @@ symlink_dir(
 )
 
 symlink_dir(
+    name = "mainnet-nns-canisters",
+    targets = {
+        "@mainnet_nns_registry_canister//file": "registry-canister",
+        "@mainnet_nns_governance_canister//file": "governance-canister_test",
+        "@mainnet_icp_ledger_canister//file": "ledger-canister_notify-method",
+        "@mainnet_nns_root-canister//file": "root-canister",
+        "@mainnet_nns_lifeline_canister//file": "lifeline_canister",
+        "@mainnet_nns_genesis-token-canister//file": "genesis-token-canister",
+        "@mainnet_nns_cycles-minting-canister//file": "cycles-minting-canister",
+        "@mainnet_nns_sns-wasm-canister//file": "sns-wasm-canister",
+    },
+)
+
+symlink_dir(
     name = "recovery/binaries",
     targets = {
         "//rs/registry/admin:ic-admin": "ic-admin",

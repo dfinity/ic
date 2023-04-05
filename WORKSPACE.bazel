@@ -399,6 +399,76 @@ filegroup(name = "artifacts", srcs = glob(["build/*", "test-data/*"]), visibilit
     urls = ["https://download.dfinity.systems/ic-ref/ic-ref-test-0.0.1-1431d7b5-x86_64-linux.tar.gz"],
 )
 
+# Deployed NNS canisters
+
+http_file(
+    name = "mainnet_nns_registry_canister",
+    downloaded_file_path = "registry-canister.wasm.gz",
+    sha256 = "9bc9448335cb3d459199bd2f8254a79bd6ca30922ede1d07d1ac2cc45c2acff6",
+    url = "https://download.dfinity.systems/ic/8b60ab1c8c5a6e4cf29d6413debe190e6cd8a6af/canisters/registry-canister.wasm.gz",
+)
+
+http_file(
+    name = "mainnet_nns_governance_canister",
+    downloaded_file_path = "governance-canister.wasm.gz",
+    sha256 = "4dd34e7277e2d53fd653e4a6189597bf9fcfb3383d8fd9113ffdaeb9548cf8da",
+    url = "https://download.dfinity.systems/ic/8b60ab1c8c5a6e4cf29d6413debe190e6cd8a6af/canisters/governance-canister.wasm.gz",
+)
+
+http_file(
+    name = "mainnet_icp_ledger_canister",
+    downloaded_file_path = "ledger-canister_notify-method.wasm.gz",
+    sha256 = "900e30c4bf3293244cd4649e8470ece822e18723e9a942decabc32d46257b514",
+    url = "https://download.dfinity.systems/ic/f02cc38677905e24a9016637fddc697039930808/canisters/ledger-canister_notify-method.wasm.gz",
+)
+
+# From https://dashboard.internetcomputer.org/proposal/44955
+# Note: the Wasm module hash in the proposal is computed for the uncompressed WASM
+http_file(
+    name = "mainnet_icp_ledger-archive-node-canister",
+    downloaded_file_path = "ledger-archive-node-canister.wasm.gz",
+    sha256 = "a88d0b6a327361208a48dd8dab5b7f47f8e1ed0f3c2aca6b6ad383187520ff67",
+    url = "https://download.dfinity.systems/ic/1b98a5d984176b1c948d0cb92227d88ad5ee8044/canisters/ledger-archive-node-canister.wasm.gz",
+)
+
+http_file(
+    name = "mainnet_nns_root-canister",
+    downloaded_file_path = "root-canister.wasm.gz",
+    sha256 = "a2d3bdcd10ba8c990ad712d9f6fc90d4e7640c7a2c9928e431230002fc89adb2",
+    url = "https://download.dfinity.systems/ic/9a1f70d6e1b03ef27e86f8094ee48b83846e482d/canisters/root-canister.wasm.gz",
+)
+
+http_file(
+    name = "mainnet_nns_lifeline_canister",
+    downloaded_file_path = "lifeline-canister.wasm.gz",
+    sha256 = "2cce2f281c86325988528624dc9375272ecd2adc96e1021e41d08943a6e9e5a1",
+    # TODO: change to https://download.dfinity.systems/ic/9a1f70d6e1b03ef27e86f8094ee48b83846e482d/canisters/lifeline_canister.wasm.gz after the next lifeline canister release.
+    url = "https://download.dfinity.systems/ic/9a1f70d6e1b03ef27e86f8094ee48b83846e482d/canisters/lifeline.wasm.gz",
+)
+
+http_file(
+    name = "mainnet_nns_genesis-token-canister",
+    downloaded_file_path = "genesis-token-canister.wasm.gz",
+    sha256 = "98cf6a9902e59f6272d03aa281f5247deebf4b61484b54cb80bdd54d6baf6e33",
+    url = "https://download.dfinity.systems/ic/9a1f70d6e1b03ef27e86f8094ee48b83846e482d/canisters/genesis-token-canister.wasm.gz",
+)
+
+# From https://dashboard.internetcomputer.org/proposal/83624
+# Note: the Wasm module hash in the proposal is computed for the uncompressed WASM
+http_file(
+    name = "mainnet_nns_cycles-minting-canister",
+    downloaded_file_path = "cycles-minting-canister.wasm.gz",
+    sha256 = "d9b64cbf4fbc05d4f6a7128a5d116a4b3d22706109461bed9385961234443cb8",
+    url = "https://download.dfinity.systems/ic/18dc31ca64a4ead42c5d4222e647dce7124eb90e/canisters/cycles-minting-canister.wasm.gz",
+)
+
+http_file(
+    name = "mainnet_nns_sns-wasm-canister",
+    downloaded_file_path = "sns-wasm-canister.wasm.gz",
+    sha256 = "727238fdf0081b271f24952a058e9796a68f39d93dbb1269137c16e121cb1549",
+    url = "https://download.dfinity.systems/ic/9bb8f35cccd013b38657c67964c39d48fac6353f/canisters/sns-wasm-canister.wasm.gz",
+)
+
 # Bitcoin canister
 
 http_file(

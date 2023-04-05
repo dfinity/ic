@@ -158,6 +158,8 @@ GUESTOS_RUNTIME_DEPS = [
 
 NNS_CANISTER_RUNTIME_DEPS = ["//rs/tests:nns-canisters"]
 
+MAINNET_NNS_CANISTER_RUNTIME_DEPS = ["//rs/tests:mainnet-nns-canisters"]
+
 UNIVERSAL_VM_RUNTIME_DEPS = [
     "//rs/tests:create-universal-vm-config-image.sh",
 ]

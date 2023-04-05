@@ -236,7 +236,10 @@ pub(crate) fn install_nns_with_customizations_and_check_progress(
         .nodes()
         .next()
         .unwrap()
-        .install_nns_canisters_with_customizations(customizations)
+        .install_nns_canisters_with_customizations(
+            NnsCanisterWasmStrategy::TakeBuiltFromSources,
+            customizations,
+        )
         .expect("NNS canisters not installed");
     info!(logger, "NNS canisters are installed.");
 
