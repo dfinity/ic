@@ -304,6 +304,7 @@ impl TipHandler {
             &tip,
             FilePermissions::ReadWrite,
             FSync::No,
+            |path| path.extension() != Some(std::ffi::OsStr::new("pbuf")),
             thread_pool,
         ) {
             Ok(()) => Ok(()),
@@ -1015,6 +1016,7 @@ impl StateLayout {
                 scratchpad.as_path(),
                 FilePermissions::ReadOnly,
                 FSync::Yes,
+                |_| true,
                 thread_pool,
             )?;
             std::fs::rename(&scratchpad, dst)?;
@@ -1798,20 +1800,24 @@ enum FSync {
 ///
 /// NOTE: If the function returns an error, the changes to the file
 /// system applied by this function are not undone.
-fn copy_recursively(
+fn copy_recursively<P>(
     log: &ReplicaLogger,
     root_src: &Path,
     root_dst: &Path,
     dst_permissions: FilePermissions,
     fsync: FSync,
+    file_predicate: P,
     thread_pool: Option<&mut scoped_threadpool::Pool>,
-) -> std::io::Result<()> {
+) -> std::io::Result<()>
+where
+    P: Fn(&Path) -> bool,
+{
     let mut copy_plan = CopyPlan {
         create_and_sync_dir: vec![],
         copy_and_sync_file: vec![],
     };
 
-    build_copy_plan(root_src, root_dst, &mut copy_plan)?;
+    build_copy_plan(root_src, root_dst, &file_predicate, &mut copy_plan)?;
 
     // Ensure that the target root directory exists.
     // Note: all the files and directories below the target root (including the
@@ -1913,7 +1919,15 @@ struct CopyAndSyncFile {
 /// Traverse the source file tree and constructs a copy-plan:
 /// a collection of I/O operations that need to be performed to copy the source
 /// to the destination.
-fn build_copy_plan(src: &Path, dst: &Path, plan: &mut CopyPlan) -> std::io::Result<()> {
+fn build_copy_plan<P>(
+    src: &Path,
+    dst: &Path,
+    file_predicate: &P,
+    plan: &mut CopyPlan,
+) -> std::io::Result<()>
+where
+    P: Fn(&Path) -> bool,
+{
     let src_metadata = src.metadata()?;
 
     if src_metadata.is_dir() {
@@ -1927,9 +1941,9 @@ fn build_copy_plan(src: &Path, dst: &Path, plan: &mut CopyPlan) -> std::io::Resu
         for entry_result in entries {
             let entry = entry_result?;
             let dst_entry = dst.join(entry.file_name());
-            build_copy_plan(&entry.path(), &dst_entry, plan)?;
+            build_copy_plan(&entry.path(), &dst_entry, file_predicate, plan)?;
         }
-    } else {
+    } else if file_predicate(src) {
         plan.copy_and_sync_file.push(CopyAndSyncFile {
             src: PathBuf::from(src),
             dst: PathBuf::from(dst),
