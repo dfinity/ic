@@ -7,7 +7,6 @@ use crate::{
         crypto::ConsensusCrypto,
         membership::{Membership, MembershipError},
         metrics::ValidatorMetrics,
-        payload_builder::PayloadBuilder,
         pool_reader::PoolReader,
         utils::{
             active_high_threshold_transcript, active_low_threshold_transcript,
@@ -19,7 +18,7 @@ use crate::{
     dkg, ecdsa,
 };
 use ic_interfaces::{
-    consensus::{PayloadPermanentError, PayloadTransientError},
+    consensus::{PayloadBuilder, PayloadPermanentError, PayloadTransientError},
     consensus_pool::*,
     dkg::DkgPool,
     messaging::MessageRouting,

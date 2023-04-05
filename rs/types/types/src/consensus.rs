@@ -18,6 +18,7 @@ use std::cmp::PartialOrd;
 use std::convert::TryInto;
 use std::hash::Hash;
 
+pub mod block_maker;
 pub mod catchup;
 pub mod certification;
 pub mod dkg;

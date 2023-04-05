@@ -1,10 +1,13 @@
 //! Contains mocks for traits internal to consensus
-use crate::consensus::{membership::Membership, payload_builder::PayloadBuilder};
+use crate::consensus::membership::Membership;
 use ic_artifact_pool::{
     canister_http_pool::CanisterHttpPoolImpl, dkg_pool::DkgPoolImpl, ecdsa_pool::EcdsaPoolImpl,
 };
 use ic_config::artifact_pool::ArtifactPoolConfig;
-use ic_interfaces::{consensus::PayloadValidationError, validation::ValidationResult};
+use ic_interfaces::{
+    consensus::{PayloadBuilder, PayloadValidationError},
+    validation::ValidationResult,
+};
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::ROOT_SUBNET_ID_KEY;
@@ -19,15 +22,13 @@ use ic_test_utilities::{
 use ic_test_utilities_registry::{setup_registry_non_final, SubnetRecordBuilder};
 use ic_types::{
     batch::{BatchPayload, ValidationContext},
-    consensus::Payload,
+    consensus::{block_maker::SubnetRecords, Payload},
     replica_config::ReplicaConfig,
     Height, RegistryVersion, SubnetId, Time,
 };
 use mockall::predicate::*;
 use mockall::*;
 use std::sync::{Arc, RwLock};
-
-use super::block_maker::SubnetRecords;
 
 mock! {
     pub PayloadBuilder {}

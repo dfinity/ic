@@ -3,7 +3,6 @@ use crate::{
     consensus::{
         membership::Membership,
         metrics::{BlockMakerMetrics, EcdsaPayloadMetrics},
-        payload_builder::PayloadBuilder,
         pool_reader::PoolReader,
         utils::*,
         ConsensusCrypto,
@@ -11,16 +10,20 @@ use crate::{
     dkg::create_payload as create_dkg_payload,
     ecdsa,
 };
-use ic_interfaces::{dkg::DkgPool, ecdsa::EcdsaPool, time_source::TimeSource};
+use ic_interfaces::{
+    consensus::PayloadBuilder, dkg::DkgPool, ecdsa::EcdsaPool, time_source::TimeSource,
+};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateManager;
 use ic_logger::{debug, error, trace, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
     batch::{BatchPayload, ValidationContext},
-    consensus::{dkg, hashed, Block, BlockProposal, HasRank, Payload, RandomBeacon, Rank},
+    consensus::{
+        block_maker::SubnetRecords, dkg, hashed, Block, BlockProposal, HasRank, Payload,
+        RandomBeacon, Rank,
+    },
     crypto::CryptoHashOf,
     replica_config::ReplicaConfig,
     time::current_time,
@@ -38,42 +41,27 @@ use std::{
 // the block validation path can skip the expensive crypto validation.
 const VALIDATED_DEALING_AGE_THRESHOLD_MSECS: u64 = 10;
 
-/// A collection of subnet records, that are relevant for constructing a block
-pub struct SubnetRecords {
-    /// The membership [`SubnetRecord`], that is available to this node
-    pub(crate) membership_version: SubnetRecord,
-
-    /// The stable [`SubnetRecord`], that might be older than latest
-    /// but is very likely available to all nodes on the subnet.
-    ///
-    /// This is the [`SubnetRecord`] that corresponds to the
-    /// [`ValidationContext`].
-    pub(crate) context_version: SubnetRecord,
-}
-
-impl SubnetRecords {
-    fn new(
-        block_maker: &BlockMaker,
-        membership_record: RegistryVersion,
-        context_record: RegistryVersion,
-    ) -> Option<Self> {
-        Some(Self {
-            membership_version: get_subnet_record(
-                block_maker.registry_client.as_ref(),
-                block_maker.replica_config.subnet_id,
-                membership_record,
-                &block_maker.log,
-            )
-            .ok()?,
-            context_version: get_subnet_record(
-                block_maker.registry_client.as_ref(),
-                block_maker.replica_config.subnet_id,
-                context_record,
-                &block_maker.log,
-            )
-            .ok()?,
-        })
-    }
+fn subnet_records_for_registry_version(
+    block_maker: &BlockMaker,
+    membership_record: RegistryVersion,
+    context_record: RegistryVersion,
+) -> Option<SubnetRecords> {
+    Some(SubnetRecords {
+        membership_version: get_subnet_record(
+            block_maker.registry_client.as_ref(),
+            block_maker.replica_config.subnet_id,
+            membership_record,
+            &block_maker.log,
+        )
+        .ok()?,
+        context_version: get_subnet_record(
+            block_maker.registry_client.as_ref(),
+            block_maker.replica_config.subnet_id,
+            context_record,
+            &block_maker.log,
+        )
+        .ok()?,
+    })
 }
 
 /// A consensus subcomponent that is responsible for creating block proposals.
@@ -219,7 +207,8 @@ impl BlockMaker {
 
         // Get the subnet records that are relevant to making a block
         let stable_registry_version = self.get_stable_registry_version(&parent)?;
-        let subnet_records = SubnetRecords::new(self, registry_version, stable_registry_version)?;
+        let subnet_records =
+            subnet_records_for_registry_version(self, registry_version, stable_registry_version)?;
 
         // If we have previously tried to make a payload but got an error at the given
         // height, We should try again with the same context. Otherwise create a
@@ -615,7 +604,8 @@ impl BlockMaker {
 
         // Get the subnet records that are relevant to making a block
         let stable_registry_version = self.get_stable_registry_version(&parent)?;
-        let subnet_records = SubnetRecords::new(self, registry_version, stable_registry_version)?;
+        let subnet_records =
+            subnet_records_for_registry_version(self, registry_version, stable_registry_version)?;
 
         self.construct_block_proposal(
             pool,

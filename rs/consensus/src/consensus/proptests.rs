@@ -1,8 +1,8 @@
 use crate::consensus::{
     mocks::{dependencies_with_subnet_params, Dependencies},
-    payload_builder::{test::make_test_payload_impl, PayloadBuilder},
-    SubnetRecords,
+    payload_builder::test::make_test_payload_impl,
 };
+use ic_interfaces::consensus::PayloadBuilder;
 use ic_test_utilities::{
     consensus::fake::Fake,
     mock_time,
@@ -15,6 +15,7 @@ use ic_test_utilities_registry::SubnetRecordBuilder;
 use ic_types::{
     batch::{BatchPayload, ValidationContext},
     consensus::{
+        block_maker::SubnetRecords,
         certification::{Certification, CertificationContent},
         dkg::Dealings,
         BlockPayload, DataPayload, Payload,

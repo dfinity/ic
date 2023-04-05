@@ -13,17 +13,14 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use ic_artifact_pool::{consensus_pool::ConsensusPoolImpl, ingress_pool::IngressPoolImpl};
 use ic_config::state_manager::Config as StateManagerConfig;
-use ic_consensus::consensus::{
-    payload_builder::{PayloadBuilder, PayloadBuilderImpl},
-    pool_reader::PoolReader,
-};
+use ic_consensus::consensus::{payload_builder::PayloadBuilderImpl, pool_reader::PoolReader};
 use ic_constants::MAX_INGRESS_TTL;
 use ic_execution_environment::IngressHistoryReaderImpl;
 use ic_ic00_types::IC_00;
 use ic_ingress_manager::IngressManager;
 use ic_interfaces::{
     artifact_pool::MutablePool,
-    consensus::PayloadValidationError,
+    consensus::{PayloadBuilder, PayloadValidationError},
     consensus_pool::{ChangeAction, ChangeSet, ConsensusPool},
     time_source::TimeSource,
     validation::ValidationResult,

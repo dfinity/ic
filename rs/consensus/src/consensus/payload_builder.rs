@@ -1,14 +1,13 @@
 //! Payload creation/validation subcomponent
 
 use crate::consensus::{
-    block_maker::SubnetRecords,
     metrics::{PayloadBuilderMetrics, CRITICAL_ERROR_SUBNET_RECORD_ISSUE},
     payload::BatchPayloadSectionBuilder,
     utils::get_subnet_record,
 };
 use ic_interfaces::{
     canister_http::CanisterHttpPayloadBuilder,
-    consensus::{PayloadPermanentError, PayloadValidationError},
+    consensus::{PayloadBuilder, PayloadPermanentError, PayloadValidationError},
     ingress_manager::IngressSelector,
     messaging::XNetPayloadBuilder,
     self_validating_payload::SelfValidatingPayloadBuilder,
@@ -20,42 +19,11 @@ use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_types::{
     batch::{BatchPayload, ValidationContext, MAX_BITCOIN_PAYLOAD_IN_BYTES},
-    consensus::Payload,
+    consensus::{block_maker::SubnetRecords, Payload},
     messages::MAX_XNET_PAYLOAD_IN_BYTES,
     Height, NumBytes, SubnetId, Time,
 };
 use std::sync::Arc;
-
-/// The [`PayloadBuilder`] is responsible for creating and validating payload that
-/// is included in consensus blocks.
-pub trait PayloadBuilder: Send + Sync {
-    /// Produces a payload that is valid given `past_payloads` and `context`.
-    ///
-    /// `past_payloads` contains the `Payloads` from all blocks above the
-    /// certified height provided in `context`, in descending block height
-    /// order.
-    fn get_payload(
-        &self,
-        height: Height,
-        past_payloads: &[(Height, Time, Payload)],
-        context: &ValidationContext,
-        subnet_records: &SubnetRecords,
-    ) -> BatchPayload;
-
-    /// Checks whether the provided `payload` is valid given `past_payloads` and
-    /// `context`.
-    ///
-    /// `past_payloads` contains the `Payloads` from all blocks above the
-    /// certified height provided in `context`, in descending block height
-    /// order.
-    fn validate_payload(
-        &self,
-        height: Height,
-        payload: &Payload,
-        past_payloads: &[(Height, Time, Payload)],
-        context: &ValidationContext,
-    ) -> ValidationResult<PayloadValidationError>;
-}
 
 /// Implementation of PayloadBuilder.
 pub struct PayloadBuilderImpl {
