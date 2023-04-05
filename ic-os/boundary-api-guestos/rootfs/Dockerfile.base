@@ -76,59 +76,6 @@ RUN \
    curl -L -O https://github.com/dfinity/nginx-modules/releases/download/v0.0.11/libnginx-mod-http-cbor-resp-ic_0.0.11_amd64.deb && \
    echo "edcadaabb22a287ad71185959fc5a93d69bde70bbc442d03410828973e9dd0e2  libnginx-mod-http-cbor-resp-ic_0.0.11_amd64.deb" | shasum -c
 
-# Build ngx_http_geoip2_module
-FROM ubuntu:20.04 AS ngx_http_geoip2_module
-
-USER root:root
-
-ARG DEBIAN_FRONTEND=noninteractive
-
-RUN \
-    apt-get update && \
-    apt-get install -y \
-        software-properties-common \
-        gpg
-
-RUN \
-    add-apt-repository -y ppa:maxmind/ppa
-
-RUN \
-    apt-get install -y \
-        libmaxminddb-dev \
-        libmaxminddb0 \
-        mmdb-bin
-
-RUN \
-    apt-get install -y \
-        curl \
-        gcc \
-        libpcre3 \
-        libpcre3-dev \
-        make \
-        zlib1g \
-        zlib1g-dev
-
-ARG NGX_HTTP_GEOIP2_MODULE_TAG=3.4
-RUN \
-    curl -sLv \
-        https://github.com/leev/ngx_http_geoip2_module/archive/refs/tags/${NGX_HTTP_GEOIP2_MODULE_TAG}.tar.gz \
-    | tar -xzf -
-
-ARG NGINX_VERSION=1.21.3
-RUN \
-    curl -sLv \
-        http://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz \
-    | tar -xzf -
-
-WORKDIR /nginx-${NGINX_VERSION}
-
-RUN \
-    ./configure \
-        --with-compat \
-        --add-dynamic-module=/ngx_http_geoip2_module-${NGX_HTTP_GEOIP2_MODULE_TAG}/ && \
-    make modules && \
-    mv objs/ngx_http_geoip2_module.so /tmp/
-
 #
 # Second build stage:
 # - Download and cache minimal Ubuntu Server 20.04 LTS Docker image
@@ -190,6 +137,7 @@ RUN \
         lshw \
         lvm2 \
         net-tools \
+        netbase \
         nftables \
         nginx-module-njs=1.21.3+0.7.0-1~focal \
         nginx=1.21.3-1~focal \
@@ -208,9 +156,7 @@ RUN \
         udev \
         usbutils \
         vim \
-        zstd \
-        fcgiwrap \
-        incron
+        zstd
 
 # Install vector
 COPY --from=download /tmp/vector_0.24.1-1_amd64.deb /tmp/vector_0.24.1-1_amd64.deb
@@ -259,7 +205,3 @@ COPY --from=download /tmp/libnginx-mod-http-cbor-resp-ic_0.0.11_amd64.deb .
 RUN \
     dpkg -i libnginx-mod-http-cbor-resp-ic_0.0.11_amd64.deb && \
     rm libnginx-mod-http-cbor-resp-ic_0.0.11_amd64.deb
-
-# Install ngx_http_geoip2
-COPY --from=ngx_http_geoip2_module \
-    /tmp/ngx_http_geoip2_module.so ${NGINX_MODULES_PATH}

@@ -60,8 +60,7 @@ function process_bootstrap() {
     # stash a couple of things away to config store
     FILES=(
         bn_vars.conf network.conf nns.conf
-        nns_public_key.pem denylist.map prober_identity.pem
-        certificate_issuer.conf certificate_issuer_identity.pem certificate_issuer_enc_key.pem
+        nns_public_key.pem
     )
     for FILE in ${FILES[@]}; do
         if [ -e "${TMPDIR}/${FILE}" ]; then
@@ -74,7 +73,6 @@ function process_bootstrap() {
         accounts_ssh_authorized_keys
         buildinfo
         certs
-        geolite2_dbs
     )
 
     for DIR in "${DIRS[@]}"; do
