@@ -16,7 +16,8 @@ pub use ic_error_types::{ErrorCode, UserError};
 use ic_execution_environment::ExecutionServices;
 use ic_ic00_types::{self as ic00, CanisterIdRecord, InstallCodeArgs, Method, Payload};
 pub use ic_ic00_types::{
-    CanisterInstallMode, CanisterSettingsArgs, EcdsaKeyId, UpdateSettingsArgs,
+    CanisterHttpResponsePayload, CanisterInstallMode, CanisterSettingsArgs, EcdsaKeyId, HttpHeader,
+    HttpMethod, UpdateSettingsArgs,
 };
 use ic_interfaces::{
     certification::{Verifier, VerifierError},
@@ -73,15 +74,16 @@ use ic_types::crypto::{
     CombinedThresholdSigOf, Signable, Signed,
 };
 use ic_types::malicious_flags::MaliciousFlags;
-use ic_types::messages::{CallbackId, Certificate};
+use ic_types::messages::{CallbackId, Certificate, Response};
 use ic_types::signature::ThresholdSignature;
 use ic_types::time::GENESIS;
 use ic_types::{
-    batch::{Batch, BatchPayload, IngressPayload, XNetPayload},
+    batch::{Batch, BatchMessages, XNetPayload},
     canister_http::CanisterHttpRequestContext,
     consensus::certification::Certification,
     messages::{
-        Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, SignedIngress, UserQuery,
+        Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, Payload as MsgPayload,
+        SignedIngress, UserQuery,
     },
     xnet::StreamIndex,
     CryptoHashOfPartialState, Height, NodeId, NumberOfNodes, Randomness, RegistryVersion,
@@ -703,12 +705,7 @@ impl StateMachine {
     /// Triggers a single round of execution without any new inputs.  The state
     /// machine will invoke heartbeats and make progress on pending async calls.
     pub fn tick(&self) {
-        self.execute_block_with_ingress_payload(IngressPayload::default())
-    }
-
-    /// Triggers a single round of execution with block payload as an input.
-    pub fn execute_payload(&self, builder: PayloadBuilder) {
-        self.execute_block_with_ingress_payload(IngressPayload::from(builder.payload))
+        self.execute_payload(PayloadBuilder::default())
     }
 
     /// Makes the state machine tick until there are no more messages in the system.
@@ -741,7 +738,8 @@ impl StateMachine {
         }
     }
 
-    fn execute_block_with_batch_payload(&self, payload: BatchPayload) {
+    /// Triggers a single round of execution with block payload as an input.
+    pub fn execute_payload(&self, payload: PayloadBuilder) {
         let batch_number = self.message_routing.expected_batch_height();
 
         let mut seed = [0u8; 32];
@@ -751,12 +749,16 @@ impl StateMachine {
         let batch = Batch {
             batch_number,
             requires_full_state_hash: self.checkpoints_enabled.get(),
-            messages: payload.into_messages().unwrap(),
+            messages: BatchMessages {
+                signed_ingress_msgs: payload.ingress_messages,
+                certified_stream_slices: payload.xnet_payload.stream_slices,
+                bitcoin_adapter_responses: vec![],
+            },
             randomness: Randomness::from(seed),
             ecdsa_subnet_public_keys: self.ecdsa_subnet_public_keys.clone(),
             registry_version: self.registry_client.get_latest_version(),
             time: self.time.get(),
-            consensus_responses: vec![],
+            consensus_responses: payload.consensus_responses,
         };
         self.message_routing
             .deliver_batch(batch)
@@ -764,18 +766,8 @@ impl StateMachine {
         self.await_height(batch_number);
     }
 
-    fn execute_block_with_ingress_payload(&self, ingress: IngressPayload) {
-        self.execute_block_with_batch_payload(BatchPayload {
-            ingress,
-            ..BatchPayload::default()
-        });
-    }
-
-    pub fn execute_block_with_xnet_payload(&self, xnet: XNetPayload) {
-        self.execute_block_with_batch_payload(BatchPayload {
-            xnet,
-            ..BatchPayload::default()
-        });
+    pub fn execute_block_with_xnet_payload(&self, xnet_payload: XNetPayload) {
+        self.execute_payload(PayloadBuilder::new().xnet_payload(xnet_payload));
     }
 
     fn await_height(&self, h: Height) {
@@ -1726,7 +1718,9 @@ impl StateMachine {
 pub struct PayloadBuilder {
     expiry_time: Time,
     nonce: Option<u64>,
-    payload: Vec<SignedIngress>,
+    ingress_messages: Vec<SignedIngress>,
+    xnet_payload: XNetPayload,
+    consensus_responses: Vec<Response>,
 }
 
 impl Default for PayloadBuilder {
@@ -1734,7 +1728,9 @@ impl Default for PayloadBuilder {
         Self {
             expiry_time: GENESIS,
             nonce: Default::default(),
-            payload: Default::default(),
+            ingress_messages: Default::default(),
+            xnet_payload: Default::default(),
+            consensus_responses: Default::default(),
         }
         .with_max_expiry_time_from_now(GENESIS.into())
     }
@@ -1787,13 +1783,29 @@ impl PayloadBuilder {
         })
         .unwrap();
 
-        self.payload.push(msg);
+        self.ingress_messages.push(msg);
         self.expiry_time += Duration::from_nanos(1);
         self.nonce = self.nonce.map(|n| n + 1);
         self
     }
 
+    pub fn xnet_payload(mut self, xnet_payload: XNetPayload) -> Self {
+        self.xnet_payload = xnet_payload;
+        self
+    }
+
+    pub fn http_response(mut self, id: CallbackId, payload: &CanisterHttpResponsePayload) -> Self {
+        self.consensus_responses.push(Response {
+            originator: CanisterId::ic_00(),
+            respondent: CanisterId::ic_00(),
+            originator_reply_callback: id,
+            refund: Cycles::zero(),
+            response_payload: MsgPayload::Data(payload.encode()),
+        });
+        self
+    }
+
     pub fn ingress_ids(&self) -> Vec<MessageId> {
-        self.payload.iter().map(|i| i.id()).collect()
+        self.ingress_messages.iter().map(|i| i.id()).collect()
     }
 }
