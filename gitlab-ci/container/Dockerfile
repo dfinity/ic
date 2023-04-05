@@ -37,7 +37,7 @@ COPY --from=docker/buildx-bin:latest /buildx /usr/libexec/docker/cli-plugins/doc
 # Add the `${USER}` user, and the required folders
 ARG USER=ubuntu
 ARG UID=1000
-ARG BAZEL_VERSION=invalid
+ARG USE_BAZEL_VERSION=invalid
 RUN useradd -ms /bin/bash -u ${UID} ${USER} && \
     mkdir -p /home/${USER} && \
     chown -R ${UID}.${UID} /home/${USER} && \
@@ -111,7 +111,7 @@ ENV ROCKSDB_INCLUDE_DIR=/usr/include ROCKSDB_LIB_DIR=/usr/lib ROCKSDB_STATIC=1 \
     BZ2_INCLUDE_DIR=/usr/include BZ2_LIB_DIR=/usr/lib/x86_64-linux-gnu BZ2_STATIC=1
 
 # Pre-populate the Bazel installation.
-RUN USE_BAZEL_VERSION=${BAZEL_VERSION} bazel version
+RUN bazel version
 
 RUN mkdir --mode=0700 /home/${USER}/.ssh
 COPY ./files/known_hosts /home/${USER}/.ssh/known_hosts
