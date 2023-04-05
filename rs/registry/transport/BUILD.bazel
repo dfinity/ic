@@ -8,6 +8,20 @@ filegroup(
     srcs = glob(["proto/**"]),
 )
 
+DEPENDENCIES = [
+    "//rs/protobuf",
+    "//rs/types/base_types",
+    "@crate_index//:bytes",
+    "@crate_index//:candid",
+    "@crate_index//:prost",
+    "@crate_index//:serde",
+]
+
+DEV_DEPENDENCIES = [
+    "//rs/registry/keys",
+    "//rs/nervous_system/common/test_keys",
+]
+
 rust_library(
     name = "transport",
     srcs = glob([
@@ -18,18 +32,13 @@ rust_library(
     proc_macro_deps = [
     ],
     version = "0.8.0",
-    deps = [
-        "//rs/protobuf",
-        "@crate_index//:bytes",
-        "@crate_index//:candid",
-        "@crate_index//:prost",
-        "@crate_index//:serde",
-    ],
+    deps = DEPENDENCIES,
 )
 
 rust_test(
     name = "lib_tests",
     crate = ":transport",
+    deps = DEV_DEPENDENCIES + DEPENDENCIES,
 )
 
 generated_files_check(
