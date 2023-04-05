@@ -1,8 +1,4 @@
-import qs from "querystring";
-
 import SUBNET_TABLE from "/var/opt/nginx/ic/ic_routes.js";
-import CANISTER_ID_ALIASES from "/var/opt/nginx/canister_aliases/canister_id_aliases.js";
-import DOMAIN_CANISTER_MAPPINGS from "/var/opt/nginx/domain_canister_mappings.js";
 
 const CANISTER_ID_LENGTH = 27;
 
@@ -62,108 +58,12 @@ function resolveCanisterIdFromUri(uri) {
   return canister_id;
 }
 
-function extractCanisterIdFromHost(host) {
-  const re = /^([0-9a-zA-Z\-]+)\./;
-  const m = re.exec(host);
-  if (!m) {
-    return "";
-  }
-  let canisterId = m[1];
-
-  // Check if ID is an alias
-  if (!!CANISTER_ID_ALIASES[canisterId]) {
-    canisterId = CANISTER_ID_ALIASES[canisterId];
-  }
-
-  if (canisterId.length != CANISTER_ID_LENGTH) {
-    return "";
-  }
-
-  return canisterId;
-}
-
-function getHostnameFromUri(uri) {
-  const re = /^https?\:\/\/([^:\/?#]*)/;
-  const m = re.exec(uri);
-  if (!m) {
-    return "";
-  }
-  return m[1];
-}
-
-function extractCanisterIdFromReferer(r) {
-  const refererHeader = r.headersIn.referer;
-  if (!refererHeader) {
-    return "";
-  }
-
-  const refererHost = getHostnameFromUri(refererHeader);
-  if (!refererHost) {
-    return "";
-  }
-
-  const canisterId = extractCanisterIdFromHost(refererHost);
-  if (!!canisterId) {
-    return canisterId;
-  }
-
-  const idx = refererHeader.indexOf("?");
-  if (i != -1) {
-    return "";
-  }
-
-  const queryParams = qs.parse(refererHeader.substr(idx + 1));
-  return queryParams["canisterId"];
-}
-
-function hostCanisterId(r) {
-  return extractCanisterIdFromHost(r.headersIn.host);
-}
-
-function domainToCanisterId(d) {
-  return DOMAIN_CANISTER_MAPPINGS[d] || "";
-}
-
 function inferCanisterId(r) {
-  // Domain
-  let canisterId = domainToCanisterId(r.headersIn.host);
-  if (!!canisterId) {
-    return canisterId;
-  }
-
-  // URI
-  canisterId = resolveCanisterIdFromUri(r.uri);
-  if (!!canisterId) {
-    return canisterId;
-  }
-
-  // Host
-  canisterId = extractCanisterIdFromHost(r.headersIn.host);
-  if (!!canisterId) {
-    return canisterId;
-  }
-
-  // Query param
-  canisterId = r.args["canisterId"];
-  if (!!canisterId) {
-    return canisterId;
-  }
-
-  // Referer
-  return extractCanisterIdFromReferer(r);
+  return  resolveCanisterIdFromUri(r.uri);
 }
 
 function isTableEmpty(r) {
   return !SUBNET_TABLE["canister_subnets"] ? "1" : "";
-}
-
-function normalizeSubnetType(typ) {
-  return (
-    {
-      application: "application",
-      system: "system",
-    }[typ] || ""
-  );
 }
 
 function route(r) {
@@ -196,14 +96,11 @@ function route(r) {
     return "";
   }
 
-  const subnetTypes = SUBNET_TABLE["subnet_types"] || {};
-  const subnetType = normalizeSubnetType(subnetTypes[subnetId]);
-
   // Choose random node
   const nodeIdx = Math.floor(Math.random() * nodeCount);
   const nodeId = subnetNodeIds[nodeIdx];
 
-  return `${nodeId},${subnetId},${subnetType}`;
+  return `${nodeId},${subnetId}`;
 }
 
 function randomRoute() {
@@ -223,18 +120,14 @@ function randomRoute() {
     return "";
   }
 
-  const subnetTypes = SUBNET_TABLE["subnet_types"] || {};
-  const subnetType = normalizeSubnetType(subnetTypes[subnetId]);
-
   // Choose random node
   const nodeIdx = Math.floor(Math.random() * nodeCount);
   const nodeId = subnetNodeIds[nodeIdx];
 
-  return `${subnetId},${subnetType},${nodeId}`;
+  return `${nodeId},${subnetId}`;
 }
 
 export default {
-  hostCanisterId,
   inferCanisterId,
   isTableEmpty,
   randomRoute,

@@ -23,17 +23,6 @@ USER root:root
 
 WORKDIR /tmp
 
-# Download Nginx NJS Plugins
-ARG NGINX_NJS_PLUGINS_PROJECT_ID=38466408
-ARG NGINX_NJS_PLUGINS_REF_NAME=v1.0.1
-ARG NGINX_NJS_PLUGINS_GITLAB_READ_ONLY_CI_TOKEN=glpat-2s2iXys15ZmVpgdxok58
-
-RUN \
-    curl -sL -o njs-plugin-is-bot.js \
-        -H "Private-Token: ${NGINX_NJS_PLUGINS_GITLAB_READ_ONLY_CI_TOKEN}" \
-        https://gitlab.com/api/v4/projects/${NGINX_NJS_PLUGINS_PROJECT_ID}/jobs/artifacts/${NGINX_NJS_PLUGINS_REF_NAME}/raw/dist/njs-plugin-is-bot.js?job=build-plugins && \
-    echo "22be6801bab3d38c1feec4eb78d95bcd40e3dc840f7254dd54655eb5dd88daae02743c7489ff2783870a13201b8091f5786af614faf9d9538d5fa96f17bc5859  njs-plugin-is-bot.js" | shasum -c
-
 #
 # Second build stage:
 # - Construct base images with the differences between dev and prod (IC-OS root filesystem)
@@ -67,10 +56,6 @@ RUN mkdir -p /boot/config \
              /boot/grub
 
 COPY etc /etc
-
-# Install Nginx NJS Plugins
-COPY --from=download \
-    /tmp/njs-plugin-is-bot.js /etc/nginx/njs/
 
 # Update POSIX permissions in /etc/
 RUN find /etc -type d -exec chmod 0755 {} \+ && \

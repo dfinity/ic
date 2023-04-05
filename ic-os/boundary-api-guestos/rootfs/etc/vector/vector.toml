@@ -124,7 +124,6 @@ inputs = ["nginx_access_json"]
     request_method = "{{ request_method }}"
     status = "{{ status }}"
     traffic_segment = "{{ traffic_segment }}"
-    is_bot = "{{ is_bot }}"
     upstream_cache_status = "{{ upstream_cache_status }}"
     upstream_status = "{{ upstream_status }}"
 
@@ -140,7 +139,6 @@ inputs = ["nginx_access_json"]
     request_method = "{{ request_method }}"
     status = "{{ status }}"
     traffic_segment = "{{ traffic_segment }}"
-    is_bot = "{{ is_bot }}"
     upstream_cache_status = "{{ upstream_cache_status }}"
     upstream_status = "{{ upstream_status }}"
 
@@ -238,86 +236,6 @@ mode = "bulk"
   index = "boundary-node-control-plane-%Y.%m.%d"
 
   [sinks.elasticsearch_control_plane.tls]
-  verify_certificate = false
-
-# certificate-issuer
-
-[sources.certificate_issuer]
-type = "journald"
-include_units = ["certificate-issuer"]
-
-[transforms.certificate_issuer_json]
-type = "remap"
-inputs = ["certificate_issuer"]
-source = """
-preserved_fields = {}; preserved_keys = ["host"]
-
-for_each(preserved_keys) -> |_, k| {
-  v = get!(., [k])
-  if v != null {
-    preserved_fields = set!(preserved_fields, [k], v)
-  }
-}
-
-. = parse_json!(.message)
-
-.@timestamp = to_timestamp!(.timestamp, unit: "milliseconds")
-.@timestamp = to_unix_timestamp(.@timestamp, unit: "milliseconds")
-del(.timestamp)
-
-. = merge(., preserved_fields)
-"""
-
-[sinks.elasticsearch_certificate_issuer]
-type = "elasticsearch"
-inputs = ["certificate_issuer_json"]
-endpoint = "${ELASTICSEARCH_URL}"
-mode = "bulk"
-
-  [sinks.elasticsearch_certificate_issuer.bulk]
-  index = "boundary-node-certificate-issuer-%Y.%m.%d"
-
-  [sinks.elasticsearch_certificate_issuer.tls]
-  verify_certificate = false
-
-# certificate-syncer
-
-[sources.certificate_syncer]
-type = "journald"
-include_units = ["certificate-syncer"]
-
-[transforms.certificate_syncer_json]
-type = "remap"
-inputs = ["certificate_syncer"]
-source = """
-preserved_fields = {}; preserved_keys = ["host"]
-
-for_each(preserved_keys) -> |_, k| {
-  v = get!(., [k])
-  if v != null {
-    preserved_fields = set!(preserved_fields, [k], v)
-  }
-}
-
-. = parse_json!(.message)
-
-.@timestamp = to_timestamp!(.timestamp, unit: "milliseconds")
-.@timestamp = to_unix_timestamp(.@timestamp, unit: "milliseconds")
-del(.timestamp)
-
-. = merge(., preserved_fields)
-"""
-
-[sinks.elasticsearch_certificate_syncer]
-type = "elasticsearch"
-inputs = ["certificate_syncer_json"]
-endpoint = "${ELASTICSEARCH_URL}"
-mode = "bulk"
-
-  [sinks.elasticsearch_certificate_syncer.bulk]
-  index = "boundary-node-certificate-syncer-%Y.%m.%d"
-
-  [sinks.elasticsearch_certificate_syncer.tls]
   verify_certificate = false
 
 # danted (socks proxy)
