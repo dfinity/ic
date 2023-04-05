@@ -34,6 +34,29 @@ gzip_compress = rule(
     },
 )
 
+def _zstd_compress(ctx):
+    """zstd-compresses source files.
+    """
+    out = ctx.actions.declare_file(ctx.label.name)
+
+    # TODO: install zstd as depedency.
+    ctx.actions.run(
+        executable = "zstd",
+        arguments = ["--threads=0", "-10", "-f", "-z", "-o", out.path] + [s.path for s in ctx.files.srcs],
+        inputs = ctx.files.srcs,
+        outputs = [out],
+        env = {"ZSTDMT_NBWORKERS_MAX": str(_COMPRESS_CONCURENCY)},
+        resource_set = _compress_resources,
+    )
+    return [DefaultInfo(files = depset([out]), runfiles = ctx.runfiles(files = [out]))]
+
+zstd_compress = rule(
+    implementation = _zstd_compress,
+    attrs = {
+        "srcs": attr.label_list(allow_files = True),
+    },
+)
+
 def rust_test_suite_with_extra_srcs(name, srcs, extra_srcs, **kwargs):
     """ A rule for creating a test suite for a set of `rust_test` targets.
 
