@@ -9,6 +9,7 @@ use crate::ecdsa::{
     make_bootstrap_summary, payload_builder::get_ecdsa_config_if_enabled,
     utils::inspect_ecdsa_initializations,
 };
+use ic_interfaces::dkg::{DkgMessageValidationError, PermanentError, TransientError};
 use ic_interfaces::{
     artifact_pool::{ChangeSetProducer, PriorityFnAndFilterProducer},
     consensus_pool::ConsensusPoolCache,
@@ -16,7 +17,7 @@ use ic_interfaces::{
     validation::{ValidationError, ValidationResult},
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::{StateManager, StateManagerError};
+use ic_interfaces_state_manager::StateManager;
 use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_metrics::buckets::{decimal_buckets, linear_buckets};
 use ic_protobuf::registry::subnet::v1::CatchUpPackageContents;
@@ -39,16 +40,11 @@ use ic_types::{
         crypto_hash,
         threshold_sig::ni_dkg::{
             config::{errors::NiDkgConfigValidationError, NiDkgConfig, NiDkgConfigData},
-            errors::{
-                create_transcript_error::DkgCreateTranscriptError,
-                verify_dealing_error::DkgVerifyDealingError,
-            },
             NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet, NiDkgTranscript,
         },
-        CryptoError, Signed,
+        Signed,
     },
     messages::CallbackId,
-    registry::RegistryClientError,
     signature::ThresholdSignature,
     Height, NodeId, NumberOfNodes, RegistryVersion, SubnetId, Time,
 };
@@ -75,90 +71,6 @@ const REMOTE_DKG_REPEATED_FAILURE_ERROR: &str = "Attemtps to run this DKG repeat
 
 // Currently we assume that we run DKGs for all of these tags.
 const TAGS: [NiDkgTag; 2] = [NiDkgTag::LowThreshold, NiDkgTag::HighThreshold];
-
-/// Transient Dkg message validation errors.
-#[allow(missing_docs)]
-#[derive(Debug)]
-pub enum PermanentError {
-    CryptoError(CryptoError),
-    DkgCreateTranscriptError(DkgCreateTranscriptError),
-    DkgVerifyDealingError(DkgVerifyDealingError),
-    MismatchedDkgSummary(dkg::Summary, dkg::Summary),
-    MissingDkgConfigForDealing,
-    LastSummaryHasMultipleConfigsForSameTag,
-    DkgStartHeightDoesNotMatchParentBlock,
-    DkgSummaryAtNonStartHeight(Height),
-    DkgDealingAtStartHeight(Height),
-    MissingRegistryVersion(Height),
-    InvalidDealer(NodeId),
-    DealerAlreadyDealt(NodeId),
-    FailedToCreateDkgConfig(NiDkgConfigValidationError),
-}
-
-/// Permanent Dkg message validation errors.
-#[allow(missing_docs)]
-#[derive(Debug)]
-pub enum TransientError {
-    /// Crypto related errors.
-    CryptoError(CryptoError),
-    StateManagerError(StateManagerError),
-    DkgCreateTranscriptError(DkgCreateTranscriptError),
-    DkgVerifyDealingError(DkgVerifyDealingError),
-    FailedToGetDkgIntervalSettingFromRegistry(RegistryClientError),
-    FailedToGetSubnetMemberListFromRegistry(RegistryClientError),
-    MissingDkgStartBlock,
-}
-
-/// Dkg errors.
-pub type DkgMessageValidationError = ValidationError<PermanentError, TransientError>;
-
-impl From<DkgCreateTranscriptError> for PermanentError {
-    fn from(err: DkgCreateTranscriptError) -> Self {
-        PermanentError::DkgCreateTranscriptError(err)
-    }
-}
-
-impl From<DkgCreateTranscriptError> for TransientError {
-    fn from(err: DkgCreateTranscriptError) -> Self {
-        TransientError::DkgCreateTranscriptError(err)
-    }
-}
-
-impl From<DkgVerifyDealingError> for PermanentError {
-    fn from(err: DkgVerifyDealingError) -> Self {
-        PermanentError::DkgVerifyDealingError(err)
-    }
-}
-
-impl From<DkgVerifyDealingError> for TransientError {
-    fn from(err: DkgVerifyDealingError) -> Self {
-        TransientError::DkgVerifyDealingError(err)
-    }
-}
-
-impl From<CryptoError> for PermanentError {
-    fn from(err: CryptoError) -> Self {
-        PermanentError::CryptoError(err)
-    }
-}
-
-impl From<CryptoError> for TransientError {
-    fn from(err: CryptoError) -> Self {
-        TransientError::CryptoError(err)
-    }
-}
-
-impl From<PermanentError> for DkgMessageValidationError {
-    fn from(err: PermanentError) -> Self {
-        ValidationError::Permanent(err)
-    }
-}
-
-impl From<TransientError> for DkgMessageValidationError {
-    fn from(err: TransientError) -> Self {
-        ValidationError::Transient(err)
-    }
-}
 
 struct Metrics {
     pub on_state_change_duration: Histogram,
@@ -1580,6 +1492,7 @@ mod tests {
         crypto::threshold_sig::ni_dkg::{
             NiDkgDealing, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
         },
+        registry::RegistryClientError,
         time::UNIX_EPOCH,
         PrincipalId, RegistryVersion, ReplicaVersion,
     };
