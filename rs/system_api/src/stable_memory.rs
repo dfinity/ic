@@ -126,6 +126,27 @@ impl StableMemory {
         Ok(initial_page_count as i64)
     }
 
+    /// Same as `stable64_read`, but doesn't do any bounds checks on the stable
+    /// memory. This should only be called through instrumented code that does
+    /// its own bounds checking (although it is still safe to call without
+    /// bounds checking - the result will just be that zeros are read from
+    /// beyond the end of stable memory).
+    pub(super) fn stable_read_without_bounds_checks(
+        &self,
+        dst: u64,
+        offset: u64,
+        size: u64,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()> {
+        let (heap_end, overflow) = dst.overflowing_add(size);
+        if overflow || heap_end as usize > heap.len() {
+            return Err(HypervisorError::Trapped(HeapOutOfBounds));
+        }
+        self.stable_memory_buffer
+            .read(&mut heap[dst as usize..heap_end as usize], offset as usize);
+        Ok(())
+    }
+
     /// Reads from stable memory back to heap.
     ///
     /// Supports bigger stable memory indexed by 64 bit pointers.

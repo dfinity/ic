@@ -46,8 +46,8 @@ use ic_replicated_state::{
     canister_state::{execution_state::SandboxMemory, NextExecution},
     page_map::PAGE_SIZE,
     testing::{CanisterQueuesTesting, ReplicatedStateTesting},
-    CallContext, CanisterState, ExecutionState, ExecutionTask, InputQueueType, Memory,
-    NetworkTopology, NodeTopology, PageIndex, ReplicatedState, SubnetTopology,
+    CallContext, CanisterState, ExecutionState, ExecutionTask, InputQueueType, NetworkTopology,
+    NodeTopology, PageIndex, ReplicatedState, SubnetTopology,
 };
 use ic_replicated_state::{page_map::TestPageAllocatorFileDescriptorImpl, PageMap};
 use ic_system_api::InstructionLimits;
@@ -140,16 +140,6 @@ pub fn test_registry_settings() -> RegistryExecutionSettings {
         provisional_whitelist: ProvisionalWhitelist::Set(BTreeSet::new()),
         max_ecdsa_queue_size: 20,
         subnet_size: SMALL_APP_SUBNET_MAX_SIZE,
-    }
-}
-
-pub fn default_memory_for_system_api() -> Option<Memory> {
-    match EmbeddersConfig::default()
-        .feature_flags
-        .wasm_native_stable_memory
-    {
-        FlagStatus::Enabled => None,
-        FlagStatus::Disabled => Some(Memory::new_for_testing()),
     }
 }
 

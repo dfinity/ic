@@ -1048,6 +1048,26 @@ pub(crate) fn syscalls<S: SystemApi>(
         .unwrap();
 
     linker
+        .func_wrap("__", "stable_read_first_access", {
+            move |mut caller: Caller<'_, StoreData<S>>, dst: i64, offset: i64, size: i64| {
+                with_memory_and_system_api(&mut caller, |system_api, memory| {
+                    system_api.stable_read_without_bounds_checks(
+                        dst as u64,
+                        offset as u64,
+                        size as u64,
+                        memory,
+                    )
+                })?;
+                if feature_flags.write_barrier == FlagStatus::Enabled {
+                    mark_writes_on_bytemap(&mut caller, dst as u32 as usize, size as u32 as usize)
+                } else {
+                    Ok(())
+                }
+            }
+        })
+        .unwrap();
+
+    linker
         .func_wrap("ic0", "stable64_read", {
             let log = log.clone();
             move |mut caller: Caller<'_, StoreData<S>>, dst: i64, offset: i64, size: i64| {

@@ -1,6 +1,6 @@
-use ic_config::embedders::Config;
-use ic_config::flag_status::FlagStatus;
-use ic_config::subnet_config::SchedulerConfig;
+use ic_config::{
+    embedders::Config as EmbeddersConfig, flag_status::FlagStatus, subnet_config::SchedulerConfig,
+};
 use ic_embedders::wasm_utils::compile;
 use ic_embedders::WasmtimeEmbedder;
 use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
@@ -16,7 +16,6 @@ use ic_test_utilities::{
     state::SystemStateBuilder,
     types::ids::{call_context_test_id, user_test_id},
 };
-use ic_test_utilities_execution_environment::default_memory_for_system_api;
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_types::{
     methods::{FuncRef, WasmMethod},
@@ -87,7 +86,10 @@ fn test_api_for_update(
             execution_mode: ExecutionMode::Replicated,
         },
         *MAX_SUBNET_AVAILABLE_MEMORY,
-        default_memory_for_system_api(),
+        EmbeddersConfig::default()
+            .feature_flags
+            .wasm_native_stable_memory,
+        Memory::new_for_testing(),
         Arc::new(DefaultOutOfInstructionsHandler {}),
         log,
     )
@@ -428,7 +430,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let wasm = wat2wasm(wat).unwrap();
 
-            let embedder = WasmtimeEmbedder::new(Config::default(), log);
+            let embedder = WasmtimeEmbedder::new(EmbeddersConfig::default(), log);
             let (embedder_cache, result) = compile(&embedder, &wasm);
             result.unwrap();
 
@@ -617,7 +619,7 @@ mod tests {
             )
             .unwrap();
 
-            let config = Config::default();
+            let config = EmbeddersConfig::default();
             let embedder = WasmtimeEmbedder::new(config, log.clone());
             let (cache, result) = compile(&embedder, &wasm);
             result.unwrap();
@@ -1000,7 +1002,7 @@ mod tests {
         let wat = make_module_wat(2 * TEST_NUM_PAGES);
         let wasm = wat2wasm(&wat).unwrap();
 
-        let config = Config {
+        let config = EmbeddersConfig {
             subnet_type,
             dirty_page_overhead: match subnet_type {
                 SubnetType::System => SchedulerConfig::system_subnet(),
@@ -1008,7 +1010,7 @@ mod tests {
                 SubnetType::VerifiedApplication => SchedulerConfig::verified_application_subnet(),
             }
             .dirty_page_overhead,
-            ..Config::default()
+            ..EmbeddersConfig::default()
         };
         let embedder = WasmtimeEmbedder::new(config, log.clone());
         let (cache, result) = compile(&embedder, &wasm);
@@ -1271,7 +1273,7 @@ mod tests {
         with_test_replica_logger(|log| {
             let wat = make_module_wat_for_api_calls(TEST_NUM_PAGES);
             let wasm = wat2wasm(&wat).unwrap();
-            let embedder = WasmtimeEmbedder::new(Config::default(), log);
+            let embedder = WasmtimeEmbedder::new(EmbeddersConfig::default(), log);
             let (embedder_cache, result) = compile(&embedder, &wasm);
             result.unwrap();
 

@@ -37,8 +37,8 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
-    "//rs/rust_canisters/canister_test",
     "//rs/registry/routing_table",
+    "//rs/rust_canisters/canister_test",
     "//rs/test_utilities",
     "//rs/test_utilities/logger",
     "//rs/test_utilities/execution_environment",
