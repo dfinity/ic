@@ -255,11 +255,11 @@ impl Polynomial {
 
             // The inverse of the `base` polynomial evaluated at the current point:
             // `1/base(x_i)`.
-            let inv = base.evaluate_at(x)?.invert()?;
 
-            if inv.is_zero() {
-                return Err(ThresholdEcdsaError::InterpolationError);
-            }
+            let inv = match base.evaluate_at(x)?.invert() {
+                Some(s) => s,
+                None => return Err(ThresholdEcdsaError::InterpolationError),
+            };
 
             // Scaling factor for the base polynomial: `(y_i-poly(x_i))/base(x_i)`
             diff = diff.mul(&inv)?;
@@ -778,11 +778,11 @@ impl LagrangeCoefficients {
                 let diff = x_j.sub(x_i)?;
                 denom = denom.mul(&diff)?;
             }
-            let inv = denom.invert()?;
 
-            if inv.is_zero() {
-                return Err(ThresholdEcdsaError::InterpolationError);
-            }
+            let inv = match denom.invert() {
+                Some(s) => s,
+                None => return Err(ThresholdEcdsaError::InterpolationError),
+            };
 
             *lagrange_i = lagrange_i.mul(&inv)?;
         }
