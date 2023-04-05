@@ -1,17 +1,21 @@
 load("//rs/tests:system_tests.bzl", "system_test")
-load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "BOUNDARY_NODE_GUESTOS_SEV_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "DEPENDENCIES", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "NNS_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "BOUNDARY_NODE_GUESTOS_SEV_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "DEPENDENCIES", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 
 package(default_visibility = ["//visibility:public"])
+
+CERTIFICATE_ORCHESTRATOR_RUNTIME_DEPS = ["//rs/boundary_node/certificate_issuance/certificate_orchestrator:certificate_orchestrator"]
+
+TEST_CANISTERS_RUNTIME_DEPS = [
+    "//rs/tests/test_canisters/http_counter",
+    "//rs/tests/test_canisters/kv_store",
+]
 
 system_test(
     name = "boundary_node_integration_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + [
-        "//rs/tests/test_canisters/http_counter",
-        "//rs/tests/test_canisters/kv_store",
-    ],
+    runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + TEST_CANISTERS_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
@@ -23,10 +27,7 @@ system_test(
         "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + [
-        "//rs/tests/test_canisters/http_counter",
-        "//rs/tests/test_canisters/kv_store",
-    ],
+    runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + TEST_CANISTERS_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
@@ -50,5 +51,21 @@ system_test(
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "long",
     runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + COUNTER_CANISTER_RUNTIME_DEPS,
+    deps = DEPENDENCIES + ["//rs/tests"],
+)
+
+system_test(
+    name = "certificate_orchestrator_test",
+    flaky = False,  # remove after when PFOPS-3148 is resolved
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "allow_to_fail",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS +
+                   GUESTOS_RUNTIME_DEPS +
+                   NNS_CANISTER_RUNTIME_DEPS +
+                   UNIVERSAL_VM_RUNTIME_DEPS +
+                   CERTIFICATE_ORCHESTRATOR_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )

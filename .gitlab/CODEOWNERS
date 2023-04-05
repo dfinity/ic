@@ -219,49 +219,14 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/test_utilities/execution_environment/         @dfinity-lab/teams/execution-owners @dfinity-lab/teams/runtime-owners
 /rs/test_utilities/src/wasmtime_instance.rs         @dfinity-lab/teams/runtime-owners
 /rs/tests/                              @dfinity-lab/teams/ic-testing-verification
-/rs/tests/bin/basic_health_test.rs        @dfinity-lab/teams/ic-testing-verification
-/rs/tests/bin/bitcoin_set_config_proposal_test.rs @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/execution-owners
-/rs/tests/bin/boundary_node_integration_test.rs @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/boundarynode-team
-/rs/tests/bin/boundary_nodes_snp_test.rs @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/boundarynode-team
-/rs/tests/bin/boundary_node_update_workload_test.rs @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/boundarynode-team @dfinity-lab/teams/networking-team
-/rs/tests/bin/btc_get_balance_test.rs     @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/execution-owners
-/rs/tests/bin/canister_http_test.rs       @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/networking-team
-/rs/tests/bin/canister_sig_verification_cache_test.rs       @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/crypto-owners
-/rs/tests/bin/certified_registry_test.rs       @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/nns-team
-/rs/tests/bin/ckbtc_minter_basics_test.rs @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/financial-integrations
-/rs/tests/bin/ckbtc_minter_batching.rs @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/financial-integrations
-/rs/tests/bin/ckbtc_minter_heartbeat.rs @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/financial-integrations
-/rs/tests/bin/ckbtc_minter_retrieve_btc.rs @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/financial-integrations
-/rs/tests/bin/ckbtc_minter_update_balance.rs @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/financial-integrations
-/rs/tests/bin/compute_allocation_test.rs           @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/execution-owners
-/rs/tests/bin/create_subnet_pre_master_test.rs @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/nns-team
-/rs/tests/bin/cycles_restrictions_test.rs           @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/execution-owners
-/rs/tests/bin/dual_workload_test.rs    @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/consensus-owners
-/rs/tests/bin/icrc1_agent_test.rs         @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/financial-integrations
-/rs/tests/bin/inter_canister_queries_test.rs           @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/execution-owners
-/rs/tests/bin/max_ingress_payload_size_test.rs    @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/consensus-owners
-/rs/tests/bin/max_number_of_canisters_test.rs           @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/execution-owners
-/rs/tests/bin/max_xnet_payload_size_test.rs    @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/consensus-owners
-/rs/tests/bin/prod_test_driver.rs       @dfinity-lab/teams/ic-testing-verification
-/rs/tests/bin/request_auth_malicious_replica_test.rs @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/consensus-owners
-/rs/tests/bin/request_signature_test.rs   @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/crypto-owners
-/rs/tests/bin/rosetta_test.rs             @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/financial-integrations
-/rs/tests/bin/rotate_ecdsa_idkg_key_test.rs     @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/consensus-owners
-/rs/tests/bin/sns_deployment_test.rs     @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/nns-team
-/rs/tests/bin/spec_compliance_application_test.rs  @dfinity-lab/teams/ic-testing-verification
-/rs/tests/bin/spec_compliance_system_test.rs       @dfinity-lab/teams/ic-testing-verification
-/rs/tests/bin/system_api_security_test.rs @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/execution-owners
-/rs/tests/bin/system_subnets_test.rs           @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/execution-owners
-/rs/tests/bin/tecdsa_add_nodes_test.rs    @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/consensus-owners
-/rs/tests/bin/tecdsa_complaint_test.rs    @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/consensus-owners
-/rs/tests/bin/two_third_latency_test.rs   @dfinity-lab/teams/ic-testing-verification
-/rs/tests/bin/node_registration_test.rs   @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/consensus-owners
-/rs/tests/bin/backup_manager_test.rs    @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/consensus-owners
-/rs/tests/bin/downgrade_app_subnet_with_ecdsa_test.rs    @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/consensus-owners
-/rs/tests/bin/upgrade_downgrade_app_subnet_test.rs       @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/consensus-owners
-/rs/tests/bin/upgrade_downgrade_nns_subnet_test.rs       @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/consensus-owners
-/rs/tests/sns                           @dfinity-lab/teams/nns-team @dfinity-lab/teams/ic-testing-verification
-/rs/tests/bin/sr_*.rs                   @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/consensus-owners
+/rs/tests/boundary_nodes        @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/boundarynode-team
+/rs/tests/consensus        @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/consensus-owners
+/rs/tests/crypto        @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/crypto-owners
+/rs/tests/execution        @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/execution-owners
+/rs/tests/financial_integrations        @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/financial-integrations
+/rs/tests/message_routing        @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/message-routing-owners
+/rs/tests/networking        @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/networking-team
+/rs/tests/nns        @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/nns-team
 /rs/tests/src/basic_health_test.rs      @dfinity-lab/teams/ic-testing-verification
 /rs/tests/src/boundary_nodes_integration/     @dfinity-lab/teams/boundarynode-team @dfinity-lab/teams/ic-testing-verification
 /rs/tests/src/boundary_nodes_snp_tests/     @dfinity-lab/teams/boundarynode-team @dfinity-lab/teams/ic-testing-verification

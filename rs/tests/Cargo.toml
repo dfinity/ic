@@ -155,332 +155,332 @@ path = "src/lib.rs"
 
 [[bin]]
 name = "ic-systest-basic-health"
-path = "bin/basic_health_test.rs"
+path = "testing_verification/basic_health_test.rs"
 
 [[bin]]
 name = "ic-ii-delegation-test"
-path = "bin/ii_delegation_test.rs"
+path = "testing_verification/ii_delegation_test.rs"
 
 [[bin]]
 name = "ic-systest-rotate-ecdsa-idkg-key"
-path = "orchestrator/bin/rotate_ecdsa_idkg_key_test.rs"
+path = "consensus/orchestrator/rotate_ecdsa_idkg_key_test.rs"
 
 [[bin]]
 name = "ic-systest-canister-http"
-path = "canister_http/bin/canister_http_test.rs"
+path = "networking/canister_http_test.rs"
 
 [[bin]]
 name = "ic-systest-canister-http-socks"
-path = "canister_http/bin/canister_http_socks_test.rs"
+path = "networking/canister_http_socks_test.rs"
 
 [[bin]]
 name = "ic-systest-canister-http-correctness"
-path = "canister_http/bin/canister_http_correctness_test.rs"
+path = "networking/canister_http_correctness_test.rs"
 
 [[bin]]
 name = "ic-systest-spec-compliance-application"
-path = "spec_compliance/bin/spec_compliance_application_test.rs"
+path = "testing_verification/spec_compliance_application_test.rs"
 
 [[bin]]
 name = "ic-systest-spec-compliance-system"
-path = "spec_compliance/bin/spec_compliance_system_test.rs"
+path = "testing_verification/spec_compliance_system_test.rs"
 
 [[bin]]
 name = "ic-systest-tecdsa-add-nodes"
-path = "tecdsa/bin/tecdsa_add_nodes_test.rs"
+path = "consensus/tecdsa/tecdsa_add_nodes_test.rs"
 
 [[bin]]
 name = "ic-systest-tecdsa-key-rotation"
-path = "tecdsa/bin/tecdsa_key_rotation_test.rs"
+path = "consensus/tecdsa/tecdsa_key_rotation_test.rs"
 
 [[bin]]
 name = "ic-systest-tecdsa-remove-nodes"
-path = "tecdsa/bin/tecdsa_remove_nodes_test.rs"
+path = "consensus/tecdsa/tecdsa_remove_nodes_test.rs"
 
 [[bin]]
 name = "ic-systest-tecdsa-signature-life-cycle"
-path = "tecdsa/bin/tecdsa_signature_life_cycle_test.rs"
+path = "consensus/tecdsa/tecdsa_signature_life_cycle_test.rs"
 
 [[bin]]
 name = "ic-systest-tecdsa-signature-fails-without-cycles"
-path = "tecdsa/bin/tecdsa_signature_fails_without_cycles_test.rs"
+path = "consensus/tecdsa/tecdsa_signature_fails_without_cycles_test.rs"
 
 [[bin]]
 name = "ic-systest-tecdsa-signature-from-nns-without-cycles"
-path = "tecdsa/bin/tecdsa_signature_from_nns_without_cycles_test.rs"
+path = "consensus/tecdsa/tecdsa_signature_from_nns_without_cycles_test.rs"
 
 [[bin]]
 name = "ic-systest-tecdsa-signature-from-other-subnet"
-path = "tecdsa/bin/tecdsa_signature_from_other_subnet_test.rs"
+path = "consensus/tecdsa/tecdsa_signature_from_other_subnet_test.rs"
 
 [[bin]]
 name = "ic-systest-tecdsa-signature-same-subnet"
-path = "tecdsa/bin/tecdsa_signature_same_subnet_test.rs"
+path = "consensus/tecdsa/tecdsa_signature_same_subnet_test.rs"
 
 [[bin]]
 name = "ic-systest-tecdsa-signature-timeout"
-path = "tecdsa/bin/tecdsa_signature_timeout_test.rs"
+path = "consensus/tecdsa/tecdsa_signature_timeout_test.rs"
 
 [[bin]]
 name = "ic-systest-btc-get-balance"
-path = "bin/btc_get_balance_test.rs"
+path = "financial_integrations/btc_get_balance_test.rs"
 
 [[bin]]
 name = "ic-systest-rosetta"
-path = "bin/rosetta_test.rs"
+path = "financial_integrations/rosetta/rosetta_test.rs"
 
 [[bin]]
 name = "ic-systest-rosetta-split"
-path = "bin/rosetta_split_test.rs"
+path = "financial_integrations/rosetta/rosetta_split_test.rs"
 
 [[bin]]
 name = "ic-systest-ckbtc-minter-basics-test"
-path = "ckbtc/bin/ckbtc_minter_basics_test.rs"
+path = "financial_integrations/ckbtc/ckbtc_minter_basics_test.rs"
 
 [[bin]]
 name = "ic-systest-ckbtc-batching"
-path = "ckbtc/bin/ckbtc_minter_batching.rs"
+path = "financial_integrations/ckbtc/ckbtc_minter_batching.rs"
 
 [[bin]]
 name = "ic-systest-ckbtc-heartbeat"
-path = "ckbtc/bin/ckbtc_minter_heartbeat.rs"
+path = "financial_integrations/ckbtc/ckbtc_minter_heartbeat.rs"
 
 [[bin]]
 name = "ic-systest-ckbtc-retrieve-btc"
-path = "ckbtc/bin/ckbtc_minter_retrieve_btc.rs"
+path = "financial_integrations/ckbtc/ckbtc_minter_retrieve_btc.rs"
 
 [[bin]]
 name = "ic-systest-ckbtc-update-balance"
-path = "ckbtc/bin/ckbtc_minter_update_balance.rs"
+path = "financial_integrations/ckbtc/ckbtc_minter_update_balance.rs"
 
 [[bin]]
 name = "ic-systest-icrc1-agent-test"
-path = "bin/icrc1_agent_test.rs"
+path = "financial_integrations/icrc1_agent_test.rs"
 
 [[bin]]
 name = "ic-systest-workload-counter-canister-test"
-path = "bin/workload_counter_canister_test.rs"
+path = "testing_verification/workload_counter_canister_test.rs"
 
 [[bin]]
 name = "ic-systest-create-subnet-pre-master-test"
-path = "nns/bin/create_subnet_pre_master_test.rs"
+path = "nns/create_subnet_pre_master_test.rs"
 
 [[bin]]
 name = "ic-systest-node-assign-test"
-path = "orchestrator/bin/node_assign_test.rs"
+path = "consensus/orchestrator/node_assign_test.rs"
 
 [[bin]]
 name = "ic-systest-node-reassignment-test"
-path = "orchestrator/bin/node_reassignment_test.rs"
+path = "consensus/orchestrator/node_reassignment_test.rs"
 
 [[bin]]
 name = "ic-systest-ssh-access-to-nodes-test"
-path = "orchestrator/bin/ssh_access_to_nodes_test.rs"
+path = "consensus/orchestrator/ssh_access_to_nodes_test.rs"
 
 [[bin]]
 name = "ic-systest-node-registration-test"
-path = "orchestrator/bin/node_registration_test.rs"
+path = "consensus/orchestrator/node_registration_test.rs"
 
 [[bin]]
 name = "ic-systest-rejoin-test"
-path = "bin/rejoin_test.rs"
+path = "message_routing/rejoin_test.rs"
 
 [[bin]]
 name = "ic-systest-liveness-with-equivocation-test"
-path = "bin/liveness_with_equivocation_test.rs"
+path = "consensus/liveness_with_equivocation_test.rs"
 
 [[bin]]
 name = "ic-systest-system-subnets-test"
-path = "bin/system_subnets_test.rs"
+path = "execution/system_subnets_test.rs"
 
 [[bin]]
 name = "ic-systest-cow-safety-test"
-path = "bin/cow_safety_test.rs"
+path = "consensus/cow_safety_test.rs"
 
 [[bin]]
 name = "ic-systest-replica-determinism-test"
-path = "bin/replica_determinism_test.rs"
+path = "consensus/replica_determinism_test.rs"
 
 [[bin]]
 name = "ic-systest-request-auth-malicious-replica-test"
-path = "bin/request_auth_malicious_replica_test.rs"
+path = "consensus/request_auth_malicious_replica_test.rs"
 
 [[bin]]
 name = "ic-systest-safety-test"
-path = "bin/safety_test.rs"
+path = "consensus/safety_test.rs"
 
 [[bin]]
 name = "ic-systest-system-api-security-test"
-path = "bin/system_api_security_test.rs"
+path = "execution/system_api_security_test.rs"
 
 [[bin]]
 name = "ic-systest-tecdsa-complaint-test"
-path = "tecdsa/bin/tecdsa_complaint_test.rs"
+path = "consensus/tecdsa/tecdsa_complaint_test.rs"
 
 [[bin]]
 name = "ic-systest-max-ingress-payload-size-test"
-path = "bin/max_ingress_payload_size_test.rs"
+path = "consensus/max_ingress_payload_size_test.rs"
 
 [[bin]]
 name = "ic-systest-dual-workload-test"
-path = "bin/dual_workload_test.rs"
+path = "consensus/dual_workload_test.rs"
 
 [[bin]]
 name = "ic-systest-catch-up-possible-test"
-path = "bin/catch_up_possible_test.rs"
+path = "consensus/catch_up_possible_test.rs"
 
 [[bin]]
 name = "ic-systest-catch-up-loop-prevention-test"
-path = "bin/catch_up_loop_prevention_test.rs"
+path = "consensus/catch_up_loop_prevention_test.rs"
 
 [[bin]]
 name = "ic-systest-max-xnet-payload-size-test"
-path = "bin/max_xnet_payload_size_test.rs"
+path = "consensus/max_xnet_payload_size_test.rs"
 
 [[bin]]
 name = "ic-systest-node-graceful-leaving-test"
-path = "bin/node_graceful_leaving_test.rs"
+path = "consensus/node_graceful_leaving_test.rs"
 
 [[bin]]
 name = "test-driver-e2e-scenarios"
-path = "bin/test_driver_e2e_scenarios.rs"
+path = "testing_verification/test_driver_e2e_scenarios.rs"
 
 [[bin]]
 name = "ic-systest-two-third-latency"
-path = "bin/two_third_latency_test.rs"
+path = "networking/two_third_latency_test.rs"
 
 [[bin]]
 name = "ic-systest-boundary-node-integration"
-path = "boundary_nodes/bin/boundary_node_integration_test.rs"
+path = "boundary_nodes/boundary_node_integration_test.rs"
 
 [[bin]]
 name = "ic-systest-boundary-node-integration-on-playnet"
-path = "boundary_nodes/bin/boundary_node_integration_on_playnet_test.rs"
+path = "boundary_nodes/boundary_node_integration_on_playnet_test.rs"
 
 [[bin]]
 name = "ic-systest-boundary-node-snp"
-path = "boundary_nodes/bin/boundary_nodes_snp_test.rs"
+path = "boundary_nodes/boundary_nodes_snp_test.rs"
 
 [[bin]]
 name = "ic-systest-boundary-node-update-workload-test"
-path = "boundary_nodes/bin/boundary_node_update_workload_test.rs"
+path = "boundary_nodes/boundary_node_update_workload_test.rs"
 
 [[bin]]
 name = "ic-systest-general-execution"
-path = "bin/general_execution_test.rs"
+path = "execution/general_execution_test.rs"
 
 [[bin]]
 name = "ic-systest-downgrade-app-subnet-with-ecdsa"
-path = "orchestrator/bin/downgrade_app_subnet_with_ecdsa_test.rs"
+path = "consensus/orchestrator/downgrade_app_subnet_with_ecdsa_test.rs"
 
 [[bin]]
 name = "ic-systest-upgrade-downgrade-app-subnet"
-path = "orchestrator/bin/upgrade_downgrade_app_subnet_test.rs"
+path = "consensus/orchestrator/upgrade_downgrade_app_subnet_test.rs"
 
 [[bin]]
 name = "ic-systest-upgrade-downgrade-nns-subnet"
-path = "orchestrator/bin/upgrade_downgrade_nns_subnet_test.rs"
+path = "consensus/orchestrator/upgrade_downgrade_nns_subnet_test.rs"
 
 [[bin]]
 name = "ic-systest-backup-manager"
-path = "orchestrator/bin/backup_manager_test.rs"
+path = "consensus/backup_manager_test.rs"
 
 [[bin]]
 name = "ic-systest-mainnet"
-path = "bin/mainnet_test.rs"
+path = "testing_verification/mainnet_test.rs"
 
 [[bin]]
 name = "ic-systest-replicable-mock-test"
-path = "bin/replicable_mock_test.rs"
+path = "testing_verification/replicable_mock_test.rs"
 
 [[bin]]
 name = "ic-systest-remote-replicable-mock-test"
-path = "bin/remote_replicable_mock_test.rs"
+path = "testing_verification/remote_replicable_mock_test.rs"
 
 [[bin]]
 name = "ic-systest-subnet-recovery-app-same-nodes"
-path = "orchestrator/bin/sr_app_same_nodes_test.rs"
+path = "consensus/orchestrator/sr_app_same_nodes_test.rs"
 
 [[bin]]
 name = "ic-systest-subnet-recovery-app-failover-nodes"
-path = "orchestrator/bin/sr_app_failover_nodes_test.rs"
+path = "consensus/orchestrator/sr_app_failover_nodes_test.rs"
 
 [[bin]]
 name = "ic-systest-subnet-recovery-app-no-upgrade"
-path = "orchestrator/bin/sr_app_no_upgrade_test.rs"
+path = "consensus/orchestrator/sr_app_no_upgrade_test.rs"
 
 [[bin]]
 name = "ic-systest-subnet-recovery-app-same-nodes-enable-tecdsa"
-path = "orchestrator/bin/sr_app_same_nodes_enable_tecdsa_test.rs"
+path = "consensus/orchestrator/sr_app_same_nodes_enable_tecdsa_test.rs"
 
 [[bin]]
 name = "ic-systest-subnet-recovery-app-failover-nodes-enable-tecdsa"
-path = "orchestrator/bin/sr_app_failover_nodes_enable_tecdsa_test.rs"
+path = "consensus/orchestrator/sr_app_failover_nodes_enable_tecdsa_test.rs"
 
 [[bin]]
 name = "ic-systest-subnet-recovery-app-no-upgrade-enable-tecdsa"
-path = "orchestrator/bin/sr_app_no_upgrade_enable_tecdsa_test.rs"
+path = "consensus/orchestrator/sr_app_no_upgrade_enable_tecdsa_test.rs"
 
 [[bin]]
 name = "ic-systest-subnet-recovery-app-same-nodes-with-tecdsa"
-path = "orchestrator/bin/sr_app_same_nodes_with_tecdsa_test.rs"
+path = "consensus/orchestrator/sr_app_same_nodes_with_tecdsa_test.rs"
 
 [[bin]]
 name = "ic-systest-subnet-recovery-app-failover-nodes-with-tecdsa"
-path = "orchestrator/bin/sr_app_failover_nodes_with_tecdsa_test.rs"
+path = "consensus/orchestrator/sr_app_failover_nodes_with_tecdsa_test.rs"
 
 [[bin]]
 name = "ic-systest-subnet-recovery-app-no-upgrade-with-tecdsa"
-path = "orchestrator/bin/sr_app_no_upgrade_with_tecdsa_test.rs"
+path = "consensus/orchestrator/sr_app_no_upgrade_with_tecdsa_test.rs"
 
 [[bin]]
 name = "ic-systest-subnet-recovery-nns-same-nodes"
-path = "orchestrator/bin/sr_nns_same_nodes_test.rs"
+path = "consensus/orchestrator/sr_nns_same_nodes_test.rs"
 
 [[bin]]
 name = "ic-systest-subnet-recovery-nns-failover-nodes"
-path = "orchestrator/bin/sr_nns_failover_nodes_test.rs"
+path = "consensus/orchestrator/sr_nns_failover_nodes_test.rs"
 
 [[bin]]
 name = "ic-systest-network-reliability"
-path = "bin/network_reliability_test.rs"
+path = "networking/network_reliability_test.rs"
 
 [[bin]]
 name = "ic-systest-unstuck-subnet"
-path = "orchestrator/bin/unstuck_subnet_test.rs"
+path = "consensus/orchestrator/unstuck_subnet_test.rs"
 
 [[bin]]
 name = "ic-systest-unassigned-node-upgrade"
-path = "orchestrator/bin/unassigned_node_upgrade_test.rs"
+path = "consensus/orchestrator/unassigned_node_upgrade_test.rs"
 
 [[bin]]
 name = "ic-systest-upgrade-with-alternative-urls"
-path = "orchestrator/bin/upgrade_with_alternative_urls.rs"
+path = "consensus/orchestrator/upgrade_with_alternative_urls.rs"
 
 [[bin]]
 name = "ic-systest-distributed"
-path = "bin/distributed_test.rs"
+path = "testing_verification/distributed_test.rs"
 
 [[bin]]
 name = "ic-systest-query-workload-long-test"
-path = "bin/query_workload_long_test.rs"
+path = "networking/query_workload_long_test.rs"
 
 [[bin]]
 name = "ic-systest-update-workload-long-test"
-path = "bin/update_workload_long_test.rs"
+path = "networking/update_workload_long_test.rs"
 
 [[bin]]
 name = "ic-systest-update-workload-large-payload"
-path = "bin/update_workload_large_payload.rs"
+path = "networking/update_workload_large_payload.rs"
 
 [[bin]]
 name = "ic-systest-canister-sig-verification-cache-test"
-path = "bin/canister_sig_verification_cache_test.rs"
+path = "crypto/canister_sig_verification_cache_test.rs"
 
 [[bin]]
 name = "ic-systest-xnet-malicious-slices"
-path = "xnet/bin/xnet_malicious_slices.rs"
+path = "message_routing/xnet/xnet_malicious_slices.rs"
 
 [[bin]]
 name = "ic-systest-canister-global-reboot-test"
-path = "bin/global_reboot_test.rs"
+path = "message_routing/global_reboot_test.rs"

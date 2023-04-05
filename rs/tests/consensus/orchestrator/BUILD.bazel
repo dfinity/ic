@@ -7,9 +7,11 @@ MAINNET_REVISION_RUNTIME_DEPS = ["//testnet:mainnet_nns_revision"]
 
 SUBNET_RECOVERY_RUNTIME_DEPS = ["//rs/tests:recovery/binaries"]
 
-BACKUP_RUNTIME_DEPS = ["//rs/tests:backup/binaries"]
-
 ORCHESTRATOR_UNIVERSAL_VM_ACTIVATION = ["//rs/tests:src/orchestrator/orchestrator_universal_vm_activation.sh"]
+
+STATIC_FILE_SERVER_IMAGE_RUNTIME_DEP = [
+    "//rs/tests:static-file-server_image",
+]
 
 system_test(
     name = "downgrade_app_subnet_with_ecdsa_test",
@@ -26,9 +28,6 @@ system_test(
 system_test(
     name = "node_assign_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "system_test_pre_master",
-    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
@@ -37,9 +36,6 @@ system_test(
 system_test(
     name = "node_reassignment_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "system_test_pre_master",
-    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
@@ -48,9 +44,6 @@ system_test(
 system_test(
     name = "node_registration_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "system_test_pre_master",
-    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
@@ -61,7 +54,6 @@ system_test(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "subnet_recovery",
-        "system_test_pre_master",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
@@ -99,7 +91,6 @@ system_test(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "subnet_recovery",
-        "system_test_pre_master",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
@@ -137,7 +128,6 @@ system_test(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "subnet_recovery",
-        "system_test_pre_master",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
@@ -175,7 +165,6 @@ system_test(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "subnet_recovery",
-        "system_test_pre_master",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS + SUBNET_RECOVERY_RUNTIME_DEPS,
@@ -188,25 +177,19 @@ system_test(
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "subnet_recovery",
-        "system_test_pre_master",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
         GUESTOS_RUNTIME_DEPS +
         UNIVERSAL_VM_RUNTIME_DEPS +
         NNS_CANISTER_RUNTIME_DEPS +
-        SUBNET_RECOVERY_RUNTIME_DEPS + ORCHESTRATOR_UNIVERSAL_VM_ACTIVATION + [
-            "//rs/tests:static-file-server_image",
-        ],
+        SUBNET_RECOVERY_RUNTIME_DEPS + ORCHESTRATOR_UNIVERSAL_VM_ACTIVATION + STATIC_FILE_SERVER_IMAGE_RUNTIME_DEP,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
 system_test(
     name = "ssh_access_to_nodes_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
-    tags = [
-        "system_test_pre_master",
-    ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
@@ -257,19 +240,6 @@ system_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
-    deps = DEPENDENCIES + ["//rs/tests"],
-)
-
-system_test(
-    name = "backup_manager_test",
-    proc_macro_deps = MACRO_DEPENDENCIES,
-    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps =
-        GUESTOS_RUNTIME_DEPS +
-        UNIVERSAL_VM_RUNTIME_DEPS +
-        NNS_CANISTER_RUNTIME_DEPS +
-        MAINNET_REVISION_RUNTIME_DEPS +
-        BACKUP_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
