@@ -5,7 +5,7 @@ A macro to build multiple versions of the ICOS image (i.e., dev vs prod)
 load("//toolchains/sysimage:toolchain.bzl", "disk_image", "docker_tar", "ext4_image", "sha256sum", "tar_extract", "upgrade_image")
 load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts")
 load("//ic-os/bootloader:defs.bzl", "build_grub_partition")
-load("//bazel:defs.bzl", "gzip_compress")
+load("//bazel:defs.bzl", "gzip_compress", "zstd_compress")
 load("//bazel:output_files.bzl", "output_files")
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 
@@ -261,11 +261,9 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
         ],
     )
 
-    native.genrule(
-        name = "disk-img.tar_zst",
+    zstd_compress(
+        name = "disk-img.tar.zst",
         srcs = [":disk-img.tar"],
-        outs = ["disk-img.tar.zst"],
-        cmd = "zstd --threads=0 -10 -f -z $< -o $@",
         # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
         # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
         tags = ["no-remote-cache"],
@@ -306,11 +304,9 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
             version_file = ":version.txt",
         )
 
-        native.genrule(
-            name = "update-img.tar_zst",
+        zstd_compress(
+            name = "update-img.tar.zst",
             srcs = [":update-img.tar"],
-            outs = ["update-img.tar.zst"],
-            cmd = "zstd --threads=0 -10 -f -z $< -o $@",
             # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
             # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
             tags = ["no-remote-cache"],
@@ -347,11 +343,9 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
             version_file = ":version-test.txt",
         )
 
-        native.genrule(
-            name = "update-img-test.tar_zst",
+        zstd_compress(
+            name = "update-img-test.tar.zst",
             srcs = [":update-img-test.tar"],
-            outs = ["update-img-test.tar.zst"],
-            cmd = "zstd --threads=0 -10 -f -z $< -o $@",
             # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
             # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
             tags = ["no-remote-cache"],
@@ -666,11 +660,9 @@ def boundary_node_icos_build(name, image_deps, mode = None, sev = False, visibil
         ],
     )
 
-    native.genrule(
-        name = "disk-img.tar_zst",
+    zstd_compress(
+        name = "disk-img.tar.zst",
         srcs = ["disk-img.tar"],
-        outs = ["disk-img.tar.zst"],
-        cmd = "zstd --threads=0 -10 -f -z $< -o $@",
         # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
         # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
         tags = ["no-remote-cache"],
@@ -905,11 +897,9 @@ def boundary_api_guestos_build(name, image_deps, mode = None, visibility = None)
         ],
     )
 
-    native.genrule(
-        name = "disk-img.tar_zst",
+    zstd_compress(
+        name = "disk-img.tar.zst",
         srcs = ["disk-img.tar"],
-        outs = ["disk-img.tar.zst"],
-        cmd = "zstd --threads=0 -10 -f -z $< -o $@",
         # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
         # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
         tags = ["no-remote-cache"],
