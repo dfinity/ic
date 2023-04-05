@@ -12,11 +12,13 @@ use crate::{
     BundledManifest, DirtyPages, FileType, ManifestMetrics,
     CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS, CRITICAL_ERROR_REUSED_CHUNK_HASH,
     LABEL_VALUE_HASHED, LABEL_VALUE_HASHED_AND_COMPARED, LABEL_VALUE_REUSED,
+    NUMBER_OF_CHECKPOINT_THREADS,
 };
 use bit_vec::BitVec;
 use hash::{chunk_hasher, file_hasher, manifest_hasher, ManifestHash};
 use ic_crypto_sha::Sha256;
-use ic_logger::{error, fatal, ReplicaLogger};
+use ic_logger::{error, fatal, replica_logger::no_op_logger, ReplicaLogger};
+use ic_metrics::MetricsRegistry;
 use ic_replicated_state::PageIndex;
 use ic_state_layout::{CheckpointLayout, ReadOnly};
 use ic_sys::{mmap::ScopedMmap, PAGE_SIZE};
@@ -1285,4 +1287,25 @@ pub fn filter_out_zero_chunks(manifest: &Manifest) -> HashSet<usize> {
         .map(|(index, _chunk_info)| index)
         .collect();
     fetch_chunks
+}
+
+/// Helper function to compute the manifest from a raw path.
+/// This function is intended for tests and external tools only.
+pub fn manifest_from_path(path: &Path) -> Result<Manifest, CheckpointError> {
+    let cp_layout = CheckpointLayout::<ReadOnly>::new_untracked(path.to_owned(), Height::new(0))?;
+
+    let metadata = cp_layout.system_metadata().deserialize()?;
+
+    let mut thread_pool = scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS);
+    let metrics_registry = MetricsRegistry::new();
+    let manifest_metrics = ManifestMetrics::new(&metrics_registry);
+    compute_manifest(
+        &mut thread_pool,
+        &manifest_metrics,
+        &no_op_logger(),
+        metadata.state_sync_version,
+        &cp_layout,
+        DEFAULT_CHUNK_SIZE,
+        None,
+    )
 }
