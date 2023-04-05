@@ -141,7 +141,6 @@ impl ExecutionServices {
             metrics_registry,
             scheduler_config.max_instructions_per_message_without_dts,
             Arc::clone(&cycles_account_manager),
-            config.composite_queries,
         ));
 
         let query_scheduler = QueryScheduler::new(

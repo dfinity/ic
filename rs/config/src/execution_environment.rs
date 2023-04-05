@@ -191,6 +191,9 @@ pub struct Config {
     /// Indicates whether composite queries are available or not.
     pub composite_queries: FlagStatus,
 
+    /// Indicates whether replica side query caching is enabled.
+    pub query_caching: FlagStatus,
+
     /// Sandbox process eviction does not activate if the number of sandbox
     /// processes is below this threshold.
     pub min_sandbox_count: usize,
@@ -266,6 +269,7 @@ impl Default for Config {
                 mainnet_canister_id: Some(bitcoin_mainnet_canister_id),
             },
             composite_queries: FlagStatus::Disabled,
+            query_caching: FlagStatus::Disabled,
             min_sandbox_count: embedders::DEFAULT_MIN_SANDBOX_COUNT,
             max_sandbox_count: embedders::DEFAULT_MAX_SANDBOX_COUNT,
             max_sandbox_idle_time: embedders::DEFAULT_MAX_SANDBOX_IDLE_TIME,

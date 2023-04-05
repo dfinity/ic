@@ -13,7 +13,6 @@ use crate::{
     metrics::{MeasurementScope, QueryHandlerMetrics},
 };
 use ic_config::execution_environment::Config;
-use ic_config::flag_status::FlagStatus;
 use ic_crypto_tree_hash::{flatmap, Label, LabeledTree, LabeledTree::SubTree};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
@@ -97,7 +96,6 @@ pub struct InternalHttpQueryHandler {
     metrics: QueryHandlerMetrics,
     max_instructions_per_query: NumInstructions,
     cycles_account_manager: Arc<CyclesAccountManager>,
-    composite_queries: FlagStatus,
 }
 
 #[derive(Clone)]
@@ -117,7 +115,6 @@ impl InternalHttpQueryHandler {
         metrics_registry: &MetricsRegistry,
         max_instructions_per_query: NumInstructions,
         cycles_account_manager: Arc<CyclesAccountManager>,
-        composite_queries: FlagStatus,
     ) -> Self {
         Self {
             log,
@@ -127,7 +124,6 @@ impl InternalHttpQueryHandler {
             metrics: QueryHandlerMetrics::new(metrics_registry),
             max_instructions_per_query,
             cycles_account_manager,
-            composite_queries,
         }
     }
 }
@@ -160,7 +156,7 @@ impl QueryHandler for InternalHttpQueryHandler {
             self.config.max_query_call_graph_depth,
             self.config.max_query_call_graph_instructions,
             self.config.instruction_overhead_per_query_call,
-            self.composite_queries,
+            self.config.composite_queries,
             query.receiver,
         );
         context.run(
