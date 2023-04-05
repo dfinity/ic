@@ -21,16 +21,15 @@
 //! counter overflows, the value of the counter is the initial value minus the
 //! sum of cost of all executed instructions.
 //!
-//! In more details, first, it inserts up to five System API functions:
+//! In more details, first, it inserts up to four System API functions:
 //!
 //! ```wasm
 //! (import "__" "out_of_instructions" (func (;0;) (func)))
 //! (import "__" "update_available_memory" (func (;1;) ((param i32 i32) (result i32))))
 //! (import "__" "try_grow_stable_memory" (func (;1;) ((param i64 i64 i32) (result i64))))
-//! (import "__" "deallocate_pages" (func (;1;) ((param i64))))
 //! (import "__" "internal_trap" (func (;1;) ((param i32))))
 //! ```
-//! Where the last three will only be inserted if Wasm-native stable memory is enabled.
+//! Where the last two will only be inserted if Wasm-native stable memory is enabled.
 //!
 //! It then inserts (and exports) a global mutable counter:
 //! ```wasm
@@ -140,14 +139,13 @@ pub(crate) enum InjectedImports {
     OutOfInstructions = 0,
     UpdateAvailableMemory = 1,
     TryGrowStableMemory = 2,
-    DeallocatePages = 3,
-    InternalTrap = 4,
+    InternalTrap = 3,
 }
 
 impl InjectedImports {
     fn count(wasm_native_stable_memory: FlagStatus) -> usize {
         if wasm_native_stable_memory == FlagStatus::Enabled {
-            5
+            4
         } else {
             2
         }
@@ -169,24 +167,10 @@ fn instruction_to_cost(i: &Operator) -> u64 {
     }
 }
 
-// Injects two system api functions:
-//   * `out_of_instructions` which is called, whenever a message execution runs
-//     out of instructions.
-//   * `update_available_memory` which is called after a native `memory.grow` to
-//     check whether the canister has enough available memory according to its
-//     memory allocation.
-//
-// Note that these functions are injected as the first two imports, so that we
-// can increment all function indices unconditionally by two. (If they would be
-// added as the last two imports, we'd need to increment only non imported
-// functions, since imported functions precede all others in the function index
-// space, but this would be error-prone).
-
 const INSTRUMENTED_FUN_MODULE: &str = "__";
 const OUT_OF_INSTRUCTIONS_FUN_NAME: &str = "out_of_instructions";
 const UPDATE_MEMORY_FUN_NAME: &str = "update_available_memory";
 const TRY_GROW_STABLE_MEMORY_FUN_NAME: &str = "try_grow_stable_memory";
-const DEALLOCATE_PAGES_NAME: &str = "deallocate_pages";
 const INTERNAL_TRAP_FUN_NAME: &str = "internal_trap";
 const TABLE_STR: &str = "table";
 pub(crate) const INSTRUCTIONS_COUNTER_GLOBAL_NAME: &str = "canister counter_instructions";
@@ -243,6 +227,13 @@ fn mutate_function_indices(module: &mut Module, f: impl Fn(u32) -> u32) {
     }
 }
 
+/// Injects hidden api functions.
+///
+/// Note that these functions are injected as the first imports, so that we
+/// can increment all function indices unconditionally. (If they would be
+/// added as the last imports, we'd need to increment only non imported
+/// functions, since imported functions precede all others in the function index
+/// space, but this would be error-prone).
 fn inject_helper_functions(mut module: Module, wasm_native_stable_memory: FlagStatus) -> Module {
     // insert types
     let ooi_type = Type::Func(FuncType::new([], []));
@@ -275,21 +266,13 @@ fn inject_helper_functions(mut module: Module, wasm_native_stable_memory: FlagSt
             [ValType::I64, ValType::I64, ValType::I32],
             [ValType::I64],
         ));
-        let dp_type = Type::Func(FuncType::new([ValType::I64], []));
         let tgsm_type_idx = add_type(&mut module, tgsm_type);
-        let dp_type_idx = add_type(&mut module, dp_type);
         let tgsm_imp = Import {
             module: INSTRUMENTED_FUN_MODULE,
             name: TRY_GROW_STABLE_MEMORY_FUN_NAME,
             ty: TypeRef::Func(tgsm_type_idx),
         };
-        let dp_imp = Import {
-            module: INSTRUMENTED_FUN_MODULE,
-            name: DEALLOCATE_PAGES_NAME,
-            ty: TypeRef::Func(dp_type_idx),
-        };
         module.imports.push(tgsm_imp);
-        module.imports.push(dp_imp);
 
         let it_type = Type::Func(FuncType::new([ValType::I32], []));
         let it_type_idx = add_type(&mut module, it_type);
@@ -318,9 +301,6 @@ fn inject_helper_functions(mut module: Module, wasm_native_stable_memory: FlagSt
         debug_assert!(
             module.imports[InjectedImports::TryGrowStableMemory as usize].name
                 == "try_grow_stable_memory"
-        );
-        debug_assert!(
-            module.imports[InjectedImports::DeallocatePages as usize].name == "deallocate_pages"
         );
         debug_assert!(
             module.imports[InjectedImports::InternalTrap as usize].name == "internal_trap"

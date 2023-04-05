@@ -129,19 +129,20 @@ pub(super) fn replacement_functions(
                             mem_byte: 0, // This is ignored when serializing
                         },
                         LocalTee { local_index: 1 },
+                        // If result is -1 then grow instruction failed - this
+                        // shouldn't happen because the try grow API should have
+                        // checked everything.
                         I64Const { value: -1 },
                         I64Eq,
-                        // Grow failed and we need to deallocate pages and return -1.
                         If {
                             blockty: BlockType::Empty,
                         },
-                        LocalGet { local_index: 0 },
-                        I64ExtendI32U,
-                        Call {
-                            function_index: InjectedImports::DeallocatePages as u32,
+                        I32Const {
+                            value: InternalErrorCode::StableGrowFailed as i32,
                         },
-                        I32Const { value: -1 },
-                        Return,
+                        Call {
+                            function_index: InjectedImports::InternalTrap as u32,
+                        },
                         End,
                         // Grow succeeded, return result of memory.grow.
                         LocalGet { local_index: 1 },
@@ -188,19 +189,21 @@ pub(super) fn replacement_functions(
                             mem_byte: 0, // This is ignored when serializing
                         },
                         LocalTee { local_index: 1 },
-                        // Return the pages if grow failed.
+                        // If result is -1 then grow instruction failed - this
+                        // shouldn't happen because the try grow API should have
+                        // checked everything.
                         I64Const { value: -1 },
                         I64Eq,
                         If {
                             blockty: BlockType::Empty,
                         },
-                        LocalGet { local_index: 0 },
-                        Call {
-                            function_index: InjectedImports::DeallocatePages as u32,
+                        I32Const {
+                            value: InternalErrorCode::StableGrowFailed as i32,
                         },
-                        I64Const { value: -1 },
-                        Return,
-                        End, // End check on memory.grow result.
+                        Call {
+                            function_index: InjectedImports::InternalTrap as u32,
+                        },
+                        End,
                         // Return the result of memory.grow.
                         LocalGet { local_index: 1 },
                         End,
