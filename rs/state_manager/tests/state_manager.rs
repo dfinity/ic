@@ -14,9 +14,8 @@ use ic_replicated_state::{
 };
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_state_manager::checkpoint::SEPARATE_INGRESS_HISTORY;
-use ic_state_manager::{
-    manifest::build_meta_manifest, DirtyPageMap, FileType, PageMapType, StateManagerImpl,
-};
+use ic_state_manager::manifest::{build_meta_manifest, manifest_from_path, validate_manifest};
+use ic_state_manager::{DirtyPageMap, FileType, PageMapType, StateManagerImpl};
 use ic_sys::PAGE_SIZE;
 use ic_test_utilities::{
     consensus::fake::FakeVerifier,
@@ -1346,6 +1345,30 @@ fn should_keep_the_last_checkpoint_on_restart() {
             .backup_heights()
             .unwrap()
             .is_empty());
+    });
+}
+
+#[test]
+fn backup_checkpoint_is_complete() {
+    state_manager_restart_test(|state_manager, restart_fn| {
+        let (_, state) = state_manager.take_tip();
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+
+        let (_, state) = state_manager.take_tip();
+        state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+
+        let state_hash = wait_for_checkpoint(&state_manager, height(2));
+
+        let state_manager = restart_fn(state_manager, Some(height(1)));
+
+        // check that the backup checkpoint has the same manifest as before
+        let manifest = manifest_from_path(
+            &state_manager
+                .state_layout()
+                .backup_checkpoint_path(height(2)),
+        )
+        .unwrap();
+        validate_manifest(&manifest, &state_hash).unwrap()
     });
 }
 
@@ -3473,6 +3496,71 @@ fn report_diverged_checkpoint() {
             assert!(last_diverged > now_ts);
         },
     );
+}
+
+#[test]
+fn diverged_checkpoint_is_complete() {
+    let tmp = tmpdir("sm");
+    let config = Config::new(tmp.path().into());
+
+    with_test_replica_logger(|log| {
+        let state_manager = StateManagerImpl::new(
+            Arc::new(FakeVerifier::new()),
+            subnet_test_id(42),
+            SubnetType::Application,
+            log.clone(),
+            &MetricsRegistry::new(),
+            &config,
+            None,
+            ic_types::malicious_flags::MaliciousFlags::default(),
+        );
+
+        let (_, state) = state_manager.take_tip();
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+
+        let (_, state) = state_manager.take_tip();
+        state_manager.commit_and_certify(state, height(2), CertificationScope::Full);
+
+        let state_hash = wait_for_checkpoint(&state_manager, height(2));
+
+        drop(state_manager);
+
+        std::panic::catch_unwind(|| {
+            let state_manager = StateManagerImpl::new(
+                Arc::new(FakeVerifier::new()),
+                subnet_test_id(42),
+                SubnetType::Application,
+                log.clone(),
+                &MetricsRegistry::new(),
+                &config,
+                None,
+                ic_types::malicious_flags::MaliciousFlags::default(),
+            );
+
+            state_manager.report_diverged_checkpoint(height(2));
+        })
+        .unwrap_err();
+
+        let state_manager = StateManagerImpl::new(
+            Arc::new(FakeVerifier::new()),
+            subnet_test_id(42),
+            SubnetType::Application,
+            log,
+            &MetricsRegistry::new(),
+            &config,
+            None,
+            ic_types::malicious_flags::MaliciousFlags::default(),
+        );
+
+        // check that the diverged checkpoint has the same manifest as before
+        let manifest = manifest_from_path(
+            &state_manager
+                .state_layout()
+                .diverged_checkpoint_path(height(2)),
+        )
+        .unwrap();
+        validate_manifest(&manifest, &state_hash).unwrap()
+    });
 }
 
 #[test]
