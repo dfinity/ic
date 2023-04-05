@@ -1301,12 +1301,16 @@ impl HasPublicApiUrl for IcNodeSnapshot {
 
 pub trait NnsInstallationExt {
     /// Installs the NNS canisters on the subnet this node belongs to. The NNS
-    /// is installed with test neurons enabled which simplify voting on
-    /// proposals in testing.
+    /// is installed with test neurons enabled which simplify voting on proposals in testing.
     fn install_nns_canisters(&self) -> Result<()>;
+
+    /// Installs the mainnet NNS canisters on the subnet this node belongs to. The NNS
+    /// is installed with test neurons enabled which simplify voting on proposals in testing.
+    fn install_mainnet_nns_canisters(&self) -> Result<()>;
 
     fn install_nns_canisters_with_customizations(
         &self,
+        canister_wasm_strategy: NnsCanisterWasmStrategy,
         customizations: NnsCustomizations,
     ) -> Result<()>;
 
@@ -1319,16 +1323,29 @@ pub struct NnsCustomizations {
     pub ledger_balances: Option<HashMap<AccountIdentifier, Tokens>>,
 }
 
+pub enum NnsCanisterWasmStrategy {
+    TakeBuiltFromSources,
+    TakeLatestMainnetDeployments,
+}
+
 impl<T> NnsInstallationExt for T
 where
     T: HasIcName + HasPublicApiUrl,
 {
     fn install_nns_canisters_with_customizations(
         &self,
+        canister_wasm_strategy: NnsCanisterWasmStrategy,
         customizations: NnsCustomizations,
     ) -> Result<()> {
         let test_env = self.test_env();
-        test_env.set_nns_canisters_env_vars()?;
+        match canister_wasm_strategy {
+            NnsCanisterWasmStrategy::TakeBuiltFromSources => {
+                test_env.set_nns_canisters_env_vars()?;
+            }
+            NnsCanisterWasmStrategy::TakeLatestMainnetDeployments => {
+                test_env.set_mainnet_nns_canisters_env_vars()?;
+            }
+        }
         let log = test_env.logger();
         let ic_name = self.ic_name();
         let url = self.get_public_url();
@@ -1350,7 +1367,17 @@ where
     }
 
     fn install_nns_canisters(&self) -> Result<()> {
-        self.install_nns_canisters_with_customizations(NnsCustomizations::default())
+        self.install_nns_canisters_with_customizations(
+            NnsCanisterWasmStrategy::TakeBuiltFromSources,
+            NnsCustomizations::default(),
+        )
+    }
+
+    fn install_mainnet_nns_canisters(&self) -> Result<()> {
+        self.install_nns_canisters_with_customizations(
+            NnsCanisterWasmStrategy::TakeLatestMainnetDeployments,
+            NnsCustomizations::default(),
+        )
     }
 
     fn install_nns_canisters_at_ids(&self) -> Result<()> {
@@ -1372,11 +1399,16 @@ where
 
 pub trait NnsCanisterEnvVars {
     fn set_nns_canisters_env_vars(&self) -> Result<()>;
+    fn set_mainnet_nns_canisters_env_vars(&self) -> Result<()>;
 }
 
 impl NnsCanisterEnvVars for TestEnv {
     fn set_nns_canisters_env_vars(&self) -> Result<()> {
         self.set_canister_env_vars("rs/tests/nns-canisters")
+    }
+
+    fn set_mainnet_nns_canisters_env_vars(&self) -> Result<()> {
+        self.set_canister_env_vars("rs/tests/mainnet-nns-canisters")
     }
 }
 
@@ -1657,8 +1689,7 @@ trait RegistryResultHelper<T> {
 /// The starting balance of one user should be sufficient for most test scenarios but less than `Tokens::MAX` as that is the upper bound on the sum of all minted tokens.
 pub const TEST_USER1_STARTING_TOKENS: Tokens = Tokens::from_e8s(u64::MAX / 2);
 
-/// Installs the NNS canisters on the node given by `url` using the initial
-/// registry created by `ic-prep`, stored under `registry_local_store`.
+/// Installs the NNS canister versions provided by `canister_wasm_strategy`, with `customizations`, on the node given by `url` using the initial registry created by `ic-prep`, stored under `registry_local_store`.
 pub fn install_nns_canisters(
     logger: &Logger,
     url: Url,
