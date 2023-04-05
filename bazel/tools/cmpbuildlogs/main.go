@@ -15,6 +15,7 @@ type BuildRecord map[string]interface{}
 type BuildRecords map[string]BuildRecord
 
 const KEY = "progressMessage"
+const UNIQUE_KEY = "listedOutputs"
 
 func loadBuildRecords(fname string) BuildRecords {
 	br := make(BuildRecords)
@@ -32,7 +33,16 @@ func loadBuildRecords(fname string) BuildRecords {
 		} else if err != nil {
 			log.Fatal(err)
 		}
-		br[buildRecord[KEY].(string)] = buildRecord
+		key := buildRecord[KEY].(string)
+		if buildRecord[UNIQUE_KEY] != nil {
+			// progressMessage is not unique, need to add listedOutput to the key.
+			var outs []string
+			for _, v := range buildRecord[UNIQUE_KEY].([]interface{}) {
+				outs = append(outs, v.(string))
+			}
+			key = fmt.Sprintf("%s%v", key, outs)
+		}
+		br[key] = buildRecord
 	}
 	return br
 }
