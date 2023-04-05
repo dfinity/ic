@@ -6,9 +6,19 @@ DEPENDENCIES = [
     "@crate_index//:rusqlite",
     "@crate_index//:anyhow",
     "@crate_index//:tempfile",
+    "@crate_index//:candid",
+    "@crate_index//:ciborium",
+    "@crate_index//:num-traits",
+    "@crate_index//:serde",
+    "@crate_index//:serde_bytes",
+    "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//rs/rosetta-api/icrc1/ledger",
+    "//rs/rosetta-api/icrc1",
+    "//rs/rosetta-api/ledger_core",
 ]
 
 DEV_DEPENDENCIES = [
+    "@crate_index//:proptest",
 ]
 
 MACRO_DEPENDENCIES = [
