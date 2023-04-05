@@ -22,6 +22,12 @@ const CXDR_SYMBOL: &str = "CXDR";
 /// If the rate is older than this value, the CMC should ask for a new rate.
 const REFRESH_RATE_INTERVAL_SECONDS: u64 = 5 * ONE_MINUTE_SECONDS;
 
+/// The minimum number of received sources to consider an ICP/CXDR rate's base asset valid.
+const MINIMUM_ICP_SOURCES: usize = 5;
+
+/// The minimum number of received sources to consider an ICP/CXDR rate's quote asset valid.
+const MINIMUM_CXDR_SOURCES: usize = 4;
+
 #[async_trait]
 pub trait ExchangeRateCanisterClient {
     async fn get_exchange_rate(&self) -> Result<ExchangeRate, GetExchangeRateError>;
@@ -203,6 +209,7 @@ pub enum UpdateExchangeRateError {
     UpdateAlreadyInProgress,
     FailedToRetrieveRate(String),
     FailedToSetRate(String),
+    InvalidRate(String),
 }
 
 impl std::fmt::Display for UpdateExchangeRateError {
@@ -223,6 +230,13 @@ impl std::fmt::Display for UpdateExchangeRateError {
                 write!(
                     f,
                     "Failed to set conversion rate from exchange rate canister: {}",
+                    message
+                )
+            }
+            UpdateExchangeRateError::InvalidRate(message) => {
+                write!(
+                    f,
+                    "Rate from exchange rate canister failed to validate: {}",
                     message
                 )
             }
@@ -253,7 +267,8 @@ pub async fn update_exchange_rate(
         let call_xrc_result = xrc_client.get_exchange_rate().await;
         match call_xrc_result {
             Ok(exchange_rate) => {
-                // TODO(ER-4018): validate the rate
+                validate_exchange_rate(&exchange_rate)
+                    .map_err(|error| UpdateExchangeRateError::InvalidRate(error.to_string()))?;
                 let icp_xdr_conversion_rate = IcpXdrConversionRate::from(exchange_rate);
                 if let Err(error) =
                     set_icp_xdr_conversion_rate(safe_state, env, icp_xdr_conversion_rate)
@@ -296,6 +311,38 @@ fn requires_new_rate(
         }
         None => true,
     }
+}
+
+enum ValidateExchangeRateError {
+    NotEnoughIcpSources { received: usize, queried: usize },
+    NotEnoughCxdrSources { received: usize, queried: usize },
+}
+
+impl std::fmt::Display for ValidateExchangeRateError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ValidateExchangeRateError::NotEnoughIcpSources { received, queried } => write!(f, "Not enough exchange sources for rate's ICP base asset. Expected: {} Received: {} Queried: {}", MINIMUM_ICP_SOURCES, received, queried),
+            ValidateExchangeRateError::NotEnoughCxdrSources { received, queried } => write!(f, "Not enough forex sources for rate's CXDR quote asset. Expected: {} Received: {} Queried: {}", MINIMUM_CXDR_SOURCES, received, queried),
+        }
+    }
+}
+
+fn validate_exchange_rate(exchange_rate: &ExchangeRate) -> Result<(), ValidateExchangeRateError> {
+    if exchange_rate.metadata.base_asset_num_received_rates < MINIMUM_ICP_SOURCES {
+        return Err(ValidateExchangeRateError::NotEnoughIcpSources {
+            received: exchange_rate.metadata.base_asset_num_received_rates,
+            queried: exchange_rate.metadata.base_asset_num_queried_sources,
+        });
+    }
+
+    if exchange_rate.metadata.quote_asset_num_received_rates < MINIMUM_CXDR_SOURCES {
+        return Err(ValidateExchangeRateError::NotEnoughCxdrSources {
+            received: exchange_rate.metadata.quote_asset_num_received_rates,
+            queried: exchange_rate.metadata.quote_asset_num_queried_sources,
+        });
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -351,7 +398,11 @@ mod test {
         }
     }
 
-    fn new_exchange_rate(timestamp: u64) -> ExchangeRate {
+    fn new_exchange_rate(
+        timestamp: u64,
+        base_asset_num_received_rates: usize,
+        quote_asset_num_received_rates: usize,
+    ) -> ExchangeRate {
         ExchangeRate {
             base_asset: Asset {
                 symbol: ICP_SYMBOL.to_string(),
@@ -365,10 +416,10 @@ mod test {
             rate: 20_000_000_000, // 20 XDR = 1 ICP
             metadata: ExchangeRateMetadata {
                 decimals: 9,
-                base_asset_num_queried_sources: 0,
-                base_asset_num_received_rates: 0,
-                quote_asset_num_queried_sources: 0,
-                quote_asset_num_received_rates: 0,
+                base_asset_num_queried_sources: 7,
+                base_asset_num_received_rates,
+                quote_asset_num_queried_sources: 7,
+                quote_asset_num_received_rates,
                 standard_deviation: 0,
                 forex_timestamp: Some(0),
             },
@@ -457,7 +508,12 @@ mod test {
             ..Default::default()
         };
         let xrc_client = MockExchangeRateCanisterClient::new(
-            vec![Ok(new_exchange_rate(env.now_timestamp_seconds()))].into(),
+            vec![Ok(new_exchange_rate(
+                env.now_timestamp_seconds(),
+                MINIMUM_ICP_SOURCES,
+                MINIMUM_CXDR_SOURCES,
+            ))]
+            .into(),
         );
 
         let result = update_exchange_rate(&STATE, &env, &xrc_client)
@@ -482,7 +538,12 @@ mod test {
             ..Default::default()
         };
         let xrc_client = MockExchangeRateCanisterClient::new(
-            vec![Ok(new_exchange_rate(env.now_timestamp_seconds()))].into(),
+            vec![Ok(new_exchange_rate(
+                env.now_timestamp_seconds(),
+                MINIMUM_ICP_SOURCES,
+                MINIMUM_CXDR_SOURCES,
+            ))]
+            .into(),
         );
         let result = update_exchange_rate(&STATE, &env, &xrc_client)
             .now_or_never()
@@ -531,14 +592,79 @@ mod test {
             now_timestamp_seconds: 1680044700,
             ..Default::default()
         };
-        // Set the rate timestamp to zero to trigger an error while setting the rate.
-        let xrc_client = MockExchangeRateCanisterClient::new(vec![Ok(new_exchange_rate(0))].into());
+        // Set the rate timestamp to a minute prior of the initial rate to trigger an error while setting the rate.
+        let xrc_client = MockExchangeRateCanisterClient::new(
+            vec![Ok(new_exchange_rate(
+                1620633540,
+                MINIMUM_ICP_SOURCES,
+                MINIMUM_CXDR_SOURCES,
+            ))]
+            .into(),
+        );
         let result = update_exchange_rate(&STATE, &env, &xrc_client)
             .now_or_never()
             .unwrap();
 
         assert!(
             matches!(result, Err(UpdateExchangeRateError::FailedToSetRate(message)) if message == "Proposed conversion rate must have greater timestamp than current one")
+        );
+        assert!(xrc_client.calls.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_periodic_calls_the_xrc_and_not_enough_icp_sources_received() {
+        thread_local! {
+            static STATE: RefCell<Option<State>> = RefCell::new(Some(State::default()));
+        }
+
+        let env = TestExchangeRateCanisterEnvironment {
+            now_timestamp_seconds: 1680044700,
+            ..Default::default()
+        };
+        // Set the rate's ICP sources to just below the required amount to trigger a validation error.
+        let xrc_client = MockExchangeRateCanisterClient::new(
+            vec![Ok(new_exchange_rate(
+                env.now_timestamp_seconds(),
+                MINIMUM_ICP_SOURCES.saturating_sub(1),
+                MINIMUM_CXDR_SOURCES,
+            ))]
+            .into(),
+        );
+        let result = update_exchange_rate(&STATE, &env, &xrc_client)
+            .now_or_never()
+            .unwrap();
+
+        assert!(
+            matches!(result, Err(UpdateExchangeRateError::InvalidRate(message)) if message == format!("Not enough exchange sources for rate's ICP base asset. Expected: {} Received: {} Queried: 7", MINIMUM_ICP_SOURCES, MINIMUM_ICP_SOURCES.saturating_sub(1))),
+        );
+        assert!(xrc_client.calls.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_periodic_calls_the_xrc_and_not_enough_cxdr_sources_received() {
+        thread_local! {
+            static STATE: RefCell<Option<State>> = RefCell::new(Some(State::default()));
+        }
+
+        let env = TestExchangeRateCanisterEnvironment {
+            now_timestamp_seconds: 1680044700,
+            ..Default::default()
+        };
+        // Set the rate's ICP sources to just below the required amount to trigger a validation error.
+        let xrc_client = MockExchangeRateCanisterClient::new(
+            vec![Ok(new_exchange_rate(
+                env.now_timestamp_seconds(),
+                MINIMUM_ICP_SOURCES,
+                MINIMUM_CXDR_SOURCES.saturating_sub(1),
+            ))]
+            .into(),
+        );
+        let result = update_exchange_rate(&STATE, &env, &xrc_client)
+            .now_or_never()
+            .unwrap();
+
+        assert!(
+            matches!(result, Err(UpdateExchangeRateError::InvalidRate(message)) if message == format!("Not enough forex sources for rate's CXDR quote asset. Expected: {} Received: {} Queried: 7", MINIMUM_CXDR_SOURCES, MINIMUM_CXDR_SOURCES.saturating_sub(1))),
         );
         assert!(xrc_client.calls.lock().unwrap().is_empty());
     }
@@ -554,7 +680,12 @@ mod test {
             ..Default::default()
         };
         let xrc_client = MockExchangeRateCanisterClient::new(
-            vec![Ok(new_exchange_rate(env.now_timestamp_seconds()))].into(),
+            vec![Ok(new_exchange_rate(
+                env.now_timestamp_seconds(),
+                MINIMUM_ICP_SOURCES,
+                MINIMUM_CXDR_SOURCES,
+            ))]
+            .into(),
         );
 
         let result = update_exchange_rate(&STATE, &env, &xrc_client)

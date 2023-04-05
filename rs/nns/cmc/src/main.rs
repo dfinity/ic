@@ -1750,7 +1750,8 @@ async fn update_exchange_rate() {
         exchange_rate_canister::update_exchange_rate(&STATE, &env, &xrc_client).await;
     if let Err(ref error) = periodic_result {
         match error {
-            UpdateExchangeRateError::FailedToRetrieveRate(_)
+            UpdateExchangeRateError::InvalidRate(_)
+            | UpdateExchangeRateError::FailedToRetrieveRate(_)
             | UpdateExchangeRateError::FailedToSetRate(_) => {
                 print(format!("[cycles] {}", error));
             }
