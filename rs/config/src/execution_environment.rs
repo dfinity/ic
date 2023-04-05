@@ -57,10 +57,13 @@ const SUBNET_WASM_CUSTOM_SECTIONS_MEMORY_CAPACITY: NumBytes = NumBytes::new(2 * 
 /// memory can succeed.
 pub(crate) const SUBNET_HEAP_DELTA_CAPACITY: NumBytes = NumBytes::new(140 * GB);
 
-/// The maximum depth of call graphs allowed for ICQC
+/// The maximum depth of call graphs allowed for composite query calls
 pub(crate) const MAX_QUERY_CALL_DEPTH: usize = 6;
 /// Equivalent to MAX_INSTRUCTIONS_PER_MESSAGE_WITHOUT_DTS for now
 pub(crate) const MAX_INSTRUCTIONS_PER_COMPOSITE_QUERY_CALL: u64 = 5_000_000_000;
+/// The maximum time in seconds a query call is allowed to run.
+pub(crate) const MAX_TIME_PER_COMPOSITE_QUERY_CALL: Duration = Duration::from_secs(30);
+
 /// This would allow 100 calls with the current MAX_INSTRUCTIONS_PER_COMPOSITE_QUERY_CALL
 pub const INSTRUCTION_OVERHEAD_PER_QUERY_CALL: u64 = 50_000_000;
 
@@ -155,6 +158,11 @@ pub struct Config {
     /// The maximum number of instructions allowed for a query call graph.
     pub max_query_call_graph_instructions: NumInstructions,
 
+    /// The maxmimum time a query call in non-replicated mode is allowed to run.
+    /// In replicated code we cannot rely on the walltime, since that is not
+    /// deterministic.
+    pub max_query_call_walltime: Duration,
+
     /// Instructions to charge for each composite query call in addition to the
     /// instructions in the actual query call. This is meant to protect from
     /// cases where we have many calls into canister that execute little work.
@@ -248,6 +256,7 @@ impl Default for Config {
             max_query_call_graph_instructions: NumInstructions::from(
                 MAX_INSTRUCTIONS_PER_COMPOSITE_QUERY_CALL,
             ),
+            max_query_call_walltime: MAX_TIME_PER_COMPOSITE_QUERY_CALL,
             instruction_overhead_per_query_call: NumInstructions::from(
                 INSTRUCTION_OVERHEAD_PER_QUERY_CALL,
             ),

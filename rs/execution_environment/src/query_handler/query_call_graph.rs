@@ -82,6 +82,13 @@ pub(super) fn evaluate_query_call_graph(
             );
             return QueryResponse::UserError(error);
         }
+        if query_context.time_limit_reached() {
+            let error = UserError::new(
+                ErrorCode::QueryTimeLimitExceeded,
+                "Composite query call exceeded the time limit.",
+            );
+            return QueryResponse::UserError(error);
+        }
 
         // Process the result of the previously visited node.
         match callee_result.take() {

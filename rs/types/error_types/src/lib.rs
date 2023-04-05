@@ -102,6 +102,7 @@ impl From<ErrorCode> for RejectCode {
             QueryCallGraphTotalInstructionLimitExceeded => CanisterError,
             CompositeQueryCalledInReplicatedMode => CanisterError,
             CanisterNotHostedBySubnet => CanisterReject,
+            QueryTimeLimitExceeded => CanisterError,
         }
     }
 }
@@ -155,6 +156,7 @@ pub enum ErrorCode {
     QueryCallGraphTooDeep = 525,
     QueryCallGraphTotalInstructionLimitExceeded = 526,
     CompositeQueryCalledInReplicatedMode = 527,
+    QueryTimeLimitExceeded = 528,
 }
 
 impl TryFrom<u64> for ErrorCode {
@@ -202,6 +204,7 @@ impl TryFrom<u64> for ErrorCode {
             525 => Ok(ErrorCode::QueryCallGraphTooDeep),
             526 => Ok(ErrorCode::QueryCallGraphTotalInstructionLimitExceeded),
             527 => Ok(ErrorCode::CompositeQueryCalledInReplicatedMode),
+            528 => Ok(ErrorCode::QueryTimeLimitExceeded),
             _ => Err(TryFromError::ValueOutOfRange(err)),
         }
     }
@@ -292,7 +295,8 @@ impl UserError {
             | ErrorCode::CanisterMemoryAccessLimitExceeded
             | ErrorCode::QueryCallGraphTooDeep
             | ErrorCode::QueryCallGraphTotalInstructionLimitExceeded
-            | ErrorCode::CompositeQueryCalledInReplicatedMode => false,
+            | ErrorCode::CompositeQueryCalledInReplicatedMode
+            | ErrorCode::QueryTimeLimitExceeded => false,
         }
     }
 }

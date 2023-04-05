@@ -155,6 +155,7 @@ impl QueryHandler for InternalHttpQueryHandler {
             self.max_instructions_per_query,
             self.config.max_query_call_graph_depth,
             self.config.max_query_call_graph_instructions,
+            self.config.max_query_call_walltime,
             self.config.instruction_overhead_per_query_call,
             self.config.composite_queries,
             query.receiver,

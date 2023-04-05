@@ -30,7 +30,7 @@ use ic_types::{
     methods::{FuncRef, WasmClosure},
     NumSlices,
 };
-use std::{collections::VecDeque, sync::Arc};
+use std::{collections::VecDeque, sync::Arc, time::Duration, time::Instant};
 
 use super::query_call_graph::evaluate_query_call_graph;
 
@@ -77,6 +77,9 @@ pub(super) struct QueryContext<'a> {
     instruction_overhead_per_query_call: RoundInstructions,
     round_limits: RoundLimits,
     composite_queries: FlagStatus,
+    // Walltime at which the query has started to execute.
+    query_context_time_start: Instant,
+    query_context_time_limit: Duration,
 }
 
 impl<'a> QueryContext<'a> {
@@ -92,6 +95,7 @@ impl<'a> QueryContext<'a> {
         max_instructions_per_query: NumInstructions,
         max_query_call_graph_depth: usize,
         max_query_call_graph_instructions: NumInstructions,
+        max_query_call_walltime: Duration,
         instruction_overhead_per_query_call: NumInstructions,
         composite_queries: FlagStatus,
         canister_id: CanisterId,
@@ -119,6 +123,8 @@ impl<'a> QueryContext<'a> {
             ),
             round_limits,
             composite_queries,
+            query_context_time_start: Instant::now(),
+            query_context_time_limit: max_query_call_walltime,
         }
     }
 
@@ -756,6 +762,11 @@ impl<'a> QueryContext<'a> {
     /// response callbacks exceeds the limit in `round_limits`.
     pub fn instruction_limit_reached(&self) -> bool {
         self.round_limits.reached()
+    }
+
+    /// Return whether the time limit for this query context has been reached.
+    pub fn time_limit_reached(&self) -> bool {
+        self.query_context_time_start.elapsed() >= self.query_context_time_limit
     }
 
     /// Returns a synthetic reject reponse for the case when a query call
