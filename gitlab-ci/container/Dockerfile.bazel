@@ -2,7 +2,7 @@
 # focal-20230301
 FROM ubuntu@sha256:3626dff0d616e8ee7065a9ac8c7117e904a4178725385910eeecd7f1872fc12d
 
-ARG BAZEL_VERSION=invalid
+ARG USE_BAZEL_VERSION=invalid
 ENV TZ=UTC
 
 COPY --chown=0700 ./files/known_hosts /etc/ssh/ssh_known_hosts
@@ -52,10 +52,10 @@ RUN /tmp/generate-bazel-completion.sh
 RUN echo "source /etc/bash_completion.d/bazel" >>/etc/bash.bashrc
 
 # Pre-populate the Bazel installation for root
-RUN USE_BAZEL_VERSION=${BAZEL_VERSION} bazel version
+RUN bazel version
 USER ubuntu
 # Pre-populate the Bazel installation for ubuntu
-RUN USE_BAZEL_VERSION=${BAZEL_VERSION} bazel version
+RUN bazel version
 WORKDIR /
 USER 0
 

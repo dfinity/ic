@@ -100,7 +100,7 @@
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
       changes:
         - .bazelversion
-        - gitlab-ci/container/*
+        - gitlab-ci/container/**/*
         - gitlab-ci/config/20--test--container-image-autobuild.yml
 
 .rules-any-schedule:
