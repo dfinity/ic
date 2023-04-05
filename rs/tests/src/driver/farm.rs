@@ -295,6 +295,7 @@ impl Farm {
         t_settings: TimeoutSettings,
     ) -> FarmResult<reqwest::blocking::Response> {
         let started_at = Instant::now();
+        let mut req_sent_successfully = false;
         loop {
             let mut req = rb.try_clone().expect("could not clone a request builder");
             let http_timeout = match t_settings.retry_timeout.checked_sub(started_at.elapsed()) {
@@ -305,9 +306,11 @@ impl Farm {
             req = req.timeout(http_timeout);
             match req.send() {
                 Err(e) => {
+                    req_sent_successfully = false;
                     error!(self.logger, "sending a request to Farm failed: {:?}", e);
                 }
                 Ok(r) => {
+                    req_sent_successfully = true;
                     if r.status().is_success() {
                         return Ok(r);
                     };
@@ -325,9 +328,11 @@ impl Farm {
             std::thread::sleep(t_settings.linear_backoff);
         }
         Err(FarmError::TooManyRetries {
-            message: String::from(
-                "sending a request to Farm retried too many times without success",
-            ),
+            message: String::from(if req_sent_successfully {
+                "processing a request on Farm"
+            } else {
+                "sending a request to Farm"
+            }),
         })
     }
 }
