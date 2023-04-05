@@ -665,6 +665,19 @@ pub trait SystemApi {
     /// Otherwise, returns -1
     fn ic0_stable_grow(&mut self, additional_pages: u32) -> HypervisorResult<i32>;
 
+    /// Same implementation as `ic0_stable_read`, but doesn't do any bounds
+    /// checks on the stable memory size. This is part of the hidden API and
+    /// should only be called from instrumented code that has already done the
+    /// bounds checks within Wasm code. Calls that access pages outsize of
+    /// the current stable memory size will get zeros for those pages.
+    fn stable_read_without_bounds_checks(
+        &self,
+        dst: u64,
+        offset: u64,
+        size: u64,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()>;
+
     /// Copies the data referred to by offset/size out of the stable memory and
     /// replaces the corresponding bytes starting at dst in the canister memory.
     ///

@@ -11,7 +11,7 @@ use ic_interfaces::execution_environment::{
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    testing::CanisterQueuesTesting, CallOrigin, NetworkTopology, SystemState,
+    testing::CanisterQueuesTesting, CallOrigin, Memory, NetworkTopology, SystemState,
 };
 use ic_system_api::{
     sandbox_safe_system_state::SandboxSafeSystemState, ApiType, DefaultOutOfInstructionsHandler,
@@ -26,7 +26,6 @@ use ic_test_utilities::{
         messages::RequestBuilder,
     },
 };
-use ic_test_utilities_execution_environment::default_memory_for_system_api;
 use ic_types::{
     messages::{CallContextId, CallbackId, RejectContext, MAX_RESPONSE_COUNT_BYTES},
     methods::{Callback, WasmClosure},
@@ -1505,7 +1504,10 @@ fn update_available_memory_updates_subnet_available_memory() {
         CANISTER_CURRENT_MEMORY_USAGE,
         execution_parameters(),
         subnet_available_memory,
-        default_memory_for_system_api(),
+        EmbeddersConfig::default()
+            .feature_flags
+            .wasm_native_stable_memory,
+        Memory::new_for_testing(),
         Arc::new(DefaultOutOfInstructionsHandler {}),
         no_op_logger(),
     );
@@ -1560,7 +1562,10 @@ fn take_execution_result_properly_frees_memory() {
         CANISTER_CURRENT_MEMORY_USAGE,
         execution_parameters(),
         subnet_available_memory,
-        default_memory_for_system_api(),
+        EmbeddersConfig::default()
+            .feature_flags
+            .wasm_native_stable_memory,
+        Memory::new_for_testing(),
         Arc::new(DefaultOutOfInstructionsHandler {}),
         no_op_logger(),
     );
@@ -1633,7 +1638,10 @@ fn push_output_request_respects_memory_limits() {
             CANISTER_CURRENT_MEMORY_USAGE,
             execution_parameters(),
             subnet_available_memory,
-            default_memory_for_system_api(),
+            EmbeddersConfig::default()
+                .feature_flags
+                .wasm_native_stable_memory,
+            Memory::new_for_testing(),
             Arc::new(DefaultOutOfInstructionsHandler {}),
             no_op_logger(),
         );
@@ -1736,7 +1744,10 @@ fn push_output_request_oversized_request_memory_limits() {
         CANISTER_CURRENT_MEMORY_USAGE,
         execution_parameters(),
         subnet_available_memory,
-        default_memory_for_system_api(),
+        EmbeddersConfig::default()
+            .feature_flags
+            .wasm_native_stable_memory,
+        Memory::new_for_testing(),
         Arc::new(DefaultOutOfInstructionsHandler {}),
         no_op_logger(),
     );

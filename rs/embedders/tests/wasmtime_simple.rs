@@ -27,6 +27,7 @@ pub fn wasmtime_instantiate_and_call_run(wasm: &BinaryEncodedWasm) {
                 )
                 (func (export "deallocate_pages") (param i64))
                 (func (export "internal_trap") (param i32))
+                (func (export "stable_read_first_access") (param i64 i64 i64))
             )"#,
         )
         .unwrap();
@@ -37,6 +38,7 @@ pub fn wasmtime_instantiate_and_call_run(wasm: &BinaryEncodedWasm) {
         e.insert("try_grow_stable_memory".to_string(), 2);
         e.insert("deallocate_pages".to_string(), 3);
         e.insert("internal_trap".to_string(), 4);
+        e.insert("stable_read_first_access".to_string(), 5);
         (i, e)
     };
 

@@ -718,11 +718,14 @@ pub struct SystemApiImpl {
 
     execution_parameters: ExecutionParameters,
 
-    /// When `stable_memory` is absent, we are using Wasm-native stable memory
-    /// which means all stable memory operations should be handled within the
-    /// wasm itself and any use of stable memory through the system API should
-    /// crash.
-    stable_memory: Option<StableMemory>,
+    /// Wasm-native stable memory is enabled. This means that stable memory
+    /// should not be accessed through the public stable memory APIs. It can
+    /// still be read through the hidden read API for speed on the first access.
+    wasm_native_stable_memory: FlagStatus,
+
+    /// Should not be accessed directly from public APIs. Instead read through
+    /// [`Self::stable_memory`] or [`Self::stable_memory_mut`].
+    stable_memory: StableMemory,
 
     /// System state information that is cached so that we don't need to go
     /// through the `SystemStateAccessor` to read it. This saves on IPC
@@ -756,7 +759,8 @@ impl SystemApiImpl {
         canister_current_memory_usage: NumBytes,
         execution_parameters: ExecutionParameters,
         subnet_available_memory: SubnetAvailableMemory,
-        stable_memory: Option<Memory>,
+        wasm_native_stable_memory: FlagStatus,
+        stable_memory: Memory,
         out_of_instructions_handler: Arc<dyn OutOfInstructionsHandler>,
         log: ReplicaLogger,
     ) -> Self {
@@ -767,13 +771,14 @@ impl SystemApiImpl {
             canister_current_memory_usage,
             subnet_available_memory,
         );
-        let stable_memory = stable_memory.map(|m| StableMemory::new(m));
+        let stable_memory = StableMemory::new(stable_memory);
         let slice_limit = execution_parameters.instruction_limits.slice().get();
         Self {
             execution_error: None,
             api_type,
             memory_usage,
             execution_parameters,
+            wasm_native_stable_memory,
             stable_memory,
             sandbox_safe_system_state,
             out_of_instructions_handler,
@@ -1128,10 +1133,7 @@ impl SystemApiImpl {
     }
 
     pub fn stable_memory_size(&self) -> NumWasmPages {
-        self.stable_memory
-            .as_ref()
-            .expect(WASM_NATIVE_STABLE_MEMORY_ERROR)
-            .stable_memory_size
+        self.stable_memory().stable_memory_size
     }
 
     /// Wrapper around `self.sandbox_safe_system_state.push_output_request()` that
@@ -1183,6 +1185,22 @@ impl SystemApiImpl {
             }
         }
     }
+
+    fn stable_memory(&self) -> &StableMemory {
+        if self.wasm_native_stable_memory == FlagStatus::Disabled {
+            &self.stable_memory
+        } else {
+            panic!("{}", WASM_NATIVE_STABLE_MEMORY_ERROR)
+        }
+    }
+
+    fn stable_memory_mut(&mut self) -> &mut StableMemory {
+        if self.wasm_native_stable_memory == FlagStatus::Disabled {
+            &mut self.stable_memory
+        } else {
+            panic!("{}", WASM_NATIVE_STABLE_MEMORY_ERROR)
+        }
+    }
 }
 
 impl SystemApi for SystemApiImpl {
@@ -1212,20 +1230,14 @@ impl SystemApi for SystemApiImpl {
     }
 
     fn stable_memory_dirty_pages(&self) -> Vec<(PageIndex, &PageBytes)> {
-        self.stable_memory
-            .as_ref()
-            .expect(WASM_NATIVE_STABLE_MEMORY_ERROR)
+        self.stable_memory()
             .stable_memory_buffer
             .dirty_pages()
             .collect()
     }
 
     fn stable_memory_size(&self) -> usize {
-        self.stable_memory
-            .as_ref()
-            .expect(WASM_NATIVE_STABLE_MEMORY_ERROR)
-            .stable_memory_size
-            .get()
+        self.stable_memory().stable_memory_size.get()
     }
 
     fn subnet_type(&self) -> SubnetType {
@@ -1986,7 +1998,7 @@ impl SystemApi for SystemApiImpl {
 
     fn ic0_stable_size(&self) -> HypervisorResult<u32> {
         let result = match &self.api_type {
-            ApiType::Start { .. } if self.stable_memory.is_some() => {
+            ApiType::Start { .. } if self.wasm_native_stable_memory == FlagStatus::Disabled => {
                 Err(self.error_for("ic0_stable_size"))
             }
             ApiType::Init { .. }
@@ -1999,11 +2011,7 @@ impl SystemApi for SystemApiImpl {
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
             | ApiType::InspectMessage { .. }
-            | ApiType::Start { .. } => self
-                .stable_memory
-                .as_ref()
-                .expect(WASM_NATIVE_STABLE_MEMORY_ERROR)
-                .stable_size(),
+            | ApiType::Start { .. } => self.stable_memory().stable_size(),
         };
         trace_syscall!(self, ic0_stable_size, result);
         result
@@ -2011,7 +2019,7 @@ impl SystemApi for SystemApiImpl {
 
     fn ic0_stable_grow(&mut self, additional_pages: u32) -> HypervisorResult<i32> {
         let result = match &self.api_type {
-            ApiType::Start { .. } if self.stable_memory.is_some() => {
+            ApiType::Start { .. } if self.wasm_native_stable_memory == FlagStatus::Disabled => {
                 Err(self.error_for("ic0_stable_grow"))
             }
             ApiType::Init { .. }
@@ -2027,11 +2035,7 @@ impl SystemApi for SystemApiImpl {
             | ApiType::Start { .. } => {
                 match self.memory_usage.allocate_pages(additional_pages as usize) {
                     Ok(()) => {
-                        let res = self
-                            .stable_memory
-                            .as_mut()
-                            .expect(WASM_NATIVE_STABLE_MEMORY_ERROR)
-                            .stable_grow(additional_pages);
+                        let res = self.stable_memory_mut().stable_grow(additional_pages);
                         match &res {
                             Err(_) | Ok(-1) => self
                                 .memory_usage
@@ -2056,7 +2060,7 @@ impl SystemApi for SystemApiImpl {
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
         let result = match &self.api_type {
-            ApiType::Start { .. } if self.stable_memory.is_some() => {
+            ApiType::Start { .. } if self.wasm_native_stable_memory == FlagStatus::Disabled => {
                 Err(self.error_for("ic0_stable_read"))
             }
             ApiType::Init { .. }
@@ -2069,11 +2073,7 @@ impl SystemApi for SystemApiImpl {
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
             | ApiType::InspectMessage { .. }
-            | ApiType::Start { .. } => self
-                .stable_memory
-                .as_ref()
-                .expect(WASM_NATIVE_STABLE_MEMORY_ERROR)
-                .stable_read(dst, offset, size, heap),
+            | ApiType::Start { .. } => self.stable_memory().stable_read(dst, offset, size, heap),
         };
         trace_syscall!(
             self,
@@ -2095,7 +2095,7 @@ impl SystemApi for SystemApiImpl {
         heap: &[u8],
     ) -> HypervisorResult<()> {
         let result = match &self.api_type {
-            ApiType::Start { .. } if self.stable_memory.is_some() => {
+            ApiType::Start { .. } if self.wasm_native_stable_memory == FlagStatus::Disabled => {
                 Err(self.error_for("ic0_stable_write"))
             }
             ApiType::Init { .. }
@@ -2109,9 +2109,7 @@ impl SystemApi for SystemApiImpl {
             | ApiType::RejectCallback { .. }
             | ApiType::InspectMessage { .. }
             | ApiType::Start { .. } => self
-                .stable_memory
-                .as_mut()
-                .expect(WASM_NATIVE_STABLE_MEMORY_ERROR)
+                .stable_memory_mut()
                 .stable_write(offset, src, size, heap),
         };
         trace_syscall!(
@@ -2128,7 +2126,7 @@ impl SystemApi for SystemApiImpl {
 
     fn ic0_stable64_size(&self) -> HypervisorResult<u64> {
         let result = match &self.api_type {
-            ApiType::Start { .. } if self.stable_memory.is_some() => {
+            ApiType::Start { .. } if self.wasm_native_stable_memory == FlagStatus::Disabled => {
                 Err(self.error_for("ic0_stable64_size"))
             }
             ApiType::Init { .. }
@@ -2141,11 +2139,7 @@ impl SystemApi for SystemApiImpl {
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
             | ApiType::InspectMessage { .. }
-            | ApiType::Start { .. } => self
-                .stable_memory
-                .as_ref()
-                .expect(WASM_NATIVE_STABLE_MEMORY_ERROR)
-                .stable64_size(),
+            | ApiType::Start { .. } => self.stable_memory().stable64_size(),
         };
         trace_syscall!(self, ic0_stable64_size, result);
         result
@@ -2153,7 +2147,7 @@ impl SystemApi for SystemApiImpl {
 
     fn ic0_stable64_grow(&mut self, additional_pages: u64) -> HypervisorResult<i64> {
         let result = match &self.api_type {
-            ApiType::Start { .. } if self.stable_memory.is_some() => {
+            ApiType::Start { .. } if self.wasm_native_stable_memory == FlagStatus::Disabled => {
                 Err(self.error_for("ic0_stable64_grow"))
             }
             ApiType::Init { .. }
@@ -2169,11 +2163,7 @@ impl SystemApi for SystemApiImpl {
             | ApiType::Start { .. } => {
                 match self.memory_usage.allocate_pages(additional_pages as usize) {
                     Ok(()) => {
-                        let res = self
-                            .stable_memory
-                            .as_mut()
-                            .expect(WASM_NATIVE_STABLE_MEMORY_ERROR)
-                            .stable64_grow(additional_pages);
+                        let res = self.stable_memory_mut().stable64_grow(additional_pages);
                         match &res {
                             Err(_) | Ok(-1) => self
                                 .memory_usage
@@ -2198,7 +2188,7 @@ impl SystemApi for SystemApiImpl {
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
         let result = match &self.api_type {
-            ApiType::Start { .. } if self.stable_memory.is_some() => {
+            ApiType::Start { .. } if self.wasm_native_stable_memory == FlagStatus::Disabled => {
                 Err(self.error_for("ic0_stable64_read"))
             }
             ApiType::Init { .. }
@@ -2211,11 +2201,7 @@ impl SystemApi for SystemApiImpl {
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
             | ApiType::InspectMessage { .. }
-            | ApiType::Start { .. } => self
-                .stable_memory
-                .as_ref()
-                .expect(WASM_NATIVE_STABLE_MEMORY_ERROR)
-                .stable64_read(dst, offset, size, heap),
+            | ApiType::Start { .. } => self.stable_memory().stable64_read(dst, offset, size, heap),
         };
         trace_syscall!(
             self,
@@ -2229,6 +2215,17 @@ impl SystemApi for SystemApiImpl {
         result
     }
 
+    fn stable_read_without_bounds_checks(
+        &self,
+        dst: u64,
+        offset: u64,
+        size: u64,
+        heap: &mut [u8],
+    ) -> HypervisorResult<()> {
+        self.stable_memory
+            .stable_read_without_bounds_checks(dst, offset, size, heap)
+    }
+
     fn ic0_stable64_write(
         &mut self,
         offset: u64,
@@ -2237,7 +2234,7 @@ impl SystemApi for SystemApiImpl {
         heap: &[u8],
     ) -> HypervisorResult<()> {
         let result = match &self.api_type {
-            ApiType::Start { .. } if self.stable_memory.is_some() => {
+            ApiType::Start { .. } if self.wasm_native_stable_memory == FlagStatus::Disabled => {
                 Err(self.error_for("ic0_stable64_write"))
             }
             ApiType::Init { .. }
@@ -2251,9 +2248,7 @@ impl SystemApi for SystemApiImpl {
             | ApiType::RejectCallback { .. }
             | ApiType::InspectMessage { .. }
             | ApiType::Start { .. } => self
-                .stable_memory
-                .as_mut()
-                .expect(WASM_NATIVE_STABLE_MEMORY_ERROR)
+                .stable_memory_mut()
                 .stable64_write(offset, src, size, heap),
         };
         trace_syscall!(
@@ -2273,11 +2268,7 @@ impl SystemApi for SystemApiImpl {
         offset: u64,
         size: u64,
     ) -> HypervisorResult<(NumPages, NumInstructions)> {
-        let dirty_pages = self
-            .stable_memory
-            .as_ref()
-            .expect(WASM_NATIVE_STABLE_MEMORY_ERROR)
-            .dirty_pages_from_write(offset, size);
+        let dirty_pages = self.stable_memory().dirty_pages_from_write(offset, size);
         let cost = self
             .sandbox_safe_system_state
             .dirty_page_cost(dirty_pages)?;

@@ -21,15 +21,16 @@
 //! counter overflows, the value of the counter is the initial value minus the
 //! sum of cost of all executed instructions.
 //!
-//! In more details, first, it inserts up to four System API functions:
+//! In more details, first, it inserts up to five System API functions:
 //!
 //! ```wasm
 //! (import "__" "out_of_instructions" (func (;0;) (func)))
 //! (import "__" "update_available_memory" (func (;1;) ((param i32 i32) (result i32))))
 //! (import "__" "try_grow_stable_memory" (func (;1;) ((param i64 i64 i32) (result i64))))
 //! (import "__" "internal_trap" (func (;1;) ((param i32))))
+//! (import "__" "stable_read_first_access" (func ((param i64) (param i64) (param i64))))
 //! ```
-//! Where the last two will only be inserted if Wasm-native stable memory is enabled.
+//! Where the last three will only be inserted if Wasm-native stable memory is enabled.
 //!
 //! It then inserts (and exports) a global mutable counter:
 //! ```wasm
@@ -140,12 +141,13 @@ pub(crate) enum InjectedImports {
     UpdateAvailableMemory = 1,
     TryGrowStableMemory = 2,
     InternalTrap = 3,
+    StableReadFirstAccess = 4,
 }
 
 impl InjectedImports {
     fn count(wasm_native_stable_memory: FlagStatus) -> usize {
         if wasm_native_stable_memory == FlagStatus::Enabled {
-            4
+            5
         } else {
             2
         }
@@ -172,6 +174,7 @@ const OUT_OF_INSTRUCTIONS_FUN_NAME: &str = "out_of_instructions";
 const UPDATE_MEMORY_FUN_NAME: &str = "update_available_memory";
 const TRY_GROW_STABLE_MEMORY_FUN_NAME: &str = "try_grow_stable_memory";
 const INTERNAL_TRAP_FUN_NAME: &str = "internal_trap";
+const STABLE_READ_FIRST_ACCESS_NAME: &str = "stable_read_first_access";
 const TABLE_STR: &str = "table";
 pub(crate) const INSTRUCTIONS_COUNTER_GLOBAL_NAME: &str = "canister counter_instructions";
 pub(crate) const DIRTY_PAGES_COUNTER_GLOBAL_NAME: &str = "canister counter_dirty_pages";
@@ -282,6 +285,18 @@ fn inject_helper_functions(mut module: Module, wasm_native_stable_memory: FlagSt
             ty: TypeRef::Func(it_type_idx),
         };
         module.imports.push(it_imp);
+
+        let fr_type = Type::Func(FuncType::new(
+            [ValType::I64, ValType::I64, ValType::I64],
+            [],
+        ));
+        let fr_type_idx = add_type(&mut module, fr_type);
+        let fr_imp = Import {
+            module: INSTRUMENTED_FUN_MODULE,
+            name: STABLE_READ_FIRST_ACCESS_NAME,
+            ty: TypeRef::Func(fr_type_idx),
+        };
+        module.imports.push(fr_imp);
     }
 
     module.imports.append(&mut old_imports);
@@ -304,6 +319,10 @@ fn inject_helper_functions(mut module: Module, wasm_native_stable_memory: FlagSt
         );
         debug_assert!(
             module.imports[InjectedImports::InternalTrap as usize].name == "internal_trap"
+        );
+        debug_assert!(
+            module.imports[InjectedImports::StableReadFirstAccess as usize].name
+                == "stable_read_first_access"
         );
     }
 

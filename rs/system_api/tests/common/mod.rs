@@ -1,14 +1,16 @@
 use std::{convert::TryFrom, sync::Arc};
 
 use ic_base_types::{CanisterId, NumBytes, SubnetId};
-use ic_config::{flag_status::FlagStatus, subnet_config::SchedulerConfig};
+use ic_config::{
+    embedders::Config as EmbeddersConfig, flag_status::FlagStatus, subnet_config::SchedulerConfig,
+};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
 use ic_logger::replica_logger::no_op_logger;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
 use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{CallOrigin, NetworkTopology, SubnetTopology, SystemState};
+use ic_replicated_state::{CallOrigin, Memory, NetworkTopology, SubnetTopology, SystemState};
 use ic_system_api::{
     sandbox_safe_system_state::SandboxSafeSystemState, ApiType, DefaultOutOfInstructionsHandler,
     ExecutionParameters, InstructionLimits, SystemApiImpl,
@@ -18,7 +20,6 @@ use ic_test_utilities::{
     state::SystemStateBuilder,
     types::ids::{call_context_test_id, canister_test_id, subnet_test_id, user_test_id},
 };
-use ic_test_utilities_execution_environment::default_memory_for_system_api;
 use ic_types::{
     messages::{CallContextId, CallbackId, RejectContext},
     methods::SystemMethod,
@@ -128,7 +129,10 @@ pub fn get_system_api(
         CANISTER_CURRENT_MEMORY_USAGE,
         execution_parameters(),
         SubnetAvailableMemory::new(i64::MAX / 2, i64::MAX / 2, i64::MAX / 2),
-        default_memory_for_system_api(),
+        EmbeddersConfig::default()
+            .feature_flags
+            .wasm_native_stable_memory,
+        Memory::new_for_testing(),
         Arc::new(DefaultOutOfInstructionsHandler {}),
         no_op_logger(),
     )

@@ -7,7 +7,7 @@ use ic_config::{embedders::Config as EmbeddersConfig, subnet_config::SchedulerCo
 use ic_interfaces::execution_environment::{ExecutionMode, SubnetAvailableMemory};
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{NetworkTopology, SystemState};
+use ic_replicated_state::{Memory, NetworkTopology, SystemState};
 use ic_system_api::{
     sandbox_safe_system_state::SandboxSafeSystemState, ApiType, DefaultOutOfInstructionsHandler,
     ExecutionParameters, InstructionLimits, SystemApiImpl,
@@ -15,7 +15,6 @@ use ic_system_api::{
 use ic_test_utilities::{
     cycles_account_manager::CyclesAccountManagerBuilder, mock_time, types::ids::canister_test_id,
 };
-use ic_test_utilities_execution_environment::default_memory_for_system_api;
 use ic_types::{ComputeAllocation, NumBytes, NumInstructions};
 use ic_wasm_types::BinaryEncodedWasm;
 
@@ -60,7 +59,10 @@ fn test_wasmtime_system_api() {
             execution_mode: ExecutionMode::Replicated,
         },
         *MAX_SUBNET_AVAILABLE_MEMORY,
-        default_memory_for_system_api(),
+        EmbeddersConfig::default()
+            .feature_flags
+            .wasm_native_stable_memory,
+        Memory::new_for_testing(),
         Arc::new(DefaultOutOfInstructionsHandler {}),
         no_op_logger(),
     );

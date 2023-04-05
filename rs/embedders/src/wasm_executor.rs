@@ -616,10 +616,8 @@ pub fn process(
         canister_current_memory_usage,
         execution_parameters,
         subnet_available_memory,
-        match embedder.config().feature_flags.wasm_native_stable_memory {
-            FlagStatus::Enabled => None,
-            FlagStatus::Disabled => Some(stable_memory.clone()),
-        },
+        embedder.config().feature_flags.wasm_native_stable_memory,
+        stable_memory.clone(),
         out_of_instructions_handler,
         logger,
     );
