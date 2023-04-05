@@ -154,6 +154,18 @@ impl CanisterApi for CanisterApiImpl {
         )))
     }
 
+    fn this_canister_has_enough_cycles(&self, required_cycles: u64) -> Result<u64, String> {
+        let available = dfn_core::api::canister_cycle_balance();
+
+        if available < required_cycles {
+            return Err(format!(
+                "Message execution requires at least {} cycles, but canister only has {} cycles.",
+                required_cycles, available,
+            ));
+        }
+        Ok(available)
+    }
+
     fn message_has_enough_cycles(&self, required_cycles: u64) -> Result<u64, String> {
         let available = dfn_core::api::msg_cycles_available();
 

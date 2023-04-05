@@ -33,6 +33,9 @@ pub trait CanisterApi {
         controllers: Vec<PrincipalId>,
     ) -> Result<(), String>;
 
+    /// Return cycles available from the canister's own balance, or error if not enough
+    fn this_canister_has_enough_cycles(&self, required_cycles: u64) -> Result<u64, String>;
+
     /// Return the cycles available, or fail if insufficient cycles are available.
     fn message_has_enough_cycles(&self, required_cycles: u64) -> Result<u64, String>;
 

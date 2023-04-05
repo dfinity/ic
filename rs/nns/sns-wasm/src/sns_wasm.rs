@@ -482,15 +482,24 @@ where
         deploy_new_sns_payload: DeployNewSnsRequest,
         caller: PrincipalId,
     ) -> DeployNewSnsResponse {
-        if !thread_safe_sns
-            .with(|sns_wasm| sns_wasm.borrow_mut().consume_caller_from_whitelist(&caller))
-        {
+        if !thread_safe_sns.with(|sns_wasm| {
+            sns_wasm
+                .borrow_mut()
+                .check_caller_and_consume_from_whitelist(&caller)
+        }) {
             return validation_deploy_error(
                 "Caller is not in allowed principals list. Cannot deploy an sns.".to_string(),
             )
             .into();
         }
-        match Self::do_deploy_new_sns(thread_safe_sns, canister_api, deploy_new_sns_payload).await {
+        match Self::do_deploy_new_sns(
+            thread_safe_sns,
+            canister_api,
+            deploy_new_sns_payload,
+            caller != GOVERNANCE_CANISTER_ID.get(), // Charge cycles except for Governance
+        )
+        .await
+        {
             Ok((subnet_id, canisters)) => DeployNewSnsResponse {
                 subnet_id: Some(subnet_id.get()),
                 canisters: Some(canisters),
@@ -509,12 +518,18 @@ where
         self.allowed_principals.contains(&caller)
     }
 
-    /// If the given caller exists in the `allowed_principals` whitelist, remove the controller
+    /// If the caller is NNS Governance, always allow, as this would indicate a proposal was passed
+    /// to create a new SNS.  
+    /// Otherwise, if the given caller exists in the `allowed_principals` whitelist, remove the controller
     /// from the whitelist and return `true`. Otherwise return `false`.
     ///
     /// Deploying an SNS is a resource intensive operation, so removing the caller ensures that the
     /// caller cannot repeated call `deploy_new_sns` and exhaust NNS resources.
-    pub fn consume_caller_from_whitelist(&mut self, caller: &PrincipalId) -> bool {
+    pub fn check_caller_and_consume_from_whitelist(&mut self, caller: &PrincipalId) -> bool {
+        if &GOVERNANCE_CANISTER_ID.get() == caller {
+            return true;
+        }
+
         if let Some(index) = self
             .allowed_principals
             .iter()
@@ -531,6 +546,7 @@ where
         thread_safe_sns: &'static LocalKey<RefCell<SnsWasmCanister<M>>>,
         canister_api: &impl CanisterApi,
         deploy_new_sns_request: DeployNewSnsRequest,
+        charge_cycles: bool,
     ) -> Result<(SubnetId, SnsCanisterIds), DeployError> {
         let sns_init_payload = deploy_new_sns_request
             .sns_init_payload
@@ -549,15 +565,25 @@ where
             .with(|sns_wasms| sns_wasms.borrow().get_latest_version_wasms())
             .map_err(validation_deploy_error)?;
 
-        // If the fee is not present, we fail.
-        canister_api
-            .message_has_enough_cycles(SNS_CREATION_FEE)
-            .map_err(validation_deploy_error)?;
+        if charge_cycles {
+            // If the fee is not present, we fail.
+            canister_api
+                .message_has_enough_cycles(SNS_CREATION_FEE)
+                .map_err(validation_deploy_error)?;
+        } else {
+            canister_api
+                .this_canister_has_enough_cycles(SNS_CREATION_FEE)
+                .map_err(validation_deploy_error)?;
+        }
 
         // After this step, we need to delete the canisters if things fail
-        let canisters =
-            Self::create_sns_canisters(canister_api, subnet_id, INITIAL_CANISTER_CREATION_CYCLES)
-                .await?;
+        let canisters = Self::create_sns_canisters(
+            canister_api,
+            subnet_id,
+            INITIAL_CANISTER_CREATION_CYCLES,
+            charge_cycles,
+        )
+        .await?;
         // This step should never fail unless the step before it fails which would return
         // an error.
         let sns_init_canister_ids = canisters.try_into().expect(
@@ -613,7 +639,7 @@ where
         // even if one fails, since we can no longer back out
         join_errors_or_ok(vec![
             // Accept all remaining cycles and fund the canisters
-            Self::fund_canisters(canister_api, &canisters).await,
+            Self::fund_canisters(canister_api, &canisters, charge_cycles).await,
             // Remove self as the controller
             Self::remove_self_as_controller(canister_api, &canisters).await,
         ])
@@ -627,15 +653,22 @@ where
     async fn fund_canisters(
         canister_api: &impl CanisterApi,
         canisters: &SnsCanisterIds,
+        charge_cycles: bool,
     ) -> Result<(), String> {
         // Accept the remaining cycles in the request we need to fund the canisters
-        let remaining_unaccepted_cycles = canister_api.accept_message_cycles(None).unwrap();
+        let remaining_unaccepted_cycles = if charge_cycles {
+            canister_api.accept_message_cycles(None)?
+        } else {
+            // We are loaning to the SNS a specific amount if we are not getting it from caller
+            SNS_CREATION_FEE.saturating_sub(INITIAL_CANISTER_CREATION_CYCLES.saturating_mul(5))
+        };
         // We only collect the INITIAL_CANISTER_CREATION_CYCLES for the other 5 canisters because
         // archive will be created by the ledger post deploy.  In order to split whole allocation
         // evenly between all 6 canisters, we want to account for this.
         let uncollected_allocation_for_archive = INITIAL_CANISTER_CREATION_CYCLES;
-        let cycles_per_canister =
-            (remaining_unaccepted_cycles - uncollected_allocation_for_archive) / 6;
+        let cycles_per_canister = (remaining_unaccepted_cycles
+            .saturating_sub(uncollected_allocation_for_archive))
+        .saturating_div(6);
 
         let results = futures::future::join_all(canisters.into_named_tuples().into_iter().map(
             |(label, canister_id)| async move {
@@ -836,20 +869,23 @@ where
         canister_api: &impl CanisterApi,
         subnet_id: SubnetId,
         initial_cycles_per_canister: u64,
+        charge_cycles: bool,
     ) -> Result<SnsCanisterIds, DeployError> {
-        // Accept enough cycles to simply create the canisters.
-        canister_api
-            .accept_message_cycles(Some(initial_cycles_per_canister.saturating_mul(5)))
-            .map_err(|e| {
-                DeployError::Reversible(RerversibleDeployError {
-                    message: format!(
-                        "Could not accept cycles from request needed to create canisters: {}",
-                        e
-                    ),
-                    canisters_to_delete: None,
-                    subnet: None,
-                })
-            })?;
+        if charge_cycles {
+            // Accept enough cycles to simply create the canisters.
+            canister_api
+                .accept_message_cycles(Some(initial_cycles_per_canister.saturating_mul(5)))
+                .map_err(|e| {
+                    DeployError::Reversible(RerversibleDeployError {
+                        message: format!(
+                            "Could not accept cycles from request needed to create canisters: {}",
+                            e
+                        ),
+                        canisters_to_delete: None,
+                        subnet: None,
+                    })
+                })?;
+        }
 
         let this_canister_id = canister_api.local_canister_id().get();
         let new_canister = || {
@@ -1358,6 +1394,8 @@ mod test {
         #[allow(clippy::type_complexity)]
         pub cycles_sent: Arc<Mutex<Vec<(CanisterId, u64)>>>,
         pub canisters_deleted: Arc<Mutex<Vec<CanisterId>>>,
+        // How many cycles the canister has
+        pub canister_cycles_balance: Arc<Mutex<u64>>,
         // How many cycles does the pretend request contain?
         pub cycles_found_in_request: Arc<Mutex<u64>>,
         // Errors that can be thrown at some nth function call
@@ -1446,6 +1484,17 @@ mod test {
             Ok(())
         }
 
+        fn this_canister_has_enough_cycles(&self, required_cycles: u64) -> Result<u64, String> {
+            let amount = *self.canister_cycles_balance.lock().unwrap();
+            if amount < required_cycles {
+                return Err(format!(
+                    "Not enough cycles in canister.  Required: {}. Found: {}",
+                    required_cycles, amount
+                ));
+            }
+            Ok(amount)
+        }
+
         fn message_has_enough_cycles(&self, required_cycles: u64) -> Result<u64, String> {
             let amount = *self.cycles_found_in_request.lock().unwrap();
             if amount < required_cycles {
@@ -1488,6 +1537,7 @@ mod test {
             cycles_accepted: Arc::new(Mutex::new(vec![])),
             cycles_sent: Arc::new(Mutex::new(vec![])),
             canisters_deleted: Arc::new(Mutex::new(vec![])),
+            canister_cycles_balance: Arc::new(Mutex::new(0)),
             cycles_found_in_request: Arc::new(Mutex::new(SNS_CREATION_FEE)),
             errors_on_create_canister: Arc::new(Mutex::new(vec![])),
             errors_on_set_controller: Arc::new(Mutex::new(vec![])),
@@ -2486,6 +2536,7 @@ mod test {
             canister_api,
             Some(subnet_test_id(1)),
             true,
+            false,
             vec![],
             vec![],
             vec![],
@@ -2511,6 +2562,7 @@ mod test {
             canister_api,
             Some(subnet_test_id(1)),
             true,
+            false,
             vec![],
             vec![],
             vec![],
@@ -2534,6 +2586,7 @@ mod test {
             canister_api,
             None,
             true,
+            false,
             vec![],
             vec![],
             vec![],
@@ -2556,6 +2609,7 @@ mod test {
             Some(SnsInitPayload::with_valid_values_for_testing()),
             canister_api,
             Some(subnet_test_id(1)),
+            false,
             false, // wasm_available
             vec![],
             vec![],
@@ -2582,6 +2636,7 @@ mod test {
             canister_api,
             Some(subnet_test_id(1)),
             true,
+            false,
             vec![],
             vec![],
             vec![],
@@ -2619,6 +2674,7 @@ mod test {
             canister_api,
             Some(subnet_test_id(1)),
             true,
+            false,
             vec![CANISTER_CREATION_CYCLES],
             vec![],
             vec![root_id, governance_id, ledger_id, index_id],
@@ -2676,6 +2732,7 @@ mod test {
             canister_api,
             Some(subnet_test_id(1)),
             true,
+            false,
             vec![CANISTER_CREATION_CYCLES],
             vec![],
             vec![root_id, governance_id, ledger_id, swap_id, index_id],
@@ -2718,6 +2775,7 @@ mod test {
             canister_api,
             Some(subnet_test_id(1)),
             true,
+            false,
             vec![CANISTER_CREATION_CYCLES],
             vec![],
             vec![root_id, governance_id, ledger_id, swap_id, index_id],
@@ -2778,6 +2836,7 @@ mod test {
             canister_api,
             Some(subnet_test_id(1)),
             true,
+            false,
             vec![
                 CANISTER_CREATION_CYCLES,
                 SNS_CREATION_FEE - CANISTER_CREATION_CYCLES,
@@ -2863,6 +2922,7 @@ mod test {
             canister_api,
             Some(subnet_test_id(1)),
             true,
+            false,
             vec![CANISTER_CREATION_CYCLES],
             vec![],
             vec![root_id, governance_id, ledger_id, swap_id, index_id],
@@ -2884,11 +2944,78 @@ mod test {
         .await;
     }
 
+    #[tokio::test]
+    async fn test_governance_deploy_sends_cycles_but_not_from_request() {
+        let mut canister_api = new_canister_api();
+        canister_api.cycles_found_in_request = Arc::new(Mutex::new(0));
+        canister_api.canister_cycles_balance = Arc::new(Mutex::new(SNS_CREATION_FEE));
+
+        let this_id = canister_test_id(0);
+
+        let root_id = canister_test_id(1);
+        let governance_id = canister_test_id(2);
+        let ledger_id = canister_test_id(3);
+        let swap_id = canister_test_id(4);
+        let index_id = canister_test_id(5);
+
+        // The cycles sent to each canister after its creation is the whole fee minus what was
+        // used to create them, minus the INITIAL_CANISTER_CREATION_CYCLES that is allocated for
+        // archive.  Also see below, ledger is given a double share, plus INITIAL_CANISTER_CREATION_CYCLES
+        // to account for archive
+        let sent_cycles =
+            (SNS_CREATION_FEE - CANISTER_CREATION_CYCLES - INITIAL_CANISTER_CREATION_CYCLES) / 6;
+
+        test_deploy_new_sns_request(
+            Some(SnsInitPayload::with_valid_values_for_testing()),
+            canister_api,
+            Some(subnet_test_id(1)),
+            true,
+            true,
+            vec![],
+            vec![
+                (root_id, sent_cycles),
+                (governance_id, sent_cycles),
+                (
+                    ledger_id,
+                    sent_cycles * 2 + INITIAL_CANISTER_CREATION_CYCLES,
+                ),
+                (swap_id, sent_cycles),
+                (index_id, sent_cycles),
+            ],
+            vec![],
+            vec![
+                (governance_id, vec![this_id.get(), root_id.get()]),
+                (ledger_id, vec![this_id.get(), root_id.get()]),
+                (index_id, vec![this_id.get(), root_id.get()]),
+                (root_id, vec![this_id.get(), governance_id.get()]),
+                (swap_id, vec![this_id.get(), ROOT_CANISTER_ID.get()]),
+                (governance_id, vec![root_id.get()]),
+                (ledger_id, vec![root_id.get()]),
+                (root_id, vec![governance_id.get()]),
+                (swap_id, vec![ROOT_CANISTER_ID.get()]),
+                (index_id, vec![root_id.get()]),
+            ],
+            DeployNewSnsResponse {
+                subnet_id: Some(subnet_test_id(1).get()),
+                canisters: Some(SnsCanisterIds {
+                    root: Some(root_id.get()),
+                    ledger: Some(ledger_id.get()),
+                    governance: Some(governance_id.get()),
+                    swap: Some(swap_id.get()),
+                    index: Some(index_id.get()),
+                }),
+                error: None,
+            },
+        )
+        .await;
+    }
+
     async fn test_deploy_new_sns_request(
         sns_init_payload: Option<SnsInitPayload>,
         canister_api: TestCanisterApi,
         available_subnet: Option<SubnetId>,
         wasm_available: bool,
+        is_governance_caller: bool,
         expected_accepted_cycles: Vec<u64>,
         expected_sent_cycles: Vec<(CanisterId, u64)>,
         expected_canisters_destroyed: Vec<CanisterId>,
@@ -2922,7 +3049,11 @@ mod test {
             &CANISTER_WRAPPER,
             &canister_api,
             DeployNewSnsRequest { sns_init_payload },
-            PrincipalId::new_user_test_id(1),
+            if is_governance_caller {
+                GOVERNANCE_CANISTER_ID.get()
+            } else {
+                PrincipalId::new_user_test_id(1)
+            },
         )
         .await;
 
@@ -3185,5 +3316,99 @@ mod test {
                 instances: vec![DeployedSns::from(sns_1), DeployedSns::from(sns_2),],
             },
         )
+    }
+
+    #[tokio::test]
+    async fn test_deploy_new_sns_works_for_nns_governance() {
+        let test_id = subnet_test_id(1);
+        let mut canister_api = new_canister_api();
+        canister_api.cycles_found_in_request = Arc::new(Mutex::new(0));
+        canister_api.canister_cycles_balance = Arc::new(Mutex::new(SNS_CREATION_FEE));
+
+        thread_local! {
+            static CANISTER_WRAPPER: RefCell<SnsWasmCanister<TestCanisterStableMemory>> = RefCell::new(new_wasm_canister()) ;
+        }
+
+        CANISTER_WRAPPER.with(|sns_wasm| {
+            sns_wasm.borrow_mut().update_allowed_principals(
+                UpdateAllowedPrincipalsRequest {
+                    added_principals: vec![PrincipalId::new_user_test_id(1)],
+                    removed_principals: vec![],
+                },
+                GOVERNANCE_CANISTER_ID.into(),
+            )
+        });
+
+        CANISTER_WRAPPER.with(|c| {
+            c.borrow_mut().set_sns_subnets(vec![test_id]);
+            add_dummy_wasms(&mut c.borrow_mut(), None);
+        });
+
+        let response = SnsWasmCanister::deploy_new_sns(
+            &CANISTER_WRAPPER,
+            &canister_api,
+            DeployNewSnsRequest {
+                sns_init_payload: Some(SnsInitPayload::with_valid_values_for_testing()),
+            },
+            GOVERNANCE_CANISTER_ID.get(),
+        )
+        .await;
+
+        assert_eq!(response.error, None);
+
+        let sns_1 = response.canisters.unwrap();
+
+        let known_deployments_response = CANISTER_WRAPPER.with(|canister| {
+            canister
+                .borrow()
+                .list_deployed_snses(ListDeployedSnsesRequest {})
+        });
+
+        assert_eq!(
+            known_deployments_response,
+            ListDeployedSnsesResponse {
+                instances: vec![DeployedSns::from(sns_1)],
+            },
+        );
+
+        assert_eq!(
+            vec![PrincipalId::new_user_test_id(1)],
+            CANISTER_WRAPPER.with(|c| c.borrow().allowed_principals.clone())
+        );
+    }
+    #[tokio::test]
+    async fn test_deploy_new_sns_fails_for_nns_governance_is_sns_w_low_on_cycles() {
+        let test_id = subnet_test_id(1);
+        let mut canister_api = new_canister_api();
+        canister_api.cycles_found_in_request = Arc::new(Mutex::new(0));
+        canister_api.canister_cycles_balance = Arc::new(Mutex::new(SNS_CREATION_FEE - 1));
+
+        thread_local! {
+            static CANISTER_WRAPPER: RefCell<SnsWasmCanister<TestCanisterStableMemory>> = RefCell::new(new_wasm_canister()) ;
+        }
+
+        CANISTER_WRAPPER.with(|c| {
+            c.borrow_mut().set_sns_subnets(vec![test_id]);
+            add_dummy_wasms(&mut c.borrow_mut(), None);
+        });
+
+        let response = SnsWasmCanister::deploy_new_sns(
+            &CANISTER_WRAPPER,
+            &canister_api,
+            DeployNewSnsRequest {
+                sns_init_payload: Some(SnsInitPayload::with_valid_values_for_testing()),
+            },
+            GOVERNANCE_CANISTER_ID.get(),
+        )
+        .await;
+
+        assert_eq!(
+            response.error,
+            Some(SnsWasmError {
+                message: "Not enough cycles in canister.  \
+                    Required: 180000000000000. Found: 179999999999999"
+                    .to_string()
+            })
+        );
     }
 }
