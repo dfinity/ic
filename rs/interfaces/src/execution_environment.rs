@@ -789,16 +789,17 @@ pub trait SystemApi {
     ) -> HypervisorResult<()>;
 
     /// Attempts to allocate memory before calling stable grow. Will also check
-    /// that the current size if valid for the stable memory API being used.
+    /// that the current size if valid for the stable memory API being used and
+    /// the resulting size doesn't exceed the maximum stable memory limit.
+    ///
+    /// This is enough to guarantee that growing the stable memory from within
+    /// wasm will succeed.
     fn try_grow_stable_memory(
         &mut self,
         current_size: u64,
         additional_pages: u64,
         stable_memory_api: StableMemoryApi,
     ) -> HypervisorResult<StableGrowOutcome>;
-
-    /// Return memory from a previous call to `update_available_memory`.
-    fn deallocate_pages(&mut self, additional_pages: u64);
 
     /// (deprecated) Please use `ic0_canister_cycle_balance128` instead.
     /// This API supports only 64-bit values.

@@ -37,6 +37,7 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
+    "//rs/rust_canisters/canister_test",
     "//rs/registry/routing_table",
     "//rs/test_utilities",
     "//rs/test_utilities/logger",
@@ -120,14 +121,14 @@ rust_test_suite_with_extra_srcs(
     ),
     aliases = ALIASES,
     compile_data = glob(["tests/instrumentation-test-data/*"]),
-    data = ["@wasm_spec_testsuite//:wast_files"] + glob([
+    data = DATA + ["@wasm_spec_testsuite//:wast_files"] + glob([
         "tests/compressed/*",
         "tests/instrumentation-test-data/*",
         "tests/round-trip-test-data/*",
     ]),
-    env = {
-        "CARGO_MANIFEST_DIR": "rs/embedders",
-    },
+    env = dict(ENV.items() + [
+        ("CARGO_MANIFEST_DIR", "rs/embedders"),
+    ]),
     extra_srcs = [
         "tests/wasmtime_simple.rs",
         "tests/instrumentation.rs",
@@ -153,7 +154,6 @@ rust_library(
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.8.0",
     deps = [
-        "//rs/rust_canisters/canister_test",
         "@crate_index//:candid",
     ] + DEPENDENCIES + DEV_DEPENDENCIES,
 )
@@ -166,7 +166,6 @@ rust_bench(
     env = ENV,
     deps = [
         ":embedders_bench",
-        "//rs/rust_canisters/canister_test",
         "//rs/types/base_types",
         "@crate_index//:candid",
     ] + DEPENDENCIES + DEV_DEPENDENCIES,
@@ -181,7 +180,6 @@ rust_bench(
     env = ENV,
     deps = [
         ":embedders_bench",
-        "//rs/rust_canisters/canister_test",
         "//rs/types/base_types",
         "@crate_index//:candid",
     ] + DEPENDENCIES + DEV_DEPENDENCIES,

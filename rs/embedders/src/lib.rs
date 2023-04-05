@@ -65,6 +65,7 @@ pub(crate) enum InternalErrorCode {
     StableMemoryTooBigFor32Bit = 3,
     MemoryWriteLimitExceeded = 4,
     MemoryAccessLimitExceeded = 5,
+    StableGrowFailed = 6,
 }
 
 impl InternalErrorCode {
@@ -79,6 +80,7 @@ impl InternalErrorCode {
             code if code == Self::MemoryAccessLimitExceeded as i32 => {
                 Self::MemoryAccessLimitExceeded
             }
+            code if code == Self::StableGrowFailed as i32 => Self::StableGrowFailed,
             _ => Self::Unknown,
         }
     }

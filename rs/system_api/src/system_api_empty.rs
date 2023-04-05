@@ -215,9 +215,6 @@ impl SystemApi for SystemApiEmpty {
     ) -> HypervisorResult<ic_interfaces::execution_environment::StableGrowOutcome> {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
-    fn deallocate_pages(&mut self, _: u64) {
-        unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
-    }
     fn ic0_canister_cycle_balance(&self) -> HypervisorResult<u64> {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }

@@ -1375,14 +1375,6 @@ pub(crate) fn syscalls<S: SystemApi>(
         .unwrap();
 
     linker
-        .func_wrap("__", "deallocate_pages", {
-            move |mut caller: Caller<'_, StoreData<S>>, additional_pages: i64| {
-                with_system_api(&mut caller, |s| s.deallocate_pages(additional_pages as u64))
-            }
-        })
-        .unwrap();
-
-    linker
         .func_wrap("ic0", "canister_status", {
             move |mut caller: Caller<'_, StoreData<S>>| {
                 with_system_api(&mut caller, |s| s.ic0_canister_status())
@@ -1519,6 +1511,9 @@ pub(crate) fn syscalls<S: SystemApi>(
                                     stable_memory_access_page_limit * (PAGE_SIZE as u64 / 1024),
                             )
                         )
+                    }
+                    InternalErrorCode::StableGrowFailed => {
+                        HypervisorError::CalledTrap("Internal error: `memory.grow` instruction failed to grow stable memory".to_string())
                     }
                     InternalErrorCode::Unknown => HypervisorError::CalledTrap(format!(
                         "Trapped with internal error code: {}",

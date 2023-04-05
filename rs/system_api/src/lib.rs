@@ -17,14 +17,17 @@ use ic_interfaces::execution_environment::{
 };
 use ic_logger::{error, ReplicaLogger};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{memory_required_to_push_request, Memory, NumWasmPages, PageIndex};
+use ic_replicated_state::{
+    canister_state::WASM_PAGE_SIZE_IN_BYTES, memory_required_to_push_request, Memory, NumWasmPages,
+    PageIndex,
+};
 use ic_sys::PageBytes;
 use ic_types::{
     ingress::WasmResult,
     messages::{CallContextId, RejectContext, Request, MAX_INTER_CANISTER_PAYLOAD_IN_BYTES},
     methods::{SystemMethod, WasmClosure},
     CanisterId, CanisterTimer, ComputeAllocation, Cycles, NumBytes, NumInstructions, NumPages,
-    PrincipalId, SubnetId, Time,
+    PrincipalId, SubnetId, Time, MAX_STABLE_MEMORY_IN_BYTES,
 };
 use ic_utils::deterministic_operations::deterministic_copy_from_slice;
 use request_in_prep::{into_request, RequestInPrep};
@@ -2403,25 +2406,24 @@ impl SystemApi for SystemApiImpl {
         additional_pages: u64,
         stable_memory_api: ic_interfaces::execution_environment::StableMemoryApi,
     ) -> HypervisorResult<StableGrowOutcome> {
+        let resulting_size = current_size.saturating_add(additional_pages);
         if let StableMemoryApi::Stable32 = stable_memory_api {
             if current_size > MAX_32_BIT_STABLE_MEMORY_IN_PAGES {
                 return Err(HypervisorError::Trapped(
                     TrapCode::StableMemoryTooBigFor32Bit,
                 ));
             }
-            if current_size.saturating_add(additional_pages) > MAX_32_BIT_STABLE_MEMORY_IN_PAGES {
+            if resulting_size > MAX_32_BIT_STABLE_MEMORY_IN_PAGES {
                 return Ok(StableGrowOutcome::Failure);
             }
+        }
+        if resulting_size > MAX_STABLE_MEMORY_IN_BYTES / WASM_PAGE_SIZE_IN_BYTES as u64 {
+            return Ok(StableGrowOutcome::Failure);
         }
         match self.memory_usage.allocate_pages(additional_pages as usize) {
             Ok(()) => Ok(StableGrowOutcome::Success),
             Err(_) => Ok(StableGrowOutcome::Failure),
         }
-    }
-
-    fn deallocate_pages(&mut self, additional_pages: u64) {
-        self.memory_usage
-            .deallocate_pages(additional_pages as usize)
     }
 
     fn ic0_canister_cycle_balance(&self) -> HypervisorResult<u64> {
