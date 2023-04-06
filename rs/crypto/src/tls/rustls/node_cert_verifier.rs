@@ -4,29 +4,26 @@ use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsPublicKeyCert};
 use ic_interfaces_registry::RegistryClient;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_types::{NodeId, RegistryVersion};
-use std::sync::Arc;
+use std::{sync::Arc, time::SystemTime};
 use tokio_rustls::rustls::{
-    Certificate, ClientCertVerified, ClientCertVerifier, DistinguishedNames, RootCertStore,
-    ServerCertVerified, ServerCertVerifier, TLSError,
+    client::{ServerCertVerified, ServerCertVerifier},
+    server::{ClientCertVerified, ClientCertVerifier},
+    Certificate, CertificateError, DistinguishedName, Error as TLSError, ServerName,
 };
-use tokio_rustls::webpki;
-use tokio_rustls::webpki::DNSNameRef;
 
 #[cfg(test)]
 mod tests;
 
 /// Implements `ServerCertVerifier`. The peer
 /// certificate is considered trusted if the following conditions hold:
-/// * Exactly one certificate (i.e. no chain with more than one certificate) is
-///   presented by the peer in `presented_certs` (as passed to
-///   `verify_server_cert`).
-/// * The presented certificate can be parsed from DER.
-/// * The presented certificate subject CN can be parsed as a `NodeId`.
-/// * The `NodeId` parsed from the presented certificate's subject CN is
+/// * No intermediate certificates.
+/// * The end entitiy certificate can be parsed from DER.
+/// * The end entity certificate subject CN can be parsed as a `NodeId`.
+/// * The `NodeId` parsed from the end entity's subject CN is
 ///   contained in `allowed_nodes` (as passed to `new`).
-/// * The presented certificate equals the node's certificate fetched from the
+/// * The end entity certificate equals the node's certificate fetched from the
 ///   `registry_client` at version `registry_version` for the `NodeId` parsed
-///   from the presented certificate. (The `registry_client` and
+///   from the end entity certificate. (The `registry_client` and
 ///   `registry_version` are passed to `new`.)
 ///
 /// If any of these conditions does not hold, a `TLSError` is returned.
@@ -55,16 +52,14 @@ impl NodeServerCertVerifier {
 
 /// Implements `ClientCertVerifier`. The peer
 /// certificate is considered trusted if the following conditions hold:
-/// * Exactly one certificate (i.e. no chain with more than one certificate) is
-///   presented by the peer in `presented_certs` (as passed to
-///   `verify_client_cert`).
-/// * The presented certificate can be parsed from DER.
-/// * The presented certificate subject CN can be parsed as a `NodeId`.
-/// * The `NodeId` parsed from the presented certificate's subject CN is
+/// * No intermediate certificates.
+/// * The end entitiy certificate can be parsed from DER.
+/// * The end entity certificate subject CN can be parsed as a `NodeId`.
+/// * The `NodeId` parsed from the end entity's subject CN is
 ///   contained in `allowed_nodes` (as passed to the constructors).
-/// * The presented certificate equals the node's certificate fetched from the
+/// * The end entity certificate equals the node's certificate fetched from the
 ///   `registry_client` at version `registry_version` for the `NodeId` parsed
-///   from the presented certificate. (The `registry_client` and
+///   from the end entity certificate. (The `registry_client` and
 ///   `registry_version` are passed to the constructors.)
 ///
 /// If any of these conditions does not hold, a `TLSError` is returned.
@@ -98,13 +93,16 @@ impl NodeClientCertVerifier {
 impl ServerCertVerifier for NodeServerCertVerifier {
     fn verify_server_cert(
         &self,
-        _roots: &RootCertStore,
-        presented_certs: &[Certificate],
-        _dns_name: DNSNameRef,
+        end_entity: &Certificate,
+        intermediates: &[Certificate],
+        _server_name: &ServerName,
+        _scts: &mut dyn Iterator<Item = &[u8]>,
         _ocsp_response: &[u8],
+        _now: SystemTime,
     ) -> Result<ServerCertVerified, TLSError> {
         verify_node_cert(
-            presented_certs,
+            end_entity,
+            intermediates,
             &self.allowed_nodes,
             self.registry_client.as_ref(),
             self.registry_version,
@@ -118,79 +116,68 @@ impl ClientCertVerifier for NodeClientCertVerifier {
         true
     }
 
-    fn client_auth_mandatory(&self, _sni: Option<&webpki::DNSName>) -> Option<bool> {
-        Some(true)
+    fn client_auth_mandatory(&self) -> bool {
+        true
     }
 
-    fn client_auth_root_subjects(
-        &self,
-        _sni: Option<&webpki::DNSName>,
-    ) -> Option<DistinguishedNames> {
-        // If `None` is returned, the connection would be aborted, see the rust doc of
-        // `client_auth_root_subjects`.
-        Some(DistinguishedNames::new())
+    fn client_auth_root_subjects(&self) -> &[DistinguishedName] {
+        &[]
     }
 
     fn verify_client_cert(
         &self,
-        presented_certs: &[Certificate],
-        _sni: Option<&webpki::DNSName>,
+        end_entity: &Certificate,
+        intermediates: &[Certificate],
+        _now: SystemTime,
     ) -> Result<ClientCertVerified, TLSError> {
         verify_node_cert(
-            presented_certs,
+            end_entity,
+            intermediates,
             &self.allowed_nodes,
             self.registry_client.as_ref(),
             self.registry_version,
         )
-        .map(|_| ClientCertVerified::assertion())
+        .map(|()| ClientCertVerified::assertion())
     }
 }
 
 fn verify_node_cert(
-    presented_certs: &[Certificate],
+    end_entity_der: &Certificate,
+    intermediates: &[Certificate],
     allowed_nodes: &SomeOrAllNodes,
     registry_client: &dyn RegistryClient,
     registry_version: RegistryVersion,
 ) -> Result<(), TLSError> {
-    ensure_exactly_one_presented_cert(presented_certs)?;
-    let presented_cert_der = presented_certs[0].0.clone();
-    let presented_cert = cert_from_der(presented_cert_der.clone())?;
-    let presented_cert_node_id = node_id_from_subject_cn(&presented_cert)?;
-    ensure_node_id_in_allowed_nodes(presented_cert_node_id, allowed_nodes)?;
+    ensure_intermediate_certs_empty(intermediates)?;
+    let end_entity = cert_from_der(end_entity_der.0.clone())?;
+    let end_entity_node_id = node_id_from_subject_cn(&end_entity)?;
+    ensure_node_id_in_allowed_nodes(end_entity_node_id, allowed_nodes)?;
     let node_cert_from_registry =
-        node_cert_from_registry(presented_cert_node_id, registry_client, registry_version)?;
-    ensure_certificates_equal(
-        presented_cert,
-        presented_cert_node_id,
-        node_cert_from_registry,
-    )?;
+        node_cert_from_registry(end_entity_node_id, registry_client, registry_version)?;
+    ensure_certificates_equal(end_entity, end_entity_node_id, node_cert_from_registry)?;
     // It's important to do the validity check after checking equality to the
     // registry cert because the cert validation uses a different parser
     // (`x509_parser` as opposed to OpenSSL that is used above) and it is safer
     // to not just pass any untrusted data to it. We consider the DER here trusted
     // because it is equal to the certificate DER stored in the registry, as checked
     // above.
-    ensure_node_certificate_is_valid(presented_cert_der, presented_cert_node_id)?;
+    ensure_node_certificate_is_valid(end_entity_der.0.clone(), end_entity_node_id)?;
     Ok(())
 }
 
-fn ensure_exactly_one_presented_cert(presented_certs: &[Certificate]) -> Result<(), TLSError> {
-    if presented_certs.len() != 1 {
+fn ensure_intermediate_certs_empty(intermediates: &[Certificate]) -> Result<(), TLSError> {
+    if !intermediates.is_empty() {
         return Err(TLSError::General(format!(
             "The peer must send exactly one self signed certificate, but it sent {} certificates.",
-            presented_certs.len()
+            intermediates.len() + 1
         )));
     }
     Ok(())
 }
 
 fn cert_from_der(cert_der: Vec<u8>) -> Result<TlsPublicKeyCert, TLSError> {
-    TlsPublicKeyCert::new_from_der(cert_der).map_err(|e| {
-        TLSError::General(format!(
-            "The presented certificate could not be parsed as DER: {}",
-            e
-        ))
-    })
+    TlsPublicKeyCert::new_from_der(cert_der)
+        .map_err(|_| TLSError::InvalidCertificate(CertificateError::BadEncoding))
 }
 
 fn node_id_from_subject_cn(cert: &TlsPublicKeyCert) -> Result<NodeId, TLSError> {
@@ -229,11 +216,11 @@ fn node_cert_from_registry(
 }
 
 fn ensure_certificates_equal(
-    presented_cert: TlsPublicKeyCert,
+    end_entity_cert: TlsPublicKeyCert,
     node_id: NodeId,
     node_cert_from_registry: TlsPublicKeyCert,
 ) -> Result<(), TLSError> {
-    if node_cert_from_registry != presented_cert {
+    if node_cert_from_registry != end_entity_cert {
         return Err(TLSError::General(
             format!("The peer certificate is not trusted since it differs from the registry certificate. NodeId of presented cert: {}", node_id),
         ));

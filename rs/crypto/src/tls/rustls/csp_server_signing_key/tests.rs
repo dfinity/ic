@@ -6,9 +6,9 @@ use ic_crypto_internal_csp::types::CspSignature;
 use ic_crypto_internal_csp::vault::api::CspTlsSignError;
 use ic_crypto_test_utils_local_csp_vault::MockLocalCspVault;
 use std::sync::Arc;
-use tokio_rustls::rustls::internal::msgs::enums::SignatureAlgorithm;
-use tokio_rustls::rustls::sign::SigningKey;
-use tokio_rustls::rustls::{SignatureScheme, TLSError};
+use tokio_rustls::rustls::{
+    sign::SigningKey, Error as TLSError, SignatureAlgorithm, SignatureScheme,
+};
 
 #[test]
 fn should_produce_same_signature_as_csp_server_if_ed25519_is_chosen() {
@@ -73,7 +73,7 @@ fn should_return_ed25519_as_signer_scheme() {
         ])
         .expect("failed to sign");
 
-    assert_eq!(signer.get_scheme(), SignatureScheme::ED25519);
+    assert_eq!(signer.scheme(), SignatureScheme::ED25519);
 }
 
 #[test]

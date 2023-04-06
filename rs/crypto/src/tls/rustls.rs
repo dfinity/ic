@@ -21,7 +21,7 @@ fn certified_key(
 ) -> CertifiedKey {
     CertifiedKey {
         cert: vec![Certificate(self_tls_cert.as_der().clone())],
-        key: Arc::new(Box::new(csp_server_signing_key)),
+        key: Arc::new(csp_server_signing_key),
         ocsp: None,
         sct_list: None,
     }

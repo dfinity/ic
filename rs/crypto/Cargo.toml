@@ -59,7 +59,7 @@ tokio = { version = "1.15.0", features = ["full"] }
 tokio-openssl = "0.6.0"
 # We use the `dangerous_configuration` flag for rustls to be able to set custom `ClientCertVerifier` and
 # `ServerCertVerifier` in order to verify node certificates.
-tokio-rustls = { version = "0.22.0", features = ["dangerous_configuration"] }
+tokio-rustls = { version = "0.24.0", features = ["dangerous_configuration"] }
 zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
 
 [build-dependencies]

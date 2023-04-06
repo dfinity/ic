@@ -14,13 +14,16 @@ use ic_interfaces_registry::RegistryClient;
 use ic_types::{NodeId, RegistryVersion};
 use std::sync::Arc;
 use tokio::net::TcpStream;
-use tokio_rustls::rustls::ciphersuite::{TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384};
-use tokio_rustls::rustls::sign::CertifiedKey;
-use tokio_rustls::rustls::{
-    ClientCertVerifier, NoClientAuth, ProtocolVersion, ResolvesServerCert, ServerConfig, Session,
-    SignatureScheme,
+use tokio_rustls::{
+    rustls::{
+        cipher_suite::{TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384},
+        server::{ClientCertVerifier, NoClientAuth, ResolvesServerCert},
+        sign::CertifiedKey,
+        version::TLS13,
+        ServerConfig, SignatureScheme,
+    },
+    TlsAcceptor,
 };
-use tokio_rustls::TlsAcceptor;
 
 pub async fn perform_tls_server_handshake<P: CspTlsHandshakeSignerProvider>(
     signer_provider: &P,
@@ -78,7 +81,7 @@ pub async fn perform_tls_server_handshake_without_client_auth<P: CspTlsHandshake
     let ed25519_signing_key =
         CspServerEd25519SigningKey::new(self_tls_cert_key_id, signer_provider.handshake_signer());
     let config = server_config_with_tls13_and_aes_ciphersuites_and_ed25519_signing_key(
-        NoClientAuth::new(),
+        NoClientAuth::boxed(),
         self_tls_cert,
         ed25519_signing_key,
     );
@@ -95,14 +98,17 @@ fn server_config_with_tls13_and_aes_ciphersuites_and_ed25519_signing_key(
     self_tls_cert: TlsPublicKeyCert,
     ed25519_signing_key: CspServerEd25519SigningKey,
 ) -> ServerConfig {
-    let mut config = ServerConfig::new(client_cert_verifier);
-    config.versions = vec![ProtocolVersion::TLSv1_3];
-    config.ciphersuites = vec![&TLS13_AES_256_GCM_SHA384, &TLS13_AES_128_GCM_SHA256];
+    let config = ServerConfig::builder()
+        .with_cipher_suites(&[TLS13_AES_256_GCM_SHA384, TLS13_AES_128_GCM_SHA256])
+        .with_safe_default_kx_groups()
+        .with_protocol_versions(&[&TLS13])
+        .expect("Valid rustls server config.")
+        .with_client_cert_verifier(client_cert_verifier)
+        .with_cert_resolver(static_cert_resolver(
+            certified_key(self_tls_cert, ed25519_signing_key),
+            SignatureScheme::ED25519,
+        ));
 
-    config.cert_resolver = static_cert_resolver(
-        certified_key(self_tls_cert, ed25519_signing_key),
-        SignatureScheme::ED25519,
-    );
     config
 }
 
@@ -128,7 +134,7 @@ fn static_cert_resolver(key: CertifiedKey, scheme: SignatureScheme) -> Arc<dyn R
 fn single_client_cert_from_handshake(
     tls_stream: &tokio_rustls::server::TlsStream<TcpStream>,
 ) -> Result<TlsPublicKeyCert, TlsServerHandshakeError> {
-    let peer_certs = tls_stream.get_ref().1.get_peer_certificates().ok_or(
+    let peer_certs = tls_stream.get_ref().1.peer_certificates().ok_or(
         TlsServerHandshakeError::HandshakeError {
             internal_error: "missing peer certificates in session".to_string(),
         },

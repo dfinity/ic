@@ -6,13 +6,15 @@ use ic_crypto_test_utils::tls::x509_certificates::{x509_public_key_cert, CertWit
 use ic_crypto_tls_interfaces::SomeOrAllNodes;
 use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3};
 use maplit::btreeset;
-use tokio_rustls::rustls::{Certificate, ClientCertVerifier, TLSError};
-use tokio_rustls::rustls::{RootCertStore, ServerCertVerifier};
+use tokio_rustls::rustls::{
+    client::ServerCertVerifier, server::ClientCertVerifier, Certificate, Error as TLSError,
+};
 
 mod client_cert_verifier_tests {
+    use tokio_rustls::rustls::CertificateError;
+
     use super::*;
-    use std::collections::BTreeSet;
-    use tokio_rustls::rustls::DistinguishedNames;
+    use std::{collections::BTreeSet, time::UNIX_EPOCH};
 
     #[test]
     fn should_return_ok_if_node_allowed_and_certificate_in_registry() {
@@ -25,7 +27,8 @@ mod client_cert_verifier_tests {
             .add_cert(NODE_1, x509_public_key_cert(&node_1_cert.x509()))
             .update();
 
-        let result = verifier.verify_client_cert(&[Certificate(node_1_cert.cert_der())], None);
+        let result =
+            verifier.verify_client_cert(&Certificate(node_1_cert.cert_der()), &[], UNIX_EPOCH);
 
         assert!(result.is_ok());
     }
@@ -45,7 +48,8 @@ mod client_cert_verifier_tests {
             .add_cert(NODE_1, x509_public_key_cert(&node_1_cert.x509()))
             .update();
 
-        let result = verifier.verify_client_cert(&[Certificate(node_1_cert.cert_der())], None);
+        let result =
+            verifier.verify_client_cert(&Certificate(node_1_cert.cert_der()), &[], UNIX_EPOCH);
 
         assert!(result.is_ok());
     }
@@ -65,8 +69,11 @@ mod client_cert_verifier_tests {
             )
             .update();
 
-        let result =
-            verifier.verify_client_cert(&[Certificate(untrusted_node_cert.cert_der())], None);
+        let result = verifier.verify_client_cert(
+            &Certificate(untrusted_node_cert.cert_der()),
+            &[],
+            UNIX_EPOCH,
+        );
 
         assert_eq!(
             result.err(),
@@ -99,8 +106,11 @@ mod client_cert_verifier_tests {
             )
             .update();
 
-        let result =
-            verifier.verify_client_cert(&[Certificate(presented_node_1_cert.cert_der())], None);
+        let result = verifier.verify_client_cert(
+            &Certificate(presented_node_1_cert.cert_der()),
+            &[],
+            UNIX_EPOCH,
+        );
 
         assert_eq!(
             result.err(),
@@ -118,8 +128,11 @@ mod client_cert_verifier_tests {
             .build_ed25519();
         let verifier = verifier_with_allowed_nodes(btreeset! {NODE_1, NODE_2}, &TlsRegistry::new());
 
-        let result = verifier
-            .verify_client_cert(&[Certificate(cert_with_no_node_id_as_cn.cert_der())], None);
+        let result = verifier.verify_client_cert(
+            &Certificate(cert_with_no_node_id_as_cn.cert_der()),
+            &[],
+            UNIX_EPOCH,
+        );
 
         assert_eq!(
             result.err(),
@@ -139,29 +152,17 @@ mod client_cert_verifier_tests {
             .build_ed25519();
         let verifier = verifier_with_allowed_nodes(btreeset! {NODE_1, NODE_2}, &TlsRegistry::new());
 
-        let result =
-            verifier.verify_client_cert(&[Certificate(cert_with_duplicate_cn.cert_der())], None);
+        let result = verifier.verify_client_cert(
+            &Certificate(cert_with_duplicate_cn.cert_der()),
+            &[],
+            std::time::UNIX_EPOCH,
+        );
 
         assert_eq!(
             result.err(),
             Some(TLSError::General(
                 "The presented certificate subject CN could not be parsed as node ID: MalformedPeerCertificateError \
                 { internal_error: \"Too many X509NameEntryRefs\" }".to_string(),
-            ))
-        );
-    }
-
-    #[test]
-    fn should_return_error_if_no_presented_certs() {
-        let verifier = verifier_with_allowed_nodes(btreeset! {NODE_1, NODE_2}, &TlsRegistry::new());
-
-        let result = verifier.verify_client_cert(&[], None);
-
-        assert_eq!(
-            result.err(),
-            Some(TLSError::General(
-                "The peer must send exactly one self signed certificate, but it sent 0 certificates."
-                    .to_string(),
             ))
         );
     }
@@ -177,11 +178,9 @@ mod client_cert_verifier_tests {
         let verifier = verifier_with_allowed_nodes(btreeset! {NODE_1, NODE_2}, &TlsRegistry::new());
 
         let result = verifier.verify_client_cert(
-            &[
-                Certificate(node_1_cert_1.cert_der()),
-                Certificate(node_1_cert_2.cert_der()),
-            ],
-            None,
+            &Certificate(node_1_cert_1.cert_der()),
+            &[Certificate(node_1_cert_2.cert_der())],
+            std::time::UNIX_EPOCH,
         );
 
         assert_eq!(
@@ -201,7 +200,8 @@ mod client_cert_verifier_tests {
         let empty_registry = TlsRegistry::new();
         let verifier = verifier_with_allowed_nodes(btreeset! {NODE_1, NODE_2}, &empty_registry);
 
-        let result = verifier.verify_client_cert(&[Certificate(node_1_cert.cert_der())], None);
+        let result =
+            verifier.verify_client_cert(&Certificate(node_1_cert.cert_der()), &[], UNIX_EPOCH);
 
         assert_eq!(
             result.err(),
@@ -227,7 +227,8 @@ mod client_cert_verifier_tests {
             .add_cert(NODE_2, x509_public_key_cert(&node_2_cert.x509()))
             .update();
 
-        let result = verifier.verify_client_cert(&[Certificate(node_1_cert.cert_der())], None);
+        let result =
+            verifier.verify_client_cert(&Certificate(node_1_cert.cert_der()), &[], UNIX_EPOCH);
 
         assert_eq!(
             result.err(),
@@ -246,7 +247,7 @@ mod client_cert_verifier_tests {
             REG_V1,
         );
 
-        assert_eq!(verifier.client_auth_mandatory(None), Some(true));
+        assert!(verifier.client_auth_mandatory());
     }
 
     #[test]
@@ -268,9 +269,30 @@ mod client_cert_verifier_tests {
             REG_V1,
         );
 
+        assert!(verifier.client_auth_root_subjects().is_empty());
+    }
+
+    #[test]
+    fn should_return_error_if_client_cert_has_bad_encoding() {
+        let node_1_cert = CertWithPrivateKey::builder()
+            .cn(NODE_1.to_string())
+            .build_ed25519();
+        let registry = TlsRegistry::new();
+        let verifier = verifier_with_allowed_nodes(btreeset! {NODE_1, NODE_2}, &registry);
+        registry
+            .add_cert(NODE_1, x509_public_key_cert(&node_1_cert.x509()))
+            .update();
+        let invalid_cert_der = {
+            let mut der = node_1_cert.cert_der();
+            der[0] ^= 0xFF;
+            der
+        };
+
+        let result = verifier.verify_client_cert(&Certificate(invalid_cert_der), &[], UNIX_EPOCH);
+
         assert_eq!(
-            verifier.client_auth_root_subjects(None),
-            Some(DistinguishedNames::new())
+            result.err(),
+            Some(TLSError::InvalidCertificate(CertificateError::BadEncoding))
         );
     }
 
@@ -291,8 +313,8 @@ mod client_cert_verifier_tests {
 /// the implementation calls the same method as the `ClientCertVerifier`.
 mod server_cert_verifier_tests {
     use super::*;
-    use std::collections::BTreeSet;
-    use tokio_rustls::webpki::DNSNameRef;
+    use std::{collections::BTreeSet, time::UNIX_EPOCH};
+    use tokio_rustls::rustls::{CertificateError, ServerName};
 
     #[test]
     fn should_return_ok_if_node_allowed_and_certificate_in_registry() {
@@ -306,10 +328,12 @@ mod server_cert_verifier_tests {
             .update();
 
         let result = verifier.verify_server_cert(
-            &RootCertStore::empty(),
-            &[Certificate(node_1_cert.cert_der())],
-            DNSNameRef::try_from_ascii_str("www.irrelevant.com").expect("could not parse DNS name"),
+            &Certificate(node_1_cert.cert_der()),
             &[],
+            &ServerName::try_from("www.irrelevant.com").expect("could not parse DNS name"),
+            &mut [].iter().copied(),
+            &[],
+            UNIX_EPOCH,
         );
 
         assert!(result.is_ok());
@@ -331,10 +355,12 @@ mod server_cert_verifier_tests {
             .update();
 
         let result = verifier.verify_server_cert(
-            &RootCertStore::empty(),
-            &[Certificate(untrusted_node_cert.cert_der())],
-            DNSNameRef::try_from_ascii_str("www.irrelevant.com").expect("could not parse DNS name"),
+            &Certificate(untrusted_node_cert.cert_der()),
             &[],
+            &ServerName::try_from("www.irrelevant.com").expect("could not parse DNS name"),
+            &mut [].iter().copied(),
+            &[],
+            UNIX_EPOCH,
         );
 
         assert_eq!(
@@ -343,6 +369,66 @@ mod server_cert_verifier_tests {
                 "The peer certificate with node ID 32uhy-eydaa-aaaaa-aaaap-2ai is not allowed. Allowed node IDs: \
                 Some({3jo2y-lqbaa-aaaaa-aaaap-2ai, gfvbo-licaa-aaaaa-aaaap-2ai})".to_string(),
             ))
+        );
+    }
+
+    #[test]
+    fn should_return_error_if_intermediate_certs_not_empty() {
+        let node_1_cert = CertWithPrivateKey::builder()
+            .cn(NODE_1.to_string())
+            .build_ed25519();
+        let registry = TlsRegistry::new();
+        let verifier = verifier_with_allowed_nodes(btreeset! {NODE_1, NODE_2}, &registry);
+        registry
+            .add_cert(NODE_1, x509_public_key_cert(&node_1_cert.x509()))
+            .update();
+
+        let result = verifier.verify_server_cert(
+            &Certificate(node_1_cert.cert_der()),
+            &[Certificate(node_1_cert.cert_der())],
+            &ServerName::try_from("www.irrelevant.com").expect("could not parse DNS name"),
+            &mut [].iter().copied(),
+            &[],
+            UNIX_EPOCH,
+        );
+
+        assert_eq!(
+            result.err(),
+            Some(TLSError::General(
+                "The peer must send exactly one self signed certificate, but it sent 2 certificates."
+                    .to_string(),
+            ))
+        );
+    }
+
+    #[test]
+    fn should_return_error_if_server_cert_has_bad_encoding() {
+        let node_1_cert = CertWithPrivateKey::builder()
+            .cn(NODE_1.to_string())
+            .build_ed25519();
+        let registry = TlsRegistry::new();
+        let verifier = verifier_with_allowed_nodes(btreeset! {NODE_1, NODE_2}, &registry);
+        registry
+            .add_cert(NODE_1, x509_public_key_cert(&node_1_cert.x509()))
+            .update();
+        let invalid_cert_der = {
+            let mut der = node_1_cert.cert_der();
+            der[0] ^= 0xFF;
+            der
+        };
+
+        let result = verifier.verify_server_cert(
+            &Certificate(invalid_cert_der),
+            &[],
+            &ServerName::try_from("www.irrelevant.com").expect("could not parse DNS name"),
+            &mut [].iter().copied(),
+            &[],
+            UNIX_EPOCH,
+        );
+
+        assert_eq!(
+            result.err(),
+            Some(TLSError::InvalidCertificate(CertificateError::BadEncoding))
         );
     }
 

@@ -20,7 +20,7 @@ flate2 = "1.0.22"
 futures = "0.3.25"
 garcon = "0.2.3"
 hyper = { version = "0.14.20", features = ["full"] }
-hyper-rustls = "0.23.0"
+hyper-rustls = "0.24.0"
 ic-agent = "0.22.0"
 ic-utils = { version = "0.22.0", features = ["raw"] }
 idna = "0.3.0"
