@@ -1,8 +1,6 @@
 use ic_canister_client::Sender;
-use ic_canister_client_sender::{Ed25519KeyPair, Secp256k1KeyPair, SigKeys};
+use ic_canister_client_sender::{Secp256k1KeyPair, SigKeys};
 use ic_sys::utility_command::{UtilityCommand, UtilityCommandResult};
-use ic_types::crypto::Signable;
-use ic_types::messages::MessageId;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -35,31 +33,6 @@ impl Signer for Hsm {
         Ok(Sender::ExternalHsm {
             pub_key,
             sign: Arc::new(get_sign_command),
-        })
-    }
-}
-
-/// The test signer instantiated from a local PEM file which is only present during tests. Not
-/// intended for use in production.
-pub struct TestSigner {
-    keypair: Ed25519KeyPair,
-}
-
-impl TestSigner {
-    pub fn new(path: &Path) -> Option<Self> {
-        let contents = std::fs::read_to_string(path).ok()?;
-        let keypair = Ed25519KeyPair::from_pem(&contents).ok()?;
-        Some(Self { keypair })
-    }
-}
-
-impl Signer for TestSigner {
-    fn get(&self) -> UtilityCommandResult<Sender> {
-        let keypair = self.keypair;
-        let sign_cmd = move |msg: &MessageId| Ok(keypair.sign(&msg.as_signed_bytes()).to_vec());
-        Ok(Sender::Node {
-            pub_key: self.keypair.public_key.to_vec(),
-            sign: Arc::new(sign_cmd),
         })
     }
 }

@@ -534,7 +534,6 @@ pub mod test {
             registration: {
                 nns_url: "http://[::1]:8080",
                 nns_pub_key_pem: "/var/lib/ic/data/nns_public_key.pem",
-                test_key_pem: "/var/lib/admin/test_key.pem",
                 node_operator_pem: "/var/lib/ic/data/node_operator_private_key.pem"
             },
             
