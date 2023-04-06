@@ -56,7 +56,7 @@ pub fn test(env: TestEnv) {
 
     // We use this principal for node provider and node operator.
     let principal =
-        PrincipalId::from_str("bc7vk-kulc6-vswcu-ysxhv-lsrxo-vkszu-zxku3-xhzmh-iac7m-lwewm-2ae")
+        PrincipalId::from_str("7532g-cd7sa-3eaay-weltl-purxe-qliyt-hfuto-364ru-b3dsz-kw5uz-kqe")
             .unwrap();
 
     info!(logger, "Add the node provider principal to the registry.");
@@ -123,13 +123,15 @@ pub fn test(env: TestEnv) {
         sudo systemctl stop ic-replica
         sudo rm /var/lib/ic/crypto/public_keys.pb
         sudo rm /var/lib/ic/crypto/sks_data.pb
-        cat <<EOT >/var/lib/admin/test_key.pem
------BEGIN PRIVATE KEY-----
-MFMCAQEwBQYDK2VwBCIEIKohpVANxO4xElQYXElAOXZHwJSVHERLE8feXSfoKwxX
-oSMDIQBqgs2z86b+S5X9HvsxtE46UZwfDHtebwmSQWSIcKr2ew==
------END PRIVATE KEY-----
+        cat <<EOT >/tmp/node_operator_private_key.pem
+-----BEGIN EC PRIVATE KEY-----
+MHQCAQEEIJ61mhHntzgHe39PaCg7JY6QJcbe0g3dvS1UnEEbKVzdoAcGBSuBBAAK
+oUQDQgAEKSfx/T3gDtkfdGl1fiONzUHs0N7/hcfQ8zwcqIzwuvHK3qqSJ3EhY5OB
+WIgAGf+2BAs2ac0RonxQZdQTmZMvrw==
+-----END EC PRIVATE KEY-----
 EOT
-        sudo chmod a+r /var/lib/admin/test_key.pem
+        sudo cp /tmp/node_operator_private_key.pem /var/lib/ic/data/node_operator_private_key.pem
+        sudo chmod a+r /var/lib/ic/data/node_operator_private_key.pem
         sudo systemctl start ic-crypto-csp
         sudo systemctl start ic-replica
         "#
