@@ -89,7 +89,7 @@ pub trait Payload<'a>: Sized + CandidType + Deserialize<'a> {
     }
 
     fn decode(blob: &'a [u8]) -> Result<Self, UserError> {
-        Decode!(blob, Self).map_err(|error| candid_error_to_user_error(error))
+        Decode!(blob, Self).map_err(candid_error_to_user_error)
     }
 }
 
@@ -898,7 +898,7 @@ impl<'a> Payload<'a> for EmptyBlob {
     fn decode(blob: &'a [u8]) -> Result<EmptyBlob, UserError> {
         Decode!(blob)
             .map(|_| EmptyBlob)
-            .map_err(|err| candid_error_to_user_error(err))
+            .map_err(candid_error_to_user_error)
     }
 }
 
@@ -1107,7 +1107,7 @@ impl SetupInitialDKGResponse {
 
     pub fn decode(blob: &[u8]) -> Result<Self, UserError> {
         let serde_encoded_transcript_records =
-            Decode!(blob, Vec<u8>).map_err(|err| candid_error_to_user_error(err))?;
+            Decode!(blob, Vec<u8>).map_err(candid_error_to_user_error)?;
         match serde_cbor::from_slice::<(
             InitialNiDkgTranscriptRecord,
             InitialNiDkgTranscriptRecord,
@@ -1508,7 +1508,7 @@ impl ComputeInitialEcdsaDealingsResponse {
 
     pub fn decode(blob: &[u8]) -> Result<Self, UserError> {
         let serde_encoded_transcript_records =
-            Decode!(blob, Vec<u8>).map_err(|err| candid_error_to_user_error(err))?;
+            Decode!(blob, Vec<u8>).map_err(candid_error_to_user_error)?;
         match serde_cbor::from_slice::<(InitialIDkgDealings,)>(&serde_encoded_transcript_records) {
             Err(err) => Err(UserError::new(
                 ErrorCode::CanisterContractViolation,

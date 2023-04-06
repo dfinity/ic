@@ -402,7 +402,7 @@ impl<'a> LazyFork<'a> for ReplyStatus<'a> {
     }
 
     fn labels(&self) -> Box<dyn Iterator<Item = Label> + 'a> {
-        Box::new(REPLY_STATUS_LABELS.iter().map(|label| Label::from(label)))
+        Box::new(REPLY_STATUS_LABELS.iter().map(Label::from))
     }
 
     fn children(&self) -> Box<dyn Iterator<Item = (Label, LazyTree<'a>)> + 'a> {

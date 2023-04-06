@@ -78,7 +78,7 @@ impl PublicKeyStore for ProtoPublicKeyStore {
         }
         self.keys.node_signing_pk = Some(key);
         self.write_node_public_keys_proto_to_disk()
-            .map_err(|io_error| PublicKeySetOnceError::Io(io_error))
+            .map_err(PublicKeySetOnceError::Io)
     }
 
     fn node_signing_pubkey(&self) -> Option<PublicKeyProto> {
@@ -97,7 +97,7 @@ impl PublicKeyStore for ProtoPublicKeyStore {
         }
         self.keys.committee_signing_pk = Some(key);
         self.write_node_public_keys_proto_to_disk()
-            .map_err(|io_error| PublicKeySetOnceError::Io(io_error))
+            .map_err(PublicKeySetOnceError::Io)
     }
 
     fn committee_signing_pubkey(&self) -> Option<PublicKeyProto> {
@@ -116,7 +116,7 @@ impl PublicKeyStore for ProtoPublicKeyStore {
         }
         self.keys.dkg_dealing_encryption_pk = Some(key);
         self.write_node_public_keys_proto_to_disk()
-            .map_err(|io_error| PublicKeySetOnceError::Io(io_error))
+            .map_err(PublicKeySetOnceError::Io)
     }
 
     fn ni_dkg_dealing_encryption_pubkey(&self) -> Option<PublicKeyProto> {
@@ -135,7 +135,7 @@ impl PublicKeyStore for ProtoPublicKeyStore {
         }
         self.keys.tls_certificate = Some(cert);
         self.write_node_public_keys_proto_to_disk()
-            .map_err(|io_error| PublicKeySetOnceError::Io(io_error))
+            .map_err(PublicKeySetOnceError::Io)
     }
 
     fn tls_certificate(&self) -> Option<X509PublicKeyCert> {
@@ -152,7 +152,7 @@ impl PublicKeyStore for ProtoPublicKeyStore {
         );
         self.keys.idkg_dealing_encryption_pks.push(key);
         self.write_node_public_keys_proto_to_disk()
-            .map_err(|io_error| PublicKeyAddError::Io(io_error))
+            .map_err(PublicKeyAddError::Io)
     }
 
     fn retain_most_recent_idkg_public_keys_up_to_inclusive(
