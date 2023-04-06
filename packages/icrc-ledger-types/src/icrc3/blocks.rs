@@ -1,4 +1,5 @@
-use super::archive::{ArchivedRange, QueryBlockArchiveFn};
+use crate::icrc3::archive::ArchivedRange;
+use crate::icrc3::archive::QueryBlockArchiveFn;
 use crate::{icrc::generic_value::Value, icrc1::transfer::BlockIndex};
 use candid::{CandidType, Deserialize, Nat};
 use serde_bytes::ByteBuf;

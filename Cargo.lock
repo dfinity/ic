@@ -6584,10 +6584,13 @@ dependencies = [
  "anyhow",
  "candid",
  "ciborium",
+ "ic-base-types",
  "ic-icrc1",
  "ic-icrc1-ledger",
+ "ic-ledger-canister-core",
  "ic-ledger-core",
  "icrc-ledger-types",
+ "log",
  "num-traits",
  "proptest",
  "rusqlite",
@@ -6613,6 +6616,7 @@ dependencies = [
  "proptest",
  "serde",
  "serde_bytes",
+ "tempfile",
 ]
 
 [[package]]
@@ -10200,6 +10204,7 @@ name = "icrc-ledger-types"
 version = "0.1.0"
 dependencies = [
  "candid",
+ "ciborium",
  "hex",
  "num-traits",
  "serde",
