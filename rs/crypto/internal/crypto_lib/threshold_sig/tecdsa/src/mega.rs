@@ -452,7 +452,7 @@ fn verify_pop(
 ///
 /// We also compute a proof of possession by hashing various information,
 /// including the ephemeral key, to another elliptic curve point
-/// (`pop_base`). We compute a scalar multipliction of the `pop_base` and
+/// (`pop_base`). We compute a scalar multiplication of the `pop_base` and
 /// `beta`, producing `pop_public_key`. Finally we create a ZK proof that the
 /// discrete logarithms of `pop_public_key` and `v` are the same value (`beta`)
 /// in the respective bases.

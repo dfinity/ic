@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_doc_test", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_doc", "rust_doc_test", "rust_library", "rust_test")
 load("//bazel:defs.bzl", "rust_bench", "rust_test_suite_with_extra_srcs")
 
 package(default_visibility = ["//visibility:public"])
@@ -118,6 +118,11 @@ rust_library(
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "0.8.0",
     deps = DEPENDENCIES,
+)
+
+rust_doc(
+    name = "crypto_doc",
+    crate = ":crypto",
 )
 
 rust_binary(
