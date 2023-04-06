@@ -10,11 +10,16 @@ use ic_interfaces_registry::RegistryClient;
 use ic_types::{NodeId, RegistryVersion};
 use std::sync::Arc;
 use tokio::net::TcpStream;
-use tokio_rustls::rustls::ciphersuite::{TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384};
-use tokio_rustls::rustls::sign::CertifiedKey;
-use tokio_rustls::rustls::{ClientConfig, ProtocolVersion, ResolvesClientCert, SignatureScheme};
-use tokio_rustls::webpki::DNSNameRef;
-use tokio_rustls::TlsConnector;
+use tokio_rustls::{
+    rustls::{
+        cipher_suite::{TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384},
+        client::ResolvesClientCert,
+        sign::CertifiedKey,
+        version::TLS13,
+        ClientConfig, ServerName, SignatureScheme,
+    },
+    TlsConnector,
+};
 
 pub async fn perform_tls_client_handshake<P: CspTlsHandshakeSignerProvider>(
     signer_provider: &P,
@@ -31,23 +36,23 @@ pub async fn perform_tls_client_handshake<P: CspTlsHandshakeSignerProvider>(
             internal_error: format!("Cannot instantiate KeyId: {:?}", error),
         }
     })?;
-    let mut config = ClientConfig::new();
-    config.versions = vec![ProtocolVersion::TLSv1_3];
-    config.ciphersuites = vec![&TLS13_AES_256_GCM_SHA384, &TLS13_AES_128_GCM_SHA256];
     let ed25519_signing_key =
         CspServerEd25519SigningKey::new(self_tls_cert_key_id, signer_provider.handshake_signer());
-    config.client_auth_cert_resolver = static_cert_resolver(
-        certified_key(self_tls_cert, ed25519_signing_key),
-        SignatureScheme::ED25519,
-    );
     let server_cert_verifier = NodeServerCertVerifier::new(
         SomeOrAllNodes::new_with_single_node(server),
         registry_client,
         registry_version,
     );
-    config
-        .dangerous()
-        .set_certificate_verifier(Arc::new(server_cert_verifier));
+    let config = ClientConfig::builder()
+        .with_cipher_suites(&[TLS13_AES_256_GCM_SHA384, TLS13_AES_128_GCM_SHA256])
+        .with_safe_default_kx_groups()
+        .with_protocol_versions(&[&TLS13])
+        .expect("Valid rustls client config.")
+        .with_custom_certificate_verifier(Arc::new(server_cert_verifier))
+        .with_client_cert_resolver(static_cert_resolver(
+            certified_key(self_tls_cert, ed25519_signing_key),
+            SignatureScheme::ED25519,
+        ));
 
     connect(tcp_stream, config).await
 }
@@ -64,7 +69,7 @@ async fn connect(
     config: ClientConfig,
 ) -> Result<Box<dyn TlsStream>, TlsClientHandshakeError> {
     let irrelevant_domain =
-        DNSNameRef::try_from_ascii_str("domain.is-irrelevant-as-hostname-verification-is.disabled")
+        ServerName::try_from("domain.is-irrelevant-as-hostname-verification-is.disabled")
             .expect("failed to create domain");
     let tls_stream = TlsConnector::from(Arc::new(config))
         .connect(irrelevant_domain, tcp_stream)

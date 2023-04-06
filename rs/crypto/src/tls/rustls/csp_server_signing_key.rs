@@ -2,9 +2,8 @@ use ic_crypto_internal_csp::key_id::KeyId;
 use ic_crypto_internal_csp::types::CspSignature;
 use ic_crypto_internal_csp::TlsHandshakeCspVault;
 use std::sync::Arc;
-use tokio_rustls::rustls;
-use tokio_rustls::rustls::internal::msgs::enums::SignatureAlgorithm;
-use tokio_rustls::rustls::{SignatureScheme, TLSError};
+use tokio_rustls::rustls::{self, SignatureAlgorithm};
+use tokio_rustls::rustls::{Error as TLSError, SignatureScheme};
 
 #[cfg(test)]
 mod tests;
@@ -75,7 +74,7 @@ impl rustls::sign::Signer for CspServerEd25519Signer {
         }
     }
 
-    fn get_scheme(&self) -> SignatureScheme {
+    fn scheme(&self) -> SignatureScheme {
         SignatureScheme::ED25519
     }
 }

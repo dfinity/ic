@@ -169,7 +169,7 @@ pub fn setup(opts: HttpClientOpts) -> Result<impl HyperService<Body>, Error> {
     } else {
         use rustls::{
             client::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier, ServerName},
-            internal::msgs::handshake::DigitallySignedStruct,
+            DigitallySignedStruct,
         };
 
         tracing::warn!("Allowing invalid certs. THIS VERY IS INSECURE.");

@@ -424,7 +424,7 @@ mod server {
 
         assert_handshake_server_error_containing(
             &server_result,
-            "peer is incompatible: Server requires TLS1.3, but client omitted versions ext",
+            "peer is incompatible: SupportedVersionsExtensionRequired",
         )
     }
 
@@ -833,7 +833,7 @@ mod client {
         let registry = TlsRegistry::new();
         let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
         let server = CustomServer::builder()
-            .expect_error("sslv3 alert bad certificate")
+            .expect_error("sslv3 alert handshake failure")
             .build_with_default_server_cert(SERVER_ID_1);
         registry
             .add_cert(SERVER_ID_1, malformed_cert())
@@ -858,7 +858,7 @@ mod client {
         let registry = TlsRegistry::new();
         let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
         let server = CustomServer::builder()
-            .expect_error("sslv3 alert bad certificate")
+            .expect_error("sslv3 alert handshake failure")
             .build_with_default_server_cert(SERVER_ID_1);
         registry
             // deliberately not adding server.cert() to the registry
@@ -1073,7 +1073,7 @@ mod client {
         let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
         let server = CustomServer::builder()
             .with_allowed_signature_algorithms("ECDSA+SHA256:RSA+SHA256:ed25519")
-            .expect_error("sslv3 alert bad certificate")
+            .expect_error("sslv3 alert handshake failure")
             .build(
                 CertWithPrivateKey::builder()
                     .cn(SERVER_ID_1.to_string())
@@ -1099,7 +1099,7 @@ mod client {
         let registry = TlsRegistry::new();
         let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
         let server = CustomServer::builder()
-            .expect_error("sslv3 alert bad certificate")
+            .expect_error("sslv3 alert handshake failure")
             .build(
                 CertWithPrivateKey::builder()
                     .cn(WRONG_NODE_ID.to_string())
@@ -1124,7 +1124,7 @@ mod client {
         let registry = TlsRegistry::new();
         let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
         let server = CustomServer::builder()
-            .expect_error("sslv3 alert bad certificate")
+            .expect_error("sslv3 alert handshake failure")
             .build_with_default_server_cert(SERVER_ID_1);
         let different_server_cert_in_registry = x509_public_key_cert(
             &CertWithPrivateKey::builder()
@@ -1153,7 +1153,7 @@ mod client {
         let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
         let ed25519_key_pair = ed25519_key_pair();
         let server = CustomServer::builder()
-            .expect_error("sslv3 alert bad certificate")
+            .expect_error("sslv3 alert handshake failure")
             .build(
                 CertWithPrivateKey::builder()
                     .cn(SERVER_ID_1.to_string())
@@ -1197,7 +1197,7 @@ mod client {
             .with_ca_signing(ca_cert_key_pair.clone(), SERVER_CA_ID.to_string())
             .build(leaf_cert_key_pair, MessageDigest::null());
         let server = CustomServer::builder()
-            .expect_error("sslv3 alert bad certificate")
+            .expect_error("sslv3 alert handshake failure")
             .build(leaf_cert);
         let ca_cert = CertWithPrivateKey::builder()
             .set_ca_key_usage_extension()
@@ -1223,7 +1223,7 @@ mod client {
         let registry = TlsRegistry::new();
         let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
         let server = CustomServer::builder()
-            .expect_error("sslv3 alert bad certificate")
+            .expect_error("sslv3 alert handshake failure")
             .build(
                 CertWithPrivateKey::builder()
                     .cn(SERVER_ID_1.to_string())
@@ -1249,7 +1249,7 @@ mod client {
         let registry = TlsRegistry::new();
         let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
         let server = CustomServer::builder()
-            .expect_error("sslv3 alert bad certificate")
+            .expect_error("sslv3 alert handshake failure")
             .build(
                 CertWithPrivateKey::builder()
                     .cn(SERVER_ID_1.to_string())
@@ -1275,7 +1275,7 @@ mod client {
         let registry = TlsRegistry::new();
         let client = Client::builder(CLIENT_ID_1, SERVER_ID_1).build(registry.get());
         let server = CustomServer::builder()
-            .expect_error("alert bad certificate")
+            .expect_error("sslv3 alert handshake failure")
             .build(
                 CertWithPrivateKey::builder()
                     .cn(SERVER_ID_1.to_string())

@@ -1,6 +1,11 @@
 use std::fmt::{Debug, Formatter};
+use std::sync::Arc;
 use tokio_rustls::rustls::sign::CertifiedKey;
-use tokio_rustls::rustls::{ClientHello, ResolvesClientCert, ResolvesServerCert, SignatureScheme};
+use tokio_rustls::rustls::{
+    client::ResolvesClientCert,
+    server::{ClientHello, ResolvesServerCert},
+    SignatureScheme,
+};
 
 #[cfg(test)]
 mod tests;
@@ -12,7 +17,7 @@ mod tests;
 /// on the client side or details of the `ClientHello` on the server side are
 /// ignored.
 pub struct StaticCertResolver {
-    certified_key: CertifiedKey,
+    certified_key: Arc<CertifiedKey>,
     sig_scheme: SignatureScheme,
 }
 
@@ -28,7 +33,7 @@ impl StaticCertResolver {
             return Err(KeyIncompatibleWithSigSchemeError {});
         }
         Ok(Self {
-            certified_key,
+            certified_key: Arc::new(certified_key),
             sig_scheme,
         })
     }
@@ -43,11 +48,11 @@ impl ResolvesClientCert for StaticCertResolver {
         &self,
         _acceptable_issuers: &[&[u8]],
         sigschemes: &[SignatureScheme],
-    ) -> Option<CertifiedKey> {
+    ) -> Option<Arc<CertifiedKey>> {
         if !sigschemes.contains(&self.sig_scheme) {
             return None;
         }
-        Some(self.certified_key.clone())
+        Some(Arc::clone(&self.certified_key))
     }
 
     fn has_certs(&self) -> bool {
@@ -56,11 +61,11 @@ impl ResolvesClientCert for StaticCertResolver {
 }
 
 impl ResolvesServerCert for StaticCertResolver {
-    fn resolve(&self, client_hello: ClientHello) -> Option<CertifiedKey> {
-        if !client_hello.sigschemes().contains(&self.sig_scheme) {
+    fn resolve(&self, client_hello: ClientHello) -> Option<Arc<CertifiedKey>> {
+        if !client_hello.signature_schemes().contains(&self.sig_scheme) {
             return None;
         }
-        Some(self.certified_key.clone())
+        Some(Arc::clone(&self.certified_key))
     }
 }
 

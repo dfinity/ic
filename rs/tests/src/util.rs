@@ -40,7 +40,6 @@ use std::{
     fmt::Debug,
     future::Future,
     net::IpAddr,
-    sync::Arc,
     time::{Duration, Instant},
 };
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Lines};
@@ -702,55 +701,11 @@ pub async fn agent_with_identity_mapping(
     addr_mapping: Option<IpAddr>,
     identity: impl Identity + 'static,
 ) -> Result<Agent, AgentError> {
-    let builder = rustls::ClientConfig::builder().with_safe_defaults();
-    use rustls::client::HandshakeSignatureValid;
-    use rustls::client::ServerCertVerified;
-    use rustls::client::ServerCertVerifier;
-    use rustls::client::ServerName;
-    use rustls::internal::msgs::handshake::DigitallySignedStruct;
-
-    struct NoVerifier;
-    impl ServerCertVerifier for NoVerifier {
-        fn verify_server_cert(
-            &self,
-            _end_entity: &rustls::Certificate,
-            _intermediates: &[rustls::Certificate],
-            _server_name: &ServerName,
-            _scts: &mut dyn Iterator<Item = &[u8]>,
-            _ocsp_response: &[u8],
-            _now: std::time::SystemTime,
-        ) -> Result<ServerCertVerified, rustls::Error> {
-            Ok(ServerCertVerified::assertion())
-        }
-
-        fn verify_tls12_signature(
-            &self,
-            _message: &[u8],
-            _cert: &rustls::Certificate,
-            _dss: &DigitallySignedStruct,
-        ) -> Result<HandshakeSignatureValid, rustls::Error> {
-            Ok(HandshakeSignatureValid::assertion())
-        }
-
-        fn verify_tls13_signature(
-            &self,
-            _message: &[u8],
-            _cert: &rustls::Certificate,
-            _dss: &DigitallySignedStruct,
-        ) -> Result<HandshakeSignatureValid, rustls::Error> {
-            Ok(HandshakeSignatureValid::assertion())
-        }
-    }
-    let mut tls_config = builder
-        .with_custom_certificate_verifier(Arc::new(NoVerifier))
-        .with_no_client_auth();
-
-    // Advertise support for HTTP/2
-    tls_config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
-
     let builder = reqwest::Client::builder()
         .timeout(AGENT_REQUEST_TIMEOUT)
-        .use_preconfigured_tls(tls_config);
+        .danger_accept_invalid_hostnames(true)
+        .danger_accept_invalid_certs(true);
+
     let builder = match (
         addr_mapping,
         reqwest::Url::parse(url).as_ref().map(|u| u.domain()),

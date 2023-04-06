@@ -423,9 +423,10 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 ],
             ),
             "hyper-rustls": crate.spec(
-                version = "^0.23.0",
+                version = "^0.24.0",
                 features = [
                     "webpki-roots",
+                    "http2",
                 ],
             ),
             "hyper-socks2": crate.spec(
@@ -833,6 +834,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                     "json",
                     "multipart",
                     "native-tls",
+                    "rustls-tls",
                     "stream",
                 ],
             ),
@@ -873,7 +875,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^1.1.0",
             ),
             "rustls": crate.spec(
-                version = "^0.20.4",
+                version = "^0.21.0",
             ),
             "rustls-pemfile": crate.spec(
                 version = "^1",
@@ -1084,7 +1086,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^0.6.1",
             ),
             "tokio-rustls": crate.spec(
-                version = "^0.22.0",
+                version = "^0.24.0",
                 features = [
                     "dangerous_configuration",
                 ],
@@ -1219,11 +1221,8 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             "wat": crate.spec(
                 version = "^1.0.57",
             ),
-            "webpki": crate.spec(
-                version = "^0.21.4",
-            ),
             "webpki-roots": crate.spec(
-                version = "^0.22",
+                version = "^0.23",
             ),
             "wee_alloc": crate.spec(
                 version = "^0.4.3",
