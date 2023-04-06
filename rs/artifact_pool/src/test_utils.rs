@@ -172,7 +172,7 @@ where
 
         // Test the matching after a reboot.
         {
-            let pool = T::new_consensus_pool(config, log);
+            let pool = T::new_consensus_pool(config.clone(), log.clone());
             match_ops_to_results(&rb_ops, pool.random_beacon(), false);
             match_ops_to_results(&fz_ops, pool.finalization(), false);
             match_ops_to_results(&nz_ops, pool.notarization(), false);
@@ -182,6 +182,44 @@ where
             match_ops_to_results(&fzs_ops, pool.finalization_share(), true);
             match_ops_to_results(&rt_ops, pool.random_tape(), false);
             match_ops_to_results(&rts_ops, pool.random_tape_share(), true);
+        }
+
+        // Test purging shares below
+        {
+            fn count_total<T>(pool: &dyn HeightIndexedPool<T>) -> usize {
+                pool.get_all().count()
+            }
+
+            fn count<T>(pool: &dyn HeightIndexedPool<T>, range: &HeightRange) -> usize {
+                pool.get_by_height_range(range.clone()).count()
+            }
+
+            let mut pool = T::new_consensus_pool(config, log);
+            let finalized_height = pool.finalization().max_height().unwrap();
+            let range_to_delete = HeightRange::new(Height::from(0), finalized_height.decrement());
+
+            // Only notarization shares and finalization shares should be deleted
+            let expected_count = vec![
+                count_total(pool.random_beacon_share()),
+                count_total(pool.notarization_share())
+                    - count(pool.notarization_share(), &range_to_delete),
+                count_total(pool.finalization_share())
+                    - count(pool.finalization_share(), &range_to_delete),
+                count_total(pool.random_tape_share()),
+            ];
+
+            let mut ops = PoolSectionOps::new();
+            ops.purge_shares_below(finalized_height);
+            pool.mutate(ops);
+
+            assert!(count(pool.random_beacon_share(), &range_to_delete) > 0);
+            assert_eq!(count_total(pool.random_beacon_share()), expected_count[0]);
+            assert_eq!(count(pool.notarization_share(), &range_to_delete), 0);
+            assert_eq!(count_total(pool.notarization_share()), expected_count[1]);
+            assert_eq!(count(pool.finalization_share(), &range_to_delete), 0);
+            assert_eq!(count_total(pool.finalization_share()), expected_count[2]);
+            assert!(count(pool.random_tape_share(), &range_to_delete) > 0);
+            assert_eq!(count_total(pool.random_tape_share()), expected_count[3]);
         }
     })
 }
@@ -493,7 +531,7 @@ fn notarization_share_ops() -> PoolSectionOps<ValidatedConsensusArtifact> {
     ops
 }
 
-fn finalization_share_ops() -> PoolSectionOps<ValidatedConsensusArtifact> {
+pub(crate) fn finalization_share_ops() -> PoolSectionOps<ValidatedConsensusArtifact> {
     let mut ops = PoolSectionOps::new();
     for i in 5..14 {
         let height = Height::from(i);

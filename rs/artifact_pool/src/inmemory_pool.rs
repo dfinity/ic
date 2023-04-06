@@ -41,89 +41,34 @@ impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> InMemoryPoolSection<
         self.remove_by_hash(msg_id.hash.digest())
     }
 
-    #[allow(clippy::cognitive_complexity)]
-    fn purge_below(&mut self, height: Height) {
-        if let Some(range) = self.random_beacon().height_range() {
-            for h in range.min.get()..height.get() {
-                for hash in self.indexes.random_beacon.remove_all(Height::from(h)) {
-                    self.artifacts.remove(hash.get_ref());
-                }
-            }
-        };
-        if let Some(range) = self.finalization().height_range() {
-            for h in range.min.get()..height.get() {
-                for hash in self.indexes.finalization.remove_all(Height::from(h)) {
-                    self.artifacts.remove(hash.get_ref());
-                }
-            }
-        };
-        if let Some(range) = self.notarization().height_range() {
-            for h in range.min.get()..height.get() {
-                for hash in self.indexes.notarization.remove_all(Height::from(h)) {
-                    self.artifacts.remove(hash.get_ref());
-                }
-            }
-        };
-        if let Some(range) = self.block_proposal().height_range() {
-            for h in range.min.get()..height.get() {
-                for hash in self.indexes.block_proposal.remove_all(Height::from(h)) {
-                    self.artifacts.remove(hash.get_ref());
-                }
-            }
-        };
-        if let Some(range) = self.random_beacon_share().height_range() {
-            for h in range.min.get()..height.get() {
-                for hash in self.indexes.random_beacon_share.remove_all(Height::from(h)) {
-                    self.artifacts.remove(hash.get_ref());
-                }
-            }
-        };
-        if let Some(range) = self.notarization_share().height_range() {
-            for h in range.min.get()..height.get() {
-                for hash in self.indexes.notarization_share.remove_all(Height::from(h)) {
-                    self.artifacts.remove(hash.get_ref());
-                }
-            }
-        };
-        if let Some(range) = self.finalization_share().height_range() {
-            for h in range.min.get()..height.get() {
-                for hash in self.indexes.finalization_share.remove_all(Height::from(h)) {
-                    self.artifacts.remove(hash.get_ref());
-                }
-            }
-        };
-        if let Some(range) = self.random_tape().height_range() {
-            for h in range.min.get()..height.get() {
-                for hash in self.indexes.random_tape.remove_all(Height::from(h)) {
-                    self.artifacts.remove(hash.get_ref());
-                }
-            }
-        };
-        if let Some(range) = self.random_tape_share().height_range() {
-            for h in range.min.get()..height.get() {
-                for hash in self.indexes.random_tape_share.remove_all(Height::from(h)) {
-                    self.artifacts.remove(hash.get_ref());
-                }
-            }
-        };
-        if let Some(range) = self.catch_up_package().height_range() {
-            for h in range.min.get()..height.get() {
-                for hash in self.indexes.catch_up_package.remove_all(Height::from(h)) {
-                    self.artifacts.remove(hash.get_ref());
-                }
-            }
-        };
-        if let Some(range) = self.catch_up_package_share().height_range() {
-            for h in range.min.get()..height.get() {
-                for hash in self
-                    .indexes
-                    .catch_up_package_share
-                    .remove_all(Height::from(h))
-                {
-                    self.artifacts.remove(hash.get_ref());
-                }
-            }
-        };
+    fn purge_below(&mut self, height: Height, only_shares: bool) {
+        macro_rules! purge {
+            ($artifact_name:ident) => {
+                if let Some(range) = self.$artifact_name().height_range() {
+                    for h in range.min.get()..height.get() {
+                        let height = Height::from(h);
+                        for hash in self.indexes.$artifact_name.remove_all(height) {
+                            self.artifacts.remove(hash.get_ref());
+                        }
+                    }
+                };
+            };
+        }
+
+        purge!(finalization_share);
+        purge!(notarization_share);
+
+        if !only_shares {
+            purge!(random_beacon);
+            purge!(random_beacon_share);
+            purge!(finalization);
+            purge!(notarization);
+            purge!(block_proposal);
+            purge!(random_tape);
+            purge!(random_tape_share);
+            purge!(catch_up_package);
+            purge!(catch_up_package_share);
+        }
     }
 
     fn get_by_hashes<S: ConsensusMessageHashable>(&self, hashes: Vec<&CryptoHashOf<S>>) -> Vec<S> {
@@ -307,7 +252,12 @@ impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> MutablePoolSection<T
                         warn!(self.log, "Error removing artifact {:?}", &msg_id)
                     }
                 }
-                PoolSectionOp::PurgeBelow(height) => self.purge_below(height),
+                PoolSectionOp::PurgeBelow(height) => {
+                    self.purge_below(height, /*only_shares=*/ false)
+                }
+                PoolSectionOp::PurgeSharesBelow(height) => {
+                    self.purge_below(height, /*only_shares=*/ true)
+                }
             }
         }
     }

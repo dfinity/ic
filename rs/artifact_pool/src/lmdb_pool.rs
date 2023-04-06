@@ -425,7 +425,7 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
 
     /// Iterate messages between min and max HeightKey (inclusive).
     ///
-    /// It is parameteriazed by an individual message type as long as it can be
+    /// It is parameterized by an individual message type as long as it can be
     /// casted from the main `Artifact::Message` type.
     fn iterate<Message: TryFrom<Artifact> + HasTypeKey + 'static>(
         &self,
@@ -518,6 +518,61 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
         }
     }
 
+    /// Remove all index entries for the given TypeKey with heights
+    /// less than the given HeightKey. Update the type's meta table
+    /// if necessary. Return the IdKeys of deleted entries.
+    fn tx_purge_index_below<'a>(
+        &self,
+        tx: &mut RwTransaction<'a>,
+        type_key: &TypeKey,
+        height_key: HeightKey,
+    ) -> lmdb::Result<Vec<IdKey>> {
+        let mut artifact_ids = Vec::new();
+        // only delete if meta exists
+        if let Some(meta) = self.get_meta(tx, type_key) {
+            // nothing to delete if min height is already higher
+            if meta.min >= height_key {
+                return Ok(artifact_ids);
+            }
+            let index_db = self.get_index_db(type_key);
+            {
+                let mut cursor = tx.open_rw_cursor(index_db)?;
+                loop {
+                    match cursor.iter().next().transpose()? {
+                        None => break,
+                        Some((key, id)) => {
+                            if HeightKey::from(key) >= height_key {
+                                break;
+                            }
+                            let id_key = IdKey::from(id);
+                            cursor.del(WriteFlags::empty())?;
+                            artifact_ids.push(id_key);
+                        }
+                    }
+                }
+            }
+            // update meta
+            let meta = if meta.max <= height_key {
+                None
+            } else {
+                let mut cursor = tx.open_rw_cursor(index_db)?;
+                cursor
+                    .iter_start()
+                    .next()
+                    .transpose()?
+                    .map(|(key, _)| Meta {
+                        min: HeightKey::from(key),
+                        max: meta.max,
+                    })
+            };
+            match meta {
+                None => tx.del(self.meta, type_key, None)?,
+                Some(meta) => self.update_meta(tx, type_key, &meta)?,
+            }
+        }
+        Ok(artifact_ids)
+    }
+
     /// Remove all artifacts with heights less than the given HeightKey.
     fn tx_purge_below<'a>(
         &self,
@@ -526,45 +581,7 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
     ) -> lmdb::Result<()> {
         // delete from all index tables
         for type_key in Artifact::type_keys() {
-            // only delete if meta exists
-            if let Some(meta) = self.get_meta(tx, type_key) {
-                // skip to next db if min height is already higher
-                if meta.min >= height_key {
-                    continue;
-                }
-                let index_db = self.get_index_db(type_key);
-                {
-                    let mut cursor = tx.open_rw_cursor(index_db)?;
-                    loop {
-                        match cursor.iter().next().transpose()? {
-                            None => break,
-                            Some((key, _)) => {
-                                if HeightKey::from(key) >= height_key {
-                                    break;
-                                }
-                                cursor.del(WriteFlags::empty())?;
-                            }
-                        }
-                    }
-                }
-                let meta = if meta.max <= height_key {
-                    None
-                } else {
-                    let mut cursor = tx.open_rw_cursor(index_db)?;
-                    cursor
-                        .iter_start()
-                        .next()
-                        .transpose()?
-                        .map(|(key, _)| Meta {
-                            min: HeightKey::from(key),
-                            max: meta.max,
-                        })
-                };
-                match meta {
-                    None => tx.del(self.meta, &type_key, None)?,
-                    Some(meta) => self.update_meta(tx, type_key, &meta)?,
-                }
-            }
+            self.tx_purge_index_below(tx, type_key, height_key)?;
         }
         // delete from artifacts table
         let mut cursor = tx.open_rw_cursor(self.artifacts)?;
@@ -578,6 +595,27 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
                         break;
                     }
                     cursor.del(WriteFlags::empty())?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Remove all artifacts of the given TypeKey with heights
+    /// less than the given HeightKey.
+    fn tx_purge_type_below<'a>(
+        &self,
+        tx: &mut RwTransaction<'a>,
+        type_key: &TypeKey,
+        height_key: HeightKey,
+    ) -> lmdb::Result<()> {
+        let artifact_ids = self.tx_purge_index_below(tx, type_key, height_key)?;
+        // Delete the corresponding artifacts.
+        for id in artifact_ids {
+            if let Err(err) = tx.del(self.artifacts, &id, None) {
+                // Ignore not found errors, although they should not appear in practice.
+                if lmdb::Error::NotFound != err {
+                    return Err(err);
                 }
             }
         }
@@ -699,6 +737,8 @@ const CONSENSUS_KEYS: [TypeKey; 12] = [
     CATCH_UP_PACKAGE_KEY,
     CATCH_UP_PACKAGE_SHARE_KEY,
 ];
+
+const CONSENSUS_SHARE_KEYS: [TypeKey; 2] = [NOTARIZATION_SHARE_KEY, FINALIZATION_SHARE_KEY];
 
 impl HasTypeKey for RandomBeacon {
     fn type_key() -> TypeKey {
@@ -967,6 +1007,12 @@ impl PersistentHeightIndexedPool<ConsensusMessage> {
                 PoolSectionOp::PurgeBelow(height) => {
                     let height_key = HeightKey::from(height);
                     self.tx_purge_below(&mut tx, height_key)?
+                }
+                PoolSectionOp::PurgeSharesBelow(height) => {
+                    let height_key = HeightKey::from(height);
+                    for type_key in &CONSENSUS_SHARE_KEYS {
+                        self.tx_purge_type_below(&mut tx, type_key, height_key)?
+                    }
                 }
             }
         }
@@ -1730,7 +1776,9 @@ mod tests {
     use super::*;
     use crate::{
         consensus_pool::MutablePoolSection,
-        test_utils::{fake_random_beacon, random_beacon_ops, PoolTestHelper},
+        test_utils::{
+            fake_random_beacon, finalization_share_ops, random_beacon_ops, PoolTestHelper,
+        },
     };
     use ic_test_utilities_logger::with_test_replica_logger;
     use std::{panic, path::PathBuf};
@@ -1827,6 +1875,7 @@ mod tests {
     fn test_purge_survives_reboot() {
         run_persistent_pool_test("test_purge_survives_reboot", |config, log| {
             // create a pool and purge at height 10
+            let height10 = Height::from(10);
             {
                 let mut pool = PersistentHeightIndexedPool::new_consensus_pool(
                     config.clone(),
@@ -1841,11 +1890,11 @@ mod tests {
                 assert_eq!(msgs_from_pool.count(), rb_ops.ops.len());
                 // purge at height 10
                 let mut purge_ops = PoolSectionOps::new();
-                purge_ops.purge_below(Height::from(10));
+                purge_ops.purge_below(height10);
                 pool.mutate(purge_ops);
                 assert_eq!(
                     pool.random_beacon().height_range().map(|r| r.min),
-                    Some(Height::from(10))
+                    Some(height10)
                 );
             }
             // create the same pool again, check if purge was persisted
@@ -1853,10 +1902,98 @@ mod tests {
                 let pool = PersistentHeightIndexedPool::new_consensus_pool(config, false, log);
                 assert_eq!(
                     pool.random_beacon().height_range().map(|r| r.min),
-                    Some(Height::from(10))
+                    Some(height10)
                 );
             }
         });
+    }
+
+    #[test]
+    fn test_purge_shares_survives_reboot() {
+        run_persistent_pool_test("test_purge_shares_survives_reboot", |config, log| {
+            // create a pool and purge at height 10
+            let height10 = Height::from(10);
+            {
+                let mut pool = PersistentHeightIndexedPool::new_consensus_pool(
+                    config.clone(),
+                    false,
+                    log.clone(),
+                );
+                // insert random beacons and finalization shares
+                let fs_ops = finalization_share_ops();
+                pool.mutate(fs_ops.clone());
+                pool.mutate(random_beacon_ops());
+                // min height should be less than 10
+                assert!(pool.finalization_share().height_range().map(|r| r.min) < Some(height10));
+
+                let iter = pool.finalization_share().get_all();
+                let shares_from_pool = iter.count();
+                assert_eq!(shares_from_pool, fs_ops.ops.len());
+                assert_consistency(&pool);
+                let iter = pool.random_beacon().get_all();
+                let messages_from_pool = iter.count();
+
+                // purge at height 10
+                let mut purge_ops = PoolSectionOps::new();
+                purge_ops.purge_shares_below(height10);
+                pool.mutate(purge_ops);
+                // min height should be 10
+                assert_eq!(
+                    pool.finalization_share().height_range().map(|r| r.min),
+                    Some(height10)
+                );
+                // full beacon count should be unchanged
+                assert_eq!(pool.random_beacon().get_all().count(), messages_from_pool);
+                assert_consistency(&pool);
+            }
+            // create the same pool again, check if purge was persisted
+            {
+                let pool = PersistentHeightIndexedPool::new_consensus_pool(config, false, log);
+                assert_eq!(
+                    pool.finalization_share().height_range().map(|r| r.min),
+                    Some(height10)
+                );
+                assert_consistency(&pool);
+            }
+        });
+    }
+
+    // Assert that entries in artifacts db are reflected by index db and vice versa.
+    // Each entry should have a join partner when joining on IdKey.
+    fn assert_consistency(pool: &PersistentHeightIndexedPool<ConsensusMessage>) {
+        let tx = pool.db_env.begin_ro_txn().unwrap();
+        // get all ids from all indices
+        let mut ids_index = pool
+            .indices
+            .iter()
+            .flat_map(|(_, db)| {
+                let mut cursor = tx.open_ro_cursor(*db).unwrap();
+                cursor
+                    .iter()
+                    .map(|res| {
+                        let (_, id) = res.unwrap();
+                        IdKey::from(id)
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        ids_index.sort();
+
+        // get all ids from artifacts db
+        let ids_artifacts = {
+            let mut cursor = tx.open_ro_cursor(pool.artifacts).unwrap();
+            cursor
+                .iter()
+                .map(|res| {
+                    let (id, _) = res.unwrap();
+                    IdKey::from(id)
+                })
+                .collect::<Vec<_>>()
+        };
+        tx.commit().unwrap();
+
+        // they should be equal
+        assert_eq!(ids_index, ids_artifacts);
     }
 
     #[test]

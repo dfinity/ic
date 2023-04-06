@@ -31,7 +31,7 @@ pub fn with_test_lmdb_pool_config<T>(run: impl FnOnce(LMDBConfig) -> T) -> T {
     toml_config.consensus_pool_backend = Some("lmdb".to_string());
     let config = match ArtifactPoolConfig::from(toml_config).persistent_pool_backend {
         PersistentPoolBackend::Lmdb(config) => config,
-        _ => panic!("Missing rocksdb persistent pool config"),
+        _ => panic!("Missing lmdb persistent pool config"),
     };
     run(config)
 }

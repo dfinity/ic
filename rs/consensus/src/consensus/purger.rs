@@ -13,7 +13,10 @@
 //! But we also want to keep a minimum chain length that is older than the
 //! CatchUpPackage to help peers catch up.
 //!
-//! 3. Replicated states below the certified height recorded in the block
+//! 3. Validated Finalization and Notarization shares below the latest finalized
+//! height can be purged from the pool.
+//!
+//! 4. Replicated states below the certified height recorded in the block
 //! in the latest CatchUpPackage can be purged.
 use crate::consensus::{metrics::PurgerMetrics, pool_reader::PoolReader};
 use ic_interfaces::{
@@ -31,6 +34,7 @@ use std::{cell::RefCell, sync::Arc};
 pub struct Purger {
     prev_expected_batch_height: RefCell<Height>,
     prev_finalized_certified_height: RefCell<Height>,
+    prev_finalized_height: RefCell<Height>,
     prev_maximum_cup_height: RefCell<Height>,
     prev_latest_state_height: RefCell<Height>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
@@ -50,6 +54,7 @@ impl Purger {
             // expected_batch_height starts from 1
             prev_expected_batch_height: RefCell::new(Height::from(1)),
             prev_finalized_certified_height: RefCell::new(Height::from(1)),
+            prev_finalized_height: RefCell::new(Height::from(1)),
             prev_maximum_cup_height: RefCell::new(Height::from(1)),
             prev_latest_state_height: RefCell::new(Height::from(1)),
             state_manager,
@@ -69,6 +74,7 @@ impl Purger {
         let mut changeset = ChangeSet::new();
         self.purge_unvalidated_pool_by_expected_batch_height(pool, &mut changeset);
         self.purge_validated_pool_by_catch_up_package(pool, &mut changeset);
+        self.purge_validated_shares_by_finalized_height(pool, &mut changeset);
 
         let certified_height_increased = self.update_finalized_certified_height(pool);
         let cup_height_increased = self.update_cup_height(pool);
@@ -90,13 +96,21 @@ impl Purger {
     }
 
     /// Updates the purger's copy of the finalized certified height, and returns true if
-    /// if the height increased. Otherwise returns false.
+    /// the height increased. Otherwise returns false.
     fn update_finalized_certified_height(&self, pool: &PoolReader<'_>) -> bool {
         let finalized_certified_height = pool.get_finalized_tip().context.certified_height;
         let prev_finalized_certified_height = self
             .prev_finalized_certified_height
             .replace(finalized_certified_height);
         finalized_certified_height > prev_finalized_certified_height
+    }
+
+    /// Updates the purger's copy of the finalized height, and returns the new height if
+    /// it increased. Otherwise returns None.
+    fn update_finalized_height(&self, pool: &PoolReader<'_>) -> Option<Height> {
+        let finalized_height = pool.get_finalized_height();
+        let prev_finalized_height = self.prev_finalized_height.replace(finalized_height);
+        (finalized_height > prev_finalized_height).then_some(finalized_height)
     }
 
     /// Updates the purger's copy of the cup height, and returns true if the height
@@ -216,6 +230,24 @@ impl Purger {
                 );
                 false
             }
+        } else {
+            false
+        }
+    }
+
+    /// Validated Finalization and Notarization shares older than the latest
+    /// finalized height can be purged from the pool.
+    ///
+    /// Return true if a purge action is taken.
+    fn purge_validated_shares_by_finalized_height(
+        &self,
+        pool_reader: &PoolReader<'_>,
+        changeset: &mut ChangeSet,
+    ) -> bool {
+        if let Some(height) = self.update_finalized_height(pool_reader) {
+            changeset.push(ChangeAction::PurgeValidatedSharesBelow(height));
+            trace!(self.log, "Purge validated shares below {height:?}");
+            true
         } else {
             false
         }
@@ -370,16 +402,20 @@ mod tests {
             // Put some stuff in the pool
             pool.advance_round_normal_operation_n(9);
 
-            // Only unvalidated pool is purged
+            // Only unvalidated pool and shares of validated pool are purged
             let pool_reader = PoolReader::new(&pool);
             *expected_batch_height.write().unwrap() = Height::from(10);
             let changeset = purger.on_state_change(&pool_reader);
-            assert_eq!(changeset.len(), 1);
             assert_eq!(
-                changeset[0],
-                ChangeAction::PurgeUnvalidatedBelow(
-                    expected_batch_height.read().unwrap().decrement()
-                )
+                changeset,
+                vec![
+                    ChangeAction::PurgeUnvalidatedBelow(
+                        expected_batch_height.read().unwrap().decrement()
+                    ),
+                    ChangeAction::PurgeValidatedSharesBelow(
+                        expected_batch_height.read().unwrap().decrement()
+                    )
+                ]
             );
 
             // No more purge action when called again
@@ -401,16 +437,15 @@ mod tests {
             *checkpoint_purge_height.write().unwrap() = pool_reader.get_catch_up_height();
             *expected_batch_height.write().unwrap() = Height::from(65);
             let changeset = purger.on_state_change(&pool_reader);
-            assert_eq!(changeset.len(), 2);
             assert_eq!(
-                changeset[0],
-                ChangeAction::PurgeUnvalidatedBelow(
-                    expected_batch_height.read().unwrap().decrement()
-                )
-            );
-            assert_eq!(
-                changeset[1],
-                ChangeAction::PurgeValidatedBelow(get_purge_height(&pool_reader).unwrap())
+                changeset,
+                vec![
+                    ChangeAction::PurgeUnvalidatedBelow(
+                        expected_batch_height.read().unwrap().decrement()
+                    ),
+                    ChangeAction::PurgeValidatedBelow(get_purge_height(&pool_reader).unwrap()),
+                    ChangeAction::PurgeValidatedSharesBelow(pool_reader.get_finalized_height()),
+                ]
             );
 
             // No more purge action when called again
