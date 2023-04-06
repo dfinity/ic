@@ -187,7 +187,7 @@ impl<Account> From<Account> for FeeCollector<Account> {
     }
 }
 
-pub trait BlockType: Sized {
+pub trait BlockType: Sized + Clone {
     type Transaction;
     type AccountId;
 

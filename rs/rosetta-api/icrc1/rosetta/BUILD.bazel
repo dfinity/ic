@@ -4,17 +4,20 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     "@crate_index//:rusqlite",
-    "@crate_index//:anyhow",
+    "@crate_index//:log",
+    "@crate_index//:serde",
     "@crate_index//:tempfile",
     "@crate_index//:candid",
     "@crate_index//:ciborium",
     "@crate_index//:num-traits",
-    "@crate_index//:serde",
     "@crate_index//:serde_bytes",
-    "//packages/icrc-ledger-types:icrc_ledger_types",
+    "@crate_index//:anyhow",
     "//rs/rosetta-api/icrc1/ledger",
     "//rs/rosetta-api/icrc1",
     "//rs/rosetta-api/ledger_core",
+    "//rs/rosetta-api/ledger_canister_core",
+    "//rs/types/base_types",
+    "//packages/icrc-ledger-types:icrc_ledger_types",
 ]
 
 DEV_DEPENDENCIES = [
