@@ -257,11 +257,11 @@ fn validate_and_render_manage_nervous_system_parameters(
         r"# Proposal to change nervous system parameters:
 ## Current nervous system parameters:
 
-{:?}
+{:#?}
 
 ## New nervous system parameters:
 
-{:?}",
+{:#?}",
         &current_parameters, new_parameters
     ))
 }
@@ -638,7 +638,7 @@ pub fn validate_and_render_add_generic_nervous_system_function(
 
 ## Function:
 
-{:?}",
+{:#?}",
         add
     ))
 }
@@ -655,7 +655,7 @@ pub fn validate_and_render_remove_nervous_generic_system_function(
 
 ## Function:
 
-{:?}",
+{:#?}",
             function
         )),
     }
@@ -692,7 +692,7 @@ pub async fn validate_and_render_execute_nervous_system_function(
 
 ## Nervous system function:
 
-{:?}
+{:#?}
 
 ## Payload:
 
@@ -1470,11 +1470,16 @@ mod tests {
                 },
             )),
         };
-        assert_is_ok(validate_and_render_add_generic_nervous_system_function(
+        let rendered = validate_and_render_add_generic_nervous_system_function(
             &hashset![FORBIDDEN_CANISTER],
             &nervous_system_function,
             &EMPTY_FUNCTIONS,
-        ));
+        )
+        .unwrap();
+
+        // Assert that the output is pretty-printed by checking for at least one
+        // newline.
+        assert!(rendered.contains("NervousSystemFunction {\n"));
 
         let mut result = basic_motion_proposal();
         result.action = Some(proposal::Action::AddGenericNervousSystemFunction(
@@ -1672,10 +1677,13 @@ mod tests {
 
         functions_map.insert(1000, nervous_system_function.clone());
 
-        assert_is_ok(validate_and_render_remove_nervous_generic_system_function(
-            1000,
-            &functions_map,
-        ));
+        let rendered =
+            validate_and_render_remove_nervous_generic_system_function(1000, &functions_map)
+                .unwrap();
+
+        // Assert that the output is pretty-printed by checking for at least one
+        // newline.
+        assert!(rendered.contains("NervousSystemFunction {\n"));
 
         functions_map.insert(1000, (*NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER).clone());
 
