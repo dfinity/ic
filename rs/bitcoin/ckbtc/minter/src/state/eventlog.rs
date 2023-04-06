@@ -183,17 +183,16 @@ pub fn replay(mut events: impl Iterator<Item = Event>) -> Result<CkBtcMinterStat
                 clean,
                 kyt_provider,
             } => {
-                let kyt_provider = match kyt_provider
-                    .or_else(|| state.kyt_principal.map(|cid| Principal::from(cid)))
-                {
-                    Some(p) => p,
-                    None => {
-                        return Err(ReplayLogError::InconsistentLog(format!(
-                            "Found CheckUTXO {} event with no provider and KYT principal",
-                            uuid,
-                        )))
-                    }
-                };
+                let kyt_provider =
+                    match kyt_provider.or_else(|| state.kyt_principal.map(Principal::from)) {
+                        Some(p) => p,
+                        None => {
+                            return Err(ReplayLogError::InconsistentLog(format!(
+                                "Found CheckUTXO {} event with no provider and KYT principal",
+                                uuid,
+                            )))
+                        }
+                    };
                 state.mark_utxo_checked(
                     utxo,
                     uuid,
