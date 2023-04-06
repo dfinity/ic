@@ -272,12 +272,15 @@ if [[ -z \${CERT_NAME+x} ]]; then
     err "'.boundary.vars.cert_name' was not defined"
 else
     (for HOST in "\${HOSTS[@]}"; do
-        scp -r "${SCP_PREFIX}\${HOST}:/etc/letsencrypt/live/\${CERT_NAME}/*" "${BN_MEDIA_PATH}/certs/" && exit
+        echo >&2 "\$(date --rfc-3339=seconds): Copying \$CERT_NAME from server \$HOST"
+        scp -B -o "ConnectTimeout 30" -r "${SCP_PREFIX}\${HOST}:/etc/letsencrypt/live/\${CERT_NAME}/*" "${BN_MEDIA_PATH}/certs/" && exit
     done) || {
-        err "failed to find certificate \${CERT_NAME}"
+        err "failed to find certificate \${CERT_NAME} on any designated server"
         exit 1
     }
 fi
+
+echo >&2 "$(date --rfc-3339=seconds): Running build-deployment.sh"
 
 "${REPO_ROOT}"/ic-os/boundary-guestos/scripts/build-deployment.sh \
     --input="${MEDIA_PATH}/${deployment}.json" \
