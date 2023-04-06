@@ -28,7 +28,7 @@ const IC_NNS_ROOT_PUBLIC_KEY_BASE64: &str = r#"MIGCMB0GDSsGAQQBgtx8BQMBAgEGDCsGA
 /// An implementation of [`HttpRequestVerifier`] to verify ingress messages.
 pub struct IngressMessageVerifier {
     time_source: Arc<dyn TimeSource>,
-    crypto: Arc<dyn IngressSigVerifier>,
+    crypto: Arc<dyn IngressSigVerifier + Send + Sync>,
 }
 
 impl Default for IngressMessageVerifier {
