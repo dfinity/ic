@@ -1,6 +1,7 @@
 //! This module implements the `QueryHandler` trait which is used to execute
 //! query methods via query calls.
 
+mod query_cache;
 mod query_call_graph;
 mod query_context;
 mod query_scheduler;
@@ -13,6 +14,7 @@ use crate::{
     metrics::{MeasurementScope, QueryHandlerMetrics},
 };
 use ic_config::execution_environment::Config;
+use ic_config::flag_status::FlagStatus;
 use ic_crypto_tree_hash::{flatmap, Label, LabeledTree, LabeledTree::SubTree};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
@@ -96,6 +98,7 @@ pub struct InternalHttpQueryHandler {
     metrics: QueryHandlerMetrics,
     max_instructions_per_query: NumInstructions,
     cycles_account_manager: Arc<CyclesAccountManager>,
+    query_cache: query_cache::QueryCache,
 }
 
 #[derive(Clone)]
@@ -124,6 +127,7 @@ impl InternalHttpQueryHandler {
             metrics: QueryHandlerMetrics::new(metrics_registry),
             max_instructions_per_query,
             cycles_account_manager,
+            query_cache: query_cache::QueryCache::new(),
         }
     }
 }
@@ -138,6 +142,23 @@ impl QueryHandler for InternalHttpQueryHandler {
         data_certificate: Vec<u8>,
     ) -> Result<WasmResult, UserError> {
         let measurement_scope = MeasurementScope::root(&self.metrics.query);
+
+        // Check the query cache first (if the query caching is enabled).
+        // If a valid cache entry found, the result will be immediately returned.
+        // Otherwise, the key and the env will be kept for the `insert` below.
+        let (cache_entry_key, cache_entry_env) = if self.config.query_caching == FlagStatus::Enabled
+        {
+            let key = query_cache::EntryKey::from(&query);
+            let env = query_cache::EntryEnv::try_from((&key, state.as_ref()))?;
+
+            if let Some(result) = self.query_cache.valid_result(&key, &env) {
+                self.metrics.query_cache_hits.inc();
+                return result;
+            }
+            (Some(key), Some(env))
+        } else {
+            (None, None)
+        };
 
         // Letting the canister grow arbitrarily when executing the
         // query is fine as we do not persist state modifications.
@@ -160,12 +181,22 @@ impl QueryHandler for InternalHttpQueryHandler {
             self.config.composite_queries,
             query.receiver,
         );
-        context.run(
+        let result = context.run(
             query,
             &self.metrics,
             Arc::clone(&self.cycles_account_manager),
             &measurement_scope,
-        )
+        );
+
+        // Add the query execution result to the query cache.
+        if self.config.query_caching == FlagStatus::Enabled {
+            if let (Some(key), Some(env)) = (cache_entry_key, cache_entry_env) {
+                self.metrics.query_cache_misses.inc();
+                self.query_cache
+                    .insert(key, query_cache::EntryValue::new(env, result.clone()));
+            }
+        }
+        result
     }
 }
 

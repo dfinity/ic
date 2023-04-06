@@ -3,13 +3,14 @@ use ic_base_types::NumSeconds;
 use ic_config::execution_environment::INSTRUCTION_OVERHEAD_PER_QUERY_CALL;
 use ic_error_types::{ErrorCode, UserError};
 use ic_registry_subnet_type::SubnetType;
+use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use ic_test_utilities::{
     types::ids::user_test_id,
     universal_canister::{call_args, wasm},
 };
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
 use ic_types::{ingress::WasmResult, messages::UserQuery, Cycles, NumInstructions};
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 const CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
 
@@ -187,6 +188,340 @@ fn query_metrics_are_reported() {
                 .instructions
                 .get_sample_sum() as u64
     )
+}
+
+#[test]
+fn query_cache_metrics_work() {
+    let mut test = ExecutionTestBuilder::new().with_query_caching().build();
+    let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+    let query_handler = downcast_query_handler(test.query_handler());
+    let output_1 = test.query(
+        UserQuery {
+            source: user_test_id(1),
+            receiver: canister_id,
+            method_name: "query".into(),
+            method_payload: wasm().caller().append_and_reply().build(),
+            ingress_expiry: 0,
+            nonce: None,
+        },
+        Arc::new(test.state().clone()),
+        vec![],
+    );
+    assert_eq!(query_handler.metrics.query_cache_hits.get(), 0);
+    assert_eq!(query_handler.metrics.query_cache_misses.get(), 1);
+    let output_2 = test.query(
+        UserQuery {
+            source: user_test_id(1),
+            receiver: canister_id,
+            method_name: "query".into(),
+            method_payload: wasm().caller().append_and_reply().build(),
+            ingress_expiry: 0,
+            nonce: None,
+        },
+        Arc::new(test.state().clone()),
+        vec![],
+    );
+    assert_eq!(query_handler.metrics.query_cache_hits.get(), 1);
+    assert_eq!(query_handler.metrics.query_cache_misses.get(), 1);
+    assert_eq!(output_1, output_2);
+}
+
+#[test]
+fn query_cache_key_different_source_returns_different_results() {
+    let mut test = ExecutionTestBuilder::new().with_query_caching().build();
+    let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+    let query_handler = downcast_query_handler(test.query_handler());
+    let output_1 = test.query(
+        UserQuery {
+            source: user_test_id(1),
+            receiver: canister_id,
+            method_name: "query".into(),
+            method_payload: wasm().caller().append_and_reply().build(),
+            ingress_expiry: 0,
+            nonce: None,
+        },
+        Arc::new(test.state().clone()),
+        vec![],
+    );
+    assert_eq!(query_handler.metrics.query_cache_misses.get(), 1);
+    assert_eq!(
+        output_1,
+        Ok(WasmResult::Reply(user_test_id(1).get().into()))
+    );
+    let output_2 = test.query(
+        UserQuery {
+            source: user_test_id(2),
+            receiver: canister_id,
+            method_name: "query".into(),
+            method_payload: wasm().caller().append_and_reply().build(),
+            ingress_expiry: 0,
+            nonce: None,
+        },
+        Arc::new(test.state().clone()),
+        vec![],
+    );
+    assert_eq!(query_handler.metrics.query_cache_misses.get(), 2);
+    assert_eq!(
+        output_2,
+        Ok(WasmResult::Reply(user_test_id(2).get().into()))
+    );
+}
+
+#[test]
+fn query_cache_key_different_receiver_returns_different_results() {
+    let mut test = ExecutionTestBuilder::new().with_query_caching().build();
+    let canister_id_1 = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+    let canister_id_2 = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+    let query_handler = downcast_query_handler(test.query_handler());
+    let output_1 = test.query(
+        UserQuery {
+            source: user_test_id(1),
+            receiver: canister_id_1,
+            method_name: "query".into(),
+            method_payload: wasm().reply_data(&[42]).build(),
+            ingress_expiry: 0,
+            nonce: None,
+        },
+        Arc::new(test.state().clone()),
+        vec![],
+    );
+    assert_eq!(query_handler.metrics.query_cache_misses.get(), 1);
+    assert_eq!(output_1, Ok(WasmResult::Reply([42].into())));
+    let output_2 = test.query(
+        UserQuery {
+            source: user_test_id(1),
+            receiver: canister_id_2,
+            method_name: "query".into(),
+            method_payload: wasm().reply_data(&[42]).build(),
+            ingress_expiry: 0,
+            nonce: None,
+        },
+        Arc::new(test.state().clone()),
+        vec![],
+    );
+    assert_eq!(query_handler.metrics.query_cache_misses.get(), 2);
+    assert_eq!(output_1, output_2);
+}
+
+const QUERY_CACHE_WAT: &str = r#"
+(module
+    (import "ic0" "msg_reply" (func $msg_reply))
+    (import "ic0" "msg_reply_data_append"
+        (func $msg_reply_data_append (param i32 i32)))
+
+    (memory 1)
+    (data (i32.const 0) "42")
+
+    (func $f
+        (call $msg_reply_data_append (i32.const 0) (i32.const 2))
+        (call $msg_reply)
+    )
+
+    (export "canister_query f1" (func $f))
+    (export "canister_query f2" (func $f))
+)"#;
+
+#[test]
+fn query_cache_key_different_method_name_returns_different_results() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_query_caching()
+        .with_initial_canister_cycles(CYCLES_BALANCE.get())
+        .build();
+    let canister_id = test.canister_from_wat(QUERY_CACHE_WAT).unwrap();
+    let query_handler = downcast_query_handler(test.query_handler());
+    let output_1 = test.query(
+        UserQuery {
+            source: user_test_id(1),
+            receiver: canister_id,
+            method_name: "f1".into(),
+            method_payload: vec![],
+            ingress_expiry: 0,
+            nonce: None,
+        },
+        Arc::new(test.state().clone()),
+        vec![],
+    );
+    assert_eq!(query_handler.metrics.query_cache_misses.get(), 1);
+    assert_eq!(output_1, Ok(WasmResult::Reply(b"42".to_vec())));
+    let output_2 = test.query(
+        UserQuery {
+            source: user_test_id(1),
+            receiver: canister_id,
+            method_name: "f2".into(),
+            method_payload: vec![],
+            ingress_expiry: 0,
+            nonce: None,
+        },
+        Arc::new(test.state().clone()),
+        vec![],
+    );
+    assert_eq!(query_handler.metrics.query_cache_misses.get(), 2);
+    assert_eq!(output_1, output_2);
+}
+
+#[test]
+fn query_cache_key_different_method_payload_returns_different_results() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_query_caching()
+        .with_initial_canister_cycles(CYCLES_BALANCE.get())
+        .build();
+    let canister_id = test.canister_from_wat(QUERY_CACHE_WAT).unwrap();
+    let query_handler = downcast_query_handler(test.query_handler());
+    let output_1 = test.query(
+        UserQuery {
+            source: user_test_id(1),
+            receiver: canister_id,
+            method_name: "f1".into(),
+            method_payload: vec![],
+            ingress_expiry: 0,
+            nonce: None,
+        },
+        Arc::new(test.state().clone()),
+        vec![],
+    );
+    assert_eq!(query_handler.metrics.query_cache_misses.get(), 1);
+    assert_eq!(output_1, Ok(WasmResult::Reply(b"42".to_vec())));
+    let output_2 = test.query(
+        UserQuery {
+            source: user_test_id(1),
+            receiver: canister_id,
+            method_name: "f1".into(),
+            method_payload: vec![42],
+            ingress_expiry: 0,
+            nonce: None,
+        },
+        Arc::new(test.state().clone()),
+        vec![],
+    );
+    assert_eq!(query_handler.metrics.query_cache_misses.get(), 2);
+    assert_eq!(output_1, output_2);
+}
+
+#[test]
+fn query_cache_env_different_batch_time_returns_different_results() {
+    let mut test = ExecutionTestBuilder::new().with_query_caching().build();
+    let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+    let output_1 = test.query(
+        UserQuery {
+            source: user_test_id(1),
+            receiver: canister_id,
+            method_name: "query".into(),
+            method_payload: wasm().reply_data(&[42]).build(),
+            ingress_expiry: 0,
+            nonce: None,
+        },
+        Arc::new(test.state().clone()),
+        vec![],
+    );
+    {
+        let query_handler = downcast_query_handler(test.query_handler());
+        assert_eq!(query_handler.metrics.query_cache_misses.get(), 1);
+        assert_eq!(output_1, Ok(WasmResult::Reply([42].into())));
+    }
+    test.state_mut().metadata.batch_time += Duration::from_secs(1);
+    let output_2 = test.query(
+        UserQuery {
+            source: user_test_id(1),
+            receiver: canister_id,
+            method_name: "query".into(),
+            method_payload: wasm().reply_data(&[42]).build(),
+            ingress_expiry: 0,
+            nonce: None,
+        },
+        Arc::new(test.state().clone()),
+        vec![],
+    );
+    {
+        let query_handler = downcast_query_handler(test.query_handler());
+        assert_eq!(query_handler.metrics.query_cache_misses.get(), 2);
+        assert_eq!(output_1, output_2);
+    }
+}
+
+#[test]
+fn query_cache_env_different_canister_version_returns_different_results() {
+    let mut test = ExecutionTestBuilder::new().with_query_caching().build();
+    let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+    let output_1 = test.query(
+        UserQuery {
+            source: user_test_id(1),
+            receiver: canister_id,
+            method_name: "query".into(),
+            method_payload: wasm().reply_data(&[42]).build(),
+            ingress_expiry: 0,
+            nonce: None,
+        },
+        Arc::new(test.state().clone()),
+        vec![],
+    );
+    {
+        let query_handler = downcast_query_handler(test.query_handler());
+        assert_eq!(query_handler.metrics.query_cache_misses.get(), 1);
+        assert_eq!(output_1, Ok(WasmResult::Reply([42].into())));
+    }
+    test.canister_state_mut(canister_id)
+        .system_state
+        .canister_version += 1;
+    let output_2 = test.query(
+        UserQuery {
+            source: user_test_id(1),
+            receiver: canister_id,
+            method_name: "query".into(),
+            method_payload: wasm().reply_data(&[42]).build(),
+            ingress_expiry: 0,
+            nonce: None,
+        },
+        Arc::new(test.state().clone()),
+        vec![],
+    );
+    {
+        let query_handler = downcast_query_handler(test.query_handler());
+        assert_eq!(query_handler.metrics.query_cache_misses.get(), 2);
+        assert_eq!(output_1, output_2);
+    }
+}
+
+#[test]
+fn query_cache_env_different_canister_balance_returns_different_results() {
+    let mut test = ExecutionTestBuilder::new().with_query_caching().build();
+    let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+    let output_1 = test.query(
+        UserQuery {
+            source: user_test_id(1),
+            receiver: canister_id,
+            method_name: "query".into(),
+            method_payload: wasm().reply_data(&[42]).build(),
+            ingress_expiry: 0,
+            nonce: None,
+        },
+        Arc::new(test.state().clone()),
+        vec![],
+    );
+    {
+        let query_handler = downcast_query_handler(test.query_handler());
+        assert_eq!(query_handler.metrics.query_cache_misses.get(), 1);
+        assert_eq!(output_1, Ok(WasmResult::Reply([42].into())));
+    }
+    test.canister_state_mut(canister_id)
+        .system_state
+        .remove_cycles(1_u128.into(), CyclesUseCase::Memory);
+    let output_2 = test.query(
+        UserQuery {
+            source: user_test_id(1),
+            receiver: canister_id,
+            method_name: "query".into(),
+            method_payload: wasm().reply_data(&[42]).build(),
+            ingress_expiry: 0,
+            nonce: None,
+        },
+        Arc::new(test.state().clone()),
+        vec![],
+    );
+    {
+        let query_handler = downcast_query_handler(test.query_handler());
+        assert_eq!(query_handler.metrics.query_cache_misses.get(), 2);
+        assert_eq!(output_1, output_2);
+    }
 }
 
 #[test]

@@ -5,7 +5,7 @@ use ic_metrics::{
 use ic_types::{
     NumInstructions, NumMessages, NumSlices, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES,
 };
-use prometheus::Histogram;
+use prometheus::{Histogram, IntCounter};
 use std::{cell::RefCell, rc::Rc, time::Instant};
 
 pub(crate) struct QueryHandlerMetrics {
@@ -13,6 +13,8 @@ pub(crate) struct QueryHandlerMetrics {
     pub query_initial_call: ScopedMetrics,
     pub query_retry_call: ScopedMetrics,
     pub query_spawned_calls: ScopedMetrics,
+    pub query_cache_hits: IntCounter,
+    pub query_cache_misses: IntCounter,
 }
 
 impl QueryHandlerMetrics {
@@ -116,6 +118,14 @@ impl QueryHandlerMetrics {
                     metrics_registry,
                 ),
             },
+            query_cache_hits: metrics_registry.int_counter(
+                "execution_query_cache_hits",
+                "The number of replica side query cache hits",
+            ),
+            query_cache_misses: metrics_registry.int_counter(
+                "execution_query_cache_misses",
+                "The number of replica side query cache misses",
+            ),
         }
     }
 }
