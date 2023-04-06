@@ -547,7 +547,7 @@ pub async fn install_lifeline_canister(
     _init_payload: LifelineCanisterInitPayload,
 ) {
     // Use the env var if we have one, otherwise use the embedded binary.
-    Wasm::from_location_specified_by_env_var("lifeline", &[])
+    Wasm::from_location_specified_by_env_var("lifeline_canister", &[])
         .unwrap_or_else(|| Wasm::from_bytes(LIFELINE_CANISTER_WASM))
         .install_with_retries_onto_canister(
             canister,

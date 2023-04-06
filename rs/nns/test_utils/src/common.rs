@@ -260,7 +260,7 @@ pub fn build_cmc_wasm() -> Wasm {
 }
 /// Build Wasm for NNS Lifeline canister
 pub fn build_lifeline_wasm() -> Wasm {
-    Wasm::from_location_specified_by_env_var("lifeline", &[])
+    Wasm::from_location_specified_by_env_var("lifeline_canister", &[])
         .unwrap_or_else(|| Wasm::from_bytes(LIFELINE_CANISTER_WASM))
 }
 /// Build Wasm for NNS Genesis Token canister
