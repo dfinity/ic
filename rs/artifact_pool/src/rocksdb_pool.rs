@@ -471,6 +471,7 @@ impl MutablePoolSection<ValidatedConsensusArtifact>
                     }
                 }
                 PoolSectionOp::PurgeBelow(height) => self.purge_below_height(height),
+                PoolSectionOp::PurgeSharesBelow(_) => (), // not implemented
             }
         }
         check_ok!(self.db.write(batch));

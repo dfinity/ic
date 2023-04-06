@@ -123,6 +123,7 @@ impl<
                 ConsensusAction::RemoveFromValidated(_) => {}
                 ConsensusAction::RemoveFromUnvalidated(_) => {}
                 ConsensusAction::PurgeValidatedBelow(_) => {}
+                ConsensusAction::PurgeValidatedSharesBelow(_) => {}
                 ConsensusAction::PurgeUnvalidatedBelow(_) => {}
                 ConsensusAction::HandleInvalid(artifact, s) => {
                     self.invalidated_artifacts.inc();

@@ -33,6 +33,7 @@ pub enum ChangeAction {
     HandleInvalid(ConsensusMessage, String),
     PurgeValidatedBelow(Height),
     PurgeUnvalidatedBelow(Height),
+    PurgeValidatedSharesBelow(Height),
 }
 
 impl From<ChangeAction> for ChangeSet {
@@ -88,6 +89,10 @@ impl ContentEq for ChangeAction {
             (ChangeAction::AddToValidated(x), ChangeAction::MoveToValidated(y)) => x.content_eq(y),
             (ChangeAction::MoveToValidated(x), ChangeAction::AddToValidated(y)) => x.content_eq(y),
             (ChangeAction::PurgeValidatedBelow(x), ChangeAction::PurgeValidatedBelow(y)) => x == y,
+            (
+                ChangeAction::PurgeValidatedSharesBelow(x),
+                ChangeAction::PurgeValidatedSharesBelow(y),
+            ) => x == y,
             // Default to false when comparing actions of different type
             _ => false,
         }
@@ -100,6 +105,7 @@ pub type ValidatedConsensusArtifact = ValidatedArtifact<ConsensusMessage>;
 /// Unvalidated consensus artifact.
 pub type UnvalidatedConsensusArtifact = UnvalidatedArtifact<ConsensusMessage>;
 
+#[derive(Clone, Debug)]
 pub struct HeightRange {
     pub min: Height,
     pub max: Height,
