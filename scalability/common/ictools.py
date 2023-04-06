@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import atexit
+import getpass
 import os
 import shutil
 import subprocess
@@ -177,7 +178,8 @@ def build_ssh_extra_config():
     yet (this is the case for CI runners), also create ssh keys.
     """
     # Ensure that $HOME/.ssh/id_rsa.pub exists
-    home_ssh = os.path.join(os.environ["HOME"], ".ssh")
+    home_dir = os.path.expanduser("~" + getpass.getuser())
+    home_ssh = os.path.join(home_dir, ".ssh")
     id_rsa_pub = os.path.join(home_ssh, "id_rsa.pub")
 
     if not os.path.exists(home_ssh):
