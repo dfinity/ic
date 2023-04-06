@@ -167,10 +167,11 @@ pub async fn http_call<I: Serialize, O: DeserializeOwned>(
     endpoint: String,
     payload: I,
 ) -> CallResult<Result<O, Error>> {
+    const KIB: u64 = 1024;
     let payload = serde_json::to_string(&payload).unwrap();
     let request = CanisterHttpRequestArgument {
         url: format!("https://api.chainalysis.com/api/kyt/{}", endpoint),
-        max_response_bytes: None,
+        max_response_bytes: Some(100 * KIB),
         method,
         headers: vec![
             HttpHeader {
