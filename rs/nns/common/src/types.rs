@@ -102,6 +102,9 @@ pub enum UpdateIcpXdrConversionRatePayloadReason {
     /// The relative difference between the rate in the CMC and the rate the conversion rate provider retrieved exceeds
     /// a threshold defined by the conversion rate provider.
     DivergedRate,
+    /// Used to restart the cycles minting canister automatic exchange rate update mechanism
+    /// that calls the exchange rate canister.
+    EnableAutomaticExchangeRateUpdates,
 }
 
 /// The payload of a proposal to update the ICP/XDR conversion rate in the CMC.

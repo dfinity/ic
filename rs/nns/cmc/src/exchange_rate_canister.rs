@@ -9,6 +9,7 @@ use candid::CandidType;
 use cycles_minting_canister::IcpXdrConversionRate;
 use dfn_candid::candid_one;
 use dfn_core::{api::call_with_cleanup, CanisterId};
+use ic_nns_common::types::UpdateIcpXdrConversionRatePayloadReason;
 use ic_xrc_types::{
     Asset, AssetClass, ExchangeRate, ExchangeRateError, GetExchangeRateRequest,
     GetExchangeRateResult,
@@ -70,6 +71,7 @@ impl ExchangeRateCanisterClient for RealExchangeRateCanisterClient {
 pub enum UpdateExchangeRateState {
     Inactive,
     InProgress,
+    Disabled,
 }
 
 impl Default for UpdateExchangeRateState {
@@ -93,6 +95,10 @@ impl UpdateExchangeRateGuard {
                 .update_exchange_rate_canister_state
                 .unwrap_or_default()
         });
+
+        if current_call_state == UpdateExchangeRateState::Disabled {
+            return Err(UpdateExchangeRateError::Disabled);
+        }
 
         if current_call_state == UpdateExchangeRateState::InProgress {
             return Err(UpdateExchangeRateError::UpdateAlreadyInProgress);
@@ -120,12 +126,19 @@ impl UpdateExchangeRateGuard {
 }
 
 impl Drop for UpdateExchangeRateGuard {
-    /// On drop, set the calling status to inactive.
+    /// On drop, the state is set to inactive unless the update process
+    /// has been disabled.
     fn drop(&mut self) {
         mutate_state(self.0, |state| {
+            if let Some(UpdateExchangeRateState::Disabled) =
+                state.update_exchange_rate_canister_state
+            {
+                return;
+            }
+
             state
                 .update_exchange_rate_canister_state
-                .replace(UpdateExchangeRateState::Inactive)
+                .replace(UpdateExchangeRateState::Inactive);
         });
     }
 }
@@ -207,6 +220,7 @@ impl std::fmt::Display for GetExchangeRateError {
 pub enum UpdateExchangeRateError {
     NewRateNotNeeded,
     UpdateAlreadyInProgress,
+    Disabled,
     FailedToRetrieveRate(String),
     FailedToSetRate(String),
     InvalidRate(String),
@@ -233,6 +247,10 @@ impl std::fmt::Display for UpdateExchangeRateError {
                     message
                 )
             }
+            UpdateExchangeRateError::Disabled => write!(
+                f,
+                "Updating the exchange rate has been disabled due to a diverged rate"
+            ),
             UpdateExchangeRateError::InvalidRate(message) => {
                 write!(
                     f,
@@ -265,6 +283,18 @@ pub async fn update_exchange_rate(
         }
 
         let call_xrc_result = xrc_client.get_exchange_rate().await;
+        // Check if updating the rate via the exchange rate canister was disabled while retrieving the rate.
+        // If it has, exit early.
+        let is_updating_rate_disabled = read_state(safe_state, |state| {
+            state
+                .update_exchange_rate_canister_state
+                .unwrap_or_default()
+                == UpdateExchangeRateState::Disabled
+        });
+        if is_updating_rate_disabled {
+            return Err(UpdateExchangeRateError::Disabled);
+        }
+
         match call_xrc_result {
             Ok(exchange_rate) => {
                 validate_exchange_rate(&exchange_rate)
@@ -310,6 +340,38 @@ fn requires_new_rate(
             is_on_five_minute_interval && is_old
         }
         None => true,
+    }
+}
+
+/// Takes the reason from an exchange rate proposal payload as input in order to
+/// determine if the CMC should continue using the exchange rate canister. If
+/// the reason is a diverged rate, requesting the rate from the exchange rate
+/// canister is disabled until a proposal comes in with a reason stating old rate.
+pub fn set_update_exchange_rate_state(
+    safe_state: &'static LocalKey<RefCell<Option<State>>>,
+    maybe_reason: &Option<UpdateIcpXdrConversionRatePayloadReason>,
+) {
+    if let Some(ref reason) = maybe_reason {
+        mutate_state(safe_state, |state| {
+            let current_update_exchange_rate_state = state
+                .update_exchange_rate_canister_state
+                .unwrap_or_default();
+            match reason {
+                UpdateIcpXdrConversionRatePayloadReason::EnableAutomaticExchangeRateUpdates => {
+                    if current_update_exchange_rate_state == UpdateExchangeRateState::Disabled {
+                        state
+                            .update_exchange_rate_canister_state
+                            .replace(UpdateExchangeRateState::Inactive);
+                    }
+                }
+                UpdateIcpXdrConversionRatePayloadReason::DivergedRate => {
+                    state
+                        .update_exchange_rate_canister_state
+                        .replace(UpdateExchangeRateState::Disabled);
+                }
+                UpdateIcpXdrConversionRatePayloadReason::OldRate => {}
+            }
+        });
     }
 }
 
@@ -701,5 +763,96 @@ mod test {
         );
         // Ensure the certified data has been set.
         assert!(!env.certified_data.borrow().is_empty());
+    }
+
+    #[test]
+    fn test_periodic_does_not_set_the_rate_if_the_state_updates_to_disabled_while_calling_xrc() {
+        thread_local! {
+            static STATE: RefCell<Option<State>> = RefCell::new(Some(State::default()));
+        }
+
+        struct TestExchangeRateCanisterClient;
+
+        #[async_trait]
+        impl ExchangeRateCanisterClient for TestExchangeRateCanisterClient {
+            async fn get_exchange_rate(&self) -> Result<ExchangeRate, GetExchangeRateError> {
+                mutate_state(&STATE, |state| {
+                    // Set the state to disabled to simulate a diverged rate proposal came during call to XRC.
+                    state
+                        .update_exchange_rate_canister_state
+                        .replace(UpdateExchangeRateState::Disabled);
+                });
+                Ok(new_exchange_rate(
+                    1680044700,
+                    MINIMUM_ICP_SOURCES,
+                    MINIMUM_CXDR_SOURCES,
+                ))
+            }
+        }
+
+        let env = TestExchangeRateCanisterEnvironment {
+            now_timestamp_seconds: 1680044700,
+            ..Default::default()
+        };
+        let xrc_client = TestExchangeRateCanisterClient;
+
+        let result = update_exchange_rate(&STATE, &env, &xrc_client)
+            .now_or_never()
+            .unwrap();
+
+        assert!(matches!(result, Err(UpdateExchangeRateError::Disabled)));
+        let icp_xdr_conversion_rate =
+            read_state(&STATE, |state| state.icp_xdr_conversion_rate.clone());
+        assert!(
+            matches!(icp_xdr_conversion_rate, Some(rate) if rate.xdr_permyriad_per_icp == 1_000_000 && rate.timestamp_seconds == 1620633600)
+        );
+    }
+
+    #[test]
+    fn test_set_update_exchange_rate_state() {
+        thread_local! {
+            static STATE: RefCell<Option<State>> = RefCell::new(Some(State::default()));
+        }
+
+        set_update_exchange_rate_state(&STATE, &None);
+        let update_exchange_rate_canister_state =
+            read_state(&STATE, |state| state.update_exchange_rate_canister_state);
+        assert!(matches!(
+            update_exchange_rate_canister_state,
+            Some(UpdateExchangeRateState::Inactive)
+        ));
+
+        set_update_exchange_rate_state(
+            &STATE,
+            &Some(UpdateIcpXdrConversionRatePayloadReason::DivergedRate),
+        );
+        let update_exchange_rate_canister_state =
+            read_state(&STATE, |state| state.update_exchange_rate_canister_state);
+        assert!(matches!(
+            update_exchange_rate_canister_state,
+            Some(UpdateExchangeRateState::Disabled)
+        ));
+
+        set_update_exchange_rate_state(
+            &STATE,
+            &Some(UpdateIcpXdrConversionRatePayloadReason::OldRate),
+        );
+        let update_exchange_rate_canister_state =
+            read_state(&STATE, |state| state.update_exchange_rate_canister_state);
+        assert!(matches!(
+            update_exchange_rate_canister_state,
+            Some(UpdateExchangeRateState::Disabled)
+        ));
+
+        set_update_exchange_rate_state(
+            &STATE,
+            &Some(UpdateIcpXdrConversionRatePayloadReason::EnableAutomaticExchangeRateUpdates),
+        );
+        let update_exchange_rate_canister_state =
+            read_state(&STATE, |state| state.update_exchange_rate_canister_state);
+        assert!(matches!(
+            update_exchange_rate_canister_state,
+            Some(UpdateExchangeRateState::Inactive)
+        ));
     }
 }

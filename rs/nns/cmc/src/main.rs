@@ -802,9 +802,17 @@ fn set_icp_xdr_conversion_rate_() {
         candid_one,
         |proposed_conversion_rate: UpdateIcpXdrConversionRatePayload| -> Result<(), String> {
             let env = CanisterEnvironment;
-            let rate: IcpXdrConversionRate = proposed_conversion_rate.into();
+            let rate = IcpXdrConversionRate::from(&proposed_conversion_rate);
             update_recent_icp_xdr_rates(&rate);
-            set_icp_xdr_conversion_rate(&STATE, &env, rate)
+            let result = set_icp_xdr_conversion_rate(&STATE, &env, rate);
+            if result.is_ok() && with_state(|state| state.exchange_rate_canister_id.is_some()) {
+                exchange_rate_canister::set_update_exchange_rate_state(
+                    &STATE,
+                    &proposed_conversion_rate.reason,
+                );
+            }
+
+            result
         },
     );
 }
@@ -1755,7 +1763,8 @@ async fn update_exchange_rate() {
             | UpdateExchangeRateError::FailedToSetRate(_) => {
                 print(format!("[cycles] {}", error));
             }
-            UpdateExchangeRateError::NewRateNotNeeded
+            UpdateExchangeRateError::Disabled
+            | UpdateExchangeRateError::NewRateNotNeeded
             | UpdateExchangeRateError::UpdateAlreadyInProgress => {}
         }
     }
