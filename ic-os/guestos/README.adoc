@@ -1,63 +1,62 @@
 = Guest OS
 
-A GuestOS image is comprised of the base Ubuntu plus the replica and orchestrator binaries.
-GuestOS runs inside a QEMU virtual machine. The IC protocol runs inside of the guestOS virtual machine.
+GuestOS refers to the operating system running inside a QEMU virtual machine on the hostOS. A GuestOS image consists of the base Ubuntu system, along with the replica and orchestrator binaries. The IC protocol runs inside the GuestOS virtual machine.
 
 For more details on the goals, structure, and disk layout of GuestOS, https://docs.google.com/presentation/d/1xECozJhVCqzFC3mMMvROD7rlB-xWDHHLKvZuVnuLgJc/edit?usp=sharing[see here]
 
-== How to build and run guestOS
-=== Building guestOS
+== How to build and run GuestOS
+=== Building GuestOS
 
-To build with Bazel, you need https://bazel.build/install[Bazel] installed.
-Alternatively, the following script allows building IC-OS in a container with the correct environment already configured:
+To build a GuestOS image, refer to the link:../README.adoc[IC-OS README]
 
-    ./gitlab-ci/container/container-run.sh
+=== Running GuestOS
 
-Build a guestOS image:
-
-* You can build any of the guestos targets (`prod`, `dev`, `dev-malicious`):
-
-    bazel build //ic-os/guestos/{prod,dev,dev-malicious}/...
-
-This will output disk-img.tar{.gz,.zst} in /ic/bazel-bin/ic-os/guestos/{prod,dev,dev-malicious}, which is your tarred guestOS image.
-
-=== Running guestOS
-
-The guestOS image (disk.img) can booted directly in qemu:
+The GuestOS image (`disk.img`) can booted directly in qemu using the following command:
 
     qemu-system-x86_64 \
     -nographic -m 4G \
     -bios /usr/share/OVMF/OVMF_CODE.fd \
     -drive file=disk.img,format=raw,if=virtio
 
-* Note: `ctrl-a x` to quit the qemu console.
+* Note: Press `Ctrl-A` followed by `x` to exit the QEMU console.
 
-You can also use bazel to do a testnet deployment. For documentation on this process, see ic/testnet/tools/README.md
+Alternatively, Bazel can be used to perform a testnet deployment. For documentation on this process, see ic/testnet/tools/README.md.
+
+==== Launch a GuestOS VM on farm
+
+Instead of running GuestOS locally in qemu, you can launch a GuestOS virtual machine on Farm:
+
+    bazel run --config=systest //ic-os/guestos:launch-single-vm
+
+The program will spin up a new GuestOS VM on Farm, and the machine can then be accessed via SSH.
+
+For more details about the program, refer to the `rs/ic_os/launch-single-vm` directory.
 
 == Upgrade GuestOS
-The GuestOS disk layout contains two sets of system partitions, called partition sets "A" and "B".
+
+The GuestOS disk layout contains two sets of system partitions, called partition sets "A" and "B". The A/B partitions enable a dual-boot system that can be updated and maintained without any downtime.
 
 image:doc/media/guestOS_disk-layout.png[]
 
-Above is the guestOS disk layout—partition set "A" in green, partition set "B" in blue.
+The image above shows the GuestOS disk layout with partition set "A" in green and partition set "B" in blue.
 
-At any point in time, one partition set is "active" and the other is "passive". 
-We can write to the passive partition set, and when we are ready, we can swap the active and passive partition sets, thereby upgrading the GuestOS.
+At any given time, one partition set is "active" while the other is "passive". 
+To upgrade the GuestOS, first, the new GuestOS is written to the passive partition set. Then, the active and passive partition sets are "swapped," so that when GuestOS reboots, it will use the new GuestOS on the new partition, thereby upgrading the GuestOS.
 
-=== Building upgrade image
+=== Building GuestOS upgrade image
 
-The same bazel command to build a guestOS image will also produce a guestOS upgrade image:
+The same Bazel command used to build a GuestOS image will also produce a GuestOS upgrade image:
 
     bazel build //ic-os/guestos/{prod,dev,dev-malicious}/...
 
-This will output update-img.tar{.gz,.zst} in /ic/bazel-bin/ic-os/guestos/{prod,dev,dev-malicious}, which is your tarred guestOS-update image.
+This command will output update-img.tar{.gz,.zst} in /ic/bazel-bin/ic-os/guestos/{prod,dev,dev-malicious}, which is the tarred GuestOS update image.
 
-=== Installing upgrade image
+=== Installing GuestOS upgrade image
 
     rootfs/opt/ic/bin/manageboot.sh upgrade-install update-img.tar
     rootfs/opt/ic/bin/manageboot.sh upgrade-commit
 
-After that, the newly installed system will be booted. Note that on the next boot, it will revert to the original system unless you then confirm that the new system is actually fully operational:
+After these commands have been run, the newly installed system will be booted. Note that on the next boot, the system will revert back to the original GuestOS unless confirmation is given that the new system is fully operational:
 
     rootfs/opt/ic/bin/manageboot.sh confirm
 
@@ -70,18 +69,3 @@ See instructions link:rootfs/README.adoc#[here] on how to make changes to the OS
 
 For further reading, see the docs in the
 link:doc/README.adoc#[doc/ subdirectory]
-
-== Alternate build paths
-
-GuestOS images can also be built with Docker or by using the build scripts directly.
-
-=== Building with Podman
-
-The container-based build process is described https://github.com/dfinity/ic#building-the-code[here].
-Be sure *not* to use Nix to build the IC binary artifacts. 
-
-    ./gitlab-ci/container/build-ic.sh
-
-This command will output a tarred guestOS image in the artifacts/icos folder: "disk-img.tar.gz"
-
-Note that building with Podman creates a production image as opposed to a development image. When you run production images inside of QEMU, you will not be able to access the console and other debugging tools.
