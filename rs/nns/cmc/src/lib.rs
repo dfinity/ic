@@ -351,6 +351,15 @@ impl From<UpdateIcpXdrConversionRatePayload> for IcpXdrConversionRate {
     }
 }
 
+impl From<&UpdateIcpXdrConversionRatePayload> for IcpXdrConversionRate {
+    fn from(val: &UpdateIcpXdrConversionRatePayload) -> Self {
+        IcpXdrConversionRate {
+            timestamp_seconds: val.timestamp_seconds,
+            xdr_permyriad_per_icp: val.xdr_permyriad_per_icp,
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, CandidType, Clone, PartialEq, Eq)]
 pub struct IcpXdrConversionRateCertifiedResponse {
     pub data: IcpXdrConversionRate,
