@@ -155,7 +155,7 @@ fn main() {
         .next()
         .unwrap();
 
-    // Constrcut SSH Key Directory
+    // Construct SSH Key Directory
     let keys_dir = tempdir.as_ref().join("ssh_authorized_keys");
     std::fs::create_dir(&keys_dir).unwrap();
     if let Some(key) = ssh_key_path {

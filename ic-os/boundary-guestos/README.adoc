@@ -2,21 +2,9 @@
 
 This contains the instructions to build the system images for a Boundary Node. More detailed information can be found link:doc/README.adoc[here].
 
-== Build the BN image
-The entire build process relies on `bazel`. In order to build the Boundary Node image with `bazel`, use the provided build environment:
+== Build a Boundary Node image
 
-[source,shell]
- gitlab-ci/container/container-run.sh
-
-Then, you can build any of the boundary-guestos targets (e.g., `prod`, `prod-sev`, `dev`, `dev-sev`):
-
-[source,shell]
- bazel build //ic-os/boundary-guestos/envs/prod
-
-Bazel locally builds and includes the binaries, such that you can test your changes.
-The `dev` and `dev-sev` images use the local service worker, while the `prod` and `prod-dev` images pull the service worker from `npm`.
-
-All the outputs from the build are stored under `bazel-bin/ic-os/boundary-guestos/envs/`.
+To build a boundary node image, refer to the link:../README.adoc[IC-OS README]
 
 == Run a Boundary Node locally
 
@@ -121,7 +109,6 @@ ic-os/boundary-guestos/scripts/build-bootstrap-config-image.sh \
 
 _Note:_ If you need to make changes, just destroy the VM, rebuild the images you need and create the VM again. The XML configuration file can be reused.
 
-
 == Developing with the system
 
 The entirety of the actual Ubuntu operating system is contained in the
@@ -137,9 +124,3 @@ include them into the image.
 The directory `../bootloader/` contains everything related to building EFI firmware and the grub bootloader image.
 
 All build steps are contained in the link:../defs.bzl[../defs.bzl] and the target specific directories (e.g., link:prod/BUILD.bazel[prod/BUILD.bazel]).
-
-== Under the hood
-
-The Ubuntu system is built by converting the official Ubuntu docker image
-into a bootable "bare-metal" image (or "virtual-metal" VM image). This
-results in a very minimal system with basically no services running at all.
