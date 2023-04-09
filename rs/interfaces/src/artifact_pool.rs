@@ -1,4 +1,4 @@
-//! The artifact pool public interface.
+//! The artifact pool public interface that defines the Consensus-P2P API.
 use crate::time_source::TimeSource;
 use derive_more::From;
 use ic_types::{
@@ -8,6 +8,7 @@ use ic_types::{
 };
 use serde::{Deserialize, Serialize};
 
+/// Produces mutations to be applied on the artifact pool.
 pub trait ChangeSetProducer<Pool>: Send {
     type ChangeSet;
 
@@ -24,12 +25,14 @@ pub trait ChangeSetProducer<Pool>: Send {
     ///
     /// 2. Because [Pool] is passed as an read-only reference, the
     /// caller is free to run other readers concurrently should it choose to.
-    /// But this is a minor point.
+    ///
+    /// 3. The call can take long time, hence the pool should _not_ be guarded
+    /// by a write lock which prevents other accesses to the pool.
     fn on_state_change(&self, pool: &Pool) -> Self::ChangeSet;
 }
 
-/// The trait defines the canonical way for mutating an artifact pool.
-/// There should be one owner of the object implementing this trait.
+/// Defines the canonical way for mutating an artifact pool.
+/// Mutations should happen from a single place/component.
 pub trait MutablePool<Artifact: ArtifactKind, C> {
     /// Inserts a message into the unvalidated part of the pool.
     fn insert(&mut self, msg: UnvalidatedArtifact<Artifact::Message>);
@@ -43,12 +46,13 @@ pub trait MutablePool<Artifact: ArtifactKind, C> {
     fn apply_changes(&mut self, time_source: &dyn TimeSource, change_set: C);
 }
 
-/// Consensus to gossip interface.
 pub trait PriorityFnAndFilterProducer<Artifact: ArtifactKind, Pool>: Send + Sync {
-    /// Return a priority function that matches the given consensus pool.
+    /// Returns a priority function for the given pool.
     fn get_priority_function(&self, pool: &Pool) -> PriorityFn<Artifact::Id, Artifact::Attribute>;
 
-    /// Return a filter that represents what artifacts are needed.
+    /// Returns a filter that represents what artifacts are needed.
+    /// The filter is derived from the (persisted) state of the client and not directly
+    /// from a pool content. Hence, no pool reference is used here.
     fn get_filter(&self) -> Artifact::Filter {
         Artifact::Filter::default()
     }
@@ -69,7 +73,6 @@ pub trait ValidatedPoolReader<T: ArtifactKind> {
     fn get_validated_by_identifier(&self, id: &T::Id) -> Option<T::Message>;
 
     /// Get all validated artifacts by the filter
-    /// See interfaces/src/artifact_manager.rs for more details
     ///
     /// #Returns:
     /// A iterator over all the validated artifacts.
