@@ -232,7 +232,7 @@ DESTROY_PID=$!
 
 echo "-------------------------------------------------------------------------------"
 
-echo "**** Build USB sticks for IC nodes"
+echo "**** Build USB sticks for IC nodes - ($(dateFromEpoch "$(date '+%s')"))"
 rm -rf "${MEDIA_PATH}"
 mkdir -p "${MEDIA_PATH}"
 "${INVENTORY}" --media-json >"${MEDIA_PATH}/${deployment}.json"
@@ -258,7 +258,7 @@ fi
 
 if [[ "${USE_BOUNDARY_NODES}" == "true" ]]; then
     BOUNDARY_OUT="${TMPDIR}/build-boundary.log"
-    echo "**** Build USB sticks for boundary nodes"
+    echo "**** Build USB sticks for boundary nodes - ($(dateFromEpoch "$(date '+%s')"))"
     COMMAND=$(
         cat <<EOF
 set -x
@@ -304,7 +304,7 @@ echo "--------------------------------------------------------------------------
 # cp bazel-bin/ic-os/guestos/envs/dev/disk.img "${MEDIA_PATH}/disk.img"
 
 # Wait on the destroy to finish
-echo "**** Finishing destroy"
+echo "**** Finishing destroy - ($(dateFromEpoch "$(date '+%s')"))"
 DESTROY_STATUS=0
 wait ${DESTROY_PID} || DESTROY_STATUS=1
 cat "${DESTROY_OUT}" || true
@@ -314,7 +314,7 @@ fi
 
 # Wait on the boundary node image to finish
 if [[ "${USE_BOUNDARY_NODES}" == "true" ]]; then
-    echo "**** Finishing boundary image"
+    echo "**** Finishing boundary image - ($(dateFromEpoch "$(date '+%s')"))"
     BOUNDARY_STATUS=0
     wait ${BOUNDARY_PID} || BOUNDARY_STATUS=1
     cat "${BOUNDARY_OUT}" || true
@@ -329,16 +329,16 @@ rm -rf "${TMPDIR}"
 echo "-------------------------------------------------------------------------------"
 cd "${REPO_ROOT}/testnet/ansible"
 
-echo "**** Create new IC instance"
+echo "**** Create new IC instance - ($(dateFromEpoch "$(date '+%s')"))"
 ansible icos_network_redeploy.yml -e ic_state="create"
 
-echo "**** Start VMs"
+echo "**** Start VMs - ($(dateFromEpoch "$(date '+%s')"))"
 ansible icos_network_redeploy.yml -e ic_state="start"
 
-echo "**** Install NNS canisters"
+echo "**** Install NNS canisters - ($(dateFromEpoch "$(date '+%s')"))"
 ansible icos_network_redeploy.yml -e ic_state="install"
 
-echo "**** Start monitoring"
+echo "**** Start monitoring - ($(dateFromEpoch "$(date '+%s')"))"
 ansible ic_p8s_network_update.yml -e yes_i_confirm=yes
 ansible ic_p8s_service_discovery_install.yml -e yes_i_confirm=yes -e nns_public_key_path="${MEDIA_PATH}/nns-public-key.pem"
 
