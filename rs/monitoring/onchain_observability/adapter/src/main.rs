@@ -112,45 +112,21 @@ pub async fn main() {
     let grpc_client =
         setup_onchain_observability_adapter_client(PathBuf::from(config.uds_socket_path));
 
-    let mut peer_ids = get_peer_ids(node_id, &registry_client);
+    // Continuously collect and send reports. There are 2 types of metrics - sampled and non-sampled.
+    // Sampled will be collected periodically and averaged at the end of the reporting interval.
+    // Non-sampled will be collected at the end and the delta will be computed from previous baseline.
+    // On failure, the report publish will be skipped and attempted again at the next interval.
 
-    // Collect an initial set of metrics to set a baseline.  On failure, skip report publish and try again at next reporting interval.
-    // Without a baseline, we cannot derive the counts for the current reporting interval.
-    let mut non_sampled_metrics_at_report_start = loop {
-        match collect_metrics_for_peers(
-            grpc_client.clone(),
-            &peer_ids,
-            &onchain_observability_adapter_metrics,
-        )
-        .await
-        {
-            Ok(metrics) => break metrics,
-            Err(e) => {
-                error!(
-                    logger,
-                    "Failed to collect non-sampled metrics, defering report to next interval: {:?}",
-                    e.to_string()
-                );
-                onchain_observability_adapter_metrics
-                    .reports_delayed_total
-                    .inc();
-            }
-        }
-        tokio::time::sleep(config.report_length_sec).await;
-    };
     let mut sampling_interval = interval(config.sampling_interval_sec);
     sampling_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
     let mut sampler = SampledMetricsCollector::new(
         grpc_client.clone(),
         onchain_observability_adapter_metrics.clone(),
     );
+    let mut non_sampled_metrics_baseline_opt = None;
     let mut start_time = SystemTime::now();
     let mut report_duration = config.report_length_sec;
 
-    // Continuously collect and send reports. There are 2 types of metrics - sampled and non-sampled.
-    // Sampled will be collected periodically and averaged at the end of the reporting interval.
-    // Non-sampled will be collected once at the start and end and the delta will be computed.
-    // On failure, the report publish will be skipped and attempted again at the next interval.
     loop {
         sampling_interval.tick().await;
         if let Err(e) = sampler.sample().await {
@@ -160,19 +136,22 @@ pub async fn main() {
             .elapsed()
             .expect("Negative system time must not happen")
             >= report_duration
+            || non_sampled_metrics_baseline_opt.is_none()
         {
             onchain_observability_adapter_metrics
                 .report_interval_elapsed_total
                 .inc();
 
-            // Refresh peer ids
-            peer_ids = get_peer_ids(node_id, &registry_client);
+            // Refresh peer ids. TODO(NET-1384) if fetching peer id fails, either fallback to old peers or skip report
+            let peer_ids = get_peer_ids(node_id, &registry_client);
+
             let non_sampled_metrics_at_report_end_result = collect_metrics_for_peers(
                 grpc_client.clone(),
                 &peer_ids,
                 &onchain_observability_adapter_metrics,
             )
             .await;
+
             if let Err(e) = non_sampled_metrics_at_report_end_result {
                 // On failure, retry data collection and publish on next interval. Note that start time / baseline counters are preserved and we simply extend the report end time.
                 onchain_observability_adapter_metrics
@@ -189,87 +168,92 @@ pub async fn main() {
             let non_sampled_metrics_at_report_end =
                 non_sampled_metrics_at_report_end_result.unwrap();
 
-            let end_time = SystemTime::now();
+            // If the report start is unset, this implies we haven't established a baseline yet, so we must wait
+            // until the next iteration before we can compute the delta and publish the report.
+            if let Some(non_sampled_metrics_baseline) = non_sampled_metrics_baseline_opt {
+                let end_time = SystemTime::now();
 
-            // The gRPC response provides cumulative metric counts since replica last restart, so we may need to adjust counts for the current reporting window.
-            let peer_counters_for_current_interval =
-                derive_peer_counters_for_current_report_interval(
-                    &non_sampled_metrics_at_report_start,
-                    &non_sampled_metrics_at_report_end,
+                // The gRPC response provides cumulative metric counts since replica last restart, so we may need to adjust counts for the current reporting window.
+                let peer_counters_for_current_interval =
+                    derive_peer_counters_for_current_report_interval(
+                        &non_sampled_metrics_baseline,
+                        &non_sampled_metrics_at_report_end,
+                    );
+                let replica_last_start_time =
+                    non_sampled_metrics_at_report_end.replica_last_start_time;
+
+                let up_time_peer_labels = sampler.aggregate();
+
+                let report = prepare_report(
+                    node_id,
+                    start_time,
+                    end_time,
+                    replica_last_start_time,
+                    peer_counters_for_current_interval,
+                    up_time_peer_labels,
+                    &peer_ids,
                 );
-            let replica_last_start_time = non_sampled_metrics_at_report_end.replica_last_start_time;
 
-            let up_time_peer_labels = sampler.aggregate();
+                info!(logger, "Completed Report: report {:?}", report);
 
-            let report = prepare_report(
-                node_id,
-                start_time,
-                end_time,
-                replica_last_start_time,
-                peer_counters_for_current_interval,
-                up_time_peer_labels,
-                &peer_ids,
-            );
-
-            info!(logger, "Completed Report: report {:?}", report);
-
-            for signature_attempts in 0..MAX_CRYPTO_SIGNATURE_ATTEMPTS {
-                match sign_report(crypto_component.clone(), report.clone(), node_id).await {
-                    Ok(signed_report) => {
-                        if let Err(e) = send_report_to_canister(
-                            &canister_client,
-                            canister_id,
-                            &signed_report,
-                            &logger,
-                        )
-                        .await
-                        {
-                            warn!(logger, "Send report may have failed: {:?}", e);
-                        }
-                        // Add a delay to allocate sufficient time in case data is commited by another node
-                        sleep(FIND_REPORT_SLEEP_DURATION).await;
-
-                        let publish_result = match is_report_published(
-                            &canister_client,
-                            canister_id,
-                            &signed_report,
-                        )
-                        .await
-                        {
-                            Ok(is_published) => is_published.to_string(),
-                            Err(e) => {
-                                error!(
-                                    logger,
-                                    "Could not check whether report was published {:?}", e
-                                );
-                                "unknown".to_string()
+                for signature_attempts in 0..MAX_CRYPTO_SIGNATURE_ATTEMPTS {
+                    match sign_report(crypto_component.clone(), report.clone(), node_id).await {
+                        Ok(signed_report) => {
+                            if let Err(e) = send_report_to_canister(
+                                &canister_client,
+                                canister_id,
+                                &signed_report,
+                                &logger,
+                            )
+                            .await
+                            {
+                                warn!(logger, "Send report may have failed: {:?}", e);
                             }
-                        };
-                        onchain_observability_adapter_metrics
-                            .find_published_report_in_canister_requests_total
-                            .with_label_values(&[&publish_result])
-                            .inc();
+                            // Add a delay to allocate sufficient time in case data is commited by another node
+                            sleep(FIND_REPORT_SLEEP_DURATION).await;
 
-                        break;
-                    }
-                    Err(e) => {
-                        if e.is_reproducible()
-                            || signature_attempts == MAX_CRYPTO_SIGNATURE_ATTEMPTS - 1
-                        {
-                            // "Reproducible" represents a fundamental issue with the crypto setup
+                            let publish_result = match is_report_published(
+                                &canister_client,
+                                canister_id,
+                                &signed_report,
+                            )
+                            .await
+                            {
+                                Ok(is_published) => is_published.to_string(),
+                                Err(e) => {
+                                    error!(
+                                        logger,
+                                        "Could not check whether report was published {:?}", e
+                                    );
+                                    "unknown".to_string()
+                                }
+                            };
                             onchain_observability_adapter_metrics
-                                .failed_crypto_signatures_total
+                                .find_published_report_in_canister_requests_total
+                                .with_label_values(&[&publish_result])
                                 .inc();
-                            error!(logger, "Failed to sign report, skipping {:?}", e);
+
                             break;
                         }
-                        // Otherwise, if we receive sporadic error, re-try a limited number of times.
-                        warn!(logger, "Received sporadic crypto signature failure {:?}", e);
+                        Err(e) => {
+                            if e.is_reproducible()
+                                || signature_attempts == MAX_CRYPTO_SIGNATURE_ATTEMPTS - 1
+                            {
+                                // "Reproducible" represents a fundamental issue with the crypto setup
+                                onchain_observability_adapter_metrics
+                                    .failed_crypto_signatures_total
+                                    .inc();
+                                error!(logger, "Failed to sign report, skipping {:?}", e);
+                                break;
+                            }
+                            // Otherwise, if we receive sporadic error, re-try a limited number of times.
+                            warn!(logger, "Received sporadic crypto signature failure {:?}", e);
+                        }
                     }
                 }
             }
-            // Reset the baseline
-            non_sampled_metrics_at_report_start = non_sampled_metrics_at_report_end;
+            // Reset the baseline counts
+            non_sampled_metrics_baseline_opt = Some(non_sampled_metrics_at_report_end);
             sampler.clear();
             start_time = SystemTime::now();
             report_duration = config.report_length_sec;
