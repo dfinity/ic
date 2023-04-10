@@ -79,6 +79,11 @@ pub async fn main() {
     let onchain_observability_adapter_metrics =
         OnchainObservabilityAdapterMetrics::new(&metrics_registry);
 
+    // SAFETY:
+    // The systemd service is configured to set its first socket as the metrics socket, so we expect the FD to exist.
+    // Additionally, this is the only callsite within the adapter so this should only be consumed once.
+    // Systemd Socket config: ic-os/guestos/rootfs/etc/systemd/system/ic-onchain-observability-adapter-metrics.socket
+    // Systemd Service config: ic-os/guestos/rootfs/etc/systemd/system/ic-onchain-observability-adapter.service
     let stream = unsafe { incoming_from_nth_systemd_socket(1) };
     start_metrics_grpc(metrics_registry.clone(), logger.clone(), stream);
 
@@ -109,7 +114,7 @@ pub async fn main() {
 
     let mut peer_ids = get_peer_ids(node_id, &registry_client);
 
-    // Collect an initial set of metrics to set a baseline.  On failure, skip report and try again at next reporting interval.
+    // Collect an initial set of metrics to set a baseline.  On failure, skip report publish and try again at next reporting interval.
     // Without a baseline, we cannot derive the counts for the current reporting interval.
     let mut non_sampled_metrics_at_report_start = loop {
         match collect_metrics_for_peers(
@@ -120,7 +125,16 @@ pub async fn main() {
         .await
         {
             Ok(metrics) => break metrics,
-            Err(_e) => { /* TODO(NET-1338) record error */ }
+            Err(e) => {
+                error!(
+                    logger,
+                    "Failed to collect non-sampled metrics, defering report to next interval: {:?}",
+                    e.to_string()
+                );
+                onchain_observability_adapter_metrics
+                    .reports_delayed_total
+                    .inc();
+            }
         }
         tokio::time::sleep(config.report_length_sec).await;
     };
@@ -131,11 +145,12 @@ pub async fn main() {
         onchain_observability_adapter_metrics.clone(),
     );
     let mut start_time = SystemTime::now();
+    let mut report_duration = config.report_length_sec;
 
     // Continuously collect and send reports. There are 2 types of metrics - sampled and non-sampled.
     // Sampled will be collected periodically and averaged at the end of the reporting interval.
     // Non-sampled will be collected once at the start and end and the delta will be computed.
-    // On failure, the report will be skipped and attempted again at the next interval.
+    // On failure, the report publish will be skipped and attempted again at the next interval.
     loop {
         sampling_interval.tick().await;
         if let Err(e) = sampler.sample().await {
@@ -144,22 +159,35 @@ pub async fn main() {
         if start_time
             .elapsed()
             .expect("Negative system time must not happen")
-            >= config.report_length_sec
+            >= report_duration
         {
             onchain_observability_adapter_metrics
-                .reports_attempted
+                .report_interval_elapsed_total
                 .inc();
 
             // Refresh peer ids
             peer_ids = get_peer_ids(node_id, &registry_client);
-            // TODO(NET-1373) - remove expect and skip report instead
-            let non_sampled_metrics_at_report_end = collect_metrics_for_peers(
+            let non_sampled_metrics_at_report_end_result = collect_metrics_for_peers(
                 grpc_client.clone(),
                 &peer_ids,
                 &onchain_observability_adapter_metrics,
             )
-            .await
-            .expect("Failed to collect non-sampled metrics");
+            .await;
+            if let Err(e) = non_sampled_metrics_at_report_end_result {
+                // On failure, retry data collection and publish on next interval. Note that start time / baseline counters are preserved and we simply extend the report end time.
+                onchain_observability_adapter_metrics
+                    .reports_delayed_total
+                    .inc();
+                error!(
+                    logger,
+                    "Failed to collect non-sampled metrics, defering report to next interval: {:?}",
+                    e.to_string()
+                );
+                report_duration += config.report_length_sec;
+                continue;
+            }
+            let non_sampled_metrics_at_report_end =
+                non_sampled_metrics_at_report_end_result.unwrap();
 
             let end_time = SystemTime::now();
 
@@ -201,22 +229,27 @@ pub async fn main() {
                         // Add a delay to allocate sufficient time in case data is commited by another node
                         sleep(FIND_REPORT_SLEEP_DURATION).await;
 
-                        match is_report_published(&canister_client, canister_id, &signed_report)
-                            .await
+                        let publish_result = match is_report_published(
+                            &canister_client,
+                            canister_id,
+                            &signed_report,
+                        )
+                        .await
                         {
-                            Ok(is_published) => {
-                                onchain_observability_adapter_metrics
-                                    .reports_published_to_canister
-                                    .with_label_values(&[&is_published.to_string()])
-                                    .inc();
-                            }
+                            Ok(is_published) => is_published.to_string(),
                             Err(e) => {
                                 error!(
                                     logger,
                                     "Could not check whether report was published {:?}", e
                                 );
+                                "unknown".to_string()
                             }
-                        }
+                        };
+                        onchain_observability_adapter_metrics
+                            .find_published_report_in_canister_requests_total
+                            .with_label_values(&[&publish_result])
+                            .inc();
+
                         break;
                     }
                     Err(e) => {
@@ -225,7 +258,7 @@ pub async fn main() {
                         {
                             // "Reproducible" represents a fundamental issue with the crypto setup
                             onchain_observability_adapter_metrics
-                                .failed_crypto_signature
+                                .failed_crypto_signatures_total
                                 .inc();
                             error!(logger, "Failed to sign report, skipping {:?}", e);
                             break;
@@ -239,6 +272,7 @@ pub async fn main() {
             non_sampled_metrics_at_report_start = non_sampled_metrics_at_report_end;
             sampler.clear();
             start_time = SystemTime::now();
+            report_duration = config.report_length_sec;
         }
     }
 }

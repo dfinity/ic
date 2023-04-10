@@ -71,7 +71,7 @@ pub async fn collect_metrics_for_peers(
         ],
     };
 
-    for attempt in 0..MAX_ATTEMPTS {
+    for _ in 0..MAX_ATTEMPTS {
         let mut tonic_request = tonic::Request::new(request.clone());
         tonic_request.set_timeout(TIMEOUT_LENGTH_SEC);
 
@@ -81,23 +81,17 @@ pub async fn collect_metrics_for_peers(
             }
             Err(status) => {
                 adapter_metrics
-                    .failed_grpc_request
+                    .failed_grpc_requests_total
                     .with_label_values(&["non_sampled", &status.code().to_string()])
                     .inc();
-
-                if attempt == MAX_ATTEMPTS - 1 {
-                    return Err(MetricsCollectError::RpcRequestFailure(format!(
-                        "Request failed: {:?}",
-                        status
-                    )));
-                }
             }
         }
         tokio::time::sleep(RETRY_INTERVAL_SEC).await;
     }
-    Err(MetricsCollectError::RpcRequestFailure(
-        "No requests were sent: MAX_ATTEMPTS must be > 0".to_string(),
-    ))
+    Err(MetricsCollectError::RpcRequestFailure(format!(
+        "Max attempts ({:?}) exceeded",
+        MAX_ATTEMPTS
+    )))
 }
 
 // Takes raw string gRPC response and converts into NonSampledMetrics struct

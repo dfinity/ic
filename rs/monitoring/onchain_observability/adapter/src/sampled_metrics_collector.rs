@@ -60,7 +60,7 @@ impl SampledMetricsCollector {
             }
             Err(status) => {
                 self.adapter_metrics
-                    .failed_grpc_request
+                    .failed_grpc_requests_total
                     .with_label_values(&["sampled", &status.code().to_string()])
                     .inc();
 
