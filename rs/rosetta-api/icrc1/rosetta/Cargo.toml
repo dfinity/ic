@@ -28,6 +28,9 @@ icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 ic-icrc1-ledger = { path = "../ledger" }
 ic-icrc1 = { path = ".." }
 proptest = "1.0"
+axum = "0.6.1"
+clap = { version = "4.0.29", features = ["derive"] }
+tokio = { version = "1.15.0", features = ["full"] }
 
 [lib]
 path = "src/lib.rs"

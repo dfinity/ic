@@ -6598,8 +6598,10 @@ name = "ic-icrc-rosetta"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "axum",
  "candid",
  "ciborium",
+ "clap 4.1.8",
  "ic-base-types",
  "ic-icrc1",
  "ic-icrc1-ledger",
@@ -6613,6 +6615,7 @@ dependencies = [
  "serde",
  "serde_bytes",
  "tempfile",
+ "tokio",
 ]
 
 [[package]]
