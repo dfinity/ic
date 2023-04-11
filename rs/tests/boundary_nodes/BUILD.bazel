@@ -42,7 +42,6 @@ system_test(
 
 system_test(
     name = "boundary_node_update_workload_test",
-    flaky = False,
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "system_test_hourly",
