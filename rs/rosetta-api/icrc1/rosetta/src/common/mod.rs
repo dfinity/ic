@@ -1,4 +1,3 @@
-#[allow(dead_code)]
 pub mod storage;
-
+pub mod types;
 pub mod utils;
