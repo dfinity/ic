@@ -18,7 +18,7 @@ pub struct GossipAdvert {
     pub attribute: ArtifactAttribute,
     pub size: usize,
     pub artifact_id: ArtifactId,
-    /// the root hash of the Merkle tree of chunks forming the Artifact
+    /// Crypto hash of the artifact's message.
     pub integrity_hash: CryptoHash,
 }
 
@@ -86,7 +86,7 @@ impl From<GossipAdvert> for pb::GossipAdvert {
             attribute: serialize(&advert.attribute).unwrap(),
             size: advert.size as u64,
             artifact_id: serialize(&advert.artifact_id).unwrap(),
-            integrity_hash: serialize(&advert.integrity_hash).unwrap(),
+            integrity_hash: advert.integrity_hash.0,
         }
     }
 }
@@ -99,7 +99,7 @@ impl TryFrom<pb::GossipAdvert> for GossipAdvert {
             attribute: deserialize(&advert.attribute)?,
             size: advert.size as usize,
             artifact_id: deserialize(&advert.artifact_id)?,
-            integrity_hash: bincode::deserialize(&advert.integrity_hash)?,
+            integrity_hash: CryptoHash(advert.integrity_hash),
         })
     }
 }
