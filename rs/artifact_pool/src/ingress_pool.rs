@@ -3,8 +3,12 @@
 /// But we keep it separated for code readability
 use crate::metrics::{PoolMetrics, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED};
 use ic_config::artifact_pool::ArtifactPoolConfig;
+use ic_constants::MAX_INGRESS_TTL;
 use ic_interfaces::{
-    artifact_pool::{HasTimestamp, MutablePool, UnvalidatedArtifact, ValidatedPoolReader},
+    artifact_pool::{
+        HasTimestamp, MutablePool, PriorityFnAndFilterProducer, UnvalidatedArtifact,
+        ValidatedPoolReader,
+    },
     ingress_pool::{
         ChangeAction, ChangeSet, IngressPool, IngressPoolObject, IngressPoolSelect,
         IngressPoolThrottler, PoolSection, SelectResult, UnvalidatedIngressArtifact,
@@ -15,13 +19,14 @@ use ic_interfaces::{
 use ic_logger::{debug, trace, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
-    artifact::IngressMessageId,
+    artifact::{IngressMessageAttribute, IngressMessageId, Priority, PriorityFn},
     artifact_kind::IngressArtifact,
     messages::{MessageId, SignedIngress, EXPECTED_MESSAGE_ID_LENGTH},
     CountBytes, Time,
 };
 use prometheus::IntCounter;
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 #[derive(Clone)]
 struct IngressPoolSection<T: AsRef<IngressPoolObject>> {
@@ -412,6 +417,44 @@ impl IngressPoolThrottler for IngressPoolImpl {
             return true;
         }
         false
+    }
+}
+
+pub struct IngressPrioritizer {
+    time_source: Arc<dyn TimeSource>,
+}
+
+impl IngressPrioritizer {
+    pub fn new(time_source: Arc<dyn TimeSource>) -> Self {
+        Self { time_source }
+    }
+}
+
+impl PriorityFnAndFilterProducer<IngressArtifact, IngressPoolImpl> for IngressPrioritizer {
+    fn get_priority_function(
+        &self,
+        pool: &IngressPoolImpl,
+    ) -> PriorityFn<IngressMessageId, IngressMessageAttribute> {
+        // EXPLANATION: Because ingress messages are included in blocks, consensus
+        // does not rely on ingress gossip for correctness. Ingress gossip exists to
+        // reduce latency in cases where replicas don't have enough ingress messages
+        // to fill their block. Once a replica's pool is full, ingress gossip just
+        // causes redundant traffic between replicas, and is thus not needed.
+        // Please note that all P2P ingress messages will be dropped if 'exceeds_threshold'
+        // returns true until the next invocation of 'get_priority_function'.
+        if pool.exceeds_threshold() {
+            return Box::new(move |_, _| Priority::Drop);
+        }
+        let time_source = self.time_source.clone();
+        Box::new(move |ingress_id, _| {
+            let start = time_source.get_relative_time();
+            let range = start..=start + MAX_INGRESS_TTL;
+            if range.contains(&ingress_id.expiry()) {
+                Priority::Later
+            } else {
+                Priority::Drop
+            }
+        })
     }
 }
 

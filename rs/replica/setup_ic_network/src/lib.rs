@@ -7,9 +7,13 @@ mod setup_ingress;
 
 use ic_artifact_manager::{manager, *};
 use ic_artifact_pool::{
-    canister_http_pool::CanisterHttpPoolImpl, certification_pool::CertificationPoolImpl,
-    consensus_pool::ConsensusPoolImpl, dkg_pool::DkgPoolImpl, ecdsa_pool::EcdsaPoolImpl,
-    ensure_persistent_pool_replica_version_compatibility, ingress_pool::IngressPoolImpl,
+    canister_http_pool::CanisterHttpPoolImpl,
+    certification_pool::CertificationPoolImpl,
+    consensus_pool::ConsensusPoolImpl,
+    dkg_pool::DkgPoolImpl,
+    ecdsa_pool::EcdsaPoolImpl,
+    ensure_persistent_pool_replica_version_compatibility,
+    ingress_pool::{IngressPoolImpl, IngressPrioritizer},
 };
 use ic_config::{
     artifact_pool::ArtifactPoolConfig, consensus::ConsensusConfig, transport::TransportConfig,
@@ -370,12 +374,14 @@ fn setup_artifact_manager(
     {
         // Create the ingress client.
         let advert_broadcaster = advert_broadcaster.clone();
+        let ingress_prioritizer = IngressPrioritizer::new(time_source.clone());
         backends.insert(
             IngressArtifact::TAG,
             Box::new(create_ingress_handlers(
                 move |req| advert_broadcaster.send(req.into()),
                 Arc::clone(&time_source) as Arc<_>,
                 Arc::clone(&artifact_pools.ingress_pool),
+                ingress_prioritizer,
                 ingress_manager,
                 replica_logger.clone(),
                 metrics_registry.clone(),
