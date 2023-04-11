@@ -710,7 +710,6 @@ mod tests {
         use ic_crypto_tls_interfaces::TlsServerHandshakeError;
         use ic_crypto_tls_interfaces::TlsStream;
         use ic_interfaces::crypto::IDkgDealingEncryptionKeyRotationError;
-        use ic_interfaces::crypto::IdkgDealingEncPubKeysCountError;
         use ic_interfaces::crypto::KeyManager;
         use ic_interfaces::crypto::ThresholdSigVerifierByPublicKey;
         use ic_interfaces::crypto::{BasicSigner, CheckKeysWithRegistryError};
@@ -759,10 +758,6 @@ mod tests {
                     &self,
                     registry_version: RegistryVersion,
                 ) -> Result<IDkgKeyRotationResult, IDkgDealingEncryptionKeyRotationError>;
-
-                fn idkg_dealing_encryption_pubkeys_count(
-                    &self,
-                ) -> Result<usize, IdkgDealingEncPubKeysCountError>;
             }
 
             pub trait BasicSigner<MessageId> {

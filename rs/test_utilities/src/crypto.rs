@@ -11,9 +11,9 @@ use ic_crypto_test_utils_canister_threshold_sigs::{
 use ic_interfaces::crypto::{
     BasicSigVerifier, BasicSigVerifierByPublicKey, BasicSigner, CanisterSigVerifier,
     CheckKeysWithRegistryError, CurrentNodePublicKeysError, IDkgDealingEncryptionKeyRotationError,
-    IDkgKeyRotationResult, IDkgProtocol, IdkgDealingEncPubKeysCountError, KeyManager,
-    LoadTranscriptResult, NiDkgAlgorithm, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
-    ThresholdSigVerifier, ThresholdSigVerifierByPublicKey, ThresholdSigner,
+    IDkgKeyRotationResult, IDkgProtocol, KeyManager, LoadTranscriptResult, NiDkgAlgorithm,
+    ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner, ThresholdSigVerifier,
+    ThresholdSigVerifierByPublicKey, ThresholdSigner,
 };
 use ic_interfaces::crypto::{MultiSigVerifier, MultiSigner};
 use ic_interfaces_registry::RegistryClient;
@@ -474,12 +474,6 @@ impl KeyManager for CryptoReturningOk {
         &self,
         _registry_version: RegistryVersion,
     ) -> Result<IDkgKeyRotationResult, IDkgDealingEncryptionKeyRotationError> {
-        unimplemented!()
-    }
-
-    fn idkg_dealing_encryption_pubkeys_count(
-        &self,
-    ) -> Result<usize, IdkgDealingEncPubKeysCountError> {
         unimplemented!()
     }
 }

@@ -71,14 +71,6 @@ pub trait KeyManager {
         &self,
         registry_version: RegistryVersion,
     ) -> Result<IDkgKeyRotationResult, IDkgDealingEncryptionKeyRotationError>;
-
-    /// Returns the number of iDKG dealing encryption public keys stored locally.
-    ///
-    /// # Errors
-    /// * if a transient error (e.g., RPC timeout) occurs when accessing the public key store
-    fn idkg_dealing_encryption_pubkeys_count(
-        &self,
-    ) -> Result<usize, IdkgDealingEncPubKeysCountError>;
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

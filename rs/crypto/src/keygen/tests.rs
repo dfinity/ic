@@ -14,7 +14,7 @@ use ic_crypto_internal_csp::vault::api::PksAndSksContainsErrors;
 use ic_crypto_internal_csp::vault::api::SecretKeyError;
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_internal_threshold_sig_ecdsa::MEGaPublicKey;
-use ic_crypto_temp_crypto::{EcdsaSubnetConfig, NodeKeysToGenerate, TempCryptoComponent};
+use ic_crypto_temp_crypto::EcdsaSubnetConfig;
 use ic_crypto_test_utils_csp::MockAllCryptoServiceProvider;
 use ic_crypto_test_utils_keys::public_keys::{
     valid_committee_signing_public_key, valid_dkg_dealing_encryption_public_key,
@@ -1215,37 +1215,6 @@ mod rotate_idkg_dealing_encryption_keys {
     }
 
     #[test]
-    fn should_correctly_get_idkg_dealing_encryption_pubkeys_count_for_multiple_keys() {
-        let setup = Setup::builder()
-            .with_csp_idkg_dealing_encryption_public_keys_count_result(Ok(2))
-            .build();
-
-        let idkg_dealing_encryption_pubkeys_count =
-            setup.crypto.idkg_dealing_encryption_pubkeys_count();
-        assert_matches!(idkg_dealing_encryption_pubkeys_count, Ok(2));
-    }
-
-    #[test]
-    fn should_correctly_return_idkg_dealing_encryption_pubkeys_count_error() {
-        const ERROR_MSG: &str = "error retrieving idkg dealing encryption key count";
-        let setup = Setup::builder()
-            .with_csp_idkg_dealing_encryption_public_keys_count_result(Err(
-                NodePublicKeyDataError::TransientInternalError(ERROR_MSG.to_string()),
-            ))
-            .build();
-
-        let idkg_dealing_encryption_pubkeys_count =
-            setup.crypto.idkg_dealing_encryption_pubkeys_count();
-        assert_matches!(
-            idkg_dealing_encryption_pubkeys_count,
-            Err(IdkgDealingEncPubKeysCountError::TransientInternalError(
-                internal_error
-            ))
-            if internal_error.contains(ERROR_MSG)
-        );
-    }
-
-    #[test]
     fn should_return_error_when_registry_error() {
         const ERROR_STR: &str = "registry client poll lock failed!";
         let mut mock_registry_client = MockRegistryClient::new();
@@ -1771,68 +1740,6 @@ mod rotate_idkg_dealing_encryption_keys {
     fn deserialize_mega_public_key_or_panic(mega_public_key: &PublicKeyProto) -> MEGaPublicKey {
         MEGaPublicKey::deserialize(EccCurveType::K256, &mega_public_key.key_value)
             .expect("error deserializing MEGaPublicKey")
-    }
-}
-
-mod idkg_dealing_encryption_pubkeys_count {
-    use super::*;
-    use ic_base_types::{NodeId, PrincipalId};
-
-    #[test]
-    fn should_correctly_count_idkg_dealing_encryption_pubkeys_when_all_keys_present() {
-        let crypto_component = TempCryptoComponent::builder()
-            .with_keys(NodeKeysToGenerate::all())
-            .build();
-        let key_counts = crypto_component
-            .idkg_dealing_encryption_pubkeys_count()
-            .expect("Error calling idkg_dealing_encryption_pubkeys_count");
-        assert_eq!(1, key_counts);
-    }
-
-    #[test]
-    fn should_correctly_count_idkg_dealing_encryption_pubkeys_when_no_keys_present() {
-        let crypto_component = TempCryptoComponent::builder()
-            .with_keys(NodeKeysToGenerate::none())
-            .build();
-        let key_counts = crypto_component
-            .idkg_dealing_encryption_pubkeys_count()
-            .expect("Error calling idkg_dealing_encryption_pubkeys_count");
-        assert_eq!(0, key_counts);
-    }
-
-    #[test]
-    fn should_have_idkg_dealing_encryption_pubkeys_count_returning_transient_error_if_csp_call_fails(
-    ) {
-        use ic_crypto_internal_csp::api::NodePublicKeyDataError;
-        use ic_crypto_test_utils_csp::MockAllCryptoServiceProvider;
-        use ic_interfaces::crypto::KeyManager;
-        use ic_logger::replica_logger::no_op_logger;
-
-        let mut csp = MockAllCryptoServiceProvider::new();
-        const DETAILS_STR: &str = "test";
-        csp.expect_idkg_dealing_encryption_pubkeys_count()
-            .return_const(Err(NodePublicKeyDataError::TransientInternalError(
-                DETAILS_STR.to_string(),
-            )));
-
-        let registry_data = Arc::new(ProtoRegistryDataProvider::new());
-
-        let registry_client =
-            Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
-
-        let crypto_component = CryptoComponentImpl::new_with_csp_and_fake_node_id(
-            csp,
-            no_op_logger(),
-            registry_client.clone(),
-            NodeId::from(PrincipalId::new_node_test_id(42)),
-            Arc::new(CryptoMetrics::none()),
-            None,
-        );
-        registry_client.reload();
-
-        let result = crypto_component.idkg_dealing_encryption_pubkeys_count();
-
-        assert_matches!(result, Err(IdkgDealingEncPubKeysCountError::TransientInternalError(details)) if details == DETAILS_STR);
     }
 }
 

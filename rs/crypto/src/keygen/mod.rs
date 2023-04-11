@@ -13,7 +13,7 @@ use ic_crypto_internal_logmon::metrics::{
 };
 use ic_interfaces::crypto::{
     CheckKeysWithRegistryError, CurrentNodePublicKeysError, IDkgDealingEncryptionKeyRotationError,
-    IDkgKeyRotationResult, IdkgDealingEncPubKeysCountError, KeyManager, KeyRotationOutcome,
+    IDkgKeyRotationResult, KeyManager, KeyRotationOutcome,
 };
 use ic_logger::{error, info, warn};
 use ic_protobuf::registry::crypto::v1::{PublicKey as PublicKeyProto, X509PublicKeyCert};
@@ -113,13 +113,6 @@ impl<C: CryptoServiceProvider> KeyManager for CryptoComponentImpl<C> {
             self.rotate_idkg_dealing_encryption_keys_internal(registry_version);
         self.record_key_rotation_metrics(&key_rotation_result);
         key_rotation_result
-    }
-
-    fn idkg_dealing_encryption_pubkeys_count(
-        &self,
-    ) -> Result<usize, IdkgDealingEncPubKeysCountError> {
-        let result = self.csp.idkg_dealing_encryption_pubkeys_count()?;
-        Ok(result)
     }
 }
 
@@ -455,14 +448,14 @@ impl<C: CryptoServiceProvider> CryptoComponentImpl<C> {
     }
 
     fn observe_number_of_idkg_dealing_encryption_public_keys(&self) {
-        match self.idkg_dealing_encryption_pubkeys_count() {
+        match self.csp.idkg_dealing_encryption_pubkeys_count() {
             Ok(num_idkg_dealing_encryption_pubkeys) => {
                 self.metrics.observe_idkg_dealing_encryption_pubkey_count(
                     num_idkg_dealing_encryption_pubkeys,
                     MetricsResult::Ok,
                 );
             }
-            Err(IdkgDealingEncPubKeysCountError::TransientInternalError(internal_error)) => {
+            Err(NodePublicKeyDataError::TransientInternalError(internal_error)) => {
                 warn!(
                     self.logger,
                     "Transient error retrieving local iDKG dealing encryption public key count: {}",
