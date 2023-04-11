@@ -62,7 +62,7 @@ pub(crate) const MAX_QUERY_CALL_DEPTH: usize = 6;
 /// Equivalent to MAX_INSTRUCTIONS_PER_MESSAGE_WITHOUT_DTS for now
 pub(crate) const MAX_INSTRUCTIONS_PER_COMPOSITE_QUERY_CALL: u64 = 5_000_000_000;
 /// The maximum time in seconds a query call is allowed to run.
-pub(crate) const MAX_TIME_PER_COMPOSITE_QUERY_CALL: Duration = Duration::from_secs(30);
+pub(crate) const MAX_TIME_PER_COMPOSITE_QUERY_CALL: Duration = Duration::from_secs(10);
 
 /// This would allow 100 calls with the current MAX_INSTRUCTIONS_PER_COMPOSITE_QUERY_CALL
 pub const INSTRUCTION_OVERHEAD_PER_QUERY_CALL: u64 = 50_000_000;
