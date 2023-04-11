@@ -6,6 +6,7 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     # Keep sorted.
     "//rs/config",
+    "//rs/constants",
     "//rs/interfaces",
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
@@ -40,7 +41,6 @@ ALIASES = {}
 
 DEV_DEPENDENCIES = [
     # Keep sorted.
-    "//rs/constants",
     "//rs/test_utilities",
     "//rs/test_utilities/artifact_pool",
     "//rs/test_utilities/logger",

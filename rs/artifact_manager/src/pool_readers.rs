@@ -7,7 +7,6 @@ use ic_interfaces::{
     artifact_pool::{
         ArtifactPoolError, PriorityFnAndFilterProducer, ReplicaVersionMismatch, ValidatedPoolReader,
     },
-    ingress_pool::IngressPoolThrottler,
     time_source::TimeSource,
 };
 use ic_logger::{debug, ReplicaLogger};
@@ -123,38 +122,45 @@ impl<
 }
 
 /// The ingress `ArtifactClient` to be managed by the `ArtifactManager`.
-pub struct IngressClient<Pool> {
+pub struct IngressClient<Pool, T> {
     /// The time source.
     time_source: Arc<dyn TimeSource>,
     /// The ingress pool, protected by a read-write lock and automatic reference
     /// counting.
     pool: Arc<RwLock<Pool>>,
+
     /// The logger.
     log: ReplicaLogger,
+
+    priority_fn_and_filter: T,
 
     #[allow(dead_code)]
     malicious_flags: MaliciousFlags,
 }
 
-impl<Pool> IngressClient<Pool> {
+impl<Pool, T> IngressClient<Pool, T> {
     /// The constructor creates an `IngressClient` instance.
     pub fn new(
         time_source: Arc<dyn TimeSource>,
         pool: Arc<RwLock<Pool>>,
+        priority_fn_and_filter: T,
         log: ReplicaLogger,
         malicious_flags: MaliciousFlags,
     ) -> Self {
         Self {
             time_source,
             pool,
+            priority_fn_and_filter,
             log,
             malicious_flags,
         }
     }
 }
 
-impl<Pool: ValidatedPoolReader<IngressArtifact> + IngressPoolThrottler + Send + Sync + 'static>
-    ArtifactClient<IngressArtifact> for IngressClient<Pool>
+impl<
+        Pool: ValidatedPoolReader<IngressArtifact> + Send + Sync + 'static,
+        T: PriorityFnAndFilterProducer<IngressArtifact, Pool> + 'static,
+    > ArtifactClient<IngressArtifact> for IngressClient<Pool, T>
 {
     /// The method checks whether the given signed ingress bytes constitutes a
     /// valid singed ingress message.
@@ -213,28 +219,8 @@ impl<Pool: ValidatedPoolReader<IngressArtifact> + IngressPoolThrottler + Send + 
 
     /// The method returns the priority function.
     fn get_priority_function(&self) -> PriorityFn<IngressMessageId, IngressMessageAttribute> {
-        let start = self.time_source.get_relative_time();
-        let range = start..=start + MAX_INGRESS_TTL;
-        let pool = self.pool.clone();
-        Box::new(move |ingress_id, _| {
-            // EXPLANATION: Because ingress messages are included in blocks, consensus
-            // does not rely on ingress gossip for correctness. Ingress gossip exists to
-            // reduce latency in cases where replicas don't have enough ingress messages
-            // to fill their block. Once a replica's pool is full, ingress gossip just
-            // causes redundant traffic between replicas, and is thus not needed.
-            if pool
-                .read()
-                .expect("couldn't acquire readers lock on ingress pool")
-                .exceeds_threshold()
-            {
-                return Priority::Drop;
-            }
-            if range.contains(&ingress_id.expiry()) {
-                Priority::Later
-            } else {
-                Priority::Drop
-            }
-        })
+        let pool = self.pool.read().unwrap();
+        self.priority_fn_and_filter.get_priority_function(&pool)
     }
 
     /// The method returns a new chunk tracker for (single-chunked) ingress

@@ -110,7 +110,7 @@ use ic_interfaces::{
     consensus_pool::ChangeSet as ConsensusChangeSet,
     dkg::ChangeSet as DkgChangeSet,
     ecdsa::EcdsaChangeSet,
-    ingress_pool::{ChangeSet as IngressChangeSet, IngressPoolThrottler},
+    ingress_pool::ChangeSet as IngressChangeSet,
     time_source::{SysTimeSource, TimeSource},
 };
 use ic_logger::ReplicaLogger;
@@ -300,13 +300,14 @@ pub fn create_ingress_handlers<
         + Send
         + Sync
         + ValidatedPoolReader<IngressArtifact>
-        + IngressPoolThrottler
         + 'static,
+    G: PriorityFnAndFilterProducer<IngressArtifact, PoolIngress> + 'static,
     S: Fn(Advert<IngressArtifact>) + Send + 'static,
 >(
     send_advert: S,
     time_source: Arc<SysTimeSource>,
     ingress_pool: Arc<RwLock<PoolIngress>>,
+    priority_fn_and_filter_producer: G,
     ingress_handler: Arc<
         dyn ChangeSetProducer<PoolIngress, ChangeSet = IngressChangeSet> + Send + Sync,
     >,
@@ -328,6 +329,7 @@ pub fn create_ingress_handlers<
         pool_reader: Box::new(pool_readers::IngressClient::new(
             time_source.clone(),
             ingress_pool,
+            priority_fn_and_filter_producer,
             log,
             malicious_flags,
         )),
