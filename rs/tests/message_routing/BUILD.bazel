@@ -14,7 +14,6 @@ system_test(
 
 system_test(
     name = "rejoin_test",
-    flaky = False,  # remove after when PFOPS-3148 is resolved
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [
         "system_test_hourly",
