@@ -443,6 +443,7 @@ impl ChunkableArtifact for StateSyncMessage {
     fn get_chunk(self: Box<Self>, chunk_id: ChunkId) -> Option<ArtifactChunk> {
         #[cfg(not(target_family = "unix"))]
         {
+            let _keep_clippy_quiet = chunk_id;
             panic!("This method should only be used when the target OS family is unix.");
         }
 
