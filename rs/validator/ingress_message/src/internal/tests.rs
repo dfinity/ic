@@ -379,6 +379,7 @@ mod validate_request {
     mod authenticated_requests_delegations {
         use super::*;
         use crate::AuthenticationError::DelegationContainsCyclesError;
+        use crate::AuthenticationError::DelegationTargetError;
         use crate::AuthenticationError::InvalidBasicSignature;
         use crate::AuthenticationError::InvalidCanisterSignature;
         use crate::HttpRequestVerifier;
@@ -386,6 +387,7 @@ mod validate_request {
         use crate::RequestValidationError::InvalidDelegationExpiry;
         use crate::RequestValidationError::{CanisterNotInDelegationTargets, InvalidSignature};
         use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+        use ic_types::messages::{HttpRequest, SignedIngressContent};
         use ic_types::time::GENESIS;
         use ic_types::{CanisterId, Time};
         use ic_validator_http_request_test_utils::{
@@ -395,6 +397,7 @@ mod validate_request {
         use std::time::Duration;
 
         const MAXIMUM_NUMBER_OF_DELEGATIONS: usize = 20; // !changing this number might be breaking!//
+        const MAXIMUM_NUMBER_OF_TARGETS: usize = 1_000; // !changing this number might be breaking!//
         const CURRENT_TIME: Time = GENESIS;
 
         #[test]
@@ -852,6 +855,50 @@ mod validate_request {
 
             assert_matches!(result, Err(InvalidDelegation(DelegationContainsCyclesError {public_key}))
                 if public_key == duplicated_key_pair.public_key_der())
+        }
+
+        #[test]
+        fn should_fail_when_too_many_distinct_targets_in_delegation() {
+            let mut targets = Vec::with_capacity(MAXIMUM_NUMBER_OF_TARGETS + 1);
+            for i in 0..MAXIMUM_NUMBER_OF_TARGETS + 1 {
+                targets.push(CanisterId::from_u64(i as u64))
+            }
+            let mut rng = reproducible_rng();
+            let request = request_authenticated_by_delegation_with_targets(targets, &mut rng);
+
+            let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
+
+            assert_matches!(result, Err(InvalidDelegation(DelegationTargetError(e))) if e.contains("expected at most 1000 targets"))
+        }
+
+        #[test]
+        fn should_fail_when_too_many_same_targets_in_delegation() {
+            let mut targets = Vec::with_capacity(MAXIMUM_NUMBER_OF_TARGETS + 1);
+            for _ in 0..MAXIMUM_NUMBER_OF_TARGETS + 1 {
+                targets.push(CanisterId::from_u64(0_u64))
+            }
+            let mut rng = reproducible_rng();
+            let request = request_authenticated_by_delegation_with_targets(targets, &mut rng);
+
+            let result = verifier_at_time(CURRENT_TIME).validate_request(&request);
+
+            assert_matches!(result, Err(InvalidDelegation(DelegationTargetError(e))) if e.contains("expected at most 1000 targets"))
+        }
+
+        fn request_authenticated_by_delegation_with_targets<R: Rng + CryptoRng>(
+            targets: Vec<CanisterId>,
+            rng: &mut R,
+        ) -> HttpRequest<SignedIngressContent> {
+            assert!(!targets.is_empty());
+            HttpRequestBuilder::default()
+                .with_ingress_expiry_at(CURRENT_TIME)
+                .with_canister_id(Blob(targets[0].get().to_vec()))
+                .with_authentication(AuthenticationScheme::Delegation(
+                    DelegationChain::rooted_at(random_user_key_pair(rng))
+                        .delegate_to_with_targets(random_user_key_pair(rng), CURRENT_TIME, targets)
+                        .build(),
+                ))
+                .build()
         }
 
         fn delegation_chain_of_length<R: Rng + CryptoRng>(

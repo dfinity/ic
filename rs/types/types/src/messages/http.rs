@@ -517,6 +517,10 @@ impl Delegation {
             }
         }
     }
+
+    pub fn number_of_targets(&self) -> Option<usize> {
+        self.targets.as_ref().map(Vec::len)
+    }
 }
 
 impl SignedBytesWithoutDomainSeparator for Delegation {

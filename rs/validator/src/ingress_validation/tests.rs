@@ -7,7 +7,6 @@ use ic_types::{
     messages::{Delegation, SignedDelegation, UserSignature},
     time::UNIX_EPOCH,
 };
-use maplit::btreeset;
 use std::time::Duration;
 
 fn mock_registry_version() -> RegistryVersion {
@@ -131,7 +130,7 @@ fn plain_authentication_with_one_delegation() {
         sender_delegation: Some(vec![signed_delegation]),
     };
 
-    assert_matches!(
+    assert_eq!(
         validate_signature(
             &sig_verifier,
             &message_id,
@@ -139,7 +138,7 @@ fn plain_authentication_with_one_delegation() {
             UNIX_EPOCH,
             mock_registry_version()
         ),
-        Ok(CanisterIdSet::All)
+        Ok(CanisterIdSet::all())
     );
 
     // Try verifying the signature in the future. It should fail because the
@@ -207,7 +206,7 @@ fn plain_authentication_with_one_scoped_delegation() {
             UNIX_EPOCH,
             mock_registry_version()
         ),
-        Ok(CanisterIdSet::Some(set)) if set == btreeset! {canister_test_id(1)}
+        Ok(ids) if ids == CanisterIdSet::try_from_iter(vec![canister_test_id(1)]).unwrap()
     );
 }
 
@@ -308,7 +307,7 @@ fn plain_authentication_with_multiple_delegations() {
             UNIX_EPOCH,
             mock_registry_version()
         ),
-        Ok(CanisterIdSet::Some(set)) if set == btreeset! {canister_test_id(1)}
+        Ok(ids) if ids == CanisterIdSet::try_from_iter(vec![canister_test_id(1)]).unwrap()
     );
     assert_matches!(
         validate_signature(
@@ -434,7 +433,7 @@ fn validate_signature_webauthn() {
         sender_delegation: None,
     };
 
-    assert_matches!(
+    assert_eq!(
         validate_signature(
             &sig_verifier,
             &message_id,
@@ -442,7 +441,7 @@ fn validate_signature_webauthn() {
             UNIX_EPOCH,
             mock_registry_version()
         ),
-        Ok(CanisterIdSet::All)
+        Ok(CanisterIdSet::all())
     );
 }
 
@@ -471,7 +470,7 @@ fn validate_signature_webauthn_with_delegations() {
         sender_delegation: Some(vec![SignedDelegation::new(delegation, delegation_sig)]),
     };
 
-    assert_matches!(
+    assert_eq!(
         validate_signature(
             &sig_verifier,
             &message_id,
@@ -479,7 +478,7 @@ fn validate_signature_webauthn_with_delegations() {
             UNIX_EPOCH,
             mock_registry_version()
         ),
-        Ok(CanisterIdSet::All)
+        Ok(CanisterIdSet::all())
     );
 }
 
@@ -563,27 +562,57 @@ mod canister_id_set {
     use rand::CryptoRng;
     use rand::Rng;
 
-    // HTTP requests are limited to 2MB.
-    // A canister ID contains 29 bytes and so there are
-    // at most 72_315 Canister IDs in an HTTP request.
-    const MAXIMAL_NUMBER_OF_CANISTER_IDS_PER_HTTP_REQUEST: u32 = 72_315;
+    #[test]
+    fn should_contain_expected_elements() {
+        let number_of_ids = MAXIMUM_NUMBER_OF_TARGETS_PER_DELEGATION;
+        let mut ids = Vec::with_capacity(number_of_ids);
+        for i in 0..number_of_ids {
+            ids.push(CanisterId::from_u64(i as u64));
+        }
 
-    //TODO CRP-1965: limit number of targets per delegation
+        let set = CanisterIdSet::try_from_iter(ids.clone()).expect("too many elements");
+
+        for id in ids {
+            assert!(set.contains(&id))
+        }
+    }
+
+    #[test]
+    fn should_not_store_duplicated_canister_ids() {
+        let id0 = CanisterId::from_u64(0);
+        let id1 = CanisterId::from_u64(1);
+        let duplicated_ids = vec![id0, id1, id0];
+        let set = CanisterIdSet::try_from_iter(duplicated_ids).expect("too many elements");
+
+        assert!(set.contains(&id0));
+        assert!(set.contains(&id1));
+        assert_matches!(set.ids, internal::CanisterIdSet::Some(subset) if subset.len() == 2);
+    }
+
     #[test]
     fn should_efficiently_intersect_large_canister_id_sets() {
         let mut rng = reproducible_rng();
-        let number_of_ids = MAXIMAL_NUMBER_OF_CANISTER_IDS_PER_HTTP_REQUEST;
-        let mut first_set = BTreeSet::new();
-        let mut second_set = BTreeSet::new();
-        for _ in 1..=number_of_ids {
-            assert!(first_set.insert(random_canister_id(&mut rng)));
-            assert!(second_set.insert(random_canister_id(&mut rng)));
-        }
+        let number_of_ids = MAXIMUM_NUMBER_OF_TARGETS_PER_DELEGATION;
+        let (first_canister_ids, second_canister_ids) = {
+            let mut first_set = BTreeSet::new();
+            let mut second_set = BTreeSet::new();
+            for _ in 1..=number_of_ids {
+                assert!(first_set.insert(random_canister_id(&mut rng)));
+                assert!(second_set.insert(random_canister_id(&mut rng)));
+            }
+            (
+                CanisterIdSet::try_from_iter(first_set).expect("too many elements"),
+                CanisterIdSet::try_from_iter(second_set).expect("too many elements"),
+            )
+        };
 
-        let intersection =
-            CanisterIdSet::Some(first_set).intersect(CanisterIdSet::Some(second_set));
+        let intersection = first_canister_ids.intersect(second_canister_ids);
         // Probability of collision is negligible (around 10^(-60)).
-        assert_matches!(intersection, CanisterIdSet::Some(set) if set.is_empty())
+        assert!(
+            intersection.is_empty(),
+            "expected {:?} to be empty but was not",
+            intersection
+        )
     }
 
     fn random_canister_id<R: Rng + CryptoRng>(rng: &mut R) -> CanisterId {

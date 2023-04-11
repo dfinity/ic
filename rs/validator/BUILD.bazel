@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_doc_test", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -11,6 +11,7 @@ DEPENDENCIES = [
     "//rs/types/types",
     "@crate_index//:chrono",
     "@crate_index//:hex",
+    "@crate_index//:thiserror",
 ]
 
 DEV_DEPENDENCIES = [
@@ -19,7 +20,6 @@ DEV_DEPENDENCIES = [
     "//rs/test_utilities",
     "@crate_index//:assert_matches",
     "@crate_index//:base64",
-    "@crate_index//:maplit",
     "@crate_index//:rand_0_8_4",
 ]
 
@@ -45,4 +45,14 @@ rust_test(
     name = "ingress_validation_test",
     srcs = ["tests/ingress_validation.rs"],
     deps = DEPENDENCIES + DEV_DEPENDENCIES + [":validator"],
+)
+
+rust_doc(
+    name = "validator_doc",
+    crate = ":validator",
+)
+
+rust_doc_test(
+    name = "validator_doc_test",
+    crate = ":validator",
 )

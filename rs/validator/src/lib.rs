@@ -9,5 +9,5 @@ mod webauthn;
 
 pub use ingress_validation::{
     get_authorized_canisters, validate_request, AuthenticationError, CanisterIdSet,
-    RequestValidationError,
+    CanisterIdSetInstantiationError, RequestValidationError,
 };
