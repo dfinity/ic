@@ -169,17 +169,11 @@ impl EccScalar {
 
     /// Compute the modular inverse of Self
     ///
-    /// Returns zero if self is equal to zero
-    pub fn invert(&self) -> ThresholdEcdsaResult<Self> {
+    /// Returns None if self is equal to zero
+    pub fn invert(&self) -> Option<Self> {
         match self {
-            Self::K256(s) => {
-                let s = s.invert().unwrap_or_else(secp256k1::Scalar::zero);
-                Ok(Self::K256(s))
-            }
-            Self::P256(s) => {
-                let s = s.invert().unwrap_or_else(secp256r1::Scalar::zero);
-                Ok(Self::P256(s))
-            }
+            Self::K256(s) => s.invert().map(|s| Self::K256(s)),
+            Self::P256(s) => s.invert().map(|s| Self::P256(s)),
         }
     }
 

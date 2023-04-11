@@ -295,7 +295,12 @@ impl ThresholdEcdsaCombinedSigInternal {
         let numerator = coefficients.interpolate_scalar(&numerator_samples)?;
         let denominator = coefficients.interpolate_scalar(&denominator_samples)?;
 
-        let sigma = numerator.mul(&denominator.invert()?)?;
+        let denominator_inv = match denominator.invert() {
+            Some(s) => s,
+            None => return Err(ThresholdEcdsaError::InterpolationError),
+        };
+
+        let sigma = numerator.mul(&denominator_inv)?;
 
         // Always use the smaller value of s
         let norm_sigma = if sigma.is_high() {
@@ -360,7 +365,11 @@ impl ThresholdEcdsaCombinedSigInternal {
         let tweak_g = EccPoint::mul_by_g(&key_tweak)?;
         let public_key = tweak_g.add_points(&master_public_key)?;
 
-        let s_inv = self.s.invert()?;
+        // This return shouldn't happen because we already checked that s != 0 above
+        let s_inv = match self.s.invert() {
+            Some(si) => si,
+            None => return Err(ThresholdEcdsaError::InvalidSignature),
+        };
 
         let u1 = msg.mul(&s_inv)?;
         let u2 = self.r.mul(&s_inv)?;
