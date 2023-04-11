@@ -20,9 +20,9 @@ use ic_crypto_utils_time::CurrentSystemTimeSource;
 use ic_interfaces::crypto::{
     BasicSigVerifier, BasicSigVerifierByPublicKey, BasicSigner, CanisterSigVerifier,
     CheckKeysWithRegistryError, CurrentNodePublicKeysError, IDkgDealingEncryptionKeyRotationError,
-    IDkgKeyRotationResult, IDkgProtocol, IdkgDealingEncPubKeysCountError, KeyManager,
-    LoadTranscriptResult, MultiSigVerifier, MultiSigner, NiDkgAlgorithm, ThresholdEcdsaSigVerifier,
-    ThresholdEcdsaSigner, ThresholdSigVerifier, ThresholdSigVerifierByPublicKey, ThresholdSigner,
+    IDkgKeyRotationResult, IDkgProtocol, KeyManager, LoadTranscriptResult, MultiSigVerifier,
+    MultiSigner, NiDkgAlgorithm, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
+    ThresholdSigVerifier, ThresholdSigVerifierByPublicKey, ThresholdSigner,
 };
 use ic_interfaces::time_source::TimeSource;
 use ic_interfaces_registry::RegistryClient;
@@ -909,13 +909,6 @@ impl<C: CryptoServiceProvider> KeyManager for TempCryptoComponentGeneric<C> {
     ) -> Result<IDkgKeyRotationResult, IDkgDealingEncryptionKeyRotationError> {
         self.crypto_component
             .rotate_idkg_dealing_encryption_keys(registry_version)
-    }
-
-    fn idkg_dealing_encryption_pubkeys_count(
-        &self,
-    ) -> Result<usize, IdkgDealingEncPubKeysCountError> {
-        self.crypto_component
-            .idkg_dealing_encryption_pubkeys_count()
     }
 }
 

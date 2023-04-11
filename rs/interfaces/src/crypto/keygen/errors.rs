@@ -48,39 +48,3 @@ impl From<CurrentNodePublicKeysError> for CryptoError {
         }
     }
 }
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum IdkgDealingEncPubKeysCountError {
-    TransientInternalError(String),
-}
-
-impl fmt::Display for IdkgDealingEncPubKeysCountError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            IdkgDealingEncPubKeysCountError::TransientInternalError(details) => {
-                let appendix = if details.is_empty() {
-                    String::default()
-                } else {
-                    format!(": {}", details)
-                };
-
-                write!(
-                    f,
-                    "Transient internal error occurred while retrieving iDKG dealing encryption public keys count{appendix}"
-                )
-            }
-        }
-    }
-}
-
-impl From<IdkgDealingEncPubKeysCountError> for CryptoError {
-    fn from(e: IdkgDealingEncPubKeysCountError) -> CryptoError {
-        match e {
-            IdkgDealingEncPubKeysCountError::TransientInternalError(details) => {
-                CryptoError::TransientInternalError {
-                    internal_error: details,
-                }
-            }
-        }
-    }
-}
