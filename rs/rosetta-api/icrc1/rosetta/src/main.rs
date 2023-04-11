@@ -1,9 +1,16 @@
 use anyhow::{Context, Result};
-use axum::{http::StatusCode, routing::get, Json, Router};
+use axum::{
+    extract::State,
+    http::StatusCode,
+    routing::{get, post},
+    Json, Router,
+};
 use clap::{Parser, ValueEnum};
+use ic_base_types::CanisterId;
 use ic_icrc_rosetta::common::storage::storage_client::StorageClient;
-use std::net::TcpListener;
+use ic_icrc_rosetta::common::types::{MetadataRequest, NetworkIdentifier, NetworkListResponse};
 use std::path::PathBuf;
+use std::{net::TcpListener, sync::Arc};
 
 #[derive(Clone, Debug, ValueEnum)]
 enum StoreType {
@@ -14,6 +21,9 @@ enum StoreType {
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
+    #[arg(short, long)]
+    ledger_id: CanisterId,
+
     /// The port to which Rosetta will bind.
     /// If not set then it will be 0.
     #[arg(short, long)]
@@ -44,20 +54,42 @@ impl Args {
     }
 }
 
+struct AppState {
+    ledger_id: CanisterId,
+    _storage: StorageClient,
+}
+
 async fn health() -> (StatusCode, Json<()>) {
     (StatusCode::OK, Json(()))
+}
+
+async fn network_list(
+    State(state): State<Arc<AppState>>,
+    _request: Json<MetadataRequest>,
+) -> Json<NetworkListResponse> {
+    Json(NetworkListResponse {
+        network_identifiers: vec![NetworkIdentifier::for_ledger_id(state.ledger_id)],
+    })
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
 
-    let _storage = match args.store_type {
+    let storage = match args.store_type {
         StoreType::InMemory => StorageClient::new_in_memory()?,
         StoreType::File => StorageClient::new_persistent(&args.store_file)?,
     };
 
-    let app = Router::new().route("/health", get(health));
+    let shared_state = Arc::new(AppState {
+        ledger_id: args.ledger_id,
+        _storage: storage,
+    });
+
+    let app = Router::new()
+        .route("/health", get(health))
+        .route("/network/list", post(network_list))
+        .with_state(shared_state);
 
     let tcp_listener = TcpListener::bind(format!("0.0.0.0:{}", args.get_port()))?;
 

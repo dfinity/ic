@@ -6602,6 +6602,7 @@ dependencies = [
  "candid",
  "ciborium",
  "clap 4.1.8",
+ "hex",
  "ic-base-types",
  "ic-icrc1",
  "ic-icrc1-ledger",
@@ -6614,6 +6615,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_bytes",
+ "serde_json",
  "tempfile",
  "tokio",
 ]
