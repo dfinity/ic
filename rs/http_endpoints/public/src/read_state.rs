@@ -562,7 +562,7 @@ mod test {
                 &sre,
                 &user_test_id(1),
                 &[Path::from(Label::from("time"))],
-                &CanisterIdSet::All,
+                &CanisterIdSet::all(),
                 canister_test_id(1),
             )
             .await,
@@ -584,7 +584,7 @@ mod test {
                         Label::from("reply")
                     ])
                 ],
-                &CanisterIdSet::All,
+                &CanisterIdSet::all(),
                 canister_test_id(1),
             )
             .await,
@@ -597,7 +597,7 @@ mod test {
                 Path::new(vec![Label::from("request_status"), [0; 32].into()]),
                 Path::new(vec![Label::from("request_status"), [1; 32].into()])
             ],
-            &CanisterIdSet::All,
+            &CanisterIdSet::all(),
             canister_test_id(1),
         )
         .await

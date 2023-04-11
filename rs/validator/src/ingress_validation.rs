@@ -14,6 +14,9 @@ use ic_types::{
 };
 use std::collections::HashSet;
 use std::{collections::BTreeSet, convert::TryFrom, fmt};
+use thiserror::Error;
+use AuthenticationError::*;
+use RequestValidationError::*;
 
 #[cfg(test)]
 mod tests;
@@ -27,6 +30,13 @@ mod tests;
 /// This limit will be tightened up once the number of delegations can be observed (via metrics or logs),
 /// see CRP-1961.
 const MAXIMUM_NUMBER_OF_DELEGATIONS: usize = 20;
+
+/// Maximum number of targets (collection of `CanisterId`s) that can be specified in a
+/// single delegation. Requests having a single delegation with more targets will be declared
+/// invalid without any further verification.
+/// **Note**: this limit part of the [IC specification](https://internetcomputer.org/docs/current/references/ic-interface-spec#authentication)
+/// and so changing this value might be breaking or result in a deviation from the specification.
+const MAXIMUM_NUMBER_OF_TARGETS_PER_DELEGATION: usize = 1_000;
 
 /// Validates the `request` and that the sender is authorized to send
 /// a message to the receiving canister.
@@ -78,7 +88,7 @@ pub fn get_authorized_canisters<C: HttpRequestContent>(
     #[cfg(feature = "malicious_code")]
     {
         if malicious_flags.maliciously_disable_ingress_validation {
-            return Ok(CanisterIdSet::All);
+            return Ok(CanisterIdSet::all());
         }
     }
 
@@ -97,7 +107,7 @@ pub fn get_authorized_canisters<C: HttpRequestContent>(
 }
 
 /// Error in validating an [HttpRequest].
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum RequestValidationError {
     InvalidIngressExpiry(String),
     InvalidDelegationExpiry(String),
@@ -136,7 +146,7 @@ impl fmt::Display for RequestValidationError {
 }
 
 /// Error in verifying the signature or authentication part of a request.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum AuthenticationError {
     InvalidBasicSignature(CryptoError),
     InvalidCanisterSignature(CryptoError),
@@ -169,33 +179,136 @@ impl fmt::Display for AuthenticationError {
     }
 }
 
-use AuthenticationError::*;
-use RequestValidationError::*;
+/// Set of canister IDs.
+///
+/// It is guaranteed that the set contains at most [`MAXIMUM_NUMBER_OF_TARGETS_PER_DELEGATION`]
+/// elements.
+/// Use [`CanisterIdSet::all`] to instantiate a set containing the entire domain of canister IDs
+/// or [`CanisterIdSet::try_from_iter`] to instantiate a specific subset.
+///
+/// # Examples
+///
+/// ```
+/// # use ic_types::CanisterId;
+/// # use ic_validator::CanisterIdSet;
+/// let all_canister_ids = CanisterIdSet::all();
+/// assert!(all_canister_ids.contains(&CanisterId::from_u64(0)));
+/// assert!(all_canister_ids.contains(&CanisterId::from_u64(1)));
+/// assert!(all_canister_ids.contains(&CanisterId::from_u64(2)));
+/// // ...
+///
+/// let subset_canister_ids = CanisterIdSet::try_from_iter(vec![
+///   CanisterId::from_u64(0),
+///   CanisterId::from_u64(1),
+/// ]).expect("too many elements");
+/// assert!(subset_canister_ids.contains(&CanisterId::from_u64(0)));
+/// assert!(subset_canister_ids.contains(&CanisterId::from_u64(1)));
+/// assert!(!subset_canister_ids.contains(&CanisterId::from_u64(2)));
+/// ```
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct CanisterIdSet {
+    ids: internal::CanisterIdSet,
+}
 
-/// An enum representing a set of canister IDs.
-#[derive(Debug, Eq, PartialEq)]
-pub enum CanisterIdSet {
-    /// The entire domain of canister IDs.
-    All,
-    /// A subet of canister IDs.
-    Some(BTreeSet<CanisterId>),
+mod internal {
+    use super::*;
+    /// An enum representing a mutable set of canister IDs.
+    /// Contrary to `super::CanisterIdSet`, the number of canister IDs is not restricted.
+    #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+    pub(super) enum CanisterIdSet {
+        /// The entire domain of canister IDs.
+        All,
+        /// A subset of canister IDs.
+        Some(BTreeSet<CanisterId>),
+    }
 }
 
 impl CanisterIdSet {
+    pub fn all() -> Self {
+        CanisterIdSet {
+            ids: internal::CanisterIdSet::All,
+        }
+    }
+
+    /// Constructs a specific subset of canister IDs from any collection that
+    /// can be iterated over.
+    ///
+    /// Duplicated elements in the input collection will be ignored.
+    ///
+    /// # Errors
+    ///
+    /// - [`CanisterIdSetInstantiationError::TooManyElements`] if the given iterator contains too many *distinct* elements
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use ic_types::CanisterId;
+    /// # use ic_validator::{CanisterIdSet, CanisterIdSetInstantiationError};
+    /// let empty_set = CanisterIdSet::try_from_iter(vec![]).expect("too many elements");
+    /// let singleton = CanisterIdSet::try_from_iter(vec![CanisterId::from_u64(0)]).expect("too many elements");
+    ///
+    /// let mut duplicated_ids = Vec::with_capacity(1001);
+    /// let mut distinct_ids = Vec::with_capacity(1001);
+    /// for i in 0..1001 {
+    ///   duplicated_ids.push(CanisterId::from_u64(0));
+    ///   distinct_ids.push(CanisterId::from_u64(i));
+    /// }
+    ///
+    /// assert_eq!(Ok(singleton), CanisterIdSet::try_from_iter(duplicated_ids));
+    /// assert_eq!(Err(CanisterIdSetInstantiationError::TooManyElements(1001)), CanisterIdSet::try_from_iter(distinct_ids));
+    /// ```
+    pub fn try_from_iter<I: IntoIterator<Item = CanisterId>>(
+        iter: I,
+    ) -> Result<Self, CanisterIdSetInstantiationError> {
+        let ids: BTreeSet<CanisterId> = iter.into_iter().collect();
+        match ids.len() {
+            n if n > MAXIMUM_NUMBER_OF_TARGETS_PER_DELEGATION => {
+                Err(CanisterIdSetInstantiationError::TooManyElements(n))
+            }
+            _ => Ok(CanisterIdSet {
+                ids: internal::CanisterIdSet::Some(ids),
+            }),
+        }
+    }
+
     pub fn contains(&self, canister_id: &CanisterId) -> bool {
-        match self {
-            Self::All => true,
-            Self::Some(c) => c.contains(canister_id),
+        match &self.ids {
+            internal::CanisterIdSet::All => true,
+            internal::CanisterIdSet::Some(set) => set.contains(canister_id),
         }
     }
 
     fn intersect(self, other: Self) -> Self {
-        match (self, other) {
-            (Self::All, other) => other,
-            (me, Self::All) => me,
-            (Self::Some(c1), Self::Some(c2)) => Self::Some(c1.intersection(&c2).cloned().collect()),
+        CanisterIdSet {
+            //the result of set intersection cannot contain
+            //more elements than the involved sets,
+            //so controlling the cardinality of the result is not needed
+            ids: match (self.ids, other.ids) {
+                (internal::CanisterIdSet::All, other) => other,
+                (me, internal::CanisterIdSet::All) => me,
+                (internal::CanisterIdSet::Some(set1), internal::CanisterIdSet::Some(set2)) => {
+                    internal::CanisterIdSet::Some(set1.intersection(&set2).cloned().collect())
+                }
+            },
         }
     }
+
+    #[cfg(test)]
+    fn is_empty(&self) -> bool {
+        match &self.ids {
+            internal::CanisterIdSet::All => false,
+            internal::CanisterIdSet::Some(set) => set.is_empty(),
+        }
+    }
+}
+
+#[derive(Error, Clone, Debug, PartialEq, Eq, Hash)]
+pub enum CanisterIdSetInstantiationError {
+    #[error(
+        "Expected at most {} elements but got {0}",
+        MAXIMUM_NUMBER_OF_TARGETS_PER_DELEGATION
+    )]
+    TooManyElements(usize),
 }
 
 // Check if ingress_expiry is within a proper range with respect to the given
@@ -372,8 +485,9 @@ fn validate_delegations(
     registry_version: RegistryVersion,
 ) -> Result<(Vec<u8>, CanisterIdSet), RequestValidationError> {
     ensure_delegations_does_not_contain_cycles(&pubkey, signed_delegations)?;
+    ensure_delegations_does_not_contain_too_many_targets(signed_delegations)?;
     // Initially, assume that the delegations target all possible canister IDs.
-    let mut targets = CanisterIdSet::All;
+    let mut targets = CanisterIdSet::all();
 
     for sd in signed_delegations {
         let delegation = sd.delegation();
@@ -403,6 +517,25 @@ fn ensure_delegations_does_not_contain_cycles(
                 public_key: current_public_key.clone(),
             }));
         }
+    }
+    Ok(())
+}
+
+fn ensure_delegations_does_not_contain_too_many_targets(
+    signed_delegations: &[SignedDelegation],
+) -> Result<(), RequestValidationError> {
+    for delegation in signed_delegations {
+        match delegation.delegation().number_of_targets() {
+            Some(number_of_targets)
+                if number_of_targets > MAXIMUM_NUMBER_OF_TARGETS_PER_DELEGATION =>
+            {
+                Err(InvalidDelegation(DelegationTargetError(format!(
+                    "expected at most {} targets per delegation, but got {}",
+                    MAXIMUM_NUMBER_OF_TARGETS_PER_DELEGATION, number_of_targets
+                ))))
+            }
+            _ => Ok(()),
+        }?
     }
     Ok(())
 }
@@ -442,8 +575,9 @@ fn validate_delegation(
 
     // Validation succeeded. Return the targets of this delegation.
     Ok(match delegation.targets().map_err(DelegationTargetError)? {
-        None => CanisterIdSet::All,
-        Some(targets) => CanisterIdSet::Some(targets),
+        None => CanisterIdSet::all(),
+        Some(targets) => CanisterIdSet::try_from_iter(targets)
+            .map_err(|e| DelegationTargetError(format!("{e}")))?,
     })
 }
 
@@ -459,7 +593,7 @@ fn validate_user_id_and_signature(
     match signature {
         None => {
             if sender.get().is_anonymous() {
-                return Ok(CanisterIdSet::All);
+                return Ok(CanisterIdSet::all());
             }
             Err(MissingSignature(*sender))
         }

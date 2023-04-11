@@ -9910,8 +9910,8 @@ dependencies = [
  "ic-interfaces",
  "ic-test-utilities",
  "ic-types",
- "maplit",
  "rand 0.8.5",
+ "thiserror",
 ]
 
 [[package]]
