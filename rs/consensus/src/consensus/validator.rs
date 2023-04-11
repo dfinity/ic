@@ -93,6 +93,7 @@ enum PermanentError {
     NonEmptyPayloadPastUpgradePoint,
     DecreasingValidationContext,
     MismatchedBlockInCatchUpPackageShare,
+    DataPayloadBlockInCatchUpPackageShare,
     MismatchedStateHashInCatchUpPackageShare,
     MismatchedRandomBeaconInCatchUpPackageShare,
     RepeatedSigner,
@@ -1421,15 +1422,23 @@ impl Validator {
         let block = pool_reader
             .get_finalized_block(height)
             .ok_or(TransientError::FinalizedBlockNotFound(height))?;
-
         if ic_types::crypto::crypto_hash(&block) != share_content.block {
             warn!(self.log, "Block from received CatchUpShareContent does not match finalized block in the pool: {:?} {:?}", share_content, block);
             Err(PermanentError::MismatchedBlockInCatchUpPackageShare)?
         }
+        if !block.payload.is_summary() {
+            warn!(
+                self.log,
+                "Block from received CatchUpShareContent is not a summary block: {:?} {:?}",
+                share_content,
+                block
+            );
+            Err(PermanentError::DataPayloadBlockInCatchUpPackageShare)?
+        }
+
         let beacon = pool_reader
             .get_random_beacon(height)
             .ok_or(TransientError::RandomBeaconNotFound(height))?;
-
         if &beacon != share_content.random_beacon.get_value() {
             warn!(self.log, "RandomBeacon from received CatchUpContent does not match RandomBeacon in the pool: {:?} {:?}", share_content, beacon);
             Err(PermanentError::MismatchedRandomBeaconInCatchUpPackageShare)?
@@ -1617,6 +1626,7 @@ pub mod test {
         dependencies_with_subnet_params, Dependencies, MockPayloadBuilder,
     };
     use crate::consensus::utils::get_block_maker_delay;
+    use assert_matches::assert_matches;
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
     use ic_interfaces::artifact_pool::MutablePool;
     use ic_interfaces::messaging::XNetTransientValidationError;
@@ -1637,7 +1647,8 @@ pub mod test {
     };
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
     use ic_types::consensus::{
-        Finalization, FinalizationShare, HashedBlock, HashedRandomBeacon, NotarizationShare,
+        CatchUpPackageShare, Finalization, FinalizationShare, HashedBlock, HashedRandomBeacon,
+        NotarizationShare,
     };
     use ic_types::crypto::{CombinedMultiSig, CombinedMultiSigOf, CryptoHash};
     use ic_types::replica_config::ReplicaConfig;
@@ -1736,13 +1747,6 @@ pub mod test {
                 replica_config,
             ) = setup_dependencies(pool_config, &(0..4).map(node_test_id).collect::<Vec<_>>());
 
-            // Manually construct a cup share
-            let random_beacon = pool.make_next_beacon();
-            let random_beacon_hash =
-                HashedRandomBeacon::new(ic_types::crypto::crypto_hash, random_beacon);
-            let block = Block::from(pool.make_next_block());
-            let block_hash = HashedBlock::new(ic_types::crypto::crypto_hash, block);
-
             // The state manager is mocked and the `StateHash` is completely arbitrary. It
             // must just be the same as in the `CatchUpPackageShare`.
             let state_hash = CryptoHashOfState::from(CryptoHash(vec![1u8; 32]));
@@ -1753,19 +1757,36 @@ pub mod test {
                 .expect_get_state_hash_at()
                 .return_const(Ok(state_hash.clone()));
 
-            let cup_share = Signed {
-                content: CatchUpShareContent::from(&CatchUpContent::new(
-                    block_hash,
-                    random_beacon_hash,
-                    state_hash,
-                )),
-                signature: ThresholdSignatureShare::fake(node_test_id(0)),
+            // Manually construct a cup share
+            let make_next_cup_share = |pool: &TestConsensusPool| -> CatchUpPackageShare {
+                let random_beacon = pool.make_next_beacon();
+                let random_beacon_hash =
+                    HashedRandomBeacon::new(ic_types::crypto::crypto_hash, random_beacon);
+                let block = Block::from(pool.make_next_block());
+                let block_hash = HashedBlock::new(ic_types::crypto::crypto_hash, block);
+
+                Signed {
+                    content: CatchUpShareContent::from(&CatchUpContent::new(
+                        block_hash,
+                        random_beacon_hash,
+                        state_hash.clone(),
+                    )),
+                    signature: ThresholdSignatureShare::fake(node_test_id(0)),
+                }
             };
 
-            // Advance by one round so we have a finalized block at height 1
+            // Skip to two heights before Summary height
+            pool.advance_round_normal_operation_no_cup_n(8);
+
+            let cup_share_data_height = make_next_cup_share(&pool);
+            pool.advance_round_normal_operation_no_cup_n(1);
+            let cup_share_summary_height = make_next_cup_share(&pool);
+
+            // Advance by two rounds so we have a finalized block at the heights
             // This is neccesary for the validate function to succeed
-            pool.advance_round_normal_operation();
-            pool.insert_unvalidated(cup_share);
+            pool.advance_round_normal_operation_no_cup_n(1);
+            pool.insert_unvalidated(cup_share_data_height.clone());
+            pool.insert_unvalidated(cup_share_summary_height.clone());
 
             let validator = Validator::new(
                 replica_config,
@@ -1786,11 +1807,13 @@ pub mod test {
 
             // Check that the change set contains exactly the one `CatchUpPackageShare` we
             // expect it to.
-            assert_eq!(change_set.len(), 1);
-            match change_set[0] {
-                ChangeAction::MoveToValidated(ConsensusMessage::CatchUpPackageShare(_)) => (),
-                _ => panic!("expected change set to contain signed content"),
-            }
+            assert_eq!(change_set.len(), 2);
+            assert_matches!(&change_set[0], ChangeAction::HandleInvalid(ConsensusMessage::CatchUpPackageShare(s), m)
+                if s == &cup_share_data_height && m.contains("DataPayloadBlockInCatchUpPackageShare")
+            );
+            assert_matches!(&change_set[1], ChangeAction::MoveToValidated(ConsensusMessage::CatchUpPackageShare(s))
+                if s == &cup_share_summary_height
+            );
         })
     }
 
