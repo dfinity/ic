@@ -347,6 +347,11 @@ load("//bazel:trivy.bzl", "trivy_scan")
 
 trivy_scan(name = "trivy")
 
+# shellcheck binary
+load("//bazel:shellcheck.bzl", "shellcheck")
+
+shellcheck(name = "shellcheck")
+
 load("//bazel:jq.bzl", "jq_repository")
 
 jq_repository(name = "jq")

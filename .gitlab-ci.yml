@@ -17,7 +17,6 @@ include:
   - local: /gitlab-ci/config/20--test--python.yml
   - local: /gitlab-ci/config/20--test--container-image-autobuild.yml
   - local: /gitlab-ci/config/20--test--dependencies.yml
-  - local: /gitlab-ci/config/20--test--shellcheck.yml
   - local: /gitlab-ci/config/21--test--bins.yml
   - local: /gitlab-ci/config/40--cargo-test--benchmarks.yml
   - local: /gitlab-ci/config/46--guest-os-build--guest-base-image.yml
