@@ -138,7 +138,10 @@ type NodeOperatorRecord = record {
 type NodeProvidersMonthlyXdrRewards = record {
   rewards : vec record { text; nat64 };
 };
-type NodeRewardRate = record { xdr_permyriad_per_node_per_month : nat64 };
+type NodeRewardRate = record {
+  xdr_permyriad_per_node_per_month : nat64;
+  reward_coefficient_percent : opt int32;
+};
 type NodeRewardRates = record { rates : vec record { text; NodeRewardRate } };
 type PrepareCanisterMigrationPayload = record {
   canister_id_ranges : vec CanisterIdRange;

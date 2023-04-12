@@ -32,9 +32,11 @@ fn test_submit_update_node_rewards_table_proposal() {
                 rates: btreemap!{
                     "default".to_string() => NodeRewardRate {
                         xdr_permyriad_per_node_per_month: 240,
+                        reward_coefficient_percent: None,
                     },
                     "small".to_string() => NodeRewardRate {
                         xdr_permyriad_per_node_per_month: 350,
+                        reward_coefficient_percent: None,
                     },
                 }
             }

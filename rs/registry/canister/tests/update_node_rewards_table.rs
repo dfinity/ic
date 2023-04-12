@@ -32,9 +32,11 @@ fn test_the_anonymous_user_cannot_update_the_node_rewards_table() {
                 rates: btreemap!{
                     "default".to_string() => NodeRewardRate {
                         xdr_permyriad_per_node_per_month: 240,
+                        reward_coefficient_percent: None,
                     },
                     "small".to_string() => NodeRewardRate {
                         xdr_permyriad_per_node_per_month: 350,
+                        reward_coefficient_percent: None,
                     },
                 }
             }
@@ -102,9 +104,11 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_the_node_rew
                 rates: btreemap!{
                     "default".to_string() => NodeRewardRate {
                         xdr_permyriad_per_node_per_month: 240,
+                        reward_coefficient_percent: None,
                     },
                     "small".to_string() => NodeRewardRate {
                         xdr_permyriad_per_node_per_month: 350,
+                        reward_coefficient_percent: None,
                     },
                 }
             }
@@ -157,9 +161,11 @@ fn test_the_governance_canister_can_update_the_node_rewards_table() {
                 rates: btreemap!{
                     "default".to_string() => NodeRewardRate {
                         xdr_permyriad_per_node_per_month: 240,
+                        reward_coefficient_percent: None,
                     },
                     "small".to_string() => NodeRewardRate {
                         xdr_permyriad_per_node_per_month: 350,
+                        reward_coefficient_percent: None,
                     },
                 }
             }

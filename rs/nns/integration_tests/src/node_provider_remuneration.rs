@@ -571,9 +571,11 @@ async fn add_node_rewards_table(nns_canisters: &NnsCanisters<'_>) {
             rates: btreemap!{
                 "default".to_string() => NodeRewardRate {
                     xdr_permyriad_per_node_per_month: 24_000,
+                    reward_coefficient_percent: None,
                 },
                 "small".to_string() => NodeRewardRate {
                     xdr_permyriad_per_node_per_month: 35_000,
+                    reward_coefficient_percent: None,
                 },
             }
         },
@@ -581,9 +583,11 @@ async fn add_node_rewards_table(nns_canisters: &NnsCanisters<'_>) {
             rates: btreemap!{
                 "default".to_string() => NodeRewardRate {
                     xdr_permyriad_per_node_per_month: 68_000,
+                    reward_coefficient_percent: None,
                 },
                 "small".to_string() => NodeRewardRate {
                     xdr_permyriad_per_node_per_month: 11_000,
+                    reward_coefficient_percent: None,
                 },
             }
         },
@@ -591,12 +595,15 @@ async fn add_node_rewards_table(nns_canisters: &NnsCanisters<'_>) {
             rates: btreemap!{
                 "default".to_string() => NodeRewardRate {
                     xdr_permyriad_per_node_per_month: 234_000,
+                    reward_coefficient_percent: None,
                 },
                 "small".to_string() => NodeRewardRate {
                     xdr_permyriad_per_node_per_month: 907_000,
+                    reward_coefficient_percent: None,
                 },
                 "storage_upgrade".to_string() => NodeRewardRate {
                     xdr_permyriad_per_node_per_month: 103_000,
+                    reward_coefficient_percent: None,
                 },
             }
         }
