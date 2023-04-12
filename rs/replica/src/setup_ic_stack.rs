@@ -108,7 +108,7 @@ pub fn construct_ic_stack(
 
     // ---------- REPLICATED STATE DEPS FOLLOW ----------
     let sev_handshake = Arc::new(Sev::new(node_id, registry.clone()));
-    let consensus_pool_cache = artifact_pools.consensus_pool_cache.clone();
+    let consensus_pool_cache = artifact_pools.consensus_pool.read().unwrap().get_cache();
     let verifier = Arc::new(VerifierImpl::new(crypto.clone()));
     let state_manager = Arc::new(StateManagerImpl::new(
         verifier,

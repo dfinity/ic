@@ -18,7 +18,7 @@ use ic_interfaces::{
     consensus_pool::ConsensusPoolCache,
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::StateManager;
+use ic_interfaces_state_manager::StateReader;
 use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
@@ -62,7 +62,7 @@ pub struct CanisterHttpPayloadBuilderImpl {
     pool: Arc<RwLock<dyn CanisterHttpPool>>,
     cache: Arc<dyn ConsensusPoolCache>,
     crypto: Arc<dyn ConsensusCrypto>,
-    state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     membership: Arc<Membership>,
     subnet_id: SubnetId,
     registry: Arc<dyn RegistryClient>,
@@ -76,7 +76,7 @@ impl CanisterHttpPayloadBuilderImpl {
         pool: Arc<RwLock<dyn CanisterHttpPool>>,
         cache: Arc<dyn ConsensusPoolCache>,
         crypto: Arc<dyn ConsensusCrypto>,
-        state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+        state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         membership: Arc<Membership>,
         subnet_id: SubnetId,
         registry: Arc<dyn RegistryClient>,
@@ -87,7 +87,7 @@ impl CanisterHttpPayloadBuilderImpl {
             pool,
             cache,
             crypto,
-            state_manager,
+            state_reader,
             membership,
             subnet_id,
             registry,
@@ -223,7 +223,7 @@ impl CanisterHttpPayloadBuilder for CanisterHttpPayloadBuilderImpl {
         // time out response. Instead, we scan the state metadata for timed
         // out requests and generate time out responses based on that
         if let Ok(state) = self
-            .state_manager
+            .state_reader
             .get_state_at(validation_context.certified_height)
         {
             // Iterate over all outstanding canister http requests
@@ -442,7 +442,7 @@ impl CanisterHttpPayloadBuilder for CanisterHttpPayloadBuilderImpl {
 
         // Validate the timed out calls
         let state = &self
-            .state_manager
+            .state_reader
             .get_state_at(validation_context.certified_height)
             .map_err(|_| {
                 CanisterHttpPayloadValidationError::Transient(
