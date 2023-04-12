@@ -1,16 +1,16 @@
 use anyhow::{Context, Result};
 use axum::{
-    extract::State,
-    http::StatusCode,
     routing::{get, post},
-    Json, Router,
+    Router,
 };
 use clap::{Parser, ValueEnum};
+use endpoints::{health, network_list, network_options};
 use ic_base_types::CanisterId;
-use ic_icrc_rosetta::common::storage::storage_client::StorageClient;
-use ic_icrc_rosetta::common::types::{MetadataRequest, NetworkIdentifier, NetworkListResponse};
+use ic_icrc_rosetta::{common::storage::storage_client::StorageClient, AppState};
 use std::path::PathBuf;
 use std::{net::TcpListener, sync::Arc};
+
+mod endpoints;
 
 #[derive(Clone, Debug, ValueEnum)]
 enum StoreType {
@@ -54,24 +54,6 @@ impl Args {
     }
 }
 
-struct AppState {
-    ledger_id: CanisterId,
-    _storage: StorageClient,
-}
-
-async fn health() -> (StatusCode, Json<()>) {
-    (StatusCode::OK, Json(()))
-}
-
-async fn network_list(
-    State(state): State<Arc<AppState>>,
-    _request: Json<MetadataRequest>,
-) -> Json<NetworkListResponse> {
-    Json(NetworkListResponse {
-        network_identifiers: vec![NetworkIdentifier::for_ledger_id(state.ledger_id)],
-    })
-}
-
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
@@ -89,6 +71,7 @@ async fn main() -> Result<()> {
     let app = Router::new()
         .route("/health", get(health))
         .route("/network/list", post(network_list))
+        .route("/network/options", post(network_options))
         .with_state(shared_state);
 
     let tcp_listener = TcpListener::bind(format!("0.0.0.0:{}", args.get_port()))?;
