@@ -38,6 +38,7 @@ use serde::{Deserialize, Serialize};
 use slog::info;
 
 use crate::driver::test_env::TestEnvAttribute;
+use crate::driver::test_env_api::{HasDependencies, NnsCanisterWasmStrategy};
 use crate::{
     driver::{
         test_env::TestEnv,
@@ -100,8 +101,11 @@ impl SnsClient {
         block_on(open_sns_token_swap(&runtime, payload));
     }
 
-    pub fn install_sns_and_check_healthy(env: &TestEnv) -> Self {
-        add_all_wasms_to_sns_wasm(env);
+    pub fn install_sns_and_check_healthy(
+        env: &TestEnv,
+        canister_wasm_strategy: NnsCanisterWasmStrategy,
+    ) -> Self {
+        add_all_wasms_to_sns_wasm(env, canister_wasm_strategy);
 
         let log = env.logger();
         let nns_node = env.get_first_healthy_nns_node_snapshot();
@@ -218,7 +222,7 @@ impl SnsClient {
 }
 
 /// Send and execute 6 proposals to add all SNS canister WASMs to the SNS WASM canister
-fn add_all_wasms_to_sns_wasm(env: &TestEnv) {
+fn add_all_wasms_to_sns_wasm(env: &TestEnv, canister_wasm_strategy: NnsCanisterWasmStrategy) {
     let logger = env.logger();
     let nns_node = env.get_first_healthy_nns_node_snapshot();
     let runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
@@ -231,7 +235,28 @@ fn add_all_wasms_to_sns_wasm(env: &TestEnv) {
         (SnsCanisterType::Index, "ic-icrc1-index"),
     ];
     info!(logger, "Setting SNS canister environment variables");
-    env.set_sns_canisters_env_vars().unwrap();
+    match canister_wasm_strategy {
+        NnsCanisterWasmStrategy::TakeBuiltFromSources => {
+            info!(
+                logger,
+                "Adding SNS canisters build from the tip of the current branch ..."
+            );
+            env.set_sns_canisters_env_vars().unwrap();
+        }
+        NnsCanisterWasmStrategy::TakeLatestMainnetDeployments => {
+            info!(logger, "Adding mainnet SNS canisters ...");
+            env.set_mainnet_sns_canisters_env_vars().unwrap();
+        }
+        NnsCanisterWasmStrategy::NnsReleaseQualification => {
+            let qual = env
+                .read_dependency_to_string(
+                    "rs/tests/qualifying-sns-canisters/selected-qualifying-sns-canisters.json",
+                )
+                .unwrap();
+            info!(logger, "Adding qualification SNS canisters ({qual}) ...");
+            env.set_qualifying_sns_canisters_env_vars().unwrap();
+        }
+    }
     sns_wasms.into_iter().for_each(|(canister_type, bin_name)| {
         info!(logger, "Adding {bin_name} wasm to SNS wasms");
         block_on(add_wasm_to_sns_wasm(&runtime, canister_type, bin_name));

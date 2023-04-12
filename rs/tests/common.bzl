@@ -2,6 +2,9 @@
 Common dependencies for system-tests.
 """
 
+load(":system_tests.bzl", "symlink_dir")
+load(":qualifying_nns_canisters.bzl", "QUALIFYING_NNS_CANISTERS", "QUALIFYING_SNS_CANISTERS")
+
 DEPENDENCIES = [
     "//packages/icrc-ledger-agent:icrc_ledger_agent",
     "//packages/icrc-ledger-types:icrc_ledger_types",
@@ -156,9 +159,156 @@ GUESTOS_RUNTIME_DEPS = [
     "//ic-os/guestos:scripts/build-bootstrap-config-image.sh",
 ]
 
-NNS_CANISTER_RUNTIME_DEPS = ["//rs/tests:nns-canisters"]
+NNS_CANISTER_WASM_PROVIDERS = {
+    "registry-canister": {
+        "tip-of-branch": "//rs/registry/canister:registry-canister",
+        "mainnet": "@mainnet_nns_registry_canister//file",
+    },
+    "governance-canister_test": {
+        "tip-of-branch": "//rs/nns/governance:governance-canister-test",
+        "mainnet": "@mainnet_nns_governance_canister//file",
+    },
+    "ledger-canister_notify-method": {
+        "tip-of-branch": "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method",
+        "mainnet": "@mainnet_icp_ledger_canister//file",
+    },
+    "root-canister": {
+        "tip-of-branch": "//rs/nns/handlers/root:root-canister",
+        "mainnet": "@mainnet_nns_root-canister//file",
+    },
+    "cycles-minting-canister": {
+        "tip-of-branch": "//rs/nns/cmc:cycles-minting-canister",
+        "mainnet": "@mainnet_nns_cycles-minting-canister//file",
+    },
+    "lifeline_canister": {
+        "tip-of-branch": "//rs/nns/handlers/lifeline:lifeline_canister",
+        "mainnet": "@mainnet_nns_lifeline_canister//file",
+    },
+    "genesis-token-canister": {
+        "tip-of-branch": "//rs/nns/gtc:genesis-token-canister",
+        "mainnet": "@mainnet_nns_genesis-token-canister//file",
+    },
+    "sns-wasm-canister": {
+        "tip-of-branch": "//rs/nns/sns-wasm:sns-wasm-canister",
+        "mainnet": "@mainnet_nns_sns-wasm-canister//file",
+    },
+}
+
+SNS_CANISTER_WASM_PROVIDERS = {
+    "sns-root-canister": {
+        "tip-of-branch": "//rs/sns/root:sns-root-canister",
+        "mainnet": "@mainnet_sns-root-canister//file",
+    },
+    "sns-governance-canister": {
+        "tip-of-branch": "//rs/sns/governance:sns-governance-canister",
+        "mainnet": "@mainnet_sns-governance-canister//file",
+    },
+    "sns-swap-canister": {
+        "tip-of-branch": "//rs/sns/swap:sns-swap-canister",
+        "mainnet": "@mainnet_sns-swap-canister//file",
+    },
+    "ic-icrc1-ledger": {
+        "tip-of-branch": "//rs/rosetta-api/icrc1/ledger:ledger_canister",
+        "mainnet": "@mainnet_ic-icrc1-ledger//file",
+    },
+    "ic-icrc1-archive": {
+        "tip-of-branch": "//rs/rosetta-api/icrc1/archive:archive_canister",
+        "mainnet": "@mainnet_ic-icrc1-archive//file",
+    },
+    "ic-icrc1-index": {
+        "tip-of-branch": "//rs/rosetta-api/icrc1/index:index_canister",
+        "mainnet": "@mainnet_ic-icrc1-index//file",
+    },
+}
+
+def canister_runtime_deps_impl(name, canister_wasm_providers, qualifying_canisters):
+    """Declares a runtime dependency for a canister suite.
+
+    Args:
+      name: base name to use for the rule providing the canister WASM.
+      canister_wasm_providers: dict with (canister names as keys) and (values representing WASM-producing rules, tip-of-branch or mainnet).
+      qualifying_canisters: list of canisters to be qualified for the release, i.e., these shoud be built from the current branch.
+    """
+    for cname in qualifying_canisters:
+        if cname not in canister_wasm_providers.keys():
+            fail("qualifying canisters must be a subset of {}" % canister_wasm_providers.keys())
+
+    targets = {
+        (
+            providers["tip-of-branch"] if cname in qualifying_canisters else providers["mainnet"]
+        ): cname
+        for cname, providers in canister_wasm_providers.items()
+    }
+
+    # Include the information about which WASMs were actually picked
+    selected = "selected-" + name
+    selected_out = selected + ".json"
+    selected_map = {("\"" + cname + "\""): ("\"mainnet\"" if provider.startswith("@mainnet_") else "\"tip-of-branch\"") for provider, cname in targets.items()}
+    native.genrule(
+        name = selected,
+        outs = [selected_out],
+        cmd = """echo "{selected_map}" > $(OUTS)""".format(selected_map = selected_map),
+    )
+    targets[selected] = selected_out
+
+    symlink_dir(
+        name = name,
+        targets = targets,
+    )
+
+def mainnet_nns_canisters(name):
+    canister_runtime_deps_impl(
+        name = name,
+        canister_wasm_providers = NNS_CANISTER_WASM_PROVIDERS,
+        qualifying_canisters = [],
+    )
+
+def tip_nns_canisters(name):
+    canister_runtime_deps_impl(
+        name = name,
+        canister_wasm_providers = NNS_CANISTER_WASM_PROVIDERS,
+        qualifying_canisters = NNS_CANISTER_WASM_PROVIDERS.keys(),
+    )
+
+def qualifying_nns_canisters(name):
+    canister_runtime_deps_impl(
+        name = name,
+        canister_wasm_providers = NNS_CANISTER_WASM_PROVIDERS,
+        qualifying_canisters = QUALIFYING_NNS_CANISTERS,
+    )
+
+def mainnet_sns_canisters(name):
+    canister_runtime_deps_impl(
+        name = name,
+        canister_wasm_providers = SNS_CANISTER_WASM_PROVIDERS,
+        qualifying_canisters = [],
+    )
+
+def tip_sns_canisters(name):
+    canister_runtime_deps_impl(
+        name = name,
+        canister_wasm_providers = SNS_CANISTER_WASM_PROVIDERS,
+        qualifying_canisters = SNS_CANISTER_WASM_PROVIDERS.keys(),
+    )
+
+def qualifying_sns_canisters(name):
+    canister_runtime_deps_impl(
+        name = name,
+        canister_wasm_providers = SNS_CANISTER_WASM_PROVIDERS,
+        qualifying_canisters = QUALIFYING_SNS_CANISTERS,
+    )
+
+NNS_CANISTER_RUNTIME_DEPS = ["//rs/tests:tip-nns-canisters"]
 
 MAINNET_NNS_CANISTER_RUNTIME_DEPS = ["//rs/tests:mainnet-nns-canisters"]
+
+QUALIFYING_NNS_CANISTER_RUNTIME_DEPS = ["//rs/tests:qualifying-nns-canisters"]
+
+SNS_CANISTER_RUNTIME_DEPS = ["//rs/tests:tip-sns-canisters"]
+
+MAINNET_SNS_CANISTER_RUNTIME_DEPS = ["//rs/tests:mainnet-sns-canisters"]
+
+QUALIFYING_SNS_CANISTER_RUNTIME_DEPS = ["//rs/tests:qualifying-sns-canisters"]
 
 UNIVERSAL_VM_RUNTIME_DEPS = [
     "//rs/tests:create-universal-vm-config-image.sh",

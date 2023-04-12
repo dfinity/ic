@@ -12,6 +12,7 @@ use crate::canister_requests;
 use crate::driver::farm::HostFeature;
 use crate::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
 use crate::driver::test_env::TestEnv;
+use crate::driver::test_env_api::NnsCanisterWasmStrategy;
 use crate::driver::test_env_api::TEST_USER1_STARTING_TOKENS;
 use crate::driver::test_env_api::{
     GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot, NnsCustomizations,
@@ -37,9 +38,7 @@ use serde::{Deserialize, Serialize};
 use slog::info;
 use tokio::runtime::Builder;
 
-use crate::orchestrator::utils::rw_message::{
-    install_nns_and_check_progress, install_nns_with_customizations_and_check_progress,
-};
+use crate::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
 use crate::sns_client::{SnsClient, SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S};
 use crate::util::{assert_create_agent_with_identity, block_on};
 
@@ -251,7 +250,11 @@ pub fn workload_static_testnet_sale_bot(env: TestEnv) {
     env.emit_report(format!("{metrics}"));
 }
 
-fn setup(env: TestEnv, sale_participants: Vec<SaleParticipant>) {
+fn setup(
+    env: TestEnv,
+    sale_participants: Vec<SaleParticipant>,
+    canister_wasm_strategy: NnsCanisterWasmStrategy,
+) {
     PrometheusVm::default()
         .start(&env)
         .expect("failed to start prometheus VM");
@@ -295,13 +298,17 @@ fn setup(env: TestEnv, sale_participants: Vec<SaleParticipant>) {
     };
 
     // Install NNS with ledger customizations
-    install_nns(&env, Some(nns_customizations));
+    install_nns(&env, nns_customizations);
 
-    install_sns(&env);
+    install_sns(&env, canister_wasm_strategy);
 }
 
 pub fn sns_setup(env: TestEnv) {
-    setup(env, vec![]);
+    setup(
+        env,
+        vec![],
+        NnsCanisterWasmStrategy::NnsReleaseQualification,
+    );
 }
 
 pub fn sns_setup_with_many_sale_participants(env: TestEnv) {
@@ -321,7 +328,11 @@ pub fn sns_setup_with_many_sale_participants(env: TestEnv) {
     participants.write_attribute(&env);
 
     // Run the actual setup
-    setup(env, participants);
+    setup(
+        env,
+        participants,
+        NnsCanisterWasmStrategy::NnsReleaseQualification,
+    );
 }
 
 pub fn sns_setup_with_many_icp_users(env: TestEnv) {
@@ -342,7 +353,11 @@ pub fn sns_setup_with_many_icp_users(env: TestEnv) {
     participants.write_attribute(&env);
 
     // Run the actual setup
-    setup(env, participants);
+    setup(
+        env,
+        participants,
+        NnsCanisterWasmStrategy::NnsReleaseQualification,
+    );
 }
 
 pub fn init_participants(env: TestEnv) {
@@ -424,14 +439,14 @@ pub fn check_all_participants(env: TestEnv) {
     );
 }
 
-pub fn install_nns(env: &TestEnv, customizations: Option<NnsCustomizations>) {
+pub fn install_nns(env: &TestEnv, customizations: NnsCustomizations) {
     let log = env.logger();
     let start_time = Instant::now();
-    if let Some(customizations) = customizations {
-        install_nns_with_customizations_and_check_progress(env.topology_snapshot(), customizations);
-    } else {
-        install_nns_and_check_progress(env.topology_snapshot());
-    }
+    install_nns_with_customizations_and_check_progress(
+        env.topology_snapshot(),
+        NnsCanisterWasmStrategy::NnsReleaseQualification,
+        customizations,
+    );
     info!(
         log,
         "=========== The NNS has been successfully installed in {:?} ==========",
@@ -439,10 +454,10 @@ pub fn install_nns(env: &TestEnv, customizations: Option<NnsCustomizations>) {
     );
 }
 
-pub fn install_sns(env: &TestEnv) {
+pub fn install_sns(env: &TestEnv, canister_wasm_strategy: NnsCanisterWasmStrategy) {
     let log = env.logger();
     let start_time = Instant::now();
-    let sns_client = SnsClient::install_sns_and_check_healthy(env);
+    let sns_client = SnsClient::install_sns_and_check_healthy(env, canister_wasm_strategy);
     {
         let observed = sns_client.sns_canisters.swap().get();
         let expected = PrincipalId::from_str(SNS_SALE_CANISTER_ID)

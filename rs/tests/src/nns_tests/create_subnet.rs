@@ -30,7 +30,7 @@ use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::Height;
 
-use crate::canister_http::lib::install_mainnet_nns_canisters;
+use crate::canister_http::lib::install_qualifying_nns_canisters;
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer};
 use crate::nns::get_subnet_list_from_registry;
@@ -70,7 +70,7 @@ pub fn test(env: TestEnv) {
     let log = &env.logger();
 
     // [Phase I] Prepare NNS
-    install_mainnet_nns_canisters(&env);
+    install_qualifying_nns_canisters(&env);
     let topology_snapshot = &env.topology_snapshot();
     let subnet = topology_snapshot.root_subnet();
     let endpoint = subnet.nodes().next().unwrap();
