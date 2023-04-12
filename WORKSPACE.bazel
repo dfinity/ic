@@ -348,7 +348,7 @@ load("//bazel:trivy.bzl", "trivy_scan")
 trivy_scan(name = "trivy")
 
 # shellcheck binary
-load("//bazel:shellcheck.bzl", "shellcheck")
+load("//bazel/pre-commit:shellcheck.bzl", "shellcheck")
 
 shellcheck(name = "shellcheck")
 
