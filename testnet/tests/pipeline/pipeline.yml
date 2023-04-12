@@ -166,4 +166,4 @@ ingress-manager-proptests-nightly:
   script:
     - |
       cd "${CI_PROJECT_DIR}/rs"
-      $SHELL_WRAPPER cargo test --release -p ic-ingress-manager --features proptest proptest
+      $SHELL_WRAPPER cargo test --release -p ic-ingress-manager proptest
