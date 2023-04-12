@@ -183,11 +183,11 @@ impl SignatureVerify for RandomTape {
         let transcript = active_low_threshold_transcript(pool.as_cache(), self.height())
             .ok_or_else(|| TransientError::DkgSummaryNotFound(self.height()))?;
         if self.signature.signer == transcript.dkg_id {
-            crypto.verify_aggregate(self, self.signature.signer)?
+            crypto.verify_aggregate(self, self.signature.signer)?;
+            Ok(())
         } else {
-            Err(PermanentError::InappropriateDkgId(self.signature.signer))?
+            Err(PermanentError::InappropriateDkgId(self.signature.signer).into())
         }
-        Ok(())
     }
 }
 
@@ -222,11 +222,11 @@ impl SignatureVerify for RandomBeacon {
         let transcript = active_low_threshold_transcript(pool.as_cache(), self.height())
             .ok_or_else(|| TransientError::DkgSummaryNotFound(self.height()))?;
         if self.signature.signer == transcript.dkg_id {
-            crypto.verify_aggregate(self, self.signature.signer)?
+            crypto.verify_aggregate(self, self.signature.signer)?;
+            Ok(())
         } else {
-            Err(PermanentError::InappropriateDkgId(self.signature.signer))?
+            Err(PermanentError::InappropriateDkgId(self.signature.signer).into())
         }
-        Ok(())
     }
 }
 
@@ -462,10 +462,10 @@ fn verify_notaries(
     let threshold = membership.get_committee_threshold(height, Notarization::committee())?;
     let unique_signers: HashSet<_> = signers.iter().collect();
     if unique_signers.len() < signers.len() {
-        Err(PermanentError::RepeatedSigner)?
+        return Err(PermanentError::RepeatedSigner.into());
     }
     if signers.len() < threshold {
-        Err(PermanentError::InsufficientSignatures)?
+        return Err(PermanentError::InsufficientSignatures.into());
     }
     for node_id in signers.iter() {
         verify_notary(membership, height, previous_beacon, *node_id)?;
@@ -480,9 +480,10 @@ fn verify_notary(
     node_id: NodeId,
 ) -> ValidationResult<ValidatorError> {
     if !membership.node_belongs_to_notarization_committee(height, previous_beacon, node_id)? {
-        Err(PermanentError::SignerNotInMultiSigCommittee(node_id))?
-    };
-    Ok(())
+        Err(PermanentError::SignerNotInMultiSigCommittee(node_id).into())
+    } else {
+        Ok(())
+    }
 }
 
 fn verify_threshold_committee(
@@ -492,9 +493,10 @@ fn verify_threshold_committee(
     committee: Committee,
 ) -> ValidationResult<ValidatorError> {
     if !membership.node_belongs_to_threshold_committee(node_id, height, committee)? {
-        Err(PermanentError::SignerNotInThresholdCommittee(node_id))?
+        Err(PermanentError::SignerNotInThresholdCommittee(node_id).into())
+    } else {
+        Ok(())
     }
-    Ok(())
 }
 
 fn get_notarized_parent(
@@ -924,7 +926,7 @@ impl Validator {
         proposal: &BlockProposal,
     ) -> ValidationResult<ValidatorError> {
         if proposal.height() == Height::from(0) {
-            Err(PermanentError::CannotVerifyBlockHeightZero)?
+            return Err(PermanentError::CannotVerifyBlockHeightZero.into());
         }
 
         // If the replica is upgrading, block payload should be empty.
@@ -944,12 +946,12 @@ impl Validator {
                 if replica_version != ReplicaVersion::default() {
                     let payload = proposal.as_ref().payload.as_ref();
                     if !payload.is_summary() && !payload.is_empty() {
-                        Err(PermanentError::NonEmptyPayloadPastUpgradePoint)?
+                        return Err(PermanentError::NonEmptyPayloadPastUpgradePoint.into());
                     }
                     skip_empty_payload_validation = true;
                 }
             }
-            None => Err(TransientError::FailedToGetRegistryVersion)?,
+            None => return Err(TransientError::FailedToGetRegistryVersion.into()),
         }
 
         let parent = get_notarized_parent(pool_reader, proposal)?;
@@ -958,7 +960,7 @@ impl Validator {
         // Ensure registry_version, certified_height and time are non-decreasing.
         let proposal = proposal.as_ref();
         if !proposal.context.greater_or_equal(&parent.context) {
-            Err(PermanentError::DecreasingValidationContext)?
+            return Err(PermanentError::DecreasingValidationContext.into());
         }
 
         let locally_available_context = ValidationContext {
@@ -970,10 +972,11 @@ impl Validator {
         // If any part of our locally available validation context is less than the
         // proposal's validation context, we cannot validate it yet.
         if !locally_available_context.greater_or_equal(&proposal.context) {
-            Err(TransientError::ValidationContextNotReached(
+            return Err(TransientError::ValidationContextNotReached(
                 proposal.context.clone(),
                 locally_available_context,
-            ))?
+            )
+            .into());
         }
 
         if skip_empty_payload_validation {
@@ -1424,7 +1427,7 @@ impl Validator {
             .ok_or(TransientError::FinalizedBlockNotFound(height))?;
         if ic_types::crypto::crypto_hash(&block) != share_content.block {
             warn!(self.log, "Block from received CatchUpShareContent does not match finalized block in the pool: {:?} {:?}", share_content, block);
-            Err(PermanentError::MismatchedBlockInCatchUpPackageShare)?
+            return Err(PermanentError::MismatchedBlockInCatchUpPackageShare.into());
         }
         if !block.payload.is_summary() {
             warn!(
@@ -1433,7 +1436,7 @@ impl Validator {
                 share_content,
                 block
             );
-            Err(PermanentError::DataPayloadBlockInCatchUpPackageShare)?
+            return Err(PermanentError::DataPayloadBlockInCatchUpPackageShare.into());
         }
 
         let beacon = pool_reader
@@ -1441,7 +1444,7 @@ impl Validator {
             .ok_or(TransientError::RandomBeaconNotFound(height))?;
         if &beacon != share_content.random_beacon.get_value() {
             warn!(self.log, "RandomBeacon from received CatchUpContent does not match RandomBeacon in the pool: {:?} {:?}", share_content, beacon);
-            Err(PermanentError::MismatchedRandomBeaconInCatchUpPackageShare)?
+            return Err(PermanentError::MismatchedRandomBeaconInCatchUpPackageShare.into());
         }
 
         let hash = self
@@ -1450,7 +1453,7 @@ impl Validator {
             .map_err(TransientError::StateHashError)?;
         if hash != share_content.state_hash {
             warn!( self.log, "State hash from received CatchUpContent does not match local state hash: {:?} {:?}", share_content, hash);
-            Err(PermanentError::MismatchedStateHashInCatchUpPackageShare)?
+            return Err(PermanentError::MismatchedStateHashInCatchUpPackageShare.into());
         }
 
         Ok(block)
