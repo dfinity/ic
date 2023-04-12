@@ -57,15 +57,15 @@ impl HttpHandlerMetrics {
             request_body_size_bytes: metrics_registry.histogram_vec(
                 "replica_http_request_body_size_bytes",
                 "HTTP/HTTPS request body sizes in bytes.",
-                // 10 B - 5 MB
-                decimal_buckets(1, 6),
+                // 10 B - 50 MB
+                decimal_buckets(1, 7),
                 &REQUESTS_LABEL_NAMES,
             ),
             response_body_size_bytes: metrics_registry.histogram_vec(
                 "replica_http_response_body_size_bytes",
                 "Response body sizes in bytes.",
-                // 10 B - 5 MB
-                decimal_buckets(1, 6),
+                // 10 B - 50 MB
+                decimal_buckets(1, 7),
                 &[LABEL_REQUEST_TYPE],
             ),
             connections_total: metrics_registry.int_counter(
@@ -80,13 +80,15 @@ impl HttpHandlerMetrics {
             connection_setup_duration: metrics_registry.histogram_vec(
                 "replica_http_connection_setup_duration_seconds",
                 "HTTP connection setup durations, by status and detail (protocol on status=\"success\", error type on status=\"error\").",
-                decimal_buckets(-3, 1),
+                // 10ms, 20ms, ... 500s
+                decimal_buckets(-2, 2),
                 &[LABEL_STATUS, LABEL_DETAIL],
             ),
             connection_duration: metrics_registry.histogram_vec(
                 "replica_http_connection_duration_seconds",
                 "HTTP connection durations, by closing status and protocol (HTTP/HTTPS).",
-                decimal_buckets(-3, 3),
+                // 10ms, 20ms, ... 50000s
+                decimal_buckets(-2, 4),
                 &[LABEL_STATUS, LABEL_PROTOCOL],
             ),
         }
