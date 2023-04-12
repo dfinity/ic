@@ -933,9 +933,9 @@ fn check_did_file() {
 
     if did != expected {
         panic!(
-            "Generated candid definition does not match canister/registry.did. \
-            Run `cargo run --bin registry-canister > canister/registry.did` in \
-            rs/registry/canister to update canister/registry.did."
+            "Generated candid definition does not match canister/registry.did \
+            Run `bazel run //rs/registry/canister:_wasm_registry-canister >canister/registry.did` in \
+            rs/registry/canister to update canister/registry.did"
         )
     }
 }

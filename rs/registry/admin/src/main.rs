@@ -56,7 +56,7 @@ use ic_nns_init::make_hsm_sender;
 use ic_nns_test_utils::ids::TEST_NEURON_1_ID;
 use ic_protobuf::registry::firewall::v1::{FirewallConfig, FirewallRule, FirewallRuleSet};
 use ic_protobuf::registry::node_rewards::v2::{
-    NodeRewardsTable, UpdateNodeRewardsTableProposalPayload,
+    NodeRewardRate, NodeRewardsTable, UpdateNodeRewardsTableProposalPayload,
 };
 use ic_protobuf::registry::{
     crypto::v1::{PublicKey, X509PublicKeyCert},
@@ -3083,7 +3083,7 @@ impl ProposalTitle for ProposeToUpdateNodeRewardsTableCmd {
 #[async_trait]
 impl ProposalPayload<UpdateNodeRewardsTableProposalPayload> for ProposeToUpdateNodeRewardsTableCmd {
     async fn payload(&self, _: Url) -> UpdateNodeRewardsTableProposalPayload {
-        let map: BTreeMap<String, BTreeMap<String, u64>> =
+        let map: BTreeMap<String, BTreeMap<String, NodeRewardRate>> =
             serde_json::from_str(&self.updated_node_rewards)
                 .unwrap_or_else(|e| panic!("Unable to parse updated_node_rewards: {}", e));
 

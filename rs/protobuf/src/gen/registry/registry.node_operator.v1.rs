@@ -2,7 +2,7 @@
 /// unique principal id, a.k.a. NOID.
 ///
 /// Note that while a node operator might host nodes for more than
-/// one funding parter, its principal ID must be unique.
+/// one funding partner, its principal ID must be unique.
 #[derive(candid::CandidType, serde::Serialize, candid::Deserialize, Eq, Hash)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

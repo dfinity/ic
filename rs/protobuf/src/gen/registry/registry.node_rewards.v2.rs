@@ -7,6 +7,14 @@ pub struct NodeRewardRate {
     /// node per month.
     #[prost(uint64, tag = "1")]
     pub xdr_permyriad_per_node_per_month: u64,
+    /// The coefficient of the node rewards the node provider gets
+    /// for having more than 1 node, as a percentage of the reward for first node.
+    /// A value of 100 means that the same reward is received for all nodes
+    /// A value of 0 means that only the first node gets the rewards, 2nd and later nodes get no reward
+    /// For values in between, the reward for the n-th node is:
+    /// reward(n) = reward(n-1) * reward_coefficient_percent ^ (n-1)
+    #[prost(int32, optional, tag = "2")]
+    pub reward_coefficient_percent: ::core::option::Option<i32>,
 }
 /// The reward rates for a set of node types
 #[derive(candid::CandidType, serde::Serialize, candid::Deserialize)]

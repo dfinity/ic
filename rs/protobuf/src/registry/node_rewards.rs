@@ -13,20 +13,17 @@ pub mod v2 {
         }
     }
 
-    impl From<BTreeMap<String, BTreeMap<String, u64>>> for UpdateNodeRewardsTableProposalPayload {
-        fn from(map: BTreeMap<String, BTreeMap<String, u64>>) -> Self {
+    impl From<BTreeMap<String, BTreeMap<String, NodeRewardRate>>>
+        for UpdateNodeRewardsTableProposalPayload
+    {
+        fn from(map: BTreeMap<String, BTreeMap<String, NodeRewardRate>>) -> Self {
             let mut payload = UpdateNodeRewardsTableProposalPayload::default();
 
             for (region, node_type_to_rewards_map) in &map {
                 let mut rates: BTreeMap<String, NodeRewardRate> = BTreeMap::new();
 
-                for (node_type, &xdr_permyriad_per_node_per_month) in node_type_to_rewards_map {
-                    rates.insert(
-                        node_type.clone(),
-                        NodeRewardRate {
-                            xdr_permyriad_per_node_per_month,
-                        },
-                    );
+                for (node_type, rewards_rate) in node_type_to_rewards_map {
+                    rates.insert(node_type.clone(), rewards_rate.clone());
                 }
 
                 payload
@@ -90,10 +87,19 @@ pub mod v2 {
         #[test]
         fn test_from_btreemap() {
             let json = r#"
-                { "us-west": { "default": 10, "storage_upgrade": 24 }, "france": { "default": 50 } }
+            {
+                "us-west": {
+                    "default": [10, null],
+                    "storage_upgrade": [24, null]
+                },
+                "france": {
+                    "default": [50, null]
+                }
+            }
             "#;
 
-            let map: BTreeMap<String, BTreeMap<String, u64>> = serde_json::from_str(json).unwrap();
+            let map: BTreeMap<String, BTreeMap<String, NodeRewardRate>> =
+                serde_json::from_str(json).unwrap();
             let payload = UpdateNodeRewardsTableProposalPayload::from(map);
 
             let us_west = payload.new_entries.get("us-west").unwrap();
@@ -126,15 +132,61 @@ pub mod v2 {
         }
 
         #[test]
+        fn test_from_btreemap_parsing_reduction_coefficient() {
+            let json = r#"{
+                "North America,US":            { "type0": [100, null],  "type2": [200, null],  "type3": [300, 70] },
+                "North America,CA":            { "type0": [400, null],  "type2": [500, null],  "type3": [600, 70] },
+                "North America,US,California": { "type0": [700, null],                         "type3": [800, 70] },
+                "North America,US,Florida":    { "type0": [900, null],                         "type3": [1000, 70] },
+                "North America,US,Georgia":    { "type0": [1100, null],                        "type3": [1200, null] },
+                "Asia,SG":                     { "type0": [10000, 100],  "type2": [11000, 100],  "type3": [12000, 70] },
+                "Asia":                        { "type0": [13000, 100],  "type2": [14000, 100],  "type3": [15000, 70] },
+                "Europe":                      { "type0": [20000, null], "type2": [21000, null], "type3": [22000, 70] }
+            }"#;
+
+            let map: BTreeMap<String, BTreeMap<String, NodeRewardRate>> =
+                serde_json::from_str(json).unwrap();
+            let payload = UpdateNodeRewardsTableProposalPayload::from(map);
+
+            let us_california = payload
+                .new_entries
+                .get("North America,US,California")
+                .unwrap();
+            let europe = payload.new_entries.get("Europe").unwrap();
+
+            let rewards = us_california.rates.get("type0").unwrap();
+            assert_eq!(rewards.xdr_permyriad_per_node_per_month, 700);
+            assert_eq!(rewards.reward_coefficient_percent, None);
+
+            assert!(us_california.rates.get("type2").is_none());
+
+            let rewards = us_california.rates.get("type3").unwrap();
+            assert_eq!(rewards.xdr_permyriad_per_node_per_month, 800);
+            assert_eq!(rewards.reward_coefficient_percent, Some(70));
+
+            let rewards = europe.rates.get("type0").unwrap();
+            assert_eq!(rewards.xdr_permyriad_per_node_per_month, 20000);
+            assert_eq!(rewards.reward_coefficient_percent, None);
+            let rewards = europe.rates.get("type2").unwrap();
+            assert_eq!(rewards.xdr_permyriad_per_node_per_month, 21000);
+            assert_eq!(rewards.reward_coefficient_percent, None);
+            let rewards = europe.rates.get("type3").unwrap();
+            assert_eq!(rewards.xdr_permyriad_per_node_per_month, 22000);
+            assert_eq!(rewards.reward_coefficient_percent, Some(70));
+        }
+
+        #[test]
         fn test_extend_node_reward_table() {
             let existing_entries = btreemap! {
                 "CH".to_string() =>  NodeRewardRates {
                     rates: btreemap!{
                         "default".to_string() => NodeRewardRate {
                             xdr_permyriad_per_node_per_month: 240,
+                            reward_coefficient_percent: None
                         },
                         "small".to_string() => NodeRewardRate {
                             xdr_permyriad_per_node_per_month: 350,
+                            reward_coefficient_percent: None
                         },
                     }
                 },
@@ -142,12 +194,15 @@ pub mod v2 {
                     rates: btreemap!{
                         "default".to_string() => NodeRewardRate {
                             xdr_permyriad_per_node_per_month: 677,
+                            reward_coefficient_percent: None
                         },
                         "small".to_string() => NodeRewardRate {
                             xdr_permyriad_per_node_per_month: 198,
+                            reward_coefficient_percent: None
                         },
                         "storage_upgrade".to_string() => NodeRewardRate {
                             xdr_permyriad_per_node_per_month: 236,
+                            reward_coefficient_percent: None
                         }
                     }
                 }
@@ -158,6 +213,7 @@ pub mod v2 {
                     rates: btreemap!{
                         "storage_upgrade".to_string() => NodeRewardRate {
                             xdr_permyriad_per_node_per_month: 532,
+                            reward_coefficient_percent: None
                         }
                     }
                 },
@@ -165,6 +221,7 @@ pub mod v2 {
                     rates: btreemap!{
                         "default".to_string() => NodeRewardRate {
                             xdr_permyriad_per_node_per_month: 120,
+                            reward_coefficient_percent: None
                         },
                     }
                 },
@@ -172,6 +229,7 @@ pub mod v2 {
                     rates: btreemap!{
                         "default".to_string() => NodeRewardRate {
                             xdr_permyriad_per_node_per_month: 200,
+                            reward_coefficient_percent: None
                         },
                     }
                 }
@@ -231,6 +289,7 @@ pub mod v2 {
                     rates: btreemap!{
                         "default".to_string() => NodeRewardRate {
                             xdr_permyriad_per_node_per_month: 240,
+                            reward_coefficient_percent: None
                         },
                     }
                 },
@@ -238,9 +297,11 @@ pub mod v2 {
                     rates: btreemap!{
                         "default".to_string() => NodeRewardRate {
                             xdr_permyriad_per_node_per_month: 677,
+                            reward_coefficient_percent: None
                         },
                         "type1".to_string() => NodeRewardRate {
                             xdr_permyriad_per_node_per_month: 456,
+                            reward_coefficient_percent: None
                         },
                     }
                 },
@@ -248,6 +309,7 @@ pub mod v2 {
                     rates: btreemap!{
                         "default".to_string() => NodeRewardRate {
                             xdr_permyriad_per_node_per_month: 801,
+                            reward_coefficient_percent: None
                         },
                     }
                 }

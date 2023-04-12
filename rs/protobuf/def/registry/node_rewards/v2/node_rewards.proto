@@ -6,6 +6,14 @@ message NodeRewardRate {
   // The number of 10,000ths of IMF SDR (currency code XDR) to be rewarded per
   // node per month.
   uint64 xdr_permyriad_per_node_per_month = 1;
+
+  // The coefficient of the node rewards the node provider gets
+  // for having more than 1 node, as a percentage of the reward for first node.
+  // A value of 100 means that the same reward is received for all nodes
+  // A value of 0 means that only the first node gets the rewards, 2nd and later nodes get no reward
+  // For values in between, the reward for the n-th node is:
+  // reward(n) = reward(n-1) * reward_coefficient_percent ^ (n-1)
+  optional int32 reward_coefficient_percent = 2;
 }
 
 // The reward rates for a set of node types
