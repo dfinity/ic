@@ -34,7 +34,6 @@ use ic_icos_sev_interfaces::ValidateAttestedStream;
 use ic_ingress_manager::IngressManager;
 use ic_interfaces::{
     artifact_manager::{ArtifactClient, ArtifactManager, ArtifactProcessor},
-    consensus_pool::ConsensusPoolCache,
     crypto::IngressSigVerifier,
     execution_environment::IngressHistoryReader,
     messaging::{MessageRouting, XNetPayloadBuilder},
@@ -87,8 +86,7 @@ pub enum P2PStateSyncClient {
 /// The collection of all artifact pools.
 pub struct ArtifactPools {
     ingress_pool: Arc<RwLock<IngressPoolImpl>>,
-    consensus_pool: Arc<RwLock<ConsensusPoolImpl>>,
-    pub consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
+    pub consensus_pool: Arc<RwLock<ConsensusPoolImpl>>,
     certification_pool: Arc<RwLock<CertificationPoolImpl>>,
     dkg_pool: Arc<RwLock<DkgPoolImpl>>,
     ecdsa_pool: Arc<RwLock<EcdsaPoolImpl>>,
@@ -136,11 +134,9 @@ pub fn create_networking_stack(
     registry_poll_delay_duration_ms: u64,
 ) -> (IngressIngestionService, P2PThreadJoiner) {
     let advert_subscriber = AdvertBroadcaster::new(log.clone(), metrics_registry);
-    let consensus_pool_cache = artifact_pools.consensus_pool_cache.clone();
     let ingress_pool = artifact_pools.ingress_pool.clone();
-    let oldest_registry_version_in_use = artifact_pools
-        .consensus_pool_cache
-        .get_oldest_registry_version_in_use();
+    let consensus_pool_cache = artifact_pools.consensus_pool.read().unwrap().get_cache();
+    let oldest_registry_version_in_use = consensus_pool_cache.get_oldest_registry_version_in_use();
     // Now we setup the Artifact Pools and the manager.
     let artifact_manager = setup_artifact_manager(
         node_id,
@@ -242,6 +238,7 @@ fn setup_artifact_manager(
 ) -> std::io::Result<Arc<dyn ArtifactManager>> {
     // Initialize the time source.
     let time_source = Arc::new(SysTimeSource::new());
+    let consensus_pool_cache = artifact_pools.consensus_pool.read().unwrap().get_cache();
 
     let mut backends: HashMap<ArtifactTag, Box<dyn manager::ArtifactManagerBackend>> =
         HashMap::new();
@@ -296,13 +293,13 @@ fn setup_artifact_manager(
 
     let replica_config = ReplicaConfig { node_id, subnet_id };
     let membership = Arc::new(Membership::new(
-        artifact_pools.consensus_pool_cache.clone(),
+        consensus_pool_cache.clone(),
         Arc::clone(&registry_client),
         subnet_id,
     ));
 
     let ingress_manager = Arc::new(IngressManager::new(
-        artifact_pools.consensus_pool_cache.clone(),
+        consensus_pool_cache.clone(),
         ingress_history_reader,
         artifact_pools.ingress_pool.clone(),
         Arc::clone(&registry_client),
@@ -317,9 +314,9 @@ fn setup_artifact_manager(
 
     let canister_http_payload_builder = Arc::new(CanisterHttpPayloadBuilderImpl::new(
         artifact_pools.canister_http_pool.clone(),
-        artifact_pools.consensus_pool_cache.clone(),
+        consensus_pool_cache.clone(),
         consensus_crypto.clone(),
-        state_manager.clone(),
+        state_reader.clone(),
         membership.clone(),
         subnet_id,
         registry_client.clone(),
@@ -403,7 +400,7 @@ fn setup_artifact_manager(
                     Arc::clone(&membership) as Arc<_>,
                     Arc::clone(&certifier_crypto),
                     Arc::clone(&state_manager) as Arc<_>,
-                    Arc::clone(&artifact_pools.consensus_pool_cache) as Arc<_>,
+                    Arc::clone(&consensus_pool_cache) as Arc<_>,
                     metrics_registry.clone(),
                     replica_logger.clone(),
                 ),
@@ -426,7 +423,7 @@ fn setup_artifact_manager(
                     dkg::DkgImpl::new(
                         node_id,
                         Arc::clone(&consensus_crypto),
-                        Arc::clone(&artifact_pools.consensus_pool_cache),
+                        Arc::clone(&consensus_pool_cache),
                         dkg_key_manager,
                         metrics_registry.clone(),
                         replica_logger.clone(),
@@ -443,7 +440,7 @@ fn setup_artifact_manager(
 
     {
         let advert_broadcaster = advert_broadcaster.clone();
-        let finalized = artifact_pools.consensus_pool_cache.finalized_block();
+        let finalized = consensus_pool_cache.finalized_block();
         let ecdsa_config =
             registry_client.get_ecdsa_config(subnet_id, registry_client.get_latest_version());
         info!(
@@ -490,19 +487,19 @@ fn setup_artifact_manager(
                 move |req| advert_broadcaster.send(req.into()),
                 (
                     CanisterHttpPoolManagerImpl::new(
-                        Arc::clone(&state_manager) as Arc<_>,
+                        Arc::clone(&state_reader),
                         Arc::new(Mutex::new(canister_http_adapter_client)),
                         Arc::clone(&consensus_crypto),
                         Arc::clone(&membership),
-                        Arc::clone(&artifact_pools.consensus_pool_cache),
+                        Arc::clone(&consensus_pool_cache),
                         ReplicaConfig { subnet_id, node_id },
                         Arc::clone(&registry_client),
                         metrics_registry.clone(),
                         replica_logger.clone(),
                     ),
                     CanisterHttpGossipImpl::new(
-                        Arc::clone(&artifact_pools.consensus_pool_cache),
-                        Arc::clone(&state_manager) as Arc<_>,
+                        Arc::clone(&consensus_pool_cache),
+                        Arc::clone(&state_reader),
                         replica_logger,
                     ),
                 ),
@@ -518,7 +515,6 @@ fn setup_artifact_manager(
 }
 
 /// The function initializes the artifact pools.
-#[allow(clippy::type_complexity)]
 pub fn init_artifact_pools(
     subnet_id: SubnetId,
     config: ArtifactPoolConfig,
@@ -550,7 +546,6 @@ pub fn init_artifact_pools(
         registry.clone(),
         log.clone(),
     )));
-    let consensus_pool_cache = consensus_pool.read().unwrap().get_cache();
     let certification_pool = Arc::new(RwLock::new(CertificationPoolImpl::new(
         config,
         log,
@@ -561,7 +556,6 @@ pub fn init_artifact_pools(
     ArtifactPools {
         ingress_pool,
         consensus_pool,
-        consensus_pool_cache,
         certification_pool,
         dkg_pool,
         ecdsa_pool,

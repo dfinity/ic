@@ -326,7 +326,7 @@ fn timeout_priority() {
                     Height::new(0),
                     Arc::new(init_state),
                 )));
-            payload_builder.state_manager = state_manager;
+            payload_builder.state_reader = state_manager;
         }
 
         let validation_context = ValidationContext {

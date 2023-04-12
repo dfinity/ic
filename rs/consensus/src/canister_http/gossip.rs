@@ -6,7 +6,7 @@ use ic_interfaces::{
     artifact_pool::PriorityFnAndFilterProducer, canister_http::CanisterHttpPool,
     consensus_pool::ConsensusPoolCache,
 };
-use ic_interfaces_state_manager::StateManager;
+use ic_interfaces_state_manager::StateReader;
 use ic_logger::{warn, ReplicaLogger};
 use ic_replicated_state::ReplicatedState;
 use ic_types::{
@@ -19,7 +19,7 @@ use std::{collections::BTreeSet, sync::Arc};
 /// The canonical implementation of [`PriorityFnAndFilterProducer`]
 pub struct CanisterHttpGossipImpl {
     consensus_cache: Arc<dyn ConsensusPoolCache>,
-    state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     log: ReplicaLogger,
 }
 
@@ -27,12 +27,12 @@ impl CanisterHttpGossipImpl {
     /// Construcet a new CanisterHttpGossipImpl instance
     pub fn new(
         consensus_cache: Arc<dyn ConsensusPoolCache>,
-        state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+        state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         log: ReplicaLogger,
     ) -> Self {
         CanisterHttpGossipImpl {
             consensus_cache,
-            state_manager,
+            state_reader,
             log,
         }
     }
@@ -49,7 +49,7 @@ impl<Pool: CanisterHttpPool> PriorityFnAndFilterProducer<CanisterHttpArtifact, P
         let registry_version =
             registry_version_at_height(self.consensus_cache.as_ref(), finalized_height).unwrap();
         let known_request_ids: BTreeSet<_> = self
-            .state_manager
+            .state_reader
             .get_latest_state()
             .get_ref()
             .metadata

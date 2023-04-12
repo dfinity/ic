@@ -11,7 +11,7 @@ use ic_interfaces::{
 };
 use ic_interfaces_https_outcalls_adapter_client::*;
 use ic_interfaces_registry::RegistryClient;
-use ic_interfaces_state_manager::StateManager;
+use ic_interfaces_state_manager::StateReader;
 use ic_logger::*;
 use ic_metrics::MetricsRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
@@ -37,7 +37,7 @@ use std::{
 /// - Validate shares in the unvalidated pool that were received from gossip
 pub struct CanisterHttpPoolManagerImpl {
     registry_client: Arc<dyn RegistryClient>,
-    state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+    state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     http_adapter_shim: Arc<Mutex<CanisterHttpAdapterClient>>,
     consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
     crypto: Arc<dyn ConsensusCrypto>,
@@ -51,7 +51,7 @@ pub struct CanisterHttpPoolManagerImpl {
 impl CanisterHttpPoolManagerImpl {
     /// Create a new [`CanisterHttpPoolManagerImpl`]
     pub fn new(
-        state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+        state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         http_adapter_shim: Arc<Mutex<CanisterHttpAdapterClient>>,
         crypto: Arc<dyn ConsensusCrypto>,
         membership: Arc<Membership>,
@@ -62,7 +62,7 @@ impl CanisterHttpPoolManagerImpl {
         log: ReplicaLogger,
     ) -> Self {
         Self {
-            state_manager,
+            state_reader,
             http_adapter_shim,
             crypto,
             replica_config,
@@ -87,7 +87,7 @@ impl CanisterHttpPoolManagerImpl {
             .start_timer();
 
         let active_callback_ids: BTreeSet<_> = self
-            .state_manager
+            .state_reader
             .get_latest_state()
             .get_ref()
             .metadata
@@ -155,7 +155,7 @@ impl CanisterHttpPoolManagerImpl {
             .start_timer();
 
         let http_requests = self
-            .state_manager
+            .state_reader
             .get_latest_state()
             .get_ref()
             .metadata
@@ -519,7 +519,7 @@ pub mod test {
                     vec![CanisterHttpChangeAction::AddToValidated(share, content)],
                 );
                 let pool_manager = CanisterHttpPoolManagerImpl::new(
-                    state_manager,
+                    state_manager as Arc<_>,
                     shim,
                     crypto,
                     membership,
