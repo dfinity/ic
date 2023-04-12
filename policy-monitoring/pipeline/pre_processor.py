@@ -64,14 +64,14 @@ class Timed:
 
     def __enter__(self):
         """Starts the timers"""
-        self.wlclock_time_start = time.time()
+        self.wlclock_time_start = time.monotonic()
         self.process_time_start = time.process_time()
         self.perf_counter_start = time.perf_counter()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Accumulates the elapsed time"""
-        self.accumulator["wall_clock_time_seconds"] += time.time() - self.wlclock_time_start
+        self.accumulator["wall_clock_time_seconds"] += time.monotonic() - self.wlclock_time_start
 
         self.accumulator["process_time_seconds"] += time.process_time() - self.process_time_start
 
