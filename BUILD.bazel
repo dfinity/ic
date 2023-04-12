@@ -79,3 +79,9 @@ compile_pip_requirements(
         "requires-network",
     ],
 )
+
+test_suite(
+    name = "single_large_node",  # the "_test" postfix is dropped on purpose since this target is meant for interactive use.
+    tags = ["manual"],
+    tests = ["//rs/tests/testing_verification:single_large_node"],
+)

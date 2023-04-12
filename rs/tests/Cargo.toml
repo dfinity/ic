@@ -294,6 +294,10 @@ name = "ic-systest-system-subnets-test"
 path = "execution/system_subnets_test.rs"
 
 [[bin]]
+name = "ic-systest-single-large-node"
+path = "testing_verification/single_large_node.rs"
+
+[[bin]]
 name = "ic-systest-cow-safety-test"
 path = "consensus/cow_safety_test.rs"
 
