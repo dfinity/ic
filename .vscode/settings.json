@@ -4,10 +4,5 @@
     },
     "rust-analyzer.trace.server": "verbose",
     "rust-analyzer.checkOnSave": true,
-    "editor.parameterHints.enabled": false,
-    "rust-analyzer.procMacro.enable": true,
-    "rust-analyzer.procMacro.server": ".vscode/proc-macro-srv-wrapper",
-    "rust-analyzer.check.overrideCommand": [ ".vscode/bazel-check-wrapper" ],
-    "rust-analyzer.cargo.buildScripts.overrideCommand": [ ".vscode/bazel-check-wrapper" ],
-    "editor.formatOnSave": false
+    "rust-analyzer.procMacro.enable": true
 }
