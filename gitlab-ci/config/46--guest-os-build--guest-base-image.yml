@@ -37,6 +37,7 @@ build-base-images:
     - .rules-dockerfile-base-changes
   stage: guest-os-build
   needs: []
+  timeout: 2h
   script:
   - set -euo pipefail
   - *build-base-images
