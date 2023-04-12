@@ -54,6 +54,13 @@ repos:
     files: \.bazel|\.bzl$
     language: system
 
+  - id: bazel_smoke
+    name: Run all bazel test smoke targets
+    entry: bazel test --config=precommit //...
+    pass_filenames: false
+    language: system
+    always_run: true
+
 # The following repo is maintained by us at
 # https://gitlab.com/dfinity-lab/open/pre-commit-tools.
 - repo: https://gitlab.com/dfinity-lab/open/pre-commit-tools.git
@@ -64,8 +71,6 @@ repos:
     exclude: |
       (?x)(
       )
-  - id: buf-lint
-    args: ["--config=buf.yaml"]
   - id: shfmt
     args: ["-w", "-i", "4", "-bn", "-ci"]
   - id: nixpkgs-fmt

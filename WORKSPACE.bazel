@@ -347,6 +347,11 @@ load("//bazel:trivy.bzl", "trivy_scan")
 
 trivy_scan(name = "trivy")
 
+# buf binary for protobuf linting
+load("//bazel/pre-commit:buf.bzl", "buf")
+
+buf(name = "buf")
+
 # shellcheck binary
 load("//bazel/pre-commit:shellcheck.bzl", "shellcheck")
 
