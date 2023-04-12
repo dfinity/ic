@@ -1,4 +1,4 @@
-#[cfg(os = "linux")]
+#[cfg(target_os = "linux")]
 mod linux {
     use ::sev::firmware::guest::{
         types::{AttestationReport, SnpReportReq},
@@ -32,7 +32,7 @@ mod linux {
         VcekUrl,
     }
 
-    fn main() -> Result<()> {
+    pub fn main() -> Result<()> {
         let opts = SevCtlArgs::parse();
         match opts.cmd {
             Command::Show(ShowCommand::Identifier) => {
@@ -118,12 +118,12 @@ mod linux {
     }
 }
 
-#[cfg(os = "linux")]
+#[cfg(target_os = "linux")]
 fn main() -> anyhow::Result<()> {
     linux::main()
 }
 
-#[cfg(not(os = "linux"))]
+#[cfg(not(target_os = "linux"))]
 fn main() {
     panic!("sevctl works only on Linux");
 }
