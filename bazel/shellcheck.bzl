@@ -22,6 +22,8 @@ def _shellcheck_impl(repository_ctx):
 
     if os_arch == "x86_64" or os_arch == "amd64":
         arch = "x86_64"
+    elif os_arch == "aarch64":
+        arch = "aarch64"
     else:
         fail("Unsupported architecture: '" + os_arch + "'")
 
@@ -29,7 +31,8 @@ def _shellcheck_impl(repository_ctx):
     if os_name == "linux":
         platform = "linux." + arch
     elif os_name == "mac os x":
-        platform = "darwin." + arch
+        # No aarch64 version available for MacOS - use amd64.
+        platform = "darwin.x86_64"
 
     else:
         fail("Unsupported operating system: " + os_name)
