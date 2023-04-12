@@ -9894,6 +9894,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-utils-lru-cache"
+version = "0.1.0"
+dependencies = [
+ "ic-types",
+ "lru",
+]
+
+[[package]]
 name = "ic-utils-rustfmt"
 version = "0.8.0"
 

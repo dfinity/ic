@@ -299,6 +299,7 @@ members = [
   "rs/types/wasm_types",
   "rs/universal_canister/lib",
   "rs/utils",
+  "rs/utils/lru_cache",
   "rs/utils/rustfmt",
   "rs/validator",
   "rs/validator/ingress_message",
