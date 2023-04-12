@@ -137,7 +137,7 @@ fn create_governance_canister(
             canister.canister_id().get()
         );
         let path_to_wasm =
-            env.get_dependency_path("rs/tests/nns-canisters/governance-canister_test");
+            env.get_dependency_path("rs/tests/tip-nns-canisters/governance-canister_test");
         install_rust_canister_from_path(&mut canister, path_to_wasm, Some(serialized)).await;
 
         info!(
@@ -205,7 +205,7 @@ fn create_ledger_canister(
             canister.canister_id().get()
         );
         let path_to_wasm =
-            env.get_dependency_path("rs/tests/nns-canisters/ledger-canister_notify-method");
+            env.get_dependency_path("rs/tests/tip-nns-canisters/ledger-canister_notify-method");
         let encoded = Encode!(&ledger_init_args).unwrap();
         install_rust_canister_from_path(&mut canister, path_to_wasm, Some(encoded)).await;
 

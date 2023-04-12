@@ -1,21 +1,7 @@
-load("//rs/tests:system_tests.bzl", "symlink_dir", "system_test")
-load("//rs/tests:common.bzl", "DEPENDENCIES", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "NNS_CANISTER_RUNTIME_DEPS")
+load("//rs/tests:system_tests.bzl", "system_test")
+load("//rs/tests:common.bzl", "DEPENDENCIES", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "QUALIFYING_NNS_CANISTER_RUNTIME_DEPS", "QUALIFYING_SNS_CANISTER_RUNTIME_DEPS")
 
 package(default_visibility = ["//visibility:public"])
-
-symlink_dir(
-    name = "sns-canisters",
-    targets = {
-        "//rs/sns/root:sns-root-canister": "sns-root-canister",
-        "//rs/sns/governance:sns-governance-canister": "sns-governance-canister",
-        "//rs/rosetta-api/icrc1/ledger:ledger_canister": "ic-icrc1-ledger",
-        "//rs/sns/swap:sns-swap-canister": "sns-swap-canister",
-        "//rs/rosetta-api/icrc1/archive:archive_canister": "ic-icrc1-archive",
-        "//rs/rosetta-api/icrc1/index:index_canister": "ic-icrc1-index",
-    },
-)
-
-SNS_CANISTER_RUNTIME_DEPS = [":sns-canisters"]
 
 system_test(
     name = "deploy_with_sale",
@@ -25,8 +11,8 @@ system_test(
         "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS +
-                   SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + QUALIFYING_NNS_CANISTER_RUNTIME_DEPS +
+                   QUALIFYING_SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
@@ -38,8 +24,8 @@ system_test(
         "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS +
-                   SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + QUALIFYING_NNS_CANISTER_RUNTIME_DEPS +
+                   QUALIFYING_SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
@@ -52,8 +38,8 @@ system_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS +
-                   SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + QUALIFYING_NNS_CANISTER_RUNTIME_DEPS +
+                   QUALIFYING_SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
@@ -66,8 +52,8 @@ system_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS +
-                   SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + QUALIFYING_NNS_CANISTER_RUNTIME_DEPS +
+                   QUALIFYING_SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
@@ -80,8 +66,8 @@ system_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS +
-                   SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + QUALIFYING_NNS_CANISTER_RUNTIME_DEPS +
+                   QUALIFYING_SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
@@ -94,8 +80,8 @@ system_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS +
-                   SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + QUALIFYING_NNS_CANISTER_RUNTIME_DEPS +
+                   QUALIFYING_SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
@@ -107,8 +93,8 @@ system_test(
         "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS +
-                   SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + [
+    runtime_deps = GUESTOS_RUNTIME_DEPS + QUALIFYING_NNS_CANISTER_RUNTIME_DEPS +
+                   QUALIFYING_SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + [
         "@sns_aggregator//file",
     ],
     deps = DEPENDENCIES + ["//rs/tests"],
@@ -123,8 +109,8 @@ system_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS +
-                   SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + QUALIFYING_NNS_CANISTER_RUNTIME_DEPS +
+                   QUALIFYING_SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
@@ -137,8 +123,8 @@ system_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS +
-                   SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + [
+    runtime_deps = GUESTOS_RUNTIME_DEPS + QUALIFYING_NNS_CANISTER_RUNTIME_DEPS +
+                   QUALIFYING_SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + [
         "@sns_aggregator//file",
     ],
     deps = DEPENDENCIES + ["//rs/tests"],
@@ -153,8 +139,8 @@ system_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS +
-                   SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + [
+    runtime_deps = GUESTOS_RUNTIME_DEPS + QUALIFYING_NNS_CANISTER_RUNTIME_DEPS +
+                   QUALIFYING_SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + [
         "@sns_aggregator//file",
     ],
     deps = DEPENDENCIES + ["//rs/tests"],
@@ -169,8 +155,8 @@ system_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS +
-                   SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + [
+    runtime_deps = GUESTOS_RUNTIME_DEPS + QUALIFYING_NNS_CANISTER_RUNTIME_DEPS +
+                   QUALIFYING_SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS + [
         "@sns_aggregator//file",
     ],
     deps = DEPENDENCIES + ["//rs/tests"],
@@ -184,8 +170,8 @@ system_test(
         "system_test_nightly",
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS +
-                   SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + QUALIFYING_NNS_CANISTER_RUNTIME_DEPS +
+                   QUALIFYING_SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
@@ -198,7 +184,7 @@ system_test(
     ],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     test_timeout = "eternal",  # TODO: consider removing this
-    runtime_deps = GUESTOS_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS +
-                   SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    runtime_deps = GUESTOS_RUNTIME_DEPS + QUALIFYING_NNS_CANISTER_RUNTIME_DEPS +
+                   QUALIFYING_SNS_CANISTER_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )

@@ -1,7 +1,7 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load(":system_tests.bzl", "symlink_dir", "uvm_config_image")
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
-load("//rs/tests:common.bzl", "DEPENDENCIES", "MACRO_DEPENDENCIES")
+load("//rs/tests:common.bzl", "DEPENDENCIES", "MACRO_DEPENDENCIES", "mainnet_nns_canisters", "mainnet_sns_canisters", "qualifying_nns_canisters", "qualifying_sns_canisters", "tip_nns_canisters", "tip_sns_canisters")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -60,32 +60,28 @@ sh_binary(
     srcs = ["create-universal-vm-config-image-from-tar.sh"],
 )
 
-symlink_dir(
-    name = "nns-canisters",
-    targets = {
-        "//rs/registry/canister:registry-canister": "registry-canister",
-        "//rs/nns/governance:governance-canister-test": "governance-canister_test",
-        "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method": "ledger-canister_notify-method",
-        "//rs/nns/handlers/root:root-canister": "root-canister",
-        "//rs/nns/cmc:cycles-minting-canister": "cycles-minting-canister",
-        "//rs/nns/handlers/lifeline:lifeline_canister": "lifeline_canister",
-        "//rs/nns/gtc:genesis-token-canister": "genesis-token-canister",
-        "//rs/nns/sns-wasm:sns-wasm-canister": "sns-wasm-canister",
-    },
+tip_nns_canisters(
+    name = "tip-nns-canisters",
 )
 
-symlink_dir(
+mainnet_nns_canisters(
     name = "mainnet-nns-canisters",
-    targets = {
-        "@mainnet_nns_registry_canister//file": "registry-canister",
-        "@mainnet_nns_governance_canister//file": "governance-canister_test",
-        "@mainnet_icp_ledger_canister//file": "ledger-canister_notify-method",
-        "@mainnet_nns_root-canister//file": "root-canister",
-        "@mainnet_nns_lifeline_canister//file": "lifeline_canister",
-        "@mainnet_nns_genesis-token-canister//file": "genesis-token-canister",
-        "@mainnet_nns_cycles-minting-canister//file": "cycles-minting-canister",
-        "@mainnet_nns_sns-wasm-canister//file": "sns-wasm-canister",
-    },
+)
+
+qualifying_nns_canisters(
+    name = "qualifying-nns-canisters",
+)
+
+tip_sns_canisters(
+    name = "tip-sns-canisters",
+)
+
+mainnet_sns_canisters(
+    name = "mainnet-sns-canisters",
+)
+
+qualifying_sns_canisters(
+    name = "qualifying-sns-canisters",
 )
 
 symlink_dir(

@@ -1308,6 +1308,10 @@ pub trait NnsInstallationExt {
     /// is installed with test neurons enabled which simplify voting on proposals in testing.
     fn install_mainnet_nns_canisters(&self) -> Result<()>;
 
+    /// Installs the qualifying NNS canisters on the subnet this node belongs to. The NNS
+    /// is installed with test neurons enabled which simplify voting on proposals in testing.
+    fn install_qualifying_nns_canisters(&self) -> Result<()>;
+
     fn install_nns_canisters_with_customizations(
         &self,
         canister_wasm_strategy: NnsCanisterWasmStrategy,
@@ -1326,6 +1330,7 @@ pub struct NnsCustomizations {
 pub enum NnsCanisterWasmStrategy {
     TakeBuiltFromSources,
     TakeLatestMainnetDeployments,
+    NnsReleaseQualification,
 }
 
 impl<T> NnsInstallationExt for T
@@ -1338,15 +1343,29 @@ where
         customizations: NnsCustomizations,
     ) -> Result<()> {
         let test_env = self.test_env();
+        let log = test_env.logger();
         match canister_wasm_strategy {
             NnsCanisterWasmStrategy::TakeBuiltFromSources => {
+                info!(
+                    log,
+                    "Installing NNS canisters build from the tip of the current branch ..."
+                );
                 test_env.set_nns_canisters_env_vars()?;
             }
             NnsCanisterWasmStrategy::TakeLatestMainnetDeployments => {
+                info!(log, "Installing mainnet NNS canisters ...");
                 test_env.set_mainnet_nns_canisters_env_vars()?;
             }
+            NnsCanisterWasmStrategy::NnsReleaseQualification => {
+                let qual = test_env
+                    .read_dependency_to_string(
+                        "rs/tests/qualifying-nns-canisters/selected-qualifying-nns-canisters.json",
+                    )
+                    .unwrap();
+                info!(log, "Installing qualification NNS canisters ({qual}) ...");
+                test_env.set_qualifying_nns_canisters_env_vars()?;
+            }
         }
-        let log = test_env.logger();
         let ic_name = self.ic_name();
         let url = self.get_public_url();
         let prep_dir = match test_env.prep_dir(&ic_name) {
@@ -1380,6 +1399,13 @@ where
         )
     }
 
+    fn install_qualifying_nns_canisters(&self) -> Result<()> {
+        self.install_nns_canisters_with_customizations(
+            NnsCanisterWasmStrategy::NnsReleaseQualification,
+            NnsCustomizations::default(),
+        )
+    }
+
     fn install_nns_canisters_at_ids(&self) -> Result<()> {
         let test_env = self.test_env();
         test_env.set_nns_canisters_env_vars()?;
@@ -1398,27 +1424,72 @@ where
 }
 
 pub trait NnsCanisterEnvVars {
+    /// Set the environment variables pointing to the NNS canisters built from the tip of this branch.
+    ///
+    /// The system test must specify the runtime dependency `NNS_CANISTER_RUNTIME_DEPS`.
     fn set_nns_canisters_env_vars(&self) -> Result<()>;
+
+    /// Set the environment variables pointing to the (latest deployment of) mainnet NNS canisters.
+    ///
+    /// The system test must specify the runtime dependency `MAINNET_NNS_CANISTER_RUNTIME_DEPS`.
     fn set_mainnet_nns_canisters_env_vars(&self) -> Result<()>;
+
+    /// Set the environment variables pointing to the NNS canisters for release qualification, i.e.:
+    /// * Canisters listed in `QUALIFYING_NNS_CANISTERS` are built from the tip of this branch.
+    /// * Others are the (latest deployment of) mainnet NNS canisters.
+    ///
+    /// See also: `NNS_CANISTER_WASM_PROVIDERS`.
+    ///
+    /// The system test must specify the runtime dependency `QUALIFYING_NNS_CANISTER_RUNTIME_DEPS`.
+    fn set_qualifying_nns_canisters_env_vars(&self) -> Result<()>;
 }
 
 impl NnsCanisterEnvVars for TestEnv {
     fn set_nns_canisters_env_vars(&self) -> Result<()> {
-        self.set_canister_env_vars("rs/tests/nns-canisters")
+        self.set_canister_env_vars("rs/tests/tip-nns-canisters")
     }
 
     fn set_mainnet_nns_canisters_env_vars(&self) -> Result<()> {
         self.set_canister_env_vars("rs/tests/mainnet-nns-canisters")
     }
+
+    fn set_qualifying_nns_canisters_env_vars(&self) -> Result<()> {
+        self.set_canister_env_vars("rs/tests/qualifying-nns-canisters")
+    }
 }
 
 pub trait SnsCanisterEnvVars {
+    /// Set the environment variables pointing to the SNS canisters built from the tip of this branch.
+    ///
+    /// The system test must specify the runtime dependency `SNS_CANISTER_RUNTIME_DEPS`.
     fn set_sns_canisters_env_vars(&self) -> Result<()>;
+
+    /// Set the environment variables pointing to the (latest deployment of) mainnet SNS canisters.
+    ///
+    /// The system test must specify the runtime dependency `MAINNET_SNS_CANISTER_RUNTIME_DEPS`.
+    fn set_mainnet_sns_canisters_env_vars(&self) -> Result<()>;
+
+    /// Set the environment variables pointing to the SNS canisters for release qualification, i.e.:
+    /// * Canisters listed in `QUALIFYING_SNS_CANISTERS` are built from the tip of this branch.
+    /// * Others are the (latest deployment of) mainnet SNS canisters.
+    ///
+    /// See also: `SNS_CANISTER_WASM_PROVIDERS`.
+    ///
+    /// The system test must specify the runtime dependency `QUALIFYING_SNS_CANISTER_RUNTIME_DEPS`.
+    fn set_qualifying_sns_canisters_env_vars(&self) -> Result<()>;
 }
 
 impl SnsCanisterEnvVars for TestEnv {
     fn set_sns_canisters_env_vars(&self) -> Result<()> {
-        self.set_canister_env_vars("rs/tests/nns/sns/sns-canisters")
+        self.set_canister_env_vars("rs/tests/tip-sns-canisters")
+    }
+
+    fn set_mainnet_sns_canisters_env_vars(&self) -> Result<()> {
+        self.set_canister_env_vars("rs/tests/mainnet-sns-canisters")
+    }
+
+    fn set_qualifying_sns_canisters_env_vars(&self) -> Result<()> {
+        self.set_canister_env_vars("rs/tests/qualifying-sns-canisters")
     }
 }
 

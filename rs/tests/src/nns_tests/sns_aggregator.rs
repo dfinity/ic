@@ -10,7 +10,7 @@ use crate::{
     canister_agent::CanisterAgent,
     canister_api::{CallMode, SnsRequestProvider},
     canister_requests,
-    driver::test_env_api::retry_async,
+    driver::test_env_api::{retry_async, NnsCanisterWasmStrategy, NnsCustomizations},
     generic_workload_engine::{
         engine::Engine,
         metrics::{LoadTestMetrics, RequestOutcome},
@@ -69,8 +69,8 @@ fn config_for_security_testing(env: &TestEnv) {
             .nodes()
             .for_each(|node| node.await_status_is_healthy().unwrap())
     });
-    install_nns(env, None);
-    install_sns(env);
+    install_nns(env, NnsCustomizations::default());
+    install_sns(env, NnsCanisterWasmStrategy::NnsReleaseQualification);
 }
 
 pub fn benchmark_config(env: TestEnv) {

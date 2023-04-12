@@ -82,7 +82,7 @@ pub fn test(env: TestEnv) {
     let app_agent = app_node.with_default_agent(|agent| async move { agent });
     info!(log, "Installing NNS canisters ...");
     nns_node
-        .install_mainnet_nns_canisters()
+        .install_qualifying_nns_canisters()
         .expect("Could not install NNS canisters");
 
     block_on(async move {

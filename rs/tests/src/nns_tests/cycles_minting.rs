@@ -103,7 +103,7 @@ pub fn test(env: TestEnv) {
     let nns_node = topology.root_subnet().nodes().next().unwrap();
     let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     nns_node
-        .install_mainnet_nns_canisters()
+        .install_qualifying_nns_canisters()
         .expect("Could not install NNS canisters");
     let app_node = topology
         .subnets()
@@ -824,7 +824,7 @@ pub fn create_canister_on_specific_subnet_type(env: TestEnv) {
     let nns_node = topology.root_subnet().nodes().next().unwrap();
     let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     nns_node
-        .install_mainnet_nns_canisters()
+        .install_qualifying_nns_canisters()
         .expect("Could not install NNS canisters");
     block_on(async move {
         let agent_client = HttpClient::new();
