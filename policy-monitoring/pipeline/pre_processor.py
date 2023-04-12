@@ -154,7 +154,7 @@ class PreProcessor:
             if not self._ever_flushed:
                 fout.write(
                     "["
-                )  # the entire output should respresent a syntactically correct python object, e.g., a list
+                )  # the entire output should represent a syntactically correct python object, e.g., a list
                 self._ever_flushed = True
             fout.writelines(self._buf)
             self._buf = []
