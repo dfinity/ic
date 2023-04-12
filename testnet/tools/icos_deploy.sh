@@ -12,6 +12,7 @@ set -eEuo pipefail
 
 cd "$(dirname "$0")"
 REPO_ROOT="$(git rev-parse --show-toplevel)"
+find "$REPO_ROOT/testnet" -type d -exec chmod 0775 '{}' \;
 
 function err() {
     echo "[$(date +'%Y-%m-%dT%H:%M:%S%z')]: $*" >&2
