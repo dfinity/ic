@@ -1,20 +1,17 @@
 import os
 import re
-from importlib.util import module_from_spec
-from importlib.util import spec_from_file_location
-from os.path import isdir
-from os.path import isfile
-from os.path import join
-from typing import Dict
-from typing import List
-from typing import Optional
+from importlib.util import module_from_spec, spec_from_file_location
+from os.path import isdir, isfile, join
+from typing import Dict, List, Optional
 
-from monpoly.monpoly import AlertHandlerParams
-from monpoly.monpoly import ErrorHandlerParams
-from monpoly.monpoly import ExitHandlerParams
-from monpoly.monpoly import Monpoly
-from monpoly.monpoly import MonpolyException
-from monpoly.monpoly import MonpolyGlobalTimeout
+from monpoly.monpoly import (
+    AlertHandlerParams,
+    ErrorHandlerParams,
+    ExitHandlerParams,
+    Monpoly,
+    MonpolyException,
+    MonpolyGlobalTimeout,
+)
 from monpoly.multi_monitor import MultiMonitor
 from util import docker
 

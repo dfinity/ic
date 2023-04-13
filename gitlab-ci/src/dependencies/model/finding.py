@@ -1,8 +1,5 @@
 from dataclasses import dataclass
-from typing import Dict
-from typing import List
-from typing import Optional
-from typing import Tuple
+from typing import Dict, List, Optional, Tuple
 
 from model.dependency import Dependency
 from model.security_risk import SecurityRisk

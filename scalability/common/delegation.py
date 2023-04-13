@@ -8,9 +8,7 @@ from pathlib import Path
 from ic.agent import Agent
 from ic.canister import Canister
 from ic.client import Client
-from ic.identity import DelegateIdentity
-from ic.identity import Identity
-
+from ic.identity import DelegateIdentity, Identity
 
 logging.basicConfig(level=logging.INFO)
 

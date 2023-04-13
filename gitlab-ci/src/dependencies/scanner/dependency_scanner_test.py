@@ -1,13 +1,11 @@
 import datetime
 import typing
-from unittest.mock import Mock
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 from model.dependency import Dependency
 from model.finding import Finding
-from model.repository import Project
-from model.repository import Repository
+from model.repository import Project, Repository
 from model.security_risk import SecurityRisk
 from model.user import User
 from model.vulnerability import Vulnerability

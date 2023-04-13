@@ -1,6 +1,4 @@
-from tests import global_infra_io
-from tests import mfotl_sanity
-from tests import monpoly_io
+from tests import global_infra_io, mfotl_sanity, monpoly_io
 
 
 def run_all_tests():

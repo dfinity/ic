@@ -8,14 +8,8 @@ import shlex
 import subprocess
 import time
 from contextlib import contextmanager
-from os import getenv
-from os import path
-from typing import Iterable
-from typing import List
-from typing import Literal
-from typing import Optional
-from typing import overload
-from typing import TypeVar
+from os import getenv, path
+from typing import Iterable, List, Literal, Optional, TypeVar, overload
 
 import beeline
 

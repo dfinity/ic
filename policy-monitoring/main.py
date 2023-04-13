@@ -4,18 +4,12 @@ import os
 import sys
 import traceback
 from pathlib import Path
-from typing import Dict
-from typing import FrozenSet
-from typing import Iterable
-from typing import Optional
-from typing import TypedDict
+from typing import Dict, FrozenSet, Iterable, Optional, TypedDict
 
 from monpoly.monpoly import Monpoly
-from pipeline.alert import AlertService
-from pipeline.alert import DummyAlertService
+from pipeline.alert import AlertService, DummyAlertService
 from pipeline.artifact_manager import ArtifactManager
-from pipeline.backend.ci import Ci
-from pipeline.backend.ci import CiException
+from pipeline.backend.ci import Ci, CiException
 from pipeline.backend.es import Es
 from pipeline.backend.group import Group
 from pipeline.backend.system_tests_artifact_manager import SystemTestsArtifactManager
@@ -23,9 +17,7 @@ from pipeline.global_infra import GlobalInfra
 from pipeline.mode import Mode
 from pipeline.pipeline import Pipeline
 from pipeline.pre_processor import UniversalPreProcessor
-from util import docker
-from util import env
-
+from util import docker, env
 
 DEFAULT_MAINNET_ES_ENDPOINT = "elasticsearch.mercury.dfinity.systems"
 DEFAULT_TESTNET_ES_ENDPOINT = "elasticsearch-v4.testnet.dfinity.systems"

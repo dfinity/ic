@@ -11,8 +11,7 @@ import sys
 import time
 
 import gflags
-from ic.candid import encode
-from ic.candid import Types
+from ic.candid import Types, encode
 from ic.principal import Principal
 from termcolor import colored
 

@@ -1,20 +1,13 @@
 import pprint
 import re
 import sys
-from datetime import datetime
-from datetime import timedelta
-from typing import Dict
-from typing import Iterator
-from typing import List
-from typing import Optional
-from typing import Union
+from datetime import datetime, timedelta
+from typing import Dict, Iterator, List, Optional, Union
 
-from elasticsearch import Elasticsearch
-from elasticsearch import exceptions
+from elasticsearch import Elasticsearch, exceptions
 from pipeline.alert import AlertService
 from pipeline.es_doc import EsDoc
-from util.print import assert_with_trace
-from util.print import eprint
+from util.print import assert_with_trace, eprint
 
 from .group import Group
 

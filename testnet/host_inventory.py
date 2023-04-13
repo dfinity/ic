@@ -2,8 +2,7 @@
 import itertools
 import re
 import sys
-from os import path
-from os import walk
+from os import path, walk
 
 
 def main(argv):

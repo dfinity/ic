@@ -1,7 +1,5 @@
 from pathlib import Path
-from typing import Iterable
-from typing import Iterator
-from typing import Optional
+from typing import Iterable, Iterator, Optional
 
 from pipeline.es_doc import EsDoc
 from pipeline.global_infra import GlobalInfra

@@ -1,7 +1,6 @@
 from data_source.console_logger_finding_data_source_subscriber import ConsoleLoggerFindingDataSourceSubscriber
 from data_source.jira_finding_data_source import JiraFindingDataSource
-from model.repository import Project
-from model.repository import Repository
+from model.repository import Project, Repository
 from notification.notification_config import NotificationConfig
 from notification.slack_notification import SlackNotifier
 from scanner.console_logger_scanner_subscriber import ConsoleLoggerScannerSubscriber

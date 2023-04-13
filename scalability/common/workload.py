@@ -9,12 +9,11 @@ import sys
 import threading
 import time
 import uuid
-from typing import List
-from typing import NamedTuple
+from typing import List, NamedTuple
 
 import gflags
-from common import misc
-from common import ssh
+
+from common import misc, ssh
 
 FLAGS = gflags.FLAGS
 

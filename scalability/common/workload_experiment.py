@@ -6,18 +6,13 @@ import subprocess
 import tempfile
 import time
 import uuid
-from statistics import mean
-from statistics import StatisticsError
+from statistics import StatisticsError, mean
 from typing import List
 
 import gflags
-from common import ansible
-from common import base_experiment
-from common import prometheus
-from common import report
-from common import ssh
-from common import workload
 from termcolor import colored
+
+from common import ansible, base_experiment, prometheus, report, ssh, workload
 
 NUM_WORKLOAD_GEN = -1  # Number of machines to run the workload generator on
 

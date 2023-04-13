@@ -8,10 +8,9 @@ import toml
 
 p = Path(__file__).parents[2]
 sys.path.append(f"{p}/")
-import common.workload as workload  # noqa: E402
-
 # even though base_experiment is not directly called, test will fail if not present
 import common.base_experiment as base_experiment  # noqa
+import common.workload as workload  # noqa: E402
 
 FLAGS = gflags.FLAGS
 

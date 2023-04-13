@@ -1,17 +1,11 @@
 import json
-from ipaddress import IPv6Address
-from ipaddress import IPv6Network
+from ipaddress import IPv6Address, IPv6Network
 from pathlib import Path
-from typing import Any
-from typing import Dict
-from typing import List
-from typing import Set
-from typing import Tuple
+from typing import Any, Dict, List, Set, Tuple
 
 from util.yaml import yaml
 
-from .es_doc import EsDoc
-from .es_doc import ReplicaDoc
+from .es_doc import EsDoc, ReplicaDoc
 
 
 class GlobalInfra:

@@ -1,14 +1,11 @@
 # type: ignore
 # Note: mypy does not see top-level attributes of the yaml module
 from datetime import timedelta
-from ipaddress import IPv6Address
-from ipaddress import IPv6Network
+from ipaddress import IPv6Address, IPv6Network
 
 import yaml
 from yaml.constructor import ConstructorError
-from yaml.nodes import Node
-from yaml.nodes import ScalarNode
-from yaml.nodes import SequenceNode
+from yaml.nodes import Node, ScalarNode, SequenceNode
 
 
 def cast_scalar(node: Node) -> ScalarNode:

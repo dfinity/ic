@@ -16,10 +16,8 @@ import subprocess
 import sys
 import tarfile
 
-from crc import calc_crc
-from crc import INITIAL_CRC
-from reproducibility import get_tmpdir_checking_block_size
-from reproducibility import print_artifact_info
+from crc import INITIAL_CRC, calc_crc
+from reproducibility import get_tmpdir_checking_block_size, print_artifact_info
 
 LVM_HEADER_SIZE_BYTES = int(2048 * 512)
 BYTES_PER_MEBIBYTE = int(2 ** 20)

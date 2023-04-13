@@ -2,13 +2,11 @@ import argparse
 import glob
 import json
 import logging
-from collections import Counter
-from collections import defaultdict
+from collections import Counter, defaultdict
 from functools import reduce
 from operator import add
 from string import Formatter
-from typing import List
-from typing import Optional
+from typing import List, Optional
 
 import input
 import requests

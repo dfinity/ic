@@ -1,10 +1,7 @@
 import re
-from datetime import datetime
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict
-from typing import List
-from typing import Optional
+from typing import Dict, List, Optional
 
 import gitlab.base
 import pytz

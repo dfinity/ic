@@ -25,7 +25,6 @@ import paramiko
 import requests
 import yaml
 
-
 git_repo = git.Repo(os.path.dirname(__file__), search_parent_directories=True)
 repo_root = pathlib.Path(git_repo.git.rev_parse("--show-toplevel"))
 

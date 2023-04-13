@@ -2,14 +2,11 @@
 import argparse
 import os
 import shutil
-from datetime import datetime
-from datetime import timedelta
-from typing import Any
-from typing import Tuple
+from datetime import datetime, timedelta
+from typing import Any, Tuple
 
 import pytz
-from slack_sdk import errors
-from slack_sdk import WebClient
+from slack_sdk import WebClient, errors
 from util.print import eprint
 
 LIVENESS_BOT_ID = "B037ZD5B2A3"

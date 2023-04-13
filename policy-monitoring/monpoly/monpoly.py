@@ -1,19 +1,11 @@
 import os
 import subprocess
 import sys
-from datetime import datetime
-from datetime import timedelta
-from typing import Any
-from typing import Callable
-from typing import Dict
-from typing import IO
-from typing import List
-from typing import Optional
-from typing import Tuple
+from datetime import datetime, timedelta
+from typing import IO, Any, Callable, Dict, List, Optional, Tuple
 
 import psutil
-from func_timeout import func_timeout
-from func_timeout import FunctionTimedOut
+from func_timeout import FunctionTimedOut, func_timeout
 from util.threads import PropagatingThread
 
 

@@ -1,14 +1,11 @@
 import time
 from pathlib import Path
-from typing import Callable
-from typing import List
-from typing import Optional
+from typing import Callable, List, Optional
 
 from util.print import eprint
 from util.threads import PropagatingThread
 
-from .monpoly import Monpoly
-from .monpoly import MonpolyException
+from .monpoly import Monpoly, MonpolyException
 
 
 class MultiMonitor:

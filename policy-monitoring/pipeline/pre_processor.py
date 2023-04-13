@@ -3,47 +3,39 @@ import pprint
 import time
 from abc import abstractmethod
 from pathlib import Path
-from typing import Any
-from typing import Dict
-from typing import FrozenSet
-from typing import Iterable
-from typing import List
-from typing import Optional
-from typing import Set
-from typing import Type
-from typing import TypedDict
-from typing import Union
+from typing import Any, Dict, FrozenSet, Iterable, List, Optional, Set, Type, TypedDict, Union
 
-from util.print import assert_with_trace
-from util.print import eprint
+from util.print import assert_with_trace, eprint
 
 from .es_doc import EsDoc
-from .event import ConsensusFinalizedEvent
-from .event import ControlePlaneSpawnAcceptTaskTlsServerHandshakeFailedEvent
-from .event import CupShareProposedEvent
-from .event import DeliverBatchEvent
-from .event import Event
-from .event import FinalEvent
-from .event import FinalizedEvent
-from .event import GenericLogEvent
-from .event import InfraEvent
-from .event import MoveBlockProposalEvent
-from .event import NodeAddedEvent
-from .event import NodeRemovedEvent
-from .event import OriginallyInIcPreambleEvent
-from .event import OriginallyInSubnetPreambleEvent
-from .event import OriginalSubnetTypePreambleEvent
-from .event import RebootEvent
-from .event import RebootIntentEvent
-from .event import RegistryNodeAddedToIcEvent
-from .event import RegistryNodeAddedToSubnetEvent
-from .event import RegistryNodesRemovedFromIcEvent
-from .event import RegistryNodesRemovedFromSubnetEvent
-from .event import RegistrySubnetCreatedEvent
-from .event import RegistrySubnetUpdatedEvent
-from .event import ReplicaDivergedEvent
-from .event import ValidatedBlockProposalAddedEvent
-from .event import ValidatedBlockProposalMovedEvent
+from .event import (
+    ConsensusFinalizedEvent,
+    ControlePlaneSpawnAcceptTaskTlsServerHandshakeFailedEvent,
+    CupShareProposedEvent,
+    DeliverBatchEvent,
+    Event,
+    FinalEvent,
+    FinalizedEvent,
+    GenericLogEvent,
+    InfraEvent,
+    MoveBlockProposalEvent,
+    NodeAddedEvent,
+    NodeRemovedEvent,
+    OriginallyInIcPreambleEvent,
+    OriginallyInSubnetPreambleEvent,
+    OriginalSubnetTypePreambleEvent,
+    RebootEvent,
+    RebootIntentEvent,
+    RegistryNodeAddedToIcEvent,
+    RegistryNodeAddedToSubnetEvent,
+    RegistryNodesRemovedFromIcEvent,
+    RegistryNodesRemovedFromSubnetEvent,
+    RegistrySubnetCreatedEvent,
+    RegistrySubnetUpdatedEvent,
+    ReplicaDivergedEvent,
+    ValidatedBlockProposalAddedEvent,
+    ValidatedBlockProposalMovedEvent,
+)
 from .global_infra import GlobalInfra
 
 

@@ -7,7 +7,6 @@ import sys
 import dfinity_gitlab_config
 import gitrepo
 import yaml
-
 from gen_gitlab_cargo_pipeline import gen_pipeline
 
 if __name__ == "__main__":

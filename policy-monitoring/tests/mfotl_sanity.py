@@ -1,8 +1,6 @@
 import os
-from os.path import isdir
-from os.path import join
-from posixpath import abspath
-from posixpath import dirname
+from os.path import isdir, join
+from posixpath import abspath, dirname
 
 from monpoly.monpoly import Monpoly
 from util import docker

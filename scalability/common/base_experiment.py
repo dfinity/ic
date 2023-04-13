@@ -25,15 +25,9 @@ from pathlib import Path
 from typing import List
 
 import gflags
-from common import ansible
-from common import flamegraphs
-from common import machine_failure
-from common import misc
-from common import prometheus
-from common import report
-from common import ssh
 from termcolor import colored
 
+from common import ansible, flamegraphs, machine_failure, misc, prometheus, report, ssh
 
 NNS_SUBNET_INDEX = 0  # Subnet index of the NNS subnetwork
 MAINNET_NNS_SUBNET_ID = "tdb26-jop6k-aogll-7ltgs-eruif-6kk7m-qpktf-gdiqx-mxtrf-vb5e6-eqe"

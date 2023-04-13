@@ -1,10 +1,6 @@
 import pprint
 from pathlib import Path
-from typing import Any
-from typing import Callable
-from typing import Dict
-from typing import Iterable
-from typing import Optional
+from typing import Any, Callable, Dict, Iterable, Optional
 
 from util.print import eprint
 from util.yaml import yaml

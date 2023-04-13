@@ -1,7 +1,5 @@
 from copy import deepcopy
-from typing import Dict
-from typing import List
-from typing import Optional
+from typing import Dict, List, Optional
 
 import pytest
 from model.dependency import Dependency
@@ -11,10 +9,8 @@ from model.user import User
 from model.vulnerability import Vulnerability
 from notification.notification_config import NotificationConfig
 from notification.slack_api import SlackApi
-from notification.slack_notification import APP_OWNERS
-from notification.slack_notification import SlackNotifier
+from notification.slack_notification import APP_OWNERS, SlackNotifier
 from scanner.scanner_job_type import ScannerJobType
-
 
 FINDING_WITH_RISK_YES_PATCH_YES = Finding(
     "repo",

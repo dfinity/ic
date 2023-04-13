@@ -3,8 +3,7 @@ import logging
 import os
 import traceback
 import urllib.request
-from typing import Dict
-from typing import Optional
+from typing import Dict, Optional
 
 from model.user import User
 

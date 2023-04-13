@@ -13,8 +13,7 @@ import shutil
 import subprocess
 import sys
 
-from reproducibility import get_tmpdir_checking_block_size
-from reproducibility import print_artifact_info
+from reproducibility import get_tmpdir_checking_block_size, print_artifact_info
 
 
 def parse_size(s):
