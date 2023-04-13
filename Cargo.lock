@@ -6346,6 +6346,7 @@ dependencies = [
  "ic-types-test-utils",
  "ic-universal-canister",
  "ic-utils 0.8.0",
+ "ic-utils-lru-cache",
  "ic-wasm-types",
  "lazy_static",
  "libflate",

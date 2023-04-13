@@ -151,7 +151,7 @@ impl QueryHandler for InternalHttpQueryHandler {
             let key = query_cache::EntryKey::from(&query);
             let env = query_cache::EntryEnv::try_from((&key, state.as_ref()))?;
 
-            if let Some(result) = self.query_cache.valid_result(&key, &env) {
+            if let Some(result) = self.query_cache.get_valid_result(&key, &env) {
                 self.metrics.query_cache_hits.inc();
                 return result;
             }

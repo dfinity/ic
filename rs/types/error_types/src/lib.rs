@@ -299,6 +299,10 @@ impl UserError {
             | ErrorCode::QueryTimeLimitExceeded => false,
         }
     }
+
+    pub fn count_bytes(&self) -> usize {
+        std::mem::size_of_val(self) + self.description.len()
+    }
 }
 
 impl std::error::Error for UserError {

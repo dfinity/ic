@@ -1,4 +1,4 @@
-use ic_types::NumBytes;
+use ic_types::{CountBytes, NumBytes};
 use std::hash::Hash;
 
 /// The upper bound on cache item size and cache capacity.
@@ -16,6 +16,15 @@ where
     cache: lru::LruCache<K, (V, NumBytes)>,
     capacity: NumBytes,
     size: NumBytes,
+}
+
+impl<K, V> CountBytes for LruCache<K, V>
+where
+    K: Eq + Hash,
+{
+    fn count_bytes(&self) -> usize {
+        self.size.get() as usize
+    }
 }
 
 impl<K, V> LruCache<K, V>
@@ -59,6 +68,19 @@ where
         self.size += size;
         self.evict();
         self.check_invariants();
+    }
+
+    /// Removes and returns the value corresponding to the key from the cache or
+    /// `None` if it does not exist.
+    pub fn pop(&mut self, key: &K) -> Option<V> {
+        if let Some((value, size)) = self.cache.pop(key) {
+            debug_assert!(self.size >= size);
+            self.size -= size;
+            self.check_invariants();
+            Some(value)
+        } else {
+            None
+        }
     }
 
     /// Clears the cache by removing all items.
@@ -168,5 +190,30 @@ mod tests {
         lru.put(0, 0, NumBytes::new(10));
         lru.clear();
         assert!(lru.get(&0).is_none());
+    }
+
+    #[test]
+    fn lru_cache_pop() {
+        let mut lru = LruCache::<u32, u32>::new(NumBytes::new(10));
+        lru.put(0, 0, NumBytes::new(5));
+        lru.put(1, 1, NumBytes::new(5));
+        lru.pop(&0);
+        assert!(lru.get(&0).is_none());
+        assert!(lru.get(&1).is_some());
+        lru.pop(&1);
+        assert!(lru.get(&1).is_none());
+    }
+
+    #[test]
+    fn lru_cache_count_bytes() {
+        let mut lru = LruCache::<u32, u32>::new(NumBytes::new(10));
+        lru.put(0, 0, NumBytes::new(4));
+        assert_eq!(4, lru.count_bytes());
+        lru.put(1, 1, NumBytes::new(6));
+        assert_eq!(10, lru.count_bytes());
+        lru.pop(&0);
+        assert_eq!(6, lru.count_bytes());
+        lru.pop(&1);
+        assert_eq!(0, lru.count_bytes());
     }
 }

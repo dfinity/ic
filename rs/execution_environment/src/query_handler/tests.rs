@@ -9,7 +9,7 @@ use ic_test_utilities::{
     universal_canister::{call_args, wasm},
 };
 use ic_test_utilities_execution_environment::{ExecutionTest, ExecutionTestBuilder};
-use ic_types::{ingress::WasmResult, messages::UserQuery, Cycles, NumInstructions};
+use ic_types::{ingress::WasmResult, messages::UserQuery, CountBytes, Cycles, NumInstructions};
 use std::{sync::Arc, time::Duration};
 
 const CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
@@ -308,12 +308,22 @@ const QUERY_CACHE_WAT: &str = r#"
     (import "ic0" "msg_reply" (func $msg_reply))
     (import "ic0" "msg_reply_data_append"
         (func $msg_reply_data_append (param i32 i32)))
+    (import "ic0" "canister_cycle_balance" (func $canister_cycle_balance (result i64)))
 
-    (memory 1)
+    (memory 100)
     (data (i32.const 0) "42")
 
     (func $f
         (call $msg_reply_data_append (i32.const 0) (i32.const 2))
+        (call $msg_reply)
+    )
+
+    (func (export "canister_query canister_balance_sized_reply")
+        ;; Produce a `canister_cycle_balance` sized reply
+        (call $msg_reply_data_append
+            (i32.const 0)
+            (i32.wrap_i64 (call $canister_cycle_balance))
+        )
         (call $msg_reply)
     )
 
@@ -522,6 +532,85 @@ fn query_cache_env_different_canister_balance_returns_different_results() {
         assert_eq!(query_handler.metrics.query_cache_misses.get(), 2);
         assert_eq!(output_1, output_2);
     }
+}
+
+#[test]
+fn query_cache_env_old_invalid_entry_frees_memory() {
+    static BIG_RESPONSE_SIZE: usize = 1_000_000;
+    static SMALL_RESPONSE_SIZE: usize = 42;
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_query_caching()
+        // Use system subnet so all the executions are free.
+        .with_subnet_type(SubnetType::System)
+        // To replace the cache entry in the cache, the query requests must be identical,
+        // i.e. source, receiver, method name and payload must all be the same. Hence,
+        // we cant use them to construct a different reply.
+        // For the test purpose, the cycles balance is used to construct different replies,
+        // keeping all other parameters the same.
+        // The first reply will be 1MB.
+        .with_initial_canister_cycles(BIG_RESPONSE_SIZE.try_into().unwrap())
+        .build();
+    let canister_id = test.canister_from_wat(QUERY_CACHE_WAT).unwrap();
+
+    let count_bytes = downcast_query_handler(test.query_handler())
+        .query_cache
+        .count_bytes();
+    // Initially the cache should be empty, i.e. less than 1MB.
+    assert!(count_bytes < BIG_RESPONSE_SIZE);
+
+    // The 1MB result will be cached internally.
+    let output = test
+        .query(
+            UserQuery {
+                source: user_test_id(1),
+                receiver: canister_id,
+                method_name: "canister_balance_sized_reply".into(),
+                method_payload: vec![],
+                ingress_expiry: 0,
+                nonce: None,
+            },
+            Arc::new(test.state().clone()),
+            vec![],
+        )
+        .unwrap();
+    assert_eq!(BIG_RESPONSE_SIZE, output.count_bytes());
+    let count_bytes = downcast_query_handler(test.query_handler())
+        .query_cache
+        .count_bytes();
+    // After the first reply, the cache should have more than 1MB of data.
+    assert!(count_bytes > BIG_RESPONSE_SIZE);
+
+    // Set the canister balance to 42B, so the second reply will heave just 42 bytes.
+    test.canister_state_mut(canister_id)
+        .system_state
+        .remove_cycles(
+            ((BIG_RESPONSE_SIZE - SMALL_RESPONSE_SIZE) as u128).into(),
+            CyclesUseCase::Memory,
+        );
+
+    // The new 42B reply must invalidate and replace the previous 1MB reply in the cache.
+    let output = test
+        .query(
+            UserQuery {
+                source: user_test_id(1),
+                receiver: canister_id,
+                method_name: "canister_balance_sized_reply".into(),
+                method_payload: vec![],
+                ingress_expiry: 0,
+                nonce: None,
+            },
+            Arc::new(test.state().clone()),
+            vec![],
+        )
+        .unwrap();
+    assert_eq!(SMALL_RESPONSE_SIZE, output.count_bytes());
+    let count_bytes = downcast_query_handler(test.query_handler())
+        .query_cache
+        .count_bytes();
+    // The second 42B reply should invalidate and replace the first 1MB reply in the cache.
+    assert!(count_bytes > SMALL_RESPONSE_SIZE);
+    assert!(count_bytes < BIG_RESPONSE_SIZE);
 }
 
 #[test]

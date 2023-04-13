@@ -607,3 +607,19 @@ impl CountBytes for Time {
         8
     }
 }
+
+impl<T: CountBytes, E: CountBytes> CountBytes for Result<T, E> {
+    fn count_bytes(&self) -> usize {
+        match self {
+            Ok(result) => result.count_bytes(),
+            Err(err) => err.count_bytes(),
+        }
+    }
+}
+
+// Implementing `CountBytes` in `ic_error_types` introduces a circular dependency.
+impl CountBytes for ic_error_types::UserError {
+    fn count_bytes(&self) -> usize {
+        self.count_bytes()
+    }
+}
