@@ -1,4 +1,44 @@
 sh_test(
+    name = "ruff-lint",
+    size = "small",
+    srcs = ["ruff-lint.sh"],
+    data = [
+        "//:WORKSPACE.bazel",
+        "@ruff",
+    ],
+    env = {
+        # Hack to escape the sandbox and grep on the actual repository
+        "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
+        "ruff_path": "$(rootpath @ruff//:ruff)",
+    },
+    tags = [
+        "external",  # force test to be unconditionally executed.
+        "local",  # precludes the action or test from being remotely cached, remotely executed, or run inside the sandbox.
+        "smoke",  # it should be run before committing code changes into the version control system.
+    ],
+)
+
+sh_binary(
+    name = "ruff-format",
+    srcs = ["ruff-format.sh"],
+    data = [
+        "//:WORKSPACE.bazel",
+        "@ruff",
+    ],
+    env = {
+        # Hack to escape the sandbox and grep on the actual repository
+        "WORKSPACE": "$(rootpath //:WORKSPACE.bazel)",
+        "ruff_path": "$(rootpath @ruff//:ruff)",
+    },
+    tags = [
+        "external",  # force test to be unconditionally executed.
+        "local",  # precludes the action or test from being remotely cached, remotely executed, or run inside the sandbox.
+        "smoke",  # it should be run before committing code changes into the version control system.
+    ],
+    visibility = ["//visibility:public"],
+)
+
+sh_test(
     name = "buf",
     size = "small",
     srcs = ["buf.sh"],
