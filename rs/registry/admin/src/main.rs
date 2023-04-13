@@ -56,7 +56,7 @@ use ic_nns_init::make_hsm_sender;
 use ic_nns_test_utils::ids::TEST_NEURON_1_ID;
 use ic_protobuf::registry::firewall::v1::{FirewallConfig, FirewallRule, FirewallRuleSet};
 use ic_protobuf::registry::node_rewards::v2::{
-    NodeRewardRate, NodeRewardsTable, UpdateNodeRewardsTableProposalPayload,
+    NodeRewardRate, UpdateNodeRewardsTableProposalPayload,
 };
 use ic_protobuf::registry::{
     crypto::v1::{PublicKey, X509PublicKeyCert},
@@ -3065,8 +3065,7 @@ struct ProposeToUpdateNodeRewardsTableCmd {
     /// xdr_permyriad_per_node_per_month for that node type in that region
     ///
     /// Example:
-    /// '{ "us-west": { "default": 10, "storage_upgrade": 24 }, "france": {
-    /// "default": 24 } }'
+    /// '{ "North America,US,California": { "type0": 10, "type1": 24 }, "Europe": { "type0": 24 } }'
     #[clap(long)]
     pub updated_node_rewards: String,
 }
@@ -4502,8 +4501,41 @@ async fn main() {
                 .await
                 .unwrap();
 
-            let table = decode_registry_value::<NodeRewardsTable>(bytes);
-            println!("{}", table);
+            // We re-create the rewards structs here in order to convert the output of get-rewards-table into the format
+            // that can also be parsed by propose-to-update-node-rewards-table.
+            // This is a bit of a hack, but it's the easiest way to get the desired output.
+            // A more proper way would be to adjust the upstream structs to flatten the "rates" and "table" fields
+            // directly, but this breaks some of the candid encoding and decoding and also some of the tests.
+            // Make sure to keep these structs in sync with the upstream ones.
+            #[derive(serde::Serialize, PartialEq, ::prost::Message)]
+            pub struct NodeRewardRateFlattened {
+                #[prost(uint64, tag = "1")]
+                pub xdr_permyriad_per_node_per_month: u64,
+                #[prost(int32, optional, tag = "2")]
+                #[serde(skip_serializing_if = "Option::is_none")]
+                pub reward_coefficient_percent: Option<i32>,
+            }
+
+            #[derive(serde::Serialize, PartialEq, ::prost::Message)]
+            pub struct NodeRewardRatesFlattened {
+                #[prost(btree_map = "string, message", tag = "1")]
+                #[serde(flatten)]
+                pub rates: BTreeMap<String, NodeRewardRateFlattened>,
+            }
+
+            #[derive(serde::Serialize, PartialEq, ::prost::Message)]
+            pub struct NodeRewardsTableFlattened {
+                #[prost(btree_map = "string, message", tag = "1")]
+                #[serde(flatten)]
+                pub table: BTreeMap<String, NodeRewardRatesFlattened>,
+            }
+
+            let table = decode_registry_value::<NodeRewardsTableFlattened>(bytes);
+            println!(
+                "{}",
+                serde_json::to_string(&table)
+                    .expect("Failed to serialize the rewards table to JSON")
+            );
         }
         SubCommand::ProposeToUpdateNodeRewardsTable(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
