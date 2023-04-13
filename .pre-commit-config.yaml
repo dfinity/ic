@@ -6,33 +6,6 @@ repos:
     stages: [commit]
 - repo: local
   hooks:
-  # Do not use pygrep, but use a grep shell script.
-  # Otherwise, on OSX the command line argument limit will be exceeded
-  # whenever a user runs `pre-commit run -a`
-  - id: do-not-merge
-    name: Check for "DO NOT MERGE".
-    stages: [manual]  # Only run this on CI --- it's called DO NOT MERGE, not DO NOT COMMIT.
-    entry: gitlab-ci/src/checks/do-not-merge.sh
-    language: system
-    exclude: |
-        (?x)^(
-            .pre-commit-config.yaml|
-            checks.nix
-        )$
-
-  - id: DFINITY-capitalization
-    exclude: |
-        (?x)^(
-            checks\.nix|
-            .github/CODEOWNERS|
-            .pre-commit-config.yaml|
-            .*/user_map.csv
-        )$
-    name: Check for improper capitalization of "DFINITY".
-    stages: [manual]  # Only run this on CI, as it makes no sense to run on commit.
-    entry: gitlab-ci/src/checks/dfinity-capitalization.sh
-    language: system
-
   - id: candid_changes_are_backwards_compatible
     name: Candid changes are backwards compatible
     entry: gitlab-ci/src/checks/candid_changes_are_backwards_compatible.py # TODO: Uncomment (once we figure out how to not cause lots of problems for people): --also-reverse
