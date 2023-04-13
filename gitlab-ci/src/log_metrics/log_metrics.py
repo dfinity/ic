@@ -22,11 +22,9 @@ import traceback
 import urllib.request
 from pathlib import Path
 from pprint import pprint
-from typing import Any
-from typing import Dict
+from typing import Any, Dict
 
 from notify_slack import send_message
-
 
 ES_NODES = ["elasticsearch-node-%s.dfinity.systems" % i for i in range(3)]
 

@@ -11,8 +11,7 @@ import traceback
 
 import gflags
 import requests
-from ic.candid import encode
-from ic.candid import Types
+from ic.candid import Types, encode
 from termcolor import colored
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

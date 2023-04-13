@@ -26,11 +26,11 @@ import typing
 from pprint import pformat
 
 import git
+import git_changes
+import notify_slack
 import toml
 import yaml
 
-import git_changes
-import notify_slack
 from gen_gitlab_cargo_pipeline.farm_rate_limit import FARM_RATE_LIMIT
 
 

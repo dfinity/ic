@@ -1,8 +1,7 @@
 import json
 import types
 from types import SimpleNamespace
-from typing import Any
-from typing import Tuple
+from typing import Any, Tuple
 
 
 def format_node_result(node_result: Any) -> Tuple[str, str]:

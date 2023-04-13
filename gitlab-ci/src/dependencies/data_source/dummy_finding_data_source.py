@@ -1,7 +1,4 @@
-from typing import Dict
-from typing import List
-from typing import Optional
-from typing import Tuple
+from typing import Dict, List, Optional, Tuple
 
 from data_source.commit_type import CommitType
 from data_source.finding_data_source import FindingDataSource

@@ -15,15 +15,14 @@ from dataclasses import dataclass
 
 import gflags
 import matplotlib.pyplot as plt
-from common.base_experiment import BaseExperiment
-from common.delegation import get_delegation
-from common.delegation import get_ii_canister_id
-from ic.agent import Agent
-from ic.agent import sign_request
+from ic.agent import Agent, sign_request
 from ic.client import Client
 from ic.identity import Identity
 from ic.principal import Principal
 from termcolor import colored
+
+from common.base_experiment import BaseExperiment
+from common.delegation import get_delegation, get_ii_canister_id
 
 FLAGS = gflags.FLAGS
 gflags.DEFINE_integer("num_procs", 16, "Number of Python processes to use")

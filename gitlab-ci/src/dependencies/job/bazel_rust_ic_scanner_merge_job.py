@@ -7,7 +7,6 @@ from scanner.dependency_scanner import DependencyScanner
 from scanner.manager.bazel_rust_dependency_manager import BazelRustDependencyManager
 from scanner.scanner_job_type import ScannerJobType
 
-
 if __name__ == "__main__":
     scanner_job = ScannerJobType.MERGE_SCAN
     notify_on_scan_job_succeeded, notify_on_scan_job_failed = {}, {}

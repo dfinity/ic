@@ -9,8 +9,7 @@ import re
 import subprocess
 import sys
 
-from reproducibility import get_tmpdir_checking_block_size
-from reproducibility import print_artifact_info
+from reproducibility import get_tmpdir_checking_block_size, print_artifact_info
 
 root_hash_re = re.compile("Root hash:[ \t]+([a-f0-9]+).*")
 

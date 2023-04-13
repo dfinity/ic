@@ -8,6 +8,7 @@ import traceback
 import typing
 
 import git
+import git_changes
 import parse
 from cvss import CVSS3
 from model.dependency import Dependency
@@ -17,9 +18,6 @@ from model.vulnerability import Vulnerability
 from packaging import version
 from scanner.manager.dependency_manager import DependencyManager
 from scanner.process_executor import ProcessExecutor
-
-import git_changes
-
 
 RUSTSEC_URL = "https://rustsec.org/advisories/"
 CRATES_IO_URL = "https://crates.io/crates/"

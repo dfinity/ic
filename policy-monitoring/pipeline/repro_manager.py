@@ -1,9 +1,6 @@
 import re
 import subprocess
-from typing import Dict
-from typing import Optional
-from typing import Set
-from typing import Tuple
+from typing import Dict, Optional, Set, Tuple
 
 from monpoly.monpoly import Monpoly
 from util.print import eprint

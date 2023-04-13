@@ -3,17 +3,19 @@ from unittest.mock import Mock
 
 import pytest
 from data_source.commit_type import CommitType
-from data_source.jira_finding_data_source import JIRA_BOARD_KEY
-from data_source.jira_finding_data_source import JIRA_DEFAULT_RISK_ASSESSORS
-from data_source.jira_finding_data_source import JIRA_FINDING_ISSUE_TYPE
-from data_source.jira_finding_data_source import JIRA_FINDING_TO_CUSTOM_FIELD
-from data_source.jira_finding_data_source import JIRA_INCIDENT_RESPONDER_EPIC
-from data_source.jira_finding_data_source import JIRA_LABEL_PATCH_ALLDEP_PUBLISHED
-from data_source.jira_finding_data_source import JIRA_LABEL_PATCH_VULNDEP_PUBLISHED
-from data_source.jira_finding_data_source import JIRA_MERGE_REQUEST_EXCEPTION_TICKET
-from data_source.jira_finding_data_source import JIRA_RELEASE_CANDIDATE_EXCEPTION_TICKET
-from data_source.jira_finding_data_source import JIRA_SECURITY_RISK_TO_ID
-from data_source.jira_finding_data_source import JiraFindingDataSource
+from data_source.jira_finding_data_source import (
+    JIRA_BOARD_KEY,
+    JIRA_DEFAULT_RISK_ASSESSORS,
+    JIRA_FINDING_ISSUE_TYPE,
+    JIRA_FINDING_TO_CUSTOM_FIELD,
+    JIRA_INCIDENT_RESPONDER_EPIC,
+    JIRA_LABEL_PATCH_ALLDEP_PUBLISHED,
+    JIRA_LABEL_PATCH_VULNDEP_PUBLISHED,
+    JIRA_MERGE_REQUEST_EXCEPTION_TICKET,
+    JIRA_RELEASE_CANDIDATE_EXCEPTION_TICKET,
+    JIRA_SECURITY_RISK_TO_ID,
+    JiraFindingDataSource,
+)
 from model.dependency import Dependency
 from model.finding import Finding
 from model.security_risk import SecurityRisk

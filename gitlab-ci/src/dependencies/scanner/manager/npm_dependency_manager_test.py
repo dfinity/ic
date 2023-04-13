@@ -1,7 +1,6 @@
 import pathlib
 import typing
-from unittest.mock import call
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 import pytest
 from model.dependency import Dependency

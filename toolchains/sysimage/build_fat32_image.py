@@ -13,8 +13,7 @@ import subprocess
 import sys
 import tarfile
 
-from reproducibility import get_tmpdir_checking_block_size
-from reproducibility import print_artifact_info
+from reproducibility import get_tmpdir_checking_block_size, print_artifact_info
 
 
 def untar_to_fat32(tf, fs_basedir, out_file, path_transform):

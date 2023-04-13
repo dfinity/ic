@@ -10,8 +10,7 @@ import textwrap
 import pytest
 import yaml
 
-from . import DfinityGitLabConfig
-from . import utils
+from . import DfinityGitLabConfig, utils
 
 
 def test_ci_config_good():

@@ -2,8 +2,7 @@ import subprocess
 
 import common.misc as misc
 from ic.agent import Agent
-from ic.candid import encode
-from ic.candid import Types
+from ic.candid import Types, encode
 from workloads.hooks.workload_hooks import WorkloadHooks
 
 

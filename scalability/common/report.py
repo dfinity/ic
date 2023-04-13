@@ -2,10 +2,8 @@ import dataclasses
 import json
 import os
 import sys
-from dataclasses import dataclass
-from dataclasses import fields
-from statistics import mean
-from statistics import median
+from dataclasses import dataclass, fields
+from statistics import mean, median
 
 from termcolor import colored
 

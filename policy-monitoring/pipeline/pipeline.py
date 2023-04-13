@@ -1,18 +1,15 @@
 import re
-from typing import Dict
-from typing import Iterable
-from typing import List
-from typing import Optional
-from typing import Set
-from typing import Tuple
+from typing import Dict, Iterable, List, Optional, Set, Tuple
 
-from monpoly.monpoly import AlertHandlerParams
-from monpoly.monpoly import ErrorHandlerParams
-from monpoly.monpoly import ExitHandlerParams
-from monpoly.monpoly import Monpoly
-from monpoly.monpoly import MonpolyException
-from monpoly.monpoly import MonpolyGlobalTimeout
-from monpoly.monpoly import MonpolyIoClosed
+from monpoly.monpoly import (
+    AlertHandlerParams,
+    ErrorHandlerParams,
+    ExitHandlerParams,
+    Monpoly,
+    MonpolyException,
+    MonpolyGlobalTimeout,
+    MonpolyIoClosed,
+)
 from monpoly.multi_monitor import MultiMonitor
 from util.print import eprint
 
@@ -21,8 +18,7 @@ from .artifact_manager import ArtifactManager
 from .backend.group import Group
 from .formula_manager import formula_local_path
 from .mode import Mode
-from .pre_processor import PreProcessor
-from .pre_processor import UniversalPreProcessor
+from .pre_processor import PreProcessor, UniversalPreProcessor
 from .repro_manager import ReproManager
 
 

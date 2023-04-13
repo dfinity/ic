@@ -1,11 +1,7 @@
 from abc import abstractmethod
-from typing import Iterable
-from typing import Optional
-from typing import Tuple
+from typing import Iterable, Optional, Tuple
 
-from .es_doc import EsDoc
-from .es_doc import RegistryDoc
-from .es_doc import ReplicaDoc
+from .es_doc import EsDoc, RegistryDoc, ReplicaDoc
 from .global_infra import GlobalInfra
 
 

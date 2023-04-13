@@ -5,7 +5,6 @@ import typing
 import gitlab
 from scanner.scanner_job_type import ScannerJobType
 
-
 GITLAB_TOKEN = os.environ.get("GITLAB_API_TOKEN", "")
 if GITLAB_TOKEN is None:
     logging.error("GITLAB_API_TOKEN is not set, can not send comments to GitLab")
