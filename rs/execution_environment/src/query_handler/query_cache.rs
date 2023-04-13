@@ -1,12 +1,9 @@
-use std::{
-    collections::HashMap,
-    sync::{Arc, RwLock},
-};
-
 use ic_base_types::CanisterId;
 use ic_error_types::UserError;
 use ic_replicated_state::ReplicatedState;
-use ic_types::{ingress::WasmResult, messages::UserQuery, Cycles, Time, UserId};
+use ic_types::{ingress::WasmResult, messages::UserQuery, CountBytes, Cycles, Time, UserId};
+use ic_utils_lru_cache::LruCache;
+use std::{mem::size_of_val, sync::Mutex};
 
 /// Query Cache entry key.
 ///
@@ -22,6 +19,12 @@ pub(crate) struct EntryKey {
     pub method_name: String,
     /// Receiving canister method payload (argument).
     pub method_payload: Vec<u8>,
+}
+
+impl CountBytes for EntryKey {
+    fn count_bytes(&self) -> usize {
+        size_of_val(self) + self.method_name.len() + self.method_payload.len()
+    }
 }
 
 impl From<&UserQuery> for EntryKey {
@@ -48,6 +51,12 @@ pub(crate) struct EntryEnv {
     pub canister_balance: Cycles,
 }
 
+impl CountBytes for EntryEnv {
+    fn count_bytes(&self) -> usize {
+        size_of_val(self)
+    }
+}
+
 impl TryFrom<(&EntryKey, &ReplicatedState)> for EntryEnv {
     type Error = UserError;
 
@@ -67,6 +76,12 @@ pub(crate) struct EntryValue {
     result: Result<WasmResult, UserError>,
 }
 
+impl CountBytes for EntryValue {
+    fn count_bytes(&self) -> usize {
+        self.env.count_bytes() + self.result.count_bytes()
+    }
+}
+
 impl EntryValue {
     pub(crate) fn new(env: EntryEnv, result: Result<WasmResult, UserError>) -> Self {
         Self { env, result }
@@ -84,10 +99,24 @@ impl EntryValue {
 }
 
 /// Replica Query Cache Implementation.
-#[derive(Default)]
 pub(crate) struct QueryCache {
-    // HashMap is ok, as those are non-replicated queries.
-    cache: Arc<RwLock<HashMap<EntryKey, EntryValue>>>,
+    // We can't use `RwLock`, as the `LruCache::get()` requires mutable reference
+    // to update the LRU.
+    cache: Mutex<LruCache<EntryKey, EntryValue>>,
+}
+
+impl CountBytes for QueryCache {
+    fn count_bytes(&self) -> usize {
+        size_of_val(self) + self.cache.lock().unwrap().count_bytes()
+    }
+}
+
+impl Default for QueryCache {
+    fn default() -> Self {
+        QueryCache {
+            cache: Mutex::new(LruCache::new((u64::MAX / 2).into())),
+        }
+    }
 }
 
 impl QueryCache {
@@ -95,23 +124,24 @@ impl QueryCache {
         Self::default()
     }
 
-    pub(crate) fn valid_result(
+    pub(crate) fn get_valid_result(
         &self,
         key: &EntryKey,
         env: &EntryEnv,
     ) -> Option<Result<WasmResult, UserError>> {
-        if let Some(value) = self.cache.read().unwrap().get(key) {
+        let mut cache = self.cache.lock().unwrap();
+        if let Some(value) = cache.get(key) {
             if value.is_valid(env) {
                 return Some(value.result());
             } else {
-                // TODO: upgrade the lock and remove the key.
-                // self.cache.write().unwrap().remove(key);
+                cache.pop(key);
             }
         }
         None
     }
 
-    pub(crate) fn insert(&self, key: EntryKey, value: EntryValue) -> Option<EntryValue> {
-        self.cache.write().unwrap().insert(key, value)
+    pub(crate) fn insert(&self, key: EntryKey, value: EntryValue) {
+        let size = (key.count_bytes() + value.count_bytes()) as u64;
+        self.cache.lock().unwrap().put(key, value, size.into());
     }
 }

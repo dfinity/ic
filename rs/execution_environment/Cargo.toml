@@ -33,6 +33,7 @@ ic-sys = { path = "../sys" }
 ic-system-api = { path = "../system_api" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
+ic-utils-lru-cache = { path = "../utils/lru_cache" }
 ic-wasm-types = { path = "../types/wasm_types" }
 lazy_static = "1.4.0"
 memory_tracker = { path = "../memory_tracker" }
