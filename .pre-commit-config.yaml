@@ -88,7 +88,6 @@ repos:
             gitlab-ci/|
             crypto/internal/crypto_lib/fs_ni_dkg/miracl_core
         ) # exclude these directories.
-  - id: ormolu
 
 - repo: https://github.com/ambv/black
   rev: 20.8b1

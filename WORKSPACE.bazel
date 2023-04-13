@@ -347,6 +347,11 @@ load("//bazel:trivy.bzl", "trivy_scan")
 
 trivy_scan(name = "trivy")
 
+# ormolu binary for haskell linting
+load("//bazel/pre-commit:ormolu.bzl", "ormolu")
+
+ormolu(name = "ormolu")
+
 # buf binary for protobuf linting
 load("//bazel/pre-commit:buf.bzl", "buf")
 
