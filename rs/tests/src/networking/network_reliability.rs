@@ -17,6 +17,8 @@ Runbook::
 
 end::catalog[] */
 
+use crate::canister_agent::CanisterAgent;
+use crate::canister_api::{CallMode, GenericRequest};
 use crate::driver::constants::DEVICE_NAME;
 use crate::driver::ic::{AmountOfMemoryKiB, InternetComputer, NrOfVCPUs, Subnet, VmResources};
 use crate::driver::test_env::TestEnv;
@@ -24,10 +26,11 @@ use crate::driver::test_env_api::{
     HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, NnsInstallationExt,
     SshSession,
 };
+use crate::generic_workload_engine::engine::Engine;
+use crate::generic_workload_engine::metrics::LoadTestMetrics;
 use crate::util::{
     self, agent_observes_canister_module, assert_canister_counter_with_retries, block_on,
 };
-use crate::workload::{CallSpec, Metrics, Request, RoundRobinPlan, Workload};
 use ic_agent::{export::Principal, Agent};
 use ic_base_types::NodeId;
 use ic_registry_subnet_type::SubnetType;
@@ -64,7 +67,6 @@ const FRACTION_FROM_REMAINING_DURATION: f64 = 0.25;
 const MAX_CANISTER_READ_RETRIES: u32 = 4;
 const CANISTER_READ_RETRY_WAIT: Duration = Duration::from_secs(10);
 // Parameters related to workload creation.
-const RESPONSES_COLLECTION_EXTRA_TIMEOUT: Duration = Duration::from_secs(30); // Responses are collected during the workload execution + this extra time, after all requests had been dispatched.
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1); // This param can be slightly tweaked (1-2 sec), if the workload fails to dispatch requests precisely on time.
 
 // Test can be run with different setup/configuration parameters.
@@ -217,7 +219,6 @@ pub fn test(env: TestEnv, config: Config) {
         config.rps,
         config.runtime,
         payload.clone(),
-        DURATION_THRESHOLD,
     );
     let handle_workload_app = spawn_workload(
         log.clone(),
@@ -226,7 +227,6 @@ pub fn test(env: TestEnv, config: Config) {
         config.rps,
         config.runtime,
         payload.clone(),
-        DURATION_THRESHOLD,
     );
     info!(
         &log,
@@ -275,41 +275,42 @@ pub fn test(env: TestEnv, config: Config) {
         &log,
         "Step 5: Collect metrics from both workloads and perform assertions ..."
     );
-    let metrics_nns = handle_workload_nns
+    let load_metrics_nns = handle_workload_nns
         .join()
         .expect("Workload execution against NNS subnet failed.");
-    let metrics_app = handle_workload_app
+    let load_metrics_app = handle_workload_app
         .join()
         .expect("Workload execution against APP subnet failed.");
-
-    let duration_bucket_nns = metrics_nns
-        .find_request_duration_bucket(DURATION_THRESHOLD)
-        .unwrap();
-    let duration_bucket_app = metrics_app
-        .find_request_duration_bucket(DURATION_THRESHOLD)
-        .unwrap();
+    let requests_count_below_threshold_nns =
+        load_metrics_nns.requests_count_below_threshold(DURATION_THRESHOLD);
+    let requests_count_below_threshold_app =
+        load_metrics_app.requests_count_below_threshold(DURATION_THRESHOLD);
+    let requests_ratio_below_threshold_nns =
+        load_metrics_nns.requests_ratio_below_threshold(DURATION_THRESHOLD);
+    let requests_ratio_below_threshold_app =
+        load_metrics_app.requests_ratio_below_threshold(DURATION_THRESHOLD);
     info!(
         &log,
-        "Requests below {} sec:\nRequests_count: NNS={} APP={}\nRequests_ratio: NNS={} APP={}.",
+        "Requests below {} sec:\nRequests_count: NNS={:?} APP={:?}\nRequests_ratio: NNS={:?} APP={:?}.",
         DURATION_THRESHOLD.as_secs(),
-        duration_bucket_nns.requests_count_below_threshold(),
-        duration_bucket_app.requests_count_below_threshold(),
-        duration_bucket_nns.requests_ratio_below_threshold(),
-        duration_bucket_app.requests_ratio_below_threshold(),
+        requests_count_below_threshold_nns,
+        requests_count_below_threshold_app,
+        requests_ratio_below_threshold_nns,
+        requests_ratio_below_threshold_app,
     );
-    assert!(
-        duration_bucket_nns.requests_ratio_below_threshold() > MIN_REQUESTS_RATIO_BELOW_THRESHOLD
-    );
-    assert!(
-        duration_bucket_app.requests_ratio_below_threshold() > MIN_REQUESTS_RATIO_BELOW_THRESHOLD
+    assert!(requests_ratio_below_threshold_nns
+        .iter()
+        .all(|(_, ratio)| *ratio > MIN_REQUESTS_RATIO_BELOW_THRESHOLD));
+    assert!(requests_ratio_below_threshold_app
+        .iter()
+        .all(|(_, ratio)| *ratio > MIN_REQUESTS_RATIO_BELOW_THRESHOLD));
+    info!(
+        &log,
+        "Workload execution results for NNS: {load_metrics_nns}"
     );
     info!(
         &log,
-        "Results of the workload execution for NNS {:?}", metrics_nns
-    );
-    info!(
-        &log,
-        "Results of the workload execution for APP {:?}", metrics_app
+        "Workload execution results for APP: {load_metrics_app}"
     );
     // Create agents to read results from the counter canisters.
     let agent_nns = subnet_nns
@@ -477,21 +478,43 @@ fn spawn_workload(
     rps: usize,
     runtime: Duration,
     payload: Vec<u8>,
-    duration_threshold: Duration,
-) -> JoinHandle<Metrics> {
-    let plan = RoundRobinPlan::new(vec![Request::Update(CallSpec::new(
-        canister_id,
-        CANISTER_METHOD,
-        payload,
-    ))]);
+) -> JoinHandle<LoadTestMetrics> {
+    let agents: Vec<CanisterAgent> = agents.into_iter().map(CanisterAgent::from).collect();
     thread::spawn(move || {
-        block_on(async {
-            let workload = Workload::new(agents, rps, runtime, plan, log)
-                .with_responses_collection_extra_timeout(RESPONSES_COLLECTION_EXTRA_TIMEOUT)
-                .increase_requests_dispatch_timeout(REQUESTS_DISPATCH_EXTRA_TIMEOUT)
-                .with_requests_duration_bucket(duration_threshold);
-            workload
-                .execute()
+        let agents = agents.clone();
+        block_on(async move {
+            let agents = agents.clone();
+            let payload = payload.clone();
+            let generator = {
+                let agents = agents.clone();
+                let payload = payload.clone();
+                move |idx: usize| {
+                    let agent = &agents[idx % agents.len()];
+                    let agent = agent.clone();
+                    let payload = payload.clone();
+                    async move {
+                        let agent = agent.clone();
+                        let payload = payload.clone();
+                        let request = GenericRequest::new(
+                            canister_id,
+                            CANISTER_METHOD.to_string(),
+                            payload,
+                            CallMode::Update,
+                        );
+                        agent
+                            .call(&request)
+                            .await
+                            .map(|_| ()) // drop non-error responses
+                            .into_test_outcome()
+                    }
+                }
+            };
+            let aggregator = LoadTestMetrics::new(log.clone())
+                .with_requests_duration_thresholds(DURATION_THRESHOLD);
+            let engine = Engine::new(log.clone(), generator, rps, runtime)
+                .increase_dispatch_timeout(REQUESTS_DISPATCH_EXTRA_TIMEOUT);
+            engine
+                .execute(aggregator, LoadTestMetrics::aggregator_fn)
                 .await
                 .expect("Execution of the workload failed.")
         })
