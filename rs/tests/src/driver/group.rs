@@ -565,7 +565,7 @@ impl SystemTestGroup {
                                     farm_url
                                 );
                             } else {
-                                info!(logger, "Farm group not created (did you forget to call env.ensure_group_setup_created()?)");
+                                info!(logger, "Farm group not created yet.");
                             }
                             std::thread::sleep(KEEPALIVE_INTERVAL);
                         }

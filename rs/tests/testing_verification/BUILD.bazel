@@ -1,6 +1,6 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 load("//rs/tests:system_tests.bzl", "system_test")
-load("//rs/tests:common.bzl", "CANISTER_HTTP_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "DEPENDENCIES", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS", "CANISTER_HTTP_RUNTIME_DEPS", "COUNTER_CANISTER_RUNTIME_DEPS", "DEPENDENCIES", "GRAFANA_RUNTIME_DEPS", "GUESTOS_RUNTIME_DEPS", "MACRO_DEPENDENCIES", "NNS_CANISTER_RUNTIME_DEPS", "UNIVERSAL_VM_RUNTIME_DEPS")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -18,6 +18,24 @@ system_test(
     tags = ["manual"],
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    deps = DEPENDENCIES + ["//rs/tests"],
+)
+
+system_test(
+    name = "small",  # the "_test" postfix is dropped on purpose since this target is meant for interactive use.
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = ["manual"],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = GUESTOS_RUNTIME_DEPS + BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
+    deps = DEPENDENCIES + ["//rs/tests"],
+)
+
+system_test(
+    name = "medium",  # the "_test" postfix is dropped on purpose since this target is meant for interactive use.
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = ["manual"],
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps = GUESTOS_RUNTIME_DEPS + BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS + GRAFANA_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],
 )
 
