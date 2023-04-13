@@ -396,7 +396,8 @@ where
         let temp_node = node_id;
         let (state_manager, query_handler, _p2p_thread_joiner, ingress_ingestion_service, _) =
             ic_replica::setup_ic_stack::construct_ic_stack(
-                logger,
+                &logger,
+                &metrics_registry,
                 tokio::runtime::Handle::current(),
                 tokio::runtime::Handle::current(),
                 tokio::runtime::Handle::current(),
@@ -408,7 +409,6 @@ where
                 subnet_id,
                 registry.clone(),
                 crypto,
-                metrics_registry,
                 None,
                 fake_local_store_certified_time_reader,
             )
