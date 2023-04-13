@@ -270,7 +270,8 @@ fn main() -> io::Result<()> {
     info!(logger, "Constructing IC stack");
     let (_, _, _p2p_thread_joiner, _, _xnet_endpoint) =
         ic_replica::setup_ic_stack::construct_ic_stack(
-            logger.clone(),
+            &logger,
+            &metrics_registry,
             rt_main.handle().clone(),
             rt_http.handle().clone(),
             rt_xnet.handle().clone(),
@@ -282,7 +283,6 @@ fn main() -> io::Result<()> {
             root_subnet_id,
             registry,
             crypto,
-            metrics_registry.clone(),
             cup_with_proto,
             registry_certified_time_reader,
         )?;
