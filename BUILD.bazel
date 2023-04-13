@@ -26,6 +26,11 @@ alias(
     actual = "//bazel:buildifier",
 )
 
+alias(
+    name = "ruff-format",
+    actual = "//bazel/pre-commit:ruff-format",
+)
+
 test_suite(
     name = "precommit",
     tests = ["//bazel:buildifier_test"],
