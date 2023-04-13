@@ -42,7 +42,7 @@ ic-state-layout = { path = "../state_layout" }
 ic-state-manager = { path = "../state_manager" }
 ic-test-utilities-metrics = { path = "../test_utilities/metrics" }
 ic-test-utilities-registry = { path = "../test_utilities/registry" }
-ic-test-state-machine-client = "1"
+ic-test-state-machine-client = "2"
 ic-types = { path = "../types/types" }
 serde = { version = "1.0.99", features = [ "derive" ] }
 serde_bytes = "0.11"

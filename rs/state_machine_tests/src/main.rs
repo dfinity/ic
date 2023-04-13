@@ -78,6 +78,10 @@ fn main() {
                 &opts,
             ),
             Time => send_response(env.time(), &opts),
+            SetTime(time) => {
+                env.set_time(time);
+                send_response((), &opts);
+            }
             AdvanceTime(amount) => {
                 env.advance_time(amount);
                 send_response((), &opts);

@@ -1,5 +1,5 @@
 {
-  "checksum": "45f0abc0bbb8af37e13128fb7febc5558cde329f33fbe9bc9bfe431ae157f9af",
+  "checksum": "c96d1ab6baa68a8ab3ecc8dcabc0fdc46321f2fce171c416c34da68c028a280f",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -890,7 +890,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.95",
+              "id": "serde_json 1.0.96",
               "target": "serde_json"
             },
             {
@@ -2479,7 +2479,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.95",
+              "id": "serde_json 1.0.96",
               "target": "serde_json"
             },
             {
@@ -2533,7 +2533,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.95",
+              "id": "serde_json 1.0.96",
               "target": "serde_json"
             }
           ],
@@ -3096,13 +3096,13 @@
       },
       "license": "Apache-2.0 OR MIT"
     },
-    "axum 0.6.12": {
+    "axum 0.6.15": {
       "name": "axum",
-      "version": "0.6.12",
+      "version": "0.6.15",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/axum/0.6.12/download",
-          "sha256": "349f8ccfd9221ee7d1f3d4b33e1f8319b3a81ed8f61f2ea40b37b859794b4491"
+          "url": "https://crates.io/api/v1/crates/axum/0.6.15/download",
+          "sha256": "3b32c5ea3aabaf4deb5f5ced2d688ec0844c881c9e6c696a8b769a05fc691e62"
         }
       },
       "targets": [
@@ -3150,11 +3150,11 @@
         "deps": {
           "common": [
             {
-              "id": "axum 0.6.12",
+              "id": "axum 0.6.15",
               "target": "build_script_build"
             },
             {
-              "id": "axum-core 0.3.3",
+              "id": "axum-core 0.3.4",
               "target": "axum_core"
             },
             {
@@ -3210,7 +3210,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.95",
+              "id": "serde_json 1.0.96",
               "target": "serde_json"
             },
             {
@@ -3254,7 +3254,7 @@
           ],
           "selects": {}
         },
-        "version": "0.6.12"
+        "version": "0.6.15"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -3272,13 +3272,13 @@
       },
       "license": "MIT"
     },
-    "axum-core 0.3.3": {
+    "axum-core 0.3.4": {
       "name": "axum-core",
-      "version": "0.3.3",
+      "version": "0.3.4",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/axum-core/0.3.3/download",
-          "sha256": "b2f958c80c248b34b9a877a643811be8dbca03ca5ba827f2b63baf3a81e5fc4e"
+          "url": "https://crates.io/api/v1/crates/axum-core/0.3.4/download",
+          "sha256": "759fa577a247914fd3f7f76d62972792636412fbfd634cd452f6a385a74d2d2c"
         }
       },
       "targets": [
@@ -3315,7 +3315,7 @@
         "deps": {
           "common": [
             {
-              "id": "axum-core 0.3.3",
+              "id": "axum-core 0.3.4",
               "target": "build_script_build"
             },
             {
@@ -3359,7 +3359,7 @@
           ],
           "selects": {}
         },
-        "version": "0.3.3"
+        "version": "0.3.4"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -4630,7 +4630,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.95",
+              "id": "serde_json 1.0.96",
               "target": "serde_json"
             }
           ],
@@ -4680,7 +4680,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.95",
+              "id": "serde_json 1.0.96",
               "target": "serde_json"
             }
           ],
@@ -5569,7 +5569,7 @@
               "target": "rustc_version"
             },
             {
-              "id": "serde_json 1.0.95",
+              "id": "serde_json 1.0.96",
               "target": "serde_json"
             },
             {
@@ -5729,7 +5729,7 @@
               "target": "quote"
             },
             {
-              "id": "serde_json 1.0.95",
+              "id": "serde_json 1.0.96",
               "target": "serde_json"
             },
             {
@@ -6782,7 +6782,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.95",
+              "id": "serde_json 1.0.96",
               "target": "serde_json"
             }
           ],
@@ -7016,7 +7016,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.95",
+              "id": "serde_json 1.0.96",
               "target": "serde_json"
             },
             {
@@ -8297,7 +8297,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.95",
+              "id": "serde_json 1.0.96",
               "target": "serde_json"
             },
             {
@@ -10186,7 +10186,7 @@
               "target": "serde_cbor"
             },
             {
-              "id": "serde_json 1.0.95",
+              "id": "serde_json 1.0.96",
               "target": "serde_json"
             },
             {
@@ -12674,7 +12674,7 @@
               "target": "async_stream"
             },
             {
-              "id": "axum 0.6.12",
+              "id": "axum 0.6.15",
               "target": "axum"
             },
             {
@@ -13053,7 +13053,7 @@
               "target": "ic_stable_structures"
             },
             {
-              "id": "ic-test-state-machine-client 1.1.1",
+              "id": "ic-test-state-machine-client 2.1.0",
               "target": "ic_test_state_machine_client"
             },
             {
@@ -13494,7 +13494,7 @@
               "target": "serde_cbor"
             },
             {
-              "id": "serde_json 1.0.95",
+              "id": "serde_json 1.0.96",
               "target": "serde_json"
             },
             {
@@ -15444,7 +15444,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.95",
+              "id": "serde_json 1.0.96",
               "target": "serde_json"
             }
           ],
@@ -19262,7 +19262,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.95",
+              "id": "serde_json 1.0.96",
               "target": "serde_json"
             },
             {
@@ -21039,13 +21039,13 @@
       },
       "license": "Apache-2.0"
     },
-    "ic-test-state-machine-client 1.1.1": {
+    "ic-test-state-machine-client 2.1.0": {
       "name": "ic-test-state-machine-client",
-      "version": "1.1.1",
+      "version": "2.1.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/ic-test-state-machine-client/1.1.1/download",
-          "sha256": "23516d69aeb4968ff884b700f41df8adae0733480d0bca6c6b4ff93d2b37003b"
+          "url": "https://crates.io/api/v1/crates/ic-test-state-machine-client/2.1.0/download",
+          "sha256": "be83b09145df43603a6255b2dee2b08055ed37642fe1ee26d2036f2ada81730b"
         }
       },
       "targets": [
@@ -21093,7 +21093,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.1.1"
+        "version": "2.1.0"
       },
       "license": "Apache-2.0"
     },
@@ -22472,7 +22472,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.95",
+              "id": "serde_json 1.0.96",
               "target": "serde_json"
             },
             {
@@ -22588,7 +22588,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.95",
+              "id": "serde_json 1.0.96",
               "target": "serde_json"
             },
             {
@@ -23426,7 +23426,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.95",
+              "id": "serde_json 1.0.96",
               "target": "serde_json"
             },
             {
@@ -23543,7 +23543,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.95",
+              "id": "serde_json 1.0.96",
               "target": "serde_json"
             }
           ],
@@ -23617,7 +23617,7 @@
               "target": "sha2"
             },
             {
-              "id": "sha3 0.10.6",
+              "id": "sha3 0.10.7",
               "target": "sha3"
             }
           ],
@@ -26377,7 +26377,7 @@
               "target": "serde_value"
             },
             {
-              "id": "serde_json 1.0.95",
+              "id": "serde_json 1.0.96",
               "target": "serde_json"
             },
             {
@@ -38247,7 +38247,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.95",
+              "id": "serde_json 1.0.96",
               "target": "serde_json"
             },
             {
@@ -38353,7 +38353,7 @@
                 "target": "js_sys"
               },
               {
-                "id": "serde_json 1.0.95",
+                "id": "serde_json 1.0.96",
                 "target": "serde_json"
               },
               {
@@ -39301,7 +39301,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.95",
+              "id": "serde_json 1.0.96",
               "target": "serde_json"
             }
           ],
@@ -41301,13 +41301,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "serde_json 1.0.95": {
+    "serde_json 1.0.96": {
       "name": "serde_json",
-      "version": "1.0.95",
+      "version": "1.0.96",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/serde_json/1.0.95/download",
-          "sha256": "d721eca97ac802aa7777b701877c8004d950fc142651367300d21c1cc0194744"
+          "url": "https://crates.io/api/v1/crates/serde_json/1.0.96/download",
+          "sha256": "057d394a50403bcac12672b2b18fb387ab6d289d957dab67dd201875391e52f1"
         }
       },
       "targets": [
@@ -41362,14 +41362,14 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.95",
+              "id": "serde_json 1.0.96",
               "target": "build_script_build"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.0.95"
+        "version": "1.0.96"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -42245,13 +42245,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "sha3 0.10.6": {
+    "sha3 0.10.7": {
       "name": "sha3",
-      "version": "0.10.6",
+      "version": "0.10.7",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/sha3/0.10.6/download",
-          "sha256": "bdf0c33fae925bdc080598b84bc15c55e7b9a4a43b3c704da051f977469691c9"
+          "url": "https://crates.io/api/v1/crates/sha3/0.10.7/download",
+          "sha256": "54c2bb1a323307527314a36bfb73f24febb08ce2b8a554bf4ffd6f51ad15198c"
         }
       },
       "targets": [
@@ -42287,7 +42287,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.10.6"
+        "version": "0.10.7"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -43417,7 +43417,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.95",
+              "id": "serde_json 1.0.96",
               "target": "serde_json"
             },
             {
@@ -46335,7 +46335,7 @@
               "target": "lazy_static"
             },
             {
-              "id": "serde_json 1.0.95",
+              "id": "serde_json 1.0.96",
               "target": "serde_json"
             },
             {
@@ -46768,7 +46768,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.95",
+              "id": "serde_json 1.0.96",
               "target": "serde_json"
             }
           ],
@@ -47398,7 +47398,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.95",
+              "id": "serde_json 1.0.96",
               "target": "serde_json"
             }
           ],
@@ -47901,7 +47901,7 @@
               "target": "async_stream"
             },
             {
-              "id": "axum 0.6.12",
+              "id": "axum 0.6.15",
               "target": "axum"
             },
             {
@@ -48888,7 +48888,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.95",
+              "id": "serde_json 1.0.96",
               "target": "serde_json"
             },
             {
@@ -48958,7 +48958,7 @@
         "deps": {
           "common": [
             {
-              "id": "serde_json 1.0.95",
+              "id": "serde_json 1.0.96",
               "target": "serde_json"
             }
           ],
@@ -50555,8 +50555,8 @@
         },
         {
           "Binary": {
-            "crate_name": "reader",
-            "crate_root": "src/bin/reader.rs",
+            "crate_name": "exit",
+            "crate_root": "src/bin/exit.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -50567,8 +50567,8 @@
         },
         {
           "Binary": {
-            "crate_name": "exit",
-            "crate_root": "src/bin/exit.rs",
+            "crate_name": "reader",
+            "crate_root": "src/bin/reader.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -50927,7 +50927,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.95",
+              "id": "serde_json 1.0.96",
               "target": "serde_json"
             },
             {
@@ -55037,7 +55037,7 @@
               "target": "serde"
             },
             {
-              "id": "serde_json 1.0.95",
+              "id": "serde_json 1.0.96",
               "target": "serde_json"
             }
           ],
