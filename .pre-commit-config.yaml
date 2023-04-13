@@ -39,8 +39,6 @@ repos:
     exclude: |
       (?x)(
       )
-  - id: shfmt
-    args: ["-w", "-i", "4", "-bn", "-ci"]
   - id: nixpkgs-fmt
     exclude: |
         (?x)^(
