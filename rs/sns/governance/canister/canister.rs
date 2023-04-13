@@ -649,27 +649,6 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         }
     }
 
-    let spans = &[
-        "process_proposals",
-        "should_distribute_rewards",
-        "distribute_rewards",
-        "maybe_move_staked_maturity",
-        "maybe_gc",
-    ];
-
-    for name in spans {
-        if let Some(instructions_consumption) = governance
-            .profiling_information
-            .with(|r| r.borrow().get_span(name).map(|info| info.sum))
-        {
-            w.encode_gauge(
-                &format!("sns_governance_{name}_total_instructions_consumption"),
-                instructions_consumption as f64,
-                &format!("Total instruction consumption of {name}"),
-            )?;
-        }
-    }
-
     Ok(())
 }
 

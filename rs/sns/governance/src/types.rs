@@ -1104,6 +1104,25 @@ impl manage_neuron::Command {
             ),
         })
     }
+
+    /// Returns a string representing what "kind" of command this is.
+    pub fn command_name(&self) -> String {
+        match self {
+            manage_neuron::Command::Configure(_) => "Configure",
+            manage_neuron::Command::Disburse(_) => "Disburse",
+            manage_neuron::Command::Follow(_) => "Follow",
+            manage_neuron::Command::MakeProposal(_) => "MakeProposal",
+            manage_neuron::Command::RegisterVote(_) => "RegisterVote",
+            manage_neuron::Command::Split(_) => "Split",
+            manage_neuron::Command::ClaimOrRefresh(_) => "ClaimOrRefresh",
+            manage_neuron::Command::MergeMaturity(_) => "MergeMaturity",
+            manage_neuron::Command::DisburseMaturity(_) => "DisburseMaturity",
+            manage_neuron::Command::AddNeuronPermissions(_) => "AddNeuronPermissions",
+            manage_neuron::Command::RemoveNeuronPermissions(_) => "RemoveNeuronPermissions",
+            manage_neuron::Command::StakeMaturity(_) => "StakeMaturity",
+        }
+        .to_string()
+    }
 }
 
 impl ManageNeuronResponse {
