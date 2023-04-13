@@ -1522,7 +1522,7 @@ impl ComputeInitialEcdsaDealingsResponse {
 }
 
 // Export the bitcoin types.
-pub use ic_btc_types::{
+pub use ic_btc_interface::{
     GetBalanceRequest as BitcoinGetBalanceArgs,
     GetCurrentFeePercentilesRequest as BitcoinGetCurrentFeePercentilesArgs,
     GetUtxosRequest as BitcoinGetUtxosArgs, Network as BitcoinNetwork,

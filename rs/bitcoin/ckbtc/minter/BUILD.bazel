@@ -5,7 +5,6 @@ package(default_visibility = ["//visibility:public"])
 
 LIB_DEPS = [
     "//packages/icrc-ledger-types:icrc_ledger_types",
-    "//rs/bitcoin/types/public",
     "//rs/crypto/extended_bip32",
     "//rs/crypto/getrandom_for_wasm",
     "//rs/crypto/sha",
@@ -18,6 +17,7 @@ LIB_DEPS = [
     "//rs/types/ic00_types",
     "@crate_index//:bech32",
     "@crate_index//:ic0",
+    "@crate_index//:ic-btc-interface",
     "@crate_index//:ic-metrics-encoder",
     "@crate_index//:ic-stable-structures",
     "@crate_index//:bs58",
@@ -133,7 +133,6 @@ rust_test(
     deps = [
         ":ckbtc_minter_lib",
         "//packages/icrc-ledger-types:icrc_ledger_types",
-        "//rs/bitcoin/types/public",
         "//rs/rosetta-api/icp_ledger",
         "//rs/rosetta-api/icrc1",
         "//rs/rosetta-api/icrc1/ledger",
@@ -142,5 +141,6 @@ rust_test(
         "//rs/test_utilities/load_wasm",
         "//rs/types/base_types",
         "@crate_index//:candid",
+        "@crate_index//:ic-btc-interface",
     ],
 )

@@ -4,7 +4,6 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     "//rs/bitcoin/types/internal",
-    "//rs/bitcoin/types/public",
     "//rs/interfaces",
     "//rs/interfaces/registry",
     "//rs/interfaces/bitcoin_adapter_client",
@@ -15,6 +14,7 @@ DEPENDENCIES = [
     "//rs/registry/subnet_features",
     "//rs/replicated_state",
     "//rs/types/types",
+    "@crate_index//:ic-btc-interface",
     "@crate_index//:prometheus",
     "@crate_index//:slog",
     "@crate_index//:thiserror",

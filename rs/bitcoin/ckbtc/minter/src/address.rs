@@ -1,7 +1,7 @@
 //! Utilities to derive, display, and parse bitcoin addresses.
 
 use crate::ECDSAPublicKey;
-use ic_btc_types::Network;
+use ic_btc_interface::Network;
 use ic_crypto_extended_bip32::{DerivationIndex, DerivationPath, ExtendedBip32DerivationOutput};
 use ic_crypto_sha::Sha256;
 use icrc_ledger_types::icrc1::account::Account;
@@ -161,9 +161,9 @@ pub fn network_and_public_key_to_p2wpkh(network: Network, public_key: &[u8]) -> 
 /// Returns the human-readable part of a bech32 address
 pub fn hrp(network: Network) -> &'static str {
     match network {
-        ic_btc_types::Network::Mainnet => "bc",
-        ic_btc_types::Network::Testnet => "tb",
-        ic_btc_types::Network::Regtest => "bcrt",
+        ic_btc_interface::Network::Mainnet => "bc",
+        ic_btc_interface::Network::Testnet => "tb",
+        ic_btc_interface::Network::Regtest => "bcrt",
     }
 }
 
@@ -340,7 +340,7 @@ fn parse_bip173_address(
 mod tests {
     use super::{hrp, BitcoinAddress, ParseAddressError};
     use bech32::u5;
-    use ic_btc_types::Network;
+    use ic_btc_interface::Network;
 
     fn generate_address(witness_version: Option<u8>, data: &[u8], network: Network) -> String {
         let data: Vec<u5> = witness_version

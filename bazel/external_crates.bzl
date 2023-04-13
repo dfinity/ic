@@ -454,9 +454,17 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                     "hyper",
                 ],
             ),
+            "ic-btc-interface": crate.spec(
+                git = "https://github.com/dfinity/bitcoin-canister",
+                rev = "e4e89f2caedffbe0cfdec6f9d4a77f66dcb9119e",
+            ),
             "ic-btc-validation": crate.spec(
                 git = "https://github.com/dfinity/bitcoin-canister",
                 rev = "0e996988693f2d55fc9533c44dc20ae5310a1894",
+            ),
+            "ic-btc-test-utils": crate.spec(
+                git = "https://github.com/dfinity/bitcoin-canister",
+                rev = "e4e89f2caedffbe0cfdec6f9d4a77f66dcb9119e",
             ),
             "ic-cdk": crate.spec(
                 version = "0.7.0",

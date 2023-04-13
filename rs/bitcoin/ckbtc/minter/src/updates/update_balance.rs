@@ -3,7 +3,7 @@ use crate::management::fetch_utxo_alerts;
 use crate::state::{mutate_state, read_state, UtxoCheckStatus};
 use crate::tasks::{schedule_now, TaskType};
 use candid::{CandidType, Deserialize, Nat, Principal};
-use ic_btc_types::{GetUtxosError, GetUtxosResponse, Utxo};
+use ic_btc_interface::{GetUtxosError, GetUtxosResponse, Utxo};
 use ic_canister_log::log;
 use ic_ckbtc_kyt::Error as KytError;
 use ic_icrc1_client_cdk::{CdkRuntime, ICRC1Client};

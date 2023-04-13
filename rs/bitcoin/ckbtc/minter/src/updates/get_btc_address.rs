@@ -91,7 +91,7 @@ pub async fn init_ecdsa_public_key() {
 
 #[cfg(test)]
 mod tests {
-    use ic_btc_types::Network;
+    use ic_btc_interface::Network;
 
     use crate::address::network_and_public_key_to_p2wpkh;
 

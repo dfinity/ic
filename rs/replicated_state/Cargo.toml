@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 cvt = "0.1.1"
-ic-btc-types = { path = "../bitcoin/types/public" }
+ic-btc-interface = { git = "https://github.com/dfinity/bitcoin-canister", rev = "e4e89f2caedffbe0cfdec6f9d4a77f66dcb9119e" }
 ic-btc-types-internal = { path = "../bitcoin/types/internal" }
 ic-base-types = { path = "../types/base_types" }
 ic-certification-version = { path = "../canonical_state/certification_version" }
@@ -40,7 +40,7 @@ uuid = { version = "1.2.1", features = ["v4", "serde"] }
 assert_matches = "1.3.0"
 criterion = "0.3"
 criterion-time = { path = "../criterion_time" }
-ic-btc-test-utils = { path = "../bitcoin/test-utils" }
+ic-btc-test-utils = { git = "https://github.com/dfinity/bitcoin-canister", rev = "e4e89f2caedffbe0cfdec6f9d4a77f66dcb9119e" }
 ic-test-utilities = { path = "../test_utilities" }
 maplit = "1.0.2"
 serde_cbor = "0.11.1"

@@ -1,5 +1,5 @@
 use crate::metrics::BitcoinPayloadBuilderMetrics;
-use ic_btc_types::NetworkSnakeCase;
+use ic_btc_interface::NetworkSnakeCase;
 use ic_btc_types_internal::{
     BitcoinAdapterRequestWrapper, BitcoinAdapterResponse, BitcoinAdapterResponseWrapper,
 };

@@ -8,7 +8,6 @@ rust_library(
     crate_name = "ic_system_api",
     version = "0.8.0",
     deps = [
-        "//rs/bitcoin/types/public",
         "//rs/config",
         "//rs/constants",
         "//rs/cycles_account_manager",
@@ -26,6 +25,7 @@ rust_library(
         "//rs/types/wasm_types",
         "//rs/utils",
         "@crate_index//:candid",
+        "@crate_index//:ic-btc-interface",
         "@crate_index//:prometheus",
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",

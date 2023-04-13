@@ -3,7 +3,7 @@ pub use crate::state::Mode;
 use crate::state::{replace_state, CkBtcMinterState};
 use candid::{CandidType, Deserialize};
 use ic_base_types::CanisterId;
-use ic_btc_types::Network;
+use ic_btc_interface::Network;
 use serde::Serialize;
 
 pub const DEFAULT_MIN_CONFIRMATIONS: u32 = 6;

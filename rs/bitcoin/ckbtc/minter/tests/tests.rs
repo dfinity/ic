@@ -1,6 +1,6 @@
 use candid::{Decode, Encode, Principal};
 use ic_base_types::CanisterId;
-use ic_btc_types::Network;
+use ic_btc_interface::Network;
 use ic_ckbtc_minter::lifecycle::init::InitArgs as CkbtcMinterInitArgs;
 use ic_ckbtc_minter::lifecycle::init::MinterArg;
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
