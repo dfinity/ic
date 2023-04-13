@@ -1,9 +1,4 @@
 repos:
-- repo: https://github.com/pre-commit/pre-commit-hooks
-  rev: v2.3.0
-  hooks:
-  - id: no-commit-to-branch
-    stages: [commit]
 - repo: local
   hooks:
   - id: candid_changes_are_backwards_compatible
