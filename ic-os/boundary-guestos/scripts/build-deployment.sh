@@ -472,17 +472,7 @@ function generate_certificate_issuer_config() {
         esac
     done <"${CERTIFICATE_ISSUER_CREDENTIALS}"
 
-    if [[ -z \
-        "${CERTIFICATE_ORCHESTRATOR_URI}" || -z \
-        "${CERTIFICATE_ORCHESTRATOR_CANISTER_ID}" || -z \
-        "${CERTIFICATE_ISSUER_DELEGATION_DOMAIN}" || -z \
-        "${CERTIFICATE_ISSUER_APPLICATION_DOMAIN}" || -z \
-        "${CERTIFICATE_ISSUER_IDENTITY}" || -z \
-        "${CERTIFICATE_ISSUER_ENCRYPTION_KEY}" || -z \
-        "${CERTIFICATE_ISSUER_ACME_ID}" || -z \
-        "${CERTIFICATE_ISSUER_ACME_KEY}" || -z \
-        "${CERTIFICATE_ISSUER_CLOUDFLARE_API_KEY}" ]] \
-            ; then
+    if [[ -z "${CERTIFICATE_ORCHESTRATOR_URI}" || -z "${CERTIFICATE_ORCHESTRATOR_CANISTER_ID}" || -z "${CERTIFICATE_ISSUER_DELEGATION_DOMAIN}" || -z "${CERTIFICATE_ISSUER_APPLICATION_DOMAIN}" || -z "${CERTIFICATE_ISSUER_IDENTITY}" || -z "${CERTIFICATE_ISSUER_ENCRYPTION_KEY}" || -z "${CERTIFICATE_ISSUER_ACME_ID}" || -z "${CERTIFICATE_ISSUER_ACME_KEY}" || -z "${CERTIFICATE_ISSUER_CLOUDFLARE_API_KEY}" ]]; then
         err "ERROR: Missing certificate-issuer configuration."
         exit_usage
     fi

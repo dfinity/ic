@@ -42,6 +42,11 @@ alias(
 )
 
 alias(
+    name = "shfmt-format",
+    actual = "//bazel/pre-commit:shfmt-format",
+)
+
+alias(
     name = "rustfmt",
     actual = "@rules_rust//:rustfmt",
 )
