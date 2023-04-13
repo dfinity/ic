@@ -1,11 +1,11 @@
 use ic_async_utils::incoming_from_path;
 use ic_base_types::CanisterId;
+use ic_btc_interface::NetworkInRequest as BitcoinNetwork;
 use ic_btc_service::{
     btc_service_server::{BtcService, BtcServiceServer},
     BtcServiceGetSuccessorsRequest, BtcServiceGetSuccessorsResponse,
     BtcServiceSendTransactionRequest, BtcServiceSendTransactionResponse,
 };
-use ic_btc_types::NetworkInRequest as BitcoinNetwork;
 use ic_btc_types_internal::{GetSuccessorsResponseComplete, GetSuccessorsResponsePartial};
 use ic_config::{
     execution_environment::{BitcoinConfig, Config as HypervisorConfig},
@@ -145,7 +145,7 @@ fn bitcoin_get_successors() {
             let response = call_get_successors(
                 &canister,
                 ic00::BitcoinGetSuccessorsArgs::Initial(ic00::BitcoinGetSuccessorsRequestInitial {
-                    network: ic_btc_types::NetworkSnakeCase::Regtest,
+                    network: ic_btc_interface::NetworkSnakeCase::Regtest,
                     anchor: vec![],
                     processed_block_hashes: vec![],
                 }),
@@ -181,7 +181,7 @@ fn bitcoin_get_successors_pagination() {
             let response = call_get_successors(
                 &canister,
                 ic00::BitcoinGetSuccessorsArgs::Initial(ic00::BitcoinGetSuccessorsRequestInitial {
-                    network: ic_btc_types::NetworkSnakeCase::Regtest,
+                    network: ic_btc_interface::NetworkSnakeCase::Regtest,
                     anchor: vec![],
                     processed_block_hashes: vec![],
                 }),
@@ -225,7 +225,7 @@ fn bitcoin_get_successors_pagination_invalid_adapter_request() {
             let response = call_get_successors(
                 &canister,
                 ic00::BitcoinGetSuccessorsArgs::Initial(ic00::BitcoinGetSuccessorsRequestInitial {
-                    network: ic_btc_types::NetworkSnakeCase::Regtest,
+                    network: ic_btc_interface::NetworkSnakeCase::Regtest,
                     anchor: vec![],
                     processed_block_hashes: vec![],
                 }),
@@ -259,7 +259,7 @@ fn bitcoin_send_transaction_internal_valid_request() {
             let response = call_send_transaction_internal(
                 &canister,
                 ic00::BitcoinSendTransactionInternalArgs {
-                    network: ic_btc_types::NetworkSnakeCase::Regtest,
+                    network: ic_btc_interface::NetworkSnakeCase::Regtest,
                     transaction: vec![1, 2, 3],
                 },
             );
@@ -318,7 +318,7 @@ fn bitcoin_send_transaction_internal_no_permissions() {
             let response = call_send_transaction_internal(
                 &canister,
                 ic00::BitcoinSendTransactionInternalArgs {
-                    network: ic_btc_types::NetworkSnakeCase::Regtest,
+                    network: ic_btc_interface::NetworkSnakeCase::Regtest,
                     transaction: vec![1, 2, 3],
                 },
             );

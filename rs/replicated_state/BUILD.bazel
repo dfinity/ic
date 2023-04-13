@@ -5,7 +5,6 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     "//rs/bitcoin/types/internal",
-    "//rs/bitcoin/types/public",
     "//rs/canonical_state/certification_version",
     "//rs/config",
     "//rs/constants",
@@ -25,6 +24,7 @@ DEPENDENCIES = [
     "//rs/types/wasm_types",
     "//rs/utils",
     "@crate_index//:cvt",
+    "@crate_index//:ic-btc-interface",
     "@crate_index//:lazy_static",
     "@crate_index//:libc",
     "@crate_index//:maplit",
@@ -40,10 +40,10 @@ DEPENDENCIES = [
 MACRO_DEPENDENCIES = []
 
 DEV_DEPENDENCIES = [
-    "//rs/bitcoin/test-utils",
     "//rs/criterion_time",
     "//rs/test_utilities",
     "@crate_index//:assert_matches",
+    "@crate_index//:ic-btc-test-utils",
     "@crate_index//:criterion",
     "@crate_index//:proptest",
     "@crate_index//:prost",

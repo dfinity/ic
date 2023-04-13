@@ -3,7 +3,7 @@
 use crate::logs::P0;
 use crate::tx;
 use candid::{CandidType, Principal};
-use ic_btc_types::{
+use ic_btc_interface::{
     Address, GetCurrentFeePercentilesRequest, GetUtxosRequest, GetUtxosResponse,
     MillisatoshiPerByte, Network, SendTransactionRequest, Utxo, UtxosFilterInRequest,
 };

@@ -4482,7 +4482,7 @@ dependencies = [
 name = "ic-btc-consensus"
 version = "0.1.0"
 dependencies = [
- "ic-btc-types",
+ "ic-btc-interface",
  "ic-btc-types-internal",
  "ic-interfaces",
  "ic-interfaces-bitcoin-adapter-client",
@@ -4505,6 +4505,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-btc-interface"
+version = "0.1.0"
+source = "git+https://github.com/dfinity/bitcoin-canister?rev=e4e89f2caedffbe0cfdec6f9d4a77f66dcb9119e#e4e89f2caedffbe0cfdec6f9d4a77f66dcb9119e"
+dependencies = [
+ "candid",
+ "serde",
+ "serde_bytes",
+]
+
+[[package]]
 name = "ic-btc-service"
 version = "0.1.0"
 dependencies = [
@@ -4516,17 +4526,9 @@ dependencies = [
 [[package]]
 name = "ic-btc-test-utils"
 version = "0.1.0"
+source = "git+https://github.com/dfinity/bitcoin-canister?rev=e4e89f2caedffbe0cfdec6f9d4a77f66dcb9119e#e4e89f2caedffbe0cfdec6f9d4a77f66dcb9119e"
 dependencies = [
  "bitcoin",
-]
-
-[[package]]
-name = "ic-btc-types"
-version = "0.1.0"
-dependencies = [
- "candid",
- "serde",
- "serde_bytes",
 ]
 
 [[package]]
@@ -4534,7 +4536,7 @@ name = "ic-btc-types-internal"
 version = "0.1.0"
 dependencies = [
  "candid",
- "ic-btc-types",
+ "ic-btc-interface",
  "ic-protobuf",
  "serde",
  "serde_bytes",
@@ -4924,7 +4926,7 @@ dependencies = [
  "ciborium",
  "hex",
  "ic-base-types",
- "ic-btc-types",
+ "ic-btc-interface",
  "ic-canister-log",
  "ic-canisters-http-types",
  "ic-cdk 0.7.3",
@@ -6308,8 +6310,8 @@ dependencies = [
  "hex",
  "iai",
  "ic-base-types",
+ "ic-btc-interface",
  "ic-btc-test-utils",
- "ic-btc-types",
  "ic-canister-sandbox-replica-controller",
  "ic-config",
  "ic-constants",
@@ -6551,7 +6553,7 @@ dependencies = [
  "candid",
  "float-cmp 0.9.0",
  "ic-base-types",
- "ic-btc-types",
+ "ic-btc-interface",
  "ic-btc-types-internal",
  "ic-error-types",
  "ic-protobuf",
@@ -7615,7 +7617,7 @@ dependencies = [
  "dfn_json",
  "futures",
  "ic-base-types",
- "ic-btc-types",
+ "ic-btc-interface",
  "ic-canister-client-sender",
  "ic-config",
  "ic-crypto-node-key-generation",
@@ -8452,8 +8454,8 @@ dependencies = [
  "futures",
  "ic-async-utils",
  "ic-base-types",
+ "ic-btc-interface",
  "ic-btc-service",
- "ic-btc-types",
  "ic-btc-types-internal",
  "ic-canister-client-sender",
  "ic-config",
@@ -8509,8 +8511,8 @@ dependencies = [
  "criterion-time",
  "cvt",
  "ic-base-types",
+ "ic-btc-interface",
  "ic-btc-test-utils",
- "ic-btc-types",
  "ic-btc-types-internal",
  "ic-certification-version",
  "ic-config",
@@ -9362,7 +9364,7 @@ dependencies = [
  "assert_matches",
  "candid",
  "ic-base-types",
- "ic-btc-types",
+ "ic-btc-interface",
  "ic-config",
  "ic-constants",
  "ic-cycles-account-manager",
@@ -14826,7 +14828,7 @@ dependencies = [
  "ic-artifact-pool",
  "ic-backup",
  "ic-base-types",
- "ic-btc-types",
+ "ic-btc-interface",
  "ic-canister-client",
  "ic-canister-client-sender",
  "ic-cdk 0.6.10",
@@ -15446,7 +15448,7 @@ dependencies = [
  "ic-artifact-pool",
  "ic-backup",
  "ic-base-types",
- "ic-btc-types",
+ "ic-btc-interface",
  "ic-canister-client",
  "ic-canister-client-sender",
  "ic-cdk 0.6.10",

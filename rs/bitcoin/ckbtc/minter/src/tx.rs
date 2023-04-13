@@ -7,7 +7,7 @@ use ic_crypto_sha::Sha256;
 use serde_bytes::{ByteBuf, Bytes};
 use std::fmt;
 
-pub use ic_btc_types::{OutPoint, Satoshi};
+pub use ic_btc_interface::{OutPoint, Satoshi};
 
 /// The current Bitcoin transaction encoding version.
 /// See https://github.com/bitcoin/bitcoin/blob/c90f86e4c7760a9f7ed0a574f54465964e006a64/src/primitives/transaction.h#L291.

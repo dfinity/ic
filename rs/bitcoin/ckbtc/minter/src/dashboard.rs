@@ -1,7 +1,7 @@
 use crate::address;
 use crate::state;
 use crate::tx::{DisplayAmount, DisplayTxid};
-use ic_btc_types::Network;
+use ic_btc_interface::Network;
 use icrc_ledger_types::icrc1::account::Account;
 use std::io::Write;
 

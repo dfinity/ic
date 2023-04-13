@@ -2,7 +2,7 @@ use crate::address::BitcoinAddress;
 use crate::logs::{P0, P1};
 use crate::queries::WithdrawalFee;
 use candid::{CandidType, Deserialize};
-use ic_btc_types::{MillisatoshiPerByte, Network, OutPoint, Satoshi, Utxo};
+use ic_btc_interface::{MillisatoshiPerByte, Network, OutPoint, Satoshi, Utxo};
 use ic_canister_log::log;
 use ic_ic00_types::DerivationPath;
 use icrc_ledger_types::icrc1::account::Account;

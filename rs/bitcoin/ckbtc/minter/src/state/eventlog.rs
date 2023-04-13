@@ -5,7 +5,7 @@ use crate::state::{
     SubmittedBtcTransaction, UtxoCheckStatus,
 };
 use candid::Principal;
-use ic_btc_types::Utxo;
+use ic_btc_interface::Utxo;
 use icrc_ledger_types::icrc1::account::Account;
 use serde::{Deserialize, Serialize};
 

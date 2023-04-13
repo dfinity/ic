@@ -2,7 +2,7 @@ use std::str::FromStr;
 use std::{collections::BTreeSet, fmt::Write};
 
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
-use ic_btc_types::NetworkInRequest as BitcoinNetwork;
+use ic_btc_interface::NetworkInRequest as BitcoinNetwork;
 use ic_error_types::UserError;
 use ic_ic00_types::{
     BitcoinGetBalanceArgs, BitcoinGetCurrentFeePercentilesArgs, BitcoinGetUtxosArgs,

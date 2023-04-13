@@ -1,5 +1,5 @@
 use ic_base_types::{CanisterId, NumBytes, NumSeconds, PrincipalId, SubnetId};
-use ic_btc_types::NetworkSnakeCase;
+use ic_btc_interface::NetworkSnakeCase;
 use ic_btc_types_internal::{
     BitcoinAdapterResponse, BitcoinAdapterResponseWrapper, GetSuccessorsRequestInitial,
     GetSuccessorsResponseComplete,

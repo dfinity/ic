@@ -105,7 +105,7 @@ mod tests {
         state::read_state,
     };
     use ic_base_types::CanisterId;
-    use ic_btc_types::Network;
+    use ic_btc_interface::Network;
     use ic_cdk::export::Principal;
 
     use super::{balance_update_guard, TimerLogicGuard};

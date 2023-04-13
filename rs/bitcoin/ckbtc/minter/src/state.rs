@@ -17,7 +17,7 @@ use crate::logs::P0;
 use crate::{address::BitcoinAddress, ECDSAPublicKey};
 use candid::{Deserialize, Principal};
 use ic_base_types::CanisterId;
-use ic_btc_types::{Network, OutPoint, Utxo};
+use ic_btc_interface::{Network, OutPoint, Utxo};
 use ic_canister_log::log;
 use icrc_ledger_types::icrc1::account::Account;
 use serde::Serialize;

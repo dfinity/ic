@@ -11,7 +11,7 @@ use crate::util::{block_on, runtime_from_url};
 use candid::{Decode, Encode};
 use canister_test::Canister;
 use ic_agent::Agent;
-use ic_btc_types::{Config as BitcoinConfig, Flag, NetworkSnakeCase, SetConfigRequest};
+use ic_btc_interface::{Config as BitcoinConfig, Flag, NetworkSnakeCase, SetConfigRequest};
 use ic_config::execution_environment::{BITCOIN_MAINNET_CANISTER_ID, BITCOIN_TESTNET_CANISTER_ID};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance::governance::BitcoinNetwork;

@@ -4,7 +4,6 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     "//packages/icrc-ledger-types:icrc_ledger_types",
-    "//rs/bitcoin/types/public",
     "//rs/canister_client/sender",
     "//rs/config",
     "//rs/crypto/node_key_generation",
@@ -46,6 +45,7 @@ DEPENDENCIES = [
     "@crate_index//:assert_matches",
     "@crate_index//:candid",
     "@crate_index//:futures",
+    "@crate_index//:ic-btc-interface",
     "@crate_index//:maplit",
     "@crate_index//:num-traits",
     "@crate_index//:prost",
