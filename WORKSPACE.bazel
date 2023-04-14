@@ -353,22 +353,22 @@ load("//bazel:shfmt.bzl", "shfmt")
 shfmt(name = "shfmt")
 
 # ruff binary for fast python linting
-load("//bazel/pre-commit:ruff.bzl", "ruff")
+load("//pre-commit:ruff.bzl", "ruff")
 
 ruff(name = "ruff")
 
 # ormolu binary for haskell linting
-load("//bazel/pre-commit:ormolu.bzl", "ormolu")
+load("//pre-commit:ormolu.bzl", "ormolu")
 
 ormolu(name = "ormolu")
 
 # buf binary for protobuf linting
-load("//bazel/pre-commit:buf.bzl", "buf")
+load("//pre-commit:buf.bzl", "buf")
 
 buf(name = "buf")
 
 # shellcheck binary
-load("//bazel/pre-commit:shellcheck.bzl", "shellcheck")
+load("//pre-commit:shellcheck.bzl", "shellcheck")
 
 shellcheck(name = "shellcheck")
 

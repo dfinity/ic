@@ -50,6 +50,7 @@ go_deps.bzl               @dfinity-lab/teams/idx
 
 # [GitLab-CI]
 /.pre-commit-config.yaml                                                @dfinity-lab/teams/idx
+/pre-commit/                                                            @dfinity-lab/teams/idx
 /.gitlab-ci.yml                                                         @dfinity-lab/teams/idx
 /.gitlab/                                                               @dfinity-lab/teams/idx
 /.gitlab/CODEOWNERS                                                     @dfinity-lab/teams/owners-owners
