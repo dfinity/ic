@@ -48,11 +48,9 @@ def _version_file_path_impl(ctx):
     However this behaviour is only limited to the local cache: https://github.com/bazelbuild/bazel/issues/10075
     """
     out = ctx.actions.declare_file(ctx.label.name)
-    ctx.actions.run(
-        executable = "awk",
-        arguments = ["-v", "out=" + out.path, '/^STABLE_WORKSPACE_ROOT / { printf "%s/bazel-out/volatile-status.txt", $2 > out }', ctx.info_file.path],
-        inputs = [ctx.info_file],
-        outputs = [out],
+    ctx.actions.write(
+        output = out,
+        content = "/var/tmp/bazel-volatile-status.txt",
     )
     return [DefaultInfo(files = depset([out]), runfiles = ctx.runfiles(files = [out]))]
 
