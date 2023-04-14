@@ -2,6 +2,10 @@
 
 ## Unreleased 
 
+## 1.7.1
+
+- Do not throw exceptions for response bodies larger than 10mb
+
 ## 1.7.0 
 
 - Integrate verification logic with `@dfinity/response-verification` package 
