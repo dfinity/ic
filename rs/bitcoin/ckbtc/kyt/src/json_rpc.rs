@@ -8,6 +8,7 @@ use num_traits::ToPrimitive;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
+use std::fmt;
 
 pub type ExternalId = String;
 
@@ -159,6 +160,21 @@ pub struct Error {
     pub status: u16,
     pub error: Option<String>,
     pub message: String,
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.error {
+            Some(kind) => write!(f, "{}: {}", kind, self.message),
+            None => write!(f, "{}", self.message),
+        }
+    }
+}
+
+impl Error {
+    pub fn is_access_denied_error(&self) -> bool {
+        self.status == 403
+    }
 }
 
 pub async fn http_call<I: Serialize, O: DeserializeOwned>(

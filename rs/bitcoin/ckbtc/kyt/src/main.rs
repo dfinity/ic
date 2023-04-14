@@ -127,6 +127,7 @@ impl Event {
             EventKind::AddressCheck { .. } => "address_check",
             EventKind::ApiKeyUpdate { .. } => "legacy_api_key_update",
             EventKind::ApiKeySet { .. } => "api_key_set",
+            EventKind::ApiKeyExpired { .. } => "api_key_expired",
         }
     }
 
@@ -137,6 +138,7 @@ impl Event {
             EventKind::AddressCheck { external_id, .. } => Some(external_id),
             EventKind::ApiKeyUpdate { .. } => None,
             EventKind::ApiKeySet { .. } => None,
+            EventKind::ApiKeyExpired { .. } => None,
         }
     }
 
@@ -146,6 +148,7 @@ impl Event {
             EventKind::AddressCheck { caller, .. } => caller.as_ref(),
             EventKind::ApiKeyUpdate => None,
             EventKind::ApiKeySet { caller, .. } => caller.as_ref(),
+            EventKind::ApiKeyExpired { .. } => None,
         }
     }
 
@@ -156,6 +159,7 @@ impl Event {
             EventKind::AddressCheck { alerts, .. } => alerts.is_empty(),
             EventKind::ApiKeyUpdate => true,
             EventKind::ApiKeySet { .. } => true,
+            EventKind::ApiKeyExpired { .. } => true,
         }
     }
 }
@@ -213,6 +217,19 @@ pub enum EventKind {
         #[serde(skip_serializing_if = "Option::is_none")]
         provider: Option<Principal>,
     },
+    #[serde(rename = "api_key_expired")]
+    ApiKeyExpired { provider: Principal },
+}
+
+enum KytCheckError {
+    RpcError(json_rpc::Error),
+    TimedOut(String),
+}
+
+impl From<json_rpc::Error> for KytCheckError {
+    fn from(e: json_rpc::Error) -> Self {
+        Self::RpcError(e)
+    }
 }
 
 thread_local! {
@@ -283,6 +300,16 @@ fn pick_api_key_from(api_keys: &BTreeMap<Principal, String>) -> Result<(Principa
 
 fn kyt_mode() -> KytMode {
     CONFIG_CELL.with(|cell| cell.borrow().get().mode.clone())
+}
+
+fn modify_config(f: impl FnOnce(Config) -> Config) {
+    CONFIG_CELL.with(|cell| {
+        let config = cell.borrow().get().0.clone();
+        let config = f(config);
+        cell.borrow_mut()
+            .set(Cbor(config))
+            .expect("failed to encode config");
+    })
 }
 
 fn record_event(kind: EventKind) {
@@ -392,57 +419,108 @@ fn set_api_key(arg: SetApiKeyArg) {
     });
 }
 
+fn expire_key(provider: Principal) {
+    modify_config(|mut config| {
+        record_event(EventKind::ApiKeyExpired { provider });
+        config.api_keys.remove(&provider);
+        config
+    });
+}
+
+async fn get_utxo_alerts(
+    api_key: String,
+    request: DepositRequest,
+) -> Result<(json_rpc::ExternalId, Vec<Alert>), KytCheckError> {
+    let response = http_register_tx(api_key.clone(), request.clone()).await?;
+    let mut ready = response.ready();
+    if !ready {
+        for _ in 0..MAX_SUMMARY_POLLS {
+            ready = http_is_transfer_ready(api_key.clone(), response.external_id.clone()).await?;
+            if ready {
+                break;
+            }
+        }
+    }
+    if !ready {
+        return Err(KytCheckError::TimedOut(
+            "transfer registration took too long".to_string(),
+        ));
+    }
+    let alerts = http_get_utxo_alerts(api_key, response.external_id.clone()).await?;
+    Ok((response.external_id, alerts))
+}
+
 #[update(guard = "caller_is_minter")]
 #[candid_method(update)]
 async fn fetch_utxo_alerts(request: DepositRequest) -> Result<FetchAlertsResponse, Error> {
-    let (provider, api_key) = pick_api_key()?;
-    let (external_id, alerts) = match kyt_mode() {
-        KytMode::Normal => {
-            let response = http_register_tx(api_key.clone(), request.clone()).await?;
-            let mut ready = response.ready();
-            if !ready {
-                for _ in 0..MAX_SUMMARY_POLLS {
-                    ready = http_is_transfer_ready(api_key.clone(), response.external_id.clone())
-                        .await?;
-                    if ready {
-                        break;
+    loop {
+        let (provider, api_key) = pick_api_key()?;
+        let (external_id, alerts) = match kyt_mode() {
+            KytMode::Normal => match get_utxo_alerts(api_key, request.clone()).await {
+                Ok(result) => result,
+                Err(KytCheckError::TimedOut(msg)) => {
+                    return Err(Error::TemporarilyUnavailable(msg))
+                }
+                Err(KytCheckError::RpcError(err)) => {
+                    if err.is_access_denied_error() {
+                        expire_key(provider);
+                        // Try again with a different provider.
+                        continue;
+                    } else {
+                        return Err(Error::TemporarilyUnavailable(err.to_string()));
                     }
                 }
+            },
+            KytMode::AcceptAll => (ic_cdk::api::time().to_string(), vec![]),
+            KytMode::RejectAll => (
+                ic_cdk::api::time().to_string(),
+                vec![Alert {
+                    level: AlertLevel::Severe,
+                    category: None,
+                    service: None,
+                    exposure_type: ExposureType::Direct,
+                }],
+            ),
+        };
+
+        UTXO_CHECKS_COUNT.with(|c| c.set(c.get() + 1));
+
+        record_event(EventKind::UtxoCheck {
+            txid: request.txid,
+            vout: request.vout,
+            caller: Some(request.caller),
+            alerts: alerts.clone(),
+            external_id: external_id.clone(),
+        });
+        return Ok(FetchAlertsResponse {
+            external_id,
+            alerts,
+            provider,
+        });
+    }
+}
+
+async fn get_withdrawal_alerts(
+    api_key: String,
+    withdrawal: WithdrawalAttempt,
+) -> Result<(json_rpc::ExternalId, Vec<Alert>), KytCheckError> {
+    let response = http_register_withdrawal(api_key.clone(), withdrawal.clone()).await?;
+    let mut ready = response.ready();
+    if !ready {
+        for _ in 0..MAX_SUMMARY_POLLS {
+            ready = http_is_withdrawal_ready(api_key.clone(), response.external_id.clone()).await?;
+            if ready {
+                break;
             }
-            if !ready {
-                return Err(Error::TemporarilyUnavailable(
-                    "transfer registration took too long".to_string(),
-                ));
-            }
-            let alerts = http_get_utxo_alerts(api_key, response.external_id.clone()).await?;
-            (response.external_id, alerts)
         }
-        KytMode::AcceptAll => (ic_cdk::api::time().to_string(), vec![]),
-        KytMode::RejectAll => (
-            ic_cdk::api::time().to_string(),
-            vec![Alert {
-                level: AlertLevel::Severe,
-                category: None,
-                service: None,
-                exposure_type: ExposureType::Direct,
-            }],
-        ),
-    };
-
-    UTXO_CHECKS_COUNT.with(|c| c.set(c.get() + 1));
-
-    record_event(EventKind::UtxoCheck {
-        txid: request.txid,
-        vout: request.vout,
-        caller: Some(request.caller),
-        alerts: alerts.clone(),
-        external_id: external_id.clone(),
-    });
-    Ok(FetchAlertsResponse {
-        external_id,
-        alerts,
-        provider,
-    })
+    }
+    if !ready {
+        return Err(KytCheckError::TimedOut(
+            "withdrawal registration took too long".to_string(),
+        ));
+    }
+    let alerts = http_get_withdrawal_alerts(api_key, response.external_id.clone()).await?;
+    Ok((response.external_id, alerts))
 }
 
 #[update(guard = "caller_is_minter")]
@@ -450,56 +528,53 @@ async fn fetch_utxo_alerts(request: DepositRequest) -> Result<FetchAlertsRespons
 async fn fetch_withdrawal_alerts(
     withdrawal: WithdrawalAttempt,
 ) -> Result<FetchAlertsResponse, Error> {
-    let (provider, api_key) = pick_api_key()?;
+    loop {
+        let (provider, api_key) = pick_api_key()?;
 
-    let (external_id, alerts) = match kyt_mode() {
-        KytMode::Normal => {
-            let response = http_register_withdrawal(api_key.clone(), withdrawal.clone()).await?;
-            let mut ready = response.ready();
-            if !ready {
-                for _ in 0..MAX_SUMMARY_POLLS {
-                    ready = http_is_withdrawal_ready(api_key.clone(), response.external_id.clone())
-                        .await?;
-                    if ready {
-                        break;
+        let (external_id, alerts) = match kyt_mode() {
+            KytMode::Normal => match get_withdrawal_alerts(api_key, withdrawal.clone()).await {
+                Ok(result) => result,
+                Err(KytCheckError::TimedOut(msg)) => {
+                    return Err(Error::TemporarilyUnavailable(msg))
+                }
+                Err(KytCheckError::RpcError(e)) => {
+                    if e.is_access_denied_error() {
+                        expire_key(provider);
+                        // Try again with a different provider.
+                        continue;
+                    } else {
+                        return Err(Error::TemporarilyUnavailable(e.to_string()));
                     }
                 }
-            }
-            if !ready {
-                return Err(Error::TemporarilyUnavailable(
-                    "withdrawal registration took too long".to_string(),
-                ));
-            }
-            let alerts = http_get_withdrawal_alerts(api_key, response.external_id.clone()).await?;
-            (response.external_id, alerts)
-        }
-        KytMode::AcceptAll => (ic_cdk::api::time().to_string(), vec![]),
-        KytMode::RejectAll => (
-            ic_cdk::api::time().to_string(),
-            vec![Alert {
-                level: AlertLevel::Severe,
-                service: None,
-                category: None,
-                exposure_type: ExposureType::Direct,
-            }],
-        ),
-    };
+            },
+            KytMode::AcceptAll => (ic_cdk::api::time().to_string(), vec![]),
+            KytMode::RejectAll => (
+                ic_cdk::api::time().to_string(),
+                vec![Alert {
+                    level: AlertLevel::Severe,
+                    service: None,
+                    category: None,
+                    exposure_type: ExposureType::Direct,
+                }],
+            ),
+        };
 
-    ADDRESS_CHECKS_COUNT.with(|c| c.set(c.get() + 1));
+        ADDRESS_CHECKS_COUNT.with(|c| c.set(c.get() + 1));
 
-    record_event(EventKind::AddressCheck {
-        caller: Some(withdrawal.caller),
-        withdrawal_id: withdrawal.id,
-        address: withdrawal.address,
-        amount: withdrawal.amount,
-        alerts: alerts.clone(),
-        external_id: external_id.clone(),
-    });
-    Ok(FetchAlertsResponse {
-        external_id,
-        alerts,
-        provider,
-    })
+        record_event(EventKind::AddressCheck {
+            caller: Some(withdrawal.caller),
+            withdrawal_id: withdrawal.id,
+            address: withdrawal.address,
+            amount: withdrawal.amount,
+            alerts: alerts.clone(),
+            external_id: external_id.clone(),
+        });
+        return Ok(FetchAlertsResponse {
+            external_id,
+            alerts,
+            provider,
+        });
+    }
 }
 
 #[query]
@@ -627,7 +702,7 @@ fn http_request(req: http::HttpRequest) -> http::HttpResponse {
 async fn http_register_tx(
     api_key: String,
     req: DepositRequest,
-) -> Result<json_rpc::RegisterTransferResponse, Error> {
+) -> Result<json_rpc::RegisterTransferResponse, json_rpc::Error> {
     let response: json_rpc::RegisterTransferResponse = json_rpc::http_call(
         HttpMethod::POST,
         api_key,
@@ -640,15 +715,14 @@ async fn http_register_tx(
         },
     )
     .await
-    .expect("failed to register transfer")
-    .map_err(json_error_to_candid)?;
+    .expect("failed to register transfer")?;
     Ok(response)
 }
 
 async fn http_is_transfer_ready(
     api_key: String,
     external_id: json_rpc::ExternalId,
-) -> Result<bool, Error> {
+) -> Result<bool, json_rpc::Error> {
     let response: json_rpc::TransferSummaryResponse = json_rpc::http_call(
         HttpMethod::GET,
         api_key,
@@ -656,8 +730,7 @@ async fn http_is_transfer_ready(
         json_rpc::GetSummaryRequest { external_id },
     )
     .await
-    .expect("failed to get a transfer summary")
-    .map_err(json_error_to_candid)?;
+    .expect("failed to get a transfer summary")?;
 
     Ok(response.updated_at.is_some())
 }
@@ -665,7 +738,7 @@ async fn http_is_transfer_ready(
 async fn http_get_utxo_alerts(
     api_key: String,
     external_id: json_rpc::ExternalId,
-) -> Result<Vec<Alert>, Error> {
+) -> Result<Vec<Alert>, json_rpc::Error> {
     let response: json_rpc::GetAlertsResponse = json_rpc::http_call(
         HttpMethod::GET,
         api_key,
@@ -673,8 +746,7 @@ async fn http_get_utxo_alerts(
         json_rpc::GetAlertsRequest { external_id },
     )
     .await
-    .expect("failed to fetch alerts")
-    .map_err(json_error_to_candid)?;
+    .expect("failed to fetch alerts")?;
     Ok(response
         .alerts
         .into_iter()
@@ -685,7 +757,7 @@ async fn http_get_utxo_alerts(
 async fn http_register_withdrawal(
     api_key: String,
     withdrawal: WithdrawalAttempt,
-) -> Result<json_rpc::RegisterWithdrawalResponse, Error> {
+) -> Result<json_rpc::RegisterWithdrawalResponse, json_rpc::Error> {
     let response: json_rpc::RegisterWithdrawalResponse = json_rpc::http_call(
         HttpMethod::POST,
         api_key,
@@ -700,15 +772,14 @@ async fn http_register_withdrawal(
         },
     )
     .await
-    .expect("failed to register a withdrawal")
-    .map_err(json_error_to_candid)?;
+    .expect("failed to register a withdrawal")?;
     Ok(response)
 }
 
 async fn http_is_withdrawal_ready(
     api_key: String,
     external_id: json_rpc::ExternalId,
-) -> Result<bool, Error> {
+) -> Result<bool, json_rpc::Error> {
     let response: json_rpc::WithdrawalSummaryResponse = json_rpc::http_call(
         HttpMethod::GET,
         api_key,
@@ -716,8 +787,7 @@ async fn http_is_withdrawal_ready(
         json_rpc::GetSummaryRequest { external_id },
     )
     .await
-    .expect("failed to get a transfer summary")
-    .map_err(json_error_to_candid)?;
+    .expect("failed to get a transfer summary")?;
 
     Ok(response.updated_at.is_some())
 }
@@ -725,7 +795,7 @@ async fn http_is_withdrawal_ready(
 async fn http_get_withdrawal_alerts(
     api_key: String,
     external_id: json_rpc::ExternalId,
-) -> Result<Vec<Alert>, Error> {
+) -> Result<Vec<Alert>, json_rpc::Error> {
     let response: json_rpc::GetAlertsResponse = json_rpc::http_call(
         HttpMethod::GET,
         api_key,
@@ -733,8 +803,7 @@ async fn http_get_withdrawal_alerts(
         json_rpc::GetAlertsRequest { external_id },
     )
     .await
-    .expect("failed to fetch alerts")
-    .map_err(json_error_to_candid)?;
+    .expect("failed to fetch alerts")?;
     Ok(response
         .alerts
         .into_iter()
@@ -765,13 +834,6 @@ fn json_alert_to_candid(alert: json_rpc::Alert) -> Alert {
             json_rpc::ExposureType::Direct => ExposureType::Direct,
             json_rpc::ExposureType::Indirect => ExposureType::Indirect,
         },
-    }
-}
-
-fn json_error_to_candid(e: json_rpc::Error) -> Error {
-    match e.error {
-        Some(kind) => Error::TemporarilyUnavailable(format!("{}: {}", kind, e.message)),
-        None => Error::TemporarilyUnavailable(e.message),
     }
 }
 

@@ -4899,6 +4899,7 @@ name = "ic-ckbtc-kyt"
 version = "0.1.0"
 dependencies = [
  "askama",
+ "assert_matches",
  "candid",
  "ciborium",
  "hex",
@@ -4907,6 +4908,8 @@ dependencies = [
  "ic-cdk-macros",
  "ic-metrics-encoder",
  "ic-stable-structures",
+ "ic-state-machine-tests",
+ "ic-test-utilities-load-wasm",
  "num-traits",
  "serde",
  "serde_json",
