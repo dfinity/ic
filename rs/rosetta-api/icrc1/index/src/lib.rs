@@ -440,11 +440,16 @@ pub fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> st
         (ic_cdk::api::stable::stable_size() * 64 * 1024) as f64,
         "Size of the stable memory allocated by this canister.",
     )?;
+
+    let cycle_balance = ic_cdk::api::canister_balance128() as f64;
     w.encode_gauge(
         "index_cycle_balance",
-        ic_cdk::api::canister_balance128() as f64,
+        cycle_balance,
         "Cycle balance on this canister.",
     )?;
+    w.gauge_vec("cycle_balance", "Cycle balance on this canister.")?
+        .value(&[("canister", "icrc1-index")], cycle_balance)?;
+
     w.encode_gauge(
         "index_number_of_transactions",
         with_index(|idx| idx.next_txid) as f64,

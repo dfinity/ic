@@ -110,11 +110,16 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         (ic_cdk::api::stable::stable64_size() * 64 * 1024) as f64,
         "Size of the stable memory allocated by this canister.",
     )?;
+
+    let cycle_balance = ic_cdk::api::canister_balance128() as f64;
     w.encode_gauge(
         "ledger_cycle_balance",
-        ic_cdk::api::canister_balance128() as f64,
+        cycle_balance,
         "Cycle balance on the ledger canister.",
     )?;
+    w.gauge_vec("cycle_balance", "Cycle balance on the ledger canister.")?
+        .value(&[("canister", "icrc1-ledger")], cycle_balance)?;
+
     Access::with_ledger(|ledger| {
         w.encode_gauge(
             "ledger_transactions_by_hash_cache_entries",

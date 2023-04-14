@@ -281,11 +281,18 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
         ic_cdk::api::stable::stable_size() as f64 * 65536f64,
         "Size of the stable memory allocated by this canister.",
     )?;
+
+    let cycle_balance = ic_cdk::api::canister_balance128() as f64;
+
     w.encode_gauge(
         "archive_cycle_balance",
-        ic_cdk::api::canister_balance128() as f64,
+        cycle_balance,
         "Cycle balance on this canister.",
     )?;
+
+    w.gauge_vec("cycle_balance", "Cycle balance on this canister.")?
+        .value(&[("canister", "icrc1-archive")], cycle_balance)?;
+
     w.encode_gauge(
         "archive_stored_blocks",
         with_blocks(|blocks| blocks.len()) as f64,
