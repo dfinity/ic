@@ -16,10 +16,38 @@ repos:
     always_run: true
 
   - id: bazel_buildifier
-    name: Auto format bazel build files.
+    name: Auto format Bazel build files.
     stages: [commit]
     entry: bazel run //:buildifier
     files: \.bazel|\.bzl$
+    language: system
+
+  - id: bazel_shfmt_format
+    name: Auto format shell files
+    stages: [commit]
+    entry: bazel run //:shfmt-format
+    files: \.sh$
+    language: system
+
+  - id: bazel_ruff_format
+    name: Auto format Python files
+    stages: [commit]
+    entry: bazel run //:ruff-format
+    files: \.py$
+    language: system
+
+  - id: bazel_ormolu_format
+    name: Auto format Haskell files
+    stages: [commit]
+    entry: bazel run //:ormolu-format
+    files: \.hs|\.lhs$
+    language: system
+
+  - id: bazel_rust_format
+    name: Auto format Rust files
+    stages: [commit]
+    entry: bazel run //:rustfmt
+    files: \.rs$
     language: system
 
   - id: bazel_smoke
