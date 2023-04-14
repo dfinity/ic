@@ -1,392 +1,174 @@
 use std::{
-    collections::{BTreeMap, BTreeSet, HashSet},
+    collections::{BTreeMap, HashMap},
     fmt::{Display, Formatter, Result},
-    time::{Duration, Instant},
+    time::{Duration, SystemTime},
 };
 
 use serde::{Deserialize, Serialize};
 
-use crate::driver::test_setup::GroupSetup;
-
 use crate::driver::event::TaskId;
 
-pub trait TargetFunctionOutcome {
-    fn task_id(&self) -> TaskId;
-    fn runtime_duration(&self) -> Duration;
-    fn message(&self) -> Option<String> {
-        None
-    }
+use super::{
+    action_graph::{ActionGraph, Node},
+    group::is_task_visible_to_user,
+};
 
-    fn to_summary(&self) -> TestResultSummary {
-        TestResultSummary {
-            name: self.task_id().to_string(),
-            runtime: self.runtime_duration().as_secs_f64(),
-            message: self.message(),
-        }
+fn get_duration(
+    task_id: &TaskId,
+    start_times: &BTreeMap<TaskId, SystemTime>,
+    end_times: &BTreeMap<TaskId, SystemTime>,
+) -> Option<Duration> {
+    if !start_times.contains_key(task_id) || !end_times.contains_key(task_id) {
+        return None;
     }
+    Some(
+        end_times
+            .get(task_id)
+            .unwrap()
+            .duration_since(*start_times.get(task_id).unwrap())
+            .expect("Failed to calculate task duration."),
+    )
 }
 
-#[derive(Clone, Debug)]
-pub struct TargetFunctionSuccess {
-    pub task_id: TaskId,
-    pub runtime: Duration,
-}
-
-impl TargetFunctionOutcome for TargetFunctionSuccess {
-    fn task_id(&self) -> TaskId {
-        self.task_id.clone()
-    }
-    fn runtime_duration(&self) -> Duration {
-        self.runtime
-    }
-}
-
-#[derive(PartialEq, Eq, Clone, Debug)]
-pub enum TargetFunctionFailure {
-    Panicked {
-        task_id: TaskId,
-        message: String,
-        runtime: Duration,
-    },
-    TimedOut {
-        task_id: TaskId,
-        timeout: Duration,
-    },
-}
-
-impl TargetFunctionOutcome for TargetFunctionFailure {
-    fn task_id(&self) -> TaskId {
-        match self {
-            TargetFunctionFailure::Panicked { task_id, .. } => task_id.clone(),
-            TargetFunctionFailure::TimedOut { task_id, .. } => task_id.clone(),
-        }
-    }
-    fn runtime_duration(&self) -> Duration {
-        match self {
-            TargetFunctionFailure::Panicked { runtime, .. } => *runtime,
-            TargetFunctionFailure::TimedOut { timeout, .. } => *timeout,
-        }
-    }
-    fn message(&self) -> Option<String> {
-        match self {
-            TargetFunctionFailure::Panicked { message, .. } => Some(message.clone()),
-            TargetFunctionFailure::TimedOut { .. } => None,
-        }
-    }
-}
-
-fn fmt_succs(
-    succs: &[TargetFunctionSuccess],
-    skips: &HashSet<TaskId>,
-    sub_reports: &BTreeMap<TaskId, String>,
-    f: &mut Formatter<'_>,
-    min_width: usize,
-) -> Result {
-    succs.iter().fold(write!(f, ""), |acc, success| {
-        let tid = success.task_id();
-        let sub_report = if let Some(sub_report) = sub_reports.get(&tid) {
-            format!(" -- {}", sub_report.clone())
-        } else {
-            "".to_string()
-        };
-        let print_result = if skips.contains(&success.task_id) {
-            format!("Test {:<min_width$}  SKIPPED {}", tid.name(), sub_report)
-        } else {
-            format!(
-                "Test {:<min_width$}  PASSED in {:>6.2}s{}",
-                tid.name(),
-                success.runtime.as_secs_f64(),
-                sub_report
-            )
-        };
-        acc.and(writeln!(f, "{}", print_result))
-    })
-}
-
-fn fmt_fails(fails: &[TargetFunctionFailure], f: &mut Formatter<'_>, min_width: usize) -> Result {
-    fails
-        .iter()
-        .fold(write!(f, ""), |acc, failure| match failure {
-            TargetFunctionFailure::Panicked {
-                task_id,
-                message,
-                runtime,
-            } => acc.and(writeln!(
-                f,
-                "Test {:<min_width$}  FAILED in {:>6.2}s -- {:?}",
-                task_id.name(),
-                runtime.as_secs_f64(),
-                message
-            )),
-            TargetFunctionFailure::TimedOut { task_id, timeout } => acc.and(writeln!(
-                f,
-                "Test {:<min_width$} TIMEOUT in {:>6.2}s",
-                task_id.name(),
-                timeout.as_secs_f64()
-            )),
-        })
-}
-
-#[derive(Clone, Debug)]
-pub struct FarmGroupReport {
-    pub group_setup: GroupSetup,
-}
-
-#[derive(Clone, Debug, Default)]
-pub struct SystemTestGroupReport {
-    skips: HashSet<TaskId>,
-    successes: Vec<TargetFunctionSuccess>,
-    failures: Vec<TargetFunctionFailure>,
-
-    // tracks the assertion failures that were receives from test tasks
-    assert_failure_messages: BTreeMap<TaskId, String>,
-
-    start_times: BTreeMap<TaskId, Instant>,
-    end_times: BTreeMap<TaskId, Instant>,
-
-    running_tasks: BTreeSet<TaskId>,
-
-    detected_timeouts: BTreeSet<TaskId>,
-
-    is_group_timed_out: bool,
-
-    sub_reports: BTreeMap<TaskId, String>,
-
-    pub farm_group_report: Option<FarmGroupReport>,
-}
-
-impl SystemTestGroupReport {
-    pub fn add_skipped(&mut self, skipped: TargetFunctionSuccess) {
-        self.skips.insert(skipped.task_id);
-    }
-
-    pub fn add_succ(&mut self, succ: TargetFunctionSuccess) {
-        self.successes.push(succ);
-    }
-
-    pub fn add_fail(&mut self, fail: TargetFunctionFailure) {
-        let fail = if let Some(assert_msg) = self.assert_failure_messages.get(&fail.task_id()) {
-            // If we received an assertion failure message from the subprocess, it overrides
-            // timeouts in the report.
-            let message = assert_msg.to_string();
-            match fail {
-                TargetFunctionFailure::Panicked {
-                    task_id, runtime, ..
-                } => TargetFunctionFailure::Panicked {
-                    task_id,
-                    message,
-                    runtime,
-                },
-                TargetFunctionFailure::TimedOut { task_id, timeout } => {
-                    TargetFunctionFailure::Panicked {
-                        task_id,
-                        message,
-                        runtime: timeout,
-                    }
-                }
+pub fn create_report(
+    action_graph: &ActionGraph<TaskId>,
+    start_times: &BTreeMap<TaskId, SystemTime>,
+    end_times: &BTreeMap<TaskId, SystemTime>,
+) -> SystemGroupReport {
+    let mut success = vec![];
+    let mut failure = vec![];
+    let mut skipped = vec![];
+    for (node, maybe_task_id) in action_graph.task_iter() {
+        if let Some(task_id) = maybe_task_id {
+            if !is_task_visible_to_user(&task_id) {
+                continue;
             }
-        } else {
-            fail
-        };
-        self.failures.push(fail);
-    }
-
-    pub fn set_assert_failure_message(&mut self, failed_task_id: TaskId, failure_message: &str) {
-        // This function might be called for an already failed test. Thus, we need to search
-        // through all failed tests and add the corresponding message.
-        for fail in self
-            .failures
-            .iter_mut()
-            .filter(|f| f.task_id() == failed_task_id)
-        {
-            let new_fail = match fail {
-                TargetFunctionFailure::Panicked { runtime, .. } => {
-                    TargetFunctionFailure::Panicked {
-                        task_id: failed_task_id.clone(),
-                        message: failure_message.to_string(),
-                        runtime: *runtime,
+            let duration = get_duration(&task_id, start_times, end_times)
+                .unwrap_or_else(|| Duration::from_secs(0));
+            match node {
+                Node::Running { active: _, message } => {
+                    // TODO: handle this with proper message/failure types
+                    if message.is_some() && message.clone().unwrap().contains("Task skipped.") {
+                        skipped.push(TaskReport {
+                            name: task_id.to_string(),
+                            runtime: duration.as_secs_f64(),
+                            message,
+                        });
+                    } else {
+                        success.push(TaskReport {
+                            name: task_id.to_string(),
+                            runtime: duration.as_secs_f64(),
+                            message,
+                        });
                     }
                 }
-                TargetFunctionFailure::TimedOut { timeout, .. } => {
-                    TargetFunctionFailure::Panicked {
-                        task_id: failed_task_id.clone(),
-                        message: failure_message.to_string(),
-                        runtime: *timeout,
-                    }
+                Node::Failed { reason } => {
+                    failure.push(TaskReport {
+                        name: task_id.to_string(),
+                        runtime: duration.as_secs_f64(),
+                        message: reason,
+                    });
                 }
-            };
-            *fail = new_fail;
-        }
-        self.assert_failure_messages
-            .insert(failed_task_id, failure_message.to_string());
-    }
-
-    pub fn is_failure_free(&self) -> bool {
-        self.failures.is_empty()
-    }
-
-    pub fn set_test_start_time(&mut self, test_id: TaskId) {
-        assert!(
-            self.running_tasks.insert(test_id.clone()),
-            "cannot set start time for {} more than once",
-            &test_id
-        );
-        self.start_times.entry(test_id).or_insert_with(Instant::now);
-    }
-
-    pub fn set_test_end_time(&mut self, test_id: TaskId) {
-        assert!(
-            self.running_tasks.remove(&test_id),
-            "cannot set end time for {} which did not start",
-            &test_id
-        );
-        self.end_times.entry(test_id).or_insert_with(Instant::now);
-    }
-
-    pub fn get_test_duration(&self, test_id: &TaskId) -> Duration {
-        let msg = |which_instant| {
-            format!(
-                "{} time is needed to compute duration of {}",
-                which_instant, test_id
-            )
-        };
-        let start = self
-            .start_times
-            .get(test_id)
-            .unwrap_or_else(|| panic!("{}", msg("start")));
-        let end = self
-            .end_times
-            .get(test_id)
-            .unwrap_or_else(|| panic!("{}", msg("end")));
-        end.duration_since(*start)
-    }
-
-    pub fn set_test_as_timed_out(&mut self, test_id: TaskId) {
-        self.detected_timeouts.insert(test_id);
-    }
-
-    pub fn is_test_timed_out(&self, test_id: &TaskId) -> bool {
-        self.detected_timeouts.contains(test_id)
-    }
-
-    pub fn all_tasks_finished(&self) -> bool {
-        self.running_tasks.is_empty()
-    }
-
-    pub fn set_group_timed_out(&mut self) {
-        self.is_group_timed_out = true;
-    }
-
-    pub fn is_group_timed_out(&self) -> bool {
-        self.is_group_timed_out
-    }
-
-    pub fn set_test_sub_report(&mut self, test_id: TaskId, sub_report: String) {
-        if let Some(old_sub_report) = self.sub_reports.insert(test_id.clone(), sub_report.clone()) {
-            panic!("sub-reports should be unique per task, but {test_id} emitted two: {old_sub_report} and {sub_report}");
+                _ => {}
+            }
         }
     }
-
-    pub fn to_summary(&self) -> SystemTestGroupReportSummary {
-        SystemTestGroupReportSummary {
-            success: self
-                .successes
-                .iter()
-                .filter(|x| !self.skips.contains(&x.task_id()))
-                .map(|x| x.to_summary())
-                .collect(),
-            failure: self.failures.iter().map(|x| x.to_summary()).collect(),
-            skipped: self
-                .successes
-                .iter()
-                .filter(|x| self.skips.contains(&x.task_id()))
-                .map(|x| x.to_summary())
-                .collect(),
-        }
+    SystemGroupReport {
+        success,
+        failure,
+        skipped,
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct SystemTestGroupReportSummary {
-    pub success: Vec<TestResultSummary>,
-    pub failure: Vec<TestResultSummary>,
-    pub skipped: Vec<TestResultSummary>,
+#[derive(Clone, Default, Debug, Serialize, Deserialize)]
+pub struct SystemGroupReport {
+    pub success: Vec<TaskReport>,
+    pub failure: Vec<TaskReport>,
+    pub skipped: Vec<TaskReport>,
 }
 
-impl Display for SystemTestGroupReportSummary {
+impl Display for SystemGroupReport {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         write!(f, "{}", serde_json::to_string(self).unwrap())
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct TestResultSummary {
+impl SystemGroupReport {
+    pub fn pretty_print(&self) -> String {
+        let max_name_len = self.max_name_len();
+        let mut out_lines = vec![];
+        for res in self.success.iter() {
+            out_lines.push(res.pretty_print(max_name_len, "PASSED "));
+        }
+        for res in self.failure.iter() {
+            out_lines.push(res.pretty_print(max_name_len, "FAILED "));
+        }
+        for res in self.skipped.iter() {
+            out_lines.push(res.pretty_print(max_name_len, "SKIPPED"));
+        }
+        let mx_len = out_lines.iter().max_by_key(|x| x.len()).unwrap().len();
+        let start = format!("{:=^mx_len$}", " Summary ");
+        let end = format!("{:=^mx_len$}", "");
+        let mut summary = vec![];
+        summary.push(start);
+        summary.append(&mut out_lines);
+        summary.push(end);
+        summary.iter().fold(String::new(), |a, b| a + b + "\n")
+    }
+
+    fn all_reports(&self) -> impl Iterator<Item = &TaskReport> {
+        self.success
+            .iter()
+            .chain(self.failure.iter())
+            .chain(self.skipped.iter())
+    }
+
+    fn max_name_len(&self) -> usize {
+        let mut mx = 6;
+        for x in self.all_reports() {
+            mx = std::cmp::max(mx, x.name.chars().count());
+        }
+        mx
+    }
+
+    pub fn to_map(&self) -> HashMap<String, (f64, Option<String>)> {
+        let mut map = HashMap::new();
+        for TaskReport {
+            name,
+            runtime,
+            message,
+        } in self.all_reports()
+        {
+            map.insert(name.clone(), (*runtime, message.clone()));
+        }
+        map
+    }
+}
+
+impl TaskReport {
+    fn pretty_print(&self, max_name_len: usize, verb: &str) -> String {
+        let time = if self.runtime > 0.0 {
+            format!(" in {:>6.2}s", self.runtime)
+        } else {
+            "".to_owned()
+        };
+        let message = if self.message.is_some() {
+            format!(" -- {}", self.message.clone().unwrap())
+        } else {
+            "".to_owned()
+        };
+        format!(
+            "Task {:<max_name_len$} {}{:<13}{}",
+            self.name, verb, time, message
+        )
+    }
+}
+
+#[derive(Clone, Default, Debug, Serialize, Deserialize)]
+pub struct TaskReport {
     pub name: String,
     pub runtime: f64,
     pub message: Option<String>,
-}
-
-fn compute_min_width<T>(xs: &[T]) -> Option<usize>
-where
-    T: TargetFunctionOutcome,
-{
-    xs.iter()
-        .max_by(|a, b| a.task_id().name().cmp(&b.task_id().name()))
-        .map(|x| x.task_id().name().chars().count())
-}
-
-impl Display for SystemTestGroupReport {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        let min_width_succs = compute_min_width(&self.successes);
-        let min_width_fails = compute_min_width(&self.failures);
-
-        // Compute number of symbols in longest task name
-        let w = std::cmp::max(min_width_succs, min_width_fails).unwrap_or(10);
-        let table_width = "Test ".len() + w + "  PASSED in xxx.xxs".len();
-
-        writeln!(f, "{:=^table_width$}", " Summary ")
-            .and(if self.failures.is_empty() && self.successes.is_empty() {
-                writeln!(f, "No test outcomes were reported.")
-            } else if self.failures.is_empty() {
-                fmt_succs(&self.successes, &self.skips, &self.sub_reports, f, w).and(writeln!(
-                    f,
-                    "{:.^table_width$}",
-                    format!(
-                        " All {} tests passed, {} skipped! ",
-                        self.successes.len() - self.skips.len(),
-                        self.skips.len()
-                    )
-                ))
-            } else if self.successes.is_empty() {
-                fmt_fails(&self.failures, f, w).and(writeln!(
-                    f,
-                    "{:.^table_width$}",
-                    format!(" All {} tests failed ", self.failures.len())
-                ))
-            } else {
-                fmt_succs(&self.successes, &self.skips, &self.sub_reports, f, w)
-                    .and(writeln!(
-                        f,
-                        "{:.^table_width$}",
-                        format!(
-                            " Tests passed: {:>2} ",
-                            self.successes.len() - self.skips.len()
-                        )
-                    ))
-                    .and(writeln!(
-                        f,
-                        "{:.^table_width$}",
-                        format!(" Tests skipped: {:>2} ", self.skips.len())
-                    ))
-                    .and(fmt_fails(&self.failures, f, w))
-                    .and(writeln!(
-                        f,
-                        "{:.^table_width$}",
-                        format!(" Tests failed: {:>2} ", self.failures.len())
-                    ))
-            })
-            .and(write!(f, "{:=^table_width$}", ""))
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -402,7 +184,7 @@ pub enum SystemTestGroupError {
         task_id: TaskId,
         signal: i32,
     },
-    SystemTestFailure(SystemTestGroupReport),
+    SystemTestFailure(SystemGroupReport),
 }
 
 impl Display for SystemTestGroupError {
@@ -445,6 +227,6 @@ impl std::convert::From<anyhow::Error> for SystemTestGroupError {
 
 #[derive(Clone, Debug)]
 pub enum Outcome {
-    FromParentProcess(SystemTestGroupReport),
+    FromParentProcess(SystemGroupReport),
     FromSubProcess,
 }

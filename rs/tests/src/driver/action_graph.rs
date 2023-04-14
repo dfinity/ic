@@ -1,13 +1,9 @@
 use std::collections::VecDeque;
 
 use crate::driver::{
-    event::Subscriber,
     plan::{EvalOrder, Plan},
     task::TaskIdT,
 };
-
-pub trait AgSubscriber<T: TaskIdT>: Subscriber<NodeEvent<T>> {}
-impl<I: TaskIdT, T: FnMut(NodeEvent<I>) + Send + Sync> AgSubscriber<I> for T {}
 
 /// A graph where nodes are stateful objects connected via directed actions.
 /// When a node A changes state, every action connecting this node to another
@@ -20,22 +16,51 @@ pub struct ActionGraph<T> {
     task_ids: Vec<Option<T>>,
     /// invariant: Actions are always ordered.
     actions: Vec<Action>,
+    // dirty nodes: temporary solution to prevent reason/report propagation through edges of action graph
+    dirty_nodes: Vec<usize>,
+    dirty_counter: usize,
 }
 
 impl<T: TaskIdT> ActionGraph<T> {
-    pub fn start(&mut self, sink: impl AgSubscriber<T>) {
-        self.effect(0, Effect::Start, sink);
+    pub fn task_iter(
+        &self,
+    ) -> std::iter::Zip<std::vec::IntoIter<Node>, std::vec::IntoIter<std::option::Option<T>>> {
+        std::iter::zip(self.nodes.clone(), self.task_ids.clone())
     }
 
-    pub fn stop(&mut self, handle: NodeHandle<T>, sink: impl AgSubscriber<T>) {
-        self.effect(handle.1, Effect::Decrease, sink);
+    pub fn start(&mut self) {
+        self.effect(0, Effect::Start);
     }
 
-    pub fn fail(&mut self, handle: NodeHandle<T>, sink: impl AgSubscriber<T>) {
-        self.effect(handle.1, Effect::Fail, sink);
+    pub fn stop(&mut self, node_idx: usize, report: String) {
+        // reset dirty nodes
+        self.dirty_nodes.clear();
+        self.dirty_counter = 0;
+        self.dirty_nodes.resize(self.nodes.len(), 0);
+        self.effect(node_idx, Effect::Decrease);
+        // propagate message to all dirty nodes
+        self.dirty_nodes
+            .iter()
+            .enumerate()
+            .filter(|(_, v)| **v == 1)
+            .for_each(|(i, _)| self.nodes[i].set_stop_msg(report.clone()));
     }
 
-    fn effect(&mut self, node_idx: usize, effect: Effect, mut sub: impl AgSubscriber<T>) {
+    pub fn fail(&mut self, node_idx: usize, reason: String) {
+        // reset dirty nodes
+        self.dirty_nodes.clear();
+        self.dirty_counter = 0;
+        self.dirty_nodes.resize(self.nodes.len(), 0);
+        self.effect(node_idx, Effect::Fail);
+        // propagate message to all dirty nodes
+        self.dirty_nodes
+            .iter()
+            .enumerate()
+            .filter(|(_, v)| **v != 0)
+            .for_each(|(i, _)| self.nodes[i].set_fail_msg(reason.clone()));
+    }
+
+    fn effect(&mut self, node_idx: usize, effect: Effect) {
         // A fifo queue containing pairs of (node index, condition). Each entry
         // indicates that a node has reached the given condition.
         let mut workset = VecDeque::new();
@@ -48,6 +73,14 @@ impl<T: TaskIdT> ActionGraph<T> {
         if let Some(cond) = cond {
             workset.push_back((node_idx, cond));
             // println!("1.1 effect({}, {:?}) START", node_idx, effect);
+            // if Stop or Fail, mark node as dirty
+            match cond {
+                Cond::Started => {}
+                _ => {
+                    self.dirty_counter += 1;
+                    self.dirty_nodes[node_idx] = self.dirty_counter;
+                }
+            }
         }
 
         // println!("2 effect({}, {:?}) START", node_idx, effect);
@@ -91,18 +124,15 @@ impl<T: TaskIdT> ActionGraph<T> {
                 self.nodes[target] = new_state;
                 if let Some(cond) = cond {
                     workset.push_back((target, cond));
-                    if let Some(task_id) = self.task_ids[target].clone() {
-                        let handle = NodeHandle(task_id, target);
-                        let change = match &cond {
-                            Cond::Started => NodeEventType::Start,
-                            Cond::Stopped => NodeEventType::Stop,
-                            Cond::Failed => NodeEventType::Fail,
-                        };
-                        // println!("Issuing command ({}, {:?})", target, change);
-                        (sub)(NodeEvent {
-                            handle,
-                            event_type: change,
-                        });
+                    if self.task_ids[target].is_some() {
+                        // if Stop or Fail, mark node as dirty
+                        match cond {
+                            Cond::Started => {}
+                            _ => {
+                                self.dirty_counter += 1;
+                                self.dirty_nodes[target] = self.dirty_counter;
+                            }
+                        }
                     }
                 }
             }
@@ -116,10 +146,13 @@ impl<T: TaskIdT> ActionGraph<T> {
             nodes: vec![],
             task_ids: vec![],
             actions: vec![],
+            dirty_nodes: vec![],
+            dirty_counter: 0,
         };
 
         Self::add_to_graph(&mut res, plan);
         res.actions.sort();
+        res.dirty_nodes.resize(res.nodes.len(), 0);
         res
     }
 
@@ -247,7 +280,7 @@ impl<T: TaskIdT> ActionGraph<T> {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-enum Node {
+pub enum Node {
     /// A scheduled Node has a capacity for running `capacity` many children in
     /// parallel at most when being started.
     Scheduled {
@@ -257,13 +290,26 @@ enum Node {
     /// is semantically equivalent to 'Stopped'.
     Running {
         active: usize,
+        message: Option<String>, //TODO: String or better typed alternative?
     },
-    Failed,
+    Failed {
+        reason: Option<String>,
+    },
 }
 
 impl Node {
     fn scheduled(capacity: usize) -> Self {
         Self::Scheduled { capacity }
+    }
+    pub fn set_stop_msg(&mut self, msg: String) {
+        if let Node::Running { active: _, message } = self {
+            *message = Some(msg);
+        }
+    }
+    pub fn set_fail_msg(&mut self, msg: String) {
+        if let Node::Failed { reason } = self {
+            *reason = Some(msg);
+        }
     }
 }
 
@@ -276,6 +322,7 @@ impl Node {
     ///
     /// * A node is started at most once <= there is only one transition leading
     /// to the Running state.
+    #[rustfmt::skip]
     fn apply_effect(&self, action: Effect) -> (Self, Option<Cond>) {
         use Effect::*;
         use Node::*;
@@ -283,21 +330,19 @@ impl Node {
         let failed = Some(Cond::Failed);
         let stopped = Some(Cond::Stopped);
         match (self, action) {
-            (Scheduled { capacity }, Start) if *capacity > 0 => {
-                (Running { active: *capacity }, started)
-            }
-            (Scheduled { capacity }, Start) => (Running { active: *capacity }, stopped),
-            (s @ Scheduled { .. }, Decrease) => (s.clone(), None),
-            (Scheduled { .. }, Fail) => (Failed, failed),
-            (Running { active }, Start) => (Running { active: *active }, None),
-            (Running { active }, Decrease) if *active > 1 => (Running { active: active - 1 }, None),
-            (Running { active }, Decrease) if *active == 1 => (Running { active: 0 }, stopped),
-            (Running { active }, Decrease) => (Running { active: *active }, None),
-            (Running { active }, Fail) if *active > 0 => (Failed, failed),
-            (Running { active }, Fail) => (Running { active: *active }, None),
-            (Failed, Start { .. }) => (Failed, None),
-            (Failed, Decrease) => (Failed, None),
-            (Failed, Fail) => (Failed, None),
+            (Scheduled { capacity }, Start) if *capacity > 0        => (Running {active: *capacity, message: None}, started,),
+            (Scheduled { capacity }, Start)                         => (Running {active: *capacity, message: Some("Job was scheduled with zero capacity".to_owned())}, stopped),
+            (s @ Scheduled { .. }, Decrease)                        => (s.clone(), None),
+            (Scheduled { .. }, Fail)                                => (Failed { reason: None }, failed),
+            (r @ Running { .. }, Start)                             => (r.clone(), None),
+            (Running { active, message }, Decrease) if *active > 1  => (Running {active: active - 1, message: message.clone()}, None),
+            (Running { active, message }, Decrease) if *active == 1 => ( Running {active: 0, message: message.clone()}, stopped),
+            (r @ Running { .. }, Decrease)                          => (r.clone(), None),
+            (Running { active, message: _ }, Fail) if *active > 0   => {(Failed { reason: None }, failed)}
+            (f @ Running { .. }, Fail)                              => (f.clone(), None),
+            (f @ Failed { .. }, Start { .. })                       => (f.clone(), None),
+            (f @ Failed { .. }, Decrease)                           => (f.clone(), None),
+            (f @ Failed { .. }, Fail)                               => (f.clone(), None),
         }
     }
 }
@@ -353,135 +398,5 @@ pub struct NodeHandle<T: TaskIdT>(T, usize);
 impl<T: TaskIdT> NodeHandle<T> {
     pub fn id(&self) -> T {
         self.0.clone()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crossbeam_channel::unbounded;
-
-    use super::*;
-
-    fn create_sub() -> (impl FnMut() -> NodeEvent<usize>, impl AgSubscriber<usize>) {
-        let (sender, receiver) = unbounded();
-        let sub = move |evt: NodeEvent<usize>| sender.send(evt).unwrap();
-        let recv = move || receiver.recv().unwrap();
-        (recv, sub)
-    }
-
-    fn seq<T: Clone>(supervisor: T, children: Vec<Plan<T>>) -> Plan<T> {
-        Plan::Supervised {
-            supervisor,
-            ordering: EvalOrder::Sequential,
-            children,
-        }
-    }
-
-    fn par<T: Clone>(supervisor: T, children: Vec<Plan<T>>) -> Plan<T> {
-        Plan::Supervised {
-            supervisor,
-            ordering: EvalOrder::Parallel,
-            children,
-        }
-    }
-
-    fn t<T: Clone>(task: T) -> Plan<T> {
-        Plan::Leaf { task }
-    }
-
-    const SUPERVISOR_0: usize = 42;
-    const SEQ_1: usize = 43;
-    const SEQ_2: usize = 44;
-    const SUPERVISOR_1: usize = 45;
-    const PAR_1: usize = 46;
-    const PAR_2: usize = 47;
-
-    fn simple_ag() -> ActionGraph<usize> {
-        ActionGraph::from_plan(seq(
-            SUPERVISOR_0,
-            vec![
-                t(SEQ_1),
-                t(SEQ_2),
-                par(SUPERVISOR_1, vec![t(PAR_1), t(PAR_2)]),
-            ],
-        ))
-    }
-
-    fn simple_evts() -> impl FnMut() -> NodeEvent<usize> {
-        let mut ag = simple_ag();
-
-        let (recv, mut sub) = create_sub();
-        ag.start(&mut sub);
-        recv
-    }
-
-    #[test]
-    fn first_supervisor_is_started_first() {
-        let mut recv = simple_evts();
-        assert_eq!(recv().id(), SUPERVISOR_0);
-        assert_eq!(recv().id(), SEQ_1);
-    }
-
-    #[test]
-    fn seq_children_executed_in_sequence() {
-        use NodeEventType::*;
-        let mut ag = simple_ag();
-
-        let (mut recv, mut sub) = create_sub();
-        // println!("before start");
-        ag.start(&mut sub);
-
-        matches_event(recv(), SUPERVISOR_0, Start);
-        let seq_1 = recv();
-        matches_event(seq_1.clone(), SEQ_1, Start);
-        // println!("before stopping 1");
-        ag.stop(seq_1.handle, &mut sub);
-        // println!("before stopping 1");
-
-        let seq_2 = recv();
-        matches_event(seq_2.clone(), SEQ_2, Start);
-
-        ag.stop(seq_2.handle, &mut sub);
-
-        matches_event(recv(), SUPERVISOR_1, Start);
-        let par_1 = recv();
-        matches_event(par_1.clone(), PAR_1, Start);
-        let par_2 = recv();
-        matches_event(par_2.clone(), PAR_2, Start);
-
-        ag.stop(par_1.handle, &mut sub);
-        ag.stop(par_2.handle, &mut sub);
-
-        matches_event(recv(), SUPERVISOR_1, Stop);
-        matches_event(recv(), SUPERVISOR_0, Stop);
-    }
-
-    #[test]
-    fn failing_fails_all_children() {
-        use NodeEventType::*;
-        let mut ag = simple_ag();
-
-        let (mut recv, mut sub) = create_sub();
-
-        ag.start(&mut sub);
-        let sprvsr_0 = recv();
-        matches_event(sprvsr_0.clone(), SUPERVISOR_0, Start);
-        matches_event(recv(), SEQ_1, Start);
-
-        ag.fail(sprvsr_0.handle, &mut sub);
-        matches_event(recv(), SEQ_1, Fail);
-        matches_event(recv(), SEQ_2, Fail);
-        // matches_command(recv(), SUPERVISOR_1, Fail);
-        matches_event(recv(), PAR_1, Fail);
-        matches_event(recv(), PAR_2, Fail);
-    }
-
-    fn matches_event(tevt: NodeEvent<usize>, id: usize, event: NodeEventType) {
-        let actual_id = tevt.id();
-        let actual_event = tevt.event_type;
-        assert!(
-            actual_id == id && actual_event == event,
-            "expected id, change: {id:?}, {event:?} -- actual: {actual_id:?}, {actual_event:?}"
-        );
     }
 }
