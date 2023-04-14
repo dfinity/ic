@@ -18,6 +18,7 @@ use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
 };
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
+use ic_interfaces::crypto::CurrentNodePublicKeysError;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgLoadTranscriptError, IDkgOpenTranscriptError, IDkgRetainKeysError,
     IDkgVerifyDealingPrivateError, ThresholdEcdsaSignShareError,
@@ -120,6 +121,16 @@ impl From<CspPublicKeyStoreError> for CryptoError {
                 CryptoError::TransientInternalError {
                     internal_error: format!("Error retrieving public keys: {:?}", details),
                 }
+            }
+        }
+    }
+}
+
+impl From<CspPublicKeyStoreError> for CurrentNodePublicKeysError {
+    fn from(e: CspPublicKeyStoreError) -> CurrentNodePublicKeysError {
+        match e {
+            CspPublicKeyStoreError::TransientInternalError(details) => {
+                CurrentNodePublicKeysError::TransientInternalError(details)
             }
         }
     }

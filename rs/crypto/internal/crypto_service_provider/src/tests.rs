@@ -11,11 +11,9 @@ mod csp_tests {
     use ic_types::crypto::AlgorithmId;
     use ic_types_test_utils::ids::node_test_id;
 
-    mod node_public_key_data {
+    mod csp_public_key_store {
         use super::*;
-        use crate::vault::api::CspPublicKeyStoreError;
-        use crate::{CspPublicKeyStore, NodePublicKeyDataError};
-        use assert_matches::assert_matches;
+        use crate::CspPublicKeyStore;
         use ic_types::crypto::CurrentNodePublicKeys;
 
         #[test]
@@ -47,16 +45,6 @@ mod csp_tests {
                 .expect("Failed to retrieve iDKG dealing encryption public keys count");
 
             assert_eq!(key_count, 0);
-        }
-
-        #[test]
-        fn should_correctly_translate_error() {
-            let csp_error = CspPublicKeyStoreError::TransientInternalError("oh no!".to_string());
-            let node_public_key_data_error = NodePublicKeyDataError::from(csp_error);
-            assert_matches!(
-                node_public_key_data_error,
-                NodePublicKeyDataError::TransientInternalError(internal_error) if internal_error == "oh no!"
-            )
         }
     }
 

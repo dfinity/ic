@@ -26,8 +26,7 @@ use crate::vault::remote_csp_vault::RemoteCspVault;
 use crate::api::{
     CspIDkgProtocol, CspKeyGenerator, CspPublicAndSecretKeyStoreChecker, CspPublicKeyStore,
     CspSigVerifier, CspSigner, CspThresholdEcdsaSigVerifier, CspThresholdEcdsaSigner,
-    CspTlsHandshakeSignerProvider, NiDkgCspClient, NodePublicKeyDataError,
-    ThresholdSignatureCspClient,
+    CspTlsHandshakeSignerProvider, NiDkgCspClient, ThresholdSignatureCspClient,
 };
 use crate::secret_key_store::SecretKeyStore;
 use crate::types::{CspPublicKey, ExternalPublicKeys};
@@ -232,21 +231,18 @@ impl Csp {
 }
 
 impl CspPublicKeyStore for Csp {
-    fn current_node_public_keys(&self) -> Result<CurrentNodePublicKeys, NodePublicKeyDataError> {
-        let pks = self.csp_vault.current_node_public_keys()?;
-        Ok(pks)
+    fn current_node_public_keys(&self) -> Result<CurrentNodePublicKeys, CspPublicKeyStoreError> {
+        self.csp_vault.current_node_public_keys()
     }
 
     fn current_node_public_keys_with_timestamps(
         &self,
-    ) -> Result<CurrentNodePublicKeys, NodePublicKeyDataError> {
-        let pks = self.csp_vault.current_node_public_keys_with_timestamps()?;
-        Ok(pks)
+    ) -> Result<CurrentNodePublicKeys, CspPublicKeyStoreError> {
+        self.csp_vault.current_node_public_keys_with_timestamps()
     }
 
-    fn idkg_dealing_encryption_pubkeys_count(&self) -> Result<usize, NodePublicKeyDataError> {
-        let idkg_key_count = self.csp_vault.idkg_dealing_encryption_pubkeys_count()?;
-        Ok(idkg_key_count)
+    fn idkg_dealing_encryption_pubkeys_count(&self) -> Result<usize, CspPublicKeyStoreError> {
+        self.csp_vault.idkg_dealing_encryption_pubkeys_count()
     }
 }
 
