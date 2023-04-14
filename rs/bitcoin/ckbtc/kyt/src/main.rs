@@ -608,12 +608,12 @@ fn http_request(req: http::HttpRequest) -> http::HttpResponse {
         let mut writer =
             ic_metrics_encoder::MetricsEncoder::new(vec![], ic_cdk::api::time() as i64 / 1_000_000);
 
+        let cycle_balance = ic_cdk::api::canister_balance128() as f64;
+
         writer
-            .encode_gauge(
-                "cycle_balance",
-                ic_cdk::api::canister_balance128() as f64,
-                "The canister cycle balance.",
-            )
+            .gauge_vec("cycle_balance", "The canister cycle balance.")
+            .unwrap()
+            .value(&[("canister", "ckbtc-kyt")], cycle_balance)
             .unwrap();
 
         writer
