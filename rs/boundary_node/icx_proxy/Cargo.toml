@@ -1,6 +1,6 @@
 [package]
 name = "icx-proxy"
-version = "0.11.0"
+version = "0.11.1"
 authors = ["DFINITY Stiftung <sdk@dfinity.org>"]
 edition = "2018"
 description = "CLI tool to create an HTTP proxy to the Internet Computer."
@@ -50,7 +50,7 @@ serde_json = "1"
 sha2 = "0.10"
 tokio = { version = "1", features = ["full"] }
 webpki-roots = "0.23"
-ic-response-verification = "0.1.0"
+ic-response-verification = "0.2.1"
 thiserror = "1.0.40"
 
 [features]

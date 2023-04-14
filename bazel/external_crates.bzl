@@ -495,7 +495,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^0.2.0",
             ),
             "ic-response-verification": crate.spec(
-                version = "^0.1.0",
+                version = "^0.2.1",
             ),
             "ic-test-state-machine-client": crate.spec(
                 version = "^2.1.0",
