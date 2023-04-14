@@ -154,8 +154,8 @@ pub fn get_resource_request(
         }
     };
     let mut res_req = ResourceRequest::new(ImageType::IcOsImage, ic_os_img_url, ic_os_img_sha256);
-    let pot_setup = GroupSetup::read_attribute(test_env);
-    let default_vm_resources = pot_setup.default_vm_resources;
+    let group_setup = GroupSetup::read_attribute(test_env);
+    let default_vm_resources = group_setup.default_vm_resources;
     res_req.group_name = group_name.to_string();
     for s in &config.subnets {
         for n in &s.nodes {
@@ -176,7 +176,7 @@ const DEFAULT_UNIVERSAL_VM_IMG_SHA256: &str =
 
 pub fn get_resource_request_for_universal_vm(
     universal_vm: &UniversalVm,
-    pot_setup: &GroupSetup,
+    group_setup: &GroupSetup,
     group_name: &str,
 ) -> anyhow::Result<ResourceRequest> {
     let primary_image = universal_vm.primary_image.clone().unwrap_or_else(|| DiskImage {
@@ -194,13 +194,13 @@ pub fn get_resource_request_for_universal_vm(
     res_req.add_vm_request(VmSpec {
         name: universal_vm.name.clone(),
         vcpus: vm_resources.vcpus.unwrap_or_else(|| {
-            pot_setup
+            group_setup
                 .default_vm_resources
                 .and_then(|vm_resources| vm_resources.vcpus)
                 .unwrap_or(DEFAULT_VCPUS_PER_VM)
         }),
         memory_kibibytes: vm_resources.memory_kibibytes.unwrap_or_else(|| {
-            pot_setup
+            group_setup
                 .default_vm_resources
                 .and_then(|vm_resources| vm_resources.memory_kibibytes)
                 .unwrap_or(DEFAULT_MEMORY_KIB_PER_VM)
@@ -208,7 +208,7 @@ pub fn get_resource_request_for_universal_vm(
         boot_image: BootImage::GroupDefault,
         boot_image_minimal_size_gibibytes: vm_resources.boot_image_minimal_size_gibibytes.or_else(
             || {
-                pot_setup
+                group_setup
                     .default_vm_resources
                     .and_then(|vm_resources| vm_resources.boot_image_minimal_size_gibibytes)
             },
