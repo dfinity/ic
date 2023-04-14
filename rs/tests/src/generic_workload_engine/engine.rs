@@ -49,6 +49,7 @@ where
         let futures_count = self.rps * self.duration.as_secs() as usize;
         let (fut_snd, mut fut_rcv) = tokio::sync::mpsc::unbounded_channel();
         let log = self.log;
+
         info!(
             log,
             "Starting execution of {} futures, expected to be submitted within {} secs.",
@@ -73,6 +74,7 @@ where
                 start.elapsed()
             }
         });
+
         let aggr_jh = task::spawn({
             let log = log.clone();
             async move {
@@ -89,6 +91,7 @@ where
                 aggr
             }
         });
+
         let dispatch_duration = match dispatch_jh.await {
             Ok(v) => v,
             Err(_e) => {
@@ -104,6 +107,7 @@ where
                 dispatch_duration.as_millis()
             )));
         }
+
         info!(
             log,
             "All {} futures started within {} secs and executed to completion within {} secs",
