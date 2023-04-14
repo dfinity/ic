@@ -201,6 +201,12 @@ impl<Artifact: ArtifactKind + 'static> ArtifactProcessorHandle<Artifact> {
     where
         <Artifact as ic_types::artifact::ArtifactKind>::Message: Send,
     {
+        // Making this channel bounded can be problematic since we don't have true multiplexing
+        // of P2P messages.
+        // Possible scenario is - adverts+chunks arrive on the same channel, slow consensus
+        // will result on slow consuption of chunks. Slow consumption of chunks will in turn
+        // result in slower consumptions of adverts. Ideally adverts are consumed at rate
+        // independant of consensus.
         let (sender, receiver) = crossbeam_channel::unbounded();
         let shutdown = Arc::new(AtomicBool::new(false));
 
