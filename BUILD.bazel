@@ -28,7 +28,7 @@ alias(
 
 alias(
     name = "ruff-format",
-    actual = "//bazel/pre-commit:ruff-format",
+    actual = "//pre-commit:ruff-format",
 )
 
 test_suite(
@@ -43,7 +43,7 @@ alias(
 
 alias(
     name = "shfmt-format",
-    actual = "//bazel/pre-commit:shfmt-format",
+    actual = "//pre-commit:shfmt-format",
 )
 
 alias(
@@ -53,7 +53,7 @@ alias(
 
 alias(
     name = "ormolu-format",
-    actual = "//bazel/pre-commit:ormolu-format",
+    actual = "//pre-commit:ormolu-format",
 )
 
 alias(
