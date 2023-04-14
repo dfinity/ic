@@ -3,10 +3,11 @@ mod tests;
 
 use crate::tls::{tls_cert_from_registry_raw, TlsCertFromRegistryError};
 use crate::{key_from_registry, CryptoComponentImpl};
-use ic_crypto_internal_csp::api::NodePublicKeyDataError;
 use ic_crypto_internal_csp::keygen::utils::idkg_dealing_encryption_pk_to_proto;
 use ic_crypto_internal_csp::types::ExternalPublicKeys;
-use ic_crypto_internal_csp::vault::api::{NodeKeysErrors, PksAndSksContainsErrors};
+use ic_crypto_internal_csp::vault::api::{
+    CspPublicKeyStoreError, NodeKeysErrors, PksAndSksContainsErrors,
+};
 use ic_crypto_internal_csp::CryptoServiceProvider;
 use ic_crypto_internal_logmon::metrics::{
     BooleanOperation, BooleanResult, KeyCounts, KeyRotationResult, MetricsResult,
@@ -344,7 +345,7 @@ impl<C: CryptoServiceProvider> CryptoComponentImpl<C> {
             .csp
             .current_node_public_keys()
             .map_err(
-                |NodePublicKeyDataError::TransientInternalError(internal_error)| {
+                |CspPublicKeyStoreError::TransientInternalError(internal_error)| {
                     IDkgDealingEncryptionKeyRotationError::TransientInternalError(internal_error)
                 },
             )?
@@ -354,7 +355,7 @@ impl<C: CryptoServiceProvider> CryptoComponentImpl<C> {
             .csp
             .current_node_public_keys_with_timestamps()
             .map_err(
-                |NodePublicKeyDataError::TransientInternalError(internal_error)| {
+                |CspPublicKeyStoreError::TransientInternalError(internal_error)| {
                     IDkgDealingEncryptionKeyRotationError::TransientInternalError(internal_error)
                 },
             )?
@@ -455,7 +456,7 @@ impl<C: CryptoServiceProvider> CryptoComponentImpl<C> {
                     MetricsResult::Ok,
                 );
             }
-            Err(NodePublicKeyDataError::TransientInternalError(internal_error)) => {
+            Err(CspPublicKeyStoreError::TransientInternalError(internal_error)) => {
                 warn!(
                     self.logger,
                     "Transient error retrieving local iDKG dealing encryption public key count: {}",

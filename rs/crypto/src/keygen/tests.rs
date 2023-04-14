@@ -5,7 +5,6 @@ use assert_matches::assert_matches;
 use ic_base_types::SubnetId;
 use ic_base_types::{NodeId, PrincipalId};
 use ic_crypto_internal_csp::api::CspCreateMEGaKeyError;
-use ic_crypto_internal_csp::api::NodePublicKeyDataError;
 use ic_crypto_internal_csp::vault::api::ExternalPublicKeyError;
 use ic_crypto_internal_csp::vault::api::LocalPublicKeyError;
 use ic_crypto_internal_csp::vault::api::NodeKeysError;
@@ -276,7 +275,7 @@ mod check_keys_with_registry {
                 .with_registry_public_keys(valid_current_node_public_keys())
                 .with_csp_pks_and_sks_contains_result(Ok(()))
                 .with_csp_idkg_dealing_encryption_public_keys_count_result(Err(
-                    NodePublicKeyDataError::TransientInternalError(
+                    CspPublicKeyStoreError::TransientInternalError(
                         "error calling remote csp vault".to_string(),
                     ),
                 ))
@@ -1247,7 +1246,7 @@ mod rotate_idkg_dealing_encryption_keys {
         const ERROR_MSG: &str = "transient error getting current node public keys";
         let setup = Setup::builder()
             .with_csp_current_node_public_keys_result(Err(
-                NodePublicKeyDataError::TransientInternalError(ERROR_MSG.to_string()),
+                CspPublicKeyStoreError::TransientInternalError(ERROR_MSG.to_string()),
             ))
             .with_ecdsa_subnet_config(EcdsaSubnetConfig::new(
                 subnet_id(),
@@ -1768,14 +1767,14 @@ impl Setup {
 
 struct SetupBuilder {
     csp_current_node_public_keys_result:
-        Option<Result<CurrentNodePublicKeys, NodePublicKeyDataError>>,
+        Option<Result<CurrentNodePublicKeys, CspPublicKeyStoreError>>,
     csp_current_node_public_keys_with_timestamps_result:
-        Option<Result<CurrentNodePublicKeys, NodePublicKeyDataError>>,
+        Option<Result<CurrentNodePublicKeys, CspPublicKeyStoreError>>,
     csp_pks_and_sks_contains_result: Option<Result<(), PksAndSksContainsErrors>>,
     registry_client_override: Option<Arc<dyn RegistryClient>>,
     registry_public_keys: Option<CurrentNodePublicKeys>,
     csp_idkg_dealing_encryption_public_keys_count_result:
-        Option<Result<usize, NodePublicKeyDataError>>,
+        Option<Result<usize, CspPublicKeyStoreError>>,
     csp_idkg_gen_dealing_encryption_key_pair_result:
         Option<Result<MEGaPublicKey, CspCreateMEGaKeyError>>,
     logger: Option<ReplicaLogger>,
@@ -1785,7 +1784,7 @@ struct SetupBuilder {
 impl SetupBuilder {
     fn with_csp_current_node_public_keys_result(
         mut self,
-        csp_current_node_public_keys: Result<CurrentNodePublicKeys, NodePublicKeyDataError>,
+        csp_current_node_public_keys: Result<CurrentNodePublicKeys, CspPublicKeyStoreError>,
     ) -> Self {
         self.csp_current_node_public_keys_result = Some(csp_current_node_public_keys);
         self
@@ -1795,7 +1794,7 @@ impl SetupBuilder {
         mut self,
         csp_current_node_public_keys_with_timestamps: Result<
             CurrentNodePublicKeys,
-            NodePublicKeyDataError,
+            CspPublicKeyStoreError,
         >,
     ) -> Self {
         self.csp_current_node_public_keys_with_timestamps_result =
@@ -1829,7 +1828,7 @@ impl SetupBuilder {
 
     fn with_csp_idkg_dealing_encryption_public_keys_count_result(
         mut self,
-        idkg_dealing_encryption_public_keys_count: Result<usize, NodePublicKeyDataError>,
+        idkg_dealing_encryption_public_keys_count: Result<usize, CspPublicKeyStoreError>,
     ) -> Self {
         self.csp_idkg_dealing_encryption_public_keys_count_result =
             Some(idkg_dealing_encryption_public_keys_count);

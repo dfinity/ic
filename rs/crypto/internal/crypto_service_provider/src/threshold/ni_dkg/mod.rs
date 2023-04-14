@@ -4,9 +4,10 @@
 //! including the secret key store and random number generator, and the
 //! stateless crypto lib.
 
-use crate::api::{CspPublicKeyStore, NiDkgCspClient, NodePublicKeyDataError};
+use crate::api::{CspPublicKeyStore, NiDkgCspClient};
 use crate::key_id::KeyId;
 use crate::types::{CspPublicCoefficients, CspSecretKey};
+use crate::vault::api::CspPublicKeyStoreError;
 use crate::Csp;
 use ic_crypto_internal_threshold_sig_bls12381::api::dkg_errors::InternalError;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
@@ -273,7 +274,7 @@ fn dkg_dealing_encryption_key_id<T: CspPublicKeyStore>(
     let pk = CspFsEncryptionPublicKey::try_from(
         csp.current_node_public_keys()
             .map_err(|error| match error {
-                NodePublicKeyDataError::TransientInternalError(msg) => {
+                CspPublicKeyStoreError::TransientInternalError(msg) => {
                     DkgDealingEncryptionKeyIdRetrievalError::TransientInternalError(msg)
                 }
             })?
