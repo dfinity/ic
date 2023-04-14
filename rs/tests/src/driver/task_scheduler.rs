@@ -1,96 +1,203 @@
 #![allow(dead_code)]
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::BTreeMap;
+use std::time::{Duration, SystemTime};
 
-use slog::{error, Logger};
+use slog::{debug, info, Logger};
 
-use crate::driver::action_graph::{ActionGraph, NodeEvent};
-use crate::driver::event::{Event, EventPayload, EventSubscriber, TaskId};
+use crate::driver::action_graph::ActionGraph;
+use crate::driver::event::TaskId;
 use crate::driver::task::Task;
+
+use super::action_graph::Node;
+use super::group::is_task_visible_to_user;
+use super::report::{SystemGroupReport, TaskReport};
+use super::task::TaskHandle;
+
+// trait for report and failure
+#[derive(Debug)]
+pub enum TaskResult {
+    Report(TaskId, String),
+    Failure(TaskId, String),
+}
 
 /// Map a task id to a task.
 pub type TaskTable = BTreeMap<TaskId, Box<dyn Task>>;
 
-/// A task scheduler is an EventSubscriber that spawns, stops, or fails tasks
-/// as a side-effect of processing events.
-pub fn new_task_scheduler(
-    mut scheduled_tasks: TaskTable,
-    mut action_graph: ActionGraph<TaskId>,
-    log: Logger,
-) -> impl EventSubscriber {
-    let mut running_tasks = BTreeMap::new();
-    let mut action_graph_events = VecDeque::new();
+pub struct TaskScheduler {
+    pub scheduled_tasks: TaskTable,
+    pub action_graph: ActionGraph<TaskId>,
+    pub running_tasks: BTreeMap<TaskId, (Box<dyn TaskHandle>, usize)>,
+    pub start_times: BTreeMap<TaskId, SystemTime>,
+    pub end_times: BTreeMap<TaskId, SystemTime>,
+    pub log: Logger,
+}
 
-    move |evt: Event| {
-        let mut action_graph_subs = |n: NodeEvent<TaskId>| {
-            action_graph_events.push_back(n);
-        };
-        match &evt.what {
-            EventPayload::TaskFailed { task_id, .. } => {
-                let (_th, node_handle) = if let Some(item) = running_tasks.remove(task_id) {
-                    item
-                } else {
-                    return;
-                };
-                action_graph.fail(node_handle, &mut action_graph_subs)
-            }
-            EventPayload::TaskStopped { task_id } => {
-                let (_th, node_handle) = if let Some(item) = running_tasks.remove(task_id) {
-                    item
-                } else {
-                    return;
-                };
-                action_graph.stop(node_handle, &mut action_graph_subs)
-            }
-            EventPayload::StartSchedule => {
-                //println!("Processing event EventPayload::StartSchedule ...");
-                std::thread::sleep(std::time::Duration::from_secs(5));
-                //println!("(changed) Processing event EventPayload::StartSchedule ...");
-                // Start the state machine. As a result, in the first loop
-                // iteration, only tasks get spawned.
-                //println!("A action_graph: {:?}", action_graph);
-                action_graph.start(&mut action_graph_subs);
-                //println!("B action_graph: {:?}", action_graph);
-            }
-            _ => return,
-        };
-
-        //println!("C action_graph: {:?}", action_graph);
-
-        // Spawn, stop, or fail tasks in the order in which the action graph
-        // tells us to do so.
-        while let Some(c) = action_graph_events.pop_front() {
-            let node_handle = c.handle;
-            let tid = node_handle.id();
-            let action_type = c.event_type;
-            //println!("Processing {:?} {:?} ...", action_type, tid);
-            use crate::driver::action_graph::NodeEventType::*;
-            match action_type {
-                Start => {
-                    let t = match scheduled_tasks.remove(&tid) {
-                        Some(t) => t,
-                        None => {
-                            error!(log, "No scheduled task '{tid:?}'.");
-                            return;
+impl TaskScheduler {
+    #[allow(clippy::map_entry)]
+    pub fn execute(&mut self, dbg_keepalive: bool) {
+        let (event_tx, event_rx) = crossbeam_channel::unbounded();
+        let log = &self.log;
+        self.action_graph.start();
+        loop {
+            // bring tasks into the state prescribed by action graph
+            for (node_index, (node, maybe_task_id)) in self.action_graph.task_iter().enumerate() {
+                // debug!(log, "ag: node_index {:?} node {:?} task_id {:?}", node_index, node, maybe_task_id);
+                match node {
+                    Node::Running { active, .. } if active > 0 => {
+                        if let Some(task_id) = maybe_task_id {
+                            if !self.running_tasks.contains_key(&task_id) {
+                                // debug!(log, "ag: Starting node: {:?}, task: {}", &node, &task_id);
+                                let task = self.scheduled_tasks.get(&task_id).unwrap();
+                                let tx = event_tx.clone();
+                                let cb = move |result: TaskResult| {
+                                    tx.send(result).expect("Failed to send message.")
+                                };
+                                let th = task.spawn(Box::new(cb));
+                                Self::record_time(&mut self.start_times, &task_id);
+                                self.running_tasks.insert(task_id, (th, node_index));
+                            }
                         }
-                    };
-                    let th = t.spawn();
-                    running_tasks.insert(tid, (th, node_handle));
+                    }
+                    Node::Running { active, .. } if active == 0 => {
+                        // stop this task if it is still running
+                        if let Some(task_id) = maybe_task_id {
+                            let (th, _node_handle) =
+                                if let Some(item) = self.running_tasks.remove(&task_id) {
+                                    Self::record_time(&mut self.end_times, &task_id);
+                                    item
+                                } else {
+                                    continue;
+                                };
+                            // debug!(log, "ag: Stopping node {:?} task {}", &node, &task_id);
+                            th.cancel();
+
+                            if dbg_keepalive && task_id.to_string() == "report" {
+                                let report = self.create_report();
+                                info!(log, "JSON Report:\n{}", report);
+                                info!(log, "Report:\n{}", report.pretty_print());
+                            }
+                        }
+                    }
+                    Node::Failed { .. } => {
+                        if let Some(task_id) = maybe_task_id {
+                            let (th, _node_handle) =
+                                if let Some(item) = self.running_tasks.remove(&task_id) {
+                                    Self::record_time(&mut self.end_times, &task_id);
+                                    item
+                                } else {
+                                    continue;
+                                };
+                            // debug!(log, "ag: Failing node {:?} task {}", &node, &task_id);
+                            th.cancel();
+                        }
+                    }
+                    _ => {}
                 }
-                Stop => {
-                    if let Some((t, _node_handle)) = running_tasks.remove(&tid) {
-                        t.stop();
+            }
+            // debug!(log, "running tasks: {:?}", self.running_tasks.keys());
+
+            // handle events and update action graph accordingly
+            if self.running_tasks.is_empty() {
+                info!(
+                    log,
+                    "Task scheduler is out of running tasks and will terminate."
+                );
+                break;
+            }
+            // wait for running task to send a signal
+            let result = event_rx
+                .recv()
+                .expect("Error while task scheduler tried to receive events.");
+            // debug!(log, "ag: received result {:?}", result);
+            match result {
+                TaskResult::Report(task_id, ref report) => {
+                    // debug!(log, "ag: Setting ag node with task_id: {:?} to stop due to result {}", &task_id, &report);
+                    if let Some((_th, node_idx)) = self.running_tasks.get(&task_id) {
+                        self.action_graph.stop(*node_idx, report.to_string());
+                    } else {
+                        debug!(
+                            log,
+                            "Task id {} not found in running_tasks (report)", task_id
+                        );
                     }
                 }
-                Fail => {
-                    if let Some((t, _node_handle)) = running_tasks.remove(&tid) {
-                        // todo: if this failure is the result of a
-                        // received failure event, the failure message
-                        // could be propagated here by passing as an
-                        // argument: fail(msg)
-                        t.fail();
+                TaskResult::Failure(task_id, ref reason) => {
+                    // debug!(log, "ag: Setting ag node with task_id: {:?} to fail due to result {}", &task_id, &reason);
+                    if let Some((_th, node_idx)) = self.running_tasks.get(&task_id) {
+                        self.action_graph.fail(*node_idx, reason.to_string());
+                    } else {
+                        debug!(
+                            log,
+                            "Task id {} not found in running_tasks (failure)", task_id
+                        );
                     }
                 }
             }
+        }
+    }
+
+    fn record_time(times: &mut BTreeMap<TaskId, SystemTime>, task_id: &TaskId) {
+        times.insert(task_id.clone(), SystemTime::now());
+    }
+
+    fn get_duration(&self, task_id: &TaskId) -> Option<Duration> {
+        if !self.start_times.contains_key(task_id) || !self.end_times.contains_key(task_id) {
+            return None;
+        }
+        Some(
+            self.end_times
+                .get(task_id)
+                .unwrap()
+                .duration_since(*self.start_times.get(task_id).unwrap())
+                .expect("Failed to calculate task duration."),
+        )
+    }
+
+    pub fn create_report(&self) -> SystemGroupReport {
+        let mut success = vec![];
+        let mut failure = vec![];
+        let mut skipped = vec![];
+        for (node, maybe_task_id) in self.action_graph.task_iter() {
+            if let Some(task_id) = maybe_task_id {
+                if !is_task_visible_to_user(&task_id) {
+                    continue;
+                }
+                let duration = self
+                    .get_duration(&task_id)
+                    .unwrap_or_else(|| Duration::from_secs(0));
+                match node {
+                    Node::Running { active: _, message } => {
+                        // TODO: handle this with proper message/failure types
+                        // println!("message for task id {} {:?}", task_id, message);
+                        if message.is_some() && message.clone().unwrap().contains("Task skipped") {
+                            skipped.push(TaskReport {
+                                name: task_id.to_string(),
+                                runtime: duration.as_secs_f64(),
+                                message,
+                            });
+                        } else {
+                            success.push(TaskReport {
+                                name: task_id.to_string(),
+                                runtime: duration.as_secs_f64(),
+                                message,
+                            });
+                        }
+                    }
+                    Node::Failed { reason } => {
+                        failure.push(TaskReport {
+                            name: task_id.to_string(),
+                            runtime: duration.as_secs_f64(),
+                            message: reason,
+                        });
+                    }
+                    _ => {}
+                }
+            }
+        }
+        SystemGroupReport {
+            success,
+            failure,
+            skipped,
         }
     }
 }

@@ -6,13 +6,13 @@ use crate::driver::{
     constants::LOG_CLOSE_TIMEOUT,
     context::GroupContext,
     dsl::SubprocessFn,
-    event::BroadcastingEventSubscriberFactory,
-    event::{Event, TaskId},
+    event::TaskId,
     process::{KillFn, Process},
     subprocess_ipc::{log_panic_event, LogReceiver, ReportOrFailure},
     task::{Task, TaskHandle},
+    task_scheduler::TaskResult,
 };
-use slog::{crit, error, info, Logger};
+use slog::{debug, error, info, Logger};
 use std::{
     panic::catch_unwind,
     process::Command,
@@ -23,6 +23,8 @@ use std::{
 };
 use tokio::{runtime::Handle as RtHandle, task::JoinHandle, time::timeout};
 
+use super::task::TaskResultCallback;
+
 pub struct SubprocessTask {
     task_id: TaskId,
     rt: RtHandle,
@@ -31,7 +33,6 @@ pub struct SubprocessTask {
     f: Arc<Mutex<Option<Box<dyn SubprocessFn>>>>,
     spawned: AtomicBool,
     group_ctx: GroupContext,
-    sub_fact: Arc<dyn BroadcastingEventSubscriberFactory>,
 }
 
 impl SubprocessTask {
@@ -40,7 +41,6 @@ impl SubprocessTask {
         rt: RtHandle,
         f: F,
         group_ctx: GroupContext,
-        sub_fact: Arc<dyn BroadcastingEventSubscriberFactory>,
     ) -> Self {
         Self {
             task_id,
@@ -48,13 +48,12 @@ impl SubprocessTask {
             f: shared_mutex(Some(Box::new(f))),
             spawned: Default::default(),
             group_ctx,
-            sub_fact,
         }
     }
 }
 
 impl Task for SubprocessTask {
-    fn spawn(&self) -> Box<dyn crate::driver::task::TaskHandle> {
+    fn spawn(&self, notify: TaskResultCallback) -> Box<dyn crate::driver::task::TaskHandle> {
         if self.spawned.swap(true, Ordering::Relaxed) {
             panic!("Respawned already spawned task '{}'", self.task_id);
         }
@@ -72,9 +71,6 @@ impl Task for SubprocessTask {
             .arg(self.task_id.name())
             .arg(sock_id.to_string());
 
-        let mut sub = self.sub_fact.create_broadcasting_subscriber();
-        (sub)(Event::task_spawned(self.task_id.clone()));
-
         info!(self.group_ctx.log(), "Spawning {:?} ...", child_cmd);
 
         let log = self.group_ctx.logger();
@@ -82,11 +78,9 @@ impl Task for SubprocessTask {
             .rt
             .block_on(LogReceiver::new(sock_path, log.clone()))
             .expect("Could not start LogReceiver");
-        let (proc, kill) = self.rt.block_on(Process::new(
-            self.task_id.clone(),
-            child_cmd,
-            self.sub_fact.clone(),
-        ));
+        let (proc, kill) =
+            self.rt
+                .block_on(Process::new(self.task_id.clone(), child_cmd, log.clone()));
 
         let task_state = shared_mutex(TaskState::Running(Box::new(kill)));
         let jh = self.rt.spawn({
@@ -100,18 +94,22 @@ impl Task for SubprocessTask {
                     log,
                     "Task '{task_id}' finished with exit code: {exit_code:?}"
                 );
+                // TODO:
+                // if cancellation request: task state is set to cancelled
+                // we still have to wait for jh_res -> leads to report or failure
+                // if cancelled, ignore child report
+                // 
 
                 // A misbehaving child might have not connected to the parent at all. In such a
                 // case, this join would block forever.
-
-                use ReportOrFailure::*;
+                let mut child_report = None;
                 match timeout(LOG_CLOSE_TIMEOUT, log_jh).await {
                     Ok(jh_res) => match jh_res.unwrap() {
-                        Ok(Some(Report(msg))) => {
-                            (sub)(Event::task_sub_report(task_id.clone(), msg))
+                        Ok(Some(ReportOrFailure::Report(msg))) => {
+                            child_report = Some(TaskResult::Report(task_id.clone(), msg));
                         }
-                        Ok(Some(Failure(msg))) => {
-                            (sub)(Event::task_caught_panic(task_id.clone(), msg))
+                        Ok(Some(ReportOrFailure::Failure(msg))) => {
+                            child_report = Some(TaskResult::Failure(task_id.clone(), msg));
                         }
                         Ok(_) => {}
                         Err(e) => {
@@ -127,43 +125,42 @@ impl Task for SubprocessTask {
                 }
 
                 let mut task_state = task_state.lock().unwrap();
-                let event = match &*task_state {
+                *task_state = match &*task_state {
                     TaskState::Running(_) => {
-                        match exit_code {
-                            // exit_code.code() should be Some, unless an external signal will fail the subprocess.
-                            // In that case, we should fail the parent process.
-                            Ok(exit_code) => match exit_code.code() {
-                                Some(code) if code == 0 => Event::task_stopped(task_id),
-                                Some(code) => Event::task_failed(
-                                    task_id.clone(),
-                                    format!("Task {} failed with exit code: {:?}.", task_id, code),
-                                ),
-                                None => Event::task_failed(
-                                    task_id,
-                                    "The process was signaled externally (no exit code available)"
-                                        .to_string(),
-                                ),
-                            },
-                            Err(e) => {
-                                Event::task_failed(task_id, format!("System API failure: {:?}", e))
+                        if let Some(child_report) = child_report {
+                            notify(child_report);
+                        } else {
+                            match exit_code {
+                                // exit_code.code() should be Some, unless an external signal will fail the subprocess.
+                                // In that case, we should fail the parent process.
+                                Ok(exit_code) => match exit_code.code() {
+                                    Some(code) if code == 0 => notify(TaskResult::Report(
+                                        task_id.clone(),
+                                        "Exited with code 0.".to_owned(),
+                                    )),
+                                    Some(code) => notify(TaskResult::Failure(
+                                        task_id.clone(),
+                                        format!("Task {} failed with exit code: {:?}.", task_id, code),
+                                    )),
+                                    None => notify(TaskResult::Failure(
+                                        task_id.clone(),
+                                        "The process was signaled externally (no exit code available)"
+                                            .to_owned(),
+                                    )),
+                                },
+                                Err(e) => {
+                                    notify(TaskResult::Failure(
+                                        task_id,
+                                        format!("System API failure: {:?}", e),
+                                    ));
+                                }
                             }
                         }
-                    }
-                    // If either a stop or a failure was requested by the
-                    // scheduler, we ignore the exit code. I.e., the request
-                    // overrides the result from the process.
-                    TaskState::StopRequested => Event::task_stopped(task_id),
-                    TaskState::FailRequested => Event::task_failed(
-                        task_id.clone(),
-                        format!("Task '{task_id}' failed with exit code: {exit_code:?}."),
-                    ),
-                    TaskState::Finished => {
-                        crit!(log, "Task '{task_id}' already finished!");
-                        unreachable!()
-                    }
+                        TaskState::Finished
+                    },
+                    TaskState::Cancelled => TaskState::Cancelled,
+                    TaskState::Finished => TaskState::Finished,
                 };
-                (sub)(event);
-                *task_state = TaskState::Finished;
             }
         });
 
@@ -217,7 +214,7 @@ impl ChildTaskHandle {
                     unreachable!();
                 }
             } else {
-                error!(self.log, "Task '{}' already failed!", self.task_id);
+                debug!(self.log, "Task '{}' already terminated!", self.task_id);
                 return;
             };
         }
@@ -236,19 +233,14 @@ impl ChildTaskHandle {
 }
 
 impl TaskHandle for ChildTaskHandle {
-    fn fail(&self) {
-        self.finish(TaskState::FailRequested);
-    }
-
-    fn stop(&self) {
-        self.finish(TaskState::StopRequested);
+    fn cancel(&self) {
+        self.finish(TaskState::Cancelled);
     }
 }
 
 pub enum TaskState {
     Running(Box<dyn KillFn>),
-    StopRequested,
-    FailRequested,
+    Cancelled,
     Finished,
 }
 

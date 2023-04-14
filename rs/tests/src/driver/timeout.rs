@@ -10,52 +10,44 @@ use std::{
 use tokio::{runtime::Handle as RtHandle, task::JoinHandle};
 
 use crate::driver::{
-    event::{BroadcastingEventSubscriberFactory, Event, TaskId},
+    event::TaskId,
     task::{Task, TaskHandle},
 };
+
+use super::{task::TaskResultCallback, task_scheduler::TaskResult};
 
 pub struct TimeoutTask {
     spawned: AtomicBool,
     rt: RtHandle,
     duration: Duration,
-    sub_fact: Arc<dyn BroadcastingEventSubscriberFactory>,
     task_id: TaskId,
 }
 
 impl TimeoutTask {
-    pub fn new(
-        rt: RtHandle,
-        duration: Duration,
-        sub_fact: Arc<dyn BroadcastingEventSubscriberFactory>,
-        task_id: TaskId,
-    ) -> Self {
+    pub fn new(rt: RtHandle, duration: Duration, task_id: TaskId) -> Self {
         Self {
             spawned: Default::default(),
             rt,
             duration,
-            sub_fact,
             task_id,
         }
     }
 }
 
 impl Task for TimeoutTask {
-    fn spawn(&self) -> Box<dyn crate::driver::task::TaskHandle> {
+    fn spawn(&self, notify: TaskResultCallback) -> Box<dyn crate::driver::task::TaskHandle> {
         if self.spawned.fetch_or(true, Ordering::Relaxed) {
             panic!("respawned already spawned task `{}`", self.task_id);
         }
-        let mut sub = self.sub_fact.create_broadcasting_subscriber();
-        (sub)(Event::task_spawned(self.task_id.clone()));
         let stopped = Arc::new(AtomicBool::default());
         let jh = self.rt.spawn({
             let duration = self.duration;
             let task_id = self.task_id.clone();
-            let stopped = stopped.clone();
             async move {
                 tokio::time::sleep(duration).await;
                 // xxx: ignore send errors
                 if !stopped.fetch_or(true, Ordering::Relaxed) {
-                    (sub)(Event::task_failed(
+                    notify(TaskResult::Failure(
                         task_id,
                         format!("Timeout after {}s", duration.as_secs()),
                     ));
@@ -63,12 +55,7 @@ impl Task for TimeoutTask {
             }
         });
 
-        let th = TimeoutTaskHandle {
-            jh,
-            finished: stopped,
-            sub_fact: self.sub_fact.clone(),
-            task_id: self.task_id.clone(),
-        };
+        let th = TimeoutTaskHandle { jh };
 
         Box::new(th)
     }
@@ -79,40 +66,19 @@ impl Task for TimeoutTask {
 }
 
 pub struct TimeoutTaskHandle {
-    /// This boolean prevents and outside stop/fail signal from being propagated
-    /// when the task finished.
-    finished: Arc<AtomicBool>,
-    sub_fact: Arc<dyn BroadcastingEventSubscriberFactory>,
-    task_id: TaskId,
     jh: JoinHandle<()>,
 }
 
 impl TaskHandle for TimeoutTaskHandle {
-    fn fail(&self) {
+    fn cancel(&self) {
         self.jh.abort();
-        let mut sub = self.sub_fact.create_broadcasting_subscriber();
-        if !self.finished.fetch_or(true, Ordering::Relaxed) {
-            (sub)(Event::task_failed(
-                self.task_id.clone(),
-                "Timeout failed.".to_string(),
-            ));
-        }
-    }
-
-    fn stop(&self) {
-        self.jh.abort();
-        let mut sub = self.sub_fact.create_broadcasting_subscriber();
-        if !self.finished.fetch_or(true, Ordering::Relaxed) {
-            (sub)(Event::task_stopped(self.task_id.clone()));
-        }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::driver::event::{test_utils::create_subfact, EventPayload};
-
     use super::*;
+    use crossbeam_channel::unbounded;
     use tokio::runtime::Runtime;
 
     #[test]
@@ -120,54 +86,15 @@ mod tests {
         let rt = create_rt();
         let d = ms(1);
         let expected_task_id = TaskId::Test("test-id".to_string());
-        let (evt_send, evt_rcv) = create_subfact();
+        let (evt_send, evt_rcv) = unbounded();
 
-        let t = TimeoutTask::new(rt.handle().clone(), d, evt_send, expected_task_id.clone());
-        let _th = t.spawn();
+        let t = TimeoutTask::new(rt.handle().clone(), d, expected_task_id.clone());
+        let _th = t.spawn(Box::new(move |res| {
+            evt_send.send(res).expect("Failed to send.")
+        }));
         std::thread::sleep(d * 20);
-
-        let _spawned_event = evt_rcv.recv().unwrap();
         let evt = evt_rcv.recv().unwrap();
-
-        assert!(matches!(evt.what,
-            EventPayload::TaskFailed { task_id, .. } if task_id == expected_task_id
-        ));
-    }
-
-    #[test]
-    fn timeout_task_can_be_stopped() {
-        let rt = create_rt();
-        let d = ms(2000);
-        let expected_task_id = TaskId::Test("test-id".to_string());
-        let (evt_send, evt_rcv) = create_subfact();
-
-        let t = TimeoutTask::new(rt.handle().clone(), d, evt_send, expected_task_id.clone());
-        let th = t.spawn();
-        th.stop();
-        let _spawned_event = evt_rcv.recv().unwrap();
-        let evt = evt_rcv.recv().unwrap();
-
-        assert!(matches!(evt.what,
-            EventPayload::TaskStopped { task_id } if task_id == expected_task_id
-        ));
-    }
-
-    #[test]
-    fn timeout_task_can_be_failed() {
-        let rt = create_rt();
-        let d = ms(2000);
-        let expected_task_id = TaskId::Test("test-id".to_string());
-        let (evt_send, evt_rcv) = create_subfact();
-
-        let t = TimeoutTask::new(rt.handle().clone(), d, evt_send, expected_task_id.clone());
-        let th = t.spawn();
-        th.fail();
-        let _spawned_event = evt_rcv.recv().unwrap();
-        let evt = evt_rcv.recv().unwrap();
-
-        assert!(matches!(evt.what,
-            EventPayload::TaskFailed { task_id, .. } if task_id == expected_task_id
-        ));
+        assert!(matches!(evt, TaskResult::Failure(task_id, _msg) if task_id == expected_task_id));
     }
 
     #[test]
@@ -176,11 +103,16 @@ mod tests {
         let rt = create_rt();
         let d = ms(2000);
         let expected_task_id = TaskId::Test("test-id".to_string());
-        let (evt_send, _evt_rcv) = create_subfact();
+        let (evt_send, _evt_rcv) = unbounded();
+        let evt_send2 = evt_send.clone();
 
-        let t = TimeoutTask::new(rt.handle().clone(), d, evt_send, expected_task_id);
-        t.spawn();
-        t.spawn();
+        let t = TimeoutTask::new(rt.handle().clone(), d, expected_task_id);
+        t.spawn(Box::new(move |res| {
+            evt_send.send(res).expect("Failed to send.")
+        }));
+        t.spawn(Box::new(move |res| {
+            evt_send2.send(res).expect("Failed to send.")
+        }));
     }
 
     fn create_rt() -> Runtime {
