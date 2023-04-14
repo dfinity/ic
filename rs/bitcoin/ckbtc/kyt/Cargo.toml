@@ -17,3 +17,8 @@ num-traits = "0.2.14"
 serde = "1.0.136"
 serde_json = "1.0"
 time = { version = "0.3.20", features = ["formatting"] }
+
+[dev-dependencies]
+assert_matches = "1.5.0"
+ic-state-machine-tests = { path = "../../../state_machine_tests" }
+ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }

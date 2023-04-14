@@ -66,6 +66,7 @@ use ic_test_utilities_metrics::{fetch_histogram_stats, fetch_int_counter};
 use ic_test_utilities_registry::{
     add_subnet_record, insert_initial_dkg_transcript, SubnetRecordBuilder,
 };
+pub use ic_types::canister_http::CanisterHttpRequestContext;
 use ic_types::consensus::certification::CertificationContent;
 use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet};
 pub use ic_types::crypto::threshold_sig::ThresholdSigPublicKey;
@@ -79,7 +80,6 @@ use ic_types::signature::ThresholdSignature;
 use ic_types::time::GENESIS;
 use ic_types::{
     batch::{Batch, BatchMessages, XNetPayload},
-    canister_http::CanisterHttpRequestContext,
     consensus::certification::Certification,
     messages::{
         Blob, HttpCallContent, HttpCanisterUpdate, HttpRequestEnvelope, Payload as MsgPayload,
@@ -347,7 +347,10 @@ impl StateMachineBuilder {
             subnet_id: own_subnet_id,
             routing_table: RoutingTable::new(),
             ecdsa_keys: Vec::new(),
-            features: SubnetFeatures::default(),
+            features: SubnetFeatures {
+                http_requests: true,
+                ..SubnetFeatures::default()
+            },
         }
     }
 
