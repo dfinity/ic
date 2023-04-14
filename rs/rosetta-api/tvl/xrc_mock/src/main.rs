@@ -25,7 +25,7 @@ async fn get_exchange_rate(_request: GetExchangeRateRequest) -> GetExchangeRateR
                     class: AssetClass::FiatCurrency,
                 }),
                 // Add 6 to the timestamp to differentiate from the governance canister time.
-                timestamp: ic_cdk::api::time() + 6,
+                timestamp: (ic_cdk::api::time() / 1_000_000_000) + 6,
                 rate: rate.rate,
                 metadata: rate.metadata.clone().unwrap_or(ExchangeRateMetadata {
                     decimals: 8,
