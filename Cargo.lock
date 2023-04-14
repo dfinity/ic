@@ -8555,9 +8555,9 @@ dependencies = [
 
 [[package]]
 name = "ic-response-verification"
-version = "0.1.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4f4e57f65dc2b5567f11e0508b3648518097fe9fcd443389eb0057b91a3c5acd"
+checksum = "d0808226c0567472d822b246231b93fa91929c4945cb2d5ca2a072865f308f4e"
 dependencies = [
  "base64 0.13.1",
  "candid",
@@ -10250,7 +10250,7 @@ dependencies = [
 
 [[package]]
 name = "icx-proxy"
-version = "0.11.0"
+version = "0.11.1"
 dependencies = [
  "anyhow",
  "async-trait",

@@ -238,7 +238,8 @@ async fn process_request_inner(
         Err(response_or_error) => return response_or_error,
     };
 
-    let agent_response = if agent_response.upgrade == Some(true) {
+    let is_update_call = agent_response.upgrade == Some(true);
+    let agent_response = if is_update_call {
         let update_result = canister
             .http_request_update_custom(
                 &http_request.method,
@@ -267,7 +268,8 @@ async fn process_request_inner(
     // At the moment verification is only performed if the response is not using a streaming
     // strategy. Performing verification for those requests would required to join all the chunks
     // and this could cause memory issues and possibly create DOS attack vectors.
-    if !http_response.has_streaming_body {
+    let should_validate = !http_response.has_streaming_body && !is_update_call;
+    if should_validate {
         let validation = validator.validate(&agent, &canister_id, &http_request, &http_response);
 
         if validation.is_err() {
