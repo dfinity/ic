@@ -4,14 +4,15 @@ use candid::Deserialize;
 use ic_base_types::CanisterId;
 use serde::Serialize;
 
-const DEFAULT_BLOCKCHAIN: &str = "Internet Computer";
+// Generated from the [Rosetta API specification v1.4.13](https://github.com/coinbase/rosetta-specifications/blob/v1.4.13/api.json)
+// Documentation for the Rosetta API can be found at https://www.rosetta-api.org/docs/1.4.13/welcome.html
 
-pub type Object = serde_json::map::Map<String, serde_json::Value>;
+const DEFAULT_BLOCKCHAIN: &str = "Internet Computer";
 
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 pub struct MetadataRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<Object>,
+    pub metadata: Option<serde_json::Value>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
@@ -45,7 +46,7 @@ pub struct SubNetworkIdentifier {
     pub network: String,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<Object>,
+    pub metadata: Option<serde_json::Value>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -65,7 +66,7 @@ pub struct Version {
     pub middleware_version: Option<String>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<Object>,
+    pub metadata: Option<serde_json::Value>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -77,6 +78,72 @@ pub struct Allow {
     pub errors: Vec<Error>,
 
     pub historical_balance_lookup: bool,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timestamp_start_index: Option<i64>,
+
+    pub call_methods: Vec<String>,
+
+    pub balance_exemptions: Vec<BalanceExemption>,
+
+    pub mempool_coins: bool,
+
+    #[serde(
+        default,
+        with = "::serde_with::rust::double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub block_hash_case: Option<Option<Case>>,
+
+    #[serde(
+        default,
+        with = "::serde_with::rust::double_option",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub transaction_hash_case: Option<Option<Case>>,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+pub struct BalanceExemption {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sub_account_address: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub currency: Option<Box<Currency>>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub exemption_type: Option<ExemptionType>,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+pub struct Currency {
+    pub symbol: String,
+
+    pub decimals: i32,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<serde_json::Value>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+pub enum ExemptionType {
+    GreaterOrEqual,
+    LessOrEqual,
+    Dynamic,
+}
+
+impl Default for ExemptionType {
+    fn default() -> ExemptionType {
+        Self::GreaterOrEqual
+    }
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+pub enum Case {
+    UpperCase,
+    LowerCase,
+    CaseSensitive,
+    Null,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -98,7 +165,7 @@ pub struct Error {
     pub retriable: bool,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub details: Option<Object>,
+    pub details: Option<serde_json::Value>,
 }
 
 const ERROR_CODE_INVALID_NETWORK_ID: u32 = 1;
@@ -129,5 +196,5 @@ pub struct NetworkRequest {
     pub network_identifier: NetworkIdentifier,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<Object>,
+    pub metadata: Option<serde_json::Value>,
 }
