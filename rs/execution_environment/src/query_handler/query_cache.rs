@@ -114,7 +114,7 @@ impl CountBytes for QueryCache {
 impl Default for QueryCache {
     fn default() -> Self {
         QueryCache {
-            cache: Mutex::new(LruCache::new((u64::MAX / 2).into())),
+            cache: Mutex::new(LruCache::unbounded()),
         }
     }
 }
@@ -134,6 +134,7 @@ impl QueryCache {
             if value.is_valid(env) {
                 return Some(value.result());
             } else {
+                // Remove the invalid entry.
                 cache.pop(key);
             }
         }
@@ -141,7 +142,6 @@ impl QueryCache {
     }
 
     pub(crate) fn insert(&self, key: EntryKey, value: EntryValue) {
-        let size = (key.count_bytes() + value.count_bytes()) as u64;
-        self.cache.lock().unwrap().put(key, value, size.into());
+        self.cache.lock().unwrap().push(key, value);
     }
 }
