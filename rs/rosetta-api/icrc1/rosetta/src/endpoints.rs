@@ -9,7 +9,7 @@ use ic_icrc_rosetta::{
     AppState,
 };
 
-const ROSETTA_VERSION: &str = "1.4.14";
+const ROSETTA_VERSION: &str = "1.4.13";
 const NODE_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 fn verify_network_id(network_identifier: &NetworkIdentifier, state: &AppState) -> Result<()> {
@@ -52,6 +52,12 @@ pub async fn network_options(
                 &NetworkIdentifier::for_ledger_id(state.ledger_id),
             )],
             historical_balance_lookup: true,
+            timestamp_start_index: None,
+            call_methods: vec![],
+            balance_exemptions: vec![],
+            mempool_coins: false,
+            block_hash_case: None,
+            transaction_hash_case: None,
         },
     }))
 }
