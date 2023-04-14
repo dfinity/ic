@@ -176,6 +176,28 @@ impl InternetComputer {
     }
 
     pub fn setup_and_start(&mut self, env: &TestEnv) -> Result<()> {
+        // propagate required host features and resource settings to all vms
+        for subnet in self.subnets.iter_mut() {
+            for node in subnet.nodes.iter_mut() {
+                node.required_host_features = node
+                    .required_host_features
+                    .iter()
+                    .chain(self.required_host_features.iter())
+                    .cloned()
+                    .collect();
+                node.vm_resources = node.vm_resources.or(&self.default_vm_resources);
+            }
+        }
+        for node in self.unassigned_nodes.iter_mut() {
+            node.required_host_features = node
+                .required_host_features
+                .iter()
+                .chain(self.required_host_features.iter())
+                .cloned()
+                .collect();
+            node.vm_resources = node.vm_resources.or(&self.default_vm_resources);
+        }
+
         let tempdir = tempfile::tempdir()?;
         self.create_secret_key_stores(tempdir.path())?;
         let logger = env.logger();
@@ -535,6 +557,19 @@ pub struct VmResources {
     pub vcpus: Option<NrOfVCPUs>,
     pub memory_kibibytes: Option<AmountOfMemoryKiB>,
     pub boot_image_minimal_size_gibibytes: Option<ImageSizeGiB>,
+}
+
+impl VmResources {
+    /// Applies Option::or to all individual fields `self` and `other`.
+    pub fn or(&self, other: &VmResources) -> Self {
+        Self {
+            vcpus: self.vcpus.or(other.vcpus),
+            memory_kibibytes: self.memory_kibibytes.or(other.memory_kibibytes),
+            boot_image_minimal_size_gibibytes: self
+                .boot_image_minimal_size_gibibytes
+                .or(other.boot_image_minimal_size_gibibytes),
+        }
+    }
 }
 
 /// A builder for the initial configuration of a node.
