@@ -2,7 +2,6 @@
 //! immediately. The provided data provider is polled periodically in the
 //! background when start_polling() is called.
 use crossbeam_channel::{RecvTimeoutError, Sender, TrySendError};
-pub use ic_config::registry_client::DataProviderConfig;
 pub use ic_interfaces_registry::{
     empty_zero_registry_record, RegistryClient, RegistryClientVersionedResult,
     RegistryDataProvider, RegistryTransportRecord, POLLING_PERIOD, ZERO_REGISTRY_VERSION,

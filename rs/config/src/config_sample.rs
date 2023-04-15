@@ -86,7 +86,8 @@ pub const SAMPLE_CONFIG: &str = r#"
     // Configuration of registry client
     // ============================================
     registry_client: {
-        // The default is not to specify it.
+        // The directory that should be used to persist registry content.
+        local_store: "/var/lib/ic/data/ic_registry_local_store/"
     },
     // ============================================
     // Configuration of the node state persistence.

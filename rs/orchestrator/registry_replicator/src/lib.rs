@@ -30,7 +30,7 @@
 
 use crate::internal_state::InternalState;
 use ic_config::metrics::{Config as MetricsConfig, Exporter};
-use ic_config::{registry_client::DataProviderConfig, Config};
+use ic_config::Config;
 use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key;
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
 use ic_interfaces_registry::{RegistryClient, RegistryDataProvider, ZERO_REGISTRY_VERSION};
@@ -92,12 +92,7 @@ impl RegistryReplicator {
         config: &Config,
     ) -> Self {
         // We only support the local store data provider
-        let DataProviderConfig::LocalStore(local_store_path) = config
-            .registry_client
-            .data_provider
-            .clone()
-            .expect("registry data provider is not configured");
-
+        let local_store_path = &config.registry_client.local_store;
         let local_store = Arc::new(LocalStoreImpl::new(local_store_path.clone()));
         std::fs::create_dir_all(local_store_path)
             .expect("Could not create directory for registry local store.");

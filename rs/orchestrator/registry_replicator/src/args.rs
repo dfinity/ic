@@ -1,5 +1,5 @@
 use clap::Parser;
-use ic_config::{logger::LogFormat, registry_client::DataProviderConfig, Config};
+use ic_config::{logger::LogFormat, Config};
 use slog::Level;
 use std::{
     net::{Ipv4Addr, SocketAddr, SocketAddrV4},
@@ -67,9 +67,7 @@ impl RegistryReplicatorArgs {
         config.logger.dc_id = self.dc_id;
         config.registration.nns_pub_key_pem = Some(self.nns_pub_key_pem.clone());
         config.registration.nns_url = Some(self.nns_url.clone());
-        config.registry_client.data_provider = Some(DataProviderConfig::LocalStore(
-            self.local_store_path.clone(),
-        ));
+        config.registry_client.local_store = self.local_store_path.clone();
         config.nns_registry_replicator.poll_delay_duration_ms = self.poll_delay_duration_ms;
 
         (config, _dir)

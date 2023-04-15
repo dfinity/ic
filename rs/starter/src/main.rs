@@ -31,7 +31,7 @@ use ic_config::{
     http_handler::Config as HttpHandlerConfig,
     logger::Config as LoggerConfig,
     metrics::{Config as MetricsConfig, Exporter},
-    registry_client::{Config as RegistryClientConfig, DataProviderConfig},
+    registry_client::Config as RegistryClientConfig,
     state_manager::Config as StateManagerConfig,
     transport::TransportConfig,
     ConfigOptional as ReplicaConfig,
@@ -635,9 +635,7 @@ impl ValidatedConfig {
 
         let crypto = Some(CryptoConfig::new(self.crypto_root.clone()));
         let registry_client = Some(RegistryClientConfig {
-            data_provider: Some(DataProviderConfig::LocalStore(
-                self.registry_local_store_path.clone(),
-            )),
+            local_store: self.registry_local_store_path.clone(),
         });
         let logger_config = LoggerConfig {
             node_id: NODE_INDEX,
