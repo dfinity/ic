@@ -1,8 +1,6 @@
 use crate::args::ReplicaArgs;
 use clap::Parser;
-use ic_config::{
-    crypto::CryptoConfig, registry_client::DataProviderConfig, Config, ConfigSource, SAMPLE_CONFIG,
-};
+use ic_config::{crypto::CryptoConfig, Config, ConfigSource, SAMPLE_CONFIG};
 use ic_crypto::CryptoComponent;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{fatal, info, warn, ReplicaLogger};
@@ -204,13 +202,8 @@ pub fn setup_crypto_registry(
     metrics_registry: Option<&MetricsRegistry>,
     logger: ReplicaLogger,
 ) -> (std::sync::Arc<RegistryClientImpl>, CryptoComponent) {
-    let data_provider = match config
-        .registry_client
-        .data_provider
-        .expect("No data provider was provided in the registry client configuration.")
-    {
-        DataProviderConfig::LocalStore(path) => Arc::new(LocalStoreImpl::new(path)),
-    };
+    let data_provider = Arc::new(LocalStoreImpl::new(config.registry_client.local_store));
+
     let registry = Arc::new(RegistryClientImpl::new(data_provider, metrics_registry));
 
     // The registry must be initialized before setting up the crypto component

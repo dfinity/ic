@@ -7,10 +7,7 @@ use ic_artifact_pool::{
     certification_pool::CertificationPoolImpl,
     consensus_pool::{ConsensusPoolImpl, UncachedConsensusPoolImpl},
 };
-use ic_config::{
-    artifact_pool::ArtifactPoolConfig, registry_client::DataProviderConfig,
-    subnet_config::SubnetConfigs, Config,
-};
+use ic_config::{artifact_pool::ArtifactPoolConfig, subnet_config::SubnetConfigs, Config};
 use ic_consensus::{
     certification::VerifierImpl,
     consensus::{
@@ -118,7 +115,7 @@ pub struct Player {
     ingress_history_reader: Box<dyn IngressHistoryReader>,
     certification_pool: Option<CertificationPoolImpl>,
     pub registry: Arc<RegistryClientImpl>,
-    local_store_path: Option<PathBuf>,
+    local_store_path: PathBuf,
     replica_version: ReplicaVersion,
     pub log: ReplicaLogger,
     _async_log_guard: AsyncGuard,
@@ -253,14 +250,6 @@ impl Player {
             registry.get_latest_version(),
             &log,
         );
-        let local_store_path = if let Some(DataProviderConfig::LocalStore(path)) =
-            cfg.registry_client.data_provider.clone()
-        {
-            Some(path)
-        } else {
-            None
-        };
-
         let metrics_registry = MetricsRegistry::new();
         let subnet_config = SubnetConfigs::default().own_subnet_config(subnet_type);
 
@@ -315,7 +304,7 @@ impl Player {
                 metrics_registry.clone(),
             )
         });
-
+        let local_store_path = cfg.registry_client.local_store.clone();
         let validator = consensus_pool.as_ref().map(|pool| {
             ReplayValidator::new(
                 cfg,
@@ -330,7 +319,6 @@ impl Player {
                 log.clone(),
             )
         });
-
         Player {
             state_manager,
             message_routing,
@@ -631,9 +619,7 @@ impl Player {
     /// Fetch registry records from the given `nns_url`, and update the local
     /// registry store with the new records.
     pub fn update_registry_local_store(&self) {
-        let local_store_path = self.local_store_path.clone().expect(
-           "update_registry_local_store can only be used with registry configured with local store");
-        println!("RegistryLocalStore path: {:?}", local_store_path);
+        println!("RegistryLocalStore path: {:?}", &self.local_store_path);
         let latest_version = self.registry.get_latest_version();
         println!("RegistryLocalStore latest version: {}", latest_version);
         let records = self
@@ -642,7 +628,7 @@ impl Player {
                 current_time() + Duration::from_secs(60),
             )
             .unwrap_or_else(|err| panic!("Error in get_certified_changes_since: {}", err));
-        write_records_to_local_store(&local_store_path, latest_version, records)
+        write_records_to_local_store(&self.local_store_path, latest_version, records)
     }
 
     /// Deliver finalized batches since last expected batch height.
@@ -1232,13 +1218,7 @@ fn setup_registry(
     config: Config,
     metrics_registry: Option<&MetricsRegistry>,
 ) -> std::sync::Arc<RegistryClientImpl> {
-    let data_provider = match config
-        .registry_client
-        .data_provider
-        .expect("Data provider required")
-    {
-        DataProviderConfig::LocalStore(path) => Arc::new(LocalStoreImpl::new(path)),
-    };
+    let data_provider = Arc::new(LocalStoreImpl::new(config.registry_client.local_store));
 
     let registry = Arc::new(RegistryClientImpl::new(data_provider, metrics_registry));
     if let Err(e) = registry.fetch_and_start_polling() {

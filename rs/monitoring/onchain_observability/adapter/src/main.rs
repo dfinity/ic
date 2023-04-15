@@ -9,7 +9,6 @@ use ic_adapter_metrics_server::start_metrics_grpc;
 use ic_async_utils::{abort_on_panic, incoming_from_nth_systemd_socket};
 use ic_base_types::{CanisterId, NodeId};
 use ic_canister_client::{Agent, Sender};
-use ic_config::registry_client::DataProviderConfig;
 use ic_crypto::CryptoComponent;
 use ic_interfaces::crypto::{BasicSigner, ErrorReproducibility, KeyManager};
 use ic_logger::{error, info, new_replica_logger_from_config, warn, ReplicaLogger};
@@ -340,13 +339,7 @@ async fn create_registry_client_and_crypto_component(
     config: Config,
     rt_handle: Handle,
 ) -> (Arc<RegistryClientImpl>, Arc<CryptoComponent>) {
-    let DataProviderConfig::LocalStore(local_store_from_config) = config
-        .registry_config
-        .data_provider
-        .as_ref()
-        .expect("No registry provider found");
-
-    let data_provider = Arc::new(LocalStoreImpl::new(local_store_from_config));
+    let data_provider = Arc::new(LocalStoreImpl::new(config.registry_config.local_store));
     let registry_client = Arc::new(RegistryClientImpl::new(
         data_provider,
         Some(&metrics_registry),

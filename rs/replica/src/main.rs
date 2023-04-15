@@ -1,10 +1,7 @@
 //! Replica -- Internet Computer
 
 use ic_async_utils::{abort_on_panic, shutdown_signal};
-use ic_config::{
-    registry_client::DataProviderConfig,
-    {subnet_config::SubnetConfigs, Config},
-};
+use ic_config::{subnet_config::SubnetConfigs, Config};
 use ic_crypto_sha::Sha256;
 use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
@@ -261,11 +258,9 @@ fn main() -> io::Result<()> {
         &logger.inner_logger.root,
     );
 
-    let registry_certified_time_reader: Arc<dyn LocalStoreCertifiedTimeReader> = {
-        let DataProviderConfig::LocalStore(path) =
-            config.registry_client.data_provider.clone().unwrap();
-        Arc::new(LocalStoreImpl::new(path))
-    };
+    let registry_certified_time_reader: Arc<dyn LocalStoreCertifiedTimeReader> = Arc::new(
+        LocalStoreImpl::new(config.registry_client.local_store.clone()),
+    );
 
     info!(logger, "Constructing IC stack");
     let (_, _, _p2p_thread_joiner, _, _xnet_endpoint) =
