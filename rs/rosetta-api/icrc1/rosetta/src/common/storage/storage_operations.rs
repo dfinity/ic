@@ -75,6 +75,17 @@ pub fn get_block_with_lowest_block_idx(
     let mut stmt = connection.prepare(command)?;
     read_single_block(&mut stmt, params![])
 }
+
+pub fn get_blocks_by_index_range(
+    connection: &mut Connection,
+    start_index: u64,
+    end_index: u64,
+) -> anyhow::Result<Vec<RosettaBlock>> {
+    let command = "SELECT idx,serialized_block FROM blocks WHERE idx>= ?1 AND idx<=?2";
+    let mut stmt = connection.prepare(command)?;
+    read_blocks(&mut stmt, params![start_index, end_index])
+}
+
 fn read_single_block<P>(stmt: &mut Statement, params: P) -> anyhow::Result<Option<RosettaBlock>>
 where
     P: Params,

@@ -60,6 +60,18 @@ impl StorageClient {
         storage_operations::get_block_with_lowest_block_idx(&mut open_connection)
     }
 
+    // Returns a range of blocks including the start index and the end index
+    // Returns an empty vector if the start index is outside of the range of the database
+    // Returns a subsect of the blocks range [start_index,end_index] if the end_index is outside of the range of the database
+    pub fn get_blocks_by_index_range(
+        &mut self,
+        start_index: u64,
+        end_index: u64,
+    ) -> anyhow::Result<Vec<RosettaBlock>> {
+        let mut open_connection = self.storage_connection.lock().unwrap();
+        storage_operations::get_blocks_by_index_range(&mut open_connection, start_index, end_index)
+    }
+
     fn create_tables(&self) -> Result<(), rusqlite::Error> {
         let open_connection = self.storage_connection.lock().unwrap();
         open_connection.execute(
@@ -154,7 +166,16 @@ mod tests {
         // Indexing starts at 0
         assert_eq!(block_read.index,(blocks.len() as u64)-1);
         let block_read = storage_client_memory.get_block_with_lowest_block_idx().unwrap().unwrap();
-        assert_eq!(block_read.index,0)
+        assert_eq!(block_read.index,0);
+        let blocks_read = storage_client_memory.get_blocks_by_index_range(0,blocks.len() as u64).unwrap();
+        // Storage should return all blocks that are stored
+        assert_eq!(blocks_read.len(),blocks.len());
+        let blocks_read = storage_client_memory.get_blocks_by_index_range(blocks.len() as u64 +1,blocks.len() as u64 +2).unwrap();
+        // Start index is outside of the index range of the blocks stored in the database -> Should return an empty vector
+        assert!(blocks_read.is_empty());
+        let blocks_read = storage_client_memory.get_blocks_by_index_range(1,blocks.len() as u64 + 2).unwrap();
+        // End index is outside of the blocks stored in the database --> Returns subset of blocks stored in the database
+        assert_eq!(blocks_read.len(),blocks.len().saturating_sub(1));
             }
         }
 }
