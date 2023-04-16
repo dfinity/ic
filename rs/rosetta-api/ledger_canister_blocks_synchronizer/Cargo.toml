@@ -32,3 +32,4 @@ serde_bytes = "0.11"
 
 [lib]
 path = "src/lib.rs"
+
