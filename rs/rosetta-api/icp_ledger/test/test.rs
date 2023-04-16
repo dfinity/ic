@@ -212,10 +212,9 @@ fn make_accounts(num_accounts: u64, num_subaccounts: u8) -> HashMap<AccountIdent
 }
 
 async fn install_motoko_proxy(r: &canister_test::Runtime) -> Canister<'_> {
-    let manifest_dir = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap())
-        .join("wasm/ledger_proxy.wasm");
+    let wasm_path = std::path::PathBuf::from(std::env::var("LEDGER_PROXY_WASM_PATH").unwrap());
 
-    canister_test::Wasm::from_file(manifest_dir)
+    canister_test::Wasm::from_file(wasm_path)
         .install_(r, CandidOne(()).into_bytes().unwrap())
         .await
         .expect("failed to install the ledger proxy canister")

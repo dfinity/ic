@@ -120,9 +120,9 @@ crate_repositories()
 
 http_archive(
     name = "rules_motoko",
-    sha256 = "b08c9419b1aebd3d781a79142797df8fcf5f7187bbc266ba3a93df093636be3e",
-    strip_prefix = "rules_motoko-0.2.0",
-    urls = ["https://github.com/dfinity/rules_motoko/archive/refs/tags/v0.2.0.tar.gz"],
+    sha256 = "f7cb0a906c8efe9d2ad8d27f0f6ac11f6409a771d74874f7e47d45959063dfe3",
+    strip_prefix = "rules_motoko-0.2.1",
+    urls = ["https://github.com/dfinity/rules_motoko/archive/refs/tags/v0.2.1.tar.gz"],
 )
 
 http_archive(

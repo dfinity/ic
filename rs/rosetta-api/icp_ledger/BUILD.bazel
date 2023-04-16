@@ -62,9 +62,7 @@ motoko_library(
 motoko_binary(
     name = "ledger_proxy",
     entry = "wasm/Proxy.mo",
-    # TODO(FI-671): Use this motoko_binary in tests instead of picking up the pre-built version.
-    # Motoko 0.8.5 emits an internal compiler error on this code, we have to wait for a fix.
-    tags = ["manual"],
+    wasm_out = "ledger_proxy.wasm",
     deps = [":ledger_mo_lib"],
 )
 
@@ -88,7 +86,7 @@ rust_test(
     data = [
         "ledger.did",
         "ledger_archive.did",
-        "wasm/ledger_proxy.wasm",
+        ":ledger_proxy.wasm",
         ":test_notified_canister",
         "//rs/canister_sandbox",
         "//rs/canister_sandbox/sandbox_launcher",
@@ -98,6 +96,7 @@ rust_test(
     env = {
         "CARGO_MANIFEST_DIR": "rs/rosetta-api/icp_ledger",
         "LEDGER_CANISTER_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm)",
+        "LEDGER_PROXY_WASM_PATH": "$(rootpath :ledger_proxy.wasm)",
         "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method)",
         "TEST_NOTIFIED_WASM_PATH": "$(rootpath :test_notified_canister)",
         "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
