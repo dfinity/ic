@@ -57,7 +57,7 @@ pub fn test(env: TestEnv) {
         .next()
         .unwrap();
     nns_node
-        .install_qualifying_nns_canisters()
+        .install_nns_canisters()
         .expect("Could not install NNS canisters");
     info!(log, "NNS canisters installed successfully.");
     let nns_agent = nns_node.with_default_agent(|agent| async move { agent });
