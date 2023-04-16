@@ -94,7 +94,7 @@ pub fn test(env: TestEnv) {
     let nns = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
     info!(logger, "Installing NNS canisters on the root subnet...");
     nns_node
-        .install_qualifying_nns_canisters()
+        .install_nns_canisters()
         .expect("Could not install NNS canisters");
     info!(&logger, "NNS canisters installed successfully.");
     block_on(async move {
