@@ -71,13 +71,11 @@ pub mod strategies {
         );
         let created_at_time_strategy = prop::option::of(Just({
             let end = SystemTime::now();
-            // Ledger takes transactions that were created in the last 48 hours
-            let two_days_in_sec = 48 * 60 * 60;
-            let start = end - Duration::from_secs(two_days_in_sec);
-
+            // Ledger takes transactions that were created in the last 24 hours (5 minute window to submit valid transactions)
+            let day_in_sec = 24 * 60 * 60 - 60 * 5;
+            let start = end - Duration::from_secs(day_in_sec);
             let mut rng = rand::thread_rng(); // initialize random number generator
-
-            let random_duration = Duration::from_secs(rng.gen_range(0..=two_days_in_sec));
+            let random_duration = Duration::from_secs(rng.gen_range(0..=day_in_sec));
             let random_time = start + random_duration; // calculate the random time
             random_time.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64
         }));
