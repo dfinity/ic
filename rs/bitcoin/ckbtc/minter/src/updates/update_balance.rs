@@ -17,7 +17,7 @@ use crate::{
     guard::{balance_update_guard, GuardError},
     management::{fetch_utxo_alerts, get_utxos, CallError, CallSource},
     state,
-    tx::DisplayOutpoint,
+    tx::{DisplayAmount, DisplayOutpoint},
     updates::get_btc_address,
 };
 
@@ -165,26 +165,23 @@ pub async fn update_balance(
         });
     }
 
-    match btc_network {
-        ic_ic00_types::BitcoinNetwork::Mainnet => log!(
-            P1,
-            "minting {} ckBTC for {} new UTXOs",
-            crate::tx::DisplayAmount(satoshis_to_mint),
-            new_utxos.len()
-        ),
-        _ => log!(
-            P1,
-            "minting {} ckTESTBTC for {} new UTXOs",
-            crate::tx::DisplayAmount(satoshis_to_mint),
-            new_utxos.len()
-        ),
-    }
+    let token_name = match btc_network {
+        ic_ic00_types::BitcoinNetwork::Mainnet => "ckBTC",
+        _ => "ckTESTBTC",
+    };
 
     let kyt_fee = read_state(|s| s.kyt_fee);
     let mut utxo_statuses: Vec<UtxoStatus> = vec![];
     for utxo in new_utxos {
         if utxo.value <= kyt_fee {
             mutate_state(|s| crate::state::audit::ignore_utxo(s, utxo.clone()));
+            log!(
+                P1,
+                "Ignored UTXO {} for account {caller_account} because UTXO value {} is lower than the KYT fee {}",
+                DisplayOutpoint(&utxo.outpoint),
+                DisplayAmount(utxo.value),
+                DisplayAmount(kyt_fee),
+            );
             utxo_statuses.push(UtxoStatus::ValueTooSmall(utxo));
             continue;
         }
@@ -199,6 +196,12 @@ pub async fn update_balance(
         let amount = utxo.value - kyt_fee;
         match mint(amount, &utxo.outpoint.txid, caller_account).await {
             Ok(block_index) => {
+                log!(
+                    P1,
+                    "Minted {} {token_name} for account {caller_account} with value {}",
+                    DisplayOutpoint(&utxo.outpoint),
+                    DisplayAmount(utxo.value),
+                );
                 state::mutate_state(|s| {
                     state::audit::add_utxos(
                         s,
