@@ -203,6 +203,7 @@ table = "http_access"
     "host",
     "hostname",
     "http_host",
+    "http_origin",
     "http_referer",
     "http_user_agent",
     "https",
