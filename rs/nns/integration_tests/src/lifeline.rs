@@ -1,10 +1,10 @@
 use dfn_candid::{candid, candid_one};
 
 use ic_canister_client_sender::Sender;
+use ic_ic00_types::{CanisterIdRecord, CanisterStatusResult};
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_OWNER_KEYPAIR,
 };
-use ic_nervous_system_root::{CanisterIdRecord, CanisterStatusResult};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_common::types::ProposalId;
 use ic_nns_governance::pb::v1::manage_neuron::Command;
@@ -64,7 +64,9 @@ fn test_submit_and_accept_root_canister_upgrade_proposal() {
             .await
             .expect("getting root canister status failed");
 
-        let root_checksum = root_status.module_hash.expect("root canister has no hash");
+        let root_checksum = root_status
+            .module_hash()
+            .expect("root canister has no hash");
         assert_ne!(
             root_checksum,
             ic_crypto_sha::Sha256::hash(wasm_module.clone().as_slice())
@@ -74,7 +76,7 @@ fn test_submit_and_accept_root_canister_upgrade_proposal() {
         let magic = funny.to_le_bytes();
 
         let proposal = create_external_update_proposal_candid(
-            "Proposal to ugprade the root canister",
+            "Proposal to upgrade the root canister",
             "",
             "",
             NnsFunction::NnsRootUpgrade,
@@ -153,7 +155,9 @@ fn test_submit_and_accept_root_canister_upgrade_proposal() {
             .await
             .expect("getting root canister status failed");
 
-        let root_checksum = root_status.module_hash.expect("root canister has no hash");
+        let root_checksum = root_status
+            .module_hash()
+            .expect("root canister has no hash");
         assert_eq!(
             root_checksum,
             ic_crypto_sha::Sha256::hash(wasm_module.as_slice())
@@ -190,7 +194,9 @@ fn test_submit_and_accept_forced_root_canister_upgrade_proposal() {
             .await
             .expect("getting root canister status failed");
 
-        let root_checksum = root_status.module_hash.expect("root canister has no hash");
+        let root_checksum = root_status
+            .module_hash()
+            .expect("root canister has no hash");
         assert_ne!(root_checksum, ic_crypto_sha::Sha256::hash(empty_wasm));
 
         let init_arg: &[u8] = &[];
@@ -275,7 +281,9 @@ fn test_submit_and_accept_forced_root_canister_upgrade_proposal() {
             .await
             .expect("getting root canister status failed");
 
-        let root_checksum = root_status.module_hash.expect("root canister has no hash");
+        let root_checksum = root_status
+            .module_hash()
+            .expect("root canister has no hash");
         assert_eq!(root_checksum, ic_crypto_sha::Sha256::hash(empty_wasm));
 
         Ok(())

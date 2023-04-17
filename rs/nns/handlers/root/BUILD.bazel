@@ -15,6 +15,7 @@ filegroup(
 DEPENDENCIES = [
     "//rs/crypto/sha",
     "//rs/nervous_system/root",
+    "//rs/nervous_system/common",
     "//rs/nns/common",
     "//rs/nns/constants",
     "//rs/nns/governance",
@@ -25,10 +26,12 @@ DEPENDENCIES = [
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
     "//rs/rust_canisters/on_wire",
+    "//rs/rust_canisters/http_types",
     "//rs/types/base_types",
     "//rs/types/ic00_types",
     "@crate_index//:build-info",
     "@crate_index//:candid",
+    "@crate_index//:ic-metrics-encoder",
     "@crate_index//:prost",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
@@ -59,6 +62,7 @@ DEV_DEPENDENCIES = select({
         "@crate_index//:assert_matches",
         "@crate_index//:hex",
         "@crate_index//:lazy_static",
+        "@crate_index//:maplit",
     ],
 })
 

@@ -372,7 +372,7 @@ pub async fn upgrade_root_canister_by_proposal(
     );
 
     loop {
-        let status: CanisterStatusResult = lifeline
+        let status: ic_ic00_types::CanisterStatusResult = lifeline
             .update_(
                 "canister_status",
                 candid_one,
@@ -380,7 +380,9 @@ pub async fn upgrade_root_canister_by_proposal(
             )
             .await
             .unwrap();
-        if status.module_hash.unwrap().as_slice() == new_module_hash && status.status == Running {
+        if status.module_hash().unwrap().as_slice() == new_module_hash
+            && status.status() == ic_ic00_types::CanisterStatusType::Running
+        {
             break;
         }
     }
