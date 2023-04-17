@@ -1,4 +1,10 @@
 use crate::state;
+use std::cell::Cell;
+
+thread_local! {
+    pub static GET_UTXOS_CLIENT_CALLS: Cell<u64> = Cell::default();
+    pub static GET_UTXOS_MINTER_CALLS: Cell<u64> = Cell::default();
+}
 
 pub fn encode_metrics(
     metrics: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>,
@@ -101,6 +107,20 @@ pub fn encode_metrics(
         state::read_state(|s| s.available_utxos.len()) as f64,
         "Total number of UTXOs the minter can use for retrieve_btc requests.",
     )?;
+
+    metrics
+        .counter_vec(
+            "ckbtc_minter_get_utxos_calls",
+            "Number of get_utxos calls the minter issued, labeled by source.",
+        )?
+        .value(
+            &[("source", "client")],
+            GET_UTXOS_CLIENT_CALLS.with(|cell| cell.get()) as f64,
+        )?
+        .value(
+            &[("source", "minter")],
+            GET_UTXOS_MINTER_CALLS.with(|cell| cell.get()) as f64,
+        )?;
 
     metrics.encode_gauge(
         "ckbtc_minter_btc_balance",
