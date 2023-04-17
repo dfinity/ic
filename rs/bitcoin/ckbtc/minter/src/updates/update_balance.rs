@@ -1,5 +1,4 @@
 use crate::logs::{P0, P1};
-use crate::management::fetch_utxo_alerts;
 use crate::state::{mutate_state, read_state, UtxoCheckStatus};
 use crate::tasks::{schedule_now, TaskType};
 use candid::{CandidType, Deserialize, Nat, Principal};
@@ -16,7 +15,7 @@ use super::get_btc_address::init_ecdsa_public_key;
 
 use crate::{
     guard::{balance_update_guard, GuardError},
-    management::{get_utxos, CallError},
+    management::{fetch_utxo_alerts, get_utxos, CallError, CallSource},
     state,
     tx::DisplayOutpoint,
     updates::get_btc_address,
@@ -123,9 +122,7 @@ pub async fn update_balance(
     let (btc_network, min_confirmations) =
         state::read_state(|s| (s.btc_network, s.min_confirmations));
 
-    log!(P1, "Fetching utxos for address {}", address);
-
-    let utxos = get_utxos(btc_network, &address, min_confirmations)
+    let utxos = get_utxos(btc_network, &address, min_confirmations, CallSource::Client)
         .await?
         .utxos;
 
@@ -146,7 +143,13 @@ pub async fn update_balance(
         // wait time to the caller.
         let GetUtxosResponse {
             tip_height, utxos, ..
-        } = get_utxos(btc_network, &address, /*min_confirmations=*/ 0).await?;
+        } = get_utxos(
+            btc_network,
+            &address,
+            /*min_confirmations=*/ 0,
+            CallSource::Client,
+        )
+        .await?;
 
         let current_confirmations = utxos
             .iter()

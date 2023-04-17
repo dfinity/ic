@@ -87,6 +87,7 @@ async fn fetch_main_utxos(main_account: &Account, main_address: &BitcoinAddress)
         btc_network,
         &main_address.display(btc_network),
         min_confirmations,
+        management::CallSource::Minter,
     )
     .await
     {
@@ -307,7 +308,7 @@ async fn submit_pending_requests() {
                 });
 
                 log!(
-                    P1,
+                    P0,
                     "[submit_pending_requests]: sending a signed transaction {}",
                     hex::encode(tx::encode_into(&signed_tx, Vec::new()))
                 );

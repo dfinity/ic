@@ -123,11 +123,20 @@ where
     }
 }
 
+#[derive(Clone, Copy)]
+pub enum CallSource {
+    /// The client initiated the call.
+    Client,
+    /// The minter initiated the call for internal bookkeeping.
+    Minter,
+}
+
 /// Fetches the full list of UTXOs for the specified address.
 pub async fn get_utxos(
     network: Network,
     address: &Address,
     min_confirmations: u32,
+    source: CallSource,
 ) -> Result<GetUtxosResponse, CallError> {
     // NB. The prices are 10B on the mainnet and 4B on the testnet:
     // https://internetcomputer.org/docs/current/developer-docs/deploy/computation-and-storage-costs
@@ -141,7 +150,13 @@ pub async fn get_utxos(
     async fn bitcoin_get_utxos(
         req: &GetUtxosRequest,
         cycles: u64,
+        source: CallSource,
     ) -> Result<GetUtxosResponse, CallError> {
+        match source {
+            CallSource::Client => &crate::metrics::GET_UTXOS_CLIENT_CALLS,
+            CallSource::Minter => &crate::metrics::GET_UTXOS_MINTER_CALLS,
+        }
+        .with(|cell| cell.set(cell.get() + 1));
         call("bitcoin_get_utxos", cycles, req).await
     }
 
@@ -152,6 +167,7 @@ pub async fn get_utxos(
             filter: Some(UtxosFilterInRequest::MinConfirmations(min_confirmations)),
         },
         get_utxos_cost_cycles,
+        source,
     )
     .await?;
 
@@ -166,6 +182,7 @@ pub async fn get_utxos(
                 filter: Some(UtxosFilterInRequest::Page(page)),
             },
             get_utxos_cost_cycles,
+            source,
         )
         .await?;
 
