@@ -1,0 +1,15 @@
+# Remove this test as soon as testnets have been removed from release pipeline
+test-testnet-deployment:
+  extends:
+    - .ubuntu-k8s
+    - .rules-protected-branch
+  stage: test
+  resource_group: $TESTNET
+  variables: 
+    TESTNET : "small14"
+  timeout: 30 minutes
+  script:
+    - |
+      set -eExou pipefail
+      GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "${CI_COMMIT_SHA}")
+      "$CI_PROJECT_DIR/testnet/tools/icos_deploy.sh" $TESTNET --git-revision "$GIT_REVISION" --no-boundary-nodes
