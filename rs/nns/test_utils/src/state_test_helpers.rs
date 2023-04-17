@@ -5,6 +5,7 @@ use crate::common::{
 };
 use candid::{Decode, Encode, Nat};
 use canister_test::Wasm;
+use cycles_minting_canister::IcpXdrConversionRateCertifiedResponse;
 use dfn_candid::candid_one;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ic00_types::{
@@ -981,4 +982,18 @@ pub fn sns_wait_for_proposal_executed_or_failed(
         }
         machine.advance_time(std::time::Duration::from_millis(100));
     }
+}
+
+/// Get the ICP/XDR conversion rate from the cycles minting canister.
+pub fn get_icp_xdr_conversion_rate(
+    machine: &StateMachine,
+) -> IcpXdrConversionRateCertifiedResponse {
+    let bytes = query(
+        machine,
+        CYCLES_MINTING_CANISTER_ID,
+        "get_icp_xdr_conversion_rate",
+        Encode!().unwrap(),
+    )
+    .expect("Failed to retrieve the conversion rate");
+    Decode!(&bytes, IcpXdrConversionRateCertifiedResponse).unwrap()
 }

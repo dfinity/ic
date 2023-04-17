@@ -7612,6 +7612,7 @@ dependencies = [
  "ic-test-utilities",
  "ic-types",
  "ic-types-test-utils",
+ "ic-xrc-types",
  "icp-ledger",
  "lazy_static",
  "libsecp256k1",
@@ -7628,6 +7629,7 @@ dependencies = [
  "strum 0.23.0",
  "tokio",
  "wat",
+ "xrc-mock",
 ]
 
 [[package]]
