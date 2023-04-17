@@ -14,6 +14,16 @@ use std::marker::PhantomData;
 use std::os::unix::{io::AsRawFd, io::RawFd, net::UnixStream};
 use std::sync::{Arc, Condvar, Mutex};
 
+// The maximum number of file descriptors that can be sent in a single message.
+const MAX_NUM_FD_PER_MESSAGE: usize = 16;
+// The size of the control message buffer that is used to send file descriptors.
+// It should be large enough to store `MAX_NUM_FD_PER_MESSAGE` file descriptors.
+const CONTROL_MESSAGE_SIZE: usize = 4096;
+// The initial capacity of buffers for sending and receiving data bytes.
+const INITIAL_BUFFER_CAPACITY: usize = 65536;
+// The minimum buffer capacity for reading in `recv_msg()`.
+const MIN_READ_BUFFER_CAPACITY: usize = 16384;
+
 // There are different types used for the msg_controllen member of
 // struct cmsghdr -- we presently support Linux and Darwin compilation.
 // Add a type alias to allow making correct casts.
@@ -86,14 +96,14 @@ pub struct UnixStreamMessageWriter<Message: 'static + Serialize + Send> {
     // fd (we otherwise have problem with concurrent access through
     // same fd).
     _socket: Arc<UnixStream>,
-    fd: libc::c_int,
-    trigger_send: Condvar,
+    socket_fd: libc::c_int,
+    trigger_background_sending: Condvar,
 }
 struct UnixStreamMessageWriterInt<Message: 'static + Send> {
     buf: BytesMut,
     fds: Vec<RawFd>,
-    sending: bool,
-    quit: bool,
+    sending_in_background: bool,
+    quit_requested: bool,
     // Phantom data to ensure the writer is correctly parameterized
     // over the type it can write. This needs to be inside the "Int"
     // object to ensure compiler can see it "inside" the mutex
@@ -105,119 +115,38 @@ impl<Message: 'static + Serialize + Send + EnumerateInnerFileDescriptors>
     UnixStreamMessageWriter<Message>
 {
     fn new(socket: Arc<UnixStream>) -> Arc<Self> {
-        let fd = socket.as_raw_fd();
+        let socket_fd = socket.as_raw_fd();
         let instance = Arc::new(UnixStreamMessageWriter {
             state: Mutex::new(UnixStreamMessageWriterInt::<Message> {
                 buf: BytesMut::new(),
                 fds: vec![],
-                sending: false,
-                quit: false,
+                sending_in_background: false,
+                quit_requested: false,
                 phantom: PhantomData,
             }),
             _socket: socket,
-            fd,
-            trigger_send: Condvar::new(),
+            socket_fd,
+            trigger_background_sending: Condvar::new(),
         });
         let copy_instance = Arc::clone(&instance);
         std::thread::spawn(move || {
-            copy_instance.thread_flush_fn();
+            copy_instance.background_sending_thread();
         });
         instance
     }
 
-    // Precondition: When this function is called, buf MUST NOT be empty.
-    fn try_flush(&self, buf: &mut BytesMut, fds: &mut Vec<RawFd>, flags: libc::c_int) {
-        #[cfg(target_os = "linux")]
-        let flags = flags | libc::MSG_NOSIGNAL;
-
-        // Let's be pedantic here about sending file descriptors:
-        // - there is a limited number of file descriptors we can send per message (252,
-        //   but let's be conservative), so if we were hypothetically being asked to
-        //   send more we need to split this up.
-        // - we can only send file descriptors along with at least 1 byte of payload
-        //   data
-        //
-        // AFAICT this situation can never arrive due to the low number
-        // of file descriptors we handle with sandbox, but it is not
-        // too hard to be pedantically correct, so let's do it.
-
-        let fds_to_send = std::cmp::min(16, fds.len());
-        let bytes_to_send = if fds_to_send < fds.len() {
-            1
-        } else {
-            buf.len()
-        };
-
-        // Important invariant: we never try to send more than the buffer
-        // holds.
-        assert!(bytes_to_send <= buf.len());
-
-        // Unsafe section required due to raw handling of buffer contents,
-        // calling directly into libc send/recv function. This is done because
-        // at the time of writing there was no better way known to the author
-        // to perform I/O without either silly thread-bouncing or superfluous
-        // locking of read side against write side.
-        // Any call to try_flush itself is safe: Internal buffer is managed
-        // consistently wrt to result of send (success or failure).
-        let num_bytes_sent = unsafe {
-            let mut iov = libc::iovec {
-                iov_base: buf.as_ptr() as *mut std::ffi::c_void,
-                iov_len: bytes_to_send,
-            };
-            let mut cmsgbuf: [u8; 4096] = [0; 4096];
-            let mut hdr = libc::msghdr {
-                msg_name: std::ptr::null_mut(),
-                msg_namelen: 0,
-                msg_iov: &mut iov,
-                msg_iovlen: 1,
-                msg_control: std::ptr::null_mut(),
-                msg_controllen: 0,
-                msg_flags: flags,
-            };
-            if fds_to_send > 0 {
-                hdr.msg_control = cmsgbuf.as_mut_ptr() as *mut std::ffi::c_void;
-                hdr.msg_controllen =
-                    libc::CMSG_SPACE((std::mem::size_of::<RawFd>() * fds_to_send) as u32)
-                        as MsgControlLenType;
-                let mut cmsg = libc::CMSG_FIRSTHDR(&hdr);
-                (*cmsg).cmsg_level = libc::SOL_SOCKET;
-                (*cmsg).cmsg_type = libc::SCM_RIGHTS;
-                (*cmsg).cmsg_len =
-                    libc::CMSG_LEN((std::mem::size_of::<RawFd>() * fds_to_send) as u32)
-                        as MsgControlLenType;
-                let data = libc::CMSG_DATA(cmsg);
-                for (index, fd) in fds.iter().enumerate().take(fds_to_send) {
-                    let dst = std::slice::from_raw_parts_mut(
-                        data.add(std::mem::size_of::<RawFd>() * index),
-                        std::mem::size_of::<RawFd>(),
-                    );
-                    dst.copy_from_slice(&RawFd::to_ne_bytes(*fd));
-                }
-            }
-
-            libc::sendmsg(self.fd, &hdr, flags)
-        };
-        if num_bytes_sent > 0 {
-            // If at least one byte was sent, then it is guaranteed that
-            // the ancillary message (file descriptors) were sent
-            // along with it.
-            buf.advance(num_bytes_sent.try_into().unwrap());
-            fds.drain(0..fds_to_send);
-        }
-    }
-
-    fn thread_flush_fn(&self) {
+    fn background_sending_thread(&self) {
         loop {
             let (mut buf, mut fds) = {
                 let mut guard = self.state.lock().unwrap();
-                if guard.quit {
+                if guard.quit_requested {
                     return;
                 }
                 loop {
                     if guard.buf.is_empty() {
-                        guard.sending = false;
-                        guard = self.trigger_send.wait(guard).unwrap();
-                        if guard.quit {
+                        guard.sending_in_background = false;
+                        guard = self.trigger_background_sending.wait(guard).unwrap();
+                        if guard.quit_requested {
                             return;
                         }
                     } else {
@@ -226,8 +155,7 @@ impl<Message: 'static + Serialize + Send + EnumerateInnerFileDescriptors>
                 }
             };
             while !buf.is_empty() {
-                // Precondition of try_flush satisfied by loop check.
-                self.try_flush(&mut buf, &mut fds, 0);
+                send_message(self.socket_fd, &mut buf, &mut fds, 0);
             }
         }
     }
@@ -253,22 +181,24 @@ impl<Message: 'static + Serialize + Send + EnumerateInnerFileDescriptors>
         state.buf.put_u32(data.len() as u32);
         state.buf.extend_from_slice(data);
         state.fds.extend_from_slice(fds);
-        if !state.sending {
-            // The buffer cannot be empty at this point because we
-            // put at least one byte in. This satisfies the precondition
-            // of try_flush.
-            self.try_flush(&mut state.buf, &mut state.fds, libc::MSG_DONTWAIT);
+        if !state.sending_in_background {
+            send_message(
+                self.socket_fd,
+                &mut state.buf,
+                &mut state.fds,
+                libc::MSG_DONTWAIT,
+            );
             if !state.buf.is_empty() {
-                state.sending = true;
-                self.trigger_send.notify_one();
+                state.sending_in_background = true;
+                self.trigger_background_sending.notify_one();
             }
         }
     }
 
     pub fn stop(&self) {
         let mut guard = self.state.lock().unwrap();
-        guard.quit = true;
-        self.trigger_send.notify_one();
+        guard.quit_requested = true;
+        self.trigger_background_sending.notify_one();
     }
 }
 
@@ -321,6 +251,33 @@ impl<Message: 'static + Serialize + Send + EnumerateInnerFileDescriptors>
     }
 }
 
+/// Reads from a unix stream socket and passes individual messages
+/// to given handler.
+pub fn socket_read_messages<
+    Message: DeserializeOwned + EnumerateInnerFileDescriptors + Clone,
+    Handler: Fn(Message),
+>(
+    handler: Handler,
+    socket: Arc<UnixStream>,
+) {
+    let socket_fd = socket.as_raw_fd();
+    let mut decoder = FrameDecoder::<Message>::new();
+    let mut buf = BytesMut::with_capacity(INITIAL_BUFFER_CAPACITY);
+    let mut fds = Vec::<RawFd>::new();
+    loop {
+        while let Some(mut frame) = decoder.decode(&mut buf) {
+            install_file_descriptors(&mut frame, &mut fds);
+            handler(frame);
+        }
+        let num_bytes_received = receive_message(socket_fd, &mut buf, &mut fds, 0);
+        if num_bytes_received <= 0 {
+            break;
+        }
+    }
+}
+
+/// A helper that write the given file descriptors into the file descriptor
+/// slots of the given message in the same order defined by `enumerate_fds()`.
 fn install_file_descriptors<Message: EnumerateInnerFileDescriptors>(
     msg: &mut Message,
     fds: &mut Vec<RawFd>,
@@ -341,55 +298,162 @@ fn install_file_descriptors<Message: EnumerateInnerFileDescriptors>(
     }
 }
 
-/// Reads from a unix stream socket and passes individual messages
-/// to given handler.
-// Allow `unnecessary_cast` because `len` is `usize` for linux and `u32` for darwin.
-pub fn socket_read_messages<
-    Message: DeserializeOwned + EnumerateInnerFileDescriptors + Clone,
-    Handler: Fn(Message),
->(
-    handler: Handler,
-    socket: Arc<UnixStream>,
-) {
-    const MIN_READ_SIZE: usize = 16384;
-    const INITIAL_SIZE: usize = 65536;
-    let fd = socket.as_raw_fd();
-    let mut decoder = FrameDecoder::<Message>::new();
-    let mut buf = BytesMut::with_capacity(INITIAL_SIZE);
-    let mut fds = Vec::<RawFd>::new();
-    loop {
-        while let Some(mut frame) = decoder.decode(&mut buf) {
-            install_file_descriptors(&mut frame, &mut fds);
-            handler(frame);
+/// A helper that writes bytes and file descriptors to the given socket.
+///
+/// It is a wrapper around `libc::sendmsg()` and returns the result of that
+/// syscall (which is the number of bytes sent or -1 on error).
+///
+/// If sending is successful, then the function removes the sent bytes and file
+/// descriptors from the given `buf` and `fds`.
+///
+/// Preconditions:
+/// - The number of file descriptors must not exceed the number of data bytes in
+///   the buffer. That's because `libc::sendmsg()` can only send file descriptors
+///   along with at least 1 byte of payload data.
+fn send_message(
+    socket_fd: i32,
+    buf: &mut BytesMut,
+    fds: &mut Vec<RawFd>,
+    flags: libc::c_int,
+) -> isize {
+    #[cfg(target_os = "linux")]
+    let flags = flags | libc::MSG_NOSIGNAL;
+
+    assert!(buf.len() >= fds.len());
+
+    if buf.is_empty() {
+        return 0;
+    }
+
+    // Let's be pedantic here about sending file descriptors:
+    // - there is a limited number of file descriptors we can send per message (252,
+    //   but let's be conservative), so if we were hypothetically being asked to
+    //   send more we need to split this up.
+    // - we can only send file descriptors along with at least 1 byte of payload
+    //   data
+    //
+    // AFAICT this situation can never arrive due to the low number
+    // of file descriptors we handle with sandbox, but it is not
+    // too hard to be pedantically correct, so let's do it.
+
+    let fds_to_send = std::cmp::min(MAX_NUM_FD_PER_MESSAGE, fds.len());
+    let bytes_to_send = if fds_to_send < fds.len() {
+        1
+    } else {
+        buf.len()
+    };
+
+    // Important invariant: we never try to send more than the buffer
+    // holds.
+    assert!(bytes_to_send <= buf.len());
+
+    // Unsafe section required due to raw handling of buffer contents,
+    // calling directly into libc send/recv function. This is done because
+    // at the time of writing there was no better way known to the author
+    // to perform I/O without either silly thread-bouncing or superfluous
+    // locking of read side against write side.
+    let num_bytes_sent = unsafe {
+        let mut iov = libc::iovec {
+            iov_base: buf.as_ptr() as *mut std::ffi::c_void,
+            iov_len: bytes_to_send,
+        };
+        let mut cmsgbuf: [u8; CONTROL_MESSAGE_SIZE] = [0; CONTROL_MESSAGE_SIZE];
+        let mut hdr = libc::msghdr {
+            msg_name: std::ptr::null_mut(),
+            msg_namelen: 0,
+            msg_iov: &mut iov,
+            msg_iovlen: 1,
+            msg_control: std::ptr::null_mut(),
+            msg_controllen: 0,
+            msg_flags: flags,
+        };
+        if fds_to_send > 0 {
+            hdr.msg_control = cmsgbuf.as_mut_ptr() as *mut std::ffi::c_void;
+            hdr.msg_controllen =
+                libc::CMSG_SPACE((std::mem::size_of::<RawFd>() * fds_to_send) as u32)
+                    as MsgControlLenType;
+            assert!(
+                hdr.msg_controllen <= cmsgbuf.len() as MsgControlLenType,
+                "Controll message buffer overflow: {} > {}",
+                hdr.msg_controllen,
+                cmsgbuf.len(),
+            );
+            let mut cmsg = libc::CMSG_FIRSTHDR(&hdr);
+            (*cmsg).cmsg_level = libc::SOL_SOCKET;
+            (*cmsg).cmsg_type = libc::SCM_RIGHTS;
+            (*cmsg).cmsg_len = libc::CMSG_LEN((std::mem::size_of::<RawFd>() * fds_to_send) as u32)
+                as MsgControlLenType;
+            let data = libc::CMSG_DATA(cmsg);
+            for (index, fd) in fds.iter().enumerate().take(fds_to_send) {
+                let dst = std::slice::from_raw_parts_mut(
+                    data.add(std::mem::size_of::<RawFd>() * index),
+                    std::mem::size_of::<RawFd>(),
+                );
+                dst.copy_from_slice(&RawFd::to_ne_bytes(*fd));
+            }
         }
-        buf.reserve(MIN_READ_SIZE);
-        let p = buf.as_mut_ptr();
-        #[cfg(not(target_os = "linux"))]
-        let flags = 0;
-        #[cfg(target_os = "linux")]
-        let flags = libc::MSG_NOSIGNAL;
-        // The unsafe section is required due to raw handling of buffer contents,
-        // calling directly into libc send/recv function. This is done because
-        // at the time of writing there was no better way known to the author
-        // to perform I/O without either silly thread-bouncing or superfluous
-        // locking of read side against write side.
-        let num_bytes_received = unsafe {
-            let mut iov = libc::iovec {
-                iov_base: p.add(buf.len()) as *mut std::ffi::c_void,
-                iov_len: buf.capacity() - buf.len(),
-            };
-            let mut cmsgbuf: [u8; 4096] = [0; 4096];
-            let mut hdr = libc::msghdr {
-                msg_name: std::ptr::null_mut(),
-                msg_namelen: 0,
-                msg_iov: &mut iov,
-                msg_iovlen: 1,
-                msg_control: cmsgbuf.as_mut_ptr() as *mut std::ffi::c_void,
-                msg_controllen: 4096,
-                msg_flags: flags,
-            };
-            let num_bytes_received = libc::recvmsg(fd, &mut hdr, flags);
-            if num_bytes_received > 0 && hdr.msg_controllen > 0 {
+
+        libc::sendmsg(socket_fd, &hdr, flags)
+    };
+    if num_bytes_sent > 0 {
+        // If at least one byte was sent, then it is guaranteed that
+        // the ancillary message (file descriptors) were sent
+        // along with it.
+        buf.advance(num_bytes_sent.try_into().unwrap());
+        fds.drain(0..fds_to_send);
+    }
+
+    num_bytes_sent
+}
+
+/// A helper that reads bytes and file descriptors from the given socket.
+///
+/// It is a wrapper around `libc::recvmsg()` and returns the result of that
+/// syscall (which is the number of bytes read or -1 on error).
+///
+/// If reading is successfull, then the function pushes the read bytes and file
+/// descriptors onto the given `buf` and `fds`.
+fn receive_message(
+    socket_fd: i32,
+    buf: &mut BytesMut,
+    fds: &mut Vec<RawFd>,
+    flags: libc::c_int,
+) -> isize {
+    #[cfg(target_os = "linux")]
+    let flags = flags | libc::MSG_NOSIGNAL;
+
+    buf.reserve(MIN_READ_BUFFER_CAPACITY);
+
+    // The unsafe section is required due to raw handling of buffer contents,
+    // calling directly into libc send/recv function. This is done because
+    // at the time of writing there was no better way known to the author
+    // to perform I/O without either silly thread-bouncing or superfluous
+    // locking of read side against write side.
+    unsafe {
+        let buf_start = buf.as_mut_ptr();
+        let mut iov = libc::iovec {
+            iov_base: buf_start.add(buf.len()) as *mut std::ffi::c_void,
+            iov_len: buf.capacity() - buf.len(),
+        };
+        let mut cmsgbuf: [u8; CONTROL_MESSAGE_SIZE] = [0; CONTROL_MESSAGE_SIZE];
+        let mut hdr = libc::msghdr {
+            msg_name: std::ptr::null_mut(),
+            msg_namelen: 0,
+            msg_iov: &mut iov,
+            msg_iovlen: 1,
+            msg_control: cmsgbuf.as_mut_ptr() as *mut std::ffi::c_void,
+            msg_controllen: cmsgbuf.len() as MsgControlLenType,
+            msg_flags: flags,
+        };
+
+        let num_bytes_received = libc::recvmsg(socket_fd, &mut hdr, flags);
+
+        if num_bytes_received > 0 {
+            // Update the buffer length to account for the received bytes.
+            buf.set_len(buf.len() + (num_bytes_received as usize));
+
+            // Push received file descriptors.
+            if hdr.msg_controllen > 0 {
                 let mut cmsg = libc::CMSG_FIRSTHDR(&hdr);
                 while !cmsg.is_null() {
                     if (*cmsg).cmsg_level == libc::SOL_SOCKET
@@ -399,6 +463,8 @@ pub fn socket_read_messages<
                         let len = (*cmsg).cmsg_len - libc::CMSG_LEN(0) as MsgControlLenType;
                         let mut pos = 0;
                         while pos + 4 <= len {
+                            // Allow `unnecessary_cast` because `len` is `usize`
+                            // for linux and `u32` for darwin.
                             #[allow(clippy::unnecessary_cast)]
                             let src = std::slice::from_raw_parts(data.add(pos as usize), 4);
                             let mut raw: [libc::c_uchar; 4] = [0, 0, 0, 0];
@@ -411,18 +477,8 @@ pub fn socket_read_messages<
                     cmsg = libc::CMSG_NXTHDR(&hdr, cmsg);
                 }
             }
-            num_bytes_received
-        };
-        if num_bytes_received > 0 {
-            // The unsafe section is required because data was read into the buffer
-            // (in above unsafe section). This is actually known to be correctly
-            // initialized by system call already.
-            unsafe {
-                buf.set_len(buf.len() + (num_bytes_received as usize));
-            }
-        } else {
-            break;
         }
+        num_bytes_received
     }
 }
 
@@ -430,7 +486,11 @@ pub fn socket_read_messages<
 mod tests {
     use super::*;
     use serde::Deserialize;
+    use std::env::temp_dir;
+    use std::fs::File;
     use std::io::Read;
+    use std::io::Seek;
+    use std::io::SeekFrom;
     use std::io::Write;
     use std::os::unix::io::FromRawFd;
     use std::sync::mpsc::sync_channel;
@@ -516,5 +576,87 @@ mod tests {
         let mut response = String::new();
         test_recv_dup.read_to_string(&mut response).unwrap();
         assert_eq!("Hello", response);
+    }
+
+    #[test]
+    fn send_and_receive_single_message() {
+        let (send, recv) = std::os::unix::net::UnixStream::pair().unwrap();
+
+        let mut file = File::options()
+            .read(true)
+            .write(true)
+            .create_new(true)
+            .open(temp_dir().join("file"))
+            .unwrap();
+        file.write_all(b"Hello").unwrap();
+
+        let mut send_fds = Vec::new();
+        send_fds.push(file.as_raw_fd());
+
+        let mut send_buf = BytesMut::new();
+        send_buf.extend_from_slice(&[42; 1]);
+
+        let mut recv_buf = BytesMut::new();
+        let mut recv_fds = Vec::new();
+
+        let res = send_message(send.as_raw_fd(), &mut send_buf, &mut send_fds, 0);
+        assert_eq!(res, 1);
+
+        let res = receive_message(recv.as_raw_fd(), &mut recv_buf, &mut recv_fds, 0);
+        assert_eq!(res, 1);
+        assert_eq!(recv_buf.iter().copied().collect::<Vec<_>>(), vec![42; 1]);
+        assert_eq!(recv_fds.len(), 1);
+        let mut file = unsafe { File::from_raw_fd(recv_fds[0]) };
+        file.seek(SeekFrom::Start(0)).unwrap();
+        let mut s = String::new();
+        file.read_to_string(&mut s).unwrap();
+        assert_eq!(s, "Hello");
+    }
+
+    #[test]
+    fn send_and_receive_many_messages() {
+        let (send, recv) = std::os::unix::net::UnixStream::pair().unwrap();
+
+        let mut files = Vec::new();
+        for i in 0..1000 {
+            let mut file = File::options()
+                .read(true)
+                .write(true)
+                .create_new(true)
+                .open(temp_dir().join(format!("file-{}", i)))
+                .unwrap();
+            file.write_all(format!("msg-{}", i).as_bytes()).unwrap();
+            files.push(file);
+        }
+
+        let mut send_buf = BytesMut::new();
+        send_buf.extend_from_slice(&[42; 1000]);
+        let mut send_fds = files.iter().map(|f| f.as_raw_fd()).collect();
+
+        let mut recv_buf = BytesMut::new();
+        let mut recv_fds = Vec::new();
+
+        let mut messages = 0;
+        loop {
+            let res = send_message(send.as_raw_fd(), &mut send_buf, &mut send_fds, 0);
+            if res == 0 {
+                break;
+            }
+            messages += 1;
+        }
+
+        for _ in 0..messages {
+            let res = receive_message(recv.as_raw_fd(), &mut recv_buf, &mut recv_fds, 0);
+            assert!(res > 0);
+        }
+        assert_eq!(recv_buf.iter().copied().collect::<Vec<_>>(), vec![42; 1000]);
+        assert_eq!(recv_fds.len(), 1000);
+        for (i, fd) in recv_fds.into_iter().enumerate() {
+            let mut file = unsafe { File::from_raw_fd(fd) };
+            file.seek(SeekFrom::Start(0)).unwrap();
+            let mut s = String::new();
+            file.read_to_string(&mut s).unwrap();
+            assert_eq!(s, format!("msg-{}", i));
+        }
     }
 }
