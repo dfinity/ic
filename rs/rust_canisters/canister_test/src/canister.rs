@@ -735,14 +735,18 @@ impl<'a> Canister<'a> {
     }
 
     pub async fn set_controller(&self, new_controller: PrincipalId) -> Result<(), String> {
+        self.set_controllers(vec![new_controller]).await
+    }
+
+    pub async fn set_controllers(&self, new_controllers: Vec<PrincipalId>) -> Result<(), String> {
         self.runtime
             .get_management_canister_with_effective_canister_id(self.canister_id().into())
             .update_(
                 ic00::Method::UpdateSettings.to_string(),
-                dfn_candid::candid_multi_arity,
+                candid_multi_arity,
                 (UpdateSettingsArgs::new(
                     self.canister_id,
-                    CanisterSettingsArgs::new(Some(vec![new_controller]), None, None, None),
+                    CanisterSettingsArgs::new(Some(new_controllers), None, None, None),
                 ),),
             )
             .await

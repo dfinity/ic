@@ -191,7 +191,7 @@ fn canister_status() {
 async fn canister_status_(
     id: ic_nervous_system_root::CanisterIdRecord,
 ) -> ic_nervous_system_root::CanisterStatusResult {
-    ic_nervous_system_root::canister_status(id).await
+    ic_nervous_system_root::canister_status(id).await.unwrap()
 }
 
 /// Return the canister status of all SNS canisters that this root canister

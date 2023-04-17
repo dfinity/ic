@@ -1,17 +1,21 @@
-use dfn_candid::candid;
+use candid::candid_method;
+use dfn_candid::{candid, candid_one};
 use dfn_core::{
     api::caller,
     endpoint::{over, over_async},
     stable,
 };
 use ic_base_types::PrincipalId;
+use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
+use ic_nervous_system_common::serve_metrics;
 use ic_nervous_system_root::{
-    change_canister, AddCanisterProposal, CanisterIdRecord, ChangeCanisterProposal,
-    StopOrStartCanisterProposal, LOG_PREFIX,
+    change_canister, AddCanisterProposal, CanisterIdRecord, CanisterStatusResult,
+    ChangeCanisterProposal, StopOrStartCanisterProposal, LOG_PREFIX,
 };
 use ic_nns_common::{access_control::check_caller_is_governance, types::CallCanisterProposal};
+use ic_nns_constants::ROOT_CANISTER_ID;
 use ic_nns_handler_root::{
-    canister_management,
+    canister_management, encode_metrics,
     root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot},
 };
 
@@ -19,7 +23,6 @@ fn main() {}
 
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
-use ic_nns_handler_root::canister_management::do_add_nns_canister;
 
 // canister_init and canister_post_upgrade are needed here
 // to ensure that printer hook is set up, otherwise error
@@ -51,18 +54,27 @@ ic_nervous_system_common_build_metadata::define_get_build_metadata_candid_method
 #[export_name = "canister_update canister_status"]
 fn canister_status() {
     println!("{}canister_status", LOG_PREFIX);
-    over_async(candid, |(canister_id_record,): (CanisterIdRecord,)| {
-        ic_nervous_system_root::canister_status(canister_id_record)
-    })
+    over_async(candid_one, canister_status_)
 }
 
-#[export_name = "canister_update submit_change_nns_canister_proposal"]
-fn submit_change_nns_canister_proposal() {
-    panic!(
-        "This method was removed in PR 11215. \
-            Use instead function `manage_neuron` on the Governance canister \
-            to submit a proposal to change an NNS canister."
-    );
+#[candid_method(update, rename = "canister_status")]
+async fn canister_status_(canister_id_record: CanisterIdRecord) -> CanisterStatusResult {
+    ic_nns_handler_root::increment_open_canister_status_calls(canister_id_record.get_canister_id());
+
+    let canister_status_response =
+        ic_nervous_system_root::canister_status(canister_id_record).await;
+
+    ic_nns_handler_root::decrement_open_canister_status_calls(canister_id_record.get_canister_id());
+
+    /*
+    TODO NNS1-2197 - Remove this un-needed call to get the canister_status of NNS Root(this canister)
+      when this call stack does not rely on panics to indicate errors. This call is made to commit the
+      open status call counter to canister memory.
+     */
+    let _unused_canister_status_response =
+        ic_nervous_system_root::canister_status(CanisterIdRecord::from(ROOT_CANISTER_ID)).await;
+
+    canister_status_response.unwrap()
 }
 
 #[export_name = "canister_update submit_root_proposal_to_upgrade_governance_canister"]
@@ -130,7 +142,7 @@ fn change_nns_canister() {
 fn add_nns_canister() {
     check_caller_is_governance();
     over_async(candid, |(proposal,): (AddCanisterProposal,)| async move {
-        do_add_nns_canister(proposal).await;
+        canister_management::do_add_nns_canister(proposal).await;
     });
 }
 
@@ -164,4 +176,18 @@ fn call_canister() {
         let future = canister_management::call_canister(proposal);
         dfn_core::api::futures::spawn(future);
     });
+}
+
+/// Resources to serve for a given http_request
+#[export_name = "canister_query http_request"]
+fn http_request() {
+    over(candid_one, serve_http)
+}
+
+/// Serve an HttpRequest made to this canister
+pub fn serve_http(request: HttpRequest) -> HttpResponse {
+    match request.path() {
+        "/metrics" => serve_metrics(encode_metrics),
+        _ => HttpResponseBuilder::not_found().build(),
+    }
 }

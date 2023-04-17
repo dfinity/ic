@@ -15,11 +15,10 @@ use dfn_core::CanisterId;
 use futures::{future::join_all, join};
 use ic_base_types::{NumBytes, PrincipalId};
 use ic_canister_log::log;
+use ic_nervous_system_root::DEFAULT_PRINCIPAL_MULTIPLE_CONTROLLERS;
 use ic_sns_swap::pb::v1::GetCanisterStatusRequest;
 use icrc_ledger_types::icrc3::archive::ArchiveInfo;
-use lazy_static::lazy_static;
 use num_traits::cast::ToPrimitive;
-use std::str::FromStr;
 use std::{cell::RefCell, collections::BTreeSet, thread::LocalKey};
 
 #[cfg(target_arch = "wasm32")]
@@ -28,14 +27,6 @@ use dfn_core::println;
 const ONE_DAY_SECONDS: u64 = 24 * 60 * 60;
 // The number of dapp canisters that can be registered with the SNS Root
 const DAPP_CANISTER_REGISTRATION_LIMIT: usize = 100;
-
-// Copied from /rs/replicated_state/src/canister_state/system_state.rs
-lazy_static! {
-    static ref DEFAULT_PRINCIPAL_MULTIPLE_CONTROLLERS: PrincipalId =
-        PrincipalId::from_str("ifxlm-aqaaa-multi-pleco-ntrol-lersa-h3ae").unwrap();
-    static ref DEFAULT_PRINCIPAL_ZERO_CONTROLLERS: PrincipalId =
-        PrincipalId::from_str("zrl4w-cqaaa-nocon-troll-eraaa-d5qc").unwrap();
-}
 
 /// Begin Local Copy of Various Candid Type definitions from ic00_types
 ///
@@ -1143,6 +1134,9 @@ mod tests {
     use candid::Principal;
     use dfn_core::api::now;
     use futures::FutureExt;
+    use ic_nervous_system_root::{
+        DEFAULT_PRINCIPAL_MULTIPLE_CONTROLLERS, DEFAULT_PRINCIPAL_ZERO_CONTROLLERS,
+    };
     use std::collections::VecDeque;
     use std::sync::{Arc, Mutex};
     use std::time::SystemTime;

@@ -27,7 +27,6 @@ DEPENDENCIES = [
     "@crate_index//:comparable",
     "@crate_index//:futures",
     "@crate_index//:ic-metrics-encoder",
-    "@crate_index//:lazy_static",
     "@crate_index//:num-traits",
     "@crate_index//:prost",
     "@crate_index//:serde",

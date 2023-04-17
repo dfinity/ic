@@ -14,5 +14,6 @@ ic-cdk = { version = "0.6.0", default-features = false }
 ic-crypto-sha = { path = "../../crypto/sha/" }
 ic-nervous-system-common = { path="../common" }
 ic-ic00-types = { path = "../../types/ic00_types" }
+lazy_static = "1.4.0"
 serde = { version = "1.0.99", features = ["derive"] }
 serde_bytes = "0.11"

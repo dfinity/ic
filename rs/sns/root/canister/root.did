@@ -4,6 +4,7 @@ type CanisterStatusResult = record {
   controller : principal;
   status : CanisterStatusType;
   memory_size : nat;
+  settings : DefiniteCanisterSettings;
   module_hash : opt vec nat8;
 };
 type CanisterStatusResultV2 = record {
@@ -23,6 +24,7 @@ type CanisterSummary = record {
   status : opt CanisterStatusResultV2;
   canister_id : opt principal;
 };
+type DefiniteCanisterSettings = record { controllers : vec principal };
 type DefiniteCanisterSettingsArgs = record {
   controller : principal;
   freezing_threshold : nat;
