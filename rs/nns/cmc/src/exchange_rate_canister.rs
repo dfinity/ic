@@ -333,8 +333,9 @@ fn requires_new_rate(
             // Check if the time is on a five-minute interval. This is done to keep the CMC relatively
             // in sync with the conversion rate providers that will be running every 10 minutes.
             let is_on_five_minute_interval = (current_minute_seconds / ONE_MINUTE_SECONDS) % 5 == 0;
-            let is_old = rate
-                .timestamp_seconds
+            let rounded_down_rate_timestamp_seconds =
+                round_down_to_multiple_of(rate.timestamp_seconds, ONE_MINUTE_SECONDS);
+            let is_old = rounded_down_rate_timestamp_seconds
                 .saturating_add(REFRESH_RATE_INTERVAL_SECONDS)
                 <= current_minute_seconds;
             is_on_five_minute_interval && is_old
@@ -553,6 +554,20 @@ mod test {
         assert!(
             requires_new_rate(&None, current_minute_seconds),
             "No rate present in state, a new rate is needed."
+        );
+
+        // Test a rate with a timestamp that is just over the next five minute mark.
+        // In practice, this should never happen, but it is best to have it accounted for.
+        let icp_xdr_conversion_rate = Some(IcpXdrConversionRate {
+            timestamp_seconds: 1620633606,    // 10 May 2021 10:00:06 AM CEST
+            xdr_permyriad_per_icp: 1_000_000, // 100 XDR = 1 ICP
+        });
+        assert!(
+            requires_new_rate(
+                &icp_xdr_conversion_rate,
+                current_minute_seconds_with_refresh_rate
+            ),
+            "Current time is ahead by the refresh rate interval, a new rate is needed."
         );
     }
 

@@ -25,6 +25,7 @@ pub const GENESIS_TOKEN_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 6;
 pub const IDENTITY_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 7;
 pub const NNS_UI_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 8;
 pub const SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 10;
+pub const EXCHANGE_RATE_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 11;
 
 /// The names of all expected .wasm files to set up the NNS.
 pub const NNS_CANISTER_WASMS: [&str; 13] = [
@@ -72,6 +73,8 @@ pub const NNS_UI_CANISTER_ID: CanisterId =
     CanisterId::from_u64(NNS_UI_CANISTER_INDEX_IN_NNS_SUBNET);
 pub const SNS_WASM_CANISTER_ID: CanisterId =
     CanisterId::from_u64(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET);
+pub const EXCHANGE_RATE_CANISTER_ID: CanisterId =
+    CanisterId::from_u64(EXCHANGE_RATE_CANISTER_INDEX_IN_NNS_SUBNET);
 
 pub const ALL_NNS_CANISTER_IDS: [&CanisterId; 10] = [
     &REGISTRY_CANISTER_ID,

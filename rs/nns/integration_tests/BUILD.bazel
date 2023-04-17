@@ -46,6 +46,7 @@ DEPENDENCIES = [
         "//rs/registry/routing_table",
         "//rs/registry/subnet_type",
         "//rs/registry/transport",
+        "//rs/rosetta-api/tvl/xrc_mock",
         "//rs/rust_canisters/canister_test",
         "//rs/rust_canisters/on_wire",
         "//rs/sns/init",
@@ -58,6 +59,7 @@ DEPENDENCIES = [
         "@crate_index//:crossbeam-channel",
         "@crate_index//:futures-util",
         "@crate_index//:hex",
+        "@crate_index//:ic-xrc-types",
         "@crate_index//:libsecp256k1",
         "@crate_index//:maplit",
         "@crate_index//:rand_0_8_4",
@@ -106,6 +108,7 @@ DEV_DATA = [
     "//rs/rosetta-api/icrc1/archive:archive_canister",
     "//rs/rosetta-api/icrc1/index:index_canister",
     "//rs/rosetta-api/icrc1/ledger:ledger_canister",
+    "//rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister",
     "//rs/sns/governance:sns-governance-canister",
     "//rs/sns/root:sns-root-canister",
     "//rs/sns/swap:sns-swap-canister",
@@ -135,6 +138,7 @@ DEV_ENV = {
     "SNS_SWAP_CANISTER_WASM_PATH": "$(rootpath //rs/sns/swap:sns-swap-canister)",
     "ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root:root-canister)",
     "NEURON_CSV_PATH": "rs/nns/integration_tests/src/neurons.csv",
+    "XRC_MOCK_WASM_PATH": "$(rootpath //rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister)",
 }
 
 rust_library(

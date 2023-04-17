@@ -5,7 +5,7 @@ use core::{
     time::Duration,
 };
 use cycles_minting_canister::CyclesCanisterInitPayload;
-use ic_base_types::{PrincipalId, SubnetId};
+use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_nns_common::init::{LifelineCanisterInitPayload, LifelineCanisterInitPayloadBuilder};
 use ic_nns_constants::{
     ALL_NNS_CANISTER_IDS, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, ROOT_CANISTER_ID,
@@ -190,6 +190,16 @@ impl NnsInitPayloadsBuilder {
         allowed_principals: Vec<PrincipalId>,
     ) -> &mut Self {
         self.sns_wasms.with_allowed_principals(allowed_principals);
+        self
+    }
+
+    pub fn with_exchange_rate_canister(
+        &mut self,
+        exchange_rate_canister_id: CanisterId,
+    ) -> &mut Self {
+        self.cycles_minting.exchange_rate_canister = Some(
+            cycles_minting_canister::ExchangeRateCanister::Set(exchange_rate_canister_id),
+        );
         self
     }
 
