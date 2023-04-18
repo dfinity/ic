@@ -2,22 +2,6 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "Generate rust-project.json",
-            "command": "./.vscode/gen-rust-project",
-            "options": {
-                "cwd": "${workspaceFolder}"
-            },
-            "group": "build",
-            "problemMatcher": [],
-            "presentation": {
-                "reveal": "never",
-                "panel": "dedicated"
-            },
-            "runOptions": {
-                "runOn": "folderOpen"
-                }
-        },
-        {
             "label": "Install recommended extensions",
             "command": "./.vscode/extensions",
             "options": {
