@@ -3,7 +3,7 @@ use candid::Encode;
 use ic_config::Config;
 use ic_error_types::{ErrorCode, RejectCode};
 use ic_ic00_types::{
-    self as ic00, CanisterIdRecord, CanisterInstallMode, CanisterSettingsArgs,
+    self as ic00, CanisterIdRecord, CanisterInstallMode, CanisterSettingsArgsBuilder,
     CanisterStatusResultV2, CanisterStatusType, EmptyBlob, InstallCodeArgs, Method, Payload,
     UpdateSettingsArgs, IC_00,
 };
@@ -128,12 +128,9 @@ fn full_canister_lifecycle_ingress() {
                 call_args().other_side(
                     UpdateSettingsArgs::new(
                         expected_canister_id,
-                        CanisterSettingsArgs::new(
-                            Some(vec![PrincipalId::new_anonymous()]),
-                            None,
-                            None,
-                            None,
-                        ),
+                        CanisterSettingsArgsBuilder::new()
+                            .with_controllers(vec![PrincipalId::new_anonymous()])
+                            .build(),
                     )
                     .encode(),
                 ),
@@ -209,7 +206,9 @@ fn delete_canister_delete_self_fails() {
                 Method::UpdateSettings,
                 UpdateSettingsArgs::new(
                     canister_id,
-                    CanisterSettingsArgs::new(Some(vec![canister_id.get()]), None, None, None)
+                    CanisterSettingsArgsBuilder::new()
+                        .with_controllers(vec![canister_id.get()])
+                        .build(),
                 )
                 .encode()
             ),
@@ -254,7 +253,9 @@ fn delete_running_canister_fails() {
                 Method::UpdateSettings,
                 UpdateSettingsArgs::new(
                     canister_b,
-                    CanisterSettingsArgs::new(Some(vec![canister_a.into()]), None, None, None)
+                    CanisterSettingsArgsBuilder::new()
+                        .with_controllers(vec![canister_a.into()])
+                        .build(),
                 )
                 .encode()
             ),
@@ -297,7 +298,9 @@ fn delete_stopped_canister_succeeds() {
             Method::UpdateSettings,
             UpdateSettingsArgs::new(
                 canister_b,
-                CanisterSettingsArgs::new(Some(vec![canister_a.get()]), None, None, None),
+                CanisterSettingsArgsBuilder::new()
+                    .with_controllers(vec![canister_a.into()])
+                    .build(),
             )
             .encode(),
         )
@@ -674,7 +677,9 @@ fn can_get_canister_information() {
                 Method::UpdateSettings,
                 UpdateSettingsArgs::new(
                     canister_b,
-                    CanisterSettingsArgs::new(Some(vec![canister_a.get()]), None, None, None)
+                    CanisterSettingsArgsBuilder::new()
+                        .with_controllers(vec![canister_a.into()])
+                        .build(),
                 )
                 .encode()
             ),

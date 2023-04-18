@@ -618,7 +618,7 @@ fn failing_mgmt_canister_call_subnet_message(
 
 #[test]
 fn no_sender_canister_version_update_settings_ic00() {
-    let settings = CanisterSettingsArgs::new(None, None, None, None);
+    let settings = CanisterSettingsArgs::default();
     let arg = UpdateSettingsArgs {
         canister_id: canister_test_id(1).into(),
         settings,
@@ -629,7 +629,7 @@ fn no_sender_canister_version_update_settings_ic00() {
 
 #[test]
 fn no_sender_canister_version_update_settings_subnet_message() {
-    let settings = CanisterSettingsArgs::new(None, None, None, None);
+    let settings = CanisterSettingsArgs::default();
     let arg = UpdateSettingsArgs {
         canister_id: canister_test_id(2).into(),
         settings,
@@ -640,7 +640,7 @@ fn no_sender_canister_version_update_settings_subnet_message() {
 
 #[test]
 fn correct_sender_canister_version_update_settings_ic00() {
-    let settings = CanisterSettingsArgs::new(None, None, None, None);
+    let settings = CanisterSettingsArgs::default();
     let arg = UpdateSettingsArgs {
         canister_id: canister_test_id(1).into(),
         settings,
@@ -651,7 +651,7 @@ fn correct_sender_canister_version_update_settings_ic00() {
 
 #[test]
 fn correct_sender_canister_version_update_settings_subnet_message() {
-    let settings = CanisterSettingsArgs::new(None, None, None, None);
+    let settings = CanisterSettingsArgs::default();
     let arg = UpdateSettingsArgs {
         canister_id: canister_test_id(2).into(),
         settings,
@@ -662,7 +662,7 @@ fn correct_sender_canister_version_update_settings_subnet_message() {
 
 #[test]
 fn wrong_sender_canister_version_update_settings_ic00() {
-    let settings = CanisterSettingsArgs::new(None, None, None, None);
+    let settings = CanisterSettingsArgs::default();
     let arg = UpdateSettingsArgs {
         canister_id: canister_test_id(1).into(),
         settings,
@@ -673,7 +673,7 @@ fn wrong_sender_canister_version_update_settings_ic00() {
 
 #[test]
 fn wrong_sender_canister_version_update_settings_subnet_message() {
-    let settings = CanisterSettingsArgs::new(None, None, None, None);
+    let settings = CanisterSettingsArgs::default();
     let arg = UpdateSettingsArgs {
         canister_id: canister_test_id(2).into(),
         settings,

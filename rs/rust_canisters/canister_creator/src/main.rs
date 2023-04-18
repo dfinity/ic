@@ -21,12 +21,11 @@ async fn create_canisters_in_batch(
             CanisterId::ic_00(),
             "create_canister",
             &ic_ic00_types::CreateCanisterArgs {
-                settings: Some(ic_ic00_types::CanisterSettingsArgs::new(
-                    Some(vec![dfn_core::api::id().get()]),
-                    None,
-                    None,
-                    None,
-                )),
+                settings: Some(
+                    ic_ic00_types::CanisterSettingsArgsBuilder::new()
+                        .with_controllers(vec![dfn_core::api::id().get()])
+                        .build(),
+                ),
                 sender_canister_version: Some(dfn_core::api::canister_version()),
             }
             .encode(),

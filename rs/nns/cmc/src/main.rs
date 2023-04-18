@@ -18,7 +18,9 @@ use ic_crypto_tree_hash::{
     flatmap, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree, WitnessGenerator,
     WitnessGeneratorImpl,
 };
-use ic_ic00_types::{CanisterIdRecord, CanisterSettingsArgs, CreateCanisterArgs, Method, IC_00};
+use ic_ic00_types::{
+    CanisterIdRecord, CanisterSettingsArgsBuilder, CreateCanisterArgs, Method, IC_00,
+};
 use ic_ledger_core::block::BlockType;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID};
 use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
@@ -1594,12 +1596,11 @@ async fn create_canister(
             &Method::CreateCanister.to_string(),
             dfn_candid::candid_one,
             CreateCanisterArgs {
-                settings: Some(CanisterSettingsArgs::new(
-                    Some(vec![controller_id]),
-                    None,
-                    None,
-                    None,
-                )),
+                settings: Some(
+                    CanisterSettingsArgsBuilder::new()
+                        .with_controllers(vec![controller_id])
+                        .build(),
+                ),
                 sender_canister_version: Some(dfn_core::api::canister_version()),
             },
             dfn_core::api::Funds::new(cycles.get().try_into().unwrap()),
