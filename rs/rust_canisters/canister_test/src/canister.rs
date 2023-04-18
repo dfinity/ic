@@ -13,7 +13,7 @@ use ic_replica_tests::*;
 pub use ic_types::{ingress::WasmResult, CanisterId, Cycles, PrincipalId};
 use on_wire::{FromWire, IntoWire, NewType};
 
-use ic_ic00_types::{CanisterSettingsArgs, CanisterStatusResultV2, UpdateSettingsArgs};
+use ic_ic00_types::{CanisterSettingsArgsBuilder, CanisterStatusResultV2, UpdateSettingsArgs};
 use std::convert::TryFrom;
 use std::env;
 use std::fmt;
@@ -727,7 +727,9 @@ impl<'a> Canister<'a> {
                 dfn_candid::candid_multi_arity,
                 (UpdateSettingsArgs {
                     canister_id: self.canister_id.into(),
-                    settings: CanisterSettingsArgs::new(Some(controllers), None, None, None),
+                    settings: CanisterSettingsArgsBuilder::new()
+                        .with_controllers(controllers)
+                        .build(),
                     sender_canister_version: None,
                 },),
             )
@@ -746,7 +748,9 @@ impl<'a> Canister<'a> {
                 candid_multi_arity,
                 (UpdateSettingsArgs::new(
                     self.canister_id,
-                    CanisterSettingsArgs::new(Some(new_controllers), None, None, None),
+                    CanisterSettingsArgsBuilder::new()
+                        .with_controllers(new_controllers)
+                        .build(),
                 ),),
             )
             .await

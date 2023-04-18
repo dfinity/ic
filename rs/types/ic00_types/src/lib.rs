@@ -975,6 +975,73 @@ impl CanisterSettingsArgs {
     }
 }
 
+#[derive(Default)]
+pub struct CanisterSettingsArgsBuilder {
+    controller: Option<PrincipalId>,
+    controllers: Option<Vec<PrincipalId>>,
+    compute_allocation: Option<candid::Nat>,
+    memory_allocation: Option<candid::Nat>,
+    freezing_threshold: Option<candid::Nat>,
+}
+
+#[allow(dead_code)]
+impl CanisterSettingsArgsBuilder {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn build(self) -> CanisterSettingsArgs {
+        CanisterSettingsArgs {
+            controller: self.controller,
+            controllers: self.controllers,
+            compute_allocation: self.compute_allocation,
+            memory_allocation: self.memory_allocation,
+            freezing_threshold: self.freezing_threshold,
+        }
+    }
+
+    pub fn with_controller(self, controller: PrincipalId) -> Self {
+        Self {
+            controller: Some(controller),
+            ..self
+        }
+    }
+
+    pub fn with_controllers(self, controllers: Vec<PrincipalId>) -> Self {
+        Self {
+            controllers: Some(controllers),
+            ..self
+        }
+    }
+
+    /// Sets the compute allocation in percent. For more details see
+    /// the description of this field in the IC specification.
+    pub fn with_compute_allocation(self, compute_allocation: u64) -> Self {
+        Self {
+            compute_allocation: Some(candid::Nat::from(compute_allocation)),
+            ..self
+        }
+    }
+
+    /// Sets the memory allocation in bytes. For more details see
+    /// the description of this field in the IC specification.
+    pub fn with_memory_allocation(self, memory_allocation: u64) -> Self {
+        Self {
+            memory_allocation: Some(candid::Nat::from(memory_allocation)),
+            ..self
+        }
+    }
+
+    /// Sets the freezing threshold in seconds. For more details see
+    /// the description of this field in the IC specification.
+    pub fn with_freezing_threshold(self, freezing_threshold: u64) -> Self {
+        Self {
+            freezing_threshold: Some(candid::Nat::from(freezing_threshold)),
+            ..self
+        }
+    }
+}
+
 /// Struct used for encoding/decoding
 /// `(record {
 ///     settings : opt canister_settings;

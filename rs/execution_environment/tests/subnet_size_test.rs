@@ -6,14 +6,13 @@ use ic_config::{
     subnet_config::{CyclesAccountManagerConfig, SubnetConfig},
 };
 use ic_ic00_types::{
-    self as ic00, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInstallMode, DerivationPath,
-    EcdsaCurve, EcdsaKeyId, HttpMethod, TransformContext, TransformFunc,
+    self as ic00, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInstallMode,
+    CanisterSettingsArgsBuilder, DerivationPath, EcdsaCurve, EcdsaKeyId, HttpMethod,
+    TransformContext, TransformFunc,
 };
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
-use ic_state_machine_tests::{
-    CanisterSettingsArgs, StateMachine, StateMachineBuilder, StateMachineConfig,
-};
+use ic_state_machine_tests::{StateMachine, StateMachineBuilder, StateMachineConfig};
 use ic_test_utilities::types::messages::SignedIngressBuilder;
 use ic_test_utilities::universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use ic_types::canister_http::MAX_CANISTER_HTTP_RESPONSE_BYTES;
@@ -195,12 +194,12 @@ fn simulate_one_gib_per_second_cost(
         .build();
     let canister_id = env.create_canister_with_cycles(
         DEFAULT_CYCLES_PER_NODE * subnet_size,
-        Some(CanisterSettingsArgs::new(
-            None,
-            Some(compute_allocation.as_percent()),
-            Some(one_gib),
-            None,
-        )),
+        Some(
+            CanisterSettingsArgsBuilder::new()
+                .with_compute_allocation(compute_allocation.as_percent())
+                .with_memory_allocation(one_gib)
+                .build(),
+        ),
     );
 
     // The time delta is long enough that allocation charging should be triggered.

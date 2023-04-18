@@ -23,9 +23,9 @@ use ic_execution_environment::{
     InternalHttpQueryHandler, RoundInstructions, RoundLimits,
 };
 use ic_ic00_types::{
-    CanisterIdRecord, CanisterInstallMode, CanisterSettingsArgs, CanisterStatusType, EcdsaKeyId,
-    EmptyBlob, InstallCodeArgs, Method, Payload, ProvisionalCreateCanisterWithCyclesArgs,
-    UpdateSettingsArgs,
+    CanisterIdRecord, CanisterInstallMode, CanisterSettingsArgs, CanisterSettingsArgsBuilder,
+    CanisterStatusType, EcdsaKeyId, EmptyBlob, InstallCodeArgs, Method, Payload,
+    ProvisionalCreateCanisterWithCyclesArgs, UpdateSettingsArgs,
 };
 use ic_interfaces::{
     execution_environment::{
@@ -565,7 +565,9 @@ impl ExecutionTest {
     ) -> Result<WasmResult, UserError> {
         let payload = UpdateSettingsArgs {
             canister_id: canister_id.into(),
-            settings: CanisterSettingsArgs::new(None, None, None, Some(freezing_threshold.get())),
+            settings: CanisterSettingsArgsBuilder::new()
+                .with_freezing_threshold(freezing_threshold.get())
+                .build(),
             sender_canister_version: None,
         }
         .encode();
@@ -580,7 +582,9 @@ impl ExecutionTest {
     ) -> Result<WasmResult, UserError> {
         let payload = UpdateSettingsArgs {
             canister_id: canister_id.into(),
-            settings: CanisterSettingsArgs::new(Some(vec![controller]), None, None, None),
+            settings: CanisterSettingsArgsBuilder::new()
+                .with_controllers(vec![controller])
+                .build(),
             sender_canister_version: None,
         }
         .encode();

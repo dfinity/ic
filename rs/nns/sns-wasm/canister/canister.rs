@@ -8,7 +8,7 @@ use dfn_core::{over, over_async, over_init};
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_ic00_types::CanisterInstallMode::Install;
 use ic_ic00_types::{
-    CanisterIdRecord, CanisterSettingsArgs, CanisterStatusResultV2, CanisterStatusType,
+    CanisterIdRecord, CanisterSettingsArgsBuilder, CanisterStatusResultV2, CanisterStatusType,
     CreateCanisterArgs, InstallCodeArgs, Method, UpdateSettingsArgs,
 };
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
@@ -63,12 +63,11 @@ impl CanisterApi for CanisterApiImpl {
             &Method::CreateCanister.to_string(),
             candid_one,
             CreateCanisterArgs {
-                settings: Some(CanisterSettingsArgs::new(
-                    Some(vec![controller_id]),
-                    None,
-                    None,
-                    None,
-                )),
+                settings: Some(
+                    CanisterSettingsArgsBuilder::new()
+                        .with_controllers(vec![controller_id])
+                        .build(),
+                ),
                 sender_canister_version: Some(dfn_core::api::canister_version()),
             },
             dfn_core::api::Funds::new(cycles.get().try_into().unwrap()),
@@ -141,7 +140,9 @@ impl CanisterApi for CanisterApiImpl {
     ) -> Result<(), String> {
         let args = UpdateSettingsArgs {
             canister_id: canister.get(),
-            settings: CanisterSettingsArgs::new(Some(controllers), None, None, None),
+            settings: CanisterSettingsArgsBuilder::new()
+                .with_controllers(controllers)
+                .build(),
             sender_canister_version: Some(dfn_core::api::canister_version()),
         };
 

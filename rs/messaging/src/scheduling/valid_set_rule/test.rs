@@ -2,7 +2,7 @@ use super::*;
 
 use assert_matches::assert_matches;
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
-use ic_ic00_types::{CanisterSettingsArgs, Payload, UpdateSettingsArgs, IC_00};
+use ic_ic00_types::{CanisterSettingsArgsBuilder, Payload, UpdateSettingsArgs, IC_00};
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::testing::CanisterQueuesTesting;
@@ -802,7 +802,9 @@ fn management_message_update_setting_is_inducted_but_not_charged() {
 
     let payload = UpdateSettingsArgs {
         canister_id: canister_id.get(),
-        settings: CanisterSettingsArgs::new(None, None, None, Some(1 << 20)),
+        settings: CanisterSettingsArgsBuilder::new()
+            .with_freezing_threshold(1 << 20)
+            .build(),
         sender_canister_version: None,
     }
     .encode();

@@ -20,7 +20,7 @@ use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::{
-    CanisterIdRecord, CanisterInstallMode, CanisterSettingsArgs, CanisterStatusType,
+    CanisterIdRecord, CanisterInstallMode, CanisterSettingsArgsBuilder, CanisterStatusType,
     CreateCanisterArgs, EmptyBlob, InstallCodeArgs, Method, Payload, UpdateSettingsArgs,
 };
 use ic_interfaces::{
@@ -4209,7 +4209,9 @@ fn unfreezing_of_frozen_canister() {
     // Set the freezing theshold high to freeze the canister.
     let payload = UpdateSettingsArgs {
         canister_id: canister_id.get(),
-        settings: CanisterSettingsArgs::new(None, None, None, Some(1_000_000_000_000_u64)),
+        settings: CanisterSettingsArgsBuilder::new()
+            .with_freezing_threshold(1_000_000_000_000)
+            .build(),
         sender_canister_version: None,
     }
     .encode();
@@ -4229,7 +4231,9 @@ fn unfreezing_of_frozen_canister() {
     // Unfreeze the canister.
     let payload = UpdateSettingsArgs {
         canister_id: canister_id.get(),
-        settings: CanisterSettingsArgs::new(None, None, None, Some(0_u64)),
+        settings: CanisterSettingsArgsBuilder::new()
+            .with_freezing_threshold(0)
+            .build(),
         sender_canister_version: None,
     }
     .encode();
@@ -4260,7 +4264,9 @@ fn create_canister_fails_if_memory_capacity_exceeded() {
         .system_state
         .set_balance(Cycles::new(1_000_000_000_000_000));
 
-    let settings = CanisterSettingsArgs::new(None, None, Some(MEMORY_CAPACITY.get() / 2), None);
+    let settings = CanisterSettingsArgsBuilder::new()
+        .with_memory_allocation(MEMORY_CAPACITY.get() / 2)
+        .build();
     let args = CreateCanisterArgs {
         settings: Some(settings),
         sender_canister_version: None,
@@ -4281,7 +4287,9 @@ fn create_canister_fails_if_memory_capacity_exceeded() {
 
     // There should be not enough memory for CAPACITY/2 because universal
     // canister already consumed some
-    let settings = CanisterSettingsArgs::new(None, None, Some(MEMORY_CAPACITY.get() / 2), None);
+    let settings = CanisterSettingsArgsBuilder::new()
+        .with_memory_allocation(MEMORY_CAPACITY.get() / 2)
+        .build();
     let args = CreateCanisterArgs {
         settings: Some(settings),
         sender_canister_version: None,
@@ -4319,7 +4327,9 @@ fn create_canister_makes_subnet_oversubscribed() {
         .system_state
         .set_balance(Cycles::new(1_000_000_000_000_000));
 
-    let settings = CanisterSettingsArgs::new(None, Some(50_u64), None, None);
+    let settings = CanisterSettingsArgsBuilder::new()
+        .with_compute_allocation(50)
+        .build();
     let args = CreateCanisterArgs {
         settings: Some(settings),
         sender_canister_version: None,
@@ -4338,7 +4348,9 @@ fn create_canister_makes_subnet_oversubscribed() {
     let reply = get_reply(result);
     Decode!(reply.as_slice(), CanisterIdRecord).unwrap();
 
-    let settings = CanisterSettingsArgs::new(None, Some(25_u64), None, None);
+    let settings = CanisterSettingsArgsBuilder::new()
+        .with_compute_allocation(25)
+        .build();
     let args = CreateCanisterArgs {
         settings: Some(settings),
         sender_canister_version: None,
@@ -4358,7 +4370,9 @@ fn create_canister_makes_subnet_oversubscribed() {
     Decode!(reply.as_slice(), CanisterIdRecord).unwrap();
 
     // Create a canister with compute allocation.
-    let settings = CanisterSettingsArgs::new(None, Some(30_u64), None, None);
+    let settings = CanisterSettingsArgsBuilder::new()
+        .with_compute_allocation(30)
+        .build();
     let args = CreateCanisterArgs {
         settings: Some(settings),
         sender_canister_version: None,
@@ -4396,7 +4410,9 @@ fn update_settings_makes_subnet_oversubscribed() {
     // Updating the compute allocation.
     let args = UpdateSettingsArgs {
         canister_id: c1.get(),
-        settings: CanisterSettingsArgs::new(None, Some(50_u64), None, None),
+        settings: CanisterSettingsArgsBuilder::new()
+            .with_compute_allocation(50)
+            .build(),
         sender_canister_version: None,
     };
     test.subnet_message(Method::UpdateSettings, args.encode())
@@ -4404,7 +4420,9 @@ fn update_settings_makes_subnet_oversubscribed() {
 
     let args = UpdateSettingsArgs {
         canister_id: c2.get(),
-        settings: CanisterSettingsArgs::new(None, Some(25_u64), None, None),
+        settings: CanisterSettingsArgsBuilder::new()
+            .with_compute_allocation(25)
+            .build(),
         sender_canister_version: None,
     };
     test.subnet_message(Method::UpdateSettings, args.encode())
@@ -4413,7 +4431,9 @@ fn update_settings_makes_subnet_oversubscribed() {
     // Go over the compute capacity.
     let args = UpdateSettingsArgs {
         canister_id: c3.get(),
-        settings: CanisterSettingsArgs::new(None, Some(30_u64), None, None),
+        settings: CanisterSettingsArgsBuilder::new()
+            .with_compute_allocation(30)
+            .build(),
         sender_canister_version: None,
     };
     let err = test
@@ -4424,7 +4444,9 @@ fn update_settings_makes_subnet_oversubscribed() {
     // Updating the memory allocation.
     let args = UpdateSettingsArgs {
         canister_id: c1.get(),
-        settings: CanisterSettingsArgs::new(None, None, Some(10 * 1024 * 1024), None),
+        settings: CanisterSettingsArgsBuilder::new()
+            .with_memory_allocation(10 * 1024 * 1024)
+            .build(),
         sender_canister_version: None,
     };
     test.subnet_message(Method::UpdateSettings, args.encode())
@@ -4432,7 +4454,9 @@ fn update_settings_makes_subnet_oversubscribed() {
 
     let args = UpdateSettingsArgs {
         canister_id: c2.get(),
-        settings: CanisterSettingsArgs::new(None, None, Some(30 * 1024 * 1024), None),
+        settings: CanisterSettingsArgsBuilder::new()
+            .with_memory_allocation(30 * 1024 * 1024)
+            .build(),
         sender_canister_version: None,
     };
     test.subnet_message(Method::UpdateSettings, args.encode())
@@ -4441,7 +4465,9 @@ fn update_settings_makes_subnet_oversubscribed() {
     // Go over the memory capacity.
     let args = UpdateSettingsArgs {
         canister_id: c3.get(),
-        settings: CanisterSettingsArgs::new(None, None, Some(65 * 1024 * 1024), None),
+        settings: CanisterSettingsArgsBuilder::new()
+            .with_memory_allocation(65 * 1024 * 1024)
+            .build(),
         sender_canister_version: None,
     };
     let err = test
@@ -4482,7 +4508,9 @@ fn create_canister_when_compute_capacity_is_oversubscribed() {
     Decode!(reply.as_slice(), CanisterIdRecord).unwrap();
 
     // Create a canister with zero compute allocation.
-    let settings = CanisterSettingsArgs::new(None, Some(0_u64), None, None);
+    let settings = CanisterSettingsArgsBuilder::new()
+        .with_compute_allocation(0)
+        .build();
     let args = CreateCanisterArgs {
         settings: Some(settings),
         sender_canister_version: None,
@@ -4502,7 +4530,9 @@ fn create_canister_when_compute_capacity_is_oversubscribed() {
     Decode!(reply.as_slice(), CanisterIdRecord).unwrap();
 
     // Create a canister with compute allocation.
-    let settings = CanisterSettingsArgs::new(None, Some(10_u64), None, None);
+    let settings = CanisterSettingsArgsBuilder::new()
+        .with_compute_allocation(10)
+        .build();
     let args = CreateCanisterArgs {
         settings: Some(settings),
         sender_canister_version: None,
@@ -4608,7 +4638,9 @@ fn update_settings_when_compute_capacity_is_oversubscribed() {
     // Updating the compute allocation to a higher value fails.
     let args = UpdateSettingsArgs {
         canister_id: canister_id.get(),
-        settings: CanisterSettingsArgs::new(None, Some(61_u64), None, None),
+        settings: CanisterSettingsArgsBuilder::new()
+            .with_compute_allocation(61)
+            .build(),
         sender_canister_version: None,
     };
     let err = test
@@ -4625,7 +4657,9 @@ fn update_settings_when_compute_capacity_is_oversubscribed() {
     // Updating the compute allocation to the same value succeeds.
     let args = UpdateSettingsArgs {
         canister_id: canister_id.get(),
-        settings: CanisterSettingsArgs::new(None, Some(60_u64), None, None),
+        settings: CanisterSettingsArgsBuilder::new()
+            .with_compute_allocation(60)
+            .build(),
         sender_canister_version: None,
     };
     test.subnet_message(Method::UpdateSettings, args.encode())
@@ -4640,7 +4674,9 @@ fn update_settings_when_compute_capacity_is_oversubscribed() {
     // Updating the compute allocation to a lower value succeeds.
     let args = UpdateSettingsArgs {
         canister_id: canister_id.get(),
-        settings: CanisterSettingsArgs::new(None, Some(59_u64), None, None),
+        settings: CanisterSettingsArgsBuilder::new()
+            .with_compute_allocation(59)
+            .build(),
         sender_canister_version: None,
     };
     test.subnet_message(Method::UpdateSettings, args.encode())

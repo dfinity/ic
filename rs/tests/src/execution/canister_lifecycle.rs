@@ -38,7 +38,8 @@ use ic_agent::export::Principal;
 use ic_agent::identity::Identity;
 use ic_agent::AgentError;
 use ic_ic00_types::{
-    CanisterSettingsArgs, CanisterStatusResultV2, CreateCanisterArgs, EmptyBlob, Payload,
+    CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2, CreateCanisterArgs,
+    EmptyBlob, Payload,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{Cycles, PrincipalId};
@@ -1107,7 +1108,9 @@ pub fn create_canister_with_empty_settings(env: TestEnv) {
 
 /// Sending a field with some settings
 pub fn create_canister_with_settings(env: TestEnv) {
-    let settings = CanisterSettingsArgs::new(None, Some(50_u64), None, None);
+    let settings = CanisterSettingsArgsBuilder::new()
+        .with_compute_allocation(50)
+        .build();
     let records = CreateCanisterArgs {
         settings: Some(settings),
         sender_canister_version: None,
@@ -1153,12 +1156,11 @@ pub fn create_canister_with_freezing_threshold(env: TestEnv) {
                         &Principal::management_canister(),
                         "create_canister",
                         CreateCanisterArgs {
-                            settings: Some(CanisterSettingsArgs::new(
-                                None,
-                                None,
-                                None,
-                                Some(*valid_value),
-                            )),
+                            settings: Some(
+                                CanisterSettingsArgsBuilder::new()
+                                    .with_freezing_threshold(*valid_value)
+                                    .build(),
+                            ),
                             sender_canister_version: None,
                         }
                         .encode(),

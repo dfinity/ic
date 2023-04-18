@@ -360,7 +360,9 @@ async fn create_and_initialize_node_canister<Rt: Runtime, Wasm: ArchiveCanisterW
         0,
         (ic_ic00_types::UpdateSettingsArgs::new(
             node_canister_id,
-            ic_ic00_types::CanisterSettingsArgs::new(Some(vec![controller_id]), None, None, None),
+            ic_ic00_types::CanisterSettingsArgsBuilder::new()
+                .with_controllers(vec![controller_id])
+                .build(),
         ),),
     )
     .await;

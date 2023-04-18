@@ -7,12 +7,15 @@ use ic_config::{
     flag_status::FlagStatus,
     subnet_config::{SchedulerConfig, SubnetConfig, SubnetConfigs},
 };
-use ic_ic00_types::{CanisterIdRecord, EmptyBlob, InstallCodeArgs, Method, Payload, IC_00};
+use ic_ic00_types::{
+    CanisterIdRecord, CanisterSettingsArgsBuilder, EmptyBlob, InstallCodeArgs, Method, Payload,
+    IC_00,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::NextExecution;
 use ic_state_machine_tests::{
-    CanisterId, CanisterInstallMode, CanisterSettingsArgs, CryptoHashOfState, ErrorCode,
-    IngressState, IngressStatus, MessageId, PrincipalId, StateMachine, StateMachineConfig,
+    CanisterId, CanisterInstallMode, CryptoHashOfState, ErrorCode, IngressState, IngressStatus,
+    MessageId, PrincipalId, StateMachine, StateMachineConfig,
 };
 use ic_types::{ingress::WasmResult, Cycles, NumInstructions};
 use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
@@ -241,12 +244,12 @@ fn setup_dts_install_code(
 
     let canister_id = env.create_canister_with_cycles(
         initial_balance,
-        Some(CanisterSettingsArgs::new(
-            None,
-            Some(1u64),
-            None,
-            Some(freezing_threshold_in_seconds as u64),
-        )),
+        Some(
+            CanisterSettingsArgsBuilder::new()
+                .with_compute_allocation(1)
+                .with_freezing_threshold(freezing_threshold_in_seconds as u64)
+                .build(),
+        ),
     );
 
     let install_code_ingress_id = env.send_ingress(
@@ -448,12 +451,11 @@ fn dts_pending_upgrade_with_heartbeat() {
         )
         .unwrap();
 
-    let settings = Some(CanisterSettingsArgs::new(
-        Some(vec![user_id, controller.get()]),
-        None,
-        None,
-        None,
-    ));
+    let settings = Some(
+        CanisterSettingsArgsBuilder::new()
+            .with_controllers(vec![user_id, controller.get()])
+            .build(),
+    );
 
     let canister = env
         .install_canister_with_cycles(binary.clone(), vec![], settings, INITIAL_CYCLES_BALANCE)
@@ -544,12 +546,11 @@ fn dts_scheduling_of_install_code() {
         )
         .unwrap();
 
-    let settings = Some(CanisterSettingsArgs::new(
-        Some(vec![user_id, controller.get()]),
-        None,
-        None,
-        None,
-    ));
+    let settings = Some(
+        CanisterSettingsArgsBuilder::new()
+            .with_controllers(vec![user_id, controller.get()])
+            .build(),
+    );
 
     let n = 10;
     let mut canister = vec![];
@@ -705,12 +706,11 @@ fn dts_pending_install_code_does_not_block_subnet_messages_of_other_canisters() 
         controller.push(id);
     }
 
-    let settings = Some(CanisterSettingsArgs::new(
-        Some(controller.iter().map(|x| x.get()).collect()),
-        None,
-        None,
-        None,
-    ));
+    let settings = Some(
+        CanisterSettingsArgsBuilder::new()
+            .with_controllers(controller.iter().map(|x| x.get()).collect())
+            .build(),
+    );
 
     let mut canister = vec![];
 
@@ -823,12 +823,11 @@ fn dts_pending_execution_blocks_subnet_messages_to_the_same_canister() {
 
     let user_id = PrincipalId::new_anonymous();
 
-    let settings = Some(CanisterSettingsArgs::new(
-        Some(vec![user_id]),
-        None,
-        None,
-        None,
-    ));
+    let settings = Some(
+        CanisterSettingsArgsBuilder::new()
+            .with_controllers(vec![user_id])
+            .build(),
+    );
 
     let canister = env
         .install_canister_with_cycles(binary.clone(), vec![], settings, INITIAL_CYCLES_BALANCE)
@@ -913,12 +912,11 @@ fn dts_pending_install_code_blocks_update_messages_to_the_same_canister() {
 
     let user_id = PrincipalId::new_anonymous();
 
-    let settings = Some(CanisterSettingsArgs::new(
-        Some(vec![user_id]),
-        None,
-        None,
-        None,
-    ));
+    let settings = Some(
+        CanisterSettingsArgsBuilder::new()
+            .with_controllers(vec![user_id])
+            .build(),
+    );
 
     let canister = env.create_canister_with_cycles(INITIAL_CYCLES_BALANCE, settings);
 
@@ -998,12 +996,11 @@ fn dts_long_running_install_and_update() {
     let mut canister = vec![];
 
     for controller_id in controller.iter() {
-        let settings = Some(CanisterSettingsArgs::new(
-            Some(vec![controller_id.get()]),
-            None,
-            None,
-            None,
-        ));
+        let settings = Some(
+            CanisterSettingsArgsBuilder::new()
+                .with_controllers(vec![controller_id.get()])
+                .build(),
+        );
 
         let id = env
             .install_canister_with_cycles(
@@ -1205,12 +1202,11 @@ fn dts_unrelated_subnet_messages_make_progress() {
 
     let user_id = PrincipalId::new_anonymous();
 
-    let settings = Some(CanisterSettingsArgs::new(
-        Some(vec![user_id]),
-        None,
-        None,
-        None,
-    ));
+    let settings = Some(
+        CanisterSettingsArgsBuilder::new()
+            .with_controllers(vec![user_id])
+            .build(),
+    );
 
     let canister = env
         .install_canister_with_cycles(
@@ -1612,7 +1608,11 @@ fn dts_canister_uninstalled_due_to_resource_charges_with_aborted_updrade() {
 
     let user_id = PrincipalId::new_anonymous();
 
-    let settings = Some(CanisterSettingsArgs::new(None, Some(1_u64), None, None));
+    let settings = Some(
+        CanisterSettingsArgsBuilder::new()
+            .with_compute_allocation(1)
+            .build(),
+    );
 
     let canister = env
         .install_canister_with_cycles(binary.clone(), vec![], settings, INITIAL_CYCLES_BALANCE)
@@ -1673,7 +1673,11 @@ fn dts_canister_uninstalled_due_resource_charges_with_aborted_update() {
 
     let mut canisters = vec![];
     for _ in 0..n {
-        let settings = Some(CanisterSettingsArgs::new(None, Some(1_u64), None, None));
+        let settings = Some(
+            CanisterSettingsArgsBuilder::new()
+                .with_compute_allocation(1)
+                .build(),
+        );
 
         let id = env
             .install_canister_with_cycles(binary.clone(), vec![], settings, INITIAL_CYCLES_BALANCE)

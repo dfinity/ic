@@ -1,5 +1,5 @@
 use canister_test::*;
-use ic00::CanisterSettingsArgs;
+use ic00::CanisterSettingsArgsBuilder;
 use ic_state_machine_tests::StateMachine;
 
 #[test]
@@ -13,12 +13,11 @@ fn test_memory_test_canisters() {
         .install_canister_with_cycles(
             wasm.bytes(),
             vec![],
-            Some(CanisterSettingsArgs::new(
-                None,
-                None,
-                Some(8 * 1024 * 1024 * 1024), // 8GiB
-                None,
-            )),
+            Some(
+                CanisterSettingsArgsBuilder::new()
+                    .with_memory_allocation(8 * 1024 * 1024 * 1024) // 8GiB
+                    .build(),
+            ),
             Cycles::from(u128::MAX),
         )
         .unwrap();

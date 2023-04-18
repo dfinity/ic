@@ -9,7 +9,8 @@ use cycles_minting_canister::IcpXdrConversionRateCertifiedResponse;
 use dfn_candid::candid_one;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ic00_types::{
-    CanisterInstallMode, CanisterSettingsArgs, CanisterStatusResultV2, UpdateSettingsArgs,
+    CanisterInstallMode, CanisterSettingsArgs, CanisterSettingsArgsBuilder, CanisterStatusResultV2,
+    UpdateSettingsArgs,
 };
 use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount;
 use ic_nervous_system_root::CanisterIdRecord;
@@ -205,7 +206,9 @@ pub fn set_controllers(
         candid_one,
         UpdateSettingsArgs {
             canister_id: target.into(),
-            settings: CanisterSettingsArgs::new(Some(controllers), None, None, None),
+            settings: CanisterSettingsArgsBuilder::new()
+                .with_controllers(controllers)
+                .build(),
             sender_canister_version: None,
         },
         sender,
@@ -379,12 +382,11 @@ pub fn setup_nns_canisters(machine: &StateMachine, init_payloads: NnsInitPayload
         machine,
         build_registry_wasm(),
         Some(Encode!(&init_payloads.registry).unwrap()),
-        Some(CanisterSettingsArgs::new(
-            None,
-            None,
-            Some(memory_allocation_of(REGISTRY_CANISTER_ID)),
-            None,
-        )),
+        Some(
+            CanisterSettingsArgsBuilder::new()
+                .with_memory_allocation(memory_allocation_of(REGISTRY_CANISTER_ID))
+                .build(),
+        ),
     );
     assert_eq!(registry_canister_id, REGISTRY_CANISTER_ID);
 
@@ -394,12 +396,11 @@ pub fn setup_nns_canisters(machine: &StateMachine, init_payloads: NnsInitPayload
         machine,
         build_ledger_wasm(),
         Some(Encode!(&init_payloads.ledger).unwrap()),
-        Some(CanisterSettingsArgs::new(
-            None,
-            None,
-            Some(memory_allocation_of(LEDGER_CANISTER_ID)),
-            None,
-        )),
+        Some(
+            CanisterSettingsArgsBuilder::new()
+                .with_memory_allocation(memory_allocation_of(LEDGER_CANISTER_ID))
+                .build(),
+        ),
     );
     assert_eq!(ledger_canister_id, LEDGER_CANISTER_ID);
 
@@ -407,12 +408,11 @@ pub fn setup_nns_canisters(machine: &StateMachine, init_payloads: NnsInitPayload
         machine,
         build_root_wasm(),
         Some(Encode!(&init_payloads.root).unwrap()),
-        Some(CanisterSettingsArgs::new(
-            None,
-            None,
-            Some(memory_allocation_of(ROOT_CANISTER_ID)),
-            None,
-        )),
+        Some(
+            CanisterSettingsArgsBuilder::new()
+                .with_memory_allocation(memory_allocation_of(ROOT_CANISTER_ID))
+                .build(),
+        ),
     );
     assert_eq!(root_canister_id, ROOT_CANISTER_ID);
 
@@ -420,12 +420,11 @@ pub fn setup_nns_canisters(machine: &StateMachine, init_payloads: NnsInitPayload
         machine,
         build_cmc_wasm(),
         Some(Encode!(&init_payloads.cycles_minting).unwrap()),
-        Some(CanisterSettingsArgs::new(
-            None,
-            None,
-            Some(memory_allocation_of(CYCLES_MINTING_CANISTER_ID)),
-            None,
-        )),
+        Some(
+            CanisterSettingsArgsBuilder::new()
+                .with_memory_allocation(memory_allocation_of(CYCLES_MINTING_CANISTER_ID))
+                .build(),
+        ),
     );
     assert_eq!(cmc_canister_id, CYCLES_MINTING_CANISTER_ID);
 
@@ -433,12 +432,11 @@ pub fn setup_nns_canisters(machine: &StateMachine, init_payloads: NnsInitPayload
         machine,
         build_lifeline_wasm(),
         Some(Encode!(&init_payloads.lifeline).unwrap()),
-        Some(CanisterSettingsArgs::new(
-            None,
-            None,
-            Some(memory_allocation_of(LIFELINE_CANISTER_ID)),
-            None,
-        )),
+        Some(
+            CanisterSettingsArgsBuilder::new()
+                .with_memory_allocation(memory_allocation_of(LIFELINE_CANISTER_ID))
+                .build(),
+        ),
     );
     assert_eq!(lifeline_canister_id, LIFELINE_CANISTER_ID);
 
@@ -446,12 +444,11 @@ pub fn setup_nns_canisters(machine: &StateMachine, init_payloads: NnsInitPayload
         machine,
         build_genesis_token_wasm(),
         Some(init_payloads.genesis_token.encode_to_vec()),
-        Some(CanisterSettingsArgs::new(
-            None,
-            None,
-            Some(memory_allocation_of(GENESIS_TOKEN_CANISTER_ID)),
-            None,
-        )),
+        Some(
+            CanisterSettingsArgsBuilder::new()
+                .with_memory_allocation(memory_allocation_of(GENESIS_TOKEN_CANISTER_ID))
+                .build(),
+        ),
     );
     assert_eq!(genesis_token_canister_id, GENESIS_TOKEN_CANISTER_ID);
 

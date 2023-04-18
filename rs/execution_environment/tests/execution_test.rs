@@ -2,10 +2,9 @@ use ic_config::{
     execution_environment::Config as HypervisorConfig,
     subnet_config::{CyclesAccountManagerConfig, SubnetConfigs},
 };
+use ic_ic00_types::CanisterSettingsArgsBuilder;
 use ic_registry_subnet_type::SubnetType;
-use ic_state_machine_tests::{
-    CanisterSettingsArgs, ErrorCode, StateMachine, StateMachineConfig, UserError,
-};
+use ic_state_machine_tests::{ErrorCode, StateMachine, StateMachineConfig, UserError};
 use ic_types::{ingress::WasmResult, Cycles, NumBytes};
 use ic_universal_canister::{wasm, UNIVERSAL_CANISTER_WASM};
 use std::{convert::TryInto, time::Duration};
@@ -339,7 +338,11 @@ fn test_canister_out_of_cycles() {
     let canister_id = env.install_canister_wat(
         TEST_CANISTER,
         vec![],
-        Some(CanisterSettingsArgs::new(None, Some(1), None, None)),
+        Some(
+            CanisterSettingsArgsBuilder::new()
+                .with_compute_allocation(1)
+                .build(),
+        ),
     );
 
     // Since all computation/storage is free, calling an update method should
@@ -396,7 +399,11 @@ fn canister_has_zero_balance_when_uninstalled_due_to_low_cycles() {
         .install_canister_with_cycles(
             UNIVERSAL_CANISTER_WASM.into(),
             vec![],
-            Some(CanisterSettingsArgs::new(None, Some(1), None, None)),
+            Some(
+                CanisterSettingsArgsBuilder::new()
+                    .with_compute_allocation(1)
+                    .build(),
+            ),
             INITIAL_CYCLES_BALANCE,
         )
         .unwrap();
@@ -633,7 +640,7 @@ fn exceeding_memory_capacity_fails_when_memory_allocation_changes() {
         .install_canister_with_cycles(
             UNIVERSAL_CANISTER_WASM.into(),
             vec![],
-            Some(CanisterSettingsArgs::new(None, None, None, None)),
+            Some(CanisterSettingsArgsBuilder::new().build()),
             INITIAL_CYCLES_BALANCE,
         )
         .unwrap();
@@ -642,7 +649,9 @@ fn exceeding_memory_capacity_fails_when_memory_allocation_changes() {
     let res = env
         .update_settings(
             &canister_id,
-            CanisterSettingsArgs::new(None, None, Some(20u64 * 1024 * 1024 + 1), None),
+            CanisterSettingsArgsBuilder::new()
+                .with_memory_allocation(20u64 * 1024 * 1024 + 1)
+                .build(),
         )
         .unwrap_err();
     assert_eq!(res.code(), ErrorCode::SubnetOversubscribed);
@@ -650,7 +659,9 @@ fn exceeding_memory_capacity_fails_when_memory_allocation_changes() {
     // Set the memory to exactly 20MiB. Should succeed.
     env.update_settings(
         &canister_id,
-        CanisterSettingsArgs::new(None, None, Some(20u64 * 1024 * 1024), None),
+        CanisterSettingsArgsBuilder::new()
+            .with_memory_allocation(20u64 * 1024 * 1024)
+            .build(),
     )
     .unwrap();
 }
@@ -692,7 +703,7 @@ fn exceeding_memory_capacity_fails_during_message_execution() {
         .install_canister_with_cycles(
             UNIVERSAL_CANISTER_WASM.into(),
             vec![],
-            Some(CanisterSettingsArgs::new(None, None, None, None)),
+            Some(CanisterSettingsArgsBuilder::new().build()),
             INITIAL_CYCLES_BALANCE,
         )
         .unwrap();
@@ -751,7 +762,7 @@ fn max_canister_memory_respected_even_when_no_memory_allocation_is_set() {
         .install_canister_with_cycles(
             UNIVERSAL_CANISTER_WASM.into(),
             vec![],
-            Some(CanisterSettingsArgs::new(None, None, None, None)),
+            Some(CanisterSettingsArgsBuilder::new().build()),
             INITIAL_CYCLES_BALANCE,
         )
         .unwrap();
