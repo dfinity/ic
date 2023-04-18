@@ -2174,6 +2174,7 @@ impl Governance {
                 distributed_e8s_equivalent: 0,
                 total_available_e8s_equivalent: 0,
                 rounds_since_last_distribution: Some(0),
+                latest_round_available_e8s_equivalent: Some(0),
             })
         }
 
@@ -7198,6 +7199,17 @@ impl Governance {
             );
         }
 
+        // Only used for metrics.
+        let latest_day_fraction: f64 = days
+            .clone()
+            .last()
+            .map(|day| {
+                crate::reward::rewards_pool_to_distribute_in_supply_fraction_for_one_day(day)
+            })
+            .unwrap_or(0.0);
+        let latest_round_available_e8s_equivalent_float =
+            (supply.get_e8s() as f64) * latest_day_fraction;
+
         let fraction: f64 = days
             .map(crate::reward::rewards_pool_to_distribute_in_supply_fraction_for_one_day)
             .sum();
@@ -7357,6 +7369,9 @@ impl Governance {
             distributed_e8s_equivalent: actually_distributed_e8s_equivalent,
             total_available_e8s_equivalent: total_available_e8s_equivalent_float as u64,
             rounds_since_last_distribution: Some(rounds_since_last_distribution),
+            latest_round_available_e8s_equivalent: Some(
+                latest_round_available_e8s_equivalent_float as u64,
+            ),
         })
     }
 

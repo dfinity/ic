@@ -2327,6 +2327,7 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
         distributed_e8s_equivalent: 0,
         total_available_e8s_equivalent: 0,
         rounds_since_last_distribution: Some(0),
+        latest_round_available_e8s_equivalent: Some(0),
     };
 
     assert_eq!(*gov.latest_reward_event(), expected_initial_event);
@@ -2350,6 +2351,7 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
             distributed_e8s_equivalent: 0,
             total_available_e8s_equivalent: 100,
             rounds_since_last_distribution: Some(1),
+            latest_round_available_e8s_equivalent: Some(100),
         }
     );
 
@@ -2395,6 +2397,7 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
                 distributed_e8s_equivalent: 0,
                 total_available_e8s_equivalent,
                 rounds_since_last_distribution: Some(3), // 2 reward periods elapsed + 1 rollover round
+                latest_round_available_e8s_equivalent: Some(INITIAL_REWARD_POT_PER_ROUND_E8S - 1)
             }
         );
     }
@@ -2445,6 +2448,7 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
             distributed_e8s_equivalent: expected_distributed_e8s_equivalent,
             total_available_e8s_equivalent: expected_available_e8s_equivalent,
             rounds_since_last_distribution: Some(fully_elapsed_reward_rounds),
+            latest_round_available_e8s_equivalent: Some(INITIAL_REWARD_POT_PER_ROUND_E8S - 1)
         }
     );
 
@@ -2480,6 +2484,7 @@ async fn test_reward_event_proposals_last_longer_than_reward_period() {
             distributed_e8s_equivalent: 0,
             total_available_e8s_equivalent: 99,
             rounds_since_last_distribution: Some(1),
+            latest_round_available_e8s_equivalent: Some(99)
         }
     );
 
@@ -2524,6 +2529,7 @@ async fn test_restricted_proposals_are_not_eligible_for_voting_rewards() {
             distributed_e8s_equivalent: 0,
             total_available_e8s_equivalent: 0,
             rounds_since_last_distribution: Some(0),
+            latest_round_available_e8s_equivalent: Some(0)
         }
     );
 
@@ -2573,6 +2579,7 @@ async fn test_restricted_proposals_are_not_eligible_for_voting_rewards() {
             distributed_e8s_equivalent: 0,
             total_available_e8s_equivalent: 338006,
             rounds_since_last_distribution: Some(1),
+            latest_round_available_e8s_equivalent: Some(338006)
         }
     );
 
@@ -2659,6 +2666,7 @@ fn test_reward_distribution_skips_deleted_neurons() {
             distributed_e8s_equivalent: 0,
             total_available_e8s_equivalent: 0,
             rounds_since_last_distribution: Some(0),
+            latest_round_available_e8s_equivalent: Some(0)
         }
     );
 
@@ -2676,6 +2684,7 @@ fn test_reward_distribution_skips_deleted_neurons() {
             distributed_e8s_equivalent: 25,
             total_available_e8s_equivalent: 100,
             rounds_since_last_distribution: Some(1),
+            latest_round_available_e8s_equivalent: Some(100)
         }
     );
     assert_eq!(
@@ -2726,6 +2735,7 @@ async fn test_genesis_in_the_future_in_supported() {
             distributed_e8s_equivalent: 0,
             total_available_e8s_equivalent: 0,
             rounds_since_last_distribution: Some(0),
+            latest_round_available_e8s_equivalent: Some(0)
         }
     );
 
@@ -2784,6 +2794,7 @@ async fn test_genesis_in_the_future_in_supported() {
             distributed_e8s_equivalent: 0,
             total_available_e8s_equivalent: 0,
             rounds_since_last_distribution: Some(0),
+            latest_round_available_e8s_equivalent: Some(0)
         }
     );
     // ... even though the short proposal is ready to settle
@@ -2852,6 +2863,7 @@ async fn test_genesis_in_the_future_in_supported() {
             distributed_e8s_equivalent: 0,
             total_available_e8s_equivalent: 0,
             rounds_since_last_distribution: Some(0),
+            latest_round_available_e8s_equivalent: Some(0)
         }
     );
     // The long early proposal should now be ready to settle
@@ -2881,11 +2893,11 @@ async fn test_genesis_in_the_future_in_supported() {
         RewardEvent {
             day_after_genesis: 1,
             actual_timestamp_seconds: fake_driver.now(),
-            // Settled proposals are sorted
             settled_proposals: vec![long_early_proposal_pid, short_proposal_pid],
             distributed_e8s_equivalent: 2,
             total_available_e8s_equivalent: 100,
             rounds_since_last_distribution: Some(1),
+            latest_round_available_e8s_equivalent: Some(100)
         }
     );
 
@@ -2905,6 +2917,9 @@ async fn test_genesis_in_the_future_in_supported() {
                 .latest_reward_event()
                 .total_available_e8s_equivalent,
             rounds_since_last_distribution: Some(1),
+            latest_round_available_e8s_equivalent: gov
+                .latest_reward_event()
+                .latest_round_available_e8s_equivalent
         }
     );
 
@@ -2989,6 +3004,7 @@ fn compute_maturities(
         distributed_e8s_equivalent: 0,
         total_available_e8s_equivalent: 0,
         rounds_since_last_distribution: Some(0),
+        latest_round_available_e8s_equivalent: Some(0),
     };
 
     assert_eq!(*gov.latest_reward_event(), expected_initial_event);
@@ -3027,6 +3043,7 @@ fn compute_maturities(
             distributed_e8s_equivalent: actual_reward_event.distributed_e8s_equivalent,
             total_available_e8s_equivalent: reward_pot_e8s,
             rounds_since_last_distribution: Some(1),
+            latest_round_available_e8s_equivalent: Some(reward_pot_e8s)
         }
     );
     assert!(
@@ -12138,6 +12155,7 @@ async fn distribute_rewards_load_test() {
             distributed_e8s_equivalent: 0,
             total_available_e8s_equivalent: 0,
             rounds_since_last_distribution: Some(1),
+            latest_round_available_e8s_equivalent: Some(0),
         }),
 
         ..Default::default()

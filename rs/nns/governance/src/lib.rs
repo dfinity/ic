@@ -193,11 +193,27 @@ pub fn encode_metrics(
         "Total number of rewards in e8s distributed in the latest reward event.",
     )?;
     w.encode_gauge(
+        "governance_latest_reward_event_rounds_since_last_distribution",
+        governance
+            .latest_reward_event()
+            .rounds_since_last_distribution
+            .unwrap_or(0) as f64,
+        "Number of rounds since the last distribution in the latest reward event. Will always be at least 1, except at genesis. If greater than 1, indicates that rollovers occurred.",
+    )?;
+    w.encode_gauge(
+        "governance_latest_reward_round_total_available_e8s",
+        governance
+            .latest_reward_event()
+            .latest_round_available_e8s_equivalent
+            .unwrap_or(0) as f64,
+        "Total number of available rewards in e8s in the latest reward round. Does not include rollovers. Will be equal to governance_latest_reward_event_total_available_e8s, unless rollovers occurred.",
+    )?;
+    w.encode_gauge(
         "governance_latest_reward_event_total_available_e8s",
         governance
             .latest_reward_event()
             .total_available_e8s_equivalent as f64,
-        "Total number of available rewards in e8s in the latest reward event.",
+        "Total number of available rewards in e8s in the latest reward event (including rollovers).",
     )?;
     w.encode_gauge(
         "governance_total_locked_e8s",
