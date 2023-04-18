@@ -57,6 +57,7 @@ CANISTERS_MAX_SIZE_IN_BYTES = {
     "cycles-minting-canister.wasm": "2500000",
     "genesis-token-canister.wasm": "2500000",
     "governance-canister.wasm": "2500000",
+    "governance-canister_test.wasm": "2500000",
     "governance-mem-test-canister.wasm": "2500000",
     "ic-ckbtc-minter.wasm": "1900000",
     "ic-icrc1-ledger.wasm": "1900000",

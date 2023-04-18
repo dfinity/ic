@@ -1,5 +1,6 @@
 use crate::pb::v1::{
     add_or_remove_node_provider::Change,
+    create_service_nervous_system,
     governance::GovernanceCachedMetrics,
     governance::{
         neuron_in_flight_command::{Command as InFlightCommand, SyncCommand},
@@ -20,9 +21,10 @@ use crate::pb::v1::{
     reward_node_provider::RewardMode,
     reward_node_provider::RewardToAccount,
     settle_community_fund_participation, swap_background_information, Ballot, BallotInfo,
-    DerivedProposalInformation, ExecuteNnsFunction, Governance as GovernanceProto, GovernanceError,
-    KnownNeuron, KnownNeuronData, ListKnownNeuronsResponse, ListNeurons, ListNeuronsResponse,
-    ListProposalInfo, ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse,
+    CreateServiceNervousSystem, DerivedProposalInformation, ExecuteNnsFunction,
+    Governance as GovernanceProto, GovernanceError, KnownNeuron, KnownNeuronData,
+    ListKnownNeuronsResponse, ListNeurons, ListNeuronsResponse, ListProposalInfo,
+    ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse,
     MostRecentMonthlyNodeProviderRewards, Motion, NetworkEconomics, Neuron, NeuronInfo,
     NeuronState, NnsFunction, NodeProvider, OpenSnsTokenSwap, Proposal, ProposalData, ProposalInfo,
     ProposalRewardStatus, ProposalStatus, RewardEvent, RewardNodeProvider, RewardNodeProviders,
@@ -58,9 +60,12 @@ use ic_nns_constants::{
     LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
 };
 use ic_protobuf::registry::dc::v1::AddOrRemoveDataCentersProposalPayload;
+use ic_sns_init::pb::v1::{self as sns_init_pb, sns_init_payload, SnsInitPayload};
 use ic_sns_root::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
 use ic_sns_swap::pb::v1::{self as sns_swap_pb, Lifecycle, RestoreDappControllersRequest};
-use ic_sns_wasm::pb::v1::{ListDeployedSnsesRequest, ListDeployedSnsesResponse};
+use ic_sns_wasm::pb::v1::{
+    DeployNewSnsRequest, DeployNewSnsResponse, ListDeployedSnsesRequest, ListDeployedSnsesResponse,
+};
 use icp_ledger::{
     AccountIdentifier, Subaccount, Tokens, DEFAULT_TRANSFER_FEE, TOKEN_SUBDIVIDABLE_BY,
 };
@@ -1157,7 +1162,11 @@ impl Proposal {
                 proposal::Action::ExecuteNnsFunction(m) => {
                     if let Some(mt) = NnsFunction::from_i32(m.nns_function) {
                         match mt {
-                            NnsFunction::Unspecified => Topic::Unspecified,
+                            NnsFunction::Unspecified => {
+                                println!("{}ERROR: NnsFunction::Unspecified", LOG_PREFIX);
+                                Topic::Unspecified
+                            }
+
                             NnsFunction::AssignNoid
                             | NnsFunction::UpdateNodeOperatorConfig
                             | NnsFunction::RemoveNodeOperators
@@ -1203,6 +1212,10 @@ impl Proposal {
                             NnsFunction::UpdateSnsWasmSnsSubnetIds => Topic::SubnetManagement,
                         }
                     } else {
+                        println!(
+                            "{}ERROR: Unknown NnsFunction: {}",
+                            LOG_PREFIX, m.nns_function
+                        );
                         Topic::Unspecified
                     }
                 }
@@ -1211,16 +1224,20 @@ impl Proposal {
                 | proposal::Action::RewardNodeProviders(_) => Topic::NodeProviderRewards,
                 proposal::Action::SetDefaultFollowees(_)
                 | proposal::Action::RegisterKnownNeuron(_) => Topic::Governance,
-                proposal::Action::SetSnsTokenSwapOpenTimeWindow(action) => {
+                proposal::Action::SetSnsTokenSwapOpenTimeWindow(_) => {
                     println!(
                         "{}ERROR: Obsolete proposal type used: {:?}",
                         LOG_PREFIX, action
                     );
                     Topic::SnsAndCommunityFund
                 }
-                proposal::Action::OpenSnsTokenSwap(_) => Topic::SnsAndCommunityFund,
+                // TODO: Move OpenSnsTokenSwap to the previous arm when we
+                // deprecate this.
+                proposal::Action::OpenSnsTokenSwap(_)
+                | proposal::Action::CreateServiceNervousSystem(_) => Topic::SnsAndCommunityFund,
             }
         } else {
+            println!("{}ERROR: No action -> no topic.", LOG_PREFIX);
             Topic::Unspecified
         }
     }
@@ -1255,6 +1272,10 @@ impl ProposalData {
         if let Some(proposal) = &self.proposal {
             proposal.topic()
         } else {
+            println!(
+                "{}ERROR: ProposalData has no proposal! {:#?}",
+                LOG_PREFIX, self
+            );
             Topic::Unspecified
         }
     }
@@ -5000,6 +5021,10 @@ impl Governance {
                 )
                 .await;
             }
+            proposal::Action::CreateServiceNervousSystem(ref create_service_nervous_system) => {
+                self.create_service_nervous_system(pid, create_service_nervous_system)
+                    .await;
+            }
         }
     }
 
@@ -5149,6 +5174,104 @@ impl Governance {
                 );
             }
         }
+    }
+
+    async fn create_service_nervous_system(
+        &mut self,
+        proposal_id: u64,
+        create_service_nervous_system: &CreateServiceNervousSystem,
+    ) {
+        // This ensures that we do not forget to set the proposal status.
+        let main = async /* -> Result<(), GovernanceError> */ {
+            // Step 1: Convert proposal into main request object.
+            let sns_init_payload = match SnsInitPayload::try_from(create_service_nervous_system.clone()) {
+                Ok(ok) => ok,
+                Err(err) => {
+                    return Err(GovernanceError::new_with_message(
+                        ErrorType::InvalidProposal,
+                        format!(
+                            "Failed to convert proposal to SnsInitPayload: {}",
+                            err,
+                        ),
+                    ))
+                }
+            };
+
+            // Step 2 (main): Call deploy_new_sns method on the SNS_WASM canister.
+            let request = DeployNewSnsRequest {
+                sns_init_payload: Some(sns_init_payload),
+            };
+            let request = match Encode!(&request) {
+                Ok(ok) => ok,
+                Err(err) => {
+                    return Err(GovernanceError::new_with_message(
+                        ErrorType::External,
+                        format!(
+                            "Failed to encode request for deploy_new_sns Candid \
+                             method call: {}\nrequest: {:#?}",
+                            err, request,
+                        ),
+                    ));
+                }
+            };
+            let deploy_new_sns_result = self.env.call_canister_method(
+                SNS_WASM_CANISTER_ID,
+                "deploy_new_sns",
+                request,
+            )
+            .await;
+
+            // Step 3: Inspect call result.
+            let deploy_new_sns_response: Vec<u8> = match deploy_new_sns_result {
+                Ok(ok) => ok,
+                Err(err) => {
+                    return Err(GovernanceError::new_with_message(
+                        ErrorType::External,
+                        format!(
+                            "Failed to send deploy_new_sns request to SNS_WASM canister: {:?}",
+                            err,
+                        ),
+                    ));
+                }
+            };
+
+            // Step 4: Decode response.
+            let deploy_new_sns_response = match Decode!(&deploy_new_sns_response, DeployNewSnsResponse) {
+                Ok(ok) => ok,
+                Err(err) => {
+                    return Err(GovernanceError::new_with_message(
+                        ErrorType::External,
+                        format!(
+                            "Failed to send deploy_new_sns request to SNS_WASM canister: {}",
+                            err,
+                        ),
+                    ));
+                }
+            };
+
+            if deploy_new_sns_response.error.is_some() {
+                return Err(GovernanceError::new_with_message(
+                        ErrorType::External,
+                        format!(
+                            "deploy_new_sns response contained an error: {:#?}",
+                            deploy_new_sns_response,
+                        ),
+                ));
+            }
+
+            // subnet_id and canisters fields in deploy_new_sns_response are not
+            // used. Would probably make sense to stick them on the
+            // ProposalData...
+            println!("deploy_new_sns succeeded: {:#?}", deploy_new_sns_response);
+
+            Ok(())
+        }; // end main.
+
+        let execute_create_service_nervous_system_result = main.await;
+        self.set_proposal_execution_status(
+            proposal_id,
+            execute_create_service_nervous_system_result,
+        );
     }
 
     /// Mark all Neurons controlled by the given principals as having passed
@@ -5393,7 +5516,7 @@ impl Governance {
         };
 
         if proposal.topic() == Topic::Unspecified {
-            return invalid_proposal("Topic not specified".to_string());
+            return invalid_proposal(format!("Topic not specified. proposal: {:#?}", proposal));
         }
 
         validate_proposal_title(&proposal.title)?;
@@ -5445,6 +5568,10 @@ impl Governance {
 
             Action::OpenSnsTokenSwap(open_sns_token_swap) => {
                 self.validate_open_sns_token_swap(open_sns_token_swap).await
+            }
+
+            Action::CreateServiceNervousSystem(create_service_nervous_system) => {
+                self.validate_create_service_nervous_system(create_service_nervous_system)
             }
 
             Action::ManageNeuron(_)
@@ -5554,34 +5681,114 @@ impl Governance {
         &mut self,
         open_sns_token_swap: &OpenSnsTokenSwap,
     ) -> Result<(), GovernanceError> {
+        /*
+        TODO(NNS1-1919): Replace the body of this function with the chunk of
+        code in this comment block when we are about to release that feature.
+
+        return Err(GovernanceError::new_with_message(
+            ErrorType::InvalidCommand,
+            "OpenSnsTokenSwap proposals have been superseded by \
+             CreateServiceNervousSystem proposals."
+                .to_string(),
+        ));
+        */
+
         // Inspect open_sns_token_swap on its own.
         validate_open_sns_token_swap(open_sns_token_swap, &mut *self.env).await?;
 
         // Enforce that it would be unique.
-        for proposal_data in self.proto.proposals.values() {
-            if proposal_data.status() != ProposalStatus::Open {
-                continue;
-            }
-
-            match &proposal_data.proposal {
-                Some(Proposal {
-                    action: Some(Action::OpenSnsTokenSwap(_)),
-                    ..
-                }) => {}
-                _ => continue,
-            }
-
+        let other_proposal_ids =
+            self.select_open_proposal_ids(|action| matches!(action, Action::OpenSnsTokenSwap(_)));
+        if !other_proposal_ids.is_empty() {
             return Err(GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,
                 format!(
                     "{}ERROR: there can only be at most one open OpenSnsTokenSwap proposal \
                      at a time, but there is already one: {:#?}",
-                    LOG_PREFIX, proposal_data,
+                    LOG_PREFIX, other_proposal_ids,
                 ),
             ));
         }
 
         Ok(())
+    }
+
+    fn validate_create_service_nervous_system(
+        &self,
+        create_service_nervous_system: &CreateServiceNervousSystem,
+    ) -> Result<(), GovernanceError> {
+        // Requirement 0: This feature is enabled.
+        if !create_service_nervous_system_proposals_is_enabled() {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                "CreateServiceNervousSystem proposals are not supported yet. \
+                 You might want to try submitting an OpenSnsTokenSwap proposal instead."
+                    .to_string(),
+            ));
+        }
+
+        // Requirement 1: Must be able to convert to a valid SnsInitPayload.
+        let conversion_result = SnsInitPayload::try_from(create_service_nervous_system.clone());
+        if let Err(err) = conversion_result {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::InvalidProposal,
+                format!("Invalid CreateServiceNervousSystem: {}", err),
+            ));
+        }
+
+        // Requirement 2: Must be unique.
+        let other_proposal_ids = self.select_open_proposal_ids(|action| {
+            matches!(action, Action::CreateServiceNervousSystem(_))
+        });
+        if !other_proposal_ids.is_empty() {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::PreconditionFailed,
+                format!(
+                    "There is another open CreateServiceNervousSystem proposal: {:?}",
+                    other_proposal_ids,
+                ),
+            ));
+        }
+
+        // All requirements met.
+        Ok(())
+    }
+
+    fn select_open_proposal_ids(&self, action_predicate: impl Fn(&Action) -> bool) -> Vec<u64> {
+        self.proto
+            .proposals
+            .values()
+            .filter_map(|proposal_data| {
+                // Disregard non-Open proposals.
+                if proposal_data.status() != ProposalStatus::Open {
+                    return None;
+                }
+
+                // Unpack proposal.
+                let action = match &proposal_data.proposal {
+                    Some(Proposal {
+                        action: Some(action),
+                        ..
+                    }) => action,
+
+                    // Ignore proposals not of the same type.
+                    _ => {
+                        println!(
+                            "{}ERROR: ProposalData had no action: {:#?}",
+                            LOG_PREFIX, proposal_data
+                        );
+                        return None;
+                    }
+                };
+
+                // Evaluate selection criterion.
+                if action_predicate(action) {
+                    proposal_data.id.map(|id| id.id)
+                } else {
+                    None
+                }
+            })
+            .collect()
     }
 
     pub async fn make_proposal(
@@ -8363,6 +8570,373 @@ impl From<ic_sns_root::CanisterStatusType> for swap_background_information::Cani
     }
 }
 
+fn divide_perfectly(field_name: &str, dividend: u64, divisor: u64) -> Result<u64, String> {
+    match dividend.checked_rem(divisor) {
+        None => Err(format!(
+            "Attempted to divide by zero while validating {}. \
+                 (This is likely due to an internal bug.)",
+            field_name,
+        )),
+
+        Some(0) => Ok(dividend.saturating_div(divisor)),
+
+        Some(remainder) => {
+            assert_ne!(remainder, 0);
+            Err(format!(
+                "{} is supposed to contain a value that is evenly divisble by {}, \
+                 but it contains {}, which leaves a remainder of {}.",
+                field_name, divisor, dividend, remainder,
+            ))
+        }
+    }
+}
+
+impl TryFrom<CreateServiceNervousSystem> for SnsInitPayload {
+    type Error = String;
+
+    fn try_from(src: CreateServiceNervousSystem) -> Result<Self, String> {
+        let CreateServiceNervousSystem {
+            name,
+            description,
+            url,
+            logo,
+
+            fallback_controller_principal_ids,
+            dapp_canisters: _, // Not used.
+
+            initial_token_distribution,
+
+            swap_parameters: _, // Not used.
+            ledger_parameters,
+            governance_parameters,
+        } = src;
+
+        let mut defects = vec![];
+
+        let ledger_parameters = ledger_parameters.unwrap_or_default();
+        let governance_parameters = governance_parameters.unwrap_or_default();
+
+        let create_service_nervous_system::LedgerParameters {
+            transaction_fee,
+            token_name,
+            token_symbol,
+            token_logo: _, // Not used.
+        } = ledger_parameters;
+
+        let transaction_fee_e8s = transaction_fee.and_then(|tokens| tokens.e8s);
+
+        let proposal_reject_cost_e8s = governance_parameters
+            .proposal_rejection_fee
+            .and_then(|tokens| tokens.e8s);
+
+        let neuron_minimum_stake_e8s = governance_parameters
+            .neuron_minimum_stake
+            .and_then(|tokens| tokens.e8s);
+
+        let initial_token_distribution = match sns_init_payload::InitialTokenDistribution::try_from(
+            initial_token_distribution.unwrap_or_default(),
+        ) {
+            Ok(ok) => Some(ok),
+            Err(err) => {
+                defects.push(err);
+                None
+            }
+        };
+
+        let fallback_controller_principal_ids = fallback_controller_principal_ids
+            .iter()
+            .map(|principal_id| principal_id.to_string())
+            .collect();
+
+        let logo = logo.and_then(|image| image.base64_encoding);
+        // url, name, and description need no conversion.
+
+        let neuron_minimum_dissolve_delay_to_vote_seconds = governance_parameters
+            .neuron_minimum_dissolve_delay_to_vote
+            .and_then(|duration| duration.seconds);
+
+        let voting_reward_parameters = governance_parameters
+            .voting_reward_parameters
+            .unwrap_or_default();
+
+        let initial_reward_rate_basis_points = voting_reward_parameters
+            .initial_reward_rate
+            .and_then(|percentage| percentage.basis_points);
+        let final_reward_rate_basis_points = voting_reward_parameters
+            .final_reward_rate
+            .and_then(|percentage| percentage.basis_points);
+
+        let reward_rate_transition_duration_seconds = voting_reward_parameters
+            .reward_rate_transition_duration
+            .and_then(|duration| duration.seconds);
+
+        let max_dissolve_delay_seconds = governance_parameters
+            .neuron_maximum_dissolve_delay
+            .and_then(|duration| duration.seconds);
+
+        let max_neuron_age_seconds_for_age_bonus = governance_parameters
+            .neuron_maximum_age_for_age_bonus
+            .and_then(|duration| duration.seconds);
+
+        let mut basis_points_to_percentage =
+            |field_name, percentage: ic_nervous_system_proto::pb::v1::Percentage| -> u64 {
+                let basis_points = percentage.basis_points.unwrap_or_default();
+                match divide_perfectly(field_name, basis_points, 100) {
+                    Ok(ok) => ok,
+                    Err(err) => {
+                        defects.push(err);
+                        basis_points.saturating_div(100)
+                    }
+                }
+            };
+
+        let max_dissolve_delay_bonus_percentage = governance_parameters
+            .neuron_maximum_dissolve_delay_bonus
+            .map(|percentage| {
+                basis_points_to_percentage(
+                    "governance_parameters.neuron_maximum_dissolve_delay_bonus",
+                    percentage,
+                )
+            });
+
+        let max_age_bonus_percentage =
+            governance_parameters
+                .neuron_maximum_age_bonus
+                .map(|percentage| {
+                    basis_points_to_percentage(
+                        "governance_parameters.neuron_maximum_age_bonus",
+                        percentage,
+                    )
+                });
+
+        let initial_voting_period_seconds = governance_parameters
+            .proposal_initial_voting_period
+            .and_then(|duration| duration.seconds);
+
+        let wait_for_quiet_deadline_increase_seconds = governance_parameters
+            .proposal_wait_for_quiet_deadline_increase
+            .and_then(|duration| duration.seconds);
+
+        if !defects.is_empty() {
+            return Err(format!(
+                "Failed to convert proposal to SnsInitPayload:\n{}",
+                defects.join("\n"),
+            ));
+        }
+
+        let result = Self {
+            transaction_fee_e8s,
+            token_name,
+            token_symbol,
+            proposal_reject_cost_e8s,
+            neuron_minimum_stake_e8s,
+            initial_token_distribution,
+            fallback_controller_principal_ids,
+            logo,
+            url,
+            name,
+            description,
+            neuron_minimum_dissolve_delay_to_vote_seconds,
+            initial_reward_rate_basis_points,
+            final_reward_rate_basis_points,
+            reward_rate_transition_duration_seconds,
+            max_dissolve_delay_seconds,
+            max_neuron_age_seconds_for_age_bonus,
+            max_dissolve_delay_bonus_percentage,
+            max_age_bonus_percentage,
+            initial_voting_period_seconds,
+            wait_for_quiet_deadline_increase_seconds,
+        };
+
+        result.validate().map_err(|err| err.to_string())?;
+
+        Ok(result)
+    }
+}
+
+impl TryFrom<create_service_nervous_system::InitialTokenDistribution>
+    for sns_init_payload::InitialTokenDistribution
+{
+    type Error = String;
+
+    fn try_from(
+        src: create_service_nervous_system::InitialTokenDistribution,
+    ) -> Result<Self, String> {
+        let create_service_nervous_system::InitialTokenDistribution {
+            developer_distribution,
+            treasury_distribution,
+            swap_distribution,
+        } = src;
+
+        let mut defects = vec![];
+
+        let developer_distribution = match sns_init_pb::DeveloperDistribution::try_from(
+            developer_distribution.unwrap_or_default(),
+        ) {
+            Ok(ok) => Some(ok),
+            Err(err) => {
+                defects.push(err);
+                None
+            }
+        };
+
+        let treasury_distribution = match sns_init_pb::TreasuryDistribution::try_from(
+            treasury_distribution.unwrap_or_default(),
+        ) {
+            Ok(ok) => Some(ok),
+            Err(err) => {
+                defects.push(err);
+                None
+            }
+        };
+
+        let swap_distribution =
+            match sns_init_pb::SwapDistribution::try_from(swap_distribution.unwrap_or_default()) {
+                Ok(ok) => Some(ok),
+                Err(err) => {
+                    defects.push(err);
+                    None
+                }
+            };
+
+        let airdrop_distribution = Some(sns_init_pb::AirdropDistribution::default());
+
+        if !defects.is_empty() {
+            return Err(format!(
+                "Failed to convert to InitialTokenDistribution for the following reasons:\n{}",
+                defects.join("\n"),
+            ));
+        }
+
+        Ok(Self::FractionalDeveloperVotingPower(
+            sns_init_pb::FractionalDeveloperVotingPower {
+                developer_distribution,
+                treasury_distribution,
+                swap_distribution,
+                airdrop_distribution,
+            },
+        ))
+    }
+}
+
+impl TryFrom<create_service_nervous_system::initial_token_distribution::SwapDistribution>
+    for sns_init_pb::SwapDistribution
+{
+    type Error = String;
+
+    fn try_from(
+        src: create_service_nervous_system::initial_token_distribution::SwapDistribution,
+    ) -> Result<Self, String> {
+        let create_service_nervous_system::initial_token_distribution::SwapDistribution { total } =
+            src;
+
+        let total_e8s = total.unwrap_or_default().e8s.unwrap_or_default();
+        let initial_swap_amount_e8s = total_e8s;
+
+        Ok(Self {
+            initial_swap_amount_e8s,
+            total_e8s,
+        })
+    }
+}
+
+impl TryFrom<create_service_nervous_system::initial_token_distribution::TreasuryDistribution>
+    for sns_init_pb::TreasuryDistribution
+{
+    type Error = String;
+
+    fn try_from(
+        src: create_service_nervous_system::initial_token_distribution::TreasuryDistribution,
+    ) -> Result<Self, String> {
+        let create_service_nervous_system::initial_token_distribution::TreasuryDistribution {
+            total,
+        } = src;
+
+        let total_e8s = total.unwrap_or_default().e8s.unwrap_or_default();
+
+        Ok(Self { total_e8s })
+    }
+}
+
+impl TryFrom<create_service_nervous_system::initial_token_distribution::DeveloperDistribution>
+    for sns_init_pb::DeveloperDistribution
+{
+    type Error = String;
+
+    fn try_from(
+        src: create_service_nervous_system::initial_token_distribution::DeveloperDistribution,
+    ) -> Result<Self, String> {
+        let create_service_nervous_system::initial_token_distribution::DeveloperDistribution {
+            developer_neurons,
+        } = src;
+
+        let mut defects = vec![];
+
+        let developer_neurons =
+            developer_neurons
+                .into_iter()
+                .enumerate()
+                .filter_map(|(i, neuron_distribution)| {
+                    match sns_init_pb::NeuronDistribution::try_from(neuron_distribution) {
+                        Ok(ok) => Some(ok),
+                        Err(err) => {
+                            defects.push(format!(
+                                "Failed to convert element at index {} in field \
+                             `developer_neurons`: {}",
+                                i, err,
+                            ));
+                            None
+                        }
+                    }
+                })
+                .collect();
+
+        if !defects.is_empty() {
+            return Err(format!(
+                "Failed to convert to DeveloperDistribution for SnsInitPayload: {}",
+                defects.join("\n"),
+            ));
+        }
+
+        Ok(Self { developer_neurons })
+    }
+}
+
+impl TryFrom<create_service_nervous_system::initial_token_distribution::developer_distribution::NeuronDistribution>
+    for sns_init_pb::NeuronDistribution
+{
+    type Error = String;
+
+    fn try_from(
+        src: create_service_nervous_system::initial_token_distribution::developer_distribution::NeuronDistribution,
+    ) -> Result<Self, String> {
+        let create_service_nervous_system::initial_token_distribution::developer_distribution::NeuronDistribution {
+            controller,
+            dissolve_delay,
+            memo,
+            stake,
+            vesting_period,
+        } = src;
+
+        // controller needs no conversion
+        let stake_e8s = stake.unwrap_or_default().e8s.unwrap_or_default();
+        let memo = memo.unwrap_or_default();
+        let dissolve_delay_seconds = dissolve_delay
+            .unwrap_or_default()
+            .seconds
+            .unwrap_or_default();
+        let vesting_period_seconds = vesting_period.unwrap_or_default().seconds;
+
+        Ok(Self {
+            controller,
+            stake_e8s,
+            memo,
+            dissolve_delay_seconds,
+            vesting_period_seconds,
+        })
+    }
+}
+
 /// Affects the perception of time by users of CanisterEnv (i.e. Governance).
 ///
 /// Specifically, the time that Governance sees is the real time + delta.
@@ -8395,6 +8969,138 @@ pub struct BitcoinSetConfigProposal {
     pub network: BitcoinNetwork,
     pub payload: Vec<u8>,
 }
+
+// TODO(NNS1-1919): Make this feature generally available by deleting this chunk
+// of code (and updating callers).
+#[cfg(feature = "test")]
+fn create_service_nervous_system_proposals_is_enabled() -> bool {
+    true
+}
+#[cfg(not(feature = "test"))]
+fn create_service_nervous_system_proposals_is_enabled() -> bool {
+    false
+}
+
+// This is in its own mod so that it can be used by other crates.
+//
+// Ideally, this would only be available when cfg(feature = "test") is enabled,
+// but it doesn't seem like making this always available creates much risk. A
+// the same time, trying to hide this behind "test" would create more hurdles.
+pub mod test_data {
+    use super::*;
+    use ic_nervous_system_proto::pb::v1 as pb;
+    use lazy_static::lazy_static;
+
+    // Alias types from crate::pb::v1::...
+    //
+    // This is done within another mod to differentiate against types that have
+    // similar names as types found in ic_sns_init.
+    mod src {
+        pub use crate::pb::v1::create_service_nervous_system::{
+            governance_parameters::VotingRewardParameters,
+            initial_token_distribution::{
+                developer_distribution::NeuronDistribution, DeveloperDistribution,
+                SwapDistribution, TreasuryDistribution,
+            },
+            GovernanceParameters, InitialTokenDistribution, LedgerParameters,
+        };
+    } // end mod src
+
+    // Both are 1 pixel. The first contains #00FF0F. The second is black.
+    pub const IMAGE_1: &str = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAD0lEQVQIHQEEAPv/AAD/DwIRAQ8HgT3GAAAAAElFTkSuQmCC";
+    pub const IMAGE_2: &str = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAD0lEQVQIHQEEAPv/AAAAAAAEAAEvUrSNAAAAAElFTkSuQmCC";
+
+    lazy_static! {
+        pub static ref CREATE_SERVICE_NERVOUS_SYSTEM: CreateServiceNervousSystem = CreateServiceNervousSystem {
+            name: Some("Hello, world!".to_string()),
+            description: Some("Best app that you ever did saw.".to_string()),
+            url: Some("https://best.app".to_string()),
+            logo: Some(pb::Image {
+                base64_encoding: Some(IMAGE_1.to_string()),
+            }),
+            fallback_controller_principal_ids: vec![PrincipalId::new_user_test_id(349839)],
+            initial_token_distribution: Some(src::InitialTokenDistribution {
+                developer_distribution: Some(src::DeveloperDistribution {
+                    developer_neurons: vec![src::NeuronDistribution {
+                        controller: Some(PrincipalId::new_user_test_id(830947)),
+                        dissolve_delay: Some(pb::Duration {
+                            seconds: Some(691793),
+                        }),
+                        memo: Some(763535),
+                        stake: Some(pb::Tokens { e8s: Some(756575) }),
+                        vesting_period: Some(pb::Duration {
+                            seconds: Some(785490),
+                        }),
+                    }],
+                }),
+                treasury_distribution: Some(src::TreasuryDistribution {
+                    total: Some(pb::Tokens { e8s: Some(307064) }),
+                }),
+                swap_distribution: Some(src::SwapDistribution {
+                    total: Some(pb::Tokens {
+                        e8s: Some(184_088_000),
+                    }),
+                }),
+            }),
+            ledger_parameters: Some(src::LedgerParameters {
+                transaction_fee: Some(pb::Tokens { e8s: Some(111430) }),
+                token_name: Some("Most valuable SNS of all time.".to_string()),
+                token_symbol: Some("Kanye".to_string()),
+                token_logo: Some(pb::Image {
+                    base64_encoding: Some(IMAGE_2.to_string()),
+                }),
+            }),
+            governance_parameters: Some(src::GovernanceParameters {
+                // Proposal Parameters
+                // -------------------
+                proposal_rejection_fee: Some(pb::Tokens { e8s: Some(372250) }),
+                proposal_initial_voting_period: Some(pb::Duration {
+                    seconds: Some(709_499),
+                }),
+                proposal_wait_for_quiet_deadline_increase: Some(pb::Duration {
+                    seconds: Some(75_891),
+                }),
+
+                // Neuron Parameters
+                // -----------------
+                neuron_minimum_stake: Some(pb::Tokens { e8s: Some(618010) }),
+
+                neuron_minimum_dissolve_delay_to_vote: Some(pb::Duration {
+                    seconds: Some(482538),
+                }),
+                neuron_maximum_dissolve_delay: Some(pb::Duration {
+                    seconds: Some(927391),
+                }),
+                neuron_maximum_dissolve_delay_bonus: Some(pb::Percentage {
+                    basis_points: Some(18_00),
+                }),
+
+                neuron_maximum_age_for_age_bonus: Some(pb::Duration {
+                    seconds: Some(740908),
+                }),
+                neuron_maximum_age_bonus: Some(pb::Percentage {
+                    basis_points: Some(54_00),
+                }),
+
+                voting_reward_parameters: Some(src::VotingRewardParameters {
+                    initial_reward_rate: Some(pb::Percentage {
+                        basis_points: Some(25_92),
+                    }),
+                    final_reward_rate: Some(pb::Percentage {
+                        basis_points: Some(7_40),
+                    }),
+                    reward_rate_transition_duration: Some(pb::Duration {
+                        seconds: Some(378025),
+                    }),
+                }),
+            }),
+
+            // Not used.
+            swap_parameters: None,
+            dapp_canisters: vec![],
+        };
+    }
+} // end mod test_data
 
 #[cfg(test)]
 mod tests {
@@ -9410,6 +10116,227 @@ mod tests {
                     })),
                 }
             ));
+        }
+    } // end mod settle_community_fund_participation_tests
+
+    mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
+        use super::*;
+        use ic_nervous_system_proto::pb::v1 as pb;
+        use test_data::{CREATE_SERVICE_NERVOUS_SYSTEM, IMAGE_1};
+
+        // Alias types from crate::pb::v1::...
+        //
+        // This is done within another mod to differentiate against types that have
+        // similar names as types found in ic_sns_init.
+        mod src {
+            pub use crate::pb::v1::create_service_nervous_system::initial_token_distribution::SwapDistribution;
+        }
+
+        fn unwrap_duration_seconds(original: &Option<pb::Duration>) -> Option<u64> {
+            Some(original.as_ref().unwrap().seconds.unwrap())
+        }
+
+        fn unwrap_tokens_e8s(original: &Option<pb::Tokens>) -> Option<u64> {
+            Some(original.as_ref().unwrap().e8s.unwrap())
+        }
+
+        fn unwrap_percentage_basis_points(original: &Option<pb::Percentage>) -> Option<u64> {
+            Some(original.as_ref().unwrap().basis_points.unwrap())
+        }
+
+        #[test]
+        fn test_convert_from_valid() {
+            // Step 1: Prepare the world. (In this case, trivial.)
+
+            // Step 2: Call the code under test.
+            let converted =
+                SnsInitPayload::try_from(CREATE_SERVICE_NERVOUS_SYSTEM.clone()).unwrap();
+
+            // Step 3: Inspect the result.
+
+            let original_ledger_parameters: &_ = CREATE_SERVICE_NERVOUS_SYSTEM
+                .ledger_parameters
+                .as_ref()
+                .unwrap();
+            let original_governance_parameters: &_ = CREATE_SERVICE_NERVOUS_SYSTEM
+                .governance_parameters
+                .as_ref()
+                .unwrap();
+
+            let original_voting_reward_parameters: &_ = original_governance_parameters
+                .voting_reward_parameters
+                .as_ref()
+                .unwrap();
+
+            assert_eq!(
+                SnsInitPayload {
+                    initial_token_distribution: None, // We'll look at this separately.
+                    ..converted
+                },
+                SnsInitPayload {
+                    transaction_fee_e8s: unwrap_tokens_e8s(
+                        &original_ledger_parameters.transaction_fee
+                    ),
+                    token_name: Some(original_ledger_parameters.clone().token_name.unwrap()),
+                    token_symbol: Some(original_ledger_parameters.clone().token_symbol.unwrap()),
+
+                    proposal_reject_cost_e8s: unwrap_tokens_e8s(
+                        &original_governance_parameters.proposal_rejection_fee
+                    ),
+
+                    neuron_minimum_stake_e8s: unwrap_tokens_e8s(
+                        &original_governance_parameters.neuron_minimum_stake
+                    ),
+
+                    fallback_controller_principal_ids: CREATE_SERVICE_NERVOUS_SYSTEM
+                        .fallback_controller_principal_ids
+                        .iter()
+                        .map(|id| id.to_string())
+                        .collect(),
+
+                    logo: Some(IMAGE_1.to_string(),),
+                    url: Some("https://best.app".to_string(),),
+                    name: Some("Hello, world!".to_string(),),
+                    description: Some("Best app that you ever did saw.".to_string(),),
+
+                    neuron_minimum_dissolve_delay_to_vote_seconds: unwrap_duration_seconds(
+                        &original_governance_parameters.neuron_minimum_dissolve_delay_to_vote
+                    ),
+
+                    initial_reward_rate_basis_points: unwrap_percentage_basis_points(
+                        &original_voting_reward_parameters.initial_reward_rate
+                    ),
+                    final_reward_rate_basis_points: unwrap_percentage_basis_points(
+                        &original_voting_reward_parameters.final_reward_rate
+                    ),
+                    reward_rate_transition_duration_seconds: unwrap_duration_seconds(
+                        &original_voting_reward_parameters.reward_rate_transition_duration
+                    ),
+
+                    max_dissolve_delay_seconds: unwrap_duration_seconds(
+                        &original_governance_parameters.neuron_maximum_dissolve_delay
+                    ),
+
+                    max_neuron_age_seconds_for_age_bonus: unwrap_duration_seconds(
+                        &original_governance_parameters.neuron_maximum_age_for_age_bonus
+                    ),
+
+                    max_dissolve_delay_bonus_percentage: unwrap_percentage_basis_points(
+                        &original_governance_parameters.neuron_maximum_dissolve_delay_bonus
+                    )
+                    .map(|basis_points| basis_points / 100),
+
+                    max_age_bonus_percentage: unwrap_percentage_basis_points(
+                        &original_governance_parameters.neuron_maximum_age_bonus
+                    )
+                    .map(|basis_points| basis_points / 100),
+
+                    initial_voting_period_seconds: unwrap_duration_seconds(
+                        &original_governance_parameters.proposal_initial_voting_period
+                    ),
+                    wait_for_quiet_deadline_increase_seconds: unwrap_duration_seconds(
+                        &original_governance_parameters.proposal_wait_for_quiet_deadline_increase
+                    ),
+
+                    initial_token_distribution: None,
+                },
+            );
+
+            let original_initial_token_distribution: &_ = CREATE_SERVICE_NERVOUS_SYSTEM
+                .initial_token_distribution
+                .as_ref()
+                .unwrap();
+            let original_developer_distribution: &_ = original_initial_token_distribution
+                .developer_distribution
+                .as_ref()
+                .unwrap();
+            assert_eq!(
+                original_developer_distribution.developer_neurons.len(),
+                1,
+                "{:#?}",
+                original_developer_distribution.developer_neurons,
+            );
+            let original_neuron_distribution: &_ = original_developer_distribution
+                .developer_neurons
+                .get(0)
+                .unwrap();
+
+            let src::SwapDistribution { total: swap_total } = original_initial_token_distribution
+                .swap_distribution
+                .as_ref()
+                .unwrap();
+            let swap_total_e8s = unwrap_tokens_e8s(swap_total).unwrap();
+            assert_eq!(swap_total_e8s, 184_088_000);
+
+            assert_eq!(
+                converted.initial_token_distribution.unwrap(),
+                sns_init_pb::sns_init_payload::InitialTokenDistribution::FractionalDeveloperVotingPower(
+                    sns_init_pb::FractionalDeveloperVotingPower {
+                        developer_distribution: Some(sns_init_pb::DeveloperDistribution {
+                            developer_neurons: vec![sns_init_pb::NeuronDistribution {
+                                controller: Some(original_neuron_distribution.controller.unwrap()),
+
+                                stake_e8s: unwrap_tokens_e8s(&original_neuron_distribution.stake).unwrap(),
+
+                                memo: original_neuron_distribution.memo.unwrap(),
+
+                                dissolve_delay_seconds: unwrap_duration_seconds(
+                                    &original_neuron_distribution.dissolve_delay
+                                )
+                                .unwrap(),
+
+                                vesting_period_seconds: unwrap_duration_seconds(
+                                    &original_neuron_distribution.vesting_period
+                                ),
+                            },],
+                        },),
+                        treasury_distribution: Some(sns_init_pb::TreasuryDistribution {
+                            total_e8s: unwrap_tokens_e8s(
+                                &original_initial_token_distribution
+                                    .treasury_distribution
+                                    .as_ref()
+                                    .unwrap()
+                                    .total
+                            )
+                            .unwrap(),
+                        },),
+                        swap_distribution: Some(sns_init_pb::SwapDistribution {
+                            // These are intentionally the same.
+                            total_e8s: swap_total_e8s,
+                            initial_swap_amount_e8s: swap_total_e8s,
+                        },),
+                        airdrop_distribution: Some(sns_init_pb::AirdropDistribution {
+                            airdrop_neurons: vec![],
+                        },),
+                    },
+                ),
+            );
+        }
+
+        #[test]
+        fn test_convert_from_invalid() {
+            // Step 1: Prepare the world: construct input.
+            let mut original = CREATE_SERVICE_NERVOUS_SYSTEM.clone();
+            let governance_parameters = original.governance_parameters.as_mut().unwrap();
+
+            // Corrupt the data. The problem with this is that wait for quiet extension
+            // amount cannot be more than half the initial voting period.
+            governance_parameters.proposal_wait_for_quiet_deadline_increase = governance_parameters
+                .proposal_initial_voting_period
+                .as_ref()
+                .map(|duration| {
+                    let seconds = Some(duration.seconds.unwrap() / 2 + 1);
+                    pb::Duration { seconds }
+                });
+
+            // Step 2: Call the code under test.
+            let converted = SnsInitPayload::try_from(original);
+
+            // Step 3: Inspect the result: Err must contain "wait for quiet".
+            match converted {
+                Ok(ok) => panic!("Invalid data was not rejected. Result: {:#?}", ok),
+                Err(err) => assert!(err.contains("wait_for_quiet"), "{}", err),
+            }
         }
     }
 }

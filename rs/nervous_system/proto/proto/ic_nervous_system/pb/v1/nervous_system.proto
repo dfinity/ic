@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package ic_nervous_system.pb.v1;
+
+message Duration {
+  optional uint64 seconds = 1;
+}
+
+message Tokens {
+  optional uint64 e8s = 1;
+}
+
+message Image {
+  // A data URI of a png. E.g.
+  // data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAD0lEQVQIHQEEAPv/AAD/DwIRAQ8HgT3GAAAAAElFTkSuQmCC
+  // ^ 1 pixel containing the color #00FF0F.
+  optional string base64_encoding = 1;
+}
+
+message Percentage {
+  optional uint64 basis_points = 1;
+}

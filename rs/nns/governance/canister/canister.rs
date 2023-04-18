@@ -241,7 +241,7 @@ impl Environment for CanisterEnv {
         method_name: &str,
         request: Vec<u8>,
     ) -> Result<Vec<u8>, (Option<i32>, String)> {
-        dfn_core::api::call(target, method_name, on_wire::bytes, request).await
+        dfn_core::api::call_with_cleanup(target, method_name, on_wire::bytes, request).await
     }
 
     #[cfg(target_arch = "wasm32")]

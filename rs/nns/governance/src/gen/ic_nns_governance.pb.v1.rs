@@ -588,7 +588,7 @@ pub struct Proposal {
     /// take.
     #[prost(
         oneof = "proposal::Action",
-        tags = "10, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23"
+        tags = "10, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 24"
     )]
     pub action: ::core::option::Option<proposal::Action>,
 }
@@ -667,12 +667,18 @@ pub mod proposal {
         /// Register Known Neuron
         #[prost(message, tag = "21")]
         RegisterKnownNeuron(super::KnownNeuron),
-        /// Obsolete. Use open_sns_token_swap instead. Kept for Candid compatibility.
+        /// Obsolete. Superseded by CreateServiceNervousSystem. Kept for Candid compatibility.
         #[prost(message, tag = "22")]
         SetSnsTokenSwapOpenTimeWindow(super::SetSnsTokenSwapOpenTimeWindow),
         /// Call the open method on an SNS swap canister.
+        ///
+        /// This is still supported but will soon be superseded by
+        /// CreateServiceNervousSystem.
         #[prost(message, tag = "23")]
         OpenSnsTokenSwap(super::OpenSnsTokenSwap),
+        /// Create a new SNS.
+        #[prost(message, tag = "24")]
+        CreateServiceNervousSystem(super::CreateServiceNervousSystem),
     }
 }
 /// Empty message to use in oneof fields that represent empty
@@ -2058,6 +2064,289 @@ pub struct OpenSnsTokenSwap {
     /// the swap.
     #[prost(uint64, optional, tag = "3")]
     pub community_fund_investment_e8s: ::core::option::Option<u64>,
+}
+/// Mainly, calls the deploy_new_sns Candid method on the SNS-WASMs canister.
+/// Therefore, most of the fields here have equivalents in SnsInitPayload.
+/// Please, consult the comments therein.
+///
+/// Metadata
+/// --------
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    serde::Serialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct CreateServiceNervousSystem {
+    #[prost(string, optional, tag = "1")]
+    pub name: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(string, optional, tag = "2")]
+    pub description: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(string, optional, tag = "3")]
+    pub url: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(message, optional, tag = "4")]
+    pub logo: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Image>,
+    // Canister Control
+    // ----------------
+    #[prost(message, repeated, tag = "5")]
+    pub fallback_controller_principal_ids: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
+    #[prost(message, repeated, tag = "6")]
+    pub dapp_canisters: ::prost::alloc::vec::Vec<create_service_nervous_system::Canister>,
+    #[prost(message, optional, tag = "7")]
+    pub initial_token_distribution:
+        ::core::option::Option<create_service_nervous_system::InitialTokenDistribution>,
+    #[prost(message, optional, tag = "8")]
+    pub swap_parameters: ::core::option::Option<create_service_nervous_system::SwapParameters>,
+    #[prost(message, optional, tag = "9")]
+    pub ledger_parameters: ::core::option::Option<create_service_nervous_system::LedgerParameters>,
+    #[prost(message, optional, tag = "10")]
+    pub governance_parameters:
+        ::core::option::Option<create_service_nervous_system::GovernanceParameters>,
+}
+/// Nested message and enum types in `CreateServiceNervousSystem`.
+pub mod create_service_nervous_system {
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct Canister {
+        #[prost(message, optional, tag = "1")]
+        pub id: ::core::option::Option<::ic_base_types::PrincipalId>,
+    }
+    // Initial SNS Tokens and Neurons
+    // ------------------------------
+
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct InitialTokenDistribution {
+        #[prost(message, optional, tag = "1")]
+        pub developer_distribution:
+            ::core::option::Option<initial_token_distribution::DeveloperDistribution>,
+        #[prost(message, optional, tag = "2")]
+        pub treasury_distribution:
+            ::core::option::Option<initial_token_distribution::TreasuryDistribution>,
+        #[prost(message, optional, tag = "3")]
+        pub swap_distribution: ::core::option::Option<initial_token_distribution::SwapDistribution>,
+    }
+    /// Nested message and enum types in `InitialTokenDistribution`.
+    pub mod initial_token_distribution {
+        #[derive(
+            candid::CandidType,
+            candid::Deserialize,
+            serde::Serialize,
+            comparable::Comparable,
+            Clone,
+            PartialEq,
+            ::prost::Message,
+        )]
+        pub struct DeveloperDistribution {
+            #[prost(message, repeated, tag = "1")]
+            pub developer_neurons:
+                ::prost::alloc::vec::Vec<developer_distribution::NeuronDistribution>,
+        }
+        /// Nested message and enum types in `DeveloperDistribution`.
+        pub mod developer_distribution {
+            #[derive(
+                candid::CandidType,
+                candid::Deserialize,
+                serde::Serialize,
+                comparable::Comparable,
+                Clone,
+                PartialEq,
+                ::prost::Message,
+            )]
+            pub struct NeuronDistribution {
+                #[prost(message, optional, tag = "1")]
+                pub controller: ::core::option::Option<::ic_base_types::PrincipalId>,
+                #[prost(message, optional, tag = "2")]
+                pub dissolve_delay:
+                    ::core::option::Option<::ic_nervous_system_proto::pb::v1::Duration>,
+                #[prost(uint64, optional, tag = "3")]
+                pub memo: ::core::option::Option<u64>,
+                #[prost(message, optional, tag = "4")]
+                pub stake: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Tokens>,
+                #[prost(message, optional, tag = "5")]
+                pub vesting_period:
+                    ::core::option::Option<::ic_nervous_system_proto::pb::v1::Duration>,
+            }
+        }
+        #[derive(
+            candid::CandidType,
+            candid::Deserialize,
+            serde::Serialize,
+            comparable::Comparable,
+            Clone,
+            PartialEq,
+            ::prost::Message,
+        )]
+        pub struct TreasuryDistribution {
+            #[prost(message, optional, tag = "1")]
+            pub total: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Tokens>,
+        }
+        #[derive(
+            candid::CandidType,
+            candid::Deserialize,
+            serde::Serialize,
+            comparable::Comparable,
+            Clone,
+            PartialEq,
+            ::prost::Message,
+        )]
+        pub struct SwapDistribution {
+            #[prost(message, optional, tag = "1")]
+            pub total: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Tokens>,
+        }
+    }
+    // Canistser Initialization
+    // ------------------------
+
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct SwapParameters {
+        #[prost(uint64, optional, tag = "1")]
+        pub minimum_participants: ::core::option::Option<u64>,
+        #[prost(uint64, optional, tag = "2")]
+        pub minimum_icp: ::core::option::Option<u64>,
+        #[prost(uint64, optional, tag = "3")]
+        pub maximum_icp: ::core::option::Option<u64>,
+        #[prost(uint64, optional, tag = "4")]
+        pub minimum_participant_icp: ::core::option::Option<u64>,
+        #[prost(uint64, optional, tag = "5")]
+        pub maximum_participant_icp: ::core::option::Option<u64>,
+        #[prost(message, optional, tag = "6")]
+        pub neuron_basket_construction_parameters:
+            ::core::option::Option<swap_parameters::NeuronBasketConstructionParameters>,
+    }
+    /// Nested message and enum types in `SwapParameters`.
+    pub mod swap_parameters {
+        #[derive(
+            candid::CandidType,
+            candid::Deserialize,
+            serde::Serialize,
+            comparable::Comparable,
+            Clone,
+            PartialEq,
+            ::prost::Message,
+        )]
+        pub struct NeuronBasketConstructionParameters {
+            #[prost(uint64, optional, tag = "1")]
+            pub count: ::core::option::Option<u64>,
+            #[prost(message, optional, tag = "2")]
+            pub dissolve_delay_interval:
+                ::core::option::Option<::ic_nervous_system_proto::pb::v1::Duration>,
+        }
+    }
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct LedgerParameters {
+        #[prost(message, optional, tag = "1")]
+        pub transaction_fee: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Tokens>,
+        #[prost(string, optional, tag = "2")]
+        pub token_name: ::core::option::Option<::prost::alloc::string::String>,
+        #[prost(string, optional, tag = "3")]
+        pub token_symbol: ::core::option::Option<::prost::alloc::string::String>,
+        #[prost(message, optional, tag = "4")]
+        pub token_logo: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Image>,
+    }
+    /// Proposal Parameters
+    /// -------------------
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        serde::Serialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct GovernanceParameters {
+        #[prost(message, optional, tag = "1")]
+        pub proposal_rejection_fee:
+            ::core::option::Option<::ic_nervous_system_proto::pb::v1::Tokens>,
+        #[prost(message, optional, tag = "2")]
+        pub proposal_initial_voting_period:
+            ::core::option::Option<::ic_nervous_system_proto::pb::v1::Duration>,
+        #[prost(message, optional, tag = "3")]
+        pub proposal_wait_for_quiet_deadline_increase:
+            ::core::option::Option<::ic_nervous_system_proto::pb::v1::Duration>,
+        // Neuron Parameters
+        // -----------------
+        #[prost(message, optional, tag = "4")]
+        pub neuron_minimum_stake: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Tokens>,
+        #[prost(message, optional, tag = "5")]
+        pub neuron_minimum_dissolve_delay_to_vote:
+            ::core::option::Option<::ic_nervous_system_proto::pb::v1::Duration>,
+        #[prost(message, optional, tag = "6")]
+        pub neuron_maximum_dissolve_delay:
+            ::core::option::Option<::ic_nervous_system_proto::pb::v1::Duration>,
+        #[prost(message, optional, tag = "7")]
+        pub neuron_maximum_dissolve_delay_bonus:
+            ::core::option::Option<::ic_nervous_system_proto::pb::v1::Percentage>,
+        #[prost(message, optional, tag = "8")]
+        pub neuron_maximum_age_for_age_bonus:
+            ::core::option::Option<::ic_nervous_system_proto::pb::v1::Duration>,
+        #[prost(message, optional, tag = "9")]
+        pub neuron_maximum_age_bonus:
+            ::core::option::Option<::ic_nervous_system_proto::pb::v1::Percentage>,
+        #[prost(message, optional, tag = "10")]
+        pub voting_reward_parameters:
+            ::core::option::Option<governance_parameters::VotingRewardParameters>,
+    }
+    /// Nested message and enum types in `GovernanceParameters`.
+    pub mod governance_parameters {
+        // Voting Reward(s) Parameters
+        // ---------------------------
+
+        #[derive(
+            candid::CandidType,
+            candid::Deserialize,
+            serde::Serialize,
+            comparable::Comparable,
+            Clone,
+            PartialEq,
+            ::prost::Message,
+        )]
+        pub struct VotingRewardParameters {
+            #[prost(message, optional, tag = "1")]
+            pub initial_reward_rate:
+                ::core::option::Option<::ic_nervous_system_proto::pb::v1::Percentage>,
+            #[prost(message, optional, tag = "2")]
+            pub final_reward_rate:
+                ::core::option::Option<::ic_nervous_system_proto::pb::v1::Percentage>,
+            #[prost(message, optional, tag = "3")]
+            pub reward_rate_transition_duration:
+                ::core::option::Option<::ic_nervous_system_proto::pb::v1::Duration>,
+        }
+    }
 }
 /// This represents the whole NNS governance system. It contains all
 /// information about the NNS governance system that must be kept
