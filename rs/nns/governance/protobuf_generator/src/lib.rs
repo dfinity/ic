@@ -4,12 +4,27 @@ use std::path::Path;
 pub struct ProtoPaths<'a> {
     pub governance: &'a Path,
     pub base_types: &'a Path,
+    pub nervous_system: &'a Path,
     pub nns_common: &'a Path,
     pub ledger: &'a Path,
     pub sns_swap: &'a Path,
 
     // Indirectly requiredby sns_swap
     pub sns_root: &'a Path,
+}
+
+impl ProtoPaths<'_> {
+    fn to_vec(&self) -> Vec<&Path> {
+        vec![
+            self.base_types,
+            self.governance,
+            self.ledger,
+            self.nervous_system,
+            self.nns_common,
+            self.sns_root,
+            self.sns_swap,
+        ]
+    }
 }
 
 /// Build protos using prost_build.
@@ -27,9 +42,13 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     // is useful to have them ordered.
     config.btree_map([".ic_nns_governance.pb.v1.Governance.proposals"]);
 
-    config.extern_path(".ic_nns_common.pb.v1", "::ic-nns-common::pb::v1");
     config.extern_path(".ic_base_types.pb.v1", "::ic-base-types");
     config.extern_path(".ic_ledger.pb.v1", "::icp-ledger::protobuf");
+    config.extern_path(
+        ".ic_nervous_system.pb.v1",
+        "::ic-nervous-system-proto::pb::v1",
+    );
+    config.extern_path(".ic_nns_common.pb.v1", "::ic-nns-common::pb::v1");
     config.extern_path(".ic_sns_root.pb.v1", "::ic-sns-root::pb::v1");
     config.extern_path(".ic_sns_swap.pb.v1", "::ic-sns-swap::pb::v1");
 
@@ -87,23 +106,11 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
 
     // END type_attribute.
 
-    let proto_file = proto
+    let src_file = proto
         .governance
         .join("ic_nns_governance/pb/v1/governance.proto");
 
-    config
-        .compile_protos(
-            &[proto_file],
-            &[
-                proto.governance,
-                proto.nns_common,
-                proto.base_types,
-                proto.ledger,
-                proto.sns_root,
-                proto.sns_swap,
-            ],
-        )
-        .unwrap();
+    config.compile_protos(&[src_file], &proto.to_vec()).unwrap();
 
     ic_utils_rustfmt::rustfmt(out).expect("failed to rustfmt protobufs");
 }

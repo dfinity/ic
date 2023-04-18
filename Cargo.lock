@@ -7300,6 +7300,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-nervous-system-proto"
+version = "0.0.1"
+dependencies = [
+ "candid",
+ "comparable",
+ "ic-nervous-system-proto-protobuf-generator",
+ "ic-test-utilities-compare-dirs",
+ "prost",
+ "serde",
+ "tempfile",
+]
+
+[[package]]
+name = "ic-nervous-system-proto-protobuf-generator"
+version = "0.0.1"
+dependencies = [
+ "ic-utils-rustfmt",
+ "prost-build",
+]
+
+[[package]]
 name = "ic-nervous-system-root"
 version = "0.1.0"
 dependencies = [
@@ -7385,10 +7406,12 @@ dependencies = [
  "ic-nervous-system-common-build-metadata",
  "ic-nervous-system-common-test-keys",
  "ic-nervous-system-common-test-utils",
+ "ic-nervous-system-proto",
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance-protobuf-generator",
  "ic-protobuf",
+ "ic-sns-init",
  "ic-sns-root",
  "ic-sns-swap",
  "ic-sns-wasm",

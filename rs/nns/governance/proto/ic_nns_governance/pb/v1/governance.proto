@@ -2,9 +2,10 @@ syntax = "proto3";
 
 package ic_nns_governance.pb.v1;
 
-import "ic_nns_common/pb/v1/types.proto";
 import "ic_base_types/pb/v1/types.proto";
 import "ic_ledger/pb/v1/types.proto";
+import "ic_nervous_system/pb/v1/nervous_system.proto";
+import "ic_nns_common/pb/v1/types.proto";
 import "ic_sns_swap/pb/v1/swap.proto";
 
 // The entity that owns the nodes that run the network.
@@ -720,10 +721,15 @@ message Proposal {
     RewardNodeProviders reward_node_providers = 19;
     // Register Known Neuron
     KnownNeuron register_known_neuron = 21;
-    // Obsolete. Use open_sns_token_swap instead. Kept for Candid compatibility.
+    // Obsolete. Superseded by CreateServiceNervousSystem. Kept for Candid compatibility.
     SetSnsTokenSwapOpenTimeWindow set_sns_token_swap_open_time_window = 22 [deprecated = true];
     // Call the open method on an SNS swap canister.
-    OpenSnsTokenSwap open_sns_token_swap = 23;
+    //
+    // This is still supported but will soon be superseded by
+    // CreateServiceNervousSystem.
+    OpenSnsTokenSwap open_sns_token_swap = 23 [deprecated = true];
+    // Create a new SNS.
+    CreateServiceNervousSystem create_service_nervous_system = 24;
   }
 }
 
@@ -1530,6 +1536,128 @@ message OpenSnsTokenSwap {
   // The amount that the community fund will collectively spend in maturity on
   // the swap.
   optional uint64 community_fund_investment_e8s = 3;
+}
+
+// Mainly, calls the deploy_new_sns Candid method on the SNS-WASMs canister.
+// Therefore, most of the fields here have equivalents in SnsInitPayload.
+// Please, consult the comments therein.
+message CreateServiceNervousSystem {
+  // Metadata
+  // --------
+
+  optional string name = 1;
+  optional string description = 2;
+  optional string url = 3;
+  ic_nervous_system.pb.v1.Image logo = 4;
+
+  // Canister Control
+  // ----------------
+
+  repeated ic_base_types.pb.v1.PrincipalId fallback_controller_principal_ids = 5;
+
+  message Canister {
+    optional ic_base_types.pb.v1.PrincipalId id = 1;
+  }
+  repeated Canister dapp_canisters = 6;
+
+  // Initial SNS Tokens and Neurons
+  // ------------------------------
+
+  message InitialTokenDistribution {
+
+    message DeveloperDistribution {
+      message NeuronDistribution {
+        ic_base_types.pb.v1.PrincipalId controller = 1;
+        ic_nervous_system.pb.v1.Duration dissolve_delay = 2;
+        optional uint64 memo = 3;
+        ic_nervous_system.pb.v1.Tokens stake = 4;
+        ic_nervous_system.pb.v1.Duration vesting_period = 5;
+      }
+
+      repeated NeuronDistribution developer_neurons = 1;
+    }
+
+    DeveloperDistribution developer_distribution = 1;
+
+    message TreasuryDistribution {
+      ic_nervous_system.pb.v1.Tokens total = 1;
+    }
+
+    TreasuryDistribution treasury_distribution = 2;
+
+    message SwapDistribution {
+      ic_nervous_system.pb.v1.Tokens total = 1;
+    }
+
+    SwapDistribution swap_distribution = 3;
+  }
+
+  InitialTokenDistribution initial_token_distribution = 7;
+
+  // Canistser Initialization
+  // ------------------------
+
+  message SwapParameters {
+    optional uint64 minimum_participants = 1;
+
+    optional uint64 minimum_icp = 2;
+    optional uint64 maximum_icp = 3;
+
+    optional uint64 minimum_participant_icp = 4;
+    optional uint64 maximum_participant_icp = 5;
+
+    message NeuronBasketConstructionParameters {
+      optional uint64 count = 1;
+      ic_nervous_system.pb.v1.Duration dissolve_delay_interval = 2;
+    }
+
+    NeuronBasketConstructionParameters neuron_basket_construction_parameters = 6;
+  }
+
+  SwapParameters swap_parameters = 8;
+
+  message LedgerParameters {
+    optional ic_nervous_system.pb.v1.Tokens transaction_fee = 1;
+    optional string token_name = 2;
+    optional string token_symbol = 3;
+    ic_nervous_system.pb.v1.Image token_logo = 4;
+  }
+
+  LedgerParameters ledger_parameters = 9;
+
+  message GovernanceParameters {
+    // Proposal Parameters
+    // -------------------
+
+    ic_nervous_system.pb.v1.Tokens proposal_rejection_fee = 1;
+    ic_nervous_system.pb.v1.Duration proposal_initial_voting_period = 2;
+    ic_nervous_system.pb.v1.Duration proposal_wait_for_quiet_deadline_increase = 3;
+
+    // Neuron Parameters
+    // -----------------
+
+    ic_nervous_system.pb.v1.Tokens neuron_minimum_stake = 4;
+
+    ic_nervous_system.pb.v1.Duration neuron_minimum_dissolve_delay_to_vote = 5;
+    ic_nervous_system.pb.v1.Duration neuron_maximum_dissolve_delay = 6;
+    ic_nervous_system.pb.v1.Percentage neuron_maximum_dissolve_delay_bonus = 7;
+
+    ic_nervous_system.pb.v1.Duration neuron_maximum_age_for_age_bonus = 8;
+    ic_nervous_system.pb.v1.Percentage neuron_maximum_age_bonus = 9;
+
+    // Voting Reward(s) Parameters
+    // ---------------------------
+
+    message VotingRewardParameters {
+      ic_nervous_system.pb.v1.Percentage initial_reward_rate = 1;
+      ic_nervous_system.pb.v1.Percentage final_reward_rate = 2;
+      ic_nervous_system.pb.v1.Duration reward_rate_transition_duration = 3;
+    }
+
+    VotingRewardParameters voting_reward_parameters = 10;
+  }
+
+  GovernanceParameters governance_parameters = 10;
 }
 
 // This represents the whole NNS governance system. It contains all

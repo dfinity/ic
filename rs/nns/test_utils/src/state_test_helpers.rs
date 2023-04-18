@@ -24,13 +24,15 @@ use ic_nns_governance::pb::v1::{
     manage_neuron::{JoinCommunityFund, LeaveCommunityFund},
     Governance, ProposalInfo,
 };
-use ic_sns_wasm::init::SnsWasmCanisterInitPayload;
+use ic_sns_wasm::{
+    init::SnsWasmCanisterInitPayload,
+    pb::v1::{ListDeployedSnsesRequest, ListDeployedSnsesResponse},
+};
 use ic_state_machine_tests::StateMachine;
 use ic_test_utilities::universal_canister::{
     call_args, wasm as universal_canister_argument_builder, UNIVERSAL_CANISTER_WASM,
 };
-use ic_types::ingress::WasmResult;
-use ic_types::Cycles;
+use ic_types::{ingress::WasmResult, Cycles};
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
 use num_traits::ToPrimitive;
@@ -45,7 +47,8 @@ use ic_nns_governance::pb::v1::{
     manage_neuron::{
         self, configure::Operation, AddHotKey, Configure, RemoveHotKey, StakeMaturity,
     },
-    ListNeurons, ListNeuronsResponse, ManageNeuron, ManageNeuronResponse, Proposal,
+    ListNeurons, ListNeuronsResponse, ListProposalInfo, ListProposalInfoResponse, ManageNeuron,
+    ManageNeuronResponse, Proposal,
 };
 use ic_sns_governance::{
     pb::v1::{
@@ -322,7 +325,7 @@ pub fn canister_id_to_u64(canister_id: CanisterId) -> u64 {
 /// Create a canister at 0-indexed position (assuming canisters are created sequentially)
 /// This also creates all intermediate canisters
 fn create_canister_id_at_position(machine: &StateMachine, position: u64) -> CanisterId {
-    let mut canister_id = machine.create_canister(None);
+    let mut canister_id = machine.create_canister(/* settings = */ None);
     while canister_id_to_u64(canister_id) < position {
         canister_id = machine.create_canister(None);
     }
@@ -622,6 +625,40 @@ pub fn nns_stake_maturity(
     manage_neuron(state_machine, sender, neuron_id, command)
 }
 
+pub fn nns_list_proposals(state_machine: &mut StateMachine) -> ListProposalInfoResponse {
+    let result = state_machine
+        .execute_ingress(
+            GOVERNANCE_CANISTER_ID,
+            "list_proposals",
+            Encode!(&ListProposalInfo::default()).unwrap(),
+        )
+        .unwrap();
+
+    let result = match result {
+        WasmResult::Reply(result) => result,
+        WasmResult::Reject(s) => panic!("Call to list_neurons failed: {:#?}", s),
+    };
+
+    Decode!(&result, ListProposalInfoResponse).unwrap()
+}
+
+pub fn list_deployed_snses(state_machine: &mut StateMachine) -> ListDeployedSnsesResponse {
+    let result = state_machine
+        .execute_ingress(
+            SNS_WASM_CANISTER_ID,
+            "list_deployed_snses",
+            Encode!(&ListDeployedSnsesRequest::default()).unwrap(),
+        )
+        .unwrap();
+
+    let result = match result {
+        WasmResult::Reply(result) => result,
+        WasmResult::Reject(s) => panic!("Call to list_neurons failed: {:#?}", s),
+    };
+
+    Decode!(&result, ListDeployedSnsesResponse).unwrap()
+}
+
 pub fn list_neurons(state_machine: &mut StateMachine, sender: PrincipalId) -> ListNeuronsResponse {
     let result = state_machine
         .execute_ingress_as(
@@ -642,6 +679,36 @@ pub fn list_neurons(state_machine: &mut StateMachine, sender: PrincipalId) -> Li
     };
 
     Decode!(&result, ListNeuronsResponse).unwrap()
+}
+
+/// Returns when the proposal has been executed. A proposal is considered to be
+/// executed when executed_timestamp_seconds > 0.
+pub fn nns_wait_for_proposal_execution(machine: &mut StateMachine, proposal_id: u64) {
+    // We create some blocks until the proposal has finished executing (machine.tick())
+    let mut attempt_count = 0;
+    let mut last_proposal = None;
+    while attempt_count < 50 {
+        attempt_count += 1;
+
+        machine.tick();
+        let proposal = nns_governance_get_proposal_info(machine, proposal_id);
+        if proposal.executed_timestamp_seconds > 0 {
+            return;
+        }
+        assert_eq!(
+            proposal.failure_reason, None,
+            "Proposal execution failed: {:#?}",
+            proposal
+        );
+
+        last_proposal = Some(proposal);
+        machine.advance_time(std::time::Duration::from_millis(100));
+    }
+
+    panic!(
+        "Looks like proposal {:?} is never going to be executed: {:#?}",
+        proposal_id, last_proposal,
+    );
 }
 
 pub fn sns_stake_neuron(

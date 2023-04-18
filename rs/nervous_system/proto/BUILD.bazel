@@ -1,0 +1,45 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+load("//bazel:prost.bzl", "generated_files_check")
+
+package(default_visibility = ["//rs/nervous_system:default_visibility"])
+
+filegroup(
+    name = "protos",
+    srcs = glob(["proto/**"]),
+)
+
+DEPENDENCIES = [
+    "@crate_index//:candid",
+    "@crate_index//:comparable",
+    "@crate_index//:prost",
+    "@crate_index//:serde",
+]
+
+MACRO_DEPENDENCIES = [
+]
+
+ALIASES = {}
+
+rust_library(
+    name = "proto",
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    crate_name = "ic_nervous_system_proto",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.0.1",
+    deps = DEPENDENCIES,
+)
+
+generated_files_check(
+    name = "check_generated_files",
+    srcs = ["tests/check_generated_files.rs"],
+    data = glob(["src/gen/**/*.rs"]) + [
+        ":protos",
+    ],
+    manifest_dir = "rs/nervous_system/proto",
+    deps = [
+        "//rs/nervous_system/proto/protobuf_generator:lib",
+        "//rs/test_utilities/compare_dirs",
+        "@crate_index//:tempfile",
+    ],
+)
