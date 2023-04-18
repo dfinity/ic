@@ -1996,6 +1996,11 @@ pub struct RewardEvent {
     /// The total amount of rewards that was available during the reward event.
     #[prost(uint64, tag = "5")]
     pub total_available_e8s_equivalent: u64,
+    /// The amount of rewards that was available during the last round included in
+    /// this event. This will only be different from `total_available_e8s_equivalent`
+    /// if there were "rollover rounds" included in this event.
+    #[prost(uint64, optional, tag = "7")]
+    pub latest_round_available_e8s_equivalent: ::core::option::Option<u64>,
     /// In some cases, the rewards that would have been distributed in one round are
     /// "rolled over" into the next reward event. This field keeps track of how many
     /// rounds have passed since the last time rewards were distributed (rather

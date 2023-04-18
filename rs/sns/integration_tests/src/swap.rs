@@ -265,6 +265,7 @@ fn begin_swap(
             distributed_e8s_equivalent: 0,
             total_available_e8s_equivalent: 0,
             rounds_since_last_distribution: Some(0),
+            latest_round_available_e8s_equivalent: Some(0),
         });
 
         result

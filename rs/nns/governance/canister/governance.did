@@ -410,6 +410,7 @@ type RewardEvent = record {
   day_after_genesis : nat64;
   actual_timestamp_seconds : nat64;
   total_available_e8s_equivalent : nat64;
+  latest_round_available_e8s_equivalent : opt nat64;
   distributed_e8s_equivalent : nat64;
   settled_proposals : vec NeuronId;
 };
