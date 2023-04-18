@@ -1,7 +1,12 @@
 /// A principal with a particular set of permissions over a neuron.
-#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable)]
-#[compare_default]
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
 pub struct NeuronPermission {
     /// The principal that has the permissions.
     #[prost(message, optional, tag = "1")]
@@ -15,9 +20,9 @@ pub struct NeuronPermission {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    comparable::Comparable,
     Eq,
     std::hash::Hash,
-    comparable::Comparable,
     Clone,
     PartialEq,
     ::prost::Message,
@@ -27,7 +32,7 @@ pub struct NeuronId {
     pub id: ::prost::alloc::vec::Vec<u8>,
 }
 /// The id of a specific proposal.
-#[derive(candid::CandidType, candid::Deserialize, Eq, Copy, comparable::Comparable)]
+#[derive(candid::CandidType, candid::Deserialize, comparable::Comparable, Eq, Copy)]
 #[self_describing]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ProposalId {
@@ -398,7 +403,20 @@ pub struct TransferSnsTreasuryFunds {
 pub mod transfer_sns_treasury_funds {
     /// Whether to make the transfer from the NNS ledger (in ICP) or
     /// to make the transfer from the SNS ledger (in SNS tokens).
-    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        Copy,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+        PartialOrd,
+        Ord,
+        ::prost::Enumeration,
+    )]
     #[repr(i32)]
     pub enum TransferFrom {
         Unspecified = 0,
@@ -621,7 +639,20 @@ pub struct GovernanceError {
 }
 /// Nested message and enum types in `GovernanceError`.
 pub mod governance_error {
-    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        Copy,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+        PartialOrd,
+        Ord,
+        ::prost::Enumeration,
+    )]
     #[repr(i32)]
     pub enum ErrorType {
         Unspecified = 0,
@@ -1511,6 +1542,9 @@ pub mod governance {
         pub proposal_id: u64,
     }
     #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
         strum_macros::EnumIter,
         Clone,
         Copy,
@@ -1576,14 +1610,24 @@ pub struct GetMetadataResponse {
     pub description: ::core::option::Option<::prost::alloc::string::String>,
 }
 /// Request message for 'get_sns_initialization_parameters'
-#[derive(candid::CandidType, candid::Deserialize)]
-#[cfg_attr(feature = "test", derive(comparable::Comparable))]
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
 pub struct GetSnsInitializationParametersRequest {}
 /// Response message for 'get_sns_initialization_parameters'
-#[derive(candid::CandidType, candid::Deserialize)]
-#[cfg_attr(feature = "test", derive(comparable::Comparable))]
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
 pub struct GetSnsInitializationParametersResponse {
     #[prost(string, tag = "1")]
     pub sns_initialization_parameters: ::prost::alloc::string::String,
@@ -1616,6 +1660,29 @@ pub struct GetRunningSnsVersionResponse {
     #[prost(message, optional, tag = "2")]
     pub pending_version: ::core::option::Option<governance::UpgradeInProgress>,
 }
+/// Request to fail an upgrade proposal that is Adopted but not Executed or
+/// Failed if it is past the time when it should have been marked as failed.
+/// This is useful in the case where the asynchronous process may have failed to
+/// complete
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct FailStuckUpgradeInProgressRequest {}
+/// Response to FailStuckUpgradeInProgressRequest
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct FailStuckUpgradeInProgressResponse {}
 /// Empty message to use in oneof fields that represent empty
 /// enums.
 #[derive(
@@ -2385,7 +2452,14 @@ pub mod get_proposal_response {
 /// Proposals are stored using an increasing id where the most recent proposals
 /// have the highest ids. ListProposals reverses the list and paginates backwards
 /// using `before_proposal`, so the first element returned is the latest proposal.
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
 pub struct ListProposals {
     /// Limit the number of Proposals returned in each page, from 1 to 100.
     /// If a value outside of this range is provided, 100 will be used.
@@ -2421,7 +2495,14 @@ pub struct ListProposals {
     pub include_status: ::prost::alloc::vec::Vec<i32>,
 }
 /// A response to the ListProposals command.
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
 pub struct ListProposalsResponse {
     /// The returned list of proposals' ProposalData.
     #[prost(message, repeated, tag = "1")]
@@ -2431,7 +2512,14 @@ pub struct ListProposalsResponse {
 /// paginated fashion.
 /// Listing of all neurons can be accomplished using `limit` and `start_page_at`.
 /// To only list neurons associated with a given principal, use `of_principal`.
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
 pub struct ListNeurons {
     /// Limit the number of Neurons returned in each page, from 1 to 100.
     /// If a value outside of this range is provided, 100 will be used.
@@ -2452,14 +2540,28 @@ pub struct ListNeurons {
     pub of_principal: ::core::option::Option<::ic_base_types::PrincipalId>,
 }
 /// A response to the ListNeurons command.
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
 pub struct ListNeuronsResponse {
     /// The returned list of neurons.
     #[prost(message, repeated, tag = "1")]
     pub neurons: ::prost::alloc::vec::Vec<Neuron>,
 }
 /// The response to the list_nervous_system_functions query.
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
 pub struct ListNervousSystemFunctionsResponse {
     /// Current set of nervous system function, both native and user-defined,
     /// that can be executed by proposal.
@@ -2470,12 +2572,26 @@ pub struct ListNervousSystemFunctionsResponse {
     #[prost(uint64, repeated, tag = "2")]
     pub reserved_ids: ::prost::alloc::vec::Vec<u64>,
 }
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
 pub struct SetMode {
     #[prost(enumeration = "governance::Mode", tag = "1")]
     pub mode: i32,
 }
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
 pub struct SetModeResponse {}
 #[derive(
     candid::CandidType,
@@ -2499,7 +2615,14 @@ pub struct GetModeResponse {
     pub mode: ::core::option::Option<i32>,
 }
 /// The request for the `claim_swap_neurons` method.
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
 pub struct ClaimSwapNeuronsRequest {
     /// The set of parameters that define the neurons created in `claim_swap_neurons`. For
     /// each NeuronParameter, one neuron will be created.
@@ -2510,7 +2633,14 @@ pub struct ClaimSwapNeuronsRequest {
 pub mod claim_swap_neurons_request {
     /// NeuronParameters groups parameters for creating a neuron in the
     /// `claim_swap_neurons` method.
-    #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
     pub struct NeuronParameters {
         /// The PrincipalId that will have permissions when the neuron is created.
         /// The permissions that are granted are controlled my
@@ -2555,7 +2685,14 @@ pub mod claim_swap_neurons_request {
     }
 }
 /// The response for the `claim_swap_neurons` method.
-#[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
 pub struct ClaimSwapNeuronsResponse {
     /// ClaimSwapNeurons will either return an error, in which
     /// no requested neurons were claimed, or a vector with
@@ -2572,7 +2709,14 @@ pub mod claim_swap_neurons_response {
     /// The ok result from `claim_swap_neurons. For every requested neuron,
     /// a SwapNeuron message is returned, and should equal the count of
     /// `ClaimSwapNeuronsRequest.neuron_parameters`.
-    #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
     pub struct ClaimedSwapNeurons {
         #[prost(message, repeated, tag = "1")]
         pub swap_neurons: ::prost::alloc::vec::Vec<SwapNeuron>,
@@ -2581,7 +2725,14 @@ pub mod claim_swap_neurons_response {
     /// claimed with a NeuronId. The `id` field will correspond with a
     /// `ClaimSwapNeuronsRequest.neuron_parameters.neuron_id` field in
     /// the request object used in `claim_swap_neurons`.
-    #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Message)]
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
     pub struct SwapNeuron {
         #[prost(message, optional, tag = "1")]
         pub id: ::core::option::Option<super::NeuronId>,
@@ -2592,7 +2743,14 @@ pub mod claim_swap_neurons_response {
     /// ClaimSwapNeurons will either return an error, in which
     /// no requested neurons were claimed, or a vector with
     /// various neuron statuses for the requested neuron ids.
-    #[derive(candid::CandidType, candid::Deserialize, Clone, PartialEq, ::prost::Oneof)]
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Oneof,
+    )]
     pub enum ClaimSwapNeuronsResult {
         #[prost(message, tag = "4")]
         Ok(ClaimedSwapNeurons),
@@ -2638,8 +2796,9 @@ pub struct Account {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
-    strum_macros::EnumIter,
+    comparable::Comparable,
     clap::ArgEnum,
+    strum_macros::EnumIter,
     Clone,
     Copy,
     Debug,
@@ -2751,6 +2910,7 @@ impl Vote {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    comparable::Comparable,
     Clone,
     Copy,
     Debug,
@@ -2796,6 +2956,7 @@ impl ProposalDecisionStatus {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    comparable::Comparable,
     Clone,
     Copy,
     Debug,
@@ -2840,7 +3001,20 @@ impl ProposalRewardStatus {
 /// `claim_swap_neurons` API may have. The status is reported back to callers of
 /// the API (mainly the SNS Sale canister) to indicate the success of the
 /// operation.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    ::prost::Enumeration,
+)]
 #[repr(i32)]
 pub enum ClaimedSwapNeuronStatus {
     /// Unspecified represents the default value for unknown enum values when deserializing.
@@ -2886,6 +3060,7 @@ impl ClaimedSwapNeuronStatus {
 #[derive(
     candid::CandidType,
     candid::Deserialize,
+    comparable::Comparable,
     Clone,
     Copy,
     Debug,

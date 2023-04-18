@@ -36,6 +36,9 @@ use ic_nervous_system_common::{
 };
 use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
 use ic_sns_governance::logs::{ERROR, INFO};
+use ic_sns_governance::pb::v1::{
+    FailStuckUpgradeInProgressRequest, FailStuckUpgradeInProgressResponse,
+};
 #[cfg(feature = "test")]
 use ic_sns_governance::pb::v1::{GovernanceError, Neuron};
 use ic_sns_governance::{
@@ -525,6 +528,21 @@ fn get_running_sns_version_(_: GetRunningSnsVersionRequest) -> GetRunningSnsVers
         deployed_version: governance().proto.deployed_version.clone(),
         pending_version: governance().proto.pending_version.clone(),
     }
+}
+
+/// Marks an in progress upgrade that has passed its deadline as failed.
+#[export_name = "canister_update fail_stuck_upgrade_in_progress"]
+fn fail_stuck_upgrade_in_progress() {
+    log!(INFO, "fail_stuck_upgrade_in_progress");
+    over(candid_one, fail_stuck_upgrade_in_progress_)
+}
+
+/// Internal method for calling fail_stuck_upgrade_in_progress.
+#[candid_method(update, rename = "fail_stuck_upgrade_in_progress")]
+fn fail_stuck_upgrade_in_progress_(
+    request: FailStuckUpgradeInProgressRequest,
+) -> FailStuckUpgradeInProgressResponse {
+    governance_mut().fail_stuck_upgrade_in_progress(request)
 }
 
 /// Sets the mode. Only the swap canister is allowed to call this.

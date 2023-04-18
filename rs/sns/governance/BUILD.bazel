@@ -88,6 +88,13 @@ MACRO_DEV_DEPENDENCIES = []
 
 ALIASES = {}
 
+LIB_SRCS = glob(
+    ["src/**"],
+    # Ensures that we do not need to rebuild just because a _test.rs file
+    # changed.
+    exclude = ["**/*_tests.rs"],
+)
+
 cargo_build_script(
     name = "build_script",
     srcs = ["build.rs"],
@@ -99,9 +106,7 @@ cargo_build_script(
 
 rust_library(
     name = "governance",
-    srcs = glob([
-        "src/**",
-    ]),
+    srcs = LIB_SRCS,
     aliases = ALIASES,
     crate_name = "ic_sns_governance",
     proc_macro_deps = MACRO_DEPENDENCIES,
@@ -111,9 +116,7 @@ rust_library(
 
 rust_library(
     name = "governance_test_feature",
-    srcs = glob([
-        "src/**",
-    ]),
+    srcs = LIB_SRCS,
     aliases = ALIASES,
     crate_features = ["test"],
     crate_name = "ic_sns_governance",
@@ -173,6 +176,7 @@ rust_canister(
 
 rust_test(
     name = "governance_test",
+    srcs = glob(["src/**"]),
     aliases = ALIASES,
     crate = ":governance",
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,

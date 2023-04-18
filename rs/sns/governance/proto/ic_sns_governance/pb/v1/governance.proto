@@ -1296,6 +1296,15 @@ message GetRunningSnsVersionResponse {
   Governance.UpgradeInProgress pending_version = 2;
 }
 
+// Request to fail an upgrade proposal that is Adopted but not Executed or
+// Failed if it is past the time when it should have been marked as failed.
+// This is useful in the case where the asynchronous process may have failed to
+// complete
+message FailStuckUpgradeInProgressRequest {}
+
+// Response to FailStuckUpgradeInProgressRequest
+message FailStuckUpgradeInProgressResponse {}
+
 // Empty message to use in oneof fields that represent empty
 // enums.
 message Empty {}

@@ -2,31 +2,41 @@ use crate::canister_control::{
     get_canister_id, perform_execute_generic_nervous_system_function_call,
     upgrade_canister_directly,
 };
-use crate::pb::v1::DefaultFollowees;
 use crate::pb::v1::{
+    claim_swap_neurons_response::SwapNeuron,
     get_neuron_response, get_proposal_response,
     governance::{
-        self, neuron_in_flight_command::Command as InFlightCommand, NeuronInFlightCommand,
+        self, neuron_in_flight_command, neuron_in_flight_command::Command as InFlightCommand,
+        NeuronInFlightCommand, SnsMetadata, UpgradeInProgress, Version,
     },
     governance_error::ErrorType,
     manage_neuron::{
         self,
         claim_or_refresh::{By, MemoAndController},
-        ClaimOrRefresh,
+        AddNeuronPermissions, ClaimOrRefresh, DisburseMaturity, FinalizeDisburseMaturity,
+        RemoveNeuronPermissions,
+    },
+    manage_neuron_response::{
+        DisburseMaturityResponse, MergeMaturityResponse, StakeMaturityResponse,
     },
     neuron::{DissolveState, Followees},
-    proposal, Account as AccountProto, Ballot, ClaimSwapNeuronsError, ClaimSwapNeuronsRequest,
-    ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus, DeregisterDappCanisters,
-    DisburseMaturityInProgress, Empty, GetMetadataRequest, GetMetadataResponse, GetMode,
-    GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
-    GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
-    Governance as GovernanceProto, GovernanceError, ListNervousSystemFunctionsResponse,
-    ListNeurons, ListNeuronsResponse, ListProposals, ListProposalsResponse, ManageNeuron,
-    ManageNeuronResponse, ManageSnsMetadata, NervousSystemParameters, Neuron, NeuronId,
-    NeuronPermission, NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData,
-    ProposalDecisionStatus, ProposalId, ProposalRewardStatus, RegisterDappCanisters, RewardEvent,
-    Tally, TransferSnsTreasuryFunds, UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote,
-    VotingRewardsParameters,
+    proposal,
+    proposal::Action,
+    transfer_sns_treasury_funds::TransferFrom,
+    Account as AccountProto, Ballot, ClaimSwapNeuronsError, ClaimSwapNeuronsRequest,
+    ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus, DefaultFollowees, DeregisterDappCanisters,
+    DisburseMaturityInProgress, Empty, ExecuteGenericNervousSystemFunction,
+    FailStuckUpgradeInProgressRequest, FailStuckUpgradeInProgressResponse, GetMetadataRequest,
+    GetMetadataResponse, GetMode, GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal,
+    GetProposalResponse, GetSnsInitializationParametersRequest,
+    GetSnsInitializationParametersResponse, Governance as GovernanceProto, GovernanceError,
+    ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
+    ListProposalsResponse, ManageNeuron, ManageNeuronResponse, ManageSnsMetadata,
+    NervousSystemFunction, NervousSystemParameters, Neuron, NeuronId, NeuronPermission,
+    NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData, ProposalDecisionStatus,
+    ProposalId, ProposalRewardStatus, RegisterDappCanisters, RewardEvent, Tally,
+    TransferSnsTreasuryFunds, UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote,
+    VotingRewardsParameters, WaitForQuietState,
 };
 use crate::{account_from_proto, account_to_proto};
 use ic_base_types::PrincipalId;
@@ -58,14 +68,6 @@ use crate::neuron::{
     NeuronState, RemovePermissionsStatus, DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER,
     MAX_LIST_NEURONS_RESULTS,
 };
-use crate::pb::v1::{
-    manage_neuron::{
-        AddNeuronPermissions, DisburseMaturity, FinalizeDisburseMaturity, RemoveNeuronPermissions,
-    },
-    manage_neuron_response::{DisburseMaturityResponse, MergeMaturityResponse},
-    proposal::Action,
-    ExecuteGenericNervousSystemFunction, NervousSystemFunction, WaitForQuietState,
-};
 use crate::proposal::{
     validate_and_render_proposal, ValidGenericNervousSystemFunction, MAX_LIST_PROPOSAL_RESULTS,
     MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
@@ -76,12 +78,6 @@ use crate::pb::sns_root_types::{
     RegisterDappCanistersRequest, RegisterDappCanistersResponse, SetDappControllersRequest,
     SetDappControllersResponse,
 };
-use crate::pb::v1::claim_swap_neurons_response::SwapNeuron;
-use crate::pb::v1::governance::{
-    neuron_in_flight_command, SnsMetadata, UpgradeInProgress, Version,
-};
-use crate::pb::v1::manage_neuron_response::StakeMaturityResponse;
-use crate::pb::v1::transfer_sns_treasury_funds::TransferFrom;
 use crate::sns_upgrade::{
     get_all_sns_canisters, get_running_version, get_upgrade_params, get_wasm, SnsCanisterType,
     UpgradeSnsParams,
@@ -4850,6 +4846,38 @@ impl Governance {
         }
     }
 
+    /// Fails an upgrade proposal that was Adopted but not Executed or Failed by the deadline.
+    pub fn fail_stuck_upgrade_in_progress(
+        &mut self,
+        _: FailStuckUpgradeInProgressRequest,
+    ) -> FailStuckUpgradeInProgressResponse {
+        let pending_version = match self.proto.pending_version.as_ref() {
+            None => return FailStuckUpgradeInProgressResponse {},
+            Some(pending_version) => pending_version,
+        };
+
+        // Maybe, we should look at the checking_upgrade_lock field and only
+        // proceed if it is false, or the request has force set to true.
+
+        let now = self.env.now();
+
+        if now > pending_version.mark_failed_at_seconds {
+            let error = format!(
+                "Upgrade marked as failed at {} seconds from UNIX epoch. \
+                Governance upgrade was manually aborted by calling fail_stuck_upgrade_in_progress \
+                after mark_failed_at_seconds ({}). Setting upgrade to failed to unblock retry.",
+                now, pending_version.mark_failed_at_seconds
+            );
+
+            self.fail_sns_upgrade_to_next_version_proposal(
+                pending_version.proposal_id,
+                GovernanceError::new_with_message(ErrorType::External, error),
+            );
+        }
+
+        FailStuckUpgradeInProgressResponse {}
+    }
+
     /// Checks whether new neurons can be added or whether the maximum number of neurons,
     /// as defined in the nervous system parameters, has already been reached.
     fn check_neuron_population_can_grow(&self) -> Result<(), GovernanceError> {
@@ -5118,6 +5146,8 @@ mod tests {
     use maplit::btreemap;
     use proptest::prelude::{prop_assert, proptest};
     use std::sync::{Arc, Mutex};
+
+    mod fail_stuck_upgrade_in_progress_tests;
 
     struct DoNothingLedger {}
 
