@@ -15,7 +15,7 @@ use ic_canister_sandbox_common::{
     rpc,
     sandbox_client_stub::SandboxClientStub,
     sandbox_service::SandboxService,
-    transport,
+    transport::{self, SocketReaderConfig},
 };
 
 pub fn spawn_launcher_process(
@@ -57,6 +57,7 @@ pub fn spawn_launcher_process(
                 demux.handle(message);
             },
             socket,
+            SocketReaderConfig::default(),
         );
     });
 
@@ -117,6 +118,7 @@ pub fn spawn_canister_sandbox_process(
                 demux.handle(message);
             },
             socket,
+            SocketReaderConfig::default(),
         );
         // Send a notification to the writer thread to stop.
         // Otherwise, the writer thread will remain waiting forever.

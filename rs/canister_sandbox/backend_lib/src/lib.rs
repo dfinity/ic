@@ -4,7 +4,8 @@ pub mod sandbox_manager;
 pub mod sandbox_server;
 
 use ic_canister_sandbox_common::{
-    child_process_initialization, controller_client_stub, protocol, rpc, transport,
+    child_process_initialization, controller_client_stub, protocol, rpc,
+    transport::{self, SocketReaderConfig},
 };
 use ic_config::embedders::Config as EmbeddersConfig;
 use ic_logger::new_replica_logger_from_config;
@@ -118,5 +119,6 @@ pub fn run_canister_sandbox(
             frame_handler.handle(message);
         },
         socket,
+        SocketReaderConfig::for_sandbox(),
     );
 }

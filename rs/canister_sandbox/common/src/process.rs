@@ -4,6 +4,7 @@ use std::os::unix::prelude::{CommandExt, RawFd};
 use std::process::{Child, Command};
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use crate::transport::SocketReaderConfig;
 use crate::{
     protocol, protocol::ctlsvc, rpc, sandbox_client_stub::SandboxClientStub,
     sandbox_service::SandboxService, transport,
@@ -107,6 +108,7 @@ pub fn spawn_canister_sandbox_process_with_factory(
                 demux.handle(message);
             },
             socket,
+            SocketReaderConfig::default(),
         );
         // If we the connection drops, but it is not terminated from
         // our end, that implies that the sandbox process died. At

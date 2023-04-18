@@ -9,10 +9,10 @@ use bytes::{
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
-use std::convert::TryInto;
 use std::marker::PhantomData;
 use std::os::unix::{io::AsRawFd, io::RawFd, net::UnixStream};
 use std::sync::{Arc, Condvar, Mutex};
+use std::{convert::TryInto, time::Duration};
 
 // The maximum number of file descriptors that can be sent in a single message.
 const MAX_NUM_FD_PER_MESSAGE: usize = 16;
@@ -23,6 +23,14 @@ const CONTROL_MESSAGE_SIZE: usize = 4096;
 const INITIAL_BUFFER_CAPACITY: usize = 65536;
 // The minimum buffer capacity for reading in `recv_msg()`.
 const MIN_READ_BUFFER_CAPACITY: usize = 16384;
+
+// The timeout after which the IPC buffers are trimmed.
+const IDLE_TIMEOUT_TO_TRIM_BUFFER: Duration = Duration::from_secs(50);
+
+// The timeout after which `libc::malloc_trim()` is called to unmap free pages
+// of the malloc allocator. Note that this timeout should be higher than
+// `IDLE_TIMEOUT_TO_TRIM_BUFFER` to achieve maximum memory reduction.
+const IDLE_TIMEOUT_TO_TRIM_MALLOC: Duration = Duration::from_secs(100);
 
 // There are different types used for the msg_controllen member of
 // struct cmsghdr -- we presently support Linux and Darwin compilation.
@@ -104,6 +112,8 @@ struct UnixStreamMessageWriterInt<Message: 'static + Send> {
     fds: Vec<RawFd>,
     sending_in_background: bool,
     quit_requested: bool,
+    // This is needed only for testing.
+    number_of_timeouts: usize,
     // Phantom data to ensure the writer is correctly parameterized
     // over the type it can write. This needs to be inside the "Int"
     // object to ensure compiler can see it "inside" the mutex
@@ -114,7 +124,7 @@ struct UnixStreamMessageWriterInt<Message: 'static + Send> {
 impl<Message: 'static + Serialize + Send + EnumerateInnerFileDescriptors>
     UnixStreamMessageWriter<Message>
 {
-    fn new(socket: Arc<UnixStream>) -> Arc<Self> {
+    fn new(socket: Arc<UnixStream>, idle_timeout_to_trim_buffer: Duration) -> Arc<Self> {
         let socket_fd = socket.as_raw_fd();
         let instance = Arc::new(UnixStreamMessageWriter {
             state: Mutex::new(UnixStreamMessageWriterInt::<Message> {
@@ -122,6 +132,7 @@ impl<Message: 'static + Serialize + Send + EnumerateInnerFileDescriptors>
                 fds: vec![],
                 sending_in_background: false,
                 quit_requested: false,
+                number_of_timeouts: 0,
                 phantom: PhantomData,
             }),
             _socket: socket,
@@ -130,29 +141,43 @@ impl<Message: 'static + Serialize + Send + EnumerateInnerFileDescriptors>
         });
         let copy_instance = Arc::clone(&instance);
         std::thread::spawn(move || {
-            copy_instance.background_sending_thread();
+            copy_instance.background_sending_thread(idle_timeout_to_trim_buffer);
         });
         instance
     }
 
-    fn background_sending_thread(&self) {
+    fn background_sending_thread(&self, idle_timeout_to_free_buffer: Duration) {
+        // This predicate corresponds to the `trigger_background_sending`
+        // condition variable.
+        let awaiting_input = |guard: &mut UnixStreamMessageWriterInt<_>| {
+            guard.buf.is_empty() && !guard.quit_requested
+        };
+
         loop {
             let (mut buf, mut fds) = {
                 let mut guard = self.state.lock().unwrap();
+                if awaiting_input(&mut guard) {
+                    guard.sending_in_background = false;
+                    let result = self
+                        .trigger_background_sending
+                        .wait_timeout_while(guard, idle_timeout_to_free_buffer, awaiting_input)
+                        .unwrap();
+                    guard = result.0;
+                    if result.1.timed_out() && awaiting_input(&mut guard) {
+                        guard.number_of_timeouts += 1;
+                        // Trim the buffer and then wait without any timeout.
+                        guard.buf = BytesMut::new();
+                        guard = self
+                            .trigger_background_sending
+                            .wait_while(guard, awaiting_input)
+                            .unwrap();
+                    }
+                    assert!(!awaiting_input(&mut guard));
+                }
                 if guard.quit_requested {
                     return;
                 }
-                loop {
-                    if guard.buf.is_empty() {
-                        guard.sending_in_background = false;
-                        guard = self.trigger_background_sending.wait(guard).unwrap();
-                        if guard.quit_requested {
-                            return;
-                        }
-                    } else {
-                        break (guard.buf.split(), std::mem::take(&mut guard.fds));
-                    }
-                }
+                (guard.buf.split(), std::mem::take(&mut guard.fds))
             };
             while !buf.is_empty() {
                 send_message(self.socket_fd, &mut buf, &mut fds, 0);
@@ -200,6 +225,13 @@ impl<Message: 'static + Serialize + Send + EnumerateInnerFileDescriptors>
         guard.quit_requested = true;
         self.trigger_background_sending.notify_one();
     }
+
+    // A helper for testing.
+    #[cfg(test)]
+    fn number_of_timeouts(&self) -> usize {
+        let guard = self.state.lock().unwrap();
+        guard.number_of_timeouts
+    }
 }
 
 impl<
@@ -236,7 +268,7 @@ impl<Message: 'static + Serialize + Send + EnumerateInnerFileDescriptors>
     UnixStreamMuxWriter<Message>
 {
     pub fn new(socket: Arc<UnixStream>) -> Self {
-        let repr = UnixStreamMessageWriter::new(socket);
+        let repr = UnixStreamMessageWriter::new(socket, IDLE_TIMEOUT_TO_TRIM_BUFFER);
         Self { repr }
     }
 
@@ -251,6 +283,133 @@ impl<Message: 'static + Serialize + Send + EnumerateInnerFileDescriptors>
     }
 }
 
+/// Config for `socket_read_messages()` function.
+/// It controls idle time trimming of the reader buffer and unmapping of free
+/// pages of the malloc allocator.
+pub struct SocketReaderConfig {
+    // Specifies whether to call `libc::malloc_trim()` or not when
+    // the socket becomes idle.
+    idle_malloc_trim: bool,
+    // Specifies the timeout after which the socket is considered idle.
+    idle_timeout: Duration,
+}
+
+impl Default for SocketReaderConfig {
+    fn default() -> Self {
+        Self {
+            // We don't trim malloc by default because it is an expensive operation.
+            // Moreover, the replica process uses jemalloc for which `malloc_trim`
+            // is a no-op.
+            idle_malloc_trim: false,
+            idle_timeout: IDLE_TIMEOUT_TO_TRIM_BUFFER,
+        }
+    }
+}
+
+impl SocketReaderConfig {
+    pub fn for_sandbox() -> Self {
+        Self {
+            idle_malloc_trim: true,
+            idle_timeout: IDLE_TIMEOUT_TO_TRIM_MALLOC,
+        }
+    }
+
+    pub fn for_testing() -> Self {
+        Self {
+            idle_malloc_trim: true,
+            idle_timeout: Duration::from_secs(0),
+        }
+    }
+}
+
+// A helper to read messages from a socket with a timeout.
+// It uses the `libc::setsockopt()` syscall to set the timeout and keeps track
+// of the currently set timeout in order to reduce the number of syscalls.
+struct SocketReaderWithTimeout {
+    socket_fd: i32,
+    socket_timeout: Option<Duration>,
+}
+
+impl SocketReaderWithTimeout {
+    fn new(socket_fd: i32) -> Self {
+        Self {
+            socket_fd,
+            socket_timeout: None,
+        }
+    }
+
+    // A wrapper around the standalone `receive_message()` function.
+    // It takes an additional `timeout` parameter and returns `None`
+    // if no message was read within the given timeout.
+    // Otherwise, it returns the result of the wrapped function.
+    fn receive_message(
+        &mut self,
+        buf: &mut BytesMut,
+        fds: &mut Vec<RawFd>,
+        flags: libc::c_int,
+        timeout: Option<Duration>,
+    ) -> Option<isize> {
+        let result = self.update_socket_timeout(timeout);
+        if let Err(err) = result {
+            // We didn't manage to update the timeout. Since timeout is used
+            // for optimization and not for correctness, we can continue
+            // without crashing and let `recvmsg` handle `EWOULDBLOCK`.
+            eprintln!("Failed to update sandbox IPC socket timeout: {}", err);
+        }
+        let num_bytes_received = receive_message(self.socket_fd, buf, fds, flags);
+        if num_bytes_received == -1
+            && std::io::Error::last_os_error().raw_os_error() == Some(libc::EWOULDBLOCK)
+        {
+            return None;
+        }
+        Some(num_bytes_received)
+    }
+
+    fn update_socket_timeout(&mut self, timeout: Option<Duration>) -> Result<(), std::io::Error> {
+        if timeout == self.socket_timeout {
+            // The fast path to avoid making the syscall to update the socket
+            // timeout to the same value.
+            return Ok(());
+        }
+
+        let (tv_sec, tv_usec) = match timeout {
+            None => (0, 0),
+            Some(dur) => {
+                let tv_sec = dur.as_secs() as libc::time_t;
+                let tv_usec = dur.subsec_micros() as libc::suseconds_t;
+                if tv_sec == 0 && tv_usec == 0 {
+                    // `setsockopt` interprets `(0, 0)` as no timeout,
+                    // so we need to take the next smallest value.
+                    (tv_sec, tv_usec + 1)
+                } else {
+                    (tv_sec, tv_usec)
+                }
+            }
+        };
+
+        let tv = libc::timeval { tv_sec, tv_usec };
+
+        // SAFETY: All parameters are valid.
+        let result = unsafe {
+            libc::setsockopt(
+                self.socket_fd,
+                libc::SOL_SOCKET,
+                libc::SO_RCVTIMEO,
+                &tv as *const libc::timeval as *const libc::c_void,
+                std::mem::size_of::<libc::timeval>() as u32,
+            )
+        };
+
+        debug_assert_eq!(result, 0);
+        if result == 0 {
+            self.socket_timeout = timeout;
+            Ok(())
+        } else {
+            Err(std::io::Error::last_os_error())
+        }
+    }
+}
+
 /// Reads from a unix stream socket and passes individual messages
 /// to given handler.
 pub fn socket_read_messages<
@@ -259,17 +418,47 @@ pub fn socket_read_messages<
 >(
     handler: Handler,
     socket: Arc<UnixStream>,
+    config: SocketReaderConfig,
 ) {
     let socket_fd = socket.as_raw_fd();
     let mut decoder = FrameDecoder::<Message>::new();
     let mut buf = BytesMut::with_capacity(INITIAL_BUFFER_CAPACITY);
     let mut fds = Vec::<RawFd>::new();
+    let mut reader = SocketReaderWithTimeout::new(socket_fd);
     loop {
         while let Some(mut frame) = decoder.decode(&mut buf) {
             install_file_descriptors(&mut frame, &mut fds);
             handler(frame);
         }
-        let num_bytes_received = receive_message(socket_fd, &mut buf, &mut fds, 0);
+
+        let num_bytes_received =
+            match reader.receive_message(&mut buf, &mut fds, 0, Some(config.idle_timeout)) {
+                Some(bytes) => bytes,
+                None => {
+                    // The operation has timed out.
+                    // Trim the buffer and trim malloc if needed.
+                    if buf.is_empty() {
+                        buf = BytesMut::with_capacity(INITIAL_BUFFER_CAPACITY);
+                        if config.idle_malloc_trim {
+                            // SAFETY: 0 is always a valid argument to `malloc_trim`.
+                            #[cfg(target_os = "linux")]
+                            unsafe {
+                                libc::malloc_trim(0);
+                            }
+                        }
+                    }
+                    // Read the message without any timeout.
+                    // The loop is not strictly necessary, but we keep it in
+                    // order to make the code robust against failures in
+                    // updating the socket timeout.
+                    loop {
+                        if let Some(bytes) = reader.receive_message(&mut buf, &mut fds, 0, None) {
+                            break (bytes);
+                        }
+                    }
+                }
+            };
+
         if num_bytes_received <= 0 {
             break;
         }
@@ -524,7 +713,8 @@ mod tests {
         let (mut test_send, test_recv) = std::os::unix::net::UnixStream::pair().unwrap();
 
         // Set up sender (to send via "comm_send".
-        let sender = UnixStreamMessageWriter::<TestMessage>::new(comm_send);
+        let sender =
+            UnixStreamMessageWriter::<TestMessage>::new(comm_send, IDLE_TIMEOUT_TO_TRIM_BUFFER);
 
         // Set up receiver thread (to receive via "comm_recv") and
         // channel to pass result back to test thread.
@@ -535,6 +725,7 @@ mod tests {
                     ch_sender.send(message).unwrap();
                 },
                 comm_recv,
+                SocketReaderConfig::for_testing(),
             );
         });
 
@@ -658,5 +849,120 @@ mod tests {
             file.read_to_string(&mut s).unwrap();
             assert_eq!(s, format!("msg-{}", i));
         }
+    }
+
+    #[derive(Serialize, Deserialize, Clone)]
+    struct StringMessage {
+        payload: String,
+    }
+
+    impl MuxInto<StringMessage> for StringMessage {
+        fn wrap(self, _cookie: u64) -> StringMessage {
+            self
+        }
+    }
+
+    impl EnumerateInnerFileDescriptors for StringMessage {
+        fn enumerate_fds<'a>(&'a mut self, _fds: &mut Vec<&'a mut RawFd>) {}
+    }
+
+    #[test]
+    fn sender_timeout() {
+        // Create a socketpair through which we will communicate.
+        let (comm_send, comm_recv) = std::os::unix::net::UnixStream::pair().unwrap();
+        let comm_send = Arc::new(comm_send);
+        let comm_recv = Arc::new(comm_recv);
+
+        // Set up sender (to send via "comm_send".
+        let sender =
+            UnixStreamMessageWriter::<StringMessage>::new(comm_send, Duration::from_millis(1));
+
+        // Set up receiver thread (to receive via "comm_recv") and
+        // channel to pass result back to test thread.
+        let (ch_sender, ch_receiver) = sync_channel::<StringMessage>(1);
+        std::thread::spawn(move || {
+            socket_read_messages(
+                |message: StringMessage| {
+                    ch_sender.send(message).unwrap();
+                },
+                comm_recv,
+                SocketReaderConfig::for_testing(),
+            );
+        });
+
+        // Send and receive the message.
+        sender.handle(
+            0,
+            StringMessage {
+                payload: String::from_utf8(vec![b'1'; 1_000_000]).unwrap(),
+            },
+        );
+        let message1 = ch_receiver.recv().unwrap();
+
+        // Give some time for the background sender to timeout.
+        std::thread::sleep(Duration::from_millis(100));
+
+        // Send and receive the message again.
+        sender.handle(
+            0,
+            StringMessage {
+                payload: String::from_utf8(vec![b'2'; 1_000]).unwrap(),
+            },
+        );
+        let message2 = ch_receiver.recv().unwrap();
+
+        // Can stop sender now, don't need it anymore.
+        sender.stop();
+
+        assert!(sender.number_of_timeouts() > 0);
+        assert_eq!(
+            message1.payload,
+            String::from_utf8(vec![b'1'; 1_000_000]).unwrap()
+        );
+        assert_eq!(
+            message2.payload,
+            String::from_utf8(vec![b'2'; 1_000]).unwrap()
+        );
+    }
+
+    #[test]
+    fn reader_timeout() {
+        // Create a socketpair through which we will communicate.
+        let (comm_send, comm_recv) = std::os::unix::net::UnixStream::pair().unwrap();
+
+        let mut reader = SocketReaderWithTimeout::new(comm_recv.as_raw_fd());
+
+        let mut recv_buf = BytesMut::new();
+        let mut recv_fds = vec![];
+        let bytes = reader.receive_message(
+            &mut recv_buf,
+            &mut recv_fds,
+            0,
+            Some(Duration::from_secs(0)),
+        );
+        assert_eq!(bytes, None);
+
+        let mut send_buf = BytesMut::new();
+        send_buf.extend_from_slice(&[42; 1000]);
+        let mut send_fds = vec![];
+        let bytes = send_message(comm_send.as_raw_fd(), &mut send_buf, &mut send_fds, 0);
+        assert_eq!(bytes, 1000);
+
+        let bytes = reader.receive_message(
+            &mut recv_buf,
+            &mut recv_fds,
+            0,
+            Some(Duration::from_secs(0)),
+        );
+        assert_eq!(bytes, Some(1000));
+        assert_eq!(recv_buf.iter().copied().collect::<Vec<_>>(), vec![42; 1000]);
+
+        let bytes = reader.receive_message(
+            &mut recv_buf,
+            &mut recv_fds,
+            0,
+            Some(Duration::from_millis(10)),
+        );
+        assert_eq!(bytes, None);
     }
 }
