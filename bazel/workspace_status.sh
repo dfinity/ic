@@ -34,7 +34,13 @@ elif [[ -n "${HOSTUSER:-}" ]]; then
 fi
 
 # Used to pass volatile status over a side channel to not affect the cache.
-ln -fs "${WORKSPACE_ROOT}/bazel-out/volatile-status.txt" /var/tmp/bazel-volatile-status.txt
+# Try user-independent path firss, fall back to user-specific to for on shared machines.
+for s in /var/tmp/bazel-volatile-status.txt "$HOME/.bazel-volatitel-status.txt"; do
+    if ln -fs "${WORKSPACE_ROOT}/bazel-out/volatile-status.txt" "$s"; then
+        echo "VERSION_FILE_PATH $s"
+        break
+    fi
+done
 
 # Generate a file that changes every time bazel runs. It can be used as dependency for targets we want to always rebuild.
 date '+%s' >"${WORKSPACE_ROOT}/bazel-timestamp.txt"
