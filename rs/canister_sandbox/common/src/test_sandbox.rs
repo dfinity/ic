@@ -1,5 +1,5 @@
-use ic_canister_sandbox_common::protocol::sbxsvc;
 use ic_canister_sandbox_common::*;
+use ic_canister_sandbox_common::{protocol::sbxsvc, transport::SocketReaderConfig};
 use ic_embedders::{
     wasm_utils::{Segments, WasmImportsDetails},
     CompilationResult, SerializedModule, SerializedModuleBytes,
@@ -127,5 +127,6 @@ fn main() {
             demux.handle(message);
         },
         socket,
+        SocketReaderConfig::for_testing(),
     );
 }

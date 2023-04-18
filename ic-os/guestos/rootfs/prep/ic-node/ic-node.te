@@ -200,7 +200,8 @@ create_dirs_pattern(ic_replica_t, tmp_t, tmp_t)
 
 # Replica creates and reads/writes to/from internal unix domain socket,
 # as well as the socket connecting it to the sandbox.
-allow ic_replica_t self : unix_stream_socket { create read write };
+# It also uses setsockopt to configure socket timeouts.
+allow ic_replica_t self : unix_stream_socket { create setopt read write };
 
 # Replica uses an internal fifo file
 allow ic_replica_t ic_replica_t : fifo_file { read };
@@ -308,7 +309,7 @@ allow ic_canister_sandbox_t ic_canister_sandbox_t : process { getsched };
 # communication channel (and such that there is no "accidental" use of any
 # differently labeled channel.
 allow ic_canister_sandbox_t ic_replica_t : fd use;
-allow ic_canister_sandbox_t ic_replica_t : unix_stream_socket { read write };
+allow ic_canister_sandbox_t ic_replica_t : unix_stream_socket { setopt read write };
 
 # Allow to access the shared memory area set up by replica. NB this should be
 # labelled differently eventually because allowing tmpfs is fairly broad.
@@ -334,7 +335,7 @@ dontaudit ic_canister_sandbox_t ic_orchestrator_t : fd { use };
 # This should actually not be allowed, logs should be routed through
 # replica.
 allow ic_canister_sandbox_t init_t : fd { use };
-allow ic_canister_sandbox_t init_t : unix_stream_socket { read write };
+allow ic_canister_sandbox_t init_t : unix_stream_socket { setopt read write };
 
 # Deny access to system information as well as own proc file (would
 # also allow accessing proc files of *other* sandboxes).

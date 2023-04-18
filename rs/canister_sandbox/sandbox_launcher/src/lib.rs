@@ -16,7 +16,8 @@ use ic_canister_sandbox_common::{
         ctllaunchersvc::SandboxExitedRequest,
         launchersvc::{LaunchSandboxReply, LaunchSandboxRequest},
     },
-    rpc, transport,
+    rpc,
+    transport::{self, SocketReaderConfig},
 };
 use ic_types::CanisterId;
 use nix::{
@@ -65,6 +66,7 @@ pub fn run_launcher(socket: std::os::unix::net::UnixStream) {
             frame_handler.handle(message);
         },
         socket,
+        SocketReaderConfig::default(),
     );
 }
 
