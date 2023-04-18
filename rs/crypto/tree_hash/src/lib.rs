@@ -567,7 +567,12 @@ pub enum MixedHashTreeConversionError {
     LabelsNotSorted(Label),
     /// The top-level node is a pruned.
     Pruned,
+    /// Too deep recursion due to a too large tree depth
+    TooDeepRecursion,
 }
+
+/// The maximum recursion depth of [`serde_cbor`] deserialization is currently 128.
+const MAX_HASH_TREE_DEPTH: usize = 128;
 
 /// Extracts the data part from a mixed hash tree by removing all forks and
 /// pruned nodes.
@@ -580,20 +585,26 @@ impl TryFrom<MixedHashTree> for LabeledTree<Vec<u8>> {
         fn collect_children(
             t: MixedHashTree,
             children: &mut FlatMap<Label, LabeledTree<Vec<u8>>>,
+            depth: usize,
         ) -> Result<(), E> {
+            if depth > MAX_HASH_TREE_DEPTH {
+                return Err(E::TooDeepRecursion);
+            }
             match t {
                 MixedHashTree::Leaf(_) => Err(E::UnlabeledLeaf),
-                MixedHashTree::Labeled(label, subtree) => match (*subtree).try_into() {
-                    Ok(labeled_subtree) => children
-                        .try_append(label, labeled_subtree)
-                        .map_err(|(label, _)| E::LabelsNotSorted(label)),
-                    // Pruned nodes with labels are commonly used for absence proofs.
-                    Err(E::Pruned) => Ok(()),
-                    Err(e) => Err(e),
-                },
+                MixedHashTree::Labeled(label, subtree) => {
+                    match try_from_impl(*subtree, depth) {
+                        Ok(labeled_subtree) => children
+                            .try_append(label, labeled_subtree)
+                            .map_err(|(label, _)| E::LabelsNotSorted(label)),
+                        // Pruned nodes with labels are commonly used for absence proofs.
+                        Err(E::Pruned) => Ok(()),
+                        Err(e) => Err(e),
+                    }
+                }
                 MixedHashTree::Fork(lr) => match (
-                    collect_children(lr.0, children),
-                    collect_children(lr.1, children),
+                    collect_children(lr.0, children, depth + 1),
+                    collect_children(lr.1, children, depth + 1),
                 ) {
                     // We can tolerate one of the children being pruned, but not
                     // both. This allows us to collapse weird trees like the one below:
@@ -615,18 +626,22 @@ impl TryFrom<MixedHashTree> for LabeledTree<Vec<u8>> {
             }
         }
 
-        Ok(match root {
-            MixedHashTree::Leaf(data) => LabeledTree::Leaf(data),
-            MixedHashTree::Labeled(_, _) | MixedHashTree::Fork(_) => {
-                let mut children = FlatMap::new();
-                collect_children(root, &mut children)?;
+        fn try_from_impl(root: MixedHashTree, depth: usize) -> Result<LabeledTree<Vec<u8>>, E> {
+            Ok(match root {
+                MixedHashTree::Leaf(data) => LabeledTree::Leaf(data),
+                MixedHashTree::Labeled(_, _) | MixedHashTree::Fork(_) => {
+                    let mut children = FlatMap::new();
+                    collect_children(root, &mut children, depth + 1)?;
 
-                LabeledTree::SubTree(children)
-            }
+                    LabeledTree::SubTree(children)
+                }
 
-            MixedHashTree::Pruned(_) => return Err(E::Pruned),
-            MixedHashTree::Empty => LabeledTree::SubTree(Default::default()),
-        })
+                MixedHashTree::Pruned(_) => return Err(E::Pruned),
+                MixedHashTree::Empty => LabeledTree::SubTree(Default::default()),
+            })
+        }
+
+        try_from_impl(root, 0)
     }
 }
 
@@ -777,9 +792,21 @@ impl<'de> serde::de::Deserialize<'de> for MixedHashTree {
 /// Errors occurring in `tree_hash` module.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum TreeHashError {
-    InconsistentPartialTree { offending_path: Vec<Label> },
-    InvalidArgument { info: String },
-    NonMinimalWitness { offending_path: Vec<Label> },
+    InconsistentPartialTree {
+        offending_path: Vec<Label>,
+    },
+    InvalidArgument {
+        info: String,
+    },
+    NonMinimalWitness {
+        offending_path: Vec<Label>,
+    },
+    /// Results from a too deep tree and/or witness passed to a recursive
+    /// algorithm such as `prune_witness`, resulting in a total recursion
+    /// depth > [`PRUNE_WITNESS_RECURSION_LIMIT`]
+    TooDeepRecursion {
+        offending_path: Vec<Label>,
+    },
 }
 
 /// A subset of a [`HashTree`] that is sufficient to verify whether some

@@ -4,7 +4,7 @@
 use crate::hasher::Hasher;
 use crate::{
     flatmap, Digest, FlatMap, HashTree, HashTreeBuilder, Label, LabeledTree, MixedHashTree, Path,
-    TreeHashError, Witness, WitnessGenerator,
+    TreeHashError, Witness, WitnessGenerator, MAX_HASH_TREE_DEPTH,
 };
 use std::collections::VecDeque;
 use std::convert::TryFrom;
@@ -170,10 +170,16 @@ fn prune_witness_subtree<'a, I>(
     witness: &Witness,
     children: &mut Peekable<I>,
     curr_path: &mut Vec<Label>,
+    witness_depth: usize,
 ) -> Result<(Witness, u64), TreeHashError>
 where
     I: Iterator<Item = (&'a Label, &'a LabeledTree<Vec<u8>>)>,
 {
+    if witness_depth > MAX_HASH_TREE_DEPTH {
+        return Err(TreeHashError::TooDeepRecursion {
+            offending_path: curr_path.clone(),
+        });
+    }
     match witness {
         Witness::Fork {
             left_tree,
@@ -189,8 +195,10 @@ where
                 });
             }
 
-            let (left, count_left) = prune_witness_subtree(left_tree, children, curr_path)?;
-            let (right, count_right) = prune_witness_subtree(right_tree, children, curr_path)?;
+            let (left, count_left) =
+                prune_witness_subtree(left_tree, children, curr_path, witness_depth + 1)?;
+            let (right, count_right) =
+                prune_witness_subtree(right_tree, children, curr_path, witness_depth + 1)?;
 
             match (&left, &right) {
                 // Both children got pruned, replace by a `Pruned` node.
@@ -226,7 +234,8 @@ where
                     children.next();
 
                     curr_path.push(label.to_owned());
-                    let (res, count) = prune_witness_impl(sub_witness, child, curr_path)?;
+                    let (res, count) =
+                        prune_witness_impl(sub_witness, child, curr_path, witness_depth + 1)?;
                     curr_path.pop();
 
                     if let Witness::Pruned { digest } = res {
@@ -269,7 +278,13 @@ fn prune_witness_impl(
     witness: &Witness,
     partial_tree: &LabeledTree<Vec<u8>>,
     curr_path: &mut Vec<Label>,
+    witness_depth: usize,
 ) -> Result<(Witness, u64), TreeHashError> {
+    if witness_depth > MAX_HASH_TREE_DEPTH {
+        return Err(TreeHashError::TooDeepRecursion {
+            offending_path: curr_path.clone(),
+        });
+    }
     match partial_tree {
         LabeledTree::SubTree(children) if children.is_empty() => {
             match witness {
@@ -292,7 +307,8 @@ fn prune_witness_impl(
                 Witness::Fork { .. } | Witness::Node { .. } => {
                     let mut children = children.iter().peekable();
 
-                    let res = prune_witness_subtree(witness, &mut children, curr_path)?;
+                    let res =
+                        prune_witness_subtree(witness, &mut children, curr_path, witness_depth)?;
                     if let Some((label, _)) = children.next() {
                         curr_path.push(label.to_owned());
                         return err_inconsistent_partial_tree(curr_path);
@@ -362,7 +378,7 @@ pub fn prune_witness(
     partial_tree: &LabeledTree<Vec<u8>>,
 ) -> Result<Witness, TreeHashError> {
     let mut curr_path = Vec::new();
-    let (pruned, plugged_in_count) = prune_witness_impl(witness, partial_tree, &mut curr_path)?;
+    let (pruned, plugged_in_count) = prune_witness_impl(witness, partial_tree, &mut curr_path, 1)?;
 
     if plugged_in_count != count_leaves_and_empty_subtrees(partial_tree) {
         debug_assert!(

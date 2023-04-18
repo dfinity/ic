@@ -6071,6 +6071,7 @@ dependencies = [
 name = "ic-crypto-tree-hash"
 version = "0.8.0"
 dependencies = [
+ "assert_matches",
  "ic-crypto-internal-types",
  "ic-crypto-sha",
  "ic-protobuf",

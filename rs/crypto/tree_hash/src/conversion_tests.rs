@@ -1,7 +1,8 @@
 use crate::{
-    arbitrary::arbitrary_well_formed_mixed_hash_tree, flatmap, Label, LabeledTree, MixedHashTree,
-    MixedHashTreeConversionError,
+    arbitrary::arbitrary_well_formed_mixed_hash_tree, flatmap, Digest, Label, LabeledTree,
+    MixedHashTree, MixedHashTreeConversionError, MAX_HASH_TREE_DEPTH,
 };
+use assert_matches::assert_matches;
 use proptest::prelude::*;
 use std::convert::TryInto;
 
@@ -66,4 +67,40 @@ fn convert_malformed_tree() {
     let malformed_tree = M::Fork(Box::new((M::Leaf(b"1".to_vec()), M::Leaf(b"2".to_vec()))));
     let r: Result<T, MixedHashTreeConversionError> = malformed_tree.try_into();
     assert_eq!(r, Err(MixedHashTreeConversionError::UnlabeledLeaf));
+}
+
+#[test]
+fn convert_too_deep_tree() {
+    fn dummy_mixed_hash_tree_of_depth(depth: usize) -> M {
+        let mut result = M::Empty;
+        assert!(depth > 0);
+        for _ in 0..depth - 1 {
+            result = M::Fork(Box::new((result, M::Pruned(Digest([0u8; 32])))));
+        }
+        result
+    }
+
+    const LIMIT: usize = MAX_HASH_TREE_DEPTH;
+
+    for depth in [1, 2, LIMIT - 1, LIMIT] {
+        let result: Result<T, MixedHashTreeConversionError> =
+            dummy_mixed_hash_tree_of_depth(depth).try_into();
+        assert_matches!(result, Ok(_));
+    }
+
+    for depth in [LIMIT + 1, LIMIT + 10] {
+        let mixed_tree = dummy_mixed_hash_tree_of_depth(depth);
+
+        assert_matches!(
+            serde_cbor::from_slice::<MixedHashTree>(
+                serde_cbor::to_vec(&mixed_tree)
+                    .expect("Failed to serialize mixed hash tree")
+                    .as_slice()
+            ),
+            Err(e) if format!("{e:?}").contains("RecursionLimitExceeded")
+        );
+
+        let result: Result<T, MixedHashTreeConversionError> = mixed_tree.try_into();
+        assert_eq!(result, Err(MixedHashTreeConversionError::TooDeepRecursion));
+    }
 }

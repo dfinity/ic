@@ -20,6 +20,7 @@ rust_test(
     name = "tree_hash_test",
     crate = ":tree_hash",
     deps = [
+        "@crate_index//:assert_matches",
         "@crate_index//:maplit",
         "@crate_index//:proptest",
         "@crate_index//:prost",
