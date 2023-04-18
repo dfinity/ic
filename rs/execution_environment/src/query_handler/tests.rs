@@ -1494,3 +1494,86 @@ fn composite_query_chained_calls() {
         .unwrap();
     assert_eq!(result, WasmResult::Reply(b));
 }
+
+#[test]
+fn composite_query_syscalls_from_reply_reject_callback() {
+    // In this test canister 0 calls canisters 1 and attempts syscalls from reply callback.
+    let mut test = ExecutionTestBuilder::new().with_composite_queries().build();
+
+    // Install two universal canisters
+    let mut canisters = vec![];
+    for _ in 0..2 {
+        canisters.push(test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap());
+    }
+
+    let reply = wasm().reply_data(&[1]).build();
+    let reject = wasm().reject().build();
+
+    let syscalls = vec![
+        (wasm().msg_cycles_available().build(), "cycles_available"),
+        (wasm().msg_cycles_refunded().build(), "cycles_refunded"),
+        (wasm().msg_cycles_accept(42).build(), "cycles_accept"),
+        (wasm().api_global_timer_set(0).build(), "global_timer_set"),
+        (wasm().call_cycles_add(0).build(), "call_cycles_add"),
+        (
+            wasm().call_cycles_add128(0, 0).build(),
+            "call_cycles_add128",
+        ),
+        (
+            wasm().msg_cycles_available128().build(),
+            "cycles_available128",
+        ),
+        (
+            wasm().msg_cycles_refunded128().build(),
+            "cycles_refunded128",
+        ),
+        (
+            wasm().msg_cycles_accept128(4, 2).build(),
+            "cycles_accept128",
+        ),
+        (
+            wasm().certified_data_set(&[42]).build(),
+            "certified_data_set",
+        ),
+    ];
+
+    for (other_side, callback_type) in vec![(reply, "reply"), (reject, "reject")] {
+        for (syscall, label) in &syscalls {
+            let canister_0 = wasm().composite_query(
+                canisters[1],
+                call_args()
+                    .other_side(other_side.clone())
+                    .on_reply(syscall.clone())
+                    .on_reject(syscall.clone()),
+            );
+
+            let output = test.query(
+                UserQuery {
+                    source: user_test_id(2),
+                    receiver: canisters[0],
+                    method_name: "composite_query".to_string(),
+                    method_payload: canister_0.build(),
+                    ingress_expiry: 0,
+                    nonce: None,
+                },
+                Arc::new(test.state().clone()),
+                vec![],
+            );
+            match output {
+                Ok(_) => {
+                    unreachable!(
+                        "{} call should not be allowed from a composite query {} callback",
+                        label, callback_type
+                    )
+                }
+                Err(err) => assert_eq!(
+                    err.code(),
+                    ErrorCode::CanisterContractViolation,
+                    "Incorrect return code for {} {}",
+                    label,
+                    callback_type
+                ),
+            }
+        }
+    }
+}

@@ -1006,22 +1006,30 @@ impl SystemApiImpl {
             }
             | ApiType::RejectCallback {
                 outgoing_request, ..
-            } => match outgoing_request {
-                None => Err(HypervisorError::ContractViolation(format!(
-                    "{} called when no call is under construction.",
-                    method_name
-                ))),
-                Some(request) => {
-                    self.sandbox_safe_system_state
-                        .withdraw_cycles_for_transfer(
-                            self.memory_usage.current_usage,
-                            self.execution_parameters.compute_allocation,
-                            amount,
-                        )?;
-                    request.add_cycles(amount);
-                    Ok(())
+            } => {
+                // Reply and reject callbacks can be executed in non-replicated mode
+                // iff from within a composite query call. Always disallow in that case.
+                if self.execution_parameters.execution_mode == ExecutionMode::NonReplicated {
+                    return Err(self.error_for(method_name));
                 }
-            },
+
+                match outgoing_request {
+                    None => Err(HypervisorError::ContractViolation(format!(
+                        "{} called when no call is under construction.",
+                        method_name
+                    ))),
+                    Some(request) => {
+                        self.sandbox_safe_system_state
+                            .withdraw_cycles_for_transfer(
+                                self.memory_usage.current_usage,
+                                self.execution_parameters.compute_allocation,
+                                amount,
+                            )?;
+                        request.add_cycles(amount);
+                        Ok(())
+                    }
+                }
+            }
         }
     }
 
@@ -1062,9 +1070,17 @@ impl SystemApiImpl {
             }
             | ApiType::RejectCallback {
                 call_context_id, ..
-            } => Ok(self
-                .sandbox_safe_system_state
-                .msg_cycles_available(*call_context_id)),
+            } => {
+                if self.execution_parameters.execution_mode == ExecutionMode::NonReplicated {
+                    // Non-replicated mode means we are handling a composite query.
+                    // Access to this syscall not permitted.
+                    Err(self.error_for(method_name))
+                } else {
+                    Ok(self
+                        .sandbox_safe_system_state
+                        .msg_cycles_available(*call_context_id))
+                }
+            }
         }
     }
 
@@ -1084,7 +1100,15 @@ impl SystemApiImpl {
             }
             | ApiType::RejectCallback {
                 incoming_cycles, ..
-            } => Ok(*incoming_cycles),
+            } => {
+                if self.execution_parameters.execution_mode == ExecutionMode::NonReplicated {
+                    // Execution callback in non-replicated mode means we are handling a composite query.
+                    // Access to this syscall not permitted.
+                    Err(self.error_for(method_name))
+                } else {
+                    Ok(*incoming_cycles)
+                }
+            }
         }
     }
 
@@ -1118,9 +1142,17 @@ impl SystemApiImpl {
             }
             | ApiType::RejectCallback {
                 call_context_id, ..
-            } => Ok(self
-                .sandbox_safe_system_state
-                .msg_cycles_accept(*call_context_id, max_amount)),
+            } => {
+                if self.execution_parameters.execution_mode == ExecutionMode::NonReplicated {
+                    // Non-replicated mode means we are handling a composite query.
+                    // Access to this syscall not permitted.
+                    Err(self.error_for(method_name))
+                } else {
+                    Ok(self
+                        .sandbox_safe_system_state
+                        .msg_cycles_accept(*call_context_id, max_amount))
+                }
+            }
         }
     }
 
@@ -2306,6 +2338,12 @@ impl SystemApi for SystemApiImpl {
             | ApiType::PreUpgrade { .. }
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. } => {
+                // Reply and reject callbacks can be executed in non-replicated mode
+                // iff from within a composite query call. Disallow in that case.
+                if self.execution_parameters.execution_mode == ExecutionMode::NonReplicated {
+                    return Err(self.error_for("ic0_global_timer_set"));
+                }
+
                 let prev_time = self.sandbox_safe_system_state.global_timer().to_time();
                 self.sandbox_safe_system_state
                     .set_global_timer(CanisterTimer::from_time(time));
@@ -2672,6 +2710,12 @@ impl SystemApi for SystemApiImpl {
             | ApiType::ReplyCallback { .. }
             | ApiType::RejectCallback { .. }
             | ApiType::PreUpgrade { .. } => {
+                // Reply and reject callbacks can be executed in non-replicated mode
+                // iff from within a composite query call. Disallow in that case.
+                if self.execution_parameters.execution_mode == ExecutionMode::NonReplicated {
+                    return Err(self.error_for("ic0_certified_data_set"));
+                }
+
                 if size > CERTIFIED_DATA_MAX_LENGTH {
                     return Err(ContractViolation(format!(
                         "ic0_certified_data_set failed because the passed data must be \

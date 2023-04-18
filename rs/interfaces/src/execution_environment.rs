@@ -273,7 +273,7 @@ impl ops::Div<i64> for SubnetAvailableMemory {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
 pub enum ExecutionMode {
     Replicated,
     NonReplicated,
