@@ -9,6 +9,9 @@ import {
 import { streamContent } from '../streaming';
 import { NotAllowedRequestRedirectError } from './errors';
 import { FetchAssetOptions, FetchAssetResult, HTTPHeaders } from './typings';
+import initResponseVerification, {
+  InitOutput,
+} from '@dfinity/response-verification';
 
 export const shouldFetchRootKey = Boolean(process.env.FORCE_FETCH_ROOT_KEY);
 export const isMainNet = !shouldFetchRootKey;
@@ -204,5 +207,21 @@ export const fetchAsset = async ({
       ok: false,
       error: e,
     };
+  }
+};
+
+let responseVerificationWasm: InitOutput | null = null;
+let loadingResponseVerificationWasm: Promise<InitOutput> | null = null;
+
+export const loadResponseVerification = async (): Promise<void> => {
+  if (!responseVerificationWasm && !loadingResponseVerificationWasm) {
+    loadingResponseVerificationWasm = initResponseVerification();
+    responseVerificationWasm = await loadingResponseVerificationWasm;
+    loadingResponseVerificationWasm = null;
+    return;
+  }
+
+  if (loadingResponseVerificationWasm) {
+    await loadingResponseVerificationWasm;
   }
 };

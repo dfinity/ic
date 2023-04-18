@@ -1,19 +1,19 @@
-import initResponseVerification from '@dfinity/response-verification';
 import { ServiceWorkerEvents } from '../typings';
 import { CanisterResolver } from './domains';
-import { handleErrorResponse } from './views/error';
 import { RequestProcessor } from './requests';
+import { loadResponseVerification } from './requests/utils';
+import { handleErrorResponse } from './views/error';
 
 declare const self: ServiceWorkerGlobalScope;
 
 // Always install updated SW immediately
 self.addEventListener('install', (event) => {
-  event.waitUntil(self.skipWaiting());
+  event.waitUntil(loadResponseVerification().then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (event) => {
   // upon activation take control of all clients (tabs & windows)
-  event.waitUntil(initResponseVerification().then(() => self.clients.claim()));
+  event.waitUntil(self.clients.claim());
 });
 
 // Intercept and proxy all fetch requests made by the browser or DOM on this scope.

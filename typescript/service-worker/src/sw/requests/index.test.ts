@@ -14,6 +14,7 @@ import fetch from 'jest-fetch-mock';
 import { HttpRequest } from '../../http-interface/canister_http_interface_types';
 import { CanisterResolver } from '../domains';
 import { RequestProcessor, maxCertTimeOffsetNs } from './index';
+import * as requestUtils from './utils';
 
 const CANISTER_ID = 'qoctq-giaaa-aaaaa-aaaea-cai';
 const maxCertTimeOffsetMs = Number(maxCertTimeOffsetNs) / 1_000_000;
@@ -50,6 +51,9 @@ const HttpRequestType = IDL.Record({
 });
 beforeEach(() => {
   fetch.resetMocks();
+  jest
+    .spyOn(requestUtils, 'loadResponseVerification')
+    .mockResolvedValue(Promise.resolve());
 });
 afterEach(() => {
   jest.spyOn(global.Math, 'random').mockRestore();
