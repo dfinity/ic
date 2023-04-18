@@ -1,4 +1,5 @@
 //! The artifact pool public interface that defines the Consensus-P2P API.
+//! Consensus clients must implement the traits in this file in order to use the IC P2P protocol.
 use crate::time_source::TimeSource;
 use derive_more::From;
 use ic_types::{

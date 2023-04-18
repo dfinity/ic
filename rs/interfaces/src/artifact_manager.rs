@@ -1,5 +1,4 @@
-//! The artifact manager/client public interface.
-
+//! The traits in this file define the interface between the `p2p` and `artifact_manager` crates/packages.
 use crate::{
     artifact_pool::{ArtifactPoolError, UnvalidatedArtifact},
     time_source::TimeSource,

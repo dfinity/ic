@@ -133,6 +133,7 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/interfaces/https_outcalls_adapter_client/    @dfinity-lab/teams/networking-team
 /rs/interfaces/p2p/                     @dfinity-lab/teams/networking-team
 /rs/interfaces/registry/                @dfinity-lab/teams/nns-team
+/rs/interfaces/src/artifact_manager.rs  @dfinity-lab/teams/networking-team
 /rs/interfaces/src/artifact_pool.rs     @dfinity-lab/teams/networking-team
 /rs/interfaces/src/canister_http.rs     @dfinity-lab/teams/consensus-owners
 /rs/interfaces/src/consensus.rs         @dfinity-lab/teams/consensus-owners
