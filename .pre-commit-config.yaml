@@ -1,20 +1,6 @@
 repos:
 - repo: local
   hooks:
-  - id: candid_changes_are_backwards_compatible
-    name: Candid changes are backwards compatible
-    entry: gitlab-ci/src/checks/candid_changes_are_backwards_compatible.py # TODO: Uncomment (once we figure out how to not cause lots of problems for people): --also-reverse
-    # Run against all .did files where the path contains nns or registry.
-    files: (nns|registry|sns).+[.]did$
-    # Warning: Remember to put the pipe operator at the end of all lines except the last.
-    exclude: |
-        (?x)^(
-            # Is this just test data?
-            | rs/nns/empty\.did
-        )$
-    language: system
-    always_run: true
-
   - id: bazel_buildifier
     name: Auto format Bazel build files.
     stages: [commit]
