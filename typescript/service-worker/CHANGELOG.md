@@ -2,6 +2,10 @@
 
 ## Unreleased 
 
+## 1.7.2
+
+- Moved wasm loading to the install event, this prevents the Service Worker from becoming active without required dependencies
+
 ## 1.7.1
 
 - Do not throw exceptions for response bodies larger than 10mb
