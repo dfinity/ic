@@ -1,6 +1,6 @@
 use super::*;
 use crate::{spawn_tip_thread, StateManagerMetrics, NUMBER_OF_CHECKPOINT_THREADS};
-use ic_base_types::{NumBytes, NumSeconds};
+use ic_base_types::NumSeconds;
 use ic_ic00_types::CanisterStatusType;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
@@ -22,11 +22,8 @@ use ic_test_utilities::{
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_tmpdir::tmpdir;
 use ic_types::{
-    ingress::{IngressState, IngressStatus},
-    malicious_flags::MaliciousFlags,
-    messages::StopCanisterContext,
-    time::UNIX_EPOCH,
-    CanisterId, Cycles, ExecutionRound, Height,
+    malicious_flags::MaliciousFlags, messages::StopCanisterContext, CanisterId, Cycles,
+    ExecutionRound, Height,
 };
 use ic_wasm_types::CanisterModule;
 use std::collections::BTreeSet;
@@ -611,54 +608,5 @@ fn can_recover_subnet_queues() {
             original_state.subnet_queues(),
             recovered_state.subnet_queues()
         );
-    });
-}
-
-#[test]
-fn can_recover_ingress_history() {
-    with_test_replica_logger(|log| {
-        let tmp = tmpdir("checkpoint");
-        let root = tmp.path().to_path_buf();
-        let layout = StateLayout::try_new(log.clone(), root, &MetricsRegistry::new()).unwrap();
-        let tip_handler = layout.capture_tip_handler();
-        let state_manager_metrics = state_manager_metrics();
-        let (_tip_thread, tip_channel) = spawn_tip_thread(
-            log,
-            tip_handler,
-            layout,
-            state_manager_metrics,
-            MaliciousFlags::default(),
-        );
-
-        let own_subnet_type = SubnetType::Application;
-        let subnet_id = subnet_test_id(1);
-        let mut state = ReplicatedState::new(subnet_id, own_subnet_type);
-
-        // Add a message to the ingress history, to later verify that it gets recovered.
-        state.set_ingress_status(
-            message_test_id(7),
-            IngressStatus::Known {
-                state: IngressState::Done,
-                receiver: subnet_id.get(),
-                user_id: user_test_id(1),
-                time: UNIX_EPOCH,
-            },
-            NumBytes::from(u64::MAX),
-        );
-
-        // Checkpoint with old representation (ingress history in system_metadata.pbuf).
-        let mut height = Height::new(42);
-        let state2 = make_checkpoint_and_get_state_impl(&state, height, &tip_channel, false);
-        assert_eq!(state2, state);
-
-        // Simulate an upgrade to new representation (separate `ingress_history.pbuf`).
-        height.inc_assign();
-        let state3 = make_checkpoint_and_get_state_impl(&state2, height, &tip_channel, true);
-        assert_eq!(state3, state);
-
-        // And a downgrade to the old representation.
-        height.inc_assign();
-        let state4 = make_checkpoint_and_get_state_impl(&state3, height, &tip_channel, false);
-        assert_eq!(state4, state);
     });
 }

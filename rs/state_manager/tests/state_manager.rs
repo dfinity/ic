@@ -4211,6 +4211,47 @@ fn tip_is_initialized_correctly() {
     });
 }
 
+#[test]
+fn can_recover_ingress_history() {
+    state_manager_test(|_metrics, state_manager| {
+        let (_height, state) = state_manager.take_tip();
+        state_manager.commit_and_certify(state, height(1), CertificationScope::Full);
+        let (_height, mut state) = state_manager.take_tip();
+
+        // Add a message to the ingress history, to later verify that it gets recovered.
+        state.set_ingress_status(
+            message_test_id(7),
+            IngressStatus::Known {
+                state: IngressState::Done,
+                receiver: subnet_test_id(42).get(),
+                user_id: user_test_id(1),
+                time: ic_types::time::UNIX_EPOCH,
+            },
+            NumBytes::from(u64::MAX),
+        );
+
+        // Checkpoint with old representation (ingress history in system_metadata.pbuf).
+        state_manager.set_separate_ingress_history(false);
+        state_manager.commit_and_certify(state.clone(), height(2), CertificationScope::Full);
+        let (_height, state2) = state_manager.take_tip();
+        state.metadata.prev_state_hash = state2.metadata.prev_state_hash.clone();
+        assert_eq!(state2, state);
+
+        state_manager.set_separate_ingress_history(true);
+        state_manager.commit_and_certify(state2, height(3), CertificationScope::Full);
+        let (_height, state3) = state_manager.take_tip();
+        state.metadata.prev_state_hash = state3.metadata.prev_state_hash.clone();
+        assert_eq!(state3, state);
+
+        // And a downgrade to the old representation.
+        state_manager.set_separate_ingress_history(false);
+        state_manager.commit_and_certify(state3, height(4), CertificationScope::Full);
+        let (_height, state4) = state_manager.take_tip();
+        state.metadata.prev_state_hash = state4.metadata.prev_state_hash.clone();
+        assert_eq!(state4, state);
+    });
+}
+
 proptest! {
     #[test]
     fn stream_store_encode_decode(stream in arb_stream(0, 10, 0, 10), size_limit in 0..20usize) {

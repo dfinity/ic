@@ -34,55 +34,75 @@ use std::time::Instant;
 const DEFRAG_SIZE: u64 = 1 << 29; // 500 MB
 const DEFRAG_SAMPLE: usize = 100;
 
+/// Tip directory can be in following states:
+///    Empty: no data available. The only possible request is ResetTipTo to populate it
+///    ReadyForPageDeltas(height): ready to write page deltas. We keep track of height to make sure
+///    it never decreases.
+/// Height(0) is special, it has no corresponding checkpoint to write on top of. That's why the
+/// state of a freshly created TipRequest with empty tip directory is ReadyForPageDeltas(0).
+#[derive(Debug, Eq, PartialEq)]
+enum TipState {
+    Empty,
+    ReadyForPageDeltas(Height),
+    Serialized(Height),
+}
+
 /// Request for the Tip directory handling thread.
 pub(crate) enum TipRequest {
     /// Create checkpoint from the current tip for the given height.
     /// Return the created checkpoint or error into the sender.
+    /// State: Serialized(height) -> Empty
     TipToCheckpoint {
         height: Height,
         sender: Sender<Result<CheckpointLayout<ReadOnly>, LayoutError>>,
     },
     /// Filter canisters in tip. Remove ones not present in the set.
+    /// State: !Empty
     FilterTipCanisters {
         height: Height,
         ids: BTreeSet<CanisterId>,
     },
     /// Truncate PageMaps's path.
+    /// State: ReadyForPageDeltas(h) -> ReadyForPageDeltas(height), height >= h
     TruncatePageMapsPath {
         height: Height,
         page_map_type: PageMapType,
     },
     /// Flush PageMaps's unflushed delta on disc.
+    /// State: ReadyForPageDeltas(h) -> ReadyForPageDeltas(height), height >= h
     FlushPageMapDelta {
         height: Height,
         page_map: PageMap,
         page_map_type: PageMapType,
     },
     /// Reset tip folder to the checkpoint with given height.
+    /// State: * -> ReadyForPageDeltas(checkpoint_layout.height())
     ResetTipTo {
         checkpoint_layout: CheckpointLayout<ReadOnly>,
     },
-    /// Serialize the data from ReplicatedState to the tip folder.
+    /// State: ReadyForPageDeltas(h) -> Serialized(height), height >= h
     SerializeToTip {
         height: Height,
         replicated_state: Box<ReplicatedState>,
         separate_ingress_history: bool,
     },
     /// Run one round of tip defragmentation.
+    /// State: ReadyForPageDeltas(h) -> ReadyForPageDeltas(height), height >= h
     DefragTip {
         height: Height,
         page_map_types: Vec<PageMapType>,
     },
     /// Compute manifest, store result into states and perist metadata as result.
+    /// State: *
     ComputeManifest {
         checkpoint_layout: CheckpointLayout<ReadOnly>,
         manifest_delta: Option<crate::manifest::ManifestDelta>,
         states: Arc<parking_lot::RwLock<SharedState>>,
         persist_metadata_guard: Arc<Mutex<()>>,
     },
-    Wait {
-        sender: Sender<()>,
-    },
+    /// Wait for the message to be executed and notify back via sender.
+    /// State: *
+    Wait { sender: Sender<()> },
 }
 
 fn request_timer(metrics: &StateManagerMetrics, name: &str) -> HistogramTimer {
@@ -117,6 +137,10 @@ pub(crate) fn spawn_tip_thread(
 ) -> (JoinOnDrop<()>, Sender<TipRequest>) {
     let (tip_sender, tip_receiver) = unbounded();
     let mut thread_pool = scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS);
+    let mut tip_state = TipState::ReadyForPageDeltas(Height::from(0));
+    // On top of tip state transitions, we enforce that each checkpoint gets manifest before we
+    // create next one. Height(0) doesn't need manifest, so original state is true.
+    let mut have_latest_manifest = true;
     let tip_handle = JoinOnDrop::new(
         std::thread::Builder::new()
             .name("TipThread".to_string())
@@ -124,6 +148,8 @@ pub(crate) fn spawn_tip_thread(
                 while let Ok(req) = tip_receiver.recv() {
                     match req {
                         TipRequest::FilterTipCanisters { height, ids } => {
+                            debug_assert_ne!(tip_state, TipState::Empty);
+
                             let _timer = request_timer(&metrics, "filter_tip_canisters");
                             tip_handler
                                 .filter_tip_canisters(height, &ids)
@@ -137,6 +163,9 @@ pub(crate) fn spawn_tip_thread(
                                 });
                         }
                         TipRequest::TipToCheckpoint { height, sender } => {
+                            debug_assert_eq!(tip_state, TipState::Serialized(height));
+                            debug_assert!(have_latest_manifest);
+                            have_latest_manifest = false;
                             let cp = {
                                 let _timer =
                                     request_timer(&metrics, "tip_to_checkpoint_send_checkpoint");
@@ -188,6 +217,11 @@ pub(crate) fn spawn_tip_thread(
                             height,
                             page_map_type,
                         } => {
+                            match tip_state {
+                                TipState::ReadyForPageDeltas(h) => debug_assert!(height >= h),
+                                _ => panic!("Unexpected tip state: {:?}", tip_state),
+                            }
+                            tip_state = TipState::ReadyForPageDeltas(height);
                             let _timer = request_timer(&metrics, "truncate_page_maps_path");
                             let path =
                                 page_map_path(&log, &mut tip_handler, height, &page_map_type);
@@ -200,6 +234,12 @@ pub(crate) fn spawn_tip_thread(
                             page_map_type,
                         } => {
                             let _timer = request_timer(&metrics, "flush_unflushed_delta");
+                            #[cfg(debug_assert)]
+                            match tip_state {
+                                TipState::ReadyForPageDeltas(h) => debug_assert!(height >= h),
+                                _ => panic!("Unexpected tip state: {:?}", tip_state),
+                            }
+                            tip_state = TipState::ReadyForPageDeltas(height);
                             let path =
                                 page_map_path(&log, &mut tip_handler, height, &page_map_type);
                             if !page_map.unflushed_delta_is_empty() {
@@ -216,6 +256,12 @@ pub(crate) fn spawn_tip_thread(
                             separate_ingress_history,
                         } => {
                             let _timer = request_timer(&metrics, "serialize_to_tip");
+                            #[cfg(debug_assert)]
+                            match tip_state {
+                                TipState::ReadyForPageDeltas(h) => debug_assert!(height >= h),
+                                _ => panic!("Unexpected tip state: {:?}", tip_state),
+                            }
+                            tip_state = TipState::Serialized(height);
                             serialize_to_tip(
                                 &log,
                                 &replicated_state,
@@ -236,6 +282,7 @@ pub(crate) fn spawn_tip_thread(
                         }
                         TipRequest::ResetTipTo { checkpoint_layout } => {
                             let _timer = request_timer(&metrics, "reset_tip_to");
+                            tip_state = TipState::ReadyForPageDeltas(checkpoint_layout.height());
                             tip_handler
                                 .reset_tip_to(
                                     &state_layout,
@@ -255,6 +302,8 @@ pub(crate) fn spawn_tip_thread(
                             height,
                             page_map_types,
                         } => {
+                            debug_assert_ne!(tip_state, TipState::Empty);
+                            tip_state = TipState::ReadyForPageDeltas(height);
                             let _timer = request_timer(&metrics, "defrag_tip");
                             defrag_tip(
                                 &tip_handler.tip(height).unwrap_or_else(|err| {
@@ -292,6 +341,7 @@ pub(crate) fn spawn_tip_thread(
                                 &persist_metadata_guard,
                                 &malicious_flags,
                             );
+                            have_latest_manifest = true;
                         }
                     }
                 }
