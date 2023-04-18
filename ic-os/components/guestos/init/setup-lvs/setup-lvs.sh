@@ -57,9 +57,9 @@ lvs /dev/store/shared-data >/dev/null 2>&1 || (
 lvs /dev/store/shared-backup >/dev/null 2>&1 || (
     echo "Logical volume 'shared-backup' does not exist yet (first boot?), creating it."
     TOTAL_SIZE_MB=$(($(blockdev --getsz /dev/mapper/vda10-crypt) * 512 / 1024 / 1024))
-    # Limit to 180G or 25% of capacity, whichever is lower.
+    # Limit to 400G or 25% of capacity, whichever is lower.
     LV_SIZE_MB=$(("$TOTAL_SIZE_MB" / 4))
-    LV_SIZE_LIMIT_MB=180000
+    LV_SIZE_LIMIT_MB=400000
     if [ "${LV_SIZE_MB}" -gt "${LV_SIZE_LIMIT_MB}" ]; then
         LV_SIZE_MB="${LV_SIZE_LIMIT_MB}"
     fi

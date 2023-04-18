@@ -154,7 +154,7 @@ component_files = {
     Label("ssh/read-ssh-keys.sh"): "/opt/ic/bin/read-ssh-keys.sh",
 
     # upgrade
-    Label("upgrade/shared-resources/monitor-expand-shared-data/monitor-expand-shared-data.service"): "/etc/systemd/system/monitor-expand-shared-data.service",
+    Label("upgrade/shared-resources/monitor-expand-shared-lvs/monitor-expand-shared-lvs.service"): "/etc/systemd/system/monitor-expand-shared-lvs.service",
     Label("upgrade/shared-resources/upgrade-shared-data-store/upgrade-shared-data-store.sh"): "/opt/ic/bin/upgrade-shared-data-store.sh",
     Label("upgrade/shared-resources/upgrade-shared-data-store/upgrade-shared-data-store.service"): "/etc/systemd/system/upgrade-shared-data-store.service",
     Label("upgrade/shared-resources/setup-shared-resources/setup-shared-backup.sh"): "/opt/ic/bin/setup-shared-backup.sh",
@@ -169,6 +169,6 @@ component_files = {
     Label("upgrade/systemd-generators/guestos/mount-generator"): "/etc/systemd/system-generators/mount-generator",
     Label("upgrade/systemd-generators/systemd-gpt-auto-generator"): "/etc/systemd/system-generators/systemd-gpt-auto-generator",
     Label("upgrade/manageboot/manageboot.sh"): "/opt/ic/bin/manageboot.sh",
-    Label("upgrade/shared-resources/monitor-expand-shared-data/monitor-expand-shared-data.py"): "/opt/ic/bin/monitor-expand-shared-data.py",
+    Label("upgrade/shared-resources/monitor-expand-shared-lvs/monitor-expand-shared-lvs.py"): "/opt/ic/bin/monitor-expand-shared-lvs.py",
     Label("upgrade/grub.sh"): "/opt/ic/bin/grub.sh",
 }

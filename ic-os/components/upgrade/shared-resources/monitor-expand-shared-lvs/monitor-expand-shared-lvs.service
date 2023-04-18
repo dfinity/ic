@@ -1,0 +1,11 @@
+[Unit]
+Description=Monitor and expand ic storage logical volumes
+RequiresMountsFor=/var/lib/ic/data
+RequiresMountsFor=/var/lib/ic/backup
+
+[Service]
+Type=simple
+ExecStart=/opt/ic/bin/monitor-expand-shared-lvs.py
+
+[Install]
+WantedBy=multi-user.target
