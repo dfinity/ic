@@ -372,6 +372,11 @@ load("//pre-commit:shellcheck.bzl", "shellcheck")
 
 shellcheck(name = "shellcheck")
 
+# candid binary
+load("//pre-commit:candid.bzl", "candid")
+
+candid(name = "candid")
+
 load("//bazel:jq.bzl", "jq_repository")
 
 jq_repository(name = "jq")

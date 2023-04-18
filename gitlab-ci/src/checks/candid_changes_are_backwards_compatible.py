@@ -160,7 +160,7 @@ def originals(candid_file_paths, *, diff_base):
 
 
 def find_didc_or_exit():
-    for binary_name in ["didc-arm32", "didc-linux64", "didc-macos", "didc"]:
+    for binary_name in ["didc", "didc-arm32", "didc-linux64", "didc-macos"]:
         try:
             stdout, stderr = run(["which", binary_name])
         except subprocess.CalledProcessError:
