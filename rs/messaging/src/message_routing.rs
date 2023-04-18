@@ -75,7 +75,8 @@ const METRIC_PROCESS_BATCH_PHASE_DURATION: &str = "mr_process_batch_phase_durati
 const METRIC_TIMED_OUT_REQUESTS_TOTAL: &str = "mr_timed_out_requests_total";
 
 const METRIC_WASM_CUSTOM_SECTIONS_MEMORY_USAGE_BYTES: &str =
-    "wasm_custom_sections_memory_usage_bytes";
+    "mr_wasm_custom_sections_memory_usage_bytes";
+const METRIC_CANISTER_HISTORY_MEMORY_USAGE_BYTES: &str = "mr_canister_history_memory_usage_bytes";
 
 const CRITICAL_ERROR_MISSING_SUBNET_SIZE: &str = "cycles_account_manager_missing_subnet_size_error";
 const CRITICAL_ERROR_NO_CANISTER_ALLOCATION_RANGE: &str = "mr_empty_canister_allocation_range";
@@ -250,10 +251,15 @@ pub(crate) struct MessageRoutingMetrics {
     /// correct operations.
     canisters_memory_usage_bytes: IntGauge,
     /// The memory footprint of Wasm custom sections of all canisters on this
-    /// subnet. Note that this counter is from the perspective of the canisters
+    /// subnet. Note that the value is from the perspective of the canisters
     /// and does not account for the extra copies of the state that the protocol
     /// has to store for correct operations.
     wasm_custom_sections_memory_usage_bytes: IntGauge,
+    /// The memory footprint of canister history of all canisters on this
+    /// subnet. Note that the value is from the perspective of the canisters
+    /// and does not account for the extra copies of the state that the protocol
+    /// has to store for correct operations.
+    canister_history_memory_usage_bytes: IntGauge,
     /// Critical error for not being able to calculate a subnet size.
     critical_error_missing_subnet_size: IntCounter,
     /// Critical error: subnet has no canister allocation range to generate new
@@ -303,6 +309,10 @@ impl MessageRoutingMetrics {
             wasm_custom_sections_memory_usage_bytes: metrics_registry.int_gauge(
                 METRIC_WASM_CUSTOM_SECTIONS_MEMORY_USAGE_BYTES,
                 "Total memory footprint of Wasm custom sections of all canisters on this subnet.",
+            ),
+            canister_history_memory_usage_bytes: metrics_registry.int_gauge(
+                METRIC_CANISTER_HISTORY_MEMORY_USAGE_BYTES,
+                "Total memory footprint of canister history of all canisters on this subnet.",
             ),
             critical_error_missing_subnet_size: metrics_registry
                 .error_counter(CRITICAL_ERROR_MISSING_SUBNET_SIZE),
@@ -391,9 +401,11 @@ impl BatchProcessorImpl {
     /// Observes metrics related to memory used by canisters. It includes:
     ///   * total memory used
     ///   * memory used by Wasm Custom Sections
+    ///   * memory used by canister history
     fn observe_canisters_memory_usage(&self, state: &ReplicatedState) {
         let mut total_memory_usage = NumBytes::from(0);
         let mut wasm_custom_sections_memory_usage = NumBytes::from(0);
+        let mut canister_history_memory_usage = NumBytes::from(0);
         for canister in state.canister_states.values() {
             total_memory_usage += canister.memory_usage(state.metadata.own_subnet_type);
             wasm_custom_sections_memory_usage += canister
@@ -401,6 +413,7 @@ impl BatchProcessorImpl {
                 .as_ref()
                 .map(|es| es.metadata.memory_usage())
                 .unwrap_or_default();
+            canister_history_memory_usage += canister.canister_history_memory_usage();
         }
         self.metrics
             .canisters_memory_usage_bytes
@@ -408,6 +421,9 @@ impl BatchProcessorImpl {
         self.metrics
             .wasm_custom_sections_memory_usage_bytes
             .set(wasm_custom_sections_memory_usage.get() as i64);
+        self.metrics
+            .canister_history_memory_usage_bytes
+            .set(canister_history_memory_usage.get() as i64);
     }
 
     // Retrieve the `ProvisionalWhitelist` from the registry.  We do this at the

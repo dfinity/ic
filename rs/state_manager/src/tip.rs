@@ -520,7 +520,7 @@ fn serialize_canister_to_tip(
         .into(),
     )?;
     let pb_canister_metadata = CanisterMetadata {
-        canister_history: Some((&canister_state.system_state.canister_history).into()),
+        canister_history: Some((canister_state.system_state.get_canister_history()).into()),
     };
     canister_layout
         .canister_metadata()

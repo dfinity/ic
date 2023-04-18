@@ -1956,7 +1956,7 @@ where
 mod test {
     use super::*;
 
-    use ic_ic00_types::{CanisterChangeDetails, CanisterChangeOrigin, IC_00};
+    use ic_ic00_types::{CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, IC_00};
     use ic_interfaces::messages::{CanisterCall, CanisterMessage, CanisterMessageOrTask};
     use ic_replicated_state::canister_state::system_state::CanisterHistory;
     use ic_test_utilities::types::ids::user_test_id;
@@ -1969,7 +1969,6 @@ mod test {
     };
     use ic_test_utilities_logger::with_test_replica_logger;
     use ic_test_utilities_tmpdir::tmpdir;
-    use ic_types::time::Time;
     use std::sync::Arc;
 
     fn default_canister_state_bits() -> CanisterStateBits {
@@ -2079,18 +2078,18 @@ mod test {
     #[test]
     fn test_encode_decode_non_empty_history() {
         let mut canister_history = CanisterHistory::default();
-        canister_history.add_canister_change(
-            Time::from_nanos_since_unix_epoch(42),
+        canister_history.add_canister_change(CanisterChange::new(
+            42,
             0,
             CanisterChangeOrigin::from_user(user_test_id(42).get()),
             CanisterChangeDetails::CanisterCreation,
-        );
-        canister_history.add_canister_change(
-            Time::from_nanos_since_unix_epoch(123),
+        ));
+        canister_history.add_canister_change(CanisterChange::new(
+            123,
             1,
             CanisterChangeOrigin::from_user(user_test_id(123).get()),
             CanisterChangeDetails::CanisterCodeUninstall,
-        );
+        ));
 
         let pb_canister_metadata = pb_canister_metadata::CanisterMetadata {
             canister_history: Some(pb_canister_metadata::CanisterHistory::from(

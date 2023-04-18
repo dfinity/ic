@@ -13,6 +13,7 @@ use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
 use ic_protobuf::{proxy::ProxyDecodeError, registry::crypto::v1 as pb_registry_crypto};
 use num_traits::cast::ToPrimitive;
 use serde::{Deserializer, Serialize};
+use std::mem::size_of;
 use std::{collections::BTreeSet, convert::TryFrom, error::Error, fmt, slice::Iter, str::FromStr};
 use strum_macros::{Display, EnumIter, EnumString};
 
@@ -214,6 +215,12 @@ pub struct CanisterControllersChangeRecord {
     controllers: Vec<PrincipalId>,
 }
 
+impl CanisterControllersChangeRecord {
+    pub fn controllers(&self) -> &[PrincipalId] {
+        &self.controllers
+    }
+}
+
 /// `CandidType` for `CanisterChangeDetails`
 /// ```text
 /// variant {
@@ -304,6 +311,22 @@ impl CanisterChange {
             change_origin,
             change_details,
         }
+    }
+
+    /// Returns the number of bytes to represent a canister change in memory.
+    /// The vector of controllers in `CanisterControllersChange` is counted separately
+    /// because the controllers are stored on heap and thus not accounted for
+    /// in `size_of::<CanisterChange>()`.
+    pub fn count_bytes(&self) -> NumBytes {
+        let controllers_memory_size = match &self.change_details {
+            CanisterChangeDetails::CanisterControllersChange(canister_controllers_change) => {
+                canister_controllers_change.controllers().len() * size_of::<PrincipalId>()
+            }
+            CanisterChangeDetails::CanisterCodeDeployment(_)
+            | CanisterChangeDetails::CanisterCreation
+            | CanisterChangeDetails::CanisterCodeUninstall => 0,
+        };
+        NumBytes::from((size_of::<CanisterChange>() + controllers_memory_size) as u64)
     }
 }
 

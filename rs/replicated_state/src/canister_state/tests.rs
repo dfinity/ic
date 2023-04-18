@@ -5,13 +5,17 @@ use super::*;
 use crate::canister_state::execution_state::CustomSection;
 use crate::canister_state::execution_state::CustomSectionType;
 use crate::canister_state::execution_state::WasmMetadata;
-use crate::canister_state::system_state::CyclesUseCase;
+use crate::canister_state::system_state::{
+    CanisterHistory, CyclesUseCase, MAX_CANISTER_HISTORY_CHANGES,
+};
 use crate::CallOrigin;
 use crate::Memory;
 use ic_base_types::NumSeconds;
+use ic_ic00_types::{CanisterChange, CanisterChangeDetails, CanisterChangeOrigin};
 use ic_logger::replica_logger::no_op_logger;
 use ic_test_utilities::mock_time;
 use ic_test_utilities::types::{
+    ids::canister_test_id,
     ids::user_test_id,
     messages::{RequestBuilder, ResponseBuilder},
 };
@@ -705,4 +709,49 @@ fn execution_state_test_partial_eq() {
         },
         state_1
     );
+}
+
+/// Performs operations with canister history and thus exercises
+/// ```
+///   debug_assert_eq!(
+///       self.get_memory_usage(),
+///       compute_total_canister_change_size(&self.changes),
+///   );
+/// ```
+/// in the functions `CanisterHistory::add_canister_change` and
+/// `CanisterHistory::clear`.
+#[test]
+fn canister_history_operations() {
+    let mut canister_history = CanisterHistory::default();
+
+    for i in 0..8 {
+        canister_history.add_canister_change(CanisterChange::new(
+            42,
+            0,
+            CanisterChangeOrigin::from_user(user_test_id(42).get()),
+            CanisterChangeDetails::controllers_change(vec![canister_test_id(i).get()]),
+        ));
+    }
+
+    canister_history.clear();
+
+    for i in 0..(MAX_CANISTER_HISTORY_CHANGES + 8) {
+        canister_history.add_canister_change(CanisterChange::new(
+            42,
+            0,
+            CanisterChangeOrigin::from_user(user_test_id(42).get()),
+            CanisterChangeDetails::controllers_change(vec![canister_test_id(i).get()]),
+        ));
+    }
+
+    canister_history.clear();
+
+    for i in 0..(MAX_CANISTER_HISTORY_CHANGES + 8) {
+        canister_history.add_canister_change(CanisterChange::new(
+            42,
+            0,
+            CanisterChangeOrigin::from_user(user_test_id(42).get()),
+            CanisterChangeDetails::controllers_change(vec![canister_test_id(i).get()]),
+        ));
+    }
 }

@@ -38,7 +38,7 @@ lazy_static! {
 }
 
 /// Maximum number of canister changes stored in the canister history.
-pub const MAX_CANISTER_HISTORY_CHANGES: u64 = 1000;
+pub const MAX_CANISTER_HISTORY_CHANGES: u64 = 20;
 
 /// Enumerates use cases of consumed cycles.
 #[derive(Clone, Copy, Debug, PartialOrd, Ord, PartialEq, Eq, Serialize, Deserialize)]
@@ -158,47 +158,88 @@ impl CanisterMetrics {
     }
 }
 
+/// Computes the total byte size of the given canister changes. Requires `O(N)` time.
+pub fn compute_total_canister_change_size(changes: &VecDeque<Arc<CanisterChange>>) -> NumBytes {
+    changes.iter().map(|c| c.count_bytes()).sum()
+}
+
 /// The canister history consists of a list of canister changes
 /// with the oldest canister changes at lowest indices.
 /// The system can drop the oldest canister changes from the list to keep its length bounded
-/// (with `1000` latest canister changes to always remain in the list).
+/// (with `20` latest canister changes to always remain in the list).
 /// The system also drops all canister changes if the canister runs out of cycles.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct CanisterHistory {
+    /// The canister changes stored in the order from the oldest to the most recent.
     changes: Arc<VecDeque<Arc<CanisterChange>>>,
     /// The `total_num_changes` records the total number of canister changes
     /// that have ever been recorded. In particular, if the system drops some canister changes,
     /// `total_num_changes` does not decrease.
     total_num_changes: u64,
+    /// Sum over `c.count_bytes()` for all canister changes `c`.
+    /// We pre-compute and store the sum in a field to optimize the running time
+    /// of computing the sum as the canister history memory usage is requested frequently.
+    canister_history_memory_usage: NumBytes,
 }
 
 impl CanisterHistory {
-    pub fn clear_canister_history(&mut self) {
+    /// Clears all canister changes and their memory usage,
+    /// but keeps the total number of changes recorded.
+    pub fn clear(&mut self) {
         self.changes = Arc::new(Default::default());
+        self.canister_history_memory_usage = NumBytes::from(0);
+
+        debug_assert_eq!(
+            self.get_memory_usage(),
+            compute_total_canister_change_size(&self.changes),
+        );
     }
 
-    pub fn add_canister_change(
-        &mut self,
-        timestamp_nanos: Time,
-        canister_version: u64,
-        change_origin: CanisterChangeOrigin,
-        change_details: CanisterChangeDetails,
-    ) {
+    /// Adds a canister change to the history, updating the memory usage
+    /// and total number of changes. It also makes sure that the number
+    /// of canister changes does not exceed `MAX_CANISTER_HISTORY_CHANGES`
+    /// by dropping the oldest entry if necessary.
+    pub fn add_canister_change(&mut self, canister_change: CanisterChange) {
         let changes = Arc::make_mut(&mut self.changes);
         if self.total_num_changes >= MAX_CANISTER_HISTORY_CHANGES {
-            changes.pop_front();
+            let change_size = changes
+                .pop_front()
+                .as_ref()
+                .map(|c| c.count_bytes())
+                .unwrap_or_default();
+            self.canister_history_memory_usage -= change_size;
         }
-        changes.push_back(Arc::new(CanisterChange::new(
-            timestamp_nanos.as_nanos_since_unix_epoch(),
-            canister_version,
-            change_origin,
-            change_details,
-        )));
+        self.canister_history_memory_usage += canister_change.count_bytes();
+        changes.push_back(Arc::new(canister_change));
         self.total_num_changes += 1;
+
+        debug_assert_eq!(
+            self.get_memory_usage(),
+            compute_total_canister_change_size(&self.changes),
+        );
+    }
+
+    /// Returns an iterator over the most recent canister changes: if `num_requested_changes` is None,
+    /// then all canister changes are returned; otherwise, the requested number of canister changes
+    /// or, if more changes are requested than available in the history, all canister changes are returned.
+    /// The changes are iterated in chronological order, i.e., from the oldest to the most recent.
+    pub fn get_changes(
+        &self,
+        num_requested_changes: Option<usize>,
+    ) -> impl Iterator<Item = &Arc<CanisterChange>> {
+        let num_all_changes = self.changes.len();
+        let num_changes = num_requested_changes
+            .unwrap_or(num_all_changes)
+            .min(num_all_changes);
+        self.changes.range((num_all_changes - num_changes)..)
     }
 
     pub fn get_total_num_changes(&self) -> u64 {
         self.total_num_changes
+    }
+
+    pub fn get_memory_usage(&self) -> NumBytes {
+        self.canister_history_memory_usage
     }
 }
 
@@ -268,7 +309,7 @@ pub struct SystemState {
     pub canister_version: u64,
 
     /// Canister history.
-    pub canister_history: CanisterHistory,
+    canister_history: CanisterHistory,
 }
 
 /// A wrapper around the different canister statuses.
@@ -561,15 +602,16 @@ impl TryFrom<pb_canister_metadata::CanisterHistory> for CanisterHistory {
     type Error = ProxyDecodeError;
 
     fn try_from(value: pb_canister_metadata::CanisterHistory) -> Result<Self, Self::Error> {
+        let changes = value
+            .changes
+            .into_iter()
+            .map(|e| Ok(Arc::new(e.try_into()?)))
+            .collect::<Result<VecDeque<_>, Self::Error>>()?;
+        let canister_history_memory_usage = compute_total_canister_change_size(&changes);
         Ok(Self {
-            changes: Arc::new(
-                value
-                    .changes
-                    .into_iter()
-                    .map(|e| Ok(Arc::new(e.try_into()?)))
-                    .collect::<Result<VecDeque<_>, Self::Error>>()?,
-            ),
+            changes: Arc::new(changes),
             total_num_changes: value.total_num_changes,
+            canister_history_memory_usage,
         })
     }
 }
@@ -1031,9 +1073,16 @@ impl SystemState {
         self.queues.filter_ingress_messages(filter)
     }
 
-    /// Returns the memory currently in use by the `SystemState`.
-    pub fn memory_usage(&self) -> NumBytes {
+    /// Returns the memory currently in use by the `SystemState`
+    /// for canister messages.
+    pub fn message_memory_usage(&self) -> NumBytes {
         (self.queues.memory_usage() as u64).into()
+    }
+
+    /// Returns the memory currently in use by the `SystemState`
+    /// for canister history.
+    pub fn canister_history_memory_usage(&self) -> NumBytes {
+        self.canister_history.get_memory_usage()
     }
 
     /// Sets the (transient) size in bytes of responses from this canister
@@ -1209,6 +1258,28 @@ impl SystemState {
             ConsumingCycles::Yes => *use_case_cocnsumption += amount.into(),
             ConsumingCycles::No => *use_case_cocnsumption -= amount.into(),
         }
+    }
+
+    /// Adds a canister change to canister history.
+    /// The canister version of the newly added canister change is
+    /// taken directly from the `SystemState`.
+    pub fn add_canister_change(
+        &mut self,
+        timestamp_nanos: Time,
+        change_origin: CanisterChangeOrigin,
+        change_details: CanisterChangeDetails,
+    ) {
+        let new_change = CanisterChange::new(
+            timestamp_nanos.as_nanos_since_unix_epoch(),
+            self.canister_version,
+            change_origin,
+            change_details,
+        );
+        self.canister_history.add_canister_change(new_change);
+    }
+
+    pub fn get_canister_history(&self) -> &CanisterHistory {
+        &self.canister_history
     }
 }
 
