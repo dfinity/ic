@@ -1,7 +1,7 @@
 use crate::ckbtc::minter::utils::{
     assert_account_balance, assert_burn_transaction, assert_mint_transaction, ensure_wallet,
     generate_blocks, get_btc_address, get_btc_client, update_balance, upgrade_canister_with_args,
-    wait_for_bitcoin_balance, BTC_BLOCK_SIZE,
+    wait_for_bitcoin_balance, BTC_BLOCK_REWARD,
 };
 use crate::{
     ckbtc::lib::{
@@ -115,7 +115,7 @@ pub fn test_retrieve_btc(env: TestEnv) {
         wait_for_bitcoin_balance(
             &universal_canister,
             &logger,
-            BTC_MIN_CONFIRMATIONS as u64 * BTC_BLOCK_SIZE,
+            BTC_MIN_CONFIRMATIONS * BTC_BLOCK_REWARD,
             &btc_address0,
         )
         .await;
@@ -130,7 +130,7 @@ pub fn test_retrieve_btc(env: TestEnv) {
                     &logger,
                     *block_index,
                     &account1,
-                    BTC_BLOCK_SIZE - KYT_FEE,
+                    BTC_BLOCK_REWARD - KYT_FEE,
                 )
                 .await;
             } else {
@@ -169,7 +169,7 @@ pub fn test_retrieve_btc(env: TestEnv) {
         assert_account_balance(
             &ledger_agent,
             &account1,
-            3 * (BTC_BLOCK_SIZE - KYT_FEE) - transfer_amount - TRANSFER_FEE,
+            3 * (BTC_BLOCK_REWARD - KYT_FEE) - transfer_amount - TRANSFER_FEE,
         )
         .await;
         info!(&logger, "Verify withdrawal_account balance on the ledger");

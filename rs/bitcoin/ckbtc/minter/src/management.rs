@@ -9,7 +9,7 @@ use ic_btc_interface::{
 };
 use ic_canister_log::log;
 use ic_cdk::api::call::RejectionCode;
-use ic_ckbtc_kyt::{DepositRequest, Error as KytError, FetchAlertsResponse};
+use ic_ckbtc_kyt::{DepositRequest, Error as KytError, FetchAlertsResponse, WithdrawalAttempt};
 use ic_ic00_types::{
     DerivationPath, EcdsaCurve, EcdsaKeyId, SignWithECDSAArgs, SignWithECDSAReply,
 };
@@ -285,6 +285,34 @@ pub async fn fetch_utxo_alerts(
     .await
     .map_err(|(code, message)| CallError {
         method: "fetch_utxo_alerts".to_string(),
+        reason: Reason::from_reject(code, message),
+    })?;
+    Ok(res)
+}
+
+/// Requests alerts for the given Bitcoin address.
+pub async fn fetch_withdrawal_alerts(
+    kyt_principal: Principal,
+    caller: Principal,
+    address: String,
+    amount: u64,
+) -> Result<Result<FetchAlertsResponse, KytError>, CallError> {
+    let now = ic_cdk::api::time();
+    let id = format!("{caller}:{address}:{amount}:{now}");
+    let (res,): (Result<FetchAlertsResponse, KytError>,) = ic_cdk::api::call::call(
+        kyt_principal,
+        "fetch_withdrawal_alerts",
+        (WithdrawalAttempt {
+            caller,
+            id,
+            amount,
+            address,
+            timestamp_nanos: now,
+        },),
+    )
+    .await
+    .map_err(|(code, message)| CallError {
+        method: "fetch_withdrawal_alerts".to_string(),
         reason: Reason::from_reject(code, message),
     })?;
     Ok(res)

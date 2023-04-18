@@ -98,6 +98,17 @@ pub enum Event {
     /// Indicates that the given UTXO's value is too small to pay for a KYT check.
     #[serde(rename = "ignored_utxo")]
     IgnoredUtxo { utxo: Utxo },
+
+    /// Indicates that the KYT check for the specified address failed.
+    #[serde(rename = "retrieve_btc_kyt_failed")]
+    RetrieveBtcKytFailed {
+        owner: Principal,
+        address: String,
+        amount: u64,
+        uuid: String,
+        kyt_provider: Principal,
+        block_index: u64,
+    },
 }
 
 #[derive(Debug)]
@@ -202,6 +213,9 @@ pub fn replay(mut events: impl Iterator<Item = Event>) -> Result<CkBtcMinterStat
             }
             Event::IgnoredUtxo { utxo } => {
                 state.ignore_utxo(utxo);
+            }
+            Event::RetrieveBtcKytFailed { kyt_provider, .. } => {
+                *state.owed_kyt_amount.entry(kyt_provider).or_insert(0) += state.kyt_fee;
             }
         }
     }

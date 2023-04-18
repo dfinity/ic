@@ -58,6 +58,11 @@ pub struct RetrieveBtcRequest {
     pub address: BitcoinAddress,
     pub block_index: u64,
     pub received_at: u64,
+    /// The KYT provider is optional because old retrieve_btc requests
+    /// didn't go through the KYT check.
+    #[serde(rename = "kyt_provider")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kyt_provider: Option<Principal>,
 }
 
 /// A transaction output storing the minter's change.
@@ -621,6 +626,9 @@ impl CkBtcMinterState {
             assert!(last_req.received_at <= request.received_at);
         }
         self.tokens_burned += request.amount;
+        if let Some(kyt_provider) = request.kyt_provider {
+            *self.owed_kyt_amount.entry(kyt_provider).or_insert(0) += self.kyt_fee;
+        }
         self.pending_retrieve_btc_requests.push(request);
     }
 

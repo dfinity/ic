@@ -9,6 +9,7 @@ use crate::{
 };
 use bitcoin::network::constants::Network as BtcNetwork;
 use bitcoin::util::psbt::serialize::{Deserialize, Serialize};
+use candid::Principal;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_btc_interface::{Network, OutPoint, Satoshi, Utxo};
 use icrc_ledger_types::icrc1::account::Account;
@@ -348,13 +349,15 @@ fn arb_retrieve_btc_requests(
         arb_address(),
         any::<u64>(),
         1569975147000..2069975147000u64,
+        option::of(any::<u64>()),
     )
         .prop_map(
-            |(amount, address, block_index, received_at)| RetrieveBtcRequest {
+            |(amount, address, block_index, received_at, provider)| RetrieveBtcRequest {
                 amount,
                 address,
                 block_index,
                 received_at,
+                kyt_provider: provider.map(|id| Principal::from(CanisterId::from_u64(id).get())),
             },
         );
     pvec(request_strategy, num).prop_map(|mut reqs| {

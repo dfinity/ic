@@ -54,7 +54,7 @@ pub const SHORT_TIMEOUT: Duration = Duration::from_secs(300);
 pub const LONG_TIMEOUT: Duration = Duration::from_secs(600);
 
 /// The initial amount of Satoshi per blocks (before halving).
-pub const BTC_BLOCK_SIZE: u64 = 50_0000_0000;
+pub const BTC_BLOCK_REWARD: u64 = 50_0000_0000;
 
 pub async fn stop_canister(canister: &Canister<'_>) {
     let stop_result = canister.stop().await;
@@ -70,13 +70,11 @@ pub async fn start_canister(canister: &Canister<'_>) {
 }
 
 /// Mint some blocks to the given address.
-pub fn generate_blocks(btc_client: &Client, logger: &Logger, nb_blocks: u32, address: &Address) {
-    let generated_blocks = btc_client
-        .generate_to_address(nb_blocks as u64, address)
-        .unwrap();
+pub fn generate_blocks(btc_client: &Client, logger: &Logger, nb_blocks: u64, address: &Address) {
+    let generated_blocks = btc_client.generate_to_address(nb_blocks, address).unwrap();
     info!(&logger, "Generated {} btc blocks.", generated_blocks.len());
     assert_eq!(
-        generated_blocks.len() as u32,
+        generated_blocks.len() as u64,
         nb_blocks,
         "Expected {} blocks.",
         nb_blocks

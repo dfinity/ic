@@ -11,7 +11,10 @@ use icrc_ledger_types::icrc1::account::Account;
 
 pub fn accept_retrieve_btc_request(state: &mut CkBtcMinterState, request: RetrieveBtcRequest) {
     record_event(&Event::AcceptedRetrieveBtcRequest(request.clone()));
-    state.pending_retrieve_btc_requests.push(request);
+    state.pending_retrieve_btc_requests.push(request.clone());
+    if let Some(kyt_provider) = request.kyt_provider {
+        *state.owed_kyt_amount.entry(kyt_provider).or_insert(0) += state.kyt_fee;
+    }
 }
 
 pub fn add_utxos(
@@ -76,4 +79,24 @@ pub fn mark_utxo_checked(
 pub fn ignore_utxo(state: &mut CkBtcMinterState, utxo: Utxo) {
     record_event(&Event::IgnoredUtxo { utxo: utxo.clone() });
     state.ignore_utxo(utxo);
+}
+
+pub fn retrieve_btc_kyt_failed(
+    state: &mut CkBtcMinterState,
+    owner: Principal,
+    address: String,
+    amount: u64,
+    kyt_provider: Principal,
+    uuid: String,
+    block_index: u64,
+) {
+    record_event(&Event::RetrieveBtcKytFailed {
+        owner,
+        address,
+        amount,
+        kyt_provider,
+        uuid,
+        block_index,
+    });
+    *state.owed_kyt_amount.entry(kyt_provider).or_insert(0) += state.kyt_fee;
 }
