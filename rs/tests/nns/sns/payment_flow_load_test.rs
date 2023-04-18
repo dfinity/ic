@@ -28,7 +28,12 @@ fn workload_rps50_many_ticket_participants(env: TestEnv) {
     generate_ticket_participants_workload(env, 50, Duration::from_secs(60));
 }
 
-/// This is a non-interactive test:
+/// This load test requires manual inspection of the resulting workload metrics.
+/// It should not be run regularly as it requires more resources. However, the complementary
+/// test //rs/tests/nns/sns:patment_flow_test excercises the same API and is intended to run
+/// on regular CI pipelines (pre-master, hourly, nightly).
+///
+/// Runbook:
 /// 1. Install NNS (with N users, each with 60 * 2 * X ICP) and SNS
 ///     * N = NUM_SNS_SALE_PARTICIPANTS
 ///     * SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S <= X <= SNS_SALE_PARAM_MAX_PARTICIPANT_ICP_E8S

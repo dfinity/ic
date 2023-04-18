@@ -147,10 +147,6 @@ name = "ic_sns_tests"
 path = "src/lib.rs"
 
 [[bin]]
-name = "ic-systest-sns-deployment"
-path = "deploy_with_sale.rs"
-
-[[bin]]
 name = "ic-systest-sns-sale-mass-participation"
 path = "sale_mass_participation.rs"
 

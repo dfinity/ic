@@ -254,18 +254,15 @@ fn setup(
     env: TestEnv,
     sale_participants: Vec<SaleParticipant>,
     canister_wasm_strategy: NnsCanisterWasmStrategy,
+    fast_test_setup: bool,
 ) {
-    PrometheusVm::default()
-        .start(&env)
-        .expect("failed to start prometheus VM");
+    if !fast_test_setup {
+        PrometheusVm::default()
+            .start(&env)
+            .expect("failed to start prometheus VM");
+    }
 
-    InternetComputer::new()
-        .with_required_host_features(vec![HostFeature::SnsLoadTest])
-        .with_default_vm_resources(VmResources {
-            vcpus: Some(UVM_NUM_CPUS),
-            memory_kibibytes: Some(UVM_MEMORY_SIZE),
-            boot_image_minimal_size_gibibytes: Some(UVM_BOOT_IMAGE_MIN_SIZE),
-        })
+    let mut ic = InternetComputer::new()
         .add_subnet(
             Subnet::new(SubnetType::System)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
@@ -275,11 +272,22 @@ fn setup(
             Subnet::new(SubnetType::Application)
                 .with_dkg_interval_length(Height::from(DKG_INTERVAL))
                 .add_nodes(SUBNET_SIZE),
-        )
-        .setup_and_start(&env)
+        );
+    if !fast_test_setup {
+        ic = ic
+            .with_required_host_features(vec![HostFeature::SnsLoadTest])
+            .with_default_vm_resources(VmResources {
+                vcpus: Some(UVM_NUM_CPUS),
+                memory_kibibytes: Some(UVM_MEMORY_SIZE),
+                boot_image_minimal_size_gibibytes: Some(UVM_BOOT_IMAGE_MIN_SIZE),
+            });
+    }
+    ic.setup_and_start(&env)
         .expect("failed to setup IC under test");
 
-    env.sync_prometheus_config_with_topology();
+    if !fast_test_setup {
+        env.sync_prometheus_config_with_topology();
+    }
 
     // Set up the initial ICP ledger
     let mut ledger_balances = HashMap::new();
@@ -308,16 +316,40 @@ pub fn sns_setup(env: TestEnv) {
         env,
         vec![],
         NnsCanisterWasmStrategy::NnsReleaseQualification,
+        false,
     );
 }
 
+pub fn sns_setup_fast(env: TestEnv) {
+    setup(
+        env,
+        vec![],
+        NnsCanisterWasmStrategy::NnsReleaseQualification,
+        true,
+    );
+}
+
+/// Setup an IC instance with SNS, pre-generating the participants' identities at random.
+/// The amount of ICPs in each user's SNS swap sub-account is minimally sufficient for sale participation.
+///
+/// The test can then pick up these participants as follows:
+/// ```
+/// let participants = Vec::<SaleParticipant>::read_attribute(&env);
+/// ```
 pub fn sns_setup_with_many_sale_participants(env: TestEnv) {
-    // Generate random identities for all the participants
+    sns_setup_with_many_sale_participants_impl(env, false)
+}
+
+/// Same as `sns_setup_with_many_sale_participants`, but intended for security testing in regular CI pipelines.
+pub fn sns_setup_with_many_sale_participants_fast(env: TestEnv) {
+    sns_setup_with_many_sale_participants_impl(env, true)
+}
+
+fn sns_setup_with_many_sale_participants_impl(env: TestEnv, fast_test_setup: bool) {
     let participants: Vec<SaleParticipant> = (1..NUM_SNS_SALE_PARTICIPANTS + 1)
         .map(|x| {
             let name = format!("user_{x}");
             let starting_icp_balance = Tokens::ZERO;
-            // The amount of ICPs in this user's SNS sale sub-account is minimally enough for sale participation.
             let starting_sns_balance = Tokens::from_e8s(SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S);
             let seed = x as u64;
             SaleParticipant::random(name, starting_icp_balance, starting_sns_balance, seed)
@@ -332,15 +364,23 @@ pub fn sns_setup_with_many_sale_participants(env: TestEnv) {
         env,
         participants,
         NnsCanisterWasmStrategy::NnsReleaseQualification,
+        fast_test_setup,
     );
 }
 
+/// Setup an IC instance with SNS, pre-generating the participants' identities at random.
+/// The amount of ICPs in each user's default ICP account is `1_200 * SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S`,
+/// i.e., each user can make ca. 1,000 minimal contributions (accounting for participation fees).
+///
+/// The test can then pick up these participants as follows:
+/// ```
+/// let participants = Vec::<SaleParticipant>::read_attribute(&env);
+/// ```
 pub fn sns_setup_with_many_icp_users(env: TestEnv) {
     // Generate random identities for all the participants
     let participants: Vec<SaleParticipant> = (1..NUM_SNS_SALE_PARTICIPANTS + 1)
         .map(|x| {
             let name = format!("user_{x}");
-            // The amount of ICPs in this user's default ICP account should suffise for at least 60 minimal SNS sale transfers + transfer fees.
             let starting_icp_balance =
                 Tokens::from_e8s(1_200 * SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S);
             let starting_sns_balance = Tokens::ZERO;
@@ -357,9 +397,13 @@ pub fn sns_setup_with_many_icp_users(env: TestEnv) {
         env,
         participants,
         NnsCanisterWasmStrategy::NnsReleaseQualification,
+        false,
     );
 }
 
+/// Call the `refresh_buyer_tokens` function of the SNS swap canister for all pre-generated participants (this actually initiates participation).
+///
+/// This function should be called after `sns_setup_with_many_sale_participants`.
 pub fn init_participants(env: TestEnv) {
     let log = env.logger();
     let start_time = Instant::now();
@@ -400,6 +444,9 @@ pub fn init_participants(env: TestEnv) {
     );
 }
 
+/// Check that the pre-generated participants have registered SNS swap contributions by calling the `get_buyer_state` function of the SNS swap canister on their behalf.
+///
+/// This function should be called after `sns_setup_with_many_sale_participants`.
 pub fn check_all_participants(env: TestEnv) {
     let log = env.logger();
     let start_time = Instant::now();
