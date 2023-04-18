@@ -64,5 +64,20 @@ COPY ./files/containers.conf /etc/containers/containers.conf
 COPY ./files/docker.sh /usr/bin/docker
 COPY ./files/entrypoint.sh /entrypoint.sh
 
+# Install Rust and Cargo in /opt
+ENV RUSTUP_HOME=/opt/rustup \
+    CARGO_TARGET_DIR=/cargo_target \
+    PATH=/opt/cargo/bin:$PATH
+
+# Add Rust/Cargo support
+# rustup uses $CARGO_HOME to figure out where to install itself
+ARG rust_version=1.58.1
+ENV CARGO_HOME=/opt/cargo
+RUN curl --fail https://sh.rustup.rs -sSf \
+        | sh -s -- -y --default-toolchain ${rust_version}-x86_64-unknown-linux-gnu --no-modify-path && \
+    rustup default ${rust_version}-x86_64-unknown-linux-gnu && \
+    rustup target add wasm32-unknown-unknown && \
+    chown -R ${USER}.${USER} ${RUSTUP_HOME} ${CARGO_HOME}
+
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["/bin/bash"]
