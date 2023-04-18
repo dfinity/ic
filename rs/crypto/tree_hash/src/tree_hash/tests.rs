@@ -2,6 +2,7 @@
 use super::*;
 use crate::hasher::Hasher;
 use crate::*;
+use assert_matches::assert_matches;
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
@@ -2131,6 +2132,67 @@ fn prune_witness_prune_inexistent_leaf_from_empty_subtree() {
     let res = prune_witness(&witness, &fixture.partial_tree_31());
 
     assert_eq!(err_inconsistent_partial_tree(fixture.p3.0), res);
+}
+
+#[test]
+fn prune_witness_exceed_recursion_depth() {
+    const DUMMY_LABEL: &str = "dummy label";
+    fn witness_of_depth(depth: usize) -> Witness {
+        assert!(depth > 0);
+        let mut result = Box::new(Witness::Known());
+        if depth > 1 {
+            result = Box::new(Witness::Node {
+                label: DUMMY_LABEL.into(),
+                sub_witness: result,
+            });
+        }
+        for _ in 2..depth {
+            result = Box::new(Witness::Fork {
+                left_tree: result,
+                right_tree: Box::new(Witness::Pruned {
+                    digest: Digest([0u8; 32]),
+                }),
+            });
+        }
+        *result
+    }
+
+    fn labeled_tree(depth: usize) -> LabeledTree<Vec<u8>> {
+        let mut result = LabeledTree::Leaf("dummy value".into());
+        if depth > 1 {
+            result = LabeledTree::SubTree(flatmap!(DUMMY_LABEL.into() => result));
+        }
+        result
+    }
+
+    for depth in [1, 2, MAX_HASH_TREE_DEPTH - 1, MAX_HASH_TREE_DEPTH] {
+        let witness = witness_of_depth(depth);
+        assert_matches!(
+            prune_witness(&witness, &labeled_tree(depth)),
+            Ok(Witness::Pruned { .. })
+        );
+        assert_matches!(recompute_digest(&labeled_tree(depth), &witness), Ok(_));
+    }
+    // failing tests reach the recursion limit
+    for depth in [MAX_HASH_TREE_DEPTH + 1, MAX_HASH_TREE_DEPTH + 10] {
+        let witness = witness_of_depth(depth);
+        assert_matches!(
+            serde_cbor::from_slice::<Witness>(
+                serde_cbor::to_vec(&witness)
+                    .expect("failed to serialize witness")
+                    .as_slice()
+            ),
+            Err(e) if format!("{e:?}").contains("RecursionLimitExceeded")
+        );
+        assert_matches!(
+            prune_witness(&witness, &labeled_tree(depth)),
+            Err(TreeHashError::TooDeepRecursion { .. })
+        );
+        assert_matches!(
+            recompute_digest(&labeled_tree(depth), &witness),
+            Err(TreeHashError::TooDeepRecursion { .. })
+        );
+    }
 }
 
 /// Ensures that an invalid witness, with a partially pruned node (leaf pruned
