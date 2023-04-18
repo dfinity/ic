@@ -188,9 +188,9 @@ impl CanisterState {
     /// Returns the memory available for canister messages based on
     ///  * the maximum canister memory size;
     ///  * the canister's memory allocation (overriding the former) if any; and
-    ///  * the subnet type (accounting for execution and message memory usage on
-    ///    application subnets; but only for messages and disregarding any
-    ///    memory allocation on system subnets).
+    ///  * the subnet type (accounting for execution, canister history, and
+    ///    message memory usage on application subnets; but only for messages
+    ///    and disregarding any memory allocation on system subnets).
     fn available_message_memory(
         &self,
         max_canister_memory_size: NumBytes,
@@ -198,13 +198,14 @@ impl CanisterState {
     ) -> i64 {
         if own_subnet_type == SubnetType::System {
             // For system subnets we ignore the canister allocation, if any;
-            // and the execution memory usage; and always allow up to
-            // `max_canister_memory_size` worth of messages.
-            max_canister_memory_size.get() as i64 - self.system_state.memory_usage().get() as i64
+            // and the execution and canister history memory usage;
+            // and always allow up to `max_canister_memory_size` worth of messages.
+            max_canister_memory_size.get() as i64
+                - self.system_state.message_memory_usage().get() as i64
         } else {
-            // For application subnets allow execution plus messages to use up
-            // to the canister's memory allocation, if any; or else
-            // `max_canister_memory_size`.
+            // For application subnets allow execution, canister history,
+            // and messages to use up to the canister's memory allocation,
+            // if any; or else `max_canister_memory_size`.
             self.memory_limit(max_canister_memory_size).get() as i64
                 - self.memory_usage(own_subnet_type).get() as i64
         }
@@ -424,11 +425,12 @@ impl CanisterState {
 
     /// The amount of memory currently being used by the canister.
     ///
-    /// This only includes execution memory (heap, stable, globals, Wasm) for
-    /// system subnets; and execution memory plus system state memory (canister
-    /// messages) for application subnets.
+    /// This only includes execution memory (heap, stable, globals, Wasm)
+    /// and canister history memory for system subnets; and execution memory
+    /// plus system state memory (canister messages and canister history)
+    /// for application subnets.
     pub fn memory_usage(&self, own_subnet_type: SubnetType) -> NumBytes {
-        let mut result = self.raw_memory_usage();
+        let mut result = self.raw_memory_usage() + self.canister_history_memory_usage();
         if own_subnet_type != SubnetType::System {
             result += self.message_memory_usage();
         }
@@ -444,10 +446,9 @@ impl CanisterState {
             .map_or(NumBytes::from(0), |es| es.memory_usage())
     }
 
-    /// Returns the amount of system state memory used by the canister in bytes
-    /// (i.e. memory used by canister messages).
+    /// Returns the amount of canister message memory used by the canister in bytes.
     pub(crate) fn message_memory_usage(&self) -> NumBytes {
-        self.system_state.memory_usage()
+        self.system_state.message_memory_usage()
     }
 
     /// Returns the amount of memory used by canisters that have custom Wasm
@@ -456,6 +457,11 @@ impl CanisterState {
         self.execution_state
             .as_ref()
             .map_or(NumBytes::from(0), |es| es.metadata.memory_usage())
+    }
+
+    /// Returns the amount of memory used by canister history in bytes.
+    pub fn canister_history_memory_usage(&self) -> NumBytes {
+        self.system_state.canister_history_memory_usage()
     }
 
     /// Hack to get the dashboard templating working.

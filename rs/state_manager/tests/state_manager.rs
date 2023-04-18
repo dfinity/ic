@@ -1960,15 +1960,11 @@ fn can_state_sync_from_cache() {
         // Modify the first canister to ensure that its chunks are not identical to the
         // other canister
         let canister_state = state.canister_state_mut(&canister_test_id(100)).unwrap();
-        canister_state
-            .system_state
-            .canister_history
-            .add_canister_change(
-                Time::from_nanos_since_unix_epoch(42),
-                0,
-                CanisterChangeOrigin::from_user(user_test_id(42).get()),
-                CanisterChangeDetails::CanisterCreation,
-            );
+        canister_state.system_state.add_canister_change(
+            Time::from_nanos_since_unix_epoch(42),
+            CanisterChangeOrigin::from_user(user_test_id(42).get()),
+            CanisterChangeDetails::CanisterCreation,
+        );
         let execution_state = canister_state.execution_state.as_mut().unwrap();
         execution_state
             .stable_memory

@@ -4,7 +4,10 @@ use ic_btc_types_internal::{
     BitcoinAdapterResponse, BitcoinAdapterResponseWrapper, GetSuccessorsRequestInitial,
     GetSuccessorsResponseComplete,
 };
-use ic_ic00_types::{BitcoinGetSuccessorsResponse, Payload as _};
+use ic_ic00_types::{
+    BitcoinGetSuccessorsResponse, CanisterChange, CanisterChangeDetails, CanisterChangeOrigin,
+    Payload as _,
+};
 use ic_interfaces::messages::CanisterMessage;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::replicated_state::testing::ReplicatedStateTesting;
@@ -17,16 +20,18 @@ use ic_replicated_state::{
 };
 use ic_test_utilities::mock_time;
 use ic_test_utilities::state::{arb_replicated_state_with_queues, ExecutionStateBuilder};
+use ic_test_utilities::types::ids::canister_test_id;
 use ic_test_utilities::types::{
     ids::user_test_id,
     messages::{RequestBuilder, ResponseBuilder},
 };
 use ic_types::{
     messages::{Payload, Request, RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES},
-    CountBytes, Cycles, Time,
+    CountBytes, Cycles, MemoryAllocation, Time,
 };
 use proptest::prelude::*;
 use std::collections::{BTreeMap, VecDeque};
+use std::mem::size_of;
 use std::sync::Arc;
 
 const SUBNET_ID: SubnetId = SubnetId::new(PrincipalId::new(29, [0xfc; 29]));
@@ -185,7 +190,9 @@ fn assert_total_memory_taken_with_messages(
     let memory_taken = fixture.memory_taken();
     assert_eq!(
         total_memory_usage as u64,
-        memory_taken.execution().get() + memory_taken.messages().get()
+        memory_taken.execution().get()
+            + memory_taken.canister_history().get()
+            + memory_taken.messages().get()
     );
 }
 
@@ -383,6 +390,56 @@ fn memory_taken_by_wasm_custom_sections() {
         MAX_RESPONSE_COUNT_BYTES,
         subnet_available_memory,
     );
+}
+
+#[test]
+fn memory_taken_by_canister_history() {
+    let mut fixture = ReplicatedStateFixture::from_canister_ids_and_wasm_metadata(
+        &[CANISTER_ID],
+        WasmMetadata::new(BTreeMap::new()),
+    );
+
+    // No memory is used initially.
+    assert_total_memory_taken(0, &fixture);
+    assert_total_memory_taken_with_messages(0, &fixture);
+
+    // Memory for two canister changes.
+    let canister_history_memory: usize =
+        size_of::<CanisterChange>() + (size_of::<CanisterChange>() + 2 * size_of::<PrincipalId>());
+
+    // Push two canister changes into canister history.
+    let canister_state = fixture.state.canister_state_mut(&CANISTER_ID).unwrap();
+    canister_state.system_state.add_canister_change(
+        Time::from_nanos_since_unix_epoch(0),
+        CanisterChangeOrigin::from_user(user_test_id(42).get()),
+        CanisterChangeDetails::CanisterCreation,
+    );
+    canister_state.system_state.add_canister_change(
+        Time::from_nanos_since_unix_epoch(16),
+        CanisterChangeOrigin::from_user(user_test_id(123).get()),
+        CanisterChangeDetails::controllers_change(vec![
+            canister_test_id(0).get(),
+            canister_test_id(1).get(),
+        ]),
+    );
+    assert_total_memory_taken(canister_history_memory, &fixture);
+    assert_total_memory_taken_with_messages(canister_history_memory, &fixture);
+
+    // Test fixed memory allocation.
+    let canister_state = fixture.state.canister_state_mut(&CANISTER_ID).unwrap();
+    canister_state.system_state.memory_allocation = MemoryAllocation::Reserved(NumBytes::from(888));
+    assert_total_memory_taken(888 + canister_history_memory, &fixture);
+    assert_total_memory_taken_with_messages(888 + canister_history_memory, &fixture);
+
+    // Reset canister memory allocation.
+    let canister_state = fixture.state.canister_state_mut(&CANISTER_ID).unwrap();
+    canister_state.system_state.memory_allocation = MemoryAllocation::BestEffort;
+
+    // Test a system subnet.
+    fixture.state.metadata.own_subnet_type = SubnetType::System;
+
+    assert_total_memory_taken(canister_history_memory, &fixture);
+    assert_total_memory_taken_with_messages(canister_history_memory, &fixture);
 }
 
 #[test]

@@ -321,9 +321,12 @@ pub struct MemoryTaken {
     messages: NumBytes,
     /// Memory taken by Wasm Custom Sections.
     wasm_custom_sections: NumBytes,
-    /// Total memory taken. This is the sum of execution and messages fields
-    /// on application subnets and excludes canister message memory
-    /// on system subnets.
+    /// Memory taken by canister history.
+    canister_history: NumBytes,
+    /// Total memory taken. This is the sum of `execution`, `messages`,
+    /// and `canister_history` on application subnets; and excludes
+    /// canister message memory (i.e. sum of `execution` and
+    /// `canister_history`) on system subnets.
     total: NumBytes,
 }
 
@@ -341,6 +344,11 @@ impl MemoryTaken {
     /// Returns the amount of memory taken by Wasm Custom Sections.
     pub fn wasm_custom_sections(&self) -> NumBytes {
         self.wasm_custom_sections
+    }
+
+    /// Returns the amount of memory taken by canister history.
+    pub fn canister_history(&self) -> NumBytes {
+        self.canister_history
     }
 
     /// Returns the total amount of memory taken.
@@ -548,7 +556,12 @@ impl ReplicatedState {
 
     /// Returns the memory taken by different types of memory resources.
     pub fn memory_taken(&self) -> MemoryTaken {
-        let (raw_memory_taken, mut message_memory_taken, wasm_custom_sections_memory_taken) = self
+        let (
+            raw_memory_taken,
+            mut message_memory_taken,
+            wasm_custom_sections_memory_taken,
+            canister_history_memory_taken,
+        ) = self
             .canisters_iter()
             .map(|canister| {
                 (
@@ -556,18 +569,26 @@ impl ReplicatedState {
                         MemoryAllocation::Reserved(bytes) => bytes,
                         MemoryAllocation::BestEffort => canister.raw_memory_usage(),
                     },
-                    canister.system_state.memory_usage(),
+                    canister.system_state.message_memory_usage(),
                     canister.wasm_custom_sections_memory_usage(),
+                    canister.canister_history_memory_usage(),
                 )
             })
-            .reduce(|accum, val| (accum.0 + val.0, accum.1 + val.1, accum.2 + val.2))
+            .reduce(|accum, val| {
+                (
+                    accum.0 + val.0,
+                    accum.1 + val.1,
+                    accum.2 + val.2,
+                    accum.3 + val.3,
+                )
+            })
             .unwrap_or_default();
 
         message_memory_taken += (self.subnet_queues.memory_usage() as u64).into();
 
         // Raw memory taken includes `wasm_custom_sections_memory_taken` so we
         // don't have to add it to the total memory taken separately.
-        let mut total_memory_taken = raw_memory_taken;
+        let mut total_memory_taken = raw_memory_taken + canister_history_memory_taken;
 
         // Add message memory taken to total for non-system subnets only.
         if self.metadata.own_subnet_type != SubnetType::System {
@@ -578,6 +599,7 @@ impl ReplicatedState {
             execution: raw_memory_taken,
             messages: message_memory_taken,
             wasm_custom_sections: wasm_custom_sections_memory_taken,
+            canister_history: canister_history_memory_taken,
             total: total_memory_taken,
         }
     }

@@ -1526,6 +1526,7 @@ impl Scheduler for SchedulerImpl {
         {
             let mut cycles_out_sum = Cycles::zero();
             let mut total_canister_balance = Cycles::zero();
+            let mut total_canister_history_memory_usage = NumBytes::new(0);
             let mut total_canister_memory_usage = NumBytes::new(0);
             let _timer = self.metrics.round_finalization_duration.start_timer();
             let own_subnet_type = state.metadata.own_subnet_type;
@@ -1553,6 +1554,7 @@ impl Scheduler for SchedulerImpl {
                         ),
                         FlagStatus::Disabled => NumInstructions::from(0),
                     };
+                total_canister_history_memory_usage += canister.canister_history_memory_usage();
                 total_canister_memory_usage += canister.memory_usage(own_subnet_type);
                 total_canister_balance += canister.system_state.balance();
                 cycles_out_sum += canister.system_state.queues().output_queue_cycles();
@@ -1579,7 +1581,12 @@ impl Scheduler for SchedulerImpl {
             // }
 
             // Check replicated state invariants still hold after the round execution.
-            if total_canister_memory_usage > self.exec_env.subnet_memory_capacity() {
+            // We allow `total_canister_memory_usage` to exceed the subnet memory capacity
+            // by `total_canister_history_memory_usage` because the canister history
+            // memory usage is not tracked during a round in `SubnetAvailableMemory`.
+            if total_canister_memory_usage
+                > self.exec_env.subnet_memory_capacity() + total_canister_history_memory_usage
+            {
                 self.metrics.subnet_memory_usage_invariant.inc();
                 warn!(
                     round_log,
