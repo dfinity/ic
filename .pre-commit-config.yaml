@@ -48,11 +48,6 @@ repos:
 - repo: https://gitlab.com/dfinity-lab/open/pre-commit-tools.git
   rev: 17101bf5cebeda988b13764909a6140badc5ef03
   hooks:
-  - id: buf-checks
-    args: ["--config=buf.yaml"]
-    exclude: |
-      (?x)(
-      )
   - id: nixpkgs-fmt
     exclude: |
         (?x)^(
