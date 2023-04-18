@@ -204,7 +204,12 @@ impl WasmtimeEmbedder {
             // with a change in how we create the memories in the implementation
             // of `wasmtime::MemoryCreator`.
             .static_memory_maximum_size(MAX_STABLE_MEMORY_IN_BYTES)
-            .max_wasm_stack(embedder_config.max_wasm_stack_size);
+            .max_wasm_stack(embedder_config.max_wasm_stack_size)
+            // Disabling the address map saves about 20% of compile code size.
+            .generate_address_map(false)
+            // Disable Wasm backtraces since we don't use them and don't have
+            // address maps.
+            .wasm_backtrace(false);
 
         config
     }
