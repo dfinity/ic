@@ -144,7 +144,6 @@ pub fn test_batching(env: TestEnv) {
             &default_btc_address,
         );
 
-        // Waiting for the minter to see new utxos
         wait_for_update_balance(&minter_agent, &logger, Some(subaccount0)).await;
 
         let withdrawal_account = minter_agent
@@ -182,7 +181,7 @@ pub fn test_batching(env: TestEnv) {
         let start = Instant::now();
         let mut block_indexes: Vec<u64> = vec![];
 
-        // Let's make 19 retrieve_btc and save the block indexes
+        // Let's make multiple retrieve_btc and save the block indices.
         while k != RETRIEVE_REQUESTS_COUNT_TO_BATCH - 1 {
             if start.elapsed() >= SHORT_TIMEOUT {
                 panic!("update_balance timeout");
@@ -200,7 +199,10 @@ pub fn test_batching(env: TestEnv) {
             }
         }
 
-        assert_eq!(block_indexes, (2..21).collect::<Vec<u64>>());
+        assert_eq!(
+            block_indexes,
+            (2_u64..(RETRIEVE_REQUESTS_COUNT_TO_BATCH as u64 + 1)).collect::<Vec<u64>>()
+        );
 
         // Check that we don't have any tx in the mempool
         let start = Instant::now();
@@ -305,8 +307,11 @@ pub fn test_batching(env: TestEnv) {
         // We have 1 input and 21 outputs (20 requests and the minter's address)
         // Hence, we can compute the minter's fee
         let minters_fee: u64 = ic_ckbtc_minter::MINTER_FEE_PER_INPUT
-            + ic_ckbtc_minter::MINTER_FEE_PER_OUTPUT * 21
+            + ic_ckbtc_minter::MINTER_FEE_PER_OUTPUT
+                * (RETRIEVE_REQUESTS_COUNT_TO_BATCH as u64 + 1)
             + ic_ckbtc_minter::MINTER_FEE_CONSTANT;
+
+        let kyts_fee = RETRIEVE_REQUESTS_COUNT_TO_BATCH as u64 * KYT_FEE;
 
         // We can check that the destination address has received all the bitcoin
         assert_eq!(
@@ -314,6 +319,7 @@ pub fn test_batching(env: TestEnv) {
             (RETRIEVE_REQUESTS_COUNT_TO_BATCH as u64) * retrieve_amount
                 - EXPECTED_FEE
                 - minters_fee
+                - kyts_fee
         );
 
         // We also check that the destination address have received 20 utxos

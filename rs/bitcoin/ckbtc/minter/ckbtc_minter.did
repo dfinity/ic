@@ -202,6 +202,7 @@ type Event = variant {
         address : BitcoinAddress;
         block_index : nat64;
         received_at : nat64;
+        kyt_provider : opt principal;
     };
     removed_retrieve_btc_request : record { block_index : nat64 };
     sent_transaction : record {
@@ -216,8 +217,16 @@ type Event = variant {
         utxo : Utxo;
         uuid : text;
         clean : bool;
+        kyt_provider : opt principal;
     };
     ignored_utxo : record { utxo: Utxo; };
+    retrieve_btc_kyt_failed : record {
+        address : text;
+        amount : nat64;
+        kyt_provider : principal;
+        uuid : text;
+        block_index : nat64;
+    };
 };
 
 type MinterArg = variant {
@@ -251,7 +260,7 @@ service : (minter_arg : MinterArg) -> {
 
     /// Returns an estimate of the user's fee (in Satoshi) for a
     /// retrieve_btc request based on the current status of the Bitcoin network.
-    estimate_withdrawal_fee : (record { amount : opt nat64 }) -> (record { bitcoin_fee: nat64; minter_fee: nat64;}) query;
+    estimate_withdrawal_fee : (record { amount : opt nat64 }) -> (record { bitcoin_fee : nat64; minter_fee : nat64 }) query;
 
     /// Returns the fee that the minter will charge for a bitcoin deposit.
     get_deposit_fee: () -> (nat64) query;

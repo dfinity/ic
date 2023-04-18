@@ -66,7 +66,7 @@ pub const TIMEOUT_SHORT: Duration = Duration::from_secs(300);
 /// Maximum time (in nanoseconds) spend in queue at 0 to make the minter treat requests rigth away
 pub const MAX_NANOS_IN_QUEUE: u64 = 0;
 
-pub const BTC_MIN_CONFIRMATIONS: u32 = 6;
+pub const BTC_MIN_CONFIRMATIONS: u64 = 6;
 
 pub const KYT_FEE: u64 = 1001;
 
@@ -302,7 +302,7 @@ pub(crate) async fn install_minter(
         retrieve_btc_min_amount: RETRIEVE_BTC_MIN_AMOUNT,
         ledger_id,
         max_time_in_queue_nanos,
-        min_confirmations: Some(BTC_MIN_CONFIRMATIONS),
+        min_confirmations: Some(BTC_MIN_CONFIRMATIONS as u32),
         mode: Mode::GeneralAvailability,
         kyt_fee: Some(KYT_FEE),
         kyt_principal: Some(kyt_canister_id),
