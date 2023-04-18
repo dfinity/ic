@@ -10,10 +10,13 @@ import (
 )
 
 func AssembleAllCmds() *cobra.Command {
-	var rootCmd = cmd.NewRootCmd()
 	var testCmd = cmd.NewTestCmd()
-	testCmd.AddCommand(cmd.NewListCmd())
+	testCmd.AddCommand(cmd.NewTestListCmd()) // command + subcommand
+	var testnetCmd = cmd.NewTestnetCmd()
+	testnetCmd.AddCommand(cmd.NewTestnetListCmd()) // command + subcommand
+	var rootCmd = cmd.NewRootCmd()
 	rootCmd.AddCommand(testCmd)
+	rootCmd.AddCommand(testnetCmd)
 	return rootCmd
 }
 

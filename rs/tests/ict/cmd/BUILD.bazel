@@ -4,9 +4,11 @@ go_library(
     name = "cmd",
     srcs = [
         "helpers.go",
-        "listCmd.go",
         "root.go",
         "testCmd.go",
+        "testListCmd.go",
+        "testnetCmd.go",
+        "testnetListCmd.go",
     ],
     importpath = "github.com/dfinity/ic/rs/tests/ict/cmd",
     visibility = ["//visibility:public"],

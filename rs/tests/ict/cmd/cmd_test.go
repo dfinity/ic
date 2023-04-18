@@ -62,7 +62,7 @@ func Test_TestCmdWithHelpArg(t *testing.T) {
 func Test_ListCmdWithHelpArg(t *testing.T) {
 	expected := "List all system_test targets with Bazel"
 	actual := new(bytes.Buffer)
-	var command = cmd.NewListCmd()
+	var command = cmd.NewTestListCmd()
 	command.SetArgs([]string{"-h"})
 	command.SetOut(actual)
 
@@ -75,7 +75,7 @@ func Test_ListCmdWithHelpArg(t *testing.T) {
 func Test_ListCmdWithOneArg(t *testing.T) {
 	expected := "Error: accepts 0 arg(s), received 1"
 	actual := new(bytes.Buffer)
-	var command = cmd.NewListCmd()
+	var command = cmd.NewTestListCmd()
 	command.SetArgs([]string{"arg"})
 	command.SetOut(actual)
 	command.SetErr(actual)
