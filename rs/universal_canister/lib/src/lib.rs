@@ -17,7 +17,7 @@ use universal_canister::Ops;
 /// `rs/universal_canister`.
 pub const UNIVERSAL_CANISTER_WASM: &[u8] = include_bytes!("universal-canister.wasm");
 pub const UNIVERSAL_CANISTER_WASM_SHA256: [u8; 32] =
-    hex!("cf13dfde0aaf4139933651766943cdb8824b47fe37a099994ab7f524e75f7656");
+    hex!("706a648d859d1a55b5722ebb3a35426928e8231a3c6177f4de6491e86231129b");
 
 /// A succinct shortcut for creating a `PayloadBuilder`, which is used to encode
 /// instructions to be executed by the UC.
@@ -277,6 +277,19 @@ impl PayloadBuilder {
         self
     }
 
+    pub fn call_cycles_add128(mut self, high_amount: u64, low_amount: u64) -> Self {
+        self = self.push_int64(high_amount);
+        self = self.push_int64(low_amount);
+        self.0.push(Ops::CallCyclesAdd128 as u8);
+        self
+    }
+
+    pub fn call_cycles_add(mut self, amount: u64) -> Self {
+        self = self.push_int64(amount);
+        self.0.push(Ops::CallCyclesAdd as u8);
+        self
+    }
+
     pub fn message_payload(mut self) -> Self {
         self.0.push(Ops::MessagePayload as u8);
         self
@@ -430,6 +443,45 @@ impl PayloadBuilder {
         self = self.push_int(offset);
         self = self.push_int(size);
         self.0.push(Ops::MsgRejectMsgCopy as u8);
+        self
+    }
+
+    pub fn msg_cycles_available(mut self) -> Self {
+        self.0.push(Ops::CyclesAvailable as u8);
+        self
+    }
+
+    pub fn msg_cycles_available128(mut self) -> Self {
+        self.0.push(Ops::CyclesAvailable128 as u8);
+        self
+    }
+
+    pub fn msg_cycles_refunded(mut self) -> Self {
+        self.0.push(Ops::CyclesRefunded as u8);
+        self
+    }
+
+    pub fn msg_cycles_refunded128(mut self) -> Self {
+        self.0.push(Ops::CyclesRefunded128 as u8);
+        self
+    }
+
+    pub fn msg_cycles_accept(mut self, max_amount: i64) -> Self {
+        self = self.push_int64(max_amount as u64);
+        self.0.push(Ops::AcceptCycles as u8);
+        self
+    }
+
+    pub fn msg_cycles_accept128(mut self, max_amount_hight: i64, max_amount_low: i64) -> Self {
+        self = self.push_int64(max_amount_hight as u64);
+        self = self.push_int64(max_amount_low as u64);
+        self.0.push(Ops::AcceptCycles128 as u8);
+        self
+    }
+
+    pub fn certified_data_set(mut self, data: &[u8]) -> Self {
+        self = self.push_bytes(data);
+        self.0.push(Ops::CertifiedDataSet as u8);
         self
     }
 
