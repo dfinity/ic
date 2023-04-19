@@ -148,7 +148,7 @@ async fn main() -> Result<()> {
     let tcp_listener = TcpListener::bind(format!("0.0.0.0:{}", args.get_port()))?;
 
     if let Some(port_file) = args.port_file {
-        std::fs::write(port_file, tcp_listener.local_addr()?.to_string())?;
+        std::fs::write(port_file, tcp_listener.local_addr()?.port().to_string())?;
     }
 
     axum::Server::from_tcp(tcp_listener)?
