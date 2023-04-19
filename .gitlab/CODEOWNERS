@@ -284,7 +284,7 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /policy-monitoring/       @dfinity-lab/teams/ic-testing-verification
 
 # [No-Approvals]
-# Ghost is a group with no direct memberes. GitLab will bypass codeowners for files that match ghost ownership.
+# Ghost is a group with no direct members. GitLab will bypass codeowners for files that match ghost ownership.
 /experimental/            @dfinity-lab/teams/ghost
 *.lock                    @dfinity-lab/teams/ghost
 Cargo.toml                @dfinity-lab/teams/ghost
