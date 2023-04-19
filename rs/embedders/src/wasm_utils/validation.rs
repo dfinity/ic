@@ -818,7 +818,11 @@ fn validate_import_section(module: &Module) -> Result<WasmImportsDetails, WasmVa
 //
 // Returns the number of exported functions that are not in the list of
 // allowed exports and whose name starts with the reserved "canister_" prefix.
-fn validate_export_section(module: &Module) -> Result<usize, WasmValidationError> {
+fn validate_export_section(
+    module: &Module,
+    max_number_exported_functions: usize,
+    max_sum_exported_function_name_lengths: usize,
+) -> Result<usize, WasmValidationError> {
     let mut reserved_exports: usize = 0;
     if !module.exports.is_empty() {
         let num_imported_functions = module
@@ -829,6 +833,8 @@ fn validate_export_section(module: &Module) -> Result<usize, WasmValidationError
 
         let mut seen_funcs: HashSet<&str> = HashSet::new();
         let valid_exported_functions = get_valid_exported_functions();
+        let mut number_exported_functions = 0;
+        let mut sum_exported_function_name_lengths = 0;
         for export in &module.exports {
             // Verify that the exported symbol's name isn't reserved.
             if RESERVED_SYMBOLS.contains(&export.name) {
@@ -858,6 +864,8 @@ fn validate_export_section(module: &Module) -> Result<usize, WasmValidationError
                         )));
                     }
                     seen_funcs.insert(unmangled_func_name);
+                    number_exported_functions += 1;
+                    sum_exported_function_name_lengths += unmangled_func_name.len();
                 } else if func_name.starts_with("canister_") {
                     // The "canister_" prefix is reserved and only functions allowed by the spec
                     // can be exported.
@@ -888,6 +896,14 @@ fn validate_export_section(module: &Module) -> Result<usize, WasmValidationError
                     )?;
                 }
             }
+        }
+        if number_exported_functions > max_number_exported_functions {
+            let err = format!("The number of exported functions called `canister_update <name>`, `canister_query <name>`, or `canister_composite_query <name>` exceeds {}.", max_number_exported_functions);
+            return Err(WasmValidationError::InvalidExportSection(err));
+        }
+        if sum_exported_function_name_lengths > max_sum_exported_function_name_lengths {
+            let err = format!("The sum of `<name>` lengths in exported functions called `canister_update <name>`, `canister_query <name>`, or `canister_composite_query <name>` exceeds {}.", max_sum_exported_function_name_lengths);
+            return Err(WasmValidationError::InvalidExportSection(err));
         }
     }
     Ok(reserved_exports)
@@ -1177,7 +1193,11 @@ pub(super) fn validate_wasm_binary<'a>(
     let module = Module::parse(wasm.as_slice(), false)
         .map_err(|err| WasmValidationError::DecodingError(format!("{}", err)))?;
     let imports_details = validate_import_section(&module)?;
-    let reserved_exports = validate_export_section(&module)?;
+    let reserved_exports = validate_export_section(
+        &module,
+        config.max_number_exported_functions,
+        config.max_sum_exported_function_name_lengths,
+    )?;
     validate_data_section(&module)?;
     validate_global_section(&module, config.max_globals)?;
     validate_function_section(&module, config.max_functions)?;

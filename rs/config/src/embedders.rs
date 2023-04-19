@@ -20,6 +20,12 @@ pub(crate) const MAX_CUSTOM_SECTIONS: usize = 16;
 // The total size of the exported custom sections in bytes.
 // The size should not exceed 1MiB.
 pub(crate) const MAX_CUSTOM_SECTIONS_SIZE: NumBytes = NumBytes::new(1048576);
+// The maximum number of exported functions called `canister_update <name>`,
+// `canister_query <name>`, or `canister_composite_query <name>`.
+pub(crate) const MAX_NUMBER_EXPORTED_FUNCTIONS: usize = 1000;
+// The maximum sum of `<name>` lengths in exported functions called `canister_update <name>`,
+// `canister_query <name>`, or `canister_composite_query <name>`.
+pub(crate) const MAX_SUM_EXPORTED_FUNCTION_NAME_LENGTHS: usize = 20000;
 /// The number of threads to use for query execution per canister.
 /// See also `QUERY_EXECUTION_THREADS_TOTAL`.
 pub(crate) const QUERY_EXECUTION_THREADS_PER_CANISTER: usize = 2;
@@ -97,6 +103,14 @@ pub struct Config {
     /// Maximum size of the custom sections in bytes.
     pub max_custom_sections_size: NumBytes,
 
+    /// The maximum number of exported functions called `canister_update <name>`,
+    /// `canister_query <name>`, or `canister_composite_query <name>`.
+    pub max_number_exported_functions: usize,
+
+    /// The maximum sum of `<name>` lengths in exported functions called `canister_update <name>`,
+    /// `canister_query <name>`, or `canister_composite_query <name>`.
+    pub max_sum_exported_function_name_lengths: usize,
+
     /// Compiling a single WASM instruction should cost as much as executing
     /// this many instructions.
     pub cost_to_compile_wasm_instruction: NumInstructions,
@@ -147,6 +161,8 @@ impl Config {
             max_functions: MAX_FUNCTIONS,
             max_custom_sections: MAX_CUSTOM_SECTIONS,
             max_custom_sections_size: MAX_CUSTOM_SECTIONS_SIZE,
+            max_number_exported_functions: MAX_NUMBER_EXPORTED_FUNCTIONS,
+            max_sum_exported_function_name_lengths: MAX_SUM_EXPORTED_FUNCTION_NAME_LENGTHS,
             cost_to_compile_wasm_instruction: DEFAULT_COST_TO_COMPILE_WASM_INSTRUCTION,
             num_rayon_compilation_threads: DEFAULT_WASMTIME_RAYON_COMPILATION_THREADS,
             feature_flags: FeatureFlags::const_default(),
