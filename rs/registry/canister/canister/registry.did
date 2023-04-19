@@ -31,17 +31,6 @@ type AddOrRemoveDataCentersProposalPayload = record {
   data_centers_to_add : vec DataCenterRecord;
   data_centers_to_remove : vec text;
 };
-type BlessReplicaVersionPayload = record {
-  release_package_urls : opt vec text;
-  node_manager_sha256_hex : text;
-  release_package_url : text;
-  sha256_hex : text;
-  guest_launch_measurement_sha256_hex : opt text;
-  replica_version_id : text;
-  release_package_sha256_hex : text;
-  node_manager_binary_url : text;
-  binary_url : text;
-};
 type CanisterIdRange = record { end : principal; start : principal };
 type ChangeSubnetMembershipPayload = record {
   node_ids_add : vec principal;
@@ -179,7 +168,6 @@ type Result_2 = variant {
   Err : text;
 };
 type Result_3 = variant { Ok : NodeProvidersMonthlyXdrRewards; Err : text };
-type RetireReplicaVersionPayload = record { replica_version_ids : vec text };
 type SetFirewallConfigPayload = record {
   ipv4_prefixes : vec text;
   firewall_config : text;
@@ -270,7 +258,6 @@ service : {
   add_node_operator : (AddNodeOperatorPayload) -> ();
   add_nodes_to_subnet : (AddNodesToSubnetPayload) -> ();
   add_or_remove_data_centers : (AddOrRemoveDataCentersProposalPayload) -> ();
-  bless_replica_version : (BlessReplicaVersionPayload) -> ();
   change_subnet_membership : (ChangeSubnetMembershipPayload) -> ();
   clear_provisional_whitelist : () -> ();
   complete_canister_migration : (CompleteCanisterMigrationPayload) -> (
@@ -289,7 +276,6 @@ service : {
   remove_nodes : (RemoveNodesPayload) -> ();
   remove_nodes_from_subnet : (RemoveNodesPayload) -> ();
   reroute_canister_ranges : (RerouteCanisterRangesPayload) -> (Result_1);
-  retire_replica_version : (RetireReplicaVersionPayload) -> ();
   set_firewall_config : (SetFirewallConfigPayload) -> ();
   update_elected_replica_versions : (UpdateElectedReplicaVersionsPayload) -> ();
   update_firewall_rules : (AddFirewallRulesPayload) -> ();
