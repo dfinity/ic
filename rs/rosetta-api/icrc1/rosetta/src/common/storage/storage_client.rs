@@ -37,39 +37,39 @@ impl StorageClient {
     }
 
     // Gets a block with a certain index. Returns None if no block exists in the database with that index. Returns an error if multiple blocks with that index exist
-    pub fn get_block_at_idx(&mut self, block_idx: u64) -> anyhow::Result<Option<RosettaBlock>> {
-        let mut open_connection = self.storage_connection.lock().unwrap();
-        storage_operations::get_block_at_idx(&mut open_connection, block_idx)
+    pub fn get_block_at_idx(&self, block_idx: u64) -> anyhow::Result<Option<RosettaBlock>> {
+        let open_connection = self.storage_connection.lock().unwrap();
+        storage_operations::get_block_at_idx(&open_connection, block_idx)
     }
 
     // Gets a block with a certain hash. Returns None if no block exists in the database with that hash. Returns an error if multiple blocks with that hash exist
-    pub fn get_block_by_hash(&mut self, hash: ByteBuf) -> anyhow::Result<Option<RosettaBlock>> {
-        let mut open_connection = self.storage_connection.lock().unwrap();
-        storage_operations::get_block_by_hash(&mut open_connection, hash)
+    pub fn get_block_by_hash(&self, hash: ByteBuf) -> anyhow::Result<Option<RosettaBlock>> {
+        let open_connection = self.storage_connection.lock().unwrap();
+        storage_operations::get_block_by_hash(&open_connection, hash)
     }
 
     // Gets the block with the highest block index. Returns None if no block exists in the database
-    pub fn get_block_with_highest_block_idx(&mut self) -> anyhow::Result<Option<RosettaBlock>> {
-        let mut open_connection = self.storage_connection.lock().unwrap();
-        storage_operations::get_block_with_highest_block_idx(&mut open_connection)
+    pub fn get_block_with_highest_block_idx(&self) -> anyhow::Result<Option<RosettaBlock>> {
+        let open_connection = self.storage_connection.lock().unwrap();
+        storage_operations::get_block_with_highest_block_idx(&open_connection)
     }
 
     // Gets the block with the lowest block index. Returns None if no block exists in the database
-    pub fn get_block_with_lowest_block_idx(&mut self) -> anyhow::Result<Option<RosettaBlock>> {
-        let mut open_connection = self.storage_connection.lock().unwrap();
-        storage_operations::get_block_with_lowest_block_idx(&mut open_connection)
+    pub fn get_block_with_lowest_block_idx(&self) -> anyhow::Result<Option<RosettaBlock>> {
+        let open_connection = self.storage_connection.lock().unwrap();
+        storage_operations::get_block_with_lowest_block_idx(&open_connection)
     }
 
     // Returns a range of blocks including the start index and the end index
     // Returns an empty vector if the start index is outside of the range of the database
     // Returns a subsect of the blocks range [start_index,end_index] if the end_index is outside of the range of the database
     pub fn get_blocks_by_index_range(
-        &mut self,
+        &self,
         start_index: u64,
         end_index: u64,
     ) -> anyhow::Result<Vec<RosettaBlock>> {
-        let mut open_connection = self.storage_connection.lock().unwrap();
-        storage_operations::get_blocks_by_index_range(&mut open_connection, start_index, end_index)
+        let open_connection = self.storage_connection.lock().unwrap();
+        storage_operations::get_blocks_by_index_range(&open_connection, start_index, end_index)
     }
 
     fn create_tables(&self) -> Result<(), rusqlite::Error> {
@@ -121,9 +121,9 @@ impl StorageClient {
         Ok(())
     }
 
-    pub fn store_blocks(&mut self, blocks: Vec<RosettaBlock>) -> anyhow::Result<()> {
-        let mut open_connection = self.storage_connection.lock().unwrap();
-        storage_operations::store_blocks(&mut open_connection, blocks)
+    pub fn store_blocks(&self, blocks: Vec<RosettaBlock>) -> anyhow::Result<()> {
+        let open_connection = self.storage_connection.lock().unwrap();
+        storage_operations::store_blocks(&open_connection, blocks)
     }
 }
 
@@ -145,7 +145,7 @@ mod tests {
     proptest! {
     #[test]
     fn test_read_and_write_blocks(block in blocks_strategy(),index in (0..10000u64)){
-        let mut storage_client_memory = StorageClient::new_in_memory().unwrap();
+        let storage_client_memory = StorageClient::new_in_memory().unwrap();
             let rosetta_block = RosettaBlock::from_icrc_ledger_block(block,index).unwrap();
             storage_client_memory.store_blocks(vec![rosetta_block.clone()]).unwrap();
                 let block_read = storage_client_memory.get_block_at_idx(index).unwrap().unwrap();
@@ -156,7 +156,7 @@ mod tests {
 
         #[test]
     fn test_highest_lowest_block_index(blocks in prop::collection::vec(blocks_strategy(),1..100)){
-        let mut storage_client_memory = StorageClient::new_in_memory().unwrap();
+        let storage_client_memory = StorageClient::new_in_memory().unwrap();
         let mut rosetta_blocks = vec![];
         for (index,block) in blocks.clone().into_iter().enumerate(){
             rosetta_blocks.push(RosettaBlock::from_icrc_ledger_block(block,index as u64).unwrap());

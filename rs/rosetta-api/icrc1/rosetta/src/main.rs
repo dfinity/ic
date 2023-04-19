@@ -101,14 +101,14 @@ impl Args {
 async fn main() -> Result<()> {
     let args = Args::parse();
 
-    let storage = match args.store_type {
+    let storage = Arc::new(match args.store_type {
         StoreType::InMemory => StorageClient::new_in_memory()?,
         StoreType::File => StorageClient::new_persistent(&args.store_file)?,
-    };
+    });
 
     let shared_state = Arc::new(AppState {
         ledger_id: args.ledger_id,
-        _storage: storage,
+        _storage: storage.clone(),
     });
 
     let network_url = args.effective_network_url();

@@ -6,7 +6,7 @@ use serde_bytes::ByteBuf;
 
 // Stores a batch of RosettaBlocks
 pub fn store_blocks(
-    connection: &mut Connection,
+    connection: &Connection,
     rosetta_blocks: Vec<RosettaBlock>,
 ) -> anyhow::Result<()> {
     connection.execute_batch("BEGIN TRANSACTION;")?;
@@ -39,7 +39,7 @@ pub fn store_blocks(
 // Returns a RosettaBlock if the block index exists in the database, else returns None.
 // Returns an Error if the query fails.
 pub fn get_block_at_idx(
-    connection: &mut Connection,
+    connection: &Connection,
     block_idx: u64,
 ) -> anyhow::Result<Option<RosettaBlock>> {
     let command = format!(
@@ -53,7 +53,7 @@ pub fn get_block_at_idx(
 // Returns a RosettaBlock if the block hash exists in the database, else returns None.
 // Returns an Error if the query fails.
 pub fn get_block_by_hash(
-    connection: &mut Connection,
+    connection: &Connection,
     hash: ByteBuf,
 ) -> anyhow::Result<Option<RosettaBlock>> {
     let mut stmt = connection.prepare("SELECT idx,serialized_block FROM blocks WHERE hash = ?1")?;
@@ -61,7 +61,7 @@ pub fn get_block_by_hash(
 }
 
 pub fn get_block_with_highest_block_idx(
-    connection: &mut Connection,
+    connection: &Connection,
 ) -> anyhow::Result<Option<RosettaBlock>> {
     let command = "SELECT idx,serialized_block FROM blocks ORDER BY idx DESC LIMIT 1";
     let mut stmt = connection.prepare(command)?;
@@ -69,7 +69,7 @@ pub fn get_block_with_highest_block_idx(
 }
 
 pub fn get_block_with_lowest_block_idx(
-    connection: &mut Connection,
+    connection: &Connection,
 ) -> anyhow::Result<Option<RosettaBlock>> {
     let command = "SELECT idx,serialized_block FROM blocks ORDER BY idx ASC LIMIT 1";
     let mut stmt = connection.prepare(command)?;
@@ -77,7 +77,7 @@ pub fn get_block_with_lowest_block_idx(
 }
 
 pub fn get_blocks_by_index_range(
-    connection: &mut Connection,
+    connection: &Connection,
     start_index: u64,
     end_index: u64,
 ) -> anyhow::Result<Vec<RosettaBlock>> {

@@ -1,4 +1,4 @@
-use std::ops::RangeInclusive;
+use std::{ops::RangeInclusive, sync::Arc};
 
 use crate::common::storage::{storage_client::StorageClient, types::RosettaBlock};
 use candid::Nat;
@@ -14,7 +14,7 @@ use LookupStatus::Found;
 // TODO: Make BlocksSynchronizer fetch blocks continously instead of returning once it has finished synching from the tip
 pub async fn start_synching_blocks(
     agent: &Icrc1Agent,
-    storage_client: &mut StorageClient,
+    storage_client: Arc<StorageClient>,
     maximum_blocks_per_request: u64,
 ) -> anyhow::Result<()> {
     // Get the most recent hash and index of the icrc ledger and start fetching from the top of the chain
