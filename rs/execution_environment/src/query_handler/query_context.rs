@@ -53,11 +53,22 @@ pub(super) enum ExecutionResult {
 
 /// Returns either `WasmMethod::CompositeQuery` or `WasmMethod::Query` depending
 /// on whether the given method name is exported as a composite query or not.
-fn wasm_query_method(canister: &CanisterState, name: String) -> WasmMethod {
+fn wasm_query_method(
+    canister: &CanisterState,
+    name: String,
+) -> Result<WasmMethod, HypervisorError> {
+    // Attempt to validate method name as composite query.
     let method = WasmMethod::CompositeQuery(name.clone());
     match validate_method(&method, canister) {
-        Ok(_) => method,
-        Err(_) => WasmMethod::Query(name),
+        Ok(_) => Ok(method),
+        Err(_) => {
+            // If validating the method as composite query fails, try as
+            // regular query instead.
+            let method = WasmMethod::Query(name);
+            validate_method(&method, canister)?;
+
+            Ok(method)
+        }
     }
 }
 
@@ -168,7 +179,10 @@ impl<'a> QueryContext<'a> {
 
         let call_origin = CallOrigin::Query(query.source);
 
-        let method = wasm_query_method(&old_canister, query.method_name);
+        let method = match wasm_query_method(&old_canister, query.method_name.clone()) {
+            Ok(method) => method,
+            Err(err) => return Err(err.into_user_error(&canister_id)),
+        };
 
         let query_kind = match &method {
             WasmMethod::Query(_) => NonReplicatedQueryKind::Pure {
@@ -596,7 +610,14 @@ impl<'a> QueryContext<'a> {
 
         let call_origin = CallOrigin::CanisterQuery(request.sender, request.sender_reply_callback);
 
-        let method = wasm_query_method(&canister, request.method_name.clone());
+        let method = match wasm_query_method(&canister, request.method_name.clone()) {
+            Ok(method) => method,
+            Err(err) => {
+                return ExecutionResult::Response(to_query_result(Payload::Reject(
+                    RejectContext::from(err.into_user_error(&canister_id)),
+                )));
+            }
+        };
 
         let (mut canister, result) = self.execute_query(
             canister,
