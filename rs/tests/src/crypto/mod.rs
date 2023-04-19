@@ -1,4 +1,5 @@
 pub mod request_signature_test;
+pub mod rpc_csp_vault_reconnection_test;
 
 use crate::driver::{
     ic::{InternetComputer, Subnet},
