@@ -1327,6 +1327,7 @@ pub struct NnsCustomizations {
     pub ledger_balances: Option<HashMap<AccountIdentifier, Tokens>>,
 }
 
+#[derive(Clone, Copy)]
 pub enum NnsCanisterWasmStrategy {
     TakeBuiltFromSources,
     TakeLatestMainnetDeployments,

@@ -58,7 +58,7 @@ const AGGREGATOR_CANISTER_VERSION: &str = "v1";
 // by `RESPONSES_COLLECTION_EXTRA_TIMEOUT` is reached).
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(1_000);
 
-fn config_for_security_testing(env: &TestEnv) {
+fn config_for_security_testing(env: &TestEnv, wasm_strategy: NnsCanisterWasmStrategy) {
     InternetComputer::new()
         .add_fast_single_node_subnet(SubnetType::System)
         .add_fast_single_node_subnet(SubnetType::Application)
@@ -69,8 +69,8 @@ fn config_for_security_testing(env: &TestEnv) {
             .nodes()
             .for_each(|node| node.await_status_is_healthy().unwrap())
     });
-    install_nns(env, NnsCustomizations::default());
-    install_sns(env, NnsCanisterWasmStrategy::NnsReleaseQualification);
+    install_nns(env, wasm_strategy, NnsCustomizations::default());
+    install_sns(env, wasm_strategy);
 }
 
 pub fn benchmark_config(env: TestEnv) {
@@ -87,7 +87,8 @@ pub fn benchmark_config_with_aggregator(env: TestEnv) {
 }
 
 pub fn config_fast(env: TestEnv) {
-    config_for_security_testing(&env);
+    let strategy = NnsCanisterWasmStrategy::TakeBuiltFromSources;
+    config_for_security_testing(&env, strategy);
     install_aggregator(&env);
 }
 

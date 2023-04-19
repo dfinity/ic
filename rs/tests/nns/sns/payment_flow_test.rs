@@ -27,6 +27,7 @@ fn multiple_ticket_participants(env: TestEnv) {
 /// 6. Assert that the user is actually participating in the sale of X ICP worth of SNS tokens
 fn main() -> Result<()> {
     SystemTestGroup::new()
+        .with_overall_timeout(Duration::from_secs(15 * 60)) // 15 min
         .with_setup(sns_setup_fast)
         .add_test(systest!(initiate_token_swap))
         .add_test(systest!(multiple_ticket_participants))
