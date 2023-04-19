@@ -23,6 +23,8 @@ DEPENDENCIES = [
     "@crate_index//:hex",
     "@crate_index//:serde_cbor",
     "@crate_index//:rand_0_8_4",
+    "@crate_index//:lazy_static",
+    "@crate_index//:url",
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//packages/icrc-ledger-agent:icrc_ledger_agent",
     "//rs/rosetta-api/icrc1/ledger",
@@ -45,8 +47,6 @@ DEV_DEPENDENCIES = [
     "@crate_index//:ring",
     "@crate_index//:once_cell",
     "@crate_index//:reqwest",
-    "@crate_index//:url",
-    "@crate_index//:lazy_static",
 ]
 
 MACRO_DEPENDENCIES = [
