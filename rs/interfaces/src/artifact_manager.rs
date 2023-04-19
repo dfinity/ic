@@ -7,6 +7,19 @@ use derive_more::From;
 use ic_types::artifact::{ArtifactPriorityFn, PriorityFn};
 use ic_types::{artifact, chunkable, p2p, NodeId};
 
+/// The trait is used by all P2P clients in order to (broadcast) transfer a message
+/// to all recipients simultaneously. Where the (peers) receipients are determined by the
+/// subnet membership at the time of execution.
+pub trait AdvertBroadcaster {
+    /// The method completes "fast", otherwise it can negatively impact consensus' finalization rate.
+    /// Implementers update their internal state to refelect the most recent artifact pool content.
+    /// The eventual delivery of the artifact pools, done by P2P, doesn't affect the time it takes
+    /// for the method to complete.
+    /// The passed in advert can be either a deletion or an insertion
+    /// (the deletion marker is part of the type).
+    fn process_delta(&self, advert: p2p::GossipAdvert);
+}
+
 #[derive(From, Debug)]
 /// An error type that combines 'NotProcessed' status with an actual
 /// error that might be returned by artifact pools. It is used as

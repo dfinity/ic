@@ -100,15 +100,17 @@ use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_transport::{Transport, TransportChannelId};
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
-use ic_types::{NodeId, SubnetId};
+use ic_types::{p2p::GossipAdvert, NodeId, SubnetId};
 use serde::{Deserialize, Serialize};
 use std::{
     error,
     fmt::{Display, Formatter, Result as FmtResult},
     sync::Arc,
 };
+use tokio::sync::mpsc::Receiver;
 use tower::util::BoxCloneService;
 
+mod advert_broadcaster;
 mod artifact_download_list;
 mod discovery;
 mod download_management;
@@ -119,7 +121,8 @@ mod gossip_types;
 mod metrics;
 mod peer_context;
 
-pub use event_handler::{AdvertBroadcaster, P2PThreadJoiner};
+pub use advert_broadcaster::AdvertBroadcasterImpl;
+pub use event_handler::{P2PThreadJoiner, MAX_ADVERT_BUFFER};
 
 /// Custom P2P result type returning a P2P error in case of error.
 pub(crate) type P2PResult<T> = std::result::Result<T, P2PError>;
@@ -161,7 +164,7 @@ pub fn start_p2p(
     transport: Arc<dyn Transport>,
     consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
     artifact_manager: Arc<dyn ArtifactManager>,
-    advert_broadcaster: &AdvertBroadcaster,
+    advert_receiver: Receiver<GossipAdvert>,
 ) -> P2PThreadJoiner {
     let p2p_transport_channels = vec![TransportChannelId::from(0)];
     let gossip = Arc::new(gossip_protocol::GossipImpl::new(
@@ -184,7 +187,8 @@ pub fn start_p2p(
         gossip.clone(),
     );
     transport.set_event_handler(BoxCloneService::new(event_handler));
-    advert_broadcaster.start(gossip.clone());
+    let _ =
+        advert_broadcaster::start_advert_send_thread(log.clone(), advert_receiver, gossip.clone());
 
     P2PThreadJoiner::new(log, gossip)
 }
