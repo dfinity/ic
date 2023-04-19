@@ -1,6 +1,5 @@
 use crate::common::local_replica;
 use crate::common::local_replica::test_identity;
-
 use ic_agent::Identity;
 use ic_base_types::PrincipalId;
 use ic_icrc1_ledger::InitArgs;
@@ -11,6 +10,7 @@ use ic_icrc_rosetta::ledger_blocks_synchronization::blocks_synchronizer::{self, 
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::account::Account;
+use std::sync::Arc;
 
 use lazy_static::lazy_static;
 use proptest::prelude::*;
@@ -74,10 +74,10 @@ proptest! {
     }
 
     // Create the storage client where blocks will be stored
-    let mut storage_client = StorageClient::new_in_memory().unwrap();
+    let storage_client = Arc::new(StorageClient::new_in_memory().unwrap());
 
     // Start the synching process
-    blocks_synchronizer::start_synching_blocks(&agent, &mut storage_client,2).await.unwrap();
+    blocks_synchronizer::start_synching_blocks(&agent, storage_client.clone(),2).await.unwrap();
 
 
 
