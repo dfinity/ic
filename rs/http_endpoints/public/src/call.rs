@@ -6,12 +6,14 @@ use crate::{
         get_cors_headers, make_plaintext_response, make_response, map_box_error_to_response,
         remove_effective_canister_id,
     },
+    metrics::LABEL_UNKNOWN,
     types::ApiReqType,
     validator_executor::ValidatorExecutor,
-    EndpointService, HttpError, HttpHandlerMetrics, IngressFilterService, UNKNOWN_LABEL,
+    EndpointService, HttpError, HttpHandlerMetrics, IngressFilterService,
 };
 use http::Request;
 use hyper::{Body, Response, StatusCode};
+use ic_config::http_handler::Config;
 use ic_interfaces_p2p::{IngressError, IngressIngestionService};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, info_sample, warn, ReplicaLogger};
@@ -47,6 +49,7 @@ pub(crate) struct CallService {
 impl CallService {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new_service(
+        config: Config,
         log: ReplicaLogger,
         metrics: HttpHandlerMetrics,
         subnet_id: SubnetId,
@@ -68,7 +71,7 @@ impl CallService {
         }));
         BoxCloneService::new(
             ServiceBuilder::new()
-                .layer(BodyReceiverLayer::default())
+                .layer(BodyReceiverLayer::new(&config))
                 .service(base_service),
         )
     }
@@ -137,7 +140,7 @@ impl Service<Request<Vec<u8>>> for CallService {
         // Actual parsing.
         self.metrics
             .request_body_size_bytes
-            .with_label_values(&[ApiReqType::Call.into(), UNKNOWN_LABEL])
+            .with_label_values(&[ApiReqType::Call.into(), LABEL_UNKNOWN])
             .observe(request.body().len() as f64);
 
         let (mut parts, body) = request.into_parts();

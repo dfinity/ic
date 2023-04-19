@@ -3,14 +3,16 @@
 use crate::{
     body::BodyReceiverLayer,
     common::{cbor_response, make_plaintext_response, remove_effective_canister_id},
+    metrics::LABEL_UNKNOWN,
     types::ApiReqType,
     validator_executor::ValidatorExecutor,
-    EndpointService, HttpHandlerMetrics, ReplicaHealthStatus, UNKNOWN_LABEL,
+    EndpointService, HttpHandlerMetrics, ReplicaHealthStatus,
 };
 use crossbeam::atomic::AtomicCell;
 use futures_util::FutureExt;
 use http::Request;
 use hyper::{Body, Response, StatusCode};
+use ic_config::http_handler::Config;
 use ic_interfaces::execution_environment::QueryExecutionService;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, ReplicaLogger};
@@ -43,6 +45,7 @@ pub(crate) struct QueryService {
 impl QueryService {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new_service(
+        config: Config,
         log: ReplicaLogger,
         metrics: HttpHandlerMetrics,
         health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
@@ -64,7 +67,7 @@ impl QueryService {
         }));
         BoxCloneService::new(
             ServiceBuilder::new()
-                .layer(BodyReceiverLayer::default())
+                .layer(BodyReceiverLayer::new(&config))
                 .service(base_service),
         )
     }
@@ -83,7 +86,7 @@ impl Service<Request<Vec<u8>>> for QueryService {
     fn call(&mut self, request: Request<Vec<u8>>) -> Self::Future {
         self.metrics
             .request_body_size_bytes
-            .with_label_values(&[ApiReqType::Query.into(), UNKNOWN_LABEL])
+            .with_label_values(&[ApiReqType::Query.into(), LABEL_UNKNOWN])
             .observe(request.body().len() as f64);
         if self.health_status.load() != ReplicaHealthStatus::Healthy {
             let res = make_plaintext_response(
