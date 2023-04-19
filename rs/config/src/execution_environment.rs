@@ -99,6 +99,9 @@ pub const BITCOIN_MAINNET_CANISTER_ID: &str = "ghsi2-tqaaa-aaaan-aaaca-cai";
 // TODO(EXC-1298): Uninstall this canister once the bitcoin mainnet canister is live.
 const BITCOIN_MAINNET_SOFT_LAUNCH_CANISTER_ID: &str = "gsvzx-syaaa-aaaan-aaabq-cai";
 
+/// The capacity of the Wasm compilation cache.
+pub const MAX_COMPILATION_CACHE_SIZE: NumBytes = NumBytes::new(10 * GB);
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(default)]
 pub struct Config {
@@ -217,6 +220,9 @@ pub struct Config {
     /// The limit on the number of dirty pages in stable memory that a canister
     /// can create in a single message.
     pub stable_memory_dirty_page_limit: NumPages,
+
+    /// The capacity of the Wasm compilation cache.
+    pub max_compilation_cache_size: NumBytes,
 }
 
 impl Default for Config {
@@ -285,6 +291,7 @@ impl Default for Config {
             stable_memory_dirty_page_limit: NumPages::new(
                 embedders::STABLE_MEMORY_DIRTY_PAGE_LIMIT,
             ),
+            max_compilation_cache_size: MAX_COMPILATION_CACHE_SIZE,
         }
     }
 }

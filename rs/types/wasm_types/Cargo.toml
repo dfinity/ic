@@ -7,5 +7,6 @@ edition = "2021"
 ic-crypto-sha = { path = "../../crypto/sha" }
 ic-protobuf = { path = "../../protobuf" }
 ic-sys = { path = "../../sys" }
+ic-types = { path = "../types" }
 ic-utils = { path = "../../utils" }
 serde = { version = "1.0.99", features = ["derive"] }

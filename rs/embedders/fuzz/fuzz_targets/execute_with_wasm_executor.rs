@@ -102,7 +102,7 @@ fn setup_wasm_execution_input(func_ref: FuncRef) -> WasmExecutionInput {
     let subnet_available_memory =
         SubnetAvailableMemory::new(i64::MAX / 2, i64::MAX / 2, i64::MAX / 2);
 
-    let compilation_cache = Arc::new(CompilationCache::new());
+    let compilation_cache = Arc::new(CompilationCache::new(NumBytes::new(0)));
 
     WasmExecutionInput {
         api_type,

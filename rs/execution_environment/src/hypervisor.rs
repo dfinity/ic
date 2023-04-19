@@ -1,4 +1,5 @@
 use ic_canister_sandbox_replica_controller::sandboxed_execution_controller::SandboxedExecutionController;
+use ic_config::execution_environment::MAX_COMPILATION_CACHE_SIZE;
 use ic_config::flag_status::FlagStatus;
 use ic_config::{embedders::Config as EmbeddersConfig, execution_environment::Config};
 use ic_cycles_account_manager::CyclesAccountManager;
@@ -228,7 +229,7 @@ impl Hypervisor {
             own_subnet_type,
             log,
             cycles_account_manager,
-            compilation_cache: Arc::new(CompilationCache::new()),
+            compilation_cache: Arc::new(CompilationCache::new(config.max_compilation_cache_size)),
             deterministic_time_slicing: config.deterministic_time_slicing,
             cost_to_compile_wasm_instruction: config.cost_to_compile_wasm_instruction,
             dirty_page_overhead,
@@ -254,7 +255,7 @@ impl Hypervisor {
             own_subnet_type,
             log,
             cycles_account_manager,
-            compilation_cache: Arc::new(CompilationCache::default()),
+            compilation_cache: Arc::new(CompilationCache::new(MAX_COMPILATION_CACHE_SIZE)),
             deterministic_time_slicing,
             cost_to_compile_wasm_instruction,
             dirty_page_overhead,

@@ -1,6 +1,6 @@
 use ic_base_types::{CanisterIdError, PrincipalIdBlobParseError};
 use ic_error_types::UserError;
-use ic_types::{methods::WasmMethod, CanisterId, Cycles, NumInstructions};
+use ic_types::{methods::WasmMethod, CanisterId, CountBytes, Cycles, NumInstructions};
 use ic_wasm_types::{WasmEngineError, WasmInstrumentationError, WasmValidationError};
 use serde::{Deserialize, Serialize};
 
@@ -158,6 +158,12 @@ impl From<WasmEngineError> for HypervisorError {
 impl std::fmt::Display for HypervisorError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self)
+    }
+}
+
+impl CountBytes for HypervisorError {
+    fn count_bytes(&self) -> usize {
+        std::mem::size_of::<Self>()
     }
 }
 
