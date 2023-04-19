@@ -9,9 +9,13 @@ use icp_rosetta_integration_tests::start_rosetta;
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc1::{account::Account, transfer::TransferArg};
 use std::sync::Arc;
+use std::thread::sleep;
+use std::time::Duration;
 use url::Url;
 
 pub const LEDGER_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 2;
+const ATTEMPTS: u8 = 100;
+const DURATION_BETWEEN_ATTEMPTS: Duration = Duration::from_millis(100);
 
 // small wrapper that gets the binaries from env
 async fn start_replica() -> ReplicaContext {
@@ -220,11 +224,19 @@ async fn test() {
         .await
         .expect("Unable to list networks")[0]
         .clone();
-    let block = client
-        .block(network, 0)
-        .await
-        .expect("Unable to fetch the first block");
 
     // check that block 0 exists
-    assert!(block.is_some());
+    //
+    // We don't know when Rosetta finishes the synchronization.
+    // So we try multiple times.
+    for i in 0..ATTEMPTS {
+        match client.block(network.clone(), 0).await {
+            Ok(block) => {
+                assert!(block.is_some());
+                break;
+            }
+            Err(_) if i < ATTEMPTS - 1 => sleep(DURATION_BETWEEN_ATTEMPTS),
+            Err(err) => panic!("Unable to fetch block 0: {}", err),
+        };
+    }
 }
