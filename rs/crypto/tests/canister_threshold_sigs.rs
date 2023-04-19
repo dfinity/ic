@@ -5,31 +5,29 @@ use ic_crypto_internal_threshold_sig_ecdsa::{EccScalar, IDkgDealingInternal, MEG
 use ic_crypto_tecdsa::derive_tecdsa_public_key;
 use ic_crypto_temp_crypto::TempCryptoComponent;
 use ic_crypto_test_utils::{crypto_for, dkg::dummy_idkg_transcript_id_for_tests};
-use ic_crypto_test_utils_canister_threshold_sigs::load_previous_transcripts_and_create_signed_dealings;
-use ic_crypto_test_utils_canister_threshold_sigs::random_crypto_component_not_in_receivers;
-use ic_crypto_test_utils_canister_threshold_sigs::sig_share_from_each_receiver;
-use ic_crypto_test_utils_canister_threshold_sigs::IntoBuilder;
 use ic_crypto_test_utils_canister_threshold_sigs::{
-    batch_sign_signed_dealings, batch_signature_from_signers, build_params_from_previous,
-    create_and_verify_signed_dealing, create_and_verify_signed_dealings, create_signed_dealing,
-    generate_key_transcript, generate_presig_quadruple, load_input_transcripts, load_transcript,
-    node_id, random_dealer_id, random_dealer_id_excluding, random_node_id_excluding,
-    random_receiver_for_inputs, random_receiver_id, random_receiver_id_excluding,
-    run_idkg_and_create_and_verify_transcript, run_tecdsa_protocol,
-    CanisterThresholdSigTestEnvironment,
+    add_support_from_all_receivers, batch_sign_signed_dealings, batch_signature_from_signers,
+    build_params_from_previous, create_and_verify_signed_dealing,
+    create_and_verify_signed_dealings, create_signed_dealing, generate_key_transcript,
+    generate_presig_quadruple, load_input_transcripts,
+    load_previous_transcripts_and_create_signed_dealings, load_transcript, n_random_dealer_indexes,
+    node_id, random_crypto_component_not_in_receivers, random_dealer_id,
+    random_dealer_id_excluding, random_node_id_excluding, random_receiver_for_inputs,
+    random_receiver_id, random_receiver_id_excluding, run_idkg_and_create_and_verify_transcript,
+    run_tecdsa_protocol, sig_share_from_each_receiver, swap_two_dealings_in_transcript,
+    CanisterThresholdSigTestEnvironment, IntoBuilder,
 };
 use ic_interfaces::crypto::{IDkgProtocol, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner};
-use ic_types::crypto::canister_threshold_sig::error::IDkgVerifyInitialDealingsError;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgCreateTranscriptError, IDkgOpenTranscriptError,
-    IDkgVerifyComplaintError, IDkgVerifyDealingPublicError, IDkgVerifyOpeningError,
-    ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
+    IDkgVerifyComplaintError, IDkgVerifyDealingPublicError, IDkgVerifyInitialDealingsError,
+    IDkgVerifyOpeningError, IDkgVerifyTranscriptError, ThresholdEcdsaCombineSigSharesError,
+    ThresholdEcdsaSignShareError,
 };
-use ic_types::crypto::canister_threshold_sig::idkg::InitialIDkgDealings;
 use ic_types::crypto::canister_threshold_sig::idkg::{
     BatchSignedIDkgDealing, IDkgComplaint, IDkgMaskedTranscriptOrigin, IDkgReceivers,
     IDkgTranscript, IDkgTranscriptOperation, IDkgTranscriptParams, IDkgTranscriptType,
-    IDkgUnmaskedTranscriptOrigin, SignedIDkgDealing,
+    IDkgUnmaskedTranscriptOrigin, InitialIDkgDealings, SignedIDkgDealing,
 };
 use ic_types::crypto::canister_threshold_sig::{
     ExtendedDerivationPath, PreSignatureQuadruple, ThresholdEcdsaSigInputs,
@@ -810,6 +808,159 @@ mod verify_transcript {
 
         let key_transcript = generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1);
         generate_presig_quadruple(&env, AlgorithmId::ThresholdEcdsaSecp256k1, &key_transcript);
+    }
+
+    #[test]
+    fn should_verify_transcript_accept_random_transcript_with_dealings_swapped() {
+        /*
+        This behavior may seem strange but it follows from how random dealings
+        are combined, and the fact that we are really checking that the
+        transcript is *consistent* with the set of dealings, rather than
+        checking that there is a 1:1 correspondence between the dealings
+        and the transcript
+         */
+
+        let mut rng = thread_rng();
+
+        let subnet_size = rng.gen_range(4..10);
+        let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
+
+        let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
+
+        let transcript = run_idkg_and_create_and_verify_transcript(&params, &env.crypto_components);
+
+        let node_ids = n_random_dealer_indexes(&transcript, 2);
+
+        let transcript =
+            swap_two_dealings_in_transcript(&params, transcript, &env, node_ids[0], node_ids[1]);
+
+        let r = crypto_for(random_receiver_id(&params), &env.crypto_components)
+            .verify_transcript(&params, &transcript);
+
+        assert_matches!(r, Ok(()));
+    }
+
+    #[test]
+    fn should_verify_transcript_reject_reshared_transcript_with_dealings_swapped() {
+        let subnet_size = thread_rng().gen_range(4..10);
+        let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
+
+        let masked_key_params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
+
+        let masked_key_transcript =
+            run_idkg_and_create_and_verify_transcript(&masked_key_params, &env.crypto_components);
+
+        let params = build_params_from_previous(
+            masked_key_params,
+            IDkgTranscriptOperation::ReshareOfMasked(masked_key_transcript),
+        );
+
+        let transcript = run_idkg_and_create_and_verify_transcript(&params, &env.crypto_components);
+
+        let node_ids = n_random_dealer_indexes(&transcript, 2);
+
+        let transcript =
+            swap_two_dealings_in_transcript(&params, transcript, &env, node_ids[0], node_ids[1]);
+
+        let r = crypto_for(random_receiver_id(&params), &env.crypto_components)
+            .verify_transcript(&params, &transcript);
+
+        assert_matches!(r, Err(IDkgVerifyTranscriptError::InvalidTranscript));
+    }
+
+    #[test]
+    fn should_verify_transcript_reject_random_transcript_with_dealing_replaced() {
+        let subnet_size = thread_rng().gen_range(4..10);
+        let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
+
+        let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
+
+        let mut transcript =
+            run_idkg_and_create_and_verify_transcript(&params, &env.crypto_components);
+
+        let node_ids = n_random_dealer_indexes(&transcript, 2);
+
+        let node0_idx = node_ids[0];
+        let node1_idx = node_ids[1];
+
+        let node1_id = transcript.dealer_id_for_index(node1_idx).unwrap();
+
+        let dealing = transcript
+            .verified_dealings
+            .get(&node0_idx)
+            .expect("Dealing exists")
+            .clone();
+
+        let dealing_resigned = dealing
+            .content
+            .into_builder()
+            .with_dealer_id(node1_id)
+            .build_and_sign_from(&params, &env, node1_id);
+
+        let dealing = add_support_from_all_receivers(&env, &params, dealing_resigned);
+
+        assert!(transcript
+            .verified_dealings
+            .insert(node1_idx, dealing)
+            .is_some());
+
+        let r = crypto_for(random_receiver_id(&params), &env.crypto_components)
+            .verify_transcript(&params, &transcript);
+
+        assert_matches!(r, Err(IDkgVerifyTranscriptError::InvalidTranscript));
+    }
+
+    #[test]
+    fn should_verify_transcript_reject_transcript_with_insufficient_dealings() {
+        let subnet_size = thread_rng().gen_range(4..10);
+        let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
+
+        let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
+
+        let mut transcript =
+            run_idkg_and_create_and_verify_transcript(&params, &env.crypto_components);
+
+        while transcript.verified_dealings.len() >= params.collection_threshold().get() as usize {
+            transcript.verified_dealings.pop_first();
+        }
+
+        let r = crypto_for(random_receiver_id(&params), &env.crypto_components)
+            .verify_transcript(&params, &transcript);
+
+        assert_matches!(r, Err(IDkgVerifyTranscriptError::InvalidArgument(msg))
+                        if msg.starts_with("failed to verify transcript against params: insufficient number of dealings"));
+    }
+
+    #[test]
+    fn should_verify_transcript_reject_transcript_with_corrupted_internal_data() {
+        let subnet_size = thread_rng().gen_range(4..10);
+        let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
+
+        let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
+
+        let mut transcript =
+            run_idkg_and_create_and_verify_transcript(&params, &env.crypto_components);
+
+        let mut rng = thread_rng();
+
+        let raw_len = transcript.internal_transcript_raw.len();
+        let corrupted_idx = rng.gen::<usize>() % raw_len;
+        transcript.internal_transcript_raw[corrupted_idx] ^= 1;
+
+        let r = crypto_for(random_receiver_id(&params), &env.crypto_components)
+            .verify_transcript(&params, &transcript);
+
+        // Since the corruption is randomized, we might corrupt the CBOR or the commitments
+        // and thus different errors may result
+        match r {
+            Err(IDkgVerifyTranscriptError::InvalidTranscript) => {}
+
+            Err(IDkgVerifyTranscriptError::SerializationError(msg)) => {
+                assert!(msg.starts_with("failed to deserialize internal transcript"))
+            }
+            Err(e) => panic!("Unexpected error {:?}", e),
+            Ok(()) => panic!("Unexpected success"),
+        }
     }
 }
 

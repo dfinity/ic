@@ -117,6 +117,60 @@ pub fn create_and_verify_signed_dealing(
     signed_dealing
 }
 
+pub fn swap_two_dealings_in_transcript(
+    params: &IDkgTranscriptParams,
+    transcript: IDkgTranscript,
+    env: &CanisterThresholdSigTestEnvironment,
+    a: NodeIndex,
+    b: NodeIndex,
+) -> IDkgTranscript {
+    assert!(a != b);
+
+    let a_id = transcript.dealer_id_for_index(a).unwrap();
+    let b_id = transcript.dealer_id_for_index(b).unwrap();
+
+    let dealing_a = transcript
+        .verified_dealings
+        .get(&a)
+        .expect("Dealing exists")
+        .clone();
+
+    let dealing_b = transcript
+        .verified_dealings
+        .get(&b)
+        .expect("Dealing exists")
+        .clone();
+
+    let dealing_ba = dealing_b
+        .content
+        .into_builder()
+        .with_dealer_id(a_id)
+        .build_and_sign_from(params, env, a_id);
+
+    let dealing_ab = dealing_a
+        .content
+        .into_builder()
+        .with_dealer_id(b_id)
+        .build_and_sign_from(params, env, b_id);
+
+    let dealing_ab_signed = add_support_from_all_receivers(env, params, dealing_ab);
+
+    let dealing_ba_signed = add_support_from_all_receivers(env, params, dealing_ba);
+
+    let mut transcript = transcript;
+
+    assert!(transcript
+        .verified_dealings
+        .insert(a, dealing_ba_signed)
+        .is_some());
+    assert!(transcript
+        .verified_dealings
+        .insert(b, dealing_ab_signed)
+        .is_some());
+
+    transcript
+}
+
 pub fn create_and_verify_signed_dealings(
     params: &IDkgTranscriptParams,
     crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
@@ -183,6 +237,19 @@ pub fn batch_sign_signed_dealings(
             (dealer_id, multisigned_dealing)
         })
         .collect()
+}
+
+pub fn add_support_from_all_receivers(
+    env: &CanisterThresholdSigTestEnvironment,
+    params: &IDkgTranscriptParams,
+    dealing: SignedIDkgDealing,
+) -> BatchSignedIDkgDealing {
+    batch_signature_from_signers(
+        params.registry_version(),
+        &env.crypto_components,
+        dealing,
+        params.receivers().get(),
+    )
 }
 
 pub fn create_transcript(
@@ -621,6 +688,18 @@ pub fn random_dealer_id_excluding(transcript: &IDkgTranscript, exclusion: NodeId
         .expect("dealer index not in transcript")
 }
 
+pub fn n_random_dealer_indexes(transcript: &IDkgTranscript, n: usize) -> Vec<NodeIndex> {
+    let mut rng = thread_rng();
+
+    assert!(transcript.verified_dealings.len() >= n);
+
+    transcript
+        .verified_dealings
+        .keys()
+        .cloned()
+        .choose_multiple(&mut rng, n)
+}
+
 pub fn random_crypto_component_not_in_receivers(
     env: &CanisterThresholdSigTestEnvironment,
     receivers: &IDkgReceivers,
@@ -1032,6 +1111,16 @@ impl SignedIDkgDealingBuilder {
             signer: signer_id,
         };
         self.build()
+    }
+
+    pub fn build_and_sign_from(
+        self,
+        params: &IDkgTranscriptParams,
+        env: &CanisterThresholdSigTestEnvironment,
+        signer_id: NodeId,
+    ) -> SignedIDkgDealing {
+        let crypto = crypto_for(signer_id, &env.crypto_components);
+        self.build_with_signature(params, crypto, signer_id)
     }
 
     pub fn corrupt_signature(mut self) -> Self {
