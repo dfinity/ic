@@ -40,7 +40,7 @@ use std::{collections::BTreeMap, iter::once, time::Duration};
 
 use slog::{debug, info, trace, Logger};
 
-use super::report::{SystemGroupReport, SystemTestGroupError};
+use super::report::{SystemGroupSummary, SystemTestGroupError};
 
 const DEFAULT_TIMEOUT_PER_TEST: Duration = Duration::from_secs(60 * 10); // 10 minutes
 const DEFAULT_OVERALL_TIMEOUT: Duration = Duration::from_secs(60 * 10); // 10 minutes
@@ -814,7 +814,7 @@ impl SystemTestGroup {
     }
 }
 
-fn print_report(ctx: &GroupContext, report: &SystemGroupReport) {
+fn print_report(ctx: &GroupContext, report: &SystemGroupSummary) {
     info!(ctx.log(), "JSON Report:\n{}", report);
     info!(ctx.log(), "\n{}", report.pretty_print());
     if let Ok(group_setup) = GroupSetup::try_read_attribute(&ctx.get_setup_env().unwrap()) {

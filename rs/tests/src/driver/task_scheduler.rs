@@ -10,7 +10,7 @@ use crate::driver::task::Task;
 
 use super::action_graph::Node;
 use super::group::is_task_visible_to_user;
-use super::report::{SystemGroupReport, TaskReport};
+use super::report::{SystemGroupSummary, TaskReport};
 use super::task::TaskHandle;
 
 // trait for report and failure
@@ -153,7 +153,7 @@ impl TaskScheduler {
         )
     }
 
-    pub fn create_report(&self) -> SystemGroupReport {
+    pub fn create_report(&self) -> SystemGroupSummary {
         let mut success = vec![];
         let mut failure = vec![];
         let mut skipped = vec![];
@@ -194,7 +194,7 @@ impl TaskScheduler {
                 }
             }
         }
-        SystemGroupReport {
+        SystemGroupSummary {
             success,
             failure,
             skipped,

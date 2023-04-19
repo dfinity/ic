@@ -1,5 +1,5 @@
 use ic_tests::driver::{
-    report::{SystemGroupReport, TaskReport},
+    report::{SystemGroupSummary, TaskReport},
     test_env_api::FarmBaseUrl,
 };
 use std::{
@@ -23,7 +23,7 @@ fn assert_name_and_message_eq(test_result: &TaskReport, name: &str, message: Opt
 }
 
 fn assert_test_summary_size(
-    summary: &SystemGroupReport,
+    summary: &SystemGroupSummary,
     expected_successes: usize,
     expected_failures: usize,
     expected_skips: usize,
@@ -71,7 +71,7 @@ fn execute_test_scenario_with_default_cmd(scenario_name: &str) -> Output {
 }
 
 // Use by calling cmd.output() instead of cmd.result()
-fn extract_report(out: Vec<u8>) -> Option<SystemGroupReport> {
+fn extract_report(out: Vec<u8>) -> Option<SystemGroupSummary> {
     let log = String::from_utf8(out).unwrap();
     let group_report = log
         .split('\n')

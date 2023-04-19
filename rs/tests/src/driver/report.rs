@@ -34,7 +34,7 @@ pub fn create_report(
     action_graph: &ActionGraph<TaskId>,
     start_times: &BTreeMap<TaskId, SystemTime>,
     end_times: &BTreeMap<TaskId, SystemTime>,
-) -> SystemGroupReport {
+) -> SystemGroupSummary {
     let mut success = vec![];
     let mut failure = vec![];
     let mut skipped = vec![];
@@ -73,7 +73,7 @@ pub fn create_report(
             }
         }
     }
-    SystemGroupReport {
+    SystemGroupSummary {
         success,
         failure,
         skipped,
@@ -81,32 +81,33 @@ pub fn create_report(
 }
 
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
-pub struct SystemGroupReport {
+pub struct SystemGroupSummary {
     pub success: Vec<TaskReport>,
     pub failure: Vec<TaskReport>,
     pub skipped: Vec<TaskReport>,
 }
 
-impl Display for SystemGroupReport {
+impl Display for SystemGroupSummary {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         write!(f, "{}", serde_json::to_string(self).unwrap())
     }
 }
 
-impl SystemGroupReport {
+impl SystemGroupSummary {
     pub fn pretty_print(&self) -> String {
         let max_name_len = self.max_name_len();
         let mut out_lines = vec![];
         for res in self.success.iter() {
-            out_lines.push(res.pretty_print(max_name_len, "PASSED "));
+            out_lines.append(&mut res.pretty_print(max_name_len, "PASSED "));
         }
         for res in self.failure.iter() {
-            out_lines.push(res.pretty_print(max_name_len, "FAILED "));
+            out_lines.append(&mut res.pretty_print(max_name_len, "FAILED "));
         }
         for res in self.skipped.iter() {
-            out_lines.push(res.pretty_print(max_name_len, "SKIPPED"));
+            out_lines.append(&mut res.pretty_print(max_name_len, "SKIPPED"));
         }
         let mx_len = out_lines.iter().max_by_key(|x| x.len()).unwrap().len();
+        let mx_len = std::cmp::min(mx_len, 200);
         let start = format!("{:=^mx_len$}", " Summary ");
         let end = format!("{:=^mx_len$}", "");
         let mut summary = vec![];
@@ -145,24 +146,40 @@ impl SystemGroupReport {
     }
 }
 
+// short messages (without newlines) are appended to the end of a report line.
+// multi-line messages are indented so they are visually distinct from report lines.
 impl TaskReport {
-    fn pretty_print(&self, max_name_len: usize, verb: &str) -> String {
+    fn pretty_print(&self, max_name_len: usize, verb: &str) -> Vec<String> {
         let time = if self.runtime > 0.0 {
             format!(" in {:>6.2}s", self.runtime)
         } else {
             "".to_owned()
         };
-        let message = if self.message.is_some() {
-            format!(" -- {}", self.message.clone().unwrap())
+        let mut report_lines: Vec<String> = vec![];
+        let message = if let Some(msg) = &self.message {
+            let msg = msg.replace("\\n", "\n");
+            if !msg.contains('\n') {
+                format!(" -- {}", msg)
+            } else {
+                report_lines.append(
+                    &mut msg
+                        .split('\n')
+                        .map(|line| format!("     {}", line))
+                        .collect(),
+                );
+                "".to_owned()
+            }
         } else {
             "".to_owned()
         };
-        format!(
+        let mut res = vec![format!(
             "Task {:<max_name_len$} {}{:<13}{}",
             self.name, verb, time, message
-        )
+        )];
+        res.append(&mut report_lines);
+        res
     }
-}
+} //
 
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
 pub struct TaskReport {
@@ -184,7 +201,7 @@ pub enum SystemTestGroupError {
         task_id: TaskId,
         signal: i32,
     },
-    SystemTestFailure(SystemGroupReport),
+    SystemTestFailure(SystemGroupSummary),
 }
 
 impl Display for SystemTestGroupError {
@@ -227,6 +244,6 @@ impl std::convert::From<anyhow::Error> for SystemTestGroupError {
 
 #[derive(Clone, Debug)]
 pub enum Outcome {
-    FromParentProcess(SystemGroupReport),
+    FromParentProcess(SystemGroupSummary),
     FromSubProcess,
 }
