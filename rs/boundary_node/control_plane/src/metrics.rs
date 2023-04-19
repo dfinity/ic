@@ -11,9 +11,10 @@ use opentelemetry::{
 use tracing::info;
 
 use crate::{
+    check::Check,
     registry::{CreateRegistryClient, RoutingTable, Snapshot},
     reload::Reload,
-    Check, Persist, PersistStatus, Run,
+    Persist, PersistStatus, Run,
 };
 
 pub struct MetricParams {

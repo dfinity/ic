@@ -4,7 +4,7 @@ use anyhow::Error;
 use async_trait::async_trait;
 use ic_registry_client::client::RegistryClientImpl;
 
-use crate::{registry::CreateRegistryClient, Check};
+use crate::{check::Check, registry::CreateRegistryClient};
 
 pub struct WithRetry<T>(
     pub T,
