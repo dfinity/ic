@@ -1,16 +1,12 @@
-use std::{
-    cmp::min,
-    sync::{Arc, Mutex},
-};
+use std::sync::{Arc, Mutex};
 
 use anyhow::{anyhow, Context, Error};
+use async_scoped::TokioScope;
 use async_trait::async_trait;
 use bytes::Buf;
-use dashmap::{DashMap, DashSet};
-use futures::stream::FuturesUnordered;
+use dashmap::{mapref::entry::Entry, DashMap, DashSet};
 use ic_types::messages::{HttpStatusResponse, ReplicaHealthStatus};
 use opentelemetry::{baggage::BaggageExt, trace::FutureExt, KeyValue};
-use tokio::task;
 
 use crate::{
     persist::Persist,
@@ -18,10 +14,14 @@ use crate::{
     Run,
 };
 
-pub struct CheckPersistRunner<C: Check, P: Persist> {
+struct CheckState {
+    successful_checks: u8,
+}
+
+pub struct CheckPersistRunner<R: Retrieve, C: Check, P: Persist> {
     // Dependencies
-    routing_table: Arc<Mutex<Option<RoutingTable>>>,
-    checks: Arc<DashMap<(String, String), u8>>,
+    routing_table: R,
+    checks: Arc<DashMap<(String, String), CheckState>>,
     checker: Arc<C>,
     persister: P,
 
@@ -29,32 +29,56 @@ pub struct CheckPersistRunner<C: Check, P: Persist> {
     min_ok_count: u8,
 }
 
-impl<C: Check, P: Persist> CheckPersistRunner<C, P> {
-    pub fn new(
-        routing_table: Arc<Mutex<Option<RoutingTable>>>,
-        checks: Arc<DashMap<(String, String), u8>>,
-        checker: C,
-        persister: P,
-        min_ok_count: u8,
-    ) -> Self {
+impl<R: Retrieve, C: Check, P: Persist> CheckPersistRunner<R, C, P> {
+    pub fn new(routing_table: R, checker: C, persister: P, min_ok_count: u8) -> Self {
         Self {
             routing_table,
-            checks,
+            checks: Arc::new(DashMap::new()),
             checker: Arc::new(checker),
             persister,
             min_ok_count,
         }
     }
+
+    pub fn get_active_checker(&self) -> impl ActiveChecker {
+        Arc::clone(&self.checks)
+    }
+}
+
+pub trait Retrieve {
+    /// Gets a copy of the routing table for this moment in time
+    fn retrieve(&self) -> Result<RoutingTable, Error>;
+}
+
+impl Retrieve for Arc<Mutex<Option<RoutingTable>>> {
+    fn retrieve(&self) -> Result<RoutingTable, Error> {
+        self.lock()
+            .unwrap()
+            .clone()
+            .ok_or_else(|| anyhow!("routing_table not available"))
+    }
+}
+
+pub trait ActiveChecker: Clone {
+    fn is_active(&self, subnet_node_id: &(String, String)) -> bool;
+}
+
+impl ActiveChecker for Arc<DashMap<(String, String), CheckState>> {
+    fn is_active(&self, subnet_node_id: &(String, String)) -> bool {
+        self.contains_key(subnet_node_id)
+    }
+}
+
+impl<F: Clone + Fn(&(String, String)) -> bool> ActiveChecker for F {
+    fn is_active(&self, subnet_node_id: &(String, String)) -> bool {
+        self(subnet_node_id)
+    }
 }
 
 #[async_trait]
-impl<C: Check, P: Persist> Run for CheckPersistRunner<C, P> {
+impl<R: Retrieve + Send + Sync, C: Check, P: Persist> Run for CheckPersistRunner<R, C, P> {
     async fn run(&mut self) -> Result<(), Error> {
-        let routing_table = {
-            let rt = self.routing_table.lock().unwrap();
-            rt.clone()
-                .ok_or_else(|| anyhow!("routing_table not available"))?
-        };
+        let routing_table = self.routing_table.retrieve()?;
 
         // Clean checks of targets that no longer exist
         let current_targets = DashSet::<(String, String)>::new();
@@ -81,57 +105,51 @@ impl<C: Check, P: Persist> Run for CheckPersistRunner<C, P> {
         }
 
         // Perform Health Checks
-        let futs = FuturesUnordered::new();
+        let ((), futs) = TokioScope::scope_and_block(|s| {
+            for subnet in routing_table.clone().subnets {
+                for node in subnet.nodes {
+                    let checks = Arc::clone(&self.checks);
+                    let checker = Arc::clone(&self.checker);
+                    let min_ok_count = self.min_ok_count;
 
-        for subnet in routing_table.clone().subnets {
-            for node in subnet.nodes {
-                let checks = Arc::clone(&self.checks);
-                let checker = Arc::clone(&self.checker);
-                let min_ok_count = self.min_ok_count.to_owned();
+                    let (subnet_id, node_id, socket_addr) = (
+                        subnet.subnet_id.clone(),
+                        node.node_id.clone(),
+                        node.socket_addr.clone(),
+                    );
 
-                let (subnet_id, node_id, socket_addr) = (
-                    subnet.subnet_id.clone(),
-                    node.node_id.clone(),
-                    node.socket_addr.clone(),
-                );
+                    s.spawn(async move {
+                        let _ctx = opentelemetry::Context::current_with_baggage(vec![
+                            KeyValue::new("subnet_id", subnet_id.to_string()),
+                            KeyValue::new("node_id", node_id.to_string()),
+                            KeyValue::new("socket_addr", socket_addr.to_string()),
+                        ]);
 
-                futs.push(task::spawn(async move {
-                    let _ctx = opentelemetry::Context::current_with_baggage(vec![
-                        KeyValue::new("subnet_id", subnet_id.to_string()),
-                        KeyValue::new("node_id", node_id.to_string()),
-                        KeyValue::new("socket_addr", socket_addr.to_string()),
-                    ]);
+                        let _out = checker
+                            .check(&socket_addr)
+                            .with_context(_ctx.clone())
+                            .await
+                            .context("failed to check node");
 
-                    let out = checker
-                        .check(&socket_addr)
-                        .with_context(_ctx.clone())
-                        .await
-                        .context("failed to check node");
-
-                    let k = (subnet_id, node_id);
-                    let ok_cnt = match checks.get(&k) {
-                        Some(c) => c.value().to_owned(),
-                        None => 0,
-                    };
-
-                    match out {
-                        Ok(_) => checks.insert(
-                            k,
-                            min(
-                                min_ok_count, // clamp to this value
-                                ok_cnt + 1,
-                            ),
-                        ),
-                        Err(_) => checks.insert(k, 0),
-                    };
-
-                    out
-                }));
+                        match checks.entry((subnet_id, node_id)) {
+                            Entry::Occupied(mut o) => {
+                                let o = o.get_mut();
+                                // clamp
+                                o.successful_checks = min_ok_count.min(o.successful_checks + 1);
+                            }
+                            Entry::Vacant(v) => {
+                                v.insert(CheckState {
+                                    successful_checks: 1,
+                                });
+                            }
+                        };
+                    });
+                }
             }
-        }
+        });
 
         for fut in futs {
-            let _ = fut.await?;
+            let _ = fut?;
         }
 
         // Construct Effective Routing Table
@@ -150,7 +168,7 @@ impl<C: Check, P: Persist> Run for CheckPersistRunner<C, P> {
                             );
 
                             let ok_cnt = match self.checks.get(&k) {
-                                Some(c) => c.value().to_owned(),
+                                Some(c) => c.value().successful_checks,
                                 None => 0,
                             };
 
@@ -173,9 +191,11 @@ impl<C: Check, P: Persist> Run for CheckPersistRunner<C, P> {
     }
 }
 
+pub struct CheckResult {}
+
 #[async_trait]
 pub trait Check: 'static + Send + Sync {
-    async fn check(&self, addr: &str) -> Result<(), Error>;
+    async fn check(&self, addr: &str) -> Result<CheckResult, Error>;
 }
 
 pub struct Checker {
@@ -190,7 +210,7 @@ impl Checker {
 
 #[async_trait]
 impl Check for Checker {
-    async fn check(&self, addr: &str) -> Result<(), Error> {
+    async fn check(&self, addr: &str) -> Result<CheckResult, Error> {
         let request = self
             .http_client
             .request(reqwest::Method::GET, format!("http://{addr}/api/v2/status"))
@@ -222,6 +242,6 @@ impl Check for Checker {
             return Err(anyhow!("replica reported unhealthy status"));
         }
 
-        Ok(())
+        Ok(CheckResult {})
     }
 }

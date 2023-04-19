@@ -11,7 +11,7 @@ use opentelemetry::{
 use tracing::info;
 
 use crate::{
-    check::Check,
+    check::{Check, CheckResult},
     registry::{CreateRegistryClient, RoutingTable, Snapshot},
     reload::Reload,
     Persist, PersistStatus, Run,
@@ -230,7 +230,7 @@ pub struct CheckWithMetrics<T>(pub T, pub CheckMetricParams);
 
 #[async_trait]
 impl<T: Check> Check for CheckWithMetrics<T> {
-    async fn check(&self, addr: &str) -> Result<(), Error> {
+    async fn check(&self, addr: &str) -> Result<CheckResult, Error> {
         let start_time = Instant::now();
 
         let out = self.0.check(addr).await;

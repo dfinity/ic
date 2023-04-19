@@ -123,6 +123,12 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             "async-recursion": crate.spec(
                 version = "^0.3.2",
             ),
+            "async-scoped": crate.spec(
+                version = "^0.7.1",
+                features = [
+                    "use-tokio",
+                ],
+            ),
             "async-socks5": crate.spec(
                 version = "^0.5.1",
             ),
