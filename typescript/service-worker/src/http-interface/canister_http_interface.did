@@ -7,7 +7,7 @@ type HttpRequest = record {
   url: text;
   headers: vec HeaderField;
   body: blob;
-  certificate_version: opt nat;
+  certificate_version: opt nat16;
 };
 
 type HttpUpdateRequest = record {

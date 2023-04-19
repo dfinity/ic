@@ -14,7 +14,7 @@ export const idlFactory: IDL.InterfaceFactory = ({ IDL }) => {
     method: IDL.Text,
     body: IDL.Vec(IDL.Nat8),
     headers: IDL.Vec(HeaderField),
-    certificate_version: IDL.Opt(IDL.Nat),
+    certificate_version: IDL.Opt(IDL.Nat16),
   });
   const StreamingStrategy = IDL.Variant({
     Callback: IDL.Record({

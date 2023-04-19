@@ -13,7 +13,8 @@ import { Principal } from '@dfinity/principal';
 import fetch from 'jest-fetch-mock';
 import { HttpRequest } from '../../http-interface/canister_http_interface_types';
 import { CanisterResolver } from '../domains';
-import { RequestProcessor, maxCertTimeOffsetNs } from './index';
+import { maxCertTimeOffsetNs } from '../response';
+import { RequestProcessor } from './index';
 import * as requestUtils from './utils';
 
 const CANISTER_ID = 'qoctq-giaaa-aaaaa-aaaea-cai';
@@ -634,7 +635,10 @@ it('should do update call on upgrade flag', async () => {
 
 it('should reject redirects', async () => {
   jest.setSystemTime(TEST_DATA.query_call.certificate_time);
-  const queryHttpPayload = createHttpRedirectResponsePayload();
+  const queryHttpPayload = createHttpRedirectResponsePayload(
+    TEST_DATA.query_call.body,
+    TEST_DATA.query_call.certificate
+  );
   mockFetchResponses(TEST_DATA.query_call.root_key, {
     query: queryHttpPayload,
   });
@@ -801,13 +805,16 @@ function createHttpQueryResponsePayload(
 }
 
 function createHttpRedirectResponsePayload(
-  statusCode: number = 302,
-  redirectLocation: string = ''
+  body: string,
+  certificate: string = ''
 ) {
   const response = {
-    status_code: statusCode,
-    headers: [['Location', redirectLocation]],
-    body: Array.from(new TextEncoder().encode('')),
+    status_code: 302,
+    headers: [
+      ['Location', 'https://catphish.cg'],
+      ['IC-Certificate', certificate],
+    ],
+    body: Array.from(new TextEncoder().encode(body)),
     streaming_strategy: [],
     upgrade: [],
   };

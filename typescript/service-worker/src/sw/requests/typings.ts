@@ -9,7 +9,6 @@ export enum HTTPHeaders {
   ContentEncoding = 'content-encoding',
 }
 
-export const maxCertTimeOffsetNs = BigInt.asUintN(64, BigInt(300_000_000_000));
 export const cacheHeaders = [HTTPHeaders.CacheControl.toString()];
 
 export enum HTTPRequestMethod {
