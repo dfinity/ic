@@ -112,7 +112,7 @@
                         <tr><td>stable_memory_size</td><td>{{ exec_state.stable_memory.size }} pages</td></tr>
                         <tr><td>exports</td><td>
                             {% let dbg = format!("{:?}",  exec_state.exports) %}
-                            {% if dbg.len() > 5000 %}
+                            {% if dbg.len() > 25000 %}
                               Exports' debug string is too large: {{  dbg.len() }} bytes!
                             {% else %}
                               {{ dbg }}
