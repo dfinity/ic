@@ -306,7 +306,7 @@ fn setup(
     };
 
     // Install NNS with ledger customizations
-    install_nns(&env, nns_customizations);
+    install_nns(&env, canister_wasm_strategy, nns_customizations);
 
     install_sns(&env, canister_wasm_strategy);
 }
@@ -315,7 +315,7 @@ pub fn sns_setup(env: TestEnv) {
     setup(
         env,
         vec![],
-        NnsCanisterWasmStrategy::NnsReleaseQualification,
+        NnsCanisterWasmStrategy::TakeBuiltFromSources,
         false,
     );
 }
@@ -324,7 +324,7 @@ pub fn sns_setup_fast(env: TestEnv) {
     setup(
         env,
         vec![],
-        NnsCanisterWasmStrategy::NnsReleaseQualification,
+        NnsCanisterWasmStrategy::TakeBuiltFromSources,
         true,
     );
 }
@@ -363,7 +363,7 @@ fn sns_setup_with_many_sale_participants_impl(env: TestEnv, fast_test_setup: boo
     setup(
         env,
         participants,
-        NnsCanisterWasmStrategy::NnsReleaseQualification,
+        NnsCanisterWasmStrategy::TakeBuiltFromSources,
         fast_test_setup,
     );
 }
@@ -396,7 +396,7 @@ pub fn sns_setup_with_many_icp_users(env: TestEnv) {
     setup(
         env,
         participants,
-        NnsCanisterWasmStrategy::NnsReleaseQualification,
+        NnsCanisterWasmStrategy::TakeBuiltFromSources,
         false,
     );
 }
@@ -486,12 +486,16 @@ pub fn check_all_participants(env: TestEnv) {
     );
 }
 
-pub fn install_nns(env: &TestEnv, customizations: NnsCustomizations) {
+pub fn install_nns(
+    env: &TestEnv,
+    canister_wasm_strategy: NnsCanisterWasmStrategy,
+    customizations: NnsCustomizations,
+) {
     let log = env.logger();
     let start_time = Instant::now();
     install_nns_with_customizations_and_check_progress(
         env.topology_snapshot(),
-        NnsCanisterWasmStrategy::NnsReleaseQualification,
+        canister_wasm_strategy,
         customizations,
     );
     info!(

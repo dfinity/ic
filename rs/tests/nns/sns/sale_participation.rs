@@ -13,7 +13,7 @@ use ic_tests::systest;
 /// 3. Add one sale-participating user
 fn main() -> Result<()> {
     SystemTestGroup::new()
-        .with_overall_timeout(Duration::from_secs(30 * 60)) // 30 min
+        .with_overall_timeout(Duration::from_secs(15 * 60)) // 15 min
         .with_setup(sns_setup_fast)
         .add_test(systest!(initiate_token_swap))
         .add_test(systest!(add_one_participant))
