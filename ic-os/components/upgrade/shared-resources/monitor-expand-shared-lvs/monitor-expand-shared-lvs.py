@@ -30,15 +30,15 @@ REQUIRED_AVAIL_FRACTION = 0.10
 EXPAND_FRACTION = 0.05
 
 
-def get_vg_free(vg_name):
+def get_vg_size_and_free(vg_name):
     """
-    Obtains total free space in volume group.
+    Obtains total size and free space in volume group.
 
     Sizes measured in MiB.
     """
     vgs_data = json.loads(
         subprocess.Popen(
-            ["vgs", "--units", "k", "-o", "vg_free", "--reportformat", "json", vg_name], stdout=subprocess.PIPE
+            ["vgs", "--units", "k", "-o", "vg_size,vg_free", "--reportformat", "json", vg_name], stdout=subprocess.PIPE
         ).stdout.read()
     )
     # The json output of vgs looks roughly like this:
@@ -46,7 +46,7 @@ def get_vg_free(vg_name):
     #      "report": [
     #          {
     #              "vg": [
-    #                  {"vg_free":"116084736.00k"}
+    #                  {"vg_size":"498814976.00k", "vg_free":"116084736.00k"}
     #              ]
     #          }
     #      ]
@@ -55,9 +55,10 @@ def get_vg_free(vg_name):
     # When parsing, we need to strip the unit ("k") at the end of the outputs,
     # and also be careful to strip decimal places (which may or may not be
     # there).
+    vg_size = int(vgs_data["report"][0]["vg"][0]["vg_size"][:-1].split(".")[0]) // 1024
     vg_free = int(vgs_data["report"][0]["vg"][0]["vg_free"][:-1].split(".")[0]) // 1024
 
-    return vg_free
+    return vg_size, vg_free
 
 
 def get_lv_size(vg_name, lv_name):
@@ -68,7 +69,7 @@ def get_lv_size(vg_name, lv_name):
     """
     lvs_data = json.loads(
         subprocess.Popen(
-            ["lvs", "--units", "k", "-o", "lv_free", "--reportformat", "json", "{vg_name}/{lv_name}" % (vg_name, lv_name)], stdout=subprocess.PIPE
+            ["lvs", "--units", "k", "-o", "lv_free", "--reportformat", "json", "{0}/{1}".format(vg_name, lv_name)], stdout=subprocess.PIPE
         ).stdout.read()
     )
     # The json output of lvs looks roughly like this:
@@ -85,7 +86,7 @@ def get_lv_size(vg_name, lv_name):
     # When parsing, we need to strip the unit ("k") at the end of the outputs,
     # and also be careful to strip decimal places (which may or may not be
     # there).
-    lv_size = int(vgs_data["report"][0]["lv"][0]["lv_size"][:-1].split(".")[0]) // 1024
+    lv_size = int(lvs_data["report"][0]["lv"][0]["lv_size"][:-1].split(".")[0]) // 1024
 
     return lv_size
 
@@ -96,7 +97,7 @@ def get_fsfree(path):
 
     Size measured in MiB.
     """
-    st = os.statvfs(MOUNT_POINT)
+    st = os.statvfs(path)
     return st.f_bsize * st.f_bavail // 1048576
 
 
@@ -107,7 +108,7 @@ def get_fstype(blkdev):
     return fields["ID_FS_TYPE"]
 
 
-def expand_lv(device_name, lv_name, mount_point, fs_free, required_avail, expand_size):
+def expand_lv(device_name, lv_name, fs_type, mount_point, fs_free, required_avail, expand_size):
     sys.stderr.write(
         "Free space on %s is %d MiB -- below %d MiB, expanding by %d MiB\n"
         % (device_name, fs_free, required_avail, expand_size)
@@ -125,8 +126,6 @@ def expand_lv(device_name, lv_name, mount_point, fs_free, required_avail, expand
         grow_cmd = ["resize2fs", device_name]
     subprocess.run(grow_cmd, check=True)
 
-    return fields["ID_FS_TYPE"]
-
 
 def main():
     # File system type is not going to change, fetch only once.
@@ -134,7 +133,7 @@ def main():
     backup_fs_type = get_fstype(BACKUP_DEVICE_NAME)
 
     # Total sizes changes only if we call lvextend below.
-    vg_free = get_vg_free(VG_NAME)
+    vg_size, vg_free = get_vg_size_and_free(VG_NAME)
     data_size = get_lv_size(VG_NAME, DATA_LV_NAME)
     backup_size = get_lv_size(VG_NAME, BACKUP_LV_NAME)
 
@@ -152,15 +151,15 @@ def main():
         if expand_size > 0:
             # Prioritize re-sizing data.
             if data_fs_free < data_required_avail:
-                expand_lv(DATA_DEVICE_NAME, DATA_LV_NAME, DATA_MOUNT_POINT, data_fs_free, data_required_avail, expand_size)
+                expand_lv(DATA_DEVICE_NAME, DATA_LV_NAME, data_fs_type, DATA_MOUNT_POINT, data_fs_free, data_required_avail, expand_size)
 
                 # Now the volume group available size changed, query it again.
-                vg_free = get_vg_free(VG_NAME)
-            else if backup_fs_free < backup_required_avail:
-                expand_lv(BACKUP_DEVICE_NAME, BACKUP_LV_NAME, BACKUP_MOUNT_POINT, backup_fs_free, backup_required_avail, expand_size)
+                vg_size, vg_free = get_vg_size_and_free(VG_NAME)
+            elif backup_fs_free < backup_required_avail:
+                expand_lv(BACKUP_DEVICE_NAME, BACKUP_LV_NAME, backup_fs_type, BACKUP_MOUNT_POINT, backup_fs_free, backup_required_avail, expand_size)
 
                 # Now the volume group available size changed, query it again.
-                vg_free = get_vg_free(VG_NAME)
+                vg_size, vg_free = get_vg_size_and_free(VG_NAME)
 
         # In the inner loop we are really making just a single syscall
         # (statfs) that is also pretty cheap. So we can afford to do it fairly
