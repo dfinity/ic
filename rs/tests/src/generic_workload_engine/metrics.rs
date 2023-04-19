@@ -14,12 +14,19 @@ use super::engine::Engine;
 
 #[derive(Default, Clone, Debug)]
 pub struct RequestDurationBucket {
-    // threshold: Duration, TODO
+    threshold: Duration,
     requests_above_threshold: u64,
     requests_below_threshold: u64,
 }
 
 impl RequestDurationBucket {
+    pub fn new(threshold: Duration) -> Self {
+        Self {
+            threshold,
+            ..Default::default()
+        }
+    }
+
     pub fn requests_count_below_threshold(&self) -> u64 {
         self.requests_below_threshold
     }
@@ -40,7 +47,7 @@ impl RequestDurationBucket {
 
 pub type Counter = usize;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RequestMetrics {
     errors_max: Counter,
     errors_map: HashMap<String, Counter>,
@@ -51,8 +58,8 @@ pub struct RequestMetrics {
     failure_calls: Counter,
     min_request_duration: Duration,
     max_request_duration: Duration,
-    total_request_duration: Duration,
-    //requests_duration_buckets: Option<Vec<RequestDurationBucket>>, TODO
+    total_requests_duration: Duration,
+    requests_duration_buckets: Vec<RequestDurationBucket>,
 }
 
 /// Outcome of a request-based workflow, i.e., r_1, r_2, ..., r_N in which each individual request r_i may depend on the outcome of r_{i-1}
@@ -62,6 +69,7 @@ pub struct LoadTestMetrics {
     inner: BTreeMap<String, RequestMetrics>,
     last_time_emitted: Instant,
     logger: Logger,
+    requests_duration_thresholds: Vec<Duration>,
 }
 
 impl LoadTestMetrics {
@@ -70,7 +78,13 @@ impl LoadTestMetrics {
             inner: Default::default(),
             last_time_emitted: Instant::now(),
             logger,
+            requests_duration_thresholds: vec![],
         }
+    }
+
+    pub fn with_requests_duration_thresholds(mut self, duration_threshold: Duration) -> Self {
+        self.requests_duration_thresholds.push(duration_threshold);
+        self
     }
 
     pub fn success_calls(&self) -> Counter {
@@ -100,11 +114,36 @@ impl LoadTestMetrics {
         })
     }
 
-    pub fn find_request_duration_bucket(
-        &self,
-        _threshold: Duration,
-    ) -> Option<RequestDurationBucket> {
-        todo!()
+    pub fn requests_count_below_threshold(&self, threshold: Duration) -> Vec<(String, u64)> {
+        self.inner
+            .iter()
+            .map(|(key, val)| {
+                (
+                    key.clone(),
+                    val.requests_duration_buckets
+                        .iter()
+                        .find(|bucket| bucket.threshold == threshold)
+                        .expect("No bucket with a given threshold exists.")
+                        .requests_count_below_threshold(),
+                )
+            })
+            .collect()
+    }
+
+    pub fn requests_ratio_below_threshold(&self, threshold: Duration) -> Vec<(String, f64)> {
+        self.inner
+            .iter()
+            .map(|(key, val)| {
+                (
+                    key.clone(),
+                    val.requests_duration_buckets
+                        .iter()
+                        .find(|bucket| bucket.threshold == threshold)
+                        .expect("No bucket with a given threshold exists.")
+                        .requests_ratio_below_threshold(),
+                )
+            })
+            .collect()
     }
 
     pub fn aggregate_load_testing_metrics<T, S>(mut self, item: LoadTestOutcome<T, S>) -> Self
@@ -112,8 +151,21 @@ impl LoadTestMetrics {
         T: Clone,
         S: Clone + Display,
     {
+        // Initialize empty request metrics with duration buckets.
+        let empty_request_metrics = RequestMetrics {
+            requests_duration_buckets: self
+                .requests_duration_thresholds
+                .iter()
+                .cloned()
+                .map(RequestDurationBucket::new)
+                .collect(),
+            ..Default::default()
+        };
         item.into_iter().for_each(|(req_name, outcome)| {
-            let entry = self.inner.entry(req_name).or_default();
+            let entry = self
+                .inner
+                .entry(req_name)
+                .or_insert_with(|| empty_request_metrics.clone());
             entry.push(outcome)
         });
         self.log_throttled();
@@ -176,7 +228,7 @@ impl RequestMetrics {
     }
 
     pub fn avg_request_duration(&self) -> Option<Duration> {
-        self.total_request_duration
+        self.total_requests_duration
             .checked_div(self.total_calls().try_into().unwrap())
     }
 
@@ -219,11 +271,19 @@ impl RequestMetrics {
     {
         self.min_request_duration = min(self.min_request_duration, item.duration);
         self.max_request_duration = max(self.max_request_duration, item.duration);
-        self.total_request_duration += item.duration;
+        self.total_requests_duration += item.duration;
 
         self.min_attempts = min(self.min_attempts, item.attempts);
         self.max_attempts = max(self.max_attempts, item.attempts);
         self.total_attempts += item.attempts;
+
+        for bucket in self.requests_duration_buckets.iter_mut() {
+            if item.duration >= bucket.threshold {
+                bucket.requests_above_threshold += 1;
+            } else {
+                bucket.requests_below_threshold += 1;
+            }
+        }
 
         if let Err(error) = item.result {
             self.failure_calls += 1;
@@ -249,12 +309,12 @@ impl Default for RequestMetrics {
             success_calls: 0,
             failure_calls: 0,
             min_request_duration: Duration::MAX,
-            max_request_duration: Duration::default(),
-            total_request_duration: Duration::default(),
-            // requests_duration_buckets: None, TODO
+            max_request_duration: Duration::ZERO,
+            total_requests_duration: Duration::ZERO,
             min_attempts: Counter::MAX,
             max_attempts: 0,
             total_attempts: 0,
+            requests_duration_buckets: vec![],
         }
     }
 }
