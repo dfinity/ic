@@ -110,7 +110,6 @@ pub enum CspSecretKeyStoreContainsError {
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum CspPublicKeyStoreError {
-    // TODO: CRP-1719 add more error variants if necessary
     TransientInternalError(String),
 }
 
