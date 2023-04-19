@@ -4,7 +4,10 @@ use anyhow::Error;
 use async_trait::async_trait;
 use ic_registry_client::client::RegistryClientImpl;
 
-use crate::{check::Check, registry::CreateRegistryClient};
+use crate::{
+    check::{Check, CheckResult},
+    registry::CreateRegistryClient,
+};
 
 pub struct WithRetry<T>(
     pub T,
@@ -41,7 +44,7 @@ impl<T: CreateRegistryClient> CreateRegistryClient for WithRetry<T> {
 
 #[async_trait]
 impl<T: Check> Check for WithRetry<T> {
-    async fn check(&self, addr: &str) -> Result<(), Error> {
+    async fn check(&self, addr: &str) -> Result<CheckResult, Error> {
         let mut remaining_attempts = self.1;
         let attempt_interval = self.2;
 

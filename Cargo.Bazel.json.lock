@@ -1,5 +1,5 @@
 {
-  "checksum": "86a9c72f78ebb0fdfd0103c4d480f00a231f3884b0d8d0cc20a683641f6849a7",
+  "checksum": "dc11e8b96561da9a97c20038053639c28aa593795273c163ea19abd902a27cce",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -317,7 +317,7 @@
               "target": "futures_core"
             },
             {
-              "id": "h2 0.3.17",
+              "id": "h2 0.3.18",
               "target": "h2"
             },
             {
@@ -2778,6 +2778,64 @@
       },
       "license": "MIT OR Apache-2.0"
     },
+    "async-scoped 0.7.1": {
+      "name": "async-scoped",
+      "version": "0.7.1",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/async-scoped/0.7.1/download",
+          "sha256": "0e7a6a57c8aeb40da1ec037f5d455836852f7a57e69e1b1ad3d8f38ac1d6cadf"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "async_scoped",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "async_scoped",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": [
+          "tokio",
+          "use-tokio"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "futures 0.3.28",
+              "target": "futures"
+            },
+            {
+              "id": "pin-project 1.0.12",
+              "target": "pin_project"
+            },
+            {
+              "id": "slab 0.4.8",
+              "target": "slab"
+            },
+            {
+              "id": "tokio 1.27.0",
+              "target": "tokio"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.7.1"
+      },
+      "license": "Apache-2.0/MIT"
+    },
     "async-socks5 0.5.1": {
       "name": "async-socks5",
       "version": "0.5.1",
@@ -3140,13 +3198,13 @@
       },
       "license": "Apache-2.0 OR MIT"
     },
-    "axum 0.6.15": {
+    "axum 0.6.16": {
       "name": "axum",
-      "version": "0.6.15",
+      "version": "0.6.16",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/axum/0.6.15/download",
-          "sha256": "3b32c5ea3aabaf4deb5f5ced2d688ec0844c881c9e6c696a8b769a05fc691e62"
+          "url": "https://crates.io/api/v1/crates/axum/0.6.16/download",
+          "sha256": "113713495a32dd0ab52baf5c10044725aa3aec00b31beda84218e469029b72a3"
         }
       },
       "targets": [
@@ -3194,7 +3252,7 @@
         "deps": {
           "common": [
             {
-              "id": "axum 0.6.15",
+              "id": "axum 0.6.16",
               "target": "build_script_build"
             },
             {
@@ -3298,7 +3356,7 @@
           ],
           "selects": {}
         },
-        "version": "0.6.15"
+        "version": "0.6.16"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -3598,7 +3656,7 @@
               "target": "object"
             },
             {
-              "id": "rustc-demangle 0.1.22",
+              "id": "rustc-demangle 0.1.23",
               "target": "rustc_demangle"
             }
           ],
@@ -7892,13 +7950,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "clap 4.2.2": {
+    "clap 4.2.4": {
       "name": "clap",
-      "version": "4.2.2",
+      "version": "4.2.4",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/clap/4.2.2/download",
-          "sha256": "9b802d85aaf3a1cdb02b224ba472ebdea62014fccfcb269b95a4d76443b5ee5a"
+          "url": "https://crates.io/api/v1/crates/clap/4.2.4/download",
+          "sha256": "956ac1f6381d8d82ab4684768f89c0ea3afe66925ceadb4eeb3fc452ffc55d62"
         }
       },
       "targets": [
@@ -7945,7 +8003,7 @@
         "deps": {
           "common": [
             {
-              "id": "clap_builder 4.2.2",
+              "id": "clap_builder 4.2.4",
               "target": "clap_builder"
             },
             {
@@ -7965,17 +8023,17 @@
           ],
           "selects": {}
         },
-        "version": "4.2.2"
+        "version": "4.2.4"
       },
       "license": "MIT OR Apache-2.0"
     },
-    "clap_builder 4.2.2": {
+    "clap_builder 4.2.4": {
       "name": "clap_builder",
-      "version": "4.2.2",
+      "version": "4.2.4",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/clap_builder/4.2.2/download",
-          "sha256": "14a1a858f532119338887a4b8e1af9c60de8249cd7bafd68036a489e261e37b6"
+          "url": "https://crates.io/api/v1/crates/clap_builder/4.2.4/download",
+          "sha256": "84080e799e54cff944f4b4a4b0e71630b0e0443b25b985175c7dddc1a859b749"
         }
       },
       "targets": [
@@ -8031,7 +8089,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "4.2.2"
+        "version": "4.2.4"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -12666,6 +12724,10 @@
               "target": "assert_matches"
             },
             {
+              "id": "async-scoped 0.7.1",
+              "target": "async_scoped"
+            },
+            {
               "id": "async-socks5 0.5.1",
               "target": "async_socks5"
             },
@@ -12674,7 +12736,7 @@
               "target": "async_stream"
             },
             {
-              "id": "axum 0.6.15",
+              "id": "axum 0.6.16",
               "target": "axum"
             },
             {
@@ -12790,7 +12852,7 @@
               "target": "clap"
             },
             {
-              "id": "clap 4.2.2",
+              "id": "clap 4.2.4",
               "target": "clap",
               "alias": "clap_4_0_0"
             },
@@ -12935,7 +12997,7 @@
               "target": "glob"
             },
             {
-              "id": "h2 0.3.17",
+              "id": "h2 0.3.18",
               "target": "h2"
             },
             {
@@ -18022,13 +18084,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "h2 0.3.17": {
+    "h2 0.3.18": {
       "name": "h2",
-      "version": "0.3.17",
+      "version": "0.3.18",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/h2/0.3.17/download",
-          "sha256": "66b91535aa35fea1523ad1b86cb6b53c28e0ae566ba4a460f4457e936cad7c6f"
+          "url": "https://crates.io/api/v1/crates/h2/0.3.18/download",
+          "sha256": "17f8a914c2987b688368b5138aa05321db91f4090cf26118185672ad588bce21"
         }
       },
       "targets": [
@@ -18100,7 +18162,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.3.17"
+        "version": "0.3.18"
       },
       "license": "MIT"
     },
@@ -19453,7 +19515,7 @@
               "target": "futures_util"
             },
             {
-              "id": "h2 0.3.17",
+              "id": "h2 0.3.18",
               "target": "h2"
             },
             {
@@ -23013,7 +23075,7 @@
           "selects": {
             "cfg(not(any(windows, target_os = \"hermit\", target_os = \"unknown\")))": [
               {
-                "id": "rustix 0.37.11",
+                "id": "rustix 0.37.12",
                 "target": "rustix"
               }
             ],
@@ -25971,13 +26033,13 @@
       },
       "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT"
     },
-    "linux-raw-sys 0.3.1": {
+    "linux-raw-sys 0.3.2": {
       "name": "linux-raw-sys",
-      "version": "0.3.1",
+      "version": "0.3.2",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/linux-raw-sys/0.3.1/download",
-          "sha256": "d59d8c75012853d2e872fb56bc8a2e53718e2cafe1a4c823143141c6d90c322f"
+          "url": "https://crates.io/api/v1/crates/linux-raw-sys/0.3.2/download",
+          "sha256": "3f508063cc7bb32987c71511216bd5a32be15bccb6a80b52df8b9d7f01fc3aa2"
         }
       },
       "targets": [
@@ -26006,7 +26068,7 @@
           "no_std"
         ],
         "edition": "2018",
-        "version": "0.3.1"
+        "version": "0.3.2"
       },
       "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT"
     },
@@ -27068,7 +27130,7 @@
         "deps": {
           "common": [
             {
-              "id": "rustix 0.37.11",
+              "id": "rustix 0.37.12",
               "target": "rustix"
             }
           ],
@@ -38246,7 +38308,7 @@
                 "target": "encoding_rs"
               },
               {
-                "id": "h2 0.3.17",
+                "id": "h2 0.3.18",
                 "target": "h2"
               },
               {
@@ -39342,13 +39404,13 @@
       },
       "license": "MIT"
     },
-    "rustc-demangle 0.1.22": {
+    "rustc-demangle 0.1.23": {
       "name": "rustc-demangle",
-      "version": "0.1.22",
+      "version": "0.1.23",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/rustc-demangle/0.1.22/download",
-          "sha256": "d4a36c42d1873f9a77c53bde094f9664d9891bc604a45b4798fd2c389ed12e5b"
+          "url": "https://crates.io/api/v1/crates/rustc-demangle/0.1.23/download",
+          "sha256": "d626bb9dae77e28219937af045c257c28bfd3f69333c512553507f5f9798cb76"
         }
       },
       "targets": [
@@ -39371,7 +39433,7 @@
           "**"
         ],
         "edition": "2015",
-        "version": "0.1.22"
+        "version": "0.1.23"
       },
       "license": "MIT/Apache-2.0"
     },
@@ -39609,13 +39671,13 @@
       },
       "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT"
     },
-    "rustix 0.37.11": {
+    "rustix 0.37.12": {
       "name": "rustix",
-      "version": "0.37.11",
+      "version": "0.37.12",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/rustix/0.37.11/download",
-          "sha256": "85597d61f83914ddeba6a47b3b8ffe7365107221c2e557ed94426489fefb5f77"
+          "url": "https://crates.io/api/v1/crates/rustix/0.37.12/download",
+          "sha256": "722529a737f5a942fdbac3a46cee213053196737c5eaa3386d52e85b786f2659"
         }
       },
       "targets": [
@@ -39669,14 +39731,14 @@
               "target": "io_lifetimes"
             },
             {
-              "id": "rustix 0.37.11",
+              "id": "rustix 0.37.12",
               "target": "build_script_build"
             }
           ],
           "selects": {
             "cfg(all(any(target_os = \"android\", target_os = \"linux\"), any(rustix_use_libc, miri, not(all(target_os = \"linux\", any(target_arch = \"x86\", all(target_arch = \"x86_64\", target_pointer_width = \"64\"), all(target_endian = \"little\", any(target_arch = \"arm\", all(target_arch = \"aarch64\", target_pointer_width = \"64\"), target_arch = \"powerpc64\", target_arch = \"riscv64\", target_arch = \"mips\", target_arch = \"mips64\"))))))))": [
               {
-                "id": "linux-raw-sys 0.3.1",
+                "id": "linux-raw-sys 0.3.2",
                 "target": "linux_raw_sys"
               }
             ],
@@ -39686,7 +39748,7 @@
                 "target": "libc"
               },
               {
-                "id": "linux-raw-sys 0.3.1",
+                "id": "linux-raw-sys 0.3.2",
                 "target": "linux_raw_sys"
               }
             ],
@@ -39710,7 +39772,7 @@
           }
         },
         "edition": "2018",
-        "version": "0.37.11"
+        "version": "0.37.12"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -44781,7 +44843,7 @@
         "deps": {
           "common": [
             {
-              "id": "rustc-demangle 0.1.22",
+              "id": "rustc-demangle 0.1.23",
               "target": "rustc_demangle"
             },
             {
@@ -45537,7 +45599,7 @@
           "selects": {
             "cfg(any(unix, target_os = \"wasi\"))": [
               {
-                "id": "rustix 0.37.11",
+                "id": "rustix 0.37.12",
                 "target": "rustix"
               }
             ],
@@ -47877,7 +47939,7 @@
               "target": "async_stream"
             },
             {
-              "id": "axum 0.6.15",
+              "id": "axum 0.6.16",
               "target": "axum"
             },
             {
@@ -47897,7 +47959,7 @@
               "target": "futures_util"
             },
             {
-              "id": "h2 0.3.17",
+              "id": "h2 0.3.18",
               "target": "h2"
             },
             {
@@ -50531,8 +50593,8 @@
         },
         {
           "Binary": {
-            "crate_name": "exit",
-            "crate_root": "src/bin/exit.rs",
+            "crate_name": "sleep",
+            "crate_root": "src/bin/sleep.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -50543,8 +50605,8 @@
         },
         {
           "Binary": {
-            "crate_name": "sleep",
-            "crate_root": "src/bin/sleep.rs",
+            "crate_name": "exit",
+            "crate_root": "src/bin/exit.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -52230,7 +52292,7 @@
               "target": "object"
             },
             {
-              "id": "rustc-demangle 0.1.22",
+              "id": "rustc-demangle 0.1.23",
               "target": "rustc_demangle"
             },
             {
@@ -55623,7 +55685,7 @@
     "cc 1.0.79",
     "cddl 0.9.1",
     "clap 3.2.23",
-    "clap 4.2.2",
+    "clap 4.2.4",
     "cpp_demangle 0.3.5",
     "difference 2.0.0",
     "escargot 0.5.7",

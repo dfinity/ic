@@ -8,6 +8,7 @@ use std::{
 use anyhow::{Context, Error};
 use async_trait::async_trait;
 use futures::{stream, StreamExt};
+use mockall::automock;
 
 use crate::{encode::Encode, registry::RoutingTable, reload::Reload, WithReload};
 
@@ -17,6 +18,7 @@ pub enum PersistStatus {
     SkippedEmpty,
 }
 
+#[automock]
 #[async_trait]
 pub trait Persist: Send + Sync {
     async fn persist(&self, rt: &RoutingTable) -> Result<PersistStatus, Error>;

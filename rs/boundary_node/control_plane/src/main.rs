@@ -10,13 +10,12 @@ use anyhow::{anyhow, Context, Error};
 use async_trait::async_trait;
 use axum::{
     body::Body,
-    handler::Handler,
+    extract::State,
     http::{Request, Response, StatusCode},
     routing::get,
-    Extension, Router,
+    Router,
 };
 use clap::Parser;
-use dashmap::DashMap;
 use futures::future::TryFutureExt;
 use lazy_static::lazy_static;
 use nix::sys::signal::Signal;
@@ -45,7 +44,7 @@ mod retry;
 mod routes;
 
 use crate::{
-    check::{Check, CheckPersistRunner, Checker},
+    check::{ActiveChecker, Check, CheckPersistRunner, CheckResult, Checker},
     encode::{RoutesEncoder, SystemReplicasEncoder, TrustedCertsEncoder, UpstreamEncoder},
     metrics::{CheckMetricParams, CheckWithMetrics, MetricParams, WithMetrics},
     persist::{
@@ -136,10 +135,6 @@ async fn main() -> Result<(), Error> {
         .build(),
     )
     .init();
-
-    // Setup Checks
-    let checks: DashMap<(String, String), u8> = DashMap::new();
-    let checks = Arc::new(checks);
 
     // Metrics
     let meter = global::meter(SERVICE_NAME);
@@ -252,12 +247,12 @@ async fn main() -> Result<(), Error> {
 
     // Runner
     let check_persist_runner = CheckPersistRunner::new(
-        Arc::clone(&routing_table), // routing_table
-        Arc::clone(&checks),        // checks
-        checker,                    // checker
-        persister,                  // persister
-        cli.min_ok_count,           // min_ok_count
+        Arc::clone(&routing_table),
+        checker,
+        persister,
+        cli.min_ok_count,
     );
+    let active_replicas = check_persist_runner.get_active_checker();
     let check_persist_runner = WithMetrics(
         check_persist_runner,
         MetricParams::new(&meter, SERVICE_NAME, "run"),
@@ -266,12 +261,12 @@ async fn main() -> Result<(), Error> {
     let mut check_persist_runner = check_persist_runner;
 
     // Metrics
-    let metrics_handler = metrics_handler.layer(Extension(MetricsHandlerArgs {
-        exporter,
-        checks: Arc::clone(&checks),
-    }));
-
-    let metrics_router = Router::new().route("/metrics", get(metrics_handler));
+    let metrics_router = Router::new()
+        .route("/metrics", get(metrics_handler))
+        .with_state(MetricsHandlerArgs {
+            exporter,
+            active_replicas,
+        });
 
     info!(
         msg = format!("starting {SERVICE_NAME}").as_str(),
@@ -305,13 +300,16 @@ async fn main() -> Result<(), Error> {
 }
 
 #[derive(Clone)]
-struct MetricsHandlerArgs {
+struct MetricsHandlerArgs<A> {
     exporter: PrometheusExporter,
-    checks: Arc<DashMap<(String, String), u8>>,
+    active_replicas: A,
 }
 
-async fn metrics_handler(
-    Extension(MetricsHandlerArgs { exporter, checks }): Extension<MetricsHandlerArgs>,
+async fn metrics_handler<A: ActiveChecker>(
+    State(MetricsHandlerArgs {
+        exporter,
+        active_replicas,
+    }): State<MetricsHandlerArgs<A>>,
     _: Request<Body>,
 ) -> Response<Body> {
     let metric_families = exporter.registry().gather();
@@ -332,7 +330,7 @@ async fn metrics_handler(
     // When that happens, the last gauge value for those replicas never changes.
     // This pollutes our metrics with stale data. Therefore we remove metric lines corresponding
     // to replicas that are no longer being actively health-checked.
-    let metrics_text = remove_stale(checks, &metrics_text);
+    let metrics_text = remove_stale(active_replicas, &metrics_text);
 
     Response::builder()
         .status(200)
@@ -340,7 +338,7 @@ async fn metrics_handler(
         .unwrap()
 }
 
-fn remove_stale(checks: Arc<DashMap<(String, String), u8>>, metrics_text: &[u8]) -> Vec<u8> {
+fn remove_stale<A: ActiveChecker>(active_replicas: A, metrics_text: &[u8]) -> Vec<u8> {
     metrics_text
         .lines()
         .flat_map(|ln| match ln {
@@ -351,19 +349,17 @@ fn remove_stale(checks: Arc<DashMap<(String, String), u8>>, metrics_text: &[u8])
                 }
 
                 // The gauge line should have both subnet and node ID labels
-                let k = match extract_ids(&ln) {
-                    Some((subnet_id, node_id)) => (subnet_id, node_id),
-                    None => {
-                        return Vec::from(format!("{ln}\n"));
-                    }
+                let subnet_node_id = match extract_ids(&ln) {
+                    Some(v) => v,
+                    None => return Vec::from(format!("{ln}\n")),
                 };
 
                 // Checks should only contain active replicas
-                match checks.get(&k) {
-                    Some(_) => Vec::from(format!("{ln}\n")),
+                match active_replicas.is_active(&subnet_node_id) {
+                    true => Vec::from(format!("{ln}\n")),
 
                     // Stale
-                    None => vec![],
+                    false => vec![],
                 }
             }
             _ => vec![],
@@ -466,7 +462,7 @@ impl<T> WithSemaphore<T> {
 
 #[async_trait]
 impl<T: Check> Check for WithSemaphore<T> {
-    async fn check(&self, addr: &str) -> Result<(), Error> {
+    async fn check(&self, addr: &str) -> Result<CheckResult, Error> {
         let _permit = self.1.acquire().await?;
         self.0.check(addr).await
     }
@@ -478,23 +474,19 @@ mod tests {
 
     #[test]
     fn removes_stale() {
-        let checks: DashMap<(String, String), u8> = DashMap::new();
-
-        checks.insert(
-            (
-                "5kdm2-62fc6-fwnja-hutkz-ycsnm-4z33i-woh43-4cenu-ev7mi-gii6t-4ae".into(),
-                "kywkz-eopg4-nn6md-cjb24-5ri6y-aq6au-vt57i-kg7gk-ch5pw-7er3w-7qe".into(),
-            ),
-            0,
-        );
-
-        checks.insert(
-            (
-                "w4asl-4nmyj-qnr7c-6cqq4-tkwmt-o26di-iupkq-vx4kt-asbrx-jzuxh-4ae".into(),
-                "ze4ou-bfvbt-c5onv-3sxls-vqa4d-gwmt2-fr3zy-svzdq-ge2yd-oehb3-wqe".into(),
-            ),
-            0,
-        );
+        fn is_active(subnet_node_id: &(String, String)) -> bool {
+            [
+                (
+                    "5kdm2-62fc6-fwnja-hutkz-ycsnm-4z33i-woh43-4cenu-ev7mi-gii6t-4ae".into(),
+                    "kywkz-eopg4-nn6md-cjb24-5ri6y-aq6au-vt57i-kg7gk-ch5pw-7er3w-7qe".into(),
+                ),
+                (
+                    "w4asl-4nmyj-qnr7c-6cqq4-tkwmt-o26di-iupkq-vx4kt-asbrx-jzuxh-4ae".into(),
+                    "ze4ou-bfvbt-c5onv-3sxls-vqa4d-gwmt2-fr3zy-svzdq-ge2yd-oehb3-wqe".into(),
+                ),
+            ]
+            .contains(subnet_node_id)
+        }
 
         // middle line is stale
         let txt = [
@@ -504,8 +496,8 @@ mod tests {
         ].join("\n");
 
         let out = remove_stale(
-            Arc::new(checks), // checks
-            txt.as_bytes(),   // metrics_text
+            is_active,      // checks
+            txt.as_bytes(), // metrics_text
         );
 
         let out = String::from_utf8(out).expect("failed to convert output to string");

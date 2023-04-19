@@ -10,6 +10,7 @@ DEPENDENCIES = [
     "//rs/registry/local_store",
     "//rs/types/types",
     "@crate_index//:anyhow",
+    "@crate_index//:async-scoped",
     "@crate_index//:axum",
     "@crate_index//:bytes",
     "@crate_index//:candid",
