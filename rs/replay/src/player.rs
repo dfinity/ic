@@ -8,12 +8,9 @@ use ic_artifact_pool::{
     consensus_pool::{ConsensusPoolImpl, UncachedConsensusPoolImpl},
 };
 use ic_config::{artifact_pool::ArtifactPoolConfig, subnet_config::SubnetConfigs, Config};
-use ic_consensus::{
-    certification::VerifierImpl,
-    consensus::{
-        batch_delivery::deliver_batches, pool_reader::PoolReader, utils::crypto_hashable_to_seed,
-    },
-};
+use ic_consensus::{certification::VerifierImpl, consensus::batch_delivery::deliver_batches};
+use ic_consensus_utils::pool_reader::PoolReader;
+use ic_consensus_utils::{crypto_hashable_to_seed, lookup_replica_version};
 use ic_crypto_for_verification_only::CryptoComponentForVerificationOnly;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::ExecutionServices;
@@ -1039,7 +1036,7 @@ impl Player {
             return Err(ReplayError::StateDivergence(last_cup.height()));
         }
 
-        match ic_consensus::consensus::utils::lookup_replica_version(
+        match lookup_replica_version(
             &*self.registry,
             self.subnet_id,
             &ic_logger::replica_logger::no_op_logger(),

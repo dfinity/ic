@@ -2,7 +2,7 @@ mod framework;
 use crate::framework::{
     ConsensusDependencies, ConsensusInstance, ConsensusRunner, ConsensusRunnerConfig,
 };
-use ic_consensus::consensus::{pool_reader::PoolReader, Membership};
+use ic_consensus_utils::{membership::Membership, pool_reader::PoolReader};
 use ic_interfaces::consensus_pool::ConsensusPool;
 use ic_interfaces_registry::RegistryClient;
 use ic_test_utilities::{

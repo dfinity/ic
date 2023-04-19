@@ -1,0 +1,38 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    # Keep sorted.
+    "//rs/artifact_pool",
+    "//rs/config",
+    "//rs/consensus/utils",
+    "//rs/interfaces",
+    "//rs/interfaces/state_manager",
+    "//rs/monitoring/logger",
+    "//rs/monitoring/metrics",
+    "//rs/protobuf",
+    "//rs/registry/fake",
+    "//rs/registry/keys",
+    "//rs/registry/proto_data_provider",
+    "//rs/test_utilities",
+    "//rs/test_utilities/artifact_pool",
+    "//rs/test_utilities/registry",
+    "//rs/types/types",
+    "@crate_index//:mockall_0_7_2",
+    "@crate_index//:slog",
+]
+
+rust_library(
+    name = "mocks",
+    srcs = glob(["src/**/*.rs"]),
+    crate_features = select({
+        "//conditions:default": [],
+    }),
+    crate_name = "ic_consensus_mocks",
+    proc_macro_deps = [
+        "@crate_index//:strum_macros",
+    ],
+    version = "0.8.0",
+    deps = DEPENDENCIES,
+)

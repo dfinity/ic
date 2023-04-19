@@ -1,12 +1,10 @@
 //! The complaint handling
 
-use crate::consensus::{
-    metrics::{timed_call, EcdsaComplaintMetrics},
-    utils::RoundRobin,
-    ConsensusCrypto,
-};
+use crate::consensus::metrics::{timed_call, EcdsaComplaintMetrics};
 use crate::ecdsa::utils::EcdsaBlockReaderImpl;
 
+use ic_consensus_utils::crypto::ConsensusCrypto;
+use ic_consensus_utils::RoundRobin;
 use ic_interfaces::consensus_pool::ConsensusBlockCache;
 use ic_interfaces::crypto::{ErrorReproducibility, IDkgProtocol};
 use ic_interfaces::ecdsa::{EcdsaChangeAction, EcdsaChangeSet, EcdsaPool};

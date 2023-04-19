@@ -1,14 +1,15 @@
 #![deny(missing_docs)]
 use crate::{
     consensus::{
-        membership::Membership,
         metrics::{BlockMakerMetrics, EcdsaPayloadMetrics},
-        pool_reader::PoolReader,
-        utils::*,
         ConsensusCrypto,
     },
     dkg::create_payload as create_dkg_payload,
     ecdsa,
+};
+use ic_consensus_utils::{
+    find_lowest_ranked_proposals, get_block_hash_string, get_subnet_record, is_time_to_make_block,
+    is_upgrade_finalized, is_upgrade_pending, membership::Membership, pool_reader::PoolReader,
 };
 use ic_interfaces::{
     consensus::PayloadBuilder, dkg::DkgPool, ecdsa::EcdsaPool, time_source::TimeSource,
@@ -645,9 +646,8 @@ fn already_proposed(pool: &PoolReader<'_>, h: Height, this_node: NodeId) -> bool
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::consensus::mocks::{
-        dependencies_with_subnet_params, Dependencies, MockPayloadBuilder,
-    };
+    use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies, MockPayloadBuilder};
+    use ic_consensus_utils::get_block_maker_delay;
     use ic_interfaces::consensus_pool::ConsensusPool;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;

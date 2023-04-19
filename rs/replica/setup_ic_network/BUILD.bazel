@@ -12,6 +12,7 @@ rust_library(
         "//rs/artifact_pool",
         "//rs/config",
         "//rs/consensus",
+        "//rs/consensus/utils",
         "//rs/crypto/tls_interfaces",
         "//rs/cycles_account_manager",
         "//rs/ic_os/sev_interfaces",

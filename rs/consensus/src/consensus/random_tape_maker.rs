@@ -22,11 +22,11 @@
 //! the randomness of height h+1 will be returned when the next block/batch/
 //! random tape is delivered.
 
-use crate::consensus::{
+use ic_consensus_utils::{
+    active_low_threshold_transcript,
+    crypto::ConsensusCrypto,
     membership::{Membership, MembershipError},
     pool_reader::PoolReader,
-    utils::active_low_threshold_transcript,
-    ConsensusCrypto,
 };
 use ic_interfaces::messaging::MessageRouting;
 use ic_logger::{error, trace, ReplicaLogger};
@@ -188,10 +188,8 @@ impl RandomTapeMaker {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::consensus::{
-        add_all_to_validated,
-        mocks::{dependencies, Dependencies},
-    };
+    use crate::consensus::add_all_to_validated;
+    use ic_consensus_mocks::{dependencies, Dependencies};
     use ic_interfaces::artifact_pool::MutablePool;
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities::{consensus::fake::*, message_routing::FakeMessageRouting};

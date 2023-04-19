@@ -3,8 +3,8 @@
 use crate::consensus::{
     metrics::{PayloadBuilderMetrics, CRITICAL_ERROR_SUBNET_RECORD_ISSUE},
     payload::BatchPayloadSectionBuilder,
-    utils::get_subnet_record,
 };
+use ic_consensus_utils::get_subnet_record;
 use ic_interfaces::{
     canister_http::CanisterHttpPayloadBuilder,
     consensus::{PayloadBuilder, PayloadPermanentError, PayloadValidationError},
@@ -189,10 +189,10 @@ impl PayloadBuilderImpl {
 #[cfg(test)]
 pub(crate) mod test {
     use super::*;
-    use crate::consensus::mocks::{dependencies, Dependencies};
     use ic_btc_types_internal::{
         BitcoinAdapterResponse, BitcoinAdapterResponseWrapper, GetSuccessorsResponseComplete,
     };
+    use ic_consensus_mocks::{dependencies, Dependencies};
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities::{
         canister_http::FakeCanisterHttpPayloadBuilder,

@@ -2,13 +2,11 @@
 //! selections of ingress and xnet messages, and DKGs computed for other
 //! subnets.
 
-use crate::consensus::{
-    metrics::{BatchStats, BlockStats},
-    pool_reader::PoolReader,
-    utils::{crypto_hashable_to_seed, get_block_hash_string, lookup_replica_version},
-};
+use crate::consensus::metrics::{BatchStats, BlockStats};
 use crate::ecdsa::utils::EcdsaBlockReaderImpl;
 use ic_artifact_pool::consensus_pool::build_consensus_block_chain;
+use ic_consensus_utils::pool_reader::PoolReader;
+use ic_consensus_utils::{crypto_hashable_to_seed, get_block_hash_string, lookup_replica_version};
 use ic_crypto::get_tecdsa_master_public_key;
 use ic_ic00_types::{EcdsaKeyId, SetupInitialDKGResponse};
 use ic_interfaces::messaging::{MessageRouting, MessageRoutingError};

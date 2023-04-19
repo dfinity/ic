@@ -18,10 +18,10 @@
 //! become finalized.
 use crate::consensus::{
     batch_delivery::deliver_batches,
-    crypto::ConsensusCrypto,
-    membership::Membership,
     metrics::{BatchStats, BlockStats, FinalizerMetrics},
-    pool_reader::PoolReader,
+};
+use ic_consensus_utils::{
+    crypto::ConsensusCrypto, membership::Membership, pool_reader::PoolReader,
 };
 use ic_interfaces::{
     ingress_manager::IngressSelector,
@@ -308,7 +308,7 @@ mod tests {
     //! Finalizer unit tests
     use super::*;
     use crate::consensus::batch_delivery::generate_responses_to_setup_initial_dkg_calls;
-    use crate::consensus::mocks::{dependencies, dependencies_with_subnet_params, Dependencies};
+    use ic_consensus_mocks::{dependencies, dependencies_with_subnet_params, Dependencies};
     use ic_ic00_types::SetupInitialDKGResponse;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;

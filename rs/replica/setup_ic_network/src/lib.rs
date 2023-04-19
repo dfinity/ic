@@ -25,8 +25,10 @@ use ic_consensus::{
     },
     certification::{setup as certification_setup, CertificationCrypto},
     consensus::{dkg_key_manager::DkgKeyManager, setup as consensus_setup},
-    consensus::{pool_reader::PoolReader, ConsensusCrypto, Membership},
     dkg, ecdsa,
+};
+use ic_consensus_utils::{
+    crypto::ConsensusCrypto, membership::Membership, pool_reader::PoolReader,
 };
 use ic_crypto_tls_interfaces::{TlsHandshake, TlsStream};
 use ic_cycles_account_manager::CyclesAccountManager;

@@ -3,7 +3,7 @@
 //! there is something to do. On high-level, it's responsible of spawning
 //! threads triggering long-running CSP operation and book-keeping of
 //! thread-handles.
-use crate::consensus::{pool_reader::PoolReader, ConsensusCrypto};
+use ic_consensus_utils::{crypto::ConsensusCrypto, pool_reader::PoolReader};
 use ic_interfaces::crypto::{ErrorReproducibility, LoadTranscriptResult, NiDkgAlgorithm};
 use ic_logger::{error, info, warn, ReplicaLogger};
 use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
@@ -424,7 +424,7 @@ impl DkgKeyManager {
         let mut dkg_summary = Some(
             BlockPayload::from(
                 pool_reader
-                    .cache
+                    .as_cache()
                     .catch_up_package()
                     .content
                     .block
@@ -525,7 +525,7 @@ impl Drop for DkgKeyManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::consensus::mocks::{dependencies_with_subnet_params, Dependencies};
+    use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities::{
         crypto::CryptoReturningOk,

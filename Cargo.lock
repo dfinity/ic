@@ -5057,13 +5057,13 @@ version = "0.8.0"
 dependencies = [
  "assert_matches",
  "criterion",
- "hex",
  "ic-artifact-pool",
  "ic-btc-types-internal",
  "ic-config",
+ "ic-consensus-mocks",
+ "ic-consensus-utils",
  "ic-constants",
  "ic-crypto",
- "ic-crypto-prng",
  "ic-crypto-temp-crypto",
  "ic-crypto-test-utils-canister-threshold-sigs",
  "ic-cycles-account-manager",
@@ -5112,6 +5112,51 @@ dependencies = [
  "strum 0.23.0",
  "strum_macros 0.23.1",
  "tempfile",
+]
+
+[[package]]
+name = "ic-consensus-mocks"
+version = "0.8.0"
+dependencies = [
+ "ic-artifact-pool",
+ "ic-config",
+ "ic-consensus-utils",
+ "ic-interfaces",
+ "ic-interfaces-state-manager",
+ "ic-logger",
+ "ic-metrics",
+ "ic-protobuf",
+ "ic-registry-client-fake",
+ "ic-registry-keys",
+ "ic-registry-proto-data-provider",
+ "ic-test-artifact-pool",
+ "ic-test-utilities",
+ "ic-test-utilities-registry",
+ "ic-types",
+ "mockall 0.7.2",
+ "slog",
+]
+
+[[package]]
+name = "ic-consensus-utils"
+version = "0.8.0"
+dependencies = [
+ "hex",
+ "ic-consensus",
+ "ic-consensus-mocks",
+ "ic-crypto-prng",
+ "ic-interfaces",
+ "ic-interfaces-registry",
+ "ic-interfaces-state-manager",
+ "ic-logger",
+ "ic-protobuf",
+ "ic-registry-client-helpers",
+ "ic-replicated-state",
+ "ic-test-utilities",
+ "ic-test-utilities-registry",
+ "ic-types",
+ "rand 0.8.5",
+ "slog",
 ]
 
 [[package]]
@@ -8414,6 +8459,7 @@ dependencies = [
  "ic-canister-sandbox-launcher",
  "ic-config",
  "ic-consensus",
+ "ic-consensus-utils",
  "ic-crypto-for-verification-only",
  "ic-crypto-internal-types",
  "ic-crypto-sha",
@@ -8544,6 +8590,7 @@ dependencies = [
  "ic-artifact-pool",
  "ic-config",
  "ic-consensus",
+ "ic-consensus-utils",
  "ic-crypto-tls-interfaces",
  "ic-cycles-account-manager",
  "ic-icos-sev-interfaces",
@@ -9522,6 +9569,7 @@ dependencies = [
  "ic-artifact-pool",
  "ic-config",
  "ic-consensus",
+ "ic-consensus-utils",
  "ic-crypto",
  "ic-interfaces",
  "ic-interfaces-registry",

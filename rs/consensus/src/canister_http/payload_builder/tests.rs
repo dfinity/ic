@@ -3,8 +3,8 @@
 //!
 //! Some tests are run over a range of subnet configurations to check for corner cases.
 
-use crate::consensus::mocks::{dependencies_with_subnet_params, Dependencies};
 use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
+use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
 use ic_interfaces::{
     artifact_pool::{MutablePool, UnvalidatedArtifact},
     canister_http::{

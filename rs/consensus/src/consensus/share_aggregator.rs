@@ -2,9 +2,13 @@
 //! of shares into full objects. That is, it constructs Random Beacon objects
 //! from random beacon shares, Notarizations from notarization shares and
 //! Finalizations from finalization shares.
-use crate::consensus::{
-    membership::Membership, pool_reader::PoolReader,
-    random_tape_maker::RANDOM_TAPE_CHECK_MAX_HEIGHT_RANGE, utils, ConsensusCrypto,
+use crate::consensus::random_tape_maker::RANDOM_TAPE_CHECK_MAX_HEIGHT_RANGE;
+use ic_consensus_utils::crypto::ConsensusCrypto;
+use ic_consensus_utils::membership::Membership;
+use ic_consensus_utils::pool_reader::PoolReader;
+use ic_consensus_utils::{
+    active_high_threshold_transcript, active_low_threshold_transcript, aggregate,
+    registry_version_at_height,
 };
 use ic_interfaces::messaging::MessageRouting;
 use ic_logger::ReplicaLogger;
@@ -58,9 +62,9 @@ impl ShareAggregator {
         let height = pool.get_random_beacon_height().increment();
         let shares = pool.get_random_beacon_shares(height);
         let state_reader = pool.as_cache();
-        let dkg_id = utils::active_low_threshold_transcript(state_reader, height)
+        let dkg_id = active_low_threshold_transcript(state_reader, height)
             .map(|transcript| transcript.dkg_id);
-        to_messages(utils::aggregate(
+        to_messages(aggregate(
             &self.log,
             self.membership.as_ref(),
             self.crypto.as_aggregate(),
@@ -83,12 +87,12 @@ impl ShareAggregator {
             .get_random_tape_shares(expected_height, max_height)
             .filter(|share| pool.get_random_tape(share.height()).is_none());
         let state_reader = pool.as_cache();
-        to_messages(utils::aggregate(
+        to_messages(aggregate(
             &self.log,
             self.membership.as_ref(),
             self.crypto.as_aggregate(),
             Box::new(|content: &RandomTapeContent| {
-                utils::active_low_threshold_transcript(state_reader, content.height())
+                active_low_threshold_transcript(state_reader, content.height())
                     .map(|transcript| transcript.dkg_id)
             }),
             shares,
@@ -100,8 +104,8 @@ impl ShareAggregator {
         let height = pool.get_notarized_height().increment();
         let shares = pool.get_notarization_shares(height);
         let state_reader = pool.as_cache();
-        let registry_version = utils::registry_version_at_height(state_reader, height);
-        to_messages(utils::aggregate(
+        let registry_version = registry_version_at_height(state_reader, height);
+        to_messages(aggregate(
             &self.log,
             self.membership.as_ref(),
             self.crypto.as_aggregate(),
@@ -117,12 +121,12 @@ impl ShareAggregator {
             pool.get_notarized_height(),
         );
         let state_reader = pool.as_cache();
-        to_messages(utils::aggregate(
+        to_messages(aggregate(
             &self.log,
             self.membership.as_ref(),
             self.crypto.as_aggregate(),
             Box::new(|content: &FinalizationContent| {
-                utils::registry_version_at_height(state_reader, content.height())
+                registry_version_at_height(state_reader, content.height())
             }),
             shares,
         ))
@@ -147,9 +151,9 @@ impl ShareAggregator {
                 }
             });
             let state_reader = pool.as_cache();
-            let dkg_id = utils::active_high_threshold_transcript(state_reader, height)
+            let dkg_id = active_high_threshold_transcript(state_reader, height)
                 .map(|transcript| transcript.dkg_id);
-            let result = utils::aggregate(
+            let result = aggregate(
                 &self.log,
                 self.membership.as_ref(),
                 self.crypto.as_aggregate(),
@@ -187,7 +191,7 @@ fn to_messages<T: ConsensusMessageHashable>(artifacts: Vec<T>) -> Vec<ConsensusM
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::consensus::mocks::{dependencies, dependencies_with_subnet_params, Dependencies};
+    use ic_consensus_mocks::{dependencies, dependencies_with_subnet_params, Dependencies};
     use ic_interfaces::consensus_pool::ConsensusPool;
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities::{

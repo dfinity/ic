@@ -171,19 +171,17 @@
 // TODO: Remove after implementing functionality
 #![allow(dead_code)]
 
-use crate::consensus::{
-    metrics::{
-        timed_call, EcdsaClientMetrics, EcdsaGossipMetrics,
-        CRITICAL_ERROR_ECDSA_RETAIN_ACTIVE_TRANSCRIPTS,
-    },
-    utils::RoundRobin,
-    ConsensusCrypto,
+use crate::consensus::metrics::{
+    timed_call, EcdsaClientMetrics, EcdsaGossipMetrics,
+    CRITICAL_ERROR_ECDSA_RETAIN_ACTIVE_TRANSCRIPTS,
 };
 use crate::ecdsa::complaints::{EcdsaComplaintHandler, EcdsaComplaintHandlerImpl};
 use crate::ecdsa::pre_signer::{EcdsaPreSigner, EcdsaPreSignerImpl};
 use crate::ecdsa::signer::{EcdsaSigner, EcdsaSignerImpl};
 use crate::ecdsa::utils::EcdsaBlockReaderImpl;
 
+use ic_consensus_utils::crypto::ConsensusCrypto;
+use ic_consensus_utils::RoundRobin;
 use ic_interfaces::{
     artifact_pool::{ChangeSetProducer, PriorityFnAndFilterProducer},
     consensus_pool::ConsensusBlockCache,

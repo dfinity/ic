@@ -1,4 +1,4 @@
-use crate::consensus::{pool_reader::PoolReader, utils::get_block_hash_string};
+use ic_consensus_utils::{get_block_hash_string, pool_reader::PoolReader};
 use ic_metrics::{
     buckets::{decimal_buckets, decimal_buckets_with_zero, linear_buckets},
     MetricsRegistry,

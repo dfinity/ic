@@ -18,7 +18,8 @@
 //!
 //! 4. Replicated states below the certified height recorded in the block
 //! in the latest CatchUpPackage can be purged.
-use crate::consensus::{metrics::PurgerMetrics, pool_reader::PoolReader};
+use crate::consensus::metrics::PurgerMetrics;
+use ic_consensus_utils::pool_reader::PoolReader;
 use ic_interfaces::{
     consensus_pool::{ChangeAction, ChangeSet, HeightRange},
     messaging::MessageRouting,
@@ -330,10 +331,7 @@ pub fn get_purge_height(pool_reader: &PoolReader<'_>) -> Option<Height> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::consensus::{
-        mocks::{dependencies, Dependencies},
-        pool_reader::PoolReader,
-    };
+    use ic_consensus_mocks::{dependencies, Dependencies};
     use ic_interfaces::artifact_pool::MutablePool;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
