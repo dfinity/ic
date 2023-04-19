@@ -1,21 +1,19 @@
 import { Principal } from '@dfinity/principal';
-import {
-  getMaxVerificationVersion,
-  getMinVerificationVersion,
-  verifyRequestResponsePair,
-} from '@dfinity/response-verification';
 import { ResponseCache } from '../cache';
 import { CanisterResolver } from '../domains';
-import { RequestMapper } from './mapper';
-import { VerifiedResponse, cacheHeaders, maxCertTimeOffsetNs } from './typings';
+import { VerifiedResponse } from './typings';
 import {
+  createHttpRequest,
   createAgentAndActor,
-  decodeBody,
-  fetchAsset,
   loadResponseVerification,
   shouldFetchRootKey,
   updateRequestApiGateway,
 } from './utils';
+import {
+  updateCallHandler,
+  shouldUpgradeToUpdateCall,
+} from './upgrade-to-update-call';
+import { queryCallHandler } from './query-call';
 
 export class RequestProcessor {
   private readonly url: URL;
@@ -122,114 +120,35 @@ export class RequestProcessor {
     try {
       await loadResponseVerification();
 
-      const minAllowedVerificationVersion = getMinVerificationVersion();
-      const desiredVerificationVersion = getMaxVerificationVersion();
-
       const [agent, actor] = await createAgentAndActor(
         gatewayUrl,
         canisterId,
         shouldFetchRootKey
       );
-      const result = await fetchAsset({
+
+      const httpRequest = await createHttpRequest(this.request);
+      const httpResponse = await actor.http_request(httpRequest);
+
+      if (shouldUpgradeToUpdateCall(httpResponse)) {
+        return await updateCallHandler(agent, actor, canisterId, httpRequest);
+      }
+
+      return await queryCallHandler(
         agent,
-        actor,
-        request: this.request,
-        canisterId,
-        certificateVersion: desiredVerificationVersion,
-      });
-
-      if (!result.ok) {
-        let errMessage = 'Failed to fetch response';
-        if (result.error instanceof Error) {
-          console.error(result.error);
-          errMessage = result.error.message;
-        }
-
-        return {
-          response: new Response(errMessage, { status: 500 }),
-          certifiedHeaders: new Headers(),
-        };
-      }
-
-      const assetFetchResult = result.data;
-      const responseHeaders = new Headers();
-      for (const [key, value] of assetFetchResult.response.headers) {
-        const headerKey = key.trim().toLowerCase();
-        if (cacheHeaders.includes(headerKey)) {
-          // cache headers are remove since those are handled by
-          // cache storage within the service worker. If returned they would
-          // reach https://www.chromium.org/blink/ in the cache of chromium which
-          // could cache those entries in memory and those requests can't be
-          // intercepted by the service worker
-          continue;
-        }
-
-        responseHeaders.append(key, value);
-      }
-
-      // update calls are certified since they've went through consensus
-      if (assetFetchResult.updateCall) {
-        const decodedResponseBody = decodeBody(
-          assetFetchResult.response.body,
-          assetFetchResult.response.encoding
-        );
-
-        return {
-          response: new Response(decodedResponseBody, {
-            status: assetFetchResult.response.statusCode,
-            headers: responseHeaders,
-          }),
-          certifiedHeaders: responseHeaders,
-        };
-      }
-
-      const currentTimeNs = BigInt.asUintN(64, BigInt(Date.now() * 1_000_000)); // from ms to nanoseconds
-      const assetCertification = verifyRequestResponsePair(
-        {
-          headers: assetFetchResult.request.headers,
-          method: assetFetchResult.request.method,
-          url: assetFetchResult.request.url,
-        },
-        {
-          statusCode: assetFetchResult.response.statusCode,
-          body: assetFetchResult.response.body,
-          headers: assetFetchResult.response.headers,
-        },
-        canisterId.toUint8Array(),
-        currentTimeNs,
-        maxCertTimeOffsetNs,
-        new Uint8Array(agent.rootKey),
-        minAllowedVerificationVersion
+        httpRequest,
+        httpResponse,
+        canisterId
       );
+    } catch (error) {
+      console.error(error);
+      const errMessage =
+        error instanceof Error ? error.message : 'Failed to fetch response';
 
-      if (assetCertification.passed && assetCertification.response) {
-        const decodedResponseBody = decodeBody(
-          assetFetchResult.response.body,
-          assetFetchResult.response.encoding
-        );
-        const certifiedResponseHeaders =
-          RequestMapper.fromResponseVerificationHeaders(
-            assetCertification.response.headers
-          );
-
-        return {
-          response: new Response(decodedResponseBody, {
-            status: assetCertification.response.statusCode,
-            headers: responseHeaders,
-          }),
-          certifiedHeaders: certifiedResponseHeaders,
-        };
-      }
-    } catch (err) {
-      console.error(String(err));
+      return {
+        response: new Response(errMessage, { status: 500 }),
+        certifiedHeaders: new Headers(),
+      };
     }
-
-    return {
-      response: new Response('Body does not pass verification', {
-        status: 500,
-      }),
-      certifiedHeaders: new Headers(),
-    };
   }
 
   /**

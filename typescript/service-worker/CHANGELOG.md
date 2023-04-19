@@ -2,6 +2,8 @@
 
 ## Unreleased 
 
+- Allow redirects for canisters implementing response verification v2
+
 ## 1.7.2
 
 - Moved wasm loading to the install event, this prevents the Service Worker from becoming active without required dependencies
