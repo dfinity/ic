@@ -1,6 +1,7 @@
-use super::verifier::VerifierImpl;
-use super::CertificationCrypto;
-use crate::consensus::{membership::Membership, utils};
+use super::{verifier::VerifierImpl, CertificationCrypto};
+use ic_consensus_utils::{
+    active_high_threshold_transcript, aggregate, membership::Membership, registry_version_at_height,
+};
 use ic_interfaces::{
     artifact_pool::{ChangeSetProducer, PriorityFnAndFilterProducer},
     certification::{CertificationPool, ChangeAction, ChangeSet, Verifier, VerifierError},
@@ -364,11 +365,9 @@ impl CertifierImpl {
             })
             .filter_map(|(height, hash)| {
                 let content = CertificationContent::new(hash);
-                let dkg_id = utils::active_high_threshold_transcript(
-                    self.consensus_pool_cache.as_ref(),
-                    height,
-                )?
-                .dkg_id;
+                let dkg_id =
+                    active_high_threshold_transcript(self.consensus_pool_cache.as_ref(), height)?
+                        .dkg_id;
                 match self
                     .crypto
                     .sign(&content, self.replica_config.node_id, dkg_id)
@@ -415,13 +414,13 @@ impl CertifierImpl {
             content: CertificationTuple(s.height, s.signed.content),
             signature: s.signed.signature,
         });
-        utils::aggregate(
+        aggregate(
             &self.log,
             self.membership.as_ref(),
             self.crypto.as_aggregate(),
             Box::new(|cert: &CertificationTuple| {
                 Some(
-                    utils::active_high_threshold_transcript(
+                    active_high_threshold_transcript(
                         self.consensus_pool_cache.as_ref(),
                         cert.height(),
                     )?
@@ -510,10 +509,8 @@ impl CertifierImpl {
     ) -> Option<ChangeAction> {
         let msg = CertificationMessage::Certification(certification.clone());
         let verifier = VerifierImpl::new(self.crypto.clone());
-        let registry_version = utils::registry_version_at_height(
-            self.consensus_pool_cache.as_ref(),
-            certification.height,
-        )?;
+        let registry_version =
+            registry_version_at_height(self.consensus_pool_cache.as_ref(), certification.height)?;
 
         // check if the certification contains the same state hash as our local one. If
         // not, we consider the certification invalid.
@@ -601,7 +598,7 @@ impl CertifierImpl {
                         .crypto
                         .verify(
                             &share.signed,
-                            utils::active_high_threshold_transcript(
+                            active_high_threshold_transcript(
                                 self.consensus_pool_cache.as_ref(),
                                 share.height,
                             )?
@@ -627,8 +624,8 @@ impl CertifierImpl {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::consensus::mocks::{dependencies, Dependencies};
     use ic_artifact_pool::certification_pool::CertificationPoolImpl;
+    use ic_consensus_mocks::{dependencies, Dependencies};
     use ic_interfaces::artifact_pool::{MutablePool, UnvalidatedArtifact};
     use ic_interfaces::certification::CertificationPool;
     use ic_interfaces::time_source::{SysTimeSource, TimeSource};

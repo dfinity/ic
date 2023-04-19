@@ -6,6 +6,7 @@ DEPENDENCIES = [
     "//rs/artifact_pool",
     "//rs/config",
     "//rs/consensus",
+    "//rs/consensus/utils",
     "//rs/crypto",
     "//rs/interfaces",
     "//rs/interfaces/registry",

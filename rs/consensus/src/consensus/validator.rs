@@ -3,19 +3,16 @@
 //! artifacts.
 
 use crate::{
-    consensus::{
-        crypto::ConsensusCrypto,
-        membership::{Membership, MembershipError},
-        metrics::ValidatorMetrics,
-        pool_reader::PoolReader,
-        utils::{
-            active_high_threshold_transcript, active_low_threshold_transcript,
-            find_lowest_ranked_proposals, is_time_to_make_block, lookup_replica_version,
-            RoundRobin,
-        },
-        ConsensusMessageId,
-    },
+    consensus::{metrics::ValidatorMetrics, ConsensusMessageId},
     dkg, ecdsa,
+};
+use ic_consensus_utils::{
+    active_high_threshold_transcript, active_low_threshold_transcript,
+    crypto::ConsensusCrypto,
+    find_lowest_ranked_proposals, is_time_to_make_block, lookup_replica_version,
+    membership::{Membership, MembershipError},
+    pool_reader::PoolReader,
+    RoundRobin,
 };
 use ic_interfaces::{
     consensus::{PayloadBuilder, PayloadPermanentError, PayloadTransientError},
@@ -125,16 +122,14 @@ impl<P> From<TransientError> for ValidationError<P, TransientError> {
 
 type ValidatorError = ValidationError<PermanentError, TransientError>;
 
-impl From<MembershipError> for ValidatorError {
-    fn from(err: MembershipError) -> Self {
-        match err {
-            MembershipError::NodeNotFound(_) => PermanentError::MembershipError(err).into(),
-            MembershipError::UnableToRetrieveDkgSummary(h) => {
-                TransientError::DkgSummaryNotFound(h).into()
-            }
-            MembershipError::RegistryClientError(err) => {
-                TransientError::RegistryClientError(err).into()
-            }
+fn membership_error_to_validation_error(err: MembershipError) -> ValidatorError {
+    match err {
+        MembershipError::NodeNotFound(_) => PermanentError::MembershipError(err).into(),
+        MembershipError::UnableToRetrieveDkgSummary(h) => {
+            TransientError::DkgSummaryNotFound(h).into()
+        }
+        MembershipError::RegistryClientError(err) => {
+            TransientError::RegistryClientError(err).into()
         }
     }
 }
@@ -159,8 +154,9 @@ impl SignatureVerify for BlockProposal {
     ) -> ValidationResult<ValidatorError> {
         let height = self.height();
         let previous_beacon = get_previous_beacon(pool, height)?;
-        let rank =
-            membership.get_block_maker_rank(height, &previous_beacon, self.signature.signer)?;
+        let rank = membership
+            .get_block_maker_rank(height, &previous_beacon, self.signature.signer)
+            .map_err(membership_error_to_validation_error)?;
         if rank != Some(self.rank()) {
             return Err(ValidationError::from(PermanentError::MismatchedRank(
                 self.rank(),
@@ -459,7 +455,9 @@ fn verify_notaries(
     previous_beacon: &RandomBeacon,
     signers: &[NodeId],
 ) -> ValidationResult<ValidatorError> {
-    let threshold = membership.get_committee_threshold(height, Notarization::committee())?;
+    let threshold = membership
+        .get_committee_threshold(height, Notarization::committee())
+        .map_err(membership_error_to_validation_error)?;
     let unique_signers: HashSet<_> = signers.iter().collect();
     if unique_signers.len() < signers.len() {
         return Err(PermanentError::RepeatedSigner.into());
@@ -479,7 +477,10 @@ fn verify_notary(
     previous_beacon: &RandomBeacon,
     node_id: NodeId,
 ) -> ValidationResult<ValidatorError> {
-    if !membership.node_belongs_to_notarization_committee(height, previous_beacon, node_id)? {
+    if !membership
+        .node_belongs_to_notarization_committee(height, previous_beacon, node_id)
+        .map_err(membership_error_to_validation_error)?
+    {
         Err(PermanentError::SignerNotInMultiSigCommittee(node_id).into())
     } else {
         Ok(())
@@ -492,7 +493,10 @@ fn verify_threshold_committee(
     height: Height,
     committee: Committee,
 ) -> ValidationResult<ValidatorError> {
-    if !membership.node_belongs_to_threshold_committee(node_id, height, committee)? {
+    if !membership
+        .node_belongs_to_threshold_committee(node_id, height, committee)
+        .map_err(membership_error_to_validation_error)?
+    {
         Err(PermanentError::SignerNotInThresholdCommittee(node_id).into())
     } else {
         Ok(())
@@ -1625,14 +1629,11 @@ pub(crate) fn maliciously_validate_all_blocks(
 #[cfg(test)]
 pub mod test {
     use super::*;
-    use crate::consensus::mocks::{
-        dependencies_with_subnet_params, Dependencies, MockPayloadBuilder,
-    };
-    use crate::consensus::utils::get_block_maker_delay;
     use assert_matches::assert_matches;
     use ic_artifact_pool::dkg_pool::DkgPoolImpl;
-    use ic_interfaces::artifact_pool::MutablePool;
-    use ic_interfaces::messaging::XNetTransientValidationError;
+    use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies, MockPayloadBuilder};
+    use ic_consensus_utils::get_block_maker_delay;
+    use ic_interfaces::{artifact_pool::MutablePool, messaging::XNetTransientValidationError};
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_registry_client_fake::FakeRegistryClient;

@@ -1,5 +1,5 @@
 //! Consensus utility functions
-use crate::consensus::{crypto::Aggregate, membership::Membership, pool_reader::PoolReader};
+use crate::{crypto::Aggregate, membership::Membership, pool_reader::PoolReader};
 use ic_interfaces::{
     consensus::{PayloadTransientError, PayloadValidationError},
     consensus_pool::ConsensusPoolCache,
@@ -25,6 +25,10 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     time::Duration,
 };
+
+pub mod crypto;
+pub mod membership;
+pub mod pool_reader;
 
 /// The acceptable gap between the finalized height and the certified height. If
 /// the actual gap is greater than this, consensus starts slowing down the block
@@ -537,7 +541,7 @@ fn get_active_data_at_given_summary(summary_block: &Block, height: Height) -> Op
 
 /// Get the [`SubnetRecord`] of this subnet with the
 /// specified [`RegistryVersion`]
-pub(crate) fn get_subnet_record(
+pub fn get_subnet_record(
     registry_client: &dyn RegistryClient,
     subnet_id: SubnetId,
     registry_version: RegistryVersion,
@@ -563,6 +567,7 @@ pub(crate) fn get_subnet_record(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ic_consensus_mocks::{dependencies, Dependencies};
     use ic_test_utilities::types::ids::node_test_id;
     use ic_types::{
         crypto::{ThresholdSigShare, ThresholdSigShareOf},
@@ -601,11 +606,11 @@ mod tests {
                 unit_delay: Duration::from_secs(1),
                 initial_notary_delay: Duration::from_secs(0),
             };
-            let crate::consensus::mocks::Dependencies {
+            let Dependencies {
                 mut pool,
                 state_manager,
                 ..
-            } = crate::consensus::mocks::dependencies(pool_config, 3);
+            } = dependencies(pool_config, 3);
             let last_cup_dkg_info = PoolReader::new(&pool)
                 .get_highest_catch_up_package()
                 .content

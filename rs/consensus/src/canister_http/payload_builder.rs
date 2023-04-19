@@ -1,13 +1,13 @@
 //! Implementation of the payload builder of the canister http feature
 
-use crate::{
-    canister_http::{
-        metrics::CanisterHttpPayloadBuilderMetrics,
-        payload_builder::utils::{
-            group_shares_by_callback_id, grouped_shares_meet_divergence_criteria,
-        },
+use crate::canister_http::{
+    metrics::CanisterHttpPayloadBuilderMetrics,
+    payload_builder::utils::{
+        group_shares_by_callback_id, grouped_shares_meet_divergence_criteria,
     },
-    consensus::{utils::registry_version_at_height, ConsensusCrypto, Membership},
+};
+use ic_consensus_utils::{
+    crypto::ConsensusCrypto, membership::Membership, registry_version_at_height,
 };
 use ic_interfaces::{
     canister_http::{

@@ -4,33 +4,28 @@
 pub mod batch_delivery;
 pub(crate) mod block_maker;
 mod catchup_package_maker;
-pub(crate) mod crypto;
 pub mod dkg_key_manager;
 mod finalizer;
 mod malicious_consensus;
-pub(crate) mod membership;
 pub(crate) mod metrics;
 mod notary;
 mod payload;
 pub mod payload_builder;
-pub mod pool_reader;
 mod priority;
 mod purger;
 mod random_beacon_maker;
 mod random_tape_maker;
 mod share_aggregator;
-pub mod utils;
 pub mod validator;
 
 #[cfg(all(test, feature = "proptest"))]
 mod proptests;
 
-pub use crypto::ConsensusCrypto;
-pub use membership::Membership;
+use ic_consensus_utils::{
+    crypto::ConsensusCrypto, get_notarization_delay_settings, is_root_subnet,
+    membership::Membership, pool_reader::PoolReader, RoundRobin,
+};
 pub use metrics::ValidatorMetrics;
-
-#[cfg(test)]
-pub(crate) mod mocks;
 
 use crate::consensus::{
     block_maker::BlockMaker,
@@ -40,13 +35,11 @@ use crate::consensus::{
     metrics::{ConsensusGossipMetrics, ConsensusMetrics},
     notary::Notary,
     payload_builder::PayloadBuilderImpl,
-    pool_reader::PoolReader,
     priority::get_priority_function,
     purger::Purger,
     random_beacon_maker::RandomBeaconMaker,
     random_tape_maker::RandomTapeMaker,
     share_aggregator::ShareAggregator,
-    utils::{get_notarization_delay_settings, is_root_subnet, RoundRobin},
     validator::Validator,
 };
 use ic_config::consensus::ConsensusConfig;
@@ -680,8 +673,8 @@ pub fn setup(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::consensus::mocks::{dependencies_with_subnet_params, Dependencies};
     use ic_config::artifact_pool::ArtifactPoolConfig;
+    use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;
     use ic_protobuf::registry::subnet::v1::SubnetRecord;

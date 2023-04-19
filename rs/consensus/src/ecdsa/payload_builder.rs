@@ -5,12 +5,10 @@
 use super::pre_signer::{EcdsaTranscriptBuilder, EcdsaTranscriptBuilderImpl};
 use super::signer::{EcdsaSignatureBuilder, EcdsaSignatureBuilderImpl};
 use super::utils::EcdsaBlockReaderImpl;
-use crate::consensus::{
-    crypto::ConsensusCrypto,
-    metrics::{EcdsaPayloadMetrics, CRITICAL_ERROR_ECDSA_KEY_TRANSCRIPT_MISSING},
-    pool_reader::PoolReader,
-};
+use crate::consensus::metrics::{EcdsaPayloadMetrics, CRITICAL_ERROR_ECDSA_KEY_TRANSCRIPT_MISSING};
 use ic_artifact_pool::consensus_pool::build_consensus_block_chain;
+use ic_consensus_utils::crypto::ConsensusCrypto;
+use ic_consensus_utils::pool_reader::PoolReader;
 use ic_crypto::{get_mega_pubkey, MegaKeyFromRegistryError};
 use ic_error_types::RejectCode;
 use ic_ic00_types::{EcdsaKeyId, Payload, SignWithECDSAReply};
@@ -1743,9 +1741,9 @@ pub fn block_chain_cache(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::consensus::mocks::{dependencies, Dependencies};
     use crate::ecdsa::utils::test_utils::*;
     use assert_matches::assert_matches;
+    use ic_consensus_mocks::{dependencies, Dependencies};
     use ic_crypto_test_utils_canister_threshold_sigs::{
         generate_key_transcript, run_idkg_and_create_and_verify_transcript,
         CanisterThresholdSigTestEnvironment,

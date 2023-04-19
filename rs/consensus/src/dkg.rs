@@ -2,13 +2,13 @@
 //! component into the consensus algorithm that is implemented within this
 //! crate.
 
-use crate::consensus::{
-    crypto::ConsensusCrypto, dkg_key_manager::DkgKeyManager, pool_reader::PoolReader,
-};
+use crate::consensus::dkg_key_manager::DkgKeyManager;
 use crate::ecdsa::{
     make_bootstrap_summary, payload_builder::get_ecdsa_config_if_enabled,
     utils::inspect_ecdsa_initializations,
 };
+use ic_consensus_utils::crypto::ConsensusCrypto;
+use ic_consensus_utils::pool_reader::PoolReader;
 use ic_interfaces::dkg::{DkgMessageValidationError, PermanentError, TransientError};
 use ic_interfaces::{
     artifact_pool::{ChangeSetProducer, PriorityFnAndFilterProducer},
@@ -1457,12 +1457,12 @@ pub fn make_registry_cup_from_cup_contents(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::consensus::mocks::{
+    use assert_matches::assert_matches;
+    use ic_artifact_pool::dkg_pool::DkgPoolImpl;
+    use ic_consensus_mocks::{
         dependencies, dependencies_with_subnet_params,
         dependencies_with_subnet_records_with_raw_state_manager, Dependencies,
     };
-    use assert_matches::assert_matches;
-    use ic_artifact_pool::dkg_pool::DkgPoolImpl;
     use ic_interfaces::{
         artifact_pool::{MutablePool, UnvalidatedArtifact},
         consensus_pool::ConsensusPool,

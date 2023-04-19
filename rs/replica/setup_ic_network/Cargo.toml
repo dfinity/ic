@@ -8,6 +8,7 @@ ic-artifact-manager = { path = "../../artifact_manager" }
 ic-artifact-pool = { path = "../../artifact_pool" }
 ic-config = { path = "../../config" }
 ic-consensus = { path = "../../consensus" }
+ic-consensus-utils = { path = "../../consensus/utils" }
 ic-crypto-tls-interfaces = { path = "../../crypto/tls_interfaces" }
 ic-cycles-account-manager = { path = "../../cycles_account_manager" }
 ic-icos-sev-interfaces = { path = "../../ic_os/sev_interfaces" }

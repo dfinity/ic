@@ -203,8 +203,6 @@ pub(crate) fn inspect_ecdsa_initializations(
 
 #[cfg(test)]
 pub(crate) mod test_utils {
-    use crate::consensus::crypto::ConsensusCrypto;
-    use crate::consensus::mocks::{dependencies, Dependencies};
     use crate::ecdsa::complaints::{
         EcdsaComplaintHandlerImpl, EcdsaTranscriptLoader, TranscriptLoadStatus,
     };
@@ -213,6 +211,8 @@ pub(crate) mod test_utils {
     use assert_matches::assert_matches;
     use ic_artifact_pool::ecdsa_pool::EcdsaPoolImpl;
     use ic_config::artifact_pool::ArtifactPoolConfig;
+    use ic_consensus_mocks::{dependencies, Dependencies};
+    use ic_consensus_utils::crypto::ConsensusCrypto;
     use ic_crypto_temp_crypto::TempCryptoComponent;
     use ic_crypto_test_utils_canister_threshold_sigs::{
         batch_sign_signed_dealings, create_and_verify_signed_dealings, create_signed_dealing,

@@ -2,9 +2,9 @@
 //! responsible for managing the flow of requests from execution to the
 //! networking component, and ensuring that the resulting responses are signed
 //! and eventually make it into consensus.
-use crate::{
-    canister_http::metrics::CanisterHttpPoolManagerMetrics,
-    consensus::{utils::registry_version_at_height, ConsensusCrypto, Membership},
+use crate::canister_http::metrics::CanisterHttpPoolManagerMetrics;
+use ic_consensus_utils::{
+    crypto::ConsensusCrypto, membership::Membership, registry_version_at_height,
 };
 use ic_interfaces::{
     artifact_pool::ChangeSetProducer, canister_http::*, consensus_pool::ConsensusPoolCache,
@@ -397,9 +397,9 @@ impl<T: CanisterHttpPool> ChangeSetProducer<T> for CanisterHttpPoolManagerImpl {
 #[cfg(test)]
 pub mod test {
     use super::*;
-    use crate::consensus::crypto::SignVerify;
-    use crate::consensus::mocks::{dependencies, Dependencies};
     use ic_artifact_pool::canister_http_pool::CanisterHttpPoolImpl;
+    use ic_consensus_mocks::{dependencies, Dependencies};
+    use ic_consensus_utils::crypto::SignVerify;
     use ic_interfaces::artifact_pool::MutablePool;
     use ic_interfaces::time_source::SysTimeSource;
     use ic_interfaces_state_manager::Labeled;

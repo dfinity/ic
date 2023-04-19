@@ -3,9 +3,10 @@
 //! of malicious nodes.
 #[cfg(feature = "malicious_code")]
 use crate::consensus::{
-    add_all_to_validated, block_maker::BlockMaker, finalizer::Finalizer, notary::Notary,
-    pool_reader::PoolReader, validator,
+    add_all_to_validated, block_maker::BlockMaker, finalizer::Finalizer, notary::Notary, validator,
 };
+#[cfg(feature = "malicious_code")]
+use ic_consensus_utils::pool_reader::PoolReader;
 #[cfg(feature = "malicious_code")]
 use ic_interfaces::consensus_pool::{ChangeAction, ChangeSet};
 #[cfg(feature = "malicious_code")]

@@ -1,7 +1,8 @@
 //! This module provides two public interfaces, compute_attribute and
 //! get_priority_function.
 
-use crate::consensus::{metrics::ConsensusGossipMetrics, pool_reader::PoolReader};
+use crate::consensus::metrics::ConsensusGossipMetrics;
+use ic_consensus_utils::pool_reader::PoolReader;
 use ic_interfaces::consensus_pool::{ConsensusPool, HeightIndexedPool, HeightRange};
 use ic_types::{
     artifact::{ConsensusMessageId, Priority, Priority::*, PriorityFn},
@@ -215,7 +216,7 @@ fn compute_priority(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::consensus::mocks::{dependencies, Dependencies};
+    use ic_consensus_mocks::{dependencies, Dependencies};
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities::{consensus::fake::FakeContent, types::ids::node_test_id};
     use ic_types::consensus::{

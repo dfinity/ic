@@ -1,9 +1,9 @@
 //! Contains mocks for traits internal to consensus
-use crate::consensus::membership::Membership;
 use ic_artifact_pool::{
     canister_http_pool::CanisterHttpPoolImpl, dkg_pool::DkgPoolImpl, ecdsa_pool::EcdsaPoolImpl,
 };
 use ic_config::artifact_pool::ArtifactPoolConfig;
+use ic_consensus_utils::membership::Membership;
 use ic_interfaces::{
     consensus::{PayloadBuilder, PayloadValidationError},
     validation::ValidationResult,

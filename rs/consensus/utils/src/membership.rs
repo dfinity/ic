@@ -1,4 +1,4 @@
-use crate::consensus::utils::{
+use crate::{
     active_high_threshold_transcript, active_low_threshold_transcript, registry_version_at_height,
 };
 use ic_crypto_prng::{Csprng, RandomnessPurpose};

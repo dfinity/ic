@@ -41,6 +41,8 @@ members = [
   "rs/certification/test-utils",
   "rs/config",
   "rs/consensus",
+  "rs/consensus/mocks",
+  "rs/consensus/utils",
   "rs/constants",
   "rs/criterion_time",
   "rs/crypto",

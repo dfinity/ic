@@ -1,10 +1,10 @@
 //! Random beacon maker is responsible for creating random beacon share
 //! for the node if the node is a beacon maker and no such share exists.
-use crate::consensus::{
+use ic_consensus_utils::{
+    active_low_threshold_transcript,
+    crypto::ConsensusCrypto,
     membership::{Membership, MembershipError},
     pool_reader::PoolReader,
-    utils::active_low_threshold_transcript,
-    ConsensusCrypto,
 };
 use ic_logger::{error, trace, ReplicaLogger};
 use ic_types::{
@@ -107,7 +107,7 @@ impl RandomBeaconMaker {
 mod tests {
     //! BeaconMaker unit tests
     use super::*;
-    use crate::consensus::mocks::{dependencies, Dependencies};
+    use ic_consensus_mocks::{dependencies, Dependencies};
     use ic_interfaces::consensus_pool::ConsensusPool;
     use ic_logger::replica_logger::no_op_logger;
 

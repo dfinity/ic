@@ -1,6 +1,7 @@
 use ic_artifact_pool::consensus_pool::ConsensusPoolImpl;
 use ic_config::artifact_pool::BACKUP_GROUP_SIZE;
-use ic_consensus::consensus::{dkg_key_manager::DkgKeyManager, pool_reader::PoolReader};
+use ic_consensus::consensus::dkg_key_manager::DkgKeyManager;
+use ic_consensus_utils::pool_reader::PoolReader;
 use ic_crypto_for_verification_only::CryptoComponentForVerificationOnly;
 use ic_interfaces::{
     artifact_pool::{MutablePool, UnvalidatedArtifact},

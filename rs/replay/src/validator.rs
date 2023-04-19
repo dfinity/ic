@@ -4,10 +4,11 @@ use ic_artifact_pool::{consensus_pool::ConsensusPoolImpl, dkg_pool::DkgPoolImpl}
 use ic_config::{artifact_pool::ArtifactPoolConfig, Config};
 use ic_consensus::{
     certification::CertificationCrypto,
-    consensus::{
-        dkg_key_manager::DkgKeyManager, pool_reader::PoolReader, utils, validator::Validator,
-        ConsensusCrypto, Membership, ValidatorMetrics,
-    },
+    consensus::{dkg_key_manager::DkgKeyManager, validator::Validator, ValidatorMetrics},
+};
+use ic_consensus_utils::{
+    active_high_threshold_transcript, crypto::ConsensusCrypto, membership::Membership,
+    pool_reader::PoolReader, registry_version_at_height,
 };
 use ic_interfaces::{
     artifact_pool::{MutablePool, UnvalidatedArtifact},
@@ -234,7 +235,7 @@ impl ReplayValidator {
     /// We treat transient errors as permanent.
     pub fn verify_certification(&self, certification: &Certification) -> Result<(), String> {
         let registry_version =
-            utils::registry_version_at_height(self.pool_cache.as_ref(), certification.height)
+            registry_version_at_height(self.pool_cache.as_ref(), certification.height)
                 .unwrap_or_else(|| self.registry.get_latest_version());
 
         self.verifier
@@ -261,7 +262,7 @@ impl ReplayValidator {
             Ok(true) => {
                 // Verify the signature.
                 let dkg_id =
-                    utils::active_high_threshold_transcript(self.pool_cache.as_ref(), share.height)
+                    active_high_threshold_transcript(self.pool_cache.as_ref(), share.height)
                         .ok_or_else(|| "Failed to get active transcript.".to_string())?
                         .dkg_id;
                 self.certification_crypto

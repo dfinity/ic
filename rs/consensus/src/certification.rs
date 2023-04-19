@@ -1,7 +1,7 @@
 //! This module defines the certification component, which is responsible for
 //! reaching consensus on parts of the replicated state produced by the upper
 //! layers by signing state hashes.
-use crate::consensus::crypto::{Aggregate, SignVerify};
+use ic_consensus_utils::crypto::{Aggregate, SignVerify};
 use ic_interfaces::crypto::{Crypto, ThresholdSigner};
 use ic_types::signature::*;
 use ic_types::{

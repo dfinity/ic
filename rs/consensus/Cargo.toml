@@ -6,9 +6,9 @@ edition = "2021"
 [dependencies]
 ic-artifact-pool = { path = "../artifact_pool" }
 ic-config = { path = "../config" }
+ic-consensus-utils = { path = "./utils" }
 ic-constants = { path = "../constants" }
 ic-crypto = { path = "../crypto" }
-ic-crypto-prng = { path = "../crypto/prng" }
 ic-crypto-test-utils-canister-threshold-sigs = { path = "../crypto/test_utils/canister_threshold_sigs", optional = true }
 ic-error-types = { path = "../types/error_types" }
 ic-ic00-types = { path = "../types/ic00_types" }
@@ -17,7 +17,6 @@ ic-interfaces-https-outcalls-adapter-client = { path = "../interfaces/https_outc
 ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
-ic-registry-keys = { path = "../registry/keys" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-logger = { path = "../monitoring/logger" }
 ic-metrics = { path = "../monitoring/metrics" }
@@ -26,7 +25,6 @@ ic-registry-subnet-features = { path = "../registry/subnet_features" }
 ic-protobuf = { path = "../protobuf" }
 ic-types = { path = "../types/types" }
 ic-utils = { path = "../utils" }
-hex = "0.4.2"
 num-integer = "0.1.41"
 phantom_newtype = { path = "../phantom_newtype" }
 prometheus = { version = "0.12.0", features = [ "process" ] }
@@ -44,6 +42,7 @@ criterion = "0.3"
 ic-artifact-pool = { path = "../artifact_pool" }
 ic-btc-types-internal = { path = "../bitcoin/types/internal" }
 ic-config = { path = "../config" }
+ic-consensus-mocks = { path = "./mocks" }
 ic-crypto-test-utils-canister-threshold-sigs = { path = "../crypto/test_utils/canister_threshold_sigs" }
 ic-crypto-temp-crypto = { path = "../crypto/temp_crypto" }
 ic-execution-environment = { path = "../execution_environment" }
@@ -52,6 +51,7 @@ ic-interfaces-certified-stream-store = { path = "../interfaces/certified_stream_
 ic-interfaces-state-manager-mocks = { path = "../interfaces/state_manager/mocks" }
 ic-messaging = { path = "../messaging" }
 ic-registry-client-fake = { path = "../registry/fake" }
+ic-registry-keys = { path = "../registry/keys" }
 ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-state-manager = { path = "../state_manager" }

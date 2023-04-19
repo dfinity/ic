@@ -25,11 +25,13 @@ use super::payload_builder::{EcdsaPayloadError, InvalidChainCacheError, Membersh
 use super::pre_signer::EcdsaTranscriptBuilder;
 use super::signer::EcdsaSignatureBuilder;
 use super::utils::EcdsaBlockReaderImpl;
-use crate::consensus::{crypto::ConsensusCrypto, metrics::timed_call, pool_reader::PoolReader};
+use crate::consensus::metrics::timed_call;
 use crate::ecdsa::payload_builder::{
     block_chain_cache, create_data_payload_helper, create_summary_payload,
     get_ecdsa_config_if_enabled,
 };
+use ic_consensus_utils::crypto::ConsensusCrypto;
+use ic_consensus_utils::pool_reader::PoolReader;
 use ic_crypto::MegaKeyFromRegistryError;
 use ic_interfaces::validation::{ValidationError, ValidationResult};
 use ic_interfaces_registry::RegistryClient;

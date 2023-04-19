@@ -1,6 +1,6 @@
 //! Wrapper to read the consensus pool
 
-use crate::consensus::utils::{lookup_replica_version, registry_version_at_height};
+use crate::{lookup_replica_version, registry_version_at_height};
 use ic_interfaces::consensus_pool::*;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::ReplicaLogger;
@@ -9,8 +9,7 @@ use ic_types::{
     consensus::catchup::*, consensus::*, crypto::CryptoHashOf, replica_config::ReplicaConfig,
     Height, NodeId, RegistryVersion, ReplicaVersion, Time,
 };
-use std::cmp::Ordering;
-use std::collections::BTreeMap;
+use std::{cmp::Ordering, collections::BTreeMap};
 
 /// A struct and corresponding impl with helper methods to obtain particular
 /// artifacts/messages from the artifact pool.
@@ -540,7 +539,7 @@ impl<'a> PoolReader<'a> {
 #[cfg(test)]
 pub mod test {
     use super::*;
-    use crate::consensus::mocks::{dependencies, dependencies_with_subnet_params, Dependencies};
+    use ic_consensus_mocks::{dependencies, dependencies_with_subnet_params, Dependencies};
     use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
 

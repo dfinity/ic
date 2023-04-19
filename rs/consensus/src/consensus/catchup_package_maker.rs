@@ -12,9 +12,10 @@
 //!
 //! At the moment, we will start to make a CatchUpPackage once a DKG summary
 //! block is considered finalized.
-use crate::consensus::{
-    membership::Membership, pool_reader::PoolReader, utils::active_high_threshold_transcript,
-    ConsensusCrypto,
+
+use ic_consensus_utils::{
+    active_high_threshold_transcript, crypto::ConsensusCrypto, membership::Membership,
+    pool_reader::PoolReader,
 };
 use ic_interfaces::messaging::MessageRouting;
 use ic_interfaces_state_manager::{
@@ -246,7 +247,7 @@ impl CatchUpPackageMaker {
 mod tests {
     //! CatchUpPackageMaker unit tests
     use super::*;
-    use crate::consensus::mocks::{dependencies_with_subnet_params, Dependencies};
+    use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
     use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities::{
         message_routing::FakeMessageRouting,

@@ -23,12 +23,12 @@
 //! * A node must not issue new notarization share for any round older than the
 //!   latest round, which would break security if it has already finality-signed
 //!   for that round.
-use crate::consensus::{
+use crate::consensus::metrics::NotaryMetrics;
+use ic_consensus_utils::{
+    crypto::ConsensusCrypto,
+    find_lowest_ranked_proposals, get_adjusted_notary_delay,
     membership::{Membership, MembershipError},
-    metrics::NotaryMetrics,
     pool_reader::PoolReader,
-    utils::{find_lowest_ranked_proposals, get_adjusted_notary_delay},
-    ConsensusCrypto,
 };
 use ic_interfaces::time_source::TimeSource;
 use ic_interfaces_state_manager::StateManager;
@@ -235,7 +235,7 @@ impl Notary {
 mod tests {
     //! Notary unit tests
     use super::*;
-    use crate::consensus::mocks::{dependencies_with_subnet_params, Dependencies};
+    use ic_consensus_mocks::{dependencies_with_subnet_params, Dependencies};
     use ic_interfaces::consensus_pool::ConsensusPool;
     use ic_logger::replica_logger::no_op_logger;
     use ic_metrics::MetricsRegistry;

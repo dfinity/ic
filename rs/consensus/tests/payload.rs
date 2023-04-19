@@ -3,8 +3,8 @@ mod framework;
 use crate::framework::ConsensusDriver;
 use ic_artifact_pool::{consensus_pool, dkg_pool, ecdsa_pool};
 use ic_consensus::consensus::dkg_key_manager::DkgKeyManager;
-use ic_consensus::consensus::pool_reader::PoolReader;
 use ic_consensus::{certification::CertifierImpl, consensus::ConsensusImpl, dkg};
+use ic_consensus_utils::{membership::Membership, pool_reader::PoolReader};
 use ic_interfaces_state_manager::Labeled;
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_logger::replica_logger::no_op_logger;
@@ -112,7 +112,7 @@ fn consensus_produces_expected_batches() {
             ),
         ));
         let consensus_cache = consensus_pool.read().unwrap().get_cache();
-        let membership = ic_consensus::consensus::Membership::new(
+        let membership = Membership::new(
             consensus_cache.clone(),
             registry_client.clone(),
             replica_config.subnet_id,
