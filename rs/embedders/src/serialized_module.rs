@@ -2,7 +2,7 @@ use std::{collections::BTreeSet, convert::TryFrom, sync::Arc};
 
 use ic_interfaces::execution_environment::{HypervisorError, HypervisorResult};
 use ic_replicated_state::canister_state::execution_state::WasmMetadata;
-use ic_types::{methods::WasmMethod, NumInstructions};
+use ic_types::{methods::WasmMethod, CountBytes, NumInstructions};
 use ic_wasm_types::WasmEngineError;
 use serde::{Deserialize, Serialize};
 use wasmtime::Module;
@@ -69,6 +69,12 @@ pub struct SerializedModule {
     pub compilation_cost: NumInstructions,
     /// Imported System API functions that are deprecated, should become deprecated, or should only be used by NNS canisters.
     pub imports_details: WasmImportsDetails,
+}
+
+impl CountBytes for SerializedModule {
+    fn count_bytes(&self) -> usize {
+        self.bytes.0.len()
+    }
 }
 
 impl SerializedModule {

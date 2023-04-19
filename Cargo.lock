@@ -6268,6 +6268,7 @@ dependencies = [
  "ic-test-utilities-logger",
  "ic-types",
  "ic-utils 0.8.0",
+ "ic-utils-lru-cache",
  "ic-wasm-types",
  "insta",
  "lazy_static",
@@ -10048,6 +10049,7 @@ dependencies = [
  "ic-crypto-sha",
  "ic-protobuf",
  "ic-sys",
+ "ic-types",
  "ic-utils 0.8.0",
  "serde",
 ]

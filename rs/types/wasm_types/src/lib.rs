@@ -3,6 +3,7 @@
 mod errors;
 
 pub use errors::{WasmEngineError, WasmError, WasmInstrumentationError, WasmValidationError};
+use ic_types::CountBytes;
 use ic_utils::byte_slice_fmt::truncate_and_format;
 use std::{
     fmt,
@@ -144,6 +145,12 @@ impl From<&CanisterModule> for WasmHash {
 impl From<[u8; WASM_HASH_LENGTH]> for WasmHash {
     fn from(item: [u8; WASM_HASH_LENGTH]) -> Self {
         Self(item)
+    }
+}
+
+impl CountBytes for WasmHash {
+    fn count_bytes(&self) -> usize {
+        self.0.len()
     }
 }
 

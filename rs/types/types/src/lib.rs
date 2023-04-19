@@ -105,6 +105,7 @@ use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use std::fmt;
 use std::fmt::Display;
+use std::sync::Arc;
 
 pub struct UserTag {}
 /// An end-user's [`PrincipalId`].
@@ -614,6 +615,12 @@ impl<T: CountBytes, E: CountBytes> CountBytes for Result<T, E> {
             Ok(result) => result.count_bytes(),
             Err(err) => err.count_bytes(),
         }
+    }
+}
+
+impl<T: CountBytes> CountBytes for Arc<T> {
+    fn count_bytes(&self) -> usize {
+        self.as_ref().count_bytes()
     }
 }
 
