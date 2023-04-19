@@ -1,11 +1,9 @@
-use crate::{
-    common::{make_plaintext_response, poll_ready},
-    MAX_REQUEST_RECEIVE_DURATION, MAX_REQUEST_SIZE_BYTES,
-};
+use crate::common::{make_plaintext_response, poll_ready};
 use byte_unit::Byte;
 use http::Request;
 use hyper::{Body, Response, StatusCode};
 use ic_async_utils::{receive_body, BodyReceiveError};
+use ic_config::http_handler::Config;
 use std::convert::Infallible;
 use std::future::Future;
 use std::pin::Pin;
@@ -19,17 +17,11 @@ pub(crate) struct BodyReceiverLayer {
 }
 
 impl BodyReceiverLayer {
-    pub(crate) fn new(max_request_receive_duration: Duration, max_request_body_size: Byte) -> Self {
+    pub(crate) fn new(config: &Config) -> Self {
         Self {
-            max_request_receive_duration,
-            max_request_body_size,
+            max_request_receive_duration: Duration::from_secs(config.max_request_receive_seconds),
+            max_request_body_size: Byte::from_bytes(config.max_request_size_bytes.into()),
         }
-    }
-}
-
-impl Default for BodyReceiverLayer {
-    fn default() -> Self {
-        BodyReceiverLayer::new(MAX_REQUEST_RECEIVE_DURATION, MAX_REQUEST_SIZE_BYTES)
     }
 }
 

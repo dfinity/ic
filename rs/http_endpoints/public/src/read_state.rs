@@ -3,14 +3,16 @@
 use crate::{
     body::BodyReceiverLayer,
     common::{cbor_response, into_cbor, make_plaintext_response},
+    metrics::LABEL_UNKNOWN,
     state_reader_executor::StateReaderExecutor,
     types::ApiReqType,
     validator_executor::ValidatorExecutor,
-    EndpointService, HttpError, HttpHandlerMetrics, ReplicaHealthStatus, UNKNOWN_LABEL,
+    EndpointService, HttpError, HttpHandlerMetrics, ReplicaHealthStatus,
 };
 use crossbeam::atomic::AtomicCell;
 use http::Request;
 use hyper::{Body, Response, StatusCode};
+use ic_config::http_handler::Config;
 use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, ReplicaLogger};
@@ -51,6 +53,7 @@ pub(crate) struct ReadStateService {
 impl ReadStateService {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new_service(
+        config: Config,
         log: ReplicaLogger,
         metrics: HttpHandlerMetrics,
         health_status: Arc<AtomicCell<ReplicaHealthStatus>>,
@@ -79,7 +82,7 @@ impl ReadStateService {
         );
         BoxCloneService::new(
             ServiceBuilder::new()
-                .layer(BodyReceiverLayer::default())
+                .layer(BodyReceiverLayer::new(&config))
                 .service(base_service),
         )
     }
@@ -98,7 +101,7 @@ impl Service<Request<Vec<u8>>> for ReadStateService {
     fn call(&mut self, request: Request<Vec<u8>>) -> Self::Future {
         self.metrics
             .request_body_size_bytes
-            .with_label_values(&[ApiReqType::ReadState.into(), UNKNOWN_LABEL])
+            .with_label_values(&[ApiReqType::ReadState.into(), LABEL_UNKNOWN])
             .observe(request.body().len() as f64);
 
         if self.health_status.load() != ReplicaHealthStatus::Healthy {

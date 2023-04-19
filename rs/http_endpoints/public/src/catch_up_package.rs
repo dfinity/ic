@@ -2,10 +2,11 @@
 
 use crate::{
     body::BodyReceiverLayer, common, types::ApiReqType, EndpointService, HttpHandlerMetrics,
-    UNKNOWN_LABEL,
+    LABEL_UNKNOWN,
 };
 use http::Request;
 use hyper::{Body, Response, StatusCode};
+use ic_config::http_handler::Config;
 use ic_interfaces::consensus_pool::ConsensusPoolCache;
 use ic_types::consensus::catchup::CatchUpPackageParam;
 use prost::Message;
@@ -28,6 +29,7 @@ pub(crate) struct CatchUpPackageService {
 
 impl CatchUpPackageService {
     pub(crate) fn new_service(
+        config: Config,
         metrics: HttpHandlerMetrics,
         consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
     ) -> EndpointService {
@@ -44,7 +46,7 @@ impl CatchUpPackageService {
 
         BoxCloneService::new(
             ServiceBuilder::new()
-                .layer(BodyReceiverLayer::default())
+                .layer(BodyReceiverLayer::new(&config))
                 .service(base_service),
         )
     }
@@ -80,7 +82,7 @@ impl Service<Request<Vec<u8>>> for CatchUpPackageService {
     fn call(&mut self, request: Request<Vec<u8>>) -> Self::Future {
         self.metrics
             .request_body_size_bytes
-            .with_label_values(&[ApiReqType::CatchUpPackage.into(), UNKNOWN_LABEL])
+            .with_label_values(&[ApiReqType::CatchUpPackage.into(), LABEL_UNKNOWN])
             .observe(request.body().len() as f64);
 
         let body = request.into_body();

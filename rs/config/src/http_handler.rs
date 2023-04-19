@@ -14,6 +14,7 @@ const DEFAULT_PORT: u16 = 8080u16;
 pub struct Config {
     /// IP address and port to listen on
     pub listen_addr: SocketAddr,
+
     /// The path to write the listening port to
     pub port_file_path: Option<PathBuf>,
 
@@ -28,8 +29,33 @@ pub struct Config {
     /// they are conditioned on the received requests.
     pub connection_read_timeout_seconds: u64,
 
-    /// Per request timeout in seconds before the server replies with 504 Gateway Timeout.
+    /// Per request timeout in seconds before the server replies with `504 Gateway Timeout`.
     pub request_timeout_seconds: u64,
+
+    /// The `SETTINGS_MAX_CONCURRENT_STREAMS` option for HTTP2 connections.
+    pub http_max_concurrent_streams: u32,
+
+    /// The maximum time we should wait for a peeking the first bytes on a TCP
+    /// connection. Effectively, if we can't read the first bytes within the
+    /// timeout the connection is broken.
+    /// If you modify this constant please also adjust:
+    /// - `ic_canister_client::agent::MAX_POLL_INTERVAL`,
+    /// - `canister_test::canister::MAX_BACKOFF_INTERVAL`.
+    /// See VER-1060 for details.
+    pub max_tcp_peek_timeout_seconds: u64,
+
+    /// Request with body size bigger than `max_request_size_bytes` will be rejected
+    /// and [`413 Content Too Large`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/413) will be returned to the user.
+    pub max_request_size_bytes: u64,
+
+    /// Delegation certificate requests with body size bigger than `max_delegation_certificate_size_bytes`
+    /// will be rejected. For valid IC delegation certificates this is never the case since the size is always constant.
+    pub max_delegation_certificate_size_bytes: u64,
+
+    /// If the request body is not received/parsed within
+    /// `max_request_receive_seconds`, then the request will be rejected and
+    /// [`408 Request Timeout`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/408) will be returned to the user.
+    pub max_request_receive_seconds: u64,
 }
 
 impl Default for Config {
@@ -43,6 +69,11 @@ impl Default for Config {
             max_outstanding_connections: 20_000,
             connection_read_timeout_seconds: 1_200, // 20 min
             request_timeout_seconds: 300,           // 5 min
+            http_max_concurrent_streams: 256,
+            max_tcp_peek_timeout_seconds: 11,
+            max_request_size_bytes: 5 * 1024 * 1024, // 5MB
+            max_delegation_certificate_size_bytes: 1024 * 1024, // 1MB
+            max_request_receive_seconds: 300,        // 5 min
         }
     }
 }

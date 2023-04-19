@@ -75,7 +75,7 @@ use ic_types::{
     time::expiry_time_from_now,
     CanisterId, NodeId, SubnetId,
 };
-use metrics::HttpHandlerMetrics;
+use metrics::{HttpHandlerMetrics, LABEL_UNKNOWN};
 use rand::Rng;
 use std::{
     convert::{Infallible, TryFrom},
@@ -96,54 +96,8 @@ use tower::{
     ServiceBuilder, ServiceExt,
 };
 
-// Constants defining the limits of the HttpHandler.
-
-// The http handler should apply backpresure when we lack a particular resources
-// which is purely HttpHandler related (e.g. connections, file descritors).
-//
-// Current mechanisms for constrained resources include:
-//
-// 1. File descriptors. The limit can be checked by 'process_max_fds'
-// Prometheus metric. The number of file descriptors used by the crate is
-// controlled by 'MAX_OUTSTANDING_CONNECTIONS'.
-//
-// 2. Lock contention. Currently we don't use lock-free data structures
-// (e.g. StateManager, RegistryClient), hence we can observe lock contention.
-// 'MAX_REQUESTS_PER_SECOND_PER_CONNECTION' is used to control the risk of
-// running into contention. A resonable value can be derived by looking what are
-// the latencies for operations that hold locks (e.g. methods on the
-// RegistryClient and StateManager).
-
-// Sets the SETTINGS_MAX_CONCURRENT_STREAMS option for HTTP2 connections.
-const HTTP_MAX_CONCURRENT_STREAMS: u32 = 256;
-
-// The maximum time we should wait for a peeking the first bytes on a TCP
-// connection. Effectively, if we can't read the first bytes within the
-// timeout the connection is broken.
-// If you modify this constant please also adjust:
-// - `ic_canister_client::agent::MAX_POLL_INTERVAL`,
-// - `canister_test::canister::MAX_BACKOFF_INTERVAL`.
-// See VER-1060 for details.
-const MAX_TCP_PEEK_TIMEOUT_SECS: u64 = 11;
-
-// Request with body size bigger than 'MAX_REQUEST_SIZE_BYTES' will be rejected
-// and appropriate error code will be returned to the user.
-pub(crate) const MAX_REQUEST_SIZE_BYTES: Byte = Byte::from_bytes(5 * 1024 * 1024); // 5MB
-
-// Delegation certificate requests with body size bigger than 'MAX_DELEGATION_CERTIFICATE_SIZE' will be rejected.
-// For valid IC delegation certificates this is never the case since the size is always constant.
-pub(crate) const MAX_DELEGATION_CERTIFICATE_SIZE: Byte = Byte::from_bytes(1024 * 1024); // 1MB
-
-// If the request body is not received/parsed within
-// 'MAX_REQUEST_RECEIVE_DURATION', then the request will be rejected and
-// appropriate error code will be returned to the user.
-pub(crate) const MAX_REQUEST_RECEIVE_DURATION: Duration = Duration::from_secs(300); // 5 min
-
 const HTTP_DASHBOARD_URL_PATH: &str = "/_/dashboard";
 const CONTENT_TYPE_CBOR: &str = "application/cbor";
-
-// Placeholder used when we can't determine the approriate prometheus label.
-const UNKNOWN_LABEL: &str = "unknown";
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct HttpError {
@@ -169,6 +123,7 @@ struct HttpHandler {
 // Crates a detached tokio blocking task that initializes the server (reading
 // required state, etc).
 fn start_server_initialization(
+    config: Config,
     log: ReplicaLogger,
     metrics: HttpHandlerMetrics,
     subnet_id: SubnetId,
@@ -204,7 +159,7 @@ fn start_server_initialization(
         // able to issue certificates.
         health_status.store(ReplicaHealthStatus::WaitingForRootDelegation);
         let loaded_delegation =
-            load_root_delegation(&log, subnet_id, nns_subnet_id, registry_client).await;
+            load_root_delegation(&config, &log, subnet_id, nns_subnet_id, registry_client).await;
         *delegation_from_nns.write().unwrap() = loaded_delegation;
         metrics
             .health_status_transitions_total
@@ -302,6 +257,7 @@ pub fn start_server(
     let state_reader_executor = StateReaderExecutor::new(state_reader);
     let validator_executor = ValidatorExecutor::new(ingress_verifier, log.clone());
     let call_service = CallService::new_service(
+        config.clone(),
         log.clone(),
         metrics.clone(),
         subnet_id,
@@ -312,6 +268,7 @@ pub fn start_server(
         malicious_flags.clone(),
     );
     let query_service = QueryService::new_service(
+        config.clone(),
         log.clone(),
         metrics.clone(),
         Arc::clone(&health_status),
@@ -322,6 +279,7 @@ pub fn start_server(
         malicious_flags.clone(),
     );
     let read_state_service = ReadStateService::new_service(
+        config.clone(),
         log.clone(),
         metrics.clone(),
         Arc::clone(&health_status),
@@ -340,8 +298,11 @@ pub fn start_server(
     );
     let dashboard_service =
         DashboardService::new_service(config.clone(), subnet_type, state_reader_executor.clone());
-    let catchup_service =
-        CatchUpPackageService::new_service(metrics.clone(), consensus_pool_cache.clone());
+    let catchup_service = CatchUpPackageService::new_service(
+        config.clone(),
+        metrics.clone(),
+        consensus_pool_cache.clone(),
+    );
 
     let health_status_refresher = HealthStatusRefreshLayer::new(
         log.clone(),
@@ -352,6 +313,7 @@ pub fn start_server(
     );
 
     start_server_initialization(
+        config.clone(),
         log.clone(),
         metrics.clone(),
         subnet_id,
@@ -449,7 +411,7 @@ fn create_main_service(
                 let request_timer = HistogramVecTimer::start_timer(
                     metrics.requests.clone(),
                     &REQUESTS_LABEL_NAMES,
-                    [UNKNOWN_LABEL, UNKNOWN_LABEL],
+                    [LABEL_UNKNOWN, LABEL_UNKNOWN],
                 );
                 (request, request_timer)
             })
@@ -478,11 +440,11 @@ async fn handshake_and_serve_connection(
 ) -> Result<(), Infallible> {
     let connection_start_time = Instant::now();
     let mut http = Http::new();
-    http.http2_max_concurrent_streams(HTTP_MAX_CONCURRENT_STREAMS);
+    http.http2_max_concurrent_streams(config.http_max_concurrent_streams);
 
     let mut b = [0_u8; 1];
     let app_layer = match timeout(
-        Duration::from_secs(MAX_TCP_PEEK_TIMEOUT_SECS),
+        Duration::from_secs(config.max_tcp_peek_timeout_seconds),
         tcp_stream.peek(&mut b),
     )
     .await
@@ -504,7 +466,9 @@ async fn handshake_and_serve_connection(
         Err(err) => {
             warn!(
                 log,
-                "TCP peeking timeout after {}s, error = {}", MAX_TCP_PEEK_TIMEOUT_SECS, err
+                "TCP peeking timeout after {}s, error = {}",
+                config.max_tcp_peek_timeout_seconds,
+                err
             );
             metrics.observe_connection_error(ConnectionError::PeekTimeout, connection_start_time);
             return Ok(());
@@ -752,6 +716,7 @@ async fn make_router(
 // Fetches a delegation from the NNS subnet to allow this subnet to issue
 // certificates on its behalf. On the NNS subnet this method is a no-op.
 async fn load_root_delegation(
+    config: &Config,
     log: &ReplicaLogger,
     subnet_id: SubnetId,
     nns_subnet_id: SubnetId,
@@ -891,8 +856,8 @@ async fn load_root_delegation(
 
         let raw_response = match receive_body(
             raw_response_res.into_body(),
-            MAX_REQUEST_RECEIVE_DURATION,
-            MAX_DELEGATION_CERTIFICATE_SIZE,
+            Duration::from_secs(config.max_request_receive_seconds),
+            Byte::from_bytes(config.max_delegation_certificate_size_bytes.into()),
         )
         .await
         {

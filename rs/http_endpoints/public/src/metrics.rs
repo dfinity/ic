@@ -12,6 +12,9 @@ pub const LABEL_STATUS: &str = "status";
 pub const LABEL_HEALTH_STATUS_BEFORE: &str = "before";
 pub const LABEL_HEALTH_STATUS_AFTER: &str = "after";
 
+/// Placeholder used when we can't determine the approriate prometheus label.
+pub const LABEL_UNKNOWN: &str = "unknown";
+
 const STATUS_SUCCESS: &str = "success";
 const STATUS_ERROR: &str = "error";
 
