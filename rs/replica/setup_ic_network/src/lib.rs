@@ -33,7 +33,7 @@ use ic_cycles_account_manager::CyclesAccountManager;
 use ic_icos_sev_interfaces::ValidateAttestedStream;
 use ic_ingress_manager::IngressManager;
 use ic_interfaces::{
-    artifact_manager::{ArtifactClient, ArtifactManager, ArtifactProcessor},
+    artifact_manager::{AdvertBroadcaster, ArtifactClient, ArtifactManager, ArtifactProcessor},
     crypto::IngressSigVerifier,
     execution_environment::IngressHistoryReader,
     messaging::{MessageRouting, XNetPayloadBuilder},
@@ -46,7 +46,7 @@ use ic_interfaces_state_manager::{StateManager, StateReader};
 use ic_interfaces_transport::Transport;
 use ic_logger::{info, replica_logger::ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_p2p::{start_p2p, AdvertBroadcaster, P2PThreadJoiner};
+use ic_p2p::{start_p2p, AdvertBroadcasterImpl, P2PThreadJoiner, MAX_ADVERT_BUFFER};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_state_manager::state_sync::{StateSync, StateSyncArtifact};
@@ -69,6 +69,7 @@ use std::{
     collections::HashMap,
     sync::{Arc, Mutex, RwLock},
 };
+use tokio::sync::mpsc::channel;
 
 /// The P2P state sync client.
 pub enum P2PStateSyncClient {
@@ -133,7 +134,12 @@ pub fn create_networking_stack(
         ic_interfaces_https_outcalls_adapter_client::CanisterHttpAdapterClient,
     registry_poll_delay_duration_ms: u64,
 ) -> (IngressIngestionService, P2PThreadJoiner) {
-    let advert_subscriber = AdvertBroadcaster::new(log.clone(), metrics_registry);
+    let (advert_tx, advert_rx) = channel(MAX_ADVERT_BUFFER);
+    let advert_subscriber = Arc::new(AdvertBroadcasterImpl::new(
+        log.clone(),
+        metrics_registry,
+        advert_tx,
+    ));
     let ingress_pool = artifact_pools.ingress_pool.clone();
     let consensus_pool_cache = artifact_pools.consensus_pool.read().unwrap().get_cache();
     let oldest_registry_version_in_use = consensus_pool_cache.get_oldest_registry_version_in_use();
@@ -160,7 +166,7 @@ pub fn create_networking_stack(
         cycles_account_manager,
         local_store_time_reader,
         registry_poll_delay_duration_ms,
-        advert_subscriber.clone(),
+        advert_subscriber,
         canister_http_adapter_client,
     )
     .unwrap();
@@ -200,7 +206,7 @@ pub fn create_networking_stack(
         transport,
         consensus_pool_cache,
         artifact_manager,
-        &advert_subscriber,
+        advert_rx,
     );
     (ingress_event_handler, p2p_thread)
 }
@@ -233,7 +239,7 @@ fn setup_artifact_manager(
     cycles_account_manager: Arc<CyclesAccountManager>,
     local_store_time_reader: Arc<dyn LocalStoreCertifiedTimeReader>,
     registry_poll_delay_duration_ms: u64,
-    advert_broadcaster: AdvertBroadcaster,
+    advert_broadcaster: Arc<dyn AdvertBroadcaster + Send + Sync>,
     canister_http_adapter_client: ic_interfaces_https_outcalls_adapter_client::CanisterHttpAdapterClient,
 ) -> std::io::Result<Arc<dyn ArtifactManager>> {
     // Initialize the time source.
@@ -257,7 +263,7 @@ fn setup_artifact_manager(
             Arc::clone(&time_source) as Arc<_>,
             metrics_registry,
             client_on_state_change,
-            move |req| advert_broadcaster.send(req.into()),
+            move |req| advert_broadcaster.process_delta(req.into()),
         );
 
         backends.insert(
@@ -278,7 +284,7 @@ fn setup_artifact_manager(
             Arc::clone(&time_source) as Arc<_>,
             metrics_registry.clone(),
             Box::new(client.clone()) as Box<_>,
-            move |req| advert_broadcaster.send(req.into()),
+            move |req| advert_broadcaster.process_delta(req.into()),
         );
 
         backends.insert(
@@ -337,7 +343,7 @@ fn setup_artifact_manager(
         backends.insert(
             ConsensusArtifact::TAG,
             Box::new(create_consensus_handlers(
-                move |req| advert_broadcaster.send(req.into()),
+                move |req| advert_broadcaster.process_delta(req.into()),
                 consensus_setup(
                     replica_config.clone(),
                     consensus_config,
@@ -375,7 +381,7 @@ fn setup_artifact_manager(
         backends.insert(
             IngressArtifact::TAG,
             Box::new(create_ingress_handlers(
-                move |req| advert_broadcaster.send(req.into()),
+                move |req| advert_broadcaster.process_delta(req.into()),
                 Arc::clone(&time_source) as Arc<_>,
                 Arc::clone(&artifact_pools.ingress_pool),
                 ingress_prioritizer,
@@ -394,7 +400,7 @@ fn setup_artifact_manager(
         backends.insert(
             CertificationArtifact::TAG,
             Box::new(create_certification_handlers(
-                move |req| advert_broadcaster.send(req.into()),
+                move |req| advert_broadcaster.process_delta(req.into()),
                 certification_setup(
                     replica_config,
                     Arc::clone(&membership) as Arc<_>,
@@ -418,7 +424,7 @@ fn setup_artifact_manager(
         backends.insert(
             DkgArtifact::TAG,
             Box::new(create_dkg_handlers(
-                move |req| advert_broadcaster.send(req.into()),
+                move |req| advert_broadcaster.process_delta(req.into()),
                 (
                     dkg::DkgImpl::new(
                         node_id,
@@ -456,7 +462,7 @@ fn setup_artifact_manager(
         backends.insert(
             EcdsaArtifact::TAG,
             Box::new(create_ecdsa_handlers(
-                move |req| advert_broadcaster.send(req.into()),
+                move |req| advert_broadcaster.process_delta(req.into()),
                 (
                     ecdsa::EcdsaImpl::new(
                         node_id,
@@ -484,7 +490,7 @@ fn setup_artifact_manager(
         backends.insert(
             CanisterHttpArtifact::TAG,
             Box::new(create_https_outcalls_handlers(
-                move |req| advert_broadcaster.send(req.into()),
+                move |req| advert_broadcaster.process_delta(req.into()),
                 (
                     CanisterHttpPoolManagerImpl::new(
                         Arc::clone(&state_reader),
