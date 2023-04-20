@@ -238,3 +238,34 @@ mod csp_multi_signature_keygen_error {
         };
     }
 }
+
+mod csp_threshold_sign_error {
+    use super::*;
+    use crate::csp_threshold_sign_error;
+    use ic_crypto_internal_csp::api::CspThresholdSignError;
+
+    #[test]
+    fn should_have_a_strategy_for_each_variant() {
+        let csp_threshold_sign_error = CspThresholdSignError::InternalError {
+            internal_error: "dummy error to match upon".to_string(),
+        };
+
+        let _ = match csp_threshold_sign_error {
+            CspThresholdSignError::SecretKeyNotFound { .. } => {
+                csp_threshold_sign_error::arb_secret_key_not_found_error().boxed()
+            }
+            CspThresholdSignError::UnsupportedAlgorithm { .. } => {
+                csp_threshold_sign_error::arb_unsupported_algorithm_error().boxed()
+            }
+            CspThresholdSignError::WrongSecretKeyType { .. } => {
+                csp_threshold_sign_error::arb_wrong_secret_key_type_error().boxed()
+            }
+            CspThresholdSignError::MalformedSecretKey { .. } => {
+                csp_threshold_sign_error::arb_malformed_secret_key_error().boxed()
+            }
+            CspThresholdSignError::InternalError { .. } => {
+                csp_threshold_sign_error::arb_internal_error().boxed()
+            }
+        };
+    }
+}

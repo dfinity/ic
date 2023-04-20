@@ -90,40 +90,6 @@ mod timeout {
     }
 }
 
-mod threshold_sig {
-    use super::*;
-    use ic_crypto_internal_seed::Seed;
-    use rand::{Rng, SeedableRng};
-    use rand_chacha::ChaChaRng;
-
-    fn test_threshold_sigs(seed: [u8; 32]) {
-        let tokio_rt = new_tokio_runtime();
-        let mut rng = ChaChaRng::from_seed(seed);
-        let message = rng.gen::<[u8; 32]>();
-        test_utils::threshold_sig::test_threshold_scheme_with_basic_keygen(
-            Seed::from_rng(&mut rng),
-            new_remote_csp_vault(tokio_rt.handle()),
-            &message,
-        );
-    }
-
-    // TODO(CRP-1286): make a proptest instead of the manual repetition.
-    #[test]
-    fn test_threshold_scheme_with_basic_keygen_1() {
-        test_threshold_sigs([5; 32]);
-    }
-
-    #[test]
-    fn test_threshold_scheme_with_basic_keygen_2() {
-        test_threshold_sigs([7; 32]);
-    }
-
-    #[test]
-    fn test_threshold_scheme_with_basic_keygen_3() {
-        test_threshold_sigs([9; 32]);
-    }
-}
-
 mod secret_key_store {
     use super::*;
 
