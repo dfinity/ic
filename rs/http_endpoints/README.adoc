@@ -3,9 +3,8 @@
  
 == Introduction ==
  
-The directory contains replica components that open active network sockets, so NNS managed nodes can 
+The directory contains replica components that listen on network sockets, so NNS managed nodes can 
 communicate with each other.
- 
 
 The replica components in this directory are:
 
@@ -14,18 +13,17 @@ The replica components in this directory are:
 
 == Connection management ==
 
-Components in scope assume persistent connections are established. A hard cap exists on
-the number of live TCP connections. If the limit is reached, new incoming connections are refused.
-Under extreme load, when the rate of incoming connections is higher than the rate at which the
-replica accepts them, users may also observe refused connections due to a full TCP listener
-backlog queue.
+Components in scope assume persistent connections are established. Each component can have at most
+`+max_tcp_connections+` simultaneous TCP connections. If the limit is reached, new incoming connections are refused.
+Under extreme load, when the rate of incoming connections is higher than the rate at which the replica accepts them,
+users may also observe refused connections due to a full 
+https://www.linuxjournal.com/files/linuxjournal.com/linuxjournal/articles/023/2333/2333s2.html[TCP listener backlog queue].
 
 Given the existence of persistent connections, we must detect dead peers, disconnections due
 to network inactivity and/or peers holding on to connections without sending requests.
 For this purpose, if no bytes are read from a connection for the duration of 
-'connection_read_timeout_seconds', defined in each component's config, then the connection is
-dropped. There is no point in setting a timeout on the write bytes since they are conditioned
-on the received requests. 
+`+connection_read_timeout_seconds+` then the connection is dropped. There is no point in 
+setting a timeout on the write bytes since they are conditioned on the received requests. 
 
 Each component uses the ReplicaOS defaults for https://tldp.org/HOWTO/TCP-Keepalive-HOWTO/overview.html#whyuse[TCP alivekeep].
 

@@ -348,9 +348,7 @@ pub fn start_server(
     let log_cl = log.clone();
     let conn_svc = ServiceBuilder::new()
         .load_shed()
-        .layer(GlobalConcurrencyLimitLayer::new(
-            config.max_outstanding_connections,
-        ))
+        .layer(GlobalConcurrencyLimitLayer::new(config.max_tcp_connections))
         .service_fn(move |tcp_stream: TcpStream| {
             handshake_and_serve_connection(
                 log_cl.clone(),

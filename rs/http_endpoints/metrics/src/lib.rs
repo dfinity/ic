@@ -235,7 +235,7 @@ impl MetricsHttpEndpoint {
         let conn_svc = ServiceBuilder::new()
             .load_shed()
             .layer(GlobalConcurrencyLimitLayer::new(
-                self.config.max_outstanding_connections,
+                self.config.max_tcp_connections,
             ))
             .service_fn(move |tcp_stream: TcpStream| {
                 let log = log.clone();
