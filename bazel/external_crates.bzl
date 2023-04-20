@@ -662,6 +662,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "0.8",
                 features = ["prime"],
             ),
+            "num-derive": crate.spec(
+                version = "^0.3",
+            ),
             "num-integer": crate.spec(
                 version = "^0.1.41",
             ),
