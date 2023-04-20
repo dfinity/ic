@@ -20,8 +20,8 @@ fuzz_target!(|data: &[u8]| {
 
 libfuzzer_sys::fuzz_mutator!(|data: &mut [u8], size: usize, max_size: usize, seed: u32| {
     let mut tree = match ProtobufLabeledTree::proxy_decode(&data[..size]) {
-        Ok(tree) => tree,
-        Err(_) => {
+        Ok(tree) if matches!(tree, LabeledTree::SubTree(_)) => tree,
+        Err(_) | Ok(_) /*if matches!(tree, LabeledTree::Leaf(_))*/ => {
             let bytes =
                 ProtobufLabeledTree::proxy_encode(LabeledTree::<Vec<u8>>::SubTree(flatmap!()))
                     .expect("failed to serialize an empty labeled tree");
