@@ -9,7 +9,7 @@ COPY --chown=0700 ./files/known_hosts /etc/ssh/ssh_known_hosts
 
 RUN export DEBIAN_FRONTEND=noninteractive && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone && \
     apt -yq update && apt -yqq install  \
-    curl build-essential git gnupg node-json5 uuid-dev zsh \
+    curl build-essential git gnupg node-json5 uuid-dev zsh clang \
     # GitLab CI \
     sudo gosu jq rclone \
     # Test \
@@ -80,9 +80,9 @@ COPY ./files/entrypoint.sh /entrypoint.sh
 # Add mold linker
 ARG mold_version=1.11.0
 ARG mold_platform="mold-${mold_version}-x86_64-linux"
-RUN curl -L "https://github.com/rui314/mold/releases/download/v${mold_version}/${mold_platform}.tar.gz" --output "$mold_platform" && \ 
+RUN curl -L "https://github.com/rui314/mold/releases/download/v${mold_version}/${mold_platform}.tar.gz" --output "$mold_platform" && \
     tar xvf "$mold_platform" && \
-    mv "${mold_platform}/bin/mold" /usr/bin/mold && \ 
+    mv "${mold_platform}/bin/mold" /usr/bin/mold && \
     rm -rf "$mold_platform"
 
 ENTRYPOINT ["/entrypoint.sh"]
