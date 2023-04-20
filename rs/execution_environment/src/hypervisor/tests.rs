@@ -13,7 +13,7 @@ use ic_replicated_state::{
     canister_state::execution_state::CustomSectionType, page_map::MemoryRegion, ExportedFunctions,
     Global, PageIndex,
 };
-use ic_replicated_state::{CanisterStatus, NumWasmPages};
+use ic_replicated_state::{CanisterStatus, NumWasmPages, PageMap};
 use ic_sys::PAGE_SIZE;
 use ic_test_utilities::assert_utils::assert_balance_equals;
 use ic_test_utilities_execution_environment::{
@@ -4710,5 +4710,178 @@ fn cycles_correct_if_update_fails() {
     assert_eq!(
         test.canister_state(b_id).system_state.balance(),
         initial_cycles - test.canister_execution_cost(b_id)
+    );
+}
+
+fn display_page_map(page_map: PageMap, page_range: std::ops::Range<u64>) -> String {
+    let mut contents = Vec::new();
+    for page in page_range {
+        contents.extend_from_slice(page_map.get_page(PageIndex::from(page)));
+    }
+    format!("[{}]", ic_utils::rle::display(&contents[..]))
+}
+
+// Grow memory multiple times first and write to newly added pages later.
+#[test]
+fn grow_memory_and_write_to_new_pages() {
+    let wat = r#"
+        (module
+          (import "ic0" "msg_reply" (func $msg_reply))
+          (import "ic0" "msg_reply_data_append"
+            (func $msg_reply_data_append (param i32 i32)))
+          (import "ic0" "msg_arg_data_copy"
+            (func $ic0_msg_arg_data_copy (param i32) (param i32) (param i32)))
+
+          (func $grow_by_one
+            (drop (memory.grow (i32.const 1)))
+            (call $msg_reply_data_append (i32.const 0) (i32.const 0))
+            (call $msg_reply))
+
+          ;; reads a byte from the beginning of a memory page
+          (func $read_byte
+            ;; copy the i32 page number into heap[0;4]
+            (call $ic0_msg_arg_data_copy
+              (i32.const 0) ;; dst
+              (i32.const 0) ;; off
+              (i32.const 4) ;; len
+            )
+            ;; copy page(n)[0;1] to heap[0;1]
+            ;; we do this to make a Wasm instruction access out-of-bounds memory area and not
+            ;; msg.reply system call. Both should fail but the failure path is different.
+            (i32.store8
+              (i32.const 4)
+              (i32.load (i32.mul (i32.load (i32.const 0)) (i32.const 65536)))
+            )
+            (call $msg_reply_data_append
+              (i32.const 4)
+              (i32.const 1))
+            (call $msg_reply))
+
+          ;; writes a byte to the beginning of a memory page
+          (func $write_byte
+            ;; copy the i32 page number into heap[0;4]
+            (call $ic0_msg_arg_data_copy
+              (i32.const 0) ;; dst
+              (i32.const 0) ;; off
+              (i32.const 4) ;; len
+            )
+            ;; copy the u8 value heap[5;1]
+            (call $ic0_msg_arg_data_copy
+              (i32.const 4) ;; dst
+              (i32.const 4) ;; off
+              (i32.const 1) ;; len
+            )
+            (i32.store8
+              ;; target address
+              (i32.mul (i32.load (i32.const 0)) (i32.const 65536))
+              ;; target value
+              (i32.load8_u (i32.const 4))
+            )
+            (call $msg_reply_data_append (i32.const 0) (i32.const 0))
+            (call $msg_reply))
+
+          (global $counter (mut i32) (i32.const 10))
+          (memory $memory 2 5)
+          (export "canister_update grow_by_one" (func $grow_by_one))
+          (export "canister_query read_byte" (func $read_byte))
+          (export "canister_update write_byte" (func $write_byte))
+        )"#;
+
+    let mut test = ExecutionTestBuilder::new().build();
+    let canister_id = test.canister_from_wat(wat).unwrap();
+
+    let num_pages = |n| (n * WASM_PAGE_SIZE as usize / PAGE_SIZE) as u64;
+
+    // memory.size = 3
+    test.ingress(canister_id, "grow_by_one", vec![])
+        .expect("grow memory to 3");
+
+    // memory.size = 4
+    test.ingress(canister_id, "grow_by_one", vec![])
+        .expect("grow memory to 4");
+
+    // memory.size = 5
+    test.ingress(canister_id, "grow_by_one", vec![])
+        .expect("grow memory to 5");
+
+    // memory.size = 5 (max limit)
+    test.ingress(canister_id, "grow_by_one", vec![])
+        .expect("grow memory to 6 attempt 1");
+    test.ingress(canister_id, "grow_by_one", vec![])
+        .expect("grow memory to 6 attempt 2");
+
+    assert_eq!(
+        display_page_map(
+            test.execution_state(canister_id)
+                .wasm_memory
+                .page_map
+                .clone(),
+            0..num_pages(5)
+        ),
+        "[327680×00]"
+    );
+
+    let make_payload = |page_num: i32, value: u8| {
+        let mut v = vec![];
+        v.extend(page_num.to_le_bytes().to_vec());
+        v.extend(value.to_le_bytes().to_vec());
+        v
+    };
+
+    // Write to memory pages allocated to satisfy memory minimum size. We use
+    // page(0) to unpack the payload so only write to page(1).
+    test.ingress(canister_id, "write_byte", make_payload(1, 7))
+        .unwrap();
+
+    #[rustfmt::skip] // rustfmt breaks the explanatory comment at the bottom of thi assert
+    assert_eq!(
+        display_page_map(
+            test.execution_state(canister_id).wasm_memory.page_map.clone(),
+            0..num_pages(5)
+        ),
+        "[1×01 3×00 1×07 65531×00 1×07 262143×00]"
+        //^^^^^^^^^^^^^^          ^^^
+        //unpacked payload        value
+    );
+
+    let mut test_write_read = |page_num, value| {
+        // 1. Grown memory page is zero-initialized
+        let result = test
+            .ingress(
+                canister_id,
+                "read_byte",
+                i32::to_le_bytes(page_num).to_vec(),
+            )
+            .unwrap()
+            .bytes()[0];
+        assert_eq!(result, 0, "query result before write");
+        // 2. Write a byte
+        test.ingress(canister_id, "write_byte", make_payload(page_num, value))
+            .unwrap();
+        // 3. Read it back
+        let result = test
+            .ingress(
+                canister_id,
+                "read_byte",
+                i32::to_le_bytes(page_num).to_vec(),
+            )
+            .unwrap()
+            .bytes()[0];
+        assert_eq!(result, value, "query result after write");
+    };
+
+    // Write data to the grown memory pages and read it back.
+    test_write_read(3, 9);
+    test_write_read(4, 10);
+    test_write_read(2, 8);
+
+    #[rustfmt::skip]
+    assert_eq!(
+        display_page_map(
+            test.execution_state(canister_id).wasm_memory.page_map.clone(),
+            0..num_pages(5)
+        ),
+        "[1×02 3×00 1×08 65531×00 1×07 65535×00 1×08 65535×00 1×09 65535×00 1×0a 65535×00]"
+        //                        ^^^ page(1)   ^^^ page(2)   ^^^ page(3)   ^^^ page(4)
     );
 }
