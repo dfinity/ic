@@ -191,6 +191,23 @@ impl CanisterChangeOrigin {
     }
 }
 
+/// `CandidType` for `CanisterCreationRecord`
+/// ```text
+/// record {
+///   controllers : vec principal;
+/// }
+/// ```
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct CanisterCreationRecord {
+    controllers: Vec<PrincipalId>,
+}
+
+impl CanisterCreationRecord {
+    pub fn controllers(&self) -> &[PrincipalId] {
+        &self.controllers
+    }
+}
+
 /// `CandidType` for `CanisterCodeDeploymentRecord`
 /// ```text
 /// record {
@@ -224,7 +241,9 @@ impl CanisterControllersChangeRecord {
 /// `CandidType` for `CanisterChangeDetails`
 /// ```text
 /// variant {
-///   canister_creation;
+///   canister_creation : record {
+///     controllers : vec principal;
+///   };
 ///   canister_code_uninstall;
 ///   canister_code_deployment : record {
 ///     mode : variant {install; reinstall; upgrade};
@@ -238,7 +257,7 @@ impl CanisterControllersChangeRecord {
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub enum CanisterChangeDetails {
     #[serde(rename = "canister_creation")]
-    CanisterCreation,
+    CanisterCreation(CanisterCreationRecord),
     #[serde(rename = "canister_code_uninstall")]
     CanisterCodeUninstall,
     #[serde(rename = "canister_code_deployment")]
@@ -248,6 +267,10 @@ pub enum CanisterChangeDetails {
 }
 
 impl CanisterChangeDetails {
+    pub fn canister_creation(controllers: Vec<PrincipalId>) -> CanisterChangeDetails {
+        CanisterChangeDetails::CanisterCreation(CanisterCreationRecord { controllers })
+    }
+
     pub fn code_deployment(
         mode: CanisterInstallMode,
         module_hash: [u8; WASM_HASH_LENGTH],
@@ -314,16 +337,18 @@ impl CanisterChange {
     }
 
     /// Returns the number of bytes to represent a canister change in memory.
-    /// The vector of controllers in `CanisterControllersChange` is counted separately
-    /// because the controllers are stored on heap and thus not accounted for
-    /// in `size_of::<CanisterChange>()`.
+    /// The vector of controllers in `CanisterCreation` and `CanisterControllersChange`
+    /// is counted separately because the controllers are stored on heap
+    /// and thus not accounted for in `size_of::<CanisterChange>()`.
     pub fn count_bytes(&self) -> NumBytes {
         let controllers_memory_size = match &self.change_details {
+            CanisterChangeDetails::CanisterCreation(canister_creation) => {
+                canister_creation.controllers().len() * size_of::<PrincipalId>()
+            }
             CanisterChangeDetails::CanisterControllersChange(canister_controllers_change) => {
                 canister_controllers_change.controllers().len() * size_of::<PrincipalId>()
             }
             CanisterChangeDetails::CanisterCodeDeployment(_)
-            | CanisterChangeDetails::CanisterCreation
             | CanisterChangeDetails::CanisterCodeUninstall => 0,
         };
         NumBytes::from((size_of::<CanisterChange>() + controllers_memory_size) as u64)
@@ -378,9 +403,15 @@ impl TryFrom<pb_canister_metadata::canister_change::ChangeOrigin> for CanisterCh
 impl From<&CanisterChangeDetails> for pb_canister_metadata::canister_change::ChangeDetails {
     fn from(item: &CanisterChangeDetails) -> Self {
         match item {
-            CanisterChangeDetails::CanisterCreation => {
+            CanisterChangeDetails::CanisterCreation(canister_creation) => {
                 pb_canister_metadata::canister_change::ChangeDetails::CanisterCreation(
-                    pb_canister_metadata::CanisterCreation {},
+                    pb_canister_metadata::CanisterCreation {
+                        controllers: canister_creation
+                            .controllers
+                            .iter()
+                            .map(|c| (*c).into())
+                            .collect::<Vec<ic_protobuf::types::v1::PrincipalId>>(),
+                    },
                 )
             }
             CanisterChangeDetails::CanisterCodeUninstall => {
@@ -418,9 +449,15 @@ impl TryFrom<pb_canister_metadata::canister_change::ChangeDetails> for CanisterC
         item: pb_canister_metadata::canister_change::ChangeDetails,
     ) -> Result<Self, Self::Error> {
         match item {
-            pb_canister_metadata::canister_change::ChangeDetails::CanisterCreation(_) => {
-                Ok(CanisterChangeDetails::CanisterCreation)
-            }
+            pb_canister_metadata::canister_change::ChangeDetails::CanisterCreation(
+                canister_creation,
+            ) => Ok(CanisterChangeDetails::canister_creation(
+                canister_creation
+                    .controllers
+                    .into_iter()
+                    .map(TryInto::try_into)
+                    .collect::<Result<Vec<PrincipalId>, _>>()?,
+            )),
             pb_canister_metadata::canister_change::ChangeDetails::CanisterCodeUninstall(_) => {
                 Ok(CanisterChangeDetails::CanisterCodeUninstall)
             }
