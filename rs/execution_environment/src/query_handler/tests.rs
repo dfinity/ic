@@ -1577,3 +1577,70 @@ fn composite_query_syscalls_from_reply_reject_callback() {
         }
     }
 }
+
+#[test]
+fn composite_query_state_preserved_across_calls() {
+    let mut test = ExecutionTestBuilder::new().with_composite_queries().build();
+
+    const NUM_CANISTERS: usize = 5;
+
+    let mut canisters = vec![];
+    for _ in 0..NUM_CANISTERS {
+        canisters.push(test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap());
+    }
+
+    // Create a chain of composite query calls
+    fn generate_continuation(
+        canisters: &[ic_types::CanisterId],
+        canister_id: usize,
+    ) -> ic_universal_canister::PayloadBuilder {
+        if canister_id >= NUM_CANISTERS {
+            // Reply to caller with the counter
+            wasm().get_global_counter().reply_int64()
+        } else {
+            // Execute further composite query calls
+            wasm().inc_global_counter().composite_query(
+                canisters[canister_id],
+                call_args()
+                    .other_side(wasm().reply_data(b"ignore".as_ref()))
+                    .on_reply(generate_continuation(canisters, canister_id + 1)),
+            )
+        }
+    }
+
+    let payload = wasm().inc_global_counter().composite_query(
+        canisters[1],
+        call_args()
+            .other_side(wasm().reply_data(b"ignore".as_ref()))
+            .on_reply(generate_continuation(&canisters, 2)),
+    );
+
+    let output = test.query(
+        UserQuery {
+            source: user_test_id(2),
+            receiver: canisters[0],
+            method_name: "composite_query".to_string(),
+            method_payload: payload.build(),
+            ingress_expiry: 0,
+            nonce: None,
+        },
+        Arc::new(test.state().clone()),
+        vec![],
+    );
+
+    // We use the global counter to count the number of composite queries we are executing (increment before each call).
+    // Since we have NUM_CANISTER caniters in total, we expect to have one less calls (from the first canister to all others).
+    assert_eq!(
+        output,
+        Ok(WasmResult::Reply(vec![
+            (NUM_CANISTERS - 1).try_into().unwrap(),
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+        ]))
+    );
+}
