@@ -233,10 +233,10 @@ nns_url=$(jq_hostvars '[._meta.hostvars[.nns.hosts[0]]]' 'map(.api_listen_url)[0
 
 if [[ $((size_level)) -eq 0 ]]; then
     # Deploy to testnet DKG interval length 20
-    deploy_with_timeout "$testnet" --dkg-interval-length 20 --git-revision "$GIT_REVISION" "${HOSTS_INI_ARGUMENTS[@]}"
+    deploy_with_timeout "$testnet" --no-boundary-nodes --dkg-interval-length 20 --git-revision "$GIT_REVISION" "${HOSTS_INI_ARGUMENTS[@]}"
 else
     # Deploy to testnet
-    deploy_with_timeout "$testnet" \
+    deploy_with_timeout "$testnet" --no-boundary-nodes \
         --git-revision "$GIT_REVISION" "${HOSTS_INI_ARGUMENTS[@]}"
 fi
 
