@@ -255,8 +255,6 @@ fn should_fail_to_sign_with_non_existent_key() {
 
 #[test]
 fn should_fail_to_sign_if_secret_key_in_store_has_wrong_type() {
-    use crate::vault::api::ThresholdSignatureCspVault;
-
     let csp_vault = LocalCspVault::builder().build();
 
     let threshold = NumberOfNodes::from(1);

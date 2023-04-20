@@ -1,13 +1,16 @@
 use crate::api::{CspThresholdSignError, ThresholdSignatureCspClient};
 use crate::key_id::KeyId;
+use crate::public_key_store::PublicKeyStore;
 use crate::types::{CspPublicCoefficients, CspSignature, ThresBls12_381_Signature};
 use crate::vault::api::CspVault;
+use crate::SecretKeyStore;
 use crate::{Csp, LocalCspVault};
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::test_utils::select_n;
 use ic_crypto_internal_threshold_sig_bls12381::types::public_coefficients::conversions::try_number_of_nodes_from_csp_pub_coeffs;
 use ic_types::crypto::AlgorithmId;
 use ic_types::{NodeIndex, NumberOfNodes};
+use rand::CryptoRng;
 use rand::Rng;
 use std::sync::Arc;
 use strum::IntoEnumIterator;
@@ -228,11 +231,16 @@ pub fn test_threshold_signatures(
 ///   * If the threshold is higher than the number of signers, keygen fails.
 /// * Correct keygen arguments yield keys that behave correctly with regards to
 ///   signing and verification.
-pub fn test_threshold_scheme_with_basic_keygen(
+pub fn test_threshold_scheme_with_basic_keygen<R, S, C, P>(
     seed: Seed,
-    csp_vault: Arc<dyn CspVault>,
+    csp_vault: Arc<LocalCspVault<R, S, C, P>>,
     message: &[u8],
-) {
+) where
+    R: Rng + CryptoRng + Send + Sync + 'static,
+    S: SecretKeyStore + 'static,
+    C: SecretKeyStore + 'static,
+    P: PublicKeyStore + 'static,
+{
     let mut rng = seed.into_rng();
     let threshold = NumberOfNodes::from(rng.gen_range(0..10));
     let number_of_signers = NumberOfNodes::from(rng.gen_range(0..10));
@@ -253,7 +261,7 @@ pub fn test_threshold_scheme_with_basic_keygen(
 
             let signers: Vec<_> = key_ids
                 .iter()
-                .map(|key_id| (csp_vault.clone(), *key_id))
+                .map(|key_id| (csp_vault.clone() as Arc<_>, *key_id))
                 .collect();
 
             test_threshold_signatures(

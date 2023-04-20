@@ -248,11 +248,15 @@ pub mod util {
         let threshold = NumberOfNodes::from(rng.gen_range(0..10));
         let number_of_signers = NumberOfNodes::from(rng.gen_range(0..10));
 
-        let csp = Csp::builder()
-            .with_vault(LocalCspVault::builder().with_rng(rng).build())
-            .build();
+        let vault = LocalCspVault::builder().with_rng(rng).build();
+        let threshold_keygen = vault.threshold_keygen_for_test(
+            AlgorithmId::ThresBls12_381,
+            threshold,
+            number_of_signers,
+        );
+        let csp = Csp::builder().with_vault(vault).build();
 
-        match csp.threshold_keygen(AlgorithmId::ThresBls12_381, threshold, number_of_signers) {
+        match threshold_keygen {
             Ok((public_coefficients, key_ids)) => {
                 assert!(
                     number_of_signers >= threshold,

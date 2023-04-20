@@ -1,6 +1,5 @@
 use ic_crypto_internal_csp::api::{CspCreateMEGaKeyError, CspThresholdSignError};
 use ic_crypto_internal_csp::key_id::KeyId;
-use ic_crypto_internal_csp::types::CspPublicCoefficients;
 use ic_crypto_internal_csp::types::{CspPop, CspPublicKey, CspSignature, ExternalPublicKeys};
 use ic_crypto_internal_csp::vault::api::BasicSignatureCspVault;
 use ic_crypto_internal_csp::vault::api::CspBasicSignatureError;
@@ -9,7 +8,6 @@ use ic_crypto_internal_csp::vault::api::CspMultiSignatureError;
 use ic_crypto_internal_csp::vault::api::CspMultiSignatureKeygenError;
 use ic_crypto_internal_csp::vault::api::CspPublicKeyStoreError;
 use ic_crypto_internal_csp::vault::api::CspSecretKeyStoreContainsError;
-use ic_crypto_internal_csp::vault::api::CspThresholdSignatureKeygenError;
 use ic_crypto_internal_csp::vault::api::CspTlsKeygenError;
 use ic_crypto_internal_csp::vault::api::CspTlsSignError;
 use ic_crypto_internal_csp::vault::api::IDkgProtocolCspVault;
@@ -77,13 +75,6 @@ mock! {
     }
 
     pub trait ThresholdSignatureCspVault {
-        fn threshold_keygen_for_test(
-            &self,
-            algorithm_id: AlgorithmId,
-            threshold: NumberOfNodes,
-            receivers: NumberOfNodes,
-        ) -> Result<(CspPublicCoefficients, Vec<KeyId>), CspThresholdSignatureKeygenError>;
-
         fn threshold_sign(
             &self,
             algorithm_id: AlgorithmId,

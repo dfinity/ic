@@ -20,18 +20,6 @@ pub mod ni_dkg;
 mod tests;
 
 impl ThresholdSignatureCspClient for Csp {
-    #[cfg(test)]
-    fn threshold_keygen(
-        &self,
-        algorithm_id: AlgorithmId,
-        threshold: ic_types::NumberOfNodes,
-        receivers: ic_types::NumberOfNodes,
-    ) -> CryptoResult<(CspPublicCoefficients, Vec<KeyId>)> {
-        self.csp_vault
-            .threshold_keygen_for_test(algorithm_id, threshold, receivers)
-            .map_err(CryptoError::from)
-    }
-
     fn threshold_sign(
         &self,
         algorithm_id: AlgorithmId,

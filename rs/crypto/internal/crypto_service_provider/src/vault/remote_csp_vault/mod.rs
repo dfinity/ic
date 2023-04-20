@@ -1,10 +1,9 @@
 use crate::api::{CspCreateMEGaKeyError, CspThresholdSignError};
-use crate::types::{CspPop, CspPublicCoefficients, CspPublicKey, CspSignature};
+use crate::types::{CspPop, CspPublicKey, CspSignature};
 use crate::vault::api::{
     CspBasicSignatureError, CspBasicSignatureKeygenError, CspMultiSignatureError,
     CspMultiSignatureKeygenError, CspPublicKeyStoreError, CspSecretKeyStoreContainsError,
-    CspThresholdSignatureKeygenError, CspTlsKeygenError, CspTlsSignError, PksAndSksContainsErrors,
-    ValidatePksAndSksError,
+    CspTlsKeygenError, CspTlsSignError, PksAndSksContainsErrors, ValidatePksAndSksError,
 };
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
@@ -86,13 +85,6 @@ pub trait TarpcCspVault {
         message: Vec<u8>,
         key_id: KeyId,
     ) -> Result<CspSignature, CspThresholdSignError>;
-
-    // Corresponds to `ThresholdSignatureCspVault.threshold_keygen_for_test()`.
-    async fn threshold_keygen_for_test(
-        algorithm_id: AlgorithmId,
-        threshold: NumberOfNodes,
-        receivers: NumberOfNodes,
-    ) -> Result<(CspPublicCoefficients, Vec<KeyId>), CspThresholdSignatureKeygenError>;
 
     // Corresponds to `NiDkgCspVault.gen_dealing_encryption_key_pair()`.
     async fn gen_dealing_encryption_key_pair(
