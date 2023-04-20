@@ -1,6 +1,5 @@
 use crate::api::{CspCreateMEGaKeyError, CspThresholdSignError};
 use crate::key_id::{KeyId, KeyIdInstantiationError};
-use crate::types::CspPublicCoefficients;
 use crate::types::{CspPop, CspPublicKey, CspSignature};
 use crate::ExternalPublicKeys;
 use ic_crypto_internal_logmon::metrics::KeyCounts;
@@ -498,38 +497,6 @@ pub trait MultiSignatureCspVault {
 /// Operations of `CspVault` related to threshold signatures
 /// (cf. `ThresholdSignatureCspClient`).
 pub trait ThresholdSignatureCspVault {
-    /// Generates threshold keys.
-    ///
-    /// This interface is primarily of interest for testing and demos.
-    ///
-    /// # Arguments
-    /// * `algorithm_id` indicates the algorithms to be used in the key
-    ///   generation.
-    /// * `threshold` is the minimum number of signatures that can be combined
-    ///   to make a valid threshold signature.
-    /// * `receivers` is the total number of receivers
-    /// # Returns
-    /// * `CspPublicCoefficients` can be used by the caller to verify
-    ///   signatures.
-    /// * `Vec<KeyId>` contains key identifiers.  The vector has the
-    ///   same length as the number of `receivers`.
-    /// # Panics
-    /// * An implementation MAY panic if it is unable to access the secret key
-    ///   store to save keys or if it cannot access a suitable random number
-    ///   generator.
-    /// # Errors
-    /// * If `threshold > receivers` then it is impossible for
-    ///   the signatories to create a valid combined signature, so
-    ///   implementations MUST return an error.
-    /// * An implementation MAY return an error if it is temporarily unable to
-    ///   generate and store keys.
-    fn threshold_keygen_for_test(
-        &self,
-        algorithm_id: AlgorithmId,
-        threshold: NumberOfNodes,
-        receivers: NumberOfNodes,
-    ) -> Result<(CspPublicCoefficients, Vec<KeyId>), CspThresholdSignatureKeygenError>;
-
     /// Signs the given message using the specified algorithm and key ID.
     ///
     /// # Arguments

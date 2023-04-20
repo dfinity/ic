@@ -1,14 +1,14 @@
 use crate::api::{CspCreateMEGaKeyError, CspThresholdSignError};
 use crate::key_id::KeyId;
-use crate::types::{CspPop, CspPublicCoefficients, CspPublicKey, CspSignature};
+use crate::types::{CspPop, CspPublicKey, CspSignature};
 use crate::vault::api::{
     BasicSignatureCspVault, CspBasicSignatureError, CspBasicSignatureKeygenError,
     CspMultiSignatureError, CspMultiSignatureKeygenError, CspPublicKeyStoreError,
-    CspSecretKeyStoreContainsError, CspThresholdSignatureKeygenError, CspTlsKeygenError,
-    CspTlsSignError, IDkgProtocolCspVault, MultiSignatureCspVault, NiDkgCspVault,
-    PksAndSksContainsErrors, PublicAndSecretKeyStoreCspVault, PublicKeyStoreCspVault,
-    PublicRandomSeedGenerator, PublicRandomSeedGeneratorError, SecretKeyStoreCspVault,
-    ThresholdEcdsaSignerCspVault, ThresholdSignatureCspVault, ValidatePksAndSksError,
+    CspSecretKeyStoreContainsError, CspTlsKeygenError, CspTlsSignError, IDkgProtocolCspVault,
+    MultiSignatureCspVault, NiDkgCspVault, PksAndSksContainsErrors,
+    PublicAndSecretKeyStoreCspVault, PublicKeyStoreCspVault, PublicRandomSeedGenerator,
+    PublicRandomSeedGeneratorError, SecretKeyStoreCspVault, ThresholdEcdsaSignerCspVault,
+    ThresholdSignatureCspVault, ValidatePksAndSksError,
 };
 use crate::vault::remote_csp_vault::codec::{CspVaultClientObserver, ObservableCodec};
 use crate::vault::remote_csp_vault::{
@@ -302,25 +302,6 @@ impl MultiSignatureCspVault for RemoteCspVault {
 }
 
 impl ThresholdSignatureCspVault for RemoteCspVault {
-    fn threshold_keygen_for_test(
-        &self,
-        algorithm_id: AlgorithmId,
-        threshold: NumberOfNodes,
-        receivers: NumberOfNodes,
-    ) -> Result<(CspPublicCoefficients, Vec<KeyId>), CspThresholdSignatureKeygenError> {
-        self.tokio_block_on(self.tarpc_csp_client.threshold_keygen_for_test(
-            context_with_timeout(self.rpc_timeout),
-            algorithm_id,
-            threshold,
-            receivers,
-        ))
-        .unwrap_or_else(|rpc_error: tarpc::client::RpcError| {
-            Err(CspThresholdSignatureKeygenError::InternalError {
-                internal_error: rpc_error.to_string(),
-            })
-        })
-    }
-
     fn threshold_sign(
         &self,
         algorithm_id: AlgorithmId,

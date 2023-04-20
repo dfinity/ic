@@ -1,10 +1,10 @@
 use crate::api::{CspCreateMEGaKeyError, CspThresholdSignError};
 use crate::key_id::KeyId;
-use crate::types::{CspPop, CspPublicCoefficients, CspPublicKey, CspSignature};
+use crate::types::{CspPop, CspPublicKey, CspSignature};
 use crate::vault::api::{
     CspBasicSignatureError, CspBasicSignatureKeygenError, CspMultiSignatureError,
-    CspMultiSignatureKeygenError, CspSecretKeyStoreContainsError, CspThresholdSignatureKeygenError,
-    CspTlsKeygenError, CspTlsSignError, PublicRandomSeedGeneratorError, ValidatePksAndSksError,
+    CspMultiSignatureKeygenError, CspSecretKeyStoreContainsError, CspTlsKeygenError,
+    CspTlsSignError, PublicRandomSeedGeneratorError, ValidatePksAndSksError,
 };
 use crate::vault::api::{CspPublicKeyStoreError, CspVault};
 use crate::vault::local_csp_vault::{LocalCspVault, ProdLocalCspVault};
@@ -160,18 +160,6 @@ impl<C: CspVault + 'static> TarpcCspVault for TarpcCspVaultServerWorker<C> {
     ) -> Result<CspSignature, CspThresholdSignError> {
         let vault = self.local_csp_vault;
         let job = move || vault.threshold_sign(algorithm_id, &message, key_id);
-        execute_on_thread_pool(self.thread_pool_handle, job).await
-    }
-
-    async fn threshold_keygen_for_test(
-        self,
-        _: context::Context,
-        algorithm_id: AlgorithmId,
-        threshold: NumberOfNodes,
-        receivers: NumberOfNodes,
-    ) -> Result<(CspPublicCoefficients, Vec<KeyId>), CspThresholdSignatureKeygenError> {
-        let vault = self.local_csp_vault;
-        let job = move || vault.threshold_keygen_for_test(algorithm_id, threshold, receivers);
         execute_on_thread_pool(self.thread_pool_handle, job).await
     }
 

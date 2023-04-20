@@ -2,10 +2,6 @@
 
 use crate::api::CspThresholdSignError;
 use crate::types::{CspPublicCoefficients, CspSecretKeyConversionError, CspSignature};
-
-#[cfg(test)]
-use crate::KeyId;
-
 use ic_crypto_internal_threshold_sig_bls12381::api::ni_dkg_errors;
 use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::{
     CspFsEncryptionPop, CspFsEncryptionPublicKey, CspNiDkgDealing, CspNiDkgTranscript, Epoch,
@@ -39,39 +35,6 @@ pub mod threshold_sign_error;
 /// intentionally made non-static (i.e., they take a `&self` parameter) so that
 /// mocking of this trait (for testing purposes) is possible.
 pub trait ThresholdSignatureCspClient {
-    /// Generates threshold keys.
-    ///
-    /// This interface is primarily of interest for testing and demos.
-    ///
-    /// # Arguments
-    /// * `algorithm_id` indicates the algorithms to be used in the key
-    ///   generation.
-    /// * `threshold` is the minimum number of signatures that can be combined
-    ///   to make a valid threshold signature.
-    /// * `receivers` is the number of receivers who receive a share
-    /// # Returns
-    /// * `CspPublicCoefficients` can be used by the caller to verify
-    ///   signatures.
-    /// * `Vec<KeyId>` contains key identifiers.  The vector has the
-    ///   same length as `receivers`.
-    /// # Panics
-    /// * An implementation MAY panic if it is unable to access the secret key
-    ///   store to save keys or if it cannot access a suitable random number
-    ///   generator.
-    /// # Errors
-    /// * If `threshold > receivers` then it is impossible for
-    ///   the signatories to create a valid combined signature, so
-    ///   implementations MUST return an error.
-    /// * An implementation MAY return an error if it is temporarily unable to
-    ///   generate and store keys.
-    #[cfg(test)]
-    fn threshold_keygen(
-        &self,
-        algorithm_id: AlgorithmId,
-        threshold: NumberOfNodes,
-        receivers: NumberOfNodes,
-    ) -> CryptoResult<(CspPublicCoefficients, Vec<KeyId>)>;
-
     /// Signs with a threshold key
     fn threshold_sign(
         &self,
