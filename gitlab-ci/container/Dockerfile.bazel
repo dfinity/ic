@@ -15,9 +15,12 @@ RUN export DEBIAN_FRONTEND=noninteractive && ln -snf /usr/share/zoneinfo/$TZ /et
     # Test \
     rsync \
     # RUST \
-    gcc lld pkg-config libssl-dev libunwind-dev libusb-1.0-0-dev libsqlite3-dev zlib1g-dev libclang-10-dev \
+    gcc lld pkg-config libssl-dev libunwind-dev libusb-1.0-0-dev libsqlite3-dev zlib1g-dev libclang-10-dev protobuf-compiler llvm liblmdb-dev\
     # IC-OS \
     python3 python-is-python3 fakeroot android-sdk-ext4-utils cryptsetup-bin zstd lsb-release grub-efi-amd64-bin libsystemd-dev faketime dosfstools libselinux-dev mtools lvm2
+
+ARG motoko_version=0.5.10
+RUN curl -fsSL https://download.dfinity.systems/motoko/${motoko_version}/x86_64-linux/motoko-${motoko_version}.tar.gz | tar -xz -C /usr/local/bin && chmod +x /usr/local/bin/moc
 
 ARG buildevents_version=0.6.0
 RUN curl -fsSL https://github.com/honeycombio/buildevents/releases/download/v${buildevents_version}/buildevents-linux-amd64 -o /usr/bin/buildevents && \
@@ -54,8 +57,18 @@ RUN echo "source /etc/bash_completion.d/bazel" >>/etc/bash.bashrc
 # Pre-populate the Bazel installation for root
 RUN bazel version
 USER ubuntu
+
 # Pre-populate the Bazel installation for ubuntu
 RUN bazel version
+
+# Add Rust/Cargo support
+ENV PATH=/home/ubuntu/.cargo/bin:$PATH
+ARG rust_version=1.58.1
+RUN curl --fail https://sh.rustup.rs -sSf \
+    | sh -s -- -y --default-toolchain ${rust_version}-x86_64-unknown-linux-gnu --no-modify-path && \
+    rustup default ${rust_version}-x86_64-unknown-linux-gnu && \
+    rustup target add wasm32-unknown-unknown
+
 WORKDIR /
 USER 0
 
@@ -63,21 +76,6 @@ RUN mv /usr/bin/docker /usr/bin/docker-bin
 COPY ./files/containers.conf /etc/containers/containers.conf
 COPY ./files/docker.sh /usr/bin/docker
 COPY ./files/entrypoint.sh /entrypoint.sh
-
-# Install Rust and Cargo in /opt
-ENV RUSTUP_HOME=/opt/rustup \
-    CARGO_TARGET_DIR=/cargo_target \
-    PATH=/opt/cargo/bin:$PATH
-
-# Add Rust/Cargo support
-# rustup uses $CARGO_HOME to figure out where to install itself
-ARG rust_version=1.58.1
-ENV CARGO_HOME=/opt/cargo
-RUN curl --fail https://sh.rustup.rs -sSf \
-        | sh -s -- -y --default-toolchain ${rust_version}-x86_64-unknown-linux-gnu --no-modify-path && \
-    rustup default ${rust_version}-x86_64-unknown-linux-gnu && \
-    rustup target add wasm32-unknown-unknown && \
-    chown -R ${USER}.${USER} ${RUSTUP_HOME} ${CARGO_HOME}
 
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["/bin/bash"]
