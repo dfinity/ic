@@ -47,7 +47,7 @@ async fn send_request(
 
 /// Once we have reached the number of outstanding connection, new connections should be refused.
 #[tokio::test]
-async fn test_max_outstanding_connections() {
+async fn test_max_tcp_connections() {
     with_test_replica_logger(|log| async move {
         let rt_handle = tokio::runtime::Handle::current();
         let addr = get_free_localhost_port().unwrap();
@@ -64,7 +64,7 @@ async fn test_max_outstanding_connections() {
         );
 
         let mut senders = vec![];
-        for _i in 0..config.max_outstanding_connections {
+        for _i in 0..config.max_tcp_connections {
             let target_stream = TcpStream::connect(addr).await.unwrap();
 
             let (mut request_sender, connection) =

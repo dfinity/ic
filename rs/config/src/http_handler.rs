@@ -18,10 +18,10 @@ pub struct Config {
     /// The path to write the listening port to
     pub port_file_path: Option<PathBuf>,
 
-    /// We can serve from at most 'max_outstanding_connections'
-    /// live TCP connections. If we are at the limit and a new
-    /// TCP connection arrives, we accept and drop it immediately.
-    pub max_outstanding_connections: usize,
+    /// The endpoint can serve from at most 'max_tcp_connections'
+    /// simultaneous TCP connections. If the limit is reached and a new
+    /// TCP connection arrives, it is accepted and dropped immediately.
+    pub max_tcp_connections: usize,
 
     /// If no bytes are read from a connection for the duration of
     /// 'connection_read_timeout_seconds', then the connection is dropped.
@@ -66,7 +66,7 @@ impl Default for Config {
                 DEFAULT_PORT,
             ),
             port_file_path: None,
-            max_outstanding_connections: 20_000,
+            max_tcp_connections: 20_000,
             connection_read_timeout_seconds: 1_200, // 20 min
             request_timeout_seconds: 300,           // 5 min
             http_max_concurrent_streams: 256,

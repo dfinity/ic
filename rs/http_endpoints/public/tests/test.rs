@@ -582,12 +582,12 @@ fn test_unathorized_call() {
 
 /// Once we have reached the number of outstanding connection, new connections should be refused.
 #[tokio::test]
-async fn test_max_outstanding_connections() {
+async fn test_max_tcp_connections() {
     let rt_handle = tokio::runtime::Handle::current();
     let addr = get_free_localhost_socket_addr();
     let config = Config {
         listen_addr: addr,
-        max_outstanding_connections: 50,
+        max_tcp_connections: 50,
         ..Default::default()
     };
 
@@ -606,7 +606,7 @@ async fn test_max_outstanding_connections() {
 
     // Create max connections and store to prevent connections from being closed
     let mut senders = vec![];
-    for _i in 0..config.max_outstanding_connections {
+    for _i in 0..config.max_tcp_connections {
         let (request_sender, status_code) = create_conn_and_send_request(addr).await;
         senders.push(request_sender);
         assert!(status_code == StatusCode::OK);
@@ -630,7 +630,7 @@ async fn test_connection_read_timeout() {
     let addr = get_free_localhost_socket_addr();
     let config = Config {
         listen_addr: addr,
-        max_outstanding_connections: 50,
+        max_tcp_connections: 50,
         connection_read_timeout_seconds: 2,
         ..Default::default()
     };
