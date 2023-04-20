@@ -19,6 +19,7 @@ pub use csp_multi_signature_keygen_error::arb_csp_multi_signature_keygen_error;
 pub use csp_pop::arb_csp_pop;
 pub use csp_public_key::arb_csp_public_key;
 pub use csp_signature::arb_csp_signature;
+pub use csp_threshold_sign_error::arb_csp_threshold_sign_error;
 
 mod common {
     use super::*;
@@ -393,6 +394,52 @@ mod csp_multi_signature_keygen_error {
             arb_internal_error(),
             arb_duplicated_key_id_error(),
             arb_transient_internal_error()
+        ]
+        .boxed()
+    }
+}
+
+mod csp_threshold_sign_error {
+    use super::*;
+    use ic_crypto_internal_csp::api::CspThresholdSignError;
+    use proptest::prelude::Just;
+
+    prop_compose! {
+        pub(super) fn arb_secret_key_not_found_error()(algorithm in arb_algorithm_id(), key_id in arb_key_id()) -> CspThresholdSignError {
+            CspThresholdSignError::SecretKeyNotFound { algorithm, key_id }
+        }
+    }
+
+    prop_compose! {
+        pub(super) fn arb_unsupported_algorithm_error()(algorithm in arb_algorithm_id()) -> CspThresholdSignError {
+            CspThresholdSignError::UnsupportedAlgorithm { algorithm }
+        }
+    }
+
+    pub(super) fn arb_wrong_secret_key_type_error() -> impl Strategy<Value = CspThresholdSignError>
+    {
+        Just(CspThresholdSignError::WrongSecretKeyType {})
+    }
+
+    prop_compose! {
+        pub(super) fn arb_malformed_secret_key_error()(algorithm in arb_algorithm_id()) -> CspThresholdSignError {
+            CspThresholdSignError::MalformedSecretKey { algorithm }
+        }
+    }
+
+    prop_compose! {
+        pub(super) fn arb_internal_error()(internal_error in ".*") -> CspThresholdSignError {
+            CspThresholdSignError::InternalError { internal_error }
+        }
+    }
+
+    pub fn arb_csp_threshold_sign_error() -> BoxedStrategy<CspThresholdSignError> {
+        prop_oneof![
+            arb_secret_key_not_found_error(),
+            arb_unsupported_algorithm_error(),
+            arb_wrong_secret_key_type_error(),
+            arb_malformed_secret_key_error(),
+            arb_internal_error()
         ]
         .boxed()
     }
