@@ -274,7 +274,7 @@ if [[ -z \${CERT_NAME+x} ]]; then
 else
     (for HOST in "\${HOSTS[@]}"; do
         echo >&2 "\$(date --rfc-3339=seconds): Copying \$CERT_NAME from server \$HOST"
-        scp -B -o "ConnectTimeout 30" -r "${SCP_PREFIX}\${HOST}:/etc/letsencrypt/live/\${CERT_NAME}/*" "${BN_MEDIA_PATH}/certs/" && exit
+        scp -B -o "ConnectTimeout 30" -o 'UserKnownHostsFile=/dev/null' -o 'StrictHostKeyChecking=no' -r "${SCP_PREFIX}\${HOST}:/etc/letsencrypt/live/\${CERT_NAME}/*" "${BN_MEDIA_PATH}/certs/" && exit
     done) || {
         err "failed to find certificate \${CERT_NAME} on any designated server"
         exit 1
