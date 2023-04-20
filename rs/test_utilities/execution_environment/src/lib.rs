@@ -1428,6 +1428,7 @@ pub struct ExecutionTestBuilder {
     manual_execution: bool,
     rate_limiting_of_instructions: bool,
     deterministic_time_slicing: bool,
+    canister_sandboxing: bool,
     composite_queries: bool,
     query_caching: bool,
     allocatable_compute_capacity_in_percent: usize,
@@ -1480,6 +1481,7 @@ impl Default for ExecutionTestBuilder {
             manual_execution: false,
             rate_limiting_of_instructions: false,
             deterministic_time_slicing: false,
+            canister_sandboxing: true,
             composite_queries: false,
             query_caching: false,
             allocatable_compute_capacity_in_percent: 100,
@@ -1664,6 +1666,13 @@ impl ExecutionTestBuilder {
         }
     }
 
+    pub fn with_canister_sandboxing_disabled(self) -> Self {
+        Self {
+            canister_sandboxing: false,
+            ..self
+        }
+    }
+
     pub fn with_composite_queries(self) -> Self {
         Self {
             composite_queries: true,
@@ -1822,6 +1831,11 @@ impl ExecutionTestBuilder {
         } else {
             FlagStatus::Disabled
         };
+        let canister_sandboxing_flag = if self.canister_sandboxing {
+            FlagStatus::Enabled
+        } else {
+            FlagStatus::Disabled
+        };
         let composite_queries = if self.composite_queries {
             FlagStatus::Enabled
         } else {
@@ -1835,6 +1849,7 @@ impl ExecutionTestBuilder {
         let config = Config {
             rate_limiting_of_instructions,
             deterministic_time_slicing,
+            canister_sandboxing_flag,
             composite_queries,
             query_caching,
             allocatable_compute_capacity_in_percent: self.allocatable_compute_capacity_in_percent,

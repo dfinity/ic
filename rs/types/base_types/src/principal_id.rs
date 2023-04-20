@@ -1,4 +1,6 @@
 use crate::pb_internal::v1::PrincipalId as PrincipalIdProto;
+#[cfg(feature = "fuzzing_code")]
+use arbitrary::{Arbitrary, Result as ArbitraryResult, Unstructured};
 use candid::types::principal::{Principal, PrincipalError};
 use candid::types::{Type, TypeId};
 use ic_crypto_sha::Sha224;
@@ -310,6 +312,31 @@ impl PrincipalId {
 
     pub fn is_anonymous(&self) -> bool {
         self.as_slice() == [Self::TYPE_ANONYMOUS]
+    }
+}
+
+#[cfg(feature = "fuzzing_code")]
+impl<'a> Arbitrary<'a> for PrincipalId {
+    fn arbitrary(u: &mut Unstructured<'a>) -> ArbitraryResult<Self> {
+        let principal = match u8::arbitrary(u)? {
+            u8::MAX => PrincipalId(Principal::management_canister()),
+            254u8 => PrincipalId::new_anonymous(),
+            _ => {
+                let length: usize = u.int_in_range(1..=PrincipalId::MAX_LENGTH_IN_BYTES)?;
+                let mut result: Vec<u8> = Vec::with_capacity(length);
+                for _ in 0..length {
+                    result.push(u8::arbitrary(u)?);
+                }
+                // non-anonymous principal cannot have type ANONYMOUS
+                // adapt by changing the last byte.
+                let last = result.last_mut().unwrap();
+                if *last == Self::TYPE_ANONYMOUS {
+                    *last = u8::MAX
+                }
+                PrincipalId::try_from(&result[..]).unwrap()
+            }
+        };
+        Ok(principal)
     }
 }
 
