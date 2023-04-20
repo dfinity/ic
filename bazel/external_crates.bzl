@@ -541,7 +541,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "=1.8.0",
             ),
             "instant-acme": crate.spec(
-                version = "^0.1.0",
+                version = "^0.2.1",
             ),
             "intmap": crate.spec(
                 version = "^1.1.0",

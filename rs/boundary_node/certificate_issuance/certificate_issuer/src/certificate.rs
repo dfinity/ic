@@ -34,6 +34,7 @@ pub trait Upload: Sync + Send {
 
 #[derive(Serialize)]
 pub struct Package {
+    id: String,
     name: String,
     canister: Principal,
     pair: Pair,
@@ -47,7 +48,7 @@ pub enum ExportError {
 
 #[async_trait]
 pub trait Export: Sync + Send {
-    async fn export(&self) -> Result<Vec<Package>, ExportError>;
+    async fn export(&self, key: Option<String>, limit: u64) -> Result<Vec<Package>, ExportError>;
 }
 
 pub struct CanisterUploader {
@@ -122,14 +123,14 @@ impl CanisterExporter {
 
 #[async_trait]
 impl Export for CanisterExporter {
-    async fn export(&self) -> Result<Vec<Package>, ExportError> {
+    async fn export(&self, key: Option<String>, limit: u64) -> Result<Vec<Package>, ExportError> {
         use ifc::{ExportCertificatesError as Error, ExportCertificatesResponse as Response};
 
-        let args = Encode!().context("failed to encode arg")?;
+        let args = Encode!(&key, &limit).context("failed to encode arg")?;
 
         let resp = self
             .agent
-            .query(&self.canister_id, "exportCertificates")
+            .query(&self.canister_id, "exportCertificatesPaginated")
             .with_arg(args)
             .call()
             .await
@@ -151,6 +152,7 @@ impl Export for CanisterExporter {
         stream::iter(pkgs.into_iter())
             .then(|pkg| async move {
                 Ok(Package {
+                    id: pkg.id,
                     name: pkg.name.into(),
                     canister: pkg.canister,
                     pair: Pair(
@@ -161,5 +163,43 @@ impl Export for CanisterExporter {
             })
             .try_collect()
             .await
+    }
+}
+
+pub struct WithPagination<T>(pub T, pub u64);
+
+#[async_trait]
+impl<T: Export> Export for WithPagination<T> {
+    async fn export(&self, _: Option<String>, _: u64) -> Result<Vec<Package>, ExportError> {
+        let mut out = Vec::new();
+
+        // Disregard given `key` and `limit`, pagination will just process the entire dataset
+        let mut key: Option<String> = None;
+
+        loop {
+            let mut pkgs = self
+                .0
+                .export(
+                    key,    // key
+                    self.1, // limit
+                )
+                .await?;
+
+            if pkgs.len() < self.1 as usize {
+                out.append(&mut pkgs);
+                break;
+            }
+
+            key = Some(
+                pkgs.last()
+                    .expect("missing last element from packages list")
+                    .id
+                    .to_owned(),
+            );
+
+            out.append(&mut pkgs);
+        }
+
+        Ok(out)
     }
 }

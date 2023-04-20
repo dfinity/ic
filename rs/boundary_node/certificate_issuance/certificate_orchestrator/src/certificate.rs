@@ -1,3 +1,5 @@
+use std::ops::Bound;
+
 use anyhow::anyhow;
 use certificate_orchestrator_interface::{EncryptedPair, ExportPackage, Id, Registration};
 use ic_cdk::caller;
@@ -98,7 +100,7 @@ pub enum ExportError {
 }
 
 pub trait Export {
-    fn export(&self) -> Result<Vec<ExportPackage>, ExportError>;
+    fn export(&self, key: Option<String>, limit: u64) -> Result<Vec<ExportPackage>, ExportError>;
 }
 
 pub struct Exporter {
@@ -119,17 +121,25 @@ impl Exporter {
 }
 
 impl Export for Exporter {
-    fn export(&self) -> Result<Vec<ExportPackage>, ExportError> {
+    fn export(&self, key: Option<String>, limit: u64) -> Result<Vec<ExportPackage>, ExportError> {
         self.pairs.with(|pairs| {
             self.registrations.with(|regs| {
                 pairs
                     .borrow()
-                    .iter()
+                    .range((
+                        Bound::Excluded(match key {
+                            Some(key) => StorableId::from(key),
+                            None => StorableId::default(),
+                        }),
+                        Bound::Unbounded,
+                    ))
+                    .take(limit as usize)
                     .map(|(id, pair)| match regs.borrow().get(&id) {
                         None => Err(ExportError::UnexpectedError(anyhow!(
                             "registration {id} is missing",
                         ))),
                         Some(Registration { name, canister, .. }) => Ok(ExportPackage {
+                            id: id.into(),
                             name,
                             canister,
                             pair,
@@ -142,7 +152,7 @@ impl Export for Exporter {
 }
 
 impl<T: Export, A: Authorize> Export for WithAuthorize<T, A> {
-    fn export(&self) -> Result<Vec<ExportPackage>, ExportError> {
+    fn export(&self, key: Option<String>, limit: u64) -> Result<Vec<ExportPackage>, ExportError> {
         if let Err(err) = self.1.authorize(&caller()) {
             return Err(match err {
                 AuthorizeError::Unauthorized => ExportError::Unauthorized,
@@ -150,6 +160,6 @@ impl<T: Export, A: Authorize> Export for WithAuthorize<T, A> {
             });
         };
 
-        self.0.export()
+        self.0.export(key, limit)
     }
 }

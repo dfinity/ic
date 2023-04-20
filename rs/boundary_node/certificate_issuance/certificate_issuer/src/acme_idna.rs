@@ -1,5 +1,5 @@
-use crate::acme::{Finalize, Order, Ready};
-use anyhow::Error;
+use crate::acme::{Finalize, FinalizeError, Order, Ready};
+use anyhow::{Context, Error};
 use async_trait::async_trait;
 
 // Wrapper to convert names to A-label Internalized Domain Names
@@ -9,7 +9,7 @@ pub struct WithIDNA<T>(pub T);
 impl<T: Order> Order for WithIDNA<T> {
     async fn order(&self, name: &str) -> Result<String, Error> {
         // Convert name to A-label Internationalized Domain Name
-        let ascii_name = idna::domain_to_ascii(name)?;
+        let ascii_name = idna::domain_to_ascii(name).context("failed to idna-encode domain")?;
         self.0.order(&ascii_name).await
     }
 }
@@ -18,16 +18,16 @@ impl<T: Order> Order for WithIDNA<T> {
 impl<T: Ready> Ready for WithIDNA<T> {
     async fn ready(&self, name: &str) -> Result<(), Error> {
         // Convert name to A-label Internationalized Domain Name
-        let ascii_name = idna::domain_to_ascii(name)?;
+        let ascii_name = idna::domain_to_ascii(name).context("failed to idna-encode domain")?;
         self.0.ready(&ascii_name).await
     }
 }
 
 #[async_trait]
 impl<T: Finalize> Finalize for WithIDNA<T> {
-    async fn finalize(&self, name: &str) -> Result<(String, String), Error> {
+    async fn finalize(&self, name: &str) -> Result<(String, String), FinalizeError> {
         // Convert name to A-label Internationalized Domain Name
-        let ascii_name = idna::domain_to_ascii(name)?;
+        let ascii_name = idna::domain_to_ascii(name).context("failed to idna-encode domain")?;
         self.0.finalize(&ascii_name).await
     }
 }
@@ -36,7 +36,6 @@ impl<T: Finalize> Finalize for WithIDNA<T> {
 mod tests {
     use crate::acme::{Finalize, MockFinalize, MockOrder, MockReady, Order, Ready};
     use crate::acme_idna::WithIDNA;
-    use anyhow::Ok;
     use mockall::predicate;
 
     /*

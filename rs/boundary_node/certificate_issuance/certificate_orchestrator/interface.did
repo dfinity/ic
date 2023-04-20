@@ -23,6 +23,7 @@ type EncryptedPair = record {
 };
 
 type ExportPackage = record {
+    id: Id;
     name: Name;
     canister: principal;
     pair: EncryptedPair;
@@ -182,6 +183,7 @@ service: (InitArg) -> {
     // Certificates
     uploadCertificate: (Id, EncryptedPair) -> (UploadCertificateResponse);
     exportCertificates: () -> (ExportCertificatesResponse);
+    exportCertificatesPaginated: (opt Id, nat64) -> (ExportCertificatesResponse);
 
     // Tasks
     queueTask: (Id, Timestamp) -> (QueueTaskResponse);

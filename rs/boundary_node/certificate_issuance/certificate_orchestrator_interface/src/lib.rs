@@ -36,7 +36,7 @@ impl BoundedStorable for EncryptedPair {
     const IS_FIXED_SIZE: bool = false;
 }
 
-#[derive(Debug, Clone, PartialOrd, Ord, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Default, Clone, PartialOrd, Ord, PartialEq, Eq, Deserialize)]
 pub struct BoundedString<const N: usize>(String);
 
 impl<const N: usize> Display for BoundedString<N> {
@@ -233,6 +233,7 @@ impl BoundedStorable for Registration {
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct ExportPackage {
+    pub id: Id,
     pub name: Name,
     pub canister: Principal,
     pub pair: EncryptedPair,
