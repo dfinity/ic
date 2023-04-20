@@ -268,7 +268,13 @@ pub async fn export_handler(
     Extension(e): Extension<Arc<dyn Export>>,
     _: Request<Body>,
 ) -> Response<Body> {
-    let pkgs = match e.export().await {
+    let pkgs = match e
+        .export(
+            None,     // key
+            u64::MAX, // limit
+        )
+        .await
+    {
         Ok(pkgs) => pkgs,
         Err(_) => {
             return Response::builder()

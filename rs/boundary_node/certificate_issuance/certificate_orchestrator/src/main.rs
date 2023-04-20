@@ -557,9 +557,22 @@ fn upload_certificate(id: Id, pair: EncryptedPair) -> UploadCertificateResponse 
     }
 }
 
+#[query(name = "exportCertificatesPaginated")]
+fn export_certificates_paginated(key: Option<String>, limit: u64) -> ExportCertificatesResponse {
+    match EXPORTER.with(|e| e.borrow().export(key, limit)) {
+        Ok(pkgs) => ExportCertificatesResponse::Ok(pkgs),
+        Err(err) => ExportCertificatesResponse::Err(match err {
+            ExportError::Unauthorized => ExportCertificatesError::Unauthorized,
+            ExportError::UnexpectedError(_) => {
+                ExportCertificatesError::UnexpectedError(err.to_string())
+            }
+        }),
+    }
+}
+
 #[query(name = "exportCertificates")]
 fn export_certificates() -> ExportCertificatesResponse {
-    match EXPORTER.with(|e| e.borrow().export()) {
+    match EXPORTER.with(|e| e.borrow().export(None, u64::MAX)) {
         Ok(pkgs) => ExportCertificatesResponse::Ok(pkgs),
         Err(err) => ExportCertificatesResponse::Err(match err {
             ExportError::Unauthorized => ExportCertificatesError::Unauthorized,

@@ -49,7 +49,7 @@ use trust_dns_resolver::{
 use crate::{
     acme::Acme,
     acme_idna::WithIDNA,
-    certificate::{CanisterExporter, CanisterUploader, Export},
+    certificate::{CanisterExporter, CanisterUploader, Export, WithPagination},
     check::{Check, Checker},
     cloudflare::Cloudflare,
     dns::Resolver,
@@ -254,6 +254,10 @@ async fn main() -> Result<(), Error> {
     let certificate_exporter = WithMetrics(
         certificate_exporter,
         MetricParams::new(&meter, SERVICE_NAME, "export_certificates"),
+    );
+    let certificate_exporter = WithPagination(
+        certificate_exporter,
+        50, // Page Size
     );
     let certificate_exporter = Arc::new(certificate_exporter);
 

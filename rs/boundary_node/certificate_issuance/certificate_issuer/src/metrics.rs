@@ -501,7 +501,7 @@ impl<T: acme::Ready> acme::Ready for WithMetrics<T> {
 
 #[async_trait]
 impl<T: acme::Finalize> acme::Finalize for WithMetrics<T> {
-    async fn finalize(&self, name: &str) -> Result<(String, String), Error> {
+    async fn finalize(&self, name: &str) -> Result<(String, String), acme::FinalizeError> {
         let start_time = Instant::now();
 
         let out = self.0.finalize(name).await;
@@ -566,10 +566,14 @@ impl<T: certificate::Upload> certificate::Upload for WithMetrics<T> {
 
 #[async_trait]
 impl<T: certificate::Export> certificate::Export for WithMetrics<T> {
-    async fn export(&self) -> Result<Vec<certificate::Package>, ExportError> {
+    async fn export(
+        &self,
+        key: Option<String>,
+        limit: u64,
+    ) -> Result<Vec<certificate::Package>, ExportError> {
         let start_time = Instant::now();
 
-        let out = self.0.export().await;
+        let out = self.0.export(key.clone(), limit).await;
 
         let status = if out.is_ok() { "ok" } else { "fail" };
         let duration = start_time.elapsed().as_secs_f64();
@@ -587,7 +591,7 @@ impl<T: certificate::Export> certificate::Export for WithMetrics<T> {
         counter.add(&cx, 1, labels);
         recorder.record(&cx, duration, labels);
 
-        info!(action = action.as_str(), status, duration, error = ?out.as_ref().err());
+        info!(action = action.as_str(), ?key, limit, status, duration, error = ?out.as_ref().err());
 
         out
     }

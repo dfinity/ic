@@ -18,10 +18,19 @@ pub trait Ready: Sync + Send {
     async fn ready(&self, name: &str) -> Result<(), Error>;
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum FinalizeError {
+    #[error("order not ready: {0}")]
+    OrderNotReady(String),
+
+    #[error(transparent)]
+    UnexpectedError(#[from] anyhow::Error),
+}
+
 #[automock]
 #[async_trait]
 pub trait Finalize: Sync + Send {
-    async fn finalize(&self, name: &str) -> Result<(String, String), Error>;
+    async fn finalize(&self, name: &str) -> Result<(String, String), FinalizeError>;
 }
 
 #[derive(Clone)]
@@ -39,7 +48,7 @@ impl Acme {
 impl Order for Acme {
     async fn order(&self, name: &str) -> Result<String, Error> {
         // Get Order
-        let (mut order, state) = self
+        let mut order = self
             .account
             .new_order(&NewOrder {
                 identifiers: &[Identifier::Dns(name.to_string())],
@@ -48,7 +57,7 @@ impl Order for Acme {
             .context("failed to create new order")?;
 
         let authorizations = order
-            .authorizations(&state.authorizations)
+            .authorizations()
             .await
             .context("failed to retrieve order authorizations")?;
 
@@ -64,7 +73,7 @@ impl Order for Acme {
 impl Ready for Acme {
     async fn ready(&self, name: &str) -> Result<(), Error> {
         // Get Order
-        let (mut order, state) = self
+        let mut order = self
             .account
             .new_order(&NewOrder {
                 identifiers: &[Identifier::Dns(name.to_string())],
@@ -73,7 +82,7 @@ impl Ready for Acme {
             .context("failed to create new order")?;
 
         let authorizations = order
-            .authorizations(&state.authorizations)
+            .authorizations()
             .await
             .context("failed to retrieve order authorizations")?;
 
@@ -91,9 +100,9 @@ impl Ready for Acme {
 
 #[async_trait]
 impl Finalize for Acme {
-    async fn finalize(&self, name: &str) -> Result<(String, String), Error> {
+    async fn finalize(&self, name: &str) -> Result<(String, String), FinalizeError> {
         // Get Order
-        let (mut order, state) = self
+        let mut order = self
             .account
             .new_order(&NewOrder {
                 identifiers: &[Identifier::Dns(name.to_string())],
@@ -101,22 +110,41 @@ impl Finalize for Acme {
             .await
             .context("failed to create new order")?;
 
+        let state = order.state();
+
         if state.status != OrderStatus::Ready {
-            return Err(anyhow!("order is not ready: {:?}", state.status));
+            return Err(FinalizeError::OrderNotReady(format!("{:?}", state.status)));
         }
 
         let cert = Certificate::from_params({
             let mut params = CertificateParams::new(vec![name.to_string()]);
             params.distinguished_name = DistinguishedName::new();
             params
-        })?;
+        })
+        .context("failed to generate certificate")?;
 
-        let csr = cert.serialize_request_der()?;
+        let csr = cert
+            .serialize_request_der()
+            .context("failed to create certificate signing request")?;
 
-        let cert_chain_pem = order
-            .finalize(&csr, &state.finalize)
+        order
+            .finalize(&csr)
             .await
             .context("failed to finalize order")?;
+
+        let cert_chain_pem = match order
+            .certificate()
+            .await
+            .context("failed to retrieve certificate")?
+        {
+            Some(cert_chain_pem) => cert_chain_pem,
+            None => {
+                return Err(FinalizeError::OrderNotReady(format!(
+                    "{:?}",
+                    order.state().status
+                )));
+            }
+        };
 
         Ok((
             cert_chain_pem,                   // Certificate Chain

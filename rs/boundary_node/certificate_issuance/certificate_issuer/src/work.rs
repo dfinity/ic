@@ -10,7 +10,7 @@ use serde::Serialize;
 use trust_dns_resolver::{error::ResolveErrorKind, proto::rr::RecordType};
 
 use crate::{
-    acme,
+    acme::{self, FinalizeError},
     certificate::{self, Pair},
     dns::{self, Resolve},
     registration::{Id, Registration, State},
@@ -342,7 +342,10 @@ impl Process for Processor {
                     .acme_finalize
                     .finalize(&task.name)
                     .await
-                    .context("failed to finalize acme order")?;
+                    .map_err(|err| match err {
+                        FinalizeError::OrderNotReady(_) => ProcessError::AwaitingAcmeOrderReady,
+                        FinalizeError::UnexpectedError(err) => err.into(),
+                    })?;
 
                 // Phase 10 - Remove DNS record with challenge response
                 self.dns_deleter
