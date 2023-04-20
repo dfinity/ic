@@ -113,5 +113,12 @@ build:check --@rules_rust//rust/settings:pipelined_compilation=True
 # and instead only run the ones that output metadata files
 build:check --output_groups=build_metadata
 
+# Fuzzing configuration
+build:fuzzing --@rules_rust//rust/toolchain/channel=nightly
+build:fuzzing --build_tag_filters=fuzz_test
+# TODO(PSEC-1167) Move from define to transition in fuzz_testing.bzl
+build:fuzzing --//bazel:enable_fuzzing_code=True
+
+
 
 try-import %workspace%/user.bazelrc

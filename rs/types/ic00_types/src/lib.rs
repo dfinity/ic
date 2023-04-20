@@ -1,8 +1,13 @@
 //! Data types used for encoding/decoding the Candid payloads of ic:00.
 mod http;
 mod provisional;
-
+#[cfg(feature = "fuzzing_code")]
+use arbitrary::{Arbitrary, Result as ArbitraryResult, Unstructured};
 use candid::{CandidType, Decode, Deserialize, Encode};
+pub use http::{
+    CanisterHttpRequestArgs, CanisterHttpResponsePayload, HttpHeader, HttpMethod, TransformArgs,
+    TransformContext, TransformFunc,
+};
 use ic_base_types::{CanisterId, NodeId, NumBytes, PrincipalId, RegistryVersion, SubnetId};
 use ic_error_types::{ErrorCode, UserError};
 use ic_protobuf::proxy::{try_decode_hash, try_from_option_field};
@@ -12,16 +17,11 @@ use ic_protobuf::state::canister_metadata::v1 as pb_canister_metadata;
 use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
 use ic_protobuf::{proxy::ProxyDecodeError, registry::crypto::v1 as pb_registry_crypto};
 use num_traits::cast::ToPrimitive;
+pub use provisional::{ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs};
 use serde::{Deserializer, Serialize};
 use std::mem::size_of;
 use std::{collections::BTreeSet, convert::TryFrom, error::Error, fmt, slice::Iter, str::FromStr};
 use strum_macros::{Display, EnumIter, EnumString};
-
-pub use http::{
-    CanisterHttpRequestArgs, CanisterHttpResponsePayload, HttpHeader, HttpMethod, TransformArgs,
-    TransformContext, TransformFunc,
-};
-pub use provisional::{ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs};
 
 /// The id of the management canister.
 pub const IC_00: CanisterId = CanisterId::ic_00();
@@ -930,7 +930,7 @@ impl<'a> Payload<'a> for EmptyBlob {
 ///     canister_id : principal;
 ///     settings: canister_settings;
 /// })`
-#[derive(CandidType, Deserialize)]
+#[derive(CandidType, Deserialize, Debug)]
 pub struct UpdateSettingsArgs {
     pub canister_id: PrincipalId,
     pub settings: CanisterSettingsArgs,
@@ -953,6 +953,21 @@ impl UpdateSettingsArgs {
 
     pub fn get_sender_canister_version(&self) -> Option<u64> {
         self.sender_canister_version
+    }
+}
+
+#[cfg(feature = "fuzzing_code")]
+impl<'a> Arbitrary<'a> for UpdateSettingsArgs {
+    fn arbitrary(u: &mut Unstructured<'a>) -> ArbitraryResult<Self> {
+        Ok(UpdateSettingsArgs::new(
+            CanisterId::from(u64::arbitrary(u)?),
+            CanisterSettingsArgs::new(
+                Some(<Vec<PrincipalId>>::arbitrary(u)?),
+                Some(u64::arbitrary(u)?),
+                Some(u64::arbitrary(u)?),
+                Some(u64::arbitrary(u)?),
+            ),
+        ))
     }
 }
 

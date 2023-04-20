@@ -5,6 +5,10 @@ package(default_visibility = ["//visibility:public"])
 rust_library(
     name = "ic00_types",
     srcs = glob(["src/**"]),
+    crate_features = select({
+        "//bazel:fuzzing_code_enabled": ["fuzzing_code"],
+        "//conditions:default": [],
+    }),
     crate_name = "ic_ic00_types",
     proc_macro_deps = [
         "@crate_index//:strum_macros",
@@ -23,7 +27,10 @@ rust_library(
         "@crate_index//:serde_bytes",
         "@crate_index//:serde_cbor",
         "@crate_index//:strum",
-    ],
+    ] + select({
+        "//bazel:fuzzing_code_enabled": ["@crate_index//:arbitrary"],
+        "//conditions:default": [],
+    }),
 )
 
 rust_test(
