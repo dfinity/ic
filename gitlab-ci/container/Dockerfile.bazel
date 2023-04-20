@@ -77,5 +77,13 @@ COPY ./files/containers.conf /etc/containers/containers.conf
 COPY ./files/docker.sh /usr/bin/docker
 COPY ./files/entrypoint.sh /entrypoint.sh
 
+# Add mold linker
+ARG mold_version=1.11.0
+ARG mold_platform="mold-${mold_version}-x86_64-linux"
+RUN curl -L "https://github.com/rui314/mold/releases/download/v${mold_version}/${mold_platform}.tar.gz" --output "$mold_platform" && \ 
+    tar xvf "$mold_platform" && \
+    mv "${mold_platform}/bin/mold" /usr/bin/mold && \ 
+    rm -rf "$mold_platform"
+
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["/bin/bash"]
