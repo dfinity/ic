@@ -11,6 +11,7 @@
 /licenses/                @dfinity-lab/teams/idx
 /outsource/               @dfinity-lab/teams/idx
 /bin/ict                  @dfinity-lab/teams/ic-testing-verification
+/.cargo/                  @dfinity-lab/teams/idx
 
 # [Bazel]
 /bazel/                   @dfinity-lab/teams/idx
