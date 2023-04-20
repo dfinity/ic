@@ -4,10 +4,26 @@
   "workspaceMount": "source=${localWorkspaceFolder},target=/ic,type=bind",
   "workspaceFolder": "/ic",
   "mounts": [
-    { "source": "${localEnv:HOME}/.cache", "target": "/home/ubuntu/.cache", "type": "bind" },
-    { "source": "${localEnv:HOME}/.ssh", "target": "/home/ubuntu/.ssh", "type": "bind" },
-    { "source": "${localEnv:HOME}/.aws", "target": "/home/ubuntu/.aws", "type": "bind" },
-    { "source": "${localEnv:HOME}/.config", "target": "/home/ubuntu/.config", "type": "bind" }
+    {
+      "source": "${localEnv:HOME}/.cache",
+      "target": "/home/ubuntu/.cache",
+      "type": "bind"
+    },
+    {
+      "source": "${localEnv:HOME}/.ssh",
+      "target": "/home/ubuntu/.ssh",
+      "type": "bind"
+    },
+    {
+      "source": "${localEnv:HOME}/.aws",
+      "target": "/home/ubuntu/.aws",
+      "type": "bind"
+    },
+    {
+      "source": "${localEnv:HOME}/.config",
+      "target": "/home/ubuntu/.config",
+      "type": "bind"
+    }
   ],
   "customizations": {
     "vscode": {
