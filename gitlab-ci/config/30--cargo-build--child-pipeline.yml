@@ -25,14 +25,4 @@ cargo-build-release-linux:
     - |
       set -eExuo pipefail
       cd "${CI_PROJECT_DIR}/rs"
-
-      mold="$(command -v mold)"
-
-      mkdir .cargo
-      cat << EOF >  .cargo/config.toml 
-        [target.x86_64-unknown-linux-gnu]
-        linker = "clang"
-        rustflags = ["-C", "link-arg=-fuse-ld=${mold}"]
-      EOF
-
       buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- cargo build --release
