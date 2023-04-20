@@ -5190,3 +5190,67 @@ fn install_code_cannot_switch_from_reserved_to_best_effort_memory_allocation() {
         NumWasmPages::from(10)
     )
 }
+
+#[test]
+fn delete_canister_with_non_empty_input_queue_fails() {
+    with_setup(|canister_manager, mut state, _| {
+        let canister_id = canister_test_id(0);
+        let controller_id = canister_test_id(1);
+
+        let mut canister = get_stopped_canister_with_controller(canister_id, controller_id.get());
+        let controller_canister = get_running_canister(controller_id);
+
+        // Simulate non-empty input queue.
+        let ingress = IngressBuilder::new()
+            .source(user_test_id(0))
+            .receiver(canister_id)
+            .method_name("foo")
+            .method_payload(vec![])
+            .build();
+
+        canister.push_ingress(ingress);
+
+        state.put_canister_state(canister);
+        state.put_canister_state(controller_canister);
+
+        assert_eq!(
+            canister_manager.delete_canister(controller_id.get(), canister_id, &mut state),
+            Err(CanisterManagerError::DeleteCanisterQueueNotEmpty(
+                canister_id
+            )),
+        );
+    });
+}
+
+#[test]
+fn delete_canister_with_non_empty_output_queue_fails() {
+    with_setup(|canister_manager, mut state, _| {
+        let canister_id = canister_test_id(0);
+        let controller_id = canister_test_id(1);
+
+        let mut canister = get_stopped_canister_with_controller(canister_id, controller_id.get());
+        let controller_canister = get_running_canister(controller_id);
+
+        // Simulate non-empty output queue.
+        canister
+            .push_output_request(
+                RequestBuilder::default()
+                    .sender(canister_id)
+                    .receiver(controller_id)
+                    .build()
+                    .into(),
+                state.time(),
+            )
+            .unwrap();
+
+        state.put_canister_state(canister);
+        state.put_canister_state(controller_canister);
+
+        assert_eq!(
+            canister_manager.delete_canister(controller_id.get(), canister_id, &mut state),
+            Err(CanisterManagerError::DeleteCanisterQueueNotEmpty(
+                canister_id
+            )),
+        );
+    });
+}
