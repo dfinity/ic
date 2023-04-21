@@ -1579,7 +1579,7 @@ fn composite_query_syscalls_from_reply_reject_callback() {
 }
 
 #[test]
-fn composite_query_state_preserved_across_calls() {
+fn composite_query_state_preserved_across_sequential_calls() {
     let mut test = ExecutionTestBuilder::new().with_composite_queries().build();
 
     const NUM_CANISTERS: usize = 5;
@@ -1613,6 +1613,74 @@ fn composite_query_state_preserved_across_calls() {
         call_args()
             .other_side(wasm().reply_data(b"ignore".as_ref()))
             .on_reply(generate_continuation(&canisters, 2)),
+    );
+
+    let output = test.query(
+        UserQuery {
+            source: user_test_id(2),
+            receiver: canisters[0],
+            method_name: "composite_query".to_string(),
+            method_payload: payload.build(),
+            ingress_expiry: 0,
+            nonce: None,
+        },
+        Arc::new(test.state().clone()),
+        vec![],
+    );
+
+    // We use the global counter to count the number of composite queries we are executing (increment before each call).
+    // Since we have NUM_CANISTER caniters in total, we expect to have one less calls (from the first canister to all others).
+    assert_eq!(
+        output,
+        Ok(WasmResult::Reply(vec![
+            (NUM_CANISTERS - 1).try_into().unwrap(),
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+        ]))
+    );
+}
+
+#[test]
+fn composite_query_state_preserved_across_parallel_calls() {
+    let mut test = ExecutionTestBuilder::new().with_composite_queries().build();
+
+    const NUM_CANISTERS: usize = 5;
+
+    let mut canisters = vec![];
+    for _ in 0..NUM_CANISTERS {
+        canisters.push(test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap());
+    }
+
+    let mut payload = wasm();
+
+    // Call each canister once. In each reply callback, increment the counter.
+    for canister in canisters.iter().take(NUM_CANISTERS - 1).skip(1) {
+        payload = payload.composite_query(
+            canister,
+            call_args()
+                .other_side(wasm().reply_data(b"ignore".as_ref()))
+                .on_reply(wasm().inc_global_counter()),
+        );
+    }
+
+    // From the "last" callback, return the counter value.
+    // Note that this works because we actually don't run calls in parallel.
+    // The implementation always sequentially executes all calls.
+    payload = payload.composite_query(
+        canisters[NUM_CANISTERS - 1],
+        call_args()
+            .other_side(wasm().reply_data(b"ignore".as_ref()))
+            .on_reply(
+                wasm()
+                    .inc_global_counter()
+                    .get_global_counter()
+                    .reply_int64(),
+            ),
     );
 
     let output = test.query(
