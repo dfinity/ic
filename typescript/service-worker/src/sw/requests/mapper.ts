@@ -53,15 +53,6 @@ export class RequestMapper {
     return finalHeaders;
   }
 
-  static fromResponseVerificationHeaders(headers: [string, string][]): Headers {
-    const finalHeaders = new Headers();
-    headers.forEach(([key, value]) => {
-      finalHeaders.append(key, value);
-    });
-
-    return finalHeaders;
-  }
-
   static toResponseCacheControlHeader(
     headers: Headers
   ): ResponseCacheControlHeader | undefined {
