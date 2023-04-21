@@ -1,5 +1,5 @@
 {
-  "image": "dfinity/ic-build-bazel:324f037f7672d46e27a55832fd20dbc7f8d5a72ba5deedd7a4835349cf80fb80",
+  "image": "dfinity/ic-build-bazel:63603ef49fcf4db398112cb976d533f13d6210888a810edd7e9594faad76f1cc",
   "remoteUser": "ubuntu",
   "workspaceMount": "source=${localWorkspaceFolder},target=/ic,type=bind",
   "workspaceFolder": "/ic",
