@@ -30,7 +30,7 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone &
         policycoreutils python-is-python3 python3 python3-pip python3-cbor shellcheck \
         sudo docker-ce-cli ripgrep patchelf cpio nodejs npm gosu pigz zsh hub less \
         ca-certificates curl git isolinux p7zip-full syslinux xorriso cryptsetup-bin autoconf automake \
-        grub-efi-amd64-bin podman buildah lvm2
+        grub-efi-amd64-bin podman buildah lvm2 fuse-overlayfs
 
 COPY --from=docker/buildx-bin:latest /buildx /usr/libexec/docker/cli-plugins/docker-buildx
 
