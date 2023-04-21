@@ -55,5 +55,7 @@ rust_test_suite(
     },
     proc_macro_deps = [
     ],
+    # The test runs replica binary that constantly uses more than 100% cpu core + rosetta server.
+    tags = ["cpu:3"],
     deps = DEPENDENCIES + [":rosetta-integration-tests-lib"],
 )
