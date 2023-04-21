@@ -67,6 +67,25 @@ impl SignedIngressContent {
     pub fn ingress_expiry(&self) -> Time {
         Time::from_nanos_since_unix_epoch(self.ingress_expiry)
     }
+
+    #[cfg(test)]
+    pub fn new(
+        sender: UserId,
+        canister_id: CanisterId,
+        method_name: String,
+        arg: Vec<u8>,
+        ingress_expiry: u64,
+        nonce: Option<Vec<u8>>,
+    ) -> Self {
+        Self {
+            sender,
+            canister_id,
+            method_name,
+            arg,
+            ingress_expiry,
+            nonce,
+        }
+    }
 }
 
 impl HasCanisterId for SignedIngressContent {
