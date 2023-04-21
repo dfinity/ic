@@ -31,7 +31,7 @@ impl CheckRunId {
 
 #[derive(Default, Debug)]
 struct CheckState {
-    successful_checks: u8,
+    ok_count: u8,
     last_updated: CheckRunId,
 }
 
@@ -45,10 +45,17 @@ pub struct CheckPersistRunner<R: Retrieve, C: Check, P: Persist> {
 
     // Configuration
     min_ok_count: u8,
+    max_height_lag: u64,
 }
 
 impl<R: Retrieve, C: Check, P: Persist> CheckPersistRunner<R, C, P> {
-    pub fn new(routing_table: R, checker: C, persister: P, min_ok_count: u8) -> Self {
+    pub fn new(
+        routing_table: R,
+        checker: C,
+        persister: P,
+        min_ok_count: u8,
+        max_height_lag: u64,
+    ) -> Self {
         Self {
             routing_table,
             checks: Arc::new(DashMap::new()),
@@ -56,6 +63,7 @@ impl<R: Retrieve, C: Check, P: Persist> CheckPersistRunner<R, C, P> {
             checker,
             persister,
             min_ok_count,
+            max_height_lag,
         }
     }
 
@@ -96,6 +104,12 @@ impl<F: Clone + Fn(&(String, String)) -> bool> ActiveChecker for F {
     }
 }
 
+struct NodeCheck {
+    node: Node,
+    ok_count: u8,
+    height: u64,
+}
+
 impl<R: Retrieve + Send + Sync, C: Check, P: Persist> CheckPersistRunner<R, C, P> {
     /// Healthcheck a nodes in a subnet
     async fn check_node(
@@ -105,7 +119,7 @@ impl<R: Retrieve + Send + Sync, C: Check, P: Persist> CheckPersistRunner<R, C, P
         current_run_id: CheckRunId,
         min_ok_count: u8,
         subnet_id: &str,
-    ) -> Result<(Node, u8), Error> {
+    ) -> Result<NodeCheck, Error> {
         let _ctx = opentelemetry::Context::current_with_baggage(vec![
             KeyValue::new("subnet_id", subnet_id.to_string()),
             KeyValue::new("node_id", node.node_id.to_string()),
@@ -124,16 +138,18 @@ impl<R: Retrieve + Send + Sync, C: Check, P: Persist> CheckPersistRunner<R, C, P
             .entry((subnet_id.to_string(), node.node_id.clone()))
             .or_default();
         entry.last_updated = current_run_id;
-        match check_result {
-            Err(e) => {
-                entry.successful_checks = 0;
-                Err(e)
-            }
-            Ok(_) => {
-                entry.successful_checks = min_ok_count.min(entry.successful_checks + 1);
-                Ok((node, entry.successful_checks))
-            }
-        }
+        entry.ok_count = if check_result.is_err() {
+            0
+        } else {
+            min_ok_count.min(entry.ok_count + 1)
+        };
+
+        // Return the node
+        check_result.map(|check_result| NodeCheck {
+            node,
+            height: check_result.height,
+            ok_count: entry.ok_count,
+        })
     }
 
     /// Healthcheck all the nodes in a subnet
@@ -153,12 +169,31 @@ impl<R: Retrieve + Send + Sync, C: Check, P: Persist> CheckPersistRunner<R, C, P
         });
 
         // Filter out bad nodes
-        let nodes = nodes
+        let mut nodes = nodes
             .into_iter()
             .filter_map(Result::ok) // Filter any green thread errors
             .filter_map(Result::ok) // Filter any `checker.check` errors
-            .filter(|node| node.1 >= self.min_ok_count) // Filter below min_ok_count
-            .map(|node| node.0)
+            .collect::<Vec<_>>();
+
+        // Calculate the minimum block height requirement
+        let min_height = if !nodes.is_empty() {
+            nodes.sort_by_key(|node| node.height);
+            let mid_height_0 = nodes[(nodes.len() - 1) / 2].height;
+            let mid_height_1 = nodes[nodes.len() / 2].height;
+            // We use the median because it's a good approximation of
+            // the "consensus" and keeps us resilient to malicious replicas
+            // sending an artificially high height to DOS the BNs
+            let median_height = (mid_height_0 + mid_height_1) / 2;
+            median_height.saturating_sub(self.max_height_lag)
+        } else {
+            0
+        };
+
+        let nodes = nodes
+            .into_iter()
+            .skip_while(|node| node.height < min_height) // Filter below min_height
+            .filter(|node| node.ok_count >= self.min_ok_count) // Filter below min_ok_count
+            .map(|node| node.node)
             .collect();
 
         Subnet { nodes, ..subnet }
@@ -204,7 +239,9 @@ impl<R: Retrieve + Send + Sync, C: Check, P: Persist> Run for CheckPersistRunner
     }
 }
 
-pub struct CheckResult {}
+pub struct CheckResult {
+    height: u64,
+}
 
 #[automock]
 #[async_trait]
@@ -249,6 +286,7 @@ impl Check for Checker {
 
         let HttpStatusResponse {
             replica_health_status,
+            certified_height,
             ..
         } = serde_cbor::from_reader(response_reader).context("failed to parse cbor response")?;
 
@@ -256,7 +294,9 @@ impl Check for Checker {
             return Err(anyhow!("replica reported unhealthy status"));
         }
 
-        Ok(CheckResult {})
+        Ok(CheckResult {
+            height: certified_height.map_or(0, |v| v.get()),
+        })
     }
 }
 
@@ -274,25 +314,31 @@ mod tests {
             tls_certificate_pem: String::new(),
         }
     }
-    fn table<'a>(
+    fn table(
         registry_version: u64,
-        subnets: &'a [(&str, &[(&str, &str)])],
-    ) -> impl Fn() -> Result<RoutingTable, Error> + 'a {
-        move || {
-            Ok(RoutingTable {
-                registry_version,
-                nns_subnet_id: String::new(),
-                canister_routes: vec![],
-                subnets: subnets
-                    .iter()
-                    .map(|&(subnet_id, nodes)| Subnet {
-                        subnet_id: subnet_id.into(),
-                        subnet_type: String::new(),
-                        nodes: nodes.iter().map(|(id, addr)| node(id, addr)).collect(),
-                    })
-                    .collect(),
-            })
-        }
+        subnets: &[(&str, &[(&str, &str)])],
+    ) -> impl Fn() -> Result<RoutingTable, Error> {
+        let v = RoutingTable {
+            registry_version,
+            nns_subnet_id: String::new(),
+            canister_routes: vec![],
+            subnets: subnets
+                .iter()
+                .map(|&(subnet_id, nodes)| Subnet {
+                    subnet_id: subnet_id.into(),
+                    subnet_type: String::new(),
+                    nodes: nodes.iter().map(|(id, addr)| node(id, addr)).collect(),
+                })
+                .collect(),
+        };
+        move || Ok(v.clone())
+    }
+    fn single_subnet_table(
+        registry_version: u64,
+        subnet_name: &str,
+        nodes: &[(&str, &str)],
+    ) -> impl Fn() -> Result<RoutingTable, Error> {
+        table(registry_version, &[(subnet_name, nodes)])
     }
     fn get_subnet_nodes(rt: &RoutingTable) -> Vec<(&str, &str)> {
         rt.subnets
@@ -315,24 +361,23 @@ mod tests {
         routing
             .expect_retrieve()
             .times(2)
-            .returning(table(
+            .returning(single_subnet_table(
                 0,
-                &[(
-                    "subnetA",
-                    &[
-                        ("nodeA1", "addrA1"),
-                        ("nodeA2", "addrA2"),
-                        ("nodeA3", "addrA3"),
-                    ],
-                )],
+                "subnetA",
+                &[
+                    ("nodeA1", "addrA1"),
+                    ("nodeA2", "addrA2"),
+                    ("nodeA3", "addrA3"),
+                ],
             ))
             .in_sequence(&mut retrieve_seq);
         routing
             .expect_retrieve()
             .times(1)
-            .returning(table(
-                0,
-                &[("subnetA", &[("nodeA1", "addrA1"), ("nodeA3", "addrA3")])],
+            .returning(single_subnet_table(
+                1,
+                "subnetA",
+                &[("nodeA1", "addrA1"), ("nodeA3", "addrA3")],
             ))
             .in_sequence(&mut retrieve_seq);
 
@@ -343,13 +388,13 @@ mod tests {
             .expect_check()
             .with(predicate::eq("addrA1"))
             .times(3)
-            .returning(|_addr| Ok(CheckResult {}))
+            .returning(|_addr| Ok(CheckResult { height: 10 }))
             .in_sequence(&mut na1_seq);
         check
             .expect_check()
             .with(predicate::in_iter(["addrA2", "addrA3"]))
             .times(2)
-            .returning(|_addr| Ok(CheckResult {}))
+            .returning(|_addr| Ok(CheckResult { height: 10 }))
             .in_sequence(&mut nb1_seq);
         check
             .expect_check()
@@ -361,7 +406,7 @@ mod tests {
             .expect_check()
             .with(predicate::eq("addrA3"))
             .times(1)
-            .returning(|_addr| Ok(CheckResult {}))
+            .returning(|_addr| Ok(CheckResult { height: 10 }))
             .in_sequence(&mut nb1_seq);
 
         let mut persist_seq = Sequence::new();
@@ -403,7 +448,7 @@ mod tests {
             })
             .in_sequence(&mut persist_seq);
 
-        let mut cpr = CheckPersistRunner::new(routing, check, persist, 0);
+        let mut cpr = CheckPersistRunner::new(routing, check, persist, 0, 1000);
         let active = cpr.get_active_checker();
         cpr.run().await.expect("no errors");
         assert!(active.is_active(&("subnetA".into(), "nodeA1".into())));
@@ -418,6 +463,105 @@ mod tests {
         cpr.run().await.expect("no errors");
         assert!(active.is_active(&("subnetA".into(), "nodeA1".into())));
         assert!(!active.is_active(&("subnetA".into(), "nodeA2".into())));
+        assert!(active.is_active(&("subnetA".into(), "nodeA3".into())));
+    }
+
+    /// This test ensures CheckPersistRunner handles replicas returning disparate heights.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn height() {
+        let mut routing = MockRetrieve::new();
+        routing.expect_retrieve().returning(single_subnet_table(
+            0,
+            "subnetA",
+            &[
+                ("nodeA1", "addrA1"),
+                ("nodeA2", "addrA2"),
+                ("nodeA3", "addrA3"),
+            ],
+        ));
+
+        let mut check = MockCheck::new();
+        let mut na1_seq = Sequence::new();
+        let mut nb1_seq = Sequence::new();
+        check
+            .expect_check()
+            .with(predicate::eq("addrA1"))
+            .times(2)
+            .returning(|_addr| Ok(CheckResult { height: 10 }))
+            .in_sequence(&mut na1_seq);
+        check
+            .expect_check()
+            .with(predicate::eq("addrA1"))
+            .times(1)
+            .returning(|_addr| Ok(CheckResult { height: 11 }))
+            .in_sequence(&mut na1_seq);
+        check
+            .expect_check()
+            .with(predicate::in_iter(["addrA2", "addrA3"]))
+            .times(2)
+            .returning(|_addr| Ok(CheckResult { height: 10 }))
+            .in_sequence(&mut nb1_seq);
+        check
+            .expect_check()
+            .with(predicate::in_iter(["addrA2", "addrA3"]))
+            .times(4)
+            .returning(|_addr| Ok(CheckResult { height: 1011 }))
+            .in_sequence(&mut nb1_seq);
+
+        let mut persist_seq = Sequence::new();
+        let mut persist = MockPersist::new();
+        persist
+            .expect_persist()
+            .times(1)
+            .returning(|rt: &RoutingTable| {
+                let subnet_nodes = get_subnet_nodes(rt);
+                assert_eq!(subnet_nodes.len(), 3);
+                assert!(subnet_nodes.contains(&("subnetA", "nodeA1")));
+                assert!(subnet_nodes.contains(&("subnetA", "nodeA2")));
+                assert!(subnet_nodes.contains(&("subnetA", "nodeA3")));
+                Ok(PersistStatus::Completed)
+            })
+            .in_sequence(&mut persist_seq);
+        persist
+            .expect_persist()
+            .times(1)
+            .returning(|rt: &RoutingTable| {
+                let subnet_nodes = get_subnet_nodes(rt);
+                assert_eq!(subnet_nodes.len(), 2);
+                assert!(!subnet_nodes.contains(&("subnetA", "nodeA1")));
+                assert!(subnet_nodes.contains(&("subnetA", "nodeA2")));
+                assert!(subnet_nodes.contains(&("subnetA", "nodeA3")));
+                Result::<_, Error>::Ok(PersistStatus::Completed)
+            })
+            .in_sequence(&mut persist_seq);
+        persist
+            .expect_persist()
+            .times(1)
+            .returning(|rt: &RoutingTable| {
+                let subnet_nodes = get_subnet_nodes(rt);
+                assert_eq!(subnet_nodes.len(), 3);
+                assert!(subnet_nodes.contains(&("subnetA", "nodeA1")));
+                assert!(subnet_nodes.contains(&("subnetA", "nodeA2")));
+                assert!(subnet_nodes.contains(&("subnetA", "nodeA3")));
+                Result::<_, Error>::Ok(PersistStatus::Completed)
+            })
+            .in_sequence(&mut persist_seq);
+
+        let mut cpr = CheckPersistRunner::new(routing, check, persist, 0, 1000);
+        let active = cpr.get_active_checker();
+        cpr.run().await.expect("no errors");
+        assert!(active.is_active(&("subnetA".into(), "nodeA1".into())));
+        assert!(active.is_active(&("subnetA".into(), "nodeA2".into())));
+        assert!(active.is_active(&("subnetA".into(), "nodeA3".into())));
+
+        cpr.run().await.expect("no errors");
+        assert!(active.is_active(&("subnetA".into(), "nodeA1".into())));
+        assert!(active.is_active(&("subnetA".into(), "nodeA2".into())));
+        assert!(active.is_active(&("subnetA".into(), "nodeA3".into())));
+
+        cpr.run().await.expect("no errors");
+        assert!(active.is_active(&("subnetA".into(), "nodeA1".into())));
+        assert!(active.is_active(&("subnetA".into(), "nodeA2".into())));
         assert!(active.is_active(&("subnetA".into(), "nodeA3".into())));
     }
 }

@@ -83,6 +83,10 @@ struct Cli {
     #[clap(long, default_value = "1")]
     min_ok_count: u8,
 
+    /// Maximum block height lag for a replica to be included in the routing table
+    #[clap(long, default_value = "1000")]
+    max_height_lag: u64,
+
     #[clap(long, default_value = "/tmp/legacy_routes")]
     legacy_routes_dir: PathBuf,
 
@@ -251,6 +255,7 @@ async fn main() -> Result<(), Error> {
         checker,
         persister,
         cli.min_ok_count,
+        cli.max_height_lag,
     );
     let active_replicas = check_persist_runner.get_active_checker();
     let check_persist_runner = WithMetrics(
