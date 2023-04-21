@@ -286,5 +286,5 @@ RUN chmod 0755 /etc/nginx/* && \
     rm -rf /etc/nginx/conf.d/default
 
 # Configure incron
-COPY etc/incron.tb /etc/incron.d/incron.tb
+COPY --chmod=644 etc/incron.tb /etc/incron.d/incron.tb
 RUN echo root >> /etc/incron.allow
