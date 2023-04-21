@@ -10,10 +10,11 @@ use ic_nns_test_utils::{
 };
 use ic_state_machine_tests::StateMachine;
 use ic_types::time::GENESIS;
-use ic_xrc_types::{Asset, AssetClass, ExchangeRateMetadata};
+use ic_xrc_types::{Asset, AssetClass, ExchangeRateError, ExchangeRateMetadata};
 use xrc_mock::{ExchangeRate, Response, XrcMockInitPayload};
 
-const FIVE_MINUTES_SECONDS: u64 = 5 * 60;
+const ONE_MINUTE_SECONDS: u64 = 60;
+const FIVE_MINUTES_SECONDS: u64 = 5 * ONE_MINUTE_SECONDS;
 
 /// Sets up the XRC mock canister.
 fn setup_mock_exchange_rate_canister(
@@ -154,4 +155,75 @@ fn test_enable_retrieving_rate_from_exchange_rate_canister() {
         cmc_first_rate_timestamp_seconds + (FIVE_MINUTES_SECONDS * 2) + 10
     );
     assert_eq!(response.data.xdr_permyriad_per_icp, 200_000);
+
+    // Step 5: Ensure that the cycles minting canister handles errors correctly
+    // from the exchange rate canister by attempting to call the exchange rate canister
+    // a minute later.
+    reinstall_mock_exchange_rate_canister(
+        &state_machine,
+        EXCHANGE_RATE_CANISTER_ID,
+        XrcMockInitPayload {
+            response: Response::Error(ExchangeRateError::StablecoinRateTooFewRates),
+        },
+    );
+
+    // Advance the time to ensure to ensure the cycles minting canister is ready
+    // to call the exchange rate canister again.
+    state_machine.advance_time(Duration::from_secs(FIVE_MINUTES_SECONDS));
+    // Trigger the heartbeat.
+    state_machine.tick();
+
+    let response = get_icp_xdr_conversion_rate(&state_machine);
+    // The rate's timestamp should be the previous timestamp.
+    assert_eq!(
+        response.data.timestamp_seconds,
+        cmc_first_rate_timestamp_seconds + (FIVE_MINUTES_SECONDS * 2) + 10
+    );
+    assert_eq!(response.data.xdr_permyriad_per_icp, 200_000);
+
+    // Have the mock exchange rate canister return a rate.
+    reinstall_mock_exchange_rate_canister(
+        &state_machine,
+        EXCHANGE_RATE_CANISTER_ID,
+        new_icp_cxdr_mock_exchange_rate_canister_init_payload(21_000_000_000),
+    );
+
+    // Move on to the next minute which should cause the cycles minting canister
+    // to trigger another attempt to reach out to the exchange rate canister due
+    // to the previous error.
+    state_machine.advance_time(Duration::from_secs(ONE_MINUTE_SECONDS));
+
+    // Trigger heartbeat.
+    state_machine.tick();
+
+    let response = get_icp_xdr_conversion_rate(&state_machine);
+    // The rate's timestamp should be the CMC's first rate timestamp + 16 minutes + 10 secs.
+    // Note on the 14 secs:
+    // Similar to retrieving the first rate. Another 2 seconds are tacked on
+    // for retrieve the rate initially.
+    assert_eq!(
+        response.data.timestamp_seconds,
+        cmc_first_rate_timestamp_seconds + (FIVE_MINUTES_SECONDS * 3) + ONE_MINUTE_SECONDS + 14
+    );
+    assert_eq!(response.data.xdr_permyriad_per_icp, 210_000);
+
+    // Check that the cycles minting canister does not call the mock exchange rate canister
+    // until the next five minute interval (advancing by four minutes).
+    for i in 1..=4 {
+        state_machine.advance_time(Duration::from_secs(ONE_MINUTE_SECONDS));
+        state_machine.tick();
+
+        let expected_timestamp = if i < 4 {
+            cmc_first_rate_timestamp_seconds + (FIVE_MINUTES_SECONDS * 3) + ONE_MINUTE_SECONDS + 14
+        } else {
+            cmc_first_rate_timestamp_seconds + (FIVE_MINUTES_SECONDS * 4) + 22
+        };
+
+        let response = get_icp_xdr_conversion_rate(&state_machine);
+        assert_eq!(
+            response.data.timestamp_seconds, expected_timestamp,
+            "failed at iteration: {}",
+            i
+        );
+    }
 }

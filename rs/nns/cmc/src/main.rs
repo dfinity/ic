@@ -254,7 +254,7 @@ impl Default for State {
             last_purged_notification: Some(0),
             maturity_modulation_permyriad: Some(0),
             subnet_types_to_subnets: Some(BTreeMap::new()),
-            update_exchange_rate_canister_state: Some(UpdateExchangeRateState::Inactive),
+            update_exchange_rate_canister_state: Some(UpdateExchangeRateState::default()),
         }
     }
 }
@@ -805,12 +805,14 @@ fn set_icp_xdr_conversion_rate_() {
         |proposed_conversion_rate: UpdateIcpXdrConversionRatePayload| -> Result<(), String> {
             let env = CanisterEnvironment;
             let rate = IcpXdrConversionRate::from(&proposed_conversion_rate);
+            let rate_timestamp_seconds = rate.timestamp_seconds;
             update_recent_icp_xdr_rates(&rate);
             let result = set_icp_xdr_conversion_rate(&STATE, &env, rate);
             if result.is_ok() && with_state(|state| state.exchange_rate_canister_id.is_some()) {
                 exchange_rate_canister::set_update_exchange_rate_state(
                     &STATE,
                     &proposed_conversion_rate.reason,
+                    rate_timestamp_seconds,
                 );
             }
 
@@ -1765,7 +1767,7 @@ async fn update_exchange_rate() {
                 print(format!("[cycles] {}", error));
             }
             UpdateExchangeRateError::Disabled
-            | UpdateExchangeRateError::NewRateNotNeeded
+            | UpdateExchangeRateError::NotReadyToGetRate(_)
             | UpdateExchangeRateError::UpdateAlreadyInProgress => {}
         }
     }
