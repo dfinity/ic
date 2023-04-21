@@ -1,0 +1,11 @@
+[package]
+name = "ic-icrc-rosetta-runner"
+version = "0.1.0"
+authors = ["The Internet Computer Project Developers"]
+description = "Build Once. Integrate Your Blockchain Everywhere. "
+edition = "2021"
+
+[dependencies]
+tempfile = "3.1.0"
+candid = "0.8"
+tokio = { version = "1.15.0", features = ["full"] }

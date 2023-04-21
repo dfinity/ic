@@ -1,0 +1,41 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+rust_library(
+    name = "ic-icrc-rosetta-client",
+    srcs = ["src/lib.rs"],
+    crate_name = "ic_icrc_rosetta_client",
+    deps = [
+        "//rs/rosetta-api/icrc1/rosetta:ic-icrc-rosetta",
+        "@crate_index//:anyhow",
+        "@crate_index//:reqwest",
+        "@crate_index//:url",
+    ],
+)
+
+rust_test(
+    name = "ic-icrc-rosetta-client-tests",
+    srcs = ["test/tests.rs"],
+    data = [
+        "//rs/canister_sandbox",
+        "//rs/canister_sandbox/sandbox_launcher",
+        "//rs/replica",
+        "//rs/rosetta-api/icrc1/rosetta:ic-icrc-rosetta-bin",
+        "//rs/starter:ic-starter",
+    ],
+    env = {
+        "CANISTER_LAUNCHER": "$(rootpath //rs/canister_sandbox)",
+        "REPLICA_BIN": "$(rootpath //rs/replica)",
+        "ROSETTA_BIN_PATH": "$(rootpath //rs/rosetta-api/icrc1/rosetta:ic-icrc-rosetta-bin)",
+        "SANDBOX_LAUNCHER": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
+        "STARTER_BIN": "$(rootpath //rs/starter:ic-starter)",
+    },
+    deps = [
+        ":ic-icrc-rosetta-client",
+        "//packages/ic-starter-tests",
+        "//rs/rosetta-api/icrc1/rosetta/runner:ic-icrc-rosetta-runner",
+        "@crate_index//:candid",
+        "@crate_index//:tokio",
+    ],
+)
