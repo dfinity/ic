@@ -11,7 +11,7 @@ pub fn store_blocks(
 ) -> anyhow::Result<()> {
     connection.execute_batch("BEGIN TRANSACTION;")?;
     let mut stmt_blocks = connection.prepare(
-        "INSERT INTO blocks (idx, hash, serialized_block, parent_hash) VALUES (?1, ?2, ?3, ?4)",
+        "INSERT OR IGNORE INTO blocks (idx, hash, serialized_block, parent_hash) VALUES (?1, ?2, ?3, ?4)",
     )?;
     for rosetta_block in rosetta_blocks.into_iter() {
         match execute(
