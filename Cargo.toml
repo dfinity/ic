@@ -201,6 +201,7 @@ members = [
   "rs/registry/provisional_whitelist",
   "rs/registry/regedit",
   "rs/registry/nns_data_provider",
+  "rs/registry/nns_data_provider_wrappers",
   "rs/registry/routing_table",
   "rs/registry/subnet_features",
   "rs/registry/subnet_type",

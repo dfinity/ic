@@ -88,8 +88,8 @@ use ic_registry_keys::{
 use ic_registry_local_store::{
     Changelog, ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreWriter,
 };
-use ic_registry_nns_data_provider::data_provider::NnsDataProvider;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
+use ic_registry_nns_data_provider_wrappers::NnsDataProvider;
 use ic_registry_routing_table::{
     CanisterIdRange, CanisterMigrations as OtherCanisterMigrations,
     RoutingTable as OtherRoutingTable,

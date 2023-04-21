@@ -33,6 +33,7 @@ ic-registry-client-helpers = { path = "../helpers" }
 ic-registry-keys = { path = "../keys" }
 ic-registry-local-store = { path = "../local_store" }
 ic-registry-nns-data-provider = { path = "../nns_data_provider" }
+ic-registry-nns-data-provider-wrappers = { path = "../nns_data_provider_wrappers" }
 ic-registry-provisional-whitelist = { path = "../provisional_whitelist" }
 ic-registry-subnet-features = { path = "../subnet_features" }
 ic-registry-subnet-type = { path = "../subnet_type" }
