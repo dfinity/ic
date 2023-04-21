@@ -6,6 +6,7 @@ use ic_crypto::CryptoComponentForNonReplicaProcess;
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_protobuf::registry::node::v1::NodeRecord;
 use ic_protobuf::types::v1 as pb;
+use ic_types::NodeId;
 use ic_types::{
     consensus::catchup::{
         CUPWithOriginalProtobuf, CatchUpContentProtobufBytes, CatchUpPackage, CatchUpPackageParam,
@@ -31,6 +32,7 @@ pub(crate) struct CatchUpPackageProvider {
     client: HttpClient,
     crypto: Arc<dyn CryptoComponentForNonReplicaProcess + Send + Sync>,
     logger: ReplicaLogger,
+    node_id: NodeId,
 }
 
 impl CatchUpPackageProvider {
@@ -40,8 +42,10 @@ impl CatchUpPackageProvider {
         cup_dir: PathBuf,
         crypto: Arc<dyn CryptoComponentForNonReplicaProcess + Send + Sync>,
         logger: ReplicaLogger,
+        node_id: NodeId,
     ) -> Self {
         Self {
+            node_id,
             registry,
             cup_dir,
             client: HttpClient::new(),
@@ -63,7 +67,6 @@ impl CatchUpPackageProvider {
         current_cup: Option<&CUPWithOriginalProtobuf>,
     ) -> Option<CUPWithOriginalProtobuf> {
         use ic_registry_client_helpers::subnet::SubnetTransportRegistry;
-        use ic_types::NodeId;
         use rand::seq::SliceRandom;
 
         let mut nodes: Vec<(NodeId, NodeRecord)> = self
@@ -75,10 +78,15 @@ impl CatchUpPackageProvider {
             .unwrap_or_default();
         // Randomize the order of peer_urls
         nodes.shuffle(&mut rand::thread_rng());
+        let current_node = nodes
+            .as_slice()
+            .iter()
+            .find(|t| t.0 == self.node_id)
+            .cloned();
 
         // Try only one peer at-a-time if there is already a local CUP,
         // Otherwise, try not to fall back to the registry CUP.
-        let peers = match current_cup {
+        let mut peers = match current_cup {
             Some(_) => vec![nodes.pop().or_else(|| {
                 warn!(
                     self.logger,
@@ -89,8 +97,16 @@ impl CatchUpPackageProvider {
             None => nodes,
         };
 
+        // If we are still a member of the subnet, append our own data so that we first try to
+        // fetch the CUP from our own replica. This improves the upgrade behaviour of a healthy
+        // subnet, as we decrease the probability hitting peers who already started the upgrade
+        // process and will not serve a CUP until they're online again.
+        if let Some(current_node) = current_node {
+            peers.push(current_node);
+        }
+
         let param = current_cup.map(CatchUpPackageParam::from);
-        for (_, node_record) in peers.iter() {
+        for (_, node_record) in peers.iter().rev() {
             let peer_cup = self
                 .fetch_verify_and_deserialize_catch_up_package(node_record, param, subnet_id)
                 .await;

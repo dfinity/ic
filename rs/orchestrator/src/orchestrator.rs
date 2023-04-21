@@ -181,6 +181,7 @@ impl Orchestrator {
             args.cup_dir.clone(),
             crypto.clone(),
             logger.clone(),
+            node_id,
         ));
 
         if args.enable_provisional_registration {
