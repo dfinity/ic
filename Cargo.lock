@@ -4163,6 +4163,7 @@ dependencies = [
  "ic-registry-keys",
  "ic-registry-local-store",
  "ic-registry-nns-data-provider",
+ "ic-registry-nns-data-provider-wrappers",
  "ic-registry-provisional-whitelist",
  "ic-registry-routing-table",
  "ic-registry-subnet-features",
@@ -7955,7 +7956,7 @@ dependencies = [
  "ic-registry-local-registry",
  "ic-registry-local-store",
  "ic-registry-local-store-artifacts",
- "ic-registry-nns-data-provider",
+ "ic-registry-nns-data-provider-wrappers",
  "ic-test-utilities",
  "ic-types",
  "ic-utils 0.8.0",
@@ -8137,7 +8138,7 @@ dependencies = [
  "ic-registry-client-helpers",
  "ic-registry-keys",
  "ic-registry-local-store",
- "ic-registry-nns-data-provider",
+ "ic-registry-nns-data-provider-wrappers",
  "ic-registry-provisional-whitelist",
  "ic-registry-subnet-type",
  "ic-types",
@@ -8307,6 +8308,17 @@ dependencies = [
  "tempfile",
  "tokio",
  "tree-deserializer",
+ "url",
+]
+
+[[package]]
+name = "ic-registry-nns-data-provider-wrappers"
+version = "0.8.0"
+dependencies = [
+ "ic-interfaces-registry",
+ "ic-registry-nns-data-provider",
+ "ic-types",
+ "tokio",
  "url",
 ]
 
@@ -8830,7 +8842,7 @@ dependencies = [
  "ic-registry-client",
  "ic-registry-client-helpers",
  "ic-registry-keys",
- "ic-registry-nns-data-provider",
+ "ic-registry-nns-data-provider-wrappers",
  "ic-registry-provisional-whitelist",
  "ic-registry-routing-table",
  "ic-registry-subnet-type",

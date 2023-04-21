@@ -27,7 +27,7 @@ ic-protobuf = { path = "../protobuf" }
 ic-registry-local-registry = { path = "../registry/local_registry" }
 ic-registry-client = { path = "../registry/client" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
-ic-registry-nns-data-provider = { path = "../registry/nns_data_provider" }
+ic-registry-nns-data-provider-wrappers = { path = "../registry/nns_data_provider_wrappers" }
 ic-registry-local-store = { path = "../registry/local_store" }
 ic-registry-local-store-artifacts = { path = "../registry/local_store/artifacts" }
 ic-types = { path = "../types/types" }

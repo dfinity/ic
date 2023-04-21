@@ -10,7 +10,7 @@ DEPENDENCIES = [
     "//rs/registry/helpers",
     "//rs/registry/keys",
     "//rs/registry/local_store",
-    "//rs/registry/nns_data_provider",
+    "//rs/registry/nns_data_provider_wrappers",
     "//rs/registry/subnet_type",
     "//rs/types/base_types",
     "//rs/types/types",
