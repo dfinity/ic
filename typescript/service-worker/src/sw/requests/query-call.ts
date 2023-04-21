@@ -5,7 +5,6 @@ import {
   responseVerification,
   streamBody,
 } from '../response';
-import { RequestMapper } from './mapper';
 import { VerifiedResponse } from './typings';
 import {
   HttpRequest,
@@ -62,21 +61,14 @@ export async function queryCallHandler(
     }
 
     const decodedResponseBody = decodeBody(streamedBody, httpResponse.headers);
-    const certifiedResponseHeaders =
-      RequestMapper.fromResponseVerificationHeaders(
-        certificationResult.response.headers
-      );
-
-    const responseHeaders = filterResponseHeaders(
-      certificationResult.response.headers
-    );
+    const responseHeaders = filterResponseHeaders(httpResponse.headers);
 
     return {
       response: new Response(decodedResponseBody, {
-        status: certificationResult.response.statusCode,
+        status: httpResponse.status_code,
         headers: responseHeaders,
       }),
-      certifiedHeaders: certifiedResponseHeaders,
+      certifiedHeaders: new Headers(certificationResult.response.headers),
     };
   } catch (error) {
     if (error instanceof ResponseVerificationError) {

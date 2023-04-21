@@ -69,15 +69,4 @@ describe('Requests mapper', () => {
 
     expect(responseCacheControl?.maxAge).toBeUndefined();
   });
-
-  it('should append same header name values from response verification headers', async () => {
-    const headers = RequestMapper.fromResponseVerificationHeaders([
-      ['Content-Encoding', 'gzip'],
-      ['Cache-Control', 'no-cache'],
-      ['Cache-Control', 'no-store'],
-    ]);
-
-    expect(headers.get('content-encoding')).toEqual('gzip');
-    expect(headers.get('cache-control')).toEqual('no-cache, no-store');
-  });
 });
