@@ -16,7 +16,7 @@ common --experimental_allow_tags_propagation
 build --nosandbox_default_allow_network
 build --incompatible_strict_action_env # use an environment with a static value for PATH and do not inherit LD_LIBRARY_PATH
 
-# default to optimized and unstripped binaries.
+# default to optimized and unstripped binaries, using frame pointers.
 build --compilation_mode=opt
 build --@rules_rust//:extra_rustc_flags=-Cdebug-assertions=on,-Cdebuginfo=2,-Cforce-frame-pointers=on
 build --strip=never
