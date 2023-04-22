@@ -5,7 +5,7 @@ use crate::common::{
 };
 use hyper::{
     client::conn::{handshake, SendRequest},
-    Body, Method, Request, StatusCode,
+    Body, Client, Method, Request, StatusCode,
 };
 use ic_agent::{
     agent::{http_transport::ReqwestHttpReplicaV2Transport, QueryBuilder, UpdateBuilder},
@@ -723,4 +723,54 @@ fn test_request_timeout() {
             }
         }
     });
+}
+
+/// Iff a http request body is greater than the configured limit, the endpoints responds with `413`.
+#[test]
+fn test_payload_too_large() {
+    let rt = Runtime::new().unwrap();
+    let addr = get_free_localhost_socket_addr();
+    let config = Config {
+        listen_addr: addr,
+        max_request_size_bytes: 2048,
+        ..Default::default()
+    };
+
+    let mock_state_manager = basic_state_manager_mock();
+    let mock_consensus_cache = basic_consensus_pool_cache();
+    let mock_registry_client = basic_registry_client();
+
+    _ = start_http_endpoint(
+        rt.handle().clone(),
+        config.clone(),
+        Arc::new(mock_state_manager),
+        Arc::new(mock_consensus_cache),
+        Arc::new(mock_registry_client),
+    );
+
+    let request = |body: Vec<u8>| {
+        rt.block_on(async {
+            let client = Client::new();
+
+            let req = Request::builder()
+                .method(Method::POST)
+                .uri(format!(
+                    "http://{}/api/v2/canister/{}/query",
+                    addr, "223xb-saaaa-aaaaf-arlqa-cai"
+                ))
+                .header("Content-Type", "application/cbor")
+                .body(Body::from(body))
+                .expect("request builder");
+
+            let response = client.request(req).await.unwrap();
+
+            response.status()
+        })
+    };
+
+    let mut body = vec![0; config.max_request_size_bytes.try_into().unwrap()];
+    assert_ne!(StatusCode::PAYLOAD_TOO_LARGE, request(body.clone()));
+
+    body.push(1);
+    assert_eq!(StatusCode::PAYLOAD_TOO_LARGE, request(body.clone()));
 }
