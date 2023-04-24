@@ -193,6 +193,12 @@ type BitcoinAddress = variant {
     p2sh : blob;
 };
 
+type MinterInfo = record {
+    min_confirmations : nat32;
+    retrieve_btc_min_amount : nat64;
+    kyt_fee : nat64;
+};
+
 type Event = variant {
     init : InitArgs;
     upgrade : UpgradeArgs;
@@ -288,6 +294,11 @@ service : (minter_arg : MinterArg) -> {
     retrieve_btc_status : (record { block_index : nat64 }) -> (RetrieveBtcStatus) query;
 
     // }}} Section "Convert ckBTC to BTC"
+
+    // Section "Minter Information" {{{
+    // Returns internal minter parameters.
+    get_minter_info : () -> (MinterInfo) query;
+    // }}}
 
     // Section "Event log" {{{
 
