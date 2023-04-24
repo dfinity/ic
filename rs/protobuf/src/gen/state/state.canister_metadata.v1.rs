@@ -14,7 +14,10 @@ pub struct CanisterChangeFromCanister {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct CanisterCreation {}
+pub struct CanisterCreation {
+    #[prost(message, repeated, tag = "1")]
+    pub controllers: ::prost::alloc::vec::Vec<super::super::super::types::v1::PrincipalId>,
+}
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CanisterCodeUninstall {}

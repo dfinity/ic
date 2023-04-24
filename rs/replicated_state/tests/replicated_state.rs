@@ -405,14 +405,17 @@ fn memory_taken_by_canister_history() {
 
     // Memory for two canister changes.
     let canister_history_memory: usize =
-        size_of::<CanisterChange>() + (size_of::<CanisterChange>() + 2 * size_of::<PrincipalId>());
+        size_of::<CanisterChange>() + (size_of::<CanisterChange>() + 4 * size_of::<PrincipalId>());
 
     // Push two canister changes into canister history.
     let canister_state = fixture.state.canister_state_mut(&CANISTER_ID).unwrap();
     canister_state.system_state.add_canister_change(
         Time::from_nanos_since_unix_epoch(0),
         CanisterChangeOrigin::from_user(user_test_id(42).get()),
-        CanisterChangeDetails::CanisterCreation,
+        CanisterChangeDetails::canister_creation(vec![
+            canister_test_id(777).get(),
+            user_test_id(42).get(),
+        ]),
     );
     canister_state.system_state.add_canister_change(
         Time::from_nanos_since_unix_epoch(16),

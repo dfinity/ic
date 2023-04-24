@@ -2082,7 +2082,10 @@ mod test {
             42,
             0,
             CanisterChangeOrigin::from_user(user_test_id(42).get()),
-            CanisterChangeDetails::CanisterCreation,
+            CanisterChangeDetails::canister_creation(vec![
+                canister_test_id(777).get(),
+                user_test_id(42).get(),
+            ]),
         ));
         canister_history.add_canister_change(CanisterChange::new(
             123,

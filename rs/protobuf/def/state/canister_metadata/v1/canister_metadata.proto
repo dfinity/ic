@@ -12,7 +12,9 @@ message CanisterChangeFromCanister {
     optional uint64 canister_version = 2;
 }
 
-message CanisterCreation {}
+message CanisterCreation {
+    repeated types.v1.PrincipalId controllers = 1;
+}
 
 message CanisterCodeUninstall {}
 
