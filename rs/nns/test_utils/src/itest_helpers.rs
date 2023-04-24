@@ -344,13 +344,36 @@ async fn install_rust_canister_with_memory_allocation(
 
     println!("Done compiling the wasm for {}", binary_name.as_ref());
 
-    wasm.install_with_retries_onto_canister(
-        canister,
-        canister_init_payload,
-        Some(memory_allocation),
-    )
-    .await
-    .unwrap_or_else(|e| panic!("Could not install {} due to {}", binary_name.as_ref(), e));
+    if canister.is_runtime_local() {
+        wasm.install_onto_canister(
+            canister,
+            CanisterInstallMode::Reinstall,
+            canister_init_payload,
+            Some(memory_allocation),
+        )
+        .await
+        .unwrap_or_else(|e| {
+            panic!(
+                "Could not install {} via local runtime due to {}",
+                binary_name.as_ref(),
+                e
+            )
+        });
+    } else {
+        wasm.install_with_retries_onto_canister(
+            canister,
+            canister_init_payload,
+            Some(memory_allocation),
+        )
+        .await
+        .unwrap_or_else(|e| {
+            panic!(
+                "Could not install {} via remote runtime due to {}",
+                binary_name.as_ref(),
+                e
+            )
+        });
+    };
     println!(
         "Installed {} with {}",
         canister.canister_id(),
