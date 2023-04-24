@@ -1956,7 +1956,9 @@ where
 mod test {
     use super::*;
 
-    use ic_ic00_types::{CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, IC_00};
+    use ic_ic00_types::{
+        CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallMode, IC_00,
+    };
     use ic_interfaces::messages::{CanisterCall, CanisterMessage, CanisterMessageOrTask};
     use ic_replicated_state::canister_state::system_state::CanisterHistory;
     use ic_test_utilities::types::ids::user_test_id;
@@ -2090,8 +2092,41 @@ mod test {
         canister_history.add_canister_change(CanisterChange::new(
             123,
             1,
-            CanisterChangeOrigin::from_user(user_test_id(123).get()),
+            CanisterChangeOrigin::from_canister(canister_test_id(123).get(), None),
             CanisterChangeDetails::CanisterCodeUninstall,
+        ));
+        canister_history.add_canister_change(CanisterChange::new(
+            222,
+            2,
+            CanisterChangeOrigin::from_canister(canister_test_id(123).get(), Some(777)),
+            CanisterChangeDetails::code_deployment(CanisterInstallMode::Install, [0; 32]),
+        ));
+        canister_history.add_canister_change(CanisterChange::new(
+            222,
+            3,
+            CanisterChangeOrigin::from_canister(canister_test_id(123).get(), Some(888)),
+            CanisterChangeDetails::code_deployment(CanisterInstallMode::Upgrade, [1; 32]),
+        ));
+        canister_history.add_canister_change(CanisterChange::new(
+            222,
+            4,
+            CanisterChangeOrigin::from_canister(canister_test_id(123).get(), Some(999)),
+            CanisterChangeDetails::code_deployment(CanisterInstallMode::Reinstall, [2; 32]),
+        ));
+        canister_history.add_canister_change(CanisterChange::new(
+            333,
+            5,
+            CanisterChangeOrigin::from_canister(canister_test_id(123).get(), None),
+            CanisterChangeDetails::controllers_change(vec![
+                canister_test_id(123).into(),
+                user_test_id(666).get(),
+            ]),
+        ));
+        canister_history.add_canister_change(CanisterChange::new(
+            444,
+            6,
+            CanisterChangeOrigin::from_canister(canister_test_id(123).get(), None),
+            CanisterChangeDetails::controllers_change(vec![]),
         ));
 
         let pb_canister_metadata = pb_canister_metadata::CanisterMetadata {
