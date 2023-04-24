@@ -16,6 +16,7 @@ use ic_ckbtc_minter::updates::{
     get_btc_address::GetBtcAddressArgs,
     update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus},
 };
+use ic_ckbtc_minter::MinterInfo;
 use ic_ckbtc_minter::{
     state::eventlog::{Event, GetEventsArg},
     storage,
@@ -148,6 +149,16 @@ fn estimate_withdrawal_fee(arg: EstimateFeeArg) -> WithdrawalFee {
             s.last_fee_per_vbyte[50],
             s.kyt_fee,
         )
+    })
+}
+
+#[candid_method(query)]
+#[query]
+fn get_minter_info() -> MinterInfo {
+    read_state(|s| MinterInfo {
+        kyt_fee: s.kyt_fee,
+        min_confirmations: s.min_confirmations,
+        retrieve_btc_min_amount: s.retrieve_btc_min_amount,
     })
 }
 
