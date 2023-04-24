@@ -83,6 +83,11 @@ pub trait NiDkgAlgorithm {
 
     /// Verifies a non-interactive DKG dealing.
     ///
+    /// # Preconditions
+    /// * As part of the NIDKG protocol the `NiDkgDealing` are signed. The `dealer`
+    ///   used during dealing's verification is assumed to be the identity of the
+    ///   node that signed the `dealing`.
+    ///
     /// # Errors
     /// * `DkgVerifyDealingError::InvalidDealingError` if the dealing is
     ///   invalid.
