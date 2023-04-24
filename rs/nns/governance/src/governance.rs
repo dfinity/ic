@@ -8562,7 +8562,6 @@ impl TryFrom<CreateServiceNervousSystem> for SnsInitPayload {
             description,
             url,
             logo,
-
             fallback_controller_principal_ids,
             dapp_canisters: _, // Not used.
 
@@ -8923,6 +8922,18 @@ pub enum BitcoinNetwork {
     Mainnet,
     #[serde(rename = "testnet")]
     Testnet,
+}
+
+impl FromStr for BitcoinNetwork {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "mainnet" => Ok(Self::Mainnet),
+            "testnet" => Ok(Self::Testnet),
+            other => Err(format!("Unknown bitcoin network {}. Valid bitcoin networks are \"mainnet\" and \"testnet\".", other))
+        }
+    }
 }
 
 // A proposal payload to set the Bitcoin configuration.

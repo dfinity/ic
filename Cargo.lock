@@ -4139,6 +4139,7 @@ dependencies = [
  "hex",
  "ic-admin-derive",
  "ic-base-types",
+ "ic-btc-interface",
  "ic-canister-client",
  "ic-canister-client-sender",
  "ic-config",
