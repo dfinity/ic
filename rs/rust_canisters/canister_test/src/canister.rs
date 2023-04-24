@@ -168,15 +168,20 @@ impl Wasm {
     pub async fn install_onto_canister(
         self,
         canister: &mut Canister<'_>,
+        mode: CanisterInstallMode,
         canister_init_payload: Option<Vec<u8>>,
+        memory_allocation: Option<u64>,
     ) -> Result<(), String> {
-        self.install(canister.runtime)
-            .install(canister, canister_init_payload.unwrap_or_default())
-            .await
+        let init_payload = canister_init_payload.unwrap_or_default();
+        let mut install = self.install(canister.runtime).with_mode(mode);
+        if let Some(memory_allocation) = memory_allocation {
+            install = install.with_memory_allocation(memory_allocation);
+        }
+        install.install(canister, init_payload).await
     }
 
     /// Installs this wasm onto the given pre-existing canister, with
-    /// retries.This is especially useful when the runtime is remote, and
+    /// retries. This is especially useful when the runtime is remote, and
     /// for which transient errors may happen.
     pub async fn install_with_retries_onto_canister(
         self,
@@ -184,25 +189,19 @@ impl Wasm {
         canister_init_payload: Option<Vec<u8>>,
         memory_allocation: Option<u64>,
     ) -> Result<(), String> {
-        let init_payload = canister_init_payload.unwrap_or_default();
-        let runtime = canister.runtime;
         let mut backoff = get_backoff_policy();
         loop {
-            let mut install = self
+            let canister_id = canister.canister_id();
+            let install_result = self
                 .clone()
-                .install(runtime)
-                .with_mode(CanisterInstallMode::Reinstall);
-
-            if let Some(memory_allocation) = memory_allocation {
-                install = install.with_memory_allocation(memory_allocation);
-            }
-
-            let canister_id = canister.canister_id;
-            println!(
-                "Attempting to install wasm into canister with ID: {}",
-                canister_id
-            );
-            match install.install(canister, init_payload.clone()).await {
+                .install_onto_canister(
+                    canister,
+                    CanisterInstallMode::Reinstall,
+                    canister_init_payload.clone(),
+                    memory_allocation,
+                )
+                .await;
+            match install_result {
                 Ok(()) => {
                     println!(
                         "Successfully installed wasm into canister with ID: {}",
@@ -514,6 +513,15 @@ pub struct Canister<'a> {
     // If the canister is reinstalled or upgraded, it is possible that this no longer
     // matches the actual wasm module inside the canister.
     wasm: Option<Wasm>,
+}
+
+impl<'a> Canister<'a> {
+    pub fn is_runtime_local(&self) -> bool {
+        match self.runtime {
+            Runtime::Remote(_) => false,
+            Runtime::Local(_) => true,
+        }
+    }
 }
 
 impl<'a> fmt::Debug for Canister<'a> {
