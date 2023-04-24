@@ -11,19 +11,16 @@ pub fn create_tmp_dir() -> tempfile::TempDir {
 }
 
 pub mod strategies {
-    use std::time::{Duration, SystemTime, UNIX_EPOCH};
-
-    use candid::Principal;
-
-    use ic_icrc1::{Block, Operation, Transaction};
-
     use crate::common::utils::unit_test_utils::DEFAULT_TRANSFER_FEE;
+    use candid::Principal;
+    use ic_icrc1::{Block, Operation, Transaction};
     use ic_ledger_core::block::BlockType;
     use icrc_ledger_types::icrc1::account::Account;
     use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg};
     use proptest::prelude::*;
     use rand;
     use serde_bytes::ByteBuf;
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
     pub fn principal_strategy() -> impl Strategy<Value = Principal> {
         let bytes_strategy = prop::collection::vec(0..=255u8, 29);

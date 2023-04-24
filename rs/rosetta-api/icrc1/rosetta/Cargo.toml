@@ -54,7 +54,6 @@ ic-starter-tests = { path = "../../../../packages/ic-starter-tests" }
 ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
 garcon = "0.2.3"
 url = "2.3.1"
-lazy_static = "1.4.0"
 once_cell = "1.8.0"
 ring = { version = "0.16.11", features = ["std"] }
 reqwest = "0.11.1"

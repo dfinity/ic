@@ -127,4 +127,65 @@ proptest! {
         });
 
     }
+
+    #[test]
+    fn test_fetching_from_archive(transfer_args in transfer_args_with_sender(*MAX_NUM_GENERATED_BLOCKS, *TEST_ACCOUNT)) {
+    // Create a tokio environment to conduct async calls
+    let rt = Runtime::new().unwrap();
+
+    // Wrap async calls in a blocking Block
+    rt.block_on(async {
+
+    // Spin up a local replica
+    let replica_context = local_replica::start_new_local_replica().await;
+
+    // Deploy an icrc ledger canister and make sure an archive is created
+    let icrc_ledger_canister_id =
+    local_replica::deploy_icrc_ledger_with_custom_args(&replica_context,
+        InitArgs {
+            minting_account: *TEST_ACCOUNT,
+            fee_collector_account: None,
+            initial_balances: vec![(*TEST_ACCOUNT,1_000_000_000_000)],
+            transfer_fee: DEFAULT_TRANSFER_FEE.get_e8s(),
+            token_name: "Test Token".to_owned(),
+            token_symbol: "TT".to_owned(),
+            metadata: vec![],
+            archive_options: ArchiveOptions {
+                // Create archive after every ten blocks
+                trigger_threshold: 10,
+                num_blocks_to_archive: 5,
+                node_max_memory_size_bytes: None,
+                max_message_size_bytes: None,
+                controller_id: PrincipalId::new_user_test_id(100),
+                cycles_for_archive_creation: None,
+                max_transactions_per_response: None,
+            },
+        }).await;
+
+    // Create a testing agent
+    let agent = Arc::new(Icrc1Agent {
+        agent: local_replica::get_testing_agent(&replica_context).await,
+        ledger_canister_id: icrc_ledger_canister_id.into(),
+    });
+
+
+    // Create some blocks to be fetched later
+    // An archive is created after 10 blocks
+    for transfer_arg in transfer_args.iter() {
+        agent.transfer(transfer_arg.clone()).await.unwrap().unwrap();
+    }
+
+    // Create the storage client where blocks will be stored
+    let storage_client = Arc::new(StorageClient::new_in_memory().unwrap());
+
+    // Start the synching process
+    // Conduct a full sync from the tip of the blockchain to genesis block
+    // Fetched blocks from the ledger and the archive
+    blocks_synchronizer::start_synching_blocks(agent.clone(), storage_client.clone(),10).await.unwrap();
+
+    // Check that the full sync of all blocks generated is valid
+    check_storage_validity(storage_client.clone(),transfer_args.len() as u64);
+
+    });
+}
 }
