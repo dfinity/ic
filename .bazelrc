@@ -16,9 +16,15 @@ common --experimental_allow_tags_propagation
 build --nosandbox_default_allow_network
 build --incompatible_strict_action_env # use an environment with a static value for PATH and do not inherit LD_LIBRARY_PATH
 
-# default to optimized and unstripped binaries, using frame pointers.
+# Default to optimized and unstripped binaries.
 build --compilation_mode=opt
-build --@rules_rust//:extra_rustc_flags=-Cdebug-assertions=on,-Cdebuginfo=2,-Cforce-frame-pointers=on
+# Ideally we'd want the below (debug info and frame pointers) but for tests
+# that depend on `ic-test-utilities` it produces binaries that contain debug
+# symbols for every single crate that `ic-test-utilities` depends on, even stuff
+# that has been removed from the binary by the linker (with `-Wunused`).
+#
+# build --@rules_rust//:extra_rustc_flags=-Cdebug-assertions=on,-Cdebuginfo=2,-Cforce-frame-pointers=on
+build --@rules_rust//:extra_rustc_flags=-Cdebug-assertions=on
 build --strip=never
 
 build --strategy_regexp=ic-os/.*=local
