@@ -12,6 +12,7 @@ use cycles_minting_canister::{
     ChangeSubnetTypeAssignmentArgs, SetAuthorizedSubnetworkListArgs, SubnetListWithType,
     UpdateSubnetTypeArgs,
 };
+use ic_btc_interface::{Flag, SetConfigRequest};
 use ic_canister_client::{Agent, Sender};
 use ic_canister_client_sender::SigKeys;
 use ic_config::subnet_config::SchedulerConfig;
@@ -45,6 +46,7 @@ use ic_nns_governance::pb::v1::{
     Proposal, RewardNodeProviders,
 };
 use ic_nns_governance::{
+    governance::{BitcoinNetwork, BitcoinSetConfigProposal},
     pb::v1::NnsFunction,
     proposal_submission::{
         create_external_update_proposal_candid, create_make_proposal_payload,
@@ -399,6 +401,8 @@ enum SubCommand {
     ProposeToUpdateSnsDeployWhitelist(ProposeToUpdateSnsDeployWhitelistCmd),
     /// Propose to start a decentralization sale
     ProposeToOpenSnsTokenSwap(ProposeToOpenSnsTokenSwap),
+    /// Propose to set the Bitcoin configuration
+    ProposeToSetBitcoinConfig(ProposeToSetBitcoinConfig),
 }
 
 /// Indicates whether a value should be added or removed.
@@ -3414,6 +3418,52 @@ impl ProposalPayload<CompleteCanisterMigrationPayload> for ProposeToCompleteCani
     }
 }
 
+/// Sub-command to submit a proposal to set the bitcoin configuration.
+#[derive_common_proposal_fields]
+#[derive(ProposalMetadata, Parser)]
+struct ProposeToSetBitcoinConfig {
+    pub network: BitcoinNetwork,
+
+    #[clap(long, help = "Updates the stability threshold.")]
+    pub stability_threshold: Option<u128>,
+
+    #[clap(long, help = "Enables/disables access to the Bitcoin canister's API.")]
+    pub api_access: Option<bool>,
+}
+
+impl ProposalTitle for ProposeToSetBitcoinConfig {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => format!(
+                "Bitcoin: set config of the {} canister",
+                match self.network {
+                    BitcoinNetwork::Mainnet => "mainnet",
+                    BitcoinNetwork::Testnet => "testnet",
+                }
+            ),
+        }
+    }
+}
+
+#[async_trait]
+impl ProposalPayload<BitcoinSetConfigProposal> for ProposeToSetBitcoinConfig {
+    async fn payload(&self, _: Url) -> BitcoinSetConfigProposal {
+        let request = SetConfigRequest {
+            stability_threshold: self.stability_threshold,
+            api_access: self
+                .api_access
+                .map(|flag| if flag { Flag::Enabled } else { Flag::Disabled }),
+            ..Default::default()
+        };
+
+        BitcoinSetConfigProposal {
+            network: self.network,
+            payload: Encode!(&request).unwrap(),
+        }
+    }
+}
+
 async fn get_firewall_rules_from_registry(
     registry_canister: &RegistryCanister,
     scope: &FirewallRulesScope,
@@ -4541,6 +4591,25 @@ async fn main() {
                 proposer,
             )
             .await
+        }
+        SubCommand::ProposeToSetBitcoinConfig(cmd) => {
+            let (proposer, sender) =
+                get_proposer_and_sender(cmd.proposer, sender, cmd.test_neuron_proposer);
+            propose_external_proposal_from_command::<
+                BitcoinSetConfigProposal,
+                ProposeToSetBitcoinConfig,
+            >(
+                cmd,
+                NnsFunction::BitcoinSetConfig,
+                make_canister_client(
+                    opts.nns_url,
+                    opts.verify_nns_responses,
+                    opts.nns_public_key_pem_file,
+                    sender,
+                ),
+                proposer,
+            )
+            .await;
         }
     }
 }
