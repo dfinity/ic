@@ -67,11 +67,22 @@ impl ExchangeRateCanisterClient for RealExchangeRateCanisterClient {
     }
 }
 
+#[repr(u8)]
 #[derive(Serialize, Deserialize, Clone, Copy, CandidType, Eq, PartialEq, Debug)]
 pub enum UpdateExchangeRateState {
-    InProgress,
-    Disabled,
-    GetRateAt(u64),
+    Disabled = 0,
+    GetRateAt(u64) = 1,
+    InProgress = 2,
+}
+
+impl From<&UpdateExchangeRateState> for u8 {
+    fn from(value: &UpdateExchangeRateState) -> Self {
+        match value {
+            UpdateExchangeRateState::Disabled => 0,
+            UpdateExchangeRateState::GetRateAt(_) => 1,
+            UpdateExchangeRateState::InProgress => 2,
+        }
+    }
 }
 
 impl Default for UpdateExchangeRateState {

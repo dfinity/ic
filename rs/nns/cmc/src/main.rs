@@ -1810,6 +1810,30 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
             state.total_cycles_minted.get() as f64,
             "Number of cycles minted since the Genesis.",
         )?;
+        w.encode_gauge(
+            "cmc_avg_icp_xdr_conversion_rate",
+            state
+                .average_icp_xdr_conversion_rate
+                .as_ref()
+                .unwrap()
+                .xdr_permyriad_per_icp as f64
+                / 10_000f64,
+            "Average amount of XDR corresponding to 1 ICP.",
+        )?;
+        w.encode_gauge(
+            "cmc_icp_xdr_conversion_rate_timestamp_seconds",
+            state
+                .icp_xdr_conversion_rate
+                .as_ref()
+                .unwrap()
+                .timestamp_seconds as f64,
+            "Timestamp of the last ICP/XDR conversion rate, in seconds since the Unix epoch.",
+        )?;
+        w.encode_gauge(
+            "cmc_update_exchange_rate_canister_state",
+            u8::from(state.update_exchange_rate_canister_state.as_ref().unwrap()) as f64,
+            "The current state of the CMC calling the exchange rate canister.",
+        )?;
         Ok(())
     })
 }
