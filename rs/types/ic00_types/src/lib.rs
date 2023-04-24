@@ -423,7 +423,7 @@ impl From<&CanisterChangeDetails> for pb_canister_metadata::canister_change::Cha
                 pb_canister_metadata::canister_change::ChangeDetails::CanisterCodeDeployment(
                     pb_canister_metadata::CanisterCodeDeployment {
                         module_hash: canister_code_deployment.module_hash.to_vec(),
-                        mode: canister_code_deployment.mode as i32,
+                        mode: (&canister_code_deployment.mode).into(),
                     },
                 )
             }
@@ -762,15 +762,15 @@ pub enum CanisterInstallMode {
     /// A fresh install of a new canister.
     #[serde(rename = "install")]
     #[strum(serialize = "install")]
-    Install,
+    Install = 1,
     /// Reinstalling a canister that was already installed.
     #[serde(rename = "reinstall")]
     #[strum(serialize = "reinstall")]
-    Reinstall,
+    Reinstall = 2,
     /// Upgrade an existing canister.
     #[serde(rename = "upgrade")]
     #[strum(serialize = "upgrade")]
-    Upgrade,
+    Upgrade = 3,
 }
 
 impl Default for CanisterInstallMode {
@@ -816,6 +816,13 @@ impl TryFrom<String> for CanisterInstallMode {
     }
 }
 
+impl From<&CanisterInstallMode> for i32 {
+    fn from(item: &CanisterInstallMode) -> Self {
+        let proto: CanisterInstallModeProto = item.into();
+        proto.into()
+    }
+}
+
 impl TryFrom<i32> for CanisterInstallMode {
     type Error = CanisterInstallModeError;
 
@@ -850,6 +857,19 @@ impl From<&CanisterInstallMode> for CanisterInstallModeProto {
             CanisterInstallMode::Upgrade => CanisterInstallModeProto::Upgrade,
         }
     }
+}
+
+#[test]
+fn canister_install_mode_round_trip() {
+    fn canister_install_mode_round_trip_aux(mode: CanisterInstallMode) {
+        let pb_mode: i32 = (&mode).into();
+        let dec_mode = CanisterInstallMode::try_from(pb_mode).unwrap();
+        assert_eq!(mode, dec_mode);
+    }
+
+    canister_install_mode_round_trip_aux(CanisterInstallMode::Install);
+    canister_install_mode_round_trip_aux(CanisterInstallMode::Reinstall);
+    canister_install_mode_round_trip_aux(CanisterInstallMode::Upgrade);
 }
 
 impl Payload<'_> for CanisterStatusResultV2 {}
