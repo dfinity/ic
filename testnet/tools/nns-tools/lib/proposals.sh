@@ -237,6 +237,38 @@ EOF
     echo "$OUTPUT"
 }
 
+##: generate_forum_post_nns_upgrades
+## Usage: $1 <proposal_file> (<proposal_file>...)
+## Example: $1 directory_with_new_proposals/*
+## Example: $1 proposal_1.md proposal_2.md
+generate_forum_post_nns_upgrades() {
+    PROPOSAL_FILES=$(ls "$@")
+
+    THIS_FRIDAY=$(date -d "next Friday" +'%Y-%m-%d' 2>/dev/null || date -v+Fri +%Y-%m-%d)
+
+    OUTPUT=$(
+        cat <<EOF
+The NNS Team will be submitting the following upgrade proposals this Friday, $THIS_FRIDAY.  DFINITY plans to vote on these proposals the following Monday.
+
+## Additional Notes / Breaking Changes
+
+TODO - delete if nothing relevant
+
+## Proposals to be Submitted
+
+$(for file in $PROPOSAL_FILES; do
+            echo "### $(nns_upgrade_proposal_canister_raw_name $file)"
+            echo '````'
+            cat $file
+            echo '````'
+            echo
+        done)
+EOF
+    )
+
+    echo "$OUTPUT"
+}
+
 #### Proposal value extractors (based on common format of proposal elements)
 
 # Extracts "LAST_COMMIT" from string like "git log $LAST_COMMIT..$NEXT_COMMIT" where commits are git commit ids
@@ -255,6 +287,11 @@ proposal_header_field_value() {
     local FILE=$1
     local FIELD=$2
     cat $FILE | grep "### $FIELD" | sed "s/.*$FIELD[[:space:]]*//"
+}
+
+nns_upgrade_proposal_canister_raw_name() {
+    local FILE=$1
+    cat "$FILE" | grep "## Proposal to Upgrade the" | cut -d' ' -f6
 }
 
 #### Proposal text validators
