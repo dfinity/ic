@@ -1,17 +1,11 @@
-use std::cell::RefCell;
-use std::collections::BTreeMap;
-use std::convert::TryFrom;
-use std::str::FromStr;
-use std::time::SystemTime;
-
 use candid::{CandidType, Deserialize};
 use dfn_core::api::{call, now, CanisterId};
-#[cfg(target_arch = "wasm32")]
-use dfn_core::println;
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_ic00_types::CanisterInstallMode;
 use ic_nervous_system_root::{
-    change_canister, CanisterIdRecord, CanisterStatusResult, ChangeCanisterProposal, LOG_PREFIX,
+    canister_status::CanisterStatusResultFromManagementCanister,
+    change_canister::{change_canister, ChangeCanisterProposal},
+    CanisterIdRecord, LOG_PREFIX,
 };
 use ic_nns_common::registry::get_value;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
@@ -23,6 +17,10 @@ use ic_registry_keys::{
     make_node_record_key, make_routing_table_record_key, make_subnet_record_key,
 };
 use ic_registry_routing_table::RoutingTable;
+use std::{cell::RefCell, collections::BTreeMap, convert::TryFrom, str::FromStr, time::SystemTime};
+
+#[cfg(target_arch = "wasm32")]
+use dfn_core::println;
 
 const MAX_TIME_FOR_GOVERNANCE_UPGRADE_ROOT_PROPOSAL: u64 = 60 * 60 * 24 * 7;
 
@@ -84,7 +82,7 @@ pub struct GovernanceUpgradeRootProposal {
     /// wasm. This must match the sha of the currently running
     /// governance canister.
     pub current_wasm_sha: Vec<u8>,
-    /// The proposal payload to ugprade the governance canister.
+    /// The proposal payload to upgrade the governance canister.
     pub payload: ChangeCanisterProposal,
     /// The sha of the binary the proposer wants to upgrade to.
     pub proposed_wasm_sha: Vec<u8>,
@@ -93,7 +91,7 @@ pub struct GovernanceUpgradeRootProposal {
     /// time of submission).
     pub proposer: PrincipalId,
     /// The registry version at which the membership was retrieved
-    /// for purposes of tallying votes for this porposal.
+    /// for purposes of tallying votes for this proposal.
     pub subnet_membership_registry_version: u64,
     /// The ballots cast by node operators.
     pub node_operator_ballots: Vec<(PrincipalId, RootProposalBallot)>,
@@ -102,7 +100,7 @@ pub struct GovernanceUpgradeRootProposal {
 }
 
 impl GovernanceUpgradeRootProposal {
-    /// For a root proposal to have a bynzatine majority of yes, it
+    /// For a root proposal to have a byzantine majority of yes, it
     /// needs to collect N - f ""yes"" votes, where N is the total number
     /// of nodes (same as the number of ballots) and f = (N - 1) / 3.
     fn is_byzantine_majority_yes(&self) -> bool {
@@ -142,7 +140,7 @@ thread_local! {
 }
 
 async fn get_current_governance_canister_wasm() -> Vec<u8> {
-    let status: CanisterStatusResult = call(
+    let status: CanisterStatusResultFromManagementCanister = call(
         CanisterId::ic_00(),
         "canister_status",
         dfn_candid::candid,
@@ -165,8 +163,8 @@ async fn get_current_governance_canister_wasm() -> Vec<u8> {
 /// - There can be only one "root" proposal pending from a given principal at a
 ///   time, if there is already a proposal pending from the same principal the
 ///   old proposal is deleted and replaced with the new one, voting is reset.
-/// - Root proposals are only avaiable for voting for 7 days. After this period
-///   the proposal can't be accepted and is deleted, upon receving a vote or a
+/// - Root proposals are only available for voting for 7 days. After this period
+///   the proposal can't be accepted and is deleted, upon receiving a vote or a
 ///   get request or the submission of a new one.
 /// - Root proposals are not stored in stable storage, an upgrade of the root
 ///   canister will delete the currently pending root proposal, if there is one.
@@ -360,7 +358,7 @@ pub async fn vote_on_root_proposal_to_upgrade_governance_canister(
         if version != proposal.subnet_membership_registry_version {
             proposals.remove(&proposer);
             let message = format!(
-                "{}Registry version of the subnet record changed since the\
+                "{}Registry version of the subnet record changed since the \
                  proposal from {} was submitted. Deleting.",
                 LOG_PREFIX, proposer,
             );
@@ -503,7 +501,7 @@ async fn get_nns_subnet_id() -> Result<SubnetId, String> {
     routing_table
         .route(GOVERNANCE_CANISTER_ID.into())
         .ok_or_else(|| {
-            "Error getting the subnet id of the subnet containing the governance canister\
+            "Error getting the subnet id of the subnet containing the governance canister \
              from the routing table"
                 .to_string()
         })

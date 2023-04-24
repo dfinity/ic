@@ -34,8 +34,10 @@ use ic_nervous_system_common_test_keys::{
     TEST_USER4_PRINCIPAL,
 };
 use ic_nervous_system_root::{
-    AddCanisterProposal, CanisterAction, CanisterStatusResult, ChangeCanisterProposal,
-    StopOrStartCanisterProposal,
+    canister_status::CanisterStatusResult,
+    change_canister::{
+        AddCanisterProposal, CanisterAction, ChangeCanisterProposal, StopOrStartCanisterProposal,
+    },
 };
 use ic_nns_common::types::{NeuronId, ProposalId, UpdateIcpXdrConversionRatePayload};
 use ic_nns_constants::{memory_allocation_of, GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};

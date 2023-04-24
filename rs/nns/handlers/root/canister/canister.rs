@@ -9,11 +9,14 @@ use ic_base_types::PrincipalId;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_nervous_system_common::serve_metrics;
 use ic_nervous_system_root::{
-    change_canister, AddCanisterProposal, CanisterIdRecord, CanisterStatusResult,
-    ChangeCanisterProposal, StopOrStartCanisterProposal, LOG_PREFIX,
+    canister_status::CanisterStatusResult,
+    change_canister::{
+        change_canister, AddCanisterProposal, ChangeCanisterProposal, StopOrStartCanisterProposal,
+    },
+    CanisterIdRecord, LOG_PREFIX,
 };
 use ic_nns_common::{access_control::check_caller_is_governance, types::CallCanisterProposal};
-use ic_nns_constants::ROOT_CANISTER_ID;
+use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LIFELINE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_handler_root::{
     canister_management, encode_metrics,
     root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot},
@@ -62,7 +65,7 @@ async fn canister_status_(canister_id_record: CanisterIdRecord) -> CanisterStatu
     ic_nns_handler_root::increment_open_canister_status_calls(canister_id_record.get_canister_id());
 
     let canister_status_response =
-        ic_nervous_system_root::canister_status(canister_id_record).await;
+        ic_nervous_system_root::canister_status::canister_status(canister_id_record).await;
 
     ic_nns_handler_root::decrement_open_canister_status_calls(canister_id_record.get_canister_id());
 
@@ -72,7 +75,10 @@ async fn canister_status_(canister_id_record: CanisterIdRecord) -> CanisterStatu
       open status call counter to canister memory.
      */
     let _unused_canister_status_response =
-        ic_nervous_system_root::canister_status(CanisterIdRecord::from(ROOT_CANISTER_ID)).await;
+        ic_nervous_system_root::canister_status::canister_status(CanisterIdRecord::from(
+            ROOT_CANISTER_ID,
+        ))
+        .await;
 
     canister_status_response.unwrap()
 }
@@ -157,9 +163,9 @@ fn stop_or_start_nns_canister() {
             // we couldn't submit any more proposals.
             // Since this canister is the only possible caller, it's then safe
             // to call stop/start inline.
-            if proposal.canister_id == ic_nns_constants::GOVERNANCE_CANISTER_ID
-                || proposal.canister_id == ic_nns_constants::ROOT_CANISTER_ID
-                || proposal.canister_id == ic_nns_constants::LIFELINE_CANISTER_ID
+            if proposal.canister_id == GOVERNANCE_CANISTER_ID
+                || proposal.canister_id == ROOT_CANISTER_ID
+                || proposal.canister_id == LIFELINE_CANISTER_ID
             {
                 panic!("The governance, root and lifeline canisters can't be stopped or started.")
             }

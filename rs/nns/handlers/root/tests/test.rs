@@ -3,7 +3,10 @@ use candid::Encode;
 use dfn_candid::candid;
 use ic_base_types::PrincipalId;
 use ic_ic00_types::CanisterInstallMode::Upgrade;
-use ic_nervous_system_root::{CanisterIdRecord, CanisterStatusResult, ChangeCanisterProposal};
+use ic_nervous_system_root::{
+    canister_status::CanisterStatusResult, change_canister::ChangeCanisterProposal,
+    CanisterIdRecord,
+};
 use ic_nns_handler_root::init::RootCanisterInitPayloadBuilder;
 use ic_nns_test_utils::itest_helpers::{
     forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_root_canister,

@@ -1,98 +1,103 @@
-use crate::canister_control::{
-    get_canister_id, perform_execute_generic_nervous_system_function_call,
-    upgrade_canister_directly,
+use crate::pb::v1::{FailStuckUpgradeInProgressRequest, FailStuckUpgradeInProgressResponse};
+use crate::{
+    account_from_proto, account_to_proto,
+    canister_control::{
+        get_canister_id, perform_execute_generic_nervous_system_function_call,
+        upgrade_canister_directly,
+    },
+    ledger::ICRC1Ledger,
+    logs::{ERROR, INFO},
+    neuron::{
+        NeuronState, RemovePermissionsStatus, DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER,
+        MAX_LIST_NEURONS_RESULTS,
+    },
+    pb::{
+        sns_root_types::{
+            RegisterDappCanistersRequest, RegisterDappCanistersResponse, SetDappControllersRequest,
+            SetDappControllersResponse,
+        },
+        v1::{
+            claim_swap_neurons_response::SwapNeuron,
+            get_neuron_response, get_proposal_response,
+            governance::{
+                self, neuron_in_flight_command,
+                neuron_in_flight_command::Command as InFlightCommand, NeuronInFlightCommand,
+                SnsMetadata, UpgradeInProgress, Version,
+            },
+            governance_error::ErrorType,
+            manage_neuron::{
+                self,
+                claim_or_refresh::{By, MemoAndController},
+                AddNeuronPermissions, ClaimOrRefresh, DisburseMaturity, FinalizeDisburseMaturity,
+                RemoveNeuronPermissions,
+            },
+            manage_neuron_response::{
+                DisburseMaturityResponse, MergeMaturityResponse, StakeMaturityResponse,
+            },
+            neuron::{DissolveState, Followees},
+            proposal::Action,
+            transfer_sns_treasury_funds::TransferFrom,
+            Account as AccountProto, Ballot, ClaimSwapNeuronsError, ClaimSwapNeuronsRequest,
+            ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus, DefaultFollowees,
+            DeregisterDappCanisters, DisburseMaturityInProgress, Empty,
+            ExecuteGenericNervousSystemFunction, GetMetadataRequest, GetMetadataResponse, GetMode,
+            GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
+            GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
+            Governance as GovernanceProto, GovernanceError, ListNervousSystemFunctionsResponse,
+            ListNeurons, ListNeuronsResponse, ListProposals, ListProposalsResponse, ManageNeuron,
+            ManageNeuronResponse, ManageSnsMetadata, NervousSystemFunction,
+            NervousSystemParameters, Neuron, NeuronId, NeuronPermission, NeuronPermissionList,
+            NeuronPermissionType, Proposal, ProposalData, ProposalDecisionStatus, ProposalId,
+            ProposalRewardStatus, RegisterDappCanisters, RewardEvent, Tally,
+            TransferSnsTreasuryFunds, UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote,
+            VotingRewardsParameters, WaitForQuietState,
+        },
+    },
+    proposal::{
+        validate_and_render_proposal, ValidGenericNervousSystemFunction, MAX_LIST_PROPOSAL_RESULTS,
+        MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
+    },
+    sns_upgrade::{
+        get_all_sns_canisters, get_running_version, get_upgrade_params, get_wasm, SnsCanisterType,
+        UpgradeSnsParams,
+    },
+    types::{is_registered_function_id, Environment, HeapGrowthPotential, LedgerUpdateLock},
 };
-use crate::pb::v1::{
-    claim_swap_neurons_response::SwapNeuron,
-    get_neuron_response, get_proposal_response,
-    governance::{
-        self, neuron_in_flight_command, neuron_in_flight_command::Command as InFlightCommand,
-        NeuronInFlightCommand, SnsMetadata, UpgradeInProgress, Version,
-    },
-    governance_error::ErrorType,
-    manage_neuron::{
-        self,
-        claim_or_refresh::{By, MemoAndController},
-        AddNeuronPermissions, ClaimOrRefresh, DisburseMaturity, FinalizeDisburseMaturity,
-        RemoveNeuronPermissions,
-    },
-    manage_neuron_response::{
-        DisburseMaturityResponse, MergeMaturityResponse, StakeMaturityResponse,
-    },
-    neuron::{DissolveState, Followees},
-    proposal,
-    proposal::Action,
-    transfer_sns_treasury_funds::TransferFrom,
-    Account as AccountProto, Ballot, ClaimSwapNeuronsError, ClaimSwapNeuronsRequest,
-    ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus, DefaultFollowees, DeregisterDappCanisters,
-    DisburseMaturityInProgress, Empty, ExecuteGenericNervousSystemFunction,
-    FailStuckUpgradeInProgressRequest, FailStuckUpgradeInProgressResponse, GetMetadataRequest,
-    GetMetadataResponse, GetMode, GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal,
-    GetProposalResponse, GetSnsInitializationParametersRequest,
-    GetSnsInitializationParametersResponse, Governance as GovernanceProto, GovernanceError,
-    ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse, ListProposals,
-    ListProposalsResponse, ManageNeuron, ManageNeuronResponse, ManageSnsMetadata,
-    NervousSystemFunction, NervousSystemParameters, Neuron, NeuronId, NeuronPermission,
-    NeuronPermissionList, NeuronPermissionType, Proposal, ProposalData, ProposalDecisionStatus,
-    ProposalId, ProposalRewardStatus, RegisterDappCanisters, RewardEvent, Tally,
-    TransferSnsTreasuryFunds, UpgradeSnsControlledCanister, UpgradeSnsToNextVersion, Vote,
-    VotingRewardsParameters, WaitForQuietState,
-};
-use crate::{account_from_proto, account_to_proto};
+use candid::{Decode, Encode};
+use dfn_core::api::{spawn, CanisterId};
 use ic_base_types::PrincipalId;
+use ic_canister_log::log;
 use ic_canister_profiler::{measure_span, SpanStats};
 use ic_ic00_types::CanisterInstallMode;
 use ic_ledger_core::Tokens;
-use ic_nervous_system_common::i2d;
-use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
+use ic_nervous_system_common::{
+    i2d,
+    ledger::{self, compute_distribution_subaccount_bytes},
+    NervousSystemError,
+};
+use ic_nervous_system_root::change_canister::ChangeCanisterProposal;
+use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
+use icp_ledger::DEFAULT_TRANSFER_FEE as NNS_DEFAULT_TRANSFER_FEE;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use lazy_static::lazy_static;
 use maplit::hashset;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
-use std::cell::RefCell;
-use std::cmp::Ordering;
-use std::collections::btree_map::{BTreeMap, Entry};
-use std::collections::btree_set::BTreeSet;
-use std::collections::{HashMap, HashSet};
-use std::convert::TryFrom;
-use std::convert::TryInto;
-use std::ops::Bound::{Excluded, Unbounded};
-use std::str::FromStr;
-use std::string::ToString;
-use std::thread::LocalKey;
+use std::{
+    cell::RefCell,
+    cmp::Ordering,
+    collections::{
+        btree_map::{BTreeMap, Entry},
+        btree_set::BTreeSet,
+        HashMap, HashSet,
+    },
+    convert::{TryFrom, TryInto},
+    ops::Bound::{Excluded, Unbounded},
+    str::FromStr,
+    string::ToString,
+    thread::LocalKey,
+};
 use strum::IntoEnumIterator;
-
-use crate::ledger::ICRC1Ledger;
-use crate::neuron::{
-    NeuronState, RemovePermissionsStatus, DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER,
-    MAX_LIST_NEURONS_RESULTS,
-};
-use crate::proposal::{
-    validate_and_render_proposal, ValidGenericNervousSystemFunction, MAX_LIST_PROPOSAL_RESULTS,
-    MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS,
-};
-
-use crate::logs::{ERROR, INFO};
-use crate::pb::sns_root_types::{
-    RegisterDappCanistersRequest, RegisterDappCanistersResponse, SetDappControllersRequest,
-    SetDappControllersResponse,
-};
-use crate::sns_upgrade::{
-    get_all_sns_canisters, get_running_version, get_upgrade_params, get_wasm, SnsCanisterType,
-    UpgradeSnsParams,
-};
-use crate::types::{is_registered_function_id, Environment, HeapGrowthPotential, LedgerUpdateLock};
-use candid::{Decode, Encode};
-use dfn_core::api::{spawn, CanisterId};
-use ic_canister_log::log;
-use ic_nervous_system_common::{
-    ledger::{self, compute_distribution_subaccount_bytes},
-    NervousSystemError,
-};
-use ic_nervous_system_root::ChangeCanisterProposal;
-use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
-use icp_ledger::DEFAULT_TRANSFER_FEE as NNS_DEFAULT_TRANSFER_FEE;
 
 lazy_static! {
     pub static ref NERVOUS_SYSTEM_FUNCTION_DELETION_MARKER: NervousSystemFunction =
@@ -1951,7 +1956,7 @@ impl Governance {
     ///
     /// The given proposal ID specifies the proposal and the `action` specifies
     /// what the proposal should do (basically, function and parameters to be applied).
-    fn start_proposal_execution(&mut self, proposal_id: u64, action: proposal::Action) {
+    fn start_proposal_execution(&mut self, proposal_id: u64, action: Action) {
         // `perform_action` is an async method of &mut self.
         //
         // Starting it and letting it run in the background requires knowing that
@@ -1972,15 +1977,15 @@ impl Governance {
     /// For a given proposal (given by its ID), selects and performs the right 'action',
     /// that is what this proposal is supposed to do as a result of the proposal being
     /// adopted.
-    async fn perform_action(&mut self, proposal_id: u64, action: proposal::Action) {
+    async fn perform_action(&mut self, proposal_id: u64, action: Action) {
         let result = match action {
             // Execution of Motion proposals is trivial.
-            proposal::Action::Motion(_) => Ok(()),
+            Action::Motion(_) => Ok(()),
 
-            proposal::Action::ManageNervousSystemParameters(params) => {
+            Action::ManageNervousSystemParameters(params) => {
                 self.perform_manage_nervous_system_parameters(params)
             }
-            proposal::Action::UpgradeSnsControlledCanister(params) => {
+            Action::UpgradeSnsControlledCanister(params) => {
                 self.perform_upgrade_sns_controlled_canister(proposal_id, params)
                     .await
             }
@@ -2003,35 +2008,33 @@ impl Governance {
                     Err(e) => Err(e),
                 }
             }
-            // TODO(NNS1-1434) - account for not allowing upgrades off of the blessed upgrade path through GenericNervousSystemFunctions
-            proposal::Action::ExecuteGenericNervousSystemFunction(call) => {
+            Action::ExecuteGenericNervousSystemFunction(call) => {
                 self.perform_execute_generic_nervous_system_function(call)
                     .await
             }
-            // TODO(NNS1-1434) - account for not allowing upgrades off of the blessed upgrade path through GenericNervousSystemFunctions
-            proposal::Action::AddGenericNervousSystemFunction(nervous_system_function) => {
+            Action::AddGenericNervousSystemFunction(nervous_system_function) => {
                 self.perform_add_generic_nervous_system_function(nervous_system_function)
             }
-            proposal::Action::RemoveGenericNervousSystemFunction(id) => {
+            Action::RemoveGenericNervousSystemFunction(id) => {
                 self.perform_remove_generic_nervous_system_function(id)
             }
-            proposal::Action::RegisterDappCanisters(register_dapp_canisters) => {
+            Action::RegisterDappCanisters(register_dapp_canisters) => {
                 self.perform_register_dapp_canisters(register_dapp_canisters)
                     .await
             }
-            proposal::Action::DeregisterDappCanisters(deregister_dapp_canisters) => {
+            Action::DeregisterDappCanisters(deregister_dapp_canisters) => {
                 self.perform_deregister_dapp_canisters(deregister_dapp_canisters)
                     .await
             }
-            proposal::Action::ManageSnsMetadata(manage_sns_metadata) => {
+            Action::ManageSnsMetadata(manage_sns_metadata) => {
                 self.perform_manage_sns_metadata(manage_sns_metadata)
             }
-            proposal::Action::TransferSnsTreasuryFunds(transfer) => {
+            Action::TransferSnsTreasuryFunds(transfer) => {
                 self.perform_transfer_sns_treasury_funds(transfer).await
             }
             // This should not be possible, because Proposal validation is performed when
             // a proposal is first made.
-            proposal::Action::Unspecified(_) => Err(GovernanceError::new_with_message(
+            Action::Unspecified(_) => Err(GovernanceError::new_with_message(
                 ErrorType::InvalidProposal,
                 format!(
                     "A Proposal somehow made it all the way to execution despite being \
@@ -2396,7 +2399,7 @@ impl Governance {
                 .unwrap_or_else(|| Encode!().unwrap()),
             upgrade
                 .mode
-                .unwrap_or(CanisterInstallModeProto::Upgrade as i32)
+                .unwrap_or(CanisterInstallMode::Upgrade as i32)
                 .try_into()?,
         )
         .await
@@ -2425,7 +2428,7 @@ impl Governance {
                     .with_arg(arg)
                     .with_mode(mode);
 
-            candid::Encode!(&change_canister_arg).unwrap()
+            Encode!(&change_canister_arg).unwrap()
         };
 
         self.env
@@ -2753,7 +2756,6 @@ impl Governance {
                 // TODO add sale (swap) canister here?
             };
 
-            // TODO(NNS1-1434) - account for not allowing upgrades off of the blessed upgrade path through GenericNervousSystemFunctions
             self.mode().allows_proposal_action_or_err(
                 action,
                 &disallowed_target_canister_ids,
@@ -3966,8 +3968,7 @@ impl Governance {
         neuron_id: &NeuronId,
         command: &manage_neuron::Command,
     ) -> Result<(), GovernanceError> {
-        use manage_neuron::configure::Operation::*;
-        use manage_neuron::Command::*;
+        use manage_neuron::{configure::Operation::*, Command::*};
 
         // If this is a "claim" call, the neuron doesn't exist yet, so we return (because no checks
         // can be made). A "refresh" call can be made on a vesting neuron, so in this case also
@@ -5106,7 +5107,6 @@ fn get_neuron_id_from_memo_and_controller(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::ONE_DAY_SECONDS;
     use crate::{
         pb::v1::{
             governance::SnsMetadata,
@@ -5122,19 +5122,17 @@ mod tests {
             GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse, GetWasmRequest,
             GetWasmResponse, SnsCanisterType, SnsVersion, SnsWasm,
         },
-        types::test_helpers::NativeEnvironment,
+        types::{test_helpers::NativeEnvironment, ONE_DAY_SECONDS},
     };
     use assert_matches::assert_matches;
     use async_trait::async_trait;
     use futures::FutureExt;
     use ic_base_types::NumBytes;
     use ic_canister_client_sender::Sender;
-    use ic_ic00_types::{
-        CanisterIdRecord, CanisterInstallMode, CanisterStatusResultV2, CanisterStatusType,
-    };
-    use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount_bytes;
+    use ic_ic00_types::{CanisterIdRecord, CanisterStatusResultV2, CanisterStatusType};
     use ic_nervous_system_common::{
-        assert_is_ok, E8, SECONDS_PER_DAY, START_OF_2022_TIMESTAMP_SECONDS,
+        assert_is_ok, ledger::compute_neuron_staking_subaccount_bytes, E8, SECONDS_PER_DAY,
+        START_OF_2022_TIMESTAMP_SECONDS,
     };
     use ic_nervous_system_common_test_keys::{
         TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL, TEST_USER1_KEYPAIR,

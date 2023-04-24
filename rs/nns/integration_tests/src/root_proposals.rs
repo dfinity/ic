@@ -7,7 +7,10 @@ use ic_nervous_system_common_test_keys::{
     TEST_USER2_PRINCIPAL, TEST_USER3_KEYPAIR, TEST_USER4_KEYPAIR, TEST_USER5_KEYPAIR,
     TEST_USER6_KEYPAIR,
 };
-use ic_nervous_system_root::{CanisterIdRecord, CanisterStatusResult, ChangeCanisterProposal};
+use ic_nervous_system_root::{
+    canister_status::CanisterStatusResult, change_canister::ChangeCanisterProposal,
+    CanisterIdRecord,
+};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_handler_root::root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot};
 use ic_nns_test_utils::{

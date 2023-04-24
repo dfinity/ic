@@ -3,7 +3,9 @@ use dfn_candid::candid_one;
 use ic_canister_client_sender::Sender;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nervous_system_root::{
-    AddCanisterProposal, CanisterIdRecord, CanisterStatusResult, CanisterStatusType::Running,
+    canister_status::{CanisterStatusResult, CanisterStatusType::Running},
+    change_canister::AddCanisterProposal,
+    CanisterIdRecord,
 };
 use ic_nns_common::types::NeuronId;
 use ic_nns_governance::pb::v1::{NnsFunction, ProposalStatus};

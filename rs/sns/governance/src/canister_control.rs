@@ -1,15 +1,6 @@
-use std::convert::TryFrom;
-
-use candid::{Decode, Encode};
-use dfn_core::CanisterId;
-use ic_base_types::PrincipalId;
-use ic_nervous_system_root::{CanisterIdRecord, CanisterStatusResult, CanisterStatusType};
-
-use crate::logs::{ERROR, INFO};
-use ic_canister_log::log;
-
 use crate::{
     governance::log_prefix,
+    logs::{ERROR, INFO},
     pb::v1::{
         governance_error::ErrorType, ExecuteGenericNervousSystemFunction, GovernanceError,
         NervousSystemFunction,
@@ -17,6 +8,15 @@ use crate::{
     proposal::ValidGenericNervousSystemFunction,
     types::Environment,
 };
+use candid::{Decode, Encode};
+use dfn_core::CanisterId;
+use ic_base_types::PrincipalId;
+use ic_canister_log::log;
+use ic_nervous_system_root::{
+    canister_status::{CanisterStatusResultFromManagementCanister, CanisterStatusType},
+    CanisterIdRecord,
+};
+use std::convert::TryFrom;
 
 /// Attempts to return a canister id given a principal id and returns an error if no id or an
 /// invalid id were given.
@@ -182,7 +182,7 @@ pub async fn stop_canister(
             )
             .await;
         let status = match result {
-            Ok(ok) => Decode!(&ok, CanisterStatusResult)
+            Ok(ok) => Decode!(&ok, CanisterStatusResultFromManagementCanister)
                 .expect("Unable to decode canister_status response."),
 
             // This is probably a permanent error, so we give up right away.
