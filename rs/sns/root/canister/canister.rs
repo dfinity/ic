@@ -1,18 +1,19 @@
-use std::cell::RefCell;
-use std::time::SystemTime;
-
 use async_trait::async_trait;
 use candid::candid_method;
 use dfn_candid::{candid, candid_one, CandidOne};
+use dfn_core::api::{call_bytes_with_cleanup, Funds};
 use dfn_core::{api::now, call, over, over_async, over_init};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
+use ic_ic00_types::IC_00;
 use ic_nervous_system_common::{
     serve_logs, serve_logs_v2, serve_metrics,
     stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter},
 };
-use ic_nervous_system_root::ChangeCanisterProposal;
+use ic_nervous_system_root::canister_status::CanisterStatusResult;
+use ic_nervous_system_root::change_canister::ChangeCanisterProposal;
+use ic_sns_root::types::Environment;
 use ic_sns_root::{
     logs::{ERROR, INFO},
     pb::v1::{
@@ -25,13 +26,9 @@ use ic_sns_root::{
     GetSnsCanistersSummaryResponse, LedgerCanisterClient, ManagementCanisterClient,
     UpdateSettingsArgs,
 };
-
-use dfn_core::api::{call_bytes_with_cleanup, Funds};
-use prost::Message;
-
-use ic_ic00_types::IC_00;
-use ic_sns_root::types::Environment;
 use icrc_ledger_types::icrc3::archive::ArchiveInfo;
+use prost::Message;
+use std::{cell::RefCell, time::SystemTime};
 
 const STABLE_MEM_BUFFER_SIZE: u32 = 100 * 1024 * 1024; // 100MiB
 
@@ -188,10 +185,10 @@ fn canister_status() {
 }
 
 #[candid_method(update, rename = "canister_status")]
-async fn canister_status_(
-    id: ic_nervous_system_root::CanisterIdRecord,
-) -> ic_nervous_system_root::CanisterStatusResult {
-    ic_nervous_system_root::canister_status(id).await.unwrap()
+async fn canister_status_(id: ic_nervous_system_root::CanisterIdRecord) -> CanisterStatusResult {
+    ic_nervous_system_root::canister_status::canister_status(id)
+        .await
+        .unwrap()
 }
 
 /// Return the canister status of all SNS canisters that this root canister
@@ -263,7 +260,9 @@ fn change_canister() {
     // spawn to do the real work in the background.
     over(candid_one, |proposal: ChangeCanisterProposal| {
         assert_change_canister_proposal_is_valid(&proposal);
-        dfn_core::api::futures::spawn(ic_nervous_system_root::change_canister(proposal));
+        dfn_core::api::futures::spawn(ic_nervous_system_root::change_canister::change_canister(
+            proposal,
+        ));
     });
 }
 

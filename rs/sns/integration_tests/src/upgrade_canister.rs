@@ -7,14 +7,19 @@ use ic_canister_client_sender::Sender;
 use ic_ic00_types::CanisterInstallMode;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common_test_keys::{TEST_USER1_KEYPAIR, TEST_USER2_KEYPAIR};
-use ic_nervous_system_root::{CanisterIdRecord, CanisterStatusResult, CanisterStatusType};
+use ic_nervous_system_root::{
+    canister_status::{CanisterStatusResult, CanisterStatusType},
+    CanisterIdRecord,
+};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
 use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
-use ic_sns_governance::pb::v1::{
-    governance_error::ErrorType, proposal::Action, NervousSystemParameters, NeuronPermissionList,
-    NeuronPermissionType, Proposal, UpgradeSnsControlledCanister,
+use ic_sns_governance::{
+    pb::v1::{
+        governance_error::ErrorType, proposal::Action, NervousSystemParameters,
+        NeuronPermissionList, NeuronPermissionType, Proposal, UpgradeSnsControlledCanister,
+    },
+    types::ONE_YEAR_SECONDS,
 };
-use ic_sns_governance::types::ONE_YEAR_SECONDS;
 use ic_sns_test_utils::itest_helpers::{
     install_governance_canister, install_ledger_canister, install_root_canister,
     install_swap_canister, local_test_on_sns_subnet, SnsCanisters, SnsTestsInitPayloadBuilder,

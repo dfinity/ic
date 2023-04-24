@@ -2,20 +2,22 @@ pub mod logs;
 pub mod pb;
 pub mod types;
 
-use crate::logs::{ERROR, INFO};
-use crate::pb::v1::{
-    set_dapp_controllers_response, CanisterCallError, ListSnsCanistersResponse,
-    RegisterDappCanistersRequest, RegisterDappCanistersResponse, SetDappControllersRequest,
-    SetDappControllersResponse, SnsRootCanister,
+use crate::{
+    logs::{ERROR, INFO},
+    pb::v1::{
+        set_dapp_controllers_response, CanisterCallError, ListSnsCanistersResponse,
+        RegisterDappCanistersRequest, RegisterDappCanistersResponse, SetDappControllersRequest,
+        SetDappControllersResponse, SnsRootCanister,
+    },
+    types::Environment,
 };
-use crate::types::Environment;
 use async_trait::async_trait;
 use candid::{CandidType, Decode, Deserialize, Encode};
 use dfn_core::CanisterId;
 use futures::{future::join_all, join};
 use ic_base_types::{NumBytes, PrincipalId};
 use ic_canister_log::log;
-use ic_nervous_system_root::DEFAULT_PRINCIPAL_MULTIPLE_CONTROLLERS;
+use ic_nervous_system_root::canister_status::DEFAULT_PRINCIPAL_MULTIPLE_CONTROLLERS;
 use ic_sns_swap::pb::v1::GetCanisterStatusRequest;
 use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 use num_traits::cast::ToPrimitive;
@@ -1134,12 +1136,14 @@ mod tests {
     use candid::Principal;
     use dfn_core::api::now;
     use futures::FutureExt;
-    use ic_nervous_system_root::{
+    use ic_nervous_system_root::canister_status::{
         DEFAULT_PRINCIPAL_MULTIPLE_CONTROLLERS, DEFAULT_PRINCIPAL_ZERO_CONTROLLERS,
     };
-    use std::collections::VecDeque;
-    use std::sync::{Arc, Mutex};
-    use std::time::SystemTime;
+    use std::{
+        collections::VecDeque,
+        sync::{Arc, Mutex},
+        time::SystemTime,
+    };
 
     #[derive(Debug)]
     enum ManagementCanisterClientCall {

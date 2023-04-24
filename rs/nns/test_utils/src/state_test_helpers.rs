@@ -14,6 +14,7 @@ use ic_ic00_types::{
 };
 use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount;
 use ic_nervous_system_root::CanisterIdRecord;
+use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::{
     memory_allocation_of, CYCLES_MINTING_CANISTER_ID, GENESIS_TOKEN_CANISTER_ID,
     GOVERNANCE_CANISTER_ID, GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET, IDENTITY_CANISTER_ID,
@@ -22,8 +23,18 @@ use ic_nns_constants::{
 };
 use ic_nns_governance::pb::v1::{
     self as nns_governance_pb,
-    manage_neuron::{JoinCommunityFund, LeaveCommunityFund},
-    Governance, ProposalInfo,
+    manage_neuron::{
+        self, configure::Operation, AddHotKey, Configure, JoinCommunityFund, LeaveCommunityFund,
+        RemoveHotKey, StakeMaturity,
+    },
+    Governance, ListNeurons, ListNeuronsResponse, ListProposalInfo, ListProposalInfoResponse,
+    ManageNeuron, ManageNeuronResponse, Proposal, ProposalInfo,
+};
+use ic_sns_governance::{
+    pb::v1::{
+        self as sns_pb, manage_neuron_response::Command as SnsCommandResponse, GetModeResponse,
+    },
+    types::DEFAULT_TRANSFER_FEE,
 };
 use ic_sns_wasm::{
     init::SnsWasmCanisterInitPayload,
@@ -34,30 +45,15 @@ use ic_test_utilities::universal_canister::{
     call_args, wasm as universal_canister_argument_builder, UNIVERSAL_CANISTER_WASM,
 };
 use ic_types::{ingress::WasmResult, Cycles};
-use icrc_ledger_types::icrc1::account::Account;
-use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
+use icp_ledger::{BinaryAccountBalanceArgs, BlockIndex, Tokens};
+use icrc_ledger_types::icrc1::{
+    account::Account,
+    transfer::{TransferArg, TransferError},
+};
 use num_traits::ToPrimitive;
 use on_wire::{FromWire, IntoWire, NewType};
 use prost::Message;
-use std::convert::TryInto;
-use std::env;
-use std::time::Duration;
-
-use ic_nns_common::pb::v1::NeuronId;
-use ic_nns_governance::pb::v1::{
-    manage_neuron::{
-        self, configure::Operation, AddHotKey, Configure, RemoveHotKey, StakeMaturity,
-    },
-    ListNeurons, ListNeuronsResponse, ListProposalInfo, ListProposalInfoResponse, ManageNeuron,
-    ManageNeuronResponse, Proposal,
-};
-use ic_sns_governance::{
-    pb::v1::{
-        self as sns_pb, manage_neuron_response::Command as SnsCommandResponse, GetModeResponse,
-    },
-    types::DEFAULT_TRANSFER_FEE,
-};
-use icp_ledger::{BinaryAccountBalanceArgs, BlockIndex, Tokens};
+use std::{convert::TryInto, env, time::Duration};
 
 /// Turn down state machine logging to just errors to reduce noise in tests where this is not relevant
 pub fn reduce_state_machine_logging_unless_env_set() {
@@ -67,7 +63,7 @@ pub fn reduce_state_machine_logging_unless_env_set() {
     }
 }
 
-/// Creates a canister with a wasm, paylaod, and optionally settings on a StateMachine
+/// Creates a canister with a wasm, payload, and optionally settings on a StateMachine
 pub fn create_canister(
     machine: &StateMachine,
     wasm: Wasm,
@@ -83,7 +79,7 @@ pub fn create_canister(
         .unwrap()
 }
 
-/// Creates a canister with cycles, wasm, paylaod, and optionally settings on a StateMachine
+/// Creates a canister with cycles, wasm, payload, and optionally settings on a StateMachine
 pub fn create_canister_with_cycles(
     machine: &StateMachine,
     wasm: Wasm,
@@ -183,7 +179,7 @@ pub fn query(
     query_impl(machine, canister, method_name, payload, None)
 }
 
-/// Make a query reqeust to a canister on a StateMachine (with sender)
+/// Make a query request to a canister on a StateMachine (with sender)
 pub fn query_with_sender(
     machine: &StateMachine,
     canister: CanisterId,
@@ -1014,7 +1010,7 @@ pub fn sns_wait_for_proposal_execution(
         if let Ok(p) = proposal {
             proposal_executed = p.executed_timestamp_seconds != 0;
         }
-        machine.advance_time(std::time::Duration::from_millis(100));
+        machine.advance_time(Duration::from_millis(100));
     }
 }
 
@@ -1044,7 +1040,7 @@ pub fn sns_wait_for_proposal_executed_or_failed(
             proposal_executed = p.executed_timestamp_seconds != 0;
             proposal_failed = p.failed_timestamp_seconds != 0;
         }
-        machine.advance_time(std::time::Duration::from_millis(100));
+        machine.advance_time(Duration::from_millis(100));
     }
 }
 
