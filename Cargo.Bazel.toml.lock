@@ -2481,7 +2481,7 @@ dependencies = [
  "ic-metrics-encoder",
  "ic-response-verification",
  "ic-stable-structures 0.2.0",
- "ic-stable-structures 0.5.2",
+ "ic-stable-structures 0.5.3",
  "ic-test-state-machine-client",
  "ic-utils 0.22.0",
  "ic-utils 0.23.2",
@@ -4041,9 +4041,9 @@ checksum = "7c382288c7a02396b792e081a5e84727bf65c283d1484c93a39f43097e0854ac"
 
 [[package]]
 name = "ic-stable-structures"
-version = "0.5.2"
+version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7d43ba7c5067d1360860e2234d93411d2126c8eac788467966ed1383161f91fc"
+checksum = "0c0c68bf2fb590e3c3b4e0719383fb2cdceb308cd62df9fef571323b418f7e1c"
 
 [[package]]
 name = "ic-test-state-machine-client"

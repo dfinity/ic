@@ -7,4 +7,4 @@ edition = "2021"
 
 [dependencies]
 ic-types = { path = "../../types/types" }
-lru = { version = "0.7.1", default-features = false }
+lru = { version = "0.7.8", default-features = false }
