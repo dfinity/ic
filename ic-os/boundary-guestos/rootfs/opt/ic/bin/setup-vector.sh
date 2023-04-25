@@ -31,6 +31,7 @@ function read_variables() {
             "logging_url") LOGGING_URL="${value}" ;;
             "logging_user") LOGGING_USER="${value}" ;;
             "logging_password") LOGGING_PASSWORD="${value}" ;;
+            "logging_2xx_sample_rate") LOGGING_2XX_SAMPLE_RATE="${value}" ;;
         esac
     done <"${BN_CONFIG}"
 
@@ -38,6 +39,9 @@ function read_variables() {
         err "missing vector configuration value(s): $(cat "${BN_CONFIG}")"
         exit 1
     fi
+
+    # Default to 1% sampling rate (value is 1/N)
+    LOGGING_2XX_SAMPLE_RATE=${LOGGING_2XX_SAMPLE_RATE:-100}
 }
 
 function generate_vector_config() {
@@ -49,6 +53,7 @@ IP_HASH_SALT=${IP_HASH_SALT:-}
 CLICKHOUSE_URL=${LOGGING_URL:-}
 CLICKHOUSE_USER=${LOGGING_USER:-}
 CLICKHOUSE_PASSWORD=${LOGGING_PASSWORD:-}
+CLICKHOUSE_2XX_SAMPLE_RATE=${LOGGING_2XX_SAMPLE_RATE:-}
 EOF
 }
 
