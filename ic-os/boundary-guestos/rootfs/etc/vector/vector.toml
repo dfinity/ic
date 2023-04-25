@@ -124,7 +124,7 @@ inputs = ["metrics_nginx_access_preprocessed"]
 [transforms.clickhouse_nginx_access_2xx_sampled]
 type = "sample"
 inputs = ["nginx_access_by_status.2xx"]
-rate = 100
+rate = ${CLICKHOUSE_2XX_SAMPLE_RATE:?err}
 
 [transforms.clickhouse_nginx_access_preprocessed]
 type = "remap"
