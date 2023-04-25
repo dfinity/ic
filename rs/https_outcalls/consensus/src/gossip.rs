@@ -1,6 +1,6 @@
 //! This module contains the gossip implementation of the canister http feature.
 
-pub use crate::canister_http::pool_manager::CanisterHttpPoolManagerImpl;
+pub use crate::pool_manager::CanisterHttpPoolManagerImpl;
 use ic_consensus_utils::registry_version_at_height;
 use ic_interfaces::{
     artifact_pool::PriorityFnAndFilterProducer, canister_http::CanisterHttpPool,

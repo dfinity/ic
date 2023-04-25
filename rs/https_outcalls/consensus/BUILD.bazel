@@ -1,0 +1,54 @@
+load("@rules_rust//rust:defs.bzl", "rust_doc", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "//rs/consensus/utils",
+    "//rs/interfaces",
+    "//rs/interfaces/https_outcalls_adapter_client",
+    "//rs/interfaces/registry",
+    "//rs/interfaces/state_manager",
+    "//rs/monitoring/logger",
+    "//rs/monitoring/metrics",
+    "//rs/registry/helpers",
+    "//rs/replicated_state",
+    "//rs/types/types",
+    "@crate_index//:prometheus",
+    "@crate_index//:slog",
+]
+
+DEV_DEPENDENCIES = [
+    "//rs/artifact_pool",
+    "//rs/consensus/mocks",
+    "//rs/protobuf",
+    "//rs/registry/subnet_type",
+    "//rs/test_utilities",
+    "//rs/test_utilities/logger",
+    "//rs/test_utilities/registry",
+    "@crate_index//:mockall_0_7_2",
+]
+
+rust_library(
+    name = "consensus",
+    srcs = glob(["src/**/*.rs"]),
+    crate_features = select({
+        "//conditions:default": [],
+    }),
+    crate_name = "ic_https_outcalls_consensus",
+    proc_macro_deps = [
+        "@crate_index//:strum_macros",
+    ],
+    version = "0.8.0",
+    deps = DEPENDENCIES,
+)
+
+rust_doc(
+    name = "ic_https_outcalls_consensus_doc",
+    crate = ":consensus",
+)
+
+rust_test(
+    name = "ic_https_outcalls_consensus_test",
+    crate = ":consensus",
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)

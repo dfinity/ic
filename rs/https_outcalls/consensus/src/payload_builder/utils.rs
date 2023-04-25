@@ -1,5 +1,3 @@
-use std::collections::{BTreeMap, BTreeSet, HashSet};
-
 use ic_interfaces::canister_http::CanisterHttpPermanentValidationError;
 use ic_types::{
     batch::{CanisterHttpPayload, ValidationContext},
@@ -10,6 +8,7 @@ use ic_types::{
     messages::CallbackId,
     NodeId, RegistryVersion,
 };
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 /// Checks whether the response is consistent
 ///

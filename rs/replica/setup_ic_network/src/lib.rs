@@ -19,10 +19,6 @@ use ic_config::{
     artifact_pool::ArtifactPoolConfig, consensus::ConsensusConfig, transport::TransportConfig,
 };
 use ic_consensus::{
-    canister_http::{
-        gossip::CanisterHttpGossipImpl, payload_builder::CanisterHttpPayloadBuilderImpl,
-        pool_manager::CanisterHttpPoolManagerImpl,
-    },
     certification::{setup as certification_setup, CertificationCrypto},
     consensus::{dkg_key_manager::DkgKeyManager, setup as consensus_setup},
     dkg, ecdsa,
@@ -32,6 +28,10 @@ use ic_consensus_utils::{
 };
 use ic_crypto_tls_interfaces::{TlsHandshake, TlsStream};
 use ic_cycles_account_manager::CyclesAccountManager;
+use ic_https_outcalls_consensus::{
+    gossip::CanisterHttpGossipImpl, payload_builder::CanisterHttpPayloadBuilderImpl,
+    pool_manager::CanisterHttpPoolManagerImpl,
+};
 use ic_icos_sev_interfaces::ValidateAttestedStream;
 use ic_ingress_manager::IngressManager;
 use ic_interfaces::{
