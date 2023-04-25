@@ -43,7 +43,9 @@ use ic_tests::driver::{
     ic::{InternetComputer, Subnet},
     prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
+    test_env_api::{HasTopologySnapshot, NnsCanisterWasmStrategy, NnsCustomizations},
 };
+use ic_tests::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
 
 const BOUNDARY_NODE_NAME: &str = "boundary-node-1";
 
@@ -64,6 +66,11 @@ pub fn setup(env: TestEnv) {
         .with_unassigned_nodes(1)
         .setup_and_start(&env)
         .expect("Failed to setup IC under test");
+    install_nns_with_customizations_and_check_progress(
+        env.topology_snapshot(),
+        NnsCanisterWasmStrategy::TakeBuiltFromSources,
+        NnsCustomizations::default(),
+    );
     BoundaryNode::new(String::from(BOUNDARY_NODE_NAME))
         .allocate_vm(&env)
         .expect("Allocation of BoundaryNode failed.")

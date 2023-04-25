@@ -210,7 +210,7 @@ pub(crate) fn cert_state_makes_no_progress_with_retries(
     .expect("System shouldn't make progress!");
 }
 
-pub(crate) fn install_nns_with_customizations_and_check_progress(
+pub fn install_nns_with_customizations_and_check_progress(
     topology: TopologySnapshot,
     canister_wasm_strategy: NnsCanisterWasmStrategy,
     customizations: NnsCustomizations,
