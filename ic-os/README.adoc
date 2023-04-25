@@ -134,7 +134,7 @@ ubuntu@sf1-gby01:~/AMDSEV/snp-release-2022-04-15$ sudo dmesg | grep  -i -e sev -
 
 * cd to the root of the source tree
 * build the image: bazel build //ic-os/boundary-guestos/envs/dev-sev/...
-* ic-os/scripts/prepare-for-virsh.sh
+* ic-os/scripts/bn-virsh/prepare-for-virsh.sh
 
 ### Create, login, destroy
 
