@@ -13,7 +13,6 @@ path = "src/main.rs"
 
 [dependencies]
 rusqlite = { version = "~0.28.0", features = ["bundled"] }
-log = "0.4.17"
 ic-ledger-core = { path = "../../ledger_core" }
 ic-ledger-canister-core = { path = "../../ledger_canister_core" }
 ic-base-types = { path = "../../../types/base_types" }
@@ -41,6 +40,11 @@ icrc-ledger-agent = { path = "../../../../packages/icrc-ledger-agent" }
 hex = "0.4.2"
 ic-crypto-tree-hash = { path = "../../../crypto/tree_hash" }
 lazy_static = "1.4.0"
+http = "0.2.9"
+tower-http = { version = "0.4.0", features = ["trace"] }
+tower-request-id = "0.2.1"
+tracing = "0.1.37"
+tracing-subscriber = { version = "0.3.16", features = ["json"] }
 
 [lib]
 path = "src/lib.rs"

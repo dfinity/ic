@@ -1153,6 +1153,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                     "trace",
                 ],
             ),
+            "tower-request-id": crate.spec(
+                version = "^0.2.1",
+            ),
             "tower-test": crate.spec(
                 version = "^0.4.0",
             ),
