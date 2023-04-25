@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import List
 
 import gflags
+from retry import retry
 from termcolor import colored
 
 from common import ansible, flamegraphs, machine_failure, misc, prometheus, report, ssh
@@ -411,6 +412,7 @@ class BaseExperiment:
         subnet_info = [info for (_, info) in topo["topology"]["subnets"].items()]
         return subnet_info[subnet_index]["records"][0]["value"]["membership"]
 
+    @retry(tries=5)
     def get_mainnet_nns_ip(self):
         """Get NNS IP address on mainnet."""
         topology = self.__get_topology(nns_url=MAINNET_NNS_URL)

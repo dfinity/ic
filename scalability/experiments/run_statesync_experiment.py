@@ -73,12 +73,22 @@ class StatesyncExperiment(base_experiment.BaseExperiment):
             self.install_canister(hostname, canister=os.path.join(self.artifacts_path, f"../canisters/{CANISTER}"))
         print("Successfully installed", FLAGS.num_canisters, "canisters.")
 
+    def __change_state(hostname, canister_id, seed):
+        agent = misc.get_agent(hostname)
+        response = agent.update_raw(canister_id, "change_state", json.dumps(seed))
+        print("response", response)
+
     def change_state(hostnames: [str], canister_ids: [str], seed):
-        """Make an update call to the statesync canister to change the state."""
+        """
+        Make an update call to the statesync canister to change the state.
+
+        We allow individual calls to fail, since we mostly care about the timing here.
+        """
         for (hostname, canister_id) in zip(hostnames, canister_ids):
-            agent = misc.get_agent(hostname)
-            response = agent.update_raw(canister_id, "change_state", json.dumps(seed))
-            print("response", response)
+            try:
+                StatesyncExperiment.__change_state(hostname, canister_id, seed)
+            except Exception as e:
+                print(f"State change called failed: {e} - continuing")
 
     def expand_state(hostnames: [str], canister_ids: [str], index, seed):
         """Make an update call to the statesync canister to expand the state."""

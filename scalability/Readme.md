@@ -51,6 +51,8 @@ Because python tests can be run in different environments, it makes sense to hav
     ```
 1. Commit changes
 
+If likely also have to add the dependency to `BUILD.bazel` using `deps = [ requirement(foobar) ]`.
+
 # Experiment classes
 
 The suite offers a set of base experiments to build on.
