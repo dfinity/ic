@@ -204,7 +204,7 @@ impl SystemApi for SystemApiEmpty {
     fn out_of_instructions(&mut self, _instruction_counter: i64) -> Result<i64, HypervisorError> {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
-    fn update_available_memory(&mut self, _: i64, _: u64) -> HypervisorResult<()> {
+    fn update_available_memory(&mut self, _: i64, _: u64, _: u64) -> HypervisorResult<()> {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
     fn try_grow_stable_memory(

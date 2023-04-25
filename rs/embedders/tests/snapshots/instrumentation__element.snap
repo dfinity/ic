@@ -1,5 +1,5 @@
 ---
-source: embedders/tests/instrumentation.rs
+source: rs/embedders/tests/instrumentation.rs
 expression: out
 ---
 (module
@@ -7,7 +7,7 @@ expression: out
   (type (;1;) (func (result i64)))
   (type (;2;) (func (param i64) (result i64)))
   (type (;3;) (func (param i32)))
-  (type (;4;) (func (param i32 i32) (result i32)))
+  (type (;4;) (func (param i32 i32 i32) (result i32)))
   (import "__" "out_of_instructions" (func (;0;) (type 0)))
   (import "__" "update_available_memory" (func (;1;) (type 4)))
   (import "ic0" "msg_cycles_accept" (func (;2;) (type 2)))

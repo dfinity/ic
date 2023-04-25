@@ -25,7 +25,7 @@
 //!
 //! ```wasm
 //! (import "__" "out_of_instructions" (func (;0;) (func)))
-//! (import "__" "update_available_memory" (func (;1;) ((param i32 i32) (result i32))))
+//! (import "__" "update_available_memory" (func (;1;) ((param i32 i32 i32) (result i32))))
 //! (import "__" "try_grow_stable_memory" (func (;1;) ((param i64 i64 i32) (result i64))))
 //! (import "__" "internal_trap" (func (;1;) ((param i32))))
 //! (import "__" "stable_read_first_access" (func ((param i64) (param i64) (param i64))))
@@ -240,7 +240,10 @@ fn mutate_function_indices(module: &mut Module, f: impl Fn(u32) -> u32) {
 fn inject_helper_functions(mut module: Module, wasm_native_stable_memory: FlagStatus) -> Module {
     // insert types
     let ooi_type = Type::Func(FuncType::new([], []));
-    let uam_type = Type::Func(FuncType::new([ValType::I32, ValType::I32], [ValType::I32]));
+    let uam_type = Type::Func(FuncType::new(
+        [ValType::I32, ValType::I32, ValType::I32],
+        [ValType::I32],
+    ));
 
     let ooi_type_idx = add_type(&mut module, ooi_type);
     let uam_type_idx = add_type(&mut module, uam_type);
@@ -1132,19 +1135,23 @@ fn inject_mem_barrier(func_body: &mut wasm_transform::Body, func_type: &FuncType
     }
 }
 
-// Scans through a function and adds instrumentation after each `memory.grow`
-// instruction to make sure that there's enough available memory left to support
-// the requested extra memory. If no `memory.grow` instructions are present then
-// the function's code remains unchanged.
+// Scans through a function and adds instrumentation after each `memory.grow` or
+// `table.grow` instruction to make sure that there's enough available memory
+// left to support the requested extra memory. If no `memory.grow` or
+// `table.grow` instructions are present then the code remains unchanged.
 fn inject_update_available_memory(func_body: &mut wasm_transform::Body, func_type: &FuncType) {
+    // This is an overestimation of table element size computed based on the
+    // existing canister limits.
+    const TABLE_ELEMENT_SIZE: u32 = 1024;
     use Operator::*;
-    let mut injection_points: Vec<usize> = Vec::new();
+    let mut injection_points: Vec<(usize, u32)> = Vec::new();
     {
         for (idx, instr) in func_body.instructions.iter().enumerate() {
-            // TODO(EXC-222): Once `table.grow` is supported we should extend the list of
-            // injections here.
             if let MemoryGrow { .. } = instr {
-                injection_points.push(idx);
+                injection_points.push((idx, WASM_PAGE_SIZE));
+            }
+            if let TableGrow { .. } = instr {
+                injection_points.push((idx, TABLE_ELEMENT_SIZE));
             }
         }
     }
@@ -1161,7 +1168,7 @@ fn inject_update_available_memory(func_body: &mut wasm_transform::Body, func_typ
         let orig_elems = &func_body.instructions;
         let mut elems: Vec<Operator> = Vec::new();
         let mut last_injection_position = 0;
-        for point in injection_points {
+        for (point, element_size) in injection_points {
             let update_available_memory_instr = orig_elems[point].clone();
             elems.extend_from_slice(&orig_elems[last_injection_position..point]);
             // At this point we have a memory.grow so the argument to it will be on top of
@@ -1174,6 +1181,9 @@ fn inject_update_available_memory(func_body: &mut wasm_transform::Body, func_typ
                 update_available_memory_instr,
                 LocalGet {
                     local_index: memory_local_ix,
+                },
+                I32Const {
+                    value: element_size as i32,
                 },
                 Call {
                     function_index: InjectedImports::UpdateAvailableMemory as u32,

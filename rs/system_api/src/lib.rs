@@ -2408,13 +2408,19 @@ impl SystemApi for SystemApiImpl {
     fn update_available_memory(
         &mut self,
         native_memory_grow_res: i64,
-        additional_pages: u64,
+        additional_elements: u64,
+        element_size: u64,
     ) -> HypervisorResult<()> {
         let result = {
             if native_memory_grow_res == -1 {
                 return Ok(());
             }
-            match self.memory_usage.allocate_pages(additional_pages as usize) {
+            let bytes = additional_elements
+                .checked_mul(element_size)
+                .map(NumBytes::new)
+                .ok_or(HypervisorError::OutOfMemory)?;
+
+            match self.memory_usage.allocate_memory(bytes, NumBytes::new(0)) {
                 Ok(()) => Ok(()),
                 Err(_err) => Err(HypervisorError::OutOfMemory),
             }
@@ -2424,7 +2430,8 @@ impl SystemApi for SystemApiImpl {
             update_available_memory,
             result,
             native_memory_grow_res,
-            additional_pages
+            additional_elements,
+            element_size
         );
         result
     }

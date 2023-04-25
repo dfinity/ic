@@ -793,12 +793,13 @@ pub trait SystemApi {
     fn out_of_instructions(&mut self, instruction_counter: i64) -> HypervisorResult<i64>;
 
     /// This system call is not part of the public spec. It's called after a
-    /// native `memory.grow` has been called to check whether there's enough
-    /// available memory left.
+    /// native `memory.grow` or `table.grow` has been called to check whether
+    /// there's enough available memory left.
     fn update_available_memory(
         &mut self,
         native_memory_grow_res: i64,
-        additional_pages: u64,
+        additional_elements: u64,
+        element_size: u64,
     ) -> HypervisorResult<()>;
 
     /// Attempts to allocate memory before calling stable grow. Will also check

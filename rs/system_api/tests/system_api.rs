@@ -1512,7 +1512,8 @@ fn update_available_memory_updates_subnet_available_memory() {
         no_op_logger(),
     );
 
-    api.update_available_memory(0, 1).unwrap();
+    api.update_available_memory(0, 1, wasm_page_size as u64)
+        .unwrap();
     assert_eq!(api.get_allocated_bytes().get() as i64, wasm_page_size);
     assert_eq!(api.get_allocated_message_bytes().get() as i64, 0);
     assert_eq!(
@@ -1520,7 +1521,8 @@ fn update_available_memory_updates_subnet_available_memory() {
         wasm_custom_sections_available_memory_before
     );
 
-    api.update_available_memory(0, 10).unwrap_err();
+    api.update_available_memory(0, 10, wasm_page_size as u64)
+        .unwrap_err();
     assert_eq!(api.get_allocated_bytes().get() as i64, wasm_page_size);
     assert_eq!(api.get_allocated_message_bytes().get() as i64, 0);
     assert_eq!(
@@ -1570,7 +1572,7 @@ fn take_execution_result_properly_frees_memory() {
         no_op_logger(),
     );
 
-    api.update_available_memory(0, 1).unwrap();
+    api.update_available_memory(0, 1, 64 << 10).unwrap();
 
     let req = RequestBuilder::default()
         .sender(own_canister_id)
