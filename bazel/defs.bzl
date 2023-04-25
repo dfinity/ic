@@ -57,6 +57,29 @@ zstd_compress = rule(
     },
 )
 
+def _sha256sum2url_impl(ctx):
+    """
+    Returns cas url pointing to the artifact with checksum specified.
+
+    The rule does not check existance of the artifact!
+    Ensure that the corresponding rule that creates the artifact is remote cacheable!
+    """
+    out = ctx.actions.declare_file(ctx.label.name)
+    ctx.actions.run(
+        executable = "awk",
+        arguments = ["-v", "out=" + out.path, '{ printf "https://artifacts.idx.dfinity.network/cas/%s", $1 > out }', ctx.file.src.path],
+        inputs = [ctx.file.src],
+        outputs = [out],
+    )
+    return [DefaultInfo(files = depset([out]), runfiles = ctx.runfiles(files = [out]))]
+
+sha256sum2url = rule(
+    implementation = _sha256sum2url_impl,
+    attrs = {
+        "src": attr.label(allow_single_file = True),
+    },
+)
+
 def rust_test_suite_with_extra_srcs(name, srcs, extra_srcs, **kwargs):
     """ A rule for creating a test suite for a set of `rust_test` targets.
 
