@@ -201,9 +201,9 @@ fn add_type(module: &mut Module, ty: Type) -> u32 {
 }
 
 fn mutate_function_indices(module: &mut Module, f: impl Fn(u32) -> u32) {
-    for func_body in &mut module.code_sections {
-        for instr in &mut func_body.instructions {
-            match instr {
+    fn mutate_instructions(f: &impl Fn(u32) -> u32, ops: &mut [Operator]) {
+        for op in ops {
+            match op {
                 Operator::Call { function_index }
                 | Operator::ReturnCall { function_index }
                 | Operator::RefFunc { function_index } => {
@@ -213,18 +213,50 @@ fn mutate_function_indices(module: &mut Module, f: impl Fn(u32) -> u32) {
             }
         }
     }
+
+    for func_body in &mut module.code_sections {
+        mutate_instructions(&f, &mut func_body.instructions)
+    }
+
     for exp in &mut module.exports {
         if let ExternalKind::Func = exp.kind {
             exp.index = f(exp.index);
         }
     }
+
     for (_, _, elem_items) in &mut module.elements {
-        if let wasm_transform::ElementItems::Functions(fun_items) = elem_items {
-            for idx in fun_items {
-                *idx = f(*idx);
+        match elem_items {
+            wasm_transform::ElementItems::Functions(fun_items) => {
+                for idx in fun_items {
+                    *idx = f(*idx);
+                }
+            }
+            wasm_transform::ElementItems::ConstExprs(expr) => {
+                for ops in expr {
+                    mutate_instructions(&f, ops)
+                }
             }
         }
     }
+
+    for global in &mut module.globals {
+        mutate_instructions(&f, &mut global.init_expr)
+    }
+
+    for data_segment in &mut module.data {
+        match &mut data_segment.kind {
+            wasm_transform::DataSegmentKind::Passive => {}
+            wasm_transform::DataSegmentKind::Active {
+                memory_index: _,
+                offset_expr,
+            } => {
+                let mut temp = [offset_expr.clone()];
+                mutate_instructions(&f, &mut temp);
+                *offset_expr = temp.into_iter().next().unwrap();
+            }
+        }
+    }
+
     if let Some(start_idx) = module.start.as_mut() {
         *start_idx = f(*start_idx);
     }
