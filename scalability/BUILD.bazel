@@ -125,6 +125,7 @@ py_library(
         ":prometheus",
         ":report",
         ":ssh",
+        requirement("retry"),
     ],
 )
 
