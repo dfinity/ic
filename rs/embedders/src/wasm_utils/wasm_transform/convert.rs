@@ -11,6 +11,15 @@
 pub(super) mod parser_to_internal {
     use crate::wasm_utils::wasm_transform;
 
+    fn const_expr(
+        const_expr: wasmparser::ConstExpr,
+    ) -> Result<Vec<wasmparser::Operator>, wasmparser::BinaryReaderError> {
+        const_expr
+            .get_operators_reader()
+            .into_iter()
+            .collect::<Result<_, _>>()
+    }
+
     fn data_kind(
         kind: wasmparser::DataKind,
     ) -> Result<wasm_transform::DataSegmentKind, wasm_transform::Error> {
@@ -44,9 +53,25 @@ pub(super) mod parser_to_internal {
         })
     }
 
+    pub(crate) fn element_kind(
+        kind: wasmparser::ElementKind,
+    ) -> Result<wasm_transform::ElementKind, wasmparser::BinaryReaderError> {
+        match kind {
+            wasmparser::ElementKind::Passive => Ok(wasm_transform::ElementKind::Passive),
+            wasmparser::ElementKind::Declared => Ok(wasm_transform::ElementKind::Declared),
+            wasmparser::ElementKind::Active {
+                table_index,
+                offset_expr,
+            } => Ok(wasm_transform::ElementKind::Active {
+                table_index,
+                offset_expr: const_expr(offset_expr)?,
+            }),
+        }
+    }
+
     pub(crate) fn element_items(
         items: wasmparser::ElementItems,
-    ) -> Result<wasm_transform::ElementItems, wasm_transform::Error> {
+    ) -> Result<wasm_transform::ElementItems, wasmparser::BinaryReaderError> {
         match items {
             wasmparser::ElementItems::Functions(reader) => {
                 let functions = reader.into_iter().collect::<Result<Vec<_>, _>>()?;
@@ -55,11 +80,20 @@ pub(super) mod parser_to_internal {
             wasmparser::ElementItems::Expressions(reader) => {
                 let exprs = reader
                     .into_iter()
-                    .map(|expr| super::internal_to_encoder::const_expr(expr?))
+                    .map(|expr| const_expr(expr?))
                     .collect::<Result<Vec<_>, _>>()?;
                 Ok(wasm_transform::ElementItems::ConstExprs(exprs))
             }
         }
+    }
+
+    pub(crate) fn global(
+        global: wasmparser::Global,
+    ) -> Result<wasm_transform::Global, wasmparser::BinaryReaderError> {
+        Ok(wasm_transform::Global {
+            ty: global.ty,
+            init_expr: const_expr(global.init_expr)?,
+        })
     }
 }
 
@@ -134,30 +168,21 @@ pub(super) mod internal_to_encoder {
         }
     }
 
-    pub(crate) fn op_to_const_expr(
-        operator: &wasmparser::Operator,
-    ) -> Result<wasm_encoder::ConstExpr, wasmparser::BinaryReaderError> {
-        use wasm_encoder::Encode;
-        let mut bytes: Vec<u8> = Vec::new();
-        op(operator)?.encode(&mut bytes);
-        Ok(wasm_encoder::ConstExpr::raw(bytes))
-    }
-
     pub(crate) fn const_expr(
-        expr: wasmparser::ConstExpr,
-    ) -> Result<wasm_encoder::ConstExpr, wasmparser::BinaryReaderError> {
-        let mut reader = expr.get_binary_reader();
-        let size = reader.bytes_remaining();
-        // The const expression should end in a `End` instruction, but the encoder
-        // doesn't expect that instruction to be part of its input so we drop it.
-        let bytes = reader.read_bytes(size - 1)?.to_vec();
-        match reader.read_operator()? {
-            wasmparser::Operator::End => {}
-            _ => {
-                panic!("const expr didn't end with `End` instruction");
+        expr: &[wasmparser::Operator],
+    ) -> Result<wasm_encoder::ConstExpr, wasm_transform::Error> {
+        use wasm_encoder::Encode;
+
+        match expr.last() {
+            Some(wasmparser::Operator::End) => {
+                let mut bytes = vec![];
+                for i in &expr[..expr.len() - 1] {
+                    op(i)?.encode(&mut bytes);
+                }
+                Ok(wasm_encoder::ConstExpr::raw(bytes))
             }
+            _ => Err(wasm_transform::Error::MissingConstEnd),
         }
-        Ok(wasm_encoder::ConstExpr::raw(bytes))
     }
 
     pub(crate) struct DerefBytesIterator<'a> {
@@ -195,15 +220,14 @@ pub(super) mod internal_to_encoder {
     pub(crate) fn data_segment<'a>(
         segment: wasm_transform::DataSegment<'a>,
         temp_const_expr: &'a mut wasm_encoder::ConstExpr,
-    ) -> Result<wasm_encoder::DataSegment<'a, DerefBytesIterator<'a>>, wasmparser::BinaryReaderError>
-    {
+    ) -> Result<wasm_encoder::DataSegment<'a, DerefBytesIterator<'a>>, wasm_transform::Error> {
         let mode = match segment.kind {
             wasm_transform::DataSegmentKind::Passive => wasm_encoder::DataSegmentMode::Passive,
             wasm_transform::DataSegmentKind::Active {
                 memory_index,
                 offset_expr,
             } => {
-                *temp_const_expr = op_to_const_expr(&offset_expr)?;
+                *temp_const_expr = const_expr(&[offset_expr, wasmparser::Operator::End])?;
                 wasm_encoder::DataSegmentMode::Active {
                     memory_index,
                     offset: temp_const_expr,
@@ -235,15 +259,19 @@ pub(super) mod internal_to_encoder {
         }
     }
 
-    pub(crate) fn element_items(
-        element_items: &wasm_transform::ElementItems,
-    ) -> wasm_encoder::Elements<'_> {
+    pub(crate) fn element_items<'a>(
+        element_items: &'a wasm_transform::ElementItems<'a>,
+        temp_const_exprs: &'a mut Vec<wasm_encoder::ConstExpr>,
+    ) -> Result<wasm_encoder::Elements<'a>, wasm_transform::Error> {
         match element_items {
             wasm_transform::ElementItems::Functions(funcs) => {
-                wasm_encoder::Elements::Functions(funcs)
+                Ok(wasm_encoder::Elements::Functions(funcs))
             }
             wasm_transform::ElementItems::ConstExprs(exprs) => {
-                wasm_encoder::Elements::Expressions(exprs)
+                for e in exprs {
+                    temp_const_exprs.push(const_expr(e)?);
+                }
+                Ok(wasm_encoder::Elements::Expressions(temp_const_exprs))
             }
         }
     }

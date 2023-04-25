@@ -1,8 +1,9 @@
 use std::ops::Range;
 
+use wasmparser::GlobalType;
 use wasmparser::{
-    BinaryReaderError, Element, ElementKind, Export, Global, Import, MemoryType, Operator, Parser,
-    Payload, TableType, Type, ValType,
+    BinaryReaderError, Export, Import, MemoryType, Operator, Parser, Payload, TableType, Type,
+    ValType,
 };
 
 mod convert;
@@ -24,9 +25,18 @@ pub struct Body<'a> {
     pub instructions: Vec<Operator<'a>>,
 }
 
-pub enum ElementItems {
+pub enum ElementItems<'a> {
     Functions(Vec<u32>),
-    ConstExprs(Vec<wasm_encoder::ConstExpr>),
+    ConstExprs(Vec<Vec<Operator<'a>>>),
+}
+
+pub enum ElementKind<'a> {
+    Passive,
+    Active {
+        table_index: u32,
+        offset_expr: Vec<Operator<'a>>,
+    },
+    Declared,
 }
 
 pub struct DataSegment<'a> {
@@ -48,6 +58,11 @@ pub enum DataSegmentKind<'a> {
         /// The initialization operator for the data segment.
         offset_expr: Operator<'a>,
     },
+}
+
+pub struct Global<'a> {
+    pub ty: GlobalType,
+    pub init_expr: Vec<Operator<'a>>,
 }
 
 #[derive(Debug, Clone)]
@@ -83,6 +98,11 @@ pub enum Error {
     InvalidMemoryReservedByte {
         func_range: Range<usize>,
     },
+    /// The spec requires that each const expression has a final `End`
+    /// instruction. `wasm_encoder` automatically inserts this instruction, so
+    /// we through an error when encoding any const expression that doesn't
+    /// include it.
+    MissingConstEnd,
 }
 
 impl From<BinaryReaderError> for Error {
@@ -150,6 +170,12 @@ impl std::fmt::Display for Error {
             Error::InvalidMemoryReservedByte { func_range } => {
                 write!(f, "Found a `memory.*` instruction with an invalid reserved byte in function at {:?}", func_range)
             }
+            Error::MissingConstEnd => {
+                write!(
+                    f,
+                    "There is a const expression without a final `End` instruction"
+                )
+            }
         }
     }
 }
@@ -167,7 +193,7 @@ pub struct Module<'a> {
     pub exports: Vec<Export<'a>>,
     // Index of the start function.
     pub start: Option<u32>,
-    pub elements: Vec<(Element<'a>, ElementItems)>,
+    pub elements: Vec<(ElementKind<'a>, ValType, ElementItems<'a>)>,
     pub code_sections: Vec<Body<'a>>,
     pub custom_sections: Vec<(&'a str, &'a [u8])>,
 }
@@ -225,6 +251,7 @@ impl<'a> Module<'a> {
                 Payload::GlobalSection(global_section_reader) => {
                     globals = global_section_reader
                         .into_iter()
+                        .map(|g| parser_to_internal::global(g?))
                         .collect::<Result<_, _>>()?;
                 }
                 Payload::ExportSection(export_section_reader) => {
@@ -242,7 +269,7 @@ impl<'a> Module<'a> {
                     for element in element_section_reader.into_iter() {
                         let element = element?;
                         if element.ty != ValType::FuncRef {
-                            if let ElementKind::Passive = element.kind {
+                            if let wasmparser::ElementKind::Passive = element.kind {
                                 return Err(Error::PassiveElementSectionTypeNotFuncRef {
                                     ty: element.ty,
                                 });
@@ -251,7 +278,11 @@ impl<'a> Module<'a> {
                             }
                         }
                         let items = parser_to_internal::element_items(element.items.clone())?;
-                        elements.push((element, items));
+                        elements.push((
+                            parser_to_internal::element_kind(element.kind)?,
+                            element.ty,
+                            items,
+                        ));
                     }
                 }
                 Payload::DataCountSection { count, range: _ } => {
@@ -366,7 +397,7 @@ impl<'a> Module<'a> {
         })
     }
 
-    pub fn encode(self) -> Result<Vec<u8>, BinaryReaderError> {
+    pub fn encode(self) -> Result<Vec<u8>, Error> {
         let mut module = wasm_encoder::Module::new();
 
         if !self.types.is_empty() {
@@ -428,7 +459,7 @@ impl<'a> Module<'a> {
             for global in self.globals {
                 globals.global(
                     internal_to_encoder::global_type(global.ty),
-                    &internal_to_encoder::const_expr(global.init_expr)?,
+                    &internal_to_encoder::const_expr(&global.init_expr)?,
                 );
             }
             module.section(&globals);
@@ -452,11 +483,15 @@ impl<'a> Module<'a> {
 
         if !self.elements.is_empty() {
             let mut elements = wasm_encoder::ElementSection::new();
-            for (element, items) in self.elements {
-                let element_items = internal_to_encoder::element_items(&items);
-                match element.kind {
+            let mut all_temp_const_exprs = vec![];
+            for (kind, ty, items) in self.elements {
+                all_temp_const_exprs.push(vec![]);
+                let index = all_temp_const_exprs.len() - 1;
+                let element_items =
+                    internal_to_encoder::element_items(&items, &mut all_temp_const_exprs[index])?;
+                match kind {
                     ElementKind::Passive => {
-                        elements.passive(internal_to_encoder::val_type(&element.ty), element_items);
+                        elements.passive(internal_to_encoder::val_type(&ty), element_items);
                     }
                     ElementKind::Active {
                         table_index,
@@ -469,21 +504,20 @@ impl<'a> Module<'a> {
                         // didn't track which tag was actually used in the
                         // original file, but it's safer to assume `0x00` was
                         // used if possible.
-                        let table_index = if table_index == 0 && element.ty == ValType::FuncRef {
+                        let table_index = if table_index == 0 && ty == ValType::FuncRef {
                             None
                         } else {
                             Some(table_index)
                         };
                         elements.active(
                             table_index,
-                            &internal_to_encoder::const_expr(offset_expr)?,
-                            internal_to_encoder::val_type(&element.ty),
+                            &internal_to_encoder::const_expr(&offset_expr)?,
+                            internal_to_encoder::val_type(&ty),
                             element_items,
                         );
                     }
                     ElementKind::Declared => {
-                        elements
-                            .declared(internal_to_encoder::val_type(&element.ty), element_items);
+                        elements.declared(internal_to_encoder::val_type(&ty), element_items);
                     }
                 }
             }
