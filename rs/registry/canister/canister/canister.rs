@@ -35,11 +35,13 @@ use registry_canister::{
         complete_canister_migration::CompleteCanisterMigrationPayload,
         do_add_node_operator::AddNodeOperatorPayload,
         do_add_nodes_to_subnet::AddNodesToSubnetPayload,
+        do_bless_replica_version::BlessReplicaVersionPayload,
         do_change_subnet_membership::ChangeSubnetMembershipPayload,
         do_create_subnet::CreateSubnetPayload,
         do_delete_subnet::DeleteSubnetPayload,
         do_recover_subnet::RecoverSubnetPayload,
         do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
+        do_retire_replica_version::RetireReplicaVersionPayload,
         do_set_firewall_config::SetFirewallConfigPayload,
         do_update_elected_replica_versions::UpdateElectedReplicaVersionsPayload,
         do_update_node_directly::UpdateNodeDirectlyPayload,
@@ -368,6 +370,34 @@ fn atomic_mutate() {
 
     let bytes = serialize_atomic_mutate_response(response_pb).expect("Error serializing response");
     reply(&bytes)
+}
+
+#[export_name = "canister_update bless_replica_version"]
+fn bless_replica_version() {
+    check_caller_is_governance_and_log("bless_replica_version");
+    over(candid_one, |payload: BlessReplicaVersionPayload| {
+        bless_replica_version_(payload)
+    });
+}
+
+#[candid_method(update, rename = "bless_replica_version")]
+fn bless_replica_version_(payload: BlessReplicaVersionPayload) {
+    registry_mut().do_bless_replica_version(payload);
+    recertify_registry();
+}
+
+#[export_name = "canister_update retire_replica_version"]
+fn retire_replica_version() {
+    check_caller_is_governance_and_log("retire_replica_version");
+    over(candid_one, |payload: RetireReplicaVersionPayload| {
+        retire_replica_version_(payload)
+    });
+}
+
+#[candid_method(update, rename = "retire_replica_version")]
+fn retire_replica_version_(payload: RetireReplicaVersionPayload) {
+    registry_mut().do_retire_replica_version(payload);
+    recertify_registry();
 }
 
 #[export_name = "canister_update update_elected_replica_versions"]
