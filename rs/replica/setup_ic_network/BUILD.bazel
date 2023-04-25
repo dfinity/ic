@@ -15,6 +15,7 @@ rust_library(
         "//rs/consensus/utils",
         "//rs/crypto/tls_interfaces",
         "//rs/cycles_account_manager",
+        "//rs/https_outcalls/consensus",
         "//rs/ic_os/sev_interfaces",
         "//rs/ingress_manager",
         "//rs/interfaces",

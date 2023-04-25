@@ -5022,14 +5022,12 @@ dependencies = [
  "ic-crypto",
  "ic-crypto-temp-crypto",
  "ic-crypto-test-utils-canister-threshold-sigs",
- "ic-cycles-account-manager",
  "ic-error-types",
  "ic-execution-environment",
  "ic-ic00-types",
  "ic-ingress-manager",
  "ic-interfaces",
  "ic-interfaces-certified-stream-store",
- "ic-interfaces-https-outcalls-adapter-client",
  "ic-interfaces-registry",
  "ic-interfaces-state-manager",
  "ic-interfaces-state-manager-mocks",
@@ -6614,6 +6612,33 @@ dependencies = [
  "tonic",
  "tower",
  "tower-test",
+]
+
+[[package]]
+name = "ic-https-outcalls-consensus"
+version = "0.8.0"
+dependencies = [
+ "ic-artifact-pool",
+ "ic-config",
+ "ic-consensus-mocks",
+ "ic-consensus-utils",
+ "ic-interfaces",
+ "ic-interfaces-https-outcalls-adapter-client",
+ "ic-interfaces-registry",
+ "ic-interfaces-state-manager",
+ "ic-logger",
+ "ic-metrics",
+ "ic-protobuf",
+ "ic-registry-client-helpers",
+ "ic-registry-subnet-type",
+ "ic-replicated-state",
+ "ic-test-utilities",
+ "ic-test-utilities-logger",
+ "ic-test-utilities-registry",
+ "ic-types",
+ "mockall 0.7.2",
+ "prometheus 0.12.0",
+ "slog",
 ]
 
 [[package]]
@@ -8586,6 +8611,7 @@ dependencies = [
  "ic-consensus-utils",
  "ic-crypto-tls-interfaces",
  "ic-cycles-account-manager",
+ "ic-https-outcalls-consensus",
  "ic-icos-sev-interfaces",
  "ic-ingress-manager",
  "ic-interfaces",

@@ -30,6 +30,7 @@ members = [
   "rs/cycles_account_manager",
   "rs/https_outcalls/adapter",
   "rs/https_outcalls/client",
+  "rs/https_outcalls/consensus",
   "rs/https_outcalls/service",
   "rs/canister_sandbox",
   "rs/canister_sandbox/backend_lib",
