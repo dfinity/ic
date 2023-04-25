@@ -122,14 +122,14 @@ use ic_types::{NumInstructions, MAX_STABLE_MEMORY_IN_BYTES};
 use ic_wasm_types::{BinaryEncodedWasm, WasmError, WasmInstrumentationError};
 use wasmtime_environ::WASM_PAGE_SIZE;
 
-use crate::wasm_utils::wasm_transform::{self, Module};
+use crate::wasm_utils::wasm_transform::{self, Global, Module};
 use crate::wasmtime_embedder::{
     STABLE_BYTEMAP_MEMORY_NAME, STABLE_MEMORY_NAME, WASM_HEAP_BYTEMAP_MEMORY_NAME,
     WASM_HEAP_MEMORY_NAME,
 };
 use wasmparser::{
-    BlockType, ConstExpr, Export, ExternalKind, FuncType, Global, GlobalType, Import, MemoryType,
-    Operator, Type, TypeRef, ValType,
+    BlockType, Export, ExternalKind, FuncType, GlobalType, Import, MemoryType, Operator, Type,
+    TypeRef, ValType,
 };
 
 use std::collections::BTreeMap;
@@ -218,7 +218,7 @@ fn mutate_function_indices(module: &mut Module, f: impl Fn(u32) -> u32) {
             exp.index = f(exp.index);
         }
     }
-    for (_, elem_items) in &mut module.elements {
+    for (_, _, elem_items) in &mut module.elements {
         if let wasm_transform::ElementItems::Functions(fun_items) = elem_items {
             for idx in fun_items {
                 *idx = f(*idx);
@@ -440,13 +440,7 @@ pub(super) fn instrument(
         }
     }
 
-    let mut extra_data: Option<Vec<u8>> = None;
-    module = export_additional_symbols(
-        module,
-        &special_indices,
-        &mut extra_data,
-        wasm_native_stable_memory,
-    );
+    module = export_additional_symbols(module, &special_indices, wasm_native_stable_memory);
 
     if wasm_native_stable_memory == FlagStatus::Enabled {
         replace_system_api_functions(
@@ -494,7 +488,7 @@ pub(super) fn instrument(
         wasm_instruction_count += body.instructions.len() as u64;
     }
     for glob in &module.globals {
-        wasm_instruction_count += glob.init_expr.get_operators_reader().into_iter().count() as u64;
+        wasm_instruction_count += glob.init_expr.len() as u64;
     }
 
     let result = module.encode().map_err(|err| {
@@ -567,7 +561,6 @@ fn replace_system_api_functions(
 fn export_additional_symbols<'a>(
     mut module: Module<'a>,
     special_indices: &SpecialIndices,
-    extra_data: &'a mut Option<Vec<u8>>,
     wasm_native_stable_memory: FlagStatus,
 ) -> Module<'a> {
     // push function to decrement the instruction counter
@@ -759,20 +752,13 @@ fn export_additional_symbols<'a>(
         module.exports.push(start_export);
     }
 
-    let mut zero_init_data: Vec<u8> = Vec::new();
-    use wasm_encoder::Encode;
-    //encode() automatically adds an End instructions
-    wasm_encoder::ConstExpr::i64_const(0).encode(&mut zero_init_data);
-    debug_assert!(extra_data.is_none());
-    *extra_data = Some(zero_init_data);
-
     // push the instructions counter
     module.globals.push(Global {
         ty: GlobalType {
             content_type: ValType::I64,
             mutable: true,
         },
-        init_expr: ConstExpr::new(extra_data.as_ref().unwrap(), 0),
+        init_expr: vec![Operator::I64Const { value: 0 }, Operator::End],
     });
 
     if wasm_native_stable_memory == FlagStatus::Enabled {
@@ -782,7 +768,7 @@ fn export_additional_symbols<'a>(
                 content_type: ValType::I64,
                 mutable: true,
             },
-            init_expr: ConstExpr::new(extra_data.as_ref().unwrap(), 0),
+            init_expr: vec![Operator::I64Const { value: 0 }, Operator::End],
         });
         // push the accessed page counter
         module.globals.push(Global {
@@ -790,7 +776,7 @@ fn export_additional_symbols<'a>(
                 content_type: ValType::I64,
                 mutable: true,
             },
-            init_expr: ConstExpr::new(extra_data.as_ref().unwrap(), 0),
+            init_expr: vec![Operator::I64Const { value: 0 }, Operator::End],
         });
     }
 
