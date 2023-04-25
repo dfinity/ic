@@ -1,10 +1,12 @@
 use anyhow::{Context, Result};
 use axum::{
+    body::Body,
     routing::{get, post},
     Router,
 };
 use clap::{Parser, ValueEnum};
 use endpoints::{health, network_list, network_options};
+use http::Request;
 use ic_agent::{
     agent::http_transport::ReqwestHttpReplicaV2Transport, identity::AnonymousIdentity, Agent,
 };
@@ -12,9 +14,12 @@ use ic_base_types::CanisterId;
 use ic_icrc_rosetta::{common::storage::storage_client::StorageClient, AppState};
 use icrc_ledger_agent::Icrc1Agent;
 use lazy_static::lazy_static;
-use log::debug;
 use std::path::PathBuf;
 use std::{net::TcpListener, sync::Arc};
+use tower_http::classify::{ServerErrorsAsFailures, SharedClassifier};
+use tower_http::trace::TraceLayer;
+use tower_request_id::{RequestId, RequestIdLayer};
+use tracing::{debug, error_span, info, Level, Span};
 use url::Url;
 mod endpoints;
 
@@ -68,6 +73,9 @@ struct Args {
     /// Default Testnet URL is: https://exchanges.testnet.dfinity.network
     #[arg(long, short = 'u')]
     network_url: Option<String>,
+
+    #[arg(short = 'L', long, default_value_t = Level::INFO)]
+    log_level: Level,
 }
 
 impl Args {
@@ -97,9 +105,45 @@ impl Args {
     }
 }
 
+fn init_logs(log_level: Level) {
+    tracing_subscriber::fmt()
+        .with_max_level(log_level)
+        .with_target(false) // instead include file and lines in the next lines
+        .with_file(true) // display source code file paths
+        .with_line_number(true) // display source code line numbers
+        .init();
+}
+
+type FnTraceLayer =
+    TraceLayer<SharedClassifier<ServerErrorsAsFailures>, fn(&Request<Body>) -> Span>;
+
+fn add_request_span() -> FnTraceLayer {
+    // See tower-request-id crate and the example at
+    // https://github.com/imbolc/tower-request-id/blob/fe372479a56bd540784b87812d4d78473e43c6d4/examples/logging.rs
+
+    // Let's create a tracing span for each request
+    TraceLayer::new_for_http().make_span_with(|request: &Request<Body>| {
+        // We get the request id from the extensions
+        let request_id = request
+            .extensions()
+            .get::<RequestId>()
+            .map(ToString::to_string)
+            .unwrap_or_else(|| "unknown".into());
+        // And then we put it along with other information into the `request` span
+        error_span!(
+            "request",
+            id = %request_id,
+            method = %request.method(),
+            uri = %request.uri(),
+        )
+    })
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
+
+    init_logs(args.log_level);
 
     let storage = Arc::new(match args.store_type {
         StoreType::InMemory => StorageClient::new_in_memory()?,
@@ -143,6 +187,13 @@ async fn main() -> Result<()> {
         .route("/health", get(health))
         .route("/network/list", post(network_list))
         .route("/network/options", post(network_options))
+        // This layer creates a span for each http request and attaches
+        // the request_id, HTTP Method and path to it.
+        .layer(add_request_span())
+        // This layer creates a new id for each request and puts it into the
+        // request extensions. Note that it should be added after the
+        // Trace layer.
+        .layer(RequestIdLayer)
         .with_state(shared_state);
 
     let tcp_listener = TcpListener::bind(format!("0.0.0.0:{}", args.get_port()))?;
@@ -150,6 +201,8 @@ async fn main() -> Result<()> {
     if let Some(port_file) = args.port_file {
         std::fs::write(port_file, tcp_listener.local_addr()?.port().to_string())?;
     }
+
+    info!("Starting Rosetta server");
 
     axum::Server::from_tcp(tcp_listener)?
         .serve(app.into_make_service())
