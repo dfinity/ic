@@ -1,14 +1,15 @@
 ---
-source: embedders/tests/instrumentation.rs
+source: rs/embedders/tests/instrumentation.rs
 expression: out
 ---
 (module
   (type $a (;0;) (func (param i32 i32) (result i32)))
   (type $b (;1;) (func (result i32)))
   (type (;2;) (func))
-  (type (;3;) (func (param i64) (result i64)))
+  (type (;3;) (func (param i32 i32 i32) (result i32)))
+  (type (;4;) (func (param i64) (result i64)))
   (import "__" "out_of_instructions" (func (;0;) (type 2)))
-  (import "__" "update_available_memory" (func $addTwo (;1;) (type $a)))
+  (import "__" "update_available_memory" (func $addTwo (;1;) (type 3)))
   (import "ic0" "msg_arg_data_size" (func (;2;) (type $b)))
   (func (;3;) (type $a) (param i32 i32) (result i32)
     global.get 0
@@ -25,7 +26,7 @@ expression: out
     local.get 1
     i32.add
   )
-  (func (;4;) (type 3) (param i64) (result i64)
+  (func (;4;) (type 4) (param i64) (result i64)
     (local i64)
     global.get 0
     local.get 0

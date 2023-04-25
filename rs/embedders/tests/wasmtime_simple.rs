@@ -19,7 +19,7 @@ pub fn wasmtime_instantiate_and_call_run(wasm: &BinaryEncodedWasm) {
             r#"
             (module
                 (func (export "out_of_instructions"))
-                (func (export "update_available_memory") (param i32 i32) (result i32)
+                (func (export "update_available_memory") (param i32 i32 i32) (result i32)
                     i32.const 42
                 )
                 (func (export "try_grow_stable_memory") (param i64 i64 i32) (result i64)
