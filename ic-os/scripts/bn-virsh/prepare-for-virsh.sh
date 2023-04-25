@@ -6,7 +6,7 @@ tar xfv bazel-out/k8-opt/bin/ic-os/boundary-guestos/envs/dev-sev/disk-img.tar
 
 # Mount and pull out the kernel and initrd.img
 start=$(fdisk -l disk.img 2>/dev/null | grep img4 | awk '$0=$2')
-offset=$(("$start" * 512))
+offset=$((start * 512))
 [ ! -d tmp_mount ] || sudo umount -q tmp_mount
 mkdir -p tmp_mount
 sudo mount -o loop,offset=${offset} ./disk.img ./tmp_mount
@@ -19,14 +19,14 @@ rmdir ./tmp_mount
 # Prepare config
 mkdir tmp_config
 (
-    cd ic-os/scripts/data/bn_config || exit 1
-    tar cf ../../../../tmp_config/ic-bootstrap.tar ./*
+    cd ic-os/scripts/bn-virsh/data/bn_config || exit 1
+    tar cf ../../../../../tmp_config/ic-bootstrap.tar ./*
 )
 make_ext4fs -T 0 -l 10M config.img tmp_config
 rm -rf tmp_config
 
 # Specialize virsh config
-cp ./ic-os/scripts/data/bn_sev_vm.xml ./bn_sev_vm.xml
+cp ./ic-os/scripts/bn-virsh/data/bn_sev_vm.xml ./bn_sev_vm.xml
 sed -i "s/USER/$USER/g" bn_sev_vm.xml
 
 # Stage in /tmp so that we get the right perms for virsh
