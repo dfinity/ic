@@ -774,3 +774,51 @@ fn test_payload_too_large() {
     body.push(1);
     assert_eq!(StatusCode::PAYLOAD_TOO_LARGE, request(body.clone()));
 }
+
+/// Iff a http request body is slower to arrive than the configured limit, the endpoints responds with `408`.
+#[test]
+fn test_request_too_slow() {
+    let rt = Runtime::new().unwrap();
+    let addr = get_free_localhost_socket_addr();
+    let config = Config {
+        listen_addr: addr,
+        max_request_receive_seconds: 1,
+        ..Default::default()
+    };
+
+    let mock_state_manager = basic_state_manager_mock();
+    let mock_consensus_cache = basic_consensus_pool_cache();
+    let mock_registry_client = basic_registry_client();
+
+    let _ = start_http_endpoint(
+        rt.handle().clone(),
+        config,
+        Arc::new(mock_state_manager),
+        Arc::new(mock_consensus_cache),
+        Arc::new(mock_registry_client),
+    );
+
+    rt.block_on(async {
+        let (mut sender, body) = Body::channel();
+
+        assert!(sender
+            .send_data(bytes::Bytes::from("hello world"))
+            .await
+            .is_ok());
+
+        let client = Client::new();
+
+        let req = Request::builder()
+            .method(Method::POST)
+            .uri(format!(
+                "http://{}/api/v2/canister/{}/query",
+                addr, "223xb-saaaa-aaaaf-arlqa-cai"
+            ))
+            .header("Content-Type", "application/cbor")
+            .body(body)
+            .expect("request builder");
+
+        let response = client.request(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::REQUEST_TIMEOUT);
+    })
+}
