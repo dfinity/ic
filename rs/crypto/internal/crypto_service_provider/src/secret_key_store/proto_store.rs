@@ -71,7 +71,9 @@ impl ProtoSecretKeyStore {
     fn read_sks_data_from_disk(sks_data_file: &Path) -> Option<SecretKeys> {
         match fs::read(sks_data_file) {
             Ok(data) => {
-                let sks_pb = pb::SecretKeyStore::decode(&*data).expect("error parsing SKS data");
+                let sks_pb = pb::SecretKeyStore::decode(&*data).unwrap_or_else(
+                    |_ignored_so_that_no_data_is_leaked| panic!("error parsing SKS protobuf data"),
+                );
                 let keys = ProtoSecretKeyStore::migrate_to_current_version(sks_pb);
                 Some(keys)
             }
@@ -136,8 +138,9 @@ impl ProtoSecretKeyStore {
     }
 
     fn parse_csp_secret_key(key_bytes: &[u8], key_id: &KeyId) -> CspSecretKey {
-        serde_cbor::from_slice(key_bytes)
-            .unwrap_or_else(|e| panic!("Error deserializing key with ID {}: {}", key_id, e))
+        serde_cbor::from_slice(key_bytes).unwrap_or_else(|_ignored_so_that_no_data_is_leaked| {
+            panic!("Error deserializing key with ID {}", key_id)
+        })
     }
 
     fn parse_scope(scope_proto: &str) -> Option<Scope> {
@@ -179,12 +182,13 @@ impl ProtoSecretKeyStore {
         };
         for (key_id, (csp_key, maybe_scope)) in secret_keys {
             let key_id_hex = key_id.encode_hex();
-            let key_as_cbor = serde_cbor::to_vec(&csp_key).map_err(|_| {
-                SecretKeyStorePersistenceError::SerializationError(format!(
-                    "Error serializing key with ID {}",
-                    key_id
-                ))
-            })?;
+            let key_as_cbor =
+                serde_cbor::to_vec(&csp_key).map_err(|_ignored_so_that_no_data_is_leaked| {
+                    SecretKeyStorePersistenceError::SerializationError(format!(
+                        "Error serializing key with ID {}",
+                        key_id
+                    ))
+                })?;
             let sk_pb = match maybe_scope {
                 Some(scope) => pb::SecretKeyV1 {
                     csp_secret_key: key_as_cbor,
