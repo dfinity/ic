@@ -612,7 +612,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^1.1.1",
             ),
             "lru": crate.spec(
-                version = "^0.7.1",
+                version = "^0.7.8",
                 default_features = False,
             ),
             "maplit": crate.spec(

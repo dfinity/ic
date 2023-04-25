@@ -1,5 +1,5 @@
 {
-  "checksum": "69c575668c6afd06cb301b9eb87a39fb481b652fa82c45ccf41a47e3b6fa1883",
+  "checksum": "05294c67ca71d2561bfcacf59815931ebc10344189b5fe17795f53ae0899b481",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -13065,7 +13065,7 @@
               "alias": "ic_stable_structures_0_2_0"
             },
             {
-              "id": "ic-stable-structures 0.5.2",
+              "id": "ic-stable-structures 0.5.3",
               "target": "ic_stable_structures"
             },
             {
@@ -20994,13 +20994,13 @@
       },
       "license": "Apache-2.0"
     },
-    "ic-stable-structures 0.5.2": {
+    "ic-stable-structures 0.5.3": {
       "name": "ic-stable-structures",
-      "version": "0.5.2",
+      "version": "0.5.3",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/ic-stable-structures/0.5.2/download",
-          "sha256": "7d43ba7c5067d1360860e2234d93411d2126c8eac788467966ed1383161f91fc"
+          "url": "https://crates.io/api/v1/crates/ic-stable-structures/0.5.3/download",
+          "sha256": "0c0c68bf2fb590e3c3b4e0719383fb2cdceb308cd62df9fef571323b418f7e1c"
         }
       },
       "targets": [
@@ -21023,7 +21023,7 @@
           "**"
         ],
         "edition": "2021",
-        "version": "0.5.2"
+        "version": "0.5.3"
       },
       "license": "Apache-2.0"
     },
