@@ -32,5 +32,4 @@ pub mod tecdsa;
 pub mod types;
 pub mod util;
 pub mod wasm_generator_test;
-pub mod workload;
 pub mod workload_counter_canister_test;

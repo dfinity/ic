@@ -17,7 +17,6 @@ Runbook::
 
 end::catalog[] */
 
-use crate::canister_agent::CanisterAgent;
 use crate::canister_api::{CallMode, GenericRequest};
 use crate::driver::constants::DEVICE_NAME;
 use crate::driver::ic::{AmountOfMemoryKiB, InternetComputer, NrOfVCPUs, Subnet, VmResources};
@@ -26,12 +25,10 @@ use crate::driver::test_env_api::{
     HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, IcNodeSnapshot, NnsInstallationExt,
     SshSession,
 };
-use crate::generic_workload_engine::engine::Engine;
-use crate::generic_workload_engine::metrics::LoadTestMetrics;
 use crate::util::{
     self, agent_observes_canister_module, assert_canister_counter_with_retries, block_on,
+    spawn_round_robin_workload_engine,
 };
-use ic_agent::{export::Principal, Agent};
 use ic_base_types::NodeId;
 use ic_registry_subnet_type::SubnetType;
 use rand::distributions::{Distribution, Uniform};
@@ -212,22 +209,40 @@ pub fn test(env: TestEnv, config: Config) {
     let payload: Vec<u8> = vec![0; PAYLOAD_SIZE_BYTES];
     let start_time = Instant::now();
     let stop_time = start_time + config.runtime;
-    let handle_workload_nns = spawn_workload(
-        log.clone(),
-        canister_nns,
-        agents_nns,
-        config.rps,
-        config.runtime,
-        payload.clone(),
-    );
-    let handle_workload_app = spawn_workload(
-        log.clone(),
-        canister_app,
-        agents_app,
-        config.rps,
-        config.runtime,
-        payload.clone(),
-    );
+    let handle_workload_nns = {
+        let requests = vec![GenericRequest::new(
+            canister_nns,
+            CANISTER_METHOD.to_string(),
+            payload.clone(),
+            CallMode::Update,
+        )];
+        spawn_round_robin_workload_engine(
+            log.clone(),
+            requests,
+            agents_nns,
+            config.rps,
+            config.runtime,
+            REQUESTS_DISPATCH_EXTRA_TIMEOUT,
+            vec![DURATION_THRESHOLD],
+        )
+    };
+    let handle_workload_app = {
+        let requests = vec![GenericRequest::new(
+            canister_app,
+            CANISTER_METHOD.to_string(),
+            payload.clone(),
+            CallMode::Update,
+        )];
+        spawn_round_robin_workload_engine(
+            log.clone(),
+            requests,
+            agents_app,
+            config.rps,
+            config.runtime,
+            REQUESTS_DISPATCH_EXTRA_TIMEOUT,
+            vec![DURATION_THRESHOLD],
+        )
+    };
     info!(
         &log,
         "Step 4: Stress another disjoint subset of 1/3 of the nodes (during the workload execution)."
@@ -327,9 +342,10 @@ pub fn test(env: TestEnv, config: Config) {
         &log,
         "Step 6: Assert min counter value on both canisters has been reached ... "
     );
-    let total_requests_count = config.rps * config.runtime.as_secs() as usize;
-    let min_expected_success_count =
-        ((1.0 - config.max_failures_ratio) * total_requests_count as f64) as usize;
+    let min_expected_success_count = {
+        let total_requests_count = config.rps * config.runtime.as_secs() as usize;
+        ((1.0 - config.max_failures_ratio) * total_requests_count as f64) as usize
+    };
     block_on(async {
         assert_canister_counter_with_retries(
             &log,
@@ -469,58 +485,6 @@ fn execute_ssh_command(session: &Session, ssh_command: String) -> Result<String,
         panic!("Channel exited with an exit code {}.", exit_code);
     }
     Ok(command_output)
-}
-
-fn spawn_workload(
-    log: Logger,
-    canister_id: Principal,
-    agents: Vec<Agent>,
-    rps: usize,
-    runtime: Duration,
-    payload: Vec<u8>,
-) -> JoinHandle<LoadTestMetrics> {
-    let agents: Vec<CanisterAgent> = agents.into_iter().map(CanisterAgent::from).collect();
-    thread::spawn(move || {
-        let agents = agents.clone();
-        block_on(async move {
-            let agents = agents.clone();
-            let payload = payload.clone();
-            let generator = {
-                let agents = agents.clone();
-                let payload = payload.clone();
-                move |idx: usize| {
-                    let agent = &agents[idx % agents.len()];
-                    let agent = agent.clone();
-                    let payload = payload.clone();
-                    async move {
-                        let agent = agent.clone();
-                        let payload = payload.clone();
-                        let request = GenericRequest::new(
-                            canister_id,
-                            CANISTER_METHOD.to_string(),
-                            payload,
-                            CallMode::Update,
-                        );
-                        agent
-                            .call(&request)
-                            .await
-                            .map(|_| ()) // drop non-error responses
-                            .into_test_outcome()
-                    }
-                }
-            };
-            // Don't log metrics during execution.
-            let log_null = slog::Logger::root(slog::Discard, slog::o!());
-            let aggregator = LoadTestMetrics::new(log_null)
-                .with_requests_duration_thresholds(DURATION_THRESHOLD);
-            let engine = Engine::new(log.clone(), generator, rps, runtime)
-                .increase_dispatch_timeout(REQUESTS_DISPATCH_EXTRA_TIMEOUT);
-            engine
-                .execute(aggregator, LoadTestMetrics::aggregator_fn)
-                .await
-                .expect("Execution of the workload failed.")
-        })
-    })
 }
 
 fn reset_tc_ssh_command() -> String {
