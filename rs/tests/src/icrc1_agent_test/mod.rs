@@ -1,5 +1,6 @@
 use std::convert::TryFrom;
 
+use assert_matches::assert_matches;
 use candid::{Encode, Nat, Principal};
 use canister_test::{Canister, PrincipalId};
 use ic_crypto_tree_hash::{LookupStatus, MixedHashTree};
@@ -239,6 +240,12 @@ pub fn test(env: TestEnv) {
         assert_eq!(
             hash_tree.lookup(&[b"tip_hash"]),
             Found(&mleaf(blocks_response.blocks[1].hash()))
+        );
+
+        let cert = serde_cbor::from_slice(&data_certificate.certificate.unwrap()).unwrap();
+        assert_matches!(
+            agent.verify_root_hash(&cert, &hash_tree.digest().0).await,
+            Ok(_)
         );
     });
 }
