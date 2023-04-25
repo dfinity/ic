@@ -1,6 +1,8 @@
 use candid::{Decode, Encode, Nat, Principal};
-use ic_agent::Agent;
+use ic_agent::hash_tree::LookupResult;
+use ic_agent::{Agent, Certificate};
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
+use icrc_ledger_types::icrc::generic_value::Hash;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{TransferArg, TransferError};
 use icrc_ledger_types::icrc3::blocks::{DataCertificate, GetBlocksRequest, GetBlocksResponse};
@@ -9,6 +11,7 @@ use icrc_ledger_types::icrc3::blocks::{DataCertificate, GetBlocksRequest, GetBlo
 pub enum Icrc1AgentError {
     AgentError(ic_agent::AgentError),
     CandidError(candid::Error),
+    VerificationFailed(String),
 }
 
 impl From<ic_agent::AgentError> for Icrc1AgentError {
@@ -186,5 +189,41 @@ impl Icrc1Agent {
             &self.query("get_data_certificate", &Encode!()?).await?,
             DataCertificate
         )?)
+    }
+
+    /// The function performs the following checks:
+    /// 1. Check whether the certificate is valid and has authority over ledger_canister_id.
+    /// 2. Check whether the certified data at path ["canister", ledger_canister_id, "certified_data"] is equal to root_hash.
+    pub async fn verify_root_hash(
+        &self,
+        certificate: &Certificate<'_>,
+        root_hash: &Hash,
+    ) -> Result<(), Icrc1AgentError> {
+        self.agent
+            .verify(certificate, self.ledger_canister_id)
+            .map_err(Icrc1AgentError::AgentError)?;
+
+        let certified_data_path = [
+            "canister".into(),
+            self.ledger_canister_id.as_slice().into(),
+            "certified_data".into(),
+        ];
+
+        let cert_hash = match certificate.tree.lookup_path(&certified_data_path) {
+            LookupResult::Found(v) => v,
+            _ => {
+                return Err(Icrc1AgentError::VerificationFailed(format!(
+                    "could not find certified_data for canister: {}",
+                    self.ledger_canister_id
+                )))
+            }
+        };
+
+        if cert_hash != root_hash {
+            return Err(Icrc1AgentError::VerificationFailed(
+                "certified_data does not match the root_hash".to_string(),
+            ));
+        }
+        Ok(())
     }
 }
