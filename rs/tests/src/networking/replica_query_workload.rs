@@ -18,11 +18,10 @@ Runbook::
 
 end::catalog[] */
 
+use crate::canister_api::{CallMode, GenericRequest};
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer};
-use crate::util::block_on;
-use crate::workload::{CallSpec, Request, RoundRobinPlan, Workload};
-
+use crate::util::spawn_round_robin_workload_engine;
 use ic_registry_subnet_type::SubnetType;
 
 use slog::{debug, info, Logger};
@@ -39,7 +38,6 @@ const DURATION_THRESHOLD: Duration = Duration::from_secs(2);
 // Ratio of requests with duration < DURATION_THRESHOLD should exceed this parameter.
 const MIN_REQUESTS_RATIO_BELOW_THRESHOLD: f64 = 0.9;
 // Parameters related to workload creation.
-const RESPONSES_COLLECTION_EXTRA_TIMEOUT: Duration = Duration::from_secs(30); // Responses are collected during the workload execution + this extra time, after all requests had been dispatched.
 const REQUESTS_DISPATCH_EXTRA_TIMEOUT: Duration = Duration::from_secs(2); // This param can be slightly tweaked (1-2 sec), if the workload fails to dispatch requests precisely on time.
 
 pub fn log_max_open_files(log: &Logger) {
@@ -90,49 +88,51 @@ pub fn test(env: TestEnv, rps: usize, runtime: Duration, min_success_ratio: f64)
     // As we talk to a single node, we create one agent, accordingly.
     let app_agent = app_node.with_default_agent(|agent| async move { agent });
     // Spawn a workload against counter canister.
-    let payload: Vec<u8> = vec![0; PAYLOAD_SIZE_BYTES];
-    let plan = RoundRobinPlan::new(vec![Request::Query(CallSpec::new(
-        app_canister,
-        CANISTER_METHOD,
-        payload,
-    ))]);
-    let dispatch_timeout = REQUESTS_DISPATCH_EXTRA_TIMEOUT + runtime.div_f32(50.0);
-    let workload = Workload::new(vec![app_agent], rps, runtime, plan, log.clone())
-        .with_responses_collection_extra_timeout(RESPONSES_COLLECTION_EXTRA_TIMEOUT)
-        .increase_requests_dispatch_timeout(dispatch_timeout)
-        .with_requests_duration_bucket(DURATION_THRESHOLD);
-    let metrics = block_on(async {
-        workload.execute().await.unwrap_or_else(|err| {
-            panic!("Execution of the workload failed, err={:?}", err);
-        })
-    });
+    let handle_workload = {
+        let requests = vec![GenericRequest::new(
+            app_canister,
+            CANISTER_METHOD.to_string(),
+            vec![0; PAYLOAD_SIZE_BYTES],
+            CallMode::Query,
+        )];
+        spawn_round_robin_workload_engine(
+            log.clone(),
+            requests,
+            vec![app_agent],
+            rps,
+            runtime,
+            REQUESTS_DISPATCH_EXTRA_TIMEOUT,
+            vec![DURATION_THRESHOLD],
+        )
+    };
+    let load_metrics = handle_workload.join().expect("Workload execution failed.");
     info!(
         &log,
         "Step 4: Collect metrics from the workload and perform assertions ..."
     );
-    let total_requests_count = rps * runtime.as_secs() as usize;
-    let success_calls: usize = total_requests_count - metrics.errors().values().sum::<usize>();
-    let success_ratio: f64 = (success_calls as f64) / total_requests_count as f64;
-    let duration_bucket = metrics
-        .find_request_duration_bucket(DURATION_THRESHOLD)
-        .unwrap();
-    debug!(&log, "Results of the workload execution {:?}", metrics);
+    let requests_count_below_threshold =
+        load_metrics.requests_count_below_threshold(DURATION_THRESHOLD);
+    let requests_ratio_below_threshold =
+        load_metrics.requests_ratio_below_threshold(DURATION_THRESHOLD);
+    info!(log, "Workload execution results: {load_metrics}");
+    info!(
+        log,
+        "Requests below {} sec:\nRequests_count: {:?} \nRequests_ratio: {:?}.",
+        DURATION_THRESHOLD.as_secs(),
+        requests_count_below_threshold,
+        requests_ratio_below_threshold,
+    );
     info!(
         &log,
         "Minimum expected success ratio is {}, actual success ratio is {}.",
         min_success_ratio,
-        success_ratio
+        load_metrics.success_ratio()
     );
     assert!(
-        success_ratio > min_success_ratio,
+        load_metrics.success_ratio() > min_success_ratio,
         "Too many requests have failed."
     );
-    info!(
-        &log,
-        "Requests below {} sec:\nRequests_count = {}\nRequests_ratio = {}",
-        DURATION_THRESHOLD.as_secs(),
-        duration_bucket.requests_count_below_threshold(),
-        duration_bucket.requests_ratio_below_threshold(),
-    );
-    assert!(duration_bucket.requests_ratio_below_threshold() > MIN_REQUESTS_RATIO_BELOW_THRESHOLD);
+    assert!(requests_ratio_below_threshold
+        .iter()
+        .all(|(_, ratio)| *ratio > MIN_REQUESTS_RATIO_BELOW_THRESHOLD));
 }
