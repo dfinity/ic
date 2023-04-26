@@ -1,9 +1,7 @@
 use super::*;
 use ic_interfaces_registry::RegistryClientResult;
 use ic_interfaces_registry_mocks::MockRegistryClient;
-use ic_protobuf::registry::node::v1::{
-    connection_endpoint::Protocol, ConnectionEndpoint, NodeRecord,
-};
+use ic_protobuf::registry::node::v1::{ConnectionEndpoint, NodeRecord, Protocol};
 use ic_registry_keys::make_node_record_key;
 use ic_test_utilities::types::ids::node_test_id;
 use ic_test_utilities_logger::with_test_replica_logger;

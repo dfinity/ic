@@ -12,7 +12,7 @@ use thiserror::Error;
 use url::{Host, Url};
 
 use ic_protobuf::registry::node::v1::{
-    connection_endpoint::Protocol as pbProtocol, ConnectionEndpoint as pbConnectionEndpoint,
+    ConnectionEndpoint as pbConnectionEndpoint, Protocol as pbProtocol,
 };
 
 #[derive(Debug, Display, Eq, PartialEq)]
@@ -525,7 +525,7 @@ mod connection_endpoint_test {
 
 #[cfg(test)]
 mod pb_connection_endpoint_test {
-    use ic_protobuf::registry::node::v1::connection_endpoint::Protocol;
+    use ic_protobuf::registry::node::v1::Protocol;
 
     use super::*;
 

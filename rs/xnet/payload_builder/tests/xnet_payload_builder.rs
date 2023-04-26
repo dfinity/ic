@@ -6,9 +6,7 @@ use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
-use ic_protobuf::registry::{
-    node::v1::connection_endpoint::Protocol, subnet::v1::SubnetListRecord,
-};
+use ic_protobuf::registry::{node::v1::Protocol, subnet::v1::SubnetListRecord};
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_client_helpers::node::{ConnectionEndpoint, NodeRecord};
 use ic_registry_keys::{make_node_record_key, make_subnet_list_record_key, make_subnet_record_key};

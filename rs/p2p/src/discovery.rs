@@ -113,9 +113,7 @@ mod tests {
     use super::*;
     use crate::download_management::tests::new_test_gossip_impl_with_registry;
     use ic_interfaces_registry::RegistryClient;
-    use ic_protobuf::registry::node::v1::{
-        connection_endpoint::Protocol, ConnectionEndpoint, FlowEndpoint,
-    };
+    use ic_protobuf::registry::node::v1::{ConnectionEndpoint, FlowEndpoint, Protocol};
     use ic_registry_client_fake::FakeRegistryClient;
     use ic_test_utilities::{
         consensus::MockConsensusCache,

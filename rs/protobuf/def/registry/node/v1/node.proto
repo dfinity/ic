@@ -1,15 +1,15 @@
 syntax = "proto3";
 package registry.node.v1;
 
+enum Protocol {
+  PROTOCOL_UNSPECIFIED = 0;
+  PROTOCOL_HTTP1 = 1;
+  PROTOCOL_HTTP1_TLS_1_3 = 2;
+  PROTOCOL_P2P1_TLS_1_3 = 3;
+}
+
 // A connection endpoint.
 message ConnectionEndpoint {
-  enum Protocol {
-    PROTOCOL_UNSPECIFIED = 0;
-    PROTOCOL_HTTP1 = 1;
-    PROTOCOL_HTTP1_TLS_1_3 = 2;
-    PROTOCOL_P2P1_TLS_1_3 = 3;
-  }
-
   // The IP address. Senders SHOULD use dotted-quad notation for IPv4 addresses
   // and RFC5952 representation for IPv6 addresses (which means that IPv6
   // addresses are *not* enclosed in `[` and `]`, as they are not written
