@@ -1,5 +1,6 @@
 //! Defines types used for threshold ECDSA key generation.
 
+use ic_protobuf::proxy::{try_from_option_field, ProxyDecodeError};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::{TryFrom, TryInto};
@@ -18,7 +19,7 @@ pub use crate::consensus::ecdsa_refs::{
     UnmaskedTimesMaskedParams, UnmaskedTranscript,
 };
 use crate::consensus::BasicSignature;
-use crate::crypto::canister_threshold_sig::error::IDkgTranscriptIdError;
+use crate::crypto::canister_threshold_sig::error::*;
 use crate::crypto::{
     canister_threshold_sig::idkg::{
         IDkgComplaint, IDkgDealingSupport, IDkgOpening, IDkgTranscript, IDkgTranscriptId,
@@ -28,7 +29,7 @@ use crate::crypto::{
     crypto_hash, AlgorithmId, CryptoHash, CryptoHashOf, CryptoHashable, Signed,
     SignedBytesWithoutDomainSeparator,
 };
-use crate::{node_id_into_protobuf, node_id_try_from_protobuf};
+use crate::{node_id_into_protobuf, node_id_try_from_option};
 use crate::{Height, NodeId, RegistryVersion, SubnetId};
 use ic_crypto_sha::Sha256;
 use ic_ic00_types::EcdsaKeyId;
@@ -272,19 +273,19 @@ impl From<&UnmaskedTranscriptWithAttributes> for pb::UnmaskedTranscriptWithAttri
 }
 
 impl TryFrom<&pb::UnmaskedTranscriptWithAttributes> for UnmaskedTranscriptWithAttributes {
-    type Error = String;
+    type Error = ProxyDecodeError;
     fn try_from(
         transcript_with_attrs: &pb::UnmaskedTranscriptWithAttributes,
     ) -> Result<Self, Self::Error> {
-        let attributes = transcript_with_attrs
-            .attributes
-            .as_ref()
-            .ok_or("pb::UnmaskedTranscriptWithAttributes missing attributes")?;
+        let attributes = try_from_option_field(
+            transcript_with_attrs.attributes.as_ref(),
+            "UnmaskedTranscriptWithAttributes::attributes",
+        )?;
         let unmasked = pb::UnmaskedTranscript {
             transcript_ref: transcript_with_attrs.transcript_ref.clone(),
         };
         Ok(UnmaskedTranscriptWithAttributes::new(
-            attributes.try_into()?,
+            attributes,
             (&unmasked).try_into()?,
         ))
     }
@@ -494,67 +495,53 @@ impl From<&KeyTranscriptCreation> for pb::KeyTranscriptCreation {
 }
 
 impl TryFrom<&pb::KeyTranscriptCreation> for KeyTranscriptCreation {
-    type Error = String;
+    type Error = ProxyDecodeError;
     fn try_from(proto: &pb::KeyTranscriptCreation) -> Result<Self, Self::Error> {
         if proto.state == (pb::KeyTranscriptCreationState::BeginUnspecified as i32) {
             Ok(KeyTranscriptCreation::Begin)
         } else if proto.state == (pb::KeyTranscriptCreationState::RandomTranscriptParams as i32) {
-            let param_proto = proto
-                .random
-                .as_ref()
-                .ok_or("pb::KeyTranscriptCreation:: Missing random transcript")?;
             Ok(KeyTranscriptCreation::RandomTranscriptParams(
-                param_proto.try_into()?,
+                try_from_option_field(proto.random.as_ref(), "KeyTranscriptCreation::random")?,
             ))
         } else if proto.state == (pb::KeyTranscriptCreationState::ReshareOfMaskedParams as i32) {
-            let param_proto = proto
-                .reshare_of_masked
-                .as_ref()
-                .ok_or("pb::KeyTranscriptCreation:: Missing reshare of masked transcript")?;
             Ok(KeyTranscriptCreation::ReshareOfMaskedParams(
-                param_proto.try_into()?,
+                try_from_option_field(
+                    proto.reshare_of_masked.as_ref(),
+                    "KeyTranscriptCreation::reshare_of_masked",
+                )?,
             ))
         } else if proto.state == (pb::KeyTranscriptCreationState::ReshareOfUnmaskedParams as i32) {
-            let param_proto = proto
-                .reshare_of_unmasked
-                .as_ref()
-                .ok_or("pb::KeyTranscriptCreation:: Missing reshare of unmasked transcript")?;
             Ok(KeyTranscriptCreation::ReshareOfUnmaskedParams(
-                param_proto.try_into()?,
+                try_from_option_field(
+                    proto.reshare_of_unmasked.as_ref(),
+                    "KeyTranscriptCreation::reshare_of_unmasked",
+                )?,
             ))
         } else if proto.state
             == (pb::KeyTranscriptCreationState::XnetReshareOfUnmaskedParams as i32)
         {
-            let initial_dealings_proto = proto
-                .xnet_reshare_initial_dealings
-                .as_ref()
-                .ok_or("pb::KeyTranscriptCreation:: Missing xnet initial dealings")?;
-            let initial_dealings: InitialIDkgDealings =
-                initial_dealings_proto.try_into().map_err(|err| {
-                    format!(
-                        "pb::KeyTranscriptCreation:: failed to convert initial dealings: {:?}",
-                        err
-                    )
-                })?;
-            let param_proto = proto
-                .xnet_reshare_of_unmasked
-                .as_ref()
-                .ok_or("pb::KeyTranscriptCreation:: Missing xnet reshare transcript")?;
+            let initial_dealings: InitialIDkgDealings = try_from_option_field(
+                proto.xnet_reshare_initial_dealings.as_ref(),
+                "KeyTranscriptCreation::xnet_reshare_initial_dealings",
+            )?;
+            let xnet_param_unmasked = try_from_option_field(
+                proto.xnet_reshare_of_unmasked.as_ref(),
+                "KeyTranscriptCreation::xnet_reshare_of_unmasked",
+            )?;
             Ok(KeyTranscriptCreation::XnetReshareOfUnmaskedParams((
                 Box::new(initial_dealings),
-                param_proto.try_into()?,
+                xnet_param_unmasked,
             )))
         } else if proto.state == (pb::KeyTranscriptCreationState::Created as i32) {
-            let param_proto = proto
-                .created
-                .as_ref()
-                .ok_or("pb::KeyTranscriptCreation:: Missing created transcript")?;
-            Ok(KeyTranscriptCreation::Created(param_proto.try_into()?))
+            Ok(KeyTranscriptCreation::Created(try_from_option_field(
+                proto.created.as_ref(),
+                "KeyTranscriptCreation::created",
+            )?))
         } else {
-            Err(format!(
-                "pb::KeyTranscriptCreation:: invalid state: {}",
+            Err(ProxyDecodeError::Other(format!(
+                "KeyTranscriptCreation:: invalid state: {}",
                 pb::KeyTranscriptCreationState::Created as i32
-            ))
+            )))
         }
     }
 }
@@ -582,25 +569,15 @@ impl From<&EcdsaReshareRequest> for pb::EcdsaReshareRequest {
 }
 
 impl TryFrom<&pb::EcdsaReshareRequest> for EcdsaReshareRequest {
-    type Error = String;
+    type Error = ProxyDecodeError;
     fn try_from(request: &pb::EcdsaReshareRequest) -> Result<Self, Self::Error> {
-        let mut receiving_node_ids = Vec::new();
-        for node in &request.receiving_node_ids {
-            let node_id = node_id_try_from_protobuf(node.clone()).map_err(|err| {
-                format!(
-                    "pb::EcdsaReshareRequest:: Failed to convert node_id: {:?}",
-                    err
-                )
-            })?;
-            receiving_node_ids.push(node_id);
-        }
-        let key_id = EcdsaKeyId::try_from(request.key_id.clone().expect("Missing key_id"))
-            .map_err(|err| {
-                format!(
-                    "pb::EcdsaReshareRequest:: Failed to convert key_id: {:?}",
-                    err
-                )
-            })?;
+        let receiving_node_ids = request
+            .receiving_node_ids
+            .iter()
+            .map(|node| node_id_try_from_option(Some(node.clone())))
+            .collect::<Result<Vec<_>, ProxyDecodeError>>()?;
+
+        let key_id = try_from_option_field(request.key_id.clone(), "EcdsaReshareRequest::key_id")?;
         Ok(Self {
             key_id,
             receiving_node_ids,
@@ -1210,7 +1187,7 @@ impl From<&EcdsaPayload> for pb::EcdsaPayload {
 }
 
 impl TryFrom<(&pb::EcdsaPayload, Height)> for EcdsaPayload {
-    type Error = String;
+    type Error = ProxyDecodeError;
     fn try_from((payload, height): (&pb::EcdsaPayload, Height)) -> Result<Self, Self::Error> {
         let mut ret = EcdsaPayload::try_from(payload)?;
         ret.update_refs(height);
@@ -1219,35 +1196,32 @@ impl TryFrom<(&pb::EcdsaPayload, Height)> for EcdsaPayload {
 }
 
 impl TryFrom<&pb::EcdsaPayload> for EcdsaPayload {
-    type Error = String;
+    type Error = ProxyDecodeError;
     fn try_from(payload: &pb::EcdsaPayload) -> Result<Self, Self::Error> {
-        // Key Id must exist
-        let key_id = payload
-            .key_id
-            .clone()
-            .expect("pb::EcdsaPayload:: Missing key id");
-        let key_id = EcdsaKeyId::try_from(key_id).map_err(|err| format!("{:?}", err))?;
-        // signature_agreements
+        let key_id = try_from_option_field(payload.key_id.clone(), "EcdsaPayload::key_id")?;
         let mut signature_agreements = BTreeMap::new();
         for completed_signature in &payload.signature_agreements {
             // NOTE: We still look at the request_id for compatibility reasons,
             // which should be removed from protobuf after upgrading deployment.
-            let request_id = completed_signature
-                .request_id
-                .as_ref()
-                .ok_or("pb::EcdsaPayload:: Missing completed_signature request Id")
-                .and_then(RequestId::try_from);
-            let pseudo_random_id = request_id.map(|x| x.pseudo_random_id).or_else(|_| {
-                if completed_signature.pseudo_random_id.len() != 32 {
-                    return Err("Expects 32 bytes of pseudo_random_id".to_string());
+            let request_id: Result<RequestId, _> = try_from_option_field(
+                completed_signature.request_id.as_ref(),
+                "EcdsaPayload::completed_signature::request_id",
+            );
+            let pseudo_random_id = match request_id {
+                Ok(inner) => inner.pseudo_random_id,
+                Err(_) => {
+                    if completed_signature.pseudo_random_id.len() != 32 {
+                        return Err(ProxyDecodeError::Other(
+                            "Expects 32 bytes of pseudo_random_id".to_string(),
+                        ));
+                    }
+                    let mut x = [0; 32];
+                    x.copy_from_slice(&completed_signature.pseudo_random_id);
+                    x
                 }
-                let mut x = [0; 32];
-                x.copy_from_slice(&completed_signature.pseudo_random_id);
-                Ok(x)
-            })?;
+            };
             let signature = if let Some(unreported) = &completed_signature.unreported {
-                let response = crate::messages::Response::try_from(unreported.clone())
-                    .map_err(|err| format!("{:?}", err))?;
+                let response = crate::messages::Response::try_from(unreported.clone())?;
                 CompletedSignature::Unreported(response)
             } else {
                 CompletedSignature::ReportedToExecution
@@ -1258,16 +1232,14 @@ impl TryFrom<&pb::EcdsaPayload> for EcdsaPayload {
         // ongoing_signatures
         let mut ongoing_signatures = BTreeMap::new();
         for ongoing_signature in &payload.ongoing_signatures {
-            let request_id = ongoing_signature
-                .request_id
-                .as_ref()
-                .ok_or("pb::EcdsaPayload:: Missing ongoing_signature request Id")
-                .and_then(RequestId::try_from)?;
-            let proto = ongoing_signature
-                .sig_inputs
-                .as_ref()
-                .ok_or("pb::EcdsaPayload:: Missing sig inputs")?;
-            let sig_inputs: ThresholdEcdsaSigInputsRef = proto.try_into()?;
+            let request_id: RequestId = try_from_option_field(
+                ongoing_signature.request_id.as_ref(),
+                "EcdsaPayload::ongoing_signature::request_id",
+            )?;
+            let sig_inputs = try_from_option_field(
+                ongoing_signature.sig_inputs.as_ref(),
+                "EcdsaPayload::ongoing_signature::sig_inputs",
+            )?;
             ongoing_signatures.insert(request_id, sig_inputs);
         }
 
@@ -1275,11 +1247,10 @@ impl TryFrom<&pb::EcdsaPayload> for EcdsaPayload {
         let mut available_quadruples = BTreeMap::new();
         for available_quadruple in &payload.available_quadruples {
             let quadruple_id = QuadrupleId(available_quadruple.quadruple_id);
-            let proto = available_quadruple
-                .quadruple
-                .as_ref()
-                .ok_or("pb::EcdsaPayload:: Missing available_quadruple")?;
-            let quadruple: PreSignatureQuadrupleRef = proto.try_into()?;
+            let quadruple: PreSignatureQuadrupleRef = try_from_option_field(
+                available_quadruple.quadruple.as_ref(),
+                "EcdsaPayload::available_quadruple::quadruple",
+            )?;
             available_quadruples.insert(quadruple_id, quadruple);
         }
 
@@ -1287,21 +1258,20 @@ impl TryFrom<&pb::EcdsaPayload> for EcdsaPayload {
         let mut quadruples_in_creation = BTreeMap::new();
         for quadruple_in_creation in &payload.quadruples_in_creation {
             let quadruple_id = QuadrupleId(quadruple_in_creation.quadruple_id);
-            let proto = quadruple_in_creation
-                .quadruple
-                .as_ref()
-                .ok_or("pb::EcdsaPayload:: Missing quadruple_in_creation Id")?;
-            let quadruple: QuadrupleInCreation = proto.try_into()?;
+            let quadruple: QuadrupleInCreation = try_from_option_field(
+                quadruple_in_creation.quadruple.as_ref(),
+                "EcdsaPayload::quadruple_in_creation::quadruple",
+            )?;
             quadruples_in_creation.insert(quadruple_id, quadruple);
         }
 
         let next_unused_transcript_id: IDkgTranscriptId = (&payload.next_unused_transcript_id)
             .try_into()
             .map_err(|err| {
-                format!(
-                    "pb::EcdsaPayload:: Failed to convert next_unused_transcript_id: {:?}",
+                ProxyDecodeError::Other(format!(
+                    "EcdsaPayload:: Failed to convert next_unused_transcript_id: {:?}",
                     err
-                )
+                ))
             })?;
 
         let next_unused_quadruple_id: QuadrupleId = QuadrupleId(payload.next_unused_quadruple_id);
@@ -1315,7 +1285,10 @@ impl TryFrom<&pb::EcdsaPayload> for EcdsaPayload {
         let mut idkg_transcripts = BTreeMap::new();
         for proto in &payload.idkg_transcripts {
             let transcript: IDkgTranscript = proto.try_into().map_err(|err| {
-                format!("pb::EcdsaPayload:: Failed to convert transcript: {:?}", err)
+                ProxyDecodeError::Other(format!(
+                    "EcdsaPayload:: Failed to convert transcript: {:?}",
+                    err
+                ))
             })?;
             let transcript_id = transcript.transcript_id;
             idkg_transcripts.insert(transcript_id, transcript);
@@ -1324,36 +1297,31 @@ impl TryFrom<&pb::EcdsaPayload> for EcdsaPayload {
         // ongoing_xnet_reshares
         let mut ongoing_xnet_reshares = BTreeMap::new();
         for reshare in &payload.ongoing_xnet_reshares {
-            let proto = reshare
-                .request
-                .as_ref()
-                .ok_or("pb::EcdsaPayload:: Missing reshare request")?;
-            let request: EcdsaReshareRequest = proto.try_into()?;
+            let request: EcdsaReshareRequest =
+                try_from_option_field(reshare.request.as_ref(), "EcdsaPayload::reshare::request")?;
 
-            let proto = reshare
-                .transcript
-                .as_ref()
-                .ok_or("pb::EcdsaPayload:: Missing reshare transcript")?;
-            let transcript: ReshareOfUnmaskedParams = proto.try_into()?;
+            let transcript: ReshareOfUnmaskedParams = try_from_option_field(
+                reshare.transcript.as_ref(),
+                "EcdsaPayload::reshare::transcript",
+            )?;
             ongoing_xnet_reshares.insert(request, transcript);
         }
 
         // xnet_reshare_agreements
         let mut xnet_reshare_agreements = BTreeMap::new();
         for agreement in &payload.xnet_reshare_agreements {
-            let proto = agreement
-                .request
-                .as_ref()
-                .ok_or("pb::EcdsaPayload:: Missing agreement reshare request")?;
-            let request: EcdsaReshareRequest = proto.try_into()?;
+            let request: EcdsaReshareRequest = try_from_option_field(
+                agreement.request.as_ref(),
+                "EcdsaPayload::agreement::request",
+            )?;
 
             let completed = match &agreement.initial_dealings {
                 Some(response) => {
                     let unreported = response.clone().try_into().map_err(|err| {
-                        format!(
-                            "pb::EcdsaPayload:: failed to convert initial dealing: {:?}",
+                        ProxyDecodeError::Other(format!(
+                            "EcdsaPayload:: failed to convert initial dealing: {:?}",
                             err
-                        )
+                        ))
                     })?;
                     CompletedReshareRequest::Unreported(unreported)
                 }
@@ -1373,13 +1341,14 @@ impl TryFrom<&pb::EcdsaPayload> for EcdsaPayload {
                         // The error here should be propagated instead.
                         let unmasked = UnmaskedTranscript::try_from(&pb::UnmaskedTranscript {
                             transcript_ref: proto.transcript_ref.clone(),
-                        })?;
+                        })
+                        .map_err(|err| ProxyDecodeError::Other(err.to_string()))?;
                         let transcript_id = unmasked.as_ref().transcript_id;
                         let transcript = idkg_transcripts.get(&transcript_id).ok_or_else(|| {
-                            format!(
+                            ProxyDecodeError::Other(format!(
                                 "Key transcript {:?} does not exist in summary",
                                 transcript_id
-                            )
+                            ))
                         })?;
                         UnmaskedTranscriptWithAttributes(transcript.to_attributes(), unmasked)
                     }
@@ -1388,11 +1357,10 @@ impl TryFrom<&pb::EcdsaPayload> for EcdsaPayload {
             } else {
                 None
             };
-        let proto = payload
-            .next_key_in_creation
-            .as_ref()
-            .ok_or("pb::EcdsaPayload:: Missing next_key_in_creation")?;
-        let next_key_in_creation: KeyTranscriptCreation = proto.try_into()?;
+        let next_key_in_creation: KeyTranscriptCreation = try_from_option_field(
+            payload.next_key_in_creation.as_ref(),
+            "EcdsaPayload:: Missing next_key_in_creation",
+        )?;
 
         Ok(Self {
             signature_agreements,
