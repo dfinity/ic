@@ -32,6 +32,7 @@ use tokio::net::UnixListener;
 
 const FOUR_GIGA_BYTES: usize = 4 * 1024 * 1024 * 1024;
 mod codec;
+mod robust_unix_socket;
 mod tarpc_csp_vault_client;
 mod tarpc_csp_vault_server;
 

@@ -45,6 +45,7 @@ serde = { version = "1.0.99", features = ["derive"] }
 serde_cbor = "0.11.1"
 simple_asn1 = "0.6.1"
 slog = { version = "2.5.2", features = ["nested-values", "release_max_level_debug"] }
+stubborn-io = "0.3.2"
 strum = "0.23.0"
 strum_macros = "0.23.0"
 tarpc = { version = "0.32", features = ["full"] }
@@ -76,3 +77,5 @@ mockall = "0.7.2"
 proptest = "1.0"
 proptest-derive = "0.3.0"
 slog-async = { version = "2.5", features = ["nested-values"] }
+tracing = "0.1.37"
+tracing-subscriber = "0.3"

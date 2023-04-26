@@ -1038,6 +1038,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             "strum_macros": crate.spec(
                 version = "^0.24.1",
             ),
+            "stubborn-io": crate.spec(
+                version = "^0.3.2",
+            ),
             "substring": crate.spec(
                 version = "^1.4.5",
             ),

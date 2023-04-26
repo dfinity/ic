@@ -31,7 +31,7 @@ use ic_crypto_internal_types::NodeIndex;
 use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
 use ic_logger::replica_logger::no_op_logger;
-use ic_logger::{new_logger, ReplicaLogger};
+use ic_logger::{info, new_logger, warn, ReplicaLogger};
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgCreateDealingError, IDkgLoadTranscriptError, IDkgOpenTranscriptError, IDkgRetainKeysError,
     IDkgVerifyDealingPrivateError, ThresholdEcdsaSignShareError,
@@ -561,6 +561,7 @@ impl<C> TarpcCspVaultServerImplBuilder<C> {
 
 impl<C: CspVault> TarpcCspVaultServerImplBuilder<C> {
     pub fn build(&self, listener: UnixListener) -> TarpcCspVaultServerImpl<C> {
+        info!(&self.logger, "Starting new RPC CSP vault server");
         let local_csp_vault: Arc<C> =
             (self.local_csp_vault_factory)(&self.logger, Arc::clone(&self.metrics));
         TarpcCspVaultServerImpl {
@@ -618,5 +619,11 @@ impl<C: CspVault + 'static> TarpcCspVaultServerImpl<C> {
                 channel_executor.await;
             });
         }
+    }
+}
+
+impl<C: CspVault> Drop for TarpcCspVaultServerImpl<C> {
+    fn drop(&mut self) {
+        warn!(self.logger, "Dropping RPC CSP vault server")
     }
 }

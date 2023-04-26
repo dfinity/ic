@@ -12,7 +12,7 @@ use crate::vault::api::{
 };
 use crate::vault::remote_csp_vault::codec::{CspVaultClientObserver, ObservableCodec};
 use crate::vault::remote_csp_vault::{
-    remote_vault_codec_builder, TarpcCspVaultClient, FOUR_GIGA_BYTES,
+    remote_vault_codec_builder, robust_unix_socket, TarpcCspVaultClient, FOUR_GIGA_BYTES,
 };
 use crate::{ExternalPublicKeys, TlsHandshakeCspVault};
 use core::future::Future;
@@ -49,7 +49,6 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use tarpc::serde_transport;
 use tarpc::tokio_serde::formats::Bincode;
-use tokio::net::UnixStream;
 
 #[cfg(test)]
 use ic_config::logger::Config as LoggerConfig;
@@ -166,6 +165,12 @@ impl RemoteCspVaultBuilder {
         self
     }
 
+    pub fn with_rpc_timeouts(mut self, timeout: Duration) -> Self {
+        self.rpc_timeout = timeout;
+        self.long_rpc_timeout = timeout;
+        self
+    }
+
     pub fn with_max_frame_length(mut self, new_length: usize) -> Self {
         self.max_frame_length = new_length;
         self
@@ -184,7 +189,10 @@ impl RemoteCspVaultBuilder {
     pub fn build(self) -> Result<RemoteCspVault, RemoteCspVaultError> {
         let conn = self
             .rt_handle
-            .block_on(UnixStream::connect(&self.socket_path))
+            .block_on(robust_unix_socket::connect(
+                self.socket_path.clone(),
+                new_logger!(&self.logger),
+            ))
             .map_err(|e| RemoteCspVaultError::TransportError {
                 server_address: self.socket_path.to_string_lossy().to_string(),
                 message: e.to_string(),
