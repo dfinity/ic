@@ -24,7 +24,7 @@ mod tests;
 
 /// Controls whether the ingress history is written to a separate
 /// `ingress_history.pbuf` file; or bundled with the rest of system metadata.
-pub const SEPARATE_INGRESS_HISTORY: bool = false;
+pub const SEPARATE_INGRESS_HISTORY: bool = true;
 
 /// Creates a checkpoint of the node state using specified directory
 /// layout. Returns a new state that is equivalent to the given one

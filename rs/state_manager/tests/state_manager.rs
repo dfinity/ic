@@ -2010,8 +2010,9 @@ fn can_state_sync_from_cache() {
             //           9 |         18 |     7     | canister_states/00000000000000c80101/software.wasm
             //          10 |          0 |    N/A    | canister_states/00000000000000c80101/stable_memory.bin
             //          11 |          0 |    N/A    | canister_states/00000000000000c80101/vmemory_0.bin
-            //          12 |          0 |    N/A    | subnet_queues.pbuf
-            //          13 |         88 |     8     | system_metadata.pbuf
+            //          12 |          0 |    N/A    | ingress_history.pbuf
+            //          13 |          0 |    N/A    | subnet_queues.pbuf
+            //          14 |         88 |     8     | system_metadata.pbuf
             //
             // Given the current state layout, the chunk for `system_metadata.pbuf` is the last one in the chunk table.
             // If there are changes to the state layout and it changes the position of `system_metadata.pbuf` in the chunk table,
