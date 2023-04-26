@@ -3,6 +3,7 @@
 use crate::crypto::{AlgorithmId, CryptoError};
 use crate::registry::RegistryClientError;
 use crate::{Height, NodeId, RegistryVersion};
+use ic_protobuf::proxy::ProxyDecodeError;
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use serde::{Deserialize, Serialize};
 
@@ -71,12 +72,11 @@ pub enum InitialIDkgDealingsValidationError {
 }
 impl_display_using_debug!(InitialIDkgDealingsValidationError);
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ExtendedDerivationPathSerializationError {
-    MissingCaller,
-    InvalidCaller { error: String },
+impl From<InitialIDkgDealingsValidationError> for ProxyDecodeError {
+    fn from(init: InitialIDkgDealingsValidationError) -> Self {
+        ProxyDecodeError::Other(init.to_string())
+    }
 }
-impl_display_using_debug!(ExtendedDerivationPathSerializationError);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ThresholdEcdsaGetPublicKeyError {
