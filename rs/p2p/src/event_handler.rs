@@ -72,7 +72,7 @@ use crate::{
     gossip_types::{GossipChunk, GossipChunkRequest, GossipMessage},
     metrics::FlowWorkerMetrics,
 };
-
+use ic_interfaces::artifact_manager::ArtifactProcessorJoinGuard;
 use ic_interfaces_transport::{TransportEvent, TransportMessage};
 use ic_logger::{debug, replica_logger::ReplicaLogger, warn};
 use ic_metrics::MetricsRegistry;
@@ -398,6 +398,7 @@ pub struct P2PThreadJoiner {
     join_handle: Option<JoinHandle<()>>,
     /// Flag indicating if P2P has been terminated.
     killed: Arc<AtomicBool>,
+    artifact_processor_join_handles: Vec<ArtifactProcessorJoinGuard>,
 }
 
 /// Periodic timer duration in milliseconds between polling calls to the P2P
@@ -406,7 +407,11 @@ const P2P_TIMER_DURATION_MS: u64 = 100;
 
 impl P2PThreadJoiner {
     /// The method starts the P2P timer task in the background.
-    pub(crate) fn new(log: ReplicaLogger, gossip: GossipArc) -> Self {
+    pub(crate) fn new(
+        log: ReplicaLogger,
+        gossip: GossipArc,
+        artifact_processor_join_handles: Vec<ArtifactProcessorJoinGuard>,
+    ) -> Self {
         let killed = Arc::new(AtomicBool::new(false));
         let killed_c = Arc::clone(&killed);
         let join_handle = std::thread::Builder::new()
@@ -424,6 +429,7 @@ impl P2PThreadJoiner {
         Self {
             killed,
             join_handle: Some(join_handle),
+            artifact_processor_join_handles,
         }
     }
 }
@@ -431,6 +437,11 @@ impl P2PThreadJoiner {
 impl Drop for P2PThreadJoiner {
     /// The method signals the tasks to exit and waits for them to complete.
     fn drop(&mut self) {
+        // First kill the Artifact Processors
+        let artifact_processor_join_handles =
+            std::mem::take(&mut self.artifact_processor_join_handles);
+        std::mem::drop(artifact_processor_join_handles);
+        // Then kill P2P
         self.killed.store(true, SeqCst);
         self.join_handle.take().unwrap().join().unwrap();
     }
