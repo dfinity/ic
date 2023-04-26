@@ -14,7 +14,7 @@ use crate::{
     canister_api::{Request, Response},
     driver::test_env_api::{retry_async, HasPublicApiUrl, IcNodeSnapshot},
     generic_workload_engine::metrics::RequestOutcome,
-    util::{assert_create_agent, assert_create_agent_with_identity, delay},
+    util::{assert_create_agent, assert_create_agent_with_identity, create_delay},
 };
 
 /// An agent that is well-suited for interacting with arbitrary IC canisters.
@@ -82,7 +82,10 @@ impl CanisterAgent {
             self.agent
                 .update(&request.canister_id(), request.method_name())
                 .with_arg(request.payload())
-                .call_and_wait(delay())
+                // NOTE: polling interval or (throttling duration) can be important in case of high rps.
+                // If chosen badly it could result in 429 Too Many Requests from the node.
+                // Ideally, node should have a high rate limit to mitigate the impact/sensitivity of this value.
+                .call_and_wait(create_delay(800, 300))
                 .await
         })
         .map_err(|e| format!("{e:?}"));
