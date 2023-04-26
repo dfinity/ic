@@ -189,6 +189,7 @@ struct CheckpointRefData {
 /// │   │       ├── software.wasm
 /// │   │       ├── stable_memory.bin
 /// │   │       └── vmemory_0.bin
+/// │   ├── ingress_history.pbuf
 /// │   ├── subnet_queues.pbuf
 /// │   └── system_metadata.pbuf
 /// │
@@ -202,6 +203,7 @@ struct CheckpointRefData {
 /// │      │       ├── software.wasm
 /// │      │       ├── stable_memory.bin
 /// │      │       └── vmemory_0.bin
+/// │      ├── ingress_history.pbuf
 /// │      ├── subnet_queues.pbuf
 /// │      └── system_metadata.pbuf
 /// │
