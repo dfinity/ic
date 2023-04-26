@@ -91,7 +91,7 @@ PODMAN_RUN_ARGS+=(
     --mount type=bind,source="${REPO_ROOT}",target="${WORKDIR}"
     --mount type=bind,source="/var/lib/containers",target="/var/lib/containers"
     --mount type=bind,source="${HOME}",target="${HOME}"
-    --mount type=tmpfs,destination=/var/sysimage
+    --mount type=tmpfs,tmpfs-size=32G,destination=/var/sysimage
 )
 
 if [ -n "${SSH_AUTH_SOCK:-}" ] && [ -e "${SSH_AUTH_SOCK:-}" ]; then

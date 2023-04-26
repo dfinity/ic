@@ -54,7 +54,7 @@ def image_deps(mode, malicious = False):
         "docker_context": Label("//ic-os/guestos:rootfs-files"),
         "partition_table": Label("//ic-os/guestos:partitions.csv"),
         "expanded_size": "50G",
-        "rootfs_size": "3G",
+        "rootfs_size": "4G",
         "bootfs_size": "1G",
 
         # Add any custom partitions to the manifest
