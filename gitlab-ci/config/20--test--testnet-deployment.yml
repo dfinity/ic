@@ -5,11 +5,12 @@ test-testnet-deployment:
     - .rules-protected-branch
   stage: test
   resource_group: $TESTNET
-  variables: 
+  variables:
     TESTNET : "small14"
   timeout: 30 minutes
   script:
     - |
       set -eExou pipefail
+      export ANSIBLE_REMOTE_USER=gitlab-runner
       GIT_REVISION=$("$CI_PROJECT_DIR"/gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh "${CI_COMMIT_SHA}")
-      "$CI_PROJECT_DIR/testnet/tools/icos_deploy.sh" $TESTNET --git-revision "$GIT_REVISION" --no-boundary-nodes
+      "$CI_PROJECT_DIR/testnet/tools/icos_deploy.sh" $TESTNET --git-revision "$GIT_REVISION" --boundary-dev-image
