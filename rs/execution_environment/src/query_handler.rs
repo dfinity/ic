@@ -119,6 +119,7 @@ impl InternalHttpQueryHandler {
         max_instructions_per_query: NumInstructions,
         cycles_account_manager: Arc<CyclesAccountManager>,
     ) -> Self {
+        let query_cache_capacity = config.query_cache_capacity;
         Self {
             log,
             hypervisor,
@@ -127,7 +128,7 @@ impl InternalHttpQueryHandler {
             metrics: QueryHandlerMetrics::new(metrics_registry),
             max_instructions_per_query,
             cycles_account_manager,
-            query_cache: query_cache::QueryCache::new(),
+            query_cache: query_cache::QueryCache::new(query_cache_capacity),
         }
     }
 }
