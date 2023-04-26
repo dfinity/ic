@@ -5539,6 +5539,7 @@ dependencies = [
  "slog-async",
  "strum 0.23.0",
  "strum_macros 0.23.1",
+ "stubborn-io",
  "tarpc",
  "tempfile",
  "threadpool",
@@ -5546,6 +5547,8 @@ dependencies = [
  "tokio-openssl",
  "tokio-serde",
  "tokio-util",
+ "tracing",
+ "tracing-subscriber",
  "zeroize",
 ]
 
@@ -15365,6 +15368,17 @@ dependencies = [
  "quote 1.0.26",
  "rustversion",
  "syn 1.0.109",
+]
+
+[[package]]
+name = "stubborn-io"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b261fbca19f25e0ac726f6efb3c3f53949e18ba4b126c16f8ca625730daa1a9c"
+dependencies = [
+ "log",
+ "rand 0.8.5",
+ "tokio",
 ]
 
 [[package]]
