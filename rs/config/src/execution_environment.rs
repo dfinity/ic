@@ -11,7 +11,8 @@ use ic_types::{
 use serde::{Deserialize, Serialize};
 use std::{str::FromStr, time::Duration};
 
-const GB: u64 = 1024 * 1024 * 1024;
+const MIB: u64 = 1024 * 1024;
+const GIB: u64 = MIB * 1024;
 
 /// This is the upper limit on how much logical storage canisters can request to
 /// be store on a given subnet.
@@ -23,24 +24,24 @@ const GB: u64 = 1024 * 1024 * 1024;
 /// The gen 1 machines in production have 3TiB disks. We offer 450GiB to
 /// canisters. The rest will be used to for storing additional copies of the
 /// canister's data and the deltas.
-const SUBNET_MEMORY_CAPACITY: NumBytes = NumBytes::new(450 * GB);
+const SUBNET_MEMORY_CAPACITY: NumBytes = NumBytes::new(450 * GIB);
 
 /// This is the upper limit on how much memory can be used by all canister
 /// messages on a given subnet.
 ///
 /// Message memory usage is calculated as the total size of enqueued canister
 /// responses; plus the maximum allowed response size per queue reservation.
-const SUBNET_MESSAGE_MEMORY_CAPACITY: NumBytes = NumBytes::new(25 * GB);
+const SUBNET_MESSAGE_MEMORY_CAPACITY: NumBytes = NumBytes::new(25 * GIB);
 
 /// This is the upper limit on how much memory can be used by the ingress
 /// history on a given subnet. It is lower than the subnet messsage memory
 /// capacity because here we count actual memory consumption as opposed to
 /// memory plus reservations.
-const INGRESS_HISTORY_MEMORY_CAPACITY: NumBytes = NumBytes::new(4 * GB);
+const INGRESS_HISTORY_MEMORY_CAPACITY: NumBytes = NumBytes::new(4 * GIB);
 
 /// This is the upper limit on how much memory can be used by wasm custom
 /// sections on a given subnet.
-const SUBNET_WASM_CUSTOM_SECTIONS_MEMORY_CAPACITY: NumBytes = NumBytes::new(2 * GB);
+const SUBNET_WASM_CUSTOM_SECTIONS_MEMORY_CAPACITY: NumBytes = NumBytes::new(2 * GIB);
 
 /// This is the upper limit on how big heap deltas all the canisters together
 /// can produce on a subnet in between checkpoints. Once, the total delta size
@@ -55,7 +56,7 @@ const SUBNET_WASM_CUSTOM_SECTIONS_MEMORY_CAPACITY: NumBytes = NumBytes::new(2 * 
 /// potential fragmentation. This limit should be larger than the maximum
 /// canister memory size to guarantee that a message that overwrites the whole
 /// memory can succeed.
-pub(crate) const SUBNET_HEAP_DELTA_CAPACITY: NumBytes = NumBytes::new(140 * GB);
+pub(crate) const SUBNET_HEAP_DELTA_CAPACITY: NumBytes = NumBytes::new(140 * GIB);
 
 /// The maximum depth of call graphs allowed for composite query calls
 pub(crate) const MAX_QUERY_CALL_DEPTH: usize = 6;
@@ -86,6 +87,12 @@ const QUERY_EXECUTION_THREADS_TOTAL: usize = 2;
 /// value increases the user-visible latency of the queries.
 const QUERY_SCHEDULING_TIME_SLICE_PER_CANISTER: Duration = Duration::from_millis(20);
 
+/// The upper limit on how much memory query cache can occupy.
+///
+/// The limit includes both cache keys and values, for successful query
+/// executions and user errors.
+const QUERY_CACHE_CAPACITY: NumBytes = NumBytes::new(100 * MIB);
+
 // The ID of the Bitcoin testnet canister.
 pub const BITCOIN_TESTNET_CANISTER_ID: &str = "g4xu7-jiaaa-aaaan-aaaaq-cai";
 
@@ -100,7 +107,7 @@ pub const BITCOIN_MAINNET_CANISTER_ID: &str = "ghsi2-tqaaa-aaaan-aaaca-cai";
 const BITCOIN_MAINNET_SOFT_LAUNCH_CANISTER_ID: &str = "gsvzx-syaaa-aaaan-aaabq-cai";
 
 /// The capacity of the Wasm compilation cache.
-pub const MAX_COMPILATION_CACHE_SIZE: NumBytes = NumBytes::new(10 * GB);
+pub const MAX_COMPILATION_CACHE_SIZE: NumBytes = NumBytes::new(10 * GIB);
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(default)]
@@ -205,6 +212,9 @@ pub struct Config {
     /// Indicates whether replica side query caching is enabled.
     pub query_caching: FlagStatus,
 
+    /// Query cache capacity in bytes
+    pub query_cache_capacity: NumBytes,
+
     /// Sandbox process eviction does not activate if the number of sandbox
     /// processes is below this threshold.
     pub min_sandbox_count: usize,
@@ -285,6 +295,7 @@ impl Default for Config {
             },
             composite_queries: FlagStatus::Disabled,
             query_caching: FlagStatus::Disabled,
+            query_cache_capacity: QUERY_CACHE_CAPACITY,
             min_sandbox_count: embedders::DEFAULT_MIN_SANDBOX_COUNT,
             max_sandbox_count: embedders::DEFAULT_MAX_SANDBOX_COUNT,
             max_sandbox_idle_time: embedders::DEFAULT_MAX_SANDBOX_IDLE_TIME,

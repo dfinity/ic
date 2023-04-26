@@ -614,6 +614,130 @@ fn query_cache_env_old_invalid_entry_frees_memory() {
 }
 
 #[test]
+fn query_cache_capacity_is_respected() {
+    const REPLY_SIZE: usize = 10_000;
+    const QUERY_CACHE_CAPACITY: usize = REPLY_SIZE * 3;
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_query_caching()
+        .with_query_cache_capacity(QUERY_CACHE_CAPACITY as u64)
+        .build();
+
+    let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+
+    // Initially the cache should be empty, i.e. less than REPLY_SIZE.
+    let count_bytes = downcast_query_handler(test.query_handler())
+        .query_cache
+        .count_bytes();
+    assert!(count_bytes < REPLY_SIZE);
+
+    // All replies should hit the same cache entry.
+    for _ in 0..5 {
+        let _res = test.query(
+            UserQuery {
+                source: user_test_id(1),
+                receiver: canister_id,
+                method_name: "query".into(),
+                // The bytes are stored twice: as payload and then as reply.
+                method_payload: wasm().reply_data(&[1; REPLY_SIZE / 2]).build(),
+                ingress_expiry: 0,
+                nonce: None,
+            },
+            Arc::new(test.state().clone()),
+            vec![],
+        );
+
+        // Now there should be only one reply in the cache.
+        let count_bytes = downcast_query_handler(test.query_handler())
+            .query_cache
+            .count_bytes();
+        assert!(count_bytes > REPLY_SIZE);
+        assert!(count_bytes < QUERY_CACHE_CAPACITY);
+    }
+
+    // Now the replies should hit another entry.
+    for _ in 0..5 {
+        let _res = test.query(
+            UserQuery {
+                source: user_test_id(2),
+                receiver: canister_id,
+                method_name: "query".into(),
+                method_payload: wasm().reply_data(&[2; REPLY_SIZE / 2]).build(),
+                ingress_expiry: 0,
+                nonce: None,
+            },
+            Arc::new(test.state().clone()),
+            vec![],
+        );
+
+        // Now there should be two replies in the cache.
+        let count_bytes = downcast_query_handler(test.query_handler())
+            .query_cache
+            .count_bytes();
+        assert!(count_bytes > REPLY_SIZE * 2);
+        assert!(count_bytes < QUERY_CACHE_CAPACITY);
+    }
+
+    // Now the replies should evict the first entry.
+    for _ in 0..5 {
+        let _res = test.query(
+            UserQuery {
+                source: user_test_id(3),
+                receiver: canister_id,
+                method_name: "query".into(),
+                method_payload: wasm().reply_data(&[3; REPLY_SIZE / 2]).build(),
+                ingress_expiry: 0,
+                nonce: None,
+            },
+            Arc::new(test.state().clone()),
+            vec![],
+        );
+
+        // There should be still just two replies in the cache.
+        let count_bytes = downcast_query_handler(test.query_handler())
+            .query_cache
+            .count_bytes();
+        assert!(count_bytes > REPLY_SIZE * 2);
+        assert!(count_bytes < QUERY_CACHE_CAPACITY);
+    }
+}
+
+#[test]
+fn query_cache_capacity_zero() {
+    let mut test = ExecutionTestBuilder::new()
+        .with_query_caching()
+        .with_query_cache_capacity(0)
+        .build();
+
+    let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+    // Even with zero capacity the cache data structure uses some bytes for the pointers etc.
+    let initial_count_bytes = downcast_query_handler(test.query_handler())
+        .query_cache
+        .count_bytes();
+
+    // Replies should not change the initial (zero) capacity.
+    for _ in 0..5 {
+        let _res = test.query(
+            UserQuery {
+                source: user_test_id(1),
+                receiver: canister_id,
+                method_name: "query".into(),
+                method_payload: wasm().reply_data(&[1]).build(),
+                ingress_expiry: 0,
+                nonce: None,
+            },
+            Arc::new(test.state().clone()),
+            vec![],
+        );
+
+        let count_bytes = downcast_query_handler(test.query_handler())
+            .query_cache
+            .count_bytes();
+        assert_eq!(initial_count_bytes, count_bytes);
+    }
+}
+
+#[test]
 fn query_call_with_side_effects() {
     // In this test we have two canisters A and B.
     // Canister A does a side-effectful operation (stable_grow) and then

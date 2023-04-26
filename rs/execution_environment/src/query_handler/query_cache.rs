@@ -1,4 +1,4 @@
-use ic_base_types::CanisterId;
+use ic_base_types::{CanisterId, NumBytes};
 use ic_error_types::UserError;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{ingress::WasmResult, messages::UserQuery, CountBytes, Cycles, Time, UserId};
@@ -120,8 +120,10 @@ impl Default for QueryCache {
 }
 
 impl QueryCache {
-    pub(crate) fn new() -> Self {
-        Self::default()
+    pub(crate) fn new(capacity: NumBytes) -> Self {
+        QueryCache {
+            cache: Mutex::new(LruCache::new(capacity)),
+        }
     }
 
     pub(crate) fn get_valid_result(
