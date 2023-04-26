@@ -1,7 +1,7 @@
 use crate::common::{
     basic_consensus_pool_cache, basic_registry_client, basic_state_manager_mock,
     setup_ingress_filter_mock, setup_ingress_ingestion_mock, setup_query_execution_mock,
-    IngressFilterHandle, IngressIngestionHandle, QueryExecutionHandle,
+    wait_for_status_healthy, IngressFilterHandle, IngressIngestionHandle, QueryExecutionHandle,
 };
 use hyper::{
     client::conn::{handshake, SendRequest},
@@ -295,19 +295,12 @@ fn test_healthy_behind() {
         .build()
         .unwrap();
 
-    rt.block_on(async {
-        loop {
-            match agent.status().await {
-                Ok(status) if status.replica_health_status == Some("healthy".to_string()) => break,
-                _ => {
-                    sleep(Duration::from_millis(250)).await;
-                }
-            }
-        }
+    let status = rt.block_on(async {
+        wait_for_status_healthy(&agent).await.unwrap();
+        healthy.store(true, Ordering::SeqCst);
+        agent.status().await.unwrap()
     });
-    healthy.store(true, Ordering::SeqCst);
 
-    let status = rt.block_on(agent.status()).unwrap();
     assert_eq!(
         status.replica_health_status,
         Some("certified_state_behind".to_string())
@@ -355,7 +348,7 @@ fn test_unathorized_controller() {
 
     let expected_error = AgentError::HttpError(HttpErrorPayload {
         status: 400,
-        content_type: None,
+        content_type: Some("text/plain".to_string()),
         content: format!(
             "Effective canister id in URL {} does not match requested canister id: {}.",
             canister1, canister2
@@ -364,21 +357,11 @@ fn test_unathorized_controller() {
         .to_vec(),
     });
     rt.block_on(async {
-        loop {
-            match agent.read_state_raw(paths.clone(), canister1).await {
-                Err(err) => {
-                    if err == expected_error {
-                        break;
-                    }
-                    println!("Received unexpeceted error: {:?}", err);
-                    sleep(Duration::from_millis(250)).await
-                }
-                Ok(r) => {
-                    println!("Received unexpeceted success: {:?}", r);
-                    sleep(Duration::from_millis(250)).await
-                }
-            }
-        }
+        wait_for_status_healthy(&agent).await.unwrap();
+        assert_eq!(
+            agent.read_state_raw(paths.clone(), canister1).await,
+            Err(expected_error)
+        );
     });
 }
 
@@ -444,7 +427,7 @@ fn test_unathorized_query() {
         .unwrap();
     let expected_resp = AgentError::HttpError(HttpErrorPayload {
         status: 400,
-        content_type: None,
+        content_type: Some("text/plain".to_string()),
         content: format!(
             "Specified CanisterId {} does not match effective canister id in URL {}",
             canister1, canister2
@@ -455,18 +438,14 @@ fn test_unathorized_query() {
     query_tests.push((query, Err(expected_resp)));
 
     rt.block_on(async {
+        wait_for_status_healthy(&agent).await.unwrap();
         for (query, expected_resp) in query_tests {
-            loop {
-                let q = query.clone();
-                let resp = agent
-                    .query_signed(q.effective_canister_id, q.signed_query)
-                    .await;
-                if resp == expected_resp {
-                    break;
-                }
-                println!("Received unexpeceted response: {:?}", resp);
-                sleep(Duration::from_millis(250)).await
-            }
+            assert_eq!(
+                agent
+                    .query_signed(query.effective_canister_id, query.signed_query)
+                    .await,
+                expected_resp
+            );
         }
     });
 }
@@ -537,7 +516,7 @@ fn test_unathorized_call() {
         .unwrap();
     let expected_resp = AgentError::HttpError(HttpErrorPayload {
         status: 400,
-        content_type: None,
+        content_type: Some("text/plain".to_string()),
         content: format!(
             "Specified CanisterId {} does not match effective canister id in URL {}",
             canister1, canister2
@@ -564,18 +543,14 @@ fn test_unathorized_call() {
     update_tests.push((update.clone(), Ok(update.request_id)));
 
     rt.block_on(async {
+        wait_for_status_healthy(&agent).await.unwrap();
         for (update, expected_resp) in update_tests {
-            loop {
-                let u = update.clone();
-                let resp = agent
-                    .update_signed(u.effective_canister_id, u.signed_update)
-                    .await;
-                if resp == expected_resp {
-                    break;
-                }
-                println!("Received unexpeceted response: {:?}", resp);
-                sleep(Duration::from_millis(250)).await
-            }
+            assert_eq!(
+                agent
+                    .update_signed(update.effective_canister_id, update.signed_update)
+                    .await,
+                expected_resp
+            );
         }
     });
 }

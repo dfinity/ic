@@ -1,3 +1,4 @@
+use ic_agent::Agent;
 use ic_crypto_tree_hash::MixedHashTree;
 use ic_error_types::UserError;
 use ic_interfaces::execution_environment::{IngressFilterService, QueryExecutionService};
@@ -43,7 +44,7 @@ use ic_types::{
     CryptoHashOfPartialState, Height, RegistryVersion,
 };
 use prost::Message;
-use std::{collections::BTreeMap, sync::Arc};
+use std::{collections::BTreeMap, sync::Arc, time::Duration};
 use tower::{util::BoxCloneService, Service, ServiceExt};
 use tower_test::mock::Handle;
 
@@ -279,4 +280,22 @@ pub(crate) fn basic_registry_client() -> MockRegistryClient {
         });
 
     mock_registry_client
+}
+
+pub(crate) async fn wait_for_status_healthy(agent: &Agent) -> Result<(), &'static str> {
+    let fut = async {
+        loop {
+            let result = agent.status().await;
+            match result {
+                Ok(status) if status.replica_health_status == Some("healthy".to_string()) => {
+                    break;
+                }
+                _ => {}
+            }
+            tokio::time::sleep(Duration::from_millis(250)).await;
+        }
+    };
+    tokio::time::timeout(Duration::from_secs(10), fut)
+        .await
+        .map_err(|_| "Timeout while waiting for http endpoint to be healthy")
 }
