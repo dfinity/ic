@@ -278,11 +278,13 @@ where
                 })?;
                 self.pool_reader.check_artifact_acceptance(&message)?;
                 // this sends to an unbounded channel, which is what we want here
-                self.processor_handle.on_artifact(UnvalidatedArtifact {
-                    message,
-                    peer_id,
-                    timestamp: self.time_source.get_relative_time(),
-                });
+                self.sender
+                    .send(UnvalidatedArtifact {
+                        message,
+                        peer_id,
+                        timestamp: self.time_source.get_relative_time(),
+                    })
+                    .unwrap_or_else(|err| panic!("Failed to send request: {:?}", err));
 
                 Ok(())
             }

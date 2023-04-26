@@ -95,7 +95,10 @@
 //! width="540"/> </div> <hr/>
 
 use ic_config::transport::TransportConfig;
-use ic_interfaces::{artifact_manager::ArtifactManager, consensus_pool::ConsensusPoolCache};
+use ic_interfaces::{
+    artifact_manager::{ArtifactManager, ArtifactProcessorJoinGuard},
+    consensus_pool::ConsensusPoolCache,
+};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_transport::{Transport, TransportChannelId};
 use ic_logger::ReplicaLogger;
@@ -165,6 +168,7 @@ pub fn start_p2p(
     consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
     artifact_manager: Arc<dyn ArtifactManager>,
     advert_receiver: Receiver<GossipAdvert>,
+    artifact_processor_join_handles: Vec<ArtifactProcessorJoinGuard>,
 ) -> P2PThreadJoiner {
     let p2p_transport_channels = vec![TransportChannelId::from(0)];
     let gossip = Arc::new(gossip_protocol::GossipImpl::new(
@@ -190,7 +194,7 @@ pub fn start_p2p(
     let _ =
         advert_broadcaster::start_advert_send_thread(log.clone(), advert_receiver, gossip.clone());
 
-    P2PThreadJoiner::new(log, gossip)
+    P2PThreadJoiner::new(log, gossip, artifact_processor_join_handles)
 }
 
 /// Generic P2P Error codes.

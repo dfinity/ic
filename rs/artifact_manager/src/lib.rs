@@ -85,7 +85,7 @@ mod unformatted {
 //!        queued to a background worker thread. The thread runs a loop that calls into the
 //!        per-client ArtifactProcessor implementation with the newly received artifacts
 //!
-//!        a. processors::ArtifactProcessorHandle manages the life cycle of these back ground
+//!        a. processors::ArtifactProcessorJoinGuard manages the life cycle of these back ground
 //!           threads, and queues the requests to the background thread via a crossbeam channel
 //!        b. processors::ConsensusProcessor, etc implement the per-client ArtifactProcessor
 //!           logic called by the threads. These roughly perform the sequence: add the new
@@ -100,7 +100,9 @@ mod processors;
 
 use crossbeam_channel::{Receiver, RecvTimeoutError, Sender};
 use ic_interfaces::{
-    artifact_manager::{ArtifactClient, ArtifactProcessor, ProcessingResult},
+    artifact_manager::{
+        ArtifactClient, ArtifactProcessor, ArtifactProcessorJoinGuard, ProcessingResult,
+    },
     artifact_pool::{
         ChangeSetProducer, MutablePool, PriorityFnAndFilterProducer, UnvalidatedArtifact,
         ValidatedPoolReader,
@@ -121,7 +123,7 @@ use std::sync::{
     atomic::{AtomicBool, Ordering::SeqCst},
     Arc, RwLock,
 };
-use std::thread::{Builder as ThreadBuilder, JoinHandle};
+use std::thread::Builder as ThreadBuilder;
 use std::time::Duration;
 
 /// Metrics for a client artifact processor.
@@ -179,113 +181,86 @@ impl ArtifactProcessorMetrics {
     }
 }
 
-/// Manages the life cycle of the client specific artifact processor thread.
-/// Also serves as the front end to enqueue requests to the processor thread.
-pub struct ArtifactProcessorHandle<Artifact: ArtifactKind + 'static> {
-    /// To send the process requests
-    sender: Sender<UnvalidatedArtifact<Artifact::Message>>,
-    /// Handle for the processing thread
-    handle: Option<JoinHandle<()>>,
-    /// To signal processing thread to exit.
-    /// TODO: handle.abort() does not seem to work as expected
+pub fn run_artifact_processor<
+    Artifact: ArtifactKind + 'static,
+    S: Fn(Advert<Artifact>) + Send + 'static,
+>(
+    time_source: Arc<SysTimeSource>,
+    metrics_registry: MetricsRegistry,
+    client: Box<dyn ArtifactProcessor<Artifact>>,
+    send_advert: S,
+) -> (
+    ArtifactProcessorJoinGuard,
+    Sender<UnvalidatedArtifact<Artifact::Message>>,
+)
+where
+    <Artifact as ic_types::artifact::ArtifactKind>::Message: Send,
+{
+    // Making this channel bounded can be problematic since we don't have true multiplexing
+    // of P2P messages.
+    // Possible scenario is - adverts+chunks arrive on the same channel, slow consensus
+    // will result on slow consuption of chunks. Slow consumption of chunks will in turn
+    // result in slower consumptions of adverts. Ideally adverts are consumed at rate
+    // independant of consensus.
+    let (sender, receiver) = crossbeam_channel::unbounded();
+    let shutdown = Arc::new(AtomicBool::new(false));
+
+    // Spawn the processor thread
+    let shutdown_cl = shutdown.clone();
+    let handle = ThreadBuilder::new()
+        .name(format!("{}_Processor", Artifact::TAG))
+        .spawn(move || {
+            process_messages(
+                time_source,
+                client,
+                Box::new(send_advert),
+                receiver,
+                ArtifactProcessorMetrics::new(metrics_registry, Artifact::TAG.to_string()),
+                shutdown_cl,
+            );
+        })
+        .unwrap();
+
+    (ArtifactProcessorJoinGuard::new(handle, shutdown), sender)
+}
+
+// The artifact processor thread loop
+#[allow(clippy::too_many_arguments)]
+fn process_messages<Artifact: ArtifactKind + 'static, S: Fn(Advert<Artifact>) + Send + 'static>(
+    time_source: Arc<SysTimeSource>,
+    client: Box<dyn ArtifactProcessor<Artifact>>,
+    send_advert: Box<S>,
+    receiver: Receiver<UnvalidatedArtifact<Artifact::Message>>,
+    mut metrics: ArtifactProcessorMetrics,
     shutdown: Arc<AtomicBool>,
-}
-
-impl<Artifact: ArtifactKind + 'static> ArtifactProcessorHandle<Artifact> {
-    pub fn new<S: Fn(Advert<Artifact>) + Send + 'static>(
-        time_source: Arc<SysTimeSource>,
-        metrics_registry: MetricsRegistry,
-        client: Box<dyn ArtifactProcessor<Artifact>>,
-        send_advert: S,
-    ) -> Self
-    where
-        <Artifact as ic_types::artifact::ArtifactKind>::Message: Send,
-    {
-        // Making this channel bounded can be problematic since we don't have true multiplexing
-        // of P2P messages.
-        // Possible scenario is - adverts+chunks arrive on the same channel, slow consensus
-        // will result on slow consuption of chunks. Slow consumption of chunks will in turn
-        // result in slower consumptions of adverts. Ideally adverts are consumed at rate
-        // independant of consensus.
-        let (sender, receiver) = crossbeam_channel::unbounded();
-        let shutdown = Arc::new(AtomicBool::new(false));
-
-        // Spawn the processor thread
-        let shutdown_cl = shutdown.clone();
-        let handle = ThreadBuilder::new()
-            .name(format!("{}_Processor", Artifact::TAG))
-            .spawn(move || {
-                Self::process_messages(
-                    time_source,
-                    client,
-                    Box::new(send_advert),
-                    receiver,
-                    ArtifactProcessorMetrics::new(metrics_registry, Artifact::TAG.to_string()),
-                    shutdown_cl,
-                );
-            })
-            .unwrap();
-
-        Self {
-            sender,
-            handle: Some(handle),
-            shutdown,
-        }
-    }
-
-    pub fn on_artifact(&self, artifact: UnvalidatedArtifact<Artifact::Message>) {
-        self.sender
-            .send(artifact)
-            .unwrap_or_else(|err| panic!("Failed to send request: {:?}", err));
-    }
-
-    // The artifact processor thread loop
-    #[allow(clippy::too_many_arguments)]
-    fn process_messages<S: Fn(Advert<Artifact>) + Send + 'static>(
-        time_source: Arc<SysTimeSource>,
-        client: Box<dyn ArtifactProcessor<Artifact>>,
-        send_advert: Box<S>,
-        receiver: Receiver<UnvalidatedArtifact<Artifact::Message>>,
-        mut metrics: ArtifactProcessorMetrics,
-        shutdown: Arc<AtomicBool>,
-    ) {
-        let mut last_on_state_change_result = ProcessingResult::StateUnchanged;
-        while !shutdown.load(SeqCst) {
-            // TODO: assess impact of continued processing in same
-            // iteration if StateChanged
-            let recv_timeout = match last_on_state_change_result {
-                ProcessingResult::StateChanged => Duration::from_millis(0),
-                ProcessingResult::StateUnchanged => {
-                    Duration::from_millis(ARTIFACT_MANAGER_TIMER_DURATION_MSEC)
+) {
+    let mut last_on_state_change_result = ProcessingResult::StateUnchanged;
+    while !shutdown.load(SeqCst) {
+        // TODO: assess impact of continued processing in same
+        // iteration if StateChanged
+        let recv_timeout = match last_on_state_change_result {
+            ProcessingResult::StateChanged => Duration::from_millis(0),
+            ProcessingResult::StateUnchanged => {
+                Duration::from_millis(ARTIFACT_MANAGER_TIMER_DURATION_MSEC)
+            }
+        };
+        let recv_artifact = receiver.recv_timeout(recv_timeout);
+        let batched_artifacts = match recv_artifact {
+            Ok(artifact) => {
+                let mut artifacts = vec![artifact];
+                while let Ok(artifact) = receiver.try_recv() {
+                    artifacts.push(artifact);
                 }
-            };
-            let recv_artifact = receiver.recv_timeout(recv_timeout);
-            let batched_artifacts = match recv_artifact {
-                Ok(artifact) => {
-                    let mut artifacts = vec![artifact];
-                    while let Ok(artifact) = receiver.try_recv() {
-                        artifacts.push(artifact);
-                    }
-                    artifacts
-                }
-                Err(RecvTimeoutError::Timeout) => vec![],
-                Err(RecvTimeoutError::Disconnected) => return,
-            };
-            time_source.update_time().ok();
-            let (adverts, on_state_change_result) = metrics
-                .with_metrics(|| client.process_changes(time_source.as_ref(), batched_artifacts));
-            adverts.into_iter().for_each(&send_advert);
-            last_on_state_change_result = on_state_change_result;
-        }
-    }
-}
-
-impl<Artifact: ArtifactKind + 'static> Drop for ArtifactProcessorHandle<Artifact> {
-    fn drop(&mut self) {
-        if let Some(handle) = self.handle.take() {
-            self.shutdown.store(true, SeqCst);
-            handle.join().unwrap();
-        }
+                artifacts
+            }
+            Err(RecvTimeoutError::Timeout) => vec![],
+            Err(RecvTimeoutError::Disconnected) => return,
+        };
+        time_source.update_time().ok();
+        let (adverts, on_state_change_result) = metrics
+            .with_metrics(|| client.process_changes(time_source.as_ref(), batched_artifacts));
+        adverts.into_iter().for_each(&send_advert);
+        last_on_state_change_result = on_state_change_result;
     }
 }
 
@@ -294,10 +269,10 @@ const ARTIFACT_MANAGER_TIMER_DURATION_MSEC: u64 = 200;
 
 /// The struct contains all relevant interfaces for P2P to operate.
 pub struct ArtifactClientHandle<Artifact: ArtifactKind + 'static> {
+    /// To send the process requests
+    pub sender: Sender<UnvalidatedArtifact<Artifact::Message>>,
     /// Reference to the artifact client.
     pub pool_reader: Box<dyn ArtifactClient<Artifact>>,
-    /// The artifact processor front end.
-    pub processor_handle: ArtifactProcessorHandle<Artifact>,
     pub time_source: Arc<dyn TimeSource>,
 }
 
@@ -321,26 +296,32 @@ pub fn create_ingress_handlers<
     metrics_registry: MetricsRegistry,
     node_id: NodeId,
     malicious_flags: MaliciousFlags,
-) -> ArtifactClientHandle<IngressArtifact> {
+) -> (
+    ArtifactClientHandle<IngressArtifact>,
+    ArtifactProcessorJoinGuard,
+) {
     let client = processors::IngressProcessor::new(ingress_pool.clone(), ingress_handler, node_id);
-    let manager = ArtifactProcessorHandle::new(
+    let (jh, sender) = run_artifact_processor(
         time_source.clone(),
         metrics_registry,
         Box::new(client),
         send_advert,
     );
 
-    ArtifactClientHandle::<IngressArtifact> {
-        processor_handle: manager,
-        pool_reader: Box::new(pool_readers::IngressClient::new(
-            time_source.clone(),
-            ingress_pool,
-            priority_fn_and_filter_producer,
-            log,
-            malicious_flags,
-        )),
-        time_source,
-    }
+    (
+        ArtifactClientHandle::<IngressArtifact> {
+            sender,
+            pool_reader: Box::new(pool_readers::IngressClient::new(
+                time_source.clone(),
+                ingress_pool,
+                priority_fn_and_filter_producer,
+                log,
+                malicious_flags,
+            )),
+            time_source,
+        },
+        jh,
+    )
 }
 
 pub fn create_consensus_handlers<
@@ -359,27 +340,33 @@ pub fn create_consensus_handlers<
     consensus_pool: Arc<RwLock<PoolConsensus>>,
     log: ReplicaLogger,
     metrics_registry: MetricsRegistry,
-) -> ArtifactClientHandle<ConsensusArtifact> {
+) -> (
+    ArtifactClientHandle<ConsensusArtifact>,
+    ArtifactProcessorJoinGuard,
+) {
     let client = processors::ConsensusProcessor::new(
         consensus_pool.clone(),
         Box::new(consensus),
         log,
         &metrics_registry,
     );
-    let manager = ArtifactProcessorHandle::new(
+    let (jh, sender) = run_artifact_processor(
         time_source.clone(),
         metrics_registry,
         Box::new(client),
         send_advert,
     );
-    ArtifactClientHandle::<ConsensusArtifact> {
-        processor_handle: manager,
-        pool_reader: Box::new(pool_readers::ConsensusClient::new(
-            consensus_pool,
-            consensus_gossip,
-        )),
-        time_source,
-    }
+    (
+        ArtifactClientHandle::<ConsensusArtifact> {
+            sender,
+            pool_reader: Box::new(pool_readers::ConsensusClient::new(
+                consensus_pool,
+                consensus_gossip,
+            )),
+            time_source,
+        },
+        jh,
+    )
 }
 
 pub fn create_certification_handlers<
@@ -398,27 +385,33 @@ pub fn create_certification_handlers<
     certification_pool: Arc<RwLock<PoolCertification>>,
     log: ReplicaLogger,
     metrics_registry: MetricsRegistry,
-) -> ArtifactClientHandle<CertificationArtifact> {
+) -> (
+    ArtifactClientHandle<CertificationArtifact>,
+    ArtifactProcessorJoinGuard,
+) {
     let client = processors::CertificationProcessor::new(
         certification_pool.clone(),
         Box::new(certifier),
         log,
         &metrics_registry,
     );
-    let manager = ArtifactProcessorHandle::new(
+    let (jh, sender) = run_artifact_processor(
         time_source.clone(),
         metrics_registry,
         Box::new(client),
         send_advert,
     );
-    ArtifactClientHandle::<CertificationArtifact> {
-        processor_handle: manager,
-        pool_reader: Box::new(pool_readers::CertificationClient::new(
-            certification_pool,
-            certifier_gossip,
-        )),
-        time_source,
-    }
+    (
+        ArtifactClientHandle::<CertificationArtifact> {
+            sender,
+            pool_reader: Box::new(pool_readers::CertificationClient::new(
+                certification_pool,
+                certifier_gossip,
+            )),
+            time_source,
+        },
+        jh,
+    )
 }
 
 pub fn create_dkg_handlers<
@@ -437,20 +430,26 @@ pub fn create_dkg_handlers<
     dkg_pool: Arc<RwLock<PoolDkg>>,
     log: ReplicaLogger,
     metrics_registry: MetricsRegistry,
-) -> ArtifactClientHandle<DkgArtifact> {
+) -> (
+    ArtifactClientHandle<DkgArtifact>,
+    ArtifactProcessorJoinGuard,
+) {
     let client =
         processors::DkgProcessor::new(dkg_pool.clone(), Box::new(dkg), log, &metrics_registry);
-    let manager = ArtifactProcessorHandle::new(
+    let (jh, sender) = run_artifact_processor(
         time_source.clone(),
         metrics_registry,
         Box::new(client),
         send_advert,
     );
-    ArtifactClientHandle::<DkgArtifact> {
-        processor_handle: manager,
-        pool_reader: Box::new(pool_readers::DkgClient::new(dkg_pool, dkg_gossip)),
-        time_source,
-    }
+    (
+        ArtifactClientHandle::<DkgArtifact> {
+            sender,
+            pool_reader: Box::new(pool_readers::DkgClient::new(dkg_pool, dkg_gossip)),
+            time_source,
+        },
+        jh,
+    )
 }
 
 pub fn create_ecdsa_handlers<
@@ -468,20 +467,26 @@ pub fn create_ecdsa_handlers<
     time_source: Arc<SysTimeSource>,
     ecdsa_pool: Arc<RwLock<PoolEcdsa>>,
     metrics_registry: MetricsRegistry,
-) -> ArtifactClientHandle<EcdsaArtifact> {
+) -> (
+    ArtifactClientHandle<EcdsaArtifact>,
+    ArtifactProcessorJoinGuard,
+) {
     let client =
         processors::EcdsaProcessor::new(ecdsa_pool.clone(), Box::new(ecdsa), &metrics_registry);
-    let manager = ArtifactProcessorHandle::new(
+    let (jh, sender) = run_artifact_processor(
         time_source.clone(),
         metrics_registry,
         Box::new(client),
         send_advert,
     );
-    ArtifactClientHandle::<EcdsaArtifact> {
-        processor_handle: manager,
-        pool_reader: Box::new(pool_readers::EcdsaClient::new(ecdsa_pool, ecdsa_gossip)),
-        time_source,
-    }
+    (
+        ArtifactClientHandle::<EcdsaArtifact> {
+            sender,
+            pool_reader: Box::new(pool_readers::EcdsaClient::new(ecdsa_pool, ecdsa_gossip)),
+            time_source,
+        },
+        jh,
+    )
 }
 
 pub fn create_https_outcalls_handlers<
@@ -499,21 +504,27 @@ pub fn create_https_outcalls_handlers<
     time_source: Arc<SysTimeSource>,
     canister_http_pool: Arc<RwLock<PoolCanisterHttp>>,
     metrics_registry: MetricsRegistry,
-) -> ArtifactClientHandle<CanisterHttpArtifact> {
+) -> (
+    ArtifactClientHandle<CanisterHttpArtifact>,
+    ArtifactProcessorJoinGuard,
+) {
     let client =
         processors::CanisterHttpProcessor::new(canister_http_pool.clone(), Box::new(pool_manager));
-    let manager = ArtifactProcessorHandle::new(
+    let (jh, sender) = run_artifact_processor(
         time_source.clone(),
         metrics_registry,
         Box::new(client),
         send_advert,
     );
-    ArtifactClientHandle::<CanisterHttpArtifact> {
-        processor_handle: manager,
-        pool_reader: Box::new(pool_readers::CanisterHttpClient::new(
-            canister_http_pool,
-            canister_http_gossip,
-        )),
-        time_source,
-    }
+    (
+        ArtifactClientHandle::<CanisterHttpArtifact> {
+            sender,
+            pool_reader: Box::new(pool_readers::CanisterHttpClient::new(
+                canister_http_pool,
+                canister_http_gossip,
+            )),
+            time_source,
+        },
+        jh,
+    )
 }

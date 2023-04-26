@@ -35,7 +35,10 @@ use ic_https_outcalls_consensus::{
 use ic_icos_sev_interfaces::ValidateAttestedStream;
 use ic_ingress_manager::IngressManager;
 use ic_interfaces::{
-    artifact_manager::{AdvertBroadcaster, ArtifactClient, ArtifactManager, ArtifactProcessor},
+    artifact_manager::{
+        AdvertBroadcaster, ArtifactClient, ArtifactManager, ArtifactProcessor,
+        ArtifactProcessorJoinGuard,
+    },
     crypto::IngressSigVerifier,
     execution_environment::IngressHistoryReader,
     messaging::{MessageRouting, XNetPayloadBuilder},
@@ -146,7 +149,7 @@ pub fn create_networking_stack(
     let consensus_pool_cache = artifact_pools.consensus_pool.read().unwrap().get_cache();
     let oldest_registry_version_in_use = consensus_pool_cache.get_oldest_registry_version_in_use();
     // Now we setup the Artifact Pools and the manager.
-    let artifact_manager = setup_artifact_manager(
+    let (artifact_manager, join_handles) = setup_artifact_manager(
         node_id,
         Arc::clone(&consensus_crypto) as Arc<_>,
         Arc::clone(&certifier_crypto) as Arc<_>,
@@ -170,8 +173,8 @@ pub fn create_networking_stack(
         registry_poll_delay_duration_ms,
         advert_subscriber,
         canister_http_adapter_client,
-    )
-    .unwrap();
+    );
+    let artifact_manager = artifact_manager.unwrap();
 
     let transport = transport.unwrap_or_else(|| {
         create_transport(
@@ -209,6 +212,7 @@ pub fn create_networking_stack(
         consensus_pool_cache,
         artifact_manager,
         advert_rx,
+        join_handles,
     );
     (ingress_event_handler, p2p_thread)
 }
@@ -243,13 +247,17 @@ fn setup_artifact_manager(
     registry_poll_delay_duration_ms: u64,
     advert_broadcaster: Arc<dyn AdvertBroadcaster + Send + Sync>,
     canister_http_adapter_client: ic_interfaces_https_outcalls_adapter_client::CanisterHttpAdapterClient,
-) -> std::io::Result<Arc<dyn ArtifactManager>> {
+) -> (
+    std::io::Result<Arc<dyn ArtifactManager>>,
+    Vec<ArtifactProcessorJoinGuard>,
+) {
     // Initialize the time source.
     let time_source = Arc::new(SysTimeSource::new());
     let consensus_pool_cache = artifact_pools.consensus_pool.read().unwrap().get_cache();
 
     let mut backends: HashMap<ArtifactTag, Box<dyn manager::ArtifactManagerBackend>> =
         HashMap::new();
+    let mut join_handles = vec![];
 
     let consensus_block_cache = artifact_pools
         .consensus_pool
@@ -261,39 +269,42 @@ fn setup_artifact_manager(
         state_sync_client
     {
         let advert_broadcaster = advert_broadcaster;
-        let processor_handle = ArtifactProcessorHandle::new(
+        let (jh, sender) = run_artifact_processor(
             Arc::clone(&time_source) as Arc<_>,
             metrics_registry,
             client_on_state_change,
             move |req| advert_broadcaster.process_delta(req.into()),
         );
-
+        join_handles.push(jh);
         backends.insert(
             TestArtifact::TAG,
             Box::new(ArtifactClientHandle {
                 pool_reader,
-                processor_handle,
+                sender,
                 time_source,
             }),
         );
-        return Ok(Arc::new(
-            manager::ArtifactManagerImpl::new_with_default_priority_fn(backends),
-        ));
+        return (
+            Ok(Arc::new(
+                manager::ArtifactManagerImpl::new_with_default_priority_fn(backends),
+            )),
+            join_handles,
+        );
     }
     if let P2PStateSyncClient::Client(client) = state_sync_client {
         let advert_broadcaster = advert_broadcaster.clone();
-        let processor_handle = ArtifactProcessorHandle::new(
+        let (jh, sender) = run_artifact_processor(
             Arc::clone(&time_source) as Arc<_>,
             metrics_registry.clone(),
             Box::new(client.clone()) as Box<_>,
             move |req| advert_broadcaster.process_delta(req.into()),
         );
-
+        join_handles.push(jh);
         backends.insert(
             StateSyncArtifact::TAG,
             Box::new(ArtifactClientHandle {
                 pool_reader: Box::new(client),
-                processor_handle,
+                sender,
                 time_source: time_source.clone(),
             }),
         );
@@ -342,108 +353,104 @@ fn setup_artifact_manager(
     {
         // Create the consensus client.
         let advert_broadcaster = advert_broadcaster.clone();
-        backends.insert(
-            ConsensusArtifact::TAG,
-            Box::new(create_consensus_handlers(
-                move |req| advert_broadcaster.process_delta(req.into()),
-                consensus_setup(
-                    replica_config.clone(),
-                    consensus_config,
-                    Arc::clone(&registry_client),
-                    Arc::clone(&membership) as Arc<_>,
-                    Arc::clone(&consensus_crypto),
-                    Arc::clone(&ingress_manager) as Arc<_>,
-                    xnet_payload_builder,
-                    self_validating_payload_builder,
-                    canister_http_payload_builder,
-                    Arc::clone(&artifact_pools.dkg_pool) as Arc<_>,
-                    Arc::clone(&artifact_pools.ecdsa_pool) as Arc<_>,
-                    Arc::clone(&dkg_key_manager) as Arc<_>,
-                    message_router,
-                    Arc::clone(&state_manager) as Arc<_>,
-                    Arc::clone(&time_source) as Arc<_>,
-                    malicious_flags.clone(),
-                    metrics_registry.clone(),
-                    replica_logger.clone(),
-                    local_store_time_reader,
-                    registry_poll_delay_duration_ms,
-                ),
+        let (client, jh) = create_consensus_handlers(
+            move |req| advert_broadcaster.process_delta(req.into()),
+            consensus_setup(
+                replica_config.clone(),
+                consensus_config,
+                Arc::clone(&registry_client),
+                Arc::clone(&membership) as Arc<_>,
+                Arc::clone(&consensus_crypto),
+                Arc::clone(&ingress_manager) as Arc<_>,
+                xnet_payload_builder,
+                self_validating_payload_builder,
+                canister_http_payload_builder,
+                Arc::clone(&artifact_pools.dkg_pool) as Arc<_>,
+                Arc::clone(&artifact_pools.ecdsa_pool) as Arc<_>,
+                Arc::clone(&dkg_key_manager) as Arc<_>,
+                message_router,
+                Arc::clone(&state_manager) as Arc<_>,
                 Arc::clone(&time_source) as Arc<_>,
-                Arc::clone(&artifact_pools.consensus_pool),
-                replica_logger.clone(),
+                malicious_flags.clone(),
                 metrics_registry.clone(),
-            )),
+                replica_logger.clone(),
+                local_store_time_reader,
+                registry_poll_delay_duration_ms,
+            ),
+            Arc::clone(&time_source) as Arc<_>,
+            Arc::clone(&artifact_pools.consensus_pool),
+            replica_logger.clone(),
+            metrics_registry.clone(),
         );
+        join_handles.push(jh);
+        backends.insert(ConsensusArtifact::TAG, Box::new(client));
     }
 
     {
         // Create the ingress client.
         let advert_broadcaster = advert_broadcaster.clone();
         let ingress_prioritizer = IngressPrioritizer::new(time_source.clone());
-        backends.insert(
-            IngressArtifact::TAG,
-            Box::new(create_ingress_handlers(
-                move |req| advert_broadcaster.process_delta(req.into()),
-                Arc::clone(&time_source) as Arc<_>,
-                Arc::clone(&artifact_pools.ingress_pool),
-                ingress_prioritizer,
-                ingress_manager,
-                replica_logger.clone(),
-                metrics_registry.clone(),
-                node_id,
-                malicious_flags.clone(),
-            )),
+        let (client, jh) = create_ingress_handlers(
+            move |req| advert_broadcaster.process_delta(req.into()),
+            Arc::clone(&time_source) as Arc<_>,
+            Arc::clone(&artifact_pools.ingress_pool),
+            ingress_prioritizer,
+            ingress_manager,
+            replica_logger.clone(),
+            metrics_registry.clone(),
+            node_id,
+            malicious_flags.clone(),
         );
+        join_handles.push(jh);
+        backends.insert(IngressArtifact::TAG, Box::new(client));
     }
 
     {
         // Create the certification client.
         let advert_broadcaster = advert_broadcaster.clone();
-        backends.insert(
-            CertificationArtifact::TAG,
-            Box::new(create_certification_handlers(
-                move |req| advert_broadcaster.process_delta(req.into()),
-                certification_setup(
-                    replica_config,
-                    Arc::clone(&membership) as Arc<_>,
-                    Arc::clone(&certifier_crypto),
-                    Arc::clone(&state_manager) as Arc<_>,
-                    Arc::clone(&consensus_pool_cache) as Arc<_>,
-                    metrics_registry.clone(),
-                    replica_logger.clone(),
-                ),
-                Arc::clone(&time_source) as Arc<_>,
-                Arc::clone(&artifact_pools.certification_pool),
-                replica_logger.clone(),
+        let (client, jh) = create_certification_handlers(
+            move |req| advert_broadcaster.process_delta(req.into()),
+            certification_setup(
+                replica_config,
+                Arc::clone(&membership) as Arc<_>,
+                Arc::clone(&certifier_crypto),
+                Arc::clone(&state_manager) as Arc<_>,
+                Arc::clone(&consensus_pool_cache) as Arc<_>,
                 metrics_registry.clone(),
-            )),
+                replica_logger.clone(),
+            ),
+            Arc::clone(&time_source) as Arc<_>,
+            Arc::clone(&artifact_pools.certification_pool),
+            replica_logger.clone(),
+            metrics_registry.clone(),
         );
+        join_handles.push(jh);
+        backends.insert(CertificationArtifact::TAG, Box::new(client));
     }
 
     {
         // Create the DKG client.
         let advert_broadcaster = advert_broadcaster.clone();
-        backends.insert(
-            DkgArtifact::TAG,
-            Box::new(create_dkg_handlers(
-                move |req| advert_broadcaster.process_delta(req.into()),
-                (
-                    dkg::DkgImpl::new(
-                        node_id,
-                        Arc::clone(&consensus_crypto),
-                        Arc::clone(&consensus_pool_cache),
-                        dkg_key_manager,
-                        metrics_registry.clone(),
-                        replica_logger.clone(),
-                    ),
-                    dkg::DkgGossipImpl {},
+        let (client, jh) = create_dkg_handlers(
+            move |req| advert_broadcaster.process_delta(req.into()),
+            (
+                dkg::DkgImpl::new(
+                    node_id,
+                    Arc::clone(&consensus_crypto),
+                    Arc::clone(&consensus_pool_cache),
+                    dkg_key_manager,
+                    metrics_registry.clone(),
+                    replica_logger.clone(),
                 ),
-                Arc::clone(&time_source) as Arc<_>,
-                Arc::clone(&artifact_pools.dkg_pool),
-                replica_logger.clone(),
-                metrics_registry.clone(),
-            )),
+                dkg::DkgGossipImpl {},
+            ),
+            Arc::clone(&time_source) as Arc<_>,
+            Arc::clone(&artifact_pools.dkg_pool),
+            replica_logger.clone(),
+            metrics_registry.clone(),
         );
+        join_handles.push(jh);
+        backends.insert(DkgArtifact::TAG, Box::new(client));
     }
 
     {
@@ -461,65 +468,66 @@ fn setup_artifact_manager(
             finalized.payload.as_ref().is_summary(),
             finalized.payload.as_ref().as_ecdsa().is_some(),
         );
-        backends.insert(
-            EcdsaArtifact::TAG,
-            Box::new(create_ecdsa_handlers(
-                move |req| advert_broadcaster.process_delta(req.into()),
-                (
-                    ecdsa::EcdsaImpl::new(
-                        node_id,
-                        subnet_id,
-                        Arc::clone(&consensus_block_cache),
-                        Arc::clone(&consensus_crypto),
-                        metrics_registry.clone(),
-                        replica_logger.clone(),
-                        malicious_flags,
-                    ),
-                    ecdsa::EcdsaGossipImpl::new(
-                        subnet_id,
-                        Arc::clone(&consensus_block_cache),
-                        metrics_registry.clone(),
-                    ),
+        let (client, jh) = create_ecdsa_handlers(
+            move |req| advert_broadcaster.process_delta(req.into()),
+            (
+                ecdsa::EcdsaImpl::new(
+                    node_id,
+                    subnet_id,
+                    Arc::clone(&consensus_block_cache),
+                    Arc::clone(&consensus_crypto),
+                    metrics_registry.clone(),
+                    replica_logger.clone(),
+                    malicious_flags,
                 ),
-                Arc::clone(&time_source) as Arc<_>,
-                Arc::clone(&artifact_pools.ecdsa_pool),
-                metrics_registry.clone(),
-            )),
+                ecdsa::EcdsaGossipImpl::new(
+                    subnet_id,
+                    Arc::clone(&consensus_block_cache),
+                    metrics_registry.clone(),
+                ),
+            ),
+            Arc::clone(&time_source) as Arc<_>,
+            Arc::clone(&artifact_pools.ecdsa_pool),
+            metrics_registry.clone(),
         );
+        join_handles.push(jh);
+        backends.insert(EcdsaArtifact::TAG, Box::new(client));
     }
 
     {
-        backends.insert(
-            CanisterHttpArtifact::TAG,
-            Box::new(create_https_outcalls_handlers(
-                move |req| advert_broadcaster.process_delta(req.into()),
-                (
-                    CanisterHttpPoolManagerImpl::new(
-                        Arc::clone(&state_reader),
-                        Arc::new(Mutex::new(canister_http_adapter_client)),
-                        Arc::clone(&consensus_crypto),
-                        Arc::clone(&membership),
-                        Arc::clone(&consensus_pool_cache),
-                        ReplicaConfig { subnet_id, node_id },
-                        Arc::clone(&registry_client),
-                        metrics_registry.clone(),
-                        replica_logger.clone(),
-                    ),
-                    CanisterHttpGossipImpl::new(
-                        Arc::clone(&consensus_pool_cache),
-                        Arc::clone(&state_reader),
-                        replica_logger,
-                    ),
+        let (client, jh) = create_https_outcalls_handlers(
+            move |req| advert_broadcaster.process_delta(req.into()),
+            (
+                CanisterHttpPoolManagerImpl::new(
+                    Arc::clone(&state_reader),
+                    Arc::new(Mutex::new(canister_http_adapter_client)),
+                    Arc::clone(&consensus_crypto),
+                    Arc::clone(&membership),
+                    Arc::clone(&consensus_pool_cache),
+                    ReplicaConfig { subnet_id, node_id },
+                    Arc::clone(&registry_client),
+                    metrics_registry.clone(),
+                    replica_logger.clone(),
                 ),
-                Arc::clone(&time_source) as Arc<_>,
-                Arc::clone(&artifact_pools.canister_http_pool),
-                metrics_registry,
-            )),
+                CanisterHttpGossipImpl::new(
+                    Arc::clone(&consensus_pool_cache),
+                    Arc::clone(&state_reader),
+                    replica_logger,
+                ),
+            ),
+            Arc::clone(&time_source) as Arc<_>,
+            Arc::clone(&artifact_pools.canister_http_pool),
+            metrics_registry,
         );
+        join_handles.push(jh);
+        backends.insert(CanisterHttpArtifact::TAG, Box::new(client));
     }
-    Ok(Arc::new(
-        manager::ArtifactManagerImpl::new_with_default_priority_fn(backends),
-    ))
+    (
+        Ok(Arc::new(
+            manager::ArtifactManagerImpl::new_with_default_priority_fn(backends),
+        )),
+        join_handles,
+    )
 }
 
 /// The function initializes the artifact pools.
