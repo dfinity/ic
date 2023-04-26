@@ -15,8 +15,8 @@ use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_protobuf::registry::{
     crypto::v1::{PublicKey, X509PublicKeyCert},
     node::v1::{
-        connection_endpoint::Protocol, ConnectionEndpoint as pbConnectionEndpoint,
-        FlowEndpoint as pbFlowEndpoint, NodeRecord as pbNodeRecord,
+        ConnectionEndpoint as pbConnectionEndpoint, FlowEndpoint as pbFlowEndpoint,
+        NodeRecord as pbNodeRecord, Protocol,
     },
 };
 use ic_registry_keys::{make_crypto_node_key, make_crypto_tls_cert_key, make_node_record_key};

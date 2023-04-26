@@ -14,7 +14,7 @@ use ic_nns_test_utils::{
 };
 use ic_protobuf::registry::{
     crypto::v1::PublicKey,
-    node::v1::{connection_endpoint::Protocol, ConnectionEndpoint, NodeRecord},
+    node::v1::{ConnectionEndpoint, NodeRecord, Protocol},
     subnet::v1::{CatchUpPackageContents, SubnetListRecord, SubnetRecord},
 };
 use ic_registry_keys::{

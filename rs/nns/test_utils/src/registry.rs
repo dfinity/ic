@@ -18,7 +18,7 @@ use ic_nervous_system_common_test_keys::{
 use ic_nns_common::registry::encode_or_panic;
 use ic_protobuf::registry::crypto::v1::{PublicKey, X509PublicKeyCert};
 use ic_protobuf::registry::{
-    node::v1::{connection_endpoint::Protocol, ConnectionEndpoint, NodeRecord},
+    node::v1::{ConnectionEndpoint, NodeRecord, Protocol},
     node_operator::v1::NodeOperatorRecord,
     replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
     routing_table::v1::RoutingTable as RoutingTablePB,

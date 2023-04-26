@@ -22,7 +22,7 @@ use ic_nns_test_utils::{
 };
 use ic_protobuf::registry::crypto::v1::PublicKey;
 use ic_protobuf::registry::{
-    node::v1::{connection_endpoint::Protocol, ConnectionEndpoint, NodeRecord},
+    node::v1::{ConnectionEndpoint, NodeRecord, Protocol},
     node_operator::v1::NodeOperatorRecord,
     subnet::v1::SubnetRecord,
 };

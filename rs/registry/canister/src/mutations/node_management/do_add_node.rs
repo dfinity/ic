@@ -11,7 +11,7 @@ use ic_crypto_node_key_validation::ValidNodePublicKeys;
 use ic_crypto_utils_basic_sig::conversions as crypto_basicsig_conversions;
 use ic_protobuf::registry::{
     crypto::v1::{PublicKey, X509PublicKeyCert},
-    node::v1::{connection_endpoint::Protocol, ConnectionEndpoint, FlowEndpoint, NodeRecord},
+    node::v1::{ConnectionEndpoint, FlowEndpoint, NodeRecord, Protocol},
 };
 
 use crate::mutations::node_management::common::{

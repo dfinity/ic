@@ -9,9 +9,7 @@ use ic_interfaces_registry::RegistryClient;
 use ic_logger::*;
 use ic_metrics::MetricsRegistry;
 use ic_p2p::P2PThreadJoiner;
-use ic_protobuf::registry::node::v1::{
-    connection_endpoint::Protocol, ConnectionEndpoint, FlowEndpoint, NodeRecord,
-};
+use ic_protobuf::registry::node::v1::{ConnectionEndpoint, FlowEndpoint, NodeRecord, Protocol};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_utilities_registry::{setup_registry_non_final, SubnetRecordBuilder};
 use ic_types::{replica_config::ReplicaConfig, NodeId, RegistryVersion, SubnetId};

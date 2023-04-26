@@ -10,7 +10,7 @@ use std::{
 
 use prost::alloc::collections::BTreeSet;
 
-use ic_protobuf::registry::node::v1::{connection_endpoint::Protocol, ConnectionEndpoint};
+use ic_protobuf::registry::node::v1::{ConnectionEndpoint, Protocol};
 
 /// Node records are valid with connection endpoints containing
 /// syntactically correct data ("ip_addr" field parses as an IP address,

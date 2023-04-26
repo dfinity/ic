@@ -260,20 +260,21 @@ fn build_registry_proto(def: &Path, out: &Path) {
         ".registry.replica_version",
         "#[derive(serde::Serialize, serde::Deserialize)]",
     );
-
     config.type_attribute(
         ".registry.node_rewards.v2",
         "#[derive(candid::CandidType, serde::Serialize, candid::Deserialize)]",
     );
-
     config.type_attribute(
         ".registry.dc",
         "#[derive(candid::CandidType, serde::Serialize, candid::Deserialize)]",
     );
-
     config.type_attribute(
         ".registry.unassigned_nodes_config",
         "#[derive(serde::Serialize, serde::Deserialize)]",
+    );
+    config.type_attribute(
+        ".registry.node.v1.ConnectionEndpoint",
+        "#[derive(Eq, PartialOrd, Ord)]",
     );
 
     let registry_files = [
