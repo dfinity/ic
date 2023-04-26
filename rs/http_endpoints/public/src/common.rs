@@ -23,6 +23,7 @@ use tower::{load_shed::error::Overloaded, timeout::error::Elapsed, BoxError};
 pub const CONTENT_TYPE_HTML: &str = "text/html";
 pub const CONTENT_TYPE_CBOR: &str = "application/cbor";
 pub const CONTENT_TYPE_PROTOBUF: &str = "application/x-protobuf";
+pub const CONTENT_TYPE_TEXT: &str = "text/plain";
 
 pub(crate) fn poll_ready(r: Poll<Result<(), Infallible>>) -> Poll<Result<(), BoxError>> {
     match r {
@@ -54,9 +55,15 @@ pub(crate) fn get_root_threshold_public_key(
 }
 
 pub(crate) fn make_plaintext_response(status: StatusCode, message: String) -> Response<Body> {
+    use hyper::header;
+
     let mut resp = Response::new(Body::from(message));
     *resp.status_mut() = status;
     *resp.headers_mut() = get_cors_headers();
+    resp.headers_mut().insert(
+        header::CONTENT_TYPE,
+        header::HeaderValue::from_static(CONTENT_TYPE_TEXT),
+    );
     resp
 }
 
