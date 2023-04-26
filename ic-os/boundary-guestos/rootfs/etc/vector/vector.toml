@@ -30,8 +30,12 @@ source = """
 # Anonymize remote_addr
 remote_addr, err = to_string(.remote_addr)
 if err != null || remote_addr == "" {
+  .remote_addr_family = 0;
   .remote_addr_hashed = ""
 } else {
+  # Make sure it's properly parsed as either IPv4 or IPv6, otherwise fall back to 0
+  .remote_addr_family = if is_ipv4(remote_addr) { 4 } else if is_ipv6(remote_addr) { 6 } else { 0 };
+
   .remote_addr_hashed = sha3("${IP_HASH_SALT}" + remote_addr, variant: "SHA3-224")
   .remote_addr_hashed = truncate(.remote_addr_hashed, limit: 32, ellipsis: false)
 }
@@ -220,6 +224,7 @@ table = "http_access"
     "proxy_port",
     "query_string",
     "remote_addr_hashed",
+    "remote_addr_family",
     "request_length",
     "request_method",
     "request_time_ms",
