@@ -16,6 +16,7 @@ hex = "0.4"
 lazy_static = "1.4.0"
 cycles-minting-canister = { path ="../../nns/cmc" }
 ic-admin-derive = { path = "../admin-derive"}
+ic-btc-interface = { git = "https://github.com/dfinity/bitcoin-canister", rev = "e4e89f2caedffbe0cfdec6f9d4a77f66dcb9119e" }
 ic-nns-init = { path="../../nns/init" }
 ic-base-types = { path="../../types/base_types" }
 ic-canister-client = { path = "../../canister_client" }

@@ -78,6 +78,7 @@ pub trait Request<T: Response> {
 /// Some examples of when this type is appropriate:
 /// - Counter Canister (//rs/workload_generator:src/counter.wat)
 /// - Universal Canister (//rs/universal_canister/lib)
+#[derive(Clone)]
 pub struct GenericRequest {
     canister: Principal,
     method: String,

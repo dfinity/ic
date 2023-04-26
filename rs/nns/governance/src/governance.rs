@@ -74,9 +74,11 @@ use registry_canister::{
     mutations::do_add_node_operator::AddNodeOperatorPayload, pb::v1::NodeProvidersMonthlyXdrRewards,
 };
 
+use crate::governance::manage_neuron_actions::{ManageNeuronAction, MergeNeuronAction};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 
+mod manage_neuron_actions;
 pub mod test_data;
 #[cfg(test)]
 mod tests;
@@ -307,7 +309,7 @@ impl NnsFunction {
             self,
             NnsFunction::NnsRootUpgrade
                 | NnsFunction::NnsCanisterUpgrade
-                | NnsFunction::UpdateElectedReplicaVersions
+                | NnsFunction::BlessReplicaVersion
                 | NnsFunction::UpdateSubnetReplicaVersion
         )
     }
@@ -474,6 +476,8 @@ impl NnsFunction {
             NnsFunction::NnsCanisterUpgrade => (ROOT_CANISTER_ID, "change_nns_canister"),
             NnsFunction::NnsRootUpgrade => (LIFELINE_CANISTER_ID, "upgrade_root"),
             NnsFunction::RecoverSubnet => (REGISTRY_CANISTER_ID, "recover_subnet"),
+            NnsFunction::BlessReplicaVersion => (REGISTRY_CANISTER_ID, "bless_replica_version"),
+            NnsFunction::RetireReplicaVersion => (REGISTRY_CANISTER_ID, "retire_replica_version"),
             NnsFunction::UpdateElectedReplicaVersions => {
                 (REGISTRY_CANISTER_ID, "update_elected_replica_versions")
             }
@@ -1180,9 +1184,9 @@ impl Proposal {
                             | NnsFunction::RemoveNodesFromSubnet
                             | NnsFunction::ChangeSubnetMembership
                             | NnsFunction::UpdateConfigOfSubnet => Topic::SubnetManagement,
-                            NnsFunction::UpdateElectedReplicaVersions => {
-                                Topic::ReplicaVersionManagement
-                            }
+                            NnsFunction::BlessReplicaVersion
+                            | NnsFunction::UpdateElectedReplicaVersions
+                            | NnsFunction::RetireReplicaVersion => Topic::ReplicaVersionManagement,
                             NnsFunction::UpdateSubnetReplicaVersion => {
                                 Topic::SubnetReplicaVersionManagement
                             }
@@ -3171,69 +3175,12 @@ impl Governance {
             )
         })?;
 
-        if id.id == source_id.id {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::InvalidCommand,
-                "Cannot merge a neuron into itself",
-            ));
-        }
+        let action = MergeNeuronAction::new(merge.clone(), id.clone());
+        action.validate_request(self, *caller)?;
 
         // Get the neuron and clone to appease the borrow checker.
         let target_neuron = self.get_neuron(id)?.clone();
-        if !target_neuron.is_controlled_by(caller) {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::NotAuthorized,
-                "Target neuron must be owned by the caller",
-            ));
-        }
-
         let source_neuron = self.get_neuron(source_id)?.clone();
-        if !source_neuron.is_controlled_by(caller) {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::NotAuthorized,
-                "Source neuron must be owned by the caller",
-            ));
-        }
-
-        if source_neuron.state(self.env.now()) == NeuronState::Spawning {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                "Can't perform operation on neuron: Source neuron is spawning.",
-            ));
-        }
-
-        if target_neuron.state(self.env.now()) == NeuronState::Spawning {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                "Can't perform operation on neuron: Target neuron is spawning.",
-            ));
-        }
-
-        if source_neuron.neuron_managers() != target_neuron.neuron_managers() {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                "ManageNeuron following of source and target does not match",
-            ));
-        }
-
-        if source_neuron.kyc_verified != target_neuron.kyc_verified {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                "Source neuron's kyc_verified field does not match target",
-            ));
-        }
-        if source_neuron.not_for_profit != target_neuron.not_for_profit {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                "Source neuron's not_for_profit field does not match target",
-            ));
-        }
-        if source_neuron.is_community_fund_neuron() || target_neuron.is_community_fund_neuron() {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                "Cannot merge neurons that have been dedicated to the community fund",
-            ));
-        }
 
         let from_subaccount = subaccount_from_slice(&source_neuron.account)?.ok_or_else(|| {
             GovernanceError::new_with_message(
@@ -8617,7 +8564,6 @@ impl TryFrom<CreateServiceNervousSystem> for SnsInitPayload {
             description,
             url,
             logo,
-
             fallback_controller_principal_ids,
             dapp_canisters: _, // Not used.
 
@@ -8978,6 +8924,18 @@ pub enum BitcoinNetwork {
     Mainnet,
     #[serde(rename = "testnet")]
     Testnet,
+}
+
+impl FromStr for BitcoinNetwork {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "mainnet" => Ok(Self::Mainnet),
+            "testnet" => Ok(Self::Testnet),
+            other => Err(format!("Unknown bitcoin network {}. Valid bitcoin networks are \"mainnet\" and \"testnet\".", other))
+        }
+    }
 }
 
 // A proposal payload to set the Bitcoin configuration.

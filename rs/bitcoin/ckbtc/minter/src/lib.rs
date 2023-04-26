@@ -45,6 +45,13 @@ pub const MINTER_FEE_PER_INPUT: u64 = 246;
 pub const MINTER_FEE_PER_OUTPUT: u64 = 7;
 pub const MINTER_FEE_CONSTANT: u64 = 52;
 
+#[derive(CandidType, Debug, Deserialize, Serialize)]
+pub struct MinterInfo {
+    pub min_confirmations: u32,
+    pub retrieve_btc_min_amount: u64,
+    pub kyt_fee: u64,
+}
+
 #[derive(CandidType, Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub struct ECDSAPublicKey {
     pub public_key: Vec<u8>,

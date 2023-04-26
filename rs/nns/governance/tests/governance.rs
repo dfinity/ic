@@ -4939,6 +4939,10 @@ fn test_merge_neurons_fails() {
             NeuronBuilder::new(18, icp(3_456), principal(123))
                 .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS * 4),
         )
+        .add_neuron(
+            NeuronBuilder::new(19, icp(1_234), principal(1))
+                .set_spawn_at_timestamp_seconds(Some(100)),
+        )
         .create();
 
     // 1. Source id and target id cannot be the same
@@ -4974,6 +4978,28 @@ fn test_merge_neurons_fails() {
         if code == NotAuthorized as i32 &&
            msg == "Source neuron must be owned by the caller");
 
+    // 4. Source neuron cannot be spawning
+    assert_matches!(
+        nns.merge_neurons(
+            &NeuronId { id: 1 },
+            &principal(1),
+            &NeuronId { id: 19 },
+        ),
+        Err(GovernanceError{error_type: code, error_message: msg})
+        if code == PreconditionFailed as i32 &&
+           msg == "Can't perform operation on neuron: Source neuron is spawning.");
+
+    // 5. Target neuron cannot be spawning
+    assert_matches!(
+        nns.merge_neurons(
+            &NeuronId { id: 19 },
+            &principal(1),
+            &NeuronId { id: 1 },
+        ),
+        Err(GovernanceError{error_type: code, error_message: msg})
+        if code == PreconditionFailed as i32 &&
+           msg == "Can't perform operation on neuron: Target neuron is spawning.");
+
     // 4. Source neuron's kyc_verified field must match target
     assert_matches!(
         nns.merge_neurons(
@@ -5002,6 +5028,17 @@ fn test_merge_neurons_fails() {
             &NeuronId { id: 1 },
             &principal(1),
             &NeuronId { id: 5 },
+        ),
+        Err(GovernanceError{error_type: code, error_message: msg})
+        if code == PreconditionFailed as i32 &&
+           msg == "Cannot merge neurons that have been dedicated to the community fund");
+
+    // 6b. Switch source and destination to ensure condition still holds
+    assert_matches!(
+        nns.merge_neurons(
+            &NeuronId { id: 5 },
+            &principal(1),
+            &NeuronId { id: 1 },
         ),
         Err(GovernanceError{error_type: code, error_message: msg})
         if code == PreconditionFailed as i32 &&

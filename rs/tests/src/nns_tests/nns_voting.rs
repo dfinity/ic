@@ -62,7 +62,7 @@ use ic_canister_client::{Ed25519KeyPair, Sender};
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_OWNER_KEYPAIR, TEST_NEURON_3_OWNER_KEYPAIR,
 };
-use ic_nervous_system_root::ChangeCanisterProposal;
+use ic_nervous_system_root::change_canister::ChangeCanisterProposal;
 use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_test_utils::governance::submit_external_update_proposal_allowing_error;
@@ -322,7 +322,7 @@ pub fn test(env: TestEnv) {
                     && error_message.contains("'t have enough minted stake to submit proposal")
             },
         );
-        assert_eq!(submit_reject, Result::Err(true));
+        assert_eq!(submit_reject, Err(true));
 
         // Proposal can be voted on even when the voting neuron has insufficient
         // funds for submitting proposals.

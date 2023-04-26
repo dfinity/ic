@@ -13,7 +13,6 @@ ic-crypto-test-utils-canister-threshold-sigs = { path = "../crypto/test_utils/ca
 ic-error-types = { path = "../types/error_types" }
 ic-ic00-types = { path = "../types/ic00_types" }
 ic-interfaces = { path = "../interfaces" }
-ic-interfaces-https-outcalls-adapter-client = { path = "../interfaces/https_outcalls_adapter_client" }
 ic-interfaces-registry = { path = "../interfaces/registry" }
 ic-interfaces-state-manager = { path = "../interfaces/state_manager" }
 ic-registry-client-helpers = { path = "../registry/helpers" }
@@ -24,7 +23,6 @@ ic-registry-subnet-type = { path = "../registry/subnet_type" }
 ic-registry-subnet-features = { path = "../registry/subnet_features" }
 ic-protobuf = { path = "../protobuf" }
 ic-types = { path = "../types/types" }
-ic-utils = { path = "../utils" }
 num-integer = "0.1.41"
 phantom_newtype = { path = "../phantom_newtype" }
 prometheus = { version = "0.12.0", features = [ "process" ] }
@@ -56,7 +54,7 @@ ic-registry-proto-data-provider = { path = "../registry/proto_data_provider" }
 ic-replicated-state = { path = "../replicated_state" }
 ic-state-manager = { path = "../state_manager" }
 ic-test-artifact-pool = { path = "../test_utilities/artifact_pool" }
-ic-cycles-account-manager = { path = "../cycles_account_manager" }
+ic-utils = { path = "../utils" }
 ic-test-utilities = { path = "../test_utilities" }
 ic-test-utilities-logger = { path = "../test_utilities/logger" }
 ic-test-utilities-registry = { path = "../test_utilities/registry" }

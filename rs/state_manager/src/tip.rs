@@ -383,16 +383,6 @@ fn serialize_to_tip(
         result?;
     }
 
-    // TODO(MR-425): Remove this part once all subnets had the bitcoin directories removed
-    let bitcoin_folder = &tip.raw_path().join("bitcoin");
-    if bitcoin_folder.exists() {
-        std::fs::remove_dir_all(bitcoin_folder).map_err(|io_err| CheckpointError::IoError {
-            path: bitcoin_folder.to_path_buf(),
-            message: "failed to delete bitcoin directory".to_string(),
-            io_err: io_err.to_string(),
-        })?;
-    }
-
     Ok(())
 }
 

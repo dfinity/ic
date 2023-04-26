@@ -40,6 +40,68 @@ fn open_should_panic_for_paths_that_are_widely_readable() {
     ProtoSecretKeyStore::open(dir.as_ref(), "dummy_file", None);
 }
 
+#[test]
+#[should_panic(expected = "error parsing SKS protobuf data")]
+fn should_not_leak_any_data_on_protobuf_deserialization_error_when_opening_key_store() {
+    let temp_dir = tempfile::Builder::new()
+        .prefix("ic_crypto_")
+        .tempdir()
+        .expect("failed to create temporary crypto directory");
+    fs::set_permissions(temp_dir.path(), Permissions::from_mode(0o700)).unwrap_or_else(|_| {
+        panic!(
+            "failed to set permissions of crypto directory {}",
+            temp_dir.path().display()
+        )
+    });
+    let sks_file_name = "temp_sks_data.pb";
+    let file = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .open(temp_dir.path().join(sks_file_name))
+        .unwrap();
+    use std::os::unix::fs::FileExt;
+    file.write_all_at(b"invalid-protobuf-data", 0)
+        .expect("failed to write");
+
+    let _panic = ProtoSecretKeyStore::open(temp_dir.path(), sks_file_name, None);
+}
+
+#[test]
+#[should_panic(
+    expected = "Error deserializing key with ID KeyId(0x0101010101010101010101010101010101010101010101010101010101010101)"
+)]
+fn should_not_leak_any_data_on_cbor_deserialization_error_when_opening_key_store() {
+    let temp_dir = tempfile::Builder::new()
+        .prefix("ic_crypto_")
+        .tempdir()
+        .expect("failed to create temporary crypto directory");
+    fs::set_permissions(temp_dir.path(), Permissions::from_mode(0o700)).unwrap_or_else(|_| {
+        panic!(
+            "failed to set permissions of crypto directory {}",
+            temp_dir.path().display()
+        )
+    });
+    let temp_file = "temp_sks_data.pb";
+    let mut key_store = ProtoSecretKeyStore::open(temp_dir.path(), temp_file, None);
+    let key_id: KeyId = KeyId::from([1; 32]);
+    let key = make_secret_key(2);
+    assert!(key_store.insert(key_id, key, None).is_ok());
+
+    let file = std::fs::OpenOptions::new()
+        .write(true)
+        .open(temp_dir.path().join(temp_file))
+        .unwrap();
+
+    use std::os::unix::fs::FileExt;
+    // Found index 74 by printing the cbor-encoded data in
+    // `sks_proto_to_secret_keys` and then looking where this data starts in
+    // the file with `std::fs::read`.
+    file.write_all_at(b"not-a-cbor-header", 74)
+        .expect("failed to write");
+
+    let _panic = ProtoSecretKeyStore::open(temp_dir.path(), temp_file, None);
+}
+
 proptest! {
     #[test]
     fn should_retrieve_inserted_key(seed1: u64, seed2: u64) {

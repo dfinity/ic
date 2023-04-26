@@ -83,6 +83,10 @@ struct Cli {
     #[clap(long, default_value = "1")]
     min_ok_count: u8,
 
+    /// Maximum block height lag for a replica to be included in the routing table
+    #[clap(long, default_value = "1000")]
+    max_height_lag: u64,
+
     #[clap(long, default_value = "/tmp/legacy_routes")]
     legacy_routes_dir: PathBuf,
 
@@ -251,6 +255,7 @@ async fn main() -> Result<(), Error> {
         checker,
         persister,
         cli.min_ok_count,
+        cli.max_height_lag,
     );
     let active_replicas = check_persist_runner.get_active_checker();
     let check_persist_runner = WithMetrics(
@@ -269,12 +274,12 @@ async fn main() -> Result<(), Error> {
         });
 
     info!(
-        msg = format!("starting {SERVICE_NAME}").as_str(),
-        legacy_routes_dir = cli.legacy_routes_dir.display().to_string().as_str(),
-        routes_path = cli.routes_path.display().to_string().as_str(),
-        upstreams_path = cli.upstreams_path.display().to_string().as_str(),
-        trusted_certs_path = cli.trusted_certs_path.display().to_string().as_str(),
-        metrics_addr = cli.metrics_addr.to_string().as_str(),
+        msg = format!("starting {SERVICE_NAME}"),
+        legacy_routes_dir = %cli.legacy_routes_dir.display(),
+        routes_path = %cli.routes_path.display(),
+        upstreams_path = %cli.upstreams_path.display(),
+        trusted_certs_path = %cli.trusted_certs_path.display(),
+        metrics_addr = %cli.metrics_addr,
     );
 
     let _ = tokio::try_join!(

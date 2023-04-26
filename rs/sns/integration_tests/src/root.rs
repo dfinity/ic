@@ -5,16 +5,21 @@ use dfn_candid::candid;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
-use ic_nervous_system_root::{CanisterIdRecord, CanisterStatusResult, CanisterStatusType};
+use ic_nervous_system_root::{
+    canister_status::{CanisterStatusResult, CanisterStatusType},
+    CanisterIdRecord,
+};
 use ic_nns_test_utils::state_test_helpers::{get_controllers, set_controllers};
 use ic_sns_root::{
     pb::v1::SnsRootCanister, GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse,
 };
-use ic_sns_test_utils::itest_helpers::{
-    local_test_on_sns_subnet, set_up_root_canister, SnsCanisters, SnsTestsInitPayloadBuilder,
-};
-use ic_sns_test_utils::state_test_helpers::{
-    sns_root_register_dapp_canister, sns_root_register_dapp_canisters, Scenario,
+use ic_sns_test_utils::{
+    itest_helpers::{
+        local_test_on_sns_subnet, set_up_root_canister, SnsCanisters, SnsTestsInitPayloadBuilder,
+    },
+    state_test_helpers::{
+        sns_root_register_dapp_canister, sns_root_register_dapp_canisters, Scenario,
+    },
 };
 use ic_state_machine_tests::StateMachine;
 use ic_types::ingress::WasmResult;

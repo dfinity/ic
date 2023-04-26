@@ -268,13 +268,15 @@ $(declare -f err)
 HOSTS=($(jq <"${BN_MEDIA_PATH}/list.json" -r '(.physical_hosts.hosts // [])[]'))
 CERT_NAME=$(jq <"${BN_MEDIA_PATH}/list.json" -r '.boundary.vars.cert_name // empty')
 
+echo "**** Trying to SCP using $(whoami)"
+
 mkdir "${BN_MEDIA_PATH}/certs"
 if [[ -z \${CERT_NAME+x} ]]; then
     err "'.boundary.vars.cert_name' was not defined"
 else
     (for HOST in "\${HOSTS[@]}"; do
         echo >&2 "\$(date --rfc-3339=seconds): Copying \$CERT_NAME from server \$HOST"
-        scp -B -o "ConnectTimeout 30" -o 'UserKnownHostsFile=/dev/null' -o 'StrictHostKeyChecking=no' -r "${SCP_PREFIX}\${HOST}:/etc/letsencrypt/live/\${CERT_NAME}/*" "${BN_MEDIA_PATH}/certs/" && exit
+        scp -B -o "ConnectTimeout 30" -o "UserKnownHostsFile=/dev/null" -o "StrictHostKeyChecking=no" -r "${SCP_PREFIX}\${HOST}:/etc/letsencrypt/live/\${CERT_NAME}/*" "${BN_MEDIA_PATH}/certs/" && exit
     done) || {
         err "failed to find certificate \${CERT_NAME} on any designated server"
         exit 1

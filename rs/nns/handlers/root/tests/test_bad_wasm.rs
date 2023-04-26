@@ -3,10 +3,11 @@
 use candid::Encode;
 use canister_test::Runtime;
 use dfn_candid::candid;
-
 use ic_ic00_types::CanisterInstallMode::{self, Reinstall, Upgrade};
 use ic_nervous_system_root::{
-    CanisterIdRecord, CanisterStatusResult, CanisterStatusType, ChangeCanisterProposal,
+    canister_status::{CanisterStatusResult, CanisterStatusType},
+    change_canister::ChangeCanisterProposal,
+    CanisterIdRecord,
 };
 use ic_nns_handler_root::init::RootCanisterInitPayloadBuilder;
 use ic_nns_test_utils::itest_helpers::{

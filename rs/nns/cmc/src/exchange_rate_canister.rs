@@ -67,28 +67,86 @@ impl ExchangeRateCanisterClient for RealExchangeRateCanisterClient {
     }
 }
 
+#[repr(u8)]
 #[derive(Serialize, Deserialize, Clone, Copy, CandidType, Eq, PartialEq, Debug)]
 pub enum UpdateExchangeRateState {
-    Inactive,
-    InProgress,
-    Disabled,
+    Disabled = 0,
+    GetRateAt(u64) = 1,
+    InProgress = 2,
+}
+
+impl From<&UpdateExchangeRateState> for u8 {
+    fn from(value: &UpdateExchangeRateState) -> Self {
+        match value {
+            UpdateExchangeRateState::Disabled => 0,
+            UpdateExchangeRateState::GetRateAt(_) => 1,
+            UpdateExchangeRateState::InProgress => 2,
+        }
+    }
 }
 
 impl Default for UpdateExchangeRateState {
     fn default() -> Self {
-        Self::Inactive
+        // 10 May 2021 10:00:00 AM CEST
+        Self::GetRateAt(1620633600)
+    }
+}
+
+impl UpdateExchangeRateState {
+    fn get_rate_at_next_refresh_rate_interval(current_timestamp_seconds: u64) -> Self {
+        let maybe_next_multiple =
+            get_next_multiple_of(current_timestamp_seconds, REFRESH_RATE_INTERVAL_SECONDS);
+        match maybe_next_multiple {
+            Some(next_timestamp) => UpdateExchangeRateState::GetRateAt(next_timestamp),
+            None => UpdateExchangeRateState::Disabled,
+        }
+    }
+
+    fn get_rate_at_next_minute(current_timestamp_seconds: u64) -> Self {
+        let maybe_next_multiple =
+            get_next_multiple_of(current_timestamp_seconds, ONE_MINUTE_SECONDS);
+        match maybe_next_multiple {
+            Some(next_timestamp) => UpdateExchangeRateState::GetRateAt(next_timestamp),
+            None => UpdateExchangeRateState::Disabled,
+        }
+    }
+}
+
+fn get_next_multiple_of(value: u64, multiple: u64) -> Option<u64> {
+    let cast_value = i128::from(value);
+    let cast_multiple = i128::from(multiple);
+    let base = cast_multiple.checked_sub(cast_value)?;
+    if multiple == 0 {
+        return None;
+    }
+
+    let diff = base.rem_euclid(cast_multiple);
+
+    if diff > i128::from(u64::MAX) {
+        return None;
+    }
+
+    let diff_seconds = diff as u64;
+    if diff_seconds == 0 {
+        value.checked_add(multiple)
+    } else {
+        value.checked_add(diff_seconds)
     }
 }
 
 /// Only one UpdateExchangeRateGuard can be created at a time.
 /// Assign UpdateExchangeRateGuard::new() to a local variable before calling the
 /// Exchange Rate Canister to ensure there are no simultaneous calls.
-struct UpdateExchangeRateGuard(&'static LocalKey<RefCell<Option<State>>>);
+struct UpdateExchangeRateGuard {
+    safe_state: &'static LocalKey<RefCell<Option<State>>>,
+    current_minute_in_seconds: u64,
+}
 
 impl UpdateExchangeRateGuard {
     /// Set the calling status to active.
     fn new(
         safe_state: &'static LocalKey<RefCell<Option<State>>>,
+        current_minute_in_seconds: u64,
     ) -> Result<Self, UpdateExchangeRateError> {
         let current_call_state = read_state(safe_state, |state| {
             state
@@ -104,42 +162,81 @@ impl UpdateExchangeRateGuard {
             return Err(UpdateExchangeRateError::UpdateAlreadyInProgress);
         }
 
+        if let UpdateExchangeRateState::GetRateAt(next_attempt_seconds) = current_call_state {
+            if current_minute_in_seconds < next_attempt_seconds {
+                return Err(UpdateExchangeRateError::NotReadyToGetRate(
+                    next_attempt_seconds,
+                ));
+            }
+        }
+
         mutate_state(safe_state, |state| {
             state
                 .update_exchange_rate_canister_state
                 .replace(UpdateExchangeRateState::InProgress);
         });
 
-        Ok(Self(safe_state))
+        Ok(Self {
+            safe_state,
+            current_minute_in_seconds,
+        })
     }
 
-    async fn with_guard<F>(
-        safe_state: &'static LocalKey<RefCell<Option<State>>>,
-        future: F,
-    ) -> Result<(), UpdateExchangeRateError>
-    where
-        F: std::future::Future<Output = Result<(), UpdateExchangeRateError>>,
-    {
-        let _guard = Self::new(safe_state)?;
-        future.await
-    }
-}
-
-impl Drop for UpdateExchangeRateGuard {
-    /// On drop, the state is set to inactive unless the update process
-    /// has been disabled.
-    fn drop(&mut self) {
-        mutate_state(self.0, |state| {
+    // This function helps schedule the next attempt at retrieving a rate from
+    // the exchange rate canister. If the result of the in progress call is successful,
+    // a new attempt to get the rate is schedule at the next five minute interval (:00, :05, :10, ...).
+    // If the result has failed due to a failure receiving the rate or the rate was
+    // determined to be invalid, a new attempt is schedule for the next minute.
+    //
+    // If the update cycle has been disabled, this function skips the scheduling.
+    fn schedule_next_attempt(&self, result: &Result<(), UpdateExchangeRateError>) {
+        mutate_state(self.safe_state, |state| {
             if let Some(UpdateExchangeRateState::Disabled) =
                 state.update_exchange_rate_canister_state
             {
                 return;
             }
 
-            state
-                .update_exchange_rate_canister_state
-                .replace(UpdateExchangeRateState::Inactive);
+            match result {
+                Ok(_) => {
+                    state.update_exchange_rate_canister_state.replace(
+                        UpdateExchangeRateState::get_rate_at_next_refresh_rate_interval(
+                            self.current_minute_in_seconds,
+                        ),
+                    );
+                }
+                Err(error) => match error {
+                    UpdateExchangeRateError::UpdateAlreadyInProgress => {}
+                    UpdateExchangeRateError::Disabled => {}
+                    UpdateExchangeRateError::NotReadyToGetRate(_) => {}
+                    UpdateExchangeRateError::FailedToRetrieveRate(_)
+                    | UpdateExchangeRateError::FailedToSetRate(_)
+                    | UpdateExchangeRateError::InvalidRate(_) => {
+                        state.update_exchange_rate_canister_state.replace(
+                            UpdateExchangeRateState::get_rate_at_next_minute(
+                                self.current_minute_in_seconds,
+                            ),
+                        );
+                    }
+                },
+            }
         });
+    }
+
+    async fn with_guard<F>(
+        safe_state: &'static LocalKey<RefCell<Option<State>>>,
+        current_minute_seconds: u64,
+        future: F,
+    ) -> Result<(), UpdateExchangeRateError>
+    where
+        F: std::future::Future<Output = Result<(), UpdateExchangeRateError>>,
+    {
+        let guard = Self::new(safe_state, current_minute_seconds)?;
+        let result = future.await;
+        // Check the result. Based on the contents, this will affect the next
+        // update state.
+        guard.schedule_next_attempt(&result);
+        result
     }
 }
 
@@ -218,18 +315,17 @@ impl std::fmt::Display for GetExchangeRateError {
 
 #[derive(Debug)]
 pub enum UpdateExchangeRateError {
-    NewRateNotNeeded,
     UpdateAlreadyInProgress,
     Disabled,
     FailedToRetrieveRate(String),
     FailedToSetRate(String),
     InvalidRate(String),
+    NotReadyToGetRate(u64),
 }
 
 impl std::fmt::Display for UpdateExchangeRateError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            UpdateExchangeRateError::NewRateNotNeeded => write!(f, "New rate not needed"),
             UpdateExchangeRateError::UpdateAlreadyInProgress => {
                 write!(f, "Updating exchange rate already in progress")
             }
@@ -258,6 +354,13 @@ impl std::fmt::Display for UpdateExchangeRateError {
                     message
                 )
             }
+            UpdateExchangeRateError::NotReadyToGetRate(timestamp) => {
+                write!(
+                    f,
+                    "Waiting to reattempt calling the exchange rate canister again at {}",
+                    timestamp
+                )
+            }
         }
     }
 }
@@ -271,17 +374,11 @@ pub async fn update_exchange_rate(
     env: &impl Environment,
     xrc_client: &impl ExchangeRateCanisterClient,
 ) -> Result<(), UpdateExchangeRateError> {
-    UpdateExchangeRateGuard::with_guard(safe_state, async {
-        let now_timestamp_seconds = env.now_timestamp_seconds();
-        let current_minute_seconds =
-            round_down_to_multiple_of(now_timestamp_seconds, ONE_MINUTE_SECONDS);
+    let now_timestamp_seconds = env.now_timestamp_seconds();
+    let current_minute_seconds =
+        round_down_to_multiple_of(now_timestamp_seconds, ONE_MINUTE_SECONDS);
 
-        let current_icp_xdr_conversion_rate =
-            read_state(safe_state, |state| state.icp_xdr_conversion_rate.clone());
-        if !requires_new_rate(&current_icp_xdr_conversion_rate, current_minute_seconds) {
-            return Err(UpdateExchangeRateError::NewRateNotNeeded);
-        }
-
+    UpdateExchangeRateGuard::with_guard(safe_state, current_minute_seconds, async {
         let call_xrc_result = xrc_client.get_exchange_rate().await;
         // Check if updating the rate via the exchange rate canister was disabled while retrieving the rate.
         // If it has, exit early.
@@ -323,27 +420,6 @@ fn round_down_to_multiple_of(value: u64, multiple: u64) -> u64 {
     (value / multiple) * multiple
 }
 
-/// Check if the CMC is ready to retrieve a new rate from the XRC.
-fn requires_new_rate(
-    icp_xdr_conversion_rate: &Option<IcpXdrConversionRate>,
-    current_minute_seconds: u64,
-) -> bool {
-    match icp_xdr_conversion_rate {
-        Some(ref rate) => {
-            // Check if the time is on a five-minute interval. This is done to keep the CMC relatively
-            // in sync with the conversion rate providers that will be running every 10 minutes.
-            let is_on_five_minute_interval = (current_minute_seconds / ONE_MINUTE_SECONDS) % 5 == 0;
-            let rounded_down_rate_timestamp_seconds =
-                round_down_to_multiple_of(rate.timestamp_seconds, ONE_MINUTE_SECONDS);
-            let is_old = rounded_down_rate_timestamp_seconds
-                .saturating_add(REFRESH_RATE_INTERVAL_SECONDS)
-                <= current_minute_seconds;
-            is_on_five_minute_interval && is_old
-        }
-        None => true,
-    }
-}
-
 /// Takes the reason from an exchange rate proposal payload as input in order to
 /// determine if the CMC should continue using the exchange rate canister. If
 /// the reason is a diverged rate, requesting the rate from the exchange rate
@@ -351,6 +427,7 @@ fn requires_new_rate(
 pub fn set_update_exchange_rate_state(
     safe_state: &'static LocalKey<RefCell<Option<State>>>,
     maybe_reason: &Option<UpdateIcpXdrConversionRatePayloadReason>,
+    rate_timestamp_seconds: u64,
 ) {
     if let Some(ref reason) = maybe_reason {
         mutate_state(safe_state, |state| {
@@ -360,9 +437,11 @@ pub fn set_update_exchange_rate_state(
             match reason {
                 UpdateIcpXdrConversionRatePayloadReason::EnableAutomaticExchangeRateUpdates => {
                     if current_update_exchange_rate_state == UpdateExchangeRateState::Disabled {
-                        state
-                            .update_exchange_rate_canister_state
-                            .replace(UpdateExchangeRateState::Inactive);
+                        state.update_exchange_rate_canister_state.replace(
+                            UpdateExchangeRateState::get_rate_at_next_refresh_rate_interval(
+                                rate_timestamp_seconds,
+                            ),
+                        );
                     }
                 }
                 UpdateIcpXdrConversionRatePayloadReason::DivergedRate => {
@@ -370,7 +449,17 @@ pub fn set_update_exchange_rate_state(
                         .update_exchange_rate_canister_state
                         .replace(UpdateExchangeRateState::Disabled);
                 }
-                UpdateIcpXdrConversionRatePayloadReason::OldRate => {}
+                UpdateIcpXdrConversionRatePayloadReason::OldRate => {
+                    if current_update_exchange_rate_state == UpdateExchangeRateState::Disabled {
+                        return;
+                    }
+
+                    state.update_exchange_rate_canister_state.replace(
+                        UpdateExchangeRateState::get_rate_at_next_refresh_rate_interval(
+                            rate_timestamp_seconds,
+                        ),
+                    );
+                }
             }
         });
     }
@@ -440,6 +529,12 @@ mod test {
         }
     }
 
+    impl TestExchangeRateCanisterEnvironment {
+        fn advance_now_timestamp_seconds(&mut self, seconds: u64) {
+            self.now_timestamp_seconds += seconds;
+        }
+    }
+
     type GetExchangeRateResults = VecDeque<Result<ExchangeRate, GetExchangeRateError>>;
 
     struct MockExchangeRateCanisterClient {
@@ -490,6 +585,20 @@ mod test {
     }
 
     #[test]
+    fn test_get_next_multiple_of() {
+        let value = 1620633658;
+        let next_multiple = get_next_multiple_of(value, ONE_MINUTE_SECONDS);
+        assert!(matches!(next_multiple, Some(1620633660)));
+
+        let value = 300;
+        let next_multiple = get_next_multiple_of(value, REFRESH_RATE_INTERVAL_SECONDS);
+        assert!(matches!(next_multiple, Some(600)));
+
+        let next_multiple = get_next_multiple_of(u64::MAX, REFRESH_RATE_INTERVAL_SECONDS);
+        assert!(matches!(next_multiple, None));
+    }
+
+    #[test]
     fn test_round_down_to_multiple_of() {
         // Timestamp round down
         let value = 1620633658;
@@ -503,72 +612,6 @@ mod test {
         let value = 199;
         let rounded_down_value = round_down_to_multiple_of(value, 200);
         assert_eq!(0, rounded_down_value);
-    }
-
-    #[test]
-    fn test_is_ready_for_new_rate() {
-        // Initial timestamp
-        let current_minute_seconds = 1620633600;
-        let icp_xdr_conversion_rate = Some(IcpXdrConversionRate {
-            timestamp_seconds: 1620633600,    // 10 May 2021 10:00:00 AM CEST
-            xdr_permyriad_per_icp: 1_000_000, // 100 XDR = 1 ICP
-        });
-
-        assert!(
-            !requires_new_rate(&icp_xdr_conversion_rate, current_minute_seconds),
-            "Current time equals the rate timestamp, no rate is needed."
-        );
-        // Initial timestamp + refresh rate
-        let current_minute_seconds_with_refresh_rate =
-            current_minute_seconds.saturating_add(REFRESH_RATE_INTERVAL_SECONDS);
-        assert!(
-            requires_new_rate(
-                &icp_xdr_conversion_rate,
-                current_minute_seconds_with_refresh_rate
-            ),
-            "Current time is ahead by the refresh rate interval, a new rate is needed."
-        );
-
-        // Initial timestamp + (refresh rate - 1)
-        let current_minute_seconds_with_refresh_rate_less_1 =
-            current_minute_seconds.saturating_add(REFRESH_RATE_INTERVAL_SECONDS - 1);
-        assert!(
-            !requires_new_rate(
-                &icp_xdr_conversion_rate,
-                current_minute_seconds_with_refresh_rate_less_1
-            ),
-            "Current time is ahead by the the refresh rate less one, no new rate is needed."
-        );
-
-        // Timestamp is not on a five-minute interval
-        let current_minute_seconds_plus_one_minute =
-            current_minute_seconds.saturating_add(ONE_MINUTE_SECONDS);
-        assert!(
-            !requires_new_rate(
-                &icp_xdr_conversion_rate,
-                current_minute_seconds_plus_one_minute
-            ),
-            "Current time is not on a five-minute interval, no new rate is needed."
-        );
-
-        assert!(
-            requires_new_rate(&None, current_minute_seconds),
-            "No rate present in state, a new rate is needed."
-        );
-
-        // Test a rate with a timestamp that is just over the next five minute mark.
-        // In practice, this should never happen, but it is best to have it accounted for.
-        let icp_xdr_conversion_rate = Some(IcpXdrConversionRate {
-            timestamp_seconds: 1620633606,    // 10 May 2021 10:00:06 AM CEST
-            xdr_permyriad_per_icp: 1_000_000, // 100 XDR = 1 ICP
-        });
-        assert!(
-            requires_new_rate(
-                &icp_xdr_conversion_rate,
-                current_minute_seconds_with_refresh_rate
-            ),
-            "Current time is ahead by the refresh rate interval, a new rate is needed."
-        );
     }
 
     #[test]
@@ -605,13 +648,22 @@ mod test {
     }
 
     #[test]
-    fn test_periodic_does_not_call_if_new_rate_is_not_required() {
+    fn test_periodic_does_not_call_if_the_scheduled_time_as_not_occurred_yet() {
+        let now_timestamp_seconds = 1680044760;
         thread_local! {
             static STATE: RefCell<Option<State>> = RefCell::new(Some(State::default()));
         }
 
+        mutate_state(&STATE, |state| {
+            state.update_exchange_rate_canister_state.replace(
+                UpdateExchangeRateState::get_rate_at_next_refresh_rate_interval(
+                    now_timestamp_seconds,
+                ),
+            );
+        });
+
         let env = TestExchangeRateCanisterEnvironment {
-            now_timestamp_seconds: 1680044760,
+            now_timestamp_seconds,
             ..Default::default()
         };
         let xrc_client = MockExchangeRateCanisterClient::new(
@@ -628,7 +680,7 @@ mod test {
 
         assert!(matches!(
             result,
-            Err(UpdateExchangeRateError::NewRateNotNeeded)
+            Err(UpdateExchangeRateError::NotReadyToGetRate(1680045000))
         ));
         assert!(!xrc_client.calls.lock().unwrap().is_empty());
     }
@@ -694,17 +746,21 @@ mod test {
             static STATE: RefCell<Option<State>> = RefCell::new(Some(State::default()));
         }
 
-        let env = TestExchangeRateCanisterEnvironment {
+        let mut env = TestExchangeRateCanisterEnvironment {
             now_timestamp_seconds: 1680044700,
             ..Default::default()
         };
         // Set the rate's ICP sources to just below the required amount to trigger a validation error.
         let xrc_client = MockExchangeRateCanisterClient::new(
-            vec![Ok(new_exchange_rate(
-                env.now_timestamp_seconds(),
-                MINIMUM_ICP_SOURCES.saturating_sub(1),
-                MINIMUM_CXDR_SOURCES,
-            ))]
+            vec![
+                Ok(new_exchange_rate(
+                    env.now_timestamp_seconds(),
+                    MINIMUM_ICP_SOURCES.saturating_sub(1),
+                    MINIMUM_CXDR_SOURCES,
+                )),
+                Ok(new_exchange_rate(env.now_timestamp_seconds() + 60, 7, 7)),
+                Ok(new_exchange_rate(env.now_timestamp_seconds() + 300, 7, 7)),
+            ]
             .into(),
         );
         let result = update_exchange_rate(&STATE, &env, &xrc_client)
@@ -714,6 +770,59 @@ mod test {
         assert!(
             matches!(result, Err(UpdateExchangeRateError::InvalidRate(message)) if message == format!("Not enough exchange sources for rate's ICP base asset. Expected: {} Received: {} Queried: 7", MINIMUM_ICP_SOURCES, MINIMUM_ICP_SOURCES.saturating_sub(1))),
         );
+        assert_eq!(xrc_client.calls.lock().unwrap().len(), 2);
+        let update_state = read_state(&STATE, |state| {
+            state
+                .update_exchange_rate_canister_state
+                .expect("update state should be set")
+        });
+        assert!(matches!(
+            update_state,
+            UpdateExchangeRateState::GetRateAt(1680044760)
+        ));
+
+        // Attempt another call. This should fail as there was a failed attempt.
+        let result = update_exchange_rate(&STATE, &env, &xrc_client)
+            .now_or_never()
+            .unwrap();
+        assert!(matches!(
+            result,
+            Err(UpdateExchangeRateError::NotReadyToGetRate(1680044760))
+        ));
+
+        // Attempt another call but a minute after.
+        env.advance_now_timestamp_seconds(60);
+        let result = update_exchange_rate(&STATE, &env, &xrc_client)
+            .now_or_never()
+            .unwrap();
+        assert!(matches!(result, Ok(_)));
+        let update_state = read_state(&STATE, |state| {
+            state
+                .update_exchange_rate_canister_state
+                .expect("update state should be set")
+        });
+        assert!(matches!(
+            update_state,
+            UpdateExchangeRateState::GetRateAt(1680045000)
+        ));
+        assert_eq!(xrc_client.calls.lock().unwrap().len(), 1);
+
+        // Attempt another call but at the next five minute interval.
+        env.advance_now_timestamp_seconds(240);
+        let result = update_exchange_rate(&STATE, &env, &xrc_client)
+            .now_or_never()
+            .unwrap();
+        assert!(matches!(result, Ok(_)));
+        assert!(xrc_client.calls.lock().unwrap().is_empty());
+        let update_state = read_state(&STATE, |state| {
+            state
+                .update_exchange_rate_canister_state
+                .expect("update state should be set")
+        });
+        assert!(matches!(
+            update_state,
+            UpdateExchangeRateState::GetRateAt(1680045300)
+        ));
         assert!(xrc_client.calls.lock().unwrap().is_empty());
     }
 
@@ -743,6 +852,93 @@ mod test {
         assert!(
             matches!(result, Err(UpdateExchangeRateError::InvalidRate(message)) if message == format!("Not enough forex sources for rate's CXDR quote asset. Expected: {} Received: {} Queried: 7", MINIMUM_CXDR_SOURCES, MINIMUM_CXDR_SOURCES.saturating_sub(1))),
         );
+        let update_state = read_state(&STATE, |state| {
+            state
+                .update_exchange_rate_canister_state
+                .expect("update state should be set")
+        });
+        assert!(matches!(
+            update_state,
+            UpdateExchangeRateState::GetRateAt(1680044760)
+        ));
+        assert!(xrc_client.calls.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_periodic_calls_the_xrc_and_if_the_call_fails_it_attempts_again_a_minute_later() {
+        thread_local! {
+            static STATE: RefCell<Option<State>> = RefCell::new(Some(State::default()));
+        }
+
+        let env = TestExchangeRateCanisterEnvironment {
+            now_timestamp_seconds: 1680044700,
+            ..Default::default()
+        };
+        // Set the rate's ICP sources to just below the required amount to trigger a validation error.
+        let xrc_client = MockExchangeRateCanisterClient::new(
+            vec![Err(GetExchangeRateError::Call {
+                code: 0,
+                message: "error".to_string(),
+            })]
+            .into(),
+        );
+        let result = update_exchange_rate(&STATE, &env, &xrc_client)
+            .now_or_never()
+            .unwrap();
+
+        assert!(matches!(
+            result,
+            Err(UpdateExchangeRateError::FailedToRetrieveRate(_))
+        ),);
+        let update_state = read_state(&STATE, |state| {
+            state
+                .update_exchange_rate_canister_state
+                .expect("update state should be set")
+        });
+        assert!(matches!(
+            update_state,
+            UpdateExchangeRateState::GetRateAt(1680044760)
+        ));
+        assert!(xrc_client.calls.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_periodic_calls_the_xrc_and_rejects_the_rates_timestamp_then_sets_the_next_attempt_a_minute_in_future(
+    ) {
+        thread_local! {
+            static STATE: RefCell<Option<State>> = RefCell::new(Some(State::default()));
+        }
+
+        let env = TestExchangeRateCanisterEnvironment {
+            now_timestamp_seconds: 1680044700,
+            ..Default::default()
+        };
+        // Set the rate's ICP sources to just below the required amount to trigger a validation error.
+        let xrc_client = MockExchangeRateCanisterClient::new(
+            vec![Ok(new_exchange_rate(
+                0,
+                MINIMUM_ICP_SOURCES,
+                MINIMUM_CXDR_SOURCES,
+            ))]
+            .into(),
+        );
+        let result = update_exchange_rate(&STATE, &env, &xrc_client)
+            .now_or_never()
+            .unwrap();
+
+        assert!(matches!(
+            result,
+            Err(UpdateExchangeRateError::FailedToSetRate(_))
+        ),);
+        let update_state = read_state(&STATE, |state| {
+            state
+                .update_exchange_rate_canister_state
+                .expect("update state should be set")
+        });
+        assert!(matches!(
+            update_state,
+            UpdateExchangeRateState::GetRateAt(1680044760)
+        ));
         assert!(xrc_client.calls.lock().unwrap().is_empty());
     }
 
@@ -829,17 +1025,18 @@ mod test {
             static STATE: RefCell<Option<State>> = RefCell::new(Some(State::default()));
         }
 
-        set_update_exchange_rate_state(&STATE, &None);
+        set_update_exchange_rate_state(&STATE, &None, 0);
         let update_exchange_rate_canister_state =
             read_state(&STATE, |state| state.update_exchange_rate_canister_state);
         assert!(matches!(
             update_exchange_rate_canister_state,
-            Some(UpdateExchangeRateState::Inactive)
+            Some(UpdateExchangeRateState::GetRateAt(1620633600))
         ));
 
         set_update_exchange_rate_state(
             &STATE,
             &Some(UpdateIcpXdrConversionRatePayloadReason::DivergedRate),
+            1680045300,
         );
         let update_exchange_rate_canister_state =
             read_state(&STATE, |state| state.update_exchange_rate_canister_state);
@@ -851,6 +1048,7 @@ mod test {
         set_update_exchange_rate_state(
             &STATE,
             &Some(UpdateIcpXdrConversionRatePayloadReason::OldRate),
+            1680045600,
         );
         let update_exchange_rate_canister_state =
             read_state(&STATE, |state| state.update_exchange_rate_canister_state);
@@ -862,12 +1060,13 @@ mod test {
         set_update_exchange_rate_state(
             &STATE,
             &Some(UpdateIcpXdrConversionRatePayloadReason::EnableAutomaticExchangeRateUpdates),
+            1680045900,
         );
         let update_exchange_rate_canister_state =
             read_state(&STATE, |state| state.update_exchange_rate_canister_state);
         assert!(matches!(
             update_exchange_rate_canister_state,
-            Some(UpdateExchangeRateState::Inactive)
+            Some(UpdateExchangeRateState::GetRateAt(1680046200))
         ));
     }
 }

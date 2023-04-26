@@ -1,4 +1,7 @@
+use crate::canister_agent::CanisterAgent;
+use crate::canister_api::GenericRequest;
 use crate::driver::test_env_api::*;
+use crate::generic_workload_engine::{engine::Engine, metrics::LoadTestMetrics};
 use crate::types::*;
 use anyhow::bail;
 use candid::{Decode, Encode};
@@ -1396,4 +1399,38 @@ pub async fn assert_node_malicious(node: IcNodeSnapshot, malicious_signals: Vec<
         .wait_until(|_, line| malicious_signals.iter().any(|x| line.contains(x)))
         .await
         .expect("Node did not have malicious log.")
+}
+
+pub fn spawn_round_robin_workload_engine(
+    log: slog::Logger,
+    requests: Vec<GenericRequest>,
+    agents: Vec<Agent>,
+    rps: usize,
+    duration: Duration,
+    requests_dispatch_extra_timeout: Duration,
+    requests_duration_categorizations: Vec<Duration>,
+) -> std::thread::JoinHandle<LoadTestMetrics> {
+    let agents: Vec<CanisterAgent> = agents.into_iter().map(CanisterAgent::from).collect();
+    std::thread::spawn(move || {
+        let generator = move |idx: usize| {
+            // Round Robin distribution over both requests and agents.
+            let request = requests[idx % requests.len()].clone();
+            let agent = agents[idx % agents.len()].clone();
+            async move {
+                agent
+                    .call(&request)
+                    .await
+                    .map(|_| ()) // drop non-error responses
+                    .into_test_outcome()
+            }
+        };
+        // Don't log intermediate metrics during workload execution.
+        let log_null = slog::Logger::root(slog::Discard, slog::o!());
+        let aggregator = LoadTestMetrics::new(log_null)
+            .with_requests_duration_categorizations(requests_duration_categorizations);
+        let engine = Engine::new(log, generator, rps, duration)
+            .increase_dispatch_timeout(requests_dispatch_extra_timeout);
+        block_on(engine.execute(aggregator, LoadTestMetrics::aggregator_fn))
+            .expect("Execution of the workload failed.")
+    })
 }

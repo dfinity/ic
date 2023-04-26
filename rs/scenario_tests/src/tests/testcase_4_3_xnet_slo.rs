@@ -479,7 +479,8 @@ async fn install(
         // Install the Wasm.
         let canister_id = CanisterId::new(res?.canister_id).map_err(|e| e.to_string())?;
         let mut canister = Canister::new(api, canister_id);
-        wasm.install_onto_canister(&mut canister, None).await?;
+        wasm.install_onto_canister(&mut canister, CanisterInstallMode::Install, None, None)
+            .await?;
 
         Ok(canister)
     } else {

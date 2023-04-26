@@ -69,7 +69,7 @@ pub struct LoadTestMetrics {
     inner: BTreeMap<String, RequestMetrics>,
     last_time_emitted: Instant,
     logger: Logger,
-    requests_duration_thresholds: Vec<Duration>,
+    requests_duration_categories: Vec<Duration>,
 }
 
 impl LoadTestMetrics {
@@ -78,12 +78,17 @@ impl LoadTestMetrics {
             inner: Default::default(),
             last_time_emitted: Instant::now(),
             logger,
-            requests_duration_thresholds: vec![],
+            requests_duration_categories: vec![],
         }
     }
 
-    pub fn with_requests_duration_thresholds(mut self, duration_threshold: Duration) -> Self {
-        self.requests_duration_thresholds.push(duration_threshold);
+    pub fn with_requests_duration_categorizations(
+        mut self,
+        duration_categories: Vec<Duration>,
+    ) -> Self {
+        for duration in duration_categories {
+            self.requests_duration_categories.push(duration);
+        }
         self
     }
 
@@ -101,6 +106,14 @@ impl LoadTestMetrics {
 
     pub fn total_calls(&self) -> Counter {
         self.success_calls() + self.failure_calls()
+    }
+
+    pub fn success_ratio(&self) -> f64 {
+        self.success_calls() as f64 / self.total_calls() as f64
+    }
+
+    pub fn failure_ratio(&self) -> f64 {
+        1.0 - self.success_ratio()
     }
 
     pub fn errors(&self) -> HashMap<String, Counter> {
@@ -154,7 +167,7 @@ impl LoadTestMetrics {
         // Initialize empty request metrics with duration buckets.
         let empty_request_metrics = RequestMetrics {
             requests_duration_buckets: self
-                .requests_duration_thresholds
+                .requests_duration_categories
                 .iter()
                 .cloned()
                 .map(RequestDurationBucket::new)

@@ -2,20 +2,21 @@ use assert_matches::assert_matches;
 use candid::Encode;
 use canister_test::{Project, Runtime};
 use dfn_candid::candid;
-
 use ic_ic00_types::CanisterInstallMode::{self, Install, Reinstall, Upgrade};
 use ic_nervous_system_root::{
-    CanisterIdRecord, CanisterStatusResult, CanisterStatusType::Running, ChangeCanisterProposal,
+    canister_status::{CanisterStatusResult, CanisterStatusType::Running},
+    change_canister::ChangeCanisterProposal,
+    CanisterIdRecord,
 };
 use ic_nns_handler_root::init::RootCanisterInitPayload;
 use ic_nns_test_utils::itest_helpers::{
     forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_root_canister,
     set_up_universal_canister,
 };
-use ic_test_utilities::stable_memory_reader::{
-    STABLE_MEMORY_READER_SHA256, STABLE_MEMORY_READER_WASM,
+use ic_test_utilities::{
+    stable_memory_reader::{STABLE_MEMORY_READER_SHA256, STABLE_MEMORY_READER_WASM},
+    universal_canister::wasm as universal_canister_argument_builder,
 };
-use ic_test_utilities::universal_canister::wasm as universal_canister_argument_builder;
 use on_wire::bytes;
 
 /// A message to be store in stable memory

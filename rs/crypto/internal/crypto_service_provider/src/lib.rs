@@ -59,7 +59,6 @@ pub trait CryptoServiceProvider:
     + CspThresholdEcdsaSigner
     + CspThresholdEcdsaSigVerifier
     + CspPublicAndSecretKeyStoreChecker
-    + CspPublicAndSecretKeyStoreChecker
     + CspTlsHandshakeSignerProvider
     + CspPublicKeyStore
 {
@@ -74,7 +73,6 @@ impl<T> CryptoServiceProvider for T where
         + CspThresholdEcdsaSigner
         + CspThresholdEcdsaSigVerifier
         + NiDkgCspClient
-        + CspPublicAndSecretKeyStoreChecker
         + CspPublicAndSecretKeyStoreChecker
         + CspTlsHandshakeSignerProvider
         + CspPublicKeyStore

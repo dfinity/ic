@@ -47,6 +47,7 @@ DEPENDENCIES = [
     "@crate_index//:simple_asn1",
     "@crate_index//:slog",
     "@crate_index//:strum",
+    "@crate_index//:stubborn-io",
     "@crate_index//:tarpc",
     "@crate_index//:tempfile",
     "@crate_index//:threadpool",
@@ -74,6 +75,8 @@ DEV_DEPENDENCIES = [
     "@crate_index//:mockall_0_7_2",
     "@crate_index//:proptest",
     "@crate_index//:slog-async",
+    "@crate_index//:tracing",
+    "@crate_index//:tracing-subscriber",
 ]
 
 MACRO_DEPENDENCIES = [

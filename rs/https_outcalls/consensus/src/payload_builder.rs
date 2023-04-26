@@ -1,6 +1,6 @@
 //! Implementation of the payload builder of the canister http feature
 
-use crate::canister_http::{
+use crate::{
     metrics::CanisterHttpPayloadBuilderMetrics,
     payload_builder::utils::{
         group_shares_by_callback_id, grouped_shares_meet_divergence_criteria,

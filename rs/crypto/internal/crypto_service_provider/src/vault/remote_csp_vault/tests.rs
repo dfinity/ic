@@ -754,7 +754,7 @@ mod logging {
         let logs = in_memory_logger.drain_logs();
 
         LogEntriesAssert::assert_that(logs)
-            .has_len(3)
+            .has_len(5)
             .has_only_one_message_containing(&Level::Debug, "Instantiated remote CSP vault client")
             .has_only_one_message_containing(
                 &Level::Debug,

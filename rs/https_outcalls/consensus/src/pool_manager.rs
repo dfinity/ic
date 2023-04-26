@@ -2,7 +2,7 @@
 //! responsible for managing the flow of requests from execution to the
 //! networking component, and ensuring that the resulting responses are signed
 //! and eventually make it into consensus.
-use crate::canister_http::metrics::CanisterHttpPoolManagerMetrics;
+use crate::metrics::CanisterHttpPoolManagerMetrics;
 use ic_consensus_utils::{
     crypto::ConsensusCrypto, membership::Membership, registry_version_at_height,
 };

@@ -1,9 +1,9 @@
 use crate::common::storage::{storage_client::StorageClient, types::RosettaBlock};
-use candid::Nat;
+use candid::{Decode, Encode, Nat};
 use ic_crypto_tree_hash::{LookupStatus, MixedHashTree};
 use ic_icrc1::hash::Hash;
 use icrc_ledger_agent::Icrc1Agent;
-use icrc_ledger_types::icrc3::blocks::{GetBlocksRequest, GetBlocksResponse};
+use icrc_ledger_types::icrc3::blocks::{BlockRange, GetBlocksRequest, GetBlocksResponse};
 use num_traits::ToPrimitive;
 use serde_bytes::ByteBuf;
 use std::{cmp, collections::HashMap, ops::RangeInclusive, sync::Arc};
@@ -240,6 +240,41 @@ async fn fetch_blocks_interval(
                     block_index,
                     Some(RosettaBlock::from_generic_block(block, block_index)?),
                 );
+            }
+
+            // Fetch all blocks that could not be returned by the ledger directly, from the archive
+            for archive_query in blocks_response.archived_blocks {
+                let archive_response = agent
+                    .agent
+                    .query(
+                        &archive_query.callback.canister_id,
+                        &archive_query.callback.method,
+                    )
+                    .with_arg(&Encode!(&GetBlocksRequest {
+                        start: archive_query.start.clone(),
+                        length: archive_query.length,
+                    })?)
+                    .call()
+                    .await?;
+
+                let arch_blocks_result = Decode!(&archive_response, BlockRange)?;
+
+                // The archive guarentees that the first index of the blocks it returns is the same as requested
+                let first_index = archive_query
+                    .start
+                    .0
+                    .to_u64()
+                    .ok_or_else(|| anyhow::Error::msg("Nat could not be converted to u64"))?;
+
+                // Iterate over the blocks returned from the archive and add them to the hashmap
+                for (index, block) in arch_blocks_result.blocks.into_iter().enumerate() {
+                    let block_index = first_index + index as u64;
+                    // The index of the RosettaBlock is the starting index of the request plus the position of the current block in the response object
+                    fetched_blocks_result.insert(
+                        block_index,
+                        Some(RosettaBlock::from_generic_block(block, block_index)?),
+                    );
+                }
             }
         }
     }

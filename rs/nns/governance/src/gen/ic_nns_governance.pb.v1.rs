@@ -3128,6 +3128,14 @@ pub enum NnsFunction {
     /// the Wasm module of the target canister, the proposal can also set the
     /// authorization information and the allocations.
     NnsCanisterUpgrade = 4,
+    /// A proposal to bless a new version to which the replicas can be
+    /// upgraded.
+    /// The proposal registers a replica version (identified by the hash of the
+    /// installation image) in the registry. Besides creating a record for that
+    /// version, the proposal also appends that version to the list of "blessed
+    /// versions" that can be installed on a subnet. By itself, this proposal
+    /// does not effect any upgrade.
+    BlessReplicaVersion = 5,
     /// Update a subnet's recovery CUP (used to recover subnets that have stalled).
     /// Nodes that find a recovery CUP for their subnet will load that CUP from
     /// the registry and restart the replica from that CUP.
@@ -3225,6 +3233,10 @@ pub enum NnsFunction {
     UpdateSnsWasmSnsSubnetIds = 34,
     /// Update the SNS-wasm canister's list of allowed principals. This list guards which principals can deploy an SNS.
     UpdateAllowedPrincipals = 35,
+    /// A proposal to retire previously elected and unused replica versions.
+    /// The specified versions are removed from the registry and the "blessed versions" record.
+    /// This ensures that the replica cannot upgrade to these versions anymore.
+    RetireReplicaVersion = 36,
     /// Insert custom upgrade path entries into SNS-W for all SNSes, or for an SNS specified by its governance canister ID.
     InsertSnsWasmUpgradePathEntries = 37,
     /// A proposal to update currently elected replica versions, by electing a new version,
@@ -3250,6 +3262,7 @@ impl NnsFunction {
             NnsFunction::AddNodeToSubnet => "NNS_FUNCTION_ADD_NODE_TO_SUBNET",
             NnsFunction::NnsCanisterInstall => "NNS_FUNCTION_NNS_CANISTER_INSTALL",
             NnsFunction::NnsCanisterUpgrade => "NNS_FUNCTION_NNS_CANISTER_UPGRADE",
+            NnsFunction::BlessReplicaVersion => "NNS_FUNCTION_BLESS_REPLICA_VERSION",
             NnsFunction::RecoverSubnet => "NNS_FUNCTION_RECOVER_SUBNET",
             NnsFunction::UpdateConfigOfSubnet => "NNS_FUNCTION_UPDATE_CONFIG_OF_SUBNET",
             NnsFunction::AssignNoid => "NNS_FUNCTION_ASSIGN_NOID",
@@ -3282,6 +3295,7 @@ impl NnsFunction {
             NnsFunction::ChangeSubnetTypeAssignment => "NNS_FUNCTION_CHANGE_SUBNET_TYPE_ASSIGNMENT",
             NnsFunction::UpdateSnsWasmSnsSubnetIds => "NNS_FUNCTION_UPDATE_SNS_WASM_SNS_SUBNET_IDS",
             NnsFunction::UpdateAllowedPrincipals => "NNS_FUNCTION_UPDATE_ALLOWED_PRINCIPALS",
+            NnsFunction::RetireReplicaVersion => "NNS_FUNCTION_RETIRE_REPLICA_VERSION",
             NnsFunction::InsertSnsWasmUpgradePathEntries => {
                 "NNS_FUNCTION_INSERT_SNS_WASM_UPGRADE_PATH_ENTRIES"
             }

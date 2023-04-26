@@ -42,3 +42,4 @@ mypy
 pylint
 pytest-shutil
 xmltodict
+retry

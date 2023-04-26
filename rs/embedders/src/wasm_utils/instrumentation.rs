@@ -25,7 +25,7 @@
 //!
 //! ```wasm
 //! (import "__" "out_of_instructions" (func (;0;) (func)))
-//! (import "__" "update_available_memory" (func (;1;) ((param i32 i32) (result i32))))
+//! (import "__" "update_available_memory" (func (;1;) ((param i32 i32 i32) (result i32))))
 //! (import "__" "try_grow_stable_memory" (func (;1;) ((param i64 i64 i32) (result i64))))
 //! (import "__" "internal_trap" (func (;1;) ((param i32))))
 //! (import "__" "stable_read_first_access" (func ((param i64) (param i64) (param i64))))
@@ -122,14 +122,14 @@ use ic_types::{NumInstructions, MAX_STABLE_MEMORY_IN_BYTES};
 use ic_wasm_types::{BinaryEncodedWasm, WasmError, WasmInstrumentationError};
 use wasmtime_environ::WASM_PAGE_SIZE;
 
-use crate::wasm_utils::wasm_transform::{self, Module};
+use crate::wasm_utils::wasm_transform::{self, Global, Module};
 use crate::wasmtime_embedder::{
     STABLE_BYTEMAP_MEMORY_NAME, STABLE_MEMORY_NAME, WASM_HEAP_BYTEMAP_MEMORY_NAME,
     WASM_HEAP_MEMORY_NAME,
 };
 use wasmparser::{
-    BlockType, ConstExpr, Export, ExternalKind, FuncType, Global, GlobalType, Import, MemoryType,
-    Operator, Type, TypeRef, ValType,
+    BlockType, Export, ExternalKind, FuncType, GlobalType, Import, MemoryType, Operator, Type,
+    TypeRef, ValType,
 };
 
 use std::collections::BTreeMap;
@@ -201,9 +201,9 @@ fn add_type(module: &mut Module, ty: Type) -> u32 {
 }
 
 fn mutate_function_indices(module: &mut Module, f: impl Fn(u32) -> u32) {
-    for func_body in &mut module.code_sections {
-        for instr in &mut func_body.instructions {
-            match instr {
+    fn mutate_instructions(f: &impl Fn(u32) -> u32, ops: &mut [Operator]) {
+        for op in ops {
+            match op {
                 Operator::Call { function_index }
                 | Operator::ReturnCall { function_index }
                 | Operator::RefFunc { function_index } => {
@@ -213,18 +213,50 @@ fn mutate_function_indices(module: &mut Module, f: impl Fn(u32) -> u32) {
             }
         }
     }
+
+    for func_body in &mut module.code_sections {
+        mutate_instructions(&f, &mut func_body.instructions)
+    }
+
     for exp in &mut module.exports {
         if let ExternalKind::Func = exp.kind {
             exp.index = f(exp.index);
         }
     }
-    for (_, elem_items) in &mut module.elements {
-        if let wasm_transform::ElementItems::Functions(fun_items) = elem_items {
-            for idx in fun_items {
-                *idx = f(*idx);
+
+    for (_, _, elem_items) in &mut module.elements {
+        match elem_items {
+            wasm_transform::ElementItems::Functions(fun_items) => {
+                for idx in fun_items {
+                    *idx = f(*idx);
+                }
+            }
+            wasm_transform::ElementItems::ConstExprs(expr) => {
+                for ops in expr {
+                    mutate_instructions(&f, ops)
+                }
             }
         }
     }
+
+    for global in &mut module.globals {
+        mutate_instructions(&f, &mut global.init_expr)
+    }
+
+    for data_segment in &mut module.data {
+        match &mut data_segment.kind {
+            wasm_transform::DataSegmentKind::Passive => {}
+            wasm_transform::DataSegmentKind::Active {
+                memory_index: _,
+                offset_expr,
+            } => {
+                let mut temp = [offset_expr.clone()];
+                mutate_instructions(&f, &mut temp);
+                *offset_expr = temp.into_iter().next().unwrap();
+            }
+        }
+    }
+
     if let Some(start_idx) = module.start.as_mut() {
         *start_idx = f(*start_idx);
     }
@@ -240,7 +272,10 @@ fn mutate_function_indices(module: &mut Module, f: impl Fn(u32) -> u32) {
 fn inject_helper_functions(mut module: Module, wasm_native_stable_memory: FlagStatus) -> Module {
     // insert types
     let ooi_type = Type::Func(FuncType::new([], []));
-    let uam_type = Type::Func(FuncType::new([ValType::I32, ValType::I32], [ValType::I32]));
+    let uam_type = Type::Func(FuncType::new(
+        [ValType::I32, ValType::I32, ValType::I32],
+        [ValType::I32],
+    ));
 
     let ooi_type_idx = add_type(&mut module, ooi_type);
     let uam_type_idx = add_type(&mut module, uam_type);
@@ -440,13 +475,7 @@ pub(super) fn instrument(
         }
     }
 
-    let mut extra_data: Option<Vec<u8>> = None;
-    module = export_additional_symbols(
-        module,
-        &special_indices,
-        &mut extra_data,
-        wasm_native_stable_memory,
-    );
+    module = export_additional_symbols(module, &special_indices, wasm_native_stable_memory);
 
     if wasm_native_stable_memory == FlagStatus::Enabled {
         replace_system_api_functions(
@@ -494,7 +523,7 @@ pub(super) fn instrument(
         wasm_instruction_count += body.instructions.len() as u64;
     }
     for glob in &module.globals {
-        wasm_instruction_count += glob.init_expr.get_operators_reader().into_iter().count() as u64;
+        wasm_instruction_count += glob.init_expr.len() as u64;
     }
 
     let result = module.encode().map_err(|err| {
@@ -567,7 +596,6 @@ fn replace_system_api_functions(
 fn export_additional_symbols<'a>(
     mut module: Module<'a>,
     special_indices: &SpecialIndices,
-    extra_data: &'a mut Option<Vec<u8>>,
     wasm_native_stable_memory: FlagStatus,
 ) -> Module<'a> {
     // push function to decrement the instruction counter
@@ -759,20 +787,13 @@ fn export_additional_symbols<'a>(
         module.exports.push(start_export);
     }
 
-    let mut zero_init_data: Vec<u8> = Vec::new();
-    use wasm_encoder::Encode;
-    //encode() automatically adds an End instructions
-    wasm_encoder::ConstExpr::i64_const(0).encode(&mut zero_init_data);
-    debug_assert!(extra_data.is_none());
-    *extra_data = Some(zero_init_data);
-
     // push the instructions counter
     module.globals.push(Global {
         ty: GlobalType {
             content_type: ValType::I64,
             mutable: true,
         },
-        init_expr: ConstExpr::new(extra_data.as_ref().unwrap(), 0),
+        init_expr: vec![Operator::I64Const { value: 0 }, Operator::End],
     });
 
     if wasm_native_stable_memory == FlagStatus::Enabled {
@@ -782,7 +803,7 @@ fn export_additional_symbols<'a>(
                 content_type: ValType::I64,
                 mutable: true,
             },
-            init_expr: ConstExpr::new(extra_data.as_ref().unwrap(), 0),
+            init_expr: vec![Operator::I64Const { value: 0 }, Operator::End],
         });
         // push the accessed page counter
         module.globals.push(Global {
@@ -790,7 +811,7 @@ fn export_additional_symbols<'a>(
                 content_type: ValType::I64,
                 mutable: true,
             },
-            init_expr: ConstExpr::new(extra_data.as_ref().unwrap(), 0),
+            init_expr: vec![Operator::I64Const { value: 0 }, Operator::End],
         });
     }
 
@@ -1132,19 +1153,23 @@ fn inject_mem_barrier(func_body: &mut wasm_transform::Body, func_type: &FuncType
     }
 }
 
-// Scans through a function and adds instrumentation after each `memory.grow`
-// instruction to make sure that there's enough available memory left to support
-// the requested extra memory. If no `memory.grow` instructions are present then
-// the function's code remains unchanged.
+// Scans through a function and adds instrumentation after each `memory.grow` or
+// `table.grow` instruction to make sure that there's enough available memory
+// left to support the requested extra memory. If no `memory.grow` or
+// `table.grow` instructions are present then the code remains unchanged.
 fn inject_update_available_memory(func_body: &mut wasm_transform::Body, func_type: &FuncType) {
+    // This is an overestimation of table element size computed based on the
+    // existing canister limits.
+    const TABLE_ELEMENT_SIZE: u32 = 1024;
     use Operator::*;
-    let mut injection_points: Vec<usize> = Vec::new();
+    let mut injection_points: Vec<(usize, u32)> = Vec::new();
     {
         for (idx, instr) in func_body.instructions.iter().enumerate() {
-            // TODO(EXC-222): Once `table.grow` is supported we should extend the list of
-            // injections here.
             if let MemoryGrow { .. } = instr {
-                injection_points.push(idx);
+                injection_points.push((idx, WASM_PAGE_SIZE));
+            }
+            if let TableGrow { .. } = instr {
+                injection_points.push((idx, TABLE_ELEMENT_SIZE));
             }
         }
     }
@@ -1161,7 +1186,7 @@ fn inject_update_available_memory(func_body: &mut wasm_transform::Body, func_typ
         let orig_elems = &func_body.instructions;
         let mut elems: Vec<Operator> = Vec::new();
         let mut last_injection_position = 0;
-        for point in injection_points {
+        for (point, element_size) in injection_points {
             let update_available_memory_instr = orig_elems[point].clone();
             elems.extend_from_slice(&orig_elems[last_injection_position..point]);
             // At this point we have a memory.grow so the argument to it will be on top of
@@ -1174,6 +1199,9 @@ fn inject_update_available_memory(func_body: &mut wasm_transform::Body, func_typ
                 update_available_memory_instr,
                 LocalGet {
                     local_index: memory_local_ix,
+                },
+                I32Const {
+                    value: element_size as i32,
                 },
                 Call {
                     function_index: InjectedImports::UpdateAvailableMemory as u32,

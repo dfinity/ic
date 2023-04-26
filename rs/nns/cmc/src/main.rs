@@ -254,7 +254,7 @@ impl Default for State {
             last_purged_notification: Some(0),
             maturity_modulation_permyriad: Some(0),
             subnet_types_to_subnets: Some(BTreeMap::new()),
-            update_exchange_rate_canister_state: Some(UpdateExchangeRateState::Inactive),
+            update_exchange_rate_canister_state: Some(UpdateExchangeRateState::default()),
         }
     }
 }
@@ -805,12 +805,14 @@ fn set_icp_xdr_conversion_rate_() {
         |proposed_conversion_rate: UpdateIcpXdrConversionRatePayload| -> Result<(), String> {
             let env = CanisterEnvironment;
             let rate = IcpXdrConversionRate::from(&proposed_conversion_rate);
+            let rate_timestamp_seconds = rate.timestamp_seconds;
             update_recent_icp_xdr_rates(&rate);
             let result = set_icp_xdr_conversion_rate(&STATE, &env, rate);
             if result.is_ok() && with_state(|state| state.exchange_rate_canister_id.is_some()) {
                 exchange_rate_canister::set_update_exchange_rate_state(
                     &STATE,
                     &proposed_conversion_rate.reason,
+                    rate_timestamp_seconds,
                 );
             }
 
@@ -1765,7 +1767,7 @@ async fn update_exchange_rate() {
                 print(format!("[cycles] {}", error));
             }
             UpdateExchangeRateError::Disabled
-            | UpdateExchangeRateError::NewRateNotNeeded
+            | UpdateExchangeRateError::NotReadyToGetRate(_)
             | UpdateExchangeRateError::UpdateAlreadyInProgress => {}
         }
     }
@@ -1807,6 +1809,30 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
             "cmc_cycles_minted_total",
             state.total_cycles_minted.get() as f64,
             "Number of cycles minted since the Genesis.",
+        )?;
+        w.encode_gauge(
+            "cmc_avg_icp_xdr_conversion_rate",
+            state
+                .average_icp_xdr_conversion_rate
+                .as_ref()
+                .unwrap()
+                .xdr_permyriad_per_icp as f64
+                / 10_000f64,
+            "Average amount of XDR corresponding to 1 ICP.",
+        )?;
+        w.encode_gauge(
+            "cmc_icp_xdr_conversion_rate_timestamp_seconds",
+            state
+                .icp_xdr_conversion_rate
+                .as_ref()
+                .unwrap()
+                .timestamp_seconds as f64,
+            "Timestamp of the last ICP/XDR conversion rate, in seconds since the Unix epoch.",
+        )?;
+        w.encode_gauge(
+            "cmc_update_exchange_rate_canister_state",
+            u8::from(state.update_exchange_rate_canister_state.as_ref().unwrap()) as f64,
+            "The current state of the CMC calling the exchange rate canister.",
         )?;
         Ok(())
     })

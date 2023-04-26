@@ -16,3 +16,4 @@ uuid
 pydot
 matplotlib==3.6.2
 pytest
+retry

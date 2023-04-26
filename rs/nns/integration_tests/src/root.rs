@@ -6,7 +6,9 @@ use ic_canister_client_sender::Sender;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_2_OWNER_KEYPAIR, TEST_USER1_KEYPAIR,
 };
-use ic_nervous_system_root::{AddCanisterProposal, CanisterAction, StopOrStartCanisterProposal};
+use ic_nervous_system_root::change_canister::{
+    AddCanisterProposal, CanisterAction, StopOrStartCanisterProposal,
+};
 use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
 use ic_nns_constants::{ALL_NNS_CANISTER_IDS, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID};
 use ic_nns_governance::pb::v1::{

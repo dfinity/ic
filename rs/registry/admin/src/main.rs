@@ -12,6 +12,7 @@ use cycles_minting_canister::{
     ChangeSubnetTypeAssignmentArgs, SetAuthorizedSubnetworkListArgs, SubnetListWithType,
     UpdateSubnetTypeArgs,
 };
+use ic_btc_interface::{Flag, SetConfigRequest};
 use ic_canister_client::{Agent, Sender};
 use ic_canister_client_sender::SigKeys;
 use ic_config::subnet_config::SchedulerConfig;
@@ -34,8 +35,10 @@ use ic_nervous_system_common_test_keys::{
     TEST_USER4_PRINCIPAL,
 };
 use ic_nervous_system_root::{
-    AddCanisterProposal, CanisterAction, CanisterStatusResult, ChangeCanisterProposal,
-    StopOrStartCanisterProposal,
+    canister_status::CanisterStatusResult,
+    change_canister::{
+        AddCanisterProposal, CanisterAction, ChangeCanisterProposal, StopOrStartCanisterProposal,
+    },
 };
 use ic_nns_common::types::{NeuronId, ProposalId, UpdateIcpXdrConversionRatePayload};
 use ic_nns_constants::{memory_allocation_of, GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
@@ -45,6 +48,7 @@ use ic_nns_governance::pb::v1::{
     Proposal, RewardNodeProviders,
 };
 use ic_nns_governance::{
+    governance::{BitcoinNetwork, BitcoinSetConfigProposal},
     pb::v1::NnsFunction,
     proposal_submission::{
         create_external_update_proposal_candid, create_make_proposal_payload,
@@ -120,9 +124,11 @@ use registry_canister::mutations::node_management::do_remove_nodes::RemoveNodesP
 use registry_canister::mutations::{
     complete_canister_migration::CompleteCanisterMigrationPayload,
     do_add_node_operator::AddNodeOperatorPayload, do_add_nodes_to_subnet::AddNodesToSubnetPayload,
+    do_bless_replica_version::BlessReplicaVersionPayload,
     do_change_subnet_membership::ChangeSubnetMembershipPayload,
     do_create_subnet::CreateSubnetPayload, do_recover_subnet::RecoverSubnetPayload,
     do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
+    do_retire_replica_version::RetireReplicaVersionPayload,
     do_update_node_operator_config::UpdateNodeOperatorConfigPayload,
     do_update_subnet::UpdateSubnetPayload,
     do_update_subnet_replica::UpdateSubnetReplicaVersionPayload,
@@ -281,6 +287,15 @@ enum SubCommand {
     GetBlessedReplicaVersions,
     /// Get the latest routing table.
     GetRoutingTable,
+    /// Submits a proposal to get a given replica version, to be downloaded from
+    /// download.dfinity.systems, blessed.
+    ProposeToBlessReplicaVersion(ProposeToBlessReplicaVersionCmd),
+    /// Submits a proposal to get the given replica version blessed. This
+    /// command gives you maximum flexibility for specifying the download
+    /// locations. It is usually preferable to use
+    /// --propose-to-bless-replica-version instead, which is less flexible, but
+    /// easier to use.
+    ProposeToBlessReplicaVersionFlexible(ProposeToBlessReplicaVersionFlexibleCmd),
     /// Submits a proposal to update currently elected replica versions, by electing
     /// a new version and/or unelecting multiple versions.
     ProposeToUpdateElectedReplicaVersions(ProposeToUpdateElectedReplicaVersionsCmd),
@@ -294,6 +309,8 @@ enum SubCommand {
     ProposeToUpdateSubnet(ProposeToUpdateSubnetCmd),
     /// Submits a proposal to change an existing canister on NNS.
     ProposeToChangeNnsCanister(ProposeToChangeNnsCanisterCmd),
+    /// Submits a proposal to remove the blessing of replica versions
+    ProposeToRetireReplicaVersion(ProposeToRetireReplicaVersionCmd),
     /// Submits a proposal to uninstall code of a canister.
     ProposeToUninstallCode(ProposeToUninstallCodeCmd),
     /// Submits a proposal to set authorized subnetworks that the cycles minting
@@ -399,6 +416,8 @@ enum SubCommand {
     ProposeToUpdateSnsDeployWhitelist(ProposeToUpdateSnsDeployWhitelistCmd),
     /// Propose to start a decentralization sale
     ProposeToOpenSnsTokenSwap(ProposeToOpenSnsTokenSwap),
+    /// Propose to set the Bitcoin configuration
+    ProposeToSetBitcoinConfig(ProposeToSetBitcoinConfig),
 }
 
 /// Indicates whether a value should be added or removed.
@@ -857,6 +876,106 @@ impl ProposalPayload<StopOrStartCanisterProposal> for StopCanisterCmd {
     }
 }
 
+/// Sub-command to submit a proposal to bless a new replica version with
+/// multiple URLs.
+#[derive_common_proposal_fields]
+#[derive(ProposalMetadata, Parser)]
+struct ProposeToBlessReplicaVersionCmd {
+    /// Version ID. This can be anything, it has no semantics. The reason it is
+    /// part of the payload is that it will be needed in the subsequent step
+    /// of upgrading individual subnets.
+    pub replica_version_id: String,
+
+    /// The hex-formatted SHA-256 hash of the archive served by
+    /// 'release_package_urls'.
+    release_package_sha256_hex: String,
+
+    /// The URLs against which an HTTP GET request will return a release
+    /// package that corresponds to this version.
+    pub release_package_urls: Vec<String>,
+}
+
+impl ProposalTitle for ProposeToBlessReplicaVersionCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => format!("Bless replica version: {}", self.replica_version_id,),
+        }
+    }
+}
+
+#[async_trait]
+impl ProposalPayload<BlessReplicaVersionPayload> for ProposeToBlessReplicaVersionCmd {
+    async fn payload(&self, _: Url) -> BlessReplicaVersionPayload {
+        BlessReplicaVersionPayload {
+            replica_version_id: self.replica_version_id.clone(),
+            binary_url: "".into(),
+            sha256_hex: "".into(),
+            node_manager_binary_url: "".into(),
+            node_manager_sha256_hex: "".into(),
+            release_package_url: "".into(),
+            release_package_sha256_hex: self.release_package_sha256_hex.clone(),
+            release_package_urls: Some(self.release_package_urls.clone()),
+            guest_launch_measurement_sha256_hex: None,
+        }
+    }
+}
+
+/// Sub-command to submit a proposal to bless a new replica version, with full
+/// details.
+#[derive_common_proposal_fields]
+#[derive(ProposalMetadata, Parser)]
+struct ProposeToBlessReplicaVersionFlexibleCmd {
+    /// Version ID. This can be anything, it has no semantics. The reason it is
+    /// part of the payload is that it will be needed in the subsequent step
+    /// of upgrading individual subnets.
+    pub replica_version_id: String,
+
+    /// The URL against which a HTTP GET request will return a release
+    /// package that corresponds to this version. If set,
+    /// {replica, orchestrator}_{url, sha256_hex} will be ignored
+    pub release_package_url: Option<String>,
+
+    /// The hex-formatted SHA-256 hash of the archive served by
+    /// 'release_package_url'. Must be present if release_package_url is
+    /// present.
+    release_package_sha256_hex: Option<String>,
+}
+
+impl ProposalTitle for ProposeToBlessReplicaVersionFlexibleCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => format!("Bless replica version: {}", self.replica_version_id,),
+        }
+    }
+}
+
+#[async_trait]
+impl ProposalPayload<BlessReplicaVersionPayload> for ProposeToBlessReplicaVersionFlexibleCmd {
+    async fn payload(&self, _: Url) -> BlessReplicaVersionPayload {
+        let release_package_url = self
+            .release_package_url
+            .clone()
+            .expect("Release package url is required");
+
+        BlessReplicaVersionPayload {
+            replica_version_id: self.replica_version_id.clone(),
+            binary_url: "".into(),
+            sha256_hex: "".into(),
+            node_manager_binary_url: "".into(),
+            node_manager_sha256_hex: "".into(),
+            release_package_url: "".into(),
+            release_package_sha256_hex: self
+                .release_package_sha256_hex
+                .clone()
+                .expect("Release package sha256 is required"),
+            release_package_urls: Some(vec![release_package_url]),
+            guest_launch_measurement_sha256_hex: None,
+        }
+    }
+}
+
 /// Sub-command to submit a proposal to update elected replica versions.
 #[derive_common_proposal_fields]
 #[derive(ProposalMetadata, Parser)]
@@ -906,6 +1025,46 @@ impl ProposalPayload<UpdateElectedReplicaVersionsPayload>
         };
         payload.validate().expect("Failed to validate payload");
         payload
+    }
+}
+
+/// Sub-command to submit a proposal to retire replica versions by their ids.
+#[derive_common_proposal_fields]
+#[derive(ProposalMetadata, Parser)]
+struct ProposeToRetireReplicaVersionCmd {
+    /// The replica version ids to retire
+    pub replica_version_ids: Vec<String>,
+}
+
+impl ProposalTitle for ProposeToRetireReplicaVersionCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => {
+                if self.replica_version_ids.len() == 1 {
+                    format!(
+                        "Retire replica version {}",
+                        self.replica_version_ids.first().unwrap()
+                    )
+                } else {
+                    String::from("Retire multiple replica versions")
+                }
+            }
+        }
+    }
+}
+
+#[async_trait]
+impl ProposalPayload<RetireReplicaVersionPayload> for ProposeToRetireReplicaVersionCmd {
+    async fn payload(&self, _: Url) -> RetireReplicaVersionPayload {
+        assert!(
+            !self.replica_version_ids.is_empty(),
+            "RetireReplicaVersionPayload cannot be empty."
+        );
+
+        RetireReplicaVersionPayload {
+            replica_version_ids: self.replica_version_ids.clone(),
+        }
     }
 }
 
@@ -3414,6 +3573,52 @@ impl ProposalPayload<CompleteCanisterMigrationPayload> for ProposeToCompleteCani
     }
 }
 
+/// Sub-command to submit a proposal to set the bitcoin configuration.
+#[derive_common_proposal_fields]
+#[derive(ProposalMetadata, Parser)]
+struct ProposeToSetBitcoinConfig {
+    pub network: BitcoinNetwork,
+
+    #[clap(long, help = "Updates the stability threshold.")]
+    pub stability_threshold: Option<u128>,
+
+    #[clap(long, help = "Enables/disables access to the Bitcoin canister's API.")]
+    pub api_access: Option<bool>,
+}
+
+impl ProposalTitle for ProposeToSetBitcoinConfig {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => format!(
+                "Bitcoin: set config of the {} canister",
+                match self.network {
+                    BitcoinNetwork::Mainnet => "mainnet",
+                    BitcoinNetwork::Testnet => "testnet",
+                }
+            ),
+        }
+    }
+}
+
+#[async_trait]
+impl ProposalPayload<BitcoinSetConfigProposal> for ProposeToSetBitcoinConfig {
+    async fn payload(&self, _: Url) -> BitcoinSetConfigProposal {
+        let request = SetConfigRequest {
+            stability_threshold: self.stability_threshold,
+            api_access: self
+                .api_access
+                .map(|flag| if flag { Flag::Enabled } else { Flag::Disabled }),
+            ..Default::default()
+        };
+
+        BitcoinSetConfigProposal {
+            network: self.network,
+            payload: Encode!(&request).unwrap(),
+        }
+    }
+}
+
 async fn get_firewall_rules_from_registry(
     registry_canister: &RegistryCanister,
     scope: &FirewallRulesScope,
@@ -3468,7 +3673,10 @@ async fn main() {
             SubCommand::ProposeToChangeNnsCanister(_) => (),
             SubCommand::ProposeToUninstallCode(_) => (),
             SubCommand::ProposeToAddNnsCanister(_) => (),
+            SubCommand::ProposeToBlessReplicaVersion(_) => (),
+            SubCommand::ProposeToBlessReplicaVersionFlexible(_) => (),
             SubCommand::ProposeToUpdateElectedReplicaVersions(_) => (),
+            SubCommand::ProposeToRetireReplicaVersion(_) => (),
             SubCommand::ProposeToUpdateSubnet(_) => (),
             SubCommand::ProposeToClearProvisionalWhitelist(_) => (),
             SubCommand::ProposeToUpdateRecoveryCup(_) => (),
@@ -3773,6 +3981,51 @@ async fn main() {
             for (key_id, subnets) in signing_subnets.iter() {
                 println!("KeyId {:?}: {:?}", key_id, subnets);
             }
+        }
+        SubCommand::ProposeToBlessReplicaVersion(cmd) => {
+            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            propose_external_proposal_from_command(
+                cmd,
+                NnsFunction::BlessReplicaVersion,
+                make_canister_client(
+                    opts.nns_url,
+                    opts.verify_nns_responses,
+                    opts.nns_public_key_pem_file,
+                    sender,
+                ),
+                proposer,
+            )
+            .await;
+        }
+        SubCommand::ProposeToBlessReplicaVersionFlexible(cmd) => {
+            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            propose_external_proposal_from_command(
+                cmd,
+                NnsFunction::BlessReplicaVersion,
+                make_canister_client(
+                    opts.nns_url,
+                    opts.verify_nns_responses,
+                    opts.nns_public_key_pem_file,
+                    sender,
+                ),
+                proposer,
+            )
+            .await;
+        }
+        SubCommand::ProposeToRetireReplicaVersion(cmd) => {
+            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            propose_external_proposal_from_command(
+                cmd,
+                NnsFunction::RetireReplicaVersion,
+                make_canister_client(
+                    opts.nns_url,
+                    opts.verify_nns_responses,
+                    opts.nns_public_key_pem_file,
+                    sender,
+                ),
+                proposer,
+            )
+            .await;
         }
         SubCommand::ProposeToUpdateElectedReplicaVersions(cmd) => {
             let (proposer, sender) = cmd.proposer_and_sender(sender);
@@ -4541,6 +4794,25 @@ async fn main() {
                 proposer,
             )
             .await
+        }
+        SubCommand::ProposeToSetBitcoinConfig(cmd) => {
+            let (proposer, sender) =
+                get_proposer_and_sender(cmd.proposer, sender, cmd.test_neuron_proposer);
+            propose_external_proposal_from_command::<
+                BitcoinSetConfigProposal,
+                ProposeToSetBitcoinConfig,
+            >(
+                cmd,
+                NnsFunction::BitcoinSetConfig,
+                make_canister_client(
+                    opts.nns_url,
+                    opts.verify_nns_responses,
+                    opts.nns_public_key_pem_file,
+                    sender,
+                ),
+                proposer,
+            )
+            .await;
         }
     }
 }

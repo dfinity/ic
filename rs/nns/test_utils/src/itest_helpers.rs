@@ -23,19 +23,23 @@ use ic_config::{subnet_config::SubnetConfig, Config};
 use ic_ic00_types::CanisterInstallMode;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nervous_system_root::{
-    CanisterIdRecord, CanisterStatusResult, CanisterStatusType::Running, ChangeCanisterProposal,
+    canister_status::{CanisterStatusResult, CanisterStatusType::Running},
+    change_canister::ChangeCanisterProposal,
+    CanisterIdRecord,
 };
-use ic_nns_common::types::ProposalId;
-use ic_nns_common::{init::LifelineCanisterInitPayload, types::NeuronId};
+use ic_nns_common::{
+    init::LifelineCanisterInitPayload,
+    types::{NeuronId, ProposalId},
+};
 use ic_nns_constants::*;
 use ic_nns_governance::{
-    governance::TimeWarp, pb::v1::Governance, pb::v1::NnsFunction, pb::v1::ProposalStatus,
+    governance::TimeWarp,
+    pb::v1::{Governance, NnsFunction, ProposalStatus},
 };
 use ic_nns_gtc::pb::v1::Gtc;
 use ic_nns_handler_root::init::RootCanisterInitPayload;
 use ic_registry_transport::pb::v1::RegistryMutation;
-use ic_sns_wasm::init::SnsWasmCanisterInitPayload;
-use ic_sns_wasm::pb::v1::AddWasmRequest;
+use ic_sns_wasm::{init::SnsWasmCanisterInitPayload, pb::v1::AddWasmRequest};
 use ic_test_utilities::universal_canister::{
     call_args, wasm as universal_canister_argument_builder, UNIVERSAL_CANISTER_WASM,
 };
@@ -344,13 +348,36 @@ async fn install_rust_canister_with_memory_allocation(
 
     println!("Done compiling the wasm for {}", binary_name.as_ref());
 
-    wasm.install_with_retries_onto_canister(
-        canister,
-        canister_init_payload,
-        Some(memory_allocation),
-    )
-    .await
-    .unwrap_or_else(|e| panic!("Could not install {} due to {}", binary_name.as_ref(), e));
+    if canister.is_runtime_local() {
+        wasm.install_onto_canister(
+            canister,
+            CanisterInstallMode::Reinstall,
+            canister_init_payload,
+            Some(memory_allocation),
+        )
+        .await
+        .unwrap_or_else(|e| {
+            panic!(
+                "Could not install {} via local runtime due to {}",
+                binary_name.as_ref(),
+                e
+            )
+        });
+    } else {
+        wasm.install_with_retries_onto_canister(
+            canister,
+            canister_init_payload,
+            Some(memory_allocation),
+        )
+        .await
+        .unwrap_or_else(|e| {
+            panic!(
+                "Could not install {} via remote runtime due to {}",
+                binary_name.as_ref(),
+                e
+            )
+        });
+    };
     println!(
         "Installed {} with {}",
         canister.canister_id(),
@@ -763,7 +790,7 @@ async fn change_nns_canister_by_proposal(
     assert_ne!(old_module_hash.as_slice(), new_module_hash, "change_nns_canister_by_proposal: both module hashes prev, cur are the same {:?}, but they should be different for upgrade", old_module_hash);
 
     let proposal = ChangeCanisterProposal::new(stop_before_installing, how, canister_id)
-        .with_memory_allocation(ic_nns_constants::memory_allocation_of(canister_id))
+        .with_memory_allocation(memory_allocation_of(canister_id))
         .with_wasm(wasm);
     let proposal = if let Some(arg) = arg {
         proposal.with_arg(arg)

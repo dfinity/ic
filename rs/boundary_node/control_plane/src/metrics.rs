@@ -64,7 +64,7 @@ impl<T: CreateRegistryClient> CreateRegistryClient for WithMetrics<T> {
         counter.add(&cx, 1, labels);
         recorder.record(&cx, duration, labels);
 
-        info!(action = action.as_str(), status, duration, error = ?out.as_ref().err());
+        info!(action, status, duration, error = ?out.as_ref().err());
 
         out
     }
@@ -101,7 +101,7 @@ impl<T: Snapshot> Snapshot for WithMetrics<T> {
             _ => (out, String::from("N/A")),
         };
 
-        info!(action = action.as_str(), status, duration, registry_version, error = ?out.as_ref().err());
+        info!(action, status, duration, registry_version, error = ?out.as_ref().err());
 
         out
     }
@@ -130,7 +130,7 @@ impl<T: Reload> Reload for WithMetrics<T> {
         counter.add(&cx, 1, labels);
         recorder.record(&cx, duration, labels);
 
-        info!(action = action.as_str(), status, duration, error = ?out.as_ref().err());
+        info!(action, status, duration, error = ?out.as_ref().err());
 
         out
     }
@@ -164,7 +164,7 @@ impl<T: Persist> Persist for WithMetrics<T> {
         counter.add(&cx, 1, labels);
         recorder.record(&cx, duration, labels);
 
-        info!(action = action.as_str(), status, duration, error = ?out.as_ref().err());
+        info!(action, status, duration, error = ?out.as_ref().err());
 
         out
     }
@@ -193,7 +193,7 @@ impl<T: Run> Run for WithMetrics<T> {
         counter.add(&cx, 1, labels);
         recorder.record(&cx, duration, labels);
 
-        info!(action = action.as_str(), status, duration, error = ?out.as_ref().err());
+        info!(action, status, duration, error = ?out.as_ref().err());
 
         out
     }
@@ -260,9 +260,9 @@ impl<T: Check> Check for CheckWithMetrics<T> {
         gauge.observe(&cx, out.is_ok().into(), labels.split_at(3).0); // Remove `status` label from gauge
 
         info!(
-            action = action.as_str(),
-            subnet_id = bgg.get("subnet_id").unwrap().to_string().as_str(),
-            node_id = bgg.get("node_id").unwrap().to_string().as_str(),
+            action,
+            subnet_id = %bgg.get("subnet_id").unwrap(),
+            node_id = %bgg.get("node_id").unwrap(),
             addr,
             status,
             duration,

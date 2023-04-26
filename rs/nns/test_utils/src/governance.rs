@@ -4,9 +4,6 @@ use crate::{
     ids::TEST_NEURON_1_ID,
     itest_helpers::{NnsCanisters, UpgradeTestingScenario},
 };
-
-use std::time::Duration;
-
 use candid::{CandidType, Encode};
 use canister_test::{Canister, Wasm};
 use dfn_candid::{candid, candid_one};
@@ -15,20 +12,26 @@ use ic_canister_client_sender::Sender;
 use ic_ic00_types::CanisterInstallMode;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nervous_system_root::{
-    CanisterIdRecord, CanisterStatusResult, CanisterStatusType::Running, ChangeCanisterProposal,
+    canister_status::{CanisterStatusResult, CanisterStatusType::Running},
+    change_canister::ChangeCanisterProposal,
+    CanisterIdRecord,
 };
 use ic_nns_common::types::{NeuronId, ProposalId};
 use ic_nns_constants::ROOT_CANISTER_ID;
-use ic_nns_governance::governance::{BitcoinNetwork, BitcoinSetConfigProposal};
-use ic_nns_governance::pb::v1::add_or_remove_node_provider::Change;
-use ic_nns_governance::pb::v1::proposal::Action;
-use ic_nns_governance::pb::v1::{
-    manage_neuron::{Command, NeuronIdOrSubaccount},
-    manage_neuron_response::Command as CommandResponse,
-    proposal, AddOrRemoveNodeProvider, ExecuteNnsFunction, GovernanceError,
-    ListNodeProvidersResponse, ManageNeuron, ManageNeuronResponse, NnsFunction, NodeProvider,
-    Proposal, ProposalInfo, ProposalStatus,
+use ic_nns_governance::{
+    governance::{BitcoinNetwork, BitcoinSetConfigProposal},
+    pb::v1::{
+        add_or_remove_node_provider::Change,
+        manage_neuron::{Command, NeuronIdOrSubaccount},
+        manage_neuron_response::Command as CommandResponse,
+        proposal,
+        proposal::Action,
+        AddOrRemoveNodeProvider, ExecuteNnsFunction, GovernanceError, ListNodeProvidersResponse,
+        ManageNeuron, ManageNeuronResponse, NnsFunction, NodeProvider, Proposal, ProposalInfo,
+        ProposalStatus,
+    },
 };
+use std::time::Duration;
 
 /// Thin-wrapper around submit_proposal to handle
 /// serialization/deserialization

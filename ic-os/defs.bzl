@@ -5,7 +5,7 @@ A macro to build multiple versions of the ICOS image (i.e., dev vs prod)
 load("//toolchains/sysimage:toolchain.bzl", "disk_image", "docker_tar", "ext4_image", "sha256sum", "tar_extract", "upgrade_image")
 load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts")
 load("//ic-os/bootloader:defs.bzl", "build_grub_partition")
-load("//bazel:defs.bzl", "gzip_compress", "zstd_compress")
+load("//bazel:defs.bzl", "gzip_compress", "sha256sum2url", "zstd_compress")
 load("//bazel:output_files.bzl", "output_files")
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 
@@ -111,6 +111,9 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
         target_compatible_with = [
             "@platforms//os:linux",
         ],
+        # As it consumes version.txt it currently changes all the time - caching it makes no sense.
+        # TODO(IDX-2606): Remove when at least dev images will use stable version.
+        tags = ["no-remote-cache"],
     )
 
     if upgrades:
@@ -134,6 +137,9 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
             target_compatible_with = [
                 "@platforms//os:linux",
             ],
+            # As it consumes version.txt it currently changes all the time - caching it makes no sense.
+            # TODO(IDX-2606): Remove when at least dev images will use stable version.
+            tags = ["no-remote-cache"],
         )
 
     # -------------------- Extract boot partition --------------------
@@ -155,6 +161,9 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
             cmd = "$(location //toolchains/sysimage:verity_sign.py) -i $< -o $(location :partition-root.tar) -r $(location partition-root-hash)",
             executable = False,
             tools = ["//toolchains/sysimage:verity_sign.py"],
+            # As it consumes partition-root-unsigned.tar that uses version.txt it currently changes all the time - caching it makes no sense.
+            # TODO(IDX-2606): Remove when at least dev images will use stable version.
+            tags = ["no-remote-cache"],
         )
 
         native.genrule(
@@ -264,15 +273,18 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
     zstd_compress(
         name = "disk-img.tar.zst",
         srcs = [":disk-img.tar"],
-        # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
-        # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
-        tags = ["no-remote-cache"],
     )
 
     sha256sum(
         name = "disk-img.tar.zst.sha256",
         srcs = [":disk-img.tar.zst"],
-        visibility = ["//visibility:public"],
+        visibility = visibility,
+    )
+
+    sha256sum2url(
+        name = "disk-img.tar.zst.cas-url",
+        src = ":disk-img.tar.zst.sha256",
+        visibility = visibility,
     )
 
     gzip_compress(
@@ -308,14 +320,18 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
         zstd_compress(
             name = "update-img.tar.zst",
             srcs = [":update-img.tar"],
-            # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
-            # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
-            tags = ["no-remote-cache"],
         )
 
         sha256sum(
             name = "update-img.tar.zst.sha256",
             srcs = [":update-img.tar.zst"],
+            visibility = visibility,
+        )
+
+        sha256sum2url(
+            name = "update-img.tar.zst.cas-url",
+            src = ":update-img.tar.zst.sha256",
+            visibility = visibility,
         )
 
         gzip_compress(

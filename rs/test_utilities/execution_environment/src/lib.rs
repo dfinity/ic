@@ -1431,6 +1431,7 @@ pub struct ExecutionTestBuilder {
     canister_sandboxing: bool,
     composite_queries: bool,
     query_caching: bool,
+    query_cache_capacity: u64,
     allocatable_compute_capacity_in_percent: usize,
     subnet_features: String,
     bitcoin_privileged_access: Vec<CanisterId>,
@@ -1484,6 +1485,7 @@ impl Default for ExecutionTestBuilder {
             canister_sandboxing: true,
             composite_queries: false,
             query_caching: false,
+            query_cache_capacity: 100_000_000, // 100MB
             allocatable_compute_capacity_in_percent: 100,
             subnet_features: String::default(),
             bitcoin_privileged_access: Vec::default(),
@@ -1687,6 +1689,13 @@ impl ExecutionTestBuilder {
         }
     }
 
+    pub fn with_query_cache_capacity(self, capacity_bytes: u64) -> Self {
+        Self {
+            query_cache_capacity: capacity_bytes,
+            ..self
+        }
+    }
+
     pub fn with_allocatable_compute_capacity_in_percent(
         self,
         allocatable_compute_capacity_in_percent: usize,
@@ -1852,6 +1861,7 @@ impl ExecutionTestBuilder {
             canister_sandboxing_flag,
             composite_queries,
             query_caching,
+            query_cache_capacity: self.query_cache_capacity.into(),
             allocatable_compute_capacity_in_percent: self.allocatable_compute_capacity_in_percent,
             subnet_memory_capacity: NumBytes::from(self.subnet_total_memory as u64),
             subnet_message_memory_capacity: NumBytes::from(self.subnet_message_memory as u64),

@@ -1,15 +1,20 @@
 use dfn_core::api::{call, call_bytes, call_with_funds, print, CanisterId, Funds};
 use ic_ic00_types::{CanisterInstallMode::Install, InstallCodeArgs};
 use ic_nervous_system_root::{
-    start_canister, stop_canister, AddCanisterProposal, CanisterAction, CanisterIdRecord,
-    StopOrStartCanisterProposal,
+    change_canister::{
+        start_canister, stop_canister, AddCanisterProposal, CanisterAction,
+        StopOrStartCanisterProposal,
+    },
+    CanisterIdRecord,
 };
 use ic_nns_common::{
     registry::{encode_or_panic, get_value, mutate_registry},
     types::CallCanisterProposal,
 };
-use ic_protobuf::registry::nns::v1::{NnsCanisterRecord, NnsCanisterRecords};
-use ic_protobuf::types::v1 as pb;
+use ic_protobuf::{
+    registry::nns::v1::{NnsCanisterRecord, NnsCanisterRecords},
+    types::v1 as pb,
+};
 use ic_registry_keys::make_nns_canister_records_key;
 use ic_registry_transport::pb::v1::{registry_mutation::Type, Precondition, RegistryMutation};
 
