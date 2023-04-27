@@ -1,8 +1,10 @@
 use async_trait::async_trait;
 use candid::candid_method;
 use dfn_candid::{candid, candid_one, CandidOne};
-use dfn_core::api::{call_bytes_with_cleanup, Funds};
-use dfn_core::{api::now, call, over, over_async, over_init};
+use dfn_core::{
+    api::{call_bytes_with_cleanup, now, Funds},
+    call, over, over_async, over_init,
+};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
@@ -11,9 +13,9 @@ use ic_nervous_system_common::{
     serve_logs, serve_logs_v2, serve_metrics,
     stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter},
 };
-use ic_nervous_system_root::canister_status::CanisterStatusResult;
-use ic_nervous_system_root::change_canister::ChangeCanisterProposal;
-use ic_sns_root::types::Environment;
+use ic_nervous_system_root::{
+    canister_status::CanisterStatusResult, change_canister::ChangeCanisterProposal,
+};
 use ic_sns_root::{
     logs::{ERROR, INFO},
     pb::v1::{
@@ -22,6 +24,7 @@ use ic_sns_root::{
         RegisterDappCanistersResponse, SetDappControllersRequest, SetDappControllersResponse,
         SnsRootCanister,
     },
+    types::Environment,
     CanisterIdRecord, CanisterStatusResultV2, EmptyBlob, GetSnsCanistersSummaryRequest,
     GetSnsCanistersSummaryResponse, LedgerCanisterClient, ManagementCanisterClient,
     UpdateSettingsArgs,
@@ -188,6 +191,7 @@ fn canister_status() {
 async fn canister_status_(id: ic_nervous_system_root::CanisterIdRecord) -> CanisterStatusResult {
     ic_nervous_system_root::canister_status::canister_status(id)
         .await
+        .map(CanisterStatusResult::from)
         .unwrap()
 }
 

@@ -16,7 +16,9 @@ DEPENDENCIES = [
     "@crate_index//:serde_bytes",
 ]
 
-MACRO_DEPENDENCIES = []
+MACRO_DEPENDENCIES = [
+    "@crate_index//:async-trait",
+]
 
 DEV_DEPENDENCIES = []
 

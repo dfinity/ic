@@ -12,8 +12,18 @@ type CanisterStatusResult = record {
   settings: definite_canister_settings;
 };
 
+type ChangeCanisterControllersError = record { code : opt int32; description : text };
+type ChangeCanisterControllersRequest = record { new_controllers : vec principal; target_canister_id: principal; };
+type ChangeCanisterControllersResponse = record {
+  change_canister_controllers_result : ChangeCanisterControllersResult;
+};
+type ChangeCanisterControllersResult = variant { Ok; Err : ChangeCanisterControllersError };
+
 service : {
   canister_status : (CanisterIdRecord) -> (CanisterStatusResult);
+  change_canister_controllers : (ChangeCanisterControllersRequest) -> (
+    ChangeCanisterControllersResponse,
+  );
 
   // "change_nns_canister" and "add_nns_canister" methods are explicitly not listed here, because they are
   // not useful in the Web UI: only the proposals canister is allowed to call them.

@@ -13,6 +13,10 @@ use ic_nervous_system_root::{
     change_canister::{
         change_canister, AddCanisterProposal, ChangeCanisterProposal, StopOrStartCanisterProposal,
     },
+    change_canister_controllers::{
+        ChangeCanisterControllersRequest, ChangeCanisterControllersResponse,
+    },
+    management_canister_client::ProdManagementCanisterClient,
     CanisterIdRecord, LOG_PREFIX,
 };
 use ic_nns_common::{access_control::check_caller_is_governance, types::CallCanisterProposal};
@@ -65,7 +69,9 @@ async fn canister_status_(canister_id_record: CanisterIdRecord) -> CanisterStatu
     ic_nns_handler_root::increment_open_canister_status_calls(canister_id_record.get_canister_id());
 
     let canister_status_response =
-        ic_nervous_system_root::canister_status::canister_status(canister_id_record).await;
+        ic_nervous_system_root::canister_status::canister_status(canister_id_record)
+            .await
+            .map(CanisterStatusResult::from);
 
     ic_nns_handler_root::decrement_open_canister_status_calls(canister_id_record.get_canister_id());
 
@@ -78,7 +84,8 @@ async fn canister_status_(canister_id_record: CanisterIdRecord) -> CanisterStatu
         ic_nervous_system_root::canister_status::canister_status(CanisterIdRecord::from(
             ROOT_CANISTER_ID,
         ))
-        .await;
+        .await
+        .map(CanisterStatusResult::from);
 
     canister_status_response.unwrap()
 }
@@ -182,6 +189,28 @@ fn call_canister() {
         let future = canister_management::call_canister(proposal);
         dfn_core::api::futures::spawn(future);
     });
+}
+
+/// Change the controllers of a canister controlled by NNS Root. Only callable
+/// by SNS-W.
+#[export_name = "canister_update change_canister_controllers"]
+fn change_canister_controllers() {
+    println!("{}change_canister_controllers", LOG_PREFIX);
+    over_async(candid_one, change_canister_controllers_)
+}
+
+/// Change the controllers of a canister controlled by NNS Root. Only callable
+/// by SNS-W.
+#[candid_method(update, rename = "change_canister_controllers")]
+async fn change_canister_controllers_(
+    change_canister_controllers_request: ChangeCanisterControllersRequest,
+) -> ChangeCanisterControllersResponse {
+    canister_management::change_canister_controllers(
+        change_canister_controllers_request,
+        caller(),
+        &mut ProdManagementCanisterClient::new(),
+    )
+    .await
 }
 
 /// Resources to serve for a given http_request

@@ -45,7 +45,7 @@ impl std::fmt::Display for CanisterStatusType {
 /// Only the fields that we need are copied.
 /// Candid deserialization is supposed to be tolerant to having data for unknown
 /// fields (which is simply discarded).
-#[derive(CandidType, Debug, Deserialize, Eq, PartialEq)]
+#[derive(CandidType, Debug, Deserialize, Eq, PartialEq, Clone)]
 pub struct DefiniteCanisterSettings {
     pub controllers: Vec<PrincipalId>,
 }
@@ -70,7 +70,7 @@ pub struct CanisterStatusResult {
 /// Only the fields we need and are supported from the replica are copied.
 /// Notice that `controller` is not present. Candid deserialization is tolerant
 /// to having data for unknown fields (which are simply discarded).
-#[derive(CandidType, Debug, Deserialize, Eq, PartialEq)]
+#[derive(CandidType, Debug, Deserialize, Eq, PartialEq, Clone)]
 pub struct CanisterStatusResultFromManagementCanister {
     // no controller. This is fine regardless of whether it sends us controller.
     pub status: CanisterStatusType,
@@ -124,7 +124,7 @@ impl From<CanisterStatusResultFromManagementCanister> for CanisterStatusResult {
 
 pub async fn canister_status(
     canister_id_record: CanisterIdRecord,
-) -> Result<CanisterStatusResult, (Option<i32>, String)> {
+) -> Result<CanisterStatusResultFromManagementCanister, (Option<i32>, String)> {
     call(
         IC_00,
         "canister_status",
@@ -132,7 +132,6 @@ pub async fn canister_status(
         (canister_id_record,),
     )
     .await
-    .map(CanisterStatusResult::from)
 }
 
 #[cfg(test)]

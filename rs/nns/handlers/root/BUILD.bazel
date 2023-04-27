@@ -48,7 +48,10 @@ BUILD_DEPENDENCIES = [
 
 ALIASES = {}
 
-DEV_DEPENDENCIES = select({
+DEV_DEPENDENCIES = [
+    "//rs/state_machine_tests",
+    "@crate_index//:tokio",
+] + select({
     "@rules_rust//rust/platform:wasm32-unknown-unknown": [],
     "//conditions:default": [
         "//rs/rust_canisters/canister_test",
@@ -135,14 +138,26 @@ rust_test_suite(
         ":upgrade-test-canister",
         "//rs/canister_sandbox",
         "//rs/canister_sandbox/sandbox_launcher",
+        "//rs/nns/cmc:cycles-minting-canister",
+        "//rs/nns/governance:governance-canister-test",
+        "//rs/nns/gtc:genesis-token-canister",
+        "//rs/nns/handlers/lifeline:lifeline_canister",
+        "//rs/nns/sns-wasm:sns-wasm-canister",
         "//rs/registry/canister:registry-canister",
+        "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/nns/handlers/root",
+        "CYCLES_MINTING_CANISTER_WASM_PATH": "$(rootpath //rs/nns/cmc:cycles-minting-canister)",
+        "GENESIS_TOKEN_CANISTER_WASM_PATH": "$(rootpath //rs/nns/gtc:genesis-token-canister)",
+        "GOVERNANCE_CANISTER_TEST_WASM_PATH": "$(rootpath //rs/nns/governance:governance-canister-test)",
         "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
+        "LEDGER_CANISTER_NOTIFY_METHOD_WASM_PATH": "$(rootpath //rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method)",
+        "LIFELINE_WASM_PATH": "$(rootpath //rs/nns/handlers/lifeline:lifeline_canister)",
         "REGISTRY_CANISTER_WASM_PATH": "$(rootpath //rs/registry/canister:registry-canister)",
         "ROOT_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root:root-canister)",
         "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",
+        "SNS_WASM_CANISTER_WASM_PATH": "$(rootpath //rs/nns/sns-wasm:sns-wasm-canister)",
         "UPGRADE_TEST_CANISTER_WASM_PATH": "$(rootpath //rs/nns/handlers/root:upgrade-test-canister)",
     },
     proc_macro_deps = MACRO_DEPENDENCIES + MACRO_DEV_DEPENDENCIES,
