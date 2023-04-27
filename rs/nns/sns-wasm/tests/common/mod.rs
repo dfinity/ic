@@ -1,8 +1,10 @@
 use candid::Encode;
 use canister_test::Project;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_nns_test_utils::common::{NnsInitPayloads, NnsInitPayloadsBuilder};
-use ic_nns_test_utils::state_test_helpers::{self, create_canister, setup_nns_canisters};
+use ic_nns_test_utils::{
+    common::{NnsInitPayloads, NnsInitPayloadsBuilder},
+    state_test_helpers::{self, create_canister, setup_nns_canisters},
+};
 use ic_state_machine_tests::StateMachine;
 
 pub const ONE_TRILLION: u128 = 1_000_000_000_000;

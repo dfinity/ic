@@ -1,19 +1,24 @@
-use crate::pb::v1::{
-    add_wasm_response, update_allowed_principals_response, AddWasmResponse,
-    GetNextSnsVersionResponse, InsertUpgradePathEntriesResponse, ListUpgradeStep, PrettySnsVersion,
-    SnsCanisterIds, SnsCanisterType, SnsSpecificSnsUpgrade, SnsUpgrade, SnsVersion, SnsWasm,
-    SnsWasmError, SnsWasmStableIndex, StableCanisterState, UpdateAllowedPrincipalsResponse,
-    UpdateSnsSubnetListResponse, UpgradePath as StableUpgradePath,
+use crate::{
+    pb::v1::{
+        add_wasm_response, update_allowed_principals_response, AddWasmResponse,
+        GetNextSnsVersionResponse, InsertUpgradePathEntriesResponse, ListUpgradeStep,
+        PrettySnsVersion, SnsCanisterIds, SnsCanisterType, SnsSpecificSnsUpgrade, SnsUpgrade,
+        SnsVersion, SnsWasm, SnsWasmError, SnsWasmStableIndex, StableCanisterState,
+        UpdateAllowedPrincipalsResponse, UpdateSnsSubnetListResponse,
+        UpgradePath as StableUpgradePath,
+    },
+    sns_wasm::{vec_to_hash, SnsWasmCanister, UpgradePath},
+    stable_memory::SnsWasmStableMemory,
 };
-use crate::sns_wasm::{vec_to_hash, SnsWasmCanister, UpgradePath};
-use crate::stable_memory::SnsWasmStableMemory;
 use ic_base_types::CanisterId;
 use ic_cdk::api::stable::StableMemory;
 use ic_crypto_sha::Sha256;
-use std::collections::{BTreeMap, HashMap};
-use std::convert::TryFrom;
-use std::fmt::{Display, Write};
-use std::str::FromStr;
+use std::{
+    collections::{BTreeMap, HashMap},
+    convert::TryFrom,
+    fmt::{Display, Write},
+    str::FromStr,
+};
 
 #[allow(clippy::all)]
 #[path = "../gen/ic_sns_wasm.pb.v1.rs"]

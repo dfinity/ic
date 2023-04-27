@@ -1,33 +1,40 @@
-use crate::canister_api::CanisterApi;
-use crate::pb::hash_to_hex_string;
-use crate::pb::v1::update_allowed_principals_response::AllowedPrincipals;
-use crate::pb::v1::{
-    add_wasm_response, update_allowed_principals_response, AddWasmRequest, AddWasmResponse,
-    DeployNewSnsRequest, DeployNewSnsResponse, DeployedSns, GetAllowedPrincipalsResponse,
-    GetNextSnsVersionRequest, GetNextSnsVersionResponse, GetSnsSubnetIdsResponse, GetWasmRequest,
-    GetWasmResponse, InsertUpgradePathEntriesRequest, InsertUpgradePathEntriesResponse,
-    ListDeployedSnsesRequest, ListDeployedSnsesResponse, ListUpgradeStep, ListUpgradeStepsRequest,
-    ListUpgradeStepsResponse, SnsCanisterIds, SnsCanisterType, SnsUpgrade, SnsVersion, SnsWasm,
-    SnsWasmError, SnsWasmStableIndex, StableCanisterState, UpdateAllowedPrincipalsRequest,
-    UpdateAllowedPrincipalsResponse, UpdateSnsSubnetListRequest, UpdateSnsSubnetListResponse,
+use crate::{
+    canister_api::CanisterApi,
+    pb::{
+        hash_to_hex_string,
+        v1::{
+            add_wasm_response, update_allowed_principals_response,
+            update_allowed_principals_response::AllowedPrincipals, AddWasmRequest, AddWasmResponse,
+            DeployNewSnsRequest, DeployNewSnsResponse, DeployedSns, GetAllowedPrincipalsResponse,
+            GetNextSnsVersionRequest, GetNextSnsVersionResponse, GetSnsSubnetIdsResponse,
+            GetWasmRequest, GetWasmResponse, InsertUpgradePathEntriesRequest,
+            InsertUpgradePathEntriesResponse, ListDeployedSnsesRequest, ListDeployedSnsesResponse,
+            ListUpgradeStep, ListUpgradeStepsRequest, ListUpgradeStepsResponse, SnsCanisterIds,
+            SnsCanisterType, SnsUpgrade, SnsVersion, SnsWasm, SnsWasmError, SnsWasmStableIndex,
+            StableCanisterState, UpdateAllowedPrincipalsRequest, UpdateAllowedPrincipalsResponse,
+            UpdateSnsSubnetListRequest, UpdateSnsSubnetListResponse,
+        },
+    },
+    stable_memory::SnsWasmStableMemory,
 };
-use crate::stable_memory::SnsWasmStableMemory;
 use candid::Encode;
-#[cfg(target_arch = "wasm32")]
-use dfn_core::println;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_cdk::api::stable::StableMemory;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_sns_governance::pb::v1::governance::Version;
-use ic_sns_init::SnsCanisterInitPayloads;
+use ic_sns_init::{pb::v1::SnsInitPayload, SnsCanisterInitPayloads};
 use ic_types::{Cycles, SubnetId};
 use maplit::hashmap;
-use std::cell::RefCell;
-use std::collections::hash_map::Entry;
-use std::collections::{BTreeMap, HashMap, HashSet};
-use std::convert::TryInto;
-use std::iter::zip;
-use std::thread::LocalKey;
+use std::{
+    cell::RefCell,
+    collections::{hash_map::Entry, BTreeMap, HashMap, HashSet},
+    convert::TryInto,
+    iter::zip,
+    thread::LocalKey,
+};
+
+#[cfg(target_arch = "wasm32")]
+use dfn_core::println;
 
 const LOG_PREFIX: &str = "[SNS-WASM] ";
 
@@ -51,7 +58,7 @@ where
 {
     /// A map from WASM hash to the index of this WASM in stable memory
     pub wasm_indexes: BTreeMap<[u8; 32], SnsWasmStableIndex>,
-    /// Allowed subnets for SNS's to be installed
+    /// Allowed subnets for SNSes to be installed
     pub sns_subnet_ids: Vec<SubnetId>,
     /// Stored deployed_sns instances
     pub deployed_sns_list: Vec<DeployedSns>,
@@ -93,7 +100,7 @@ fn reversible_deploy_error(
     subnet: SubnetId,
 ) -> impl Fn(String) -> DeployError {
     move |message| {
-        DeployError::Reversible(RerversibleDeployError {
+        DeployError::Reversible(ReversibleDeployError {
             message,
             canisters_to_delete: Some(canisters_to_delete),
             subnet: Some(subnet),
@@ -103,7 +110,7 @@ fn reversible_deploy_error(
 
 /// Helper function to create a DeployError::Irreversible(IrreversibleDeployError {})
 /// Returns a function that takes the error message and returns the DeployError
-fn irreversible_depoy_error(
+fn irreversible_deploy_error(
     canisters_created: SnsCanisterIds,
     subnet: SubnetId,
 ) -> impl Fn(String) -> DeployError {
@@ -134,7 +141,7 @@ fn join_errors_or_ok(results: Vec<Result<(), String>>) -> Result<(), String> {
 
 enum DeployError {
     Validation(ValidationDeployError),
-    Reversible(RerversibleDeployError),
+    Reversible(ReversibleDeployError),
     Irreversible(IrreversibleDeployError),
 }
 
@@ -146,7 +153,7 @@ struct ValidationDeployError {
 
 /// Struct representing an error that can be cleaned up
 #[derive(Clone)]
-struct RerversibleDeployError {
+struct ReversibleDeployError {
     /// The error message to be returned externally
     message: String,
     /// Canisters created that need to be cleaned up
@@ -482,11 +489,7 @@ where
         deploy_new_sns_payload: DeployNewSnsRequest,
         caller: PrincipalId,
     ) -> DeployNewSnsResponse {
-        if !thread_safe_sns.with(|sns_wasm| {
-            sns_wasm
-                .borrow_mut()
-                .check_caller_and_consume_from_whitelist(&caller)
-        }) {
+        if !thread_safe_sns.with(|sns_wasm| sns_wasm.borrow_mut().check_caller(&caller)) {
             return validation_deploy_error(
                 "Caller is not in allowed principals list. Cannot deploy an sns.".to_string(),
             )
@@ -496,7 +499,7 @@ where
             thread_safe_sns,
             canister_api,
             deploy_new_sns_payload,
-            caller != GOVERNANCE_CANISTER_ID.get(), // Charge cycles except for Governance
+            &caller,
         )
         .await
         {
@@ -520,15 +523,33 @@ where
 
     /// If the caller is NNS Governance, always allow, as this would indicate a proposal was passed
     /// to create a new SNS.  
-    /// Otherwise, if the given caller exists in the `allowed_principals` whitelist, remove the controller
-    /// from the whitelist and return `true`. Otherwise return `false`.
+    /// If the given caller exists in the `allowed_principals` whitelist return `true`,
+    /// otherwise return `false`.
     ///
     /// Deploying an SNS is a resource intensive operation, so removing the caller ensures that the
     /// caller cannot repeated call `deploy_new_sns` and exhaust NNS resources.
-    pub fn check_caller_and_consume_from_whitelist(&mut self, caller: &PrincipalId) -> bool {
+    pub fn check_caller(&mut self, caller: &PrincipalId) -> bool {
         if &GOVERNANCE_CANISTER_ID.get() == caller {
             return true;
         }
+
+        self.allowed_principals.contains(caller)
+    }
+
+    /// If the caller is NNS Governance, always allow, as this would indicate a proposal was passed
+    /// to create a new SNS.
+    /// Otherwise, if the given caller exists in the `allowed_principals` whitelist, remove it.
+    ///
+    /// Deploying an SNS is a resource intensive operation, so removing the caller ensures that the
+    /// caller cannot repeated call `deploy_new_sns` and exhaust NNS resources.
+    pub fn consume_from_whitelist(&mut self, caller: &PrincipalId) {
+        if &GOVERNANCE_CANISTER_ID.get() == caller {
+            return;
+        }
+
+        // Debug assert for tests to ensure that `consume_from_whitelist` is
+        // only called on principals in the whitelist.
+        debug_assert!(self.allowed_principals.contains(caller));
 
         if let Some(index) = self
             .allowed_principals
@@ -536,9 +557,6 @@ where
             .position(|principal| principal == caller)
         {
             self.allowed_principals.remove(index);
-            true
-        } else {
-            false
         }
     }
 
@@ -546,14 +564,10 @@ where
         thread_safe_sns: &'static LocalKey<RefCell<SnsWasmCanister<M>>>,
         canister_api: &impl CanisterApi,
         deploy_new_sns_request: DeployNewSnsRequest,
-        charge_cycles: bool,
+        caller: &PrincipalId,
     ) -> Result<(SubnetId, SnsCanisterIds), DeployError> {
         let sns_init_payload = deploy_new_sns_request
-            .sns_init_payload
-            // Validate presence
-            .ok_or_else(|| "sns_init_payload is a required field".to_string())
-            // Validate contents
-            .and_then(|init_payload| init_payload.validate().map_err(|e| e.to_string()))
+            .get_and_validate_sns_init_payload()
             .map_err(validation_deploy_error)?;
 
         let subnet_id = thread_safe_sns
@@ -565,6 +579,7 @@ where
             .with(|sns_wasms| sns_wasms.borrow().get_latest_version_wasms())
             .map_err(validation_deploy_error)?;
 
+        let charge_cycles = caller != &GOVERNANCE_CANISTER_ID.get(); // Charge cycles except for Governance
         if charge_cycles {
             // If the fee is not present, we fail.
             canister_api
@@ -575,6 +590,9 @@ where
                 .this_canister_has_enough_cycles(SNS_CREATION_FEE)
                 .map_err(validation_deploy_error)?;
         }
+
+        // Now that all preconditions have been met, remove the caller from the whitelist.
+        thread_safe_sns.with(|sns_wasm| sns_wasm.borrow_mut().consume_from_whitelist(caller));
 
         // After this step, we need to delete the canisters if things fail
         let canisters = Self::create_sns_canisters(
@@ -643,7 +661,7 @@ where
             // Remove self as the controller
             Self::remove_self_as_controller(canister_api, &canisters).await,
         ])
-        .map_err(irreversible_depoy_error(canisters, subnet_id))?;
+        .map_err(irreversible_deploy_error(canisters, subnet_id))?;
 
         Ok((subnet_id, canisters))
     }
@@ -876,7 +894,7 @@ where
             canister_api
                 .accept_message_cycles(Some(initial_cycles_per_canister.saturating_mul(5)))
                 .map_err(|e| {
-                    DeployError::Reversible(RerversibleDeployError {
+                    DeployError::Reversible(ReversibleDeployError {
                         message: format!(
                             "Could not accept cycles from request needed to create canisters: {}",
                             e
@@ -928,7 +946,7 @@ where
                 swap: next(&mut canisters_created),
                 index: next(&mut canisters_created),
             };
-            return Err(DeployError::Reversible(RerversibleDeployError {
+            return Err(DeployError::Reversible(ReversibleDeployError {
                 message: format!(
                     "Could not create needed canisters.  Only created {} but 5 needed.",
                     canisters_created_count
@@ -950,7 +968,7 @@ where
     // Attempt to clean up canisters that were created.
     async fn try_cleanup_reversible_deploy_error(
         canister_api: &impl CanisterApi,
-        deploy_error: RerversibleDeployError,
+        deploy_error: ReversibleDeployError,
     ) -> DeployNewSnsResponse {
         let success_response = DeployNewSnsResponse {
             subnet_id: None,
@@ -1299,7 +1317,7 @@ impl UpgradePath {
         {
             Entry::Occupied(occupied) => {
                 println!(
-                    "Speical Entry for {}  from {:?} to {:?} is being overwritten with new value {:?}",
+                    "Special Entry for {}  from {:?} to {:?} is being overwritten with new value {:?}",
                     sns_governance_canister_id,
                     occupied.key(),
                     occupied.get(),
@@ -1328,6 +1346,17 @@ impl UpgradePath {
             }
         };
         // self.upgrade_path.insert(from, to);
+    }
+}
+
+impl DeployNewSnsRequest {
+    pub fn get_and_validate_sns_init_payload(&self) -> Result<SnsInitPayload, String> {
+        self.sns_init_payload
+            .as_ref()
+            // Validate presence
+            .ok_or_else(|| "sns_init_payload is a required field".to_string())
+            // Validate contents
+            .and_then(|init_payload| init_payload.validate().map_err(|e| e.to_string()))
     }
 }
 
@@ -1366,8 +1395,7 @@ pub fn assert_unique_canister_ids(sns_1: &SnsCanisterIds, sns_2: &SnsCanisterIds
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::canister_stable_memory::TestCanisterStableMemory;
-    use crate::pb::v1::SnsUpgrade;
+    use crate::{canister_stable_memory::TestCanisterStableMemory, pb::v1::SnsUpgrade};
     use async_trait::async_trait;
     use candid::{Decode, Encode};
     use ic_base_types::PrincipalId;
@@ -1378,8 +1406,10 @@ mod test {
     use ic_test_utilities::types::ids::{canister_test_id, subnet_test_id};
     use maplit::hashset;
     use pretty_assertions::assert_eq;
-    use std::sync::{Arc, Mutex};
-    use std::vec;
+    use std::{
+        sync::{Arc, Mutex},
+        vec,
+    };
 
     const CANISTER_CREATION_CYCLES: u64 = INITIAL_CANISTER_CREATION_CYCLES * 5;
 
@@ -1506,6 +1536,16 @@ mod test {
             Ok(amount)
         }
 
+        fn accept_message_cycles(&self, cycles: Option<u64>) -> Result<u64, String> {
+            let cycles = cycles.unwrap_or_else(|| *self.cycles_found_in_request.lock().unwrap());
+            self.message_has_enough_cycles(cycles)?;
+            self.cycles_accepted.lock().unwrap().push(cycles);
+
+            *self.cycles_found_in_request.lock().unwrap() -= cycles;
+
+            Ok(cycles)
+        }
+
         async fn send_cycles_to_canister(
             &self,
             target_canister: CanisterId,
@@ -1516,16 +1556,6 @@ mod test {
                 .unwrap()
                 .push((target_canister, cycles));
             Ok(())
-        }
-
-        fn accept_message_cycles(&self, cycles: Option<u64>) -> Result<u64, String> {
-            let cycles = cycles.unwrap_or_else(|| *self.cycles_found_in_request.lock().unwrap());
-            self.message_has_enough_cycles(cycles)?;
-            self.cycles_accepted.lock().unwrap().push(cycles);
-
-            *self.cycles_found_in_request.lock().unwrap() -= cycles;
-
-            Ok(cycles)
         }
     }
 
@@ -2340,11 +2370,11 @@ mod test {
             ),
         }
 
-        assert!(
+        assert_eq!(
             expected_2
                 .symmetric_difference(&canister.allowed_principals.into_iter().collect())
-                .count()
-                == 0
+                .count(),
+            0
         );
     }
 
@@ -2537,6 +2567,7 @@ mod test {
             Some(subnet_test_id(1)),
             true,
             false,
+            false,
             vec![],
             vec![],
             vec![],
@@ -2551,6 +2582,7 @@ mod test {
         )
         .await;
     }
+
     #[tokio::test]
     async fn test_invalid_init_payload() {
         let canister_api = new_canister_api();
@@ -2562,6 +2594,7 @@ mod test {
             canister_api,
             Some(subnet_test_id(1)),
             true,
+            false,
             false,
             vec![],
             vec![],
@@ -2577,6 +2610,7 @@ mod test {
         )
         .await;
     }
+
     #[tokio::test]
     async fn test_missing_available_subnet() {
         let canister_api = new_canister_api();
@@ -2586,6 +2620,7 @@ mod test {
             canister_api,
             None,
             true,
+            false,
             false,
             vec![],
             vec![],
@@ -2601,6 +2636,7 @@ mod test {
         )
         .await;
     }
+
     #[tokio::test]
     async fn test_wasms_not_available() {
         let canister_api = new_canister_api();
@@ -2611,6 +2647,7 @@ mod test {
             Some(subnet_test_id(1)),
             false,
             false, // wasm_available
+            false,
             vec![],
             vec![],
             vec![],
@@ -2636,6 +2673,7 @@ mod test {
             canister_api,
             Some(subnet_test_id(1)),
             true,
+            false,
             false,
             vec![],
             vec![],
@@ -2675,6 +2713,7 @@ mod test {
             Some(subnet_test_id(1)),
             true,
             false,
+            true,
             vec![CANISTER_CREATION_CYCLES],
             vec![],
             vec![root_id, governance_id, ledger_id, index_id],
@@ -2733,6 +2772,7 @@ mod test {
             Some(subnet_test_id(1)),
             true,
             false,
+            true,
             vec![CANISTER_CREATION_CYCLES],
             vec![],
             vec![root_id, governance_id, ledger_id, swap_id, index_id],
@@ -2776,6 +2816,7 @@ mod test {
             Some(subnet_test_id(1)),
             true,
             false,
+            true,
             vec![CANISTER_CREATION_CYCLES],
             vec![],
             vec![root_id, governance_id, ledger_id, swap_id, index_id],
@@ -2837,6 +2878,7 @@ mod test {
             Some(subnet_test_id(1)),
             true,
             false,
+            true,
             vec![
                 CANISTER_CREATION_CYCLES,
                 SNS_CREATION_FEE - CANISTER_CREATION_CYCLES,
@@ -2923,6 +2965,7 @@ mod test {
             Some(subnet_test_id(1)),
             true,
             false,
+            true,
             vec![CANISTER_CREATION_CYCLES],
             vec![],
             vec![root_id, governance_id, ledger_id, swap_id, index_id],
@@ -2971,6 +3014,7 @@ mod test {
             Some(subnet_test_id(1)),
             true,
             true,
+            false,
             vec![],
             vec![
                 (root_id, sent_cycles),
@@ -3016,24 +3060,35 @@ mod test {
         available_subnet: Option<SubnetId>,
         wasm_available: bool,
         is_governance_caller: bool,
+        should_caller_be_removed_from_whitelist: bool,
         expected_accepted_cycles: Vec<u64>,
         expected_sent_cycles: Vec<(CanisterId, u64)>,
         expected_canisters_destroyed: Vec<CanisterId>,
         expected_set_controllers_calls: Vec<(CanisterId, Vec<PrincipalId>)>,
         expected_response: DeployNewSnsResponse,
     ) {
+        let allowed_principal = PrincipalId::new_user_test_id(1);
+
         thread_local! {
             static CANISTER_WRAPPER: RefCell<SnsWasmCanister<TestCanisterStableMemory>> = RefCell::new(new_wasm_canister()) ;
         }
         CANISTER_WRAPPER.with(|sns_wasm| {
             sns_wasm.borrow_mut().update_allowed_principals(
                 UpdateAllowedPrincipalsRequest {
-                    added_principals: vec![PrincipalId::new_user_test_id(1)],
+                    added_principals: vec![allowed_principal],
                     removed_principals: vec![],
                 },
                 GOVERNANCE_CANISTER_ID.into(),
             )
         });
+
+        let get_allowed_principals_response =
+            CANISTER_WRAPPER.with(|c| c.borrow_mut().get_allowed_principals());
+
+        assert_eq!(
+            get_allowed_principals_response.allowed_principals,
+            vec![allowed_principal]
+        );
 
         CANISTER_WRAPPER.with(|c| {
             if available_subnet.is_some() {
@@ -3052,7 +3107,7 @@ mod test {
             if is_governance_caller {
                 GOVERNANCE_CANISTER_ID.get()
             } else {
-                PrincipalId::new_user_test_id(1)
+                allowed_principal
             },
         )
         .await;
@@ -3071,6 +3126,18 @@ mod test {
 
         let set_controllers_calls = &*canister_api.set_controllers_calls.lock().unwrap();
         assert_eq!(&expected_set_controllers_calls, set_controllers_calls);
+
+        let get_allowed_principals_response =
+            CANISTER_WRAPPER.with(|c| c.borrow_mut().get_allowed_principals());
+
+        if should_caller_be_removed_from_whitelist {
+            assert_eq!(get_allowed_principals_response.allowed_principals, vec![]);
+        } else {
+            assert_eq!(
+                get_allowed_principals_response.allowed_principals,
+                vec![allowed_principal]
+            );
+        }
     }
 
     #[tokio::test]
@@ -3376,6 +3443,7 @@ mod test {
             CANISTER_WRAPPER.with(|c| c.borrow().allowed_principals.clone())
         );
     }
+
     #[tokio::test]
     async fn test_deploy_new_sns_fails_for_nns_governance_is_sns_w_low_on_cycles() {
         let test_id = subnet_test_id(1);
