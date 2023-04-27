@@ -12,7 +12,7 @@ check-bins-linux:
   before_script: /bin/true
   after_script: /bin/true
   variables:
-    ARTIFACT_PREFIX: binaries/x86_64-linux
+    ARTIFACT_PREFIX: openssl-static-binaries/x86_64-linux
   script:
     - |
       set -exuo pipefail
@@ -42,7 +42,7 @@ check-bins-darwin:
   before_script: /usr/bin/true
   after_script: /usr/bin/true
   variables:
-    ARTIFACT_PREFIX: binaries/x86_64-darwin
+    ARTIFACT_PREFIX: openssl-static-binaries/x86_64-darwin
     # https://curl.se/mail/lib-2020-06/0010.html
     CURL_SSL_BACKEND: secure-transport
   script:
