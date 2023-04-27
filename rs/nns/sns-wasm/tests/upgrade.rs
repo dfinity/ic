@@ -1,17 +1,18 @@
-use canister_test::Project;
-use ic_nns_constants::SNS_WASM_CANISTER_ID;
-use ic_nns_test_utils::sns_wasm;
-use ic_nns_test_utils::sns_wasm::{
-    add_dummy_wasms_to_sns_wasms, test_wasm, wasm_map_to_sns_version,
-};
-use ic_sns_wasm::pb::v1::{GetNextSnsVersionRequest, SnsCanisterType, SnsUpgrade, SnsVersion};
-pub mod common;
 use crate::common::EXPECTED_SNS_CREATION_FEE;
+use canister_test::Project;
 use common::set_up_state_machine_with_nns;
 use ic_base_types::CanisterId;
-use ic_nns_test_utils::state_test_helpers::set_up_universal_canister;
+use ic_nns_constants::SNS_WASM_CANISTER_ID;
+use ic_nns_test_utils::{
+    sns_wasm,
+    sns_wasm::{add_dummy_wasms_to_sns_wasms, test_wasm, wasm_map_to_sns_version},
+    state_test_helpers::set_up_universal_canister,
+};
 use ic_sns_init::pb::v1::SnsInitPayload;
+use ic_sns_wasm::pb::v1::{GetNextSnsVersionRequest, SnsCanisterType, SnsUpgrade, SnsVersion};
 use ic_types::Cycles;
+
+pub mod common;
 
 /// Add WASMs, perform a canister upgrade, then assert that the added WASMs and upgrade
 /// path are still available

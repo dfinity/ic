@@ -1,25 +1,20 @@
+use crate::common::EXPECTED_SNS_CREATION_FEE;
 use candid::{Decode, Encode, Nat};
 use dfn_candid::candid_one;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_icrc1_ledger::LedgerArgument;
-use ic_nns_constants::SNS_WASM_CANISTER_ID;
-use ic_nns_test_utils::common::NnsInitPayloadsBuilder;
-use ic_nns_test_utils::state_test_helpers::{
-    query, set_controllers, setup_nns_canisters, update, update_with_sender,
-};
-use ic_nns_test_utils::{sns_wasm, state_test_helpers};
-use maplit::btreemap;
-use std::collections::BTreeMap;
-use std::convert::TryInto;
-use std::time::Duration;
-
-pub mod common;
-use crate::common::EXPECTED_SNS_CREATION_FEE;
 use ic_ic00_types::CanisterInstallMode;
+use ic_icrc1_ledger::LedgerArgument;
 use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount;
-use ic_nns_test_utils::sns_wasm::{
-    build_archive_sns_wasm, build_governance_sns_wasm, build_index_sns_wasm, build_ledger_sns_wasm,
-    build_root_sns_wasm, build_swap_sns_wasm, create_modified_wasm,
+use ic_nns_constants::SNS_WASM_CANISTER_ID;
+use ic_nns_test_utils::{
+    common::NnsInitPayloadsBuilder,
+    sns_wasm,
+    sns_wasm::{
+        build_archive_sns_wasm, build_governance_sns_wasm, build_index_sns_wasm,
+        build_ledger_sns_wasm, build_root_sns_wasm, build_swap_sns_wasm, create_modified_wasm,
+    },
+    state_test_helpers,
+    state_test_helpers::{query, set_controllers, setup_nns_canisters, update, update_with_sender},
 };
 use ic_sns_governance::{
     pb::v1::{
@@ -31,10 +26,10 @@ use ic_sns_governance::{
     },
     types::{DEFAULT_TRANSFER_FEE, E8S_PER_TOKEN},
 };
-use ic_sns_init::pb::v1::sns_init_payload::InitialTokenDistribution;
 use ic_sns_init::pb::v1::{
-    AirdropDistribution, DeveloperDistribution, FractionalDeveloperVotingPower, NeuronDistribution,
-    SnsInitPayload, SwapDistribution, TreasuryDistribution,
+    sns_init_payload::InitialTokenDistribution, AirdropDistribution, DeveloperDistribution,
+    FractionalDeveloperVotingPower, NeuronDistribution, SnsInitPayload, SwapDistribution,
+    TreasuryDistribution,
 };
 use ic_sns_root::{
     CanisterStatusResultV2, CanisterStatusType, GetSnsCanistersSummaryRequest,
@@ -46,8 +41,14 @@ use ic_sns_wasm::pb::v1::{
 };
 use ic_state_machine_tests::StateMachine;
 use ic_types::Cycles;
-use icrc_ledger_types::icrc1::account::Account;
-use icrc_ledger_types::icrc1::transfer::{NumTokens, TransferArg, TransferError};
+use icrc_ledger_types::icrc1::{
+    account::Account,
+    transfer::{NumTokens, TransferArg, TransferError},
+};
+use maplit::btreemap;
+use std::{collections::BTreeMap, convert::TryInto, time::Duration};
+
+pub mod common;
 
 #[test]
 fn upgrade_root_sns_canister_via_sns_wasms() {

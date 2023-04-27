@@ -3,8 +3,7 @@ use canister_test::Project;
 use common::set_up_state_machine_with_nns;
 use ic_base_types::CanisterId;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
-use ic_nns_test_utils::sns_wasm;
-use ic_nns_test_utils::state_test_helpers::set_up_universal_canister;
+use ic_nns_test_utils::{sns_wasm, state_test_helpers::set_up_universal_canister};
 use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_wasm::{
     pb::v1::{DeployedSns, ListDeployedSnsesResponse},

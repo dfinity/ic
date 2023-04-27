@@ -1,5 +1,7 @@
+use crate::common::{EXPECTED_SNS_CREATION_FEE, ONE_TRILLION};
 use candid::{Decode, Encode};
 use canister_test::{Canister, Project, Runtime, Wasm};
+use common::set_up_state_machine_with_nns;
 use dfn_candid::candid_one;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_crypto_sha::Sha256;
@@ -8,12 +10,14 @@ use ic_interfaces_registry::RegistryClient;
 use ic_nns_constants::{
     ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID, SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET,
 };
-use ic_nns_test_utils::itest_helpers::{
-    local_test_on_nns_subnet, set_up_universal_canister_with_cycles,
-    try_call_with_cycles_via_universal_canister, NnsCanisters,
+use ic_nns_test_utils::{
+    common::NnsInitPayloadsBuilder,
+    itest_helpers::{
+        local_test_on_nns_subnet, set_up_universal_canister_with_cycles,
+        try_call_with_cycles_via_universal_canister, NnsCanisters,
+    },
+    sns_wasm, state_test_helpers,
 };
-use ic_nns_test_utils::sns_wasm;
-use ic_nns_test_utils::state_test_helpers;
 use ic_protobuf::registry::subnet::v1::SubnetListRecord;
 use ic_registry_keys::make_subnet_list_record_key;
 use ic_sns_init::pb::v1::SnsInitPayload;
@@ -25,15 +29,14 @@ use ic_sns_wasm::pb::v1::{
     AddWasmRequest, DeployNewSnsRequest, DeployNewSnsResponse, SnsCanisterIds, SnsCanisterType,
     SnsWasm, SnsWasmError,
 };
-use ic_test_utilities::types::ids::canister_test_id;
-use ic_test_utilities::universal_canister::UNIVERSAL_CANISTER_WASM;
+use ic_test_utilities::{
+    types::ids::canister_test_id, universal_canister::UNIVERSAL_CANISTER_WASM,
+};
 use ic_types::Cycles;
 use registry_canister::mutations::common::decode_registry_value;
 use std::convert::TryFrom;
+
 pub mod common;
-use crate::common::{EXPECTED_SNS_CREATION_FEE, ONE_TRILLION};
-use common::set_up_state_machine_with_nns;
-use ic_nns_test_utils::common::NnsInitPayloadsBuilder;
 
 #[test]
 fn test_canisters_are_created_and_installed() {
