@@ -222,6 +222,8 @@ pub struct ExecutionStateBits {
     pub metadata: ::core::option::Option<WasmMetadata>,
     #[prost(bytes = "vec", optional, tag = "6")]
     pub binary_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
+    #[prost(enumeration = "NextScheduledMethod", optional, tag = "7")]
+    pub next_scheduled_method: ::core::option::Option<i32>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -470,6 +472,29 @@ impl CustomSectionType {
             CustomSectionType::Unspecified => "CUSTOM_SECTION_TYPE_UNSPECIFIED",
             CustomSectionType::Public => "CUSTOM_SECTION_TYPE_PUBLIC",
             CustomSectionType::Private => "CUSTOM_SECTION_TYPE_PRIVATE",
+        }
+    }
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum NextScheduledMethod {
+    Unspecified = 0,
+    GlobalTimer = 1,
+    Heartbeat = 2,
+    Message = 3,
+}
+impl NextScheduledMethod {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            NextScheduledMethod::Unspecified => "NEXT_SCHEDULED_METHOD_UNSPECIFIED",
+            NextScheduledMethod::GlobalTimer => "NEXT_SCHEDULED_METHOD_GLOBAL_TIMER",
+            NextScheduledMethod::Heartbeat => "NEXT_SCHEDULED_METHOD_HEARTBEAT",
+            NextScheduledMethod::Message => "NEXT_SCHEDULED_METHOD_MESSAGE",
         }
     }
 }

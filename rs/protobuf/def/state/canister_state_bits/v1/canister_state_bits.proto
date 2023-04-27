@@ -118,6 +118,13 @@ message WasmMetadata {
     map<string, WasmCustomSection> custom_sections = 1;
 }
 
+enum NextScheduledMethod {
+    NEXT_SCHEDULED_METHOD_UNSPECIFIED = 0;
+    NEXT_SCHEDULED_METHOD_GLOBAL_TIMER = 1;
+    NEXT_SCHEDULED_METHOD_HEARTBEAT = 2;
+    NEXT_SCHEDULED_METHOD_MESSAGE = 3;
+}
+
 message ExecutionStateBits {
   repeated Global exported_globals = 1;
   uint32 heap_size = 2;
@@ -125,6 +132,7 @@ message ExecutionStateBits {
   uint64 last_executed_round = 4;
   WasmMetadata metadata = 5;
   optional bytes binary_hash = 6;
+  optional NextScheduledMethod next_scheduled_method = 7;
 }
 
 message StopCanisterContext {

@@ -335,6 +335,7 @@ pub fn load_canister_state<P: ReadPolicy>(
                 exports: execution_state_bits.exports,
                 metadata: execution_state_bits.metadata,
                 last_executed_round: execution_state_bits.last_executed_round,
+                next_scheduled_method: execution_state_bits.next_scheduled_method,
             })
         }
         None => None,

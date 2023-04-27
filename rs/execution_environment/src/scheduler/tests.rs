@@ -23,12 +23,14 @@ use ic_interfaces::execution_environment::SubnetAvailableMemory;
 use ic_logger::replica_logger::no_op_logger;
 use ic_registry_routing_table::CanisterIdRange;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::testing::CanisterQueuesTesting;
-
 use ic_replicated_state::canister_state::system_state::PausedExecutionId;
+use ic_replicated_state::testing::CanisterQueuesTesting;
+use ic_replicated_state::testing::SystemStateTesting;
+use ic_replicated_state::ExportedFunctions;
 use ic_state_machine_tests::{
     PayloadBuilder, StateMachine, StateMachineBuilder, StateMachineConfig, WasmResult,
 };
+use ic_test_utilities::types::ids::message_test_id;
 use ic_test_utilities::{
     mock_time,
     state::{get_running_canister, get_stopped_canister, get_stopping_canister},
@@ -42,6 +44,8 @@ use ic_test_utilities_metrics::{
 };
 use ic_types::messages::{CallbackId, Payload, RejectContext, Response, MAX_RESPONSE_COUNT_BYTES};
 use ic_types::methods::SystemMethod;
+use ic_types::methods::WasmMethod;
+use ic_types::time::expiry_time_from_now;
 use ic_types::{time::UNIX_EPOCH, ComputeAllocation, Cycles, NumBytes};
 use ic_types_test_utils::ids::user_test_id;
 use proptest::prelude::*;
@@ -4413,4 +4417,197 @@ fn scheduler_resets_accumulated_priorities() {
     //     2nd message states: E E . . <-- num_executed_second_messages == scheduler_cores
     let num_executed_second_messages = executed_messages_after_two_rounds(scheduler_cores, 1);
     assert_eq!(scheduler_cores, num_executed_second_messages);
+}
+
+#[test]
+fn test_is_next_method_added_to_task_queue() {
+    let mut test = SchedulerTestBuilder::new()
+        .with_deterministic_time_slicing()
+        .build();
+
+    let canister = test.create_canister_with(
+        Cycles::new(1_000_000_000_000),
+        ComputeAllocation::zero(),
+        MemoryAllocation::BestEffort,
+        Some(SystemMethod::CanisterGlobalTimer),
+        None,
+        None,
+    );
+
+    let mut heartbeat_and_timer_canister_ids = BTreeSet::new();
+    assert!(!test
+        .canister_state_mut(canister)
+        .system_state
+        .queues_mut()
+        .has_input());
+
+    for _ in 0..3 {
+        // The timer did not reach the deadline and the canister does not have
+        // input, hence no method will be chosen.
+        assert!(!is_next_method_chosen(
+            test.canister_state_mut(canister),
+            &mut heartbeat_and_timer_canister_ids,
+            false
+        ));
+        assert_eq!(heartbeat_and_timer_canister_ids, BTreeSet::new());
+        test.canister_state_mut(canister)
+            .inc_next_scheduled_method();
+    }
+
+    // Make canister export heartbeat and global timer.
+    test.canister_state_mut(canister)
+        .execution_state
+        .as_mut()
+        .unwrap()
+        .exports = ExportedFunctions::new(BTreeSet::from([
+        WasmMethod::System(SystemMethod::CanisterHeartbeat),
+        WasmMethod::System(SystemMethod::CanisterGlobalTimer),
+    ]));
+
+    // Set input.
+    test.canister_state_mut(canister)
+        .system_state
+        .queues_mut()
+        .push_ingress(Ingress {
+            source: user_test_id(77),
+            receiver: canister,
+            effective_canister_id: None,
+            method_name: String::from("test"),
+            method_payload: vec![1_u8],
+            message_id: message_test_id(555),
+            expiry_time: expiry_time_from_now(),
+        });
+
+    assert!(test
+        .canister_state_mut(canister)
+        .system_state
+        .queues_mut()
+        .has_input());
+
+    while test
+        .canister_state_mut(canister)
+        .get_next_scheduled_method()
+        != NextScheduledMethod::Message
+    {
+        test.canister_state_mut(canister)
+            .inc_next_scheduled_method();
+    }
+
+    assert!(is_next_method_chosen(
+        test.canister_state_mut(canister),
+        &mut heartbeat_and_timer_canister_ids,
+        true
+    ));
+
+    // Since NextScheduledMethod is Message it is not expected that Heartbeat
+    // and GlobalTimer are added to the queue.
+    assert!(test
+        .canister_state_mut(canister)
+        .system_state
+        .task_queue
+        .is_empty());
+
+    assert_eq!(heartbeat_and_timer_canister_ids, BTreeSet::new());
+
+    // Add a mock task, to know if new tasks are added
+    // at the front or back of the queue.
+    test.canister_state_mut(canister)
+        .system_state
+        .task_queue
+        .push_front(ExecutionTask::PausedExecution(
+            ic_replicated_state::canister_state::system_state::PausedExecutionId(1),
+        ));
+
+    while test
+        .canister_state_mut(canister)
+        .get_next_scheduled_method()
+        != NextScheduledMethod::Heartbeat
+    {
+        test.canister_state_mut(canister)
+            .inc_next_scheduled_method();
+    }
+
+    // Since NextScheduledMethod is Heartbeat it is expected that Heartbeat
+    // and GlobalTimer are added at the front of the queue.
+    assert!(is_next_method_chosen(
+        test.canister_state_mut(canister),
+        &mut heartbeat_and_timer_canister_ids,
+        true
+    ));
+
+    assert_eq!(heartbeat_and_timer_canister_ids, BTreeSet::from([canister]));
+    assert_eq!(
+        test.canister_state_mut(canister)
+            .system_state
+            .task_queue
+            .front(),
+        Some(&ExecutionTask::Heartbeat)
+    );
+
+    test.canister_state_mut(canister)
+        .system_state
+        .task_queue
+        .pop_front();
+
+    assert_eq!(
+        test.canister_state_mut(canister)
+            .system_state
+            .task_queue
+            .front(),
+        Some(&ExecutionTask::GlobalTimer)
+    );
+
+    test.canister_state_mut(canister)
+        .system_state
+        .task_queue
+        .pop_front();
+
+    assert_eq!(heartbeat_and_timer_canister_ids, BTreeSet::from([canister]));
+
+    heartbeat_and_timer_canister_ids = BTreeSet::new();
+
+    while test
+        .canister_state_mut(canister)
+        .get_next_scheduled_method()
+        != NextScheduledMethod::GlobalTimer
+    {
+        test.canister_state_mut(canister)
+            .inc_next_scheduled_method();
+    }
+    // Since NextScheduledMethod is GlobalTimer it is expected that GlobalTimer
+    // and Heartbeat are added at the front of the queue.
+    assert!(is_next_method_chosen(
+        test.canister_state_mut(canister),
+        &mut heartbeat_and_timer_canister_ids,
+        true
+    ));
+
+    assert_eq!(heartbeat_and_timer_canister_ids, BTreeSet::from([canister]));
+    assert_eq!(
+        test.canister_state_mut(canister)
+            .system_state
+            .task_queue
+            .front(),
+        Some(&ExecutionTask::GlobalTimer)
+    );
+
+    test.canister_state_mut(canister)
+        .system_state
+        .task_queue
+        .pop_front();
+
+    assert_eq!(
+        test.canister_state_mut(canister)
+            .system_state
+            .task_queue
+            .front(),
+        Some(&ExecutionTask::Heartbeat)
+    );
+
+    test.canister_state_mut(canister)
+        .system_state
+        .task_queue
+        .pop_front();
+
+    assert_eq!(heartbeat_and_timer_canister_ids, BTreeSet::from([canister]));
 }

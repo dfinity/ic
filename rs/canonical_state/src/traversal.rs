@@ -54,7 +54,9 @@ mod tests {
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{
         canister_state::{
-            execution_state::{CustomSection, CustomSectionType, WasmBinary, WasmMetadata},
+            execution_state::{
+                CustomSection, CustomSectionType, NextScheduledMethod, WasmBinary, WasmMetadata,
+            },
             ExecutionState, ExportedFunctions, Global, NumWasmPages,
         },
         metadata_state::SubnetTopology,
@@ -246,7 +248,9 @@ mod tests {
             exports: ExportedFunctions::new(BTreeSet::new()),
             metadata: WasmMetadata::new(metadata),
             last_executed_round: ExecutionRound::from(0),
+            next_scheduled_method: NextScheduledMethod::default(),
         };
+
         canister_state.execution_state = Some(execution_state);
 
         let mut state = ReplicatedState::new(subnet_test_id(1), SubnetType::Application);

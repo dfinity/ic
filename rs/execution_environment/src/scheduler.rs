@@ -23,7 +23,9 @@ use ic_interfaces::{
 use ic_logger::{debug, error, fatal, info, new_logger, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::{
-    canister_state::{system_state::CyclesUseCase, NextExecution},
+    canister_state::{
+        execution_state::NextScheduledMethod, system_state::CyclesUseCase, NextExecution,
+    },
     testing::ReplicatedStateTesting,
     CanisterState, CanisterStatus, ExecutionTask, InputQueueType, NetworkTopology, ReplicatedState,
 };
@@ -564,22 +566,18 @@ impl SchedulerImpl {
                         // is pending.
                     }
                     NextExecution::None | NextExecution::StartNew => {
-                        // TODO: RUN-599 Alternate the order to avoid heartbeats starvation?
-                        if canister.exports_heartbeat_method() {
-                            canister
-                                .system_state
-                                .task_queue
-                                .push_front(ExecutionTask::Heartbeat);
-                            heartbeat_and_timer_canister_ids.insert(canister.canister_id());
-                        }
-                        if global_timer_has_reached_deadline
-                            && canister.exports_global_timer_method()
-                        {
-                            canister
-                                .system_state
-                                .task_queue
-                                .push_front(ExecutionTask::GlobalTimer);
-                            heartbeat_and_timer_canister_ids.insert(canister.canister_id());
+                        for _ in 0..NextScheduledMethod::NUMBER_OF_VARIANTS {
+                            let method_chosen = is_next_method_chosen(
+                                canister,
+                                &mut heartbeat_and_timer_canister_ids,
+                                global_timer_has_reached_deadline,
+                            );
+
+                            canister.inc_next_scheduled_method();
+
+                            if method_chosen {
+                                break;
+                            }
                         }
                     }
                 }
@@ -2149,5 +2147,87 @@ fn get_instructions_limits_for_subnet_message(
             ),
         },
         Err(_) => default_limits,
+    }
+}
+
+fn is_next_method_chosen(
+    canister: &mut CanisterState,
+    heartbeat_and_timer_canister_ids: &mut BTreeSet<CanisterId>,
+    global_timer_has_reached_deadline: bool,
+) -> bool {
+    let mut tasks_added = false;
+    let method_chosen = match canister.get_next_scheduled_method() {
+        NextScheduledMethod::Message => canister.has_input(),
+        NextScheduledMethod::Heartbeat => {
+            tasks_added = try_add_tasks(
+                canister,
+                ExecutionTask::Heartbeat,
+                global_timer_has_reached_deadline,
+            );
+            tasks_added
+        }
+        NextScheduledMethod::GlobalTimer => {
+            tasks_added = try_add_tasks(
+                canister,
+                ExecutionTask::GlobalTimer,
+                global_timer_has_reached_deadline,
+            );
+            tasks_added
+        }
+    };
+
+    if tasks_added {
+        heartbeat_and_timer_canister_ids.insert(canister.canister_id());
+    }
+
+    method_chosen
+}
+
+fn try_add_tasks(
+    canister: &mut CanisterState,
+    scheduled_task: ExecutionTask,
+    global_timer_has_reached_deadline: bool,
+) -> bool {
+    if should_add_task(canister, &scheduled_task, global_timer_has_reached_deadline) {
+        // If the conditions for the 'other_task' are satisfied, then we are
+        // adding it as well, because we want to execute as many tasks as
+        // possible on the single canister to avoid context switching.
+        // We are first adding the 'other_task' to the front of the queue and after it
+        // 'scheduled_task' so that the 'scheduled_task' is the first executed.
+        let other_task = get_other_task(scheduled_task.clone());
+        if should_add_task(canister, &other_task, global_timer_has_reached_deadline) {
+            canister.system_state.task_queue.push_front(other_task);
+        }
+        canister.system_state.task_queue.push_front(scheduled_task);
+        return true;
+    }
+    false
+}
+
+fn should_add_task(
+    canister: &CanisterState,
+    task: &ExecutionTask,
+    global_timer_has_reached_deadline: bool,
+) -> bool {
+    match task {
+        ExecutionTask::Heartbeat => canister.exports_heartbeat_method(),
+        ExecutionTask::GlobalTimer => {
+            global_timer_has_reached_deadline && canister.exports_global_timer_method()
+        }
+        ExecutionTask::AbortedExecution { .. }
+        | ExecutionTask::AbortedInstallCode { .. }
+        | ExecutionTask::PausedExecution(..)
+        | ExecutionTask::PausedInstallCode(..) => unreachable!("Unexpected ExecutionTask variant."),
+    }
+}
+
+fn get_other_task(task: ExecutionTask) -> ExecutionTask {
+    match task {
+        ExecutionTask::Heartbeat => ExecutionTask::GlobalTimer,
+        ExecutionTask::GlobalTimer => ExecutionTask::Heartbeat,
+        ExecutionTask::AbortedExecution { .. }
+        | ExecutionTask::AbortedInstallCode { .. }
+        | ExecutionTask::PausedExecution(..)
+        | ExecutionTask::PausedInstallCode(..) => unreachable!("Unexpected ExecutionTask variant."),
     }
 }
