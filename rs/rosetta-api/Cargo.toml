@@ -9,7 +9,7 @@ default-run = "ic-rosetta-api"
 
 [dependencies]
 actix-rt = "2.2.0"
-actix-web = { version = "4.0.1", default_features = false, features = ["macros", "compress-brotli", "compress-gzip", "cookies"] }
+actix-web = { version = "4.0.1", default-features = false, features = ["macros", "compress-brotli", "compress-gzip", "cookies"] }
 async-trait = "0.1.41"
 base64 = "0.13.0"
 candid = "0.8.1"
