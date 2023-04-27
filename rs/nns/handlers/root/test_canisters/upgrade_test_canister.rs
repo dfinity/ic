@@ -1,8 +1,6 @@
 // This canister is used for testing upgrades with arguments and stable memory.
 
-use dfn_core::api::arg_data;
-use dfn_core::endpoint::over_bytes;
-use dfn_core::{println, stable};
+use dfn_core::{api::arg_data, endpoint::over_bytes, println, stable};
 
 fn main() {}
 

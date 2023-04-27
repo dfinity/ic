@@ -1,16 +1,23 @@
 use dfn_core::api::{call, call_bytes, call_with_funds, print, CanisterId, Funds};
+use ic_base_types::PrincipalId;
 use ic_ic00_types::{CanisterInstallMode::Install, InstallCodeArgs};
 use ic_nervous_system_root::{
     change_canister::{
         start_canister, stop_canister, AddCanisterProposal, CanisterAction,
         StopOrStartCanisterProposal,
     },
+    change_canister_controllers::{
+        ChangeCanisterControllersRequest, ChangeCanisterControllersResponse,
+    },
+    management_canister_client::ManagementCanisterClient,
+    update_settings::{CanisterSettings, UpdateSettings},
     CanisterIdRecord,
 };
 use ic_nns_common::{
     registry::{encode_or_panic, get_value, mutate_registry},
     types::CallCanisterProposal,
 };
+use ic_nns_constants::SNS_WASM_CANISTER_ID;
 use ic_protobuf::{
     registry::nns::v1::{NnsCanisterRecord, NnsCanisterRecords},
     types::v1 as pb,
@@ -183,4 +190,40 @@ pub async fn call_canister(proposal: CallCanisterProposal) {
     ));
 
     res.unwrap();
+}
+
+pub async fn change_canister_controllers(
+    change_canister_controllers_request: ChangeCanisterControllersRequest,
+    caller: PrincipalId,
+    management_canister_client: &mut impl ManagementCanisterClient,
+) -> ChangeCanisterControllersResponse {
+    if caller != SNS_WASM_CANISTER_ID.get() {
+        return ChangeCanisterControllersResponse::new_with_error(
+            None,
+            format!(
+                "change_canister_controllers is only callable by the SNS-W canister ({})",
+                SNS_WASM_CANISTER_ID
+            ),
+        );
+    }
+
+    let update_settings_args = UpdateSettings {
+        canister_id: change_canister_controllers_request.target_canister_id,
+        settings: CanisterSettings {
+            controllers: Some(change_canister_controllers_request.new_controllers),
+            compute_allocation: None,
+            memory_allocation: None,
+            freezing_threshold: None,
+        },
+    };
+
+    match management_canister_client
+        .update_settings(update_settings_args)
+        .await
+    {
+        Ok(()) => ChangeCanisterControllersResponse::new_with_ok(),
+        Err((code, description)) => {
+            ChangeCanisterControllersResponse::new_with_error(code, description)
+        }
+    }
 }

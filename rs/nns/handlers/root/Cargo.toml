@@ -61,3 +61,7 @@ registry-canister = { path = "../../../registry/canister" }
 [build-dependencies]
 # This MUST be kept in sync with build-info in the [dependencies] section!
 build-info-build = { version="0.0.26", default-features = false, features = [] }
+
+[dev-dependencies]
+ic-state-machine-tests = { path = "../../../state_machine_tests" }
+tokio = "1.28.0"

@@ -1,5 +1,5 @@
 {
-  "checksum": "f966c525a23bc848295660c4376d1528f4be8770b7e0d1fe389b007c00dd6009",
+  "checksum": "27a7f2ba21efed1542b5a6cde3ae5a3a512468e088121f399bcdf2c2f532a11a",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -7056,11 +7056,11 @@
               "target": "log"
             },
             {
-              "id": "pest_meta 2.5.7",
+              "id": "pest_meta 2.6.0",
               "target": "pest_meta"
             },
             {
-              "id": "pest_vm 2.5.7",
+              "id": "pest_vm 2.6.0",
               "target": "pest_vm"
             },
             {
@@ -23005,7 +23005,7 @@
           "selects": {
             "cfg(not(any(windows, target_os = \"hermit\", target_os = \"unknown\")))": [
               {
-                "id": "rustix 0.37.14",
+                "id": "rustix 0.37.15",
                 "target": "rustix"
               }
             ],
@@ -23464,7 +23464,7 @@
         "deps": {
           "common": [
             {
-              "id": "pest 2.5.7",
+              "id": "pest 2.6.0",
               "target": "pest"
             },
             {
@@ -23478,7 +23478,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "pest_derive 2.5.7",
+              "id": "pest_derive 2.6.0",
               "target": "pest_derive"
             }
           ],
@@ -27060,7 +27060,7 @@
         "deps": {
           "common": [
             {
-              "id": "rustix 0.37.14",
+              "id": "rustix 0.37.15",
               "target": "rustix"
             }
           ],
@@ -32563,13 +32563,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "pest 2.5.7": {
+    "pest 2.6.0": {
       "name": "pest",
-      "version": "2.5.7",
+      "version": "2.6.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/pest/2.5.7/download",
-          "sha256": "7b1403e8401ad5dedea73c626b99758535b342502f8d1e361f4a2dd952749122"
+          "url": "https://crates.io/api/v1/crates/pest/2.6.0/download",
+          "sha256": "e68e84bfb01f0507134eac1e9b410a12ba379d064eab48c50ba4ce329a527b70"
         }
       },
       "targets": [
@@ -32610,17 +32610,17 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "2.5.7"
+        "version": "2.6.0"
       },
       "license": "MIT/Apache-2.0"
     },
-    "pest_derive 2.5.7": {
+    "pest_derive 2.6.0": {
       "name": "pest_derive",
-      "version": "2.5.7",
+      "version": "2.6.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/pest_derive/2.5.7/download",
-          "sha256": "be99c4c1d2fc2769b1d00239431d711d08f6efedcecb8b6e30707160aee99c15"
+          "url": "https://crates.io/api/v1/crates/pest_derive/2.6.0/download",
+          "sha256": "6b79d4c71c865a25a4322296122e3924d30bc8ee0834c8bfc8b95f7f054afbfb"
         }
       },
       "targets": [
@@ -32649,28 +32649,28 @@
         "deps": {
           "common": [
             {
-              "id": "pest 2.5.7",
+              "id": "pest 2.6.0",
               "target": "pest"
             },
             {
-              "id": "pest_generator 2.5.7",
+              "id": "pest_generator 2.6.0",
               "target": "pest_generator"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "2.5.7"
+        "version": "2.6.0"
       },
       "license": "MIT/Apache-2.0"
     },
-    "pest_generator 2.5.7": {
+    "pest_generator 2.6.0": {
       "name": "pest_generator",
-      "version": "2.5.7",
+      "version": "2.6.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/pest_generator/2.5.7/download",
-          "sha256": "e56094789873daa36164de2e822b3888c6ae4b4f9da555a1103587658c805b1e"
+          "url": "https://crates.io/api/v1/crates/pest_generator/2.6.0/download",
+          "sha256": "6c435bf1076437b851ebc8edc3a18442796b30f1728ffea6262d59bbe28b077e"
         }
       },
       "targets": [
@@ -32698,11 +32698,11 @@
         "deps": {
           "common": [
             {
-              "id": "pest 2.5.7",
+              "id": "pest 2.6.0",
               "target": "pest"
             },
             {
-              "id": "pest_meta 2.5.7",
+              "id": "pest_meta 2.6.0",
               "target": "pest_meta"
             },
             {
@@ -32721,17 +32721,17 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "2.5.7"
+        "version": "2.6.0"
       },
       "license": "MIT/Apache-2.0"
     },
-    "pest_meta 2.5.7": {
+    "pest_meta 2.6.0": {
       "name": "pest_meta",
-      "version": "2.5.7",
+      "version": "2.6.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/pest_meta/2.5.7/download",
-          "sha256": "6733073c7cff3d8459fda0e42f13a047870242aed8b509fe98000928975f359e"
+          "url": "https://crates.io/api/v1/crates/pest_meta/2.6.0/download",
+          "sha256": "745a452f8eb71e39ffd8ee32b3c5f51d03845f99786fa9b68db6ff509c505411"
         }
       },
       "targets": [
@@ -32760,24 +32760,24 @@
               "target": "once_cell"
             },
             {
-              "id": "pest 2.5.7",
+              "id": "pest 2.6.0",
               "target": "pest"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "2.5.7"
+        "version": "2.6.0"
       },
       "license": "MIT/Apache-2.0"
     },
-    "pest_vm 2.5.7": {
+    "pest_vm 2.6.0": {
       "name": "pest_vm",
-      "version": "2.5.7",
+      "version": "2.6.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/pest_vm/2.5.7/download",
-          "sha256": "b08a824e4c0fd842e2906becbf538359a2ff159bbbeeaadb912ca7b16fa0b8ce"
+          "url": "https://crates.io/api/v1/crates/pest_vm/2.6.0/download",
+          "sha256": "910fc201ae72f3391e17ef56d12d95d7d537d68bdf572758edaca76c9349624f"
         }
       },
       "targets": [
@@ -32802,18 +32802,18 @@
         "deps": {
           "common": [
             {
-              "id": "pest 2.5.7",
+              "id": "pest 2.6.0",
               "target": "pest"
             },
             {
-              "id": "pest_meta 2.5.7",
+              "id": "pest_meta 2.6.0",
               "target": "pest_meta"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "2.5.7"
+        "version": "2.6.0"
       },
       "license": "MIT/Apache-2.0"
     },
@@ -39647,13 +39647,13 @@
       },
       "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT"
     },
-    "rustix 0.37.14": {
+    "rustix 0.37.15": {
       "name": "rustix",
-      "version": "0.37.14",
+      "version": "0.37.15",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/rustix/0.37.14/download",
-          "sha256": "d9b864d3c18a5785a05953adeed93e2dca37ed30f18e69bba9f30079d51f363f"
+          "url": "https://crates.io/api/v1/crates/rustix/0.37.15/download",
+          "sha256": "a0661814f891c57c930a610266415528da53c4933e6dea5fb350cbfe048a9ece"
         }
       },
       "targets": [
@@ -39707,7 +39707,7 @@
               "target": "io_lifetimes"
             },
             {
-              "id": "rustix 0.37.14",
+              "id": "rustix 0.37.15",
               "target": "build_script_build"
             }
           ],
@@ -39728,7 +39728,7 @@
                 "target": "linux_raw_sys"
               }
             ],
-            "cfg(any(rustix_use_libc, miri, not(all(target_os = \"linux\", any(target_arch = \"x86\", all(target_arch = \"x86_64\", target_pointer_width = \"64\"), all(target_endian = \"little\", any(target_arch = \"arm\", all(target_arch = \"aarch64\", target_pointer_width = \"64\"), target_arch = \"powerpc64\", target_arch = \"riscv64\", target_arch = \"mips\", target_arch = \"mips64\")))))))": [
+            "cfg(all(not(windows), any(rustix_use_libc, miri, not(all(target_os = \"linux\", any(target_arch = \"x86\", all(target_arch = \"x86_64\", target_pointer_width = \"64\"), all(target_endian = \"little\", any(target_arch = \"arm\", all(target_arch = \"aarch64\", target_pointer_width = \"64\"), target_arch = \"powerpc64\", target_arch = \"riscv64\", target_arch = \"mips\", target_arch = \"mips64\"))))))))": [
               {
                 "id": "errno 0.3.1",
                 "target": "errno",
@@ -39741,6 +39741,11 @@
             ],
             "cfg(windows)": [
               {
+                "id": "errno 0.3.1",
+                "target": "errno",
+                "alias": "libc_errno"
+              },
+              {
                 "id": "windows-sys 0.48.0",
                 "target": "windows_sys"
               }
@@ -39748,7 +39753,7 @@
           }
         },
         "edition": "2018",
-        "version": "0.37.14"
+        "version": "0.37.15"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -45625,7 +45630,7 @@
           "selects": {
             "cfg(any(unix, target_os = \"wasi\"))": [
               {
-                "id": "rustix 0.37.14",
+                "id": "rustix 0.37.15",
                 "target": "rustix"
               }
             ],
@@ -47536,13 +47541,13 @@
       },
       "license": "MIT"
     },
-    "tokio-stream 0.1.13": {
+    "tokio-stream 0.1.14": {
       "name": "tokio-stream",
-      "version": "0.1.13",
+      "version": "0.1.14",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/tokio-stream/0.1.13/download",
-          "sha256": "76cd2598a37719e3cd4c28af93f978506a97a2920ef4d96e4b12e38b8cbc8940"
+          "url": "https://crates.io/api/v1/crates/tokio-stream/0.1.14/download",
+          "sha256": "397c988d37662c7dda6d2208364a706264bf3d6138b11d436cbac0ad38832842"
         }
       },
       "targets": [
@@ -47586,7 +47591,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.1.13"
+        "version": "0.1.14"
       },
       "license": "MIT"
     },
@@ -47637,7 +47642,7 @@
               "target": "tokio"
             },
             {
-              "id": "tokio-stream 0.1.13",
+              "id": "tokio-stream 0.1.14",
               "target": "tokio_stream"
             }
           ],
@@ -48022,7 +48027,7 @@
               "target": "tokio"
             },
             {
-              "id": "tokio-stream 0.1.13",
+              "id": "tokio-stream 0.1.14",
               "target": "tokio_stream"
             },
             {
@@ -51104,7 +51109,7 @@
               "target": "tokio_rustls"
             },
             {
-              "id": "tokio-stream 0.1.13",
+              "id": "tokio-stream 0.1.14",
               "target": "tokio_stream"
             },
             {
@@ -55851,6 +55856,26 @@
       "armv7-unknown-linux-gnueabi",
       "i686-unknown-linux-gnu",
       "x86_64-unknown-linux-gnu"
+    ],
+    "cfg(all(not(windows), any(rustix_use_libc, miri, not(all(target_os = \"linux\", any(target_arch = \"x86\", all(target_arch = \"x86_64\", target_pointer_width = \"64\"), all(target_endian = \"little\", any(target_arch = \"arm\", all(target_arch = \"aarch64\", target_pointer_width = \"64\"), target_arch = \"powerpc64\", target_arch = \"riscv64\", target_arch = \"mips\", target_arch = \"mips64\"))))))))": [
+      "aarch64-apple-darwin",
+      "aarch64-apple-ios",
+      "aarch64-apple-ios-sim",
+      "aarch64-linux-android",
+      "armv7-linux-androideabi",
+      "i686-apple-darwin",
+      "i686-linux-android",
+      "i686-unknown-freebsd",
+      "powerpc-unknown-linux-gnu",
+      "riscv32imc-unknown-none-elf",
+      "riscv64gc-unknown-none-elf",
+      "s390x-unknown-linux-gnu",
+      "wasm32-unknown-unknown",
+      "wasm32-wasi",
+      "x86_64-apple-darwin",
+      "x86_64-apple-ios",
+      "x86_64-linux-android",
+      "x86_64-unknown-freebsd"
     ],
     "cfg(all(target_arch = \"aarch64\", target_env = \"gnu\", target_abi = \"llvm\", not(windows_raw_dylib)))": [],
     "cfg(all(target_arch = \"aarch64\", target_env = \"msvc\", not(windows_raw_dylib)))": [
