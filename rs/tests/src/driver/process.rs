@@ -85,7 +85,11 @@ impl Process {
         let mut lines = buffered_reader.lines();
         loop {
             match lines.next_line().await {
-                Ok(Some(line)) => info!(log, "({}|{:?}): {}", task_id, channel_tag, line),
+                Ok(Some(line)) => {
+                    let task_id: String = format!("{}", task_id);
+                    let output_channel: String = format!("{:?}", channel_tag);
+                    info!(log, "{}", line; "task_id" => task_id, "output_channel" => output_channel)
+                }
                 Ok(None) => break,
                 Err(e) => eprintln!("listen_on_channel(): {:?}", e),
             }

@@ -142,6 +142,7 @@ DEPENDENCIES = [
     "@crate_index//:ssh2",
     "@crate_index//:tempfile",
     "@crate_index//:thiserror",
+    "@crate_index//:time",
     "@crate_index//:tokio",
     "@crate_index//:url",
     "@crate_index//:walkdir",
