@@ -2,8 +2,9 @@
 
 use crate::driver::constants;
 use anyhow::Result;
-use slog::{o, Drain, Logger};
-use std::fs::File;
+use slog::{o, Drain, Key, Logger, OwnedKVList, Record, KV};
+use slog_term::Decorator;
+use std::{fmt, fs::File, io};
 use std::{os::unix::prelude::AsRawFd, path::Path};
 
 fn open_append_and_lock_exclusive<P: AsRef<Path>>(p: P) -> Result<File> {
@@ -45,9 +46,98 @@ fn multiplex_logger(l1: Logger, l2: Logger) -> Logger {
 /// creates a slog::Logger that prints to standard out using an asynchronous drain
 pub fn new_stdout_logger() -> Logger {
     let decorator = slog_term::TermDecorator::new().build();
-    let drain = slog_term::FullFormat::new(decorator)
-        .use_file_location()
-        .build()
-        .fuse();
+    let drain = SysTestLogFormatter::new(decorator).fuse();
     slog::Logger::root(async_drain(drain), o!())
+}
+
+struct SysTestLogFormatter<D> {
+    decorator: D,
+}
+
+impl<D: Decorator> SysTestLogFormatter<D> {
+    fn new(decorator: D) -> Self {
+        Self { decorator }
+    }
+}
+
+impl<D: Decorator> Drain for SysTestLogFormatter<D> {
+    type Ok = ();
+    type Err = io::Error;
+
+    fn log(&self, record: &Record<'_>, values: &OwnedKVList) -> Result<Self::Ok, Self::Err> {
+        self.decorator.with_record(record, values, |rd| {
+            let mut kv_serializer = KeyValueSerializer::default();
+            record.kv().serialize(record, &mut kv_serializer)?;
+
+            rd.start_timestamp()?;
+            let now: time::OffsetDateTime = std::time::SystemTime::now().into();
+            write!(
+                rd,
+                "{}",
+                now.format(TIMESTAMP_FORMAT)
+                    .map_err(convert_time_fmt_error)?
+            )?;
+
+            rd.start_whitespace()?;
+            write!(rd, " ")?;
+
+            rd.start_level()?;
+            write!(rd, "{}", record.level().as_short_str())?;
+
+            rd.start_location()?;
+            write!(rd, "[")?;
+            if let Some(ref task_id) = kv_serializer.task_id {
+                write!(rd, "{}:", task_id)?;
+            }
+
+            if let Some(ref output_channel) = kv_serializer.output_channel {
+                write!(rd, "{}]", output_channel)?;
+            } else {
+                write!(
+                    rd,
+                    "{}:{}:{}]",
+                    record.location().file,
+                    record.location().line,
+                    record.location().column
+                )?;
+            }
+
+            rd.start_whitespace()?;
+            write!(rd, " ")?;
+
+            rd.start_msg()?;
+            writeln!(rd, "{}", record.msg())?;
+            Ok(())
+        })
+    }
+}
+
+fn convert_time_fmt_error(cause: time::error::Format) -> io::Error {
+    io::Error::new(io::ErrorKind::Other, cause)
+}
+
+const TIMESTAMP_FORMAT: &[time::format_description::FormatItem] = time::macros::format_description!(
+    "[year]-[month]-[day] [hour repr:24]:[minute]:[second].[subsecond digits:3]"
+);
+
+#[derive(Default)]
+struct KeyValueSerializer {
+    /// The task id of the task that generated this log message.
+    pub task_id: Option<String>,
+    /// The channel name (stdout or stderr) if this log line is the output of a subprocess.
+    pub output_channel: Option<String>,
+}
+
+impl slog::ser::Serializer for KeyValueSerializer {
+    /// The trait [slog::ser::Serializer] defines methods for all basic types (`emit_usize`,
+    /// `emit_u8`, ...) which all default to emit_arguments. We only expect `task_id` and
+    /// `output_channel` to be set (on the record) and ignore all other keys.
+    fn emit_arguments(&mut self, key: Key, val: &fmt::Arguments) -> slog::Result {
+        match key {
+            "task_id" => self.task_id = Some(format!("{}", val)),
+            "output_channel" => self.output_channel = Some(format!("{}", val)),
+            _ => (),
+        }
+        Ok(())
+    }
 }

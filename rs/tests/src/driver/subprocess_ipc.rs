@@ -187,14 +187,8 @@ impl LogReceiver {
                         }
                     }
 
-                    let LogEvent {
-                        // for now, when receiving a message, we just ignore the task id and
-                        // rely on the code location of the log message to provide context.
-                        task_id: _task_id,
-                        log_record,
-                    } = log_event;
                     let mut box_records = self.box_records.lock().unwrap();
-                    box_records.box_record(log_record, &mut log);
+                    box_records.box_record(log_event, &mut log);
                 }
                 Err(e) => {
                     error!(self.log, "Could not parse log event: {e:?}");
@@ -360,15 +354,20 @@ mod ser {
         #[inline]
         pub fn box_record<F: FnMut(&'_ slog::Record<'_>)>(
             &mut self,
-            log_event: LogRecord,
+            log_event: LogEvent,
             mut f: F,
         ) {
-            let file = self.get_static_str(&log_event.file);
-            let module = self.get_static_str(&log_event.module);
-            let level =
-                Level::from_usize(log_event.level).expect("Could not convert to Level from usize.");
-            let line = log_event.line;
-            let msg = log_event.msg;
+            let LogEvent {
+                task_id,
+                log_record,
+            } = log_event;
+
+            let file = self.get_static_str(&log_record.file);
+            let module = self.get_static_str(&log_record.module);
+            let level = Level::from_usize(log_record.level)
+                .expect("Could not convert to Level from usize.");
+            let line = log_record.line;
+            let msg = log_record.msg;
 
             let rl = RecordLocation {
                 file,
@@ -386,9 +385,11 @@ mod ser {
                 level,
             };
 
-            let kv = b!();
-
-            f(&Record::new(&rs, &format_args!("{}", msg), kv));
+            f(&Record::new(
+                &rs,
+                &format_args!("{}", msg),
+                b!("task_id" => format!("{}", task_id)),
+            ));
         }
 
         #[inline]
