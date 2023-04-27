@@ -30,13 +30,13 @@ fn node_is_created_on_receiving_the_request() {
         let registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
-                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
                 .push_init_mutate_request(init_mutation_with_node_allowance(100))
                 .build(),
         )
         .await;
 
-        let (payload, node_pks) = prepare_add_node_payload();
+        let (payload, node_pks) = prepare_add_node_payload(1);
         let node_id = node_pks.node_id();
 
         // Then, ensure there is no value for the node
@@ -51,6 +51,7 @@ fn node_is_created_on_receiving_the_request() {
                 &Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
             )
             .await;
+        println!("registry.update_from_sender(add_node) = {response:?}");
         assert!(response.is_ok());
 
         // Now let's check directly in the registry that the mutation actually happened
@@ -104,13 +105,13 @@ fn node_is_not_created_on_wrong_principal() {
         let registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
-                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
                 .push_init_mutate_request(init_mutation_with_node_allowance(100))
                 .build(),
         )
         .await;
 
-        let (payload, node_pks) = prepare_add_node_payload();
+        let (payload, node_pks) = prepare_add_node_payload(1);
         let node_id = node_pks.node_id();
 
         // Then, ensure there is no value for the node
@@ -143,13 +144,13 @@ fn node_is_not_created_when_above_capacity() {
         let registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
-                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
                 .push_init_mutate_request(init_mutation_with_node_allowance(1))
                 .build(),
         )
         .await;
 
-        let (payload, node_pks) = prepare_add_node_payload();
+        let (payload, node_pks) = prepare_add_node_payload(1);
         let node_id = node_pks.node_id();
 
         // Then, ensure there is no value for the node
@@ -168,7 +169,7 @@ fn node_is_not_created_when_above_capacity() {
         assert!(response.is_ok());
 
         // Try to add another node
-        let (payload, node_pks) = prepare_add_node_payload();
+        let (payload, node_pks) = prepare_add_node_payload(2);
         let node_id = node_pks.node_id();
 
         // Ensure there is no value for this new node

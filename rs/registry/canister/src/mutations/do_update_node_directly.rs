@@ -229,7 +229,7 @@ mod test {
     #[test]
     #[should_panic(expected = "not found in the registry, aborting node update")]
     fn test_invalid_node_id() {
-        let mut registry = invariant_compliant_registry();
+        let mut registry = invariant_compliant_registry(0);
 
         let now = SystemTime::now();
 
@@ -251,9 +251,9 @@ mod test {
     #[test]
     #[should_panic(expected = "the node is not on an ECDSA subnet")]
     fn test_node_not_on_ecdsa_subnet() {
-        let mut registry = invariant_compliant_registry();
+        let mut registry = invariant_compliant_registry(0);
 
-        let (mutate_request, node_ids) = prepare_registry_with_nodes(4);
+        let (mutate_request, node_ids) = prepare_registry_with_nodes(1, 4);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();
@@ -287,9 +287,9 @@ mod test {
     #[test]
     #[should_panic(expected = "the key rotation feature is disabled")]
     fn test_idkg_key_update_disabled() {
-        let mut registry = invariant_compliant_registry();
+        let mut registry = invariant_compliant_registry(0);
 
-        let (mutate_request, node_ids) = prepare_registry_with_nodes(4);
+        let (mutate_request, node_ids) = prepare_registry_with_nodes(1, 4);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();
@@ -338,9 +338,9 @@ mod test {
     #[test]
     // Tests failures with invalid keys during the key update.
     fn test_idkg_key_update_fail() {
-        let mut registry = invariant_compliant_registry();
+        let mut registry = invariant_compliant_registry(0);
 
-        let (mutate_request, node_ids) = prepare_registry_with_nodes(4);
+        let (mutate_request, node_ids) = prepare_registry_with_nodes(1, 4);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();
@@ -399,9 +399,9 @@ mod test {
     #[test]
     // Tests two successful key updates from two different nodes.
     fn test_idkg_key_update_success() {
-        let mut registry = invariant_compliant_registry();
+        let mut registry = invariant_compliant_registry(0);
 
-        let (mutate_request, node_ids) = prepare_registry_with_nodes(4);
+        let (mutate_request, node_ids) = prepare_registry_with_nodes(1, 4);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();

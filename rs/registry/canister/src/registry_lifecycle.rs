@@ -161,7 +161,7 @@ mod test {
     #[test]
     fn post_upgrade_succeeds_with_valid_registry() {
         // given valid registry state encoded for stable storage
-        let registry = invariant_compliant_registry();
+        let registry = invariant_compliant_registry(0);
         let stable_storage_bytes = stable_storage_from_registry(&registry, None);
 
         // we can use canister_post_upgrade to initialize a new registry correctly
@@ -216,7 +216,7 @@ mod test {
     #[test]
     fn post_upgrade_fills_in_missing_versions_to_maintain_invariant() {
         // We only check a single failure mode, since the rest should be under other test coverage
-        let mut registry = invariant_compliant_registry();
+        let mut registry = invariant_compliant_registry(0);
         registry
             .changelog
             .insert(EncodedVersion::from(7), empty_mutation());
@@ -243,24 +243,29 @@ mod test {
     )]
     fn post_upgrade_fails_when_registry_decodes_different_version() {
         // Given a mismatched stable storage version from the registry
-        let registry = invariant_compliant_registry();
+        let registry = invariant_compliant_registry(0);
         let stable_storage = stable_storage_from_registry(&registry, Some(100u64));
         // then we panic when decoding
         let mut new_registry = Registry::new();
         canister_post_upgrade(&mut new_registry, &stable_storage);
     }
 
-    fn new_node_mutations() -> (NodeId, Vec<RegistryMutation>) {
+    fn new_node_mutations(mutation_id: u8) -> (NodeId, Vec<RegistryMutation>) {
         let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
         let valid_pks =
             generate_node_keys_once(&config, None).expect("error generation node public keys");
         let node_id = valid_pks.node_id();
-
         let node_record = NodeRecord {
             node_operator_id: (*TEST_NEURON_1_OWNER_PRINCIPAL).to_vec(),
-            xnet: Some(connection_endpoint_from_string("128.0.0.1:1234")),
-            http: Some(connection_endpoint_from_string("128.0.0.1:1234")),
-            p2p_flow_endpoints: vec![flow_endpoint_from_string("123,128.0.0.1:10000")],
+            xnet: Some(connection_endpoint_from_string(&format!(
+                "128.0.{mutation_id}.1:1234"
+            ))),
+            http: Some(connection_endpoint_from_string(&format!(
+                "128.0.{mutation_id}.1:4321"
+            ))),
+            p2p_flow_endpoints: vec![flow_endpoint_from_string(&format!(
+                "123,128.0.{mutation_id}.1:10000"
+            ))],
             ..Default::default()
         };
         (
@@ -273,9 +278,9 @@ mod test {
     #[test]
     fn post_upgrade_cleans_up_orphaned_node_keys_and_certs_and_nothing_else() {
         fn registry_with_one_node_and_orphaned_keys() -> (Registry, NodeId, NodeId) {
-            let mut registry = invariant_compliant_registry();
-            let (node_1_id, node_1_mutations) = new_node_mutations();
-            let (orphaned_id, mut orphaned_keys_mutations) = new_node_mutations();
+            let mut registry = invariant_compliant_registry(0);
+            let (node_1_id, node_1_mutations) = new_node_mutations(1);
+            let (orphaned_id, mut orphaned_keys_mutations) = new_node_mutations(2);
             // Remove the mutation that adds the node, so that the records will be orphaned.
             orphaned_keys_mutations.remove(0);
             registry.maybe_apply_mutation_internal(node_1_mutations);
@@ -374,9 +379,9 @@ mod test {
     #[test]
     fn post_upgrade_makes_no_changes_with_no_orphaned_certs_or_keys() {
         fn registry_with_two_nodes() -> (Registry, NodeId, NodeId) {
-            let mut registry = invariant_compliant_registry();
-            let (node_1_id, node_1_mutations) = new_node_mutations();
-            let (node_id_2, node_2_mutations) = new_node_mutations();
+            let mut registry = invariant_compliant_registry(0);
+            let (node_1_id, node_1_mutations) = new_node_mutations(1);
+            let (node_id_2, node_2_mutations) = new_node_mutations(2);
             // Remove the mutation that adds the node, so that the records will be orphaned.
             registry.maybe_apply_mutation_internal(node_1_mutations);
             registry.maybe_apply_mutation_internal(node_2_mutations);

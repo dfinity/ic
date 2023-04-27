@@ -1026,9 +1026,9 @@ mod tests {
         A proposal to add that key to the subnet must first be separately submitted."
     )]
     fn test_ecdsa_keys_cannot_be_enabled_unless_already_held() {
-        let mut registry = invariant_compliant_registry();
+        let mut registry = invariant_compliant_registry(0);
 
-        let (mutate_request, mut node_ids) = prepare_registry_with_nodes(2);
+        let (mutate_request, mut node_ids) = prepare_registry_with_nodes(1, 2);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();
@@ -1077,9 +1077,9 @@ mod tests {
         let subnet_holding_key_id = SubnetId::from(*TEST_USER1_PRINCIPAL);
         let subnet_to_update_id = SubnetId::from(*TEST_USER2_PRINCIPAL);
 
-        let mut registry = invariant_compliant_registry();
+        let mut registry = invariant_compliant_registry(0);
 
-        let (mutate_request, mut node_ids) = prepare_registry_with_nodes(2);
+        let (mutate_request, mut node_ids) = prepare_registry_with_nodes(1, 2);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();
@@ -1138,9 +1138,9 @@ mod tests {
                     but sev_status can only be set during subnet creation."
     )]
     fn test_sev_status_cannot_be_changed() {
-        let mut registry = invariant_compliant_registry();
+        let mut registry = invariant_compliant_registry(0);
 
-        let (mutate_request, mut node_ids) = prepare_registry_with_nodes(2);
+        let (mutate_request, mut node_ids) = prepare_registry_with_nodes(1, 2);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();
@@ -1168,9 +1168,9 @@ mod tests {
 
     #[test]
     fn can_add_a_second_key_in_subsequent_request() {
-        let mut registry = invariant_compliant_registry();
+        let mut registry = invariant_compliant_registry(0);
 
-        let (mutate_request, mut node_ids) = prepare_registry_with_nodes(2);
+        let (mutate_request, mut node_ids) = prepare_registry_with_nodes(1, 2);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();
@@ -1235,9 +1235,9 @@ mod tests {
 
     #[test]
     fn test_remove_ecdsa_keys_also_removed_subnet_from_signing_subnet_list() {
-        let mut registry = invariant_compliant_registry();
+        let mut registry = invariant_compliant_registry(0);
 
-        let (mutate_request, mut node_ids) = prepare_registry_with_nodes(2);
+        let (mutate_request, mut node_ids) = prepare_registry_with_nodes(1, 2);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();
@@ -1325,9 +1325,9 @@ mod tests {
 
     #[test]
     fn can_disable_signing_without_removing_keys() {
-        let mut registry = invariant_compliant_registry();
+        let mut registry = invariant_compliant_registry(0);
 
-        let (mutate_request, mut node_ids) = prepare_registry_with_nodes(2);
+        let (mutate_request, mut node_ids) = prepare_registry_with_nodes(1, 2);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();
@@ -1412,9 +1412,9 @@ mod tests {
                     ECDSA keys: [EcdsaKeyId { curve: Secp256k1, name: \"existing_key_id\" }]"
     )]
     fn enable_and_disable_signing_lists_should_not_have_same_keys_in_single_request() {
-        let mut registry = invariant_compliant_registry();
+        let mut registry = invariant_compliant_registry(0);
 
-        let (mutate_request, mut node_ids) = prepare_registry_with_nodes(2);
+        let (mutate_request, mut node_ids) = prepare_registry_with_nodes(1, 2);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();

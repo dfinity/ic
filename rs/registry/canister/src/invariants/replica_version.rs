@@ -146,7 +146,7 @@ mod tests {
     const MOCK_URL: &str = "http://release_package.tar.gz";
 
     fn check_bless_version(versions: Vec<String>) {
-        let registry = invariant_compliant_registry();
+        let registry = invariant_compliant_registry(0);
 
         let key = make_blessed_replica_versions_key();
         let value = encode_or_panic(&BlessedReplicaVersions {
@@ -190,7 +190,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "Using a version that isn't blessed.")]
     fn panic_when_using_unelected_version() {
-        let registry = invariant_compliant_registry();
+        let registry = invariant_compliant_registry(0);
 
         let list = registry.get_subnet_list_record();
         let nns_id = SubnetId::from(PrincipalId::try_from(list.subnets.get(0).unwrap()).unwrap());
@@ -207,7 +207,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "Using a version that isn't blessed.")]
     fn panic_when_retiring_unassigned_nodes_version() {
-        let mut registry = invariant_compliant_registry();
+        let mut registry = invariant_compliant_registry(0);
 
         let replica_version_id = "unassigned_version".to_string();
         let replica_version = ReplicaVersionRecord {
@@ -252,7 +252,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "Using a version that isn't blessed.")]
     fn panic_when_using_unelected_unassigned_version() {
-        let registry = invariant_compliant_registry();
+        let registry = invariant_compliant_registry(0);
 
         let key = make_unassigned_nodes_config_record_key();
         let value = encode_or_panic(&UnassignedNodesConfigRecord {
@@ -265,7 +265,7 @@ mod tests {
     }
 
     fn check_replica_version(hash: &str, urls: Vec<String>) {
-        let registry = invariant_compliant_registry();
+        let registry = invariant_compliant_registry(0);
 
         let key = make_replica_version_key(ReplicaVersion::default());
         let value = encode_or_panic(&ReplicaVersionRecord {

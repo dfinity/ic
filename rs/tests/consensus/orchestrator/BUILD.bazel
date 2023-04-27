@@ -44,6 +44,7 @@ system_test(
 system_test(
     name = "node_registration_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = ["manual"],  # Remove this line after OR-325 is closed
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
     deps = DEPENDENCIES + ["//rs/tests"],

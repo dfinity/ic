@@ -269,8 +269,8 @@ mod tests {
     use ic_registry_keys::{make_firewall_rules_record_key, FirewallRulesScope};
     use ic_types::PrincipalId;
 
-    fn firewall_mutations_test(scope: FirewallRulesScope) {
-        let mut registry = invariant_compliant_registry();
+    fn firewall_mutations_test(mutation_id: u8, scope: FirewallRulesScope) {
+        let mut registry = invariant_compliant_registry(mutation_id);
 
         // Add initial rules
         let mut expected_result = FirewallRuleSet {
@@ -569,9 +569,9 @@ mod tests {
     #[test]
     fn firewall_mutations_all_scope_types() {
         let id = PrincipalId::new_node_test_id(TEST_ID);
-        firewall_mutations_test(FirewallRulesScope::Global);
-        firewall_mutations_test(FirewallRulesScope::ReplicaNodes);
-        firewall_mutations_test(FirewallRulesScope::Subnet(SubnetId::from(id)));
-        firewall_mutations_test(FirewallRulesScope::Node(NodeId::from(id)));
+        firewall_mutations_test(0, FirewallRulesScope::Global);
+        firewall_mutations_test(0, FirewallRulesScope::ReplicaNodes);
+        firewall_mutations_test(0, FirewallRulesScope::Subnet(SubnetId::from(id)));
+        firewall_mutations_test(0, FirewallRulesScope::Node(NodeId::from(id)));
     }
 }

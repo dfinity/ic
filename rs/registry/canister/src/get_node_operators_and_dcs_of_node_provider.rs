@@ -128,7 +128,7 @@ mod tests {
     #[test]
     fn test_get_node_operators_and_dcs_of_node_provider() {
         let mut registry = Registry::new();
-        registry.maybe_apply_mutation_internal(invariant_compliant_mutation());
+        registry.maybe_apply_mutation_internal(invariant_compliant_mutation(0));
 
         // Node Provider 1
         let dc_id_1: String = "NY1".into();
@@ -235,7 +235,7 @@ mod tests {
     #[test]
     fn test_get_node_operators_and_dcs_of_node_provider_empty() {
         let mut registry = Registry::new();
-        registry.maybe_apply_mutation_internal(invariant_compliant_mutation());
+        registry.maybe_apply_mutation_internal(invariant_compliant_mutation(0));
 
         let dc_id_1: String = "NY1".into();
         let node_operator_payload = AddNodeOperatorPayload {

@@ -204,7 +204,7 @@ fn test_recover_subnet_gets_ecdsa_keys_when_needed() {
 
             let runtime = Runtime::Local(local_runtime);
             // get some nodes for our tests
-            let (init_mutate, mut node_ids) = prepare_registry_with_nodes(5);
+            let (init_mutate, mut node_ids) = prepare_registry_with_nodes(5, 0);
 
             let key_1 = EcdsaKeyId {
                 curve: EcdsaCurve::Secp256k1,
@@ -417,7 +417,7 @@ fn test_recover_subnet_without_ecdsa_key_removes_it_from_signing_list() {
 
             let runtime = Runtime::Local(local_runtime);
             // get some nodes for our tests
-            let (init_mutate, mut node_ids) = prepare_registry_with_nodes(5);
+            let (init_mutate, mut node_ids) = prepare_registry_with_nodes(5, 0);
 
             let key_1 = EcdsaKeyId {
                 curve: EcdsaCurve::Secp256k1,

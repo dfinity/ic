@@ -27,7 +27,7 @@ fn test_add_nns_canister() {
     local_test_on_nns_subnet(|runtime| async move {
         // Set up the registry first so that it gets its expected id.
         let init_payload = RegistryCanisterInitPayloadBuilder::new()
-            .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+            .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
             .build();
         let registry = set_up_registry_canister(&runtime, init_payload).await;
         assert_eq!(registry.canister_id(), REGISTRY_CANISTER_ID);

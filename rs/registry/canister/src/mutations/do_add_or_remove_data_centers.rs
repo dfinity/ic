@@ -72,7 +72,7 @@ mod test {
     fn cannot_add_second_data_center_with_same_id() {
         // Given a registry instance
         let mut registry = Registry::new();
-        registry.maybe_apply_mutation_internal(invariant_compliant_mutation());
+        registry.maybe_apply_mutation_internal(invariant_compliant_mutation(0));
         // when we try to add two data centers with same id
         let first_record = DataCenterRecord {
             id: "AN1".into(),
@@ -112,7 +112,7 @@ mod test {
     fn can_add_data_center_after_removing() {
         // Given a registry instance
         let mut registry = Registry::new();
-        registry.maybe_apply_mutation_internal(invariant_compliant_mutation());
+        registry.maybe_apply_mutation_internal(invariant_compliant_mutation(0));
         // when we try to add two data centers with same id
         let first_record = DataCenterRecord {
             id: "AN1".into(),

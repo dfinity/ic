@@ -110,7 +110,7 @@ async fn registry(runtime: &Runtime, upgrade_scenario: UpgradeTestingScenario) {
     let mut canister = install_registry_canister(
         runtime,
         RegistryCanisterInitPayloadBuilder::new()
-            .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+            .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
             .build(),
     )
     .await;
@@ -239,7 +239,7 @@ async fn get_latest_version_certified(runtime: &Runtime, upgrade_scenario: Upgra
     let mut canister = install_registry_canister(
         runtime,
         RegistryCanisterInitPayloadBuilder::new()
-            .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+            .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
             .build(),
     )
     .await;
@@ -284,7 +284,7 @@ async fn get_changes_since_certified(runtime: &Runtime, upgrade_scenario: Upgrad
     let mut canister = install_registry_canister(
         runtime,
         RegistryCanisterInitPayloadBuilder::new()
-            .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+            .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
             .build(),
     )
     .await;
@@ -343,7 +343,7 @@ fn test_does_not_return_more_than_1000_certified_deltas() {
 
         let canister = install_registry_canister(&runtime, {
             let mut builder = RegistryCanisterInitPayloadBuilder::new();
-            builder.push_init_mutate_request(invariant_compliant_mutation_as_atomic_req());
+            builder.push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0));
             for v in 1..(3 * MAX_VERSIONS_PER_QUERY / 2) {
                 let mutation_request = RegistryAtomicMutateRequest {
                     mutations: vec![insert(format!("key{}", v), "value")],
@@ -409,7 +409,7 @@ fn test_mutations_are_rejected_from_non_authorized_sources() {
         let mut canister = install_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
-                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
                 .build(),
         )
         .await;
@@ -442,7 +442,7 @@ fn test_mutations_are_rejected_from_non_authorized_sources() {
 fn test_initial_mutations_ok() {
     local_test_on_nns_subnet(|runtime| async move {
         let init_payload = RegistryCanisterInitPayloadBuilder::new()
-            .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+            .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
             .push_init_mutate_request(RegistryAtomicMutateRequest {
                 mutations: vec![
                     upsert(b"dufourspitze", b"4634 m"),
@@ -505,7 +505,7 @@ fn test_initial_mutations_ok() {
 fn test_that_init_traps_if_any_init_mutation_fails() {
     local_test_on_nns_subnet(|runtime| async move {
         let init_payload = RegistryCanisterInitPayloadBuilder::new()
-            .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+            .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
             .push_init_mutate_request(RegistryAtomicMutateRequest {
                 mutations: vec![
                     upsert(b"rock steady", b"jamaica"),

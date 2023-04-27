@@ -33,7 +33,7 @@ fn test_the_anonymous_user_cannot_bless_a_version() {
         let mut registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
-                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
                 .build(),
         )
         .await;
@@ -105,7 +105,7 @@ fn test_a_canister_other_than_the_proposals_canister_cannot_bless_a_version() {
         let registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
-                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
                 .build(),
         )
         .await;
@@ -151,7 +151,7 @@ fn test_accepted_proposal_mutates_the_registry() {
     local_test_on_nns_subnet(|runtime| async move {
         // Add an empty routing table to the registry
         let init_payload = RegistryCanisterInitPayloadBuilder::new()
-            .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+            .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
             .build();
         let registry = set_up_registry_canister(&runtime, init_payload).await;
 

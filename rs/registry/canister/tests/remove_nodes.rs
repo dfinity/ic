@@ -52,22 +52,41 @@ fn remove_nodes_with_duplicate_endpoints_succeeds() {
             node_allowance: 5,
             ..Default::default()
         };
-        let connection_endpoint = ConnectionEndpoint {
-            ip_addr: "129.0.0.1".to_string(),
-            port: 12345,
-            protocol: Protocol::Http1 as i32,
+        let node1 = {
+            let xnet_connection_endpoint = ConnectionEndpoint {
+                ip_addr: "129.0.0.1".to_string(),
+                port: 1234,
+                protocol: Protocol::Http1 as i32,
+            };
+            let http_connection_endpoint = ConnectionEndpoint {
+                ip_addr: "129.0.0.1".to_string(),
+                port: 4321,
+                protocol: Protocol::Http1 as i32,
+            };
+            NodeRecord {
+                node_operator_id: user_test_id(NO_ID).get().to_vec(),
+                xnet: Some(xnet_connection_endpoint),
+                http: Some(http_connection_endpoint),
+                ..Default::default()
+            }
         };
-        let node1 = NodeRecord {
-            node_operator_id: user_test_id(NO_ID).get().to_vec(),
-            xnet: Some(connection_endpoint.clone()),
-            http: Some(connection_endpoint.clone()),
-            ..Default::default()
-        };
-        let node2 = NodeRecord {
-            node_operator_id: user_test_id(NO_ID).get().to_vec(),
-            xnet: Some(connection_endpoint.clone()),
-            http: Some(connection_endpoint.clone()),
-            ..Default::default()
+        let node2 = {
+            let xnet_connection_endpoint = ConnectionEndpoint {
+                ip_addr: "129.0.1.1".to_string(),
+                port: 1234,
+                protocol: Protocol::Http1 as i32,
+            };
+            let http_connection_endpoint = ConnectionEndpoint {
+                ip_addr: "129.0.1.1".to_string(),
+                port: 4321,
+                protocol: Protocol::Http1 as i32,
+            };
+            NodeRecord {
+                node_operator_id: user_test_id(NO_ID).get().to_vec(),
+                xnet: Some(xnet_connection_endpoint),
+                http: Some(http_connection_endpoint),
+                ..Default::default()
+            }
         };
         let (init_mutation, _, mut nodes_to_remove, _) = prepare_registry(1, NUM_NODES.into());
         let registry = set_up_registry_canister(
@@ -162,16 +181,23 @@ fn remove_nodes_succeeds_with_missing_encryption_keys_in_registry() {
             node_allowance: 5,
             ..Default::default()
         };
-        let connection_endpoint = ConnectionEndpoint {
-            ip_addr: "129.0.0.1".to_string(),
-            port: 12345,
-            protocol: Protocol::Http1 as i32,
-        };
-        let node = NodeRecord {
-            node_operator_id: user_test_id(NO_ID).get().to_vec(),
-            xnet: Some(connection_endpoint.clone()),
-            http: Some(connection_endpoint),
-            ..Default::default()
+        let node = {
+            let xnet_connection_endpoint = ConnectionEndpoint {
+                ip_addr: "129.0.1.1".to_string(),
+                port: 1234,
+                protocol: Protocol::Http1 as i32,
+            };
+            let http_connection_endpoint = ConnectionEndpoint {
+                ip_addr: "129.0.1.1".to_string(),
+                port: 4321,
+                protocol: Protocol::Http1 as i32,
+            };
+            NodeRecord {
+                node_operator_id: user_test_id(NO_ID).get().to_vec(),
+                xnet: Some(xnet_connection_endpoint),
+                http: Some(http_connection_endpoint),
+                ..Default::default()
+            }
         };
 
         let node_dkg_key = PublicKey {
@@ -299,16 +325,23 @@ fn remove_nodes_removes_all_keys() {
             node_allowance: 2,
             ..Default::default()
         };
-        let connection_endpoint = ConnectionEndpoint {
-            ip_addr: "129.0.0.1".to_string(),
-            port: 12345,
-            protocol: Protocol::Http1 as i32,
-        };
-        let node = NodeRecord {
-            node_operator_id: user_test_id(NO_ID).get().to_vec(),
-            xnet: Some(connection_endpoint.clone()),
-            http: Some(connection_endpoint),
-            ..Default::default()
+        let node = {
+            let xnet_connection_endpoint = ConnectionEndpoint {
+                ip_addr: "129.0.1.1".to_string(),
+                port: 1234,
+                protocol: Protocol::Http1 as i32,
+            };
+            let http_connection_endpoint = ConnectionEndpoint {
+                ip_addr: "129.0.1.1".to_string(),
+                port: 4321,
+                protocol: Protocol::Http1 as i32,
+            };
+            NodeRecord {
+                node_operator_id: user_test_id(NO_ID).get().to_vec(),
+                xnet: Some(xnet_connection_endpoint),
+                http: Some(http_connection_endpoint),
+                ..Default::default()
+            }
         };
         let (init_mutation, _, _, _) = prepare_registry(1, NUM_NODES.into());
         let mut nodes_to_remove = vec![];

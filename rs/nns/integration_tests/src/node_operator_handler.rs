@@ -94,7 +94,7 @@ fn test_node_operator_records_can_be_added_and_removed() {
         add_node_operator(&nns_canisters, &TEST_NEURON_2_OWNER_PRINCIPAL).await;
 
         // Assert that a Node Operator with no nodes can be removed
-        let (payload, _) = prepare_add_node_payload();
+        let (payload, _) = prepare_add_node_payload(1);
         let _node_id: NodeId = nns_canisters
             .registry
             .update_from_sender(

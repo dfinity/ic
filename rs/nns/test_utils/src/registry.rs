@@ -52,11 +52,28 @@ use registry_canister::mutations::node_management::do_add_node::{
 /// ID used in multiple tests.
 pub const TEST_ID: u64 = 999;
 
+/// Value used to initialize initial registry records in tests.
+///
+/// The type is `u8` to make it easy to use this constant for parameterizing IP addresses,
+/// usually as follows:
+/// ```
+/// let ip_addr = format!("192.0.{mutation_id}.{node_id}");
+/// ```
+/// where `mutation_id` is initialized with `INITIAL_MUTATION_ID` (and incremented as needed, e.g., to avoid
+/// endpoint collisions; see `registry_canister::invariants::endpoint::check_endpoint_invariants`)
+/// and `node_id` is an `u8` value identifying the node.
+///
+/// Note: The value `0` is reserved for `ic_replica_tests::get_ic_config`.
+pub const INITIAL_MUTATION_ID: u8 = 1;
+
 /// Returns a `RegistryAtomicMutateRequest` containing all the invariant
 /// compliant mutations to initialize the registry.
-pub fn invariant_compliant_mutation_as_atomic_req() -> RegistryAtomicMutateRequest {
+///
+/// The argument `mutation_id` should be specified to a `u8` value that is
+/// unique within this registry instance.
+pub fn invariant_compliant_mutation_as_atomic_req(mutation_id: u8) -> RegistryAtomicMutateRequest {
     RegistryAtomicMutateRequest {
-        mutations: invariant_compliant_mutation(),
+        mutations: invariant_compliant_mutation(mutation_id),
         preconditions: vec![],
     }
 }
@@ -202,23 +219,33 @@ pub fn routing_table_mutation(rt: &RoutingTable) -> RegistryMutation {
 
 /// Returns a mutation that sets the initial state of the registry to be
 /// compliant with its invariants.
-pub fn invariant_compliant_mutation() -> Vec<RegistryMutation> {
+///
+/// The argument `mutation_id` should be specified to a `u8` value that is
+/// unique within this registry instance.
+pub fn invariant_compliant_mutation(mutation_id: u8) -> Vec<RegistryMutation> {
     let node_operator_pid = user_test_id(TEST_ID);
     let node_pid = node_test_id(TEST_ID);
     let subnet_pid = subnet_test_id(TEST_ID);
-
-    let connection_endpoint = ConnectionEndpoint {
-        ip_addr: "128.0.0.1".to_string(),
-        port: 12345,
-        protocol: Protocol::Http1 as i32,
+    let node = {
+        let ip_addr = format!("128.0.{mutation_id}.1");
+        let protocol = Protocol::Http1 as i32;
+        let xnet_connection_endpoint = ConnectionEndpoint {
+            ip_addr: ip_addr.clone(),
+            port: 1234,
+            protocol,
+        };
+        let http_connection_endpoint = ConnectionEndpoint {
+            ip_addr,
+            port: 4321,
+            protocol,
+        };
+        NodeRecord {
+            node_operator_id: node_operator_pid.get().to_vec(),
+            xnet: Some(xnet_connection_endpoint),
+            http: Some(http_connection_endpoint),
+            ..Default::default()
+        }
     };
-    let node = NodeRecord {
-        node_operator_id: node_operator_pid.get().to_vec(),
-        xnet: Some(connection_endpoint.clone()),
-        http: Some(connection_endpoint),
-        ..Default::default()
-    };
-
     const MOCK_HASH: &str = "d1bc8d3ba4afc7e109612cb73acbdddac052c93025aa1f82942edabb7deb82a1";
     let release_package_url = "http://release_package.tar.gz".to_string();
     let replica_version_id = ReplicaVersion::default().to_string();
@@ -279,15 +306,24 @@ fn make_node_operator_record(principal_id: PrincipalId) -> NodeOperatorRecord {
 
 /// Make a node record from the provided `NodeOperatorRecord`.
 fn make_node_record(node_operator_record: &NodeOperatorRecord) -> NodeRecord {
-    let connection_endpoint = ConnectionEndpoint {
-        ip_addr: "128.0.0.1".to_string(),
-        port: 12345,
+    let id = node_operator_record
+        .node_operator_principal_id
+        .iter()
+        .fold(0, |acc: u32, v| (acc + (*v as u32)) % 255) as u8;
+    let xnet_connection_endpoint = ConnectionEndpoint {
+        ip_addr: format!("128.0.{id}.1"),
+        port: 1234,
+        protocol: Protocol::Http1 as i32,
+    };
+    let http_connection_endpoint = ConnectionEndpoint {
+        ip_addr: format!("128.0.{id}.1"),
+        port: 4321,
         protocol: Protocol::Http1 as i32,
     };
     NodeRecord {
         node_operator_id: node_operator_record.node_operator_principal_id.clone(),
-        xnet: Some(connection_endpoint.clone()),
-        http: Some(connection_endpoint),
+        xnet: Some(xnet_connection_endpoint),
+        http: Some(http_connection_endpoint),
         ..Default::default()
     }
 }
@@ -468,10 +504,10 @@ pub fn prepare_registry_with_two_node_sets(
     Vec<RegistryMutation>,
 ) {
     // Nodes (both assigned and unassigned)
-    let mut mutations = invariant_compliant_mutation();
+    let mut mutations = invariant_compliant_mutation(INITIAL_MUTATION_ID);
     let mut node_mutations = Vec::<RegistryMutation>::default();
     let node_ids: Vec<NodeId> = (0..num_nodes_in_subnet2 + num_nodes_in_subnet1)
-        .map(|idx| {
+        .map(|id| {
             let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
             let node_pks =
                 generate_node_keys_once(&config, None).expect("error generating node public keys");
@@ -487,16 +523,16 @@ pub fn prepare_registry_with_two_node_sets(
 
             let node_key = make_node_record_key(node_id);
             // Connection endpoints must be well-formed and most must be unique
-            let ip_addr_prefix = "128.0.0.1:".to_owned();
-            let port = 1234;
+            let effective_id = 1 + INITIAL_MUTATION_ID + (id as u8);
+            let ip_addr_prefix = format!("128.0.{effective_id}.1:");
             let node_record = NodeRecord {
-                xnet: Some(connection_endpoint_from_string(
-                    &(ip_addr_prefix.clone() + &(port + idx).to_string()),
-                )),
-                http: Some(connection_endpoint_from_string(
-                    &(ip_addr_prefix + &(port - 1 - idx).to_string()),
-                )),
-                p2p_flow_endpoints: vec!["123,128.0.0.1:10000"]
+                xnet: Some(connection_endpoint_from_string(&format!(
+                    "{ip_addr_prefix}1234"
+                ))),
+                http: Some(connection_endpoint_from_string(&format!(
+                    "{ip_addr_prefix}4321"
+                ))),
+                p2p_flow_endpoints: vec![&format!("123,{ip_addr_prefix}10000")]
                     .iter()
                     .map(|x| flow_endpoint_from_string(x))
                     .collect(),
@@ -595,7 +631,7 @@ pub fn prepare_registry_with_two_node_sets(
 }
 
 /// Prepares all the payloads to add a new node, for tests.
-pub fn prepare_add_node_payload() -> (AddNodePayload, ValidNodePublicKeys) {
+pub fn prepare_add_node_payload(mutation_id: u8) -> (AddNodePayload, ValidNodePublicKeys) {
     // As the node canister checks for validity of keys, we need to generate them
     // first
     let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
@@ -617,10 +653,10 @@ pub fn prepare_add_node_payload() -> (AddNodePayload, ValidNodePublicKeys) {
         ni_dkg_dealing_encryption_pk,
         transport_tls_cert,
         idkg_dealing_encryption_pk: Some(idkg_dealing_encryption_pk),
-        xnet_endpoint: "128.0.0.1:1234".to_string(),
-        http_endpoint: "128.0.0.1:8123".to_string(),
-        p2p_flow_endpoints: vec!["123,128.0.0.1:10000".to_string()],
-        prometheus_metrics_endpoint: "128.0.0.1:5555".to_string(),
+        xnet_endpoint: format!("128.0.{mutation_id}.1:1234"),
+        http_endpoint: format!("128.0.{mutation_id}.1:4321"),
+        p2p_flow_endpoints: vec![format!("123,128.0.{mutation_id}.1:10000")],
+        prometheus_metrics_endpoint: format!("128.0.{mutation_id}.1:5555"),
     };
 
     (payload, node_public_keys)

@@ -43,7 +43,7 @@ fn node_is_removed_on_receiving_the_request() {
         let test_node_record = NodeRecord {
             node_operator_id: (*TEST_NEURON_1_OWNER_PRINCIPAL).to_vec(),
             xnet: Some(connection_endpoint_from_string("128.0.0.1:1234")),
-            http: Some(connection_endpoint_from_string("128.0.0.1:1234")),
+            http: Some(connection_endpoint_from_string("128.0.0.1:4321")),
             p2p_flow_endpoints: vec!["123,128.0.0.1:10000"]
                 .iter()
                 .map(|x| flow_endpoint_from_string(x))
@@ -55,7 +55,7 @@ fn node_is_removed_on_receiving_the_request() {
         let registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
-                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(1))
                 .push_init_mutate_request(mutation)
                 .build(),
         )
@@ -123,7 +123,7 @@ fn node_cannot_be_removed_by_non_node_operator() {
         let test_node_record = NodeRecord {
             node_operator_id: (*TEST_NEURON_1_OWNER_PRINCIPAL).to_vec(),
             xnet: Some(connection_endpoint_from_string("128.0.0.1:1234")),
-            http: Some(connection_endpoint_from_string("128.0.0.1:1234")),
+            http: Some(connection_endpoint_from_string("128.0.0.1:4321")),
             p2p_flow_endpoints: vec!["123,128.0.0.1:10000"]
                 .iter()
                 .map(|x| flow_endpoint_from_string(x))
@@ -135,7 +135,7 @@ fn node_cannot_be_removed_by_non_node_operator() {
         let registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
-                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(1))
                 .push_init_mutate_request(mutation)
                 .build(),
         )
@@ -157,7 +157,7 @@ fn node_cannot_be_removed_if_in_subnet() {
         let test_node_record = NodeRecord {
             node_operator_id: (*TEST_NEURON_1_OWNER_PRINCIPAL).to_vec(),
             xnet: Some(connection_endpoint_from_string("128.0.0.1:1234")),
-            http: Some(connection_endpoint_from_string("128.0.0.1:1234")),
+            http: Some(connection_endpoint_from_string("128.0.0.1:4321")),
             p2p_flow_endpoints: vec!["123,128.0.0.1:10000"]
                 .iter()
                 .map(|x| flow_endpoint_from_string(x))
@@ -186,7 +186,7 @@ fn node_cannot_be_removed_if_in_subnet() {
         let registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
-                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(1))
                 .push_init_mutate_request(mutation)
                 .push_init_mutate_request(RegistryAtomicMutateRequest {
                     mutations: vec![

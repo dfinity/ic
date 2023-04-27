@@ -367,7 +367,7 @@ mod test {
         expected = "The requested ECDSA key 'Secp256k1:fake_key_id' was not found in any subnet"
     )]
     fn should_panic_if_ecdsa_keys_non_existing() {
-        let mut registry = invariant_compliant_registry();
+        let mut registry = invariant_compliant_registry(0);
         let payload = CreateSubnetPayload {
             replica_version_id: ReplicaVersion::default().into(),
             ecdsa_config: Some(EcdsaInitialConfig {
@@ -400,10 +400,10 @@ mod test {
             name: "fake_key_id".to_string(),
         };
         let signing_subnet = SubnetId::from(*TEST_USER1_PRINCIPAL);
-        let mut registry = invariant_compliant_registry();
+        let mut registry = invariant_compliant_registry(0);
 
         // add a node for our existing subnet that has the ECDSA key
-        let (mutate_request, node_ids) = prepare_registry_with_nodes(1);
+        let (mutate_request, node_ids) = prepare_registry_with_nodes(1, 1);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();
@@ -454,10 +454,10 @@ mod test {
             name: "fake_key_id".to_string(),
         };
         let signing_subnet = SubnetId::from(*TEST_USER1_PRINCIPAL);
-        let mut registry = invariant_compliant_registry();
+        let mut registry = invariant_compliant_registry(0);
 
         // add a node for our existing subnet that has the ECDSA key
-        let (mutate_request, node_ids) = prepare_registry_with_nodes(1);
+        let (mutate_request, node_ids) = prepare_registry_with_nodes(1, 1);
         registry.maybe_apply_mutation_internal(mutate_request.mutations);
 
         let mut subnet_list_record = registry.get_subnet_list_record();
