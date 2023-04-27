@@ -349,7 +349,9 @@ fn remove_stale<A: ActiveChecker>(active_replicas: A, metrics_text: &[u8]) -> Ve
         .flat_map(|ln| match ln {
             Ok(ln) => {
                 // Skip lines that arent gauges
-                if !ln.starts_with("control_plane_check_status{") {
+                if !ln.starts_with("control_plane_check_status{")
+                    && !ln.starts_with("control_plane_check_block_height{")
+                {
                     return Vec::from(format!("{ln}\n"));
                 }
 

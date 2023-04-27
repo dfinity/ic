@@ -240,7 +240,7 @@ impl<R: Retrieve + Send + Sync, C: Check, P: Persist> Run for CheckPersistRunner
 }
 
 pub struct CheckResult {
-    height: u64,
+    pub height: u64,
 }
 
 #[automock]
