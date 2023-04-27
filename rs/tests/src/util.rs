@@ -906,29 +906,47 @@ pub(crate) async fn create_and_install(
     .await
 }
 
+pub async fn create_canister(agent: &Agent, effective_canister_id: PrincipalId) -> Principal {
+    create_canister_with_cycles(agent, effective_canister_id, CYCLES_LIMIT_PER_CANISTER).await
+}
+
+pub(crate) async fn create_canister_with_cycles(
+    agent: &Agent,
+    effective_canister_id: PrincipalId,
+    amount: Cycles,
+) -> Principal {
+    let mgr = ManagementCanister::create(agent);
+    mgr.create_canister()
+        .as_provisional_create_with_amount(Some(amount.into()))
+        .with_effective_canister_id(effective_canister_id)
+        .call_and_wait(delay())
+        .await
+        .unwrap_or_else(|err| panic!("Couldn't create canister with provisional API: {}", err))
+        .0
+}
+
+pub async fn install_canister(
+    agent: &Agent,
+    canister_id: Principal,
+    canister_wasm: &[u8],
+    arg: Vec<u8>,
+) {
+    let mgr = ManagementCanister::create(agent);
+    mgr.install_code(&canister_id, canister_wasm)
+        .with_raw_arg(arg)
+        .call_and_wait(delay())
+        .await
+        .unwrap_or_else(|err| panic!("Couldn't install canister: {}", err));
+}
+
 pub(crate) async fn create_and_install_with_cycles(
     agent: &Agent,
     effective_canister_id: PrincipalId,
     canister_wasm: &[u8],
     amount: Cycles,
 ) -> Principal {
-    let mgr = ManagementCanister::create(agent);
-    let canister_id = mgr
-        .create_canister()
-        .as_provisional_create_with_amount(Some(amount.into()))
-        .with_effective_canister_id(effective_canister_id)
-        .call_and_wait(delay())
-        .await
-        .unwrap_or_else(|err| panic!("Couldn't create canister with provisional API: {}", err))
-        .0;
-
-    // Install the universal canister.
-    mgr.install_code(&canister_id, canister_wasm)
-        .with_raw_arg(vec![])
-        .call_and_wait(delay())
-        .await
-        .unwrap_or_else(|err| panic!("Couldn't install canister: {}", err));
-
+    let canister_id = create_canister_with_cycles(agent, effective_canister_id, amount).await;
+    install_canister(agent, canister_id, canister_wasm, vec![]).await;
     canister_id
 }
 

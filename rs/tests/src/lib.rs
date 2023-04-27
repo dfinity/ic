@@ -22,6 +22,7 @@ pub mod mainnet_tests;
 pub mod message_routing;
 pub mod networking;
 pub mod nns;
+pub mod nns_dapp;
 pub mod nns_tests;
 pub mod orchestrator;
 pub mod rosetta_test;

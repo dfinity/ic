@@ -567,6 +567,15 @@ http_file(
     url = "https://github.com/dfinity/internet-identity/releases/download/release-2023-01-16/internet_identity_test.wasm",
 )
 
+# NNS frontend dapp canister
+
+http_file(
+    name = "nns_dapp_canister",
+    downloaded_file_path = "nns_dapp_canister.wasm",
+    sha256 = "8bcf768429631db5f6db372d090c58eedc9308ef623d98e0381121f598215de6",
+    url = "https://github.com/dfinity/nns-dapp/releases/download/proposal-119296/nns-dapp.wasm",
+)
+
 # SNS aggregator canister (https://github.com/dfinity/nns-dapp/releases/tag/tip)
 
 http_file(

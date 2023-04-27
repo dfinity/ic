@@ -492,3 +492,15 @@ path = "message_routing/xnet/xnet_malicious_slices.rs"
 [[bin]]
 name = "ic-systest-canister-global-reboot-test"
 path = "message_routing/global_reboot_test.rs"
+
+[[bin]]
+name = "ic-systest-small"
+path = "testing_verification/testnets/small.rs"
+
+[[bin]]
+name = "ic-systest-small-nns"
+path = "testing_verification/testnets/small_nns.rs"
+
+[[bin]]
+name = "ic-systest-medium"
+path = "testing_verification/testnets/medium.rs"
