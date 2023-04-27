@@ -1,0 +1,33 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+load("//bazel:canisters.bzl", "rust_canister")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = []
+
+MACRO_DEPENDENCIES = []
+
+rust_library(
+    name = "index-ng",
+    srcs = ["src/lib.rs"],
+    crate_name = "ic_icrc1_index_ng",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_canister(
+    name = "index_ng_canister",
+    srcs = ["src/main.rs"],
+    compile_data = ["//rs/rosetta-api/icrc1/index:index.did"],
+    crate_name = "ic_icrc1_index_ng_canister",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    rustc_env = {
+        "INDEX_DID_PATH": "$(location //rs/rosetta-api/icrc1/index:index.did)",
+    },
+    service_file = "//rs/rosetta-api/icrc1/index:index.did",
+    deps = [
+        ":index-ng",
+    ] + DEPENDENCIES,
+)
