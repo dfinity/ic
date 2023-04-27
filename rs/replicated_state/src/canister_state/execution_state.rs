@@ -348,6 +348,56 @@ impl SandboxMemoryHandle {
         self.0.get_sandbox_process_id()
     }
 }
+
+/// Next scheduled method: round-robin across GlobalTimer; Heartbeat; and Message.
+#[derive(Clone, Copy, Eq, Debug, PartialEq)]
+pub enum NextScheduledMethod {
+    GlobalTimer,
+    Heartbeat,
+    Message,
+}
+
+impl Default for NextScheduledMethod {
+    fn default() -> Self {
+        NextScheduledMethod::GlobalTimer
+    }
+}
+
+impl From<pb::NextScheduledMethod> for NextScheduledMethod {
+    fn from(val: pb::NextScheduledMethod) -> Self {
+        match val {
+            pb::NextScheduledMethod::Unspecified | pb::NextScheduledMethod::GlobalTimer => {
+                NextScheduledMethod::GlobalTimer
+            }
+            pb::NextScheduledMethod::Heartbeat => NextScheduledMethod::Heartbeat,
+            pb::NextScheduledMethod::Message => NextScheduledMethod::Message,
+        }
+    }
+}
+
+impl From<NextScheduledMethod> for pb::NextScheduledMethod {
+    fn from(val: NextScheduledMethod) -> Self {
+        match val {
+            NextScheduledMethod::GlobalTimer => pb::NextScheduledMethod::GlobalTimer,
+            NextScheduledMethod::Heartbeat => pb::NextScheduledMethod::Heartbeat,
+            NextScheduledMethod::Message => pb::NextScheduledMethod::Message,
+        }
+    }
+}
+
+impl NextScheduledMethod {
+    pub const NUMBER_OF_VARIANTS: u32 = 3;
+
+    /// Round-robin across methods.
+    pub fn inc(&mut self) {
+        *self = match self {
+            Self::GlobalTimer => Self::Heartbeat,
+            Self::Heartbeat => Self::Message,
+            Self::Message => Self::GlobalTimer,
+        }
+    }
+}
+
 /// The part of the canister state that can be accessed during execution
 ///
 /// Note that execution state is used to track ephemeral information.
@@ -403,6 +453,9 @@ pub struct ExecutionState {
     /// Round number at which canister executed
     /// update type operation.
     pub last_executed_round: ExecutionRound,
+
+    /// Round-robin across canister method types.
+    pub next_scheduled_method: NextScheduledMethod,
 }
 
 // We have to implement it by hand as embedder_cache can not be compared for
@@ -422,6 +475,7 @@ impl PartialEq for ExecutionState {
             ref exports,
             ref metadata,
             ref last_executed_round,
+            ref next_scheduled_method,
         } = rhs;
 
         (
@@ -432,6 +486,7 @@ impl PartialEq for ExecutionState {
             &self.exports,
             &self.metadata,
             &self.last_executed_round,
+            &self.next_scheduled_method,
         ) == (
             &wasm_binary.binary,
             wasm_memory,
@@ -440,6 +495,7 @@ impl PartialEq for ExecutionState {
             exports,
             metadata,
             last_executed_round,
+            next_scheduled_method,
         )
     }
 }
@@ -467,6 +523,7 @@ impl ExecutionState {
             exported_globals,
             metadata: wasm_metadata,
             last_executed_round: ExecutionRound::from(0),
+            next_scheduled_method: NextScheduledMethod::default(),
         }
     }
 
@@ -694,5 +751,33 @@ impl TryFrom<pb::WasmMetadata> for WasmMetadata {
             )
             .collect::<Result<_, _>>()?;
         Ok(WasmMetadata::new(custom_sections))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeSet;
+
+    use super::NextScheduledMethod;
+
+    #[test]
+    fn test_next_scheduled_method() {
+        let mut values: BTreeSet<u8> = BTreeSet::new();
+        let number_of_variants = NextScheduledMethod::NUMBER_OF_VARIANTS;
+        let mut next_method = NextScheduledMethod::GlobalTimer;
+        let initial_scheduled_method = NextScheduledMethod::GlobalTimer;
+
+        for _ in 0..number_of_variants {
+            values.insert(next_method as u8);
+            next_method.inc();
+        }
+
+        // Check that after calling method 'inc()' 'NUMBER_OF_VARIANTS'
+        // times we are back at the initial method.
+        assert_eq!(next_method, initial_scheduled_method);
+
+        // Check that we loop over all possible variants of
+        // the 'NextScheduledMethod'.
+        assert_eq!(values.len(), number_of_variants as usize);
     }
 }

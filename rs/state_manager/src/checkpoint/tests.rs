@@ -5,7 +5,7 @@ use ic_ic00_types::CanisterStatusType;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
-    canister_state::execution_state::{WasmBinary, WasmMetadata},
+    canister_state::execution_state::{NextScheduledMethod, WasmBinary, WasmMetadata},
     page_map::{Buffer, TestPageAllocatorFileDescriptorImpl},
     testing::ReplicatedStateTesting,
     CallContextManager, CanisterStatus, ExecutionState, ExportedFunctions, NumWasmPages, PageIndex,
@@ -247,7 +247,9 @@ fn can_recover_from_a_checkpoint() {
             exports: ExportedFunctions::new(BTreeSet::new()),
             metadata: WasmMetadata::default(),
             last_executed_round: ExecutionRound::from(0),
+            next_scheduled_method: NextScheduledMethod::default(),
         };
+
         canister_state.execution_state = Some(execution_state);
 
         let own_subnet_type = SubnetType::Application;

@@ -27,6 +27,8 @@ use std::convert::From;
 use std::sync::Arc;
 use std::time::Duration;
 
+use self::execution_state::NextScheduledMethod;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 /// State maintained by the scheduler.
 pub struct SchedulerState {
@@ -528,6 +530,21 @@ impl CanisterState {
             CanisterStatus::Running { .. } => CanisterStatusType::Running,
             CanisterStatus::Stopping { .. } => CanisterStatusType::Stopping,
             CanisterStatus::Stopped { .. } => CanisterStatusType::Stopped,
+        }
+    }
+
+    /// Returns next scheduled method.
+    pub fn get_next_scheduled_method(&self) -> NextScheduledMethod {
+        self.execution_state.as_ref().map_or_else(
+            || NextScheduledMethod::Message,
+            |execution_state| execution_state.next_scheduled_method,
+        )
+    }
+
+    /// Increments next scheduled method.
+    pub fn inc_next_scheduled_method(&mut self) {
+        if let Some(execution_state) = self.execution_state.as_mut() {
+            execution_state.next_scheduled_method.inc();
         }
     }
 }

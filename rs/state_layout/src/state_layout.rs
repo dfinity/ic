@@ -8,14 +8,20 @@ use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     state::{
         canister_metadata::v1::{self as pb_canister_metadata},
-        canister_state_bits::v1::{self as pb_canister_state_bits, ConsumedCyclesByUseCase},
+        canister_state_bits::v1::{
+            self as pb_canister_state_bits, ConsumedCyclesByUseCase,
+            NextScheduledMethod as ProtoNextScheduledMethod,
+        },
         ingress::v1 as pb_ingress,
         queues::v1 as pb_queues,
         system_metadata::v1 as pb_metadata,
     },
 };
 use ic_replicated_state::{
-    canister_state::{execution_state::WasmMetadata, system_state::CyclesUseCase},
+    canister_state::{
+        execution_state::{NextScheduledMethod, WasmMetadata},
+        system_state::CyclesUseCase,
+    },
     CallContextManager, CanisterStatus, ExecutionTask, ExportedFunctions, Global, NumWasmPages,
 };
 use ic_sys::mmap::ScopedMmap;
@@ -38,7 +44,6 @@ use std::sync::{
     Arc, Mutex,
 };
 use std::time::Instant;
-
 /// `ReadOnly` is the access policy used for reading checkpoints. We
 /// don't want to ever modify persisted states.
 pub enum ReadOnly {}
@@ -109,6 +114,7 @@ pub struct ExecutionStateBits {
     pub last_executed_round: ExecutionRound,
     pub metadata: WasmMetadata,
     pub binary_hash: Option<WasmHash>,
+    pub next_scheduled_method: NextScheduledMethod,
 }
 
 /// This struct contains bits of the `CanisterState` that are not already
@@ -1674,6 +1680,10 @@ impl From<&ExecutionStateBits> for pb_canister_state_bits::ExecutionStateBits {
             last_executed_round: item.last_executed_round.get(),
             metadata: Some((&item.metadata).into()),
             binary_hash: item.binary_hash.as_ref().map(|h| h.to_vec()),
+            next_scheduled_method: Some(
+                pb_canister_state_bits::NextScheduledMethod::from(item.next_scheduled_method)
+                    .into(),
+            ),
         }
     }
 }
@@ -1706,6 +1716,12 @@ impl TryFrom<pb_canister_state_bits::ExecutionStateBits> for ExecutionStateBits 
             metadata: try_from_option_field(value.metadata, "ExecutionStateBits::metadata")
                 .unwrap_or_default(),
             binary_hash,
+            next_scheduled_method: match value.next_scheduled_method {
+                Some(method_id) => ProtoNextScheduledMethod::from_i32(method_id)
+                    .unwrap_or_default()
+                    .into(),
+                None => NextScheduledMethod::default(),
+            },
         })
     }
 }

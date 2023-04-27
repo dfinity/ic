@@ -2395,6 +2395,8 @@ fn swap_lifecycle_sad() {
         std::time::UNIX_EPOCH + std::time::Duration::from_secs(*SWAP_DUE_TIMESTAMP_SECONDS + 1),
     );
 
+    state_machine.tick();
+
     // Make sure the swap reached the Aborted state.
     {
         let result = swap_get_state(
