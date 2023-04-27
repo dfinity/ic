@@ -24,7 +24,7 @@ const CXDR_SYMBOL: &str = "CXDR";
 const REFRESH_RATE_INTERVAL_SECONDS: u64 = 5 * ONE_MINUTE_SECONDS;
 
 /// The minimum number of received sources to consider an ICP/CXDR rate's base asset valid.
-const MINIMUM_ICP_SOURCES: usize = 5;
+const MINIMUM_ICP_SOURCES: usize = 4;
 
 /// The minimum number of received sources to consider an ICP/CXDR rate's quote asset valid.
 const MINIMUM_CXDR_SOURCES: usize = 4;
