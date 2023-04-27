@@ -144,11 +144,32 @@ pub async fn setup_registry_synced_with_fake_client(
 
 /// Prepare a mutate request to add the desired number of nodes, and returned the IDs
 /// of the nodes to be added.
-pub fn prepare_registry_with_nodes(node_count: u64) -> (RegistryAtomicMutateRequest, Vec<NodeId>) {
+///
+/// The argument `starting_mutation_id` can be used to avoid mutation collisions in tests
+/// that involve multiple registry mutations, e.g., creating multiple node records that
+/// should have distinct API endpoints.
+///
+/// This function will create `node_count` mutations.
+///
+/// Example usage:
+/// ```
+/// // Creates one initial mutation
+/// let mut registry = registry_canister::common::test_helpers::invariant_compliant_registry(0);
+/// // Creates 10 more mutations, so we have 11 mutations (0..10 inclusive).
+/// let (mut_req_a, _) = prepare_registry_with_nodes(10, 1);
+/// registry.maybe_apply_mutation_internal(mut_req_a.mutations)
+/// // Creates 8 more mutations, so we have 19 mutations (0..18 inclusive).
+/// let (mut_req_b, _) prepare_registry_with_nodes(8, 11);
+/// registry.maybe_apply_mutation_internal(mut_req_b.mutations)
+/// ```
+pub fn prepare_registry_with_nodes(
+    node_count: u64,
+    starting_mutation_id: u8,
+) -> (RegistryAtomicMutateRequest, Vec<NodeId>) {
     // Prepare a transaction to add the nodes to the registry
     let mut mutations = vec![];
     let node_ids: Vec<NodeId> = (0..node_count)
-        .map(|_| {
+        .map(|id| {
             let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
             let node_pks =
                 generate_node_keys_once(&config, None).expect("error generating node public keys");
@@ -167,12 +188,17 @@ pub fn prepare_registry_with_nodes(node_count: u64) -> (RegistryAtomicMutateRequ
             ));
 
             let node_key = make_node_record_key(node_id);
+            let effective_id = starting_mutation_id + (id as u8);
             mutations.push(insert(
                 node_key.as_bytes(),
                 encode_or_panic(&NodeRecord {
-                    xnet: Some(connection_endpoint_from_string("128.0.0.1:1234")),
-                    http: Some(connection_endpoint_from_string("128.0.0.1:1234")),
-                    p2p_flow_endpoints: vec!["123,128.0.0.1:10000"]
+                    xnet: Some(connection_endpoint_from_string(&format!(
+                        "128.0.{effective_id}.1:1234"
+                    ))),
+                    http: Some(connection_endpoint_from_string(&format!(
+                        "128.0.{effective_id}.1:4321"
+                    ))),
+                    p2p_flow_endpoints: vec![&format!("123,128.0.{effective_id}.1:10000")]
                         .iter()
                         .map(|x| flow_endpoint_from_string(x))
                         .collect(),

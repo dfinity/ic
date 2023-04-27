@@ -58,7 +58,7 @@ fn test_the_anonymous_user_cannot_update_a_subnets_configuration() {
         let mut registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
-                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
                 .build(),
         )
         .await;
@@ -178,7 +178,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_update_a_subnets_co
         let registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
-                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
                 .push_init_mutate_request(RegistryAtomicMutateRequest {
                     mutations: vec![insert(
                         make_subnet_record_key(subnet_id).as_bytes(),
@@ -264,7 +264,7 @@ fn test_the_governance_canister_can_update_a_subnets_configuration() {
         let registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
-                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
                 .push_init_mutate_request(RegistryAtomicMutateRequest {
                     mutations: vec![insert(
                         make_subnet_record_key(subnet_id).as_bytes(),
@@ -411,7 +411,7 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
 
     const NO_ECDSA_CONFIG_REJECT_MSG: &str = "Canister rejected with message: \
     IC0503: Canister rwlgt-iiaaa-aaaaa-aaaaa-cai trapped explicitly: Panicked at \
-    '[Registry]  invariant check failed with message:The subnet \
+    '[Registry]  invariant check failed with message: The subnet \
     bn3el-jdvcs-a3syn-gyqwo-umlu3-avgud-vq6yl-hunln-3jejb-226vq-mae does not \
     have an ECDSA config'";
 
@@ -453,7 +453,7 @@ fn test_subnets_configuration_ecdsa_fields_are_updated_correctly() {
         let registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
-                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
                 .push_init_mutate_request(RegistryAtomicMutateRequest {
                     mutations: vec![insert(
                         make_subnet_record_key(subnet_id).as_bytes(),

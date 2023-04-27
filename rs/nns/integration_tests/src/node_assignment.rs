@@ -109,7 +109,7 @@ fn test_add_and_remove_nodes_from_registry() {
         )
         .await;
 
-        let (payload, _) = prepare_add_node_payload();
+        let (payload, _) = prepare_add_node_payload(1);
         let node_id: NodeId = nns_canisters
             .registry
             .update_from_sender(

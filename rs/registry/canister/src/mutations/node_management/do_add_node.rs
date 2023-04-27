@@ -113,7 +113,7 @@ pub struct AddNodePayload {
 pub fn connection_endpoint_from_string(endpoint: &str) -> ConnectionEndpoint {
     match endpoint.parse::<SocketAddr>() {
         Err(e) => panic!(
-            "Could not convert '{:?}' to a connection endpoint: {:?}",
+            "Could not convert {:?} to a connection endpoint: {:?}",
             endpoint, e
         ),
         Ok(sa) => ConnectionEndpoint {
@@ -133,7 +133,7 @@ pub fn flow_endpoint_from_string(endpoint: &str) -> FlowEndpoint {
     println!("Parts are {:?} and {:?}", parts[0], parts[1]);
     match parts[1].parse::<SocketAddr>() {
         Err(e) => panic!(
-            "Could not convert '{:?}' to a connection endpoint: {:?}",
+            "Could not convert {:?} to a connection endpoint: {:?}",
             endpoint, e
         ),
         Ok(sa) => FlowEndpoint {

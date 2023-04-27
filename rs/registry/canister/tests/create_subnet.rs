@@ -6,7 +6,7 @@ use ic_nns_test_utils::{
         forward_call_via_universal_canister, local_test_on_nns_subnet, set_up_registry_canister,
         set_up_universal_canister,
     },
-    registry::invariant_compliant_mutation_as_atomic_req,
+    registry::{invariant_compliant_mutation_as_atomic_req, INITIAL_MUTATION_ID},
 };
 use ic_protobuf::registry::crypto::v1::{EcdsaCurve as pbEcdsaCurve, EcdsaKeyId as pbEcdsaKeyId};
 use std::convert::TryFrom;
@@ -52,11 +52,13 @@ use common::test_helpers::{
 #[test]
 fn test_the_anonymous_user_cannot_create_a_subnet() {
     local_test_on_nns_subnet(|runtime| async move {
-        let (init_mutate, node_ids) = prepare_registry_with_nodes(4);
+        let (init_mutate, node_ids) = prepare_registry_with_nodes(4, INITIAL_MUTATION_ID);
         let mut registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
-                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(
+                    4 + INITIAL_MUTATION_ID,
+                ))
                 .push_init_mutate_request(init_mutate)
                 .build(),
         )
@@ -107,11 +109,13 @@ fn test_a_canister_other_than_the_proposals_canister_cannot_create_a_subnet() {
             ic_nns_constants::GOVERNANCE_CANISTER_ID
         );
 
-        let (init_mutate, node_ids) = prepare_registry_with_nodes(5);
+        let (init_mutate, node_ids) = prepare_registry_with_nodes(5, INITIAL_MUTATION_ID);
         let registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
-                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(
+                    5 + INITIAL_MUTATION_ID,
+                ))
                 .push_init_mutate_request(init_mutate)
                 .build(),
         )
@@ -150,7 +154,7 @@ fn test_accepted_proposal_mutates_the_registry_some_subnets_present() {
             Runtime::Local(ref r) => (r.registry_data_provider.clone(), r.registry_client.clone()),
         };
 
-        let (init_mutate, node_ids) = prepare_registry_with_nodes(5);
+        let (init_mutate, node_ids) = prepare_registry_with_nodes(5, INITIAL_MUTATION_ID);
 
         let registry = setup_registry_synced_with_fake_client(
             &runtime,
@@ -227,7 +231,7 @@ fn test_accepted_proposal_with_ecdsa_gets_keys_from_other_subnet() {
                 name: "foo-bar".to_string(),
             };
 
-            let (init_mutate, node_ids) = prepare_registry_with_nodes(5);
+            let (init_mutate, node_ids) = prepare_registry_with_nodes(5, INITIAL_MUTATION_ID);
 
             // Here we discover the IC's subnet ID (from our test harness)
             // and then modify it to hold the key.

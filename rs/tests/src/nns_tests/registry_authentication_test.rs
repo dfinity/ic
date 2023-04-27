@@ -130,7 +130,7 @@ pub fn test(env: TestEnv) {
         let mut canister = runtime.create_canister_with_max_cycles().await.unwrap();
         info!(logger, "installing registry canister...");
         let registry_init_payload = RegistryCanisterInitPayloadBuilder::new()
-            .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+            .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
             // Populate registry with some data
             .push_init_mutate_request(RegistryAtomicMutateRequest {
                 mutations: vec![upsert("IC", "Good")],

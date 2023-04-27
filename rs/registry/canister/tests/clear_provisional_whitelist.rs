@@ -31,7 +31,7 @@ fn anonymous_user_cannot_clear_the_provisional_whitelist() {
         let registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
-                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
                 .push_init_mutate_request(RegistryAtomicMutateRequest {
                     mutations: vec![RegistryMutation {
                         mutation_type: Type::Insert as i32,
@@ -88,7 +88,7 @@ fn a_canister_other_than_the_governance_canister_cannot_change_the_provisional_w
         let registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
-                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
                 .push_init_mutate_request(RegistryAtomicMutateRequest {
                     mutations: vec![RegistryMutation {
                         mutation_type: Type::Insert as i32,
@@ -139,7 +139,7 @@ fn clear_provisional_whitelist_succeeds() {
         let registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
-                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
                 .push_init_mutate_request(RegistryAtomicMutateRequest {
                     mutations: vec![RegistryMutation {
                         mutation_type: Type::Insert as i32,

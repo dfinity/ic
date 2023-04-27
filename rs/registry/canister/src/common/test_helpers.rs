@@ -20,9 +20,9 @@ use ic_registry_transport::{insert, upsert};
 use ic_types::crypto::KeyPurpose;
 use ic_types::ReplicaVersion;
 
-pub fn invariant_compliant_registry() -> Registry {
+pub fn invariant_compliant_registry(mutation_id: u8) -> Registry {
     let mut registry = Registry::new();
-    let mutations = invariant_compliant_mutation();
+    let mutations = invariant_compliant_mutation(mutation_id);
     registry.maybe_apply_mutation_internal(mutations);
     registry
 }
@@ -85,11 +85,14 @@ pub fn get_invariant_compliant_subnet_record(node_ids: Vec<NodeId>) -> SubnetRec
 
 /// Prepare a mutate request to add the desired of nodes, and returned the IDs
 /// of the nodes to be added.
-pub fn prepare_registry_with_nodes(nodes: u64) -> (RegistryAtomicMutateRequest, Vec<NodeId>) {
+pub fn prepare_registry_with_nodes(
+    start_mutation_id: u8,
+    nodes: u64,
+) -> (RegistryAtomicMutateRequest, Vec<NodeId>) {
     // Prepare a transaction to add the nodes to the registry
     let mut mutations = Vec::<RegistryMutation>::default();
     let node_ids: Vec<NodeId> = (0..nodes)
-        .map(|_| {
+        .map(|id| {
             let (config, _temp_dir) = CryptoConfig::new_in_temp_dir();
             let node_pks =
                 generate_node_keys_once(&config, None).expect("error generating node public keys");
@@ -100,12 +103,17 @@ pub fn prepare_registry_with_nodes(nodes: u64) -> (RegistryAtomicMutateRequest, 
             ));
 
             let node_key = make_node_record_key(node_id);
+            let effective_id: u8 = start_mutation_id + (id as u8);
             mutations.push(insert(
                 node_key.as_bytes(),
                 encode_or_panic(&NodeRecord {
-                    xnet: Some(connection_endpoint_from_string("128.0.0.1:1234")),
-                    http: Some(connection_endpoint_from_string("128.0.0.1:1234")),
-                    p2p_flow_endpoints: vec!["123,128.0.0.1:10000"]
+                    xnet: Some(connection_endpoint_from_string(&format!(
+                        "128.0.{effective_id}.1:1234"
+                    ))),
+                    http: Some(connection_endpoint_from_string(&format!(
+                        "128.0.{effective_id}.1:4321"
+                    ))),
+                    p2p_flow_endpoints: vec![&format!("123,128.0.{effective_id}.1:10000")]
                         .iter()
                         .map(|x| flow_endpoint_from_string(x))
                         .collect(),

@@ -30,99 +30,155 @@ pub(crate) fn check_endpoint_invariants(
     strict: bool,
 ) -> Result<(), InvariantCheckError> {
     let mut valid_endpoints = BTreeSet::<(IpAddr, u16)>::new();
-    for (node_id, node_record) in get_node_records_from_snapshot(snapshot) {
-        let mut node_endpoints = BTreeSet::<(IpAddr, u16)>::new();
-        let mut endpoints_to_check = Vec::<ConnectionEndpoint>::new();
-
-        if node_record.xnet.is_none() && node_record.xnet_api.is_empty() {
-            return Err(InvariantCheckError {
-                msg: format!("No Xnet endpoint found for node {}", node_id),
-                source: None,
-            });
-        }
-
-        if node_record.http.is_none() && node_record.public_api.is_empty() {
-            return Err(InvariantCheckError {
-                msg: format!("No HTTP/Public API endpoint found for node {}", node_id),
-                source: None,
-            });
-        }
-
-        // Xnet endpoint
-        if node_record.xnet.is_some() {
-            endpoints_to_check.push(node_record.xnet.unwrap());
-        }
-
-        // HTTP endpoint
-        if node_record.http.is_some() {
-            endpoints_to_check.push(node_record.http.unwrap());
-        }
-
-        // Private API endpoints
-        endpoints_to_check.extend(node_record.private_api);
-
-        // Public API endpoints
-        endpoints_to_check.extend(node_record.public_api);
-
-        // Xnet API endpoints
-        endpoints_to_check.extend(node_record.xnet_api);
-
-        // Prometheus metrics endpoints
-        endpoints_to_check.extend(node_record.prometheus_metrics);
-
-        // Prometheus metrics HTTP endpoint
-        if node_record.prometheus_metrics_http.is_some() {
-            endpoints_to_check.push(node_record.prometheus_metrics_http.unwrap());
-        }
+    let node_records = get_node_records_from_snapshot(snapshot);
+    let common_error_prefix = format!("Invariant violated by node records: {node_records:?}");
+    for (node_id, node_record) in node_records {
+        let error_prefix = format!("{common_error_prefix} (checking {node_id} failed)");
 
         // P2P endpoints
         //    * For each of the flow endpoints that belong to one node, the identifier
         //      must be distinct (a node may have multiple flow endpoints). That is, the
         //      address-port-pair of different flow endpoints of the same node can be
-        //      the same, but the flow identifier must be different. However, 2 nodes
-        //      can have he same flow endpoints.
+        //      the same, but the flow identifier must be different.
         for endpoint in node_record.p2p_flow_endpoints {
             let connection_endpoint = match endpoint.endpoint {
                 None => {
                     return Err(InvariantCheckError {
-                        msg: "No connection endpoint specified".to_string(),
+                        msg: format!("{error_prefix}: No connection endpoint specified"),
                         source: None,
                     })
                 }
                 Some(ep) => ep,
             };
-            validate_endpoint(&connection_endpoint, strict)?;
+            validate_endpoint(&connection_endpoint, false, strict)?;
         }
 
-        if strict {
-            // Validate all endpoints of this node (excluding p2p flow endpoints which are
-            // validated separately)
-            for endpoint in endpoints_to_check {
-                if !node_endpoints.insert(validate_endpoint(&endpoint, strict)?) {
+        // The Boolean indicates whether an unspecified address should be tolerated
+        let mut endpoints_to_check = Vec::<(ConnectionEndpoint, bool)>::new();
+
+        // Private API endpoints (cannot be unspecified)
+        endpoints_to_check.extend(node_record.private_api.into_iter().map(|x| (x, false)));
+
+        // Xnet API endpoints (cannot be unspecified)
+        // TODO: simplify this code after NET-1142 is completed
+        if !node_record.xnet_api.is_empty() {
+            let xnet_api: BTreeSet<String> = node_record
+                .xnet_api
+                .iter()
+                .map(|x| format!("{x:?}"))
+                .collect();
+            // TODO: remove the following check after NET-1142 is completed
+            if node_record.xnet.is_some() {
+                let xnet_endpoint = format!("{:?}", node_record.xnet.unwrap());
+                if !xnet_api.contains(&xnet_endpoint) {
                     return Err(InvariantCheckError {
-                        msg: format!(
-                            "Duplicate endpoint ({:?}, {:?})",
-                            &endpoint.ip_addr, &endpoint.port
-                        ),
+                        msg: format!("{error_prefix}: inconsistent node record: legacy xnet endpoint field ({xnet_endpoint}) must belong to the new xnet_api field"),
                         source: None,
                     });
                 }
             }
+            endpoints_to_check.extend(node_record.xnet_api.into_iter().map(|x| (x, false)));
+        } else {
+            if node_record.xnet.is_none() {
+                return Err(InvariantCheckError {
+                    msg: format!("{error_prefix}: No Xnet endpoint found for node"),
+                    source: None,
+                });
+            }
+            endpoints_to_check.push((node_record.xnet.unwrap(), false))
+        };
+
+        // Public API endpoints (cannot be unspecified)
+        // TODO: simplify this code after NET-1142 is completed
+        if !node_record.public_api.is_empty() {
+            let public_api: BTreeSet<String> = node_record
+                .public_api
+                .iter()
+                .map(|x| format!("{x:?}"))
+                .collect();
+            if node_record.http.is_some() {
+                let http_endpoint = format!("{:?}", node_record.http.unwrap());
+                if !public_api.contains(&http_endpoint) {
+                    return Err(InvariantCheckError {
+                        msg: format!("{error_prefix}: inconsistent node record: legacy http endpoint field ({http_endpoint}) must belong to the new public_api field"),
+                        source: None,
+                    });
+                }
+            }
+            endpoints_to_check.extend(node_record.public_api.into_iter().map(|x| (x, false)));
+        } else {
+            if node_record.http.is_none() {
+                return Err(InvariantCheckError {
+                    msg: format!("{error_prefix}: No HTTP/Public API endpoint found"),
+                    source: None,
+                });
+            }
+            endpoints_to_check.push((node_record.http.unwrap(), false))
+        };
+
+        // Prometheus metrics HTTP endpoint (may be unspecified)
+        // TODO: simplify this code after NET-1142 is completed
+        if !node_record.prometheus_metrics.is_empty() {
+            let prometheus_metrics: BTreeSet<String> = node_record
+                .prometheus_metrics
+                .iter()
+                .map(|x| format!("{x:?}"))
+                .collect();
+            if node_record.prometheus_metrics_http.is_some() {
+                let http_endpoint = format!("{:?}", node_record.prometheus_metrics_http.unwrap());
+                if !prometheus_metrics.contains(&http_endpoint) {
+                    return Err(InvariantCheckError {
+                        msg: format!("{error_prefix}: inconsistent node record: legacy prometheus_metrics_http endpoint field ({http_endpoint}) must belong to the new prometheus_metrics field"),
+                        source: None,
+                    });
+                }
+            }
+            endpoints_to_check.extend(
+                node_record
+                    .prometheus_metrics
+                    .into_iter()
+                    .map(|x| (x, true)),
+            );
+        } else if node_record.prometheus_metrics_http.is_some() {
+            endpoints_to_check.push((node_record.prometheus_metrics_http.unwrap(), true));
+        };
+
+        let mut new_valid_endpoints = BTreeSet::<(IpAddr, u16)>::new();
+
+        // Validate all endpoints of this node (excluding p2p flow endpoints which are
+        // validated separately)
+        for (endpoint, tolerate_unspecified_ip) in endpoints_to_check {
+            let valid_endpoint = validate_endpoint(&endpoint, tolerate_unspecified_ip, strict)?;
+            // Multiple nodes may have unspecified addresses, so duplicates should be avioded only for specified endpoints
+            if !valid_endpoint.0.is_unspecified() && !new_valid_endpoints.insert(valid_endpoint) {
+                return Err(InvariantCheckError {
+                    msg: format!(
+                        "{error_prefix}: Duplicate endpoint ({:?}, {:?}); previous endpoints: {new_valid_endpoints:?}",
+                        &endpoint.ip_addr, &endpoint.port
+                    ),
+                    source: None,
+                });
+            }
+        }
+
+        // Check that there are _some_ node endpoints
+        if new_valid_endpoints.is_empty() {
+            return Err(InvariantCheckError {
+                msg: format!("{error_prefix}: No endpoints to validate"),
+                source: None,
+            });
         }
 
         // Check that there is no intersection with other nodes
-        if !node_endpoints.is_disjoint(&valid_endpoints) {
+        if !new_valid_endpoints.is_disjoint(&valid_endpoints) {
             return Err(InvariantCheckError {
-                msg: format!(
-                    "Duplicate endpoints detected across nodes (for node {})",
-                    node_id
-                ),
+                msg: format!("{error_prefix}: Duplicate endpoints detected across nodes; new_valid_endpoints = {new_valid_endpoints:?}; valid_endpoints = {valid_endpoints:?}"),
                 source: None,
             });
         }
 
         // All is good -- add current endpoints to global set
-        valid_endpoints.append(&mut node_endpoints);
+        valid_endpoints.append(&mut new_valid_endpoints);
     }
 
     Ok(())
@@ -135,12 +191,15 @@ pub(crate) fn check_endpoint_invariants(
 ///    * IP address is not broadcast
 ///    * IP address is not a multicast address
 ///
-/// Strict check also checks that:
+/// If `tolerate_unspecified_ip` is set, allow the IP to be unspecified, e.g., 0.0.0.0
+///
+/// If `strict` is set, also checks that:
 ///    * IPv4 address is not private, reserved, documentation address,
 ///      link-local, benchmarking
 ///    * IPv6 address is not link-local or unique-local unicast address
 fn validate_endpoint(
     endpoint: &ConnectionEndpoint,
+    tolerate_unspecified_ip: bool,
     strict: bool,
 ) -> Result<(IpAddr, u16), InvariantCheckError> {
     if endpoint.protocol() != Protocol::Http1
@@ -169,7 +228,7 @@ fn validate_endpoint(
         source: Some(Box::new(e)),
     })?;
 
-    if ip.is_unspecified() {
+    if !tolerate_unspecified_ip && ip.is_unspecified() {
         return Err(InvariantCheckError {
             msg: format!("IP Address {:?} is unspecified", ip),
             source: None,
@@ -346,70 +405,70 @@ mod tests {
             port: 8080,
             protocol: Protocol::Http1 as i32,
         };
-        assert!(validate_endpoint(&loopback_ipv4_endpoint, true).is_err());
+        assert!(validate_endpoint(&loopback_ipv4_endpoint, false, true).is_err());
 
         let loopback_ipv6_endpoint = ConnectionEndpoint {
             ip_addr: "::1".to_string(),
             port: 8080,
             protocol: Protocol::Http1 as i32,
         };
-        assert!(validate_endpoint(&loopback_ipv6_endpoint, true).is_err());
+        assert!(validate_endpoint(&loopback_ipv6_endpoint, false, true).is_err());
 
         let bad_port_endpoint = ConnectionEndpoint {
             ip_addr: "212.13.11.77".to_string(),
             port: 80802,
             protocol: Protocol::Http1 as i32,
         };
-        assert!(validate_endpoint(&bad_port_endpoint, true).is_err());
-        assert!(validate_endpoint(&bad_port_endpoint, false).is_err());
+        assert!(validate_endpoint(&bad_port_endpoint, false, true).is_err());
+        assert!(validate_endpoint(&bad_port_endpoint, false, false).is_err());
 
         let bad_ipv4_endpoint = ConnectionEndpoint {
             ip_addr: "280.13.11.77".to_string(),
             port: 8080,
             protocol: Protocol::Http1 as i32,
         };
-        assert!(validate_endpoint(&bad_ipv4_endpoint, true).is_err());
-        assert!(validate_endpoint(&bad_ipv4_endpoint, false).is_err());
+        assert!(validate_endpoint(&bad_ipv4_endpoint, false, true).is_err());
+        assert!(validate_endpoint(&bad_ipv4_endpoint, false, false).is_err());
 
         let bad_ipv6_endpoint = ConnectionEndpoint {
             ip_addr: "0fab:12345::".to_string(),
             port: 8080,
             protocol: Protocol::Http1 as i32,
         };
-        assert!(validate_endpoint(&bad_ipv6_endpoint, true).is_err());
-        assert!(validate_endpoint(&bad_ipv6_endpoint, false).is_err());
+        assert!(validate_endpoint(&bad_ipv6_endpoint, false, true).is_err());
+        assert!(validate_endpoint(&bad_ipv6_endpoint, false, false).is_err());
 
         let multicast_ipv4_endpoint = ConnectionEndpoint {
             ip_addr: "224.0.0.1".to_string(),
             port: 8080,
             protocol: Protocol::Http1 as i32,
         };
-        assert!(validate_endpoint(&multicast_ipv4_endpoint, true).is_err());
-        assert!(validate_endpoint(&multicast_ipv4_endpoint, false).is_err());
+        assert!(validate_endpoint(&multicast_ipv4_endpoint, false, true).is_err());
+        assert!(validate_endpoint(&multicast_ipv4_endpoint, false, false).is_err());
 
         let multicast_ipv6_endpoint = ConnectionEndpoint {
             ip_addr: "ff00:1:2::".to_string(),
             port: 8080,
             protocol: Protocol::Http1 as i32,
         };
-        assert!(validate_endpoint(&multicast_ipv6_endpoint, true).is_err());
-        assert!(validate_endpoint(&multicast_ipv6_endpoint, false).is_err());
+        assert!(validate_endpoint(&multicast_ipv6_endpoint, false, true).is_err());
+        assert!(validate_endpoint(&multicast_ipv6_endpoint, false, false).is_err());
 
         let private_ipv4_endpoint = ConnectionEndpoint {
             ip_addr: "192.168.0.1".to_string(),
             port: 8080,
             protocol: Protocol::Http1 as i32,
         };
-        assert!(validate_endpoint(&private_ipv4_endpoint, true).is_err());
-        assert!(validate_endpoint(&private_ipv4_endpoint, false).is_ok());
+        assert!(validate_endpoint(&private_ipv4_endpoint, false, true).is_err());
+        assert!(validate_endpoint(&private_ipv4_endpoint, false, false).is_ok());
 
         let unique_ipv6_endpoint = ConnectionEndpoint {
             ip_addr: "fc00:1234::".to_string(),
             port: 8080,
             protocol: Protocol::Http1 as i32,
         };
-        assert!(validate_endpoint(&unique_ipv6_endpoint, true).is_err());
-        assert!(validate_endpoint(&unique_ipv6_endpoint, false).is_ok());
+        assert!(validate_endpoint(&unique_ipv6_endpoint, false, true).is_err());
+        assert!(validate_endpoint(&unique_ipv6_endpoint, false, false).is_ok());
     }
 
     #[test]

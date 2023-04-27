@@ -209,10 +209,7 @@ impl ProtoRegistryDataProvider {
             }
         }
 
-        let mut mutations_by_version = mutations_by_version
-            .iter()
-            .map(|(k, mutations)| (k, mutations))
-            .collect::<Vec<_>>();
+        let mut mutations_by_version = mutations_by_version.iter().collect::<Vec<_>>();
 
         mutations_by_version.sort_by_key(|x| x.0);
 

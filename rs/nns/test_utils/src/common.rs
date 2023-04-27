@@ -148,7 +148,7 @@ impl NnsInitPayloadsBuilder {
     pub fn with_initial_invariant_compliant_mutations(&mut self) -> &mut Self {
         self.registry
             .push_init_mutate_request(RegistryAtomicMutateRequest {
-                mutations: invariant_compliant_mutation(),
+                mutations: invariant_compliant_mutation(0),
                 preconditions: vec![],
             });
         self

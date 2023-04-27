@@ -17,7 +17,7 @@ fn test_the_anonymous_user_cannot_remove_node_operators() {
         let mut registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
-                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
                 .build(),
         )
         .await;
@@ -67,7 +67,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_remove_node_operato
         let registry = set_up_registry_canister(
             &runtime,
             RegistryCanisterInitPayloadBuilder::new()
-                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req())
+                .push_init_mutate_request(invariant_compliant_mutation_as_atomic_req(0))
                 .build(),
         )
         .await;
