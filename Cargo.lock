@@ -6927,6 +6927,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-icrc1-index-ng"
+version = "0.8.0"
+
+[[package]]
 name = "ic-icrc1-ledger"
 version = "0.8.0"
 dependencies = [
