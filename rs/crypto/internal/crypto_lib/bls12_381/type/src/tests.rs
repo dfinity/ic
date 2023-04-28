@@ -54,9 +54,11 @@ fn random_bit_indices_works_correctly() {
             assert_eq!(random_indices.len(), num_true_bits as usize);
 
             if num_true_bits > 10 {
-                // no trivial/default-initialized output
-                // probability of getting a sequence 0..num_true_bits or all 0s
-                // is 0, since `num_true_bits > 0`
+                // no trivial/default-initialized output:
+                // probability of getting 0..num_true_bits
+                // = $1 / \prod_{i=1}^{num_true_bits} (SCALAR_FLOORED_BIT_LENGTH - i + 1)$
+                // = 2^-79.6 for `num_true_bits=10` and decreases further with
+                // larger `num_true_bits`
                 let mut seq_indices: Vec<u8> = Vec::with_capacity(num_true_bits as usize);
                 seq_indices.extend(0..num_true_bits);
                 assert_ne!(random_indices, seq_indices);
