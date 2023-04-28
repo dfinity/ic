@@ -141,6 +141,21 @@ pub mod strategies {
         })
     }
 
+    pub fn valid_blockchain_with_gaps_strategy(size: usize) -> impl Strategy<Value = Vec<Block>> {
+        let blockchain_strategy = valid_blockchain_strategy(size);
+        let random_indices =
+            prop::collection::hash_set(any::<u8>().prop_map(|x| x as u64), 0..size);
+        (blockchain_strategy, random_indices).prop_map(|(mut blockchain, indices)| {
+            for index in indices.into_iter() {
+                if !blockchain.is_empty() {
+                    let fitted_index = index % blockchain.len() as u64;
+                    blockchain.remove(fitted_index as usize);
+                }
+            }
+            blockchain
+        })
+    }
+
     pub fn transfer_args_with_sender(
         num: usize,
         sender: Account,

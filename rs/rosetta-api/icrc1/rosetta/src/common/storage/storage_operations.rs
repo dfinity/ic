@@ -86,6 +86,27 @@ pub fn get_blocks_by_index_range(
     read_blocks(&mut stmt, params![start_index, end_index])
 }
 
+pub fn get_blockchain_gaps(
+    connection: &Connection,
+) -> anyhow::Result<Vec<(RosettaBlock, RosettaBlock)>> {
+    // If there exists a gap in the stored blockchain from (a,b) then this query will return all blocks which represent b in all the gaps that exist in the database
+    let command =  "SELECT b1.idx,b1.serialized_block FROM blocks b1 LEFT JOIN blocks b2 ON b1.idx = b2.idx +1 WHERE b2.idx IS NULL AND b1.idx > (SELECT idx from blocks ORDER BY idx ASC LIMIT 1) ORDER BY b1.idx ASC";
+    let mut stmt = connection.prepare(command)?;
+    let upper_gap_limits = read_blocks(&mut stmt, params![])?;
+
+    // If there exists a gap in the stored blockchain from (a,b) then this query will return all blocks which represent a in all the gaps that exist in the database
+    let command =  "SELECT b1.idx,b1.serialized_block FROM  blocks b1 LEFT JOIN blocks b2 ON b1.idx + 1 = b2.idx WHERE b2.idx IS NULL AND b1.idx < (SELECT idx from blocks ORDER BY idx DESC LIMIT 1) ORDER BY b1.idx ASC";
+    let mut stmt = connection.prepare(command)?;
+    let lower_gap_limits = read_blocks(&mut stmt, params![])?;
+
+    // Both block vectors are ordered and since a gap always has a upper and lower end, both vectors will have the same length.
+    // If U is the vector of upper limits and L of lower limits then the first gap in the blockchain is (L[0],U[0]) the second gap is (L[1],U[1]) ...
+    Ok(lower_gap_limits
+        .into_iter()
+        .zip(upper_gap_limits.into_iter())
+        .collect())
+}
+
 fn read_single_block<P>(stmt: &mut Statement, params: P) -> anyhow::Result<Option<RosettaBlock>>
 where
     P: Params,
