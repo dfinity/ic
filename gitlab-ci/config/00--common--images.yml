@@ -10,6 +10,16 @@
   variables:
     GIT_CLONE_PATH: $CI_BUILDS_DIR/$CI_CONCURRENT_ID/$CI_PROJECT_NAME
 
+.ic-build-image-on-docker:
+  artifacts:
+    expire_in: 3 days
+  image:
+    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:63603ef49fcf4db398112cb976d533f13d6210888a810edd7e9594faad76f1cc"
+  tags:
+    - dfinity
+    - ubuntu
+    - docker
+
 .ic-build-bazel-image:
   artifacts:
     expire_in: 3 days

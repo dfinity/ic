@@ -154,11 +154,7 @@ after_script:
 .ubuntu-docker:
   extends:
     - .build-env-base
-    - .ic-build-image
-  tags:
-    - dfinity
-    - ubuntu
-    - docker
+    - .ic-build-image-on-docker
 
 .bazel-build-k8s:
   extends:
