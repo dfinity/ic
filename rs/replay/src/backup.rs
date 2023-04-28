@@ -51,6 +51,18 @@ fn read_file(path: &Path) -> Vec<u8> {
     buffer
 }
 
+// Renames the file at `path` and by adding a prefix 'invalid_'.
+fn rename_file(original_file: &Path) {
+    let file_name = original_file
+        .file_name()
+        .expect("File name is missing")
+        .to_str()
+        .expect("File name is not a proper string");
+    let renamed_file = original_file.with_file_name(format!("invalid_{}", file_name));
+    println!("Renaming {:?} to {:?}", original_file, renamed_file);
+    fs::rename(original_file, renamed_file).expect("Error renaming a file");
+}
+
 /// All possible exits from the deserialization loop of the artifacts. All
 /// exits except for `Done` require for the upper layers to catch up.
 pub(crate) enum ExitPoint {
@@ -75,16 +87,20 @@ pub(crate) fn insert_cup_at_height(
     pool: &mut dyn MutablePool<ConsensusArtifact, ChangeSet>,
     backup_dir: &Path,
     height: Height,
-) {
-    let cup = read_cup_at_height(backup_dir, height);
-    pool.apply_changes(
-        &SysTimeSource::new(),
-        ChangeAction::AddToValidated(cup.into_message()).into(),
-    );
+) -> Result<(), ReplayError> {
+    if let Some(cup) = read_cup_at_height(backup_dir, height) {
+        pool.apply_changes(
+            &SysTimeSource::new(),
+            ChangeAction::AddToValidated(cup.into_message()).into(),
+        );
+        Ok(())
+    } else {
+        Err(ReplayError::ValidationFailed(height))
+    }
 }
 
 /// Deserializes the CUP at the given height and returns it.
-pub(crate) fn read_cup_at_height(backup_dir: &Path, height: Height) -> CatchUpPackage {
+pub(crate) fn read_cup_at_height(backup_dir: &Path, height: Height) -> Option<CatchUpPackage> {
     let group_key = (height.get() / BACKUP_GROUP_SIZE) * BACKUP_GROUP_SIZE;
     let file = &backup_dir
         .join(group_key.to_string())
@@ -92,11 +108,20 @@ pub(crate) fn read_cup_at_height(backup_dir: &Path, height: Height) -> CatchUpPa
         .join("catch_up_package.bin");
     let buffer = read_file(file);
 
-    let protobuf = ic_protobuf::types::v1::CatchUpPackage::decode(buffer.as_slice())
-        .expect("Protobuf decoding failed");
+    let Ok(protobuf) = pb::CatchUpPackage::decode(buffer.as_slice()) else {
+        rename_file(file);
+        println!("Protobuf decoding of CUP failed");
+        return None;
+    };
 
-    CatchUpPackage::try_from(&protobuf)
-        .unwrap_or_else(|err| panic!("{}", deserialization_error(file, err)))
+    match CatchUpPackage::try_from(&protobuf) {
+        Ok(cup) => Some(cup),
+        Err(err) => {
+            rename_file(file);
+            println!("{}", deserialization_error(file, err));
+            None
+        }
+    }
 }
 
 /// Read all files from the backup folder starting from the `start_height` and
@@ -215,26 +240,38 @@ pub(crate) fn deserialize_consensus_artifacts(
             finalized_block_hash = file_name.split('_').nth(1);
             let file = &path.join(file_name);
             let buffer = read_file(file);
-            let finalization = Finalization::try_from(
-                pb::Finalization::decode(buffer.as_slice()).expect("Protobuf decoding failed"),
-            )
-            .unwrap_or_else(|err| panic!("{}", deserialization_error(file, err)));
+            let mut finalization_opt = None;
+            if let Ok(fn_pb) = pb::Finalization::decode(buffer.as_slice()) {
+                match Finalization::try_from(fn_pb) {
+                    Ok(fin) => finalization_opt = Some(fin),
+                    Err(err) => {
+                        println!("Error: {}", deserialization_error(file, err));
+                        rename_file(file);
+                    }
+                }
+            } else {
+                println!("Error: Protobuf decoding of finalization failed");
+                rename_file(file);
+            };
 
-            let unique_signers: BTreeSet<_> =
-                finalization.signature.signers.clone().into_iter().collect();
-            if unique_signers.len() != finalization.signature.signers.len() {
-                panic!("Detected repeated signers on the finalization signature");
-            }
-
-            crypto
-                .verify_multi_sig_combined(
+            if let Some(finalization) = finalization_opt {
+                let unique_signers: BTreeSet<_> =
+                    finalization.signature.signers.clone().into_iter().collect();
+                if unique_signers.len() != finalization.signature.signers.len() {
+                    println!("Detected repeated signers on the finalization signature");
+                    rename_file(file);
+                } else if let Err(err) = crypto.verify_multi_sig_combined(
                     &finalization.signature.signature,
                     &finalization.content,
                     unique_signers,
                     registry_version,
-                )
-                .expect("Cannot verify the signature on the finalization");
-            artifacts.push(finalization.into_message());
+                ) {
+                    println!("Cannot verify the signature on the finalization: {:?}", err);
+                    rename_file(file);
+                } else {
+                    artifacts.push(finalization.into_message());
+                }
+            }
         }
 
         // Insert block proposals.
@@ -247,36 +284,47 @@ pub(crate) fn deserialize_consensus_artifacts(
         {
             let file = &path.join(file_name);
             let buffer = read_file(file);
-            let proposal = BlockProposal::try_from(
-                pb::BlockProposal::decode(buffer.as_slice()).expect("Protobuf decoding failed"),
-            )
-            .unwrap_or_else(|err| panic!("{}", deserialization_error(file, err)));
-
-            let validation_context = &proposal.content.as_ref().context;
-
-            let block_registry_version = validation_context.registry_version;
-            if block_registry_version > registry_client.get_latest_version() {
-                println!(
-                    "Found a block with a newer registry version {:?} at height {:?}",
-                    block_registry_version,
-                    proposal.content.as_ref().height,
-                );
-                // If an NNS block references a newer registry version than that we have,
-                // we exit to apply all changes from the registry canister into the local
-                // store. Otherwise, we cannot progress until we sync the local store.
-                let root_subnet_id = registry_client
-                    .get_root_subnet_id(registry_version)
-                    .unwrap()
-                    .unwrap();
-                if subnet_id == root_subnet_id {
-                    height_to_batches.insert(height, height_artifacts);
-                    return ExitPoint::NewerRegistryVersion(block_registry_version);
-                } else {
-                    return ExitPoint::Done;
+            let mut proposal_opt = None;
+            if let Ok(bp_pb) = pb::BlockProposal::decode(buffer.as_slice()) {
+                match BlockProposal::try_from(bp_pb) {
+                    Ok(bp) => proposal_opt = Some(bp),
+                    Err(err) => {
+                        println!("{}", deserialization_error(file, err));
+                        rename_file(file);
+                    }
                 }
+            } else {
+                println!("Protobuf decoding of the block proposal failed");
+                rename_file(file);
             }
+            if let Some(proposal) = proposal_opt {
+                let validation_context = &proposal.content.as_ref().context;
+                let block_registry_version = validation_context.registry_version;
+                if block_registry_version > registry_client.get_latest_version() {
+                    println!(
+                        "Found a block with a newer registry version {:?} at height {:?}",
+                        block_registry_version,
+                        proposal.content.as_ref().height,
+                    );
+                    // If an NNS block references a newer registry version than that we have,
+                    // we exit to apply all changes from the registry canister into the local
+                    // store. Otherwise, we cannot progress until we sync the local store.
+                    let root_subnet_id = registry_client
+                        .get_root_subnet_id(registry_version)
+                        .unwrap()
+                        .unwrap();
+                    if subnet_id == root_subnet_id {
+                        height_to_batches.insert(height, height_artifacts);
+                        return ExitPoint::NewerRegistryVersion(block_registry_version);
+                    } else {
+                        return ExitPoint::Done;
+                    }
+                }
 
-            artifacts.push(proposal.into_message());
+                artifacts.push(proposal.into_message());
+            } else {
+                return ExitPoint::ValidationIncomplete(height);
+            }
         }
 
         // Insert the random beacon and the random tape.
@@ -289,15 +337,19 @@ pub(crate) fn deserialize_consensus_artifacts(
             return ExitPoint::Done;
         }
         let buffer = read_file(&rb_path);
-        artifacts.push(
-            RandomBeacon::try_from(
-                pb::RandomBeacon::decode(buffer.as_slice()).expect("Protobuf decoding failed"),
-            )
-            // TODO: Remove after switching to ProxyDecodeError
-            .map_err(|e| format!("{}", e))
-            .unwrap_or_else(|err| panic!("{}", deserialization_error(&rb_path, err)))
-            .into_message(),
-        );
+        if let Ok(rb_pb) = pb::RandomBeacon::decode(buffer.as_slice()) {
+            match RandomBeacon::try_from(rb_pb) {
+                Ok(rb) => artifacts.push(rb.into_message()),
+                Err(err) => {
+                    // TODO: Remove to_string() call after switching to ProxyDecodeError
+                    println!("{}", deserialization_error(&rb_path, err.to_string()));
+                    rename_file(&rb_path);
+                }
+            }
+        } else {
+            println!("Protobuf decoding of random beacon failed");
+            rename_file(&rb_path);
+        }
 
         let rt_path = path.join("random_tape.bin");
         if !rt_path.exists() {
@@ -308,25 +360,35 @@ pub(crate) fn deserialize_consensus_artifacts(
             return ExitPoint::Done;
         }
         let buffer = read_file(&rt_path);
-        artifacts.push(
-            RandomTape::try_from(
-                pb::RandomTape::decode(buffer.as_slice()).expect("Protobuf decoding failed"),
-            )
-            .unwrap_or_else(|err| panic!("{}", deserialization_error(&rt_path, err)))
-            .into_message(),
-        );
+        if let Ok(rt_pb) = pb::RandomTape::decode(buffer.as_slice()) {
+            match RandomTape::try_from(rt_pb) {
+                Ok(rt) => artifacts.push(rt.into_message()),
+                Err(err) => {
+                    println!("{}", deserialization_error(&rt_path, err));
+                    rename_file(&rt_path);
+                }
+            }
+        } else {
+            println!("Protobuf decoding of random tape failed");
+            rename_file(&rt_path);
+        }
 
         // Insert the notarizations.
         for file_name in &height_artifacts.notarizations {
             let file = &path.join(file_name);
             let buffer = read_file(file);
-            artifacts.push(
-                Notarization::try_from(
-                    pb::Notarization::decode(buffer.as_slice()).expect("Protobuf decoding failed"),
-                )
-                .unwrap_or_else(|err| panic!("{}", deserialization_error(file, err)))
-                .into_message(),
-            );
+            if let Ok(not_pb) = pb::Notarization::decode(buffer.as_slice()) {
+                match Notarization::try_from(not_pb) {
+                    Ok(not) => artifacts.push(not.into_message()),
+                    Err(err) => {
+                        println!("{}", deserialization_error(file, err));
+                        rename_file(file);
+                    }
+                }
+            } else {
+                println!("Protobuf decoding of notarization failed");
+                rename_file(file);
+            }
         }
 
         artifacts.into_iter().for_each(|message| {
@@ -356,11 +418,13 @@ pub(crate) fn deserialize_consensus_artifacts(
             };
         invalid.iter().for_each(|i| match i.get_file_name() {
             Some(name) => {
+                let artifact_path = path.join(name);
                 assert!(
-                    path.join(&name).exists(),
+                    artifact_path.exists(),
                     "Path to invalid artifact doesn't exist."
                 );
-                println!("Invalid artifact detected: {:?}", path.join(name));
+                println!("Invalid artifact detected: {:?}", &artifact_path);
+                rename_file(&artifact_path);
             }
             None => println!("Failed to get path for invalid artifact: {:?}", i),
         });
