@@ -270,7 +270,14 @@ pub(crate) fn deserialize_consensus_artifacts(
                     println!("Cannot verify the signature on the finalization: {:?}", err);
                     rename_file(file);
                 } else {
-                    artifacts.push(finalization.into_message());
+                    let message = finalization.into_message();
+                    expected.insert(
+                        message.get_cm_hash(),
+                        file.to_str()
+                            .expect("File string should be valid")
+                            .to_string(),
+                    );
+                    artifacts.push(message);
                 }
             }
         }
@@ -387,7 +394,17 @@ pub(crate) fn deserialize_consensus_artifacts(
             let buffer = read_file(file);
             if let Ok(not_pb) = pb::Notarization::decode(buffer.as_slice()) {
                 match Notarization::try_from(not_pb) {
-                    Ok(not) => artifacts.push(not.into_message()),
+                    Ok(not) => {
+                        let message = not.into_message();
+                        expected.insert(
+                            message.get_cm_hash(),
+                            file.to_str()
+                                .expect("File string should be valid")
+                                .to_string(),
+                        );
+
+                        artifacts.push(message);
+                    }
                     Err(err) => {
                         println!("{}", deserialization_error(file, err));
                         rename_file(file);
