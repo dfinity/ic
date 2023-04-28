@@ -25,7 +25,7 @@ func TestCommandWithConfig(cfg *Config) func(cmd *cobra.Command, args []string) 
 		target := args[0]
 		if all_targets, err := get_all_system_test_targets(); err != nil {
 			return err
-		} else {
+		} else if !any_equals(all_targets, target) {
 			if match_target, msg, err := find_matching_target(all_targets, target, cfg.isFuzzyMatch); err == nil {
 				if len(msg) > 0 {
 					cmd.Printf(CYAN + msg + NC)
