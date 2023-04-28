@@ -21,7 +21,7 @@ use ic_types::{
 };
 use prost::Message;
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, HashMap},
     convert::TryFrom,
     fs,
     io::Read,
@@ -217,6 +217,7 @@ pub(crate) fn deserialize_consensus_artifacts(
 
         let path = &height_artifacts.path;
         let mut artifacts = Vec::new();
+        let mut expected = HashMap::new();
 
         if height_artifacts.proposals.is_empty() {
             println!(
@@ -321,7 +322,14 @@ pub(crate) fn deserialize_consensus_artifacts(
                     }
                 }
 
-                artifacts.push(proposal.into_message());
+                let message = proposal.into_message();
+                expected.insert(
+                    message.get_cm_hash(),
+                    file.to_str()
+                        .expect("File string should be valid")
+                        .to_string(),
+                );
+                artifacts.push(message);
             } else {
                 return ExitPoint::ValidationIncomplete(height);
             }
@@ -408,7 +416,7 @@ pub(crate) fn deserialize_consensus_artifacts(
         };
         // call validator, which moves artifacts to validated or removes invalid
         let (mut invalid, failure_after_height) =
-            match validator.validate(pool, dkg_manager, target_height) {
+            match validator.validate(pool, &mut expected, dkg_manager, target_height) {
                 Ok(artifacts) => (artifacts, None),
                 Err(ReplayError::ValidationIncomplete(h, artifacts)) => (artifacts, Some(h)),
                 Err(other) => {
@@ -429,6 +437,13 @@ pub(crate) fn deserialize_consensus_artifacts(
             None => println!("Failed to get path for invalid artifact: {:?}", i),
         });
         invalid_artifacts.append(&mut invalid);
+
+        // All the artifacts that we expect to be validated and hence removed from the collection.
+        // If they weren't we remove them here and hopefully rsync the correct ones next time.
+        expected.iter().for_each(|artifact| {
+            println!("Artifact couldn't be validated: {:?}", artifact.1);
+            rename_file(Path::new(artifact.1));
+        });
 
         if let Some(height) = failure_after_height {
             return ExitPoint::ValidationIncomplete(height);
