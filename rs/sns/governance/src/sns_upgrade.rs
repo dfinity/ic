@@ -3,7 +3,7 @@ use crate::proposal::render_version;
 use crate::types::Environment;
 use candid::{Decode, Encode};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_ic00_types::CanisterStatusResultV2;
+use ic_nervous_system_root::canister_status::CanisterStatusResultV2;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
 
 /// A struct to represent all the types of SNS canisters Governance knows about.
@@ -191,7 +191,7 @@ pub(crate) async fn get_running_version(
             .ok_or_else(|| format!("{} had no status", label))
             .and_then(|status| {
                 status
-                    .module_hash()
+                    .module_hash
                     .ok_or_else(|| format!("{} Status had no module hash", label))
             })
     };
@@ -469,7 +469,6 @@ pub(crate) struct GetSnsCanistersSummaryRequest {
     pub update_canister_list: Option<bool>,
 }
 
-/// Copied from ic-sns-root
 #[derive(PartialEq, Eq, Debug, candid::CandidType, candid::Deserialize)]
 pub(crate) struct GetSnsCanistersSummaryResponse {
     pub root: Option<CanisterSummary>,

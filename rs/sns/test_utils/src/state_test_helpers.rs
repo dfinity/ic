@@ -6,6 +6,7 @@ use ic_ic00_types::CanisterInstallMode;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::{ExplosiveTokens, SECONDS_PER_DAY};
 use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
+use ic_nervous_system_root::{canister_status::CanisterStatusResultV2, CanisterIdRecord};
 use ic_nns_constants::{
     LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID, ROOT_CANISTER_ID as NNS_ROOT_CANISTER_ID,
 };
@@ -20,7 +21,6 @@ use ic_sns_root::pb::v1::{
     RegisterDappCanisterRequest, RegisterDappCanisterResponse, RegisterDappCanistersRequest,
     RegisterDappCanistersResponse,
 };
-use ic_sns_root::{CanisterIdRecord, CanisterStatusResultV2};
 use icrc_ledger_types::icrc1::account::Account;
 
 use ic_sns_swap::pb::v1::params::NeuronBasketConstructionParameters;

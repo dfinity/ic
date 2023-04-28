@@ -7466,6 +7466,7 @@ dependencies = [
  "ic-ic00-types",
  "ic-nervous-system-common",
  "lazy_static",
+ "num-traits",
  "serde",
  "serde_bytes",
 ]
@@ -7540,6 +7541,7 @@ dependencies = [
  "ic-nervous-system-common-test-keys",
  "ic-nervous-system-common-test-utils",
  "ic-nervous-system-proto",
+ "ic-nervous-system-root",
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance-protobuf-generator",
@@ -9305,6 +9307,7 @@ dependencies = [
  "ic-interfaces-registry",
  "ic-metrics-encoder",
  "ic-nervous-system-common",
+ "ic-nervous-system-root",
  "ic-nns-constants",
  "ic-nns-test-utils",
  "ic-protobuf",

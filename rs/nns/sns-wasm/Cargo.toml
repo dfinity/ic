@@ -23,15 +23,16 @@ futures = "0.3.21"
 hex = "0.4.3"
 ic-base-types = { path = "../../types/base_types" }
 ic-cdk = "0.6.0"
-ic-crypto-sha = {path = "../../crypto/sha/"}
-ic-ic00-types = {path = "../../types/ic00_types"}
+ic-crypto-sha = { path = "../../crypto/sha/" }
+ic-ic00-types = { path = "../../types/ic00_types" }
 ic-metrics-encoder = "1"
 ic-nervous-system-common = { path = "../../nervous_system/common" }
+ic-nervous-system-root = { path = "../../nervous_system/root" }
 ic-nns-constants = { path = "../constants" }
 ic-sns-governance = { path = "../../sns/governance" }
 ic-sns-init = { path = "../../sns/init" }
 ic-sns-root = { path = "../../sns/root" }
-ic-types = { path = "../../types/types"}
+ic-types = { path = "../../types/types" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
 maplit = "1.0.2"
 serde = { version = "1.0", features = ["derive"] }

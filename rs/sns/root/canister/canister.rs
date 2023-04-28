@@ -14,7 +14,8 @@ use ic_nervous_system_common::{
     stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter},
 };
 use ic_nervous_system_root::{
-    canister_status::CanisterStatusResult, change_canister::ChangeCanisterProposal,
+    canister_status::{CanisterStatusResult, CanisterStatusResultV2},
+    change_canister::ChangeCanisterProposal,
 };
 use ic_sns_root::{
     logs::{ERROR, INFO},
@@ -25,9 +26,8 @@ use ic_sns_root::{
         SnsRootCanister,
     },
     types::Environment,
-    CanisterIdRecord, CanisterStatusResultV2, EmptyBlob, GetSnsCanistersSummaryRequest,
-    GetSnsCanistersSummaryResponse, LedgerCanisterClient, ManagementCanisterClient,
-    UpdateSettingsArgs,
+    CanisterIdRecord, EmptyBlob, GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse,
+    LedgerCanisterClient, ManagementCanisterClient, UpdateSettingsArgs,
 };
 use icrc_ledger_types::icrc3::archive::ArchiveInfo;
 use prost::Message;
@@ -221,6 +221,7 @@ async fn get_sns_canisters_summary_(
         &create_ledger_client(),
         &canister_env,
         update_canister_list,
+        dfn_core::api::id().into(),
     )
     .await
 }
