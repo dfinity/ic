@@ -379,7 +379,7 @@ impl BackupManager {
 
         let mut thread_ids: HashSet<u32> = HashSet::new();
         for i in 0..size {
-            // should we sync the subnet
+            // should we replay the subnet
             if self.subnet_backups[i].replay_period >= Duration::from_secs(1) {
                 let id = self.subnet_backups[i].backup_helper.thread_id;
                 if !thread_ids.contains(&id) {
