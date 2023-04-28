@@ -21,27 +21,105 @@ struct SyncRange {
 impl SyncRange {
     fn new(
         lowest_index: u64,
-        _highest_index: u64,
+        highest_index: u64,
         leading_block_hash: ByteBuf,
         trailing_parent_hash: Option<ByteBuf>,
     ) -> Self {
         Self {
-            index_range: RangeInclusive::new(lowest_index, _highest_index),
+            index_range: RangeInclusive::new(lowest_index, highest_index),
             leading_block_hash,
             trailing_parent_hash,
         }
     }
 }
 
-/// The blocks synchronizer starts by getting the most recent block and starts fetching the blockchain starting from the top of the blockchain
-/// It verifies fetched blocks and stores verified blocks in the database
+/// This function will check whether there is a gap in the database
+/// Furthermore, if there exists a gap between the genesis block and the lowest stored block, this function will add this synchronization gap to the gaps returned by the storage client
+/// It is guarenteed that all gaps between [0,Highest_Stored_Block] will be returned
+fn derive_synchronization_gaps(
+    storage_client: Arc<StorageClient>,
+) -> anyhow::Result<Vec<SyncRange>> {
+    let lowest_block_opt = storage_client.get_block_with_lowest_block_idx()?;
+
+    // If the database is empty then there cannot exist any gaps
+    if lowest_block_opt.is_none() {
+        return Ok(vec![]);
+    }
+
+    // Unwrap is safe
+    let lowest_block = lowest_block_opt.unwrap();
+
+    // If the database is not empty we have to determine whether there is a gap in the database
+    let gap = storage_client.get_blockchain_gaps()?;
+
+    // The database should have at most one gap. Otherwise the database file was edited and it can no longer be guarenteed that it contains valid blocks
+    if gap.len() > 1 {
+        return Err(anyhow::Error::msg(format!("The database has {} gaps. More than one gap means the database has been tampered with and can no longer be guarenteed to contain valid blocks",gap.len())));
+    }
+
+    let mut sync_ranges = gap
+        .into_iter()
+        .map(|(a, b)| {
+            SyncRange::new(
+                a.index + 1,
+                b.index - 1,
+                b.parent_hash.unwrap(),
+                Some(a.block_hash),
+            )
+        })
+        .collect::<Vec<SyncRange>>();
+
+    // Gaps are only determined within stored block ranges. Blocks with indices that are below the lowest stored block and above the highest stored blocks are not considered.
+    // Check if the lowest block that was stored is the genesis block
+    if lowest_block.index != 0 {
+        // If the lowest stored block's index is not 0 that means there is a gap between the genesis block and the lowest stored block. Unwrapping parent hash is safe as only the genesis block does not have a parent hash
+        // The first interval to sync is between the genesis block and the lowest stored block.
+        sync_ranges.insert(
+            0,
+            SyncRange::new(
+                0,
+                lowest_block.index - 1,
+                lowest_block.parent_hash.unwrap(),
+                None,
+            ),
+        );
+    }
+    Ok(sync_ranges)
+}
+
+/// This function will check for any gaps in the database and between the database and the icrc ledger
+/// After this function is successfully executed all blocks between [0,Ledger_Tip] will be stored in the database
 pub async fn start_synching_blocks(
     agent: Arc<Icrc1Agent>,
     storage_client: Arc<StorageClient>,
     maximum_blocks_per_request: u64,
 ) -> anyhow::Result<()> {
-    // Check whether the blocks storage is empty.
-    // Conduct a full sync of the icrc ledger if storage is empty otherwise only sync the blocks that are missing between the tip of the blockchain and the highest block in storage
+    // Determine whether there are any synchronization gaps in the database that need to be filled
+    let sync_gaps = derive_synchronization_gaps(storage_client.clone())?;
+
+    // Close all of the synchronization gaps
+    for gap in sync_gaps {
+        sync_blocks_interval(
+            agent.clone(),
+            storage_client.clone(),
+            maximum_blocks_per_request,
+            gap,
+        )
+        .await?;
+    }
+
+    // After all the gaps have been filled continue with a synchronization from the top of the blockchain
+    sync_from_the_tip(agent, storage_client, maximum_blocks_per_request).await?;
+
+    Ok(())
+}
+
+/// This function will do a synchronization of the interval (Higest_Stored_Block,Ledger_Tip]
+pub async fn sync_from_the_tip(
+    agent: Arc<Icrc1Agent>,
+    storage_client: Arc<StorageClient>,
+    maximum_blocks_per_request: u64,
+) -> anyhow::Result<()> {
     let (tip_block_index, tip_block_hash) = fetch_blockchain_tip_data(agent.clone()).await?;
 
     // The starting point of the synchronization process is either 0 if the database is empty or the highest stored block index plus one
