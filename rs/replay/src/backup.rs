@@ -270,28 +270,36 @@ pub(crate) fn deserialize_consensus_artifacts(
             };
 
             if let Some(finalization) = finalization_opt {
-                let unique_signers: BTreeSet<_> =
-                    finalization.signature.signers.clone().into_iter().collect();
-                if unique_signers.len() != finalization.signature.signers.len() {
-                    println!("Detected repeated signers on the finalization signature");
-                    rename_file(file);
-                } else if let Err(err) = crypto.verify_multi_sig_combined(
-                    &finalization.signature.signature,
-                    &finalization.content,
-                    unique_signers,
-                    registry_version,
-                ) {
-                    println!("Cannot verify the signature on the finalization: {:?}", err);
+                if height != finalization.height() {
+                    println!(
+                        "A finalization with an unexpected height detected: {:?}",
+                        file
+                    );
                     rename_file(file);
                 } else {
-                    let message = finalization.into_message();
-                    expected.insert(
-                        message.get_cm_hash(),
-                        file.to_str()
-                            .expect("File string should be valid")
-                            .to_string(),
-                    );
-                    artifacts.push(message);
+                    let unique_signers: BTreeSet<_> =
+                        finalization.signature.signers.clone().into_iter().collect();
+                    if unique_signers.len() != finalization.signature.signers.len() {
+                        println!("Detected repeated signers on the finalization signature");
+                        rename_file(file);
+                    } else if let Err(err) = crypto.verify_multi_sig_combined(
+                        &finalization.signature.signature,
+                        &finalization.content,
+                        unique_signers,
+                        registry_version,
+                    ) {
+                        println!("Cannot verify the signature on the finalization: {:?}", err);
+                        rename_file(file);
+                    } else {
+                        let message = finalization.into_message();
+                        expected.insert(
+                            message.get_cm_hash(),
+                            file.to_str()
+                                .expect("File string should be valid")
+                                .to_string(),
+                        );
+                        artifacts.push(message);
+                    }
                 }
             }
         }
@@ -320,37 +328,45 @@ pub(crate) fn deserialize_consensus_artifacts(
                 rename_file(file);
             }
             if let Some(proposal) = proposal_opt {
-                let validation_context = &proposal.content.as_ref().context;
-                let block_registry_version = validation_context.registry_version;
-                if block_registry_version > registry_client.get_latest_version() {
+                if height != proposal.height() {
                     println!(
-                        "Found a block with a newer registry version {:?} at height {:?}",
-                        block_registry_version,
-                        proposal.content.as_ref().height,
+                        "A block proposal with an unexpected height detected: {:?}",
+                        file
                     );
-                    // If an NNS block references a newer registry version than that we have,
-                    // we exit to apply all changes from the registry canister into the local
-                    // store. Otherwise, we cannot progress until we sync the local store.
-                    let root_subnet_id = registry_client
-                        .get_root_subnet_id(registry_version)
-                        .unwrap()
-                        .unwrap();
-                    if subnet_id == root_subnet_id {
-                        height_to_batches.insert(height, height_artifacts);
-                        return ExitPoint::NewerRegistryVersion(block_registry_version);
-                    } else {
-                        return ExitPoint::Done;
+                    rename_file(file);
+                } else {
+                    let validation_context = &proposal.content.as_ref().context;
+                    let block_registry_version = validation_context.registry_version;
+                    if block_registry_version > registry_client.get_latest_version() {
+                        println!(
+                            "Found a block with a newer registry version {:?} at height {:?}",
+                            block_registry_version,
+                            proposal.content.as_ref().height,
+                        );
+                        // If an NNS block references a newer registry version than that we have,
+                        // we exit to apply all changes from the registry canister into the local
+                        // store. Otherwise, we cannot progress until we sync the local store.
+                        let root_subnet_id = registry_client
+                            .get_root_subnet_id(registry_version)
+                            .unwrap()
+                            .unwrap();
+                        if subnet_id == root_subnet_id {
+                            height_to_batches.insert(height, height_artifacts);
+                            return ExitPoint::NewerRegistryVersion(block_registry_version);
+                        } else {
+                            return ExitPoint::Done;
+                        }
                     }
-                }
 
-                let message = proposal.into_message();
-                expected.insert(
-                    message.get_cm_hash(),
-                    file.to_str()
-                        .expect("File string should be valid")
-                        .to_string(),
-                );
-                artifacts.push(message);
+                    let message = proposal.into_message();
+                    expected.insert(
+                        message.get_cm_hash(),
+                        file.to_str()
+                            .expect("File string should be valid")
+                            .to_string(),
+                    );
+                    artifacts.push(message);
+                }
             } else {
                 return ExitPoint::ValidationIncomplete(height);
             }
@@ -368,7 +384,17 @@ pub(crate) fn deserialize_consensus_artifacts(
         let buffer = read_file(&rb_path);
         if let Ok(rb_pb) = pb::RandomBeacon::decode(buffer.as_slice()) {
             match RandomBeacon::try_from(rb_pb) {
-                Ok(rb) => artifacts.push(rb.into_message()),
+                Ok(rb) => {
+                    if height == rb.height() {
+                        artifacts.push(rb.into_message())
+                    } else {
+                        println!(
+                            "A random beacon with an unexpected height detected: {:?}",
+                            rb_path
+                        );
+                        rename_file(&rb_path);
+                    }
+                }
                 Err(err) => {
                     // TODO: Remove to_string() call after switching to ProxyDecodeError
                     println!("{}", deserialization_error(&rb_path, err.to_string()));
@@ -391,7 +417,17 @@ pub(crate) fn deserialize_consensus_artifacts(
         let buffer = read_file(&rt_path);
         if let Ok(rt_pb) = pb::RandomTape::decode(buffer.as_slice()) {
             match RandomTape::try_from(rt_pb) {
-                Ok(rt) => artifacts.push(rt.into_message()),
+                Ok(rt) => {
+                    if height == rt.height() {
+                        artifacts.push(rt.into_message())
+                    } else {
+                        println!(
+                            "A random tape with an unexpected height detected: {:?}",
+                            rt_path
+                        );
+                        rename_file(&rt_path);
+                    }
+                }
                 Err(err) => {
                     println!("{}", deserialization_error(&rt_path, err));
                     rename_file(&rt_path);
@@ -409,15 +445,22 @@ pub(crate) fn deserialize_consensus_artifacts(
             if let Ok(not_pb) = pb::Notarization::decode(buffer.as_slice()) {
                 match Notarization::try_from(not_pb) {
                     Ok(not) => {
-                        let message = not.into_message();
-                        expected.insert(
-                            message.get_cm_hash(),
-                            file.to_str()
-                                .expect("File string should be valid")
-                                .to_string(),
-                        );
-
-                        artifacts.push(message);
+                        if height != not.height() {
+                            println!(
+                                "A notarization with an unexpected height detected: {:?}",
+                                file
+                            );
+                            rename_file(file);
+                        } else {
+                            let message = not.into_message();
+                            expected.insert(
+                                message.get_cm_hash(),
+                                file.to_str()
+                                    .expect("File string should be valid")
+                                    .to_string(),
+                            );
+                            artifacts.push(message);
+                        }
                     }
                     Err(err) => {
                         println!("{}", deserialization_error(file, err));

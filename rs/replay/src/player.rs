@@ -1051,7 +1051,8 @@ impl Player {
         }
 
         // Verify state hash against the state hash in the CUP
-        if get_state_hash(&*self.state_manager, last_cup.height()).expect("No hash for CUP found")
+        if get_state_hash(&*self.state_manager, last_cup.height())
+            .expect("No state hash at a current CUP height found")
             != last_cup.content.state_hash
         {
             println!(
@@ -1250,12 +1251,12 @@ fn setup_registry(
 }
 
 // Returns the state hash for the given height once it is computed. For non-checkpoints heights
-// `None` is returned.
+// or when transient error persists `None` is returned.
 fn get_state_hash<T>(
     state_manager: &dyn StateManager<State = T>,
     height: Height,
 ) -> Option<CryptoHashOfState> {
-    loop {
+    for _ in 0..120 {
         match state_manager.get_state_hash_at(height) {
             Ok(hash) => return Some(hash),
             Err(StateHashError::Transient(err)) => {
@@ -1273,6 +1274,7 @@ fn get_state_hash<T>(
         }
         std::thread::sleep(WAIT_DURATION);
     }
+    None
 }
 
 #[cfg(test)]
