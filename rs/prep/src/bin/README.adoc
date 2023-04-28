@@ -61,9 +61,6 @@ The fields are:
 - `public_api` - an array of endpoints on which the node will serve the 
   public API.
 
-- `private_api` - an array of endpoints on which the node will serve the
-  private api.
-
 - `prometheus_metrics` - an array of endpoints on which the node will serve
   Prometheus-compatible metrics.
 

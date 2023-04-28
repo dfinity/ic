@@ -67,8 +67,8 @@ message NodeRecord {
   // Endpoints on which the public API is served.
   repeated ConnectionEndpoint public_api = 11;
 
-  // Endpoints on which private APIs are served.
-  repeated ConnectionEndpoint private_api = 12;
+  reserved "private_api";
+  reserved 12;
 
   // Endpoints on which metrics compatible with the Prometheus export
   // format are served.

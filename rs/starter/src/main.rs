@@ -90,7 +90,6 @@ fn main() -> Result<()> {
             NodeConfiguration {
                 xnet_api: vec!["http://0.0.0.0:0".parse().expect("can't fail")],
                 public_api: vec![ConnectionEndpoint::from(config.http_listen_addr)],
-                private_api: vec![],
                 p2p_addr: "org.internetcomputer.p2p1://0.0.0.0:0"
                     .parse()
                     .expect("can't fail"),

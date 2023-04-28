@@ -164,7 +164,6 @@ mod tests {
                             port: 8080,
                             protocol: 2,
                         }],
-                        private_api: vec![],
                         prometheus_metrics: vec![],
                         xnet_api: vec![ConnectionEndpoint {
                             ip_addr: ip.to_string(),

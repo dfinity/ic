@@ -47,9 +47,6 @@ pub struct NodeRecord {
     /// Endpoints on which the public API is served.
     #[prost(message, repeated, tag = "11")]
     pub public_api: ::prost::alloc::vec::Vec<ConnectionEndpoint>,
-    /// Endpoints on which private APIs are served.
-    #[prost(message, repeated, tag = "12")]
-    pub private_api: ::prost::alloc::vec::Vec<ConnectionEndpoint>,
     /// Endpoints on which metrics compatible with the Prometheus export
     /// format are served.
     #[prost(message, repeated, tag = "13")]
