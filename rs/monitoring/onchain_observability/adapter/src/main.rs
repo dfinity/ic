@@ -7,20 +7,21 @@ use candid::{Decode, Encode};
 use clap::Parser;
 use ic_adapter_metrics_server::start_metrics_grpc;
 use ic_async_utils::{abort_on_panic, incoming_from_nth_systemd_socket};
-use ic_base_types::{CanisterId, NodeId};
+use ic_base_types::{CanisterId, NodeId, SubnetId};
 use ic_canister_client::{Agent, Sender};
 use ic_crypto::CryptoComponent;
 use ic_interfaces::crypto::{BasicSigner, ErrorReproducibility, KeyManager};
+use ic_interfaces_registry::ZERO_REGISTRY_VERSION;
 use ic_logger::{error, info, new_replica_logger_from_config, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_onchain_observability_adapter::{
     collect_metrics_for_peers, derive_peer_counters_for_current_report_interval,
-    CanisterPublishError, Config, Flags, MetricsCollectError, OnchainObservabilityAdapterMetrics,
-    PeerCounterMetrics, SampledMetricsCollector,
+    poll_until_reporting_enabled, CanisterPublishError, Config, Flags, MetricsCollectError,
+    OnchainObservabilityAdapterMetrics, PeerCounterMetrics, SampledMetricsCollector,
 };
 use ic_onchain_observability_service::onchain_observability_service_client::OnchainObservabilityServiceClient;
 use ic_registry_client::client::{RegistryClient, RegistryClientImpl};
-use ic_registry_client_helpers::subnet::SubnetRegistry;
+use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetRegistry};
 use ic_registry_local_store::LocalStoreImpl;
 use ic_types::{
     crypto::CryptoError,
@@ -54,6 +55,8 @@ const COMMIT_METHOD: &str = "commit";
 const FIND_METHOD: &str = "find";
 
 const FIND_REPORT_SLEEP_DURATION: Duration = Duration::from_secs(10);
+const REGISTRY_RETRY_SLEEP_DURATION: Duration = Duration::from_secs(10);
+const FEATURE_FLAG_POLL_DURATION: Duration = Duration::from_secs(60);
 
 #[tokio::main]
 pub async fn main() {
@@ -64,35 +67,12 @@ pub async fn main() {
 
     let flags = Flags::parse();
     let config = flags.get_config().expect("Error getting config");
-    if config.canister_id.is_empty() {
-        // This means the process is disabled
-        return;
-    }
-    let canister_client_url =
-        Url::parse(&config.canister_client_url).expect("Failed to create url");
-    let canister_id =
-        CanisterId::from_str(&config.canister_id).expect("Failed to parse canister id");
 
     let metrics_registry = MetricsRegistry::global();
     let (logger, _async_log_guard) = new_replica_logger_from_config(&config.logger);
     let onchain_observability_adapter_metrics =
         OnchainObservabilityAdapterMetrics::new(&metrics_registry);
 
-    // SAFETY:
-    // The systemd service is configured to set its first socket as the metrics socket, so we expect the FD to exist.
-    // Additionally, this is the only callsite within the adapter so this should only be consumed once.
-    // Systemd Socket config: ic-os/guestos/rootfs/etc/systemd/system/ic-onchain-observability-adapter-metrics.socket
-    // Systemd Service config: ic-os/guestos/rootfs/etc/systemd/system/ic-onchain-observability-adapter.service
-    let stream = unsafe { incoming_from_nth_systemd_socket(1) };
-    start_metrics_grpc(metrics_registry.clone(), logger.clone(), stream);
-
-    info!(
-        logger,
-        "Starting the onchain observability adapter with config: {}, url: {:?} id{:?}",
-        to_string_pretty(&config).unwrap(),
-        canister_client_url,
-        canister_id,
-    );
     let handle = Handle::current();
 
     let (registry_client, crypto_component) = create_registry_client_and_crypto_component(
@@ -103,7 +83,48 @@ pub async fn main() {
     )
     .await;
 
+    while registry_client.get_latest_version() == ZERO_REGISTRY_VERSION {
+        warn!(logger, "Registry client not ready");
+        sleep(REGISTRY_RETRY_SLEEP_DURATION).await;
+    }
+
     let node_id = crypto_component.get_node_id();
+
+    let subnet_id = registry_client
+        .get_subnet_id_from_node_id(node_id, registry_client.get_latest_version())
+        .expect("Failed to query subnet topology data")
+        .expect("Failed to get subnet id from node");
+
+    info!(logger, "Waiting for feature flag to be enabled...");
+
+    // Adapter should only collect/send data if feature flag is enabled
+    poll_until_reporting_enabled(
+        registry_client.clone(),
+        subnet_id,
+        FEATURE_FLAG_POLL_DURATION,
+    )
+    .await;
+
+    let canister_client_url =
+        Url::parse(&config.canister_client_url).expect("Failed to create url");
+    let canister_id =
+        CanisterId::from_str(&config.canister_id).expect("Failed to parse canister id");
+
+    info!(
+        logger,
+        "Starting the onchain observability adapter with config: {}, url: {:?} id{:?}",
+        to_string_pretty(&config).unwrap(),
+        canister_client_url,
+        canister_id,
+    );
+
+    // SAFETY:
+    // The systemd service is configured to set its first socket as the metrics socket, so we expect the FD to exist.
+    // Additionally, this is the only callsite within the adapter so this should only be consumed once.
+    // Systemd Socket config: ic-os/guestos/rootfs/etc/systemd/system/ic-onchain-observability-adapter-metrics.socket
+    // Systemd Service config: ic-os/guestos/rootfs/etc/systemd/system/ic-onchain-observability-adapter.service
+    let stream = unsafe { incoming_from_nth_systemd_socket(1) };
+    start_metrics_grpc(metrics_registry.clone(), logger.clone(), stream);
 
     let canister_client =
         create_canister_client(crypto_component.clone(), canister_client_url, node_id).await;
@@ -142,7 +163,7 @@ pub async fn main() {
                 .inc();
 
             // Refresh peer ids. TODO(NET-1384) if fetching peer id fails, either fallback to old peers or skip report
-            let peer_ids = get_peer_ids(node_id, &registry_client);
+            let peer_ids = get_peer_ids(node_id, subnet_id, registry_client.clone());
 
             let non_sampled_metrics_at_report_end_result = collect_metrics_for_peers(
                 grpc_client.clone(),
@@ -254,8 +275,15 @@ pub async fn main() {
             // Reset the baseline counts
             non_sampled_metrics_baseline_opt = Some(non_sampled_metrics_at_report_end);
             sampler.clear();
-            start_time = SystemTime::now();
             report_duration = config.report_length_sec;
+            // Only proceed if feature flag is still enabled
+            poll_until_reporting_enabled(
+                registry_client.clone(),
+                subnet_id,
+                FEATURE_FLAG_POLL_DURATION,
+            )
+            .await;
+            start_time = SystemTime::now();
         }
     }
 }
@@ -313,14 +341,10 @@ async fn is_report_published(
 // NET-1352 to track
 fn get_peer_ids(
     current_node_id: NodeId,
-    registry_client: &Arc<RegistryClientImpl>,
+    subnet_id: SubnetId,
+    registry_client: Arc<dyn RegistryClient>,
 ) -> HashSet<NodeId> {
     let latest_version = registry_client.get_latest_version();
-
-    let (subnet_id, _) = registry_client
-        .get_listed_subnet_for_node_id(current_node_id, latest_version)
-        .expect("Failed to get subnet data for node id")
-        .expect("Failed to retrieve subnet id for node id");
 
     registry_client
         .get_node_ids_on_subnet(subnet_id, latest_version)
@@ -338,7 +362,7 @@ async fn create_registry_client_and_crypto_component(
     metrics_registry: MetricsRegistry,
     config: Config,
     rt_handle: Handle,
-) -> (Arc<RegistryClientImpl>, Arc<CryptoComponent>) {
+) -> (Arc<dyn RegistryClient>, Arc<CryptoComponent>) {
     let data_provider = Arc::new(LocalStoreImpl::new(config.registry_config.local_store));
     let registry_client = Arc::new(RegistryClientImpl::new(
         data_provider,

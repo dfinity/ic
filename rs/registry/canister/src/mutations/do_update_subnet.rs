@@ -420,6 +420,7 @@ mod tests {
                 canister_sandboxing: false,
                 http_requests: false,
                 sev_status: None,
+                onchain_observability: None,
             }),
             ecdsa_config: Some(EcdsaConfig {
                 quadruples_to_create_in_advance: 10,
@@ -539,6 +540,7 @@ mod tests {
                 canister_sandboxing: false,
                 http_requests: false,
                 sev_status: None,
+                onchain_observability: None,
             }),
             ecdsa_config: Some(EcdsaConfig {
                 quadruples_to_create_in_advance: 10,
@@ -587,6 +589,7 @@ mod tests {
                         canister_sandboxing: false,
                         http_requests: false,
                         sev_status: None,
+                        onchain_observability: None,
                     }
                     .into()
                 ),
@@ -1160,6 +1163,7 @@ mod tests {
             canister_sandboxing: false,
             http_requests: false,
             sev_status: Some(SevFeatureStatus::SecureEnabled),
+            onchain_observability: None,
         });
 
         // Should panic because we are changing SubnetFeatures

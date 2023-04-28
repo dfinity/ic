@@ -15,6 +15,7 @@ ic-canister-client = { path = "../../../canister_client" }
 ic-config = { path = "../../../config" }
 ic-crypto = { path = "../../../crypto" }
 ic-interfaces = { path = "../../../interfaces" }
+ic-interfaces-registry = { path = "../../../interfaces/registry" }
 ic-logger = { path = "../../logger" }
 ic-metrics = { path = "../../metrics" }
 ic-onchain-observability-service = { path = "../service" }
