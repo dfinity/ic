@@ -33,7 +33,8 @@
 
 build-base-images:
   extends:
-    - .ubuntu-k8s
+    # TODO(IDX-2829) fix working with podman and then switch to k8s runners.
+    - .ubuntu-docker
     - .rules-dockerfile-base-changes
   stage: guest-os-build
   needs: []
@@ -44,7 +45,8 @@ build-base-images:
 
 build-push-base-images:
   extends:
-    - .ubuntu-k8s
+    # TODO(IDX-2829) fix working with podman and then switch to k8s runners.
+    - .ubuntu-docker
     - .rules-build-base-images-schedule
   stage: guest-os-build
   needs: []
