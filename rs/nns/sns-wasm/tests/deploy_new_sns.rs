@@ -5,8 +5,10 @@ use common::set_up_state_machine_with_nns;
 use dfn_candid::candid_one;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_crypto_sha::Sha256;
-use ic_ic00_types::CanisterStatusResultV2;
 use ic_interfaces_registry::RegistryClient;
+use ic_nervous_system_root::canister_status::{
+    CanisterStatusResultV2, CanisterStatusType::Running,
+};
 use ic_nns_constants::{
     ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID, SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET,
 };
@@ -21,9 +23,7 @@ use ic_nns_test_utils::{
 use ic_protobuf::registry::subnet::v1::SubnetListRecord;
 use ic_registry_keys::make_subnet_list_record_key;
 use ic_sns_init::pb::v1::SnsInitPayload;
-use ic_sns_root::{
-    CanisterStatusType::Running, GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse,
-};
+use ic_sns_root::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
 use ic_sns_swap::pb::v1::GetCanisterStatusRequest;
 use ic_sns_wasm::pb::v1::{
     AddWasmRequest, DeployNewSnsRequest, DeployNewSnsResponse, SnsCanisterIds, SnsCanisterType,
@@ -215,8 +215,8 @@ fn test_canisters_are_created_and_installed() {
         assert_eq!(root_canister_summary.canister_id(), root_canister_id.get());
         assert_eq!(root_canister_summary.status().status(), Running);
         assert_eq!(
-            root_canister_summary.status().controller(),
-            governance_canister_id.get()
+            root_canister_summary.status().controllers(),
+            vec![governance_canister_id.get()]
         );
         assert_eq!(
             root_canister_summary.status().module_hash().unwrap(),
@@ -230,8 +230,8 @@ fn test_canisters_are_created_and_installed() {
         );
         assert_eq!(governance_canister_summary.status().status(), Running);
         assert_eq!(
-            governance_canister_summary.status().controller(),
-            root_canister_id.get()
+            governance_canister_summary.status().controllers(),
+            vec![root_canister_id.get()]
         );
         assert_eq!(
             governance_canister_summary.status().module_hash().unwrap(),
@@ -245,8 +245,8 @@ fn test_canisters_are_created_and_installed() {
         );
         assert_eq!(ledger_canister_summary.status().status(), Running);
         assert_eq!(
-            ledger_canister_summary.status().controller(),
-            root_canister_id.get()
+            ledger_canister_summary.status().controllers(),
+            vec![root_canister_id.get()]
         );
         assert_eq!(
             ledger_canister_summary.status().module_hash().unwrap(),
@@ -260,8 +260,8 @@ fn test_canisters_are_created_and_installed() {
         );
         assert_eq!(index_canister_summary.status().status(), Running);
         assert_eq!(
-            index_canister_summary.status().controller(),
-            root_canister_id.get()
+            index_canister_summary.status().controllers(),
+            vec![root_canister_id.get()]
         );
         assert_eq!(
             index_canister_summary.status().module_hash().unwrap(),

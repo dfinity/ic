@@ -11455,10 +11455,9 @@ lazy_static! {
         Ok(Encode!(&GetSnsCanistersSummaryResponse {
             root: Some(ic_sns_root::CanisterSummary {
                 canister_id: Some(*SNS_ROOT_CANISTER_ID),
-                status: Some(ic_sns_root::CanisterStatusResultV2::new(
-                    ic_sns_root::CanisterStatusType::Running,
+                status: Some(ic_nervous_system_root::canister_status::CanisterStatusResultV2::new(
+                    ic_nervous_system_root::canister_status::CanisterStatusType::Running,
                     Some(vec![0xCA, 0xFE]),  // module_hash
-                    PrincipalId::new_user_test_id(647671), // controller
                     vec![PrincipalId::new_user_test_id(647671)], // controllers
                     NumBytes::from(485082), // memory_size
                     766182, // cycles

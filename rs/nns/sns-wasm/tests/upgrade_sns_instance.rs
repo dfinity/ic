@@ -5,6 +5,7 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_ic00_types::CanisterInstallMode;
 use ic_icrc1_ledger::LedgerArgument;
 use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount;
+use ic_nervous_system_root::canister_status::{CanisterStatusResultV2, CanisterStatusType};
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -31,10 +32,7 @@ use ic_sns_init::pb::v1::{
     FractionalDeveloperVotingPower, NeuronDistribution, SnsInitPayload, SwapDistribution,
     TreasuryDistribution,
 };
-use ic_sns_root::{
-    CanisterStatusResultV2, CanisterStatusType, GetSnsCanistersSummaryRequest,
-    GetSnsCanistersSummaryResponse,
-};
+use ic_sns_root::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
 use ic_sns_wasm::pb::v1::{
     GetNextSnsVersionRequest, InsertUpgradePathEntriesRequest, InsertUpgradePathEntriesResponse,
     SnsCanisterIds, SnsCanisterType, SnsUpgrade, SnsWasm,

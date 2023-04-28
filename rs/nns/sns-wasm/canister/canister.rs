@@ -8,9 +8,9 @@ use dfn_core::{
 use ic_base_types::{PrincipalId, SubnetId};
 use ic_ic00_types::{
     CanisterIdRecord, CanisterInstallMode::Install, CanisterSettingsArgsBuilder,
-    CanisterStatusResultV2, CanisterStatusType, CreateCanisterArgs, InstallCodeArgs, Method,
-    UpdateSettingsArgs,
+    CreateCanisterArgs, InstallCodeArgs, Method, UpdateSettingsArgs,
 };
+use ic_nervous_system_root::canister_status::{CanisterStatusResultV2, CanisterStatusType};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_sns_wasm::{
     canister_api::CanisterApi,

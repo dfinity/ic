@@ -1166,9 +1166,8 @@ mod tests {
     use ic_base_types::NumBytes;
     use ic_base_types::PrincipalId;
     use ic_crypto_sha::Sha256;
-    use ic_ic00_types::CanisterStatusResultV2;
-    use ic_ic00_types::CanisterStatusType;
     use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
+    use ic_nervous_system_root::canister_status::{CanisterStatusResultV2, CanisterStatusType};
     use ic_nns_constants::SNS_WASM_CANISTER_ID;
     use ic_protobuf::types::v1::CanisterInstallMode as CanisterInstallModeProto;
     use ic_test_utilities::types::ids::canister_test_id;
@@ -1746,7 +1745,6 @@ mod tests {
         CanisterStatusResultV2::new(
             status,
             Some(module_hash),
-            PrincipalId::new_anonymous(),
             vec![],
             NumBytes::new(0),
             0,
