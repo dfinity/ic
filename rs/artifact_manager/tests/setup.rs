@@ -42,7 +42,7 @@ impl ChangeSetProducer<ConsensusPoolImpl> for MockConsensus {
 
 fn setup_manager(
     artifact_pool_config: ArtifactPoolConfig,
-) -> (Arc<dyn ArtifactManager>, ArtifactProcessorJoinGuard) {
+) -> (Arc<dyn ArtifactManager>, Box<dyn JoinGuard>) {
     let time_source = Arc::new(SysTimeSource::new());
     let metrics_registry = MetricsRegistry::new();
     let replica_logger = no_op_logger();

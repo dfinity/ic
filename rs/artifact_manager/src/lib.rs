@@ -100,9 +100,7 @@ mod processors;
 
 use crossbeam_channel::{Receiver, RecvTimeoutError, Sender};
 use ic_interfaces::{
-    artifact_manager::{
-        ArtifactClient, ArtifactProcessor, ArtifactProcessorJoinGuard, ProcessingResult,
-    },
+    artifact_manager::{ArtifactClient, ArtifactProcessor, JoinGuard, ProcessingResult},
     artifact_pool::{
         ChangeSetProducer, MutablePool, PriorityFnAndFilterProducer, UnvalidatedArtifact,
         ValidatedPoolReader,
@@ -123,7 +121,7 @@ use std::sync::{
     atomic::{AtomicBool, Ordering::SeqCst},
     Arc, RwLock,
 };
-use std::thread::Builder as ThreadBuilder;
+use std::thread::{Builder as ThreadBuilder, JoinHandle};
 use std::time::Duration;
 
 /// Metrics for a client artifact processor.
@@ -181,6 +179,32 @@ impl ArtifactProcessorMetrics {
     }
 }
 
+/// Manages the life cycle of the client specific artifact processor thread.
+pub struct ArtifactProcessorJoinGuard {
+    handle: Option<JoinHandle<()>>,
+    shutdown: Arc<AtomicBool>,
+}
+
+impl JoinGuard for ArtifactProcessorJoinGuard {}
+
+impl ArtifactProcessorJoinGuard {
+    pub fn new(handle: JoinHandle<()>, shutdown: Arc<AtomicBool>) -> Self {
+        Self {
+            handle: Some(handle),
+            shutdown,
+        }
+    }
+}
+
+impl Drop for ArtifactProcessorJoinGuard {
+    fn drop(&mut self) {
+        if let Some(handle) = self.handle.take() {
+            self.shutdown.store(true, SeqCst);
+            handle.join().unwrap();
+        }
+    }
+}
+
 pub fn run_artifact_processor<
     Artifact: ArtifactKind + 'static,
     S: Fn(Advert<Artifact>) + Send + 'static,
@@ -190,7 +214,7 @@ pub fn run_artifact_processor<
     client: Box<dyn ArtifactProcessor<Artifact>>,
     send_advert: S,
 ) -> (
-    ArtifactProcessorJoinGuard,
+    Box<dyn JoinGuard>,
     Sender<UnvalidatedArtifact<Artifact::Message>>,
 )
 where
@@ -221,7 +245,10 @@ where
         })
         .unwrap();
 
-    (ArtifactProcessorJoinGuard::new(handle, shutdown), sender)
+    (
+        Box::new(ArtifactProcessorJoinGuard::new(handle, shutdown)),
+        sender,
+    )
 }
 
 // The artifact processor thread loop
@@ -296,10 +323,7 @@ pub fn create_ingress_handlers<
     metrics_registry: MetricsRegistry,
     node_id: NodeId,
     malicious_flags: MaliciousFlags,
-) -> (
-    ArtifactClientHandle<IngressArtifact>,
-    ArtifactProcessorJoinGuard,
-) {
+) -> (ArtifactClientHandle<IngressArtifact>, Box<dyn JoinGuard>) {
     let client = processors::IngressProcessor::new(ingress_pool.clone(), ingress_handler, node_id);
     let (jh, sender) = run_artifact_processor(
         time_source.clone(),
@@ -340,10 +364,7 @@ pub fn create_consensus_handlers<
     consensus_pool: Arc<RwLock<PoolConsensus>>,
     log: ReplicaLogger,
     metrics_registry: MetricsRegistry,
-) -> (
-    ArtifactClientHandle<ConsensusArtifact>,
-    ArtifactProcessorJoinGuard,
-) {
+) -> (ArtifactClientHandle<ConsensusArtifact>, Box<dyn JoinGuard>) {
     let client = processors::ConsensusProcessor::new(
         consensus_pool.clone(),
         Box::new(consensus),
@@ -387,7 +408,7 @@ pub fn create_certification_handlers<
     metrics_registry: MetricsRegistry,
 ) -> (
     ArtifactClientHandle<CertificationArtifact>,
-    ArtifactProcessorJoinGuard,
+    Box<dyn JoinGuard>,
 ) {
     let client = processors::CertificationProcessor::new(
         certification_pool.clone(),
@@ -430,10 +451,7 @@ pub fn create_dkg_handlers<
     dkg_pool: Arc<RwLock<PoolDkg>>,
     log: ReplicaLogger,
     metrics_registry: MetricsRegistry,
-) -> (
-    ArtifactClientHandle<DkgArtifact>,
-    ArtifactProcessorJoinGuard,
-) {
+) -> (ArtifactClientHandle<DkgArtifact>, Box<dyn JoinGuard>) {
     let client =
         processors::DkgProcessor::new(dkg_pool.clone(), Box::new(dkg), log, &metrics_registry);
     let (jh, sender) = run_artifact_processor(
@@ -467,10 +485,7 @@ pub fn create_ecdsa_handlers<
     time_source: Arc<SysTimeSource>,
     ecdsa_pool: Arc<RwLock<PoolEcdsa>>,
     metrics_registry: MetricsRegistry,
-) -> (
-    ArtifactClientHandle<EcdsaArtifact>,
-    ArtifactProcessorJoinGuard,
-) {
+) -> (ArtifactClientHandle<EcdsaArtifact>, Box<dyn JoinGuard>) {
     let client =
         processors::EcdsaProcessor::new(ecdsa_pool.clone(), Box::new(ecdsa), &metrics_registry);
     let (jh, sender) = run_artifact_processor(
@@ -506,7 +521,7 @@ pub fn create_https_outcalls_handlers<
     metrics_registry: MetricsRegistry,
 ) -> (
     ArtifactClientHandle<CanisterHttpArtifact>,
-    ArtifactProcessorJoinGuard,
+    Box<dyn JoinGuard>,
 ) {
     let client =
         processors::CanisterHttpProcessor::new(canister_http_pool.clone(), Box::new(pool_manager));

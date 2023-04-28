@@ -6,33 +6,11 @@ use crate::{
 use derive_more::From;
 use ic_types::artifact::{ArtifactPriorityFn, PriorityFn};
 use ic_types::{artifact, chunkable, p2p, NodeId};
-use std::sync::atomic::{AtomicBool, Ordering::SeqCst};
-use std::sync::Arc;
-use std::thread::JoinHandle;
 
-/// Manages the life cycle of the client specific artifact processor thread.
-pub struct ArtifactProcessorJoinGuard {
-    handle: Option<JoinHandle<()>>,
-    shutdown: Arc<AtomicBool>,
-}
-
-impl ArtifactProcessorJoinGuard {
-    pub fn new(handle: JoinHandle<()>, shutdown: Arc<AtomicBool>) -> Self {
-        Self {
-            handle: Some(handle),
-            shutdown,
-        }
-    }
-}
-
-impl Drop for ArtifactProcessorJoinGuard {
-    fn drop(&mut self) {
-        if let Some(handle) = self.handle.take() {
-            self.shutdown.store(true, SeqCst);
-            handle.join().unwrap();
-        }
-    }
-}
+/// Event loops/actors that implement a graceful shutdown on destruction implement this trait.
+/// This is useful when the the event loop/actor has multiple handles and a separate object
+/// that does the shutdown is required.
+pub trait JoinGuard {}
 
 /// The trait is used by all P2P clients in order to (broadcast) transfer a message
 /// to all recipients simultaneously. Where the (peers) receipients are determined by the
