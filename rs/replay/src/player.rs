@@ -1,3 +1,4 @@
+use crate::backup::{cup_file_name, rename_file};
 use crate::ingress::IngressWithPrinter;
 use crate::{
     backup,
@@ -94,8 +95,8 @@ pub enum ReplayError {
     UpgradeDetected(StateParams),
     /// Can't proceed because artifact validation failed after the given height.
     ValidationIncomplete(Height, Vec<InvalidArtifact>),
-    /// Can't proceed because one or more aretifacts was invalid
-    ValidationFailed(Height),
+    /// Can't proceed because CUP verification failed at the given height.
+    CUPVerificationFailed(Height),
     /// Replay was successful, but manual inspection is required to choose correct state.
     ManualInspectionRequired(StateParams),
 }
@@ -163,8 +164,9 @@ impl Player {
             .join(subnet_id.to_string())
             .join(replica_version.to_string());
         // Extract the genesis CUP and instantiate a new pool.
-        let initial_cup = backup::read_cup_at_height(&backup_dir, Height::from(start_height))
-            .expect("CUP of the starting block should be valid");
+        let cup_file = backup::cup_file_name(&backup_dir, Height::from(start_height));
+        let initial_cup =
+            backup::read_cup_file(&cup_file).expect("CUP of the starting block should be valid");
         // This would create a new pool with just the genesis CUP.
         let pool = ConsensusPoolImpl::new_from_cup_without_bytes(
             subnet_id,
@@ -891,8 +893,16 @@ impl Player {
             "Restoring the replica state of subnet {:?} starting from the height {:?}",
             backup_dir, start_height
         );
+
         // Assert consistent initial state
-        self.verify_latest_cup()?;
+        if let Err(err) = self.verify_latest_cup() {
+            if let ReplayError::CUPVerificationFailed(height) = err {
+                let file = cup_file_name(&backup_dir, height);
+                println!("Invalid CUP detected: {:?}", file);
+                rename_file(&file);
+            }
+            return Err(err);
+        }
 
         let mut dkg_manager = self
             .validator
@@ -936,7 +946,14 @@ impl Player {
                         &backup_dir,
                         cup_height,
                     )?;
-                    self.assert_consistency_and_clean_up()?;
+                    if let Err(err) = self.assert_consistency_and_clean_up() {
+                        if let ReplayError::CUPVerificationFailed(height) = err {
+                            let file = cup_file_name(&backup_dir, height);
+                            println!("Invalid CUP detected: {:?}", file);
+                            rename_file(&file);
+                        }
+                        return Err(err);
+                    }
                 }
                 // When we run into an NNS block referencing a newer registry version, we need to dump
                 // all changes from the registry canister into the local store and apply them.
@@ -1016,14 +1033,15 @@ impl Player {
 
         // Verify the CUP signature.
         let protobuf = last_cup_with_proto.protobuf;
-        self.crypto
-            .verify_combined_threshold_sig_by_public_key(
-                &CombinedThresholdSigOf::new(CombinedThresholdSig(protobuf.signature)),
-                &CatchUpContentProtobufBytes(protobuf.content),
-                self.subnet_id,
-                last_cup.content.block.get_value().context.registry_version,
-            )
-            .expect("Verification of the signature on the CUP failed");
+        if let Err(err) = self.crypto.verify_combined_threshold_sig_by_public_key(
+            &CombinedThresholdSigOf::new(CombinedThresholdSig(protobuf.signature)),
+            &CatchUpContentProtobufBytes(protobuf.content),
+            self.subnet_id,
+            last_cup.content.block.get_value().context.registry_version,
+        ) {
+            println!("Verification of the signature on the CUP failed: {:?}", err);
+            return Err(ReplayError::CUPVerificationFailed(last_cup.height()));
+        }
 
         if last_cup.height() < self.state_manager.latest_state_height() {
             // In subnet recovery mode we persist states but do not create newer CUPs, hence we cannot

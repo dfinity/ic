@@ -14,8 +14,8 @@ use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{
     artifact_kind::ConsensusArtifact,
     consensus::{
-        BlockProposal, CatchUpPackage, ConsensusMessageHashable, Finalization, Notarization,
-        RandomBeacon, RandomTape,
+        BlockProposal, CatchUpPackage, ConsensusMessageHashable, Finalization, HasHeight,
+        Notarization, RandomBeacon, RandomTape,
     },
     Height, RegistryVersion, SubnetId,
 };
@@ -52,7 +52,7 @@ fn read_file(path: &Path) -> Vec<u8> {
 }
 
 // Renames the file at `path` and by adding a prefix 'invalid_'.
-fn rename_file(original_file: &Path) {
+pub(crate) fn rename_file(original_file: &Path) {
     let file_name = original_file
         .file_name()
         .expect("File name is missing")
@@ -88,24 +88,20 @@ pub(crate) fn insert_cup_at_height(
     backup_dir: &Path,
     height: Height,
 ) -> Result<(), ReplayError> {
-    if let Some(cup) = read_cup_at_height(backup_dir, height) {
+    let file = &cup_file_name(backup_dir, height);
+    if let Some(cup) = read_cup_file(file) {
         pool.apply_changes(
             &SysTimeSource::new(),
             ChangeAction::AddToValidated(cup.into_message()).into(),
         );
         Ok(())
     } else {
-        Err(ReplayError::ValidationFailed(height))
+        Err(ReplayError::CUPVerificationFailed(height))
     }
 }
 
-/// Deserializes the CUP at the given height and returns it.
-pub(crate) fn read_cup_at_height(backup_dir: &Path, height: Height) -> Option<CatchUpPackage> {
-    let group_key = (height.get() / BACKUP_GROUP_SIZE) * BACKUP_GROUP_SIZE;
-    let file = &backup_dir
-        .join(group_key.to_string())
-        .join(height.to_string())
-        .join("catch_up_package.bin");
+/// Deserializes the CUP file and returns it.
+pub(crate) fn read_cup_file(file: &Path) -> Option<CatchUpPackage> {
     let buffer = read_file(file);
 
     let Ok(protobuf) = pb::CatchUpPackage::decode(buffer.as_slice()) else {
@@ -122,6 +118,15 @@ pub(crate) fn read_cup_at_height(backup_dir: &Path, height: Height) -> Option<Ca
             None
         }
     }
+}
+
+/// Deduce the file name of a CUP at a specific height
+pub(crate) fn cup_file_name(backup_dir: &Path, height: Height) -> PathBuf {
+    let group_key = (height.get() / BACKUP_GROUP_SIZE) * BACKUP_GROUP_SIZE;
+    backup_dir
+        .join(group_key.to_string())
+        .join(height.to_string())
+        .join("catch_up_package.bin")
 }
 
 /// Read all files from the backup folder starting from the `start_height` and
@@ -207,15 +212,24 @@ pub(crate) fn deserialize_consensus_artifacts(
             .remove(&height)
             .expect("Couldn't read value for the next key");
 
+        let path = &height_artifacts.path;
+
         // If we see a height_artifacts containing a CUP, we save its height for later.
         // We cannot insert a CUP right away into the pool as it changes the
         // behaviour of the pool cache. So we should insert the CUP at the next
         // finalized height.
         if height > Height::from(0) && height_artifacts.contains_cup {
             last_cup_height = Some(height);
+            let file = &path.join("catch_up_package.bin");
+            if let Some(cup) = read_cup_file(file) {
+                if cup.content.random_beacon.height() != height {
+                    println!("A CUP with an unexpected height detected: {:?}", file);
+                    rename_file(file);
+                    return ExitPoint::Done;
+                }
+            }
         }
 
-        let path = &height_artifacts.path;
         let mut artifacts = Vec::new();
         let mut expected = HashMap::new();
 
