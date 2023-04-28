@@ -2,7 +2,9 @@ use ic_crypto_internal_bls12_381_type::*;
 use ic_crypto_internal_types::curves::bls12_381::{G1Bytes, G2Bytes};
 use ic_crypto_internal_types::curves::test_vectors::bls12_381 as test_vectors;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+use itertools::izip;
 use paste::paste;
+use rand::seq::IteratorRandom;
 use rand::{CryptoRng, Rng, RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
@@ -692,6 +694,402 @@ fn test_verify_bls_signature() {
     assert!(!verify_bls_signature(&message, &pk, &signature));
 }
 
+fn with_random_duplicates(
+    n: usize,
+    rng: &mut (impl Rng + CryptoRng),
+    sigs: &[G1Affine],
+    pks: &[G2Affine],
+    msgs: &[G1Affine],
+) -> (Vec<G1Affine>, Vec<G2Affine>, Vec<G1Affine>) {
+    let mut result_sigs = sigs.to_vec();
+    let mut result_pks = pks.to_vec();
+    let mut result_msgs = msgs.to_vec();
+    for _ in 0..n {
+        let in_index = rng.gen_range(0..sigs.len());
+        let out_index = rng.gen_range(0..result_sigs.len() + 1);
+        result_sigs.insert(out_index, sigs[in_index].clone());
+        result_pks.insert(out_index, pks[in_index].clone());
+        result_msgs.insert(out_index, msgs[in_index].clone());
+    }
+
+    (result_sigs, result_pks, result_msgs)
+}
+
+fn with_random_new_msgs_signed_by_existing_keys(
+    n: usize,
+    rng: &mut (impl Rng + CryptoRng),
+    sks: &[Scalar],
+    sigs: &[G1Affine],
+    pks: &[G2Affine],
+    msgs: &[G1Affine],
+) -> (Vec<G1Affine>, Vec<G2Affine>, Vec<G1Affine>) {
+    let mut result_sigs = sigs.to_vec();
+    let mut result_pks = pks.to_vec();
+    let mut result_msgs = msgs.to_vec();
+    for _ in 0..n {
+        let in_index = rng.gen_range(0..sigs.len());
+        let out_index = rng.gen_range(0..result_sigs.len() + 1);
+
+        let rand_new_msg = G1Affine::hash(b"bls_signature", &rng.gen::<[u8; 32]>());
+
+        let rand_selected_pk = pks[in_index].clone();
+        let rand_selected_sk = sks[in_index].clone();
+
+        let new_sig = G1Affine::from(&rand_new_msg * rand_selected_sk);
+
+        result_sigs.insert(out_index, new_sig);
+        result_pks.insert(out_index, rand_selected_pk);
+        result_msgs.insert(out_index, rand_new_msg);
+    }
+
+    (result_sigs, result_pks, result_msgs)
+}
+
+fn with_random_sigs_of_existing_messages_signed_by_existing_signers(
+    n: usize,
+    rng: &mut (impl Rng + CryptoRng),
+    sks: &[Scalar],
+    sigs: &[G1Affine],
+    pks: &[G2Affine],
+    msgs: &[G1Affine],
+) -> (Vec<G1Affine>, Vec<G2Affine>, Vec<G1Affine>) {
+    let mut result_sigs = sigs.to_vec();
+    let mut result_pks = pks.to_vec();
+    let mut result_msgs = msgs.to_vec();
+    for _ in 0..n {
+        let msg_index = rng.gen_range(0..sigs.len());
+        let signer_index = rng.gen_range(0..sigs.len());
+
+        let out_index = rng.gen_range(0..result_sigs.len() + 1);
+
+        let rand_selected_pk = pks[signer_index].clone();
+        let rand_selected_sk = sks[signer_index].clone();
+        let rand_selected_msg = msgs[msg_index].clone();
+
+        let new_sig = G1Affine::from(&rand_selected_msg * rand_selected_sk);
+
+        result_sigs.insert(out_index, new_sig);
+        result_pks.insert(out_index, rand_selected_pk);
+        result_msgs.insert(out_index, rand_selected_msg);
+    }
+
+    (result_sigs, result_pks, result_msgs)
+}
+
+const NUM_DUPLICATES: usize = 10;
+
+macro_rules! generic_test_verify_bls_signature_batch {
+    ($batch_verification_function:ident) => {
+        let mut rng = reproducible_rng();
+
+        for num_inputs in [1, 2, 4, 8, 16, 32, 100] {
+            let sks: Vec<_> = (0..num_inputs).map(|_| Scalar::random(&mut rng)).collect();
+            let pks: Vec<_> = sks
+                .iter()
+                .map(|sk| G2Affine::from(G2Affine::generator() * sk))
+                .collect();
+            let msgs: Vec<_> = (0..num_inputs)
+                .map(|_| G1Affine::hash(b"bls_signature", &rng.gen::<[u8; 32]>()))
+                .collect();
+            let sigs: Vec<_> = sks
+                .iter()
+                .zip(msgs.iter())
+                .map(|(sk, msg)| G1Affine::from(msg * sk))
+                .collect();
+
+            for i in 0..num_inputs {
+                assert!(verify_bls_signature(&sigs[i], &pks[i], &msgs[i]));
+                // swapped sigs/msgs must not work
+                assert!(!verify_bls_signature(&msgs[i], &pks[i], &sigs[i]));
+            }
+
+            assert!($batch_verification_function(
+                &izip!(sigs.iter(), pks.iter(), msgs.iter()).collect::<Vec<_>>()[..],
+                &mut rng
+            ));
+
+            // swapped sigs/msgs must not work
+            assert!(!$batch_verification_function(
+                &izip!(msgs.iter(), pks.iter(), sigs.iter()).collect::<Vec<_>>()[..],
+                &mut rng
+            ));
+
+            if num_inputs > 1 {
+                // swapped single sigs must not work
+                let mut cloned_sigs = sigs.clone();
+                cloned_sigs.swap(0, 1);
+                assert!(!$batch_verification_function(
+                    &izip!(cloned_sigs.iter(), pks.iter(), msgs.iter()).collect::<Vec<_>>()[..],
+                    &mut rng
+                ));
+
+                // swapped single msgs must not work
+                let mut cloned_msgs = msgs.clone();
+                cloned_msgs.swap(0, 1);
+
+                assert!(!$batch_verification_function(
+                    &izip!(sigs.iter(), pks.iter(), cloned_msgs.iter()).collect::<Vec<_>>()[..],
+                    &mut rng
+                ));
+
+                // swapped single pks must not work
+                let mut cloned_pks = pks.clone();
+                cloned_pks.swap(0, 1);
+
+                assert!(!$batch_verification_function(
+                    &izip!(sigs.iter(), cloned_pks.iter(), msgs.iter()).collect::<Vec<_>>()[..],
+                    &mut rng
+                ));
+            }
+
+            let (sigs_w_dups, pks_w_dups, msgs_w_dups) =
+                with_random_duplicates(NUM_DUPLICATES, &mut rng, &sigs, &pks, &msgs);
+
+            assert!($batch_verification_function(
+                &izip!(sigs_w_dups.iter(), pks_w_dups.iter(), msgs_w_dups.iter())
+                    .collect::<Vec<_>>()[..],
+                &mut rng
+            ));
+
+            let (sigs_w_new_msgs, pks_w_new_msgs, msgs_w_new_msgs) =
+                with_random_new_msgs_signed_by_existing_keys(
+                    NUM_DUPLICATES,
+                    &mut rng,
+                    &sks,
+                    &sigs,
+                    &pks,
+                    &msgs,
+                );
+
+            assert!($batch_verification_function(
+                &izip!(
+                    sigs_w_new_msgs.iter(),
+                    pks_w_new_msgs.iter(),
+                    msgs_w_new_msgs.iter()
+                )
+                .collect::<Vec<_>>()[..],
+                &mut rng
+            ));
+
+            // corrupt each signature sequentially for not too large batches
+            if sigs_w_new_msgs.len() < 50 {
+                for i in 0..sigs_w_new_msgs.len() {
+                    let sigs_w_new_msgs: Vec<_> = sigs_w_new_msgs
+                        .iter()
+                        .enumerate()
+                        .map(|(j, sig)| {
+                            if j == i {
+                                // corrupt signature i
+                                G1Affine::hash(b"bls_signature", &rng.gen::<[u8; 32]>())
+                            } else {
+                                sig.clone()
+                            }
+                        })
+                        .collect();
+                    assert!(!$batch_verification_function(
+                        &izip!(
+                            sigs_w_new_msgs.iter(),
+                            pks_w_new_msgs.iter(),
+                            msgs_w_new_msgs.iter()
+                        )
+                        .collect::<Vec<_>>()[..],
+                        &mut rng
+                    ));
+                }
+            }
+
+            let (sigs_w_dup_msgs, pks_w_dup_msgs, msgs_w_dup_msgs) =
+                with_random_sigs_of_existing_messages_signed_by_existing_signers(
+                    NUM_DUPLICATES,
+                    &mut rng,
+                    &sks,
+                    &sigs,
+                    &pks,
+                    &msgs,
+                );
+
+            assert!($batch_verification_function(
+                &izip!(
+                    sigs_w_dup_msgs.iter(),
+                    pks_w_dup_msgs.iter(),
+                    msgs_w_dup_msgs.iter()
+                )
+                .collect::<Vec<_>>()[..],
+                &mut rng
+            ));
+        }
+    };
+}
+
+#[test]
+fn test_verify_bls_signature_batch_with_distinct_msgs_and_sigs() {
+    generic_test_verify_bls_signature_batch!(verify_bls_signature_batch_distinct);
+}
+
+#[test]
+fn test_verify_bls_signature_mixed_batch() {
+    generic_test_verify_bls_signature_batch!(verify_bls_signature_batch);
+}
+
+#[test]
+fn test_verify_bls_signature_batch_with_same_msg() {
+    let mut rng = reproducible_rng();
+
+    for num_inputs in [1, 2, 4, 8, 16, 32, 100] {
+        let sks: Vec<_> = (0..num_inputs).map(|_| Scalar::random(&mut rng)).collect();
+        let pks: Vec<_> = sks
+            .iter()
+            .map(|sk| G2Affine::from(G2Affine::generator() * sk))
+            .collect();
+        let msg = G1Affine::hash(b"bls_signature", &rng.gen::<[u8; 32]>());
+        let sigs: Vec<_> = sks.iter().map(|sk| G1Affine::from(&msg * sk)).collect();
+
+        for i in 0..num_inputs {
+            assert!(verify_bls_signature(&sigs[i], &pks[i], &msg));
+            assert!(!verify_bls_signature(&msg, &pks[i], &sigs[i]));
+        }
+
+        assert!(verify_bls_signature_batch_same_msg(
+            &sigs.iter().zip(pks.iter()).collect::<Vec<_>>()[..],
+            &msg,
+            &mut rng
+        ));
+
+        // the "all-distinct" batched method should also work
+        assert!(verify_bls_signature_batch_distinct(
+            &sigs
+                .iter()
+                .zip(pks.iter())
+                .map(|(sig, pk)| (sig, pk, &msg))
+                .collect::<Vec<_>>()[..],
+            &mut rng
+        ));
+
+        assert!(!verify_bls_signature_batch_same_msg(
+            &sigs.iter().zip(pks.iter()).collect::<Vec<_>>()[..],
+            &G1Affine::hash(b"bls_signature", &rng.gen::<[u8; 32]>()),
+            &mut rng
+        ));
+
+        // swapped single sigs/pks must not work
+        if num_inputs > 1 {
+            let mut cloned_sigs = sigs.clone();
+            cloned_sigs.swap(0, 1);
+
+            assert!(!verify_bls_signature_batch_same_msg(
+                &cloned_sigs.iter().zip(pks.iter()).collect::<Vec<_>>()[..],
+                &msg,
+                &mut rng
+            ));
+
+            let mut cloned_pks = pks.clone();
+            cloned_pks.swap(0, 1);
+
+            assert!(!verify_bls_signature_batch_same_msg(
+                &sigs.iter().zip(cloned_pks.iter()).collect::<Vec<_>>()[..],
+                &msg,
+                &mut rng
+            ));
+        }
+
+        let (sigs_w_dups, pks_w_dups, _msgs_w_dups) = with_random_duplicates(
+            NUM_DUPLICATES,
+            &mut rng,
+            &sigs,
+            &pks,
+            &vec![msg.clone(); pks.len()][..],
+        );
+
+        assert!(verify_bls_signature_batch_same_msg(
+            &sigs_w_dups
+                .iter()
+                .zip(pks_w_dups.iter())
+                .collect::<Vec<_>>()[..],
+            &msg,
+            &mut rng
+        ));
+    }
+}
+
+#[test]
+fn test_verify_bls_signature_batch_with_same_pk() {
+    let mut rng = reproducible_rng();
+
+    for num_inputs in [1, 2, 4, 8, 16, 32, 100] {
+        let sk = Scalar::random(&mut rng);
+        let pk = G2Affine::from(G2Affine::generator() * &sk);
+        let msgs: Vec<_> = (0..num_inputs)
+            .map(|_| G1Affine::hash(b"bls_signature", &rng.gen::<[u8; 32]>()))
+            .collect();
+        let sigs: Vec<_> = msgs.iter().map(|msg| G1Affine::from(msg * &sk)).collect();
+
+        for i in 0..num_inputs {
+            assert!(verify_bls_signature(&sigs[i], &pk, &msgs[i]));
+            assert!(!verify_bls_signature(&msgs[i], &pk, &sigs[i]));
+        }
+
+        assert!(verify_bls_signature_batch_same_pk(
+            &sigs.iter().zip(msgs.iter()).collect::<Vec<_>>()[..],
+            &pk,
+            &mut rng
+        ));
+
+        // the "all-distinct" batched method should also work
+        assert!(verify_bls_signature_batch_distinct(
+            &sigs
+                .iter()
+                .zip(msgs.iter())
+                .map(|(sig, msg)| (sig, &pk, msg))
+                .collect::<Vec<_>>()[..],
+            &mut rng
+        ));
+
+        assert!(!verify_bls_signature_batch_same_pk(
+            &sigs.iter().zip(msgs.iter()).collect::<Vec<_>>()[..],
+            &G2Affine::from(G2Affine::generator() * &Scalar::random(&mut rng)),
+            &mut rng
+        ));
+
+        // swapped single sigs/msgs must not work
+        if num_inputs > 1 {
+            let mut cloned_sigs = sigs.clone();
+            cloned_sigs.swap(0, 1);
+
+            assert!(!verify_bls_signature_batch_same_pk(
+                &cloned_sigs.iter().zip(msgs.iter()).collect::<Vec<_>>()[..],
+                &pk,
+                &mut rng
+            ));
+
+            let mut cloned_msgs = msgs.clone();
+            cloned_msgs.swap(0, 1);
+
+            assert!(!verify_bls_signature_batch_same_pk(
+                &sigs.iter().zip(cloned_msgs.iter()).collect::<Vec<_>>()[..],
+                &pk,
+                &mut rng
+            ));
+        }
+
+        let (sigs_w_dups, _pks_w_dups, msgs_w_dups) = with_random_duplicates(
+            NUM_DUPLICATES,
+            &mut rng,
+            &sigs[..],
+            &vec![pk.clone(); msgs.len()][..],
+            &msgs[..],
+        );
+
+        assert!(verify_bls_signature_batch_same_pk(
+            &sigs_w_dups
+                .iter()
+                .zip(msgs_w_dups.iter())
+                .collect::<Vec<_>>()[..],
+            &pk,
+            &mut rng
+        ));
+    }
+}
+
 #[test]
 fn test_hash_to_g1_matches_draft() {
     /*
@@ -1065,6 +1463,81 @@ test_point_operation!(mul2, [g1, g2], {
 
         assert_eq!(Projective::mul2(&p1, &s1, &p2, &s2), reference);
         assert_eq!(Projective::mul2(&p2, &s2, &p1, &s1), reference);
+    }
+});
+
+test_point_operation!(muln_sparse, [g1, g2], {
+    let mut rng = reproducible_rng();
+
+    assert_eq!(
+        Projective::muln_affine_sparse_vartime(&[]),
+        Projective::identity()
+    );
+
+    fn gen_rand_subset(k: usize, n: usize, rng: &mut (impl Rng + CryptoRng)) -> Vec<usize> {
+        (0..n)
+            .collect::<Vec<usize>>()
+            .iter()
+            .choose_multiple(rng, k)
+            .into_iter()
+            .cloned()
+            .collect()
+    }
+
+    fn gen_rand_sparse_scalar(k: usize, rng: &mut (impl Rng + CryptoRng)) -> Scalar {
+        let set_bit = |bytes: &mut [u8], i: usize| {
+            bytes[Scalar::BYTES - i / 8 - 1] |= 1 << (i % 8);
+        };
+
+        const SCALAR_FLOORED_BIT_LENGTH: usize = 254;
+
+        let mut scalar = [0u8; Scalar::BYTES];
+        for i in gen_rand_subset(k, SCALAR_FLOORED_BIT_LENGTH, rng) {
+            set_bit(&mut scalar, i);
+        }
+        Scalar::deserialize(&scalar).unwrap()
+    }
+
+    // test sparse scalars
+    for hamming_weight in [1, 2, 3, 5, 10, 15, 20, 100] {
+        for num_inputs in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 30, 40, 50, 100] {
+            let points: Vec<Affine> = (0..num_inputs)
+                .map(|_| Projective::biased(&mut rng).to_affine())
+                .collect();
+            let scalars: Vec<Scalar> = (0..num_inputs)
+                .map(|_| gen_rand_sparse_scalar(hamming_weight, &mut rng))
+                .collect();
+
+            let reference_val = points
+                .iter()
+                .zip(scalars.iter())
+                .fold(Projective::identity(), |accum, (p, s)| accum + p * s);
+
+            let computed = Projective::muln_affine_sparse_vartime(
+                &points.iter().zip(scalars.iter()).collect::<Vec<_>>()[..],
+            );
+            assert_eq!(computed, reference_val);
+        }
+    }
+
+    // non-sparse scalars must also work, although slower
+    for t in 1..20 {
+        let mut points = Vec::with_capacity(t);
+        let mut scalars = Vec::with_capacity(t);
+        for _ in 0..t {
+            points.push(Projective::biased(&mut rng).to_affine());
+            scalars.push(Scalar::biased(&mut rng));
+        }
+
+        let reference_val = points
+            .iter()
+            .zip(scalars.iter())
+            .fold(Projective::identity(), |accum, (p, s)| accum + p * s);
+
+        let computed = Projective::muln_affine_sparse_vartime(
+            &points.iter().zip(scalars.iter()).collect::<Vec<_>>()[..],
+        );
+        assert_eq!(computed, reference_val);
     }
 });
 

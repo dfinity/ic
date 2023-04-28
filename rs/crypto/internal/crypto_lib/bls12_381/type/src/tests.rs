@@ -1,3 +1,5 @@
+use ic_crypto_test_utils_reproducible_rng::{reproducible_rng, ReproducibleRng};
+
 macro_rules! window_extraction_works_correctly_init {
     ( $( $window_size:expr ),* ) => {
         #[test]
@@ -29,3 +31,106 @@ macro_rules! window_extraction_works_correctly_init {
 
 // initialize the test for all input bit-lengths
 window_extraction_works_correctly_init![1, 2, 3, 4, 5, 6, 7, 8];
+
+#[test]
+fn random_bit_indices_works_correctly() {
+    const SCALAR_FLOORED_BIT_LENGTH: u8 = 254;
+    const BATCH_SIZE: usize = 10;
+    let mut rng = reproducible_rng();
+
+    assert_eq!(
+        crate::Scalar::random_bit_indices(&mut rng, 0, SCALAR_FLOORED_BIT_LENGTH),
+        vec![0u8; 0]
+    );
+
+    for num_true_bits in 1..=SCALAR_FLOORED_BIT_LENGTH {
+        for _ in 0..BATCH_SIZE {
+            let mut random_indices = crate::Scalar::random_bit_indices(
+                &mut rng,
+                num_true_bits,
+                SCALAR_FLOORED_BIT_LENGTH,
+            );
+
+            assert_eq!(random_indices.len(), num_true_bits as usize);
+
+            if num_true_bits > 10 {
+                // no trivial/default-initialized output
+                // probability of getting a sequence 0..num_true_bits or all 0s
+                // is 0, since `num_true_bits > 0`
+                let mut seq_indices: Vec<u8> = Vec::with_capacity(num_true_bits as usize);
+                seq_indices.extend(0..num_true_bits);
+                assert_ne!(random_indices, seq_indices);
+                assert_ne!(random_indices, vec![0; num_true_bits as usize]);
+            }
+
+            // each index must be in range
+            for i in random_indices.iter() {
+                assert!(*i < SCALAR_FLOORED_BIT_LENGTH);
+            }
+
+            // check that all indices are unique
+            random_indices.sort_unstable();
+            let all_unique = random_indices.windows(2).all(|x| (x[0] != x[1]));
+            assert!(all_unique);
+        }
+    }
+}
+
+#[test]
+fn random_bit_indices_works_correctly_for_overflowing_amount() {
+    use rand::SeedableRng;
+    const SCALAR_FLOORED_BIT_LENGTH: u8 = 254;
+    let mut rng1 = ReproducibleRng::from_seed([0; 32]);
+    let mut rng2 = ReproducibleRng::from_seed([0; 32]);
+
+    // `Scalar::random_bit_indices` for an overflowing `amount` should fall back
+    // to the maximum value of `amount`, i.e., `SCALAR_FLOORED_BIT_LENGTH`, and
+    // produce the same result for the same RNG (seed).
+    assert_eq!(
+        crate::Scalar::random_bit_indices(
+            &mut rng1,
+            SCALAR_FLOORED_BIT_LENGTH,
+            SCALAR_FLOORED_BIT_LENGTH,
+        ),
+        crate::Scalar::random_bit_indices(
+            &mut rng2,
+            SCALAR_FLOORED_BIT_LENGTH + 1,
+            SCALAR_FLOORED_BIT_LENGTH,
+        )
+    );
+}
+
+#[test]
+fn random_sparse_scalar_works_correctly_for_overflowing_num_bits() {
+    use rand::SeedableRng;
+    const SCALAR_FLOORED_BIT_LENGTH: u8 = 254;
+    let mut rng1 = ReproducibleRng::from_seed([0; 32]);
+    let mut rng2 = ReproducibleRng::from_seed([0; 32]);
+
+    // `Scalar::random_sparse` for an overflowing `num_bits` should fall back to
+    // `SCALAR_FLOORED_BIT_LENGTH`, and produce the same result for the same RNG
+    // (seed).
+    assert_eq!(
+        crate::Scalar::random_sparse(&mut rng1, SCALAR_FLOORED_BIT_LENGTH),
+        crate::Scalar::random_sparse(&mut rng2, SCALAR_FLOORED_BIT_LENGTH + 1)
+    );
+}
+
+#[test]
+fn random_sparse_scalars_have_correct_hamming_weight() {
+    const SCALAR_FLOORED_BIT_LENGTH: u8 = 254;
+    const BATCH_SIZE: usize = 10;
+    let mut rng = reproducible_rng();
+
+    for num_true_bits in 1..SCALAR_FLOORED_BIT_LENGTH {
+        let scalars = crate::Scalar::batch_sparse_random(&mut rng, BATCH_SIZE, num_true_bits);
+
+        for s in scalars {
+            let hamming_weight = s
+                .serialize()
+                .iter()
+                .fold(0, |accum, byte| accum + byte.count_ones() as u8);
+            assert_eq!(hamming_weight, num_true_bits);
+        }
+    }
+}

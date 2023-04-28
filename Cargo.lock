@@ -5465,6 +5465,7 @@ dependencies = [
  "ic-crypto-internal-types",
  "ic-crypto-test-utils-reproducible-rng",
  "ic_bls12_381",
+ "itertools",
  "lazy_static",
  "pairing",
  "paste 1.0.12",
