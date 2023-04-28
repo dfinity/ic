@@ -10,11 +10,12 @@
 mod tests;
 
 use ic_bls12_381::hash_to_curve::{ExpandMsgXmd, HashToCurve};
+use itertools::multiunzip;
 use pairing::group::{ff::Field, Group};
 use paste::paste;
-use rand::{CryptoRng, RngCore};
-use std::fmt;
+use rand::{CryptoRng, Rng, RngCore};
 use std::sync::Arc;
+use std::{collections::HashMap, fmt};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 macro_rules! ctoption_ok_or {
@@ -159,8 +160,6 @@ impl Scalar {
         up to provide space, followed by a scalar addition.
         */
 
-        use rand::Rng;
-
         let mut bytes = [0u8; 64];
 
         // We can't use fill_bytes here because that results in incompatible output.
@@ -237,6 +236,60 @@ impl Scalar {
         }
     }
 
+    /// Randomly sample exactly `amount` unbiased indices from `0..range` using an inplace partial Fisher-Yates method.
+    ///
+    /// This method is adopted from the std::rand crate including some comments, see
+    /// https://github.com/rust-random/rand/blob/19169cbce9931eea5ccb4f2cbf174fc9d3e8759d/src/seq/index.rs#L425.
+    ///
+    /// If `amount > range`, then `range` is internally used as `amount`.
+    ///
+    /// This allocates the entire range of indices (`range`) and randomizes
+    /// only the first `amount`.
+    ///
+    /// It then truncates to `amount` and returns.
+    fn random_bit_indices<R>(rng: &mut R, amount: u8, range: u8) -> Vec<u8>
+    where
+        R: Rng + RngCore + CryptoRng + ?Sized,
+    {
+        let amount = std::cmp::min(amount, range);
+
+        let mut indices: Vec<u8> = Vec::with_capacity(range as usize);
+        indices.extend(0..range);
+        for i in 0..amount {
+            let j: u8 = rng.gen_range(i..range);
+            indices.swap(i as usize, j as usize);
+        }
+        indices.truncate(amount as usize);
+        debug_assert_eq!(indices.len(), amount as usize);
+        indices
+    }
+
+    /// Returns a sparse random [`Scalar`] with a fixed Hamming weight.
+    ///
+    /// # Arguments
+    /// * `rng` - RNG object.
+    /// * `num_bits` - the Hamming weight of each [`Scalar`].
+    ///
+    /// Note that
+    /// * If `num_bits` overflows 254 (the floored [`Scalar`] bit length), then
+    ///    internally the `num_bits` is set to 254.
+    /// * The MSB of the returned [`Scalar`] is always 0.
+    pub fn random_sparse(rng: &mut (impl Rng + CryptoRng), num_bits: u8) -> Scalar {
+        let set_bit = |bytes: &mut [u8], i: u8| {
+            bytes[Scalar::BYTES - (i as usize / 8) - 1] |= 1 << (i % 8);
+        };
+
+        let mut scalar = [0u8; Scalar::BYTES];
+        const SCALAR_FLOORED_BIT_LENGTH: u8 = 254;
+
+        for i in Self::random_bit_indices(rng, num_bits, SCALAR_FLOORED_BIT_LENGTH) {
+            set_bit(&mut scalar, i);
+        }
+        // we always generate fewer bits than the max capacity of the scalar,
+        // so `deserialize` never returns an error
+        Scalar::deserialize(&scalar).unwrap()
+    }
+
     /// Return several random scalars
     pub fn batch_random<R: RngCore + CryptoRng>(rng: &mut R, count: usize) -> Vec<Self> {
         let mut result = Vec::with_capacity(count);
@@ -246,6 +299,22 @@ impl Scalar {
         }
 
         result
+    }
+
+    /// Returns several sparse random scalars.
+    ///
+    /// # Arguments
+    /// * `rng` - RNG object
+    /// * `count` - number of generated scalars
+    /// * `num_bits` - number of 1-bits that each scalar will have at random positions
+    pub fn batch_sparse_random<R: RngCore + CryptoRng>(
+        rng: &mut R,
+        count: usize,
+        num_bits: u8,
+    ) -> Vec<Self> {
+        (0..count)
+            .map(|_| Self::random_sparse(rng, num_bits))
+            .collect()
     }
 
     /// Return a random scalar within a small range
@@ -812,6 +881,12 @@ macro_rules! define_affine_and_projective_types {
         impl PartialEq for $affine {
             fn eq(&self, other: &Self) -> bool {
                 self.value == other.value
+            }
+        }
+
+        impl std::hash::Hash for $affine {
+            fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+                self.serialize().hash(state)
             }
         }
 
@@ -1510,6 +1585,40 @@ macro_rules! declare_muln_vartime_affine_impl_for {
 
                 Self::muln_vartime(&proj_points[..], scalars)
             }
+
+            /// Multiplies and adds together `points` and `scalars` as
+            /// `points[0] * scalars[0] + ... + points[l] * scalars[l]`,
+            /// where `l` is `min(points.len(), scalars.len())`.
+            ///
+            /// Returns the identity element if terms is empty.
+            ///
+            /// This function is more efficient with smaller Hamming
+            /// weight of the scalars and with more point-scalar pairs
+            /// in the input. Although less efficiently, this function works
+            /// also with scalars having a large Hamming weight.
+            ///
+            /// Warning: this function leaks information about the scalars via
+            /// side channels. Do not use this function with secret scalars.
+            pub fn muln_affine_sparse_vartime(inputs: &[(&$affine, &Scalar)]) -> Self {
+                let get_bit = |bytes: &[u8], i: usize| {
+                    let target_byte = bytes[Scalar::BYTES - i / 8 - 1];
+                    let target_bit = (target_byte >> (i % 8)) & 1;
+                    target_bit == 1
+                };
+
+                let mut accum = Self::identity();
+                for bit_i in (0..=Scalar::BYTES * 8 - 1).rev() {
+                    for (p, s) in inputs.iter().map(|(p, s)| (*p, s.serialize())) {
+                        if get_bit(&s[..], bit_i) {
+                            accum = &accum + p;
+                        }
+                    }
+                    if bit_i > 0 {
+                        accum = accum.double();
+                    }
+                }
+                accum
+            }
         }
     };
 }
@@ -1866,6 +1975,186 @@ pub fn verify_bls_signature(
     let g2_gen = G2Prepared::neg_generator();
     let pub_key_prepared = G2Prepared::from(public_key);
     Gt::multipairing(&[(signature, g2_gen), (message, &pub_key_prepared)]).is_identity()
+}
+
+/// Number of random bits in a [`Scalar`] that is used for batched signature
+/// verification.
+///
+/// We generated a random [`Scalar`] for batched signature verification by (1)
+/// reinterpreting a 0-[`Scalar`] as a bit string, 2) selecting
+/// [`NUM_BITS_BATCH_VERIFICATION`] random locations in the bit string, and 3)
+/// assigning 1-bits to those locations. This generates a set of |bit string|
+/// choose [`NUM_BITS_BATCH_VERIFICATION`] [`Scalar`]s. The selected parameter
+/// 30 generated a set of (254 choose 30) = 2^(129.37) [`Scalar`]s, which
+/// satisfies our requirements for the batched signature verification.
+///
+/// Note that this constant could eventually be lowered to e.g. 16 if (254
+/// choose 16) = 2^(81.91) [`Scalar`]s satisfies the security requirements.
+const NUM_BITS_BATCH_VERIFICATION: u8 = 30;
+
+/// Performs the verification of a batch of BLS signatures that is faster than
+/// pairwise verification. For efficiency, the provided batch is automatically
+/// dispatched into subcases: same message, same public key, distinct keys and
+/// messages batches.
+///
+/// TODO(CRP-2013): use only one multi-pairing per call.
+pub fn verify_bls_signature_batch<R: RngCore + CryptoRng>(
+    sigs_pks_msgs: &[(&G1Affine, &G2Affine, &G1Affine)],
+    rng: &mut R,
+) -> bool {
+    type Sig = G1Affine;
+    type Pk = G2Affine;
+    type Msg = G1Affine;
+
+    // same-public-key verification is most efficient, so it comes first
+    let mut same_pk = HashMap::<&Pk, Vec<(&Sig, &Msg)>>::with_capacity(sigs_pks_msgs.len());
+
+    for (sig, pk, msg) in sigs_pks_msgs {
+        match same_pk.get_mut(pk) {
+            Some(v) => {
+                v.push((sig, msg));
+            }
+            _ => {
+                same_pk.insert(pk, vec![(sig, msg)]);
+            }
+        }
+    }
+
+    for (pk, sigs_and_msgs) in same_pk.iter().filter(|(_k, v)| v.len() > 1) {
+        if !verify_bls_signature_batch_same_pk(&sigs_and_msgs[..], pk, rng) {
+            return false;
+        };
+    }
+
+    // same-message verification is second most efficient, so it comes second
+    let mut same_msg = HashMap::<&Msg, Vec<(&Sig, &Pk)>>::with_capacity(
+        same_pk.iter().filter(|(_k, v)| v.len() == 1).count(),
+    );
+
+    for (pk, sigs_and_msgs) in same_pk.iter().filter(|(_k, v)| v.len() == 1) {
+        match same_msg.get_mut(sigs_and_msgs[0].1) {
+            Some(v) => {
+                v.push((sigs_and_msgs[0].0, pk));
+            }
+            None => {
+                same_msg.insert(sigs_and_msgs[0].1, vec![(sigs_and_msgs[0].0, pk)]);
+            }
+        }
+    }
+
+    for (msg, sigs_and_pks) in same_msg.iter().filter(|(_k, v)| v.len() > 1) {
+        if !verify_bls_signature_batch_same_msg(&sigs_and_pks[..], msg, rng) {
+            return false;
+        };
+    }
+
+    // the remainder contains distinct tuples and is least efficient to verify (although more efficient than one-by-one)
+    let distinct_len = same_msg.iter().filter(|(_k, v)| v.len() == 1).count();
+    let mut sigs_pks_msgs = Vec::<(&Sig, &Pk, &Msg)>::with_capacity(distinct_len);
+
+    for (&msg, sigs_and_pks) in same_msg.iter().filter(|(_k, v)| v.len() == 1) {
+        sigs_pks_msgs.push((sigs_and_pks[0].0, sigs_and_pks[0].1, msg));
+    }
+
+    verify_bls_signature_batch_distinct(&sigs_pks_msgs[..], rng)
+}
+
+/// Performs the verification of a batch of BLS signatures that is faster than
+/// pairwise verification.
+///
+/// This works by adding together all signatures before computing the pairing,
+/// and thus reduces the number of required pairings from 2n to n+1.
+///
+/// For details, see Section 5.1 in "Batch Verification of Short Signatures"
+/// by J. Camenisch, S. Hohenberger, M. Ø. Pedersen. In Eurocrypt'07.
+/// https://eprint.iacr.org/2007/172.pdf.
+pub fn verify_bls_signature_batch_distinct<R: RngCore + CryptoRng>(
+    sigs_pks_msgs: &[(&G1Affine, &G2Affine, &G1Affine)],
+    rng: &mut R,
+) -> bool {
+    let random_scalars =
+        Scalar::batch_sparse_random(rng, sigs_pks_msgs.len(), NUM_BITS_BATCH_VERIFICATION);
+    let (sigs, pks, msgs): (Vec<_>, Vec<_>, Vec<_>) = multiunzip(sigs_pks_msgs.to_vec());
+
+    let sigs_scalars: Vec<_> = sigs.into_iter().zip(random_scalars.iter()).collect();
+    let aggregate_sig = G1Projective::muln_affine_sparse_vartime(&sigs_scalars[..]).to_affine();
+    let inv_g2_gen = G2Prepared::neg_generator();
+
+    let msgs: Vec<_> = msgs
+        .iter()
+        .zip(random_scalars.iter())
+        .map(|(&msg, s)| (msg * s).to_affine())
+        .collect();
+
+    let pks_prepared: Vec<_> = pks.into_iter().map(G2Prepared::from).collect();
+
+    let mut multipairing_inputs = Vec::with_capacity(sigs_pks_msgs.len() + 1);
+    multipairing_inputs.push((&aggregate_sig, inv_g2_gen));
+    for (msg, pk) in msgs.iter().zip(pks_prepared.iter()) {
+        multipairing_inputs.push((msg, pk));
+    }
+
+    Gt::multipairing(&multipairing_inputs[..]).is_identity()
+}
+
+/// Performs the verification of a batch of BLS signatures that is faster than
+/// pairwise verification given the same public key
+///
+/// This works by adding together all signatures before computing the pairing,
+/// and thus reduces the number of required pairings 2n to 2.
+///
+/// For details, see Section 5.2 in "Short Signatures from the Weil Pairing"
+/// by Dan Boneh, Ben Lynn, and Hovav Shacham. In Jounal of Cryptology'04.
+/// https://link.springer.com/content/pdf/10.1007/s00145-004-0314-9.pdf.
+pub fn verify_bls_signature_batch_same_pk<R: RngCore + CryptoRng>(
+    sigs_msgs: &[(&G1Affine, &G1Affine)],
+    public_key: &G2Affine,
+    rng: &mut R,
+) -> bool {
+    let random_scalars =
+        Scalar::batch_sparse_random(rng, sigs_msgs.len(), NUM_BITS_BATCH_VERIFICATION);
+    let (sigs, msgs): (Vec<_>, Vec<_>) = sigs_msgs.iter().copied().unzip();
+    let sigs_scalars: Vec<_> = sigs.into_iter().zip(random_scalars.iter()).collect();
+    let aggregate_sig = G1Projective::muln_affine_sparse_vartime(&sigs_scalars[..]).to_affine();
+    let inv_g2_gen = G2Prepared::neg_generator();
+
+    let msgs_scalars: Vec<_> = msgs.into_iter().zip(random_scalars.iter()).collect();
+    let aggregate_message = G1Projective::muln_affine_sparse_vartime(&msgs_scalars[..]).to_affine();
+    let prepared_pk = G2Prepared::from(public_key);
+
+    Gt::multipairing(&[
+        (&aggregate_sig, inv_g2_gen),
+        (&aggregate_message, &prepared_pk),
+    ])
+    .is_identity()
+}
+
+/// Performs a verification of a batch of BLS signatures that is faster than
+/// pairwise verification given the same message
+///
+/// This works by adding together all signatures before computing the pairing,
+/// and thus reduces the number of required pairings 2n to 2.
+///
+/// For details, see Section 5.2 in "Short Signatures from the Weil Pairing"
+/// by Dan Boneh, Ben Lynn, and Hovav Shacham. In Jounal of Cryptology'04.
+/// https://link.springer.com/content/pdf/10.1007/s00145-004-0314-9.pdf.
+pub fn verify_bls_signature_batch_same_msg<R: RngCore + CryptoRng>(
+    sigs_pks: &[(&G1Affine, &G2Affine)],
+    message: &G1Affine,
+    rng: &mut R,
+) -> bool {
+    let random_scalars =
+        Scalar::batch_sparse_random(rng, sigs_pks.len(), NUM_BITS_BATCH_VERIFICATION);
+    let (sigs, pks): (Vec<_>, Vec<_>) = sigs_pks.iter().copied().unzip();
+    let sigs_scalars: Vec<_> = sigs.into_iter().zip(random_scalars.iter()).collect();
+    let aggregate_sig = G1Projective::muln_affine_sparse_vartime(&sigs_scalars[..]).to_affine();
+    let inv_g2_gen = G2Prepared::neg_generator();
+
+    let pks_scalars: Vec<_> = pks.into_iter().zip(random_scalars.iter()).collect();
+    let aggregate_pk = G2Projective::muln_affine_sparse_vartime(&pks_scalars[..]);
+    let pub_key_prepared = G2Prepared::from(aggregate_pk);
+
+    Gt::multipairing(&[(&aggregate_sig, inv_g2_gen), (message, &pub_key_prepared)]).is_identity()
 }
 
 struct WindowInfo<const WINDOW_SIZE: usize> {}

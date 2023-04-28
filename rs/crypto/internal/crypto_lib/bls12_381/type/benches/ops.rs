@@ -2,6 +2,7 @@ use criterion::*;
 use ic_crypto_internal_bls12_381_type::*;
 use paste::paste;
 use rand::Rng;
+use std::sync::Arc;
 
 fn random_g1() -> G1Projective {
     let mut rng = rand::thread_rng();
@@ -42,6 +43,11 @@ fn random_scalar() -> Scalar {
     Scalar::random(&mut rng)
 }
 
+fn random_sparse_scalar(num_bits: u8) -> Scalar {
+    let mut rng = rand::thread_rng();
+    Scalar::random_sparse(&mut rng, num_bits)
+}
+
 fn n_random_scalar(size: usize) -> Vec<Scalar> {
     let mut r = Vec::with_capacity(size);
     for _ in 0..size {
@@ -64,6 +70,12 @@ fn g1_muln_instance(terms: usize) -> (Vec<G1Projective>, Vec<Scalar>) {
     (points, scalars)
 }
 
+fn g1_sparse_muln_instance(terms: usize, num_bits: u8) -> Vec<(G1Affine, Scalar)> {
+    (0..terms)
+        .map(|_| (random_g1().to_affine(), random_sparse_scalar(num_bits)))
+        .collect()
+}
+
 fn g2_muln_instance(terms: usize) -> (Vec<G2Projective>, Vec<Scalar>) {
     let mut points = Vec::with_capacity(terms);
     let mut scalars = Vec::with_capacity(terms);
@@ -72,6 +84,12 @@ fn g2_muln_instance(terms: usize) -> (Vec<G2Projective>, Vec<Scalar>) {
         scalars.push(random_scalar());
     }
     (points, scalars)
+}
+
+fn g2_sparse_muln_instance(terms: usize, num_bits: u8) -> Vec<(G2Affine, Scalar)> {
+    (0..terms)
+        .map(|_| (random_g2().to_affine(), random_sparse_scalar(num_bits)))
+        .collect()
 }
 
 fn scalar_multiexp_naive(lhs: &[Scalar], rhs: &[Scalar]) -> Scalar {
@@ -275,7 +293,6 @@ fn bls12_381_g1_ops(c: &mut Criterion) {
                 BatchSize::SmallInput,
             )
         });
-
         group.bench_function(format!("multiexp_muln_{}", n), |b| {
             b.iter_batched_ref(
                 || g1_muln_instance(n),
@@ -284,6 +301,18 @@ fn bls12_381_g1_ops(c: &mut Criterion) {
             )
         });
     }
+
+    group.bench_function("multiexp_muln_sparse_32_inputs_16_bits", |b| {
+        b.iter_batched_ref(
+            || g1_sparse_muln_instance(32, 16),
+            |points_scalars| {
+                let points_scalars_refs: Vec<_> =
+                    points_scalars.iter().map(|(p, s)| (p, s)).collect();
+                G1Projective::muln_affine_sparse_vartime(&points_scalars_refs[..]);
+            },
+            BatchSize::SmallInput,
+        )
+    });
 }
 
 fn bls12_381_g2_ops(c: &mut Criterion) {
@@ -433,6 +462,18 @@ fn bls12_381_g2_ops(c: &mut Criterion) {
             )
         });
     }
+
+    group.bench_function("multiexp_muln_sparse_32_inputs_16_bits", |b| {
+        b.iter_batched_ref(
+            || g2_sparse_muln_instance(32, 16),
+            |points_scalars| {
+                let points_scalars_refs: Vec<_> =
+                    points_scalars.iter().map(|(p, s)| (p, s)).collect();
+                G2Projective::muln_affine_sparse_vartime(&points_scalars_refs[..]);
+            },
+            BatchSize::SmallInput,
+        )
+    });
 }
 
 fn pairing_ops(c: &mut Criterion) {
@@ -538,6 +579,205 @@ fn pairing_ops(c: &mut Criterion) {
     });
 }
 
+fn bls12_381_batch_sig_verification(c: &mut Criterion) {
+    let mut group = c.benchmark_group("crypto_bls12_381_batch_sig_verification");
+
+    for num_args in [2usize, 4, 8, 16, 32, 64, 128] {
+        group.throughput(Throughput::Elements(num_args as u64));
+        group.bench_with_input(
+            BenchmarkId::new("naive", num_args),
+            &num_args,
+            |b, &size| {
+                b.iter_batched_ref(
+                    || random_batch_sig_verification_instances(size),
+                    |sigs_pks_msgs| {
+                        for (sig, pk, msg) in sigs_pks_msgs.iter() {
+                            black_box(verify_bls_signature(sig, pk, msg));
+                        }
+                    },
+                    BatchSize::SmallInput,
+                )
+            },
+        );
+        group.bench_with_input(
+            BenchmarkId::new("batched_distinct", num_args),
+            &num_args,
+            |b, &size| {
+                b.iter_batched_ref(
+                    || random_batch_sig_verification_instances(size),
+                    |sigs_pks_msgs| {
+                        let sigs_pks_msgs_refs: Vec<_> = sigs_pks_msgs
+                            .iter()
+                            .map(|(sig, pk, msg)| (sig, pk, msg))
+                            .collect();
+                        black_box(verify_bls_signature_batch_distinct(
+                            &sigs_pks_msgs_refs[..],
+                            &mut rand::thread_rng(),
+                        ));
+                    },
+                    BatchSize::SmallInput,
+                )
+            },
+        );
+        group.bench_with_input(
+            BenchmarkId::new("batched_same_msg", num_args),
+            &num_args,
+            |b, &size| {
+                b.iter_batched_ref(
+                    || random_batch_sig_verification_instances(size),
+                    |sigs_pks_msgs| {
+                        let sigs_pks_refs: Vec<_> = sigs_pks_msgs
+                            .iter()
+                            .map(|(sig, pk, _msg)| (sig, pk))
+                            .collect();
+
+                        black_box(verify_bls_signature_batch_same_msg(
+                            &sigs_pks_refs[..],
+                            &sigs_pks_msgs[0].2,
+                            &mut rand::thread_rng(),
+                        ));
+                    },
+                    BatchSize::SmallInput,
+                )
+            },
+        );
+        group.bench_with_input(
+            BenchmarkId::new("batched_same_pk", num_args),
+            &num_args,
+            |b, &size| {
+                b.iter_batched_ref(
+                    || random_batch_sig_verification_instances(size),
+                    |sigs_pks_msgs| {
+                        let sigs_msgs_refs: Vec<_> = sigs_pks_msgs
+                            .iter()
+                            .map(|(sig, _pk, msg)| (sig, msg))
+                            .collect();
+                        black_box(verify_bls_signature_batch_same_pk(
+                            &sigs_msgs_refs[..],
+                            &sigs_pks_msgs[0].1,
+                            &mut rand::thread_rng(),
+                        ));
+                    },
+                    BatchSize::SmallInput,
+                )
+            },
+        );
+    }
+
+    let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+    group.plot_config(plot_config);
+    group.finish();
+}
+
+fn bls12_381_batch_sig_verification_multithreaded(c: &mut Criterion) {
+    let mut group = c.benchmark_group("crypto_bls12_381_batch_sig_verification_multithreaded");
+
+    const NUM_THREADS: usize = 8;
+
+    for num_args in [80, 800] {
+        group.throughput(Throughput::Elements(num_args as u64));
+        group.bench_with_input(
+            BenchmarkId::new("batched_distinct", num_args),
+            &num_args,
+            |b, &size| {
+                b.iter_batched(
+                    || Arc::new(random_batch_sig_verification_instances(size)),
+                    |sigs_pks_msgs| {
+                        let threads = (0..NUM_THREADS).map(|i| {
+                            let size_c = size;
+                            let sigs_pks_msgs_c = sigs_pks_msgs.clone();
+                            std::thread::spawn(move || {
+                                let sigs_pks_msgs_refs = sigs_pks_msgs_c
+                                    [i * size_c / NUM_THREADS..(i + 1) * size_c / NUM_THREADS]
+                                    .iter()
+                                    .map(|(sig, pk, msg)| (sig, pk, msg))
+                                    .collect::<Vec<_>>();
+                                black_box(verify_bls_signature_batch_distinct(
+                                    &sigs_pks_msgs_refs,
+                                    &mut rand::thread_rng(),
+                                ));
+                            })
+                        });
+                        for t in threads {
+                            t.join().unwrap();
+                        }
+                    },
+                    BatchSize::SmallInput,
+                );
+            },
+        );
+        group.bench_with_input(
+            BenchmarkId::new("batched_same_msg", num_args),
+            &num_args,
+            |b, &size| {
+                b.iter_batched_ref(
+                    || Arc::new(random_batch_sig_verification_instances(size)),
+                    |sigs_pks_msgs| {
+                        let mut threads = vec![];
+                        for i in 0..NUM_THREADS {
+                            let size_c = size;
+                            let sigs_pks_msgs_c = sigs_pks_msgs.clone();
+                            threads.push(std::thread::spawn(move || {
+                                let sigs_pks_refs: Vec<_> = sigs_pks_msgs_c
+                                    [i * size_c / NUM_THREADS..(i + 1) * size_c / NUM_THREADS]
+                                    .iter()
+                                    .map(|(sig, pk, _msg)| (sig, pk))
+                                    .collect();
+                                black_box(verify_bls_signature_batch_same_msg(
+                                    &sigs_pks_refs[..],
+                                    &sigs_pks_msgs_c[0].2,
+                                    &mut rand::thread_rng(),
+                                ))
+                            }));
+                        }
+
+                        for t in threads {
+                            t.join().unwrap();
+                        }
+                    },
+                    BatchSize::SmallInput,
+                )
+            },
+        );
+        group.bench_with_input(
+            BenchmarkId::new("batched_same_pk", num_args),
+            &num_args,
+            |b, &size| {
+                b.iter_batched_ref(
+                    || Arc::new(random_batch_sig_verification_instances(size)),
+                    |sigs_pks_msgs| {
+                        let mut threads = vec![];
+                        for i in 0..NUM_THREADS {
+                            let size_c = size;
+                            let sigs_pks_msgs_c = sigs_pks_msgs.clone();
+                            threads.push(std::thread::spawn(move || {
+                                let sigs_msgs_refs: Vec<_> = sigs_pks_msgs_c
+                                    [i * size_c / NUM_THREADS..(i + 1) * size_c / NUM_THREADS]
+                                    .iter()
+                                    .map(|(sig, _pk, msg)| (sig, msg))
+                                    .collect();
+                                black_box(verify_bls_signature_batch_same_pk(
+                                    &sigs_msgs_refs,
+                                    &sigs_pks_msgs_c[0].1,
+                                    &mut rand::thread_rng(),
+                                ))
+                            }));
+                        }
+                        for t in threads {
+                            t.join().unwrap();
+                        }
+                    },
+                    BatchSize::SmallInput,
+                )
+            },
+        );
+    }
+
+    let plot_config = PlotConfiguration::default().summary_scale(AxisScale::Logarithmic);
+    group.plot_config(plot_config);
+    group.finish();
+}
+
 macro_rules! crypto_bls12_381_mul2_precomputation_init {
     ($group:ident, $projective:ty) => {
         paste! {
@@ -599,6 +839,17 @@ macro_rules! crypto_bls12_381_mul2_precomputation_init {
     };
 }
 
+fn random_batch_sig_verification_instances(n: usize) -> Vec<(G1Affine, G2Affine, G1Affine)> {
+    let fake_sigs_pks_msgs: Vec<_> = n_random_g1(n)
+        .into_iter()
+        .map(|g1| g1.into())
+        .zip(n_random_g2(n).into_iter().map(|g2| g2.into()))
+        .zip(n_random_g1(n).into_iter().map(|g1| g1.into()))
+        .map(|((sig, pk), msg)| (sig, pk, msg))
+        .collect();
+    fake_sigs_pks_msgs
+}
+
 crypto_bls12_381_mul2_precomputation_init!(g1, G1Projective);
 crypto_bls12_381_mul2_precomputation_init!(g2, G2Projective);
 
@@ -608,6 +859,8 @@ criterion_group!(
     bls12_381_g1_ops,
     bls12_381_g2_ops,
     pairing_ops,
+    bls12_381_batch_sig_verification,
+    bls12_381_batch_sig_verification_multithreaded,
     mul2_precomputation_g1,
     mul2_precomputation_g2,
 );
