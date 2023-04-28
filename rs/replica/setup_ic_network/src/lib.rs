@@ -36,8 +36,7 @@ use ic_icos_sev_interfaces::ValidateAttestedStream;
 use ic_ingress_manager::IngressManager;
 use ic_interfaces::{
     artifact_manager::{
-        AdvertBroadcaster, ArtifactClient, ArtifactManager, ArtifactProcessor,
-        ArtifactProcessorJoinGuard,
+        AdvertBroadcaster, ArtifactClient, ArtifactManager, ArtifactProcessor, JoinGuard,
     },
     crypto::IngressSigVerifier,
     execution_environment::IngressHistoryReader,
@@ -51,7 +50,7 @@ use ic_interfaces_state_manager::{StateManager, StateReader};
 use ic_interfaces_transport::Transport;
 use ic_logger::{info, replica_logger::ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_p2p::{start_p2p, AdvertBroadcasterImpl, P2PThreadJoiner, MAX_ADVERT_BUFFER};
+use ic_p2p::{start_p2p, AdvertBroadcasterImpl, MAX_ADVERT_BUFFER};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_state_manager::state_sync::{StateSync, StateSyncArtifact};
@@ -138,7 +137,7 @@ pub fn create_networking_stack(
     canister_http_adapter_client:
         ic_interfaces_https_outcalls_adapter_client::CanisterHttpAdapterClient,
     registry_poll_delay_duration_ms: u64,
-) -> (IngressIngestionService, P2PThreadJoiner) {
+) -> (IngressIngestionService, Box<dyn JoinGuard>) {
     let (advert_tx, advert_rx) = channel(MAX_ADVERT_BUFFER);
     let advert_subscriber = Arc::new(AdvertBroadcasterImpl::new(
         log.clone(),
@@ -249,7 +248,7 @@ fn setup_artifact_manager(
     canister_http_adapter_client: ic_interfaces_https_outcalls_adapter_client::CanisterHttpAdapterClient,
 ) -> (
     std::io::Result<Arc<dyn ArtifactManager>>,
-    Vec<ArtifactProcessorJoinGuard>,
+    Vec<Box<dyn JoinGuard>>,
 ) {
     // Initialize the time source.
     let time_source = Arc::new(SysTimeSource::new());

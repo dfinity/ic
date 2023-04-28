@@ -94,9 +94,10 @@
 //! <img src="../../../../../docs/assets/p2p.png" height="960"
 //! width="540"/> </div> <hr/>
 
+use crate::event_handler::P2PJoinGuard;
 use ic_config::transport::TransportConfig;
 use ic_interfaces::{
-    artifact_manager::{ArtifactManager, ArtifactProcessorJoinGuard},
+    artifact_manager::{ArtifactManager, JoinGuard},
     consensus_pool::ConsensusPoolCache,
 };
 use ic_interfaces_registry::RegistryClient;
@@ -125,7 +126,7 @@ mod metrics;
 mod peer_context;
 
 pub use advert_broadcaster::AdvertBroadcasterImpl;
-pub use event_handler::{P2PThreadJoiner, MAX_ADVERT_BUFFER};
+pub use event_handler::MAX_ADVERT_BUFFER;
 
 /// Custom P2P result type returning a P2P error in case of error.
 pub(crate) type P2PResult<T> = std::result::Result<T, P2PError>;
@@ -168,8 +169,8 @@ pub fn start_p2p(
     consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
     artifact_manager: Arc<dyn ArtifactManager>,
     advert_receiver: Receiver<GossipAdvert>,
-    artifact_processor_join_handles: Vec<ArtifactProcessorJoinGuard>,
-) -> P2PThreadJoiner {
+    artifact_processor_join_guards: Vec<Box<dyn JoinGuard>>,
+) -> Box<dyn JoinGuard> {
     let p2p_transport_channels = vec![TransportChannelId::from(0)];
     let gossip = Arc::new(gossip_protocol::GossipImpl::new(
         node_id,
@@ -194,7 +195,11 @@ pub fn start_p2p(
     let _ =
         advert_broadcaster::start_advert_send_thread(log.clone(), advert_receiver, gossip.clone());
 
-    P2PThreadJoiner::new(log, gossip, artifact_processor_join_handles)
+    Box::new(P2PJoinGuard::new(
+        log,
+        gossip,
+        artifact_processor_join_guards,
+    ))
 }
 
 /// Generic P2P Error codes.

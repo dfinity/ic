@@ -72,7 +72,7 @@ use crate::{
     gossip_types::{GossipChunk, GossipChunkRequest, GossipMessage},
     metrics::FlowWorkerMetrics,
 };
-use ic_interfaces::artifact_manager::ArtifactProcessorJoinGuard;
+use ic_interfaces::artifact_manager::JoinGuard;
 use ic_interfaces_transport::{TransportEvent, TransportMessage};
 use ic_logger::{debug, replica_logger::ReplicaLogger, warn};
 use ic_metrics::MetricsRegistry;
@@ -393,24 +393,26 @@ impl Service<TransportEvent> for AsyncTransportEventHandlerImpl {
 
 /// The struct is a handle for running a P2P thread relevant for the protocol.
 /// Once dropped expect the protocol to be aborted.
-pub struct P2PThreadJoiner {
+pub(crate) struct P2PJoinGuard {
     /// The task handles.
     join_handle: Option<JoinHandle<()>>,
     /// Flag indicating if P2P has been terminated.
     killed: Arc<AtomicBool>,
-    artifact_processor_join_handles: Vec<ArtifactProcessorJoinGuard>,
+    artifact_processor_join_guards: Vec<Box<dyn JoinGuard>>,
 }
 
 /// Periodic timer duration in milliseconds between polling calls to the P2P
 /// component.
 const P2P_TIMER_DURATION_MS: u64 = 100;
 
-impl P2PThreadJoiner {
+impl JoinGuard for P2PJoinGuard {}
+
+impl P2PJoinGuard {
     /// The method starts the P2P timer task in the background.
     pub(crate) fn new(
         log: ReplicaLogger,
         gossip: GossipArc,
-        artifact_processor_join_handles: Vec<ArtifactProcessorJoinGuard>,
+        artifact_processor_join_guards: Vec<Box<dyn JoinGuard>>,
     ) -> Self {
         let killed = Arc::new(AtomicBool::new(false));
         let killed_c = Arc::clone(&killed);
@@ -429,18 +431,18 @@ impl P2PThreadJoiner {
         Self {
             killed,
             join_handle: Some(join_handle),
-            artifact_processor_join_handles,
+            artifact_processor_join_guards,
         }
     }
 }
 
-impl Drop for P2PThreadJoiner {
+impl Drop for P2PJoinGuard {
     /// The method signals the tasks to exit and waits for them to complete.
     fn drop(&mut self) {
         // First kill the Artifact Processors
-        let artifact_processor_join_handles =
-            std::mem::take(&mut self.artifact_processor_join_handles);
-        std::mem::drop(artifact_processor_join_handles);
+        let artifact_processor_join_guards =
+            std::mem::take(&mut self.artifact_processor_join_guards);
+        std::mem::drop(artifact_processor_join_guards);
         // Then kill P2P
         self.killed.store(true, SeqCst);
         self.join_handle.take().unwrap().join().unwrap();

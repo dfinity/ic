@@ -7,6 +7,7 @@ use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::ExecutionServices;
 use ic_https_outcalls_adapter_client::setup_canister_http_client;
 use ic_icos_sev::Sev;
+use ic_interfaces::artifact_manager::JoinGuard;
 use ic_interfaces::execution_environment::QueryHandler;
 use ic_interfaces_certified_stream_store::CertifiedStreamStore;
 use ic_interfaces_p2p::IngressIngestionService;
@@ -14,7 +15,6 @@ use ic_interfaces_registry::{LocalStoreCertifiedTimeReader, RegistryClient};
 use ic_logger::{info, ReplicaLogger};
 use ic_messaging::MessageRoutingImpl;
 use ic_metrics::MetricsRegistry;
-use ic_p2p::P2PThreadJoiner;
 use ic_registry_subnet_type::SubnetType;
 use ic_replica_setup_ic_network::{
     create_networking_stack, init_artifact_pools, P2PStateSyncClient,
@@ -48,7 +48,7 @@ pub fn construct_ic_stack(
     Arc<StateManagerImpl>,
     // TODO: remove this return value since it is used only in tests
     Arc<dyn QueryHandler<State = ReplicatedState>>,
-    P2PThreadJoiner,
+    Box<dyn JoinGuard>,
     // TODO: remove this return value since it is used only in tests
     IngressIngestionService,
     XNetEndpoint,
