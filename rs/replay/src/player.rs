@@ -94,6 +94,8 @@ pub enum ReplayError {
     UpgradeDetected(StateParams),
     /// Can't proceed because artifact validation failed after the given height.
     ValidationIncomplete(Height, Vec<InvalidArtifact>),
+    /// Can't proceed because one or more aretifacts was invalid
+    ValidationFailed(Height),
     /// Replay was successful, but manual inspection is required to choose correct state.
     ManualInspectionRequired(StateParams),
 }
@@ -161,7 +163,8 @@ impl Player {
             .join(subnet_id.to_string())
             .join(replica_version.to_string());
         // Extract the genesis CUP and instantiate a new pool.
-        let initial_cup = backup::read_cup_at_height(&backup_dir, Height::from(start_height));
+        let initial_cup = backup::read_cup_at_height(&backup_dir, Height::from(start_height))
+            .expect("CUP of the starting block should be valid");
         // This would create a new pool with just the genesis CUP.
         let pool = ConsensusPoolImpl::new_from_cup_without_bytes(
             subnet_id,
@@ -932,7 +935,7 @@ impl Player {
                         self.consensus_pool.as_mut().unwrap(),
                         &backup_dir,
                         cup_height,
-                    );
+                    )?;
                     self.assert_consistency_and_clean_up()?;
                 }
                 // When we run into an NNS block referencing a newer registry version, we need to dump
@@ -957,6 +960,10 @@ impl Player {
                     return Ok(self.get_latest_state_params(None, invalid_artifacts));
                 }
                 backup::ExitPoint::ValidationIncomplete(last_validated_height) => {
+                    println!(
+                        "Validation of artifacts at height {:?} is not complete",
+                        last_validated_height
+                    );
                     return Err(ReplayError::ValidationIncomplete(
                         last_validated_height,
                         invalid_artifacts,
