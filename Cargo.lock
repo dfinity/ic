@@ -7861,6 +7861,7 @@ dependencies = [
  "ic-config",
  "ic-crypto",
  "ic-interfaces",
+ "ic-interfaces-registry",
  "ic-logger",
  "ic-metrics",
  "ic-onchain-observability-service",
