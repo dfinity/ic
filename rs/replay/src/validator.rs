@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    path::PathBuf,
     sync::{Arc, RwLock},
 };
 
@@ -281,7 +282,7 @@ impl ReplayValidator {
     pub fn validate(
         &self,
         pool: &mut ConsensusPoolImpl,
-        expected: &mut HashMap<ConsensusMessageHash, String>,
+        expected: &mut HashMap<ConsensusMessageHash, PathBuf>,
         dkg: &mut DkgKeyManager,
         target_height: Height,
     ) -> Result<Vec<InvalidArtifact>, ReplayError> {
