@@ -56,9 +56,6 @@ pub(crate) fn check_endpoint_invariants(
         // The Boolean indicates whether an unspecified address should be tolerated
         let mut endpoints_to_check = Vec::<(ConnectionEndpoint, bool)>::new();
 
-        // Private API endpoints (cannot be unspecified)
-        endpoints_to_check.extend(node_record.private_api.into_iter().map(|x| (x, false)));
-
         // Xnet API endpoints (cannot be unspecified)
         // TODO: simplify this code after NET-1142 is completed
         if !node_record.xnet_api.is_empty() {
@@ -496,7 +493,6 @@ mod tests {
                     port: 9000,
                     protocol: Protocol::Http1 as i32,
                 }],
-                private_api: vec![],
                 prometheus_metrics: vec![],
                 xnet_api: vec![ConnectionEndpoint {
                     ip_addr: "200.1.1.3".to_string(),
@@ -531,7 +527,6 @@ mod tests {
                     port: 9000,
                     protocol: Protocol::Http1 as i32,
                 }],
-                private_api: vec![],
                 prometheus_metrics: vec![],
                 xnet_api: vec![ConnectionEndpoint {
                     ip_addr: "200.1.1.1".to_string(),
@@ -567,7 +562,6 @@ mod tests {
                     port: 9000,
                     protocol: Protocol::Http1 as i32,
                 }],
-                private_api: vec![],
                 prometheus_metrics: vec![],
                 xnet_api: vec![ConnectionEndpoint {
                     ip_addr: "200.1.1.2".to_string(),

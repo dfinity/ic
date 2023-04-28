@@ -328,7 +328,6 @@ mod tests {
             p2p_flow_endpoints: vec![],
             prometheus_metrics_http: None,
             public_api: vec![],
-            private_api: vec![],
             prometheus_metrics: vec![],
             xnet_api: vec![],
             chip_id: vec![],

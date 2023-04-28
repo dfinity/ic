@@ -195,9 +195,6 @@ pub struct NodeConfiguration {
     /// Endpoints where the replica serves the public API interface
     pub public_api: Vec<ConnectionEndpoint>,
 
-    /// Endpoints where the replica serves the private API interface
-    pub private_api: Vec<ConnectionEndpoint>,
-
     /// Endpoint where the replica serves Prometheus-compatible metrics
     pub prometheus_metrics: Vec<ConnectionEndpoint>,
 
@@ -274,14 +271,6 @@ impl TryFrom<NodeConfiguration> for pbNodeRecord {
         }
 
         pb_node_record.public_api = pb_public_api_endpoints;
-
-        // private_api. This may be empty (in which case the replica would not
-        // serve the private API on any address)
-        pb_node_record.private_api = node_configuration
-            .private_api
-            .iter()
-            .map(pbConnectionEndpoint::from)
-            .collect::<Vec<_>>();
 
         // xnet and related field. All values are used in the `xnet_api`
         // field, and the first value is used, for backwards compatibility,
@@ -438,7 +427,6 @@ mod node_configuration {
         let node_configuration = NodeConfiguration {
             xnet_api: vec!["http://1.2.3.4:8080".parse().unwrap()],
             public_api: vec!["http://1.2.3.4:8081".parse().unwrap()],
-            private_api: vec!["http://1.2.3.4:8082".parse().unwrap()],
             prometheus_metrics: vec!["http://1.2.3.4:9090".parse().unwrap()],
             p2p_addr: "org.internetcomputer.p2p1://1.2.3.4:1234".parse().unwrap(),
             node_operator_principal_id: None,
@@ -459,11 +447,6 @@ mod node_configuration {
             public_api: vec![pbConnectionEndpoint {
                 ip_addr: "1.2.3.4".to_string(),
                 port: 8081,
-                protocol: Protocol::Http1 as i32,
-            }],
-            private_api: vec![pbConnectionEndpoint {
-                ip_addr: "1.2.3.4".to_string(),
-                port: 8082,
                 protocol: Protocol::Http1 as i32,
             }],
             prometheus_metrics: vec![pbConnectionEndpoint {

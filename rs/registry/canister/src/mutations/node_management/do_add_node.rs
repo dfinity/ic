@@ -61,7 +61,6 @@ impl Registry {
                 &payload.prometheus_metrics_endpoint,
             )),
             public_api: vec![],
-            private_api: vec![],
             prometheus_metrics: vec![],
             xnet_api: vec![],
             chip_id: vec![],
