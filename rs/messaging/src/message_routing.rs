@@ -20,7 +20,6 @@ use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_registry_client_helpers::{
     crypto::CryptoRegistry,
     ecdsa_keys::EcdsaKeysRegistry,
-    node::NodeRegistry,
     provisional_whitelist::ProvisionalWhitelistRegistry,
     routing_table::RoutingTableRegistry,
     subnet::{SubnetListRegistry, SubnetRegistry},
@@ -28,7 +27,7 @@ use ic_registry_client_helpers::{
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{NetworkTopology, NodeTopology, ReplicatedState, SubnetTopology};
+use ic_replicated_state::{NetworkTopology, ReplicatedState, SubnetTopology};
 use ic_types::{
     batch::Batch,
     malicious_flags::MaliciousFlags,
@@ -486,7 +485,7 @@ impl BatchProcessorImpl {
         let mut subnets = BTreeMap::new();
 
         for subnet_id in &subnet_ids {
-            let mut nodes: BTreeMap<NodeId, NodeTopology> = BTreeMap::new();
+            let mut nodes: BTreeSet<NodeId> = BTreeSet::new();
 
             // Return the list of nodes present in the registry. If no nodes are
             // defined, as could be the case in tests, an empty `Vec` is returned.
@@ -496,53 +495,7 @@ impl BatchProcessorImpl {
             let node_ids = node_ids_record.unwrap_or_default();
 
             for node_id in node_ids {
-                // Get the node
-                let node_record = match self
-                    .registry
-                    .get_transport_info(node_id, registry_version)?
-                {
-                    Some(node_record) => node_record,
-                    None => {
-                        warn!(
-                            self.log,
-                            "No NodeRecord found for node {}. Skipping...", node_id
-                        );
-                        continue;
-                    }
-                };
-
-                let http_info = match node_record.http {
-                    Some(http_info) => http_info,
-                    None => {
-                        warn!(
-                            self.log,
-                            "NodeRecord for node {} does not contain an http connection endpoint. Skipping...",
-                            node_id
-                        );
-                        continue;
-                    }
-                };
-
-                let http_port = match u16::try_from(http_info.port) {
-                    Ok(http_port) => http_port,
-                    _ => {
-                        warn!(
-                            self.log,
-                            "Invalid HTTP port {} defined for node {}. Skipping...",
-                            http_info.port,
-                            node_id,
-                        );
-                        continue;
-                    }
-                };
-
-                nodes.insert(
-                    node_id,
-                    NodeTopology {
-                        ip_address: http_info.ip_addr,
-                        http_port,
-                    },
-                );
+                nodes.insert(node_id);
             }
 
             let public_key =

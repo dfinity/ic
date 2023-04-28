@@ -47,7 +47,7 @@ use ic_replicated_state::{
     page_map::PAGE_SIZE,
     testing::{CanisterQueuesTesting, ReplicatedStateTesting},
     CallContext, CanisterState, ExecutionState, ExecutionTask, InputQueueType, NetworkTopology,
-    NodeTopology, PageIndex, ReplicatedState, SubnetTopology,
+    PageIndex, ReplicatedState, SubnetTopology,
 };
 use ic_replicated_state::{page_map::TestPageAllocatorFileDescriptorImpl, PageMap};
 use ic_system_api::InstructionLimits;
@@ -64,7 +64,7 @@ use ic_types_test_utils::ids::{node_test_id, subnet_test_id, user_test_id};
 use ic_universal_canister::UNIVERSAL_CANISTER_WASM;
 use ic_wasm_types::BinaryEncodedWasm;
 
-use maplit::btreemap;
+use maplit::{btreemap, btreeset};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::convert::TryFrom;
 use std::sync::Arc;
@@ -83,18 +83,12 @@ pub fn generate_subnets(
     let mut result: BTreeMap<SubnetId, SubnetTopology> = Default::default();
     for subnet_id in subnet_ids {
         let mut subnet_type = SubnetType::System;
-        let mut nodes = btreemap! {};
+        let mut nodes = btreeset! {};
         if subnet_id == own_subnet_id {
             subnet_type = own_subnet_type;
             // Populate network_topology of own_subnet with fake nodes to simulate subnet_size.
             for i in 0..own_subnet_size {
-                nodes.insert(
-                    node_test_id(i as u64),
-                    NodeTopology {
-                        ip_address: "fake-ip-address".to_string(),
-                        http_port: 1234,
-                    },
-                );
+                nodes.insert(node_test_id(i as u64));
             }
         }
         result.insert(

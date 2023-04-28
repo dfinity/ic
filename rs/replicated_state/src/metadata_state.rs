@@ -311,7 +311,7 @@ pub struct SubnetTopology {
     /// The public key of the subnet (a DER-encoded BLS key, see
     /// https://sdk.dfinity.org/docs/interface-spec/index.html#certification)
     pub public_key: Vec<u8>,
-    pub nodes: BTreeMap<NodeId, NodeTopology>,
+    pub nodes: BTreeSet<NodeId>,
     pub subnet_type: SubnetType,
     pub subnet_features: SubnetFeatures,
     /// ECDSA keys held by this subnet. Just because a subnet holds an ECDSA key
@@ -329,9 +329,9 @@ impl From<&SubnetTopology> for pb_metadata::SubnetTopology {
             nodes: item
                 .nodes
                 .iter()
-                .map(|(node_id, node_toplogy)| pb_metadata::SubnetTopologyEntry {
+                .map(|node_id| pb_metadata::SubnetTopologyEntry {
                     node_id: Some(node_id_into_protobuf(*node_id)),
-                    node_topology: Some(node_toplogy.into()),
+                    node_topology: Some(pb_metadata::NodeTopology::default()),
                 })
                 .collect(),
             subnet_type: i32::from(item.subnet_type),
@@ -344,15 +344,12 @@ impl From<&SubnetTopology> for pb_metadata::SubnetTopology {
 impl TryFrom<pb_metadata::SubnetTopology> for SubnetTopology {
     type Error = ProxyDecodeError;
     fn try_from(item: pb_metadata::SubnetTopology) -> Result<Self, Self::Error> {
-        let mut nodes = BTreeMap::<NodeId, NodeTopology>::new();
+        let mut nodes = BTreeSet::<NodeId>::new();
         for entry in item.nodes {
-            nodes.insert(
-                node_id_try_from_protobuf(try_from_option_field(
-                    entry.node_id,
-                    "SubnetTopology::nodes::K",
-                )?)?,
-                try_from_option_field(entry.node_topology, "SubnetTopology::nodes::V")?,
-            );
+            nodes.insert(node_id_try_from_protobuf(try_from_option_field(
+                entry.node_id,
+                "SubnetTopology::nodes::K",
+            )?)?);
         }
 
         let mut ecdsa_keys_held = BTreeSet::new();

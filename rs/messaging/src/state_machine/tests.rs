@@ -103,7 +103,7 @@ fn test_fixture(provided_batch: &Batch) -> StateMachineTestFixture {
         subnet_test_id(0),
         SubnetTopology {
             public_key: vec![0, 1, 2, 3],
-            nodes: BTreeMap::new(),
+            nodes: BTreeSet::new(),
             subnet_type: SubnetType::Application,
             subnet_features: SubnetFeatures::default(),
             ecdsa_keys_held: BTreeSet::new(),

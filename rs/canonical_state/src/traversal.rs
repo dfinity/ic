@@ -71,7 +71,7 @@ mod tests {
     };
     use ic_types::{CanisterId, Cycles, ExecutionRound};
     use ic_wasm_types::CanisterModule;
-    use maplit::btreemap;
+    use maplit::{btreemap, btreeset};
     use std::collections::{BTreeSet, VecDeque};
     use std::convert::TryFrom;
     use std::sync::Arc;
@@ -622,14 +622,14 @@ mod tests {
         state.metadata.network_topology.subnets = btreemap! {
             subnet_test_id(0) => SubnetTopology {
                 public_key: vec![1, 2, 3, 4],
-                nodes: btreemap!{},
+                nodes: btreeset!{},
                 subnet_type: SubnetType::Application,
                 subnet_features: SubnetFeatures::default(),
                 ecdsa_keys_held: BTreeSet::new(),
             },
             subnet_test_id(1) => SubnetTopology {
                 public_key: vec![5, 6, 7, 8],
-                nodes: btreemap!{},
+                nodes: btreeset!{},
                 subnet_type: SubnetType::Application,
                 subnet_features: SubnetFeatures::default(),
                 ecdsa_keys_held: BTreeSet::new(),
