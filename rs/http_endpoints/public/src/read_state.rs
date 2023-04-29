@@ -191,6 +191,7 @@ impl Service<Request<Vec<u8>>> for ReadStateService {
                 &read_state.paths,
                 &targets,
                 effective_canister_id,
+                &metrics,
             )
             .await
             {
@@ -240,6 +241,7 @@ async fn verify_paths(
     paths: &[Path],
     targets: &CanisterIdSet,
     effective_canister_id: CanisterId,
+    metrics: &HttpHandlerMetrics,
 ) -> Result<(), HttpError> {
     let state = state_reader_executor.get_latest_state().await?.take();
     let mut request_status_id: Option<MessageId> = None;
@@ -256,6 +258,7 @@ async fn verify_paths(
             [b"canister", canister_id, b"controller"] => {
                 let canister_id = parse_canister_id(canister_id)?;
                 verify_canister_ids(&canister_id, &effective_canister_id)?;
+                metrics.read_state_canister_controller_total.inc();
             }
             [b"canister", canister_id, b"controllers"] => {
                 let canister_id = parse_canister_id(canister_id)?;
@@ -409,6 +412,7 @@ fn can_read_canister_metadata(
 mod test {
     use crate::{
         common::test::{array, assert_cbor_ser_equal, bytes, int},
+        metrics::HttpHandlerMetrics,
         read_state::{can_read_canister_metadata, verify_paths},
         state_reader_executor::StateReaderExecutor,
         HttpError,
@@ -417,6 +421,7 @@ mod test {
     use ic_crypto_tree_hash::{Digest, Label, MixedHashTree, Path};
     use ic_interfaces_state_manager::Labeled;
     use ic_interfaces_state_manager_mocks::MockStateManager;
+    use ic_metrics::MetricsRegistry;
     use ic_registry_subnet_type::SubnetType;
     use ic_replicated_state::{CanisterQueues, ReplicatedState, SystemMetadata};
     use ic_test_utilities::{
@@ -567,6 +572,7 @@ mod test {
                 &[Path::from(Label::from("time"))],
                 &CanisterIdSet::all(),
                 canister_test_id(1),
+                &HttpHandlerMetrics::new(&MetricsRegistry::default())
             )
             .await,
             Ok(())
@@ -589,6 +595,7 @@ mod test {
                 ],
                 &CanisterIdSet::all(),
                 canister_test_id(1),
+                &HttpHandlerMetrics::new(&MetricsRegistry::default())
             )
             .await,
             Ok(())
@@ -602,6 +609,7 @@ mod test {
             ],
             &CanisterIdSet::all(),
             canister_test_id(1),
+            &HttpHandlerMetrics::new(&MetricsRegistry::default())
         )
         .await
         .is_err());
