@@ -3,7 +3,10 @@ use ic_error_types::UserError;
 use ic_replicated_state::ReplicatedState;
 use ic_types::{ingress::WasmResult, messages::UserQuery, CountBytes, Cycles, Time, UserId};
 use ic_utils_lru_cache::LruCache;
-use std::{mem::size_of_val, sync::Mutex};
+use std::{
+    mem::size_of_val,
+    sync::{LockResult, Mutex, MutexGuard},
+};
 
 /// Query Cache entry key.
 ///
@@ -126,24 +129,7 @@ impl QueryCache {
         }
     }
 
-    pub(crate) fn get_valid_result(
-        &self,
-        key: &EntryKey,
-        env: &EntryEnv,
-    ) -> Option<Result<WasmResult, UserError>> {
-        let mut cache = self.cache.lock().unwrap();
-        if let Some(value) = cache.get(key) {
-            if value.is_valid(env) {
-                return Some(value.result());
-            } else {
-                // Remove the invalid entry.
-                cache.pop(key);
-            }
-        }
-        None
-    }
-
-    pub(crate) fn insert(&self, key: EntryKey, value: EntryValue) {
-        self.cache.lock().unwrap().push(key, value);
+    pub(crate) fn lock(&self) -> LockResult<MutexGuard<LruCache<EntryKey, EntryValue>>> {
+        self.cache.lock()
     }
 }

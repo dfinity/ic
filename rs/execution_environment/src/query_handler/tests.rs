@@ -2,6 +2,7 @@ use crate::InternalHttpQueryHandler;
 use ic_base_types::NumSeconds;
 use ic_config::execution_environment::INSTRUCTION_OVERHEAD_PER_QUERY_CALL;
 use ic_error_types::{ErrorCode, UserError};
+use ic_interfaces::messages::CanisterTask;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::CyclesUseCase;
 use ic_test_utilities::{
@@ -224,6 +225,120 @@ fn query_cache_metrics_work() {
     assert_eq!(query_handler.metrics.query_cache_hits.get(), 1);
     assert_eq!(query_handler.metrics.query_cache_misses.get(), 1);
     assert_eq!(output_1, output_2);
+}
+
+#[test]
+fn query_cache_metrics_evicted_entries_count_bytes_work() {
+    const ITERATIONS: usize = 5;
+    const REPLY_SIZE: usize = 10_000;
+    const QUERY_CACHE_SIZE: usize = 1;
+    // Plus some room for the keys, headers etc.
+    const QUERY_CACHE_CAPACITY: usize = REPLY_SIZE * QUERY_CACHE_SIZE + REPLY_SIZE;
+
+    let mut test = ExecutionTestBuilder::new()
+        .with_query_caching()
+        .with_query_cache_capacity(QUERY_CACHE_CAPACITY as u64)
+        .build();
+
+    let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+
+    for i in 0..ITERATIONS {
+        let output = test.query(
+            UserQuery {
+                // Every query is unique and should produce a new cache entry.
+                source: user_test_id(i as u64),
+                receiver: canister_id,
+                method_name: "query".into(),
+                // The bytes are stored twice: as a payload in key and as a reply in value.
+                method_payload: wasm().reply_data(&[1; REPLY_SIZE / 2]).build(),
+                ingress_expiry: 0,
+                nonce: None,
+            },
+            Arc::new(test.state().clone()),
+            vec![],
+        );
+        assert_eq!(output, Ok(WasmResult::Reply([1; REPLY_SIZE / 2].into())));
+    }
+
+    let query_handler = downcast_query_handler(test.query_handler());
+    assert_eq!(0, query_handler.metrics.query_cache_hits.get());
+    assert_eq!(
+        ITERATIONS,
+        query_handler.metrics.query_cache_misses.get() as usize
+    );
+    assert_eq!(
+        ITERATIONS - QUERY_CACHE_SIZE,
+        query_handler.metrics.query_cache_evicted_entries.get() as usize
+    );
+    assert_eq!(
+        0,
+        query_handler.metrics.query_cache_invalidated_entries.get(),
+    );
+    assert_eq!(
+        ITERATIONS,
+        query_handler
+            .metrics
+            .query_cache_count_bytes
+            .get_sample_count() as usize,
+    );
+    let count_bytes_sum = query_handler
+        .metrics
+        .query_cache_count_bytes
+        .get_sample_sum() as usize;
+    // We can't match the size exactly, as it includes the key and the captured environment.
+    // But we can assert that the sum of the sizes should be:
+    // REPLY_SIZE * ITERATION < count_bytes_sum < REPLY_SIZE * 2 * ITERATION
+    assert!(REPLY_SIZE * ITERATIONS < count_bytes_sum);
+    assert!(REPLY_SIZE * 2 * ITERATIONS > count_bytes_sum);
+
+    // At the end the cache should not be empty and should not exceed the capacity.
+    let count_bytes = query_handler.query_cache.count_bytes();
+    assert!(count_bytes > REPLY_SIZE);
+    assert!(count_bytes < QUERY_CACHE_CAPACITY);
+}
+
+#[test]
+fn query_cache_metrics_invalidated_entries_work() {
+    const ITERATIONS: usize = 5;
+
+    let mut test = ExecutionTestBuilder::new().with_query_caching().build();
+
+    let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+
+    for _ in 0..ITERATIONS {
+        // Every query is the same and should hit the same cache entry.
+        let output = test.query(
+            UserQuery {
+                source: user_test_id(1),
+                receiver: canister_id,
+                method_name: "query".into(),
+                method_payload: wasm().reply_data(&[42]).build(),
+                ingress_expiry: 0,
+                nonce: None,
+            },
+            Arc::new(test.state().clone()),
+            vec![],
+        );
+        assert_eq!(output, Ok(WasmResult::Reply([42].into())));
+        // Executing a default UC heartbeat should render the cache entry invalid.
+        test.canister_task(canister_id, CanisterTask::Heartbeat);
+    }
+
+    let query_handler = downcast_query_handler(test.query_handler());
+    assert_eq!(0, query_handler.metrics.query_cache_hits.get());
+    assert_eq!(
+        ITERATIONS,
+        query_handler.metrics.query_cache_misses.get() as usize
+    );
+    assert_eq!(
+        0,
+        query_handler.metrics.query_cache_evicted_entries.get() as usize
+    );
+    // Minus one for the first iteration when the entry was just added into the cache.
+    assert_eq!(
+        ITERATIONS - 1,
+        query_handler.metrics.query_cache_invalidated_entries.get() as usize,
+    );
 }
 
 #[test]
