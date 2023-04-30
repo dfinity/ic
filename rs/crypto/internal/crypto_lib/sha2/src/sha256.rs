@@ -23,6 +23,9 @@ pub struct Sha256 {
 }
 
 impl Sha256 {
+    /// Byte length of the SHA-256 output.
+    pub const DIGEST_LEN: usize = 32;
+
     /// Returns a new Sha256 object.
     pub fn new() -> Self {
         Self::default()
@@ -36,7 +39,7 @@ impl Sha256 {
     }
 
     /// Hashes some data and returns the digest
-    pub fn hash(data: &[u8]) -> [u8; 32] {
+    pub fn hash(data: &[u8]) -> [u8; Self::DIGEST_LEN] {
         hash(data)
     }
 
@@ -46,7 +49,7 @@ impl Sha256 {
     }
 
     /// Finishes computing a hash, returning the digest
-    pub fn finish(self) -> [u8; 32] {
+    pub fn finish(self) -> [u8; Self::DIGEST_LEN] {
         self.sha256.finish()
     }
 }
@@ -65,7 +68,7 @@ impl std::io::Write for Sha256 {
 }
 
 impl std::hash::Hasher for Sha256 {
-    /// This function will panic; use finish() -> [u8; 32] instead
+    /// This function will panic; use finish() -> [u8; DIGEST_LEN] instead
     fn finish(&self) -> u64 {
         panic!(
             "not supported because the hash values produced by this hasher \
