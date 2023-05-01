@@ -6,26 +6,52 @@ use ic_tests::driver::test_env::TestEnv;
 use ic_tests::nns_tests::sns_deployment::{
     generate_ticket_participants_workload, initiate_token_swap, sns_setup_with_many_icp_users,
 };
+use ic_tests::sns_client::SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S;
 use ic_tests::systest;
 
 fn workload_rps70_many_ticket_participants(env: TestEnv) {
-    generate_ticket_participants_workload(env, 70, Duration::from_secs(60));
+    generate_ticket_participants_workload(
+        env,
+        70,
+        Duration::from_secs(60),
+        SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S,
+    );
 }
 
 fn workload_rps65_many_ticket_participants(env: TestEnv) {
-    generate_ticket_participants_workload(env, 65, Duration::from_secs(60));
+    generate_ticket_participants_workload(
+        env,
+        65,
+        Duration::from_secs(60),
+        SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S,
+    );
 }
 
 fn workload_rps60_many_ticket_participants(env: TestEnv) {
-    generate_ticket_participants_workload(env, 60, Duration::from_secs(60));
+    generate_ticket_participants_workload(
+        env,
+        60,
+        Duration::from_secs(60),
+        SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S,
+    );
 }
 
 fn workload_rps55_many_ticket_participants(env: TestEnv) {
-    generate_ticket_participants_workload(env, 55, Duration::from_secs(60));
+    generate_ticket_participants_workload(
+        env,
+        55,
+        Duration::from_secs(60),
+        SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S,
+    );
 }
 
 fn workload_rps50_many_ticket_participants(env: TestEnv) {
-    generate_ticket_participants_workload(env, 50, Duration::from_secs(60));
+    generate_ticket_participants_workload(
+        env,
+        50,
+        Duration::from_secs(60),
+        SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S,
+    );
 }
 
 /// This load test requires manual inspection of the resulting workload metrics.

@@ -139,7 +139,7 @@ use crate::driver::constants::{self, kibana_link, SSH_USERNAME};
 use crate::driver::farm::{Farm, GroupSpec};
 use crate::driver::test_env::{HasIcPrepDir, SshKeyGen, TestEnv, TestEnvAttribute};
 use crate::util::{create_agent, delay};
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use async_trait::async_trait;
 use canister_test::{RemoteTestRuntime, Runtime};
 use ic_agent::export::Principal;
@@ -1327,7 +1327,7 @@ pub struct NnsCustomizations {
     pub ledger_balances: Option<HashMap<AccountIdentifier, Tokens>>,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum NnsCanisterWasmStrategy {
     TakeBuiltFromSources,
     TakeLatestMainnetDeployments,
@@ -1501,11 +1501,15 @@ pub trait CanisterEnvVars {
 impl<T: HasDependencies> CanisterEnvVars for T {
     fn set_canister_env_vars<P: AsRef<Path>>(&self, dirname: P) -> Result<()> {
         let dir = self.get_dependency_path(dirname);
-        for entry in (std::fs::read_dir(dir.clone())?).flatten() {
+        let entries = std::fs::read_dir(dir.clone()).context(format!(
+            "Problem reading directory at {}",
+            dir.to_string_lossy()
+        ))?;
+        for entry in entries.flatten() {
             let file_name = entry.file_name();
             let canister_name = file_name
                 .to_str()
-                .expect("Couldn't convert file path to canister name!");
+                .context("Couldn't convert file path to string")?;
             let env_name = format!("{}_WASM_PATH", canister_name)
                 .replace('-', "_")
                 .to_uppercase();

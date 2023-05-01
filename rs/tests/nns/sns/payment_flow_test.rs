@@ -1,5 +1,6 @@
 use anyhow::Result;
 use ic_tests::driver::test_env::TestEnv;
+use ic_tests::sns_client::SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S;
 use std::time::Duration;
 
 use ic_tests::driver::group::SystemTestGroup;
@@ -10,10 +11,15 @@ use ic_tests::systest;
 
 /// Issue just three workflows over 1 second - this allows detecting possible degradations in the workload metrics aggregator logic.
 fn multiple_ticket_participants(env: TestEnv) {
-    generate_ticket_participants_workload(env, 3, Duration::from_secs(1));
+    generate_ticket_participants_workload(
+        env,
+        3,
+        Duration::from_secs(1),
+        SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S,
+    );
 }
 
-/// This test is complementary to the //rs/tests/nns/sns:patment_flow_load_test, requiring less resources.
+/// This test is complementary to the //rs/tests/nns/sns:payment_flow_load_test, requiring less resources.
 /// Its purpose is to excercise the same API, catching potential regressions in regular CI pipelines (pre-master, hourly, nightly).
 ///
 /// Runbook:

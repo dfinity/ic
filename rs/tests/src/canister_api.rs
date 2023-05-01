@@ -8,6 +8,7 @@ use ic_sns_governance::pb::v1::{
 };
 use ic_sns_root::pb::v1::ListSnsCanistersResponse as ListSnsCanistersRes;
 use ic_sns_swap::pb::v1::{
+    FinalizeSwapRequest as FinalizeSwapReq, FinalizeSwapResponse,
     GetBuyerStateRequest as GetBuyerStateReq, GetBuyerStateResponse as GetBuyerStateRes,
     GetOpenTicketRequest as GetOpenTicketReq, GetOpenTicketResponse as GetOpenTicketRes,
     GetStateRequest as GetStateReq, GetStateResponse as GetStateRes,
@@ -511,6 +512,32 @@ impl Icrc1TransferRequest {
 }
 
 #[derive(Clone, Debug)]
+pub struct FinalizeSwapRequest {
+    swap_canister: Principal,
+}
+
+impl Request<FinalizeSwapResponse> for FinalizeSwapRequest {
+    fn mode(&self) -> CallMode {
+        CallMode::Update
+    }
+    fn canister_id(&self) -> Principal {
+        self.swap_canister
+    }
+    fn method_name(&self) -> String {
+        "finalize_swap".to_string()
+    }
+    fn payload(&self) -> Vec<u8> {
+        Encode!(&FinalizeSwapReq {}).unwrap()
+    }
+}
+
+impl FinalizeSwapRequest {
+    pub fn new(swap_canister: Principal) -> Self {
+        Self { swap_canister }
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct Icrc1MetadataRequest {
     mode: CallMode,
     icrc1_canister: Principal,
@@ -697,6 +724,13 @@ impl SnsRequestProvider {
     ) -> impl Request<GetOpenTicketRes> + std::fmt::Debug + Clone + Sync + Send {
         let sale_canister = self.sns_canisters.swap().get().into();
         GetOpenTicketRequest::new(sale_canister, mode)
+    }
+
+    pub fn finalize_swap(
+        &self,
+    ) -> impl Request<FinalizeSwapResponse> + std::fmt::Debug + Clone + Sync + Send {
+        let sale_canister = self.sns_canisters.swap().get().into();
+        FinalizeSwapRequest::new(sale_canister)
     }
 
     // The requests below are used by the aggregator canister
