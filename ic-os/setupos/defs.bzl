@@ -3,7 +3,7 @@ Hold manifest common to all SetupOS variants.
 """
 
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
-load("//toolchains/sysimage:toolchain.bzl", "ext4_image")
+load("//toolchains/sysimage:toolchain.bzl", "ext4_image", "fat32_image")
 load("@bazel_tools//tools/build_defs/pkg:pkg.bzl", "pkg_tar")
 
 # Declare the dependencies that we will have for the built filesystem images.
@@ -73,6 +73,27 @@ def _custom_partitions(mode):
     )
 
     pkg_tar(
+        name = "config_tar",
+        srcs = [
+            Label("//ic-os/setupos:config/config.ini"),
+            Label("//ic-os/setupos:config/ssh_authorized_keys"),
+        ] + ([Label("//ic-os/setupos:config/node_operator_private_key.pem")] if mode == "dev" else []),
+        mode = "0644",
+        package_dir = "config",
+    )
+
+    fat32_image(
+        name = "partition-config.tar",
+        src = "config_tar",
+        label = "CONFIG",
+        partition_size = "50M",
+        subdir = "./config",
+        target_compatible_with = [
+            "@platforms//os:linux",
+        ],
+    )
+
+    pkg_tar(
         name = "data_tar",
         srcs = [
             Label("//ic-os/setupos:data/nns_public_key.pem"),
@@ -95,6 +116,6 @@ def _custom_partitions(mode):
     )
 
     return [
-        Label("//ic-os/setupos:partition-config.tar"),
+        ":partition-config.tar",
         ":partition-data.tar",
     ]
