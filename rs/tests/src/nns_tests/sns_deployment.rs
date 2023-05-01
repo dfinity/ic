@@ -27,7 +27,7 @@ use ic_ledger_core::Tokens;
 use ic_nervous_system_common::E8;
 use ic_rosetta_api::models::RosettaSupportedKeyPair;
 use ic_rosetta_test_utils::EdKeypair;
-use ic_sns_swap::pb::v1::Lifecycle;
+use ic_sns_swap::pb::v1::{new_sale_ticket_response, Lifecycle};
 use ic_sns_swap::swap::principal_to_subaccount;
 use ic_types::Height;
 use icp_ledger::{AccountIdentifier, Subaccount};
@@ -921,10 +921,14 @@ pub fn add_one_participant(env: TestEnv) {
     );
 }
 
-pub fn generate_ticket_participants_workload(env: TestEnv, rps: usize, duration: Duration) {
+pub fn generate_ticket_participants_workload(
+    env: TestEnv,
+    rps: usize,
+    duration: Duration,
+    contribution_per_user: u64,
+) {
+    // TODO: reject values of contribution_per_user that are not sane
     let log = env.logger();
-    // The amount of ICP that each participant will contribute to the SNS
-    let icp_amount = SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S;
 
     let future_generator = {
         let nns_node = env.get_first_healthy_nns_node_snapshot();
@@ -991,7 +995,7 @@ pub fn generate_ticket_participants_workload(env: TestEnv, rps: usize, duration:
                             fee: None,
                             created_at_time: None,
                             memo: None,
-                            amount: Nat::from(icp_amount * 2), // should cover one minimal participation + fee
+                            amount: Nat::from(contribution_per_user * 2), // should cover one minimal participation + fee
                         };
                         wealthy_ledger_agent.call_and_parse(&Icrc1TransferRequest::new(
                             ledger_canister_id,
@@ -1014,8 +1018,8 @@ pub fn generate_ticket_participants_workload(env: TestEnv, rps: usize, duration:
                 // 1. Call sns.new_sale_ticket
                 if overall_result.is_ok() {
                     overall_result = {
-                        let request =
-                            sns_request_provider.new_sale_ticket(icp_amount, Some(sns_subaccount));
+                        let request = sns_request_provider
+                            .new_sale_ticket(contribution_per_user, Some(sns_subaccount));
                         canister_agent.call_with_retries(
                             request,
                             SNS_ENDPOINT_RETRY_TIMEOUT,
@@ -1049,7 +1053,7 @@ pub fn generate_ticket_participants_workload(env: TestEnv, rps: usize, duration:
                             fee: None,
                             created_at_time: None,
                             memo: None,
-                            amount: Nat::from(icp_amount),
+                            amount: Nat::from(contribution_per_user),
                         };
                         ledger_agent.call_and_parse(&Icrc1TransferRequest::new(
                             ledger_canister_id,
@@ -1102,10 +1106,10 @@ pub fn generate_ticket_participants_workload(env: TestEnv, rps: usize, duration:
                     .await
                     .check_response(|response| {
                         let response_amount = response.buyer_state.unwrap().icp.unwrap().amount_e8s;
-                        if response_amount >= icp_amount {
+                        if response_amount >= contribution_per_user {
                             Ok(())
                         } else {
-                            Err(format!("get_buyer_state: response ICP amount {response_amount:?} below the minimum amount {icp_amount:?}"))
+                            Err(format!("get_buyer_state: response ICP amount {response_amount:?} below the minimum amount {contribution_per_user:?}"))
                         }
                     })
                     .with_workflow_position(4)
@@ -1126,7 +1130,15 @@ pub fn generate_ticket_participants_workload(env: TestEnv, rps: usize, duration:
                     }
                     .await
                     .check_response(|response| {
-                        if response.ticket().unwrap().is_some() {
+                        let response = response.ticket().map_err(|err| {
+                            // Convert the error code to a string for easier debugging
+                            let err = new_sale_ticket_response::err::Type::from_i32(err)
+                                .unwrap_or_else(|| {
+                                    panic!("{err} could not be converted to error type")
+                                });
+                            format!("get_open_ticket failed: {:?}", err)
+                        })?;
+                        if response.is_some() {
                             Err("get_open_ticket: ticket has not been deleted".to_string())
                         } else {
                             Ok(())
