@@ -32,7 +32,7 @@ submit_nns_upgrade_proposal_mainnet() {
     CANISTER_ID_IN_PROPOSAL=$(proposal_header_field_value "$PROPOSAL_FILE" "Target canister:")
     VERSION=$(proposal_header_field_value "$PROPOSAL_FILE" "Git Hash:")
     PROPOSAL_SHA=$(proposal_header_field_value "$PROPOSAL_FILE" "New Wasm Hash:")
-    CAPITALIZED_CANISTER_NAME=$(cat $PROPOSAL_FILE | grep "## Proposal to Upgrade the" | cut -d' ' -f6)
+    CAPITALIZED_CANISTER_NAME=$(nns_upgrade_proposal_canister_raw_name "$PROPOSAL_FILE")
     CANISTER_NAME="$(tr '[:upper:]' '[:lower:]' <<<${CAPITALIZED_CANISTER_NAME:0:1})${CAPITALIZED_CANISTER_NAME:1}"
     CANISTER_ID=$(nns_canister_id "$CANISTER_NAME")
 
