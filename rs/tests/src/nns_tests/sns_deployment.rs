@@ -984,7 +984,7 @@ pub fn generate_ticket_participants_workload(
                 let sns_subaccount = Subaccount(principal_to_subaccount(&participant.principal_id));
                 let mut sale_outcome = LoadTestOutcome::<(), String>::default();
                 let overall_start_time = Instant::now();
-                let mut overall_result: Result<(), String> = Ok(());
+                let mut overall_result: Result<(), anyhow::Error> = Ok(());
 
                 // 0. "Mint" tokens
                 if overall_result.is_ok() {
@@ -1005,13 +1005,13 @@ pub fn generate_ticket_participants_workload(
                     .await
                     .check_response(|response| {
                         if let Err(error) = response {
-                            Err(format!("Minting failed: {error:?}"))
+                            Err(anyhow::anyhow!("Minting failed: {error:?}"))
                         } else {
                             Ok(())
                         }
                     })
                     .with_workflow_position(0)
-                    .push_outcome(&mut sale_outcome)
+                    .push_outcome_display_error(&mut sale_outcome)
                     .result();
                 }
 
@@ -1030,13 +1030,13 @@ pub fn generate_ticket_participants_workload(
                     .await
                     .check_response(|response| {
                         if let Err(error) = response.ticket() {
-                            Err(format!("new_sale_ticket: {:?}", error.error_type()))
+                            Err(anyhow::anyhow!("new_sale_ticket: {:?}", error.error_type()))
                         } else {
                             Ok(())
                         }
                     })
                     .with_workflow_position(1)
-                    .push_outcome(&mut sale_outcome)
+                    .push_outcome_display_error(&mut sale_outcome)
                     .result();
                 }
 
@@ -1063,13 +1063,13 @@ pub fn generate_ticket_participants_workload(
                     .await
                     .check_response(|response| {
                         if let Err(error) = response {
-                            Err(format!("ICP ledger transfer failed: {error:?}"))
+                            Err(anyhow::anyhow!("ICP ledger transfer failed: {error:?}"))
                         } else {
                             Ok(())
                         }
                     })
                     .with_workflow_position(2)
-                    .push_outcome(&mut sale_outcome)
+                    .push_outcome_display_error(&mut sale_outcome)
                     .result();
                 }
 
@@ -1087,7 +1087,7 @@ pub fn generate_ticket_participants_workload(
                     .await
                     .check_response(|_response| Ok(()))
                     .with_workflow_position(3)
-                    .push_outcome(&mut sale_outcome)
+                    .push_outcome_display_error(&mut sale_outcome)
                     .result();
                 }
 
@@ -1109,11 +1109,11 @@ pub fn generate_ticket_participants_workload(
                         if response_amount >= contribution_per_user {
                             Ok(())
                         } else {
-                            Err(format!("get_buyer_state: response ICP amount {response_amount:?} below the minimum amount {contribution_per_user:?}"))
+                            Err(anyhow::anyhow!("get_buyer_state: response ICP amount {response_amount:?} below the minimum amount {contribution_per_user:?}"))
                         }
                     })
                     .with_workflow_position(4)
-                    .push_outcome(&mut sale_outcome)
+                    .push_outcome_display_error(&mut sale_outcome)
                     .result();
                 }
 
@@ -1136,16 +1136,18 @@ pub fn generate_ticket_participants_workload(
                                 .unwrap_or_else(|| {
                                     panic!("{err} could not be converted to error type")
                                 });
-                            format!("get_open_ticket failed: {:?}", err)
+                            anyhow::anyhow!("get_open_ticket failed: {:?}", err)
                         })?;
                         if response.is_some() {
-                            Err("get_open_ticket: ticket has not been deleted".to_string())
+                            Err(anyhow::anyhow!(
+                                "get_open_ticket: ticket has not been deleted"
+                            ))
                         } else {
                             Ok(())
                         }
                     })
                     .with_workflow_position(5)
-                    .push_outcome(&mut sale_outcome)
+                    .push_outcome_display_error(&mut sale_outcome)
                     .result();
                 }
 
@@ -1156,7 +1158,7 @@ pub fn generate_ticket_participants_workload(
                     overall_start_time.elapsed(),
                     1,
                 )
-                .push_outcome(&mut sale_outcome);
+                .push_outcome_display_error(&mut sale_outcome);
 
                 sale_outcome
             }
