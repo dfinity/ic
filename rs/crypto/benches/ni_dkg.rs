@@ -1,13 +1,17 @@
+use ic_base_types::RegistryVersion;
 use ic_crypto_test_utils_threshold_sigs::non_interactive::{
     create_dealing, create_transcript, load_transcript, retain_only_active_keys, verify_dealing,
     NiDkgTestEnvironment,
 };
-use ic_types::crypto::threshold_sig::ni_dkg::NiDkgTag;
+use ic_types::crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript};
 
 use criterion::measurement::Measurement;
 use criterion::BatchSize::SmallInput;
-use criterion::{criterion_group, criterion_main, BenchmarkGroup, Criterion, SamplingMode};
+use criterion::{
+    criterion_group, criterion_main, BenchmarkGroup, BenchmarkId, Criterion, SamplingMode,
+};
 
+use std::collections::HashSet;
 use std::path::PathBuf;
 
 use nidkg_benches_test_vectors::NiDkgBenchDataManager;
@@ -172,27 +176,60 @@ fn bench_load_transcript<M: Measurement>(
     });
 }
 
+/// The complexity of `retain_active_keys` depends on the Hamming distance
+/// between the previous and the new registry version. Thus, we perform
+/// benchmarks where we set the initial registry version to 3 and increment it
+/// by 2^exp. Note that the likelihood of "bigger registry version jumps"
+/// continuously descreses in a real deployment.
 fn bench_retain_keys<M: Measurement>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
     data_mgr: &NiDkgBenchDataManager,
 ) {
-    group.bench_function("retain_active_keys", |bench| {
-        let (env_path, retained_transcripts, retainer_node) =
-            data_mgr.get_retain_keys_test_vectors(test_case);
+    for exp in [0, 1, 5, 10, 15, 20, 25, 30].iter() {
+        group.bench_with_input(
+            BenchmarkId::new("retain_active_keys", exp),
+            exp,
+            |bench, exp| {
+                bench.iter_batched(
+                    || {
+                        // instantiate test environment from a file
+                        let (env_path, transcripts, retainer_node) =
+                            data_mgr.get_retain_keys_test_vectors(test_case);
+                        let env = NiDkgTestEnvironment::new_from_dir(&env_path);
 
-        bench.iter_batched_ref(
-            || NiDkgTestEnvironment::new_from_dir(&env_path),
-            |env| {
-                retain_only_active_keys(
-                    &env.crypto_components,
-                    retainer_node,
-                    retained_transcripts.clone(),
+                        let transcripts = increment_registry_version(transcripts, 2);
+                        retain_only_active_keys(
+                            &env.crypto_components,
+                            retainer_node,
+                            transcripts.clone(),
+                        );
+
+                        let transcripts = increment_registry_version(transcripts, 1u64 << *exp);
+
+                        (env.crypto_components, retainer_node, transcripts)
+                    },
+                    |(crypto_components, retainer_node, transcripts)| {
+                        retain_only_active_keys(&crypto_components, retainer_node, transcripts)
+                    },
+                    SmallInput,
                 )
             },
-            SmallInput,
-        )
-    });
+        );
+    }
+}
+
+/// Adds `arg` to the registry version of each transcript in `transcript`
+fn increment_registry_version(
+    mut transcripts: HashSet<NiDkgTranscript>,
+    arg: u64,
+) -> HashSet<NiDkgTranscript> {
+    let mut new_set = HashSet::new();
+    for mut t in transcripts.drain() {
+        t.registry_version += RegistryVersion::from(arg);
+        new_set.insert(t);
+    }
+    new_set
 }
 
 pub struct TestCase {
@@ -645,6 +682,7 @@ mod nidkg_benches_test_vectors {
             .subnet_size(test_case.num_of_nodes)
             .dkg_tag(test_case.dkg_tag)
             .dealer_count(test_case.num_of_dealers)
+            .registry_version(ic_base_types::RegistryVersion::from(1))
             .build();
         let mut env = NiDkgTestEnvironment::new_for_config(config0.get());
         let transcript0 =
