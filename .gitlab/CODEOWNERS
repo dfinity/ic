@@ -228,6 +228,7 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/tests/crypto        @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/crypto-owners
 /rs/tests/execution        @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/execution-owners
 /rs/tests/financial_integrations        @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/financial-integrations
+/rs/tests/gix                           @dfinity-lab/teams/ic-testing-verification
 /rs/tests/message_routing        @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/message-routing-owners
 /rs/tests/networking        @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/networking-team
 /rs/tests/nns        @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/nns-team

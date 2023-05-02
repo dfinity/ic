@@ -7,6 +7,7 @@ use crate::driver::{
 };
 use crate::nns::set_authorized_subnetwork_list;
 use crate::util::{block_on, create_canister, install_canister, runtime_from_url};
+use candid::Principal;
 use candid::{CandidType, Encode};
 use ic_ledger_core::Tokens;
 use ic_registry_subnet_type::SubnetType;
@@ -46,7 +47,7 @@ pub fn nns_dapp_customizations() -> NnsCustomizations {
     }
 }
 
-pub fn install_ii_and_nns_dapp(env: &TestEnv, boundary_node_name: &str) {
+pub fn install_ii_and_nns_dapp(env: &TestEnv, boundary_node_name: &str) -> (Principal, Principal) {
     let boundary_node = env
         .get_deployed_boundary_node(boundary_node_name)
         .unwrap()
@@ -103,7 +104,8 @@ pub fn install_ii_and_nns_dapp(env: &TestEnv, boundary_node_name: &str) {
             logger,
             "NNS frontend dapp: https://{}.{}", nns_dapp_canister_id, farm_url
         );
-    });
+        (ii_canister_id, nns_dapp_canister_id)
+    })
 }
 
 pub fn set_authorized_subnets(env: &TestEnv) {
