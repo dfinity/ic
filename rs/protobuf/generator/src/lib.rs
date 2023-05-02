@@ -340,7 +340,6 @@ fn build_state_proto(def: &Path, out: &Path) {
         def.join("state/ingress/v1/ingress.proto"),
         def.join("state/metadata/v1/metadata.proto"),
         def.join("state/canister_state_bits/v1/canister_state_bits.proto"),
-        def.join("state/canister_metadata/v1/canister_metadata.proto"),
         def.join("state/queues/v1/queues.proto"),
         def.join("state/sync/v1/manifest.proto"),
         def.join("state/v1/metadata.proto"),

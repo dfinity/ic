@@ -1998,21 +1998,19 @@ fn can_state_sync_from_cache() {
             // Here we choose the `system_metadata.pbuf` because it is never empty and unlikely to be identical to others.
             //   file idx  |  file size | chunk idx |                         path
             // ------------+------------+---------- +------------------------------------------------------
-            //           0 |        216 |     0     | canister_states/00000000000000640101/canister.pbuf
-            //           1 |         26 |     1     | canister_states/00000000000000640101/canister_metadata.pbuf
-            //           2 |          0 |    N/A    | canister_states/00000000000000640101/queues.pbuf
-            //           3 |         18 |     2     | canister_states/00000000000000640101/software.wasm
-            //           4 |       4096 |     3     | canister_states/00000000000000640101/stable_memory.bin
-            //           5 |       4096 |     4     | canister_states/00000000000000640101/vmemory_0.bin
-            //           6 |        216 |     5     | canister_states/00000000000000c80101/canister.pbuf
-            //           7 |          2 |     6     | canister_states/00000000000000c80101/canister_metadata.pbuf
-            //           8 |          0 |    N/A    | canister_states/00000000000000c80101/queues.pbuf
-            //           9 |         18 |     7     | canister_states/00000000000000c80101/software.wasm
-            //          10 |          0 |    N/A    | canister_states/00000000000000c80101/stable_memory.bin
-            //          11 |          0 |    N/A    | canister_states/00000000000000c80101/vmemory_0.bin
-            //          12 |          0 |    N/A    | ingress_history.pbuf
-            //          13 |          0 |    N/A    | subnet_queues.pbuf
-            //          14 |         88 |     8     | system_metadata.pbuf
+            //           0 |        259 |     0     | canister_states/00000000000000640101/canister.pbuf
+            //           1 |          0 |    N/A    | canister_states/00000000000000640101/queues.pbuf
+            //           2 |         18 |     1     | canister_states/00000000000000640101/software.wasm
+            //           3 |       4096 |     2     | canister_states/00000000000000640101/stable_memory.bin
+            //           4 |       4096 |     3     | canister_states/00000000000000640101/vmemory_0.bin
+            //           5 |        221 |     4     | canister_states/00000000000000c80101/canister.pbuf
+            //           6 |          0 |    N/A    | canister_states/00000000000000c80101/queues.pbuf
+            //           7 |         18 |     5     | canister_states/00000000000000c80101/software.wasm
+            //           8 |          0 |    N/A    | canister_states/00000000000000c80101/stable_memory.bin
+            //           9 |          0 |    N/A    | canister_states/00000000000000c80101/vmemory_0.bin
+            //          10 |          0 |    N/A    | ingress_history.pbuf
+            //          11 |          0 |    N/A    | subnet_queues.pbuf
+            //          12 |         86 |     6     | system_metadata.pbuf
             //
             // Given the current state layout, the chunk for `system_metadata.pbuf` is the last one in the chunk table.
             // If there are changes to the state layout and it changes the position of `system_metadata.pbuf` in the chunk table,
@@ -4183,7 +4181,6 @@ fn tip_is_initialized_correctly() {
             .canister(&tip_layout.canister_ids().unwrap()[0])
             .unwrap();
         assert!(!canister_layout.queues().raw_path().exists());
-        assert!(!canister_layout.canister_metadata().raw_path().exists());
         assert!(canister_layout.wasm().raw_path().exists());
         assert!(canister_layout.vmemory_0().exists());
         assert!(canister_layout.stable_memory_blob().exists());
@@ -4201,7 +4198,6 @@ fn tip_is_initialized_correctly() {
             .canister(&checkpoint_layout.canister_ids().unwrap()[0])
             .unwrap();
         assert!(canister_layout.queues().raw_path().exists());
-        assert!(canister_layout.canister_metadata().raw_path().exists());
         assert!(canister_layout.wasm().raw_path().exists());
         assert!(canister_layout.vmemory_0().exists());
         assert!(canister_layout.stable_memory_blob().exists());

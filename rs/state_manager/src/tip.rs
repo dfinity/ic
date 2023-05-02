@@ -5,7 +5,6 @@ use crate::{
 };
 use crossbeam_channel::{unbounded, Sender};
 use ic_logger::{error, fatal, info, ReplicaLogger};
-use ic_protobuf::state::canister_metadata::v1::CanisterMetadata;
 use ic_protobuf::state::system_metadata::v1::SystemMetadata;
 #[allow(unused)]
 use ic_replicated_state::{
@@ -443,7 +442,7 @@ fn serialize_canister_to_tip(
         None => {
             truncate_path(log, &canister_layout.vmemory_0());
             truncate_path(log, &canister_layout.stable_memory_blob());
-            canister_layout.wasm().delete_file()?;
+            canister_layout.wasm().try_delete_file()?;
             None
         }
     };
@@ -507,16 +506,11 @@ fn serialize_canister_to_tip(
                 .canister_metrics
                 .get_consumed_cycles_since_replica_started_by_use_cases()
                 .clone(),
+            canister_history: canister_state.system_state.get_canister_history().clone(),
         }
         .into(),
     )?;
-    let pb_canister_metadata = CanisterMetadata {
-        canister_history: Some((canister_state.system_state.get_canister_history()).into()),
-    };
-    canister_layout
-        .canister_metadata()
-        .serialize(pb_canister_metadata)
-        .map_err(CheckpointError::from)
+    Ok(())
 }
 
 /// Defragments part of the tip directory.

@@ -7,7 +7,6 @@ use ic_metrics::{buckets::decimal_buckets, MetricsRegistry};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
     state::{
-        canister_metadata::v1::{self as pb_canister_metadata},
         canister_state_bits::v1::{
             self as pb_canister_state_bits, ConsumedCyclesByUseCase,
             NextScheduledMethod as ProtoNextScheduledMethod,
@@ -20,7 +19,7 @@ use ic_protobuf::{
 use ic_replicated_state::{
     canister_state::{
         execution_state::{NextScheduledMethod, WasmMetadata},
-        system_state::CyclesUseCase,
+        system_state::{CanisterHistory, CyclesUseCase},
     },
     CallContextManager, CanisterStatus, ExecutionTask, ExportedFunctions, Global, NumWasmPages,
 };
@@ -146,6 +145,7 @@ pub struct CanisterStateBits {
     pub global_timer_nanos: Option<u64>,
     pub canister_version: u64,
     pub consumed_cycles_since_replica_started_by_use_cases: BTreeMap<CyclesUseCase, NominalCycles>,
+    pub canister_history: CanisterHistory,
 }
 
 #[derive(Clone)]
@@ -190,7 +190,6 @@ struct CheckpointRefData {
 /// │   ├── canister_states
 /// │   │   └── <hex(canister_id)>
 /// │   │       ├── canister.pbuf
-/// │   │       ├── canister_metadata.pbuf
 /// │   │       ├── queues.pbuf
 /// │   │       ├── software.wasm
 /// │   │       ├── stable_memory.bin
@@ -204,7 +203,6 @@ struct CheckpointRefData {
 /// │      ├── canister_states
 /// │      │   └── <hex(canister_id)>
 /// │      │       ├── canister.pbuf
-/// │      │       ├── canister_metadata.pbuf
 /// │      │       ├── queues.pbuf
 /// │      │       ├── software.wasm
 /// │      │       ├── stable_memory.bin
@@ -1292,12 +1290,6 @@ impl<Permissions: AccessPolicy> CanisterLayout<Permissions> {
         self.canister_root.join("canister.pbuf").into()
     }
 
-    pub fn canister_metadata(
-        &self,
-    ) -> ProtoFileWith<pb_canister_metadata::CanisterMetadata, Permissions> {
-        self.canister_root.join("canister_metadata.pbuf").into()
-    }
-
     pub fn vmemory_0(&self) -> PathBuf {
         self.canister_root.join("vmemory_0.bin")
     }
@@ -1509,7 +1501,8 @@ where
         })
     }
 
-    pub fn delete_file(&self) -> Result<(), LayoutError> {
+    /// Removes the file if it exists, else does nothing.
+    pub fn try_delete_file(&self) -> Result<(), LayoutError> {
         try_remove_file(&self.path)
     }
 }
@@ -1564,6 +1557,7 @@ impl From<CanisterStateBits> for pb_canister_state_bits::CanisterStateBits {
                     cycles: Some((&entry.1).into()),
                 })
                 .collect(),
+            canister_history: Some((&item.canister_history).into()),
         }
     }
 }
@@ -1659,6 +1653,12 @@ impl TryFrom<pb_canister_state_bits::CanisterStateBits> for CanisterStateBits {
                     )
                 })
                 .collect(),
+            // TODO(MR-412): replace `unwrap_or_default` by returning an error on missing canister_history field
+            canister_history: try_from_option_field(
+                value.canister_history,
+                "CanisterStateBits::canister_history",
+            )
+            .unwrap_or_default(),
         })
     }
 }
@@ -2018,6 +2018,7 @@ mod test {
             global_timer_nanos: None,
             canister_version: 0,
             consumed_cycles_since_replica_started_by_use_cases: BTreeMap::new(),
+            canister_history: CanisterHistory::default(),
         }
     }
 
@@ -2081,18 +2082,18 @@ mod test {
 
     #[test]
     fn test_encode_decode_empty_history() {
-        // A canister state with empty history.
         let canister_history = CanisterHistory::default();
 
-        let pb_canister_metadata = pb_canister_metadata::CanisterMetadata {
-            canister_history: Some(pb_canister_metadata::CanisterHistory::from(
-                &canister_history,
-            )),
+        // A canister state with empty history.
+        let canister_state_bits = CanisterStateBits {
+            canister_history: canister_history.clone(),
+            ..default_canister_state_bits()
         };
-        let pb_canister_history =
-            CanisterHistory::try_from(pb_canister_metadata.canister_history.unwrap()).unwrap();
 
-        assert_eq!(canister_history, pb_canister_history);
+        let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
+        let canister_state_bits = CanisterStateBits::try_from(pb_bits).unwrap();
+
+        assert_eq!(canister_state_bits.canister_history, canister_history);
     }
 
     #[test]
@@ -2147,15 +2148,16 @@ mod test {
             CanisterChangeDetails::controllers_change(vec![]),
         ));
 
-        let pb_canister_metadata = pb_canister_metadata::CanisterMetadata {
-            canister_history: Some(pb_canister_metadata::CanisterHistory::from(
-                &canister_history,
-            )),
+        // A canister state with non-empty history.
+        let canister_state_bits = CanisterStateBits {
+            canister_history: canister_history.clone(),
+            ..default_canister_state_bits()
         };
-        let pb_canister_history =
-            CanisterHistory::try_from(pb_canister_metadata.canister_history.unwrap()).unwrap();
 
-        assert_eq!(canister_history, pb_canister_history);
+        let pb_bits = pb_canister_state_bits::CanisterStateBits::from(canister_state_bits);
+        let canister_state_bits = CanisterStateBits::try_from(pb_bits).unwrap();
+
+        assert_eq!(canister_state_bits.canister_history, canister_history);
     }
 
     #[test]

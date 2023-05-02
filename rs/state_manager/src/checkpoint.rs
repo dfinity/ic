@@ -7,9 +7,8 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::Memory;
 use ic_replicated_state::{
-    canister_state::execution_state::WasmBinary, canister_state::system_state::CanisterHistory,
-    page_map::PageMap, CanisterMetrics, CanisterState, ExecutionState, ReplicatedState,
-    SchedulerState, SystemState,
+    canister_state::execution_state::WasmBinary, page_map::PageMap, CanisterMetrics, CanisterState,
+    ExecutionState, ReplicatedState, SchedulerState, SystemState,
 };
 use ic_state_layout::{CanisterLayout, CanisterStateBits, CheckpointLayout, ReadOnly, ReadPolicy};
 use ic_types::{CanisterTimer, Height, LongExecutionMode, Time};
@@ -259,33 +258,6 @@ pub fn load_canister_state<P: ReadPolicy>(
             )
         })?;
     durations.insert("canister_state_bits", starting_time.elapsed());
-    let starting_time = Instant::now();
-    // TODO(MR-412): replace `deserialize_opt` by `deserialize` once
-    // the file canister_metadata.pbuf exists on disk for all nodes.
-    let pb_canister_metadata: ic_protobuf::state::canister_metadata::v1::CanisterMetadata =
-        canister_layout
-            .canister_metadata()
-            .deserialize_opt()?
-            .unwrap_or_default();
-    let pb_canister_history: ic_protobuf::state::canister_metadata::v1::CanisterHistory =
-        pb_canister_metadata.canister_history.unwrap_or_default();
-    // TODO(MR-412): use the followin code to get pb_canister_history once
-    // all nodes have been upgraded
-    //  try_from_option_field(pb_canister_metadata.canister_history, "CanisterHistory").map_err(
-    //      |err| {
-    //          into_checkpoint_error(
-    //              format!("canister_states[{}]::canister_metadata", canister_id),
-    //              err,
-    //          )
-    //      },
-    //  )?;
-    let canister_history: CanisterHistory = pb_canister_history.try_into().map_err(|err| {
-        into_checkpoint_error(
-            format!("canister_states[{}]::canister_metadata", canister_id),
-            err,
-        )
-    })?;
-    durations.insert("canister_metadata", starting_time.elapsed());
 
     let session_nonce = None;
 
@@ -374,7 +346,7 @@ pub fn load_canister_state<P: ReadPolicy>(
         canister_state_bits.task_queue.into_iter().collect(),
         CanisterTimer::from_nanos_since_unix_epoch(canister_state_bits.global_timer_nanos),
         canister_state_bits.canister_version,
-        canister_history,
+        canister_state_bits.canister_history,
     );
 
     let canister_state = CanisterState {

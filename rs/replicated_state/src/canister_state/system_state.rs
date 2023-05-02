@@ -11,7 +11,6 @@ use ic_interfaces::messages::{CanisterCall, CanisterMessage, CanisterMessageOrTa
 use ic_logger::{error, ReplicaLogger};
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
-    state::canister_metadata::v1 as pb_canister_metadata,
     state::canister_state_bits::v1 as pb,
 };
 use ic_registry_subnet_type::SubnetType;
@@ -585,23 +584,23 @@ impl TryFrom<pb::ExecutionTask> for ExecutionTask {
     }
 }
 
-impl From<&CanisterHistory> for pb_canister_metadata::CanisterHistory {
+impl From<&CanisterHistory> for pb::CanisterHistory {
     fn from(item: &CanisterHistory) -> Self {
         Self {
             changes: item
                 .changes
                 .iter()
                 .map(|e| (&(**e)).into())
-                .collect::<Vec<pb_canister_metadata::CanisterChange>>(),
+                .collect::<Vec<pb::CanisterChange>>(),
             total_num_changes: item.total_num_changes,
         }
     }
 }
 
-impl TryFrom<pb_canister_metadata::CanisterHistory> for CanisterHistory {
+impl TryFrom<pb::CanisterHistory> for CanisterHistory {
     type Error = ProxyDecodeError;
 
-    fn try_from(value: pb_canister_metadata::CanisterHistory) -> Result<Self, Self::Error> {
+    fn try_from(value: pb::CanisterHistory) -> Result<Self, Self::Error> {
         let changes = value
             .changes
             .into_iter()
