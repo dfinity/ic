@@ -1,5 +1,5 @@
 {
-  "checksum": "c9bd855d5eb03b3964fc60083c88bbec4df7de1946e6626a9dd2494d96fdd325",
+  "checksum": "73b7075c7ffa74ebff41be22d36912bce86b55778a22a1e92229b7e878b1cb9f",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -1876,52 +1876,6 @@
         ]
       },
       "license": "MIT OR Apache-2.0"
-    },
-    "approx 0.5.1": {
-      "name": "approx",
-      "version": "0.5.1",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/approx/0.5.1/download",
-          "sha256": "cab112f0a86d568ea0e627cc1d6be74a1e9cd55214684db5561995f6dad897c6"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "approx",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        }
-      ],
-      "library_target_name": "approx",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": [
-          "default",
-          "std"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "num-traits 0.2.15",
-              "target": "num_traits"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2015",
-        "version": "0.5.1"
-      },
-      "license": "Apache-2.0"
     },
     "arbitrary 1.1.3": {
       "name": "arbitrary",
@@ -13202,10 +13156,6 @@
               "target": "maplit"
             },
             {
-              "id": "matrixmultiply 0.3.3",
-              "target": "matrixmultiply"
-            },
-            {
               "id": "mio 0.7.14",
               "target": "mio"
             },
@@ -13597,10 +13547,6 @@
             {
               "id": "static_assertions 0.3.4",
               "target": "static_assertions"
-            },
-            {
-              "id": "statrs 0.15.0",
-              "target": "statrs"
             },
             {
               "id": "strum 0.24.1",
@@ -26865,52 +26811,6 @@
       },
       "license": "MIT"
     },
-    "matrixmultiply 0.3.3": {
-      "name": "matrixmultiply",
-      "version": "0.3.3",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/matrixmultiply/0.3.3/download",
-          "sha256": "bb99c395ae250e1bf9133673f03ca9f97b7e71b705436bf8f089453445d1e9fe"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "matrixmultiply",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        }
-      ],
-      "library_target_name": "matrixmultiply",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": [
-          "default",
-          "std"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "rawpointer 0.2.1",
-              "target": "rawpointer"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.3.3"
-      },
-      "license": "MIT/Apache-2.0"
-    },
     "md-5 0.9.1": {
       "name": "md-5",
       "version": "0.9.1",
@@ -28462,151 +28362,6 @@
         "version": "0.8.3"
       },
       "license": "MIT/Apache-2.0"
-    },
-    "nalgebra 0.27.1": {
-      "name": "nalgebra",
-      "version": "0.27.1",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/nalgebra/0.27.1/download",
-          "sha256": "462fffe4002f4f2e1f6a9dcf12cc1a6fc0e15989014efc02a941d3e0f5dc2120"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "nalgebra",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        }
-      ],
-      "library_target_name": "nalgebra",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": [
-          "default",
-          "macros",
-          "matrixmultiply",
-          "nalgebra-macros",
-          "rand",
-          "rand-no-std",
-          "rand-package",
-          "rand_distr",
-          "std"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "approx 0.5.1",
-              "target": "approx"
-            },
-            {
-              "id": "matrixmultiply 0.3.3",
-              "target": "matrixmultiply"
-            },
-            {
-              "id": "num-complex 0.4.3",
-              "target": "num_complex"
-            },
-            {
-              "id": "num-rational 0.4.1",
-              "target": "num_rational"
-            },
-            {
-              "id": "num-traits 0.2.15",
-              "target": "num_traits"
-            },
-            {
-              "id": "rand 0.8.5",
-              "target": "rand",
-              "alias": "rand_package"
-            },
-            {
-              "id": "rand_distr 0.4.3",
-              "target": "rand_distr"
-            },
-            {
-              "id": "simba 0.5.1",
-              "target": "simba"
-            },
-            {
-              "id": "typenum 1.16.0",
-              "target": "typenum"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "nalgebra-macros 0.1.0",
-              "target": "nalgebra_macros"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.27.1"
-      },
-      "license": "BSD-3-Clause"
-    },
-    "nalgebra-macros 0.1.0": {
-      "name": "nalgebra-macros",
-      "version": "0.1.0",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/nalgebra-macros/0.1.0/download",
-          "sha256": "01fcc0b8149b4632adc89ac3b7b31a12fb6099a0317a4eb2ebff574ef7de7218"
-        }
-      },
-      "targets": [
-        {
-          "ProcMacro": {
-            "crate_name": "nalgebra_macros",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        }
-      ],
-      "library_target_name": "nalgebra_macros",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "proc-macro2 1.0.56",
-              "target": "proc_macro2"
-            },
-            {
-              "id": "quote 1.0.26",
-              "target": "quote"
-            },
-            {
-              "id": "syn 1.0.109",
-              "target": "syn"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.1.0"
-      },
-      "license": "Apache-2.0"
     },
     "native-tls 0.2.11": {
       "name": "native-tls",
@@ -37288,39 +37043,6 @@
       },
       "license": "MIT/BSD-3-Clause"
     },
-    "rawpointer 0.2.1": {
-      "name": "rawpointer",
-      "version": "0.2.1",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/rawpointer/0.2.1/download",
-          "sha256": "60a357793950651c4ed0f3f52338f53b2f809f32d83a07f72909fa13e4c6c1e3"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "rawpointer",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        }
-      ],
-      "library_target_name": "rawpointer",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "edition": "2015",
-        "version": "0.2.1"
-      },
-      "license": "MIT/Apache-2.0"
-    },
     "rayon 1.7.0": {
       "name": "rayon",
       "version": "1.7.0",
@@ -42795,68 +42517,6 @@
       },
       "license": "Apache-2.0 OR MIT"
     },
-    "simba 0.5.1": {
-      "name": "simba",
-      "version": "0.5.1",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/simba/0.5.1/download",
-          "sha256": "8e82063457853d00243beda9952e910b82593e4b07ae9f721b9278a99a0d3d5c"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "simba",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        }
-      ],
-      "library_target_name": "simba",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "crate_features": [
-          "std"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "approx 0.5.1",
-              "target": "approx"
-            },
-            {
-              "id": "num-complex 0.4.3",
-              "target": "num_complex"
-            },
-            {
-              "id": "num-traits 0.2.15",
-              "target": "num_traits"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "proc_macro_deps": {
-          "common": [
-            {
-              "id": "paste 1.0.12",
-              "target": "paste"
-            }
-          ],
-          "selects": {}
-        },
-        "version": "0.5.1"
-      },
-      "license": "Apache-2.0"
-    },
     "simdutf8 0.1.4": {
       "name": "simdutf8",
       "version": "0.1.4",
@@ -44286,64 +43946,6 @@
         "version": "1.1.0"
       },
       "license": "MIT OR Apache-2.0"
-    },
-    "statrs 0.15.0": {
-      "name": "statrs",
-      "version": "0.15.0",
-      "repository": {
-        "Http": {
-          "url": "https://crates.io/api/v1/crates/statrs/0.15.0/download",
-          "sha256": "05bdbb8e4e78216a85785a85d3ec3183144f98d0097b9281802c019bb07a6f05"
-        }
-      },
-      "targets": [
-        {
-          "Library": {
-            "crate_name": "statrs",
-            "crate_root": "src/lib.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        }
-      ],
-      "library_target_name": "statrs",
-      "common_attrs": {
-        "compile_data_glob": [
-          "**"
-        ],
-        "deps": {
-          "common": [
-            {
-              "id": "approx 0.5.1",
-              "target": "approx"
-            },
-            {
-              "id": "lazy_static 1.4.0",
-              "target": "lazy_static"
-            },
-            {
-              "id": "nalgebra 0.27.1",
-              "target": "nalgebra"
-            },
-            {
-              "id": "num-traits 0.2.15",
-              "target": "num_traits"
-            },
-            {
-              "id": "rand 0.8.5",
-              "target": "rand"
-            }
-          ],
-          "selects": {}
-        },
-        "edition": "2018",
-        "version": "0.15.0"
-      },
-      "license": "MIT"
     },
     "str_stack 0.1.0": {
       "name": "str_stack",

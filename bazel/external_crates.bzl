@@ -618,11 +618,6 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             "maplit": crate.spec(
                 version = "^1.0.2",
             ),
-            # version 0.3.6 fails to build with an error about spaces in
-            # filenames.
-            "matrixmultiply": crate.spec(
-                version = "=0.3.3",
-            ),
             "mio": crate.spec(
                 version = "^0.7",
                 features = [
@@ -1030,9 +1025,6 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             ),
             "static_assertions": crate.spec(
                 version = "^0.3.4",
-            ),
-            "statrs": crate.spec(
-                version = "^0.15.0",
             ),
             "strum": crate.spec(
                 version = "^0.24.1",
