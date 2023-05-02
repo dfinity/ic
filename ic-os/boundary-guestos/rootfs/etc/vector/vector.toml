@@ -27,6 +27,9 @@ inputs = ["nginx_access"]
 source = """
 . = parse_json!(.message)
 
+# Inject the environment
+.env = "${ENV:?environment must be provided}"
+
 # Anonymize remote_addr
 remote_addr, err = to_string(.remote_addr)
 if err != null || remote_addr == "" {
@@ -128,7 +131,7 @@ inputs = ["metrics_nginx_access_preprocessed"]
 [transforms.clickhouse_nginx_access_2xx_sampled]
 type = "sample"
 inputs = ["nginx_access_by_status.2xx"]
-rate = ${CLICKHOUSE_2XX_SAMPLE_RATE:?err}
+rate = ${CLICKHOUSE_2XX_SAMPLE_RATE:?CLICKHOUSE_2XX_SAMPLE_RATE env var must be provided}
 
 [transforms.clickhouse_nginx_access_preprocessed]
 type = "remap"
@@ -201,6 +204,7 @@ table = "http_access"
     "content_length",
     "content_type",
     "date",
+    "env",
     "geo_city_name",
     "geo_country_code",
     "geo_country_name",

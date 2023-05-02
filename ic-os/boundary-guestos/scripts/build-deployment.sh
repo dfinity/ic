@@ -36,6 +36,7 @@ Arguments:
   -h,  --help                           show this help message and exit
   -i=, --input=                         JSON formatted input file (Default: ./subnet.json)
   -o=, --output=                        removable media output directory (Default: ./build-out/)
+       --env=                           specify deployment environment (dev/prod)
        --ssh=                           specify directory holding SSH authorized_key files (Default: ../../testnet/config/ssh_authorized_keys)
        --certdir=                       specify directory holding TLS certificates for hosted domain (Default: None i.e. snakeoil/self certified certificate will be used)
        --nns_public_key=                specify NNS public key pem file
@@ -71,6 +72,10 @@ for argument in "${@}"; do
             ;;
         -o=* | --output=*)
             OUTPUT="${argument#*=}"
+            shift
+            ;;
+        --env=*)
+            ENV="${argument#*=}"
             shift
             ;;
         --ssh=*)
@@ -153,6 +158,14 @@ elif [ ! -f "${NNS_PUBLIC_KEY}" ]; then
     exit 1
 fi
 
+if [ -z ${ENV+x} ]; then
+    err "--env not set"
+    exit 1
+elif [[ ! "${ENV}" =~ ^(dev|prod)$ ]]; then
+    err "--env should be set to one of: dev/prod"
+    exit 1
+fi
+
 # Load INPUT
 CONFIG="$(cat ${INPUT})"
 
@@ -166,6 +179,9 @@ BN_VARS=$(
         )
     )[][] | join("=")'
 )
+
+# Add `env` variable on top
+BN_VARS="env=${ENV}"$'\n'"${BN_VARS}"
 
 # Read all the top-level values out in one swoop
 VALUES=$(echo ${CONFIG} | jq -r -c '[
