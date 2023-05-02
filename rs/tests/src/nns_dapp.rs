@@ -57,7 +57,6 @@ pub fn install_ii_and_nns_dapp(env: &TestEnv, boundary_node_name: &str) {
     let topology = env.topology_snapshot();
     let nns_node = topology.root_subnet().nodes().next().unwrap();
     let nns_agent = nns_node.build_default_agent();
-    let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
 
     let ii_canister_id =
         nns_node.create_and_install_canister_with_arg(INTERNET_IDENTITY_WASM, None);
@@ -104,13 +103,6 @@ pub fn install_ii_and_nns_dapp(env: &TestEnv, boundary_node_name: &str) {
             logger,
             "NNS frontend dapp: https://{}.{}", nns_dapp_canister_id, farm_url
         );
-        let app_subnet_ids: Vec<_> = topology
-            .subnets()
-            .filter_map(|s| (s.subnet_type() == SubnetType::Application).then_some(s.subnet_id))
-            .collect();
-        set_authorized_subnetwork_list(&nns_runtime, None, app_subnet_ids)
-            .await
-            .unwrap();
     });
 }
 
