@@ -1,4 +1,4 @@
-#/bin/sh
+#!/bin/sh
 
 NAME="certificate_orchestrator"
 OUTPUT="target/wasm32-unknown-unknown/release/${NAME}.wasm"
