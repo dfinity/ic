@@ -34,7 +34,7 @@ pub struct NnsInitPayloads {
     pub governance: Governance,
     pub ledger: LedgerCanisterInitPayload,
     pub root: RootCanisterInitPayload,
-    pub cycles_minting: CyclesCanisterInitPayload,
+    pub cycles_minting: Option<CyclesCanisterInitPayload>,
     pub lifeline: LifelineCanisterInitPayload,
     pub genesis_token: Gtc,
     pub sns_wasms: SnsWasmCanisterInitPayload,
@@ -46,7 +46,7 @@ pub struct NnsInitPayloadsBuilder {
     pub governance: GovernanceCanisterInitPayloadBuilder,
     pub ledger: LedgerCanisterInitPayload,
     pub root: RootCanisterInitPayloadBuilder,
-    pub cycles_minting: CyclesCanisterInitPayload,
+    pub cycles_minting: Option<CyclesCanisterInitPayload>,
     pub lifeline: LifelineCanisterInitPayloadBuilder,
     pub genesis_token: GenesisTokenCanisterInitPayloadBuilder,
     pub sns_wasms: SnsWasmCanisterInitPayloadBuilder,
@@ -79,13 +79,13 @@ impl NnsInitPayloadsBuilder {
                 .build()
                 .unwrap(),
             root: RootCanisterInitPayloadBuilder::new(),
-            cycles_minting: CyclesCanisterInitPayload {
-                ledger_canister_id: LEDGER_CANISTER_ID,
-                governance_canister_id: GOVERNANCE_CANISTER_ID,
+            cycles_minting: Some(CyclesCanisterInitPayload {
+                ledger_canister_id: Some(LEDGER_CANISTER_ID),
+                governance_canister_id: Some(GOVERNANCE_CANISTER_ID),
                 exchange_rate_canister: None,
                 minting_account_id: Some(GOVERNANCE_CANISTER_ID.get().into()),
                 last_purged_notification: Some(1),
-            },
+            }),
             lifeline: LifelineCanisterInitPayloadBuilder::new(),
             genesis_token: GenesisTokenCanisterInitPayloadBuilder::new(),
             sns_wasms: SnsWasmCanisterInitPayloadBuilder::new(),
@@ -197,9 +197,12 @@ impl NnsInitPayloadsBuilder {
         &mut self,
         exchange_rate_canister_id: CanisterId,
     ) -> &mut Self {
-        self.cycles_minting.exchange_rate_canister = Some(
-            cycles_minting_canister::ExchangeRateCanister::Set(exchange_rate_canister_id),
-        );
+        if let Some(init_payload) = self.cycles_minting.as_mut() {
+            init_payload.exchange_rate_canister = Some(
+                cycles_minting_canister::ExchangeRateCanister::Set(exchange_rate_canister_id),
+            );
+        }
+
         self
     }
 

@@ -677,13 +677,13 @@ pub fn test(env: TestEnv) {
 
         let wasm = wat::parse_str("(module)").unwrap();
 
-        let arg = candid::encode_one(cycles_minting_canister::CyclesCanisterInitPayload {
-            ledger_canister_id: LEDGER_CANISTER_ID,
-            governance_canister_id: GOVERNANCE_CANISTER_ID,
+        let arg = candid::encode_one(Some(cycles_minting_canister::CyclesCanisterInitPayload {
+            ledger_canister_id: Some(LEDGER_CANISTER_ID),
+            governance_canister_id: Some(GOVERNANCE_CANISTER_ID),
             exchange_rate_canister: None,
             minting_account_id: None,
             last_purged_notification: None,
-        })
+        }))
         .unwrap();
 
         upgrade_nns_canister_by_proposal(
@@ -728,13 +728,13 @@ pub fn test(env: TestEnv) {
         info!(logger, "upgrading cycles minting canister");
         let wasm = Project::cargo_bin_maybe_from_env("cycles-minting-canister", &[]);
 
-        let arg = candid::encode_one(cycles_minting_canister::CyclesCanisterInitPayload {
-            ledger_canister_id: LEDGER_CANISTER_ID,
-            governance_canister_id: GOVERNANCE_CANISTER_ID,
+        let arg = candid::encode_one(Some(cycles_minting_canister::CyclesCanisterInitPayload {
+            ledger_canister_id: Some(LEDGER_CANISTER_ID),
+            governance_canister_id: Some(GOVERNANCE_CANISTER_ID),
             exchange_rate_canister: None,
             minting_account_id: None,
             last_purged_notification: None,
-        })
+        }))
         .unwrap();
 
         upgrade_nns_canister_by_proposal(

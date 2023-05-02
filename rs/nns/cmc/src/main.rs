@@ -272,11 +272,13 @@ fn main() {
     over_init(|CandidOne(args)| init(args))
 }
 
-fn init(args: CyclesCanisterInitPayload) {
+fn init(maybe_args: Option<CyclesCanisterInitPayload>) {
+    let args =
+        maybe_args.expect("Payload is expected to initialization the cycles minting canister.");
     print(format!(
         "[cycles] init() with ledger canister {}, governance canister {}, exchange rate canister {}, and minting account {}",
-        args.ledger_canister_id,
-        args.governance_canister_id,
+        args.ledger_canister_id.as_ref().map(|x| x.to_string()).unwrap_or_else(|| "<none>".to_string()),
+        args.governance_canister_id.as_ref().map(|x| x.to_string()).unwrap_or_else(|| "<none>".to_string()),
         args.exchange_rate_canister.as_ref()
             .map(|x| match x {
                 ExchangeRateCanister::Set(id) => id.to_string(),
@@ -290,8 +292,12 @@ fn init(args: CyclesCanisterInitPayload) {
 
     STATE.with(|state| state.replace(Some(State::default())));
     with_state_mut(|state| {
-        state.ledger_canister_id = args.ledger_canister_id;
-        state.governance_canister_id = args.governance_canister_id;
+        state.ledger_canister_id = args
+            .ledger_canister_id
+            .expect("Ledger canister ID must be set!");
+        state.governance_canister_id = args
+            .governance_canister_id
+            .expect("Governance canister ID must be set!");
         state.minting_account_id = args.minting_account_id;
         state.last_purged_notification = args.last_purged_notification;
         if let Some(xrc_flag) = args.exchange_rate_canister {
@@ -1719,7 +1725,7 @@ fn post_upgrade_() {
     over_init(|CandidOne(args)| post_upgrade(args))
 }
 
-fn post_upgrade(args: CyclesCanisterInitPayload) {
+fn post_upgrade(maybe_args: Option<CyclesCanisterInitPayload>) {
     let bytes = stable::get();
     print(format!(
         "[cycles] deserializing state after upgrade ({} bytes)",
@@ -1731,8 +1737,10 @@ fn post_upgrade(args: CyclesCanisterInitPayload) {
         new_state.subnet_types_to_subnets = Some(BTreeMap::new());
     }
 
-    if let Some(xrc_flag) = args.exchange_rate_canister {
-        new_state.exchange_rate_canister_id = xrc_flag.extract_exchange_rate_canister_id();
+    if let Some(args) = maybe_args {
+        if let Some(xrc_flag) = args.exchange_rate_canister {
+            new_state.exchange_rate_canister_id = xrc_flag.extract_exchange_rate_canister_id();
+        }
     }
 
     STATE.with(|state| state.replace(Some(new_state)));
@@ -1845,13 +1853,13 @@ mod tests {
     use rand::Rng;
 
     pub(crate) fn init_test_state() {
-        init(CyclesCanisterInitPayload {
-            ledger_canister_id: CanisterId::ic_00(),
-            governance_canister_id: CanisterId::ic_00(),
+        init(Some(CyclesCanisterInitPayload {
+            ledger_canister_id: Some(CanisterId::ic_00()),
+            governance_canister_id: Some(CanisterId::ic_00()),
             exchange_rate_canister: None,
             minting_account_id: None,
             last_purged_notification: Some(0),
-        })
+        }))
     }
 
     #[test]

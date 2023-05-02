@@ -34,8 +34,8 @@ impl ExchangeRateCanister {
 }
 #[derive(Serialize, Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
 pub struct CyclesCanisterInitPayload {
-    pub ledger_canister_id: CanisterId,
-    pub governance_canister_id: CanisterId,
+    pub ledger_canister_id: Option<CanisterId>,
+    pub governance_canister_id: Option<CanisterId>,
     pub minting_account_id: Option<AccountIdentifier>,
     pub last_purged_notification: Option<BlockIndex>,
     pub exchange_rate_canister: Option<ExchangeRateCanister>,
