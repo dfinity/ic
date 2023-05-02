@@ -167,13 +167,13 @@ fn test_subnet_is_only_deleted_when_appropriate() {
         // let fake_cmc = set_up_universal_canister(&runtime).await;
         let cmc = set_up_cycles_minting_canister(
             &runtime,
-            CyclesCanisterInitPayload {
-                ledger_canister_id: LEDGER_CANISTER_ID,
-                governance_canister_id: GOVERNANCE_CANISTER_ID,
+            Some(CyclesCanisterInitPayload {
+                ledger_canister_id: Some(LEDGER_CANISTER_ID),
+                governance_canister_id: Some(GOVERNANCE_CANISTER_ID),
                 exchange_rate_canister: None,
                 minting_account_id: Some(GOVERNANCE_CANISTER_ID.get().into()),
                 last_purged_notification: Some(1),
-            },
+            }),
         )
         .await;
         // Since it takes the id reserved for the governance canister, it can

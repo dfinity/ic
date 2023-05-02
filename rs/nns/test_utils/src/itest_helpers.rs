@@ -547,7 +547,7 @@ pub async fn set_up_root_canister(
 /// installs it
 pub async fn install_cycles_minting_canister(
     canister: &mut Canister<'_>,
-    init_payload: CyclesCanisterInitPayload,
+    init_payload: Option<CyclesCanisterInitPayload>,
 ) {
     install_rust_canister(
         canister,
@@ -561,7 +561,7 @@ pub async fn install_cycles_minting_canister(
 /// Creates and installs the cycles minting canister.
 pub async fn set_up_cycles_minting_canister(
     runtime: &'_ Runtime,
-    init_payload: CyclesCanisterInitPayload,
+    init_payload: Option<CyclesCanisterInitPayload>,
 ) -> Canister<'_> {
     let mut canister = runtime.create_canister_with_max_cycles().await.unwrap();
     install_cycles_minting_canister(&mut canister, init_payload).await;

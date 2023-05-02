@@ -97,9 +97,28 @@ type IcpXdrConversionRateResponse = record {
 
 type SubnetTypesToSubnetsResponse = record {
   data: vec record { text; vec principal };
-}
+};
 
-service : {
+type AccountIdentifier = record {
+  bytes: blob;
+};
+
+type ExchangeRateCanister = variant {
+    /// Enables the exchange rate canister with the given canister ID.
+    Set: principal;
+    /// Disable the exchange rate canister.
+    Unset;
+};
+
+type CyclesCanisterInitPayload = record {
+    ledger_canister_id: opt principal;
+    governance_canister_id: opt principal;
+    minting_account_id: opt AccountIdentifier;
+    last_purged_notification: opt nat64;
+    exchange_rate_canister: opt ExchangeRateCanister;
+};
+
+service : (opt CyclesCanisterInitPayload) -> {
   // Propmts the cycles minting canister to process a payment by converting ICP
   // into cycles and sending the cycles the specified canister.
   notify_top_up : (NotifyTopUpArg) -> (NotifyTopUpResult);
