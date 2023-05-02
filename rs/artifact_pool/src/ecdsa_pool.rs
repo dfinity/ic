@@ -23,11 +23,11 @@ use ic_types::artifact::EcdsaMessageId;
 use ic_types::artifact_kind::EcdsaArtifact;
 use ic_types::consensus::BlockPayload;
 use ic_types::consensus::{
-    catchup::CUPWithOriginalProtobuf,
     ecdsa::{
         ecdsa_msg_id, EcdsaComplaint, EcdsaMessage, EcdsaMessageType, EcdsaOpening, EcdsaPrefixOf,
         EcdsaSigShare, EcdsaStats, EcdsaStatsNoOp,
     },
+    CatchUpPackage,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing};
 use std::collections::BTreeMap;
@@ -329,8 +329,8 @@ impl EcdsaPoolImpl {
     }
 
     // Populates the validated pool with the initial dealings from the CUP.
-    pub fn add_initial_dealings(&mut self, catch_up_package: &CUPWithOriginalProtobuf) {
-        let block = catch_up_package.cup.content.block.get_value().clone();
+    pub fn add_initial_dealings(&mut self, catch_up_package: &CatchUpPackage) {
+        let block = catch_up_package.content.block.get_value().clone();
         let mut initial_dealings = None;
         if block.payload.is_summary() {
             let block_payload = BlockPayload::from(block.payload);

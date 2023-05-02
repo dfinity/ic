@@ -149,8 +149,8 @@ impl OrchestratorDashboard {
         let (height, signed) = match self.cup_provider.get_local_cup() {
             None => (String::from("None"), String::from("None")),
             Some(cup) => {
-                let height = cup.cup.content.height().to_string();
-                let signed = !cup.cup.signature.signature.get().0.is_empty();
+                let height = cup.content.height().to_string();
+                let signed = !cup.signature.signature.get().0.is_empty();
                 (height, signed.to_string())
             }
         };

@@ -28,7 +28,7 @@ use ic_test_utilities::{
 };
 use ic_test_utilities_metrics::fetch_int_gauge;
 use ic_test_utilities_registry::FakeLocalStoreCertifiedTimeReader;
-use ic_types::{consensus::catchup::CUPWithOriginalProtobuf, replica_config::ReplicaConfig};
+use ic_types::replica_config::ReplicaConfig;
 use parking_lot::Mutex;
 use std::sync::Arc;
 use std::time::Duration;
@@ -100,10 +100,7 @@ fn execute_test(
             artifact_pool_config,
             metrics_registry.clone(),
             log.clone(),
-            CUPWithOriginalProtobuf::from_cup(make_catch_up_package_with_empty_transcript(
-                registry.clone(),
-                subnet_id,
-            )),
+            make_catch_up_package_with_empty_transcript(registry.clone(), subnet_id),
         );
 
         let (_, p2p_runner) = create_networking_stack(
@@ -266,10 +263,7 @@ fn execute_test_chunking_pool(
             artifact_pool_config,
             metrics_registry.clone(),
             log.clone(),
-            CUPWithOriginalProtobuf::from_cup(make_catch_up_package_with_empty_transcript(
-                registry.clone(),
-                subnet_id,
-            )),
+            make_catch_up_package_with_empty_transcript(registry.clone(), subnet_id),
         );
 
         let (_, p2p_runner) = create_networking_stack(

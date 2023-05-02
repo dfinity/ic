@@ -10,14 +10,14 @@ use ic_interfaces::{
     validation::*,
 };
 use ic_interfaces_registry::RegistryClient;
+use ic_protobuf::types::v1 as pb;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::crypto::crypto_hash;
 use ic_types::{
     batch::ValidationContext,
     consensus::{
-        catchup::CUPWithOriginalProtobuf, dkg, Block, CatchUpContent, CatchUpPackage,
-        ConsensusMessageHashable, HasHeight, HashedBlock, HashedRandomBeacon, Payload,
-        RandomBeaconContent, Rank,
+        dkg, Block, CatchUpContent, CatchUpPackage, ConsensusMessageHashable, HasHeight,
+        HashedBlock, HashedRandomBeacon, Payload, RandomBeaconContent, Rank,
     },
     crypto::{
         threshold_sig::ni_dkg::NiDkgTag, CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash,
@@ -73,7 +73,7 @@ mock! {
 
         fn summary_block(&self) -> Block;
 
-        fn cup_with_protobuf(&self) -> CUPWithOriginalProtobuf;
+        fn cup_as_protobuf(&self) -> pb::CatchUpPackage;
 
         fn get_oldest_registry_version_in_use(&self) -> RegistryVersion;
     }
@@ -83,7 +83,8 @@ mock! {
 struct CachedData {
     finalized_block: Block,
     summary_block: Block,
-    catch_up_package: CUPWithOriginalProtobuf,
+    catch_up_package: CatchUpPackage,
+    catch_up_package_proto: pb::CatchUpPackage,
 }
 
 pub struct FakeConsensusPoolCache {
@@ -93,23 +94,31 @@ pub struct FakeConsensusPoolCache {
 // FakeConsensusPoolCache. Used as fake which allows for updating CUP and blocks
 // during unit tests.
 impl FakeConsensusPoolCache {
-    pub fn new(catch_up_package: CUPWithOriginalProtobuf) -> Self {
-        let latest_block = catch_up_package.cup.content.block.as_ref();
+    pub fn new(cup_proto: pb::CatchUpPackage) -> Self {
+        let catch_up_package: CatchUpPackage = (&cup_proto)
+            .try_into()
+            .expect("deserialization of CUP failed");
+        let latest_block = catch_up_package.content.block.as_ref();
         Self {
             cache: RwLock::new(CachedData {
                 finalized_block: latest_block.clone(),
                 summary_block: latest_block.clone(),
                 catch_up_package,
+                catch_up_package_proto: cup_proto,
             }),
         }
     }
 
-    pub fn update_cup(&self, catch_up_package: CUPWithOriginalProtobuf) {
-        let latest_block = catch_up_package.cup.content.block.as_ref();
+    pub fn update_cup(&self, cup_proto: pb::CatchUpPackage) {
+        let catch_up_package: CatchUpPackage = (&cup_proto)
+            .try_into()
+            .expect("deserialization of CUP failed");
+        let latest_block = catch_up_package.content.block.as_ref();
         let cache = &mut *self.cache.write().unwrap();
         cache.finalized_block = latest_block.clone();
         cache.summary_block = latest_block.clone();
         cache.catch_up_package = catch_up_package;
+        cache.catch_up_package_proto = cup_proto;
     }
 }
 
@@ -128,11 +137,11 @@ impl ConsensusPoolCache for FakeConsensusPoolCache {
     }
 
     fn catch_up_package(&self) -> CatchUpPackage {
-        self.cache.read().unwrap().catch_up_package.cup.clone()
+        self.cache.read().unwrap().catch_up_package.clone()
     }
 
-    fn cup_with_protobuf(&self) -> CUPWithOriginalProtobuf {
-        self.cache.read().unwrap().catch_up_package.clone()
+    fn cup_as_protobuf(&self) -> pb::CatchUpPackage {
+        self.cache.read().unwrap().catch_up_package_proto.clone()
     }
 
     fn summary_block(&self) -> Block {

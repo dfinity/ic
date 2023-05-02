@@ -23,6 +23,7 @@ ic-interfaces-transport = { path = "../../interfaces/transport" }
 ic-logger = { path = "../../monitoring/logger" }
 ic-metrics = { path = "../../monitoring/metrics" }
 ic-p2p = { path = "../../p2p" }
+ic-protobuf = { path = "../../protobuf" }
 ic-registry-client-helpers = { path = "../../registry/helpers" }
 ic-replicated-state = { path = "../../replicated_state" }
 ic-state-manager = { path = "../../state_manager" }

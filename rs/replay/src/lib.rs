@@ -22,6 +22,7 @@ use ic_canister_client::{Agent, Sender};
 use ic_config::{Config, ConfigSource};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_protobuf::registry::subnet::v1::InitialNiDkgTranscriptRecord;
+use ic_types::consensus::CatchUpPackage;
 use ic_types::ReplicaVersion;
 use prost::Message;
 use std::cell::RefCell;
@@ -242,7 +243,7 @@ fn cmd_get_recovery_cup(
     cmd: &crate::cmd::GetRecoveryCupCmd,
 ) -> Result<(), String> {
     use ic_protobuf::registry::subnet::v1::{CatchUpPackageContents, RegistryStoreUri};
-    use ic_types::consensus::{catchup::CUPWithOriginalProtobuf, HasHeight};
+    use ic_types::consensus::HasHeight;
     use ic_types::crypto::threshold_sig::ni_dkg::NiDkgTag;
 
     let context_time = ic_types::time::current_time();
@@ -279,7 +280,7 @@ fn cmd_get_recovery_cup(
         ecdsa_initializations: vec![],
     };
 
-    let cup = ic_consensus::dkg::make_registry_cup_from_cup_contents(
+    let cup_proto = ic_consensus::dkg::make_registry_cup_from_cup_contents(
         &*player.registry,
         player.subnet_id,
         cup_contents,
@@ -288,6 +289,7 @@ fn cmd_get_recovery_cup(
     )
     .ok_or_else(|| "couldn't create a registry CUP".to_string())?;
 
+    let cup = CatchUpPackage::try_from(&cup_proto).expect("deserializing CUP failed");
     println!(
         "height: {}, time: {}, state_hash: {:?}",
         cup.height(),
@@ -295,12 +297,10 @@ fn cmd_get_recovery_cup(
         cup.content.state_hash
     );
 
-    let cup_proto = CUPWithOriginalProtobuf::from_cup(cup);
     let mut file =
         std::fs::File::create(&cmd.output_file).expect("Failed to open output file for write");
     let mut bytes = Vec::<u8>::new();
     cup_proto
-        .protobuf
         .encode(&mut bytes)
         .expect("Failed to encode protobuf");
     use std::io::Write;

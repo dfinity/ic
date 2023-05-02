@@ -12,6 +12,7 @@ use ic_onchain_observability_server::spawn_onchain_observability_grpc_server_and
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replica::setup;
 use ic_sys::PAGE_SIZE;
+use ic_types::consensus::CatchUpPackage;
 use ic_types::{replica_version::REPLICA_BINARY_HASH, PrincipalId, ReplicaVersion, SubnetId};
 use nix::unistd::{setpgid, Pid};
 use static_assertions::assert_eq_size;
@@ -178,7 +179,10 @@ fn main() -> io::Result<()> {
     );
 
     let node_id = crypto.get_node_id();
-    let cup_with_proto = setup::get_catch_up_package(&replica_args, &logger);
+    let cup_proto = setup::get_catch_up_package(&replica_args, &logger);
+    let cup = cup_proto
+        .as_ref()
+        .map(|c| CatchUpPackage::try_from(c).expect("deserializing CUP failed"));
 
     let subnet_id = match &replica_args {
         Ok(args) => {
@@ -188,24 +192,10 @@ fn main() -> io::Result<()> {
                         .expect("Failed to parse subnet ID given as --force-subnet"),
                 )
             } else {
-                setup::get_subnet_id(
-                    node_id,
-                    registry.as_ref(),
-                    cup_with_proto
-                        .as_ref()
-                        .map(|cup_with_proto| &cup_with_proto.cup),
-                    &logger,
-                )
+                setup::get_subnet_id(node_id, registry.as_ref(), cup.as_ref(), &logger)
             }
         }
-        Err(_) => setup::get_subnet_id(
-            node_id,
-            registry.as_ref(),
-            cup_with_proto
-                .as_ref()
-                .map(|cup_with_proto| &cup_with_proto.cup),
-            &logger,
-        ),
+        Err(_) => setup::get_subnet_id(node_id, registry.as_ref(), cup.as_ref(), &logger),
     };
 
     let subnet_type = setup::get_subnet_type(
@@ -220,9 +210,8 @@ fn main() -> io::Result<()> {
     // Read the root subnet id from registry
     let root_subnet_id = registry
         .get_root_subnet_id(
-            cup_with_proto
-                .as_ref()
-                .map(|cup| cup.cup.content.registry_version())
+            cup.as_ref()
+                .map(|c| c.content.registry_version())
                 .unwrap_or_else(|| registry.get_latest_version()),
         )
         .expect("cannot read from registry")
@@ -278,9 +267,10 @@ fn main() -> io::Result<()> {
             root_subnet_id,
             registry,
             crypto,
-            cup_with_proto,
+            cup,
             registry_certified_time_reader,
         )?;
+
     info!(logger, "Constructed IC stack");
 
     // TODO(NET-1366) - remove this flag once confident that starting gRPC is stable
