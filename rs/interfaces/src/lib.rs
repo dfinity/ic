@@ -4,6 +4,7 @@
 //! helps reduce unnecessary dependencies between them.
 pub mod artifact_manager;
 pub mod artifact_pool;
+pub mod batch_payload;
 pub mod canister_http;
 pub mod certification;
 pub mod consensus;
