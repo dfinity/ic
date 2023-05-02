@@ -15664,6 +15664,7 @@ dependencies = [
  "k256 0.12.0",
  "lazy_static",
  "leb128",
+ "libflate",
  "lifeline",
  "maplit",
  "nix 0.23.2",
