@@ -36,7 +36,7 @@ Arguments:
   -h,  --help                           show this help message and exit
   -i=, --input=                         JSON formatted input file (Default: ./subnet.json)
   -o=, --output=                        removable media output directory (Default: ./build-out/)
-       --env=                           specify deployment environment (dev/prod)
+       --env=                           specify deployment environment (dev/prod/test)
        --ssh=                           specify directory holding SSH authorized_key files (Default: ../../testnet/config/ssh_authorized_keys)
        --certdir=                       specify directory holding TLS certificates for hosted domain (Default: None i.e. snakeoil/self certified certificate will be used)
        --nns_public_key=                specify NNS public key pem file
@@ -161,8 +161,8 @@ fi
 if [ -z ${ENV+x} ]; then
     err "--env not set"
     exit 1
-elif [[ ! "${ENV}" =~ ^(dev|prod)$ ]]; then
-    err "--env should be set to one of: dev/prod"
+elif [[ ! "${ENV}" =~ ^(dev|prod|test)$ ]]; then
+    err "--env should be set to one of: dev/prod/test"
     exit 1
 fi
 

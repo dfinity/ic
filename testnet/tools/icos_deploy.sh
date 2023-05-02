@@ -286,6 +286,7 @@ fi
 echo >&2 "$(date --rfc-3339=seconds): Running build-deployment.sh"
 
 "${REPO_ROOT}"/ic-os/boundary-guestos/scripts/build-deployment.sh \
+    --env=test \
     --input="${MEDIA_PATH}/${deployment}.json" \
     --output="${BN_MEDIA_PATH}" \
     --certdir="${BN_MEDIA_PATH}/certs" \
