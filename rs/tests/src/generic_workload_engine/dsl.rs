@@ -49,7 +49,7 @@ macro_rules! canister_requests {
     ( $i:ident $(, $l:literal * $a:expr => $r:expr )+ $(,)? ) => {
         {
             let _num_requests: usize = canister_requests!(@count_requests $($l),+ );
-            let mut _res: Option<RequestOutcome<(), String>> = None;
+            let mut _res: Option<RequestOutcome<(), anyhow::Error>> = None;
             let mut _j = 0usize;
             $(
                 if (_j <= ($i % _num_requests) && ($i % _num_requests) < _j + (1usize * $l)) {

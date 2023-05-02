@@ -67,7 +67,7 @@ impl CanisterAgent {
     pub async fn call<T>(
         &self,
         request: &(dyn Request<T> + Send + Sync),
-    ) -> RequestOutcome<Vec<u8>, String>
+    ) -> RequestOutcome<Vec<u8>, anyhow::Error>
     where
         T: Response,
     {
@@ -88,18 +88,20 @@ impl CanisterAgent {
                 .call_and_wait(create_delay(800, 300))
                 .await
         })
-        .map_err(|e| format!("{e:?}"));
+        .map_err(|e| anyhow::anyhow!(e));
         RequestOutcome::new(result, request.signature(), start_time.elapsed(), 1)
     }
 
     pub async fn call_and_parse<T>(
         &self,
         request: &(dyn Request<T> + Send + Sync),
-    ) -> RequestOutcome<T, String>
+    ) -> RequestOutcome<T, anyhow::Error>
     where
         T: Response + Clone,
     {
         let raw_outcome = self.call(request).await;
+        let duration = raw_outcome.duration;
+        let attempts = raw_outcome.attempts;
         RequestOutcome::new(
             raw_outcome.result().map(|r| {
                 request
@@ -107,8 +109,8 @@ impl CanisterAgent {
                     .expect("failed to decode")
             }),
             format!("{}+parse", request.signature()),
-            raw_outcome.duration,
-            raw_outcome.attempts,
+            duration,
+            attempts,
         )
     }
 
@@ -118,7 +120,7 @@ impl CanisterAgent {
         timeout: Duration,
         backoff_delay: Duration,
         expected_outcome: Option<&(dyn Fn(T) -> bool + Sync + Send)>,
-    ) -> RequestOutcome<T, String>
+    ) -> RequestOutcome<T, anyhow::Error>
     where
         T: Response + Clone,
         R: Request<T> + Clone + Sync + Send + 'static,
@@ -153,8 +155,7 @@ impl CanisterAgent {
                 }
             }
         })
-        .await
-        .map_err(|e| format!("{e:?}"));
+        .await;
         RequestOutcome::new(
             result,
             format!("{}+retries", label),
