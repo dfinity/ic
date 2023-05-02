@@ -21,6 +21,7 @@ MACRO_DEPENDENCIES = []
 DEV_DEPENDENCIES = [
     "//rs/artifact_pool",
     "//rs/config",
+    "//rs/protobuf",
     "//rs/test_utilities",
     "@crate_index//:assert_matches",
 ]

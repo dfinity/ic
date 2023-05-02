@@ -51,6 +51,7 @@ use ic_interfaces_transport::Transport;
 use ic_logger::{info, replica_logger::ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_p2p::{start_p2p, AdvertBroadcasterImpl, MAX_ADVERT_BUFFER};
+use ic_protobuf::types::v1 as pb;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replicated_state::ReplicatedState;
 use ic_state_manager::state_sync::{StateSync, StateSyncArtifact};
@@ -61,7 +62,7 @@ use ic_types::{
         CanisterHttpArtifact, CertificationArtifact, ConsensusArtifact, DkgArtifact, EcdsaArtifact,
         IngressArtifact,
     },
-    consensus::catchup::CUPWithOriginalProtobuf,
+    consensus::CatchUpPackage,
     consensus::HasHeight,
     crypto::CryptoHash,
     filetree_sync::{FileTreeSyncArtifact, FileTreeSyncId},
@@ -535,7 +536,7 @@ pub fn init_artifact_pools(
     config: ArtifactPoolConfig,
     registry: MetricsRegistry,
     log: ReplicaLogger,
-    catch_up_package: CUPWithOriginalProtobuf,
+    cup: CatchUpPackage,
 ) -> ArtifactPools {
     ensure_persistent_pool_replica_version_compatibility(config.persistent_pool_db_path());
 
@@ -551,12 +552,12 @@ pub fn init_artifact_pools(
         registry.clone(),
         Box::new(ecdsa::EcdsaStatsImpl::new(registry.clone())),
     );
-    ecdsa_pool.add_initial_dealings(&catch_up_package);
+    ecdsa_pool.add_initial_dealings(&cup);
     let ecdsa_pool = Arc::new(RwLock::new(ecdsa_pool));
 
     let consensus_pool = Arc::new(RwLock::new(ConsensusPoolImpl::new(
         subnet_id,
-        catch_up_package,
+        pb::CatchUpPackage::from(&cup),
         config.clone(),
         registry.clone(),
         log.clone(),

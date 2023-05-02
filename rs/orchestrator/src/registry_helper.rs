@@ -5,13 +5,13 @@ use ic_logger::ReplicaLogger;
 use ic_protobuf::registry::firewall::v1::FirewallRuleSet;
 use ic_protobuf::registry::replica_version::v1::ReplicaVersionRecord;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
+use ic_protobuf::types::v1 as pb;
 use ic_registry_client_helpers::firewall::FirewallRegistry;
 use ic_registry_client_helpers::node::NodeRegistry;
 use ic_registry_client_helpers::node_operator::NodeOperatorRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_client_helpers::unassigned_nodes::UnassignedNodeRegistry;
 use ic_registry_keys::FirewallRulesScope;
-use ic_types::consensus::CatchUpPackage;
 use ic_types::{NodeId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId};
 use std::convert::TryFrom;
 use std::net::IpAddr;
@@ -109,7 +109,7 @@ impl RegistryHelper {
         &self,
         version: RegistryVersion,
         subnet_id: SubnetId,
-    ) -> OrchestratorResult<CatchUpPackage> {
+    ) -> OrchestratorResult<pb::CatchUpPackage> {
         make_registry_cup(&*self.registry_client, subnet_id, Some(&self.logger))
             .ok_or(OrchestratorError::MakeRegistryCupError(subnet_id, version))
     }

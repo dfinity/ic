@@ -8,9 +8,7 @@ use ic_protobuf::registry::node::v1::NodeRecord;
 use ic_protobuf::types::v1 as pb;
 use ic_types::NodeId;
 use ic_types::{
-    consensus::catchup::{
-        CUPWithOriginalProtobuf, CatchUpContentProtobufBytes, CatchUpPackage, CatchUpPackageParam,
-    },
+    consensus::catchup::{CatchUpContentProtobufBytes, CatchUpPackage, CatchUpPackageParam},
     consensus::HasHeight,
     crypto::*,
     RegistryVersion, SubnetId,
@@ -64,8 +62,8 @@ impl CatchUpPackageProvider {
         &self,
         subnet_id: SubnetId,
         registry_version: RegistryVersion,
-        current_cup: Option<&CUPWithOriginalProtobuf>,
-    ) -> Option<CUPWithOriginalProtobuf> {
+        current_cup: Option<&pb::CatchUpPackage>,
+    ) -> Option<pb::CatchUpPackage> {
         use ic_registry_client_helpers::subnet::SubnetTransportRegistry;
         use rand::seq::SliceRandom;
 
@@ -105,14 +103,19 @@ impl CatchUpPackageProvider {
             peers.push(current_node);
         }
 
-        let param = current_cup.map(CatchUpPackageParam::from);
-        for (_, node_record) in peers.iter().rev() {
-            let peer_cup = self
-                .fetch_verify_and_deserialize_catch_up_package(node_record, param, subnet_id)
-                .await;
-            // Note: None is < Some(_)
-            if peer_cup.as_ref().map(CatchUpPackageParam::from) > param {
-                return peer_cup;
+        let param = current_cup
+            .map(CatchUpPackageParam::try_from)
+            .and_then(Result::ok);
+
+        for (_, node_record) in peers.iter() {
+            if let Some((proto, cup)) = self
+                .fetch_and_verify_catch_up_package(node_record, param, subnet_id)
+                .await
+            {
+                // Note: None is < Some(_)
+                if Some(CatchUpPackageParam::from(&cup)) > param {
+                    return Some(proto);
+                }
             }
         }
         None
@@ -125,12 +128,12 @@ impl CatchUpPackageProvider {
     // network bandwidth requirements.
     //
     // Also checks the signature of the downloaded catch up package.
-    async fn fetch_verify_and_deserialize_catch_up_package(
+    async fn fetch_and_verify_catch_up_package(
         &self,
         node_record: &NodeRecord,
         param: Option<CatchUpPackageParam>,
         subnet_id: SubnetId,
-    ) -> Option<CUPWithOriginalProtobuf> {
+    ) -> Option<(pb::CatchUpPackage, CatchUpPackage)> {
         let http = node_record.clone().http.or_else(|| {
             warn!(
                 self.logger,
@@ -149,23 +152,20 @@ impl CatchUpPackageProvider {
             .ok()?;
 
         let protobuf = self.fetch_catch_up_package(url.clone(), param).await?;
-        let cup = CUPWithOriginalProtobuf {
-            cup: CatchUpPackage::try_from(&protobuf)
-                .map_err(|e| {
-                    warn!(
-                        self.logger,
-                        "Failed to read CUP from peer at url {}: {:?}", url, e
-                    )
-                })
-                .ok()?,
-            protobuf,
-        };
+        let cup = CatchUpPackage::try_from(&protobuf)
+            .map_err(|e| {
+                warn!(
+                    self.logger,
+                    "Failed to read CUP from peer at url {}: {:?}", url, e
+                )
+            })
+            .ok()?;
         self.crypto
             .verify_combined_threshold_sig_by_public_key(
-                &CombinedThresholdSigOf::new(CombinedThresholdSig(cup.protobuf.signature.clone())),
-                &CatchUpContentProtobufBytes(cup.protobuf.content.clone()),
+                &CombinedThresholdSigOf::new(CombinedThresholdSig(protobuf.signature.clone())),
+                &CatchUpContentProtobufBytes(protobuf.content.clone()),
                 subnet_id,
-                cup.cup.content.block.get_value().context.registry_version,
+                cup.content.block.get_value().context.registry_version,
             )
             .map_err(|e| {
                 warn!(
@@ -174,7 +174,7 @@ impl CatchUpPackageProvider {
                 )
             })
             .ok()?;
-        Some(cup)
+        Some((protobuf, cup))
     }
 
     // Attempt to fetch a `CatchUpPackage` from the given endpoint.
@@ -202,16 +202,25 @@ impl CatchUpPackageProvider {
     /// discovered.
     ///
     /// Follows guidelines for DFINITY thread-safe I/O.
-    pub(crate) fn persist_cup(&self, cup: &CUPWithOriginalProtobuf) -> OrchestratorResult<PathBuf> {
+    pub(crate) fn persist_cup(
+        &self,
+        cup_proto: &pb::CatchUpPackage,
+    ) -> OrchestratorResult<PathBuf> {
         let cup_file_path = self.get_cup_path();
+        let cup = CatchUpPackage::try_from(cup_proto).map_err(|e| {
+            OrchestratorError::IoError(
+                "Failed to deserialize CUP! Couldn't persist.".to_string(),
+                std::io::Error::new(std::io::ErrorKind::InvalidData, e),
+            )
+        })?;
         info!(
             self.logger,
             "Persisting CUP (registry version={}, height={}) to file {}",
-            cup.cup.content.registry_version(),
-            cup.cup.height(),
+            cup.content.registry_version(),
+            cup.height(),
             &cup_file_path.display(),
         );
-        write_protobuf_using_tmp_file(&cup_file_path, &cup.protobuf).map_err(|e| {
+        write_protobuf_using_tmp_file(&cup_file_path, cup_proto).map_err(|e| {
             OrchestratorError::IoError(
                 format!("Failed to serialize protobuf to disk: {:?}", &cup_file_path),
                 e,
@@ -235,11 +244,15 @@ impl CatchUpPackageProvider {
     /// by the registry. If we manage to find a newer CUP we also persist it.
     pub(crate) async fn get_latest_cup(
         &self,
-        local_cup: Option<CUPWithOriginalProtobuf>,
+        local_cup: Option<pb::CatchUpPackage>,
         subnet_id: SubnetId,
-    ) -> OrchestratorResult<CUPWithOriginalProtobuf> {
+    ) -> OrchestratorResult<(pb::CatchUpPackage, CatchUpPackage)> {
         let registry_version = self.registry.get_latest_version();
-        let local_cup_height = local_cup.as_ref().map(|cup| cup.cup.content.height());
+        let local_cup_height = local_cup
+            .as_ref()
+            .map(CatchUpPackage::try_from)
+            .and_then(|r| r.ok())
+            .map(|c| c.content.height());
 
         let subnet_cup = self
             .get_peer_cup(subnet_id, registry_version, local_cup.as_ref())
@@ -248,21 +261,25 @@ impl CatchUpPackageProvider {
         let registry_cup = self
             .registry
             .get_registry_cup(registry_version, subnet_id)
-            .map(CUPWithOriginalProtobuf::from_cup)
-            .map_err(|err| warn!(self.logger, "Failed to retrieve registry CUP {:?}", err))
             .ok();
 
-        let latest_cup = vec![local_cup, registry_cup, subnet_cup]
+        let (latest_cup, latest_cup_proto) = vec![local_cup, registry_cup, subnet_cup]
             .into_iter()
             .flatten()
-            .max_by_key(|cup| cup.cup.content.height())
+            .map(|proto| {
+                (
+                    CatchUpPackage::try_from(&proto).expect("deserializing CUP failed"),
+                    proto,
+                )
+            })
+            .max_by_key(|(cup, _)| cup.content.height())
             .ok_or(OrchestratorError::MakeRegistryCupError(
                 subnet_id,
                 registry_version,
             ))?;
 
-        let unsigned = latest_cup.cup.signature.signature.get_ref().0.is_empty();
-        let height = Some(latest_cup.cup.content.height());
+        let unsigned = latest_cup.signature.signature.get_ref().0.is_empty();
+        let height = Some(latest_cup.content.height());
         // We recreate the local registry CUP everytime to avoid incompatibility issues. Without
         // this recreation, we might run into the following problem: assume the orchestrator of
         // version A creates a local unsigned CUP from the registry contents, persists it, then
@@ -275,26 +292,30 @@ impl CatchUpPackageProvider {
         // By re-creating the unsigned CUP every time we realize it's the newest one, we instead
         // recreate the CUP on all orchestrators of the version B before starting the replica.
         if height > local_cup_height || height == local_cup_height && unsigned {
-            self.persist_cup(&latest_cup)?;
+            self.persist_cup(&latest_cup_proto)?;
         }
-
-        Ok(latest_cup)
+        Ok((latest_cup_proto, latest_cup))
     }
 
-    /// Returns the locally persisted CUP.
-    pub fn get_local_cup(&self) -> Option<CUPWithOriginalProtobuf> {
+    // Returns the locally persisted CUP in deserialized form
+    pub fn get_local_cup(&self) -> Option<CatchUpPackage> {
+        match self.get_local_cup_proto() {
+            None => None,
+            Some(cup_proto) => (&cup_proto)
+                .try_into()
+                .map_err(|_| warn!(self.logger, "Deserialization of CUP failed"))
+                .ok(),
+        }
+    }
+
+    /// Returns the locally persisted CUP in protobuf form
+    pub fn get_local_cup_proto(&self) -> Option<pb::CatchUpPackage> {
         let path = self.get_cup_path();
         if !path.exists() {
             return None;
         }
         match File::open(&path) {
             Ok(reader) => pb::CatchUpPackage::read_from_reader(reader)
-                .and_then(|protobuf| {
-                    Ok(CUPWithOriginalProtobuf {
-                        cup: CatchUpPackage::try_from(&protobuf)?,
-                        protobuf,
-                    })
-                })
                 .map_err(|e| warn!(self.logger, "Failed to read CUP from file {:?}", e))
                 .ok(),
             Err(err) => {

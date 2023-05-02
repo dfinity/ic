@@ -9,6 +9,7 @@ use hyper::{Body, Response, StatusCode};
 use ic_config::http_handler::Config;
 use ic_interfaces::consensus_pool::ConsensusPoolCache;
 use ic_types::consensus::catchup::CatchUpPackageParam;
+use ic_types::consensus::CatchUpPackage;
 use prost::Message;
 use std::convert::Infallible;
 use std::future::Future;
@@ -86,14 +87,16 @@ impl Service<Request<Vec<u8>>> for CatchUpPackageService {
             .observe(request.body().len() as f64);
 
         let body = request.into_body();
-        let cup = self.consensus_pool_cache.cup_with_protobuf();
+        let cup_proto = self.consensus_pool_cache.cup_as_protobuf();
         let res = if body.is_empty() {
-            Ok(protobuf_response(&cup.protobuf))
+            Ok(protobuf_response(&cup_proto))
         } else {
             match serde_cbor::from_slice::<CatchUpPackageParam>(&body) {
                 Ok(param) => {
-                    if CatchUpPackageParam::from(&cup.cup) > param {
-                        Ok(protobuf_response(&cup.protobuf))
+                    let cup: CatchUpPackage =
+                        (&cup_proto).try_into().expect("deserializing CUP failed");
+                    if CatchUpPackageParam::from(&cup) > param {
+                        Ok(protobuf_response(&cup_proto))
                     } else {
                         Ok(common::empty_response())
                     }

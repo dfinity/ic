@@ -11,7 +11,7 @@ use ic_registry_client_helpers::subnet::{SubnetListRegistry, SubnetRegistry};
 use ic_registry_local_store::LocalStoreImpl;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
-    consensus::catchup::{CUPWithOriginalProtobuf, CatchUpPackage},
+    consensus::catchup::CatchUpPackage,
     {NodeId, RegistryVersion, ReplicaVersion, SubnetId},
 };
 use std::{convert::TryFrom, env, path::PathBuf, sync::Arc};
@@ -54,14 +54,10 @@ pub fn set_replica_version(args: &Result<ReplicaArgs, clap::Error>, logger: &Rep
 pub fn get_catch_up_package(
     replica_args: &Result<ReplicaArgs, clap::Error>,
     logger: &ReplicaLogger,
-) -> Option<CUPWithOriginalProtobuf> {
+) -> Option<pb::CatchUpPackage> {
     match replica_args {
         Ok(args) => Some(
             pb::CatchUpPackage::read_from_file(args.catch_up_package.clone()?)
-                .and_then(|protobuf| {
-                    CatchUpPackage::try_from(&protobuf)
-                        .map(|cup| CUPWithOriginalProtobuf { cup, protobuf })
-                })
                 .map_err(|e| panic!("Failed to load CUP at startup {:?}", e))
                 .unwrap(),
         ),

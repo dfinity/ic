@@ -1,8 +1,8 @@
 use crate::backup::Backup;
 use crate::{
     consensus_pool_cache::{
-        get_highest_catch_up_package, get_highest_finalized_block, update_summary_block,
-        ConsensusBlockChainImpl, ConsensusCacheImpl,
+        get_highest_finalized_block, update_summary_block, ConsensusBlockChainImpl,
+        ConsensusCacheImpl,
     },
     inmemory_pool::InMemoryPoolSection,
     metrics::{LABEL_POOL_TYPE, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED},
@@ -19,10 +19,10 @@ use ic_interfaces::{
 };
 use ic_logger::ReplicaLogger;
 use ic_metrics::buckets::linear_buckets;
+use ic_protobuf::types::v1 as pb;
 use ic_types::{
     artifact::ConsensusMessageFilter, artifact::ConsensusMessageId,
-    artifact_kind::ConsensusArtifact, consensus::catchup::CUPWithOriginalProtobuf, consensus::*,
-    Height, SubnetId, Time,
+    artifact_kind::ConsensusArtifact, consensus::*, Height, SubnetId, Time,
 };
 use prometheus::{histogram_opts, labels, opts, Histogram, IntGauge};
 use std::cmp::Ordering;
@@ -62,7 +62,7 @@ impl<T> PoolSectionOps<T> {
 }
 
 pub trait InitializablePoolSection: MutablePoolSection<ValidatedConsensusArtifact> {
-    fn insert_cup_with_proto(&self, cup_with_proto: CUPWithOriginalProtobuf);
+    fn insert_cup_with_proto(&self, cup_proto: pb::CatchUpPackage);
 }
 
 pub trait MutablePoolSection<T>: PoolSection<T> {
@@ -307,11 +307,11 @@ impl ConsensusPoolCache for UncachedConsensusPoolImpl {
     }
 
     fn catch_up_package(&self) -> CatchUpPackage {
-        get_highest_catch_up_package(self).cup
+        self.validated().highest_catch_up_package()
     }
 
-    fn cup_with_protobuf(&self) -> CUPWithOriginalProtobuf {
-        get_highest_catch_up_package(self)
+    fn cup_as_protobuf(&self) -> pb::CatchUpPackage {
+        self.validated().highest_catch_up_package_proto()
     }
 
     fn summary_block(&self) -> Block {
@@ -359,13 +359,13 @@ impl ConsensusPoolImpl {
     /// height and registry version) will be used.
     pub fn new(
         subnet_id: SubnetId,
-        catch_up_package: CUPWithOriginalProtobuf,
+        cup_proto: pb::CatchUpPackage,
         config: ArtifactPoolConfig,
         registry: ic_metrics::MetricsRegistry,
         log: ReplicaLogger,
     ) -> ConsensusPoolImpl {
         let mut pool = UncachedConsensusPoolImpl::new(config.clone(), log.clone());
-        Self::init_genesis(catch_up_package, pool.validated.as_mut());
+        Self::init_genesis(cup_proto, pool.validated.as_mut());
         let mut pool = Self::from_uncached(pool, registry.clone());
         // If the back up directory is set, instantiate the backup component
         // and create a subdirectory with the subnet id as directory name.
@@ -392,7 +392,11 @@ impl ConsensusPoolImpl {
         pool
     }
 
-    fn init_genesis(cup: CUPWithOriginalProtobuf, pool_section: &mut dyn InitializablePoolSection) {
+    fn init_genesis(
+        cup_proto: pb::CatchUpPackage,
+        pool_section: &mut dyn InitializablePoolSection,
+    ) {
+        let cup = CatchUpPackage::try_from(&cup_proto).expect("deserializing CUP failed");
         let should_insert = match pool_section.catch_up_package().get_highest() {
             Ok(existing) => CatchUpPackageParam::from(&cup) > CatchUpPackageParam::from(&existing),
             Err(_) => true,
@@ -401,17 +405,11 @@ impl ConsensusPoolImpl {
         if should_insert {
             let mut ops = PoolSectionOps::new();
             ops.insert(ValidatedConsensusArtifact {
-                msg: cup
-                    .cup
-                    .content
-                    .random_beacon
-                    .as_ref()
-                    .clone()
-                    .into_message(),
-                timestamp: cup.cup.content.block.as_ref().context.time,
+                msg: cup.content.random_beacon.as_ref().clone().into_message(),
+                timestamp: cup.content.block.as_ref().context.time,
             });
             pool_section.mutate(ops);
-            pool_section.insert_cup_with_proto(cup);
+            pool_section.insert_cup_with_proto(cup_proto);
         }
     }
 
@@ -438,13 +436,7 @@ impl ConsensusPoolImpl {
         registry: ic_metrics::MetricsRegistry,
         log: ReplicaLogger,
     ) -> ConsensusPoolImpl {
-        Self::new(
-            subnet_id,
-            CUPWithOriginalProtobuf::from_cup(catch_up_package),
-            config,
-            registry,
-            log,
-        )
+        Self::new(subnet_id, (&catch_up_package).into(), config, registry, log)
     }
 
     /// Get a copy of ConsensusPoolCache.

@@ -86,49 +86,51 @@ impl Upgrade {
     pub(crate) async fn check(&mut self) -> OrchestratorResult<Option<SubnetId>> {
         let latest_registry_version = self.registry.get_latest_version();
         // Determine the subnet_id using the local CUP.
-        let (subnet_id, local_cup) = if let Some(cup) = self.cup_provider.get_local_cup() {
-            let subnet_id =
-                get_subnet_id(&*self.registry.registry_client, &cup.cup).map_err(|err| {
-                    OrchestratorError::UpgradeError(format!(
-                        "Couldn't determine the subnet id: {:?}",
-                        err
-                    ))
-                })?;
-            (subnet_id, Some(cup))
-        } else {
-            // No local CUP found, check registry
-            match self.registry.get_subnet_id(latest_registry_version) {
-                Ok(subnet_id) => {
-                    info!(self.logger, "Assignment to subnet {} detected", subnet_id);
-                    (subnet_id, None)
+        let (subnet_id, local_cup_proto, local_cup) =
+            if let Some(proto) = self.cup_provider.get_local_cup_proto() {
+                let cup = CatchUpPackage::try_from(&proto).expect("deserializing CUP failed");
+                let subnet_id =
+                    get_subnet_id(&*self.registry.registry_client, &cup).map_err(|err| {
+                        OrchestratorError::UpgradeError(format!(
+                            "Couldn't determine the subnet id: {:?}",
+                            err
+                        ))
+                    })?;
+                (subnet_id, Some(proto), Some(cup))
+            } else {
+                // No local CUP found, check registry
+                match self.registry.get_subnet_id(latest_registry_version) {
+                    Ok(subnet_id) => {
+                        info!(self.logger, "Assignment to subnet {} detected", subnet_id);
+                        (subnet_id, None, None)
+                    }
+                    // If no subnet is assigned to the node id, we're unassigned.
+                    _ => {
+                        self.check_for_upgrade_as_unassigned().await?;
+                        return Ok(None);
+                    }
                 }
-                // If no subnet is assigned to the node id, we're unassigned.
-                _ => {
-                    self.check_for_upgrade_as_unassigned().await?;
-                    return Ok(None);
-                }
-            }
-        };
+            };
 
         // When we arrived here, we are an assigned node.
-        let old_cup_height = local_cup.as_ref().map(|cup| cup.cup.content.height());
+        let old_cup_height = local_cup.as_ref().map(|cup| cup.content.height());
 
         // Get the latest available CUP from the disk, peers or registry and
         // persist it if necessary.
-        let cup = self
+        let (_, latest_cup) = self
             .cup_provider
-            .get_latest_cup(local_cup, subnet_id)
+            .get_latest_cup(local_cup_proto, subnet_id)
             .await?;
 
         // If the CUP is unsigned, it's a registry CUP and we're in a genesis or subnet
         // recovery scenario. Check if we're in an NNS subnet recovery case and download
         // the new registry if needed.
-        if cup.cup.signature.signature.get_ref().0.is_empty() {
+        if latest_cup.signature.signature.get_ref().0.is_empty() {
             info!(
                 self.logger,
                 "The latest CUP (registry version={}, height={}) is unsigned: a subnet genesis/recovery is in progress",
-                cup.cup.content.registry_version(),
-                cup.cup.height(),
+                latest_cup.content.registry_version(),
+                latest_cup.height(),
             );
             self.download_registry_and_restart_if_nns_subnet_recovery(
                 subnet_id,
@@ -143,7 +145,7 @@ impl Upgrade {
             &*self.registry.registry_client,
             self.node_id,
             subnet_id,
-            &cup.cup,
+            &latest_cup,
         ) {
             self.stop_replica()?;
             remove_node_state(
@@ -157,7 +159,7 @@ impl Upgrade {
 
         // If we arrived here, we have the newest CUP and we're still assigned.
         // Now we check if this CUP requires a new replica version.
-        let cup_registry_version = cup.cup.content.registry_version();
+        let cup_registry_version = latest_cup.content.registry_version();
         let new_replica_version = self
             .registry
             .get_replica_version(subnet_id, cup_registry_version)?;
@@ -181,7 +183,7 @@ impl Upgrade {
         // If we arrive here, we are on the newest replica version.
         // Now we check if a subnet recovery is in progress.
         // If it is, we restart to pass the unsigned CUP to consensus.
-        self.stop_replica_if_new_recovery_cup(&cup.cup, old_cup_height);
+        self.stop_replica_if_new_recovery_cup(&latest_cup, old_cup_height);
 
         // This will start a new replica process if none is running.
         self.ensure_replica_is_running(&self.replica_version, subnet_id)?;

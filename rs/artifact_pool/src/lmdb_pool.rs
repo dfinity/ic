@@ -16,7 +16,6 @@ use ic_types::{
     artifact::{CertificationMessageId, ConsensusMessageId, EcdsaMessageId},
     batch::BatchPayload,
     consensus::{
-        catchup::CUPWithOriginalProtobuf,
         certification::{Certification, CertificationMessage, CertificationShare},
         dkg,
         ecdsa::{
@@ -625,18 +624,19 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
 
 impl InitializablePoolSection for PersistentHeightIndexedPool<ConsensusMessage> {
     /// Insert a cup with the original bytes from which that cup was received.
-    fn insert_cup_with_proto(&self, cup_with_proto: CUPWithOriginalProtobuf) {
+    fn insert_cup_with_proto(&self, cup_proto: pb::CatchUpPackage) {
+        let cup = CatchUpPackage::try_from(&cup_proto).expect("deserializing CUP failed");
         let mut tx = self
             .db_env
             .begin_rw_txn()
             .expect("Unable to begin transation to initialize consensus pool");
-        let key = ArtifactKey::from(cup_with_proto.cup.get_id());
+        let key = ArtifactKey::from(cup.get_id());
         self.tx_insert(
             &mut tx,
             &key,
             ValidatedArtifact {
-                msg: PersistedConsensusMessage::OriginalCUPBytes(cup_with_proto.protobuf),
-                timestamp: cup_with_proto.cup.content.block.as_ref().context.time,
+                msg: PersistedConsensusMessage::OriginalCUPBytes(cup_proto),
+                timestamp: cup.content.block.as_ref().context.time,
             },
         )
         .expect("Insertion of CUP into initial consensus pool failed");
@@ -899,6 +899,7 @@ impl PoolArtifact for ConsensusMessage {
             value.msg = PersistedConsensusMessage::from(proposal.into_message());
         }
         let bytes = log_err!(
+            // TODO: Remove bincode here and store protobuf representation
             bincode::serialize::<Self::ObjectType>(&value),
             log,
             "ConsensusArtifact::save serialize"
@@ -1143,6 +1144,8 @@ impl PoolSection<ValidatedConsensusArtifact> for PersistentHeightIndexedPool<Con
             move |tx: &RoTransaction<'_>, key: &[u8]| {
                 let bytes = tx.get(artifacts, &key)?;
                 let artifact = log_err!(
+                    // TODO: Get rid of bincode serialization, and unify
+                    // PersistedConsensusMessage with ConsensusMessage.
                     bincode::deserialize::<PersistedConsensusMessage>(bytes),
                     log,
                     "CatchUpPackage protobuf deserialize"

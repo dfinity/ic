@@ -158,6 +158,12 @@ impl From<&CatchUpPackage> for pb::CatchUpPackage {
     }
 }
 
+impl From<CatchUpPackage> for pb::CatchUpPackage {
+    fn from(cup: CatchUpPackage) -> Self {
+        (&cup).into()
+    }
+}
+
 impl TryFrom<&pb::CatchUpPackage> for CatchUpPackage {
     type Error = String;
     fn try_from(cup: &pb::CatchUpPackage) -> Result<CatchUpPackage, String> {
@@ -248,36 +254,17 @@ impl From<&CatchUpPackage> for CatchUpPackageParam {
         }
     }
 }
+impl TryFrom<&pb::CatchUpPackage> for CatchUpPackageParam {
+    type Error = String;
+    fn try_from(catch_up_package: &pb::CatchUpPackage) -> Result<Self, Self::Error> {
+        Ok((&CatchUpPackage::try_from(catch_up_package)?).into())
+    }
+}
 
 /// CatchUpContentProtobufBytes holds bytes that represent a protobuf serialized
 /// catch-up package
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct CatchUpContentProtobufBytes(pub Vec<u8>);
-
-/// A catch up package paired with the original protobuf. Note that the protobuf
-/// contained in this struct is only partially deserialized and has the ORIGINAL
-/// bytes CatchUpContent bytes that were signed in yet to be deserialized form.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct CUPWithOriginalProtobuf {
-    /// The CUP as [`CatchUpPackage`](type@CatchUpPackage)
-    pub cup: CatchUpPackage,
-    /// The CUP as protobuf message
-    pub protobuf: pb::CatchUpPackage,
-}
-
-impl CUPWithOriginalProtobuf {
-    /// Create a CUPWithOriginalProtobuf from a CatchUpPackage
-    pub fn from_cup(cup: CatchUpPackage) -> Self {
-        let protobuf = pb::CatchUpPackage::from(&cup);
-        Self { cup, protobuf }
-    }
-}
-
-impl From<&CUPWithOriginalProtobuf> for CatchUpPackageParam {
-    fn from(c: &CUPWithOriginalProtobuf) -> Self {
-        Self::from(&c.cup)
-    }
-}
 
 impl SignedBytesWithoutDomainSeparator for CatchUpContentProtobufBytes {
     fn as_signed_bytes_without_domain_separator(&self) -> Vec<u8> {

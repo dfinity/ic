@@ -31,6 +31,7 @@ use ic_nns_constants::REGISTRY_CANISTER_ID;
 use ic_protobuf::registry::{
     replica_version::v1::BlessedReplicaVersions, subnet::v1::SubnetRecord,
 };
+use ic_protobuf::types::v1 as pb;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_registry_client_helpers::deserialize_registry_value;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
@@ -52,7 +53,7 @@ use ic_types::consensus::certification::CertificationShare;
 use ic_types::malicious_flags::MaliciousFlags;
 use ic_types::{
     batch::Batch,
-    consensus::{catchup::CUPWithOriginalProtobuf, CatchUpPackage, HasHeight, HasVersion},
+    consensus::{CatchUpPackage, HasHeight, HasVersion},
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::UserQuery,
     time::current_time,
@@ -440,7 +441,7 @@ impl Player {
         let mut invalid_artifacts = Vec::new();
         invalid_artifacts.append(&mut validator.validate_in_tmp_pool(
             consensus_pool,
-            self.get_latest_cup().cup,
+            self.get_latest_cup(),
             target_height.unwrap(),
         )?);
         if !invalid_artifacts.is_empty() {
@@ -604,7 +605,7 @@ impl Player {
             } else {
                 // If the latest state height corresponds to an in-memory state only, we return the
                 // state hash of the latest CUP
-                let last_cup = self.get_latest_cup().cup;
+                let last_cup = self.get_latest_cup();
                 (last_cup.height(), last_cup.content.state_hash)
             }
         };
@@ -1011,20 +1012,29 @@ impl Player {
         Ok(params)
     }
 
-    fn get_latest_cup(&self) -> CUPWithOriginalProtobuf {
+    fn get_latest_cup(&self) -> CatchUpPackage {
         let pool = self
             .consensus_pool
             .as_ref()
             .expect("no consensus_pool")
             .get_cache();
-        pool.cup_with_protobuf()
+        pool.catch_up_package()
+    }
+
+    fn get_latest_cup_proto(&self) -> pb::CatchUpPackage {
+        let pool = self
+            .consensus_pool
+            .as_ref()
+            .expect("no consensus_pool")
+            .get_cache();
+        pool.cup_as_protobuf()
     }
 
     /// Checks that the catch-up package inside the consensus pool contains the same state hash as
     /// the one computed by the state manager. Additionally, it verifies the CUP's signature.
     pub fn verify_latest_cup(&self) -> Result<(), ReplayError> {
-        let last_cup_with_proto = self.get_latest_cup();
-        let last_cup = last_cup_with_proto.cup;
+        let last_cup = self.get_latest_cup();
+        let protobuf = self.get_latest_cup_proto();
 
         // We cannot verify the genesis CUP with this subnet's public key. And there is no state.
         if last_cup.height() == Height::from(0) {
@@ -1032,7 +1042,6 @@ impl Player {
         }
 
         // Verify the CUP signature.
-        let protobuf = last_cup_with_proto.protobuf;
         if let Err(err) = self.crypto.verify_combined_threshold_sig_by_public_key(
             &CombinedThresholdSigOf::new(CombinedThresholdSig(protobuf.signature)),
             &CatchUpContentProtobufBytes(protobuf.content),

@@ -27,6 +27,7 @@ rust_library(
         "//rs/monitoring/logger",
         "//rs/monitoring/metrics",
         "//rs/p2p",
+        "//rs/protobuf",
         "//rs/registry/helpers",
         "//rs/replicated_state",
         "//rs/state_manager",

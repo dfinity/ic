@@ -21,7 +21,7 @@ use ic_replica_setup_ic_network::{
 };
 use ic_replicated_state::ReplicatedState;
 use ic_state_manager::{state_sync::StateSync, StateManagerImpl};
-use ic_types::{consensus::catchup::CUPWithOriginalProtobuf, NodeId, SubnetId};
+use ic_types::{consensus::CatchUpPackage, NodeId, SubnetId};
 use ic_xnet_endpoint::{XNetEndpoint, XNetEndpointConfig};
 use ic_xnet_payload_builder::XNetPayloadBuilderImpl;
 use std::sync::Arc;
@@ -41,7 +41,7 @@ pub fn construct_ic_stack(
     root_subnet_id: SubnetId,
     registry: Arc<dyn RegistryClient + Send + Sync>,
     crypto: Arc<CryptoComponent>,
-    catch_up_package: Option<CUPWithOriginalProtobuf>,
+    catch_up_package: Option<CatchUpPackage>,
     local_store_time_reader: Arc<dyn LocalStoreCertifiedTimeReader>,
 ) -> std::io::Result<(
     // TODO: remove this return value since it is used only in tests
@@ -58,10 +58,8 @@ pub fn construct_ic_stack(
     let catch_up_package = {
         use ic_types::consensus::HasHeight;
         let make_registry_cup = || {
-            CUPWithOriginalProtobuf::from_cup(
-                ic_consensus::dkg::make_registry_cup(&*registry, subnet_id, None)
-                    .expect("Couldn't create a registry CUP"),
-            )
+            ic_consensus::dkg::make_registry_cup(&*registry, subnet_id, None)
+                .expect("Couldn't create a registry CUP")
         };
         match catch_up_package {
             // The replica was started on a CUP persisted by the orchestrator.
@@ -69,30 +67,24 @@ pub fn construct_ic_stack(
                 // The CUP passed by the orchestrator can be signed or unsigned. If it's signed, it
                 // was created and signed by the subnet. An unsigned CUP was created by the orchestrator
                 // from the registry CUP contents and can only happen during a subnet recovery or subnet genesis.
-                let signed = !cup_from_orc
-                    .cup
-                    .signature
-                    .signature
-                    .clone()
-                    .get()
-                    .0
-                    .is_empty();
+                let signed = !cup_from_orc.signature.signature.clone().get().0.is_empty();
                 info!(
                     log,
                     "Using the {} CUP with height {}",
                     if signed { "signed" } else { "unsigned" },
-                    cup_from_orc.cup.height()
+                    cup_from_orc.height()
                 );
                 cup_from_orc
             }
             // This case is only possible if the replica is started without an orchestrator which
             // is currently only possible in the local development mode with `dfx`.
             None => {
-                let registry_cup = make_registry_cup();
+                let registry_cup = CatchUpPackage::try_from(&make_registry_cup())
+                    .expect("deserializing CUP failed");
                 info!(
                     log,
                     "Using the CUP with height {} generated from the registry",
-                    registry_cup.cup.height()
+                    registry_cup.height()
                 );
                 registry_cup
             }

@@ -6,10 +6,10 @@ use ic_protobuf::types::v1 as pb;
 use ic_types::{
     artifact::ConsensusMessageId,
     consensus::{
-        catchup::CUPWithOriginalProtobuf, ecdsa::EcdsaPayload, Block, BlockProposal,
-        CatchUpPackage, CatchUpPackageShare, ConsensusMessage, ContentEq, Finalization,
-        FinalizationShare, HasHeight, HashedBlock, Notarization, NotarizationShare, RandomBeacon,
-        RandomBeaconShare, RandomTape, RandomTapeShare,
+        ecdsa::EcdsaPayload, Block, BlockProposal, CatchUpPackage, CatchUpPackageShare,
+        ConsensusMessage, ContentEq, Finalization, FinalizationShare, HasHeight, HashedBlock,
+        Notarization, NotarizationShare, RandomBeacon, RandomBeaconShare, RandomTape,
+        RandomTapeShare,
     },
     time::Time,
     Height,
@@ -174,6 +174,10 @@ pub trait PoolSection<T> {
     /// Return the HeightIndexedPool for CatchUpPackageShare.
     fn catch_up_package_share(&self) -> &dyn HeightIndexedPool<CatchUpPackageShare>;
 
+    fn highest_catch_up_package(&self) -> CatchUpPackage {
+        let proto = self.highest_catch_up_package_proto();
+        CatchUpPackage::try_from(&proto).expect("deserializing CUP from protobuf artifact failed")
+    }
     /// Return the HeightIndexedPool for CatchUpPackage in protobuf form.
     fn highest_catch_up_package_proto(&self) -> pb::CatchUpPackage {
         // NOTE: This default implementation is not the actual implementation
@@ -264,13 +268,10 @@ pub trait ConsensusPoolCache: Send + Sync {
     fn consensus_time(&self) -> Option<Time>;
 
     /// Return the latest/highest CatchUpPackage.
-    fn catch_up_package(&self) -> CatchUpPackage {
-        self.cup_with_protobuf().cup
-    }
+    fn catch_up_package(&self) -> CatchUpPackage;
 
-    /// Return the latest/highest CatchUpPackage together with its original
-    /// protobuf.
-    fn cup_with_protobuf(&self) -> CUPWithOriginalProtobuf;
+    /// Return the latest/highest CatchUpPackage in their original protobuf form.
+    fn cup_as_protobuf(&self) -> pb::CatchUpPackage;
 
     /// Return the latest/highest finalized block with DKG summary. In a
     /// situation where we have only finalized the catch-up block but not

@@ -7,6 +7,7 @@ use ic_interfaces::consensus_pool::ChangeSet;
 use ic_interfaces::time_source::SysTimeSource;
 use ic_logger::replica_logger::{no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
+use ic_protobuf::types::v1 as pb;
 use ic_test_utilities::{
     consensus::{fake::*, make_genesis},
     types::ids::subnet_test_id,
@@ -85,7 +86,7 @@ fn init_artifact_pools(
 
     Arc::new(RwLock::new(ConsensusPoolImpl::new(
         subnet_test_id(0),
-        ic_types::consensus::catchup::CUPWithOriginalProtobuf::from_cup(cup),
+        pb::CatchUpPackage::from(cup),
         config,
         registry,
         log,
