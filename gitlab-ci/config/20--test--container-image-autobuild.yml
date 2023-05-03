@@ -36,7 +36,8 @@ container-autobuild-protected:
 container-autobuild:
   extends:
     - .ubuntu-cargo-k8s
-    - .rules-prs-dockerfile-changes
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
   needs: []
   stage: test
   script:
