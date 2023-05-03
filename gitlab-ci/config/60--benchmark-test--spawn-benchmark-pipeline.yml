@@ -68,8 +68,6 @@ maximum-capacity-system-baseline-query:
     when: always
     paths:
       - scalability/
-  variables:
-    TESTNET: "cdmax"
   script:
     - |
       set -eExou pipefail
@@ -124,8 +122,6 @@ maximum-capacity-large-memory-query:
     when: always
     paths:
       - scalability/
-  variables:
-    TESTNET: "cdmax"
   script:
     - |
       set -eExou pipefail
