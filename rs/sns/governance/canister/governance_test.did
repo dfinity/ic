@@ -141,6 +141,9 @@ type GenericNervousSystemFunction = record {
   validator_method_name : opt text;
   target_method_name : opt text;
 };
+type GetMaturityModulationResponse = record {
+  maturity_modulation : opt MaturityModulation;
+};
 type GetMetadataResponse = record {
   url : opt text;
   logo : opt text;
@@ -163,6 +166,7 @@ type Governance = record {
   root_canister_id : opt principal;
   id_to_nervous_system_functions : vec record { nat64; NervousSystemFunction };
   metrics : opt GovernanceCachedMetrics;
+  maturity_modulation : opt MaturityModulation;
   mode : int32;
   parameters : opt NervousSystemParameters;
   is_finalizing_disburse_maturity : opt bool;
@@ -225,6 +229,10 @@ type ManageSnsMetadata = record {
   name : opt text;
   description : opt text;
 };
+type MaturityModulation = record {
+  current_basis_points : opt int32;
+  updated_at_timestamp_seconds : opt nat64;
+};
 type MemoAndController = record { controller : opt principal; memo : nat64 };
 type MergeMaturity = record { percentage_to_merge : nat32 };
 type MergeMaturityResponse = record {
@@ -257,6 +265,7 @@ type NervousSystemParameters = record {
   max_age_bonus_percentage : opt nat64;
   neuron_grantable_permissions : opt NeuronPermissionList;
   voting_rewards_parameters : opt VotingRewardsParameters;
+  maturity_modulation_disabled : opt bool;
   max_number_of_principals_per_neuron : opt nat64;
 };
 type Neuron = record {
@@ -402,6 +411,7 @@ service : (Governance) -> {
   fail_stuck_upgrade_in_progress : (record {}) -> (record {});
   get_build_metadata : () -> (text) query;
   get_latest_reward_event : () -> (RewardEvent) query;
+  get_maturity_modulation : (record {}) -> (GetMaturityModulationResponse);
   get_metadata : (record {}) -> (GetMetadataResponse) query;
   get_mode : (record {}) -> (GetModeResponse) query;
   get_nervous_system_parameters : (null) -> (NervousSystemParameters) query;

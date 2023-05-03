@@ -1067,6 +1067,17 @@ pub struct NervousSystemParameters {
     /// To achieve functionality equivalent to NNS, this should be set to 25.
     #[prost(uint64, optional, tag = "21")]
     pub max_age_bonus_percentage: ::core::option::Option<u64>,
+    /// By default, maturity modulation is enabled; however, an SNS can use this
+    /// field to disable it. When disabled, this canister will still poll the
+    /// Cycles Minting Canister (CMC), and store the value received
+    /// therefrom. However, the fetched value does not get when this is set to
+    /// true.
+    ///
+    /// The reason we call this "disabled" instead of (positive) "enabled" is so
+    /// that the PB default (bool fields are false) and our application default
+    /// (enabled) agree.
+    #[prost(bool, optional, tag = "22")]
+    pub maturity_modulation_disabled: ::core::option::Option<bool>,
 }
 #[derive(
     candid::CandidType,
@@ -1311,6 +1322,8 @@ pub struct Governance {
     /// that it should finish before being called again.
     #[prost(bool, optional, tag = "25")]
     pub is_finalizing_disburse_maturity: ::core::option::Option<bool>,
+    #[prost(message, optional, tag = "26")]
+    pub maturity_modulation: ::core::option::Option<governance::MaturityModulation>,
 }
 /// Nested message and enum types in `Governance`.
 pub mod governance {
@@ -1540,6 +1553,28 @@ pub mod governance {
         /// The proposal that initiated this upgrade
         #[prost(uint64, tag = "4")]
         pub proposal_id: u64,
+    }
+    #[derive(
+        candid::CandidType,
+        candid::Deserialize,
+        comparable::Comparable,
+        Clone,
+        PartialEq,
+        ::prost::Message,
+    )]
+    pub struct MaturityModulation {
+        /// When X maturity is disbursed, the amount that goes to the destination
+        /// account is X * (1 + y) where y = current_basis_points / 10_000.
+        ///
+        /// Fetched from the cycles minting canister (same as NNS governance).
+        ///
+        /// There is a positive relationship between the price of ICP (in XDR) and
+        /// this value.
+        #[prost(int32, optional, tag = "1")]
+        pub current_basis_points: ::core::option::Option<i32>,
+        /// When current_basis_points was last updated (seconds since UNIX epoch).
+        #[prost(uint64, optional, tag = "2")]
+        pub updated_at_timestamp_seconds: ::core::option::Option<u64>,
     }
     #[derive(
         candid::CandidType,
@@ -2757,6 +2792,27 @@ pub mod claim_swap_neurons_response {
         #[prost(enumeration = "super::ClaimSwapNeuronsError", tag = "5")]
         Err(i32),
     }
+}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct GetMaturityModulationRequest {}
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct GetMaturityModulationResponse {
+    #[prost(message, optional, tag = "1")]
+    pub maturity_modulation: ::core::option::Option<governance::MaturityModulation>,
 }
 /// A Ledger subaccount.
 #[derive(

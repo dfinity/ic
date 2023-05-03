@@ -2,12 +2,12 @@ use async_trait::async_trait;
 use candid::{Decode, Encode};
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_nervous_system_common::{ledger::IcpLedger, NervousSystemError};
+use ic_nervous_system_common::{cmc::CMC, ledger::IcpLedger, NervousSystemError};
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, SNS_WASM_CANISTER_ID};
 use ic_nns_governance::{
-    governance::{Environment, Governance, HeapGrowthPotential, CMC},
+    governance::{Environment, Governance, HeapGrowthPotential},
     pb::v1::{
         manage_neuron, manage_neuron::NeuronIdOrSubaccount, manage_neuron_response, proposal,
         ExecuteNnsFunction, GovernanceError, ManageNeuron, ManageNeuronResponse, Motion,

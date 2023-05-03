@@ -28,6 +28,7 @@ use rand_chacha::ChaCha20Rng;
 
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_common::{
+    cmc::CMCCanister,
     ledger::IcpLedgerCanister,
     stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter},
     MethodAuthzChange,
@@ -37,13 +38,13 @@ use ic_nns_common::{
     pb::v1::{CanisterAuthzInfo, NeuronId as NeuronIdProto, ProposalId as ProposalIdProto},
     types::{CallCanisterProposal, NeuronId, ProposalId},
 };
-use ic_nns_constants::{CYCLES_MINTING_CANISTER_ID, LEDGER_CANISTER_ID};
+use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance::pb::v1::governance::GovernanceCachedMetrics;
 use ic_nns_governance::{
     encode_metrics,
     governance::{
         BitcoinNetwork, BitcoinSetConfigProposal, Environment, Governance, HeapGrowthPotential,
-        TimeWarp, CMC,
+        TimeWarp,
     },
     pb::v1::{
         claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshNeuronFromAccountResponseResult,
@@ -124,37 +125,6 @@ impl CanisterEnv {
             },
 
             time_warp: TimeWarp { delta_s: 0 },
-        }
-    }
-}
-
-struct CMCCanister {
-    canister_id: CanisterId,
-}
-
-impl CMCCanister {
-    fn new() -> Self {
-        CMCCanister {
-            canister_id: CYCLES_MINTING_CANISTER_ID,
-        }
-    }
-}
-
-#[async_trait]
-impl CMC for CMCCanister {
-    /// Returns the maturity_modulation from the CMC in basis points.
-    async fn neuron_maturity_modulation(&mut self) -> Result<i32, String> {
-        let result: Result<Result<i32, String>, (Option<i32>, String)> =
-            dfn_core::api::call_with_cleanup(
-                self.canister_id,
-                "neuron_maturity_modulation",
-                candid_one,
-                (),
-            )
-            .await;
-        match result {
-            Ok(result) => result,
-            Err(error) => Err(error.1),
         }
     }
 }

@@ -377,6 +377,7 @@ impl NervousSystemParameters {
             voting_rewards_parameters: Some(VotingRewardsParameters::with_default_values()),
             max_dissolve_delay_bonus_percentage: Some(100),
             max_age_bonus_percentage: Some(25),
+            maturity_modulation_disabled: Some(false),
         }
     }
 
@@ -442,6 +443,9 @@ impl NervousSystemParameters {
                     None => v,
                     Some(base) => v.inherit_from(base),
                 }),
+            maturity_modulation_disabled: self
+                .maturity_modulation_disabled
+                .or(base.maturity_modulation_disabled),
         }
     }
 
@@ -2290,6 +2294,8 @@ pub(crate) mod tests {
             max_number_of_neurons: Some(566),
             max_number_of_proposals_with_ballots: Some(9801),
             default_followees: Some(Default::default()),
+
+            // Set all other fields to None.
             ..Default::default()
         };
 
@@ -2299,10 +2305,27 @@ pub(crate) mod tests {
             max_number_of_neurons: Some(566),
             max_number_of_proposals_with_ballots: Some(9801),
             default_followees: Some(Default::default()),
-            ..default_params
+            ..default_params.clone()
         };
 
         assert_eq!(new_params, expected_params);
+
+        assert_eq!(new_params.maturity_modulation_disabled, Some(false));
+
+        let disable_maturity_modulation = NervousSystemParameters {
+            maturity_modulation_disabled: Some(true),
+
+            // Set all other fields to None.
+            ..Default::default()
+        };
+
+        assert_eq!(
+            disable_maturity_modulation.inherit_from(&default_params),
+            NervousSystemParameters {
+                maturity_modulation_disabled: Some(true),
+                ..default_params
+            },
+        );
     }
 
     lazy_static! {

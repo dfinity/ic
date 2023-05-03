@@ -34,12 +34,12 @@ use ic_sns_governance::{
             RemoveNeuronPermissionsResponse,
         },
         proposal::Action,
-        Account as AccountProto, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
-        Governance, GovernanceError, ListNervousSystemFunctionsResponse, ListNeurons,
-        ListNeuronsResponse, ListProposals, ListProposalsResponse, ManageNeuron,
-        ManageNeuronResponse, Motion, NervousSystemParameters, Neuron, NeuronId,
-        NeuronPermissionList, Proposal, ProposalData, ProposalId, RegisterDappCanisters,
-        RewardEvent, Subaccount as SubaccountProto, Vote,
+        Account as AccountProto, GetMaturityModulationRequest, GetMaturityModulationResponse,
+        GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse, Governance,
+        GovernanceError, ListNervousSystemFunctionsResponse, ListNeurons, ListNeuronsResponse,
+        ListProposals, ListProposalsResponse, ManageNeuron, ManageNeuronResponse, Motion,
+        NervousSystemParameters, Neuron, NeuronId, NeuronPermissionList, Proposal, ProposalData,
+        ProposalId, RegisterDappCanisters, RewardEvent, Subaccount as SubaccountProto, Vote,
     },
     types::DEFAULT_TRANSFER_FEE,
 };
@@ -1224,6 +1224,38 @@ impl SnsCanisters<'_> {
             .unwrap();
 
         self.await_proposal_execution_or_failure(&proposal_id).await;
+    }
+
+    /// Get the summary of the SNS from root
+    pub async fn get_maturity_modulation(&self) -> GetMaturityModulationResponse {
+        self.governance
+            .update_(
+                "get_maturity_modulation",
+                candid_one,
+                GetMaturityModulationRequest {},
+            )
+            .await
+            .expect("Error calling the get_maturity_modulation.")
+    }
+
+    pub async fn wait_for_maturity_modulation_or_panic(&self) {
+        const MAX_ATTEMPTS: usize = 100;
+        for attempt in 0..MAX_ATTEMPTS {
+            let response = self.get_maturity_modulation().await;
+            if response.maturity_modulation.as_ref().is_some() {
+                println!(
+                    "got MaturityModulation on attempt {}: {:#?}",
+                    attempt, response
+                );
+                return;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+
+        panic!(
+            "maturity_modulation still None after {} attempts.",
+            MAX_ATTEMPTS
+        );
     }
 }
 

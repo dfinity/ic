@@ -7363,6 +7363,7 @@ dependencies = [
  "ic-icrc1",
  "ic-ledger-core",
  "ic-metrics-encoder",
+ "ic-nns-constants",
  "ic-nns-governance",
  "icp-ledger",
  "icrc-ledger-types",

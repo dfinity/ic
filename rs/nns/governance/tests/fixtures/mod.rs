@@ -11,7 +11,7 @@ use comparable::Comparable;
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha::Sha256;
-use ic_nervous_system_common::{ledger::IcpLedger, NervousSystemError};
+use ic_nervous_system_common::{cmc::CMC, ledger::IcpLedger, NervousSystemError};
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
 };
@@ -79,7 +79,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 
 use ic_nns_governance::governance::{
-    HeapGrowthPotential, CMC, MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS,
+    HeapGrowthPotential, MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS,
     MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS, ONE_YEAR_SECONDS,
 };
 use ic_nns_governance::pb::v1::governance::GovernanceCachedMetrics;
