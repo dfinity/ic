@@ -26,7 +26,7 @@ DOCKER_IMG_TAG=$("$REPO_ROOT"/gitlab-ci/container/get-image-tag.sh)
 USE_BAZEL_VERSION="$(cat $REPO_ROOT/.bazelversion)"
 echo "Bazel version: $USE_BAZEL_VERSION"
 
-pushd "$REPO_ROOT/gitlab-ci/container"
+pushd "$REPO_ROOT"
 
 # we can pass '--no-cache' from env
 build_args=("${DOCKER_BUILD_ARGS:---rm=true}")
@@ -37,14 +37,12 @@ DOCKER_BUILDKIT=1 docker build "${build_args[@]}" \
     -t docker.io/dfinity/ic-build-bazel:latest \
     -t registry.gitlab.com/dfinity-lab/core/docker/ic-build-bazel:"$DOCKER_IMG_TAG" \
     --build-arg USE_BAZEL_VERSION="${USE_BAZEL_VERSION}" \
-    -f Dockerfile.bazel .
+    -f gitlab-ci/container/Dockerfile.bazel .
 
 if [ "${ONLY_BAZEL:-false}" == "true" ]; then
     popd
     exit 0
 fi
-
-cp "$REPO_ROOT"/requirements.txt "$REPO_ROOT"/gitlab-ci/container/files
 
 # build the dependencies image
 DOCKER_BUILDKIT=1 docker build "${build_args[@]}" \
@@ -52,7 +50,7 @@ DOCKER_BUILDKIT=1 docker build "${build_args[@]}" \
     -t docker.io/dfinity/ic-build-src:"$DOCKER_IMG_TAG" \
     -t docker.io/dfinity/ic-build-src:latest \
     -t registry.gitlab.com/dfinity-lab/core/docker/ic-build-src:"$DOCKER_IMG_TAG" \
-    -f Dockerfile.src .
+    -f gitlab-ci/container/Dockerfile.src .
 
 # build the container image
 DOCKER_BUILDKIT=1 docker build "${build_args[@]}" \
@@ -62,6 +60,6 @@ DOCKER_BUILDKIT=1 docker build "${build_args[@]}" \
     -t registry.gitlab.com/dfinity-lab/core/docker/ic-build:"$DOCKER_IMG_TAG" \
     --build-arg SRC_IMG_PATH="dfinity/ic-build-src:$DOCKER_IMG_TAG" \
     --build-arg USE_BAZEL_VERSION="${USE_BAZEL_VERSION}" \
-    -f Dockerfile .
+    -f gitlab-ci/container/Dockerfile .
 
 popd

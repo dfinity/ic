@@ -5,7 +5,7 @@ FROM ubuntu@sha256:3626dff0d616e8ee7065a9ac8c7117e904a4178725385910eeecd7f1872fc
 ARG USE_BAZEL_VERSION=invalid
 ENV TZ=UTC
 
-COPY --chown=0700 ./files/known_hosts /etc/ssh/ssh_known_hosts
+COPY --chown=0700 ./gitlab-ci/container/files/known_hosts /etc/ssh/ssh_known_hosts
 
 RUN export DEBIAN_FRONTEND=noninteractive && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone && \
     apt -yq update && apt -yqq install  \
@@ -50,7 +50,7 @@ RUN groupadd -g 1000 ubuntu && useradd -ms /bin/bash -u 1000 -g 1000 ubuntu
 # CI before script requires sudo
 RUN echo "ALL ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
-COPY ./files/generate-bazel-completion.sh /tmp/
+COPY ./gitlab-ci/container/files/generate-bazel-completion.sh /tmp/
 RUN /tmp/generate-bazel-completion.sh
 RUN echo "source /etc/bash_completion.d/bazel" >>/etc/bash.bashrc
 
@@ -73,9 +73,9 @@ WORKDIR /
 USER 0
 
 RUN mv /usr/bin/docker /usr/bin/docker-bin
-COPY ./files/containers.conf /etc/containers/containers.conf
-COPY ./files/docker.sh /usr/bin/docker
-COPY ./files/entrypoint.sh /entrypoint.sh
+COPY ./gitlab-ci/container/files/containers.conf /etc/containers/containers.conf
+COPY ./gitlab-ci/container/files/docker.sh /usr/bin/docker
+COPY ./gitlab-ci/container/files/entrypoint.sh /entrypoint.sh
 
 # Add mold linker
 ARG mold_version=1.11.0
