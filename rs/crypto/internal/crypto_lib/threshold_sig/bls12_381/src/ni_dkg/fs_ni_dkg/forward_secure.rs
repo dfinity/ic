@@ -154,10 +154,10 @@ impl From<Epoch> for Tau {
 /// Notation from section 7.2.
 pub(crate) struct BTENode {
     // Bit-vector, indicating a path in a binary tree.
-    pub tau: Tau,
+    tau: Tau,
 
-    pub a: G1Affine,
-    pub b: G2Affine,
+    a: G1Affine,
+    b: G2Affine,
 
     // We split the d's into two groups.
     // The vector `d_h` always contains the last LAMBDA_H points
@@ -165,10 +165,10 @@ pub(crate) struct BTENode {
     // The list `d_t` contains the other elements. There are at most LAMBDA_T of them.
     // The longer this list, the higher up we are in the binary tree,
     // and the more leaf node keys we are able to derive.
-    pub d_t: LinkedList<G2Affine>,
-    pub d_h: Vec<G2Affine>,
+    d_t: LinkedList<G2Affine>,
+    d_h: Vec<G2Affine>,
 
-    pub e: G2Affine,
+    e: G2Affine,
 }
 
 // must implement explicitly as zeroize does not support LinkedList
@@ -251,18 +251,22 @@ pub struct SecretKey {
 /// A public key and its associated proof of possession
 #[derive(Clone, Debug)]
 pub struct PublicKeyWithPop {
-    pub key_value: G1Affine,
-    pub proof_data: EncryptionKeyPop,
+    key_value: G1Affine,
+    proof_data: EncryptionKeyPop,
 }
 
 impl PublicKeyWithPop {
     pub fn verify(&self, associated_data: &[u8]) -> bool {
-        let instance = EncryptionKeyInstance {
-            g1_gen: G1Affine::generator().clone(),
-            public_key: self.key_value.clone(),
-            associated_data: associated_data.to_vec(),
-        };
+        let instance = EncryptionKeyInstance::new(&self.key_value, associated_data);
         verify_pop(&instance, &self.proof_data).is_ok()
+    }
+
+    pub fn public_key(&self) -> &G1Affine {
+        &self.key_value
+    }
+
+    pub fn proof(&self) -> &EncryptionKeyPop {
+        &self.proof_data
     }
 
     /// Parse a serialized public key and PoP
@@ -275,11 +279,7 @@ impl PublicKeyWithPop {
         match (key_value, pop_key, challenge, response) {
             (Ok(key_value), Ok(pop_key), Ok(challenge), Ok(response)) => Some(Self {
                 key_value,
-                proof_data: EncryptionKeyPop {
-                    pop_key,
-                    challenge,
-                    response,
-                },
+                proof_data: EncryptionKeyPop::new(pop_key, challenge, response),
             }),
             (_, _, _, _) => None,
         }
@@ -288,23 +288,36 @@ impl PublicKeyWithPop {
     /// Serialize the public key and PoP
     pub(crate) fn serialize(&self) -> (FsEncryptionPublicKey, FsEncryptionPop) {
         let public_key = FsEncryptionPublicKey(self.key_value.serialize_to::<G1Bytes>());
-
-        let pop = FsEncryptionPop {
-            pop_key: G1Bytes(self.proof_data.pop_key.serialize()),
-            challenge: FrBytes(self.proof_data.challenge.serialize()),
-            response: FrBytes(self.proof_data.response.serialize()),
-        };
+        let pop = self.proof_data.serialize();
         (public_key, pop)
     }
 }
 
 /// NI-DKG system parameters
 pub struct SysParam {
-    pub f0: G2Affine,       // f_0 in the paper.
-    pub f: Vec<G2Affine>,   // f_1, ..., f_{lambda_T} in the paper.
-    pub f_h: Vec<G2Affine>, // The remaining LAMBDA_H f_i's in the paper.
-    pub h: G2Affine,
+    f0: G2Affine,       // f_0 in the paper.
+    f: Vec<G2Affine>,   // f_1, ..., f_{lambda_T} in the paper.
+    f_h: Vec<G2Affine>, // The remaining LAMBDA_H f_i's in the paper.
+    h: G2Affine,
     h_prep: G2Prepared,
+}
+
+impl SysParam {
+    pub fn f0(&self) -> &G2Affine {
+        &self.f0
+    }
+
+    pub fn h(&self) -> &G2Affine {
+        &self.h
+    }
+
+    pub fn f(&self) -> &[G2Affine] {
+        &self.f
+    }
+
+    pub fn f_h(&self) -> &[G2Affine] {
+        &self.f_h
+    }
 }
 
 /// Generates a (public key, secret key) pair for of forward-secure
@@ -357,11 +370,7 @@ pub fn kgen<R: RngCore + CryptoRng>(
 
     let y = G1Affine::from(g1 * &x);
 
-    let pop_instance = EncryptionKeyInstance {
-        g1_gen: G1Affine::generator().clone(),
-        public_key: y.clone(),
-        associated_data: associated_data.to_vec(),
-    };
+    let pop_instance = EncryptionKeyInstance::new(&y, associated_data);
 
     let pop = prove_pop(&pop_instance, &x, rng).expect("Implementation bug: Pop generation failed");
 
@@ -615,10 +624,10 @@ impl SecretKey {
 /// one for each recipent.
 #[derive(Debug)]
 pub struct FsEncryptionCiphertext {
-    pub cc: Vec<Vec<G1Affine>>,
-    pub rr: Vec<G1Affine>,
-    pub ss: Vec<G1Affine>,
-    pub zz: Vec<G2Affine>,
+    cc: Vec<Vec<G1Affine>>,
+    rr: Vec<G1Affine>,
+    ss: Vec<G1Affine>,
+    zz: Vec<G2Affine>,
 }
 
 impl FsEncryptionCiphertext {
@@ -695,12 +704,26 @@ impl FsEncryptionCiphertext {
 
         Ok(Self { cc, rr, ss, zz })
     }
+
+    pub fn ciphertext_chunks(&self) -> &[Vec<G1Affine>] {
+        &self.cc
+    }
+
+    pub fn randomizers_r(&self) -> &[G1Affine] {
+        &self.rr
+    }
 }
 
 /// Randomness needed for NIZK proofs.
 #[derive(Zeroize, ZeroizeOnDrop)]
 pub struct EncryptionWitness {
-    pub r: Vec<Scalar>,
+    r: Vec<Scalar>,
+}
+
+impl EncryptionWitness {
+    pub fn witness(&self) -> &[Scalar] {
+        &self.r
+    }
 }
 
 /// Encrypt chunks. Returns ciphertext as well as the witness for later use
