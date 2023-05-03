@@ -209,7 +209,11 @@ fn test(env: TestEnv, expect_catch_up: bool) {
     });
 }
 
-fn await_node_certified_height(node: &IcNodeSnapshot, target_height: Height, log: Logger) {
+pub(crate) fn await_node_certified_height(
+    node: &IcNodeSnapshot,
+    target_height: Height,
+    log: Logger,
+) {
     retry(log, READY_WAIT_TIMEOUT, RETRY_BACKOFF, || {
         node.status()
             .and_then(|response| match response.certified_height {
@@ -222,5 +226,5 @@ fn await_node_certified_height(node: &IcNodeSnapshot, target_height: Height, log
                 None => bail!("Certified height not available"),
             })
     })
-    .expect("The node did not reach the speicifed height in time")
+    .expect("The node did not reach the specified height in time")
 }
