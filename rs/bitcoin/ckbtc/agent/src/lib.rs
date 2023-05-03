@@ -119,6 +119,10 @@ impl CkBtcMinterAgent {
         .await
     }
 
+    pub async fn distribute_kyt_fee(&self) -> Result<(), CkBtcMinterAgentError> {
+        self.update("distribute_kyt_fee", ()).await
+    }
+
     pub async fn get_events(
         &self,
         start: u64,
