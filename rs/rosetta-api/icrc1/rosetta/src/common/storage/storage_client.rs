@@ -139,9 +139,7 @@ impl StorageClient {
 mod tests {
     use super::*;
     use crate::common::utils::unit_test_utils::create_tmp_dir;
-    use crate::common::utils::unit_test_utils::strategies::{
-        blocks_strategy, valid_blockchain_with_gaps_strategy,
-    };
+    use ic_icrc1_test_utils::{blocks_strategy, valid_blockchain_with_gaps_strategy};
     use proptest::prelude::*;
 
     #[test]

@@ -1,7 +1,7 @@
 use candid::{candid_method, Principal};
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk_macros::{init, post_upgrade, query, update};
-use ic_icrc1::{blocks::icrc1_block_from_encoded, Block};
+use ic_icrc1::{blocks::encoded_block_to_generic_block, Block};
 use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
 use ic_stable_structures::{
@@ -125,7 +125,7 @@ fn decode_transaction(txid: u64, bytes: Vec<u8>) -> Transaction {
 
 fn decode_icrc1_block(_txid: u64, bytes: Vec<u8>) -> IcrcBlock {
     let encoded_block = EncodedBlock::from(bytes);
-    icrc1_block_from_encoded(&encoded_block)
+    encoded_block_to_generic_block(&encoded_block)
 }
 
 #[init]
