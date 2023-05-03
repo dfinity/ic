@@ -58,12 +58,15 @@ checkpolicy
 dosfstools
 ethtool
 ipmitool
-locales
 libarchive-zip-perl
 libusb-1.0-0
-libvirt-daemon-system libvirt-dev
+libvirt-daemon-system 
+libvirt-dev
+locales
+moreutils
 mtools
+nvme-cli
 ovmf
-python3-requests
 python3-libvirt
+python3-requests
 xxd
