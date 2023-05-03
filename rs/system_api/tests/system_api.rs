@@ -108,32 +108,21 @@ fn assert_stable_apis_panic(mut api: SystemApiImpl) {
         .expect_err("Stable API should panic");
 }
 
-fn check_stable_apis_support(mut api: SystemApiImpl, supported: bool) {
+fn check_stable_apis_support(mut api: SystemApiImpl) {
     match EmbeddersConfig::default()
         .feature_flags
         .wasm_native_stable_memory
     {
         FlagStatus::Enabled => assert_stable_apis_panic(api),
         FlagStatus::Disabled => {
-            if supported {
-                assert_api_supported(api.ic0_stable_size());
-                assert_api_supported(api.ic0_stable_grow(1));
-                assert_api_supported(api.ic0_stable_read(0, 0, 0, &mut []));
-                assert_api_supported(api.ic0_stable_write(0, 0, 0, &[]));
-                assert_api_supported(api.ic0_stable64_size());
-                assert_api_supported(api.ic0_stable64_grow(1));
-                assert_api_supported(api.ic0_stable64_read(0, 0, 0, &mut []));
-                assert_api_supported(api.ic0_stable64_write(0, 0, 0, &[]));
-            } else {
-                assert_api_not_supported(api.ic0_stable_size());
-                assert_api_not_supported(api.ic0_stable_grow(1));
-                assert_api_not_supported(api.ic0_stable_read(0, 0, 0, &mut []));
-                assert_api_not_supported(api.ic0_stable_write(0, 0, 0, &[]));
-                assert_api_not_supported(api.ic0_stable64_size());
-                assert_api_not_supported(api.ic0_stable64_grow(1));
-                assert_api_not_supported(api.ic0_stable64_read(0, 0, 0, &mut []));
-                assert_api_not_supported(api.ic0_stable64_write(0, 0, 0, &[]));
-            }
+            assert_api_supported(api.ic0_stable_size());
+            assert_api_supported(api.ic0_stable_grow(1));
+            assert_api_supported(api.ic0_stable_read(0, 0, 0, &mut []));
+            assert_api_supported(api.ic0_stable_write(0, 0, 0, &[]));
+            assert_api_supported(api.ic0_stable64_size());
+            assert_api_supported(api.ic0_stable64_grow(1));
+            assert_api_supported(api.ic0_stable64_read(0, 0, 0, &mut []));
+            assert_api_supported(api.ic0_stable64_write(0, 0, 0, &[]));
         }
     }
 }
@@ -193,7 +182,7 @@ fn test_canister_init_support() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
-    check_stable_apis_support(api, true);
+    check_stable_apis_support(api);
 }
 
 #[test]
@@ -251,7 +240,7 @@ fn test_canister_update_support() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
-    check_stable_apis_support(api, true);
+    check_stable_apis_support(api);
 }
 
 #[test]
@@ -309,7 +298,7 @@ fn test_canister_replicated_query_support() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
-    check_stable_apis_support(api, true);
+    check_stable_apis_support(api);
 }
 
 #[test]
@@ -367,7 +356,7 @@ fn test_canister_pure_query_support() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
-    check_stable_apis_support(api, true);
+    check_stable_apis_support(api);
 }
 
 #[test]
@@ -435,7 +424,7 @@ fn test_canister_stateful_query_support() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
-    check_stable_apis_support(api, true);
+    check_stable_apis_support(api);
 }
 
 #[test]
@@ -493,7 +482,7 @@ fn test_reply_api_support_on_nns() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
-    check_stable_apis_support(api, true);
+    check_stable_apis_support(api);
 }
 
 #[test]
@@ -551,7 +540,7 @@ fn test_reply_api_support_non_nns() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
-    check_stable_apis_support(api, true);
+    check_stable_apis_support(api);
 }
 
 #[test]
@@ -612,7 +601,7 @@ fn test_reject_api_support_on_nns() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
-    check_stable_apis_support(api, true);
+    check_stable_apis_support(api);
 }
 
 #[test]
@@ -673,7 +662,7 @@ fn test_reject_api_support_non_nns() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
-    check_stable_apis_support(api, true);
+    check_stable_apis_support(api);
 }
 
 #[test]
@@ -731,7 +720,7 @@ fn test_pre_upgrade_support() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
-    check_stable_apis_support(api, true);
+    check_stable_apis_support(api);
 }
 
 #[test]
@@ -789,7 +778,7 @@ fn test_start_support() {
     assert_api_not_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
-    check_stable_apis_support(api, false);
+    check_stable_apis_support(api);
 }
 
 #[test]
@@ -847,7 +836,7 @@ fn test_cleanup_support() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
-    check_stable_apis_support(api, true);
+    check_stable_apis_support(api);
 }
 
 #[test]
@@ -910,7 +899,7 @@ fn test_inspect_message_support() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
-    check_stable_apis_support(api, true);
+    check_stable_apis_support(api);
 }
 
 #[test]
@@ -969,7 +958,7 @@ fn test_canister_heartbeat_support() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_not_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
-    check_stable_apis_support(api, true);
+    check_stable_apis_support(api);
 }
 
 #[test]
@@ -1027,7 +1016,7 @@ fn test_canister_heartbeat_support_nns() {
     assert_api_supported(api.ic0_canister_status());
     assert_api_supported(api.ic0_mint_cycles(0));
     assert_api_supported(api.ic0_is_controller(0, 0, &[]));
-    check_stable_apis_support(api, true);
+    check_stable_apis_support(api);
 }
 
 #[test]

@@ -471,8 +471,9 @@ fn ic0_stable_read_and_write_work() {
             (import "ic0" "msg_reply_data_append"
                 (func $msg_reply_data_append (param i32 i32))
             )
-            (func (export "canister_update test")
-                ;; Swap the first 8 bytes from "abcdefgh" to "efghabcd" using stable memory
+            (func $swap
+                ;; Swap the first 8 bytes from "abcdefgh" to "efghabcd"
+                ;; (and vice-versa in a repeated call) using stable memory
 
                 ;; Grow stable memory by 1 page.
                 (drop (call $stable_grow (i32.const 1)))
@@ -488,7 +489,12 @@ fn ic0_stable_read_and_write_work() {
 
                 ;; heap[4..8] = stable_memory[0..4]
                 (call $stable_read (i32.const 4) (i32.const 0) (i32.const 4))
-
+            )
+            (func $test
+                (call $swap)
+                (call $read)
+            )
+            (func $read
                 ;; Return the first 8 bytes of the heap.
                 (call $msg_reply_data_append
                     (i32.const 0)     ;; heap offset = 0
@@ -496,11 +502,16 @@ fn ic0_stable_read_and_write_work() {
                 (call $msg_reply)     ;; call reply
             )
             (memory 1)
+            (start $swap)
+            (export "canister_query read" (func $read))
+            (export "canister_update test" (func $test))
             (data (i32.const 0) "abcdefgh")  ;; Initial contents of the heap.
         )"#;
     let canister_id = test.canister_from_wat(wat).unwrap();
+    let result = test.ingress(canister_id, "read", vec![]).unwrap();
+    assert_eq!(WasmResult::Reply(b"efghabcd".to_vec()), result); // swapped in `start`
     let result = test.ingress(canister_id, "test", vec![]).unwrap();
-    assert_eq!(WasmResult::Reply(b"efghabcd".to_vec()), result);
+    assert_eq!(WasmResult::Reply(b"abcdefgh".to_vec()), result); // swapped again in `test`
 }
 
 #[test]
