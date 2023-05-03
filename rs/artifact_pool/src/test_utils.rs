@@ -30,6 +30,7 @@ use ic_types::{
     Height,
 };
 use std::{
+    collections::HashSet,
     panic,
     path::{Path, PathBuf},
     time::Duration,
@@ -208,9 +209,26 @@ where
                 count_total(pool.random_tape_share()),
             ];
 
+            let mut expected_to_be_purged = Vec::new();
+            expected_to_be_purged.extend(
+                pool.notarization_share()
+                    .get_by_height_range(range_to_delete.clone())
+                    .map(|n| n.get_id()),
+            );
+            expected_to_be_purged.extend(
+                pool.finalization_share()
+                    .get_by_height_range(range_to_delete.clone())
+                    .map(|n| n.get_id()),
+            );
+
             let mut ops = PoolSectionOps::new();
             ops.purge_shares_below(finalized_height);
-            pool.mutate(ops);
+            let purged = pool.mutate(ops);
+
+            assert_eq!(expected_to_be_purged.len(), purged.len());
+            let expected_set = HashSet::<_>::from_iter(expected_to_be_purged);
+            let purged_set = HashSet::<_>::from_iter(purged);
+            assert_eq!(expected_set, purged_set);
 
             assert!(count(pool.random_beacon_share(), &range_to_delete) > 0);
             assert_eq!(count_total(pool.random_beacon_share()), expected_count[0]);
@@ -220,6 +238,20 @@ where
             assert_eq!(count_total(pool.finalization_share()), expected_count[2]);
             assert!(count(pool.random_tape_share(), &range_to_delete) > 0);
             assert_eq!(count_total(pool.random_tape_share()), expected_count[3]);
+
+            let expected_to_be_purged = pool
+                .block_proposal()
+                .get_by_height_range(range_to_delete)
+                .map(|n| n.get_id())
+                .collect::<HashSet<_>>();
+            assert!(!expected_to_be_purged.is_empty());
+
+            let mut ops = PoolSectionOps::new();
+            ops.purge_below(finalized_height);
+            let purged = pool.mutate(ops);
+            let purged_set = HashSet::<_>::from_iter(purged);
+
+            assert!(expected_to_be_purged.is_subset(&purged_set));
         }
     })
 }

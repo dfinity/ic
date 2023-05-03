@@ -12,6 +12,7 @@ use ic_interfaces::{
 use ic_logger::{error, info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::types::v1 as pb;
+use ic_types::consensus::certification::CertificationMessageHash;
 use ic_types::{
     artifact::{CertificationMessageId, ConsensusMessageId, EcdsaMessageId},
     batch::BatchPayload,
@@ -267,6 +268,7 @@ macro_rules! log_err {
 }
 
 /// Combination of type/height/id keys.
+#[derive(Debug)]
 struct ArtifactKey {
     type_key: TypeKey,
     height_key: HeightKey,
@@ -517,23 +519,23 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
         }
     }
 
-    /// Remove all index entries for the given TypeKey with heights
-    /// less than the given HeightKey. Update the type's meta table
-    /// if necessary. Return the IdKeys of deleted entries.
+    /// Remove all index entries for the given [`TypeKey`] with heights
+    /// less than the given [`HeightKey`]. Update the type's meta table
+    /// if necessary. Return the [`ArtifactKey`]s of deleted entries.
     fn tx_purge_index_below<'a>(
         &self,
         tx: &mut RwTransaction<'a>,
-        type_key: &TypeKey,
+        type_key: TypeKey,
         height_key: HeightKey,
-    ) -> lmdb::Result<Vec<IdKey>> {
+    ) -> lmdb::Result<Vec<ArtifactKey>> {
         let mut artifact_ids = Vec::new();
         // only delete if meta exists
-        if let Some(meta) = self.get_meta(tx, type_key) {
+        if let Some(meta) = self.get_meta(tx, &type_key) {
             // nothing to delete if min height is already higher
             if meta.min >= height_key {
                 return Ok(artifact_ids);
             }
-            let index_db = self.get_index_db(type_key);
+            let index_db = self.get_index_db(&type_key);
             {
                 let mut cursor = tx.open_rw_cursor(index_db)?;
                 loop {
@@ -543,9 +545,12 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
                             if HeightKey::from(key) >= height_key {
                                 break;
                             }
-                            let id_key = IdKey::from(id);
+                            artifact_ids.push(ArtifactKey {
+                                type_key,
+                                height_key: HeightKey::from(key),
+                                id_key: IdKey::from(id),
+                            });
                             cursor.del(WriteFlags::empty())?;
-                            artifact_ids.push(id_key);
                         }
                     }
                 }
@@ -565,22 +570,24 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
                     })
             };
             match meta {
-                None => tx.del(self.meta, type_key, None)?,
-                Some(meta) => self.update_meta(tx, type_key, &meta)?,
+                None => tx.del(self.meta, &type_key, None)?,
+                Some(meta) => self.update_meta(tx, &type_key, &meta)?,
             }
         }
         Ok(artifact_ids)
     }
 
-    /// Remove all artifacts with heights less than the given HeightKey.
+    /// Remove all artifacts with heights less than the given [`HeightKey`].
+    /// Return [`ArtifactKey`]s of the removed artifacts.
     fn tx_purge_below<'a>(
         &self,
         tx: &mut RwTransaction<'a>,
         height_key: HeightKey,
-    ) -> lmdb::Result<()> {
+    ) -> lmdb::Result<Vec<ArtifactKey>> {
+        let mut purged = Vec::new();
         // delete from all index tables
-        for type_key in Artifact::type_keys() {
-            self.tx_purge_index_below(tx, type_key, height_key)?;
+        for &type_key in Artifact::type_keys() {
+            purged.append(&mut self.tx_purge_index_below(tx, type_key, height_key)?);
         }
         // delete from artifacts table
         let mut cursor = tx.open_rw_cursor(self.artifacts)?;
@@ -597,28 +604,28 @@ impl<Artifact: PoolArtifact> PersistentHeightIndexedPool<Artifact> {
                 }
             }
         }
-        Ok(())
+        Ok(purged)
     }
 
-    /// Remove all artifacts of the given TypeKey with heights
-    /// less than the given HeightKey.
+    /// Remove all artifacts of the given [`TypeKey`] with heights less than the
+    /// given [`HeightKey`]. Return [`ArtifactKey`]s of the removed artifacts.
     fn tx_purge_type_below<'a>(
         &self,
         tx: &mut RwTransaction<'a>,
-        type_key: &TypeKey,
+        type_key: TypeKey,
         height_key: HeightKey,
-    ) -> lmdb::Result<()> {
-        let artifact_ids = self.tx_purge_index_below(tx, type_key, height_key)?;
-        // Delete the corresponding artifacts.
-        for id in artifact_ids {
-            if let Err(err) = tx.del(self.artifacts, &id, None) {
+    ) -> lmdb::Result<Vec<ArtifactKey>> {
+        let artifact_keys = self.tx_purge_index_below(tx, type_key, height_key)?;
+        // delete the corresponding artifacts, ignoring not found errors
+        for key in &artifact_keys {
+            if let Err(err) = tx.del(self.artifacts, &key.id_key, None) {
                 // Ignore not found errors, although they should not appear in practice.
                 if lmdb::Error::NotFound != err {
                     return Err(err);
                 }
             }
         }
-        Ok(())
+        Ok(artifact_keys)
     }
 }
 
@@ -829,6 +836,39 @@ impl From<ConsensusMessageId> for ArtifactKey {
     }
 }
 
+impl TryFrom<ArtifactKey> for ConsensusMessageId {
+    type Error = String;
+    fn try_from(key: ArtifactKey) -> Result<Self, Self::Error> {
+        let h = key.id_key.hash();
+        let hash = match key.type_key {
+            RANDOM_BEACON_KEY => ConsensusMessageHash::RandomBeacon(h.into()),
+            FINALIZATION_KEY => ConsensusMessageHash::Finalization(h.into()),
+            NOTARIZATION_KEY => ConsensusMessageHash::Notarization(h.into()),
+            BLOCK_PROPOSAL_KEY => ConsensusMessageHash::BlockProposal(h.into()),
+            RANDOM_BEACON_SHARE_KEY => ConsensusMessageHash::RandomBeaconShare(h.into()),
+            NOTARIZATION_SHARE_KEY => ConsensusMessageHash::NotarizationShare(h.into()),
+            FINALIZATION_SHARE_KEY => ConsensusMessageHash::FinalizationShare(h.into()),
+            RANDOM_TAPE_KEY => ConsensusMessageHash::RandomTape(h.into()),
+            RANDOM_TAPE_SHARE_KEY => ConsensusMessageHash::RandomTapeShare(h.into()),
+            CATCH_UP_PACKAGE_KEY => ConsensusMessageHash::CatchUpPackage(h.into()),
+            CATCH_UP_PACKAGE_SHARE_KEY => ConsensusMessageHash::CatchUpPackageShare(h.into()),
+            BLOCK_PAYLOAD_KEY => {
+                return Err("Block payloads do not have a ConsensusMessageId".into())
+            }
+            other => {
+                return Err(format!(
+                    "{:?} is not a valid ConsensusMessage TypeKey.",
+                    other
+                ))
+            }
+        };
+        Ok(ConsensusMessageId {
+            hash,
+            height: key.id_key.height(),
+        })
+    }
+}
+
 impl From<ConsensusMessage> for PersistedConsensusMessage {
     fn from(message: ConsensusMessage) -> PersistedConsensusMessage {
         PersistedConsensusMessage::ConsensusMessage(message)
@@ -983,8 +1023,12 @@ impl PersistentHeightIndexedPool<ConsensusMessage> {
         PersistentHeightIndexedPool::new(path.as_path(), read_only, log)
     }
 
-    fn tx_mutate(&mut self, ops: PoolSectionOps<ValidatedConsensusArtifact>) -> lmdb::Result<()> {
+    fn tx_mutate(
+        &mut self,
+        ops: PoolSectionOps<ValidatedConsensusArtifact>,
+    ) -> lmdb::Result<Vec<ConsensusMessageId>> {
         let mut tx = self.db_env.begin_rw_txn()?;
+        let mut purged = Vec::new();
         for op in ops.ops {
             match op {
                 PoolSectionOp::Insert(artifact) => {
@@ -1001,31 +1045,60 @@ impl PersistentHeightIndexedPool<ConsensusMessage> {
                     }?
                 }
                 PoolSectionOp::Remove(msg_id) => {
-                    let key = ArtifactKey::from(msg_id);
+                    let key = ArtifactKey::from(msg_id.clone());
                     // Note: We do not remove block payloads here, but leave it to purging.
-                    self.tx_remove(&mut tx, &key)?
+                    self.tx_remove(&mut tx, &key)?;
+                    purged.push(msg_id);
                 }
                 PoolSectionOp::PurgeBelow(height) => {
                     let height_key = HeightKey::from(height);
-                    self.tx_purge_below(&mut tx, height_key)?
+                    purged.extend(
+                        self.tx_purge_below(&mut tx, height_key)?
+                            .into_iter()
+                            .map(ConsensusMessageId::try_from)
+                            .flat_map(|r| {
+                                log_err!(r, self.log, "ConsensusMessage::tx_mutate PurgeBelow")
+                            }),
+                    );
                 }
                 PoolSectionOp::PurgeSharesBelow(height) => {
                     let height_key = HeightKey::from(height);
-                    for type_key in &CONSENSUS_SHARE_KEYS {
-                        self.tx_purge_type_below(&mut tx, type_key, height_key)?
+                    for type_key in CONSENSUS_SHARE_KEYS {
+                        purged.extend(
+                            self.tx_purge_type_below(&mut tx, type_key, height_key)?
+                                .into_iter()
+                                .map(ConsensusMessageId::try_from)
+                                .flat_map(|r| {
+                                    log_err!(
+                                        r,
+                                        self.log,
+                                        "ConsensusMessage::tx_mutate PurgeSharesBelow"
+                                    )
+                                }),
+                        );
                     }
                 }
             }
         }
-        tx.commit()
+        tx.commit()?;
+        Ok(purged)
     }
 }
 
 impl crate::consensus_pool::MutablePoolSection<ValidatedConsensusArtifact>
     for PersistentHeightIndexedPool<ConsensusMessage>
 {
-    fn mutate(&mut self, ops: PoolSectionOps<ValidatedConsensusArtifact>) {
-        log_err!(self.tx_mutate(ops), self.log, "ConsensusArtifact::mutate");
+    fn mutate(
+        &mut self,
+        ops: PoolSectionOps<ValidatedConsensusArtifact>,
+    ) -> Vec<ConsensusMessageId> {
+        match self.tx_mutate(ops) {
+            Ok(purged) => purged,
+            err => {
+                log_err!(err, self.log, "ConsensusArtifact::mutate");
+                Vec::new()
+            }
+        }
     }
 
     fn pool_section(&self) -> &dyn PoolSection<ValidatedConsensusArtifact> {
@@ -1204,6 +1277,27 @@ impl HasTypeKey for CertificationShare {
     }
 }
 
+impl TryFrom<ArtifactKey> for CertificationMessageId {
+    type Error = String;
+    fn try_from(key: ArtifactKey) -> Result<Self, Self::Error> {
+        let h = key.id_key.hash();
+        let hash = match key.type_key {
+            CERTIFICATION_KEY => CertificationMessageHash::Certification(h.into()),
+            CERTIFICATION_SHARE_KEY => CertificationMessageHash::CertificationShare(h.into()),
+            other => {
+                return Err(format!(
+                    "{:?} is not a valid CertificationMessage TypeKey.",
+                    other
+                ))
+            }
+        };
+        Ok(CertificationMessageId {
+            hash,
+            height: key.id_key.height(),
+        })
+    }
+}
+
 impl PoolArtifact for CertificationMessage {
     type ObjectType = CertificationMessage;
     type Id = CertificationMessageId;
@@ -1278,10 +1372,16 @@ impl PersistentHeightIndexedPool<CertificationMessage> {
         tx.commit()
     }
 
-    fn purge_below_height(&self, height: Height) -> lmdb::Result<()> {
+    fn purge_below_height(&self, height: Height) -> lmdb::Result<Vec<CertificationMessageId>> {
         let mut tx = self.db_env.begin_rw_txn()?;
-        self.tx_purge_below(&mut tx, HeightKey::from(height))?;
-        tx.commit()
+        let purged = self
+            .tx_purge_below(&mut tx, HeightKey::from(height))?
+            .into_iter()
+            .map(CertificationMessageId::try_from)
+            .flat_map(|r| log_err!(r, self.log, "CertificationMessage::purge_below_height"))
+            .collect();
+        tx.commit()?;
+        Ok(purged)
     }
 }
 
@@ -1303,12 +1403,14 @@ impl crate::certification_pool::MutablePoolSection
         };
     }
 
-    fn purge_below(&self, height: Height) {
-        log_err!(
-            self.purge_below_height(height),
-            self.log,
-            "CertificationArtifact::purge_below"
-        );
+    fn purge_below(&self, height: Height) -> Vec<CertificationMessageId> {
+        match self.purge_below_height(height) {
+            Ok(purged) => purged,
+            err => {
+                log_err!(err, self.log, "CertificationArtifact::purge_below");
+                Vec::new()
+            }
+        }
     }
 
     fn certifications(&self) -> &dyn HeightIndexedPool<Certification> {

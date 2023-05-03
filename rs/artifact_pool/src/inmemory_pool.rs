@@ -41,34 +41,44 @@ impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> InMemoryPoolSection<
         self.remove_by_hash(msg_id.hash.digest())
     }
 
-    fn purge_below(&mut self, height: Height, only_shares: bool) {
+    /// Purge all artifacts or only shares below the given [`Height`].
+    /// Return [`ConsensusMessageId`]s of deleted artifacts.
+    fn purge_below(&mut self, height: Height, only_shares: bool) -> Vec<ConsensusMessageId> {
+        let mut purged = Vec::new();
+
         macro_rules! purge {
-            ($artifact_name:ident) => {
+            ($artifact_name:ident, $artifact_type:ident) => {
                 if let Some(range) = self.$artifact_name().height_range() {
                     for h in range.min.get()..height.get() {
                         let height = Height::from(h);
                         for hash in self.indexes.$artifact_name.remove_all(height) {
                             self.artifacts.remove(hash.get_ref());
+                            purged.push(ConsensusMessageId {
+                                hash: ConsensusMessageHash::$artifact_type(hash),
+                                height,
+                            });
                         }
                     }
                 };
             };
         }
 
-        purge!(finalization_share);
-        purge!(notarization_share);
+        purge!(finalization_share, FinalizationShare);
+        purge!(notarization_share, NotarizationShare);
 
         if !only_shares {
-            purge!(random_beacon);
-            purge!(random_beacon_share);
-            purge!(finalization);
-            purge!(notarization);
-            purge!(block_proposal);
-            purge!(random_tape);
-            purge!(random_tape_share);
-            purge!(catch_up_package);
-            purge!(catch_up_package_share);
+            purge!(random_beacon, RandomBeacon);
+            purge!(random_beacon_share, RandomBeaconShare);
+            purge!(finalization, Finalization);
+            purge!(notarization, Notarization);
+            purge!(block_proposal, BlockProposal);
+            purge!(random_tape, RandomTape);
+            purge!(random_tape_share, RandomTapeShare);
+            purge!(catch_up_package, CatchUpPackage);
+            purge!(catch_up_package_share, CatchUpPackageShare);
         }
+
+        purged
     }
 
     fn get_by_hashes<S: ConsensusMessageHashable>(&self, hashes: Vec<&CryptoHashOf<S>>) -> Vec<S> {
@@ -243,23 +253,27 @@ impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> PoolSection<T>
 impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> MutablePoolSection<T>
     for InMemoryPoolSection<T>
 {
-    fn mutate(&mut self, ops: PoolSectionOps<T>) {
+    fn mutate(&mut self, ops: PoolSectionOps<T>) -> Vec<ConsensusMessageId> {
+        let mut purged = Vec::new();
         for op in ops.ops {
             match op {
                 PoolSectionOp::Insert(artifact) => self.insert(artifact),
                 PoolSectionOp::Remove(msg_id) => {
                     if self.remove(&msg_id).is_none() {
                         warn!(self.log, "Error removing artifact {:?}", &msg_id)
+                    } else {
+                        purged.push(msg_id)
                     }
                 }
                 PoolSectionOp::PurgeBelow(height) => {
-                    self.purge_below(height, /*only_shares=*/ false)
+                    purged.append(&mut self.purge_below(height, /*only_shares=*/ false))
                 }
                 PoolSectionOp::PurgeSharesBelow(height) => {
-                    self.purge_below(height, /*only_shares=*/ true)
+                    purged.append(&mut self.purge_below(height, /*only_shares=*/ true))
                 }
             }
         }
+        purged
     }
 
     fn pool_section(&self) -> &dyn PoolSection<T> {
@@ -269,6 +283,8 @@ impl<T: IntoInner<ConsensusMessage> + HasTimestamp + Clone> MutablePoolSection<T
 
 #[cfg(test)]
 pub mod test {
+    use std::collections::HashSet;
+
     use super::*;
     use ic_interfaces::artifact_pool::ValidatedArtifact;
     use ic_test_utilities::consensus::{fake::*, make_genesis};
@@ -308,6 +324,43 @@ pub mod test {
                     .random_beacon()
                     .get_by_height_range(pool.random_beacon().height_range().unwrap());
                 assert_eq!(result.count(), 2);
+            }
+        ));
+    }
+
+    #[test]
+    fn test_purging() {
+        assert!(ic_test_utilities::with_timeout(
+            std::time::Duration::new(12, 0),
+            || {
+                let beacons = (1..=10)
+                    .map(|i| fake_random_beacon(Height::from(i)))
+                    .collect::<Vec<_>>();
+                let ids = beacons.iter().map(|b| b.get_id()).collect::<HashSet<_>>();
+
+                let mut pool = InMemoryPoolSection::new(ic_logger::replica_logger::no_op_logger());
+                beacons
+                    .into_iter()
+                    .for_each(|b| pool.insert(make_artifact(b)));
+
+                assert_eq!(pool.random_beacon().get_all().count(), ids.len());
+                let h30 = Height::from(30);
+                pool.insert(make_artifact(fake_random_beacon(Height::from(30))));
+
+                let mut ops = PoolSectionOps::new();
+                ops.purge_shares_below(Height::from(20));
+                let result = pool.mutate(ops);
+                assert!(result.is_empty());
+
+                let mut ops = PoolSectionOps::new();
+                ops.purge_below(Height::from(20));
+                let result = pool.mutate(ops);
+                assert_eq!(ids.len(), result.len());
+                assert_eq!(ids, HashSet::from_iter(result));
+
+                let range = pool.random_beacon().height_range().unwrap();
+                assert_eq!(range.min, h30);
+                assert_eq!(range.max, h30);
             }
         ));
     }
