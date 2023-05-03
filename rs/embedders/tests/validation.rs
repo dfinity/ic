@@ -352,6 +352,92 @@ fn can_validate_duplicate_query_and_composite_query_methods() {
     );
 }
 
+fn many_exported_functions(n: usize) -> String {
+    let mut ret: String = "(module\n  (func $read)\n".to_string();
+    for i in 0..n {
+        let typ = if i % 3 == 0 {
+            "update"
+        } else if i % 3 == 1 {
+            "query"
+        } else {
+            "composite_query"
+        };
+        ret = format!(
+            "{}  (export \"canister_{} xxx{}\" (func $read))\n",
+            ret, typ, i
+        );
+    }
+    format!("{}\n)", ret)
+}
+
+#[test]
+fn can_validate_many_exported_functions() {
+    let wasm = wat2wasm(&many_exported_functions(1000)).unwrap();
+    assert_eq!(
+        validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
+        Ok(WasmValidationDetails {
+            largest_function_instruction_count: NumInstructions::new(1),
+            ..Default::default()
+        })
+    );
+}
+
+#[test]
+fn can_validate_too_many_exported_functions() {
+    let wasm = wat2wasm(&many_exported_functions(1001)).unwrap();
+    assert_eq!(
+        validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
+        Err(WasmValidationError::InvalidExportSection(
+            "The number of exported functions called `canister_update <name>`, `canister_query <name>`, or `canister_composite_query <name>` exceeds 1000.".to_string()
+        ))
+    );
+}
+
+#[test]
+fn can_validate_large_sum_exported_function_name_lengths() {
+    let func_a = String::from_utf8(vec![b'a'; 6666]).unwrap();
+    let func_b = String::from_utf8(vec![b'b'; 6667]).unwrap();
+    let func_c = String::from_utf8(vec![b'c'; 6667]).unwrap();
+    let wasm = wat2wasm(&format!(
+        r#"(module
+                    (func $read)
+                    (export "canister_update {}" (func $read))
+                    (export "canister_composite_query {}" (func $read))
+                    (export "canister_query {}" (func $read)))"#,
+        func_a, func_b, func_c
+    ))
+    .unwrap();
+    assert_eq!(
+        validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
+        Ok(WasmValidationDetails {
+            largest_function_instruction_count: NumInstructions::new(1),
+            ..Default::default()
+        })
+    );
+}
+
+#[test]
+fn can_validate_too_large_sum_exported_function_name_lengths() {
+    let func_a = String::from_utf8(vec![b'a'; 6667]).unwrap();
+    let func_b = String::from_utf8(vec![b'b'; 6667]).unwrap();
+    let func_c = String::from_utf8(vec![b'c'; 6667]).unwrap();
+    let wasm = wat2wasm(&format!(
+        r#"(module
+                    (func $read)
+                    (export "canister_update {}" (func $read))
+                    (export "canister_composite_query {}" (func $read))
+                    (export "canister_query {}" (func $read)))"#,
+        func_a, func_b, func_c
+    ))
+    .unwrap();
+    assert_eq!(
+        validate_wasm_binary(&wasm, &EmbeddersConfig::default()),
+        Err(WasmValidationError::InvalidExportSection(
+            "The sum of `<name>` lengths in exported functions called `canister_update <name>`, `canister_query <name>`, or `canister_composite_query <name>` exceeds 20000.".to_string()
+        ))
+    );
+}
+
 #[test]
 fn can_validate_canister_query_update_method_name_with_whitespace() {
     let wasm = wat2wasm(
