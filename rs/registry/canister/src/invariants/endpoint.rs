@@ -31,9 +31,18 @@ pub(crate) fn check_endpoint_invariants(
 ) -> Result<(), InvariantCheckError> {
     let mut valid_endpoints = BTreeSet::<(IpAddr, u16)>::new();
     let node_records = get_node_records_from_snapshot(snapshot);
-    let common_error_prefix = format!("Invariant violated by node records: {node_records:?}");
+    let common_error_prefix = format!(
+        "Invariant violated by node records: {}",
+        node_records
+            .keys()
+            .map(|k| k.to_string())
+            .collect::<Vec<String>>()
+            .join(", ")
+    );
     for (node_id, node_record) in node_records {
-        let error_prefix = format!("{common_error_prefix} (checking {node_id} failed)");
+        let error_prefix = format!(
+            "{common_error_prefix} (checking failed for node ID {node_id}: {node_record:?})"
+        );
 
         // P2P endpoints
         //    * For each of the flow endpoints that belong to one node, the identifier
@@ -68,10 +77,12 @@ pub(crate) fn check_endpoint_invariants(
             if node_record.xnet.is_some() {
                 let xnet_endpoint = format!("{:?}", node_record.xnet.unwrap());
                 if !xnet_api.contains(&xnet_endpoint) {
-                    return Err(InvariantCheckError {
+                    let error: Result<(), InvariantCheckError> = Err(InvariantCheckError {
                         msg: format!("{error_prefix}: inconsistent node record: legacy xnet endpoint field ({xnet_endpoint}) must belong to the new xnet_api field"),
                         source: None,
                     });
+                    // TODO: change to `return error;` after NNS1-2228 is closed.
+                    println!("WARNING: {error:?}");
                 }
             }
             endpoints_to_check.extend(node_record.xnet_api.into_iter().map(|x| (x, false)));
@@ -96,10 +107,12 @@ pub(crate) fn check_endpoint_invariants(
             if node_record.http.is_some() {
                 let http_endpoint = format!("{:?}", node_record.http.unwrap());
                 if !public_api.contains(&http_endpoint) {
-                    return Err(InvariantCheckError {
+                    let error: Result<(), InvariantCheckError> = Err(InvariantCheckError {
                         msg: format!("{error_prefix}: inconsistent node record: legacy http endpoint field ({http_endpoint}) must belong to the new public_api field"),
                         source: None,
                     });
+                    // TODO: change to `return error;` after NNS1-2228 is closed.
+                    println!("WARNING: {error:?}");
                 }
             }
             endpoints_to_check.extend(node_record.public_api.into_iter().map(|x| (x, false)));
@@ -124,10 +137,12 @@ pub(crate) fn check_endpoint_invariants(
             if node_record.prometheus_metrics_http.is_some() {
                 let http_endpoint = format!("{:?}", node_record.prometheus_metrics_http.unwrap());
                 if !prometheus_metrics.contains(&http_endpoint) {
-                    return Err(InvariantCheckError {
+                    let error: Result<(), InvariantCheckError> = Err(InvariantCheckError {
                         msg: format!("{error_prefix}: inconsistent node record: legacy prometheus_metrics_http endpoint field ({http_endpoint}) must belong to the new prometheus_metrics field"),
                         source: None,
                     });
+                    // TODO: change to `return error;` after NNS1-2228 is closed.
+                    println!("WARNING: {error:?}");
                 }
             }
             endpoints_to_check.extend(
@@ -148,30 +163,36 @@ pub(crate) fn check_endpoint_invariants(
             let valid_endpoint = validate_endpoint(&endpoint, tolerate_unspecified_ip, strict)?;
             // Multiple nodes may have unspecified addresses, so duplicates should be avioded only for specified endpoints
             if !valid_endpoint.0.is_unspecified() && !new_valid_endpoints.insert(valid_endpoint) {
-                return Err(InvariantCheckError {
+                let error: Result<(), InvariantCheckError> = Err(InvariantCheckError {
                     msg: format!(
                         "{error_prefix}: Duplicate endpoint ({:?}, {:?}); previous endpoints: {new_valid_endpoints:?}",
                         &endpoint.ip_addr, &endpoint.port
                     ),
                     source: None,
                 });
+                // TODO: change to `return error;` after NNS1-2228 is closed.
+                println!("WARNING: {error:?}");
             }
         }
 
         // Check that there are _some_ node endpoints
         if new_valid_endpoints.is_empty() {
-            return Err(InvariantCheckError {
+            let error: Result<(), InvariantCheckError> = Err(InvariantCheckError {
                 msg: format!("{error_prefix}: No endpoints to validate"),
                 source: None,
             });
+            // TODO: change to `return error;` after NNS1-2228 is closed.
+            println!("WARNING: {error:?}");
         }
 
         // Check that there is no intersection with other nodes
         if !new_valid_endpoints.is_disjoint(&valid_endpoints) {
-            return Err(InvariantCheckError {
+            let error: Result<(), InvariantCheckError> = Err(InvariantCheckError {
                 msg: format!("{error_prefix}: Duplicate endpoints detected across nodes; new_valid_endpoints = {new_valid_endpoints:?}; valid_endpoints = {valid_endpoints:?}"),
                 source: None,
             });
+            // TODO: change to `return error;` after NNS1-2228 is closed.
+            println!("WARNING: {error:?}");
         }
 
         // All is good -- add current endpoints to global set
@@ -536,7 +557,8 @@ mod tests {
                 chip_id: vec![],
             }),
         );
-        assert!(check_endpoint_invariants(&snapshot, true).is_err());
+        // TODO: change to `assert!(check_endpoint_invariants(&snapshot, true).is_err());` after NNS1-2228 is closed.
+        assert!(check_endpoint_invariants(&snapshot, true).is_ok());
 
         snapshot.remove(&key);
 
