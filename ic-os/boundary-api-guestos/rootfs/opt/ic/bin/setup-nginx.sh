@@ -73,7 +73,6 @@ function setup_domains() {
 
     # api domains
     for DOMAIN in "${API_DOMAINS[@]}"; do
-        echo "server_name .rosetta-exchanges.${DOMAIN};" >>"${DOMAIN_DIR}/server_rosetta_domain.conf"
         echo "server_name ${DOMAIN};" >>"${DOMAIN_DIR}/api_domain.conf"
     done
 }
