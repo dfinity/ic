@@ -28,7 +28,7 @@ source = """
 . = parse_json!(.message)
 
 # Inject the environment
-.env = "${ENV:?environment must be provided}"
+.env = "${ENV:?ENV must be provided}"
 
 # Anonymize remote_addr
 remote_addr, err = to_string(.remote_addr)
@@ -39,7 +39,7 @@ if err != null || remote_addr == "" {
   # Make sure it's properly parsed as either IPv4 or IPv6, otherwise fall back to 0
   .remote_addr_family = if is_ipv4(remote_addr) { 4 } else if is_ipv6(remote_addr) { 6 } else { 0 };
 
-  .remote_addr_hashed = sha3("${IP_HASH_SALT}" + remote_addr, variant: "SHA3-224")
+  .remote_addr_hashed = sha3("${IP_HASH_SALT:?IP_HASH_SALT must be provided}" + remote_addr, variant: "SHA3-224")
   .remote_addr_hashed = truncate(.remote_addr_hashed, limit: 32, ellipsis: false)
 }
 
@@ -131,7 +131,7 @@ inputs = ["metrics_nginx_access_preprocessed"]
 [transforms.clickhouse_nginx_access_2xx_sampled]
 type = "sample"
 inputs = ["nginx_access_by_status.2xx"]
-rate = ${CLICKHOUSE_2XX_SAMPLE_RATE:?CLICKHOUSE_2XX_SAMPLE_RATE env var must be provided}
+rate = ${CLICKHOUSE_2XX_SAMPLE_RATE:?CLICKHOUSE_2XX_SAMPLE_RATE must be provided}
 
 [transforms.clickhouse_nginx_access_preprocessed]
 type = "remap"
@@ -172,7 +172,7 @@ type = "clickhouse"
 inputs = ["clickhouse_nginx_access_preprocessed"]
 
 # General
-endpoint = "${CLICKHOUSE_URL}"
+endpoint = "${CLICKHOUSE_URL:?CLICKHOUSE_URL must be provided}"
 database = "default"
 table = "http_access"
 
@@ -193,8 +193,8 @@ table = "http_access"
 
   [sinks.clickhouse_nginx_access.auth]
   strategy = "basic"
-  user = "${CLICKHOUSE_USER}"
-  password = "${CLICKHOUSE_PASSWORD}"
+  user = "${CLICKHOUSE_USER:?CLICKHOUSE_USER must be provided}"
+  password = "${CLICKHOUSE_PASSWORD:?CLICKHOUSE_PASSWORD must be provided}"
 
   [sinks.clickhouse_nginx_access.encoding]
   only_fields = [
@@ -216,10 +216,12 @@ table = "http_access"
     "http_user_agent",
     "https",
     "ic_canister_id",
+    "ic_canister_id_cbor",
     "ic_http_request",
     "ic_method_name",
     "ic_node_id",
     "ic_request_type",
+    "ic_sender",
     "ic_subnet_id",
     "is_bot",
     "nginx_version",
@@ -295,7 +297,7 @@ if err == null && length(tags) != 0 {
 [sinks.elasticsearch_nginx_access]
 type = "elasticsearch"
 inputs = ["elasticsearch_nginx_access_preprocessed"]
-endpoint = "${ELASTICSEARCH_URL}"
+endpoint = "${ELASTICSEARCH_URL:?ELASTICSEARCH_URL must be provided}"
 mode = "bulk"
 
   [sinks.elasticsearch_nginx_access.bulk]
@@ -357,7 +359,7 @@ inputs = ["nginx_error_json"]
 [sinks.prometheus_exporter_nginx]
 type = "prometheus_exporter"
 inputs = ["nginx_access_metrics", "nginx_error_metrics"]
-address = "${NGINX_PROMETHUS_ADDR}"
+address = "${NGINX_PROMETHUS_ADDR?:NGINX_PROMETHUS_ADDR must be provided}"
 default_namespace = "nginx"
 suppress_timestamp = true
 
@@ -536,7 +538,7 @@ inputs = ["danted_json"]
 [sinks.prometheus_exporter_danted]
 type = "prometheus_exporter"
 inputs = ["danted_metrics"]
-address = "${DANTED_PROMETHUS_ADDR}"
+address = "${DANTED_PROMETHUS_ADDR:?DANTED_PROMETHUS_ADDR must be provided}"
 default_namespace = "danted"
 suppress_timestamp = true
 
