@@ -5,9 +5,7 @@
 // You can setup this testnet by executing the following commands:
 //
 //   $ gitlab-ci/container/container-run.sh
-//   $ ict test single_large_node --keepalive -- --test_tmpdir=./single_large_node
-//
-// The --keepalive will keep the test running for a maximum of 1 hour.
+//   $ ict testnet single_large_node -- --test_tmpdir=./single_large_node
 //
 // The --test_tmpdir=./single_large_node will store the test output in the specified directory.
 // This is useful to have access to in case you need to SSH into an IC node for example like:
