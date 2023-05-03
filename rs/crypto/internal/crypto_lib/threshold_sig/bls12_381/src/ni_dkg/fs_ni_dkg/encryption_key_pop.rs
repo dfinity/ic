@@ -4,6 +4,9 @@ use crate::ni_dkg::fs_ni_dkg::random_oracles::{
     random_oracle_to_g1, random_oracle_to_scalar, HashedMap, UniqueHash,
 };
 use ic_crypto_internal_bls12_381_type::{G1Affine, G1Projective, Scalar};
+use ic_crypto_internal_types::sign::threshold_sig::ni_dkg::ni_dkg_groth20_bls12_381::{
+    FrBytes, FsEncryptionPop, G1Bytes,
+};
 use rand::{CryptoRng, RngCore};
 
 const DOMAIN_POP_ENCRYPTION_KEY: &str = "ic-pop-encryption";
@@ -11,16 +14,44 @@ const DOMAIN_POP_ENCRYPTION_KEY: &str = "ic-pop-encryption";
 /// Proof of Possession (PoP) of the Encryption Key.
 #[derive(Clone, Debug)]
 pub struct EncryptionKeyPop {
-    pub pop_key: G1Affine,
-    pub challenge: Scalar,
-    pub response: Scalar,
+    pop_key: G1Affine,
+    challenge: Scalar,
+    response: Scalar,
+}
+
+impl EncryptionKeyPop {
+    pub fn new(pop_key: G1Affine, challenge: Scalar, response: Scalar) -> Self {
+        Self {
+            pop_key,
+            challenge,
+            response,
+        }
+    }
+
+    pub fn serialize(&self) -> FsEncryptionPop {
+        FsEncryptionPop {
+            pop_key: G1Bytes(self.pop_key.serialize()),
+            challenge: FrBytes(self.challenge.serialize()),
+            response: FrBytes(self.response.serialize()),
+        }
+    }
 }
 
 /// Instance for the Possession of the Encryption Key.
 pub struct EncryptionKeyInstance {
-    pub g1_gen: G1Affine,
-    pub public_key: G1Affine,
-    pub associated_data: Vec<u8>,
+    g1_gen: G1Affine,
+    public_key: G1Affine,
+    associated_data: Vec<u8>,
+}
+
+impl EncryptionKeyInstance {
+    pub fn new(public_key: &G1Affine, associated_data: &[u8]) -> Self {
+        Self {
+            g1_gen: G1Affine::generator().clone(),
+            public_key: public_key.clone(),
+            associated_data: associated_data.to_vec(),
+        }
+    }
 }
 
 /// A PoP could not be generated or verified

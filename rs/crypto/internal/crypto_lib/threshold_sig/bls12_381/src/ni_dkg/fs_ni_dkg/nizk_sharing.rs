@@ -64,14 +64,24 @@ impl SharingWitness {
 
 /// Zero-knowledge proof of sharing.
 pub struct ProofSharing {
-    pub ff: G1Affine,
-    pub aa: G2Affine,
-    pub yy: G1Affine,
-    pub z_r: Scalar,
-    pub z_alpha: Scalar,
+    ff: G1Affine,
+    aa: G2Affine,
+    yy: G1Affine,
+    z_r: Scalar,
+    z_alpha: Scalar,
 }
 
 impl ProofSharing {
+    pub fn new(ff: G1Affine, aa: G2Affine, yy: G1Affine, z_r: Scalar, z_alpha: Scalar) -> Self {
+        Self {
+            ff,
+            aa,
+            yy,
+            z_r,
+            z_alpha,
+        }
+    }
+
     /// Convert the sharing proof into a serializable form
     pub fn serialize(&self) -> ZKProofShare {
         ZKProofShare {

@@ -45,14 +45,26 @@ pub const CHALLENGE_MASK: usize = (1 << CHALLENGE_BITS) - 1;
 #[derive(Clone, Debug)]
 pub struct ChunkingInstance {
     g1_gen: G1Affine,
-    pub public_keys: Vec<G1Affine>,
+    public_keys: Vec<G1Affine>,
     //This should be Vec<[G1Affine; NUM_CHUNKS]>
-    pub ciphertext_chunks: Vec<Vec<G1Affine>>,
+    ciphertext_chunks: Vec<Vec<G1Affine>>,
     //This should have size NUM_CHUNKS
     randomizers_r: Vec<G1Affine>,
 }
 
 impl ChunkingInstance {
+    pub fn public_keys(&self) -> &[G1Affine] {
+        &self.public_keys
+    }
+
+    pub fn ciphertext_chunks(&self) -> &[Vec<G1Affine>] {
+        &self.ciphertext_chunks
+    }
+
+    pub fn randomizers_r(&self) -> &[G1Affine] {
+        &self.randomizers_r
+    }
+
     pub fn new(
         public_keys: Vec<G1Affine>,
         ciphertext_chunks: Vec<Vec<G1Affine>>,
