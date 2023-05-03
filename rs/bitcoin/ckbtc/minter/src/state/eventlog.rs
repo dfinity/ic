@@ -1,8 +1,8 @@
 use crate::lifecycle::init::InitArgs;
 use crate::lifecycle::upgrade::UpgradeArgs;
 use crate::state::{
-    ChangeOutput, CkBtcMinterState, FinalizedBtcRetrieval, FinalizedStatus, RetrieveBtcRequest,
-    SubmittedBtcTransaction, UtxoCheckStatus,
+    ChangeOutput, CkBtcMinterState, FinalizedBtcRetrieval, FinalizedStatus, Overdraft,
+    RetrieveBtcRequest, SubmittedBtcTransaction, UtxoCheckStatus,
 };
 use candid::Principal;
 use ic_btc_interface::Utxo;
@@ -99,6 +99,19 @@ pub enum Event {
     #[serde(rename = "ignored_utxo")]
     IgnoredUtxo { utxo: Utxo },
 
+    /// Indicates that the given KYT provider received owed fees.
+    #[serde(rename = "distributed_kyt_fee")]
+    DistributedKytFee {
+        /// The beneficiary.
+        #[serde(rename = "kyt_provider")]
+        kyt_provider: Principal,
+        /// The token amount minted.
+        #[serde(rename = "amount")]
+        amount: u64,
+        /// The mint block on the ledger.
+        #[serde(rename = "block_index")]
+        block_index: u64,
+    },
     /// Indicates that the KYT check for the specified address failed.
     #[serde(rename = "retrieve_btc_kyt_failed")]
     RetrieveBtcKytFailed {
@@ -213,6 +226,15 @@ pub fn replay(mut events: impl Iterator<Item = Event>) -> Result<CkBtcMinterStat
             }
             Event::IgnoredUtxo { utxo } => {
                 state.ignore_utxo(utxo);
+            }
+            Event::DistributedKytFee {
+                kyt_provider,
+                amount,
+                ..
+            } => {
+                if let Err(Overdraft(overdraft)) = state.distribute_kyt_fee(kyt_provider, amount) {
+                    return Err(ReplayLogError::InconsistentLog(format!("Attempted to distribute {amount} to {kyt_provider}, causing an overdraft of {overdraft}")));
+                }
             }
             Event::RetrieveBtcKytFailed { kyt_provider, .. } => {
                 *state.owed_kyt_amount.entry(kyt_provider).or_insert(0) += state.kyt_fee;

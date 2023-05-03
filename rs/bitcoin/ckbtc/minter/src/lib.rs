@@ -1,11 +1,13 @@
 use crate::address::BitcoinAddress;
 use crate::logs::{P0, P1};
 use crate::queries::WithdrawalFee;
+use crate::tasks::schedule_after;
 use candid::{CandidType, Deserialize};
 use ic_btc_interface::{MillisatoshiPerByte, Network, OutPoint, Satoshi, Utxo};
 use ic_canister_log::log;
 use ic_ic00_types::DerivationPath;
 use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc1::transfer::TransferError;
 use scopeguard::{guard, ScopeGuard};
 use serde::Serialize;
 use serde_bytes::ByteBuf;
@@ -748,8 +750,82 @@ fn distribute(amount: u64, n: u64) -> Vec<u64> {
     shares
 }
 
+pub async fn distribute_kyt_fees() {
+    use ic_icrc1_client_cdk::CdkRuntime;
+    use ic_icrc1_client_cdk::ICRC1Client;
+    use icrc_ledger_types::icrc1::transfer::TransferArg;
+
+    #[derive(Debug)]
+    enum MintError {
+        TransferError(TransferError),
+        CallError(i32, String),
+    }
+
+    async fn mint(amount: u64, to: candid::Principal) -> Result<u64, MintError> {
+        let client = ICRC1Client {
+            runtime: CdkRuntime,
+            ledger_canister_id: state::read_state(|s| s.ledger_id.get().into()),
+        };
+        client
+            .transfer(TransferArg {
+                from_subaccount: None,
+                to: Account {
+                    owner: to,
+                    subaccount: None,
+                },
+                fee: None,
+                created_at_time: None,
+                memo: None,
+                amount: candid::Nat::from(amount),
+            })
+            .await
+            .map_err(|(code, msg)| MintError::CallError(code, msg))?
+            .map_err(MintError::TransferError)
+    }
+
+    let fees_to_distribute = state::read_state(|s| s.owed_kyt_amount.clone());
+    for (provider, amount) in fees_to_distribute {
+        match mint(amount, provider).await {
+            Ok(block_index) => {
+                state::mutate_state(|s| {
+                    if let Err(state::Overdraft(overdraft)) =
+                        state::audit::distributed_kyt_fee(s, provider, amount, block_index)
+                    {
+                        // This should never happen because:
+                        //  1. The fee distribution task is guarded (at most one copy is active).
+                        //  2. Fee distribution is the only way to decrease the balance.
+                        log!(
+                            P0,
+                            "BUG[distribute_kyt_fees]: distributed {} to {} but the balance is only {}",
+                            tx::DisplayAmount(amount),
+                            provider,
+                            tx::DisplayAmount(amount - overdraft),
+                        );
+                    } else {
+                        log!(
+                            P0,
+                            "[distribute_kyt_fees]: minted {} to {}",
+                            tx::DisplayAmount(amount),
+                            provider,
+                        );
+                    }
+                });
+            }
+            Err(error) => {
+                log!(
+                    P0,
+                    "[distribute_kyt_fees]: failed to mint {} to {} with error: {:?}",
+                    tx::DisplayAmount(amount),
+                    provider,
+                    error
+                );
+            }
+        }
+    }
+}
+
 pub fn timer() {
-    use tasks::{pop_if_ready, schedule_after, TaskType};
+    use tasks::{pop_if_ready, TaskType};
 
     const INTERVAL_PROCESSING: Duration = Duration::from_secs(5);
 
@@ -779,6 +855,30 @@ pub fn timer() {
                 const FEE_ESTIMATE_DELAY: Duration = Duration::from_secs(60 * 60);
                 let _ = estimate_fee_per_vbyte().await;
                 schedule_after(FEE_ESTIMATE_DELAY, TaskType::RefreshFeePercentiles);
+            });
+        }
+        TaskType::DistributeKytFee => {
+            ic_cdk::spawn(async {
+                let _guard = match crate::guard::DistributeKytFeeGuard::new() {
+                    Some(guard) => guard,
+                    None => return,
+                };
+
+                const MAINNET_KYT_FEE_DISTRIBUTION_PERIOD: Duration =
+                    Duration::from_secs(24 * 60 * 60);
+
+                match crate::state::read_state(|s| s.btc_network) {
+                    Network::Mainnet | Network::Testnet => {
+                        distribute_kyt_fees().await;
+                        schedule_after(
+                            MAINNET_KYT_FEE_DISTRIBUTION_PERIOD,
+                            TaskType::DistributeKytFee,
+                        );
+                    }
+                    // We use a debug canister build exposing an endpoint
+                    // triggering the fee distribution in tests.
+                    Network::Regtest => {}
+                }
             });
         }
     }

@@ -103,6 +103,33 @@ pub async fn wait_for_bitcoin_balance<'a>(
     }
 }
 
+/// Wait for the expected balance to be available at the given account.
+/// Timeout after SHORT_TIMEOUT if the expected balance is not reached.
+pub async fn wait_for_ledger_balance<'a>(
+    ledger_agent: &Icrc1Agent,
+    logger: &Logger,
+    expected_balance: Nat,
+    account: Account,
+) {
+    let mut balance: Nat = Nat::from(0);
+    let start = Instant::now();
+    while balance != expected_balance {
+        if start.elapsed() >= SHORT_TIMEOUT {
+            panic!("wait_for_ledger_balance timeout");
+        };
+        balance = ledger_agent
+            .balance_of(account, CallMode::Query)
+            .await
+            .expect("Error while calling balance_of");
+        debug!(
+            &logger,
+            "[wait_for_ledger_balance] current balance: {}, expecting {}",
+            balance,
+            expected_balance
+        );
+    }
+}
+
 /// Wait until we have a tx in btc mempool
 /// Timeout after SHORT_TIMEOUT if the minter doesn't successfully find a new tx in the timeframe.
 pub async fn wait_for_mempool_change(btc_rpc: &Client, logger: &Logger) -> Vec<Txid> {

@@ -81,6 +81,20 @@ pub fn ignore_utxo(state: &mut CkBtcMinterState, utxo: Utxo) {
     state.ignore_utxo(utxo);
 }
 
+pub fn distributed_kyt_fee(
+    state: &mut CkBtcMinterState,
+    kyt_provider: Principal,
+    amount: u64,
+    block_index: u64,
+) -> Result<(), super::Overdraft> {
+    record_event(&Event::DistributedKytFee {
+        kyt_provider,
+        amount,
+        block_index,
+    });
+    state.distribute_kyt_fee(kyt_provider, amount)
+}
+
 pub fn retrieve_btc_kyt_failed(
     state: &mut CkBtcMinterState,
     owner: Principal,

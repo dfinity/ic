@@ -31,6 +31,7 @@ fn init(args: MinterArg) {
             lifecycle::init::init(args);
             schedule_now(TaskType::ProcessLogic);
             schedule_now(TaskType::RefreshFeePercentiles);
+            schedule_now(TaskType::DistributeKytFee);
 
             #[cfg(feature = "self_check")]
             ok_or_die(check_invariants())
@@ -72,6 +73,13 @@ fn check_invariants() -> Result<(), String> {
     })
 }
 
+#[cfg(feature = "self_check")]
+#[candid_method(update)]
+#[update]
+async fn distribute_kyt_fee() {
+    ic_ckbtc_minter::distribute_kyt_fees().await;
+}
+
 fn check_postcondition<T>(t: T) -> T {
     #[cfg(feature = "self_check")]
     ok_or_die(check_invariants());
@@ -103,6 +111,8 @@ fn post_upgrade(minter_arg: Option<MinterArg>) {
     }
     lifecycle::upgrade::post_upgrade(upgrade_arg);
     schedule_now(TaskType::ProcessLogic);
+    schedule_now(TaskType::RefreshFeePercentiles);
+    schedule_now(TaskType::DistributeKytFee);
 }
 
 #[candid_method(update)]

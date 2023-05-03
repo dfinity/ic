@@ -39,7 +39,7 @@ pub enum UtxoStatus {
     },
 }
 
-enum ErrorCode {
+pub enum ErrorCode {
     ConfigurationError = 1,
 }
 

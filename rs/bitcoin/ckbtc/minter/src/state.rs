@@ -17,7 +17,8 @@ use crate::logs::P0;
 use crate::{address::BitcoinAddress, ECDSAPublicKey};
 use candid::{Deserialize, Principal};
 use ic_base_types::CanisterId;
-use ic_btc_interface::{Network, OutPoint, Utxo};
+pub use ic_btc_interface::Network;
+use ic_btc_interface::{OutPoint, Utxo};
 use ic_canister_log::log;
 use icrc_ledger_types::icrc1::account::Account;
 use serde::Serialize;
@@ -195,6 +196,10 @@ impl UtxoCheckStatus {
     }
 }
 
+/// Indicates that fee distribution overdrafted.
+#[derive(Clone, Copy, Debug)]
+pub struct Overdraft(pub u64);
+
 /// The state of the ckBTC Minter.
 ///
 /// Every piece of state of the Minter should be stored as field of this struct.
@@ -278,6 +283,9 @@ pub struct CkBtcMinterState {
     /// Process one timer event at a time.
     #[serde(skip)]
     pub is_timer_running: bool,
+
+    #[serde(skip)]
+    pub is_distributing_fee: bool,
 
     /// The mode in which the minter runs.
     pub mode: Mode,
@@ -715,6 +723,35 @@ impl CkBtcMinterState {
         }
     }
 
+    /// Decreases the owed amount for the given provider by the amount.
+    /// Returns an error if the distributed amount exceeds the amount owed to the provider.
+    ///
+    /// NOTE: The owed balance decreases even in the case of an overdraft.
+    /// That's because we mint tokens on the ledger before calling this method, so preserving the
+    /// original owed amount does not make sense.
+    fn distribute_kyt_fee(&mut self, provider: Principal, amount: u64) -> Result<(), Overdraft> {
+        use std::collections::btree_map::Entry;
+        if amount == 0 {
+            return Ok(());
+        }
+        match self.owed_kyt_amount.entry(provider) {
+            Entry::Occupied(mut entry) => {
+                let balance = *entry.get();
+                if amount > balance {
+                    entry.remove();
+                    Err(Overdraft(amount - balance))
+                } else {
+                    *entry.get_mut() -= amount;
+                    if *entry.get() == 0 {
+                        entry.remove();
+                    }
+                    Ok(())
+                }
+            }
+            Entry::Vacant(_) => Err(Overdraft(amount)),
+        }
+    }
+
     /// Checks whether the internal state of the minter matches the other state
     /// semantically (the state holds the same data, but maybe in a slightly
     /// different form).
@@ -841,6 +878,7 @@ impl From<InitArgs> for CkBtcMinterState {
             utxos_state_addresses: Default::default(),
             finalized_utxos: Default::default(),
             is_timer_running: false,
+            is_distributing_fee: false,
             mode: args.mode,
             last_fee_per_vbyte: vec![1; 100],
             kyt_fee: args
