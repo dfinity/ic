@@ -49,7 +49,7 @@ use dfn_protobuf::ToProto;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_crypto_sha::Sha256;
 use ic_nervous_system_common::{
-    ledger, ledger::IcpLedger, validate_proposal_url, NervousSystemError,
+    cmc::CMC, ledger, ledger::IcpLedger, validate_proposal_url, NervousSystemError,
 };
 use ic_nns_common::{
     pb::v1::{NeuronId, ProposalId},
@@ -2007,13 +2007,6 @@ impl fmt::Display for RewardEvent {
             self.total_available_e8s_equivalent,
         )
     }
-}
-
-/// A trait defining common patterns for accessing the CMC canister.
-#[async_trait]
-pub trait CMC: Send + Sync {
-    /// Returns the current neuron maturity modulation.
-    async fn neuron_maturity_modulation(&mut self) -> Result<i32, String>;
 }
 
 /// A general trait for the environment in which governance is running.

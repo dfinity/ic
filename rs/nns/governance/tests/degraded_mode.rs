@@ -4,10 +4,10 @@ use assert_matches::assert_matches;
 use async_trait::async_trait;
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_nervous_system_common::{ledger::IcpLedger, NervousSystemError};
+use ic_nervous_system_common::{cmc::CMC, ledger::IcpLedger, NervousSystemError};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_governance::{
-    governance::{Environment, Governance, CMC},
+    governance::{Environment, Governance},
     pb::v1::{
         governance_error::ErrorType,
         manage_neuron::{

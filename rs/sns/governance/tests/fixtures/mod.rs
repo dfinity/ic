@@ -3,13 +3,13 @@ use async_trait::async_trait;
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_ledger_core::Tokens;
-use ic_nervous_system_common::{NervousSystemError, E8};
+use ic_nervous_system_common::{cmc::CMC, NervousSystemError, E8};
 use ic_sns_governance::{
     governance::{Governance, ValidGovernanceProto},
     ledger::ICRC1Ledger,
     pb::v1::{
         get_neuron_response, get_proposal_response,
-        governance::{Mode, SnsMetadata},
+        governance::{MaturityModulation, Mode, SnsMetadata},
         manage_neuron,
         manage_neuron::{
             AddNeuronPermissions, MergeMaturity, RegisterVote, RemoveNeuronPermissions,
@@ -96,7 +96,9 @@ impl ICRC1Ledger for LedgerFixture {
             .get(&to)
             .ok_or_else(|| NervousSystemError::new_with_message("Target account doesn't exist"))?;
 
-        // If this is not a minting transfer, deduct the funds being transfered from the subaccount
+        // Only change SNS governance's SNS token balance when transferring from
+        // a non-default account. This is because when transferring from the
+        // default account, the "transfer" is actually a minting transaction.
         if from_subaccount.is_some() {
             let from_e8s = ledger_fixture_state
                 .accounts
@@ -200,6 +202,26 @@ impl LedgerFixtureBuilder {
 
     pub fn get_account_balance(&self, ident: Account) -> Option<u64> {
         self.accounts.get(&ident).copied()
+    }
+}
+
+#[derive(Default)]
+pub struct CmcFixture {
+    maturity_modulation: i32,
+}
+
+impl CmcFixture {
+    pub fn new(maturity_modulation: i32) -> Self {
+        Self {
+            maturity_modulation,
+        }
+    }
+}
+
+#[async_trait]
+impl CMC for CmcFixture {
+    async fn neuron_maturity_modulation(&mut self) -> Result<i32, String> {
+        Ok(self.maturity_modulation)
     }
 }
 
@@ -798,6 +820,7 @@ pub struct GovernanceCanisterFixtureBuilder {
     icp_ledger_transforms: Vec<LedgerTransform>,
     sns_ledger_builder: LedgerFixtureBuilder,
     icp_ledger_builder: LedgerFixtureBuilder,
+    cmc_fixture: CmcFixture,
 }
 
 impl Default for GovernanceCanisterFixtureBuilder {
@@ -825,6 +848,10 @@ impl Default for GovernanceCanisterFixtureBuilder {
                 mode: Mode::Normal as i32,
                 sns_metadata: Some(SnsMetadata::with_default_values_for_testing()),
                 parameters: Some(NervousSystemParameters::with_default_values()),
+                maturity_modulation: Some(MaturityModulation {
+                    current_basis_points: Some(0),
+                    updated_at_timestamp_seconds: Some(1),
+                }),
                 ..Default::default()
             },
             sns_ledger_transforms: Vec::default(),
@@ -838,6 +865,7 @@ impl Default for GovernanceCanisterFixtureBuilder {
                 governance_canister_id,
                 icp_ledger_canister_id,
             ),
+            cmc_fixture: CmcFixture::default(),
         }
     }
 }
@@ -884,6 +912,7 @@ impl GovernanceCanisterFixtureBuilder {
                 Box::new(environment_fixture),
                 sns_ledger,
                 icp_ledger,
+                Box::new(self.cmc_fixture),
             ),
             initial_state: None,
         };
@@ -907,6 +936,11 @@ impl GovernanceCanisterFixtureBuilder {
             )
             .create();
         (fixture, user_principal, neuron_id)
+    }
+
+    pub fn set_maturity_modulation(mut self, maturity_modulation: i32) -> Self {
+        self.cmc_fixture = CmcFixture::new(maturity_modulation);
+        self
     }
 
     pub fn set_start_time(mut self, seconds: u64) -> Self {

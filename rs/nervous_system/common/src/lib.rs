@@ -25,8 +25,11 @@ use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_ic00_types::{CanisterIdRecord, CanisterStatusResultV2, IC_00};
 use ic_ledger_core::Tokens;
 
+pub mod cmc;
 pub mod ledger;
 pub mod stable_mem_utils;
+
+pub const BASIS_POINTS_PER_UNITY: u64 = 10_000;
 
 // 10^8
 pub const E8: u64 = 100_000_000;

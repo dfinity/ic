@@ -26,6 +26,7 @@ use ic_base_types::CanisterId;
 use ic_canister_log::log;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_nervous_system_common::{
+    cmc::CMCCanister,
     ledger::IcpLedgerCanister,
     serve_logs, serve_logs_v2, serve_metrics,
     stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter},
@@ -38,7 +39,8 @@ use ic_sns_governance::{
     logs::{ERROR, INFO},
     pb::v1::{
         governance, ClaimSwapNeuronsRequest, ClaimSwapNeuronsResponse,
-        FailStuckUpgradeInProgressRequest, FailStuckUpgradeInProgressResponse, GetMetadataRequest,
+        FailStuckUpgradeInProgressRequest, FailStuckUpgradeInProgressResponse,
+        GetMaturityModulationRequest, GetMaturityModulationResponse, GetMetadataRequest,
         GetMetadataResponse, GetMode, GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal,
         GetProposalResponse, GetRunningSnsVersionRequest, GetRunningSnsVersionResponse,
         GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
@@ -218,6 +220,7 @@ fn canister_init_(init_payload: GovernanceProto) {
             Box::new(CanisterEnv::new()),
             Box::new(LedgerCanister::new(ledger_canister_id)),
             Box::new(IcpLedgerCanister::new(NNS_LEDGER_CANISTER_ID)),
+            Box::new(CMCCanister::new()),
         ));
     }
 }
@@ -580,6 +583,21 @@ fn claim_swap_neurons_(
     claim_swap_neurons_request: ClaimSwapNeuronsRequest,
 ) -> ClaimSwapNeuronsResponse {
     governance_mut().claim_swap_neurons(claim_swap_neurons_request, caller())
+}
+
+/// This is not really useful to the public. It is, however, useful to integration tests.
+#[export_name = "canister_query get_maturity_modulation"]
+fn get_maturity_modulation() {
+    log!(INFO, "get_maturity_modulation");
+    over(candid_one, get_maturity_modulation_)
+}
+
+/// Internal method for calling get_maturity_modulation.
+#[candid_method(update, rename = "get_maturity_modulation")]
+fn get_maturity_modulation_(
+    request: GetMaturityModulationRequest,
+) -> GetMaturityModulationResponse {
+    governance().get_maturity_modulation(request)
 }
 
 /// The canister's heartbeat.

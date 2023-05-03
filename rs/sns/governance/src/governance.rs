@@ -21,8 +21,8 @@ use crate::{
             get_neuron_response, get_proposal_response,
             governance::{
                 self, neuron_in_flight_command,
-                neuron_in_flight_command::Command as InFlightCommand, NeuronInFlightCommand,
-                SnsMetadata, UpgradeInProgress, Version,
+                neuron_in_flight_command::Command as InFlightCommand, MaturityModulation,
+                NeuronInFlightCommand, SnsMetadata, UpgradeInProgress, Version,
             },
             governance_error::ErrorType,
             manage_neuron::{
@@ -40,7 +40,8 @@ use crate::{
             Account as AccountProto, Ballot, ClaimSwapNeuronsError, ClaimSwapNeuronsRequest,
             ClaimSwapNeuronsResponse, ClaimedSwapNeuronStatus, DefaultFollowees,
             DeregisterDappCanisters, DisburseMaturityInProgress, Empty,
-            ExecuteGenericNervousSystemFunction, GetMetadataRequest, GetMetadataResponse, GetMode,
+            ExecuteGenericNervousSystemFunction, GetMaturityModulationRequest,
+            GetMaturityModulationResponse, GetMetadataRequest, GetMetadataResponse, GetMode,
             GetModeResponse, GetNeuron, GetNeuronResponse, GetProposal, GetProposalResponse,
             GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
             Governance as GovernanceProto, GovernanceError, ListNervousSystemFunctionsResponse,
@@ -71,9 +72,10 @@ use ic_canister_profiler::{measure_span, SpanStats};
 use ic_ic00_types::CanisterInstallMode;
 use ic_ledger_core::Tokens;
 use ic_nervous_system_common::{
+    cmc::CMC,
     i2d,
     ledger::{self, compute_distribution_subaccount_bytes},
-    NervousSystemError,
+    NervousSystemError, BASIS_POINTS_PER_UNITY, SECONDS_PER_DAY,
 };
 use ic_nervous_system_root::change_canister::ChangeCanisterProposal;
 use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
@@ -116,6 +118,7 @@ pub const EXECUTE_NERVOUS_SYSTEM_FUNCTION_PAYLOAD_LISTING_BYTES_MAX: usize = 100
 
 const MAX_HEAP_SIZE_IN_KIB: usize = 4 * 1024 * 1024;
 const WASM32_PAGE_SIZE_IN_KIB: usize = 64;
+pub const ONE_DAY_SECONDS: u64 = 24 * 60 * 60;
 const SEVEN_DAYS_IN_SECONDS: u64 = 7 * 24 * 3600;
 
 /// The max number of wasm32 pages for the heap after which we consider that there
@@ -398,6 +401,38 @@ impl GovernanceProto {
             .cloned()
             .expect("No version set in Governance.")
     }
+
+    /// Returns 0 if maturity modulation is disabled (per
+    /// nervous_system_parameters.maturity_modulation_disabled). Otherwise,
+    /// returns the value in self.maturity_modulation.current_basis_points. If
+    /// current_basis_points is missing, returns Err.
+    fn effective_maturity_modulation_basis_points(&self) -> Result<i32, GovernanceError> {
+        let maturity_modulation_disabled = self
+            .parameters
+            .as_ref()
+            .map(|nervous_system_parameters| {
+                nervous_system_parameters
+                    .maturity_modulation_disabled
+                    .unwrap_or_default()
+            })
+            .unwrap_or_default();
+
+        if maturity_modulation_disabled {
+            return Ok(0);
+        }
+
+        self.maturity_modulation
+            .as_ref()
+            .and_then(|maturity_modulation| maturity_modulation.current_basis_points)
+            .ok_or_else(|| {
+                GovernanceError::new_with_message(
+                    ErrorType::Unavailable,
+                    "Maturity modulation not known. Retrying later might work. \
+                     If this persists, there is probably a problem with retrieving \
+                     the maturity modulation value from the Cycles Minting Canister.",
+                )
+            })
+    }
 }
 
 /// This follows the following pattern:
@@ -597,6 +632,9 @@ pub struct Governance {
     // Implementation of the interface pointing to the NNS's ICP ledger canister
     nns_ledger: Box<dyn ICRC1Ledger>,
 
+    /// Implementation of the interface with the CMC canister.
+    cmc: Box<dyn CMC>,
+
     // Stores information about the instruction usage of various "spans", which
     // map roughly to the execution of a single update call.
     pub profiling_information: &'static LocalKey<RefCell<SpanStats>>,
@@ -638,6 +676,7 @@ impl Governance {
         env: Box<dyn Environment>,
         ledger: Box<dyn ICRC1Ledger>,
         nns_ledger: Box<dyn ICRC1Ledger>,
+        cmc: Box<dyn CMC>,
     ) -> Self {
         let mut proto = proto.into_inner();
         let now = env.now();
@@ -677,6 +716,7 @@ impl Governance {
             ledger,
             profiling_information: &PROFILING_INFORMATION,
             nns_ledger,
+            cmc,
             function_followee_index: BTreeMap::new(),
             principal_to_neuron_ids_index: BTreeMap::new(),
             closest_proposal_deadline_timestamp_seconds: 0,
@@ -1548,6 +1588,9 @@ impl Governance {
         let neuron = self.get_neuron_result(id)?;
         neuron.check_authorized(caller, NeuronPermissionType::DisburseMaturity)?;
 
+        let maturity_modulation_basis_points =
+            self.proto.effective_maturity_modulation_basis_points()?;
+
         // If no account was provided, transfer to the caller's account.
         let to_account: Account = match disburse_maturity.to_account.as_ref() {
             None => Account {
@@ -1574,12 +1617,35 @@ impl Governance {
                 "The percentage of maturity to disburse must be a value between 1 and 100 (inclusive)."));
         }
 
-        let maturity_to_disburse = neuron
+        // The amount to deduct = the amout in the neuron * request.percentage / 100.
+        let maturity_to_deduct = neuron
             .maturity_e8s_equivalent
             .checked_mul(disburse_maturity.percentage_to_disburse as u64)
             .expect("Overflow while processing maturity to disburse.")
             .checked_div(100)
-            .expect("Error when processing maturity to disburse.");
+            .expect("Error when processing maturity to disburse.")
+            as u128;
+
+        // Modulate maturity_to_deduct. That is, multiply by 1 + X where
+        // X = maturity_modulation_basis_points / 10_000.
+        //
+        // From the fact that maturity_to_deduct is converted from u64 to u128,
+        // it should not be possible that any of the lines that look like they
+        // might panic at face value actually panic.
+        let maturity_to_disburse: u64 = u64::try_from(
+            maturity_to_deduct
+                .checked_mul(
+                    (BASIS_POINTS_PER_UNITY as i32 + maturity_modulation_basis_points)
+                        .try_into()
+                        .unwrap(),
+                )
+                .unwrap()
+                .checked_div(BASIS_POINTS_PER_UNITY as u128)
+                .unwrap(),
+        )
+        .expect("Couldn't convert maturity to u64");
+
+        let maturity_to_deduct = maturity_to_deduct as u64;
 
         let transaction_fee_e8s = self.transaction_fee_e8s_or_panic();
         if maturity_to_disburse < transaction_fee_e8s {
@@ -1604,7 +1670,7 @@ impl Governance {
         let mut neuron = self.get_neuron_result_mut(id)?;
         neuron.maturity_e8s_equivalent = neuron
             .maturity_e8s_equivalent
-            .saturating_sub(maturity_to_disburse);
+            .saturating_sub(maturity_to_deduct);
         neuron
             .disburse_maturity_in_progress
             .push(disbursement_in_progress);
@@ -3927,13 +3993,9 @@ impl Governance {
             C::StakeMaturity(m) => self
                 .stake_maturity_of_neuron(&neuron_id, caller, m)
                 .map(ManageNeuronResponse::stake_maturity_response),
-            C::DisburseMaturity(_d) => Err(GovernanceError::new_with_message(
-                ErrorType::Unavailable,
-                "disburse_maturity is currently disabled",
-            )),
-            // TODO(NNS1-2021): re-enable disburse_maturity
-            // self.disburse_maturity(&neuron_id, caller, d)
-            //     .map(ManageNeuronResponse::disburse_maturity_response),
+            C::DisburseMaturity(d) => self
+                .disburse_maturity(&neuron_id, caller, d)
+                .map(ManageNeuronResponse::disburse_maturity_response),
             C::Split(s) => self
                 .split_neuron(&neuron_id, caller, s)
                 .await
@@ -4286,6 +4348,10 @@ impl Governance {
             }
         }
 
+        if self.should_update_maturity_modulation() {
+            self.update_maturity_modulation().await;
+        }
+
         self.maybe_finalize_disburse_maturity().await;
 
         measure_span(
@@ -4295,6 +4361,56 @@ impl Governance {
         );
 
         measure_span(self.profiling_information, "maybe_gc", || self.maybe_gc());
+    }
+
+    fn should_update_maturity_modulation(&self) -> bool {
+        // Check if we're already updating the neuron maturity modulation.
+        let updated_at_timestamp_seconds = self
+            .proto
+            .maturity_modulation
+            .as_ref()
+            .and_then(|maturity_modulation| maturity_modulation.updated_at_timestamp_seconds)
+            .unwrap_or_default();
+
+        let age_seconds = self.env.now() - updated_at_timestamp_seconds;
+        age_seconds >= SECONDS_PER_DAY
+    }
+
+    async fn update_maturity_modulation(&mut self) {
+        if !self.should_update_maturity_modulation() {
+            return;
+        };
+
+        // Fetch new maturity modulation.
+        let maturity_modulation = self.cmc.neuron_maturity_modulation().await;
+
+        // Unwrap response.
+        let maturity_modulation = match maturity_modulation {
+            Ok(ok) => ok,
+            Err(err) => {
+                println!(
+                    "{}Couldn't update maturity modulation. Error: {}",
+                    log_prefix(),
+                    err,
+                );
+                return;
+            }
+        };
+
+        // Construct new MaturityModulation.
+        let new_maturity_modulation = MaturityModulation {
+            current_basis_points: Some(maturity_modulation),
+            updated_at_timestamp_seconds: Some(self.env.now()),
+        };
+        println!(
+            "{}Updating maturity modulation to {:#?}. Previously: {:#?}",
+            log_prefix(),
+            new_maturity_modulation,
+            self.proto.maturity_modulation
+        );
+
+        // Store the new value.
+        self.proto.maturity_modulation = Some(new_maturity_modulation);
     }
 
     /// Returns `true` if rewards should be distributed (which is the case if
@@ -5002,6 +5118,15 @@ impl Governance {
         }
     }
 
+    pub fn get_maturity_modulation(
+        &self,
+        _: GetMaturityModulationRequest,
+    ) -> GetMaturityModulationResponse {
+        GetMaturityModulationResponse {
+            maturity_modulation: self.proto.maturity_modulation.clone(),
+        }
+    }
+
     /// Returns the ledger account identifier of the minting account on the ledger canister
     /// (currently an account controlled by the governance canister).
     pub fn governance_minting_account(&self) -> Account {
@@ -5131,8 +5256,8 @@ mod tests {
     use ic_canister_client_sender::Sender;
     use ic_ic00_types::CanisterIdRecord;
     use ic_nervous_system_common::{
-        assert_is_ok, ledger::compute_neuron_staking_subaccount_bytes, E8, SECONDS_PER_DAY,
-        START_OF_2022_TIMESTAMP_SECONDS,
+        assert_is_err, assert_is_ok, cmc::FakeCmc, ledger::compute_neuron_staking_subaccount_bytes,
+        E8, SECONDS_PER_DAY, START_OF_2022_TIMESTAMP_SECONDS,
     };
     use ic_nervous_system_common_test_keys::{
         TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL, TEST_USER1_KEYPAIR,
@@ -5382,6 +5507,7 @@ mod tests {
                         transfer_funds_continue: transfer_funds_continue.clone(),
                     }),
                     Box::new(DoNothingLedger {}),
+                    Box::new(FakeCmc::new()),
                 );
 
                 // Step 2: Execute code under test.
@@ -5799,6 +5925,7 @@ mod tests {
             Box::<NativeEnvironment>::default(),
             Box::new(DoNothingLedger {}),
             Box::new(DoNothingLedger {}),
+            Box::new(FakeCmc::new()),
         );
         let swap_canister_id = governance.proto.swap_canister_id_or_panic();
 
@@ -5833,6 +5960,7 @@ mod tests {
             Box::new(NativeEnvironment::new(Some(CanisterId::from_u64(350519)))),
             Box::new(DoNothingLedger {}),
             Box::new(DoNothingLedger {}),
+            Box::new(FakeCmc::new()),
         );
 
         // Step 2: Run code under test.
@@ -5956,6 +6084,7 @@ mod tests {
             Box::new(DummyEnvironment::new(now.clone())),
             Box::new(DoNothingLedger {}),
             Box::new(DoNothingLedger {}),
+            Box::new(FakeCmc::new()),
         );
         // Step 1.3: Record original last_reward_event. That way, we can detect
         // changes (there aren't supposed to be any).
@@ -6121,6 +6250,7 @@ mod tests {
             Box::new(NativeEnvironment::new(Some(CanisterId::from(1000)))),
             Box::new(DoNothingLedger {}),
             Box::new(DoNothingLedger {}),
+            Box::new(FakeCmc::new()),
         );
 
         // Step 2: Run code under test.
@@ -6183,6 +6313,7 @@ mod tests {
             Box::new(NativeEnvironment::new(Some(CanisterId::from(1000)))),
             Box::new(DoNothingLedger {}),
             Box::new(DoNothingLedger {}),
+            Box::new(FakeCmc::new()),
         );
 
         // Step 2: Run code under test.
@@ -6248,6 +6379,7 @@ mod tests {
             Box::new(NativeEnvironment::new(Some(CanisterId::from(1000)))),
             Box::new(DoNothingLedger {}),
             Box::new(DoNothingLedger {}),
+            Box::new(FakeCmc::new()),
         );
 
         // Step 2: Run code under test.
@@ -6359,6 +6491,7 @@ mod tests {
             Box::<NativeEnvironment>::default(),
             Box::new(DoNothingLedger {}),
             Box::new(DoNothingLedger {}),
+            Box::new(FakeCmc::new()),
         );
 
         // Step 2: Execute code under test.
@@ -6585,6 +6718,7 @@ mod tests {
             Box::new(env),
             Box::new(DoNothingLedger {}),
             Box::new(DoNothingLedger {}),
+            Box::new(FakeCmc::new()),
         );
 
         // When we execute the proposal
@@ -6877,6 +7011,7 @@ mod tests {
             Box::new(env),
             Box::new(AlwaysSucceedingLedger {}),
             Box::new(DoNothingLedger {}),
+            Box::new(FakeCmc::new()),
         );
 
         // Get the initial reward event for comparison later
@@ -7002,6 +7137,7 @@ mod tests {
             Box::new(env),
             Box::new(DoNothingLedger {}),
             Box::new(DoNothingLedger {}),
+            Box::new(FakeCmc::new()),
         );
 
         assert_eq!(
@@ -7108,6 +7244,7 @@ mod tests {
             Box::new(env),
             Box::new(DoNothingLedger {}),
             Box::new(DoNothingLedger {}),
+            Box::new(FakeCmc::new()),
         );
 
         assert_eq!(
@@ -7232,6 +7369,7 @@ mod tests {
             Box::new(env),
             Box::new(DoNothingLedger {}),
             Box::new(DoNothingLedger {}),
+            Box::new(FakeCmc::new()),
         );
 
         assert_eq!(
@@ -7364,6 +7502,7 @@ mod tests {
             Box::new(env),
             Box::new(DoNothingLedger {}),
             Box::new(DoNothingLedger {}),
+            Box::new(FakeCmc::new()),
         );
 
         assert_eq!(
@@ -7495,6 +7634,7 @@ mod tests {
             Box::new(env),
             Box::new(DoNothingLedger {}),
             Box::new(DoNothingLedger {}),
+            Box::new(FakeCmc::new()),
         );
 
         // After we run our periodic tasks, the version should be marked as successful
@@ -7609,6 +7749,7 @@ mod tests {
             Box::new(env),
             Box::new(DoNothingLedger {}),
             Box::new(DoNothingLedger {}),
+            Box::new(FakeCmc::new()),
         );
 
         assert_eq!(
@@ -7714,6 +7855,7 @@ mod tests {
             Box::new(env),
             Box::new(DoNothingLedger {}),
             Box::new(DoNothingLedger {}),
+            Box::new(FakeCmc::new()),
         );
 
         assert_eq!(
@@ -7791,6 +7933,7 @@ mod tests {
             Box::new(env),
             Box::new(DoNothingLedger {}),
             Box::new(DoNothingLedger {}),
+            Box::new(FakeCmc::new()),
         );
 
         assert_eq!(
@@ -7902,6 +8045,7 @@ mod tests {
             Box::new(env),
             Box::new(DoNothingLedger {}),
             Box::new(DoNothingLedger {}),
+            Box::new(FakeCmc::new()),
         );
 
         // Helper function to assert failures.
@@ -8111,6 +8255,7 @@ mod tests {
             Box::new(env),
             Box::new(DoNothingLedger {}),
             Box::new(DoNothingLedger {}),
+            Box::new(FakeCmc::new()),
         );
 
         let valid = NervousSystemFunction {
@@ -8137,6 +8282,7 @@ mod tests {
             Box::<NativeEnvironment>::default(),
             Box::new(DoNothingLedger {}),
             Box::new(DoNothingLedger {}),
+            Box::new(FakeCmc::new()),
         )
     }
 
@@ -8470,7 +8616,13 @@ mod tests {
             maturity_e8s_equivalent: earned_maturity_e8s,
             ..Default::default()
         };
-        let mut governance_proto = basic_governance_proto();
+        let mut governance_proto = GovernanceProto {
+            maturity_modulation: Some(MaturityModulation {
+                current_basis_points: Some(0), // Neither positive nor negative.
+                updated_at_timestamp_seconds: Some(1),
+            }),
+            ..basic_governance_proto()
+        };
         governance_proto
             .neurons
             .insert(neuron_id.to_string(), neuron);
@@ -8836,6 +8988,7 @@ mod tests {
             Box::new(NativeEnvironment::new(Some(canister_id))),
             Box::new(AlwaysSucceedingLedger {}),
             Box::new(DoNothingLedger {}),
+            Box::new(FakeCmc::new()),
         );
         SplitNeuronTestSetup {
             controller,
@@ -9064,6 +9217,7 @@ mod tests {
             Box::new(env),
             Box::new(DoNothingLedger {}),
             Box::new(DoNothingLedger {}),
+            Box::new(FakeCmc::new()),
         );
 
         let list_that_should_fail = vec![
@@ -9130,5 +9284,69 @@ mod tests {
             nns_function_invalid_target,
             result
         );
+    }
+
+    #[test]
+    fn test_effective_maturity_modulation_basis_points() {
+        let mut governance_proto = GovernanceProto {
+            maturity_modulation: Some(MaturityModulation {
+                current_basis_points: Some(42),
+                updated_at_timestamp_seconds: Some(1),
+            }),
+            parameters: Some(NervousSystemParameters {
+                maturity_modulation_disabled: None, // Maturity modulation is enabled.
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        assert_eq!(
+            governance_proto.effective_maturity_modulation_basis_points(),
+            Ok(42),
+            "{:#?}",
+            governance_proto,
+        );
+
+        governance_proto.parameters = Some(NervousSystemParameters {
+            maturity_modulation_disabled: Some(false), // Behaves the same as None.
+            ..Default::default()
+        });
+
+        assert_eq!(
+            governance_proto.effective_maturity_modulation_basis_points(),
+            Ok(42),
+            "{:#?}",
+            governance_proto,
+        );
+
+        governance_proto.parameters = Some(NervousSystemParameters {
+            maturity_modulation_disabled: Some(true), // Causes maturity_modulation to be ignored.
+            ..Default::default()
+        });
+
+        assert_eq!(
+            governance_proto.effective_maturity_modulation_basis_points(),
+            Ok(0),
+            "{:#?}",
+            governance_proto,
+        );
+
+        let governance_proto = GovernanceProto {
+            maturity_modulation: Some(MaturityModulation {
+                current_basis_points: None, // No value yet.
+                updated_at_timestamp_seconds: Some(1),
+            }),
+            parameters: Some(NervousSystemParameters {
+                maturity_modulation_disabled: Some(false), // Maturity modulation is enabled.
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let result = governance_proto.effective_maturity_modulation_basis_points();
+        assert_is_err!(result.clone());
+        let err = result.unwrap_err();
+        assert_eq!(err.error_type, ErrorType::Unavailable as i32);
+        assert!(err.error_message.contains("retriev"));
     }
 }
