@@ -6,9 +6,10 @@ source "$NNS_TOOLS_DIR/lib/include.sh"
 
 help() {
     print_green "
-Usage: $0 <CANISTER_NAME> <TARGET_VERSION> (<OUTPUT_FILE>)
+Usage: $0 <CANISTER_NAME> <TARGET_VERSION> (<CANDID_ARGS> <OUTPUT_FILE>)
   CANISTER_NAME: Canister name to be deployed (from rs/nns/canister_ids.json)
   TARGET_VERSION: Git hash of version to be deployed to production
+  CANDID_ARGS: Candid string to encode as as initial arguments for the canister. Empty string to ignore
   OUTPUT_FILE: File to write contents to (otherwise stdout is used)
 
   Environment_variables:
@@ -28,7 +29,8 @@ fi
 CANISTER_NAME=$1
 NEXT=$2
 LAST=${PREVIOUS_COMMIT:-$(nns_canister_git_version ic "$CANISTER_NAME")}
-OUTPUT_FILE=${3:-}
+CANDID_ARGS=${3:-}
+OUTPUT_FILE=${4:-}
 
 IC_ROOT=$(repo_root)
 
@@ -46,4 +48,4 @@ current_branch_has_commit $NEXT || (
     exit 1
 )
 
-generate_nns_proposal_text "$LAST" "$NEXT" "$CANISTER_NAME" "$OUTPUT_FILE"
+generate_nns_upgrade_proposal_text "$LAST" "$NEXT" "$CANISTER_NAME" "$CANDID_ARGS" "$OUTPUT_FILE"
