@@ -111,3 +111,30 @@ canister_has_file_contents_installed() {
     echo >&2 "Canister is running with hash $WASM_HASH as expected"
     return 0
 }
+
+wait_for_canister_has_version() {
+    local NNS_URL=$1
+    local CANISTER_NAME=$2
+    local VERSION=$3
+    WASM_GZ=$(get_nns_canister_wasm_gz_for_type "$CANISTER_NAME" "$VERSION")
+
+    wait_for_canister_has_file_contents "$NNS_URL" "$CANISTER_NAME" "$WASM_GZ"
+}
+
+wait_for_canister_has_file_contents() {
+    local NNS_URL=$1
+    local CANISTER_NAME=$2
+    local WASM=$3
+
+    for i in {1..20}; do
+        echo "Testing if upgrade was successful..."
+        if canister_has_file_contents_installed "$NNS_URL" "$CANISTER_NAME" "$WASM"; then
+            print_green "Canister $CANISTER_NAME successfully upgraded."
+            return 0
+        fi
+        sleep 10
+    done
+
+    print_red "Canister $CANISTER_NAME upgrade failed"
+    return 1
+}

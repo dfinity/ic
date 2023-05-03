@@ -10,17 +10,18 @@ fi
 
 ##: propose_upgrade_canister_to_version_pem
 ## Upgrades an NNS canister by name using a neuron_id and a pem to a specified version on a given NNS
-## Usage: $1 <NNS_URL> <NEURON_ID> <PEM> <CANISTER_NAME> <VERSION>
+## Usage: $1 <NNS_URL> <NEURON_ID> <PEM> <CANISTER_NAME> <VERSION> (<ENCODED_ARGS_FILE>)
 propose_upgrade_canister_to_version_pem() {
     local NNS_URL=$1
     local NEURON_ID=$2
     local PEM=$3
     local CANISTER_NAME=$4
     local VERSION=$5
+    local ENCODED_ARGS_FILE=${6:-}
 
     WASM_FILE=$(get_nns_canister_wasm_gz_for_type "$CANISTER_NAME" "$VERSION")
 
-    propose_upgrade_canister_wasm_file_pem "$NNS_URL" "$NEURON_ID" "$PEM" "$CANISTER_NAME" "$WASM_FILE"
+    propose_upgrade_canister_wasm_file_pem "$NNS_URL" "$NEURON_ID" "$PEM" "$CANISTER_NAME" "$WASM_FILE" "$ENCODED_ARGS_FILE"
 }
 
 build_canister_and_propose_upgrade_pem() {
@@ -28,13 +29,14 @@ build_canister_and_propose_upgrade_pem() {
     local NEURON_ID=$2
     local PEM=$3
     local CANISTER_NAME=$4
+    local ENCODED_ARGS_FILE=${5:-}
 
     # TODO: Figure out a way to require that the result already be cached.
     bazel build "$(canister_bazel_label "${CANISTER_NAME}")"
 
-    WASM_FILE="$(repo_root)/bazel-bin/$(canister_bazel_artifact_path "${CANISTER_NAME}")"
+    WASM_FILE="$(repo_root)/$(canister_bazel_artifact_path "${CANISTER_NAME}")"
 
-    propose_upgrade_canister_wasm_file_pem "$NNS_URL" "$NEURON_ID" "$PEM" "$CANISTER_NAME" "$WASM_FILE"
+    propose_upgrade_canister_wasm_file_pem "$NNS_URL" "$NEURON_ID" "$PEM" "$CANISTER_NAME" "$WASM_FILE" "$ENCODED_ARGS_FILE"
 }
 
 canister_bazel_label() {
@@ -52,6 +54,9 @@ canister_bazel_label() {
         "sns-wasm")
             echo "//rs/nns/sns-wasm:sns-wasm-canister"
             ;;
+        "xrc-mock-canister")
+            echo "//rs/rosetta-api/tvl/xrc_mock:xrc_mock_canister"
+            ;;
         # TODO cycles-minting, genesis-token, identity, ledger, lifeline, nns-ui, registry
         *)
             echo "Sorry. I do not know how to build ${CANISTER_NAME}."
@@ -63,10 +68,7 @@ canister_bazel_label() {
 canister_bazel_artifact_path() {
     local CANISTER_NAME=$1
 
-    canister_bazel_label "${CANISTER_NAME}" \
-        | sed 's!^//!!' \
-        | sed 's!:!/!' \
-        | sed 's/$/.wasm/'
+    bazel cquery --output=files $(canister_bazel_label "$CANISTER_NAME") 2>/dev/null
 }
 
 propose_upgrade_canister_wasm_file_pem() {
@@ -77,6 +79,7 @@ propose_upgrade_canister_wasm_file_pem() {
     local PEM=$3
     local CANISTER_NAME=$4
     local WASM_FILE=$5
+    local ENCODED_ARGS_FILE=${6:-}
 
     CANISTER_ID=$(nns_canister_id "$CANISTER_NAME")
 
@@ -92,7 +95,9 @@ propose_upgrade_canister_wasm_file_pem() {
         --wasm-module-path "$WASM_FILE" \
         --wasm-module-sha256 "$WASM_SHA" \
         --summary-file $PROPOSAL \
-        --proposer "$NEURON_ID"
+        --proposer "$NEURON_ID" \
+        $([ "${SKIP_STOPPING:-no}" == "yes" ] && echo "--skip-stopping-before-installing") \
+        $([ -z "$ENCODED_ARGS_FILE" ] || echo "--arg $ENCODED_ARGS_FILE")
 
     rm -rf $PROPOSAL
 }

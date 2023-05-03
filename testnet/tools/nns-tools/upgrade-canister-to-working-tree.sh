@@ -38,7 +38,7 @@ export PEM=${PEM:-$NNS_TOOLS_DIR/nns_test_user_dfx_identity}
 build_canister_and_propose_upgrade_pem "$NNS_URL" "$NEURON_ID" "$PEM" "$CANISTER_NAME"
 
 # Wait for upgrade.
-WASM_FILE="$(repo_root)/bazel-bin/$(canister_bazel_artifact_path "${CANISTER_NAME}")"
+WASM_FILE="$(repo_root)/$(canister_bazel_artifact_path "${CANISTER_NAME}")"
 for i in {1..20}; do
     echo "Testing if upgrade was successful..."
     if canister_has_file_contents_installed $NNS_URL $CANISTER_NAME $WASM_FILE; then

@@ -36,6 +36,8 @@ submit_nns_upgrade_proposal_mainnet() {
     CANISTER_NAME="$(tr '[:upper:]' '[:lower:]' <<<${CAPITALIZED_CANISTER_NAME:0:1})${CAPITALIZED_CANISTER_NAME:1}"
     CANISTER_ID=$(nns_canister_id "$CANISTER_NAME")
 
+    CANDID_UPGRADE_ARGS=$(extract_candid_upgrade_args "$PROPOSAL_FILE")
+
     # Functions that exit if error
     validate_nns_version_wasm_sha "$CANISTER_NAME" "$VERSION" "$PROPOSAL_SHA"
     validate_no_todos "$PROPOSAL_FILE"
@@ -43,6 +45,11 @@ submit_nns_upgrade_proposal_mainnet() {
 
     WASM_GZ=$(get_nns_canister_wasm_gz_for_type "$CANISTER_NAME" "$VERSION")
     WASM_SHA=$(sha_256 $WASM_GZ)
+
+    CANDID_ARGS_FILE=""
+    if [ ! -z "$CANDID_UPGRADE_ARGS" ]; then
+        CANDID_ARGS_FILE=$(encode_candid_args_in_file "$CANDID_UPGRADE_ARGS")
+    fi
 
     echo
     print_green "Proposal Text To Submit"
@@ -52,6 +59,15 @@ submit_nns_upgrade_proposal_mainnet() {
     print_green "Summary of action:
   You are proposing to update canister $CANISTER_ID ($CAPITALIZED_CANISTER_NAME) to commit $VERSION.
   The WASM hash is $WASM_SHA.
+
+  $(if [ ! -z "$CANDID_ARGS_FILE" ]; then
+        echo "Extracted Candid Args:
+     '$CANDID_UPGRADE_ARGS'
+   which are encoded as
+      '$(cat "$CANDID_ARGS_FILE")'
+   and decode as:
+        '$(cat "$CANDID_ARGS_FILE" | xxd -p | tr -d '\r\n' | xargs didc decode)'"
+    fi)
     "
 
     check_or_set_dfx_hsm_pin
@@ -65,6 +81,10 @@ submit_nns_upgrade_proposal_mainnet() {
         --wasm-module-sha256=$WASM_SHA
         --summary-file=$PROPOSAL_FILE
         --proposer=$NEURON_ID)
+
+    if [ ! -z "$CANDID_ARGS_FILE" ]; then
+        cmd+=(--arg=$CANDID_ARGS_FILE)
+    fi
 
     confirm_submit_proposal_command "${cmd[@]}"
 
