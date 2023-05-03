@@ -234,6 +234,7 @@ members = [
   "rs/rosetta-api/icrc1/rosetta/runner",
   "rs/rosetta-api/icrc1/ledger/sm-tests",
   "rs/rosetta-api/icrc1/archive",
+  "rs/rosetta-api/icrc1/test_utils",
   "rs/rosetta-api/hardware_wallet_tests",
   "rs/rosetta-api/test_utils",
   "rs/rosetta-api/tvl",

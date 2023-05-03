@@ -6718,6 +6718,7 @@ dependencies = [
  "ic-icrc1",
  "ic-icrc1-ledger",
  "ic-icrc1-ledger-sm-tests",
+ "ic-icrc1-test-utils",
  "ic-ledger-canister-core",
  "ic-ledger-core",
  "ic-starter-tests",
@@ -6774,12 +6775,14 @@ dependencies = [
  "hex",
  "ic-base-types",
  "ic-crypto-sha",
+ "ic-icrc1-test-utils",
  "ic-ledger-canister-core",
  "ic-ledger-core",
  "icrc-ledger-types",
  "leb128",
  "num-traits",
  "proptest",
+ "rand 0.8.5",
  "serde",
  "serde_bytes",
  "tempfile",
@@ -6970,6 +6973,19 @@ dependencies = [
  "num-traits",
  "proptest",
  "serde",
+]
+
+[[package]]
+name = "ic-icrc1-test-utils"
+version = "0.8.0"
+dependencies = [
+ "candid",
+ "ic-icrc1",
+ "ic-ledger-core",
+ "icrc-ledger-types",
+ "proptest",
+ "rand 0.8.5",
+ "serde_bytes",
 ]
 
 [[package]]
@@ -7234,12 +7250,17 @@ version = "0.8.0"
 dependencies = [
  "async-trait",
  "candid",
+ "ciborium",
  "hex",
  "ic-base-types",
  "ic-constants",
  "ic-crypto-sha",
  "ic-ic00-types",
  "ic-utils 0.8.0",
+ "icrc-ledger-types",
+ "num-traits",
+ "proptest",
+ "rand 0.8.5",
  "serde",
  "serde_bytes",
 ]

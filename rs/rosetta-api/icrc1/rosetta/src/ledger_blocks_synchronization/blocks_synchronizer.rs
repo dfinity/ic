@@ -460,7 +460,7 @@ pub mod blocks_verifier {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::common::utils::unit_test_utils::strategies::valid_blockchain_strategy;
+    use ic_icrc1_test_utils::valid_blockchain_strategy;
     use proptest::prelude::*;
     use rand::seq::SliceRandom;
     use serde_bytes::ByteBuf;

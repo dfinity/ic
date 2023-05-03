@@ -51,6 +51,7 @@ path = "src/lib.rs"
 
 [dev-dependencies]
 ic-icrc1-ledger-sm-tests = { path = "../ledger/sm-tests" }
+ic-icrc1-test-utils = { path = "../test_utils" }
 ic-base-types = { path = "../../../types/base_types" }
 ic-ledger-canister-core = { path = "../../ledger_canister_core" }
 ic-ic00-types = { path = "../../../types/ic00_types" }

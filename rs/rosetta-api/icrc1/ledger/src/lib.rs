@@ -7,7 +7,7 @@ use candid::{
 };
 use ic_base_types::PrincipalId;
 use ic_crypto_tree_hash::{Label, MixedHashTree};
-use ic_icrc1::blocks::icrc1_block_from_encoded;
+use ic_icrc1::blocks::encoded_block_to_generic_block;
 use ic_icrc1::{Block, LedgerBalances, Transaction};
 use ic_ledger_canister_core::{
     archive::{ArchiveCanisterWasm, ArchiveOptions},
@@ -441,10 +441,12 @@ impl Ledger {
 
     /// Returns blocks in the specified range.
     pub fn get_blocks(&self, start: BlockIndex, length: usize) -> GetBlocksResponse {
-        let (first_index, local_blocks, archived_blocks) =
-            self.query_blocks(start, length, icrc1_block_from_encoded, |canister_id| {
-                QueryBlockArchiveFn::new(canister_id, "get_blocks")
-            });
+        let (first_index, local_blocks, archived_blocks) = self.query_blocks(
+            start,
+            length,
+            encoded_block_to_generic_block,
+            |canister_id| QueryBlockArchiveFn::new(canister_id, "get_blocks"),
+        );
 
         GetBlocksResponse {
             first_index: Nat::from(first_index),

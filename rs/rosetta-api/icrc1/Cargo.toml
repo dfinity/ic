@@ -19,7 +19,8 @@ serde = "1.0"
 serde_bytes = "0.11"
 tempfile = "3.1.0"
 
-
 [dev-dependencies]
+ic-icrc1-test-utils = { path = "test_utils" }
 leb128 = "0.2.4"
 proptest = "1.0"
+rand = "0.8"
