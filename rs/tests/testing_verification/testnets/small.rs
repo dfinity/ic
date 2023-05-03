@@ -5,9 +5,7 @@
 // You can setup this testnet by executing the following commands:
 //
 //   $ gitlab-ci/container/container-run.sh
-//   $ ict test small --keepalive -- --test_tmpdir=./small
-//
-// The --keepalive will keep the test running for a maximum of 1 hour.
+//   $ ict testnet small -- --test_tmpdir=./small
 //
 // The --test_tmpdir=./small will store the test output in the specified directory.
 // This is useful to have access to in case you need to SSH into an IC node for example like:
@@ -32,7 +30,7 @@
 //   Apr 11 15:33:58.903 INFO[rs/tests/src/driver/prometheus_vm.rs:170:0]
 //     IC Progress Clock at http://grafana.small--1681227226065.testnet.farm.dfinity.systems/d/ic-progress-clock/ic-progress-clock?refresh=10s&from=now-5m&to=now
 //
-// Happy benchmarking!
+// Happy testing!
 
 use anyhow::Result;
 

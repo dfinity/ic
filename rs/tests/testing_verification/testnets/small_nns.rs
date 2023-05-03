@@ -1,13 +1,14 @@
-// Set up a testnet containing:
+// Set up a testnet similar to the "small" testnet containing:
 // 1-node System and Application subnets, single unassigned node, single boundary node and a p8s (with grafana) VM.
 // All nodes use the following resources: 4 vCPUs, 24GiB of RAM and 50 GiB disk.
+//
+// In addition to the "small" testnet this testnet additionally installs the NNS
+// and the NNS and II frontend canisters.
 //
 // You can setup this testnet by executing the following commands:
 //
 //   $ gitlab-ci/container/container-run.sh
-//   $ ict test small_nns --keepalive -- --test_tmpdir=./small_nns
-//
-// The --keepalive will keep the test running for a maximum of 1 hour.
+//   $ ict testnet small_nns -- --test_tmpdir=./small_nns
 //
 // The --test_tmpdir=./small_nns will store the test output in the specified directory.
 // This is useful to have access to in case you need to SSH into an IC node for example like:
@@ -32,7 +33,14 @@
 //   Apr 11 15:33:58.903 INFO[rs/tests/src/driver/prometheus_vm.rs:170:0]
 //     IC Progress Clock at http://grafana.small_nns--1681227226065.testnet.farm.dfinity.systems/d/ic-progress-clock/ic-progress-clock?refresh=10s&from=now-5m&to=now
 //
-// Happy benchmarking!
+// To access the NNS or II dapps look for the following log lines:
+//
+//   2023-05-03 11:06:27.948 INFO[setup:rs/tests/src/nns_dapp.rs:99:0]
+//     Internet Identity: https://qhbym-qaaaa-aaaaa-aaafq-cai.ic0.farm.dfinity.systems
+//   2023-05-03 11:06:27.948 INFO[setup:rs/tests/src/nns_dapp.rs:103:0]
+//     NNS frontend dapp: https://qsgjb-riaaa-aaaaa-aaaga-cai.ic0.farm.dfinity.systems
+//
+// Happy testing!
 
 use anyhow::Result;
 
