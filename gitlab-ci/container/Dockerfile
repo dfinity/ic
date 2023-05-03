@@ -114,19 +114,19 @@ ENV ROCKSDB_INCLUDE_DIR=/usr/include ROCKSDB_LIB_DIR=/usr/lib ROCKSDB_STATIC=1 \
 RUN bazel version
 
 RUN mkdir --mode=0700 /home/${USER}/.ssh
-COPY ./files/known_hosts /home/${USER}/.ssh/known_hosts
+COPY ./gitlab-ci/container/files/known_hosts /home/${USER}/.ssh/known_hosts
 
-COPY ./files/entrypoint.sh /entrypoint.sh
+COPY ./gitlab-ci/container/files/entrypoint.sh /entrypoint.sh
 WORKDIR /
 
 USER 0
 
 RUN mv /usr/bin/docker /usr/bin/docker-bin
-COPY ./files/containers.conf /etc/containers/containers.conf
-COPY ./files/docker.sh /usr/bin/docker
+COPY ./gitlab-ci/container/files/containers.conf /etc/containers/containers.conf
+COPY ./gitlab-ci/container/files/docker.sh /usr/bin/docker
 
 # Install all python requirements
-COPY ./files/requirements.txt /tmp/requirements.txt
+COPY ./requirements.txt /tmp/requirements.txt
 RUN pip3 install --ignore-installed -r /tmp/requirements.txt
 
 # Add mold linker
