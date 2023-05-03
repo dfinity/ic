@@ -2030,9 +2030,6 @@ impl SystemApi for SystemApiImpl {
 
     fn ic0_stable_size(&self) -> HypervisorResult<u32> {
         let result = match &self.api_type {
-            ApiType::Start { .. } if self.wasm_native_stable_memory == FlagStatus::Disabled => {
-                Err(self.error_for("ic0_stable_size"))
-            }
             ApiType::Init { .. }
             | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
@@ -2051,9 +2048,6 @@ impl SystemApi for SystemApiImpl {
 
     fn ic0_stable_grow(&mut self, additional_pages: u32) -> HypervisorResult<i32> {
         let result = match &self.api_type {
-            ApiType::Start { .. } if self.wasm_native_stable_memory == FlagStatus::Disabled => {
-                Err(self.error_for("ic0_stable_grow"))
-            }
             ApiType::Init { .. }
             | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
@@ -2092,9 +2086,6 @@ impl SystemApi for SystemApiImpl {
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
         let result = match &self.api_type {
-            ApiType::Start { .. } if self.wasm_native_stable_memory == FlagStatus::Disabled => {
-                Err(self.error_for("ic0_stable_read"))
-            }
             ApiType::Init { .. }
             | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
@@ -2127,9 +2118,6 @@ impl SystemApi for SystemApiImpl {
         heap: &[u8],
     ) -> HypervisorResult<()> {
         let result = match &self.api_type {
-            ApiType::Start { .. } if self.wasm_native_stable_memory == FlagStatus::Disabled => {
-                Err(self.error_for("ic0_stable_write"))
-            }
             ApiType::Init { .. }
             | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
@@ -2158,9 +2146,6 @@ impl SystemApi for SystemApiImpl {
 
     fn ic0_stable64_size(&self) -> HypervisorResult<u64> {
         let result = match &self.api_type {
-            ApiType::Start { .. } if self.wasm_native_stable_memory == FlagStatus::Disabled => {
-                Err(self.error_for("ic0_stable64_size"))
-            }
             ApiType::Init { .. }
             | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
@@ -2179,9 +2164,6 @@ impl SystemApi for SystemApiImpl {
 
     fn ic0_stable64_grow(&mut self, additional_pages: u64) -> HypervisorResult<i64> {
         let result = match &self.api_type {
-            ApiType::Start { .. } if self.wasm_native_stable_memory == FlagStatus::Disabled => {
-                Err(self.error_for("ic0_stable64_grow"))
-            }
             ApiType::Init { .. }
             | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
@@ -2220,9 +2202,6 @@ impl SystemApi for SystemApiImpl {
         heap: &mut [u8],
     ) -> HypervisorResult<()> {
         let result = match &self.api_type {
-            ApiType::Start { .. } if self.wasm_native_stable_memory == FlagStatus::Disabled => {
-                Err(self.error_for("ic0_stable64_read"))
-            }
             ApiType::Init { .. }
             | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
@@ -2266,9 +2245,6 @@ impl SystemApi for SystemApiImpl {
         heap: &[u8],
     ) -> HypervisorResult<()> {
         let result = match &self.api_type {
-            ApiType::Start { .. } if self.wasm_native_stable_memory == FlagStatus::Disabled => {
-                Err(self.error_for("ic0_stable64_write"))
-            }
             ApiType::Init { .. }
             | ApiType::SystemTask { .. }
             | ApiType::Update { .. }
