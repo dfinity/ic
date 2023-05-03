@@ -102,6 +102,43 @@ fn should_not_leak_any_data_on_cbor_deserialization_error_when_opening_key_store
     let _panic = ProtoSecretKeyStore::open(temp_dir.path(), temp_file, None);
 }
 
+#[test]
+#[should_panic(expected = "is not a regular file")]
+fn open_should_panic_if_secret_keystore_is_a_symbolic_link() {
+    let (temp_dir, _secret_key_store) =
+        open_existing_secret_key_store_in_temp_dir(&SecretKeyStoreVersion::V3);
+    let original_sks_path_and_filename = temp_dir.as_ref().join(
+        existing_secret_key_store_file_name(&SecretKeyStoreVersion::V3),
+    );
+    let symbolic_link_filename = format!(
+        "{}.test",
+        existing_secret_key_store_file_name(&SecretKeyStoreVersion::V3)
+    );
+    let symbolic_link_path_and_filename = temp_dir.as_ref().join(&symbolic_link_filename);
+    std::os::unix::fs::symlink(
+        original_sks_path_and_filename,
+        symbolic_link_path_and_filename,
+    )
+    .expect("error creating symbolic link");
+
+    let _opened_sks = ProtoSecretKeyStore::open(temp_dir.as_ref(), &symbolic_link_filename, None);
+}
+
+#[test]
+#[should_panic(expected = "is not a regular file")]
+fn open_should_panic_if_secret_keystore_is_a_directory() {
+    let (temp_dir, _secret_key_store) =
+        open_existing_secret_key_store_in_temp_dir(&SecretKeyStoreVersion::V3);
+    let sks_file_name = format!(
+        "{}.test",
+        existing_secret_key_store_file_name(&SecretKeyStoreVersion::V3)
+    );
+    let name_of_dir_inside_temp_dir = temp_dir.as_ref().join(&sks_file_name);
+    fs::create_dir(name_of_dir_inside_temp_dir).expect("error creating directory inside temp dir");
+
+    let _opened_sks = ProtoSecretKeyStore::open(temp_dir.as_ref(), &sks_file_name, None);
+}
+
 proptest! {
     #[test]
     fn should_retrieve_inserted_key(seed1: u64, seed2: u64) {
@@ -372,13 +409,291 @@ fn should_fail_to_write_to_read_only_secret_key_store_directory() {
         Err(SecretKeyStoreError::PersistenceError(
             SecretKeyStorePersistenceError::IoError(msg)
         ))
-        if msg.to_lowercase().contains("secret key store internal error writing protobuf using tmp file: permission denied")
+        if msg.to_lowercase().contains("permission denied")
     );
 
     fs::set_permissions(temp_dir.path(), Permissions::from_mode(0o700)).expect(
         "failed to change permissions of temp_dir so that writing is possible \
                 again, so that the directory can automatically be cleaned up",
     );
+}
+
+#[test]
+fn should_fail_to_write_to_secret_key_store_directory_without_execute_permissions() {
+    let (temp_dir, mut secret_key_store) =
+        open_existing_secret_key_store_in_temp_dir(&SecretKeyStoreVersion::V3);
+    let mut seed = ChaCha20Rng::seed_from_u64(42);
+    let key_id = KeyId::from(seed.gen::<[u8; 32]>());
+    let key = CspSecretKey::Ed25519(ed25519_types::SecretKeyBytes(
+        SecretArray::new_and_dont_zeroize_argument(&seed.gen()),
+    ));
+
+    // make the crypto root directory non-executable, causing the subsequent call to insert a
+    // new key into the key store to fail
+    fs::set_permissions(temp_dir.path(), Permissions::from_mode(0o600))
+        .expect("Could not set the permissions of the temp dir.");
+
+    assert_matches!(
+        secret_key_store.insert(key_id, key, None),
+        Err(SecretKeyStoreError::PersistenceError(
+            SecretKeyStorePersistenceError::IoError(msg)
+        ))
+        if msg.to_lowercase().contains("permission denied")
+    );
+
+    fs::set_permissions(temp_dir.path(), Permissions::from_mode(0o700)).expect(
+        "failed to change permissions of temp_dir so that writing is possible \
+                again, so that the directory can automatically be cleaned up",
+    );
+}
+
+#[test]
+fn should_fail_to_write_to_secret_key_store_directory_without_write_permissions() {
+    let (temp_dir, mut secret_key_store) =
+        open_existing_secret_key_store_in_temp_dir(&SecretKeyStoreVersion::V3);
+    let mut seed = ChaCha20Rng::seed_from_u64(42);
+    let key_id = KeyId::from(seed.gen::<[u8; 32]>());
+    let key = CspSecretKey::Ed25519(ed25519_types::SecretKeyBytes(
+        SecretArray::new_and_dont_zeroize_argument(&seed.gen()),
+    ));
+
+    // make the crypto root directory non-writeable, causing the subsequent call to insert a
+    // new key into the key store to fail
+    fs::set_permissions(temp_dir.path(), Permissions::from_mode(0o500))
+        .expect("Could not set the permissions of the temp dir.");
+
+    assert_matches!(
+        secret_key_store.insert(key_id, key, None),
+        Err(SecretKeyStoreError::PersistenceError(
+            SecretKeyStorePersistenceError::IoError(msg)
+        ))
+        if msg.to_lowercase().contains("permission denied")
+    );
+
+    fs::set_permissions(temp_dir.path(), Permissions::from_mode(0o700)).expect(
+        "failed to change permissions of temp_dir so that writing is possible \
+                again, so that the directory can automatically be cleaned up",
+    );
+}
+
+#[test]
+fn should_successfully_write_to_secret_key_store_directory_with_write_and_execute_permissions() {
+    let (temp_dir, mut secret_key_store) =
+        open_existing_secret_key_store_in_temp_dir(&SecretKeyStoreVersion::V2);
+    fs::set_permissions(temp_dir.path(), Permissions::from_mode(0o700))
+        .expect("Could not set the permissions of the temp dir.");
+    let mut seed = ChaCha20Rng::seed_from_u64(42);
+    let key_id = KeyId::from(seed.gen::<[u8; 32]>());
+    let key = CspSecretKey::Ed25519(ed25519_types::SecretKeyBytes(
+        SecretArray::new_and_dont_zeroize_argument(&seed.gen()),
+    ));
+    assert_matches!(secret_key_store.insert(key_id, key, None), Ok(()));
+}
+
+mod zeroize_old_secret_key_store {
+    use super::*;
+    use std::fs;
+
+    #[test]
+    fn should_overwrite_old_secret_key_store_with_zeroes() {
+        let mut setup = Setup::new();
+        ic_utils::fs::create_hard_link_to_existing_file(
+            &setup.secret_key_store.proto_file,
+            &setup.hard_link_to_test_zeroization,
+        )
+        .expect("error creating hard link to existing secret key store file");
+
+        let key_id = make_key_id(42);
+        let key = make_secret_key(42);
+        setup
+            .secret_key_store
+            .insert(key_id, key, None)
+            .expect("error inserting key in secret key store");
+
+        assert_contains_only_zeroes(&setup.hard_link_to_test_zeroization);
+    }
+
+    #[test]
+    fn should_not_overwrite_new_keystore_with_zeroes() {
+        let mut setup = Setup::new();
+        ic_utils::fs::create_hard_link_to_existing_file(
+            &setup.secret_key_store.proto_file,
+            &setup.hard_link_to_test_zeroization,
+        )
+        .expect("error creating hard link to existing secret key store file");
+
+        let key_id = make_key_id(42);
+        let key = make_secret_key(42);
+        setup
+            .secret_key_store
+            .insert(key_id, key, None)
+            .expect("error inserting key in secret key store");
+
+        assert_contains_only_zeroes(&setup.hard_link_to_test_zeroization);
+        assert!(setup.secret_key_store.contains(&key_id));
+    }
+
+    #[test]
+    fn should_overwrite_leftover_backup_copy_with_zeroes_when_opening_secret_key_store() {
+        let setup = Setup::new();
+        fs::copy(
+            &setup.secret_key_store.proto_file,
+            &setup.secret_key_store.old_proto_file_to_zeroize,
+        )
+        .expect("error copying sks");
+        ic_utils::fs::create_hard_link_to_existing_file(
+            &setup.secret_key_store.old_proto_file_to_zeroize,
+            &setup.hard_link_to_test_zeroization,
+        )
+        .expect("error creating hard link to old secret key store file");
+
+        let _opened_sks = ProtoSecretKeyStore::open(
+            setup.temp_dir.as_ref(),
+            &existing_secret_key_store_file_name(&SecretKeyStoreVersion::V3),
+            None,
+        );
+
+        assert_contains_only_zeroes(&setup.hard_link_to_test_zeroization);
+    }
+
+    #[test]
+    fn should_cleanup_leftover_backup_file_of_zero_length_when_opening_secret_key_store() {
+        let setup = Setup::new();
+        let _old_sks_file =
+            std::fs::File::create(&setup.secret_key_store.old_proto_file_to_zeroize)
+                .expect("error creating empty old secret key store file");
+        assert!(
+            Path::try_exists(&setup.secret_key_store.old_proto_file_to_zeroize)
+                .expect("error checking if old secret key store file exists")
+        );
+
+        let _opened_sks = ProtoSecretKeyStore::open(
+            setup.temp_dir.as_ref(),
+            &existing_secret_key_store_file_name(&SecretKeyStoreVersion::V3),
+            None,
+        );
+        assert!(
+            !Path::try_exists(&setup.secret_key_store.old_proto_file_to_zeroize)
+                .expect("error checking if old secret key store file exists")
+        );
+    }
+
+    #[test]
+    fn should_overwrite_leftover_backup_copy_with_zeroes_when_opening_non_existing_secret_key_store(
+    ) {
+        let setup = Setup::new();
+        fs::copy(
+            &setup.secret_key_store.proto_file,
+            &setup.secret_key_store.old_proto_file_to_zeroize,
+        )
+        .expect("error copying sks");
+        fs::remove_file(&setup.secret_key_store.proto_file)
+            .expect("error removing original sks file");
+        ic_utils::fs::create_hard_link_to_existing_file(
+            &setup.secret_key_store.old_proto_file_to_zeroize,
+            &setup.hard_link_to_test_zeroization,
+        )
+        .expect("error creating hard link to old secret key store file");
+
+        let _opened_sks = ProtoSecretKeyStore::open(
+            setup.temp_dir.as_ref(),
+            &existing_secret_key_store_file_name(&SecretKeyStoreVersion::V3),
+            None,
+        );
+
+        assert_contains_only_zeroes(&setup.hard_link_to_test_zeroization);
+        assert!(!Path::try_exists(&setup.secret_key_store.proto_file)
+            .expect("error checking if secret key store file exists"));
+    }
+
+    #[test]
+    fn should_only_remove_leftover_hard_linked_duplicate_file_when_opening_secret_key_store() {
+        let setup = Setup::new();
+        ic_utils::fs::create_hard_link_to_existing_file(
+            &setup.secret_key_store.proto_file,
+            &setup.secret_key_store.old_proto_file_to_zeroize,
+        )
+        .expect("error creating hard link from current secret key store file to backup file");
+        let initial_sks_bytes = fs::read(&setup.secret_key_store.proto_file)
+            .expect("error reading initial secret key store");
+
+        let _opened_sks = ProtoSecretKeyStore::open(
+            setup.temp_dir.as_ref(),
+            &existing_secret_key_store_file_name(&SecretKeyStoreVersion::V3),
+            None,
+        );
+
+        let current_sks_bytes = fs::read(&setup.secret_key_store.proto_file)
+            .expect("error reading current secret key store");
+        assert_matches!(
+            Path::try_exists(&setup.secret_key_store.old_proto_file_to_zeroize),
+            Ok(false)
+        );
+        assert_eq!(current_sks_bytes, initial_sks_bytes);
+    }
+
+    #[test]
+    fn should_clean_up_leftover_old_file_when_dropping_secret_key_store() {
+        let setup = Setup::new();
+        let opened_sks = ProtoSecretKeyStore::open(
+            setup.temp_dir.as_ref(),
+            &existing_secret_key_store_file_name(&SecretKeyStoreVersion::V3),
+            None,
+        );
+        assert!(
+            !Path::try_exists(&setup.secret_key_store.old_proto_file_to_zeroize)
+                .expect("error checking if old secret key store file exists")
+        );
+        fs::copy(
+            &setup.secret_key_store.proto_file,
+            &setup.secret_key_store.old_proto_file_to_zeroize,
+        )
+        .expect("error copying sks");
+        ic_utils::fs::create_hard_link_to_existing_file(
+            &setup.secret_key_store.old_proto_file_to_zeroize,
+            &setup.hard_link_to_test_zeroization,
+        )
+        .expect("error creating hard link to old secret key store file");
+        drop(opened_sks);
+        assert!(
+            !Path::try_exists(&setup.secret_key_store.old_proto_file_to_zeroize)
+                .expect("error checking if old secret key store file exists")
+        );
+
+        assert_contains_only_zeroes(&setup.hard_link_to_test_zeroization);
+        assert!(Path::try_exists(&setup.secret_key_store.proto_file)
+            .expect("error checking if secret key store file exists"));
+    }
+
+    struct Setup {
+        temp_dir: TempDir,
+        secret_key_store: ProtoSecretKeyStore,
+        hard_link_to_test_zeroization: PathBuf,
+    }
+
+    impl Setup {
+        fn new() -> Self {
+            let (temp_dir, secret_key_store) =
+                open_existing_secret_key_store_in_temp_dir(&SecretKeyStoreVersion::V3);
+            let hard_link_to_test_zeroization = temp_dir.as_ref().join(format!(
+                "{}.test",
+                existing_secret_key_store_file_name(&SecretKeyStoreVersion::V3)
+            ));
+            Setup {
+                temp_dir,
+                secret_key_store,
+                hard_link_to_test_zeroization,
+            }
+        }
+    }
+
+    fn assert_contains_only_zeroes(file: &Path) {
+        let read_bytes = fs::read(file).expect("error reading file");
+        assert!(!read_bytes.is_empty());
+        for byte in read_bytes {
+            assert_eq!(byte, 0u8);
+        }
+    }
 }
 
 #[test]

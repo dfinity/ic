@@ -4,6 +4,8 @@ use std::{fs, io, io::Error, path::Path, path::PathBuf};
 
 #[cfg(target_family = "unix")] // Otherwise, clippy complains about lack of use.
 use std::io::ErrorKind::AlreadyExists;
+#[cfg(target_family = "unix")]
+use std::os::unix::fs::MetadataExt;
 
 #[cfg(target_os = "linux")]
 use thiserror::Error;
@@ -396,6 +398,69 @@ where
     })
 }
 
+#[cfg(target_family = "unix")]
+/// Determines if two regular POSIX files reference the same data, i.e., both point to the same
+/// inode number. Returns `true` if the files are hard links to the same inode, `false` if either
+/// file is not a regular file. If either file does not exist, an error with
+/// `err.kind() == NotFound` is returned.
+pub fn are_hard_links_to_the_same_inode<P, Q>(p: &P, q: &Q) -> io::Result<bool>
+where
+    P: AsRef<Path>,
+    Q: AsRef<Path>,
+{
+    if !is_regular_file(p)? || !is_regular_file(q)? {
+        return Ok(false);
+    }
+    let original_metadata = fs::metadata(p)?;
+    let link_metadata = fs::metadata(q)?;
+    Ok(original_metadata.ino() == link_metadata.ino())
+}
+
+#[cfg(target_family = "unix")]
+/// Create a new hard link to an existing file. Returns an error if the original path is not a file
+/// or doesn't exist, or if the link already exists.
+pub fn create_hard_link_to_existing_file<P, Q>(original: &P, link: &Q) -> io::Result<()>
+where
+    P: AsRef<Path>,
+    Q: AsRef<Path>,
+{
+    fs::hard_link(original, link)
+}
+
+#[cfg(target_family = "unix")]
+/// Checks if `file_name` points to an existing, POSIX regular file, which the current process can
+/// access. In particular, this function returns true for regular files (and hard links), and false
+/// for directories and symbolic links.
+pub fn is_regular_file<P>(file_name: &P) -> io::Result<bool>
+where
+    P: AsRef<Path>,
+{
+    let symlink_metadata = std::fs::symlink_metadata(file_name)?;
+    Ok(symlink_metadata.is_file())
+}
+
+#[cfg(target_family = "unix")]
+/// Open an existing file for writing to it.
+pub fn open_existing_file_for_write<P>(path: P) -> io::Result<std::fs::File>
+where
+    P: AsRef<Path>,
+{
+    std::fs::OpenOptions::new()
+        .write(true)
+        .read(true)
+        .create(false)
+        .open(&path)
+}
+
+#[cfg(target_family = "unix")]
+/// Removes a file from the filesystem.
+pub fn remove_file<P>(path: P) -> io::Result<()>
+where
+    P: AsRef<Path>,
+{
+    std::fs::remove_file(path)
+}
+
 #[cfg(any(target_family = "unix"))]
 /// Create and open a file exclusively with the given name.
 ///
@@ -687,5 +752,383 @@ mod tests {
         // advance the remaining 1.25 slices
         advance_slices(&mut slices, &mut front, slice_size + slice_size / 4, bufs);
         assert_eq!(5, front);
+    }
+
+    #[cfg(target_family = "unix")]
+    mod are_hard_links_to_the_same_inode {
+        use crate::fs::write_string_using_tmp_file;
+        use crate::fs::{are_hard_links_to_the_same_inode, create_hard_link_to_existing_file};
+        use assert_matches::assert_matches;
+        use std::fs;
+        use std::io::ErrorKind::NotFound;
+
+        #[test]
+        fn should_return_true_for_hard_linked_files() {
+            let temp_dir =
+                tempfile::TempDir::new().expect("failed to create a temporary directory");
+            let source = temp_dir.as_ref().join("source_file");
+            write_string_using_tmp_file(&source, "test content").expect("error writing to file");
+            let link = temp_dir.as_ref().join("link");
+            create_hard_link_to_existing_file(&source, &link).expect("error creating hard link");
+            assert_matches!(are_hard_links_to_the_same_inode(&source, &link), Ok(true));
+        }
+
+        #[test]
+        fn should_return_false_for_symbolic_link() {
+            let temp_dir =
+                tempfile::TempDir::new().expect("failed to create a temporary directory");
+            let test_file = temp_dir.as_ref().join("source_file");
+            write_string_using_tmp_file(&test_file, "test content").expect("error writing to file");
+            let sym_link = temp_dir.as_ref().join("link");
+            std::os::unix::fs::symlink(&test_file, &sym_link)
+                .expect("error creating symbolic link");
+            assert_matches!(
+                are_hard_links_to_the_same_inode(&test_file, &sym_link),
+                Ok(false)
+            );
+        }
+
+        #[test]
+        fn should_return_false_for_directory_and_file() {
+            let temp_dir =
+                tempfile::TempDir::new().expect("failed to create a temporary directory");
+            let test_file = temp_dir.as_ref().join("first");
+            write_string_using_tmp_file(&test_file, "test content").expect("error writing to file");
+            let test_dir = temp_dir.as_ref().join("second");
+            fs::create_dir(&test_dir).expect("error creating directory");
+            assert_matches!(
+                are_hard_links_to_the_same_inode(&test_file, &test_dir),
+                Ok(false)
+            );
+        }
+
+        #[test]
+        fn should_return_false_for_same_directory_twice() {
+            let temp_dir =
+                tempfile::TempDir::new().expect("failed to create a temporary directory");
+            let test_dir = temp_dir.as_ref().join("subdir");
+            fs::create_dir(&test_dir).expect("error creating directory");
+            assert_matches!(
+                are_hard_links_to_the_same_inode(&test_dir, &test_dir),
+                Ok(false)
+            );
+        }
+
+        #[test]
+        fn should_return_false_for_copied_files() {
+            let temp_dir =
+                tempfile::TempDir::new().expect("failed to create a temporary directory");
+            let source = temp_dir.as_ref().join("source_file");
+            write_string_using_tmp_file(&source, "test content").expect("error writing to file");
+            let copy = temp_dir.as_ref().join("copy");
+            fs::copy(&source, &copy).expect("error copying files");
+            assert_matches!(are_hard_links_to_the_same_inode(&source, &copy), Ok(false));
+        }
+
+        #[test]
+        fn should_return_not_found_error_if_source_does_not_exist() {
+            let temp_dir =
+                tempfile::TempDir::new().expect("failed to create a temporary directory");
+            let original = temp_dir.as_ref().join("original");
+            let link = temp_dir.as_ref().join("link");
+            write_string_using_tmp_file(&link, "test content").expect("error writing to file");
+            assert_matches!(
+                are_hard_links_to_the_same_inode(&original, &link),
+                Err(err) if err.kind() == NotFound);
+        }
+
+        #[test]
+        fn should_return_not_found_error_if_destination_does_not_exist() {
+            let temp_dir =
+                tempfile::TempDir::new().expect("failed to create a temporary directory");
+            let original = temp_dir.as_ref().join("original");
+            let link = temp_dir.as_ref().join("link");
+            write_string_using_tmp_file(&original, "test content").expect("error writing to file");
+            assert_matches!(
+                are_hard_links_to_the_same_inode(&original, &link),
+                Err(err) if err.kind() == NotFound);
+        }
+
+        #[test]
+        fn should_return_not_found_error_if_neither_source_nor_destination_exists() {
+            let temp_dir =
+                tempfile::TempDir::new().expect("failed to create a temporary directory");
+            let original = temp_dir.as_ref().join("original");
+            let link = temp_dir.as_ref().join("link");
+            assert_matches!(
+                are_hard_links_to_the_same_inode(&original, &link),
+                Err(err) if err.kind() == NotFound);
+        }
+    }
+
+    #[cfg(target_family = "unix")]
+    mod create_hard_link_to_existing_file {
+        use super::super::create_hard_link_to_existing_file;
+        use super::super::write_string_using_tmp_file;
+        use assert_matches::assert_matches;
+        use std::fs;
+        use std::io::ErrorKind;
+
+        #[test]
+        fn should_succeed_when_creating_a_hard_link_to_a_regular_file() {
+            let temp_dir =
+                tempfile::TempDir::new().expect("failed to create a temporary directory");
+            let source = temp_dir.as_ref().join("source_file");
+            write_string_using_tmp_file(&source, "test content").expect("error writing to file");
+            let destination = temp_dir.as_ref().join("destination");
+            assert_matches!(
+                create_hard_link_to_existing_file(&source, &destination),
+                Ok(())
+            );
+        }
+
+        #[test]
+        fn should_return_an_error_when_creating_a_hard_link_to_a_directory() {
+            let temp_dir =
+                tempfile::TempDir::new().expect("failed to create a temporary directory");
+            let source = temp_dir.as_ref().join("source_file");
+            fs::create_dir(&source).expect("error creating directory");
+            let destination = temp_dir.as_ref().join("destination");
+            assert_matches!(create_hard_link_to_existing_file(&source, &destination),
+                Err(ref e) if e.kind() == ErrorKind::PermissionDenied
+            );
+        }
+
+        #[test]
+        fn should_return_an_error_when_creating_a_hard_link_to_a_file_that_does_not_exists() {
+            let temp_dir =
+                tempfile::TempDir::new().expect("failed to create a temporary directory");
+            let source = temp_dir.as_ref().join("source_file");
+            let destination = temp_dir.as_ref().join("destination");
+            assert_matches!(create_hard_link_to_existing_file(&source, &destination),
+                Err(ref e) if e.kind() == ErrorKind::NotFound
+            );
+        }
+
+        #[test]
+        fn should_return_an_error_when_creating_a_hard_link_where_the_destination_already_exists() {
+            let temp_dir =
+                tempfile::TempDir::new().expect("failed to create a temporary directory");
+            let source = temp_dir.as_ref().join("source_file");
+            write_string_using_tmp_file(&source, "test content").expect("error writing to file");
+            let destination = temp_dir.as_ref().join("destination");
+            fs::copy(&source, &destination).expect("error copying file");
+            assert!(destination.exists());
+            assert_matches!(create_hard_link_to_existing_file(&source, &destination),
+                Err(ref e) if e.kind() == ErrorKind::AlreadyExists
+            );
+        }
+    }
+
+    #[cfg(target_family = "unix")]
+    mod is_regular_file {
+        use crate::fs::{
+            create_hard_link_to_existing_file, is_regular_file, write_string_using_tmp_file,
+        };
+        use assert_matches::assert_matches;
+        use std::fs;
+        use std::io::ErrorKind::NotFound;
+
+        #[test]
+        fn should_return_true_if_file_is_a_regular_file() {
+            let temp_dir =
+                tempfile::TempDir::new().expect("failed to create a temporary directory");
+            let test_file = temp_dir.as_ref().join("test_file");
+            write_string_using_tmp_file(&test_file, "test content").expect("error writing to file");
+            assert!(
+                is_regular_file(&test_file).expect("error determining if file is a regular file")
+            );
+        }
+
+        #[test]
+        fn should_return_true_if_file_is_a_hard_link_to_a_regular_file() {
+            let temp_dir =
+                tempfile::TempDir::new().expect("failed to create a temporary directory");
+            let test_file = temp_dir.as_ref().join("test_file");
+            write_string_using_tmp_file(&test_file, "test content").expect("error writing to file");
+            let test_hard_link = temp_dir.as_ref().join("test_link");
+            create_hard_link_to_existing_file(&test_file, &test_hard_link)
+                .expect("error creating hard link");
+            assert!(
+                is_regular_file(&test_file).expect("error determining if file is a regular file")
+            );
+        }
+
+        #[test]
+        fn should_return_false_if_file_is_a_directory() {
+            let temp_dir =
+                tempfile::TempDir::new().expect("failed to create a temporary directory");
+            let test_file = temp_dir.as_ref().join("test_file");
+            fs::create_dir(&test_file).expect("error creating directory");
+            assert!(
+                !is_regular_file(&test_file).expect("error determining if file is a regular file")
+            );
+        }
+
+        #[test]
+        fn should_return_false_if_file_is_a_symbolic_link_to_a_file() {
+            let temp_dir =
+                tempfile::TempDir::new().expect("failed to create a temporary directory");
+            let test_file = temp_dir.as_ref().join("test_file");
+            write_string_using_tmp_file(&test_file, "test content").expect("error writing to file");
+            let test_sym_link = temp_dir.as_ref().join("test_sym_link");
+            std::os::unix::fs::symlink(&test_file, &test_sym_link)
+                .expect("error creating symbolic link");
+            assert!(!is_regular_file(&test_sym_link)
+                .expect("error determining if file is a regular file"));
+        }
+
+        #[test]
+        fn should_return_false_if_file_is_a_hard_link_to_a_symbolic_link_to_a_file() {
+            let temp_dir =
+                tempfile::TempDir::new().expect("failed to create a temporary directory");
+            let test_file = temp_dir.as_ref().join("test_file");
+            write_string_using_tmp_file(&test_file, "test content").expect("error writing to file");
+            let test_sym_link = temp_dir.as_ref().join("test_sym_link");
+            std::os::unix::fs::symlink(&test_file, &test_sym_link)
+                .expect("error creating symbolic link");
+            let test_hard_link = temp_dir.as_ref().join("test_hard_link");
+            create_hard_link_to_existing_file(&test_sym_link, &test_hard_link)
+                .expect("error creating hard link");
+            assert!(!is_regular_file(&test_hard_link)
+                .expect("error determining if file is a regular file"));
+        }
+
+        #[test]
+        fn should_return_not_found_error_if_file_does_not_exist() {
+            let temp_dir =
+                tempfile::TempDir::new().expect("failed to create a temporary directory");
+            let test_file = temp_dir.as_ref().join("test_file");
+            assert_matches!(
+                is_regular_file(&test_file),
+                Err(err) if err.kind() == NotFound
+            );
+        }
+    }
+
+    #[cfg(target_family = "unix")]
+    mod open_existing_file_for_write {
+        use crate::fs::{open_existing_file_for_write, write_string_using_tmp_file};
+        use assert_matches::assert_matches;
+        use std::fs::create_dir;
+        use std::fs::Permissions;
+        use std::io::ErrorKind::{NotFound, PermissionDenied};
+        use std::os::unix::fs::PermissionsExt;
+
+        #[test]
+        fn should_succeed_if_file_exists() {
+            let temp_dir =
+                tempfile::TempDir::new().expect("failed to create a temporary directory");
+            let test_file = temp_dir.as_ref().join("test_file");
+            write_string_using_tmp_file(&test_file, "test content").expect("error writing to file");
+            open_existing_file_for_write(test_file).expect("error opening existing file for write");
+        }
+
+        #[test]
+        fn should_return_error_if_file_does_not_exist() {
+            let temp_dir =
+                tempfile::TempDir::new().expect("failed to create a temporary directory");
+            let test_file = temp_dir.as_ref().join("test_file");
+            assert_matches!(
+                open_existing_file_for_write(test_file),
+                Err(err) if err.kind() == NotFound
+            );
+        }
+
+        #[test]
+        fn should_return_error_if_file_is_a_directory() {
+            let temp_dir =
+                tempfile::TempDir::new().expect("failed to create a temporary directory");
+            let test_file = temp_dir.as_ref().join("test_file");
+            create_dir(&test_file).expect("error creating directory");
+            assert_matches!(
+                open_existing_file_for_write(test_file),
+                Err(err) if format!("{:?}", err).contains("Is a directory")  // ErrorKind::IsADirectory is unstable
+            );
+        }
+
+        #[test]
+        fn should_return_error_if_permission_is_denied() {
+            let temp_dir =
+                tempfile::TempDir::new().expect("failed to create a temporary directory");
+            let test_file = temp_dir.as_ref().join("test_file");
+            write_string_using_tmp_file(&test_file, "test content").expect("error writing to file");
+            std::fs::set_permissions(&test_file, Permissions::from_mode(0o400))
+                .expect("Could not set the permissions of the test file.");
+            assert_matches!(
+                open_existing_file_for_write(&test_file),
+                Err(err) if err.kind() == PermissionDenied
+            );
+            std::fs::set_permissions(&test_file, Permissions::from_mode(0o700)).expect(
+                "failed to change permissions of test_file so that writing is possible \
+                again, so that the directory can automatically be cleaned up",
+            );
+        }
+    }
+
+    #[cfg(target_family = "unix")]
+    mod remove_file {
+        use crate::fs::{remove_file, write_string_using_tmp_file};
+        use assert_matches::assert_matches;
+        use std::fs::create_dir;
+        use std::fs::Permissions;
+        use std::io::ErrorKind::{NotFound, PermissionDenied};
+        use std::os::unix::fs::PermissionsExt;
+
+        #[test]
+        fn should_succeed_if_file_exists() {
+            let temp_dir =
+                tempfile::TempDir::new().expect("failed to create a temporary directory");
+            let test_file = temp_dir.as_ref().join("test_file");
+            write_string_using_tmp_file(&test_file, "test content").expect("error writing to file");
+            remove_file(&test_file).expect("error removing file");
+        }
+
+        #[test]
+        fn should_return_error_if_file_does_not_exist() {
+            let temp_dir =
+                tempfile::TempDir::new().expect("failed to create a temporary directory");
+            let test_file = temp_dir.as_ref().join("test_file");
+            assert_matches!(
+                remove_file(test_file),
+                Err(err) if err.kind() == NotFound
+            );
+        }
+
+        #[test]
+        fn should_return_error_if_file_is_a_directory() {
+            let temp_dir =
+                tempfile::TempDir::new().expect("failed to create a temporary directory");
+            let test_file = temp_dir.as_ref().join("test_file");
+            create_dir(&test_file).expect("error creating directory");
+            #[cfg(target_os = "linux")]
+            assert_matches!(
+                remove_file(test_file),
+                Err(err) if format!("{:?}", err).contains("Is a directory")
+            );
+            #[cfg(target_os = "macos")]
+            assert_matches!(
+                remove_file(test_file),
+                Err(err) if err.kind() == PermissionDenied
+            );
+        }
+
+        #[test]
+        fn should_return_error_if_permission_is_denied() {
+            let temp_dir =
+                tempfile::TempDir::new().expect("failed to create a temporary directory");
+            let test_file = temp_dir.as_ref().join("test_file");
+            write_string_using_tmp_file(&test_file, "test content").expect("error writing to file");
+            std::fs::set_permissions(temp_dir.path(), Permissions::from_mode(0o400))
+                .expect("Could not set the permissions of the test file.");
+            assert_matches!(
+                remove_file(test_file),
+                Err(err) if err.kind() == PermissionDenied
+            );
+            std::fs::set_permissions(temp_dir.path(), Permissions::from_mode(0o700)).expect(
+                "failed to change permissions of test_file so that writing is possible \
+                again, so that the directory can automatically be cleaned up",
+            );
+        }
     }
 }

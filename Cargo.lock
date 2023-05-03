@@ -10043,6 +10043,7 @@ dependencies = [
 name = "ic-utils"
 version = "0.8.0"
 dependencies = [
+ "assert_matches",
  "bitflags",
  "cvt",
  "features",
