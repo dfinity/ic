@@ -66,7 +66,10 @@ pub trait InitializablePoolSection: MutablePoolSection<ValidatedConsensusArtifac
 }
 
 pub trait MutablePoolSection<T>: PoolSection<T> {
-    fn mutate(&mut self, ops: PoolSectionOps<T>);
+    /// Mutate the pool by applying the given [`PoolSectionOps`]. Return [`ConsensusMessageId`]s
+    /// of artifacts that were deleted during the mutation.
+    fn mutate(&mut self, ops: PoolSectionOps<T>) -> Vec<ConsensusMessageId>;
+    /// Return a reference to the [`PoolSection`].
     fn pool_section(&self) -> &dyn PoolSection<T>;
 }
 
@@ -457,10 +460,15 @@ impl ConsensusPoolImpl {
         Arc::clone(&self.cache) as Arc<_>
     }
 
-    fn apply_changes_validated(&mut self, ops: PoolSectionOps<ValidatedConsensusArtifact>) {
+    /// Applying the given [`PoolSectionOps`] to the validated [`PoolSection`].
+    /// Return [`ConsensusMessageId`]s of artifacts that were deleted during the mutation.
+    fn apply_changes_validated(
+        &mut self,
+        ops: PoolSectionOps<ValidatedConsensusArtifact>,
+    ) -> Vec<ConsensusMessageId> {
         if !ops.ops.is_empty() {
             let last_height = self.validated.pool_section().finalization().max_height();
-            self.validated.mutate(ops);
+            let purged = self.validated.mutate(ops);
             let new_height = self.validated.pool_section().finalization().max_height();
 
             self.validated_metrics.update(self.validated.pool_section());
@@ -474,14 +482,25 @@ impl ConsensusPoolImpl {
                     );
                 }
             }
+            purged
+        } else {
+            Vec::new()
         }
     }
 
-    fn apply_changes_unvalidated(&mut self, ops: PoolSectionOps<UnvalidatedConsensusArtifact>) {
+    /// Applying the given [`PoolSectionOps`] to the unvalidated [`PoolSection`].
+    /// Return [`ConsensusMessageId`]s of artifacts that were deleted during the mutation.
+    fn apply_changes_unvalidated(
+        &mut self,
+        ops: PoolSectionOps<UnvalidatedConsensusArtifact>,
+    ) -> Vec<ConsensusMessageId> {
         if !ops.ops.is_empty() {
-            self.unvalidated.mutate(ops);
+            let purged = self.unvalidated.mutate(ops);
             self.unvalidated_metrics
                 .update(self.unvalidated.pool_section());
+            purged
+        } else {
+            Vec::new()
         }
     }
 }

@@ -246,7 +246,7 @@ fn import(path: &str) {
                 msg,
                 timestamp: current_time(),
             });
-            consensus_pool.validated.mutate(ops)
+            consensus_pool.validated.mutate(ops);
         } else if let Ok(msg) = from_str(&s) {
             certification_pool.persistent_pool.insert(msg)
         } else {

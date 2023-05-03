@@ -187,12 +187,17 @@ impl MutablePool<CertificationArtifact, ChangeSet> for CertificationPoolImpl {
     }
 }
 
-/// Operations that mutates the persistent pool.
+/// Operations that mutate the persistent pool.
 pub trait MutablePoolSection {
+    /// Insert a [`CertificationMessage`] into the pool.
     fn insert(&self, message: CertificationMessage);
+    /// Get the height indexed pool section for full [`Certification`]s.
     fn certifications(&self) -> &dyn HeightIndexedPool<Certification>;
+    /// Get the height indexed pool section for [`CertificationShare`]s.
     fn certification_shares(&self) -> &dyn HeightIndexedPool<CertificationShare>;
-    fn purge_below(&self, height: Height);
+    /// Purge all artifacts below the given [`Height`]. Return the [`CertificationMessageId`]s
+    /// of the deleted artifacts.
+    fn purge_below(&self, height: Height) -> Vec<CertificationMessageId>;
 }
 
 impl CertificationPool for CertificationPoolImpl {

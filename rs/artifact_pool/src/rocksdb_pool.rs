@@ -13,6 +13,7 @@ use ic_interfaces::consensus_pool::{
 };
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_protobuf::types::v1 as pb;
+use ic_types::artifact::CertificationMessageId;
 use ic_types::{
     artifact::ConsensusMessageId,
     batch::BatchPayload,
@@ -404,7 +405,10 @@ impl InitializablePoolSection for PersistentHeightIndexedPool<ConsensusMessage> 
 impl MutablePoolSection<ValidatedConsensusArtifact>
     for PersistentHeightIndexedPool<ConsensusMessage>
 {
-    fn mutate(&mut self, ops: PoolSectionOps<ValidatedConsensusArtifact>) {
+    fn mutate(
+        &mut self,
+        ops: PoolSectionOps<ValidatedConsensusArtifact>,
+    ) -> Vec<ConsensusMessageId> {
         let mut batch = WriteBatch::default();
         for op in ops.ops {
             match op {
@@ -475,6 +479,7 @@ impl MutablePoolSection<ValidatedConsensusArtifact>
             }
         }
         check_ok!(self.db.write(batch));
+        Vec::new()
     }
 
     fn pool_section(&self) -> &dyn PoolSection<ValidatedConsensusArtifact> {
@@ -1078,8 +1083,9 @@ impl crate::certification_pool::MutablePoolSection
         self
     }
 
-    fn purge_below(&self, height: Height) {
-        self.purge_below_height(height)
+    fn purge_below(&self, height: Height) -> Vec<CertificationMessageId> {
+        self.purge_below_height(height);
+        Vec::new()
     }
 }
 
