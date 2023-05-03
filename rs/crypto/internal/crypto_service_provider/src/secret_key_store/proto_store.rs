@@ -10,13 +10,13 @@ use hex::{FromHex, ToHex};
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::types::convert_keyset_to_keyset_with_pop;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::types::CspFsEncryptionKeySet;
-use ic_logger::{info, replica_logger::no_op_logger, ReplicaLogger};
+use ic_logger::{info, replica_logger::no_op_logger, warn, ReplicaLogger};
 use parking_lot::RwLock;
 use prost::Message;
 use std::borrow::{Borrow, BorrowMut};
 use std::collections::HashMap;
 use std::fs;
-use std::io::ErrorKind;
+use std::io::{ErrorKind, Write};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
@@ -42,24 +42,50 @@ type SecretKeys = HashMap<KeyId, (CspSecretKey, Option<Scope>)>;
 /// serialization
 pub struct ProtoSecretKeyStore {
     proto_file: PathBuf,
+    old_proto_file_to_zeroize: PathBuf,
     keys: Arc<RwLock<SecretKeys>>,
     logger: ReplicaLogger,
 }
 
 impl ProtoSecretKeyStore {
-    /// Creates a database instance.
+    /// Creates a `ProtoSecretKeyStore` instance backed by a file. To access the secret keys
+    /// generated as part of previous invocations, it is assumed that the values provided for `dir`
+    /// and `file_name` are the same as in previous invocations. If different values for `dir`
+    /// and/or `file_name` are provided, cleanup of previously failed zeroizations of old secret
+    /// key store instances will not be performed correctly. `dir` shall point to a directory that
+    /// the process has read and write access to, and `file_name` shall point to an existing
+    /// regular file (e.g., not a symbolic link) that the process also has access to, or the name
+    /// of the file to be created, if one does not yet exist.
+    ///
+    /// # Panics
+    ///  - If the crypto root directory does not have the required permissions
+    ///  - If the secret key store file is not a POSIX regular file
     pub fn open(dir: &Path, file_name: &str, logger: Option<ReplicaLogger>) -> Self {
         CryptoConfig::check_dir_has_required_permissions(dir)
             .expect("wrong crypto root permissions");
         let proto_file = dir.join(file_name);
+        if let Ok(true) = proto_file.try_exists() {
+            if !ic_utils::fs::is_regular_file(&proto_file)
+                .expect("error checking if secret key store is a regular file")
+            {
+                panic!(
+                    "secret key store {} is not a regular file",
+                    proto_file.to_string_lossy()
+                );
+            }
+        }
+        let old_proto_file = dir.join(format!("{}.old", file_name));
         let secret_keys = match Self::read_sks_data_from_disk(&proto_file) {
             Some(sks_proto) => sks_proto,
             None => SecretKeys::new(),
         };
+        let replica_logger = logger.unwrap_or_else(no_op_logger);
+        clean_up_old_sks(&proto_file, &old_proto_file, &replica_logger);
         ProtoSecretKeyStore {
             proto_file,
+            old_proto_file_to_zeroize: old_proto_file,
             keys: Arc::new(RwLock::new(secret_keys)),
-            logger: logger.unwrap_or_else(no_op_logger),
+            logger: replica_logger,
         }
     }
 
@@ -204,17 +230,53 @@ impl ProtoSecretKeyStore {
         Ok(sks_proto)
     }
 
+    /// Writes the secret keys to disk, and performs cleanup (zeroization and removal) of the old
+    /// secret key store file. Note that the cleanup is best-effort, and that any errors encountered
+    /// during cleanup are merely logged, and not returned.
     fn write_secret_keys_to_disk(
         sks_data_file: &Path,
+        old_sks_link_filename: &Path,
         secret_keys: &SecretKeys,
+        logger: &ReplicaLogger,
     ) -> Result<(), SecretKeyStorePersistenceError> {
         let sks_proto = ProtoSecretKeyStore::secret_keys_to_sks_proto(secret_keys)?;
+        match sks_data_file.try_exists() {
+            Ok(exists) => {
+                if exists {
+                    // Create a hard link to the existing keystore, so that we maintain a handle to
+                    // it, which can later be used to zeroize and delete the old keystore.
+                    if let Err(err) = ic_utils::fs::create_hard_link_to_existing_file(
+                        &sks_data_file,
+                        &old_sks_link_filename,
+                    ) {
+                        warn!(
+                            logger,
+                            "Secret key store internal error creating hard link to existing file: {}",
+                            err
+                        );
+                    }
+                }
+            }
+            Err(err) => {
+                warn!(
+                    logger,
+                    "error determining if secret key store file '{}' exists or not: {}",
+                    sks_data_file.to_string_lossy(),
+                    err
+                );
+            }
+        }
+        // Write the new keystore to a new file and atomically replace the existing keystore.
+        // The previously created hard link still points to the old keystore file.
         ic_utils::fs::write_protobuf_using_tmp_file(sks_data_file, &sks_proto).map_err(|e| {
             SecretKeyStorePersistenceError::IoError(format!(
                 "Secret key store internal error writing protobuf using tmp file: {}",
                 e
             ))
-        })
+        })?;
+        // Use the previously created hard link to zeroize and delete the old keystore file.
+        overwrite_file_with_zeroes_and_delete_if_it_exists(old_sks_link_filename, logger);
+        Ok(())
     }
 }
 
@@ -230,7 +292,12 @@ impl SecretKeyStore for ProtoSecretKeyStore {
                 Some(_) => Ok(false),
                 None => {
                     keys.insert(id, (key, scope));
-                    ProtoSecretKeyStore::write_secret_keys_to_disk(&self.proto_file, keys)?;
+                    ProtoSecretKeyStore::write_secret_keys_to_disk(
+                        &self.proto_file,
+                        &self.old_proto_file_to_zeroize,
+                        keys,
+                        &self.logger,
+                    )?;
                     Ok(true)
                 }
             });
@@ -255,7 +322,12 @@ impl SecretKeyStore for ProtoSecretKeyStore {
         with_write_lock(&self.keys, |keys| match keys.get(id) {
             Some(_) => {
                 keys.remove(id);
-                ProtoSecretKeyStore::write_secret_keys_to_disk(&self.proto_file, keys)?;
+                ProtoSecretKeyStore::write_secret_keys_to_disk(
+                    &self.proto_file,
+                    &self.old_proto_file_to_zeroize,
+                    keys,
+                    &self.logger,
+                )?;
                 Ok(true)
             }
             None => Ok(false),
@@ -281,11 +353,134 @@ impl SecretKeyStore for ProtoSecretKeyStore {
                 }
             }
             if keys.len() < orig_keys_count {
-                ProtoSecretKeyStore::write_secret_keys_to_disk(&self.proto_file, keys)?;
+                ProtoSecretKeyStore::write_secret_keys_to_disk(
+                    &self.proto_file,
+                    &self.old_proto_file_to_zeroize,
+                    keys,
+                    &self.logger,
+                )?;
             }
             Ok(())
         })
     }
+}
+
+impl Drop for ProtoSecretKeyStore {
+    fn drop(&mut self) {
+        clean_up_old_sks(
+            &self.proto_file,
+            &self.old_proto_file_to_zeroize,
+            &self.logger,
+        );
+    }
+}
+
+fn clean_up_old_sks(sks_data_file: &PathBuf, old_sks_data_file: &PathBuf, logger: &ReplicaLogger) {
+    match old_sks_data_file.try_exists() {
+        Ok(exists) => {
+            if !exists {
+                return;
+            }
+        }
+        Err(err) => {
+            warn!(
+                logger,
+                "error determining if old secret key store file '{}' exists or not: {}",
+                old_sks_data_file.to_string_lossy(),
+                err
+            );
+            return;
+        }
+    }
+    let sks_exists = match sks_data_file.try_exists() {
+        Ok(exists) => exists,
+        Err(err) => {
+            warn!(
+                logger,
+                "error determining if secret key store file '{}' exists or not: {}",
+                sks_data_file.to_string_lossy(),
+                err
+            );
+            return;
+        }
+    };
+
+    if sks_exists {
+        match ic_utils::fs::are_hard_links_to_the_same_inode(&sks_data_file, &old_sks_data_file) {
+            Ok(are_same_file) => {
+                if are_same_file {
+                    if let Err(err) = ic_utils::fs::remove_file(old_sks_data_file) {
+                        warn!(
+                            logger,
+                            "error removing old secret key store file {}: {}",
+                            old_sks_data_file.to_string_lossy(),
+                            err
+                        );
+                    }
+                } else {
+                    overwrite_file_with_zeroes_and_delete_if_it_exists(old_sks_data_file, logger);
+                }
+            }
+            Err(err) => {
+                warn!(
+                        logger,
+                        "error determining if secret key store file '{}' and old secret key store '{}' are the same file: {}",
+                        sks_data_file.to_string_lossy(),
+                        old_sks_data_file.to_string_lossy(),
+                        err,
+                    );
+            }
+        }
+    } else {
+        warn!(
+                logger,
+                "secret key store file {} does not exist, but old secret key store file to zeroize exists {}",
+                sks_data_file.to_string_lossy(),
+                old_sks_data_file.to_string_lossy()
+            );
+        overwrite_file_with_zeroes_and_delete_if_it_exists(old_sks_data_file, logger);
+    }
+}
+
+fn overwrite_file_with_zeroes_and_delete_if_it_exists<P: AsRef<Path>>(
+    file: P,
+    logger: &ReplicaLogger,
+) {
+    let f = ic_utils::fs::open_existing_file_for_write(&file);
+    match f {
+        Ok(mut f) => {
+            match f.metadata() {
+                Ok(metadata) => {
+                    let len = metadata.len() as usize;
+                    if len > 0 {
+                        let zeros = vec![0; len];
+                        if let Err(e) = f.write_all(&zeros) {
+                            warn!(logger, "error cleaning up old secret key store file: error overwriting file with zeros: {}", e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    warn!(logger, "error cleaning up old secret key store file: error getting file metadata: {}", e);
+                }
+            };
+        }
+        Err(e) if e.kind() == ErrorKind::NotFound => {
+            return;
+        }
+        Err(e) => {
+            warn!(
+                logger,
+                "error cleaning up old secret key store file: error opening file for writing: {}",
+                e
+            );
+        }
+    }
+    if let Err(e) = ic_utils::fs::remove_file(&file) {
+        warn!(
+            logger,
+            "error cleaning up old secret key store file: error removing file from disk: {}", e
+        );
+    };
 }
 
 fn with_write_lock<T, I, R, F>(v: T, f: F) -> Result<R, SecretKeyStorePersistenceError>
