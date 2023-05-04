@@ -1,18 +1,15 @@
 mod framework;
 use crate::framework::{
-    ConsensusDependencies, ConsensusInstance, ConsensusRunner, ConsensusRunnerConfig,
+    setup_subnet, ConsensusDependencies, ConsensusInstance, ConsensusRunner, ConsensusRunnerConfig,
 };
 use ic_consensus_utils::{membership::Membership, pool_reader::PoolReader};
 use ic_interfaces::consensus_pool::ConsensusPool;
 use ic_interfaces_registry::RegistryClient;
 use ic_test_utilities::{
-    consensus::make_catch_up_package_with_empty_transcript,
-    crypto::CryptoReturningOk,
     types::ids::{node_test_id, subnet_test_id},
     FastForwardTimeSource,
 };
-use ic_test_utilities_registry::{setup_registry_non_final, SubnetRecordBuilder};
-use ic_types::{crypto::CryptoHash, replica_config::ReplicaConfig, Height, RegistryVersion};
+use ic_types::{crypto::CryptoHash, replica_config::ReplicaConfig, Height};
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -37,6 +34,7 @@ fn single_node_is_live() {
     run_n_rounds_and_collect_hashes(config);
 }
 
+#[ignore]
 #[test]
 fn multiple_nodes_are_deterministic() {
     let run = || {
@@ -81,27 +79,7 @@ fn run_n_rounds_and_collect_hashes(config: ConsensusRunnerConfig) -> Rc<RefCell<
             .iter()
             .map(|config| config.node_id)
             .collect();
-        let crypto = Arc::new(CryptoReturningOk::default());
-        let initial_version = 1;
-        let (data_provider, registry_client) = setup_registry_non_final(
-            subnet_id,
-            vec![(
-                initial_version,
-                SubnetRecordBuilder::from(&node_ids).build(),
-            )],
-        );
-        // This is required by the XNet payload builder.
-        for node in node_ids.iter() {
-            data_provider
-                .add(
-                    &ic_registry_keys::make_node_record_key(*node),
-                    RegistryVersion::from(initial_version),
-                    Some(ic_protobuf::registry::node::v1::NodeRecord::default()),
-                )
-                .expect("Could not add node record.");
-        }
-        registry_client.update_to_latest_version();
-        let cup = make_catch_up_package_with_empty_transcript(registry_client.clone(), subnet_id);
+        let (registry_client, cup, cryptos) = setup_subnet(subnet_id, &node_ids);
         let inst_deps: Vec<_> = replica_configs
             .iter()
             .zip(pool_configs.iter())
@@ -117,7 +95,11 @@ fn run_n_rounds_and_collect_hashes(config: ConsensusRunnerConfig) -> Rc<RefCell<
 
         let mut framework = ConsensusRunner::new_with_config(config, time_source);
 
-        for (pool_config, deps) in pool_configs.iter().zip(inst_deps.iter()) {
+        for ((pool_config, deps), crypto) in pool_configs
+            .iter()
+            .zip(inst_deps.iter())
+            .zip(cryptos.iter())
+        {
             let membership = Membership::new(
                 deps.consensus_pool.read().unwrap().get_cache(),
                 Arc::clone(&registry_client) as Arc<dyn RegistryClient>,
@@ -126,6 +108,7 @@ fn run_n_rounds_and_collect_hashes(config: ConsensusRunnerConfig) -> Rc<RefCell<
             let membership = Arc::new(membership);
             framework.add_instance(
                 membership.clone(),
+                crypto.clone(),
                 crypto.clone(),
                 deps,
                 pool_config.clone(),

@@ -5032,6 +5032,7 @@ dependencies = [
  "ic-crypto",
  "ic-crypto-temp-crypto",
  "ic-crypto-test-utils-canister-threshold-sigs",
+ "ic-crypto-test-utils-ni-dkg",
  "ic-error-types",
  "ic-execution-environment",
  "ic-ic00-types",
