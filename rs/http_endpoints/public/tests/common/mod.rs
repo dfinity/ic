@@ -1,11 +1,23 @@
+use hyper::{
+    client::conn::{handshake, SendRequest},
+    Body, Method, Request, StatusCode,
+};
 use ic_agent::Agent;
+use ic_config::http_handler::Config;
+use ic_crypto_tls_interfaces_mocks::MockTlsHandshake;
 use ic_crypto_tree_hash::MixedHashTree;
 use ic_error_types::UserError;
+use ic_http_endpoints_public::start_server;
+use ic_interfaces::consensus_pool::ConsensusPoolCache;
 use ic_interfaces::execution_environment::{IngressFilterService, QueryExecutionService};
 use ic_interfaces_p2p::{IngressError, IngressIngestionService};
+use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_registry_mocks::MockRegistryClient;
 use ic_interfaces_state_manager::Labeled;
+use ic_interfaces_state_manager::StateReader;
 use ic_interfaces_state_manager_mocks::MockStateManager;
+use ic_logger::replica_logger::no_op_logger;
+use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::{
     crypto::v1::{AlgorithmId as AlgorithmIdProto, PublicKey as PublicKeyProto},
     provisional_whitelist::v1::ProvisionalWhitelist as ProvisionalWhitelistProto,
@@ -20,8 +32,11 @@ use ic_registry_routing_table::{CanisterMigrations, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{CanisterQueues, NetworkTopology, ReplicatedState, SystemMetadata};
 use ic_test_utilities::{
-    consensus::MockConsensusCache, mock_time, state::ReplicatedStateBuilder,
-    types::ids::subnet_test_id,
+    consensus::MockConsensusCache,
+    crypto::temp_crypto_component_with_fake_registry,
+    mock_time,
+    state::ReplicatedStateBuilder,
+    types::ids::{node_test_id, subnet_test_id},
 };
 use ic_types::{
     batch::{BatchPayload, ValidationContext},
@@ -37,6 +52,7 @@ use ic_types::{
         },
         CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, CryptoHashOf, Signed,
     },
+    malicious_flags::MaliciousFlags,
     messages::{
         CertificateDelegation, HttpQueryResponse, SignedIngress, SignedIngressContent, UserQuery,
     },
@@ -44,7 +60,8 @@ use ic_types::{
     CryptoHashOfPartialState, Height, RegistryVersion,
 };
 use prost::Message;
-use std::{collections::BTreeMap, sync::Arc, time::Duration};
+use std::{collections::BTreeMap, net::SocketAddr, sync::Arc, time::Duration};
+use tokio::net::{TcpSocket, TcpStream};
 use tower::{util::BoxCloneService, Service, ServiceExt};
 use tower_test::mock::Handle;
 
@@ -54,7 +71,7 @@ pub(crate) type IngressIngestionHandle = Handle<SignedIngress, Result<(), Ingres
 pub(crate) type QueryExecutionHandle =
     Handle<(UserQuery, Option<CertificateDelegation>), HttpQueryResponse>;
 
-pub(crate) fn setup_query_execution_mock() -> (QueryExecutionService, QueryExecutionHandle) {
+fn setup_query_execution_mock() -> (QueryExecutionService, QueryExecutionHandle) {
     let (service, handle) =
         tower_test::mock::pair::<(UserQuery, Option<CertificateDelegation>), HttpQueryResponse>();
 
@@ -82,7 +99,7 @@ pub(crate) fn setup_query_execution_mock() -> (QueryExecutionService, QueryExecu
 }
 
 #[allow(clippy::type_complexity)]
-pub(crate) fn setup_ingress_filter_mock() -> (IngressFilterService, IngressFilterHandle) {
+fn setup_ingress_filter_mock() -> (IngressFilterService, IngressFilterHandle) {
     let (service, handle) = tower_test::mock::pair::<
         (ProvisionalWhitelist, SignedIngressContent),
         Result<(), UserError>,
@@ -112,7 +129,7 @@ pub(crate) fn setup_ingress_filter_mock() -> (IngressFilterService, IngressFilte
     )
 }
 
-pub(crate) fn setup_ingress_ingestion_mock() -> (IngressIngestionService, IngressIngestionHandle) {
+fn setup_ingress_ingestion_mock() -> (IngressIngestionService, IngressIngestionHandle) {
     let (service, handle) = tower_test::mock::pair::<SignedIngress, Result<(), IngressError>>();
 
     let infallible_service = tower::service_fn(move |request: SignedIngress| {
@@ -298,4 +315,88 @@ pub(crate) async fn wait_for_status_healthy(agent: &Agent) -> Result<(), &'stati
     tokio::time::timeout(Duration::from_secs(10), fut)
         .await
         .map_err(|_| "Timeout while waiting for http endpoint to be healthy")
+}
+
+// Get a free port on this host to which we can connect transport to.
+pub(crate) fn get_free_localhost_socket_addr() -> SocketAddr {
+    let socket = TcpSocket::new_v4().unwrap();
+    socket.set_reuseport(false).unwrap();
+    socket.set_reuseaddr(false).unwrap();
+    socket.bind("127.0.0.1:0".parse().unwrap()).unwrap();
+    socket.local_addr().unwrap()
+}
+
+pub(crate) async fn create_conn_and_send_request(
+    addr: SocketAddr,
+) -> (SendRequest<Body>, StatusCode) {
+    let target_stream = TcpStream::connect(addr)
+        .await
+        .expect("tcp connection to server address failed");
+
+    let (mut request_sender, connection) = handshake(target_stream)
+        .await
+        .expect("tcp client handshake failed");
+
+    // spawn a task to poll the connection and drive the HTTP state
+    tokio::spawn(async move {
+        connection.await.unwrap();
+    });
+
+    let request = Request::builder()
+        .method(Method::GET)
+        .uri(format!("http://{}/api/v2/status", addr))
+        .body(Body::from(""))
+        .expect("Building the request failed.");
+    let response = request_sender
+        .send_request(request)
+        .await
+        .expect("failed to send request");
+
+    (request_sender, response.status())
+}
+
+pub(crate) fn start_http_endpoint(
+    rt: tokio::runtime::Handle,
+    config: Config,
+    state_manager: Arc<dyn StateReader<State = ReplicatedState>>,
+    consensus_cache: Arc<dyn ConsensusPoolCache>,
+    registry_client: Arc<dyn RegistryClient>,
+) -> (
+    IngressFilterHandle,
+    IngressIngestionHandle,
+    QueryExecutionHandle,
+) {
+    let metrics = MetricsRegistry::new();
+    let (ingress_filter, ingress_filter_handle) = setup_ingress_filter_mock();
+    let (ingress_ingestion, ingress_ingestion_handler) = setup_ingress_ingestion_mock();
+    let (query_exe, query_exe_handler) = setup_query_execution_mock();
+    // Run test on "nns" to avoid fetching root delegation
+    let subnet_id = subnet_test_id(1);
+    let nns_subnet_id = subnet_test_id(1);
+
+    let tls_handshake = Arc::new(MockTlsHandshake::new());
+    let sig_verifier = Arc::new(temp_crypto_component_with_fake_registry(node_test_id(0)));
+    start_server(
+        rt,
+        &metrics,
+        config,
+        ingress_filter,
+        ingress_ingestion,
+        query_exe,
+        state_manager,
+        registry_client,
+        tls_handshake,
+        sig_verifier,
+        subnet_id,
+        nns_subnet_id,
+        no_op_logger(),
+        consensus_cache,
+        SubnetType::Application,
+        MaliciousFlags::default(),
+    );
+    (
+        ingress_filter_handle,
+        ingress_ingestion_handler,
+        query_exe_handler,
+    )
 }
