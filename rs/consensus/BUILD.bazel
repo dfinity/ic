@@ -39,6 +39,7 @@ DEV_DEPENDENCIES = [
     "//rs/bitcoin/types/internal",
     "//rs/consensus/mocks",
     "//rs/crypto/temp_crypto",
+    "//rs/crypto/test_utils/ni-dkg",
     "//rs/execution_environment",
     "//rs/ingress_manager",
     "//rs/interfaces/certified_stream_store",

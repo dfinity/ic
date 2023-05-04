@@ -3,12 +3,17 @@ use super::execution::*;
 use super::types::*;
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus::consensus::dkg_key_manager::DkgKeyManager;
-use ic_consensus::{certification::CertifierImpl, consensus::ConsensusImpl, dkg};
+use ic_consensus::{
+    certification::{CertificationCrypto, CertifierImpl},
+    consensus::ConsensusImpl,
+    dkg,
+};
+use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_consensus_utils::membership::Membership;
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_interfaces::time_source::TimeSource;
 use ic_logger::{info, warn, ReplicaLogger};
-use ic_test_utilities::{crypto::CryptoReturningOk, FastForwardTimeSource};
+use ic_test_utilities::FastForwardTimeSource;
 use ic_test_utilities_registry::FakeLocalStoreCertifiedTimeReader;
 use ic_types::malicious_flags::MaliciousFlags;
 use ic_types::Time;
@@ -114,7 +119,8 @@ impl<'a> ConsensusRunner<'a> {
     pub fn add_instance(
         &mut self,
         membership: Arc<Membership>,
-        fake_crypto: Arc<CryptoReturningOk>,
+        consensus_crypto: Arc<dyn ConsensusCrypto>,
+        certification_crypto: Arc<dyn CertificationCrypto>,
         deps: &'a ConsensusDependencies,
         pool_config: ArtifactPoolConfig,
         pool_reader: &PoolReader<'_>,
@@ -128,7 +134,7 @@ impl<'a> ConsensusRunner<'a> {
 
         let dkg_key_manager = Arc::new(Mutex::new(DkgKeyManager::new(
             deps.metrics_registry.clone(),
-            Arc::clone(&fake_crypto) as Arc<_>,
+            consensus_crypto.clone(),
             replica_logger.clone(),
             pool_reader,
         )));
@@ -140,7 +146,7 @@ impl<'a> ConsensusRunner<'a> {
             Default::default(),
             Arc::clone(&deps.registry_client),
             membership.clone(),
-            fake_crypto.clone(),
+            consensus_crypto.clone(),
             deps.ingress_selector.clone(),
             deps.xnet_payload_builder.clone(),
             deps.self_validating_payload_builder.clone(),
@@ -159,7 +165,7 @@ impl<'a> ConsensusRunner<'a> {
         );
         let dkg = dkg::DkgImpl::new(
             deps.replica_config.node_id,
-            fake_crypto.clone(),
+            consensus_crypto,
             deps.consensus_pool.read().unwrap().get_cache(),
             dkg_key_manager,
             deps.metrics_registry.clone(),
@@ -168,7 +174,7 @@ impl<'a> ConsensusRunner<'a> {
         let certifier = CertifierImpl::new(
             deps.replica_config.clone(),
             membership,
-            fake_crypto,
+            certification_crypto,
             deps.state_manager.clone(),
             deps.consensus_pool.read().unwrap().get_cache(),
             deps.metrics_registry.clone(),
