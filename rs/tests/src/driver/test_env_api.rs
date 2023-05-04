@@ -1150,8 +1150,11 @@ pub trait HasMetricsUrl {
 impl HasMetricsUrl for IcNodeSnapshot {
     fn get_metrics_url(&self) -> Option<Url> {
         let node_record = self.raw_node_record();
-        let metrics_endpoint = node_record.prometheus_metrics.first().cloned();
-        metrics_endpoint.map(|me| IcNodeSnapshot::http_endpoint_to_url(&me))
+        node_record.http.map(|me| {
+            let mut url = IcNodeSnapshot::http_endpoint_to_url(&me);
+            let _ = url.set_port(Some(9090));
+            url
+        })
     }
 }
 

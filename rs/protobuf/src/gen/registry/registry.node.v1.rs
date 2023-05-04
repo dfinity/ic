@@ -41,13 +41,6 @@ pub struct NodeRecord {
     /// The P2P flow end points.
     #[prost(message, repeated, tag = "8")]
     pub p2p_flow_endpoints: ::prost::alloc::vec::Vec<FlowEndpoint>,
-    /// Endpoint where the node provides Prometheus format metrics over HTTP
-    #[prost(message, optional, tag = "10")]
-    pub prometheus_metrics_http: ::core::option::Option<ConnectionEndpoint>,
-    /// Endpoints on which metrics compatible with the Prometheus export
-    /// format are served.
-    #[prost(message, repeated, tag = "13")]
-    pub prometheus_metrics: ::prost::alloc::vec::Vec<ConnectionEndpoint>,
     /// Endpoints on which the XNet API is served
     #[prost(message, repeated, tag = "14")]
     pub xnet_api: ::prost::alloc::vec::Vec<ConnectionEndpoint>,

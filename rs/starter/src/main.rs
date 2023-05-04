@@ -93,7 +93,6 @@ fn main() -> Result<()> {
                 p2p_addr: "org.internetcomputer.p2p1://0.0.0.0:0"
                     .parse()
                     .expect("can't fail"),
-                prometheus_metrics: vec![],
                 node_operator_principal_id: None,
                 secret_key_store: None,
             },

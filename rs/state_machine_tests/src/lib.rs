@@ -198,8 +198,6 @@ fn make_nodes_registry(
                 protocol: 0,
             }),
             p2p_flow_endpoints: vec![],
-            prometheus_metrics_http: None,
-            prometheus_metrics: vec![],
             xnet_api: vec![],
             chip_id: vec![],
         };

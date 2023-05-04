@@ -388,14 +388,12 @@ fn node_to_config(node: &Node) -> NodeConfiguration {
     let public_api = SocketAddr::new(ipv6_addr, AddrType::PublicApi.into());
     let xnet_api = SocketAddr::new(ipv6_addr, AddrType::Xnet.into());
     let p2p_addr = SocketAddr::new(ipv6_addr, AddrType::P2P.into());
-    let prometheus_addr = SocketAddr::new(ipv6_addr, AddrType::Prometheus.into());
     NodeConfiguration {
         xnet_api: vec![xnet_api.into()],
         public_api: public_api.into(),
         p2p_addr: format!("org.internetcomputer.p2p1://{}", p2p_addr)
             .parse()
             .expect("can't fail"),
-        prometheus_metrics: vec![prometheus_addr.into()],
         // this value will be overridden by IcConfig::with_node_operator()
         node_operator_principal_id: None,
         secret_key_store: node.secret_key_store.clone(),

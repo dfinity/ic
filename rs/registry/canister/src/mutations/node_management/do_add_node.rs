@@ -57,10 +57,6 @@ impl Registry {
                 .map(|x| flow_endpoint_from_string(x))
                 .collect(),
             node_operator_id: caller.into_vec(),
-            prometheus_metrics_http: Some(connection_endpoint_from_string(
-                &payload.prometheus_metrics_endpoint,
-            )),
-            prometheus_metrics: vec![],
             xnet_api: vec![],
             chip_id: vec![],
         };

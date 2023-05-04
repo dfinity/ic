@@ -192,8 +192,9 @@ fn get_ic_topology(
                     registry_version,
                 })?;
 
+            // Derive the prometheus metrics endpoint from the http endpoint.
             let connection_endpoint =
-                ConnectionEndpoint::try_from(node_record.prometheus_metrics_http.clone().ok_or(
+                ConnectionEndpoint::try_from(node_record.http.clone().ok_or(
                     RegistryInvariantError::NoConnectionEndpoint {
                         subnet_id,
                         node_id,
@@ -204,35 +205,13 @@ fn get_ic_topology(
                     RegistryInvariantError::ConnectionEndpointParseFailed {
                         source,
                         node_id,
-                        connection_endpoint: node_record.prometheus_metrics_http.clone().unwrap(),
+                        connection_endpoint: node_record.http.unwrap(),
                         registry_version,
                     }
                 })?;
 
             let mut addr = SocketAddr::from(&connection_endpoint);
-
-            // If prometheus_metrics_http is not set fallback to http.
-            if addr.ip().is_unspecified() {
-                let connection_endpoint =
-                    ConnectionEndpoint::try_from(node_record.http.clone().ok_or(
-                        RegistryInvariantError::NoConnectionEndpoint {
-                            subnet_id,
-                            node_id,
-                            registry_version,
-                        },
-                    )?)
-                    .map_err(|source| {
-                        RegistryInvariantError::ConnectionEndpointParseFailed {
-                            source,
-                            node_id,
-                            connection_endpoint: node_record.http.unwrap(),
-                            registry_version,
-                        }
-                    })?;
-
-                addr = SocketAddr::from(&connection_endpoint);
-                addr.set_port(9090);
-            }
+            addr.set_port(9090);
 
             // Seen bogus registry entries where the connection endpoint exists
             // but is 0.0.0.0

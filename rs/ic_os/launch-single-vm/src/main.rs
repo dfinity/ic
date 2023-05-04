@@ -117,7 +117,6 @@ fn main() {
             )
             .parse()
             .unwrap(),
-            prometheus_metrics: vec![SocketAddr::new(ipv6_addr, 9090).into()],
             node_operator_principal_id: None,
             secret_key_store: None,
         },

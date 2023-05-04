@@ -239,7 +239,6 @@ pub fn get_ic_config() -> IcConfig {
             p2p_addr: "org.internetcomputer.p2p1://128.0.0.1:10000"
                 .parse()
                 .expect("can't fail"),
-            prometheus_metrics: vec![],
             node_operator_principal_id: None,
             secret_key_store: Some(node_sks),
         },

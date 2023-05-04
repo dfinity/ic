@@ -104,35 +104,6 @@ pub(crate) fn check_endpoint_invariants(
         }
         endpoints_to_check.push((node_record.http.unwrap(), false));
 
-        // Prometheus metrics HTTP endpoint (may be unspecified)
-        // TODO: simplify this code after NET-1142 is completed
-        if !node_record.prometheus_metrics.is_empty() {
-            let prometheus_metrics: BTreeSet<String> = node_record
-                .prometheus_metrics
-                .iter()
-                .map(|x| format!("{x:?}"))
-                .collect();
-            if node_record.prometheus_metrics_http.is_some() {
-                let http_endpoint = format!("{:?}", node_record.prometheus_metrics_http.unwrap());
-                if !prometheus_metrics.contains(&http_endpoint) {
-                    let error: Result<(), InvariantCheckError> = Err(InvariantCheckError {
-                        msg: format!("{error_prefix}: inconsistent node record: legacy prometheus_metrics_http endpoint field ({http_endpoint}) must belong to the new prometheus_metrics field"),
-                        source: None,
-                    });
-                    // TODO: change to `return error;` after NNS1-2228 is closed.
-                    println!("WARNING: {error:?}");
-                }
-            }
-            endpoints_to_check.extend(
-                node_record
-                    .prometheus_metrics
-                    .into_iter()
-                    .map(|x| (x, true)),
-            );
-        } else if node_record.prometheus_metrics_http.is_some() {
-            endpoints_to_check.push((node_record.prometheus_metrics_http.unwrap(), true));
-        };
-
         let mut new_valid_endpoints = BTreeSet::<(IpAddr, u16)>::new();
 
         // Validate all endpoints of this node (excluding p2p flow endpoints which are
@@ -485,13 +456,11 @@ mod tests {
                         protocol: Protocol::P2p1Tls13 as i32,
                     }),
                 }],
-                prometheus_metrics_http: None,
                 http: Some(ConnectionEndpoint {
                     ip_addr: "200.1.1.3".to_string(),
                     port: 9000,
                     protocol: Protocol::Http1 as i32,
                 }),
-                prometheus_metrics: vec![],
                 xnet_api: vec![ConnectionEndpoint {
                     ip_addr: "200.1.1.3".to_string(),
                     port: 9001,
@@ -518,13 +487,11 @@ mod tests {
                         protocol: Protocol::P2p1Tls13 as i32,
                     }),
                 }],
-                prometheus_metrics_http: None,
                 http: Some(ConnectionEndpoint {
                     ip_addr: "200.1.1.3".to_string(),
                     port: 9000,
                     protocol: Protocol::Http1 as i32,
                 }),
-                prometheus_metrics: vec![],
                 xnet_api: vec![ConnectionEndpoint {
                     ip_addr: "200.1.1.1".to_string(),
                     port: 9001,
@@ -553,13 +520,11 @@ mod tests {
                         protocol: Protocol::P2p1Tls13 as i32,
                     }),
                 }],
-                prometheus_metrics_http: None,
                 http: Some(ConnectionEndpoint {
                     ip_addr: "200.1.1.2".to_string(),
                     port: 9000,
                     protocol: Protocol::Http1 as i32,
                 }),
-                prometheus_metrics: vec![],
                 xnet_api: vec![ConnectionEndpoint {
                     ip_addr: "200.1.1.2".to_string(),
                     port: 9001,
