@@ -3,13 +3,10 @@
 //! Note: These are used in threshold signatures, multisignatures and
 //! distributed key generation.
 
-pub mod test_vectors;
-
 pub mod bls12_381 {
     //! Data types for the BLS12_381 elliptic curve.
     //!
     //! This is a pairing curve from which we use two groups, "G1" and "G2".
-    pub mod conversions;
 
     use std::fmt;
     use zeroize::DefaultIsZeroes;

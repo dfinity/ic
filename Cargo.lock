@@ -5473,7 +5473,6 @@ dependencies = [
  "criterion",
  "hex",
  "ic-crypto-getrandom-for-wasm",
- "ic-crypto-internal-types",
  "ic-crypto-test-utils-reproducible-rng",
  "ic_bls12_381",
  "itertools",
