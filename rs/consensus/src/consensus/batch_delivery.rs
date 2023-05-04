@@ -80,7 +80,7 @@ pub fn deliver_batches(
                 if block.payload.is_summary() {
                     info!(log, "Delivering finalized batch at CUP height of {}", h);
                 }
-                // When we are not deliverying CUP block, we must check replica_version
+                // When we are not delivering CUP block, we must check replica_version
                 else {
                     match pool.registry_version(h).and_then(|registry_version| {
                         lookup_replica_version(registry_client, subnet_id, log, registry_version)

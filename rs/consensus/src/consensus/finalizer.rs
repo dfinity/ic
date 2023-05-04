@@ -153,7 +153,7 @@ impl Finalizer {
     /// * This replica has not created a notarization share for height `h` on
     ///   any block other than the single fully notarized block at height `h`
     ///
-    /// In this case, the the single notarized block is returned. Otherwise,
+    /// In this case, the single notarized block is returned. Otherwise,
     /// return `None`
     fn pick_block_to_finality_sign(&self, pool: &PoolReader<'_>, h: Height) -> Option<Block> {
         let me = self.replica_config.node_id;
@@ -199,11 +199,11 @@ impl Finalizer {
 
         // If notarization shares exists created by this replica at height `h`
         // that sign a block different than `notarized_block`, do not finalize.
-        let other_notarizaed_shares_exists = pool.get_notarization_shares(h).any(|x| {
+        let other_notarized_shares_exists = pool.get_notarization_shares(h).any(|x| {
             x.signature.signer == me
                 && x.content.block != ic_types::crypto::crypto_hash(&notarized_block)
         });
-        if other_notarizaed_shares_exists {
+        if other_notarized_shares_exists {
             return None;
         }
 
