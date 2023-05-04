@@ -156,13 +156,11 @@ mod tests {
                                 protocol: 3,
                             }),
                         }],
-                        prometheus_metrics_http: None,
                         http: Some(ConnectionEndpoint {
                             ip_addr: ip.to_string(),
                             port: 8080,
                             protocol: 2,
                         }),
-                        prometheus_metrics: vec![],
                         xnet_api: vec![ConnectionEndpoint {
                             ip_addr: ip.to_string(),
                             port: 2457,

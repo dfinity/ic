@@ -13,7 +13,7 @@ cargo run -p ic-prep --bin ic-prep -- \
   --replica-download-url ... \
   --orchestrator-download-url ... \
   --p2p-flows 1234-3 \
-  --node 'idx:1,subnet_idx:1,xnet_api:["http://1.2.3.4:81"],public_api:"http://1.2.3.4:82",prometheus_metrics:["http://1.2.3.4:9090"],p2p_addr:"org.internetcomputer.p2p1://1.2.3.4:80"'
+  --node 'idx:1,subnet_idx:1,xnet_api:["http://1.2.3.4:81"],public_api:"http://1.2.3.4:82",p2p_addr:"org.internetcomputer.p2p1://1.2.3.4:80"'
   --node ...
 ----
 
@@ -60,9 +60,6 @@ The fields are:
 
 - `public_api` - an endpoint on which the node will serve the public API.
 
-- `prometheus_metrics` - an array of endpoints on which the node will serve
-  Prometheus-compatible metrics.
-
 - `p2p_addr` - the base endpoint on which the node will serve P2P
 
 - `xnet_api` - an array of endpoints on which the node will handle XNet messages
@@ -89,6 +86,6 @@ with their connection endpoints on the same ports but different IP addresses
 ----
 ic-admin
   ...
-  --node 'idx:1,subnet_idx:1,xnet_api:"http://1.2.3.4:81",public_api:"http://1.2.3.4:82",prometheus_metrics:["http://1.2.3.4:9090"],p2p_addr:"org.internetcomputer.p2p1://1.2.3.4:80"'
-  --node 'idx:2,subnet_idx:1,xnet_api:"http://4.3.2.1:81",public_api:"http://4.3.2.1:82",prometheus_metrics:["http://4.3.2.1:9090"],p2p_addr:"org.internetcomputer.p2p1://1.2.3.4:80"''
+  --node 'idx:1,subnet_idx:1,xnet_api:"http://1.2.3.4:81",public_api:"http://1.2.3.4:82",p2p_addr:"org.internetcomputer.p2p1://1.2.3.4:80"'
+  --node 'idx:2,subnet_idx:1,xnet_api:"http://4.3.2.1:81",public_api:"http://4.3.2.1:82",p2p_addr:"org.internetcomputer.p2p1://1.2.3.4:80"''
 ----

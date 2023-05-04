@@ -260,11 +260,6 @@ pub fn test_group_set_registry(
                 port: node_num as u32, /* NOTE: this port is not used in any test */
                 protocol: Protocol::Http1 as i32,
             }),
-            prometheus_metrics_http: Some(ConnectionEndpoint {
-                ip_addr: "127.0.0.1".to_string(),
-                port: 9090,
-                protocol: Protocol::Http1 as i32,
-            }),
             ..Default::default()
         };
         data_provider

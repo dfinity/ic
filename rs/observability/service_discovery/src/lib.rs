@@ -277,30 +277,12 @@ impl IcServiceDiscoveryImpl {
         node_record: NodeRecord,
     ) -> Result<SocketAddr, IcServiceDiscoveryError> {
         use IcServiceDiscoveryError::*;
+        // Derive the prometheus metrics endpoint from the http endpoint.
         let connection_endpoint =
-            ConnectionEndpoint::try_from(node_record.prometheus_metrics_http.clone().ok_or(
-                NoConnectionEndpoint {
-                    node_id,
-                    registry_version,
-                },
-            )?)
-            .map_err(|source| ConnectionEndpointParseFailed {
-                source,
+            ConnectionEndpoint::try_from(node_record.http.clone().ok_or(NoConnectionEndpoint {
                 node_id,
-                connection_endpoint: node_record.prometheus_metrics_http.clone().unwrap(),
                 registry_version,
-            })?;
-
-        let mut addr = SocketAddr::from(&connection_endpoint);
-
-        // If prometheus_metrics_http is not set fallback to http.
-        if addr.ip().is_unspecified() {
-            let connection_endpoint = ConnectionEndpoint::try_from(
-                node_record.http.clone().ok_or(NoConnectionEndpoint {
-                    node_id,
-                    registry_version,
-                })?,
-            )
+            })?)
             .map_err(|source| ConnectionEndpointParseFailed {
                 source,
                 node_id,
@@ -308,9 +290,8 @@ impl IcServiceDiscoveryImpl {
                 registry_version,
             })?;
 
-            addr = SocketAddr::from(&connection_endpoint);
-            addr.set_port(9090);
-        }
+        let mut addr = SocketAddr::from(&connection_endpoint);
+        addr.set_port(9090);
         // Seen bogus registry entries where the connection endpoint exists
         // but is 0.0.0.0
         if addr.ip().is_unspecified() {
