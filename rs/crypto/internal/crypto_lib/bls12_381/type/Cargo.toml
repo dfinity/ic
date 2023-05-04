@@ -21,7 +21,6 @@ ic-crypto-getrandom-for-wasm = { path = "../../../../getrandom_for_wasm" }
 
 [dev-dependencies]
 criterion = { version = "0.3", features = ["html_reports"] }
-ic-crypto-internal-types = { path = "../../types" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../../../test_utils/reproducible_rng" }
 
 [[bench]]

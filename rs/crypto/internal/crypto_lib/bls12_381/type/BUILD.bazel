@@ -22,7 +22,6 @@ MACRO_DEPENDENCIES = [
 ]
 
 DEV_DEPENDENCIES = [
-    "//rs/crypto/internal/crypto_lib/types",
     "//rs/crypto/test_utils/reproducible_rng",
     "@crate_index//:criterion",
 ]
