@@ -78,7 +78,6 @@ impl<T: RegistryClient + ?Sized> FirewallRegistry for T {
                                 .collect(),
                         );
                         endpoints.extend::<Vec<ConnectionEndpoint>>(node_record.xnet_api);
-                        endpoints.extend::<Vec<ConnectionEndpoint>>(node_record.public_api);
                         if let Some(xnet_record) = node_record.xnet {
                             endpoints.push(xnet_record)
                         };
@@ -150,7 +149,6 @@ mod tests {
                     NodeId::from(PrincipalId::new_node_test_id(id as u64)),
                     NodeRecord {
                         xnet: None,
-                        http: None,
                         p2p_flow_endpoints: vec![FlowEndpoint {
                             endpoint: Some(ConnectionEndpoint {
                                 ip_addr: ip.to_string(),
@@ -159,11 +157,11 @@ mod tests {
                             }),
                         }],
                         prometheus_metrics_http: None,
-                        public_api: vec![ConnectionEndpoint {
+                        http: Some(ConnectionEndpoint {
                             ip_addr: ip.to_string(),
                             port: 8080,
                             protocol: 2,
-                        }],
+                        }),
                         prometheus_metrics: vec![],
                         xnet_api: vec![ConnectionEndpoint {
                             ip_addr: ip.to_string(),

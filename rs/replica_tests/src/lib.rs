@@ -235,7 +235,7 @@ pub fn get_ic_config() -> IcConfig {
         NODE_INDEX_DEFAULT,
         NodeConfiguration {
             xnet_api: vec!["http://0.0.0.1:0".parse().expect("can't fail")],
-            public_api: vec!["http://128.0.0.1:10000".parse().expect("can't fail")],
+            public_api: "http://128.0.0.1:10000".parse().expect("can't fail"),
             p2p_addr: "org.internetcomputer.p2p1://128.0.0.1:10000"
                 .parse()
                 .expect("can't fail"),

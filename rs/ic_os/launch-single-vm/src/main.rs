@@ -110,7 +110,7 @@ fn main() {
         0,
         NodeConfiguration {
             xnet_api: vec![SocketAddr::new(ipv6_addr, 2497).into()],
-            public_api: vec![SocketAddr::new(ipv6_addr, 8080).into()],
+            public_api: SocketAddr::new(ipv6_addr, 8080).into(),
             p2p_addr: format!(
                 "org.internetcomputer.p2p1://{}",
                 SocketAddr::new(ipv6_addr, 4100)

@@ -391,7 +391,7 @@ fn node_to_config(node: &Node) -> NodeConfiguration {
     let prometheus_addr = SocketAddr::new(ipv6_addr, AddrType::Prometheus.into());
     NodeConfiguration {
         xnet_api: vec![xnet_api.into()],
-        public_api: vec![public_api.into()],
+        public_api: public_api.into(),
         p2p_addr: format!("org.internetcomputer.p2p1://{}", p2p_addr)
             .parse()
             .expect("can't fail"),

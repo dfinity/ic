@@ -64,12 +64,11 @@ message NodeRecord {
   // Endpoint where the node provides Prometheus format metrics over HTTP
   ConnectionEndpoint prometheus_metrics_http = 10;
 
-  // Endpoints on which the public API is served.
-  repeated ConnectionEndpoint public_api = 11;
-
-  reserved "private_api";
+  reserved 11;
+  reserved "public_api";
   reserved 12;
-
+  reserved "private_api";
+  
   // Endpoints on which metrics compatible with the Prometheus export
   // format are served.
   repeated ConnectionEndpoint prometheus_metrics = 13;
