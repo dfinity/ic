@@ -227,7 +227,7 @@ impl EcdsaPayload {
             RandomTranscriptParams(params) => Some(params.as_ref().registry_version()),
             ReshareOfMaskedParams(params) => Some(params.as_ref().registry_version()),
             ReshareOfUnmaskedParams(params) => Some(params.as_ref().registry_version()),
-            XnetReshareOfUnmaskedParams(_) => None,
+            XnetReshareOfUnmaskedParams((_, params)) => Some(params.as_ref().registry_version()),
             Created(transcript) => idkg_transcripts
                 .get(&transcript.as_ref().transcript_id)
                 .map(|transcript| transcript.registry_version),
