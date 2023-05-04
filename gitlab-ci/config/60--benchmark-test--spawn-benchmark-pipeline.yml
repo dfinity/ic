@@ -77,7 +77,7 @@ maximum-capacity-system-baseline-query:
       $SHELL_WRAPPER timeout 1h ./testnet/tools/icos_deploy.sh $TESTNET --git-revision "$GIT_REVISION" --no-boundary-nodes
       cd ./scalability
 
-      $SHELL_WRAPPER python3 experiments/run_system_baseline_experiment.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --initial_rps=100 --increment_rps=50 --target_rps=4400 --max_rps=40000
+      $SHELL_WRAPPER python3 experiments/run_system_baseline_experiment.py --num_canisters 2 --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --initial_rps=100 --increment_rps=50 --target_rps=4400 --max_rps=40000
 
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"

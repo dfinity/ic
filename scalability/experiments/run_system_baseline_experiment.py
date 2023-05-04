@@ -46,6 +46,7 @@ gflags.DEFINE_integer("increment_rps", 50, "Increment of requests per second per
 gflags.DEFINE_integer(
     "max_rps", 40000, "Maximum requests per second to be sent. Experiment will wrap up beyond this number."
 )
+gflags.DEFINE_integer("num_canisters", 1, "Number of canisters to run against.")
 
 
 class BaselineExperiment(workload_experiment.WorkloadExperiment):
@@ -57,7 +58,8 @@ class BaselineExperiment(workload_experiment.WorkloadExperiment):
             num_workload_gen=FLAGS.num_workload_generators,
             request_type="call" if FLAGS.use_updates else "query",
         )
-        self.install_canister(self.target_nodes[0])
+        for _ in range(FLAGS.num_canisters):
+            self.install_canister(self.target_nodes[0])
 
     def run_experiment_internal(self, config):
         """Run workload generator with the load specified in config."""
