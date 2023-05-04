@@ -54,7 +54,6 @@ pub fn config_impl(env: TestEnv) {
         env.get_dependency_path("ic-os/guestos/rootfs/dev-certs/canister_http_test_ca.cert"),
     );
     env::remove_var("NIX_SSL_CERT_FILE");
-    env::set_var("IC_TEST_DATA", env.get_dependency_path("rs/tests/ic-hs"));
 
     UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
         .with_config_img(env.get_dependency_path("rs/tests/http_uvm_config_image.zst"))
@@ -150,6 +149,7 @@ pub fn test_subnet(
         .into_string()
         .unwrap();
     with_endpoint(
+        env,
         test_subnet,
         peer_subnet,
         httpbin,
@@ -183,6 +183,7 @@ fn subnet_config(subnet: &SubnetSnapshot) -> String {
 }
 
 pub fn with_endpoint(
+    env: TestEnv,
     test_subnet: SubnetSnapshot,
     peer_subnet: SubnetSnapshot,
     httpbin: String,
@@ -196,6 +197,7 @@ pub fn with_endpoint(
     info!(log, "test-subnet-config: {}", test_subnet_config);
     info!(log, "peer-subnet-config: {}", peer_subnet_config);
     let status = Command::new(ic_ref_test_path)
+        .env("IC_TEST_DATA", env.get_dependency_path("rs/tests/ic-hs"))
         .arg("-j20")
         .arg("--pattern")
         .arg(tests_to_pattern(excluded_tests))
