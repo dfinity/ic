@@ -4423,6 +4423,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-boundary"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "arc-swap",
+ "async-scoped",
+ "async-trait",
+ "axum",
+ "clap 4.1.8",
+ "futures",
+ "lazy_static",
+ "prometheus 0.13.3",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "ic-btc-adapter"
 version = "0.1.0"
 dependencies = [
