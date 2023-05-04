@@ -60,7 +60,6 @@ impl Registry {
             prometheus_metrics_http: Some(connection_endpoint_from_string(
                 &payload.prometheus_metrics_endpoint,
             )),
-            public_api: vec![],
             prometheus_metrics: vec![],
             xnet_api: vec![],
             chip_id: vec![],

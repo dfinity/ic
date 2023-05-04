@@ -193,7 +193,7 @@ pub struct NodeConfiguration {
     pub xnet_api: Vec<ConnectionEndpoint>,
 
     /// Endpoints where the replica serves the public API interface
-    pub public_api: Vec<ConnectionEndpoint>,
+    pub public_api: ConnectionEndpoint,
 
     /// Endpoint where the replica serves Prometheus-compatible metrics
     pub prometheus_metrics: Vec<ConnectionEndpoint>,
@@ -250,27 +250,7 @@ impl TryFrom<NodeConfiguration> for pbNodeRecord {
             endpoint: Some(p2p_base_endpoint),
         }];
 
-        // public_api and related fields. This must have at least one value.
-        // All values are used in the `public_api` field, and the first value
-        // with `Protocol::Http1` is copied to the deprecated `http` field.
-        let pb_public_api_endpoints = node_configuration
-            .public_api
-            .iter()
-            .map(pbConnectionEndpoint::from)
-            .collect::<Vec<_>>();
-
-        if pb_public_api_endpoints.is_empty() {
-            return Err(NodeConfigurationTryFromError::EmptyPublicApiEndpoint);
-        }
-
-        if let Some(endpoint) = pb_public_api_endpoints
-            .iter()
-            .find(|&endpoint| endpoint.protocol() == Protocol::Http1)
-        {
-            pb_node_record.http = Some(endpoint.clone());
-        }
-
-        pb_node_record.public_api = pb_public_api_endpoints;
+        pb_node_record.http = Some(pbConnectionEndpoint::from(&node_configuration.public_api));
 
         // xnet and related field. All values are used in the `xnet_api`
         // field, and the first value is used, for backwards compatibility,
@@ -426,7 +406,7 @@ mod node_configuration {
     fn into_proto_http() {
         let node_configuration = NodeConfiguration {
             xnet_api: vec!["http://1.2.3.4:8080".parse().unwrap()],
-            public_api: vec!["http://1.2.3.4:8081".parse().unwrap()],
+            public_api: "http://1.2.3.4:8081".parse().unwrap(),
             prometheus_metrics: vec!["http://1.2.3.4:9090".parse().unwrap()],
             p2p_addr: "org.internetcomputer.p2p1://1.2.3.4:1234".parse().unwrap(),
             node_operator_principal_id: None,
@@ -444,11 +424,6 @@ mod node_configuration {
                     protocol: Protocol::P2p1Tls13 as i32,
                 }),
             }],
-            public_api: vec![pbConnectionEndpoint {
-                ip_addr: "1.2.3.4".to_string(),
-                port: 8081,
-                protocol: Protocol::Http1 as i32,
-            }],
             prometheus_metrics: vec![pbConnectionEndpoint {
                 ip_addr: "1.2.3.4".to_string(),
                 port: 9090,
@@ -459,7 +434,6 @@ mod node_configuration {
                 port: 8080,
                 protocol: Protocol::Http1 as i32,
             }],
-            // Deprecated fields should also have values
             http: Some(pbConnectionEndpoint {
                 ip_addr: "1.2.3.4".to_string(),
                 port: 8081,

@@ -44,9 +44,6 @@ pub struct NodeRecord {
     /// Endpoint where the node provides Prometheus format metrics over HTTP
     #[prost(message, optional, tag = "10")]
     pub prometheus_metrics_http: ::core::option::Option<ConnectionEndpoint>,
-    /// Endpoints on which the public API is served.
-    #[prost(message, repeated, tag = "11")]
-    pub public_api: ::prost::alloc::vec::Vec<ConnectionEndpoint>,
     /// Endpoints on which metrics compatible with the Prometheus export
     /// format are served.
     #[prost(message, repeated, tag = "13")]

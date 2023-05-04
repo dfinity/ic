@@ -392,7 +392,7 @@ fn parse_nodes_deprecated(src: &str) -> Result<Node> {
         subnet_index,
         config: NodeConfiguration {
             xnet_api: vec![ConnectionEndpoint::from(xnet_addr)],
-            public_api: vec![ConnectionEndpoint::from(http_addr)],
+            public_api: ConnectionEndpoint::from(http_addr),
             prometheus_metrics: vec![ConnectionEndpoint::from(metrics_addr)],
             p2p_addr: ConnectionEndpoint::try_from(p2p_addr)?,
             node_operator_principal_id: None,
@@ -408,7 +408,7 @@ struct NodeFlag {
     idx: Option<u64>,
     subnet_idx: Option<u64>,
     pub xnet_api: Option<Vec<ConnectionEndpoint>>,
-    pub public_api: Option<Vec<ConnectionEndpoint>>,
+    pub public_api: Option<ConnectionEndpoint>,
     pub prometheus_metrics: Option<Vec<ConnectionEndpoint>>,
 
     /// The initial endpoint that P2P uses.
@@ -521,7 +521,7 @@ impl Display for Node {
         if let Some(subnet_index) = self.subnet_index {
             write!(f, ",subnet_idx:{}", subnet_index)?;
         }
-        write!(f, ",public_api:[{}]", joiner(&self.config.public_api))?;
+        write!(f, r#",public_api:"{}""#, self.config.public_api)?;
         write!(
             f,
             ",prometheus_metrics:[{}]",
@@ -822,7 +822,7 @@ mod test_flag_nodes_parser_deprecated {
             subnet_index: Some(2),
             config: NodeConfiguration {
                 xnet_api: vec!["http://2.3.4.5:81".parse().unwrap()],
-                public_api: vec!["http://3.4.5.6:82".parse().unwrap()],
+                public_api: "http://3.4.5.6:82".parse().unwrap(),
                 prometheus_metrics: vec!["http://0.0.0.0:82".parse().unwrap()],
                 p2p_addr: "org.internetcomputer.p2p1://1.2.3.4:80".parse().unwrap(),
                 node_operator_principal_id: None,
@@ -843,7 +843,7 @@ mod test_flag_nodes_parser_deprecated {
             subnet_index: Some(2),
             config: NodeConfiguration {
                 xnet_api: vec!["http://2.3.4.5:81".parse().unwrap()],
-                public_api: vec!["http://3.4.5.6:82".parse().unwrap()],
+                public_api: "http://3.4.5.6:82".parse().unwrap(),
                 p2p_addr: "org.internetcomputer.p2p1://1.2.3.4:80".parse().unwrap(),
                 prometheus_metrics: vec!["http://0.0.0.0:82".parse().unwrap()],
                 node_operator_principal_id: None,
@@ -861,7 +861,7 @@ mod test_flag_node_parser {
     use assert_matches::assert_matches;
     use pretty_assertions::assert_eq;
 
-    const GOOD_FLAG: &str = r#"idx:1,subnet_idx:2,xnet_api:["http://1.2.3.4:81"],public_api:["http://3.4.5.6:82"],prometheus_metrics:["http://5.6.7.8:9090"],p2p_addr:"org.internetcomputer.p2p1://1.2.3.4:80""#;
+    const GOOD_FLAG: &str = r#"idx:1,subnet_idx:2,xnet_api:["http://1.2.3.4:81"],public_api:"http://3.4.5.6:82",prometheus_metrics:["http://5.6.7.8:9090"],p2p_addr:"org.internetcomputer.p2p1://1.2.3.4:80""#;
 
     /// Verifies that a good flag parses correctly
     #[test]
@@ -872,7 +872,7 @@ mod test_flag_node_parser {
             subnet_index: Some(2),
             config: NodeConfiguration {
                 xnet_api: vec!["http://1.2.3.4:81".parse().unwrap()],
-                public_api: vec!["http://3.4.5.6:82".parse().unwrap()],
+                public_api: "http://3.4.5.6:82".parse().unwrap(),
                 p2p_addr: "org.internetcomputer.p2p1://1.2.3.4:80".parse().unwrap(),
                 prometheus_metrics: vec!["http://5.6.7.8:9090".parse().unwrap()],
                 node_operator_principal_id: None,
@@ -888,14 +888,14 @@ mod test_flag_node_parser {
     fn missing_fields() {
         // Each flag variant omits a field, starting with `idx`.
         let flags = vec![
-            r#"subnet_idx:2,xnet_api:["http://1.2.3.4:81"],public_api:["http://3.4.5.6:82"],prometheus_metrics:["http://5.6.7.8:9090"],p2p_addr:"org.internetcomputer.p2p1://1.2.3.4:80""#,
+            r#"subnet_idx:2,xnet_api:["http://1.2.3.4:81"],public_api:"http://3.4.5.6:82",prometheus_metrics:["http://5.6.7.8:9090"],p2p_addr:"org.internetcomputer.p2p1://1.2.3.4:80""#,
             // Omitting subnet index yields an unassigned node.
-            // r#"idx:1,xnet_api:["http://1.2.3.4:81"],public_api:["http://3.4.5.6:82"],prometheus_metrics:["http://5.6.7.8:9090"],p2p_addr:"org.internetcomputer.p2p1://1.2.3.4:80""#,
-            r#"idx:1,subnet_idx:2,public_api:["http://3.4.5.6:82"],prometheus_metrics:["http://5.6.7.8:9090"],p2p_addr:"org.internetcomputer.p2p1://1.2.3.4:80""#,
+            // r#"idx:1,xnet_api:["http://1.2.3.4:81"],public_api:"http://3.4.5.6:82",prometheus_metrics:["http://5.6.7.8:9090"],p2p_addr:"org.internetcomputer.p2p1://1.2.3.4:80""#,
+            r#"idx:1,subnet_idx:2,public_api:"http://3.4.5.6:82",prometheus_metrics:["http://5.6.7.8:9090"],p2p_addr:"org.internetcomputer.p2p1://1.2.3.4:80""#,
             r#"idx:1,subnet_idx:2,xnet_api:["http://1.2.3.4:81"],prometheus_metrics:["http://5.6.7.8:9090"],p2p_addr:"org.internetcomputer.p2p1://1.2.3.4:80""#,
-            //r#"idx:1,subnet_idx:2,xnet_api:["http://1.2.3.4:81"],public_api:["http://3.4.5.6:82"],prometheus_metrics:["http://5.6.7.8:9090"],p2p_addr:"org.internetcomputer.p2p1://1.2.3.4:80""#,
-            r#"idx:1,subnet_idx:2,xnet_api:["http://1.2.3.4:81"],public_api:["http://3.4.5.6:82"],p2p_addr:"org.internetcomputer.p2p1://1.2.3.4:80""#,
-            r#"idx:1,subnet_idx:2,xnet_api:["http://1.2.3.4:81"],public_api:["http://3.4.5.6:82"],prometheus_metrics:["http://5.6.7.8:9090"]"#,
+            //r#"idx:1,subnet_idx:2,xnet_api:["http://1.2.3.4:81"],public_api:"http://3.4.5.6:82",prometheus_metrics:["http://5.6.7.8:9090"],p2p_addr:"org.internetcomputer.p2p1://1.2.3.4:80""#,
+            r#"idx:1,subnet_idx:2,xnet_api:["http://1.2.3.4:81"],public_api:"http://3.4.5.6:82",p2p_addr:"org.internetcomputer.p2p1://1.2.3.4:80""#,
+            r#"idx:1,subnet_idx:2,xnet_api:["http://1.2.3.4:81"],public_api:"http://3.4.5.6:82",prometheus_metrics:["http://5.6.7.8:9090"]"#,
         ];
 
         for flag in flags {

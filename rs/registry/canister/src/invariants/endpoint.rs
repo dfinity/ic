@@ -16,7 +16,7 @@ use ic_protobuf::registry::node::v1::{ConnectionEndpoint, Protocol};
 /// syntactically correct data ("ip_addr" field parses as an IP address,
 /// "port" field is <= 65535):
 ///    * An Xnet endpoint entry exists (either .xnet or .xnet_api)
-///    * A HTTP endpoint entry exists (either .http or .public_api)
+///    * A HTTP endpoint entry exists (either .http)
 ///    * IP address is not 0.0.0.0 ("unspecified" address)
 ///    * IP address is not 255.255.255.255 ("broadcast" address)
 ///    * We might want to ban others as well: must be global, not link-local
@@ -96,35 +96,13 @@ pub(crate) fn check_endpoint_invariants(
             endpoints_to_check.push((node_record.xnet.unwrap(), false))
         };
 
-        // Public API endpoints (cannot be unspecified)
-        // TODO: simplify this code after NET-1142 is completed
-        if !node_record.public_api.is_empty() {
-            let public_api: BTreeSet<String> = node_record
-                .public_api
-                .iter()
-                .map(|x| format!("{x:?}"))
-                .collect();
-            if node_record.http.is_some() {
-                let http_endpoint = format!("{:?}", node_record.http.unwrap());
-                if !public_api.contains(&http_endpoint) {
-                    let error: Result<(), InvariantCheckError> = Err(InvariantCheckError {
-                        msg: format!("{error_prefix}: inconsistent node record: legacy http endpoint field ({http_endpoint}) must belong to the new public_api field"),
-                        source: None,
-                    });
-                    // TODO: change to `return error;` after NNS1-2228 is closed.
-                    println!("WARNING: {error:?}");
-                }
-            }
-            endpoints_to_check.extend(node_record.public_api.into_iter().map(|x| (x, false)));
-        } else {
-            if node_record.http.is_none() {
-                return Err(InvariantCheckError {
-                    msg: format!("{error_prefix}: No HTTP/Public API endpoint found"),
-                    source: None,
-                });
-            }
-            endpoints_to_check.push((node_record.http.unwrap(), false))
-        };
+        if node_record.http.is_none() {
+            return Err(InvariantCheckError {
+                msg: format!("{error_prefix}: No HTTP/Public API endpoint found"),
+                source: None,
+            });
+        }
+        endpoints_to_check.push((node_record.http.unwrap(), false));
 
         // Prometheus metrics HTTP endpoint (may be unspecified)
         // TODO: simplify this code after NET-1142 is completed
@@ -500,7 +478,6 @@ mod tests {
             encode_or_panic::<NodeRecord>(&NodeRecord {
                 node_operator_id: vec![0],
                 xnet: None,
-                http: None,
                 p2p_flow_endpoints: vec![FlowEndpoint {
                     endpoint: Some(ConnectionEndpoint {
                         ip_addr: "200.1.1.1".to_string(),
@@ -509,11 +486,11 @@ mod tests {
                     }),
                 }],
                 prometheus_metrics_http: None,
-                public_api: vec![ConnectionEndpoint {
+                http: Some(ConnectionEndpoint {
                     ip_addr: "200.1.1.3".to_string(),
                     port: 9000,
                     protocol: Protocol::Http1 as i32,
-                }],
+                }),
                 prometheus_metrics: vec![],
                 xnet_api: vec![ConnectionEndpoint {
                     ip_addr: "200.1.1.3".to_string(),
@@ -534,7 +511,6 @@ mod tests {
             encode_or_panic::<NodeRecord>(&NodeRecord {
                 node_operator_id: vec![0],
                 xnet: None,
-                http: None,
                 p2p_flow_endpoints: vec![FlowEndpoint {
                     endpoint: Some(ConnectionEndpoint {
                         ip_addr: "200.1.1.3".to_string(),
@@ -543,11 +519,11 @@ mod tests {
                     }),
                 }],
                 prometheus_metrics_http: None,
-                public_api: vec![ConnectionEndpoint {
+                http: Some(ConnectionEndpoint {
                     ip_addr: "200.1.1.3".to_string(),
                     port: 9000,
                     protocol: Protocol::Http1 as i32,
-                }],
+                }),
                 prometheus_metrics: vec![],
                 xnet_api: vec![ConnectionEndpoint {
                     ip_addr: "200.1.1.1".to_string(),
@@ -570,7 +546,6 @@ mod tests {
             encode_or_panic::<NodeRecord>(&NodeRecord {
                 node_operator_id: vec![0],
                 xnet: None,
-                http: None,
                 p2p_flow_endpoints: vec![FlowEndpoint {
                     endpoint: Some(ConnectionEndpoint {
                         ip_addr: "200.1.1.3".to_string(),
@@ -579,11 +554,11 @@ mod tests {
                     }),
                 }],
                 prometheus_metrics_http: None,
-                public_api: vec![ConnectionEndpoint {
+                http: Some(ConnectionEndpoint {
                     ip_addr: "200.1.1.2".to_string(),
                     port: 9000,
                     protocol: Protocol::Http1 as i32,
-                }],
+                }),
                 prometheus_metrics: vec![],
                 xnet_api: vec![ConnectionEndpoint {
                     ip_addr: "200.1.1.2".to_string(),
