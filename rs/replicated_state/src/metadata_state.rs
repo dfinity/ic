@@ -28,13 +28,13 @@ use ic_registry_routing_table::{
 };
 use ic_registry_subnet_features::SubnetFeatures;
 use ic_registry_subnet_type::SubnetType;
-use ic_types::nominal_cycles::NominalCycles;
 use ic_types::{
     crypto::CryptoHash,
     ingress::{IngressState, IngressStatus},
     messages::{MessageId, RequestOrResponse},
-    node_id_into_protobuf, node_id_try_from_protobuf, subnet_id_into_protobuf,
-    subnet_id_try_from_protobuf,
+    node_id_into_protobuf, node_id_try_from_option,
+    nominal_cycles::NominalCycles,
+    subnet_id_into_protobuf, subnet_id_try_from_protobuf,
     time::{Time, UNIX_EPOCH},
     xnet::{StreamHeader, StreamIndex, StreamIndexedQueue, StreamSlice},
     CountBytes, CryptoHashOfPartialState, NodeId, NumBytes, PrincipalId, SubnetId,
@@ -346,10 +346,7 @@ impl TryFrom<pb_metadata::SubnetTopology> for SubnetTopology {
     fn try_from(item: pb_metadata::SubnetTopology) -> Result<Self, Self::Error> {
         let mut nodes = BTreeSet::<NodeId>::new();
         for entry in item.nodes {
-            nodes.insert(node_id_try_from_protobuf(try_from_option_field(
-                entry.node_id,
-                "SubnetTopology::nodes::K",
-            )?)?);
+            nodes.insert(node_id_try_from_option(entry.node_id)?);
         }
 
         let mut ecdsa_keys_held = BTreeSet::new();

@@ -73,7 +73,7 @@ impl TryFrom<pb::NiDkgConfig> for NiDkgConfig {
                 config
                     .dealers
                     .into_iter()
-                    .map(crate::node_id_try_from_protobuf)
+                    .map(|dealer| crate::node_id_try_from_option(Some(dealer)))
                     .collect::<Result<BTreeSet<_>, _>>()
                     .map_err(|err| format!("Problem loading dealers in NiDkgConfig: {:?}", err))?,
             )
@@ -83,7 +83,7 @@ impl TryFrom<pb::NiDkgConfig> for NiDkgConfig {
                 config
                     .receivers
                     .into_iter()
-                    .map(crate::node_id_try_from_protobuf)
+                    .map(|receiver| crate::node_id_try_from_option(Some(receiver)))
                     .collect::<Result<BTreeSet<_>, _>>()
                     .map_err(|err| {
                         format!("Problem loading receivers in NiDkgConfig: {:?}", err)

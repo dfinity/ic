@@ -306,12 +306,7 @@ impl TryFrom<&pb::IDkgTranscriptAttributes> for IDkgTranscriptAttributes {
     fn try_from(attributes: &pb::IDkgTranscriptAttributes) -> Result<Self, Self::Error> {
         let mut receivers = BTreeSet::new();
         for pb_node_id in &attributes.receivers {
-            let node_id = crate::node_id_try_from_protobuf(pb_node_id.clone()).map_err(|err| {
-                ProxyDecodeError::Other(format!(
-                    "IDkgTranscriptParamsRef:: Failed to convert receiver: {:?}",
-                    err
-                ))
-            })?;
+            let node_id = crate::node_id_try_from_option(Some(pb_node_id.clone()))?;
             receivers.insert(node_id);
         }
         Ok(IDkgTranscriptAttributes::new(
@@ -1124,23 +1119,13 @@ impl TryFrom<&pb::IDkgTranscriptParamsRef> for IDkgTranscriptParamsRef {
 
         let mut dealers = BTreeSet::new();
         for pb_node_id in &params.dealers {
-            let node_id = crate::node_id_try_from_protobuf(pb_node_id.clone()).map_err(|err| {
-                ProxyDecodeError::Other(format!(
-                    "IDkgTranscriptParamsRef:: Failed to convert dealer: {:?}",
-                    err
-                ))
-            })?;
+            let node_id = crate::node_id_try_from_option(Some(pb_node_id.clone()))?;
             dealers.insert(node_id);
         }
 
         let mut receivers = BTreeSet::new();
         for pb_node_id in &params.receivers {
-            let node_id = crate::node_id_try_from_protobuf(pb_node_id.clone()).map_err(|err| {
-                ProxyDecodeError::Other(format!(
-                    "IDkgTranscriptParamsRef:: Failed to convert receiver: {:?}",
-                    err
-                ))
-            })?;
+            let node_id = crate::node_id_try_from_option(Some(pb_node_id.clone()))?;
             receivers.insert(node_id);
         }
 

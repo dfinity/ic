@@ -170,14 +170,6 @@ pub fn node_id_into_protobuf(id: NodeId) -> pb::NodeId {
     }
 }
 
-/// TODO: Deprecated. Remove in favor of [`node_id_try_from_option`].
-pub fn node_id_try_from_protobuf(value: pb::NodeId) -> Result<NodeId, PrincipalIdBlobParseError> {
-    // All fields in Protobuf definition are required hence they are encoded in
-    // `Option`.  We simply treat them as required here though.
-    let principal_id = PrincipalId::try_from(value.principal_id.unwrap())?;
-    Ok(NodeId::from(principal_id))
-}
-
 /// From its protobuf definition convert to a NodeId.  Normally, we would
 /// use `impl TryFrom<Option<pb::NodeId>> for NodeId` here however we cannot
 /// as both `Id` and `pb::NodeId` are defined in other crates.
