@@ -173,7 +173,7 @@ pub fn encrypt_and_prove(
                 &crypto::ChunkingInstance::new(
                     public_keys.clone(),
                     ciphertext.ciphertext_chunks().to_vec(),
-                    ciphertext.randomizers_r().to_vec(),
+                    ciphertext.randomizers_r().clone(),
                 ),
                 &chunking_proof,
             ),
@@ -258,7 +258,7 @@ fn prove_chunking<R: RngCore + CryptoRng>(
     encryption_witness: &crypto::EncryptionWitness,
     rng: &mut R,
 ) -> crypto::ProofChunking {
-    let big_plaintext_chunks: Vec<Vec<Scalar>> = plaintext_chunks
+    let big_plaintext_chunks: Vec<_> = plaintext_chunks
         .iter()
         .map(|chunks| chunks.chunks_as_scalars())
         .collect();
@@ -266,11 +266,11 @@ fn prove_chunking<R: RngCore + CryptoRng>(
     let chunking_instance = crypto::ChunkingInstance::new(
         public_keys.to_vec(),
         ciphertext.ciphertext_chunks().to_vec(),
-        ciphertext.randomizers_r().to_vec(),
+        ciphertext.randomizers_r().clone(),
     );
 
     let chunking_witness =
-        crypto::ChunkingWitness::new(encryption_witness.witness().to_vec(), big_plaintext_chunks);
+        crypto::ChunkingWitness::new(encryption_witness.witness().clone(), big_plaintext_chunks);
 
     crypto::prove_chunking(&chunking_instance, &chunking_witness, rng)
 }
@@ -389,7 +389,7 @@ pub fn verify_zk_proofs(
         &crypto::ChunkingInstance::new(
             public_keys.clone(),
             ciphertext.ciphertext_chunks().to_vec(),
-            ciphertext.randomizers_r().to_vec(),
+            ciphertext.randomizers_r().clone(),
         ),
         &chunking_proof,
     )

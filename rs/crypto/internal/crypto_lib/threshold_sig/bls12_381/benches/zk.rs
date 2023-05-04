@@ -71,7 +71,7 @@ fn zk_sharing_proof(c: &mut Criterion) {
 
 fn setup_chunking_instance_and_witness() -> (ChunkingInstance, ChunkingWitness) {
     const NODE_COUNT: usize = 28;
-    const THRESHOLD: usize = 19;
+    const NUM_CHUNKS: usize = 16;
 
     let mut rng = rand::thread_rng();
 
@@ -82,7 +82,7 @@ fn setup_chunking_instance_and_witness() -> (ChunkingInstance, ChunkingWitness) 
         y.push(G1Affine::from(g1 * Scalar::random(&mut rng)));
     }
 
-    let r = Scalar::batch_random(&mut rng, THRESHOLD);
+    let r = Scalar::batch_random(&mut rng, NUM_CHUNKS);
     let rr = G1Affine::batch_mul(g1, &r);
 
     let mut s = Vec::with_capacity(y.len());
@@ -95,12 +95,12 @@ fn setup_chunking_instance_and_witness() -> (ChunkingInstance, ChunkingWitness) 
             chunk_i.push(G1Projective::mul2(&y_i.into(), r_j, &g1.into(), &s_ij).to_affine());
             s_i.push(s_ij);
         }
-        s.push(s_i);
-        chunk.push(chunk_i);
+        s.push(s_i.try_into().expect("Unexpected size"));
+        chunk.push(chunk_i.try_into().expect("Unexpected size"));
     }
 
-    let instance = ChunkingInstance::new(y, chunk, rr);
-    let witness = ChunkingWitness::new(r, s);
+    let instance = ChunkingInstance::new(y, chunk, rr.try_into().expect("Unexpected size"));
+    let witness = ChunkingWitness::new(r.try_into().expect("Unexpected size"), s);
     (instance, witness)
 }
 

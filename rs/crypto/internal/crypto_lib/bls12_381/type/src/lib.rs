@@ -301,6 +301,11 @@ impl Scalar {
         result
     }
 
+    /// Return several random scalars
+    pub fn batch_random_array<const N: usize, R: RngCore + CryptoRng>(rng: &mut R) -> [Self; N] {
+        [(); N].map(|_| Self::random(rng))
+    }
+
     /// Returns several sparse random scalars.
     ///
     /// # Arguments
@@ -392,6 +397,21 @@ impl Scalar {
         Ok(r)
     }
 
+    /// Deserialize multiple scalars
+    ///
+    /// This function returns Ok only if all of the provided inputs
+    /// represent a valid scalar.
+    pub fn batch_deserialize_array<B: AsRef<[u8]>, const N: usize>(
+        inputs: &[B; N],
+    ) -> Result<[Self; N], PairingInvalidScalar> {
+        // This could be made nicer, and avoid the heap allocation, by
+        // using array::try_map (currently only available in nightly)
+
+        let r = Self::batch_deserialize(inputs.as_ref())?;
+        Ok(r.try_into()
+            .expect("Input and output lengths are guaranteed same at compile time"))
+    }
+
     /// Serialize the scalar to a big-endian byte string
     pub fn serialize(&self) -> [u8; Self::BYTES] {
         let mut bytes = self.value.to_bytes();
@@ -402,6 +422,25 @@ impl Scalar {
     /// Serialize the scalar to a big-endian byte string in some specific type
     pub fn serialize_to<T: From<[u8; Self::BYTES]>>(&self) -> T {
         T::from(self.serialize())
+    }
+
+    /// Serialize an array of scalars into some specific type
+    pub fn serialize_array_to<T: From<[u8; Self::BYTES]>, const N: usize>(
+        vals: &[Self; N],
+    ) -> [T; N] {
+        let iota: [usize; N] = std::array::from_fn(|i| i);
+        iota.map(|i| T::from(vals[i].serialize()))
+    }
+
+    /// Serialize a slice of scalars into some specific type
+    pub fn serialize_seq_to<T: From<[u8; Self::BYTES]>>(vals: &[Self]) -> Vec<T> {
+        let mut result = Vec::with_capacity(vals.len());
+
+        for v in vals {
+            result.push(T::from(v.serialize()));
+        }
+
+        result
     }
 
     /// Multiscalar multiplication
@@ -994,7 +1033,7 @@ macro_rules! define_affine_and_projective_types {
                 ctoption_ok_or!(pt, PairingInvalidPoint::InvalidPoint)
             }
 
-            /// Deserialize multiple point (compressed format only)
+            /// Deserialize multiple points (compressed format only)
             ///
             /// This version verifies that the decoded point is within the prime order
             /// subgroup, and is safe to call on untrusted inputs. It returns Ok only
@@ -1005,6 +1044,21 @@ macro_rules! define_affine_and_projective_types {
                     r.push(Self::deserialize(input)?);
                 }
                 Ok(r)
+            }
+
+            /// Deserialize multiple points (compressed format only)
+            ///
+            /// This version verifies that the decoded point is within the prime order
+            /// subgroup, and is safe to call on untrusted inputs. It returns Ok only
+            /// if all of the provided bytes represent a valid point.
+            pub fn batch_deserialize_array<B: AsRef<[u8]>, const N: usize>(inputs: &[B; N]) -> Result<[Self; N], PairingInvalidPoint> {
+
+                // This could be made nicer, and avoid the heap allocation, by
+                // using array::try_map (currently only available in nightly)
+
+                let r = Self::batch_deserialize(inputs.as_ref())?;
+
+                Ok(r.try_into().expect("Input and output lengths are guaranteed same at compile time"))
             }
 
             /// Deserialize a point (compressed format only), trusted bytes edition
@@ -1029,6 +1083,23 @@ macro_rules! define_affine_and_projective_types {
             /// Serialize a point in compressed format in some specific type
             pub fn serialize_to<T: From<[u8; Self::BYTES]>>(&self) -> T {
                 T::from(self.serialize())
+            }
+
+            /// Serialize an array of points in compressed format in some specific type
+            pub fn serialize_array_to<T: From<[u8; Self::BYTES]>, const N: usize>(vals: &[Self; N]) -> [T; N] {
+                let iota: [usize; N] = std::array::from_fn(|i| i);
+                iota.map(|i| T::from(vals[i].serialize()))
+            }
+
+            /// Serialize a slice of points into some specific type
+            pub fn serialize_seq_to<T: From<[u8; Self::BYTES]>>(vals: &[Self]) -> Vec<T> {
+                let mut result = Vec::with_capacity(vals.len());
+
+                for v in vals {
+                    result.push(T::from(v.serialize()));
+                }
+
+                result
             }
 
             /// Return true if this is the identity element
@@ -1062,6 +1133,12 @@ macro_rules! define_affine_and_projective_types {
                     result.push(self * scalar);
                 }
                 $projective::batch_normalize(&result)
+            }
+
+            /// Batch multiplication
+            pub fn batch_mul_array<const N: usize>(&self, scalars: &[Scalar; N]) -> [Self; N] {
+                let v = scalars.clone().map(|s| self * s);
+                $projective::batch_normalize_array(&v)
             }
         }
 
@@ -1220,6 +1297,16 @@ macro_rules! define_affine_and_projective_types {
                 }
                 output
             }
+
+            /// Convert a group of points into affine format
+            pub fn batch_normalize_array<const N: usize>(points: &[Self; N]) -> [$affine; N] {
+                let inner_points = points.clone().map(|p| *p.inner());
+
+                let mut inner_affine = [ic_bls12_381::$affine::identity(); N];
+                ic_bls12_381::$projective::batch_normalize(inner_points.as_ref(), &mut inner_affine);
+
+                inner_affine.map(|p| $affine::new(p))
+            }
         }
 
         impl std::ops::Mul<&Scalar> for &$affine {
@@ -1342,6 +1429,17 @@ macro_rules! declare_mul2_table_impl {
                 }
 
                 accum
+            }
+
+            #[allow(dead_code)]
+            /// Perform a sequence of sum-of-2-products operations and return the results
+            pub fn mul2_array<const N: usize>(
+                &self,
+                a: &[Scalar; N],
+                b: &[Scalar; N],
+            ) -> [$projective; N] {
+                let iota: [usize; N] = std::array::from_fn(|i| i);
+                iota.map(|i| self.mul2(&a[i], &b[i]))
             }
         }
     };

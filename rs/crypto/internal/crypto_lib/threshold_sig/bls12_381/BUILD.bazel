@@ -17,7 +17,6 @@ DEPENDENCIES = [
     "//rs/crypto/secrets_containers",
     "//rs/crypto/sha",
     "//rs/types/types",
-    "@crate_index//:arrayvec",
     "@crate_index//:base64",
     "@crate_index//:cached",
     "@crate_index//:hex",

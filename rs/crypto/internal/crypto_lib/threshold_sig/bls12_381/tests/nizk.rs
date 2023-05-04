@@ -210,7 +210,7 @@ fn setup_chunking_instance_and_witness<R: RngCore + CryptoRng>(
     rng: &mut R,
 ) -> (ChunkingInstance, ChunkingWitness) {
     const NODE_COUNT: usize = 28;
-    const THRESHOLD: usize = 16;
+    const NUM_CHUNKS: usize = 16;
 
     let g1 = G1Affine::generator();
 
@@ -219,13 +219,8 @@ fn setup_chunking_instance_and_witness<R: RngCore + CryptoRng>(
         y.push(G1Affine::from(g1 * Scalar::random(rng)));
     }
 
-    let mut r = Vec::with_capacity(THRESHOLD);
-    let mut rr = Vec::with_capacity(THRESHOLD);
-    for _ in 0..THRESHOLD {
-        let r_i = Scalar::random(rng);
-        rr.push(G1Affine::from(g1 * &r_i));
-        r.push(r_i);
-    }
+    let r = Scalar::batch_random_array::<NUM_CHUNKS, R>(rng);
+    let rr = g1.batch_mul_array(&r);
 
     let mut s = Vec::with_capacity(y.len());
     let mut chunk = Vec::new();
@@ -237,8 +232,8 @@ fn setup_chunking_instance_and_witness<R: RngCore + CryptoRng>(
             chunk_i.push(G1Projective::mul2(&y_i.into(), r_j, &g1.into(), &s_ij).to_affine());
             s_i.push(s_ij);
         }
-        s.push(s_i);
-        chunk.push(chunk_i);
+        s.push(s_i.try_into().expect("Expected size"));
+        chunk.push(chunk_i.try_into().expect("Expected size"));
     }
 
     let instance = ChunkingInstance::new(y, chunk, rr);
@@ -269,7 +264,7 @@ fn chunking_prover_should_panic_on_empty_chunks() {
     let invalid_instance = ChunkingInstance::new(
         instance.public_keys().to_vec(),
         empty_chunks,
-        instance.randomizers_r().to_vec(),
+        instance.randomizers_r().clone(),
     );
 
     let _panic = prove_chunking(&invalid_instance, &witness, &mut rng);
@@ -308,7 +303,7 @@ fn chunking_prover_should_panic_on_invalid_instance() {
     let invalid_instance = ChunkingInstance::new(
         with_extra_key,
         instance.ciphertext_chunks().to_vec(),
-        instance.randomizers_r().to_vec(),
+        instance.randomizers_r().clone(),
     );
 
     let _panic = prove_chunking(&invalid_instance, &witness, &mut rng);
@@ -327,7 +322,7 @@ fn chunking_nizk_should_fail_on_invalid_instance() {
     let invalid_instance = ChunkingInstance::new(
         with_extra_key,
         instance.ciphertext_chunks().to_vec(),
-        instance.randomizers_r().to_vec(),
+        instance.randomizers_r().clone(),
     );
 
     assert_eq!(

@@ -162,7 +162,7 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
         println!("Verifying chunking proof...");
         // Suggestion: Make this conversion in prove_chunking, so that the API types are
         // consistent.
-        let big_plaintext_chunks: Vec<Vec<_>> = plaintext_chunks
+        let big_plaintext_chunks: Vec<_> = plaintext_chunks
             .iter()
             .map(|chunks| chunks.chunks_as_scalars())
             .collect();
@@ -170,11 +170,11 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
         let chunking_instance = ChunkingInstance::new(
             receiver_fs_public_keys.clone(),
             crsz.ciphertext_chunks().to_vec(),
-            crsz.randomizers_r().to_vec(),
+            crsz.randomizers_r().clone(),
         );
 
         let chunking_witness =
-            ChunkingWitness::new(encryption_witness.witness().to_vec(), big_plaintext_chunks);
+            ChunkingWitness::new(encryption_witness.witness().clone(), big_plaintext_chunks);
 
         let nizk_chunking = prove_chunking(&chunking_instance, &chunking_witness, &mut rng);
 
@@ -227,6 +227,7 @@ fn encrypted_chunks_should_validate(epoch: Epoch) {
             .iter()
             .map(|s| g1_from_big_endian_chunks(s))
             .collect();
+
         let combined_r = scalar_from_big_endian_chunks(encryption_witness.witness());
         let combined_r_exp = g1_from_big_endian_chunks(crsz.randomizers_r());
         let combined_plaintexts: Vec<Scalar> = plaintext_chunks

@@ -624,58 +624,23 @@ impl SecretKey {
 /// one for each recipent.
 #[derive(Debug)]
 pub struct FsEncryptionCiphertext {
-    cc: Vec<Vec<G1Affine>>,
-    rr: Vec<G1Affine>,
-    ss: Vec<G1Affine>,
-    zz: Vec<G2Affine>,
+    cc: Vec<[G1Affine; NUM_CHUNKS]>,
+    rr: [G1Affine; NUM_CHUNKS],
+    ss: [G1Affine; NUM_CHUNKS],
+    zz: [G2Affine; NUM_CHUNKS],
 }
 
 impl FsEncryptionCiphertext {
     /// Serialises a ciphertext from the internal representation into the standard
     /// form.
-    ///
-    /// # Panics
-    /// This will panic if the internal representation is invalid.  Given that the
-    /// internal representation is generated internally, this can happen only if there
-    /// is an error in our code.
     pub fn serialize(&self) -> FsEncryptionCiphertextBytes {
-        assert_eq!(self.rr.len(), NUM_CHUNKS);
-        assert_eq!(self.ss.len(), NUM_CHUNKS);
-        assert_eq!(self.zz.len(), NUM_CHUNKS);
-
-        let rand_r = {
-            let mut rand_r = [G1Bytes([0u8; G1Bytes::SIZE]); NUM_CHUNKS];
-            for (dst, src) in rand_r[..].iter_mut().zip(&self.rr) {
-                *dst = src.serialize_to::<G1Bytes>();
-            }
-            rand_r
-        };
-        let rand_s = {
-            let mut rand_s = [G1Bytes([0u8; G1Bytes::SIZE]); NUM_CHUNKS];
-            for (dst, src) in rand_s[..].iter_mut().zip(&self.ss) {
-                *dst = src.serialize_to::<G1Bytes>();
-            }
-            rand_s
-        };
-        let rand_z = {
-            let mut rand_z = [G2Bytes([0u8; G2Bytes::SIZE]); NUM_CHUNKS];
-            for (dst, src) in rand_z[..].iter_mut().zip(&self.zz) {
-                *dst = src.serialize_to::<G2Bytes>();
-            }
-            rand_z
-        };
+        let rand_r = G1Affine::serialize_array_to::<G1Bytes, NUM_CHUNKS>(&self.rr);
+        let rand_s = G1Affine::serialize_array_to::<G1Bytes, NUM_CHUNKS>(&self.ss);
+        let rand_z = G2Affine::serialize_array_to::<G2Bytes, NUM_CHUNKS>(&self.zz);
         let ciphertext_chunks = self
             .cc
             .iter()
-            .map(|cj| {
-                assert_eq!(cj.len(), NUM_CHUNKS);
-
-                let mut cc = [G1Bytes([0u8; G1Bytes::SIZE]); NUM_CHUNKS];
-                for (dst, src) in cc[..].iter_mut().zip(cj) {
-                    *dst = src.serialize_to::<G1Bytes>();
-                }
-                cc
-            })
+            .map(|cj| G1Affine::serialize_array_to::<G1Bytes, NUM_CHUNKS>(cj))
             .collect();
 
         FsEncryptionCiphertextBytes {
@@ -692,24 +657,27 @@ impl FsEncryptionCiphertext {
     /// This will return an error if any of the constituent group elements is
     /// invalid.
     pub fn deserialize(ciphertext: &FsEncryptionCiphertextBytes) -> Result<Self, &'static str> {
-        let rr = G1Affine::batch_deserialize(&ciphertext.rand_r).or(Err("Malformed rand_r"))?;
-        let ss = G1Affine::batch_deserialize(&ciphertext.rand_s).or(Err("Malformed rand_s"))?;
-        let zz = G2Affine::batch_deserialize(&ciphertext.rand_z).or(Err("Malformed rand_z"))?;
+        let rr =
+            G1Affine::batch_deserialize_array(&ciphertext.rand_r).or(Err("Malformed rand_r"))?;
+        let ss =
+            G1Affine::batch_deserialize_array(&ciphertext.rand_s).or(Err("Malformed rand_s"))?;
+        let zz =
+            G2Affine::batch_deserialize_array(&ciphertext.rand_z).or(Err("Malformed rand_z"))?;
 
-        let cc: Vec<Vec<G1Affine>> = ciphertext
+        let cc: Vec<[G1Affine; NUM_CHUNKS]> = ciphertext
             .ciphertext_chunks
             .iter()
-            .map(|cj| G1Affine::batch_deserialize(&cj[..]).or(Err("Malformed ciphertext_chunk")))
+            .map(|cj| G1Affine::batch_deserialize_array(cj).or(Err("Malformed ciphertext_chunk")))
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(Self { cc, rr, ss, zz })
     }
 
-    pub fn ciphertext_chunks(&self) -> &[Vec<G1Affine>] {
+    pub fn ciphertext_chunks(&self) -> &[[G1Affine; NUM_CHUNKS]] {
         &self.cc
     }
 
-    pub fn randomizers_r(&self) -> &[G1Affine] {
+    pub fn randomizers_r(&self) -> &[G1Affine; NUM_CHUNKS] {
         &self.rr
     }
 }
@@ -717,11 +685,11 @@ impl FsEncryptionCiphertext {
 /// Randomness needed for NIZK proofs.
 #[derive(Zeroize, ZeroizeOnDrop)]
 pub struct EncryptionWitness {
-    r: Vec<Scalar>,
+    r: [Scalar; NUM_CHUNKS],
 }
 
 impl EncryptionWitness {
-    pub fn witness(&self) -> &[Scalar] {
+    pub fn witness(&self) -> &[Scalar; NUM_CHUNKS] {
         &self.r
     }
 }
@@ -739,14 +707,14 @@ pub fn enc_chunks<R: RngCore + CryptoRng>(
 
     let g1 = G1Affine::generator();
 
-    let s = Scalar::batch_random(rng, NUM_CHUNKS);
-    let ss = g1.batch_mul(&s);
+    let s = Scalar::batch_random_array::<NUM_CHUNKS, R>(rng);
+    let ss = g1.batch_mul_array(&s);
 
-    let r = Scalar::batch_random(rng, NUM_CHUNKS);
-    let rr = g1.batch_mul(&r);
+    let r = Scalar::batch_random_array::<NUM_CHUNKS, R>(rng);
+    let rr = g1.batch_mul_array(&r);
 
     let cc = {
-        let mut cc: Vec<Vec<G1Affine>> = Vec::with_capacity(receivers);
+        let mut cc: Vec<[G1Affine; NUM_CHUNKS]> = Vec::with_capacity(receivers);
 
         let g1 = G1Projective::from(g1);
 
@@ -756,29 +724,22 @@ pub fn enc_chunks<R: RngCore + CryptoRng>(
 
             let chunks = ptext.chunks_as_scalars();
 
-            let mut enc_chunks = Vec::with_capacity(NUM_CHUNKS);
+            let enc_chunks =
+                G1Projective::batch_normalize_array(&pk_g1_tbl.mul2_array(&r, &chunks));
 
-            for j in 0..NUM_CHUNKS {
-                enc_chunks.push(pk_g1_tbl.mul2(&r[j], &chunks[j]));
-            }
-
-            cc.push(G1Projective::batch_normalize(&enc_chunks));
+            cc.push(enc_chunks);
         }
 
         cc
     };
 
     let id = ftau_extended(&cc, &rr, &ss, sys, epoch, associated_data);
-    let mut zz = Vec::with_capacity(NUM_CHUNKS);
-
     let id_h_tbl = G2Projective::compute_mul2_tbl(&id, &G2Projective::from(&sys.h));
-    for j in 0..NUM_CHUNKS {
-        zz.push(id_h_tbl.mul2(&r[j], &s[j]));
-    }
 
-    let zz = G2Projective::batch_normalize(&zz);
+    let zz = G2Projective::batch_normalize_array(&id_h_tbl.mul2_array(&r, &s));
 
     let witness = EncryptionWitness { r };
+
     let crsz = FsEncryptionCiphertext { cc, rr, ss, zz };
 
     (crsz, witness)
@@ -926,29 +887,25 @@ pub fn verify_ciphertext_integrity(
     let g1_neg = G1Affine::generator().neg();
     let precomp_id = G2Prepared::from(&id);
 
-    let checks: Result<(), ()> = crsz
-        .rr
-        .iter()
-        .zip(crsz.ss.iter().zip(crsz.zz.iter()))
-        .try_for_each(|(r, (s, z))| {
-            let z = G2Prepared::from(z);
+    for i in 0..NUM_CHUNKS {
+        let r = &crsz.rr[i];
+        let s = &crsz.ss[i];
+        let z = G2Prepared::from(&crsz.zz[i]);
 
-            let v = Gt::multipairing(&[(r, &precomp_id), (s, &sys.h_prep), (&g1_neg, &z)]);
+        let v = Gt::multipairing(&[(r, &precomp_id), (s, &sys.h_prep), (&g1_neg, &z)]);
 
-            if v.is_identity() {
-                Ok(())
-            } else {
-                Err(())
-            }
-        });
-    checks
+        if !v.is_identity() {
+            return Err(());
+        }
+    }
+    Ok(())
 }
 
 /// Returns (tau || RO(cc, rr, ss, tau, associated_data)).
 ///
 /// See the description of Deal in Section 7.1.
 pub(crate) fn extend_tau(
-    cc: &[Vec<G1Affine>],
+    cc: &[[G1Affine; NUM_CHUNKS]],
     rr: &[G1Affine],
     ss: &[G1Affine],
     epoch: Epoch,
@@ -978,7 +935,7 @@ pub(crate) fn extend_tau(
 ///
 /// See the description of Deal in Section 7.1.
 pub fn ftau_extended(
-    cc: &[Vec<G1Affine>],
+    cc: &[[G1Affine; NUM_CHUNKS]],
     rr: &[G1Affine],
     ss: &[G1Affine],
     sys: &SysParam,
