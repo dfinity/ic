@@ -45,6 +45,9 @@ canister_bazel_label() {
     # A more authoritative place where these values are listed is the following:
     # https://sourcegraph.com/github.com/dfinity/ic@7f7f77e025ed16b58b4bae564eb27bc429d8063d/-/blob/publish/canisters/BUILD.bazel?L5&subtree=true
     case "$CANISTER_NAME" in
+        "registry")
+            echo "//rs/registry/canister:registry-canister"
+            ;;
         "governance")
             echo "//rs/nns/governance:governance-canister"
             ;;

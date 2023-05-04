@@ -12,6 +12,9 @@ use prost::alloc::collections::BTreeSet;
 
 use ic_protobuf::registry::node::v1::{ConnectionEndpoint, Protocol};
 
+#[cfg(target_arch = "wasm32")]
+use dfn_core::println;
+
 /// Node records are valid with connection endpoints containing
 /// syntactically correct data ("ip_addr" field parses as an IP address,
 /// "port" field is <= 65535):
@@ -32,17 +35,11 @@ pub(crate) fn check_endpoint_invariants(
     let mut valid_endpoints = BTreeSet::<(IpAddr, u16)>::new();
     let node_records = get_node_records_from_snapshot(snapshot);
     let common_error_prefix = format!(
-        "Invariant violated by node records: {}",
-        node_records
-            .keys()
-            .map(|k| k.to_string())
-            .collect::<Vec<String>>()
-            .join(", ")
+        "Invariant violation detected among {} node records",
+        node_records.len()
     );
     for (node_id, node_record) in node_records {
-        let error_prefix = format!(
-            "{common_error_prefix} (checking failed for node ID {node_id}: {node_record:?})"
-        );
+        let error_prefix = format!("{common_error_prefix} (checking failed for node {node_id})");
 
         // P2P endpoints
         //    * For each of the flow endpoints that belong to one node, the identifier
@@ -188,7 +185,16 @@ pub(crate) fn check_endpoint_invariants(
         // Check that there is no intersection with other nodes
         if !new_valid_endpoints.is_disjoint(&valid_endpoints) {
             let error: Result<(), InvariantCheckError> = Err(InvariantCheckError {
-                msg: format!("{error_prefix}: Duplicate endpoints detected across nodes; new_valid_endpoints = {new_valid_endpoints:?}; valid_endpoints = {valid_endpoints:?}"),
+                msg: format!(
+                    "{error_prefix}: Duplicate endpoints detected across nodes; new_valid_endpoints = {}",
+                    new_valid_endpoints.iter().map(|x| if valid_endpoints.contains(x) {
+                        format!("{x:?} (duplicate)")
+                    } else {
+                        format!("{x:?} (new)")
+                    })
+                    .collect::<Vec<String>>()
+                    .join(", ")
+                ),
                 source: None,
             });
             // TODO: change to `return error;` after NNS1-2228 is closed.
