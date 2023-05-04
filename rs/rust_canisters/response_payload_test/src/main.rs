@@ -14,8 +14,8 @@ struct Operation {
 }
 
 #[query]
-fn query(operation: Operation) -> Result<Vec<u8>, String> {
-    Ok(vec![0; operation.response_size_bytes])
+fn query(operation: Operation) -> Result<String, String> {
+    Ok("a".repeat(operation.response_size_bytes))
 }
 
 fn main() {}
