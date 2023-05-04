@@ -5685,7 +5685,6 @@ dependencies = [
 name = "ic-crypto-internal-threshold-sig-bls12381"
 version = "0.8.0"
 dependencies = [
- "arrayvec 0.5.2",
  "base64 0.11.0",
  "cached",
  "criterion",

@@ -12,6 +12,8 @@ const DOMAIN_RO_BYTE_ARRAY: &str = "ic-random-oracle-byte-array";
 const DOMAIN_RO_MAP: &str = "ic-random-oracle-map";
 const DOMAIN_RO_VECTOR: &str = "ic-random-oracle-vector";
 
+const UNIQUE_HASH_OUTPUT_LENGTH: usize = 32; // output of SHA-256
+
 /// Initializes an hasher with a DomainSeparationContext string.
 fn new_hasher_with_domain(domain: &str) -> Sha256 {
     Sha256::new_with_context(&DomainSeparationContext::new(domain))
@@ -20,7 +22,7 @@ fn new_hasher_with_domain(domain: &str) -> Sha256 {
 /// Hashes the unique encoding of some structured data. Each data type uses a
 /// distinct domain separator.
 pub trait UniqueHash {
-    fn unique_hash(&self) -> [u8; 32];
+    fn unique_hash(&self) -> [u8; UNIQUE_HASH_OUTPUT_LENGTH];
 }
 
 /// Computes the unique digest of a string.
@@ -28,7 +30,7 @@ pub trait UniqueHash {
 /// The digest is the hash of the domain separator appended with the UTF-8
 /// encoding of a string.
 impl UniqueHash for String {
-    fn unique_hash(&self) -> [u8; 32] {
+    fn unique_hash(&self) -> [u8; UNIQUE_HASH_OUTPUT_LENGTH] {
         let mut hasher = new_hasher_with_domain(DOMAIN_RO_STRING);
         hasher.write(self.as_bytes());
         hasher.finish()
@@ -40,7 +42,7 @@ impl UniqueHash for String {
 /// The digest is the hash of the domain separator appended with the big-endian
 /// encoding of the byte representation of the integer.
 impl UniqueHash for usize {
-    fn unique_hash(&self) -> [u8; 32] {
+    fn unique_hash(&self) -> [u8; UNIQUE_HASH_OUTPUT_LENGTH] {
         let mut hasher = new_hasher_with_domain(DOMAIN_RO_INT);
         hasher.write(&self.to_be_bytes());
         hasher.finish()
@@ -52,7 +54,7 @@ impl UniqueHash for usize {
 /// The digest is the hash of the domain separator appended with the bytes in
 /// the vector.
 impl UniqueHash for Vec<u8> {
-    fn unique_hash(&self) -> [u8; 32] {
+    fn unique_hash(&self) -> [u8; UNIQUE_HASH_OUTPUT_LENGTH] {
         let mut hasher = new_hasher_with_domain(DOMAIN_RO_BYTE_ARRAY);
         hasher.write(self);
         hasher.finish()
@@ -66,7 +68,7 @@ impl UniqueHash for Vec<u8> {
 /// bytes using big-endian order. The digest is the hash of the domain separator
 /// appended with the serialization of the scalar.
 impl UniqueHash for Scalar {
-    fn unique_hash(&self) -> [u8; 32] {
+    fn unique_hash(&self) -> [u8; UNIQUE_HASH_OUTPUT_LENGTH] {
         let mut hasher = new_hasher_with_domain(DOMAIN_RO_SCALAR_ELEMENT);
         hasher.write(&self.serialize());
         hasher.finish()
@@ -80,7 +82,7 @@ impl UniqueHash for Scalar {
 /// The digest is the hash of the domain separator appended with the
 /// serialization of the group element.
 impl UniqueHash for G1Affine {
-    fn unique_hash(&self) -> [u8; 32] {
+    fn unique_hash(&self) -> [u8; UNIQUE_HASH_OUTPUT_LENGTH] {
         let mut hasher = new_hasher_with_domain(DOMAIN_RO_ECP_POINT);
         hasher.write(&self.serialize());
         hasher.finish()
@@ -94,7 +96,7 @@ impl UniqueHash for G1Affine {
 /// The digest is the hash of the domain separator appended with the
 /// serialization of the group element.
 impl UniqueHash for G2Affine {
-    fn unique_hash(&self) -> [u8; 32] {
+    fn unique_hash(&self) -> [u8; UNIQUE_HASH_OUTPUT_LENGTH] {
         let mut hasher = new_hasher_with_domain(DOMAIN_RO_ECP2_POINT);
         hasher.write(&self.serialize());
         hasher.finish()
@@ -106,7 +108,23 @@ impl UniqueHash for G2Affine {
 /// The digest is the hash of the domain separator concatenated with the unique
 /// digests of the entries in the vector.
 impl<T: UniqueHash> UniqueHash for Vec<T> {
-    fn unique_hash(&self) -> [u8; 32] {
+    fn unique_hash(&self) -> [u8; UNIQUE_HASH_OUTPUT_LENGTH] {
+        let mut hasher = new_hasher_with_domain(DOMAIN_RO_VECTOR);
+        for item in self.iter() {
+            hasher.write(&item.unique_hash())
+        }
+        hasher.finish()
+    }
+}
+
+/// Computes the unique digest of a array
+///
+/// The digest is the hash of the domain separator concatenated with the unique
+/// digests of the entries in the array.
+impl<T: UniqueHash, const N: usize> UniqueHash for [T; N] {
+    fn unique_hash(&self) -> [u8; UNIQUE_HASH_OUTPUT_LENGTH] {
+        // We use the VECTOR domain seperator here since historically
+        // only Vec<T> was used
         let mut hasher = new_hasher_with_domain(DOMAIN_RO_VECTOR);
         for item in self.iter() {
             hasher.write(&item.unique_hash())
@@ -116,14 +134,14 @@ impl<T: UniqueHash> UniqueHash for Vec<T> {
 }
 
 impl UniqueHash for Box<dyn UniqueHash> {
-    fn unique_hash(&self) -> [u8; 32] {
+    fn unique_hash(&self) -> [u8; UNIQUE_HASH_OUTPUT_LENGTH] {
         (**self).unique_hash()
     }
 }
 
 /// Computes the unique digest of a vector with entries of different types.
 impl UniqueHash for Vec<&dyn UniqueHash> {
-    fn unique_hash(&self) -> [u8; 32] {
+    fn unique_hash(&self) -> [u8; UNIQUE_HASH_OUTPUT_LENGTH] {
         let mut hasher = new_hasher_with_domain(DOMAIN_RO_VECTOR);
         for item in self.iter() {
             hasher.write(&item.unique_hash())
@@ -142,7 +160,7 @@ pub type HashableMap = BTreeMap<String, Box<dyn UniqueHash>>;
 /// are then sorted and concatenated. The digest is the hash of the domain
 /// separator concatenated with the sorted concatenations.
 impl UniqueHash for HashableMap {
-    fn unique_hash(&self) -> [u8; 32] {
+    fn unique_hash(&self) -> [u8; UNIQUE_HASH_OUTPUT_LENGTH] {
         let hashed_map = HashedMap::from(self);
         hashed_map.unique_hash()
     }
@@ -152,7 +170,9 @@ impl UniqueHash for HashableMap {
 /// keys.
 ///
 /// It is used to store the digests of key-value pairs of an HashableMap.
-pub struct HashedMap(pub BTreeMap<[u8; 32], [u8; 32]>);
+pub struct HashedMap(
+    pub BTreeMap<[u8; UNIQUE_HASH_OUTPUT_LENGTH], [u8; UNIQUE_HASH_OUTPUT_LENGTH]>,
+);
 
 impl Default for HashedMap {
     fn default() -> Self {
@@ -173,7 +193,7 @@ impl HashedMap {
         &mut self,
         key: S,
         value: &T,
-    ) -> Option<[u8; 32]> {
+    ) -> Option<[u8; UNIQUE_HASH_OUTPUT_LENGTH]> {
         self.0
             .insert(key.to_string().unique_hash(), value.unique_hash())
     }
@@ -196,7 +216,7 @@ impl From<&HashableMap> for HashedMap {
 /// The digest is the hash of the domain separator concatenated with the sorted
 /// key-value pairs. Note: keys and values in an HashedMap are digests.
 impl UniqueHash for HashedMap {
-    fn unique_hash(&self) -> [u8; 32] {
+    fn unique_hash(&self) -> [u8; UNIQUE_HASH_OUTPUT_LENGTH] {
         let mut hasher = new_hasher_with_domain(DOMAIN_RO_MAP);
         // This iterates over the entries of a map sorted by key.
         for (hashed_key, hashed_value) in self.0.iter() {
@@ -213,7 +233,7 @@ impl UniqueHash for HashedMap {
 /// The digest is the hash of `domain` appended with the unique digest of
 /// `data`. A distinct `domain` should be used for each purpose of the random
 /// oracle.
-pub fn random_oracle(domain: &str, data: &dyn UniqueHash) -> [u8; 32] {
+pub fn random_oracle(domain: &str, data: &dyn UniqueHash) -> [u8; UNIQUE_HASH_OUTPUT_LENGTH] {
     let mut hasher = new_hasher_with_domain(domain);
     hasher.write(&data.unique_hash());
     hasher.finish()
