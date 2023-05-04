@@ -1,3 +1,10 @@
+/// This module contains custom code for receiving bodies and adding timeouts.
+/// We would ideally use middleware such as `tower_http::limit::RequestBodyLimitLayer`,
+/// but the current implementation has poor usability as it changes the request body type.
+/// See [issue](https://github.com/tokio-rs/axum/issues/1110) and [PR](https://github.com/tokio-rs/axum/pull/1751)
+/// for more detail.
+///
+/// These issues will be resolved with Axum 0.7 along with Hyper 1.0, as hyper::Body will be going away.
 use byte_unit::Byte;
 use derive_more::Display;
 use futures_util::StreamExt;
