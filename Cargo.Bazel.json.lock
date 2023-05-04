@@ -1,5 +1,5 @@
 {
-  "checksum": "79f2e2a3cf46afcf7a6a33b56cb0b338bc4396fc99ec4893d7859900e83c8737",
+  "checksum": "111e4ce6c618acb7e853f95fd965ace41925fc6b618cf6a4923d56fa2cddface",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -7862,13 +7862,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "clap 4.2.5": {
+    "clap 4.2.7": {
       "name": "clap",
-      "version": "4.2.5",
+      "version": "4.2.7",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/clap/4.2.5/download",
-          "sha256": "8a1f23fa97e1d1641371b51f35535cb26959b8e27ab50d167a8b996b5bada819"
+          "url": "https://crates.io/api/v1/crates/clap/4.2.7/download",
+          "sha256": "34d21f9bf1b425d2968943631ec91202fe5e837264063503708b83013f8fc938"
         }
       },
       "targets": [
@@ -7915,7 +7915,7 @@
         "deps": {
           "common": [
             {
-              "id": "clap_builder 4.2.5",
+              "id": "clap_builder 4.2.7",
               "target": "clap_builder"
             },
             {
@@ -7935,17 +7935,17 @@
           ],
           "selects": {}
         },
-        "version": "4.2.5"
+        "version": "4.2.7"
       },
       "license": "MIT OR Apache-2.0"
     },
-    "clap_builder 4.2.5": {
+    "clap_builder 4.2.7": {
       "name": "clap_builder",
-      "version": "4.2.5",
+      "version": "4.2.7",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/clap_builder/4.2.5/download",
-          "sha256": "0fdc5d93c358224b4d6867ef1356d740de2303e9892edc06c5340daeccd96bab"
+          "url": "https://crates.io/api/v1/crates/clap_builder/4.2.7/download",
+          "sha256": "914c8c79fb560f238ef6429439a30023c862f7a28e688c58f7203f12b29970bd"
         }
       },
       "targets": [
@@ -8001,7 +8001,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "4.2.5"
+        "version": "4.2.7"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -12608,6 +12608,10 @@
               "target": "arbitrary"
             },
             {
+              "id": "arc-swap 1.6.0",
+              "target": "arc_swap"
+            },
+            {
               "id": "arrayvec 0.5.2",
               "target": "arrayvec"
             },
@@ -12760,7 +12764,7 @@
               "target": "clap"
             },
             {
-              "id": "clap 4.2.5",
+              "id": "clap 4.2.7",
               "target": "clap",
               "alias": "clap_4_0_0"
             },
@@ -47590,7 +47594,7 @@
               "target": "toml_datetime"
             },
             {
-              "id": "winnow 0.4.5",
+              "id": "winnow 0.4.6",
               "target": "winnow"
             }
           ],
@@ -54634,13 +54638,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "winnow 0.4.5": {
+    "winnow 0.4.6": {
       "name": "winnow",
-      "version": "0.4.5",
+      "version": "0.4.6",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/winnow/0.4.5/download",
-          "sha256": "69af645a61644c6dd379ade8b77cc87efb5393c988707bad12d3c8e00c50f669"
+          "url": "https://crates.io/api/v1/crates/winnow/0.4.6/download",
+          "sha256": "61de7bac303dc551fe038e2b3cef0f571087a47571ea6e79a87692ac99b99699"
         }
       },
       "targets": [
@@ -54677,7 +54681,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.4.5"
+        "version": "0.4.6"
       },
       "license": "MIT"
     },
@@ -55502,7 +55506,7 @@
     "cc 1.0.79",
     "cddl 0.9.1",
     "clap 3.2.25",
-    "clap 4.2.5",
+    "clap 4.2.7",
     "cpp_demangle 0.3.5",
     "difference 2.0.0",
     "escargot 0.5.7",

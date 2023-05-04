@@ -1,0 +1,22 @@
+[package]
+name = "ic-boundary"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "ic-boundary"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1.0.56"
+arc-swap = "1"
+async-scoped = { version = "0.7", features = ["use-tokio"] }
+async-trait = "0.1.56"
+axum = "0.6.1"
+clap = { version = "4", features = ["derive"] }
+futures = "0.3.21"
+lazy_static = "1.4.0"
+prometheus = "0.13"
+tokio = { version = "1.19.2", features = ["full"] }
+tracing = "0.1.35"
+tracing-subscriber = { version = "0.3.11", features = ["json"] }

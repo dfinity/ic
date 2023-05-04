@@ -90,6 +90,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             "arbitrary": crate.spec(
                 version = "=1.1.3",
             ),
+            "arc-swap": crate.spec(
+                version = "^1",
+            ),
             "assert_approx_eq": crate.spec(
                 version = "^1.1.0",
             ),
