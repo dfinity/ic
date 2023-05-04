@@ -7,7 +7,7 @@ use crate::crypto::canister_threshold_sig::idkg::{
 use crate::crypto::canister_threshold_sig::ExtendedDerivationPath;
 use crate::crypto::{AlgorithmId, BasicSig, BasicSigOf};
 use crate::signature::{BasicSignature, BasicSignatureBatch};
-use crate::{node_id_into_protobuf, node_id_try_from_protobuf, Height, NodeIndex};
+use crate::{node_id_into_protobuf, node_id_try_from_option, Height, NodeIndex};
 use ic_base_types::{
     subnet_id_into_protobuf, subnet_id_try_from_protobuf, NodeId, RegistryVersion,
 };
@@ -256,19 +256,11 @@ fn idkg_transcript_operation_enum(
 fn node_id_struct(
     maybe_node_id_proto: &Option<NodeIdProto>,
 ) -> Result<NodeId, InitialIDkgDealingsValidationError> {
-    if let Some(node_id_proto) = maybe_node_id_proto {
-        Ok(
-            node_id_try_from_protobuf(node_id_proto.clone()).map_err(|e| {
-                InitialIDkgDealingsValidationError::DeserializationError {
-                    error: e.to_string(),
-                }
-            })?,
-        )
-    } else {
-        Err(InitialIDkgDealingsValidationError::DeserializationError {
-            error: "Missing NodeId".to_string(),
-        })
-    }
+    node_id_try_from_option(maybe_node_id_proto.to_owned()).map_err(|e| {
+        InitialIDkgDealingsValidationError::DeserializationError {
+            error: e.to_string(),
+        }
+    })
 }
 
 fn idkg_transcript_params_struct(

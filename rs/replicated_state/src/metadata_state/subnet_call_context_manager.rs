@@ -10,7 +10,7 @@ use ic_types::{
     canister_http::CanisterHttpRequestContext,
     crypto::threshold_sig::ni_dkg::{id::ni_dkg_target_id, NiDkgTargetId},
     messages::{CallbackId, Request},
-    node_id_into_protobuf, node_id_try_from_protobuf, NodeId, RegistryVersion, Time,
+    node_id_into_protobuf, node_id_try_from_option, NodeId, RegistryVersion, Time,
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -384,7 +384,7 @@ impl TryFrom<(Time, pb_metadata::SetupInitialDkgContext)> for SetupInitialDkgCon
     ) -> Result<Self, Self::Error> {
         let mut nodes_in_target_subnet = BTreeSet::<NodeId>::new();
         for node_id in context.nodes_in_subnet {
-            nodes_in_target_subnet.insert(node_id_try_from_protobuf(node_id)?);
+            nodes_in_target_subnet.insert(node_id_try_from_option(Some(node_id))?);
         }
         Ok(SetupInitialDkgContext {
             request: try_from_option_field(context.request, "SetupInitialDkgContext::request")?,
@@ -497,7 +497,7 @@ impl TryFrom<(Time, pb_metadata::EcdsaDealingsContext)> for EcdsaDealingsContext
             try_from_option_field(context.key_id, "EcdsaDealingsContext::key_id")?;
         let mut nodes = BTreeSet::<NodeId>::new();
         for node_id in context.nodes {
-            nodes.insert(node_id_try_from_protobuf(node_id)?);
+            nodes.insert(node_id_try_from_option(Some(node_id))?);
         }
         Ok(EcdsaDealingsContext {
             request,
