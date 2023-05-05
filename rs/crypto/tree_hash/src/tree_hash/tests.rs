@@ -3,6 +3,8 @@ use super::*;
 use crate::hasher::Hasher;
 use crate::*;
 use assert_matches::assert_matches;
+use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
+use rand::{CryptoRng, RngCore};
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
@@ -2725,4 +2727,301 @@ fn labeled_tree_leaf_count() {
     // The tree above has 6 leaves and 2 empty subtress. So we expect
     // count_leaves to return 8.
     assert_eq!(count_leaves_and_empty_subtrees(&tree), 8);
+}
+
+#[test]
+fn witness_for_a_labeled_tree_does_not_contain_private_data() {
+    /// the maximum depth of the generated random [`LabeledTree`]
+    const RANDOM_TREE_MAX_DEPTH: u32 = 10;
+    /// The probability of generating a subtree from the root node, which
+    /// continuously decreases with larger tree depth
+    const RANDOM_TREE_DESIRED_SIZE: u32 = 1000;
+
+    let mut rng = reproducible_rng();
+
+    // Minimum number of leaves in the generated random `LabeledTree`
+    for min_leaves in [0, 5, 10, 15, 20] {
+        let labeled_tree = test_utils::new_random_labeled_tree(
+            &mut rng,
+            RANDOM_TREE_MAX_DEPTH,
+            RANDOM_TREE_DESIRED_SIZE,
+            min_leaves,
+        );
+        witness_for_a_labeled_tree_does_not_contain_private_data_impl(&labeled_tree, &mut rng);
+    }
+}
+
+fn witness_for_a_labeled_tree_does_not_contain_private_data_impl<R: RngCore + CryptoRng>(
+    labeled_tree: &LabeledTree<Vec<u8>>,
+    rng: &mut R,
+) {
+    use rand::Rng;
+    let builder = test_utils::hash_tree_builder_from_labeled_tree(labeled_tree);
+
+    // split the tree into paths with exactly one leaf or empty subtree at the end
+    let leaf_partial_trees: Vec<_> =
+        test_utils::LeafAndEmptySubtreeTraverser::new(labeled_tree).collect();
+    assert!(!leaf_partial_trees.is_empty());
+    let full_tree_witness = builder
+        .witness_generator()
+        .unwrap()
+        .witness(labeled_tree)
+        .expect("Failed to generate a witness");
+    let root_hash = recompute_digest(labeled_tree, &full_tree_witness)
+        .expect("Failed to compute the root hash");
+
+    if leaf_partial_trees.len() == 1 {
+        assert!(
+            test_utils::witness_contains_only_nodes_and_known(&full_tree_witness),
+            "{full_tree_witness:?}"
+        );
+        return;
+    }
+
+    // test witness generated from a single leaf for each leaf
+    for i in 0..leaf_partial_trees.len() {
+        witness_for_a_labeled_tree_does_not_contain_private_data_multileaf(
+            labeled_tree,
+            &[i],
+            &leaf_partial_trees[..],
+            &full_tree_witness,
+            &root_hash,
+            &builder,
+            rng,
+        );
+    }
+
+    const NUM_ITERATIONS: usize = 10;
+    let num_selected_leaves = leaf_partial_trees.len() / 2;
+    for _ in 0..NUM_ITERATIONS {
+        // `NUMBER_OF_RANDOM_LEAVES` random indexes
+        let mut indexes =
+            rand::seq::index::sample(rng, leaf_partial_trees.len(), num_selected_leaves).into_vec();
+        indexes.sort_unstable();
+        witness_for_a_labeled_tree_does_not_contain_private_data_multileaf(
+            labeled_tree,
+            &indexes[..],
+            &leaf_partial_trees[..],
+            &full_tree_witness,
+            &root_hash,
+            &builder,
+            rng,
+        );
+
+        // `NUMBER_OF_RANDOM_LEAVES` *consecutive* random indexes
+        let start: usize = rng.gen_range(0..num_selected_leaves);
+        let indexes: Vec<_> = (start..start + num_selected_leaves).collect();
+        witness_for_a_labeled_tree_does_not_contain_private_data_multileaf(
+            labeled_tree,
+            &indexes[..],
+            &leaf_partial_trees[..],
+            &full_tree_witness,
+            &root_hash,
+            &builder,
+            rng,
+        );
+    }
+}
+
+/// Combines paths to multiple leaves/empty subtrees in the test.
+fn witness_for_a_labeled_tree_does_not_contain_private_data_multileaf<R: RngCore + CryptoRng>(
+    labeled_tree: &LabeledTree<Vec<u8>>,
+    leaf_indexes: &[usize],
+    leaf_partial_trees: &[LabeledTree<Vec<u8>>],
+    full_tree_witness: &Witness,
+    root_hash: &Digest,
+    builder: &HashTreeBuilderImpl,
+    rng: &mut R,
+) {
+    for w in leaf_indexes.windows(2) {
+        assert_ne!(w[0], w[1], "Leaf indexes must be unique");
+        assert!(
+            w[0] < w[1],
+            "Leaf indexes must be sorted in ascending order: {w:?}"
+        );
+    }
+
+    // aggregate paths to leaves/empty subtrees indexed by `leaf_indexes` to a tree
+    let mut aggregated_partial_tree = leaf_partial_trees[leaf_indexes[0]].clone();
+    for i in leaf_indexes[1..].iter() {
+        test_utils::merge_path_into_labeled_tree(
+            &mut aggregated_partial_tree,
+            &leaf_partial_trees[*i],
+        );
+    }
+
+    // pruning from the full tree the same subtree twice should return an error
+    let pruned_witness = prune_witness(full_tree_witness, &aggregated_partial_tree)
+        .expect("Failed to prune one leaf from a full tree witness");
+
+    let mut pruned_full_tree = labeled_tree.clone();
+    for i in leaf_indexes.iter() {
+        pruned_full_tree = test_utils::labeled_tree_without_leaf_or_empty_subtree(
+            &pruned_full_tree,
+            &leaf_partial_trees[*i],
+        );
+    }
+
+    assert_eq!(
+        recompute_digest(&pruned_full_tree, &pruned_witness,).expect("Failed to recompute_digest"),
+        *root_hash,
+    );
+
+    assert_matches!(
+        prune_witness(&pruned_witness, &aggregated_partial_tree),
+        Err(TreeHashError::InconsistentPartialTree { offending_path }) // we might prune more than just the `Leaf`
+        if test_utils::labeled_tree_contains_prefix(&aggregated_partial_tree, &offending_path[..])
+    );
+
+    for single_path in test_utils::LeafAndEmptySubtreeTraverser::new(&aggregated_partial_tree) {
+        assert_matches!(
+            prune_witness(&pruned_witness, &single_path),
+            Err(TreeHashError::InconsistentPartialTree { offending_path })
+            // we might prune more than just the `Leaf`
+            if test_utils::labeled_tree_contains_prefix(&single_path, &offending_path[..])
+        );
+    }
+
+    // generate a witness for the aggregated tree
+    let mut witness = builder
+        .witness_generator()
+        .unwrap()
+        .witness(&aggregated_partial_tree)
+        .expect("Failed to generate a witness");
+    let num_known_nodes =
+        test_utils::check_leaves_and_empty_subtrees_are_known(&aggregated_partial_tree, &witness);
+    let num_leaves = test_utils::get_num_leaves_and_empty_subtrees(&aggregated_partial_tree);
+    assert_eq!(num_leaves, leaf_indexes.len());
+    assert_eq!(num_known_nodes, num_leaves);
+
+    let pruned_witness = prune_witness(&witness, &aggregated_partial_tree);
+    // completely pruned the witness should yield the correct root hash
+    assert_matches!(
+        &pruned_witness,
+        Ok(Witness::Pruned { digest }) if digest == root_hash
+    );
+
+    // pruning a witness twice should return an error
+    assert_matches!(
+        prune_witness(&pruned_witness.expect("Failed to prune witness"), &aggregated_partial_tree),
+        Err(TreeHashError::InconsistentPartialTree { offending_path }) if offending_path.is_empty()
+    );
+
+    // if we replace any `Witness::Known` with `Witness::Pruned` node, `prune_witness` should error
+    let mut expected_offending_paths = vec![];
+
+    for _ in 0..num_leaves {
+        expected_offending_paths.push(test_utils::replace_random_known_with_dummy_pruned(
+            &mut witness,
+            rng,
+        ));
+        assert_matches!(
+            prune_witness(&witness, &aggregated_partial_tree),
+            Err(TreeHashError::InconsistentPartialTree { offending_path })
+            if expected_offending_paths.contains(&offending_path)
+        );
+    }
+}
+
+#[test]
+fn pruning_depth_0_tree_works_correctly() {
+    fn depth_0_inputs() -> Vec<(LabeledTree<Vec<u8>>, Digest)> {
+        vec![
+            (
+                LabeledTree::Leaf(b"dummy leaf".to_vec()),
+                tree_hash::compute_leaf_digest(&b"dummy leaf".to_vec()[..]),
+            ),
+            (
+                LabeledTree::SubTree(FlatMap::new()),
+                tree_hash::empty_subtree_hash(),
+            ),
+        ]
+    }
+    use rand::Rng;
+    let mut rng = reproducible_rng();
+    const RANDOM_TREE_MAX_DEPTH: u32 = 10;
+
+    for (labeled_tree, expected_hash) in depth_0_inputs() {
+        let builder = test_utils::hash_tree_builder_from_labeled_tree(&labeled_tree);
+
+        let witness = builder
+            .witness_generator()
+            .unwrap()
+            .witness(&labeled_tree)
+            .expect("Failed to generate a witness");
+        assert_eq!(&witness, &Witness::Known());
+        assert_eq!(recompute_digest(&labeled_tree, &witness), Ok(expected_hash));
+
+        // generate 10 random invalid trees and check that we cannot 1) generate
+        // a witness and 2) recompute the hash using the wrong tree
+        for _ in 0..10 {
+            let random_tree_desired_size: u32 = rng.gen_range(1..100);
+            let min_leaves = rng.gen_range(0..10);
+            let other_labeled_tree = test_utils::new_random_labeled_tree(
+                &mut rng,
+                RANDOM_TREE_MAX_DEPTH,
+                random_tree_desired_size,
+                min_leaves,
+            );
+            if matches!(&other_labeled_tree, LabeledTree::SubTree(children) if !children.is_empty())
+            {
+                // any attempt to generate a witness with any other tree of
+                // depth > 0 should error
+                assert_matches!(
+                    builder
+                        .witness_generator()
+                        .unwrap()
+                        .witness(&other_labeled_tree),
+                    Err(TreeHashError::InconsistentPartialTree { offending_path: _ }),
+                    "labeled_tree={labeled_tree:?}, other_labeled_tree={other_labeled_tree:?}"
+                );
+                // any attempt to `recompute_digest` or `prune_witness` with any
+                // other tree of depth > 0 should error
+                assert_eq!(
+                    recompute_digest(&other_labeled_tree, &witness),
+                    Err(TreeHashError::InconsistentPartialTree {
+                        offending_path: vec![]
+                    })
+                );
+                assert_eq!(
+                    prune_witness(&witness, &other_labeled_tree),
+                    Err(TreeHashError::InconsistentPartialTree {
+                        offending_path: vec![]
+                    })
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn pruning_witness_pruned_in_the_root_fails_for_any_labeled_tree() {
+    use rand::Rng;
+    let mut rng = reproducible_rng();
+    const RANDOM_TREE_MAX_DEPTH: u32 = 10;
+    let random_tree_desired_size: u32 = rng.gen_range(1..100);
+    let min_leaves = rng.gen_range(0..10);
+    const WITNESS: Witness = Witness::Pruned {
+        digest: Digest([0u8; Sha256::DIGEST_LEN]),
+    };
+    for _ in 0..10 {
+        let labeled_tree = test_utils::new_random_labeled_tree(
+            &mut rng,
+            RANDOM_TREE_MAX_DEPTH,
+            random_tree_desired_size,
+            min_leaves,
+        );
+        assert_eq!(
+            recompute_digest(&labeled_tree, &WITNESS),
+            Err(TreeHashError::InconsistentPartialTree {
+                offending_path: vec![]
+            })
+        );
+        assert_eq!(
+            prune_witness(&WITNESS, &labeled_tree),
+            Err(TreeHashError::InconsistentPartialTree {
+                offending_path: vec![]
+            })
+        );
+    }
 }

@@ -15,6 +15,9 @@ use std::iter::Peekable;
 #[cfg(test)]
 mod tests;
 
+#[cfg(test)]
+mod test_utils;
+
 const DOMAIN_HASHTREE_LEAF: &str = "ic-hashtree-leaf";
 const DOMAIN_HASHTREE_EMPTY_SUBTREE: &str = "ic-hashtree-empty";
 const DOMAIN_HASHTREE_NODE: &str = "ic-hashtree-labeled";
@@ -44,7 +47,7 @@ pub(crate) fn empty_subtree_hash() -> Digest {
     Hasher::for_domain(DOMAIN_HASHTREE_EMPTY_SUBTREE).finalize()
 }
 
-// Wraps the given hash_tree into a HashTree::HashNode.
+/// Wraps the given hash_tree into a [`HashTree::HashNode`].
 fn into_hash_node(label: &Label, hash_tree: HashTree) -> HashTree {
     let mut hasher = new_node_hasher();
     hasher.update(label.as_bytes());
@@ -57,7 +60,7 @@ fn into_hash_node(label: &Label, hash_tree: HashTree) -> HashTree {
     }
 }
 
-// Wraps the given left_tree and right_tree into HashTree::HashFork.
+/// Wraps the given left_tree and right_tree into [`HashTree::HashFork`].
 fn into_fork(left_tree: HashTree, right_tree: HashTree) -> HashTree {
     let mut hasher = new_fork_hasher();
     hasher.update(&left_tree.digest().0);
@@ -70,8 +73,8 @@ fn into_fork(left_tree: HashTree, right_tree: HashTree) -> HashTree {
     }
 }
 
-// Wraps the given hash_trees into a single HashTree, maintaining
-// the order of the subtrees.
+/// Wraps the given hash_trees into a single [`HashTree`], maintaining
+/// the order of the subtrees.
 fn into_hash_tree(mut hash_trees: VecDeque<HashTree>) -> HashTree {
     if hash_trees.is_empty() {
         return HashTree::Leaf {
