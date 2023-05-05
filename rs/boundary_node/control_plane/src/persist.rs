@@ -88,12 +88,21 @@ pub struct WithDedup<T, U>(pub T, pub Arc<RwLock<Option<U>>>);
 #[async_trait]
 impl<T: Persist> Persist for WithDedup<T, RoutingTable> {
     async fn persist(&self, rt: &RoutingTable) -> Result<PersistStatus, Error> {
+        let mut rt = rt.clone();
+        rt.subnets
+            .sort_unstable_by(|a, b| a.subnet_id.cmp(&b.subnet_id));
+        for subnet in rt.subnets.iter_mut() {
+            subnet
+                .nodes
+                .sort_unstable_by(|a, b| a.node_id.cmp(&b.node_id));
+        }
+
         if self
             .1
             .read()
             .map(|v| match &*v {
                 None => false,
-                Some(v) => *v == *rt,
+                Some(v) => *v == rt,
             })
             .unwrap()
         {
@@ -102,7 +111,7 @@ impl<T: Persist> Persist for WithDedup<T, RoutingTable> {
             self.1.write().map(|mut v| *v = Some(rt.clone())).unwrap();
         }
 
-        self.0.persist(rt).await
+        self.0.persist(&rt).await
     }
 }
 
