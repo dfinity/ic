@@ -83,23 +83,23 @@ RUN \
 
 # Download libnginx-mod-http-ndk.deb
 RUN \
-   curl -L -O https://github.com/dfinity/nginx-modules/releases/download/v0.1.0/libnginx-mod-http-ndk_0.3.1_amd64.deb && \
-   echo "c807ac06ce3ffbbfda9845dbd70d59d5b3180913b0ba8ef3e89f3da4e7818a68  libnginx-mod-http-ndk_0.3.1_amd64.deb" | shasum -c
+   curl -L -O https://github.com/dfinity/nginx-modules/releases/download/v0.1.1/libnginx-mod-http-ndk_0.3.1_amd64.deb && \
+   echo "f71c7c342ac54718809c952b230690a89501b384ee1e07c0f33cfb3301e0ef7b  libnginx-mod-http-ndk_0.3.1_amd64.deb" | shasum -c
 
 # Download libnginx-mod-http-cbor-input.deb
 RUN \
-   curl -L -O https://github.com/dfinity/nginx-modules/releases/download/v0.1.0/libnginx-mod-http-cbor-input_0.1.0_amd64.deb && \
-   echo "7d454a87da8a38c2d7b17d791186e2a512cbc9d2f64c502248e80a8a97781a2b  libnginx-mod-http-cbor-input_0.1.0_amd64.deb" | shasum -c
+   curl -L -O https://github.com/dfinity/nginx-modules/releases/download/v0.1.1/libnginx-mod-http-cbor-input_0.1.1_amd64.deb && \
+   echo "f90c9ff32542763c35f2a14cdb3127c298202c8ec5b1a4115fdabf32d147b9e3  libnginx-mod-http-cbor-input_0.1.1_amd64.deb" | shasum -c
 
 # Download libnginx-mod-http-cbor-req-ic.deb
 RUN \
-   curl -L -O https://github.com/dfinity/nginx-modules/releases/download/v0.1.0/libnginx-mod-http-cbor-req-ic_0.1.0_amd64.deb && \
-   echo "86c7a6ce4d3ee5c4251778f85732e415db7672ac9641bd39bdf35a1cbae2b88a  libnginx-mod-http-cbor-req-ic_0.1.0_amd64.deb" | shasum -c
+   curl -L -O https://github.com/dfinity/nginx-modules/releases/download/v0.1.1/libnginx-mod-http-cbor-req-ic_0.1.1_amd64.deb && \
+   echo "8cb4cc1572a9a98372323ba0665c3b08555d9ce6a0c4b1d732c0e63ef6de627a  libnginx-mod-http-cbor-req-ic_0.1.1_amd64.deb" | shasum -c
 
 # Download libnginx-mod-http-cbor-resp-ic.deb
 RUN \
-   curl -L -O https://github.com/dfinity/nginx-modules/releases/download/v0.1.0/libnginx-mod-http-cbor-resp-ic_0.1.0_amd64.deb && \
-   echo "aae648fd0e5687ea11a1582686dfcc7a48c2a7eed307f72f38d9de8926fce30a  libnginx-mod-http-cbor-resp-ic_0.1.0_amd64.deb" | shasum -c
+   curl -L -O https://github.com/dfinity/nginx-modules/releases/download/v0.1.1/libnginx-mod-http-cbor-resp-ic_0.1.1_amd64.deb && \
+   echo "324b1a9bda6e0210c6b3bb3d1dee816a122c43069f0cc5730868072e06ddd38a  libnginx-mod-http-cbor-resp-ic_0.1.1_amd64.deb" | shasum -c
 
 # Download and build sev-guest tool
 RUN \
@@ -311,22 +311,22 @@ RUN \
     rm libnginx-mod-http-ndk_0.3.1_amd64.deb
 
 # Install libnginx-mod-http-cbor-input
-COPY --from=download /tmp/libnginx-mod-http-cbor-input_0.1.0_amd64.deb .
+COPY --from=download /tmp/libnginx-mod-http-cbor-input_0.1.1_amd64.deb .
 RUN \
-    dpkg -i libnginx-mod-http-cbor-input_0.1.0_amd64.deb && \
-    rm libnginx-mod-http-cbor-input_0.1.0_amd64.deb
+    dpkg -i libnginx-mod-http-cbor-input_0.1.1_amd64.deb && \
+    rm libnginx-mod-http-cbor-input_0.1.1_amd64.deb
 
 # Install libnginx-mod-http-cbor-req-ic
-COPY --from=download /tmp/libnginx-mod-http-cbor-req-ic_0.1.0_amd64.deb .
+COPY --from=download /tmp/libnginx-mod-http-cbor-req-ic_0.1.1_amd64.deb .
 RUN \
-    dpkg -i libnginx-mod-http-cbor-req-ic_0.1.0_amd64.deb && \
-    rm libnginx-mod-http-cbor-req-ic_0.1.0_amd64.deb
+    dpkg -i libnginx-mod-http-cbor-req-ic_0.1.1_amd64.deb && \
+    rm libnginx-mod-http-cbor-req-ic_0.1.1_amd64.deb
 
 # Install libnginx-mod-http-cbor-resp-ic
-COPY --from=download /tmp/libnginx-mod-http-cbor-resp-ic_0.1.0_amd64.deb .
+COPY --from=download /tmp/libnginx-mod-http-cbor-resp-ic_0.1.1_amd64.deb .
 RUN \
-    dpkg -i libnginx-mod-http-cbor-resp-ic_0.1.0_amd64.deb && \
-    rm libnginx-mod-http-cbor-resp-ic_0.1.0_amd64.deb
+    dpkg -i libnginx-mod-http-cbor-resp-ic_0.1.1_amd64.deb && \
+    rm libnginx-mod-http-cbor-resp-ic_0.1.1_amd64.deb
 
 # Install ngx_http_geoip2
 COPY --from=ngx_http_geoip2_module \
