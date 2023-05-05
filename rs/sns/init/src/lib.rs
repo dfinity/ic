@@ -256,6 +256,7 @@ impl SnsInitPayload {
                 max_transactions_per_response: None,
             },
             fee_collector_account: None,
+            max_memo_length: None,
         };
 
         Ok(LedgerArgument::Init(payload))

@@ -58,6 +58,7 @@ fn install_ledger(env: &StateMachine) -> CanisterId {
             max_transactions_per_response: None,
         },
         fee_collector_account: None,
+        max_memo_length: None,
     });
     env.install_canister(ledger_wasm(), Encode!(&args).unwrap(), None)
         .unwrap()

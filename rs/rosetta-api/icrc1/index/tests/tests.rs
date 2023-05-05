@@ -73,7 +73,7 @@ fn mint_block() -> EncodedBlock {
                 amount: 1,
             },
             created_at_time: Some(1),
-            memo: Some(Memo::from([1; 32])),
+            memo: Some(Memo::from([1; 32].to_vec())),
         },
         TimeStamp::new(3, 4),
         Tokens::ZERO,
@@ -113,6 +113,7 @@ fn install_ledger(
         ],
         archive_options,
         fee_collector_account: None,
+        max_memo_length: None,
     });
     env.install_canister(ledger_wasm(), Encode!(&args).unwrap(), None)
         .unwrap()

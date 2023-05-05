@@ -1,5 +1,3 @@
-use std::fmt;
-
 use candid::{CandidType, Deserialize, Nat};
 use serde::Serialize;
 use serde_bytes::ByteBuf;
@@ -24,42 +22,11 @@ pub struct TransferArg {
     pub amount: NumTokens,
 }
 
-pub const MAX_MEMO_LENGTH: usize = 32;
-
-#[derive(Debug, PartialEq, Eq)]
-pub struct MemoTooLarge(usize);
-
-impl fmt::Display for MemoTooLarge {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "Memo field is {} bytes long, max allowed length is {}",
-            self.0, MAX_MEMO_LENGTH
-        )
-    }
-}
-
 #[derive(
     Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord, Default,
 )]
 #[serde(transparent)]
-pub struct Memo(#[serde(deserialize_with = "deserialize_memo_bytes")] pub ByteBuf);
-
-fn deserialize_memo_bytes<'de, D>(d: D) -> Result<ByteBuf, D::Error>
-where
-    D: serde::de::Deserializer<'de>,
-{
-    use serde::de::Error;
-    let bytes = ByteBuf::deserialize(d)?;
-    let memo = Memo::try_from(bytes).map_err(D::Error::custom)?;
-    Ok(memo.into())
-}
-
-impl From<[u8; MAX_MEMO_LENGTH]> for Memo {
-    fn from(memo: [u8; MAX_MEMO_LENGTH]) -> Self {
-        Self(ByteBuf::from(memo.to_vec()))
-    }
-}
+pub struct Memo(pub ByteBuf);
 
 impl From<u64> for Memo {
     fn from(num: u64) -> Self {
@@ -67,22 +34,15 @@ impl From<u64> for Memo {
     }
 }
 
-impl TryFrom<ByteBuf> for Memo {
-    type Error = MemoTooLarge;
-
-    fn try_from(b: ByteBuf) -> Result<Self, MemoTooLarge> {
-        if b.len() > MAX_MEMO_LENGTH {
-            return Err(MemoTooLarge(b.len()));
-        }
-        Ok(Self(b))
+impl From<ByteBuf> for Memo {
+    fn from(b: ByteBuf) -> Self {
+        Self(b)
     }
 }
 
-impl TryFrom<Vec<u8>> for Memo {
-    type Error = MemoTooLarge;
-
-    fn try_from(v: Vec<u8>) -> Result<Self, MemoTooLarge> {
-        Self::try_from(ByteBuf::from(v))
+impl From<Vec<u8>> for Memo {
+    fn from(v: Vec<u8>) -> Self {
+        Self::from(ByteBuf::from(v))
     }
 }
 

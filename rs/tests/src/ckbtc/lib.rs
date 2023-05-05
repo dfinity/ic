@@ -279,6 +279,7 @@ pub(crate) async fn install_ledger(
             max_transactions_per_response: None,
         },
         fee_collector_account: None,
+        max_memo_length: None,
     });
     install_icrc1_ledger(env, canister, &init_args).await;
     canister.canister_id()

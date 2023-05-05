@@ -110,5 +110,6 @@ rust_test(
         "@crate_index//:leb128",
         "@crate_index//:num-traits",
         "@crate_index//:proptest",
+        "@crate_index//:serde_bytes",
     ],
 )

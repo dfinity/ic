@@ -83,6 +83,7 @@ pub fn test(env: TestEnv) {
                 max_transactions_per_response: None,
             },
             fee_collector_account: None,
+            max_memo_length: None,
         };
         install_icrc1_ledger(&env, &mut ledger, &LedgerArgument::Init(init_args.clone())).await;
 
@@ -171,6 +172,7 @@ pub fn test(env: TestEnv) {
             Value::entry("icrc1:name", init_args.token_name),
             Value::entry("icrc1:symbol", init_args.token_symbol),
             Value::entry("icrc1:fee", init_args.transfer_fee),
+            Value::entry("icrc1:max_memo_length", 32u64),
         ];
         assert_eq!(
             expected_metadata,
