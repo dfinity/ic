@@ -590,6 +590,25 @@ pub struct CatchUpPackage {
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CatchUpPackageShare {
+    #[prost(string, tag = "1")]
+    pub version: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "2")]
+    pub random_beacon: ::core::option::Option<RandomBeacon>,
+    #[prost(bytes = "vec", tag = "3")]
+    pub state_hash: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", tag = "4")]
+    pub block_hash: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", tag = "5")]
+    pub random_beacon_hash: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", tag = "6")]
+    pub signature: ::prost::alloc::vec::Vec<u8>,
+    #[prost(message, optional, tag = "7")]
+    pub signer: ::core::option::Option<NodeId>,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct CatchUpContent {
     #[prost(message, optional, tag = "1")]
     pub block: ::core::option::Option<Block>,
@@ -642,7 +661,10 @@ pub struct Block {
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ConsensusMessage {
-    #[prost(oneof = "consensus_message::Msg", tags = "1, 2, 3, 4, 8, 10")]
+    #[prost(
+        oneof = "consensus_message::Msg",
+        tags = "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11"
+    )]
     pub msg: ::core::option::Option<consensus_message::Msg>,
 }
 /// Nested message and enum types in `ConsensusMessage`.
@@ -660,16 +682,20 @@ pub mod consensus_message {
         Notarization(super::Notarization),
         #[prost(message, tag = "4")]
         BlockProposal(super::BlockProposal),
-        /// missing: RandomBeaconShare = 5;
-        /// missing: NotarizationShare = 6;
-        /// missing: FinalizationShare = 7;
+        #[prost(message, tag = "5")]
+        RandomBeaconShare(super::RandomBeaconShare),
+        #[prost(message, tag = "6")]
+        NotarizationShare(super::NotarizationShare),
+        #[prost(message, tag = "7")]
+        FinalizationShare(super::FinalizationShare),
         #[prost(message, tag = "8")]
         RandomTape(super::RandomTape),
-        /// missing: RandomTapeShare = 9;
-        ///
-        /// missing: CatchUpPackageShare = 11;
+        #[prost(message, tag = "9")]
+        RandomTapeShare(super::RandomTapeShare),
         #[prost(message, tag = "10")]
         Cup(super::CatchUpPackage),
+        #[prost(message, tag = "11")]
+        CupShare(super::CatchUpPackageShare),
     }
 }
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -731,6 +757,19 @@ pub struct RandomTape {
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RandomTapeShare {
+    #[prost(string, tag = "1")]
+    pub version: ::prost::alloc::string::String,
+    #[prost(uint64, tag = "2")]
+    pub height: u64,
+    #[prost(bytes = "vec", tag = "3")]
+    pub signature: ::prost::alloc::vec::Vec<u8>,
+    #[prost(message, optional, tag = "4")]
+    pub signer: ::core::option::Option<NodeId>,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Finalization {
     #[prost(string, tag = "1")]
     pub version: ::prost::alloc::string::String,
@@ -746,6 +785,21 @@ pub struct Finalization {
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FinalizationShare {
+    #[prost(string, tag = "1")]
+    pub version: ::prost::alloc::string::String,
+    #[prost(uint64, tag = "2")]
+    pub height: u64,
+    #[prost(bytes = "vec", tag = "3")]
+    pub block: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", tag = "4")]
+    pub signature: ::prost::alloc::vec::Vec<u8>,
+    #[prost(message, optional, tag = "5")]
+    pub signer: ::core::option::Option<NodeId>,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Notarization {
     #[prost(string, tag = "1")]
     pub version: ::prost::alloc::string::String,
@@ -757,6 +811,21 @@ pub struct Notarization {
     pub signature: ::prost::alloc::vec::Vec<u8>,
     #[prost(bytes = "vec", repeated, tag = "5")]
     pub signers: ::prost::alloc::vec::Vec<::prost::alloc::vec::Vec<u8>>,
+}
+#[derive(serde::Serialize, serde::Deserialize)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct NotarizationShare {
+    #[prost(string, tag = "1")]
+    pub version: ::prost::alloc::string::String,
+    #[prost(uint64, tag = "2")]
+    pub height: u64,
+    #[prost(bytes = "vec", tag = "3")]
+    pub block: ::prost::alloc::vec::Vec<u8>,
+    #[prost(bytes = "vec", tag = "4")]
+    pub signature: ::prost::alloc::vec::Vec<u8>,
+    #[prost(message, optional, tag = "5")]
+    pub signer: ::core::option::Option<NodeId>,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
