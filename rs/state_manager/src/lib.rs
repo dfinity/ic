@@ -21,6 +21,7 @@ use ic_canonical_state::{
     hash_tree::{hash_lazy_tree, HashTree},
     lazy_tree::{materialize::materialize_partial, LazyTree},
 };
+use ic_config::flag_status::FlagStatus;
 use ic_config::state_manager::Config;
 use ic_crypto_tree_hash::{recompute_digest, Digest, LabeledTree, MixedHashTree, Witness};
 use ic_interfaces::certification::Verifier;
@@ -70,6 +71,7 @@ use std::{
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use std::os::unix::io::RawFd;
 use std::os::unix::prelude::IntoRawFd;
+use tempfile::tempfile;
 use uuid::Uuid;
 
 /// The number of threads that state manager starts to construct checkpoints.
@@ -1307,7 +1309,10 @@ impl StateManagerImpl {
         // Create the file descriptor factory that is used to create files for PageMaps.
         let page_delta_path = state_layout.page_deltas();
         let fd_factory: Arc<dyn PageAllocatorFileDescriptor> =
-            Arc::new(PageAllocatorFileDescriptorImpl::new(page_delta_path));
+            Arc::new(PageAllocatorFileDescriptorImpl::new(
+                page_delta_path,
+                config.file_backed_memory_allocator,
+            ));
 
         let (_tip_thread_handle, tip_channel) = spawn_tip_thread(
             log.clone(),
@@ -3416,11 +3421,29 @@ fn maliciously_return_wrong_hash(
 #[derive(Debug)]
 pub struct PageAllocatorFileDescriptorImpl {
     root: PathBuf,
+    file_backed_memory_allocator: FlagStatus,
 }
 
 impl PageAllocatorFileDescriptor for PageAllocatorFileDescriptorImpl {
-    /// Create a file using that unique name to back memory pages
     fn get_fd(&self) -> RawFd {
+        // Only use the file-backed allocator if the feature flag is enabled for now.
+        if self.file_backed_memory_allocator == FlagStatus::Enabled {
+            self.get_file_backed_fd()
+        } else {
+            self.get_memory_backed_fd()
+        }
+    }
+}
+
+impl PageAllocatorFileDescriptorImpl {
+    pub fn new(root: PathBuf, file_backed_memory_allocator: FlagStatus) -> Self {
+        Self {
+            root,
+            file_backed_memory_allocator,
+        }
+    }
+    /// Create a file using an unique name to back memory pages
+    fn get_file_backed_fd(&self) -> RawFd {
         // create a string uuid
         let uuid_str = Uuid::new_v4().to_string();
         let uuid_str_file = uuid_str + ".mem";
@@ -3451,10 +3474,44 @@ impl PageAllocatorFileDescriptor for PageAllocatorFileDescriptorImpl {
             }
         }
     }
-}
 
-impl PageAllocatorFileDescriptorImpl {
-    pub fn new(root: PathBuf) -> Self {
-        Self { root }
+    // A platform-specific function that creates the backing file of the page allocator.
+    // On Linux it uses `memfd_create` to create an in-memory file.
+    // On MacOS and WSL it uses an ordinary temporary file.
+    #[cfg(target_os = "linux")]
+    fn get_memory_backed_fd(&self) -> RawFd {
+        if *ic_sys::IS_WSL {
+            return self.create_backing_file_portable();
+        }
+
+        match nix::sys::memfd::memfd_create(
+            &std::ffi::CString::default(),
+            nix::sys::memfd::MemFdCreateFlag::empty(),
+        ) {
+            Ok(fd) => fd,
+            Err(err) => {
+                panic!(
+                    "MmapPageAllocatorCore failed to create the memory backing file {}",
+                    err
+                )
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    fn get_memory_backed_fd(&self) -> RawFd {
+        self.create_backing_file_portable()
+    }
+
+    fn create_backing_file_portable(&self) -> RawFd {
+        match tempfile() {
+            Ok(file) => file.into_raw_fd(),
+            Err(err) => {
+                panic!(
+                    "MmapPageAllocatorCore failed to create the MacOS/WSL backing file {}",
+                    err
+                )
+            }
+        }
     }
 }

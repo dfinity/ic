@@ -454,13 +454,9 @@ impl Drop for MmapBasedPageAllocatorCore {
 }
 
 impl MmapBasedPageAllocatorCore {
-    fn new(_fd_factory: Arc<dyn PageAllocatorFileDescriptor>) -> Self {
-        // TODO: ticket RUN-412
-        // At the moment we keep the file descriptors being created by the old
-        // code path which stores files in memory/tempfs. In the future, to enable
-        // the disk/file-backed memory allocation we simply need to replace the line
-        // below with fd_factory.get_fd().
-        let fd = create_backing_file();
+    fn new(fd_factory: Arc<dyn PageAllocatorFileDescriptor>) -> Self {
+        // We get the file descriptor passed from the factory instantiated by the state manager.
+        let fd = fd_factory.get_fd();
 
         Self::open(
             PageAllocatorId::default(),
@@ -735,47 +731,6 @@ fn free_pages(mut pages: Vec<PagePtr>) {
     // Free the last page range.
     // SAFETY: the range consists of pages that mapped as shared and writable.
     unsafe { madvise_remove(start_ptr, end_ptr) }
-}
-
-// A platform-specific function that creates the backing file of the page allocator.
-// On Linux it uses `memfd_create` to create an in-memory file.
-// On MacOS and WSL it uses an ordinary temporary file.
-#[cfg(target_os = "linux")]
-fn create_backing_file() -> RawFd {
-    if *ic_sys::IS_WSL {
-        return create_backing_file_portable();
-    }
-
-    match nix::sys::memfd::memfd_create(
-        &std::ffi::CString::default(),
-        nix::sys::memfd::MemFdCreateFlag::empty(),
-    ) {
-        Ok(fd) => fd,
-        Err(err) => {
-            panic!(
-                "MmapPageAllocatorCore failed to create the backing file {}",
-                err
-            )
-        }
-    }
-}
-
-#[cfg(not(target_os = "linux"))]
-fn create_backing_file() -> RawFd {
-    create_backing_file_portable()
-}
-
-fn create_backing_file_portable() -> RawFd {
-    use std::os::unix::io::IntoRawFd;
-    match tempfile::tempfile() {
-        Ok(file) => file.into_raw_fd(),
-        Err(err) => {
-            panic!(
-                "MmapPageAllocatorCore failed to create the backing file {}",
-                err
-            )
-        }
-    }
 }
 
 // A platform-specific function to truncate a file.

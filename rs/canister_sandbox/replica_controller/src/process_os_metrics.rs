@@ -198,9 +198,11 @@ pub fn parse_proc_smaps(data: &[u8]) -> Vec<VMAInfo> {
     vmas
 }
 
-fn compute_memfd_rss_total(vma_infos: &[VMAInfo]) -> u64 {
+fn compute_memory_allocator_rss_total(vma_infos: &[VMAInfo]) -> u64 {
     let mut total: u64 = 0;
     for vma_info in vma_infos {
+        // Check if memfds are present and add their RSS.
+        // This is working for the original memory-based allocator.
         const PREFIX: &[u8] = b"/memfd:";
         let matching = vma_info
             .pathname
@@ -212,6 +214,27 @@ fn compute_memfd_rss_total(vma_infos: &[VMAInfo]) -> u64 {
             if let Ok(size) = get_named_field_kb(&vma_info.fields, "Rss") {
                 total += size;
             }
+        } else {
+            // Check if file-backed memory regions are present and add their RSS.
+            // This is working for the newer file-backed allocator. All files
+            // of the file-backed allocator are of form /var/lib/ic/data/ic_state/page_deltas/[uuid].mem .
+            // The (deleted) part appears because the allocator deletes the file as soon as it is created,
+            // and thus the space on disk will be freed as soon as the last file descriptor pointing to
+            // that file is closed.
+            const EXTENSION: &[u8] = b".mem (deleted)";
+            let matching = vma_info
+                .pathname
+                .iter()
+                .rev()
+                .zip(EXTENSION.iter().rev())
+                .filter(|&(x, y)| x == y)
+                .count();
+
+            if matching == EXTENSION.len() {
+                if let Ok(size) = get_named_field_kb(&vma_info.fields, "Rss") {
+                    total += size;
+                }
+            }
         }
     }
 
@@ -221,14 +244,14 @@ fn compute_memfd_rss_total(vma_infos: &[VMAInfo]) -> u64 {
 // Extract the RSS of all memfd regions set up in given process. These regions
 // are used to hold the canister and stable memory in RAM and need to be
 // accounted for to get an overall view of system resource usage.
-pub fn get_memfd_rss(pid: u32) -> std::io::Result<u64> {
+pub fn get_page_allocator_rss(pid: u32) -> std::io::Result<u64> {
     let path = std::path::Path::new("/proc")
         .join(pid.to_string())
         .join("smaps");
     let data = std::fs::read(path)?;
     let vma_infos = parse_proc_smaps(&data);
 
-    Ok(compute_memfd_rss_total(&vma_infos))
+    Ok(compute_memory_allocator_rss_total(&vma_infos))
 }
 
 lazy_static! {
@@ -851,6 +874,29 @@ SwapPss:               0 kB
 Locked:                0 kB
 THPeligible:    0
 VmFlags: ex
+7f6719400000-7f671941e000 rw-s 00017000 fd:04 152                        /var/lib/ic/data/ic_state/page_deltas/dfe89acc-16c2-4f38-9965-5d108b01a012.mem (deleted)
+Size:                120 kB
+KernelPageSize:        4 kB
+MMUPageSize:           4 kB
+Rss:                  60 kB
+Pss:                  44 kB
+Shared_Clean:         32 kB
+Shared_Dirty:          0 kB
+Private_Clean:        28 kB
+Private_Dirty:         0 kB
+Referenced:           60 kB
+Anonymous:             0 kB
+LazyFree:              0 kB
+AnonHugePages:         0 kB
+ShmemPmdMapped:        0 kB
+FilePmdMapped:         0 kB
+Shared_Hugetlb:        0 kB
+Private_Hugetlb:       0 kB
+Swap:                  0 kB
+SwapPss:               0 kB
+Locked:                0 kB
+THPeligible:    0
+VmFlags: rd wr sh mr mw me ms sd
 "#;
 
     #[test]
@@ -864,6 +910,14 @@ VmFlags: ex
         let vmas = parse_proc_smaps(PROC_SMAPS_TESTCASE.as_bytes());
         assert_eq!(vmas[5].pathname, b"/memfd:foo (deleted)");
         assert_eq!(get_named_field_kb(&vmas[5].fields, "Rss").unwrap(), 256);
-        assert_eq!(compute_memfd_rss_total(&vmas), 256);
+        assert_eq!(compute_memory_allocator_rss_total(&vmas), 316);
+    }
+
+    #[test]
+    fn test_parse_file_backed_smap() {
+        let vmas = parse_proc_smaps(PROC_SMAPS_TESTCASE.as_bytes());
+        assert_eq!(vmas[21].pathname, b"/var/lib/ic/data/ic_state/page_deltas/dfe89acc-16c2-4f38-9965-5d108b01a012.mem (deleted)");
+        assert_eq!(get_named_field_kb(&vmas[21].fields, "Rss").unwrap(), 60);
+        assert_eq!(compute_memory_allocator_rss_total(&vmas), 316);
     }
 }
