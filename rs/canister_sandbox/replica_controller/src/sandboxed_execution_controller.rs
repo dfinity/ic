@@ -1040,7 +1040,7 @@ impl SandboxedExecutionController {
                     } else {
                         warn!(logger, "Unable to get anon RSS for pid {}", pid);
                     }
-                    if let Ok(kib) = process_os_metrics::get_memfd_rss(pid) {
+                    if let Ok(kib) = process_os_metrics::get_page_allocator_rss(pid) {
                         total_memfd_rss += kib;
                         process_rss += kib;
                         metrics
