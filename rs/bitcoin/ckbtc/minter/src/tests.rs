@@ -231,7 +231,7 @@ fn test_min_change_amount() {
 }
 
 #[test]
-fn test_no_zero_outputs() {
+fn test_no_dust_outputs() {
     let mut available_utxos = BTreeSet::new();
     available_utxos.insert(Utxo {
         outpoint: OutPoint {
@@ -250,13 +250,28 @@ fn test_no_zero_outputs() {
     assert_eq!(
         build_unsigned_transaction(
             &mut available_utxos,
-            vec![(out1_addr, 99_900), (out2_addr.clone(), 100)],
+            vec![(out1_addr.clone(), 99_900), (out2_addr.clone(), 100)],
+            minter_addr.clone(),
+            fee_per_vbyte,
+        ),
+        Err(BuildTxError::DustOutput {
+            address: out2_addr.clone(),
+            amount: 100
+        })
+    );
+
+    let fee_per_vbyte = 4000;
+
+    assert_eq!(
+        build_unsigned_transaction(
+            &mut available_utxos,
+            vec![(out1_addr, 99_000), (out2_addr.clone(), 1000)],
             minter_addr,
             fee_per_vbyte,
         ),
-        Err(BuildTxError::ZeroOutput {
+        Err(BuildTxError::DustOutput {
             address: out2_addr,
-            amount: 100
+            amount: 1000
         })
     );
 

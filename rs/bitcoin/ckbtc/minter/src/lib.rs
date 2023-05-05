@@ -249,7 +249,7 @@ async fn submit_pending_requests() {
                 }
                 None
             }
-            Err(BuildTxError::ZeroOutput { address, amount }) => {
+            Err(BuildTxError::DustOutput { address, amount }) => {
                 log!(P0,
                     "[submit_pending_requests]: dropping a request for BTC amount {} to {} (too low to cover the fees)",
                      tx::DisplayAmount(amount), address.display(s.btc_network)
@@ -570,7 +570,7 @@ pub enum BuildTxError {
     /// Withdrawal amount of at least one request is too low to cover its share
     /// of the fees.  Similar to `AmountTooLow`, but applies to a single
     /// request in a batch.
-    ZeroOutput {
+    DustOutput {
         address: BitcoinAddress,
         amount: u64,
     },
@@ -704,11 +704,16 @@ pub fn build_unsigned_transaction(
     }
 
     let fee_shares = distribute(fee + minter_fee, outputs.len() as u64);
+    // The default dustRelayFee is 3 sat/vB,
+    // which translates to a dust threshold of 546 satoshi for P2PKH outputs.
+    // The threshold for other types is lower,
+    // so we simply use 546 satoshi as the minimum amount per output.
+    const MIN_OUTPUT_AMOUNT: u64 = 546;
 
     for (output, fee_share) in unsigned_tx.outputs.iter_mut().zip(fee_shares.iter()) {
         if output.address != main_address {
-            if output.value <= *fee_share {
-                return Err(BuildTxError::ZeroOutput {
+            if output.value <= *fee_share + MIN_OUTPUT_AMOUNT {
+                return Err(BuildTxError::DustOutput {
                     address: output.address.clone(),
                     amount: output.value,
                 });
