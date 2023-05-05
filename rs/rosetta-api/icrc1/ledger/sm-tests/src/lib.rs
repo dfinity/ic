@@ -1,9 +1,10 @@
 use candid::{CandidType, Decode, Encode, Nat, Principal};
 use ic_base_types::PrincipalId;
+use ic_error_types::UserError;
 use ic_icrc1::{endpoints::StandardRecord, hash::Hash, Block, Operation, Transaction};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::block::{BlockIndex, BlockType, HashOf};
-use ic_state_machine_tests::{CanisterId, ErrorCode, StateMachine};
+use ic_state_machine_tests::{CanisterId, ErrorCode, StateMachine, WasmResult};
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};
@@ -422,7 +423,7 @@ fn arb_transaction() -> impl Strategy<Value = Transaction> {
         .prop_map(|(operation, ts, memo)| Transaction {
             operation,
             created_at_time: ts,
-            memo: memo.map(Memo::from),
+            memo: memo.map(|m| Memo::from(m.to_vec())),
         })
 }
 
@@ -957,92 +958,6 @@ where
             }
         )
     );
-}
-
-pub fn test_memo_validation<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
-where
-    T: CandidType,
-{
-    let p1 = PrincipalId::new_user_test_id(1);
-    let p2 = PrincipalId::new_user_test_id(2);
-    let (env, canister_id) = setup(
-        ledger_wasm,
-        encode_init_args,
-        vec![(Account::from(p1.0), 10_000_000)],
-    );
-    // [ic_icrc1::endpoints::TransferArg] does not allow invalid memos by construction, we
-    // need another type to check invalid inputs.
-    #[derive(CandidType)]
-    struct TransferArg {
-        to: Account,
-        amount: Nat,
-        memo: Option<Vec<u8>>,
-    }
-    type TxResult = Result<Nat, TransferError>;
-
-    // 8-byte memo should work
-    Decode!(
-        &env.execute_ingress_as(
-            p1,
-            canister_id,
-            "icrc1_transfer",
-            Encode!(&TransferArg {
-                to: p2.0.into(),
-                amount: Nat::from(10_000),
-                memo: Some(vec![1u8; 8]),
-            })
-            .unwrap()
-        )
-        .expect("failed to call transfer")
-        .bytes(),
-        TxResult
-    )
-    .unwrap()
-    .expect("transfer failed");
-
-    // 32-byte memo should work
-    Decode!(
-        &env.execute_ingress_as(
-            p1,
-            canister_id,
-            "icrc1_transfer",
-            Encode!(&TransferArg {
-                to: p2.0.into(),
-                amount: Nat::from(10_000),
-                memo: Some(vec![1u8; 32]),
-            })
-            .unwrap()
-        )
-        .expect("failed to call transfer")
-        .bytes(),
-        TxResult
-    )
-    .unwrap()
-    .expect("transfer failed");
-
-    // 33-byte memo should fail
-    match env.execute_ingress_as(
-        p1,
-        canister_id,
-        "icrc1_transfer",
-        Encode!(&TransferArg {
-            to: p2.0.into(),
-            amount: Nat::from(10_000),
-            memo: Some(vec![1u8; 33]),
-        })
-        .unwrap(),
-    ) {
-        Err(user_error) => assert_eq!(
-            user_error.code(),
-            ErrorCode::CanisterCalledTrap,
-            "unexpected error: {}",
-            user_error
-        ),
-        Ok(result) => panic!(
-            "expected a reject for a 33-byte memo, got result {:?}",
-            result
-        ),
-    }
 }
 
 pub fn test_tx_time_bounds<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
@@ -1710,4 +1625,92 @@ where
             },
         )
         .unwrap()
+}
+
+pub fn test_memo_max_len<T>(ledger_wasm: Vec<u8>, encode_init_args: fn(InitArgs) -> T)
+where
+    T: CandidType,
+{
+    let from_account = Principal::from_slice(&[1u8; 29]).into();
+    let (env, ledger_id) = setup(
+        ledger_wasm.clone(),
+        encode_init_args,
+        vec![(from_account, 1_000_000_000)],
+    );
+    let to_account = Principal::from_slice(&[2u8; 29]).into();
+    let transfer_with_memo = |memo: &[u8]| -> Result<WasmResult, UserError> {
+        env.execute_ingress_as(
+            PrincipalId(from_account.owner),
+            ledger_id,
+            "icrc1_transfer",
+            Encode!(&TransferArg {
+                from_subaccount: None,
+                to: to_account,
+                amount: Nat::from(1),
+                fee: None,
+                created_at_time: None,
+                memo: Some(Memo::from(memo.to_vec())),
+            })
+            .unwrap(),
+        )
+    };
+
+    // We didn't set the max_memo_length in the init params of the ledger
+    // so the memo will be accepted only if it's 32 bytes or less
+    for i in 0..=32 {
+        assert!(
+            transfer_with_memo(&vec![0u8; i]).is_ok(),
+            "Memo size: {}",
+            i
+        );
+    }
+    expect_memo_length_error(transfer_with_memo, &[0u8; 33]);
+
+    // Change the memo to 64 bytes
+    let args = ic_icrc1_ledger::LedgerArgument::Upgrade(Some(ic_icrc1_ledger::UpgradeArgs {
+        max_memo_length: Some(64),
+        ..ic_icrc1_ledger::UpgradeArgs::default()
+    }));
+    let args = Encode!(&args).unwrap();
+    env.upgrade_canister(ledger_id, ledger_wasm.clone(), args)
+        .unwrap();
+
+    // now the ledger should accept memos up to 64 bytes
+    for i in 0..=64 {
+        assert!(
+            transfer_with_memo(&vec![0u8; i]).is_ok(),
+            "Memo size: {}",
+            i
+        );
+    }
+    expect_memo_length_error(transfer_with_memo, &[0u8; 65]);
+
+    expect_memo_length_error(transfer_with_memo, &[0u8; u16::MAX as usize + 1]);
+
+    // Trying to shrink the memo should result in a failure
+    let args = ic_icrc1_ledger::LedgerArgument::Upgrade(Some(ic_icrc1_ledger::UpgradeArgs {
+        max_memo_length: Some(63),
+        ..ic_icrc1_ledger::UpgradeArgs::default()
+    }));
+    let args = Encode!(&args).unwrap();
+    assert!(env.upgrade_canister(ledger_id, ledger_wasm, args).is_err());
+}
+
+fn expect_memo_length_error<T>(transfer_with_memo: T, memo: &[u8])
+where
+    T: FnOnce(&[u8]) -> Result<WasmResult, UserError>,
+{
+    match transfer_with_memo(memo) {
+        Err(user_error) => assert_eq!(
+            user_error.code(),
+            ErrorCode::CanisterCalledTrap,
+            "unexpected error: {}",
+            user_error
+        ),
+        Ok(result) => panic!(
+            "expected a reject for a {}-byte memo, got result {:?}",
+            memo.len(),
+            result
+        ),
+    }
 }

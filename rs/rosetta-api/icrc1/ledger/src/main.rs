@@ -268,6 +268,12 @@ async fn icrc1_transfer(arg: TransferArg) -> Result<Nat, TransferError> {
             owner: ic_cdk::api::caller(),
             subaccount: arg.from_subaccount,
         };
+        match arg.memo.as_ref() {
+            Some(memo) if memo.0.len() > ledger.max_memo_length() as usize => {
+                ic_cdk::trap("the memo field is too large")
+            }
+            _ => {}
+        };
         let amount = match arg.amount.0.to_u64() {
             Some(n) => Tokens::from_e8s(n),
             None => {

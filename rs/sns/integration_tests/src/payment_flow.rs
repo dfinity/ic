@@ -176,6 +176,7 @@ impl PaymentProtocolTestSetup {
             metadata: vec![],
             archive_options: DEFAULT_ICRC1_ARCHIVE_OPTIONS.clone(),
             fee_collector_account: None,
+            max_memo_length: None,
         }
     }
 

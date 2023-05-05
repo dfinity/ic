@@ -146,6 +146,7 @@ impl SnsTestsInitPayloadBuilder {
             token_name: "Token Example".to_string(),
             metadata: vec![],
             fee_collector_account: None,
+            max_memo_length: None,
         };
 
         let swap = SwapInit {

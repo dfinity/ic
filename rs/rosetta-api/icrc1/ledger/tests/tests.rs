@@ -51,6 +51,7 @@ fn encode_init_args(args: ic_icrc1_ledger_sm_tests::InitArgs) -> LedgerArgument 
             cycles_for_archive_creation: None,
             max_transactions_per_response: None,
         },
+        max_memo_length: None,
     })
 }
 
@@ -140,4 +141,9 @@ fn check_fee_collector() {
 #[test]
 fn check_fee_collector_blocks() {
     ic_icrc1_ledger_sm_tests::test_fee_collector_blocks(ledger_wasm(), encode_init_args);
+}
+
+#[test]
+fn check_memo_max_len() {
+    ic_icrc1_ledger_sm_tests::test_memo_max_len(ledger_wasm(), encode_init_args);
 }
