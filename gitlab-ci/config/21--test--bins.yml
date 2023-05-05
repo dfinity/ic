@@ -4,7 +4,7 @@ check-bins-linux:
     - .bazel-rules-pipeline-no-merge-train
   stage: test
   needs:
-    - job: bazel-test-all
+    - job: linux-openssl-static-binaries
       artifacts: false
   image:
     # 21.04
@@ -34,7 +34,7 @@ check-bins-darwin:
     - .bazel-rules-pipeline-no-merge-train
   stage: test
   needs:
-    - job: bazel-build-macos
+    - job: macos-openssl-static-binaries
       artifacts: false
   tags:
     - dfinity
