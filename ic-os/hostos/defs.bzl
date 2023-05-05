@@ -32,6 +32,7 @@ def image_deps(mode, _malicious = False):
 
             # additional files to install
             "//publish/binaries:vsock_host": "/opt/ic/bin/vsock-host:0755",
+            "//ic-os:scripts/build-bootstrap-config-image.sh": "/opt/ic/bin/build-bootstrap-config-image.sh:0755",
         },
 
         # Set various configuration values

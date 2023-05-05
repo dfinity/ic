@@ -263,8 +263,7 @@ pub fn create_config_disk_image(
     group_name: &str,
 ) -> anyhow::Result<()> {
     let img_path = PathBuf::from(&node.node_path).join(CONF_IMG_FNAME);
-    let script_path =
-        test_env.get_dependency_path("ic-os/guestos/scripts/build-bootstrap-config-image.sh");
+    let script_path = test_env.get_dependency_path("ic-os/scripts/build-bootstrap-config-image.sh");
     let mut cmd = Command::new(script_path);
     let local_store_path = test_env
         .prep_dir(ic_name)

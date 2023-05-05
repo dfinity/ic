@@ -237,7 +237,7 @@ py_binary(
         ":artifacts",
         "//ic-os/guestos/envs/dev:hash_and_upload_update-img",
         "//ic-os/guestos/envs/dev:hash_and_upload_disk-img",
-        "//ic-os/guestos:scripts/build-bootstrap-config-image.sh",
+        "//ic-os:scripts/build-bootstrap-config-image.sh",
         "//rs/tests:create-universal-vm-config-image.sh",
         "common/flamegraph.gz",
         "workloads/tiny.toml",
@@ -277,7 +277,7 @@ sh_test(
     ],
     data = [
         ":e2e-scalability-tests",
-        "//ic-os/guestos:scripts/build-bootstrap-config-image.sh",
+        "//ic-os:scripts/build-bootstrap-config-image.sh",
         "//ic-os/guestos/envs/dev:version.txt",
     ],
     env_inherit = [

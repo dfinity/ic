@@ -156,7 +156,7 @@ MACRO_DEPENDENCIES = [
 GUESTOS_RUNTIME_DEPS = [
     "//ic-os/guestos/envs/dev:hash_and_upload_disk-img",
     "//ic-os/guestos/envs/dev:hash_and_upload_update-img",
-    "//ic-os/guestos:scripts/build-bootstrap-config-image.sh",
+    "//ic-os:scripts/build-bootstrap-config-image.sh",
 ]
 
 NNS_CANISTER_WASM_PROVIDERS = {
@@ -332,7 +332,7 @@ COUNTER_CANISTER_RUNTIME_DEPS = ["//rs/tests:src/counter.wat"]
 GUESTOS_MALICIOUS_RUNTIME_DEPS = [
     "//ic-os/guestos/envs/dev-malicious:hash_and_upload_disk-img",
     "//ic-os/guestos/envs/dev-malicious:hash_and_upload_update-img",
-    "//ic-os/guestos:scripts/build-bootstrap-config-image.sh",
+    "//ic-os:scripts/build-bootstrap-config-image.sh",
 ]
 
 CANISTER_HTTP_RUNTIME_DEPS = [

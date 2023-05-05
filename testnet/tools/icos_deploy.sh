@@ -238,8 +238,7 @@ rm -rf "${MEDIA_PATH}"
 mkdir -p "${MEDIA_PATH}"
 "${INVENTORY}" --media-json >"${MEDIA_PATH}/${deployment}.json"
 
-pushd "${REPO_ROOT}/ic-os/guestos"
-"${REPO_ROOT}/ic-os/guestos/scripts/build-deployment.sh" \
+"${REPO_ROOT}/testnet/tools/build-guestos-configs.sh" \
     --debug \
     --input="${MEDIA_PATH}/${deployment}.json" \
     --output="${MEDIA_PATH}" \
@@ -250,7 +249,6 @@ pushd "${REPO_ROOT}/ic-os/guestos"
     --output-nns-public-key="${MEDIA_PATH}/nns-public-key.pem" \
     ${WITH_TESTNET_KEYS:-} \
     ${ALLOW_SPECIFIED_IDS:-}
-popd
 
 SCP_PREFIX=""
 if [ -n "${ANSIBLE_REMOTE_USER:-}" ]; then
