@@ -880,7 +880,9 @@ impl TryFrom<PersistedConsensusMessage> for ConsensusMessage {
     fn try_from(message: PersistedConsensusMessage) -> Result<Self, Self::Error> {
         match message {
             PersistedConsensusMessage::OriginalCUPBytes(protobuf) => {
-                CatchUpPackage::try_from(&protobuf).map(ConsensusMessage::CatchUpPackage)
+                CatchUpPackage::try_from(&protobuf)
+                    .map(ConsensusMessage::CatchUpPackage)
+                    .map_err(|e| e.to_string())
             }
             PersistedConsensusMessage::ConsensusMessage(message) => Ok(message),
         }

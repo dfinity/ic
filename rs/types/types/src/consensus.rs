@@ -8,7 +8,8 @@ use crate::{
     signature::*,
     *,
 };
-use ic_protobuf::types::v1 as pb;
+use ic_base_types::PrincipalIdError;
+use ic_protobuf::types::v1::{self as pb, consensus_message::Msg};
 use ic_protobuf::{
     log::block_log_entry::v1::BlockLogEntry,
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -314,29 +315,31 @@ impl From<&BlockProposal> for pb::BlockProposal {
 }
 
 impl TryFrom<pb::BlockProposal> for BlockProposal {
-    type Error = String;
+    type Error = ProxyDecodeError;
     fn try_from(block_proposal: pb::BlockProposal) -> Result<Self, Self::Error> {
         let ret = Signed {
             content: Hashed {
                 value: Block::try_from(
                     block_proposal
                         .value
-                        .ok_or_else(|| "No block proposal value found".to_string())?,
-                )?,
+                        .ok_or_else(|| ProxyDecodeError::MissingField("BlockProposal::value"))?,
+                )
+                .map_err(ProxyDecodeError::Other)?,
                 hash: CryptoHashOf::from(CryptoHash(block_proposal.hash)),
             },
             signature: BasicSignature {
                 signature: BasicSigOf::from(BasicSig(block_proposal.signature)),
-                signer: NodeId::from(
-                    PrincipalId::try_from(block_proposal.signer)
-                        .expect("Couldn't parse principal id."),
-                ),
+                // TODO(CON-1002): BlockProposal protobuf definition should use nodeid
+                // instead of opaque bytes
+                signer: NodeId::from(PrincipalId::try_from(block_proposal.signer)?),
             },
         };
         if ret.check_integrity() {
             Ok(ret)
         } else {
-            Err("Block proposal validity check failed".to_string())
+            Err(ProxyDecodeError::Other(
+                "Block proposal validity check failed".to_string(),
+            ))
         }
     }
 }
@@ -399,12 +402,11 @@ impl From<&Notarization> for pb::Notarization {
 }
 
 impl TryFrom<pb::Notarization> for Notarization {
-    type Error = String;
+    type Error = ProxyDecodeError;
     fn try_from(notarization: pb::Notarization) -> Result<Self, Self::Error> {
         Ok(Signed {
             content: NotarizationContent {
-                version: ReplicaVersion::try_from(notarization.version.as_str())
-                    .map_err(|e| format!("Notarization replica version failed to parse {:?}", e))?,
+                version: ReplicaVersion::try_from(notarization.version.as_str())?,
                 height: Height::from(notarization.height),
                 block: CryptoHashOf::from(CryptoHash(notarization.block)),
             },
@@ -413,13 +415,8 @@ impl TryFrom<pb::Notarization> for Notarization {
                 signers: notarization
                     .signers
                     .iter()
-                    .map(|n| {
-                        NodeId::from(
-                            PrincipalId::try_from(&n[..])
-                                .expect("Could not deserialize principal id."),
-                        )
-                    })
-                    .collect(),
+                    .map(|n| Ok(NodeId::from(PrincipalId::try_from(&n[..])?)))
+                    .collect::<Result<_, PrincipalIdError>>()?,
             },
         })
     }
@@ -429,6 +426,35 @@ impl TryFrom<pb::Notarization> for Notarization {
 /// If sufficiently many replicas create notarization shares, the shares can be
 /// aggregated into a full notarization.
 pub type NotarizationShare = Signed<NotarizationContent, MultiSignatureShare<NotarizationContent>>;
+
+impl From<&NotarizationShare> for pb::NotarizationShare {
+    fn from(notarization: &NotarizationShare) -> Self {
+        Self {
+            version: notarization.content.version.to_string(),
+            height: notarization.content.height.get(),
+            block: notarization.content.block.clone().get().0,
+            signature: notarization.signature.signature.clone().get().0,
+            signer: Some(node_id_into_protobuf(notarization.signature.signer)),
+        }
+    }
+}
+
+impl TryFrom<pb::NotarizationShare> for NotarizationShare {
+    type Error = ProxyDecodeError;
+    fn try_from(notarization: pb::NotarizationShare) -> Result<Self, Self::Error> {
+        Ok(Signed {
+            content: NotarizationContent {
+                version: ReplicaVersion::try_from(notarization.version.as_str())?,
+                height: Height::from(notarization.height),
+                block: CryptoHashOf::from(CryptoHash(notarization.block)),
+            },
+            signature: MultiSignatureShare {
+                signature: IndividualMultiSigOf::new(IndividualMultiSig(notarization.signature)),
+                signer: node_id_try_from_option(notarization.signer)?,
+            },
+        })
+    }
+}
 
 /// FinalizationContent holds the values that are signed in a finalization
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -477,12 +503,11 @@ impl From<&Finalization> for pb::Finalization {
 }
 
 impl TryFrom<pb::Finalization> for Finalization {
-    type Error = String;
+    type Error = ProxyDecodeError;
     fn try_from(finalization: pb::Finalization) -> Result<Self, Self::Error> {
         Ok(Signed {
             content: FinalizationContent {
-                version: ReplicaVersion::try_from(finalization.version.as_str())
-                    .map_err(|e| format!("Finalization replica version failed to parse {:?}", e))?,
+                version: ReplicaVersion::try_from(finalization.version.as_str())?,
                 height: Height::from(finalization.height),
                 block: CryptoHashOf::from(CryptoHash(finalization.block)),
             },
@@ -491,8 +516,8 @@ impl TryFrom<pb::Finalization> for Finalization {
                 signers: finalization
                     .signers
                     .iter()
-                    .map(|n| NodeId::from(PrincipalId::try_from(&n[..]).unwrap()))
-                    .collect(),
+                    .map(|n| Ok(NodeId::from(PrincipalId::try_from(&n[..])?)))
+                    .collect::<Result<_, PrincipalIdError>>()?,
             },
         })
     }
@@ -503,6 +528,34 @@ impl TryFrom<pb::Finalization> for Finalization {
 /// aggregated into a full finalization.
 pub type FinalizationShare = Signed<FinalizationContent, MultiSignatureShare<FinalizationContent>>;
 
+impl From<&FinalizationShare> for pb::FinalizationShare {
+    fn from(finalization: &FinalizationShare) -> Self {
+        Self {
+            version: finalization.content.version.to_string(),
+            height: finalization.content.height.get(),
+            block: finalization.content.block.clone().get().0,
+            signature: finalization.signature.signature.clone().get().0,
+            signer: Some(node_id_into_protobuf(finalization.signature.signer)),
+        }
+    }
+}
+
+impl TryFrom<pb::FinalizationShare> for FinalizationShare {
+    type Error = ProxyDecodeError;
+    fn try_from(finalization: pb::FinalizationShare) -> Result<Self, Self::Error> {
+        Ok(Signed {
+            content: FinalizationContent {
+                version: ReplicaVersion::try_from(finalization.version.as_str())?,
+                height: Height::from(finalization.height),
+                block: CryptoHashOf::from(CryptoHash(finalization.block)),
+            },
+            signature: MultiSignatureShare {
+                signature: IndividualMultiSigOf::new(IndividualMultiSig(finalization.signature)),
+                signer: node_id_try_from_option(finalization.signer)?,
+            },
+        })
+    }
+}
 /// RandomBeaconContent holds the content that is signed in the random beacon,
 /// which is the previous random beacon, the height, and the replica version
 /// used to create the random beacon.
@@ -660,21 +713,16 @@ impl From<&RandomTape> for pb::RandomTape {
 }
 
 impl TryFrom<pb::RandomTape> for RandomTape {
-    type Error = String;
+    type Error = ProxyDecodeError;
     fn try_from(tape: pb::RandomTape) -> Result<Self, Self::Error> {
         Ok(Signed {
             content: RandomTapeContent {
-                version: ReplicaVersion::try_from(tape.version.as_str())
-                    .map_err(|e| format!("RandomTape replica version failed to parse {:?}", e))?,
+                version: ReplicaVersion::try_from(tape.version.as_str())?,
                 height: Height::from(tape.height),
             },
             signature: ThresholdSignature {
                 signature: CombinedThresholdSigOf::new(CombinedThresholdSig(tape.signature)),
-                signer: NiDkgId::try_from(
-                    tape.signer
-                        .ok_or_else(|| String::from("Error: RandomTape signer not present"))?,
-                )
-                .map_err(|e| format!("Unable to decode RandomTape signer {:?}", e))?,
+                signer: try_from_option_field(tape.signer, "RandomTape::signer")?,
             },
         })
     }
@@ -684,6 +732,33 @@ impl TryFrom<pb::RandomTape> for RandomTape {
 /// sufficiently many replicas create random tape shares, the shares can be
 /// aggregated into a RandomTape.
 pub type RandomTapeShare = Signed<RandomTapeContent, ThresholdSignatureShare<RandomTapeContent>>;
+
+impl From<&RandomTapeShare> for pb::RandomTapeShare {
+    fn from(tape_share: &RandomTapeShare) -> Self {
+        Self {
+            version: tape_share.content.version.to_string(),
+            height: tape_share.content.height.get(),
+            signature: tape_share.signature.signature.clone().get().0,
+            signer: Some(node_id_into_protobuf(tape_share.signature.signer)),
+        }
+    }
+}
+
+impl TryFrom<pb::RandomTapeShare> for RandomTapeShare {
+    type Error = ProxyDecodeError;
+    fn try_from(tape_share: pb::RandomTapeShare) -> Result<Self, Self::Error> {
+        Ok(Signed {
+            content: RandomTapeContent {
+                version: ReplicaVersion::try_from(tape_share.version.as_str())?,
+                height: Height::from(tape_share.height),
+            },
+            signature: ThresholdSignatureShare {
+                signature: ThresholdSigShareOf::new(ThresholdSigShare(tape_share.signature)),
+                signer: node_id_try_from_option(tape_share.signer)?,
+            },
+        })
+    }
+}
 
 /// The enum encompassing all of the consensus artifacts exchanged between
 /// replicas.
@@ -700,6 +775,48 @@ pub enum ConsensusMessage {
     RandomTapeShare(RandomTapeShare),
     CatchUpPackage(CatchUpPackage),
     CatchUpPackageShare(CatchUpPackageShare),
+}
+
+impl From<ConsensusMessage> for pb::ConsensusMessage {
+    fn from(value: ConsensusMessage) -> Self {
+        Self {
+            msg: Some(match value {
+                ConsensusMessage::RandomBeacon(ref x) => Msg::RandomBeacon(x.into()),
+                ConsensusMessage::Finalization(ref x) => Msg::Finalization(x.into()),
+                ConsensusMessage::Notarization(ref x) => Msg::Notarization(x.into()),
+                ConsensusMessage::BlockProposal(ref x) => Msg::BlockProposal(x.into()),
+                ConsensusMessage::RandomBeaconShare(ref x) => Msg::RandomBeaconShare(x.into()),
+                ConsensusMessage::NotarizationShare(ref x) => Msg::NotarizationShare(x.into()),
+                ConsensusMessage::FinalizationShare(ref x) => Msg::FinalizationShare(x.into()),
+                ConsensusMessage::RandomTape(ref x) => Msg::RandomTape(x.into()),
+                ConsensusMessage::RandomTapeShare(ref x) => Msg::RandomTapeShare(x.into()),
+                ConsensusMessage::CatchUpPackage(ref x) => Msg::Cup(x.into()),
+                ConsensusMessage::CatchUpPackageShare(ref x) => Msg::CupShare(x.into()),
+            }),
+        }
+    }
+}
+
+impl TryFrom<pb::ConsensusMessage> for ConsensusMessage {
+    type Error = ProxyDecodeError;
+    fn try_from(value: pb::ConsensusMessage) -> Result<Self, Self::Error> {
+        let Some(msg) = value.msg else {
+            return Err(ProxyDecodeError::MissingField("ConsensusMessage::msg"))
+        };
+        Ok(match msg {
+            Msg::RandomBeacon(x) => ConsensusMessage::RandomBeacon(x.try_into()?),
+            Msg::Finalization(x) => ConsensusMessage::Finalization(x.try_into()?),
+            Msg::Notarization(x) => ConsensusMessage::Notarization(x.try_into()?),
+            Msg::BlockProposal(x) => ConsensusMessage::BlockProposal(x.try_into()?),
+            Msg::RandomBeaconShare(x) => ConsensusMessage::RandomBeaconShare(x.try_into()?),
+            Msg::NotarizationShare(x) => ConsensusMessage::NotarizationShare(x.try_into()?),
+            Msg::FinalizationShare(x) => ConsensusMessage::FinalizationShare(x.try_into()?),
+            Msg::RandomTape(x) => ConsensusMessage::RandomTape(x.try_into()?),
+            Msg::RandomTapeShare(x) => ConsensusMessage::RandomTapeShare(x.try_into()?),
+            Msg::Cup(ref x) => ConsensusMessage::CatchUpPackage(x.try_into()?),
+            Msg::CupShare(x) => ConsensusMessage::CatchUpPackageShare(x.try_into()?),
+        })
+    }
 }
 
 impl TryFrom<ConsensusMessage> for RandomBeacon {

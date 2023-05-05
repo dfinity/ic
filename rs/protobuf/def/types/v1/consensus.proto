@@ -16,6 +16,16 @@ message CatchUpPackage {
 	NiDkgId signer = 3;
 }
 
+message CatchUpPackageShare {
+	string version = 1;
+	RandomBeacon random_beacon = 2;
+	bytes state_hash = 3;
+	bytes block_hash = 4;
+	bytes random_beacon_hash = 5;
+	bytes signature = 6;
+	NodeId signer = 7;
+}
+
 message CatchUpContent {
 	Block block = 1;
 	RandomBeacon random_beacon = 2;
@@ -49,13 +59,13 @@ message ConsensusMessage {
 		Finalization finalization = 2;
 		Notarization notarization = 3;
 		BlockProposal block_proposal = 4;
-		// missing: RandomBeaconShare = 5;
-		// missing: NotarizationShare = 6;
-		// missing: FinalizationShare = 7;
+		RandomBeaconShare random_beacon_share = 5;
+		NotarizationShare notarization_share = 6;
+		FinalizationShare finalization_share = 7;
 		RandomTape random_tape = 8;
-		// missing: RandomTapeShare = 9;
+		RandomTapeShare random_tape_share = 9;
 		CatchUpPackage cup = 10;
-		// missing: CatchUpPackageShare = 11;
+		CatchUpPackageShare cup_share = 11;
 	}
 }
 
@@ -89,6 +99,13 @@ message RandomTape {
 	NiDkgId signer = 4;
 }
 
+message RandomTapeShare {
+	string version = 1;
+	uint64 height = 2;
+	bytes signature = 3;
+	NodeId signer = 4;
+}
+
 message Finalization {
 	string version = 1;
 	uint64 height = 2;
@@ -97,12 +114,28 @@ message Finalization {
 	repeated bytes signers = 5;
 }
 
+message FinalizationShare {
+	string version = 1;
+	uint64 height = 2;
+	bytes block = 3;
+	bytes signature = 4;
+	NodeId signer = 5;
+}
+
 message Notarization {
 	string version = 1;
 	uint64 height = 2;
 	bytes block = 3;
 	bytes signature = 4;
 	repeated bytes signers = 5;
+}
+
+message NotarizationShare {
+	string version = 1;
+	uint64 height = 2;
+	bytes block = 3;
+	bytes signature = 4;
+	NodeId signer = 5;
 }
 
 message SubnetStreamSlice {

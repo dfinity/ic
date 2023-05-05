@@ -9,7 +9,7 @@ use ic_interfaces::{
     time_source::SysTimeSource,
 };
 use ic_interfaces_registry::RegistryClient;
-use ic_protobuf::types::v1 as pb;
+use ic_protobuf::{proxy::ProxyDecodeError, types::v1 as pb};
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_types::{
     artifact_kind::ConsensusArtifact,
@@ -467,7 +467,6 @@ pub(crate) fn deserialize_consensus_artifacts(
     }
 }
 
-// TODO: Replace String with ProxyDecodeError once structures have been migrated
-fn deserialization_error(file: &Path, err: String) -> String {
+fn deserialization_error(file: &Path, err: ProxyDecodeError) -> String {
     format!("Couldn't deserialize artifact {:?}: {}", file, err)
 }

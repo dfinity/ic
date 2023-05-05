@@ -3,13 +3,16 @@
 use crate::{
     consensus::{
         Block, Committee, ConsensusMessageHashable, HasCommittee, HasHeight, HasVersion,
-        HashedBlock, HashedRandomBeacon, RandomBeacon, ThresholdSignature, ThresholdSignatureShare,
+        HashedBlock, HashedRandomBeacon, ThresholdSignature, ThresholdSignatureShare,
     },
-    crypto::threshold_sig::ni_dkg::NiDkgId,
     crypto::*,
-    CryptoHashOfState, Height, RegistryVersion, ReplicaVersion,
+    node_id_into_protobuf, node_id_try_from_option, CryptoHashOfState, Height, RegistryVersion,
+    ReplicaVersion,
 };
-use ic_protobuf::types::v1 as pb;
+use ic_protobuf::{
+    proxy::{try_from_option_field, ProxyDecodeError},
+    types::v1 as pb,
+};
 use prost::Message;
 use serde::{Deserialize, Serialize};
 use std::cmp::{Ordering, PartialOrd};
@@ -88,20 +91,17 @@ impl From<&CatchUpContent> for pb::CatchUpContent {
 }
 
 impl TryFrom<pb::CatchUpContent> for CatchUpContent {
-    type Error = String;
-    fn try_from(content: pb::CatchUpContent) -> Result<CatchUpContent, String> {
+    type Error = ProxyDecodeError;
+    fn try_from(content: pb::CatchUpContent) -> Result<CatchUpContent, Self::Error> {
         let block = super::Block::try_from(
             content
                 .block
-                .ok_or_else(|| String::from("Error: CUP missing block"))?,
-        )?;
-        let random_beacon = RandomBeacon::try_from(
-            content
-                .random_beacon
-                .ok_or_else(|| String::from("Error: CUP missing block"))?,
+                .ok_or_else(|| ProxyDecodeError::MissingField("CatchUpContent::block"))?,
         )
-        // TODO: Remove after switching to ProxyDecodeError
-        .map_err(|e| format!("{}", e))?;
+        .map_err(ProxyDecodeError::Other)?;
+
+        let random_beacon =
+            try_from_option_field(content.random_beacon, "CatchUpContent::random_beacon")?;
 
         Ok(Self::new(
             HashedBlock {
@@ -165,28 +165,24 @@ impl From<CatchUpPackage> for pb::CatchUpPackage {
 }
 
 impl TryFrom<&pb::CatchUpPackage> for CatchUpPackage {
-    type Error = String;
-    fn try_from(cup: &pb::CatchUpPackage) -> Result<CatchUpPackage, String> {
+    type Error = ProxyDecodeError;
+    fn try_from(cup: &pb::CatchUpPackage) -> Result<CatchUpPackage, Self::Error> {
         let ret = CatchUpPackage {
             content: CatchUpContent::try_from(
                 pb::CatchUpContent::decode(&cup.content[..])
-                    .map_err(|e| format!("CatchUpContent failed to decode {:?}", e))?,
+                    .map_err(ProxyDecodeError::DecodeError)?,
             )?,
             signature: ThresholdSignature {
                 signature: CombinedThresholdSigOf::new(CombinedThresholdSig(cup.signature.clone())),
-                signer: NiDkgId::try_from(
-                    cup.signer
-                        .as_ref()
-                        .ok_or_else(|| String::from("Error: CUP signer not present"))?
-                        .clone(),
-                )
-                .map_err(|e| format!("Unable to decode CUP signer {:?}", e))?,
+                signer: try_from_option_field(cup.signer.clone(), "CatchUpPackage::signer")?,
             },
         };
         if ret.check_integrity() {
             Ok(ret)
         } else {
-            Err("CatchUpPackage validity check failed".to_string())
+            Err(ProxyDecodeError::Other(
+                "CatchUpPackage validity check failed".to_string(),
+            ))
         }
     }
 }
@@ -209,6 +205,43 @@ impl From<&CatchUpContent> for CatchUpShareContent {
 /// committee.
 pub type CatchUpPackageShare = Signed<CatchUpShareContent, ThresholdSignatureShare<CatchUpContent>>;
 
+impl From<&CatchUpPackageShare> for pb::CatchUpPackageShare {
+    fn from(cup_share: &CatchUpPackageShare) -> Self {
+        Self {
+            version: cup_share.content.version.to_string(),
+            random_beacon: Some((&cup_share.content.random_beacon.value).into()),
+            state_hash: cup_share.content.state_hash.clone().get().0,
+            block_hash: cup_share.content.block.clone().get().0,
+            random_beacon_hash: cup_share.content.random_beacon.hash.clone().get().0,
+            signature: cup_share.signature.signature.clone().get().0,
+            signer: Some(node_id_into_protobuf(cup_share.signature.signer)),
+        }
+    }
+}
+
+impl TryFrom<pb::CatchUpPackageShare> for CatchUpPackageShare {
+    type Error = ProxyDecodeError;
+    fn try_from(cup_share: pb::CatchUpPackageShare) -> Result<Self, Self::Error> {
+        Ok(Signed {
+            content: CatchUpShareContent {
+                version: ReplicaVersion::try_from(cup_share.version.as_str())?,
+                block: CryptoHashOf::new(CryptoHash(cup_share.block_hash)),
+                random_beacon: HashedRandomBeacon::recompose(
+                    CryptoHashOf::from(CryptoHash(cup_share.random_beacon_hash)),
+                    try_from_option_field(
+                        cup_share.random_beacon,
+                        "CatchUpPackageShare::random_beacon",
+                    )?,
+                ),
+                state_hash: CryptoHashOf::from(CryptoHash(cup_share.state_hash)),
+            },
+            signature: ThresholdSignatureShare {
+                signature: ThresholdSigShareOf::new(ThresholdSigShare(cup_share.signature)),
+                signer: node_id_try_from_option(cup_share.signer)?,
+            },
+        })
+    }
+}
 /// The parameters used to request `CatchUpPackage` (by orchestrator).
 ///
 /// We make use of the `Ord` trait to determine if one `CatchUpPackage` is newer
@@ -255,9 +288,10 @@ impl From<&CatchUpPackage> for CatchUpPackageParam {
     }
 }
 impl TryFrom<&pb::CatchUpPackage> for CatchUpPackageParam {
-    type Error = String;
+    type Error = ProxyDecodeError;
     fn try_from(catch_up_package: &pb::CatchUpPackage) -> Result<Self, Self::Error> {
-        Ok((&CatchUpPackage::try_from(catch_up_package)?).into())
+        let cup = &CatchUpPackage::try_from(catch_up_package)?;
+        Ok(cup.into())
     }
 }
 
