@@ -291,4 +291,3 @@ go_deps.bzl               @dfinity-lab/teams/idx
 *.lock                    @dfinity-lab/teams/ghost
 Cargo.toml                @dfinity-lab/teams/ghost
 .gitignore                @dfinity-lab/teams/ghost
-Capsule.toml              @dfinity-lab/teams/ghost
