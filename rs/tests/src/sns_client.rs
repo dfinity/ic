@@ -25,10 +25,7 @@ use ic_sns_init::pb::v1::{
     FractionalDeveloperVotingPower, NeuronDistribution, SnsInitPayload, SwapDistribution,
     TreasuryDistribution,
 };
-use ic_sns_swap::pb::v1::{
-    params::NeuronBasketConstructionParameters, GetStateRequest, GetStateResponse, Lifecycle,
-    Params,
-};
+use ic_sns_swap::pb::v1::{GetStateRequest, GetStateResponse, Init, Lifecycle, Params};
 use ic_sns_wasm::pb::v1::{
     AddWasmRequest, DeployNewSnsRequest, DeployNewSnsResponse, SnsCanisterIds, SnsCanisterType,
     SnsWasm, UpdateAllowedPrincipalsRequest, UpdateSnsSubnetListRequest,
@@ -91,11 +88,17 @@ impl SnsClient {
         assert_eq!(res.lifecycle(), state);
     }
 
-    pub fn initiate_token_swap(&self, env: &TestEnv) {
+    pub fn initiate_token_swap(
+        &self,
+        env: &TestEnv,
+        params: Params,
+        community_fund_investment_e8s: u64,
+    ) {
         let log = env.logger();
         let swap_id = self.sns_canisters.swap();
         info!(log, "Sending open token swap proposal");
-        let payload = open_sns_token_swap_payload_for_tests(swap_id.get());
+        let payload =
+            open_sns_token_swap_payload(swap_id.get(), params, community_fund_investment_e8s);
         let nns_node = env.get_first_healthy_nns_node_snapshot();
         let runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
         block_on(open_sns_token_swap(&runtime, payload));
@@ -364,7 +367,7 @@ async fn get_swap_state(
         .map(|res| Decode!(res.as_slice(), GetStateResponse).expect("failed to decode"))
 }
 
-fn two_days_from_now_in_secs() -> u64 {
+pub fn two_days_from_now_in_secs() -> u64 {
     SystemTime::now()
         .checked_add(Duration::from_secs(2 * 24 * 60 * 60)) // two days
         .unwrap()
@@ -373,30 +376,36 @@ fn two_days_from_now_in_secs() -> u64 {
         .as_secs()
 }
 
-fn open_sns_token_swap_payload_for_tests(sns_swap_canister_id: PrincipalId) -> OpenSnsTokenSwap {
+const fn open_sns_token_swap_payload(
+    sns_swap_canister_id: PrincipalId,
+    params: Params,
+    community_fund_investment_e8s: u64,
+) -> OpenSnsTokenSwap {
     OpenSnsTokenSwap {
         target_swap_canister_id: Some(sns_swap_canister_id),
         // Taken (mostly) from https://github.com/open-ic/open-chat/blob/master/sns_proposal.sh
-        params: Some(Params {
-            min_participants: 100,
-            min_icp_e8s: 500_000 * E8,
-            max_icp_e8s: 1_000_000 * E8,
-            min_participant_icp_e8s: SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S,
-            max_participant_icp_e8s: SNS_SALE_PARAM_MAX_PARTICIPANT_ICP_E8S,
-            swap_due_timestamp_seconds: two_days_from_now_in_secs(),
-            sns_token_e8s: 25_000_000 * E8,
-            neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
-                count: 5,
-                dissolve_delay_interval_seconds: 7_889_400,
-            }),
-            sale_delay_seconds: None,
-        }),
-        community_fund_investment_e8s: Some(333_333 * E8),
+        params: Some(params),
+        community_fund_investment_e8s: Some(community_fund_investment_e8s),
     }
 }
 
 /// Send open sns token swap proposal to governance and wait until it is executed.
 async fn open_sns_token_swap(nns_api: &'_ Runtime, payload: OpenSnsTokenSwap) {
+    // Sanity check that params is valid
+    let params = payload.params.as_ref().unwrap().clone();
+    let () = params
+        .validate(&Init {
+            nns_governance_canister_id: "".to_string(),
+            sns_governance_canister_id: "".to_string(),
+            sns_ledger_canister_id: "".to_string(),
+            icp_ledger_canister_id: "".to_string(),
+            sns_root_canister_id: "".to_string(),
+            fallback_controller_principal_ids: vec![],
+            transaction_fee_e8s: Some(0),
+            neuron_minimum_stake_e8s: Some(0),
+        })
+        .unwrap();
+
     let governance_canister = get_governance_canister(nns_api);
     let neuron_id = NeuronId {
         id: TEST_NEURON_1_ID,

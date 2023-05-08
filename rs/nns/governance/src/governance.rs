@@ -8542,7 +8542,7 @@ fn divide_perfectly(field_name: &str, dividend: u64, divisor: u64) -> Result<u64
         Some(remainder) => {
             assert_ne!(remainder, 0);
             Err(format!(
-                "{} is supposed to contain a value that is evenly divisble by {}, \
+                "{} is supposed to contain a value that is evenly divisible by {}, \
                  but it contains {}, which leaves a remainder of {}.",
                 field_name, divisor, dividend, remainder,
             ))

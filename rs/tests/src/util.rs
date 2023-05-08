@@ -771,10 +771,10 @@ pub fn delay() -> garcon::Delay {
         .build()
 }
 
-pub fn create_delay(throttle_duration: u64, timeout: u64) -> garcon::Delay {
+pub fn create_delay(throttle_duration_millis: u64, timeout_seconds: u64) -> garcon::Delay {
     garcon::Delay::builder()
-        .throttle(std::time::Duration::from_millis(throttle_duration))
-        .timeout(std::time::Duration::from_secs(timeout))
+        .throttle(std::time::Duration::from_millis(throttle_duration_millis))
+        .timeout(std::time::Duration::from_secs(timeout_seconds))
         .build()
 }
 
@@ -1451,4 +1451,34 @@ pub fn spawn_round_robin_workload_engine(
         block_on(engine.execute(aggregator, LoadTestMetrics::aggregator_fn))
             .expect("Execution of the workload failed.")
     })
+}
+
+/// Divides `dividend` into `divisor` "perfectly" (with zero remainder) or returns
+/// an error.
+pub fn divide_perfectly(
+    field_name: &str,
+    dividend: u64,
+    divisor: u64,
+) -> Result<u64, anyhow::Error> {
+    match dividend.checked_rem(divisor) {
+        None => bail!(
+            "Attempted to divide by zero while validating {}. \
+                 (This is likely due to an internal bug.)",
+            field_name,
+        ),
+
+        Some(0) => Ok(dividend.saturating_div(divisor)),
+
+        Some(remainder) => {
+            assert_ne!(remainder, 0);
+            bail!(
+                "{} is supposed to contain a value that is evenly divisible by {}, \
+                 but it contains {}, which leaves a remainder of {}.",
+                field_name,
+                divisor,
+                dividend,
+                remainder,
+            )
+        }
+    }
 }
