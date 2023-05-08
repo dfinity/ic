@@ -45,6 +45,7 @@ tower-http = { version = "0.4.0", features = ["trace"] }
 tower-request-id = "0.2.1"
 tracing = "0.1.37"
 tracing-subscriber = { version = "0.3.16", features = ["json"] }
+indicatif = "0.17.3"
 
 [lib]
 path = "src/lib.rs"

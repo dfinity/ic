@@ -28,6 +28,7 @@ DEPENDENCIES = [
     "@crate_index//:tower-http",
     "@crate_index//:tower-request-id",
     "@crate_index//:tracing",
+    "@crate_index//:indicatif_0_17_3",
     "@crate_index//:tracing-subscriber",
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//packages/icrc-ledger-agent:icrc_ledger_agent",

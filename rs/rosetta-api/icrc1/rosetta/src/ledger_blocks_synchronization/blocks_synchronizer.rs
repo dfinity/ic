@@ -4,9 +4,10 @@ use ic_crypto_tree_hash::{LookupStatus, MixedHashTree};
 use ic_icrc1::hash::Hash;
 use icrc_ledger_agent::Icrc1Agent;
 use icrc_ledger_types::icrc3::blocks::{BlockRange, GetBlocksRequest, GetBlocksResponse};
+use indicatif::{ProgressBar, ProgressState, ProgressStyle};
 use num_traits::ToPrimitive;
 use serde_bytes::ByteBuf;
-use std::{cmp, collections::HashMap, ops::RangeInclusive, sync::Arc};
+use std::{cmp, collections::HashMap, fmt::Write, ops::RangeInclusive, sync::Arc};
 use LookupStatus::Found;
 
 // The Range of indices to be synchronized
@@ -158,6 +159,19 @@ async fn sync_blocks_interval(
     maximum_blocks_per_request: u64,
     sync_range: SyncRange,
 ) -> anyhow::Result<()> {
+    // Create a progess bar for visualization
+    let pb = ProgressBar::new(*sync_range.index_range.end() - *sync_range.index_range.start() + 1);
+    pb.set_style(
+        ProgressStyle::with_template(
+            "{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] ({eta}) {msg}",
+        )
+        .unwrap()
+        .with_key("eta", |state: &ProgressState, w: &mut dyn Write| {
+            write!(w, "{:.1}s", state.eta().as_secs_f64()).unwrap()
+        })
+        .progress_chars("#>-"),
+    );
+
     // The leading index/hash is the highest block index/hash that is requested by the icrc ledger
     let mut next_index_interval = RangeInclusive::new(
         cmp::max(
@@ -193,6 +207,7 @@ async fn sync_blocks_interval(
 
         leading_block_hash = fetched_blocks[0].parent_hash.clone();
         let number_of_blocks_fetched = fetched_blocks.len();
+        pb.inc(number_of_blocks_fetched as u64);
 
         // Store the fetched blocks in the database
         storage_client.store_blocks(fetched_blocks.clone())?;
@@ -226,6 +241,10 @@ async fn sync_blocks_interval(
         );
         next_index_interval = RangeInclusive::new(interval_start, interval_end);
     }
+    pb.finish_with_message(format!(
+        "Synced Up to block height: {}",
+        *sync_range.index_range.end()
+    ));
     Ok(())
 }
 
@@ -375,10 +394,12 @@ async fn fetch_blocks_interval(
 /// Returns the tip index and hash of the ledger
 async fn fetch_blockchain_tip_data(agent: Arc<Icrc1Agent>) -> anyhow::Result<(u64, Hash)> {
     // Fetch the data certificate from the icrc ledger
-    let data_certificate = agent
-        .get_data_certificate()
-        .await
-        .map_err(|_| anyhow::Error::msg("Could not fetch data certificate from ledger"))?;
+    let data_certificate = agent.get_data_certificate().await.map_err(|err| {
+        anyhow::Error::msg(format!(
+            "Could not fetch data certificate from ledger: {:?}",
+            err
+        ))
+    })?;
 
     // Extract the hash tree from the data certificate and deserialize it into a Tree object
     let hash_tree: MixedHashTree = serde_cbor::from_slice(&data_certificate.hash_tree)
