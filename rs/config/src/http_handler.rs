@@ -57,17 +57,20 @@ pub struct Config {
     /// [`408 Request Timeout`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/408) will be returned to the user.
     pub max_request_receive_seconds: u64,
 
-    /// Serving at most `max_read_state_concurrent_requests` requests concurrently for endpoint `/api/v2/read_state`
+    /// Serving at most `max_read_state_concurrent_requests` requests concurrently for endpoint `/api/v2/read_state`.
     pub max_read_state_concurrent_requests: usize,
 
-    /// Serving at most `max_status_concurrent_requests` requests concurrently for endpoint `/api/v2/status`
+    /// Serving at most `max_status_concurrent_requests` requests concurrently for endpoint `/api/v2/status`.
     pub max_status_concurrent_requests: usize,
 
-    /// Serving at most `max_catch_up_package_concurrent_requests` requests concurrently for endpoint `/_/catch_up_package`
+    /// Serving at most `max_catch_up_package_concurrent_requests` requests concurrently for endpoint `/_/catch_up_package`.
     pub max_catch_up_package_concurrent_requests: usize,
 
-    /// Serving at most `max_dashboard_concurrent_requests` requests concurrently for endpoint `/_/dashboard`
+    /// Serving at most `max_dashboard_concurrent_requests` requests concurrently for endpoint `/_/dashboard`.
     pub max_dashboard_concurrent_requests: usize,
+
+    /// Serving at most `max_call_concurrent_requests` requests concurrently for endpoint `/api/v2/call`.
+    pub max_call_concurrent_requests: usize,
 }
 
 impl Default for Config {
@@ -90,6 +93,7 @@ impl Default for Config {
             max_catch_up_package_concurrent_requests: 100,
             max_dashboard_concurrent_requests: 100,
             max_status_concurrent_requests: 100,
+            max_call_concurrent_requests: 50,
         }
     }
 }
