@@ -4,6 +4,7 @@ use std::{
 };
 
 use ic_base_types::CanisterId;
+use ic_metrics::MetricsRegistry;
 
 use self::{
     internal::{Query, QuerySchedulerInternal},
@@ -56,12 +57,16 @@ impl QueryScheduler {
         num_threads: usize,
         max_threads_per_canister: usize,
         time_slice_per_canister: Duration,
+        metrics_registry: &MetricsRegistry,
         flag: QuerySchedulerFlag,
     ) -> Self {
         match flag {
             QuerySchedulerFlag::UseNewSchedulingAlgorithm => {
-                let scheduler =
-                    QuerySchedulerInternal::new(max_threads_per_canister, time_slice_per_canister);
+                let scheduler = QuerySchedulerInternal::new(
+                    max_threads_per_canister,
+                    time_slice_per_canister,
+                    metrics_registry,
+                );
                 let thread_pool =
                     QueryThreadPool::new(num_threads, time_slice_per_canister, scheduler.clone());
                 Self::NewScheduler {

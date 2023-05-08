@@ -147,6 +147,7 @@ impl ExecutionServices {
             config.query_execution_threads_total,
             config.query_execution_threads_per_canister,
             config.query_scheduling_time_slice_per_canister,
+            metrics_registry,
             QuerySchedulerFlag::UseNewSchedulingAlgorithm,
         );
 
