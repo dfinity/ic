@@ -72,14 +72,12 @@ use crate::{
     gossip_types::{GossipChunk, GossipChunkRequest, GossipMessage},
     metrics::FlowWorkerMetrics,
 };
-use ic_interfaces::artifact_manager::JoinGuard;
 use ic_interfaces_transport::{TransportEvent, TransportMessage};
-use ic_logger::{debug, replica_logger::ReplicaLogger, warn};
+use ic_logger::{replica_logger::ReplicaLogger, warn};
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::{p2p::v1 as pb, proxy::ProtoProxy};
 use ic_types::{artifact::ArtifactFilter, p2p::GossipAdvert, NodeId};
 use parking_lot::Mutex;
-
 use std::{
     cmp::max,
     collections::BTreeMap,
@@ -87,12 +85,8 @@ use std::{
     fmt::Debug,
     future::Future,
     pin::Pin,
-    sync::{
-        atomic::{AtomicBool, Ordering::SeqCst},
-        Arc,
-    },
+    sync::Arc,
     task::{Context, Poll},
-    thread::JoinHandle,
     time::Duration,
 };
 use strum::IntoEnumIterator;
@@ -391,68 +385,26 @@ impl Service<TransportEvent> for AsyncTransportEventHandlerImpl {
     }
 }
 
-/// The struct is a handle for running a P2P thread relevant for the protocol.
-/// Once dropped expect the protocol to be aborted.
-pub(crate) struct P2PJoinGuard {
-    /// The task handles.
-    join_handle: Option<JoinHandle<()>>,
-    /// Flag indicating if P2P has been terminated.
-    killed: Arc<AtomicBool>,
-    artifact_processor_join_guards: Vec<Box<dyn JoinGuard>>,
-}
-
-/// Periodic timer duration in milliseconds between polling calls to the P2P
-/// component.
-const P2P_TIMER_DURATION_MS: u64 = 100;
-
-impl JoinGuard for P2PJoinGuard {}
-
-impl P2PJoinGuard {
-    /// The method starts the P2P timer task in the background.
-    pub(crate) fn new(
-        log: ReplicaLogger,
-        gossip: GossipArc,
-        artifact_processor_join_guards: Vec<Box<dyn JoinGuard>>,
-    ) -> Self {
-        let killed = Arc::new(AtomicBool::new(false));
-        let killed_c = Arc::clone(&killed);
-        let join_handle = std::thread::Builder::new()
-            .name("P2P_OnTimer_Thread".into())
-            .spawn(move || {
-                debug!(log, "P2P::p2p_timer(): started processing",);
-
-                let timer_duration = Duration::from_millis(P2P_TIMER_DURATION_MS);
-                while !killed_c.load(SeqCst) {
-                    std::thread::sleep(timer_duration);
-                    gossip.on_gossip_timer();
-                }
-            })
-            .unwrap();
-        Self {
-            killed,
-            join_handle: Some(join_handle),
-            artifact_processor_join_guards,
+pub(crate) fn start_ticker_task(rt_handle: tokio::runtime::Handle, gossip: GossipArc) {
+    const P2P_TICK_INTERVAL: Duration = Duration::from_millis(100);
+    rt_handle.clone().spawn(async move {
+        loop {
+            tokio::time::sleep(P2P_TICK_INTERVAL).await;
+            let gossip_clone = gossip.clone();
+            rt_handle
+                .spawn_blocking(move || {
+                    gossip_clone.on_gossip_timer();
+                })
+                .await
+                .unwrap();
         }
-    }
-}
-
-impl Drop for P2PJoinGuard {
-    /// The method signals the tasks to exit and waits for them to complete.
-    fn drop(&mut self) {
-        // First kill the Artifact Processors
-        let artifact_processor_join_guards =
-            std::mem::take(&mut self.artifact_processor_join_guards);
-        std::mem::drop(artifact_processor_join_guards);
-        // Then kill P2P
-        self.killed.store(true, SeqCst);
-        self.join_handle.take().unwrap().join().unwrap();
-    }
+    });
 }
 
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::advert_broadcaster::start_advert_send_thread;
+    use crate::advert_broadcaster::start_advert_broadcast_task;
     use crate::download_prioritization::test::make_gossip_advert;
     use crate::AdvertBroadcasterImpl;
     use ic_interfaces::artifact_manager::AdvertBroadcaster;
@@ -681,7 +633,12 @@ pub mod tests {
         let gossip_arc = Arc::new(TestGossip::new(Duration::from_secs(0), node_id));
         let (mut handler, subscriber, rx) =
             new_test_event_handler(MAX_ADVERT_BUFFER, node_id, gossip_arc.clone());
-        let _ = start_advert_send_thread(no_op_logger(), rx, gossip_arc.clone());
+        start_advert_broadcast_task(
+            tokio::runtime::Handle::current(),
+            no_op_logger(),
+            rx,
+            gossip_arc.clone(),
+        );
 
         send_advert(MAX_ADVERT_BUFFER, &mut handler, node_test_id).await;
         loop {
