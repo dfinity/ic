@@ -115,13 +115,6 @@
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "benchmarks"'
 
-.rules-build-base-images-schedule:
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "build-push-base-images"'
-    - if: '$CI_PIPELINE_SOURCE == "parent_pipeline" && $CI_COMMIT_REF_PROTECTED == "true"'
-      when: manual
-      allow_failure: true
-
 .rules-rollout-pipeline-manual:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/'
@@ -246,26 +239,6 @@
     - if: '$CI_PIPELINE_SOURCE == "parent_pipeline" && $CI_COMMIT_REF_PROTECTED == "true"'
       when: manual
       allow_failure: true
-
-.rules-dockerfile-base-changes:
-  rules:
-    - if: '$CI_PARENT_PIPELINE_SOURCE == "trigger"'
-    - if: '$CI_PIPELINE_SOURCE == "parent_pipeline" && $CI_COMMIT_BRANCH == "master"'
-    - if: '$CI_PIPELINE_SOURCE == "parent_pipeline" && $CI_COMMIT_BRANCH =~ /^rc--.*/'
-    - if: '$CI_PIPELINE_SOURCE == "parent_pipeline"'
-      changes:
-        - gitlab-ci/config/46--guest-os-build--guest-base-image.yml
-        - ic-os/boundary-guestos/rootfs/Dockerfile.base
-        - ic-os/boundary-api-guestos/rootfs/Dockerfile.base
-        - ic-os/guestos/rootfs/Dockerfile.base
-        - ic-os/guestos/rootfs/packages.common
-        - ic-os/guestos/rootfs/packages.dev
-        - ic-os/hostos/rootfs/Dockerfile.base
-        - ic-os/hostos/rootfs/packages.common
-        - ic-os/hostos/rootfs/packages.dev
-        - ic-os/setupos/rootfs/Dockerfile.base
-        - ic-os/setupos/rootfs/packages.common
-        - ic-os/setupos/rootfs/packages.dev
 
 .rules-scheduled-rosetta-release:
   rules:
