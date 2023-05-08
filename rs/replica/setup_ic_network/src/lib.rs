@@ -138,7 +138,7 @@ pub fn create_networking_stack(
     canister_http_adapter_client:
         ic_interfaces_https_outcalls_adapter_client::CanisterHttpAdapterClient,
     registry_poll_delay_duration_ms: u64,
-) -> (IngressIngestionService, Box<dyn JoinGuard>) {
+) -> (IngressIngestionService, Vec<Box<dyn JoinGuard>>) {
     let (advert_tx, advert_rx) = channel(MAX_ADVERT_BUFFER);
     let advert_subscriber = Arc::new(AdvertBroadcasterImpl::new(
         log.clone(),
@@ -201,9 +201,10 @@ pub fn create_networking_stack(
         )
     };
 
-    let p2p_thread = start_p2p(
+    start_p2p(
         metrics_registry.clone(),
         log,
+        rt_handle,
         node_id,
         subnet_id,
         transport_config,
@@ -212,9 +213,8 @@ pub fn create_networking_stack(
         consensus_pool_cache,
         artifact_manager,
         advert_rx,
-        join_handles,
     );
-    (ingress_event_handler, p2p_thread)
+    (ingress_event_handler, join_handles)
 }
 
 /// The function sets up and returns the Artifact Manager and Consensus Pool.

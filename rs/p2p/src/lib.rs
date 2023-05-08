@@ -94,12 +94,8 @@
 //! <img src="../../../../../docs/assets/p2p.png" height="960"
 //! width="540"/> </div> <hr/>
 
-use crate::event_handler::P2PJoinGuard;
 use ic_config::transport::TransportConfig;
-use ic_interfaces::{
-    artifact_manager::{ArtifactManager, JoinGuard},
-    consensus_pool::ConsensusPoolCache,
-};
+use ic_interfaces::{artifact_manager::ArtifactManager, consensus_pool::ConsensusPoolCache};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_transport::{Transport, TransportChannelId};
 use ic_logger::ReplicaLogger;
@@ -161,6 +157,7 @@ pub(crate) mod utils {
 pub fn start_p2p(
     metrics_registry: MetricsRegistry,
     log: ReplicaLogger,
+    rt_handle: tokio::runtime::Handle,
     node_id: NodeId,
     subnet_id: SubnetId,
     _transport_config: TransportConfig,
@@ -169,8 +166,7 @@ pub fn start_p2p(
     consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
     artifact_manager: Arc<dyn ArtifactManager>,
     advert_receiver: Receiver<GossipAdvert>,
-    artifact_processor_join_guards: Vec<Box<dyn JoinGuard>>,
-) -> Box<dyn JoinGuard> {
+) {
     let p2p_transport_channels = vec![TransportChannelId::from(0)];
     let gossip = Arc::new(gossip_protocol::GossipImpl::new(
         node_id,
@@ -192,14 +188,15 @@ pub fn start_p2p(
         gossip.clone(),
     );
     transport.set_event_handler(BoxCloneService::new(event_handler));
-    let _ =
-        advert_broadcaster::start_advert_send_thread(log.clone(), advert_receiver, gossip.clone());
 
-    Box::new(P2PJoinGuard::new(
+    crate::advert_broadcaster::start_advert_broadcast_task(
+        rt_handle.clone(),
         log,
-        gossip,
-        artifact_processor_join_guards,
-    ))
+        advert_receiver,
+        gossip.clone(),
+    );
+
+    crate::event_handler::start_ticker_task(rt_handle, gossip);
 }
 
 /// Generic P2P Error codes.

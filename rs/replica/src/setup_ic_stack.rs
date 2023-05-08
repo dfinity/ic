@@ -48,7 +48,7 @@ pub fn construct_ic_stack(
     Arc<StateManagerImpl>,
     // TODO: remove this return value since it is used only in tests
     Arc<dyn QueryHandler<State = ReplicatedState>>,
-    Box<dyn JoinGuard>,
+    Vec<Box<dyn JoinGuard>>,
     // TODO: remove this return value since it is used only in tests
     IngressIngestionService,
     XNetEndpoint,

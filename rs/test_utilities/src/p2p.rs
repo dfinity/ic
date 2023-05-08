@@ -62,7 +62,7 @@ pub struct P2PTestContext {
     pub subnet_id: SubnetId,               // Dummy test subnet ID
     pub metrics_registry: MetricsRegistry, // monitor metrics from various ICP layers
     pub test_synchronizer: P2PTestSynchronizer, // Provide basic inter-test synchronization
-    pub _p2p_join_guard: Box<dyn JoinGuard>, // p2p object to drive the ICP stack
+    pub _p2p_join_guard: Vec<Box<dyn JoinGuard>>, // p2p object to drive the ICP stack
 }
 
 impl P2PTestContext {
@@ -71,7 +71,7 @@ impl P2PTestContext {
         subnet_id: SubnetId,
         metrics_registry: MetricsRegistry,
         test_synchronizer: P2PTestSynchronizer,
-        p2p_join_guard: Box<dyn JoinGuard>,
+        p2p_join_guard: Vec<Box<dyn JoinGuard>>,
     ) -> Self {
         P2PTestContext {
             node_num,
