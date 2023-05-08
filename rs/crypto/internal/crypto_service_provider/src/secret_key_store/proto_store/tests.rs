@@ -21,6 +21,7 @@ use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 use std::fs::Permissions;
 use std::os::unix::fs::PermissionsExt;
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use tempfile::{tempdir as tempdir_deleted_at_end_of_scope, TempDir};
 
 #[test]
@@ -41,7 +42,6 @@ fn open_should_panic_for_paths_that_are_widely_readable() {
 }
 
 #[test]
-#[should_panic(expected = "error parsing SKS protobuf data")]
 fn should_not_leak_any_data_on_protobuf_deserialization_error_when_opening_key_store() {
     let temp_dir = tempfile::Builder::new()
         .prefix("ic_crypto_")
@@ -63,13 +63,16 @@ fn should_not_leak_any_data_on_protobuf_deserialization_error_when_opening_key_s
     file.write_all_at(b"invalid-protobuf-data", 0)
         .expect("failed to write");
 
-    let _panic = ProtoSecretKeyStore::open(temp_dir.path(), sks_file_name, None);
+    let panic_msg = catch_unwind(AssertUnwindSafe(|| {
+        ProtoSecretKeyStore::open(temp_dir.path(), sks_file_name, None);
+    }));
+    assert_eq!(
+        "error parsing SKS protobuf data",
+        *panic_msg.unwrap_err().downcast_ref::<&str>().unwrap()
+    );
 }
 
 #[test]
-#[should_panic(
-    expected = "Error deserializing key with ID KeyId(0x0101010101010101010101010101010101010101010101010101010101010101)"
-)]
 fn should_not_leak_any_data_on_cbor_deserialization_error_when_opening_key_store() {
     let temp_dir = tempfile::Builder::new()
         .prefix("ic_crypto_")
@@ -99,7 +102,13 @@ fn should_not_leak_any_data_on_cbor_deserialization_error_when_opening_key_store
     file.write_all_at(b"not-a-cbor-header", 74)
         .expect("failed to write");
 
-    let _panic = ProtoSecretKeyStore::open(temp_dir.path(), temp_file, None);
+    let panic_msg = catch_unwind(AssertUnwindSafe(|| {
+        ProtoSecretKeyStore::open(temp_dir.path(), temp_file, None);
+    }));
+    assert_eq!(
+        "Error deserializing key with ID KeyId(0x0101010101010101010101010101010101010101010101010101010101010101)",
+        *panic_msg.unwrap_err().downcast_ref::<String>().unwrap()
+    );
 }
 
 #[test]
