@@ -288,7 +288,6 @@ pub(crate) fn get_registry_and_urls_for_test(
                 REGISTRY_VERSION,
                 Some(NodeRecord {
                     xnet: Some(xnet_endpoint.clone()),
-                    xnet_api: vec![xnet_endpoint.clone()],
                     ..Default::default()
                 }),
             )
@@ -354,8 +353,7 @@ fn add_node_record_with_node_operator_id(
             &make_node_record_key(node_id),
             REGISTRY_VERSION,
             Some(NodeRecord {
-                xnet: Some(xnet_endpoint.clone()),
-                xnet_api: vec![xnet_endpoint],
+                xnet: Some(xnet_endpoint),
                 node_operator_id: node_operator_id.to_vec(),
                 ..Default::default()
             }),

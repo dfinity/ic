@@ -326,7 +326,6 @@ mod tests {
             xnet: None,
             http: None,
             p2p_flow_endpoints: vec![],
-            xnet_api: vec![],
             chip_id: vec![],
         }
     }

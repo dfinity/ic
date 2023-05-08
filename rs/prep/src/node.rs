@@ -190,7 +190,7 @@ impl InitializedNode {
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct NodeConfiguration {
     // Endpoints where the replica provides the Xnet interface
-    pub xnet_api: Vec<ConnectionEndpoint>,
+    pub xnet_api: ConnectionEndpoint,
 
     /// Endpoints where the replica serves the public API interface
     pub public_api: ConnectionEndpoint,
@@ -248,18 +248,7 @@ impl TryFrom<NodeConfiguration> for pbNodeRecord {
         }];
 
         pb_node_record.http = Some(pbConnectionEndpoint::from(&node_configuration.public_api));
-
-        // xnet and related field. All values are used in the `xnet_api`
-        // field, and the first value is used, for backwards compatibility,
-        // in the `xnet` field.
-        pb_node_record.xnet_api = node_configuration
-            .xnet_api
-            .iter()
-            .map(pbConnectionEndpoint::from)
-            .collect::<Vec<_>>();
-        if !node_configuration.xnet_api.is_empty() {
-            pb_node_record.xnet = Some(pbConnectionEndpoint::from(&node_configuration.xnet_api[0]));
-        }
+        pb_node_record.xnet = Some(pbConnectionEndpoint::from(&node_configuration.xnet_api));
 
         // node provider principal id
         pb_node_record.node_operator_id = node_configuration
@@ -383,7 +372,7 @@ mod node_configuration {
     #[test]
     fn into_proto_http() {
         let node_configuration = NodeConfiguration {
-            xnet_api: vec!["http://1.2.3.4:8080".parse().unwrap()],
+            xnet_api: "http://1.2.3.4:8080".parse().unwrap(),
             public_api: "http://1.2.3.4:8081".parse().unwrap(),
             p2p_addr: "org.internetcomputer.p2p1://1.2.3.4:1234".parse().unwrap(),
             node_operator_principal_id: None,
@@ -400,11 +389,6 @@ mod node_configuration {
                     port: 1234,
                     protocol: Protocol::P2p1Tls13 as i32,
                 }),
-            }],
-            xnet_api: vec![pbConnectionEndpoint {
-                ip_addr: "1.2.3.4".to_string(),
-                port: 8080,
-                protocol: Protocol::Http1 as i32,
             }],
             http: Some(pbConnectionEndpoint {
                 ip_addr: "1.2.3.4".to_string(),

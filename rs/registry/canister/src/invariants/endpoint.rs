@@ -18,7 +18,7 @@ use dfn_core::println;
 /// Node records are valid with connection endpoints containing
 /// syntactically correct data ("ip_addr" field parses as an IP address,
 /// "port" field is <= 65535):
-///    * An Xnet endpoint entry exists (either .xnet or .xnet_api)
+///    * An Xnet endpoint entry exists
 ///    * A HTTP endpoint entry exists (either .http)
 ///    * IP address is not 0.0.0.0 ("unspecified" address)
 ///    * IP address is not 255.255.255.255 ("broadcast" address)
@@ -62,36 +62,13 @@ pub(crate) fn check_endpoint_invariants(
         // The Boolean indicates whether an unspecified address should be tolerated
         let mut endpoints_to_check = Vec::<(ConnectionEndpoint, bool)>::new();
 
-        // Xnet API endpoints (cannot be unspecified)
-        // TODO: simplify this code after NET-1142 is completed
-        if !node_record.xnet_api.is_empty() {
-            let xnet_api: BTreeSet<String> = node_record
-                .xnet_api
-                .iter()
-                .map(|x| format!("{x:?}"))
-                .collect();
-            // TODO: remove the following check after NET-1142 is completed
-            if node_record.xnet.is_some() {
-                let xnet_endpoint = format!("{:?}", node_record.xnet.unwrap());
-                if !xnet_api.contains(&xnet_endpoint) {
-                    let error: Result<(), InvariantCheckError> = Err(InvariantCheckError {
-                        msg: format!("{error_prefix}: inconsistent node record: legacy xnet endpoint field ({xnet_endpoint}) must belong to the new xnet_api field"),
-                        source: None,
-                    });
-                    // TODO: change to `return error;` after NNS1-2228 is closed.
-                    println!("WARNING: {error:?}");
-                }
-            }
-            endpoints_to_check.extend(node_record.xnet_api.into_iter().map(|x| (x, false)));
-        } else {
-            if node_record.xnet.is_none() {
-                return Err(InvariantCheckError {
-                    msg: format!("{error_prefix}: No Xnet endpoint found for node"),
-                    source: None,
-                });
-            }
-            endpoints_to_check.push((node_record.xnet.unwrap(), false))
-        };
+        if node_record.xnet.is_none() {
+            return Err(InvariantCheckError {
+                msg: format!("{error_prefix}: No Xnet endpoint found for node"),
+                source: None,
+            });
+        }
+        endpoints_to_check.push((node_record.xnet.unwrap(), false));
 
         if node_record.http.is_none() {
             return Err(InvariantCheckError {
@@ -454,7 +431,6 @@ mod tests {
             make_node_record_key(node_id).into_bytes(),
             encode_or_panic::<NodeRecord>(&NodeRecord {
                 node_operator_id: vec![0],
-                xnet: None,
                 p2p_flow_endpoints: vec![FlowEndpoint {
                     endpoint: Some(ConnectionEndpoint {
                         ip_addr: "200.1.1.1".to_string(),
@@ -467,11 +443,11 @@ mod tests {
                     port: 9000,
                     protocol: Protocol::Http1 as i32,
                 }),
-                xnet_api: vec![ConnectionEndpoint {
+                xnet: Some(ConnectionEndpoint {
                     ip_addr: "200.1.1.3".to_string(),
                     port: 9001,
                     protocol: Protocol::Http1 as i32,
-                }],
+                }),
                 chip_id: vec![],
             }),
         );
@@ -485,7 +461,6 @@ mod tests {
             key.clone(),
             encode_or_panic::<NodeRecord>(&NodeRecord {
                 node_operator_id: vec![0],
-                xnet: None,
                 p2p_flow_endpoints: vec![FlowEndpoint {
                     endpoint: Some(ConnectionEndpoint {
                         ip_addr: "200.1.1.3".to_string(),
@@ -498,11 +473,11 @@ mod tests {
                     port: 9000,
                     protocol: Protocol::Http1 as i32,
                 }),
-                xnet_api: vec![ConnectionEndpoint {
+                xnet: Some(ConnectionEndpoint {
                     ip_addr: "200.1.1.1".to_string(),
                     port: 9001,
                     protocol: Protocol::Http1 as i32,
-                }],
+                }),
                 chip_id: vec![],
             }),
         );
@@ -518,7 +493,6 @@ mod tests {
             key,
             encode_or_panic::<NodeRecord>(&NodeRecord {
                 node_operator_id: vec![0],
-                xnet: None,
                 p2p_flow_endpoints: vec![FlowEndpoint {
                     endpoint: Some(ConnectionEndpoint {
                         ip_addr: "200.1.1.3".to_string(),
@@ -531,11 +505,11 @@ mod tests {
                     port: 9000,
                     protocol: Protocol::Http1 as i32,
                 }),
-                xnet_api: vec![ConnectionEndpoint {
+                xnet: Some(ConnectionEndpoint {
                     ip_addr: "200.1.1.2".to_string(),
                     port: 9001,
                     protocol: Protocol::Http1 as i32,
-                }],
+                }),
                 chip_id: vec![],
             }),
         );

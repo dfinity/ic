@@ -41,9 +41,6 @@ pub struct NodeRecord {
     /// The P2P flow end points.
     #[prost(message, repeated, tag = "8")]
     pub p2p_flow_endpoints: ::prost::alloc::vec::Vec<FlowEndpoint>,
-    /// Endpoints on which the XNet API is served
-    #[prost(message, repeated, tag = "14")]
-    pub xnet_api: ::prost::alloc::vec::Vec<ConnectionEndpoint>,
     /// The id of the node operator that added this node.
     #[prost(bytes = "vec", tag = "15")]
     pub node_operator_id: ::prost::alloc::vec::Vec<u8>,

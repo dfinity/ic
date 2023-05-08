@@ -388,7 +388,7 @@ fn node_to_config(node: &Node) -> NodeConfiguration {
     let xnet_api = SocketAddr::new(ipv6_addr, AddrType::Xnet.into());
     let p2p_addr = SocketAddr::new(ipv6_addr, AddrType::P2P.into());
     NodeConfiguration {
-        xnet_api: vec![xnet_api.into()],
+        xnet_api: xnet_api.into(),
         public_api: public_api.into(),
         p2p_addr: format!("org.internetcomputer.p2p1://{}", p2p_addr)
             .parse()
