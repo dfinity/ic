@@ -13,7 +13,7 @@ cargo run -p ic-prep --bin ic-prep -- \
   --replica-download-url ... \
   --orchestrator-download-url ... \
   --p2p-flows 1234-3 \
-  --node 'idx:1,subnet_idx:1,xnet_api:["http://1.2.3.4:81"],public_api:"http://1.2.3.4:82",p2p_addr:"org.internetcomputer.p2p1://1.2.3.4:80"'
+  --node 'idx:1,subnet_idx:1,xnet_api:"http://1.2.3.4:81",public_api:"http://1.2.3.4:82",p2p_addr:"org.internetcomputer.p2p1://1.2.3.4:80"'
   --node ...
 ----
 
@@ -62,7 +62,7 @@ The fields are:
 
 - `p2p_addr` - the base endpoint on which the node will serve P2P
 
-- `xnet_api` - an array of endpoints on which the node will handle XNet messages
+- `xnet_api` - an endpoint on which the node will handle XNet messages
 
 === Specifying an endpoint
 

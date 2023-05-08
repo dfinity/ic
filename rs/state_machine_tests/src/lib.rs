@@ -198,7 +198,6 @@ fn make_nodes_registry(
                 protocol: 0,
             }),
             p2p_flow_endpoints: vec![],
-            xnet_api: vec![],
             chip_id: vec![],
         };
         data_provider

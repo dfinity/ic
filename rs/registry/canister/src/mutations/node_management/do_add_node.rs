@@ -57,7 +57,6 @@ impl Registry {
                 .map(|x| flow_endpoint_from_string(x))
                 .collect(),
             node_operator_id: caller.into_vec(),
-            xnet_api: vec![],
             chip_id: vec![],
         };
 

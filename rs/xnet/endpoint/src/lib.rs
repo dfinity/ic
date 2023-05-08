@@ -607,14 +607,7 @@ impl XNetEndpointConfig {
                 )
             })?;
 
-        // TODO(OR4-18): Correctly handle multiple endpoints
-        // Prefer the first item from xnet_api if it exists, otherwise use the
-        // the only entry in xnet.
-        let endpoint = if node_record.xnet_api.is_empty() {
-            node_record.xnet?
-        } else {
-            node_record.xnet_api[0].clone()
-        };
+        let endpoint = node_record.xnet?;
 
         // Return None if fields have default values.
         if endpoint.port == 0 || endpoint.ip_addr.is_empty() {

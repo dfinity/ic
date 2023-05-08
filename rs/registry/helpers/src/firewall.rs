@@ -77,7 +77,6 @@ impl<T: RegistryClient + ?Sized> FirewallRegistry for T {
                                 .filter_map(|flow_endpoint| flow_endpoint.endpoint.clone())
                                 .collect(),
                         );
-                        endpoints.extend::<Vec<ConnectionEndpoint>>(node_record.xnet_api);
                         if let Some(xnet_record) = node_record.xnet {
                             endpoints.push(xnet_record)
                         };
@@ -148,7 +147,6 @@ mod tests {
                 (
                     NodeId::from(PrincipalId::new_node_test_id(id as u64)),
                     NodeRecord {
-                        xnet: None,
                         p2p_flow_endpoints: vec![FlowEndpoint {
                             endpoint: Some(ConnectionEndpoint {
                                 ip_addr: ip.to_string(),
@@ -161,11 +159,11 @@ mod tests {
                             port: 8080,
                             protocol: 2,
                         }),
-                        xnet_api: vec![ConnectionEndpoint {
+                        xnet: Some(ConnectionEndpoint {
                             ip_addr: ip.to_string(),
                             port: 2457,
                             protocol: 2,
-                        }],
+                        }),
                         node_operator_id: vec![],
                         chip_id: vec![],
                     },

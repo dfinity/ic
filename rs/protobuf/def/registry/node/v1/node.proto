@@ -55,16 +55,13 @@ message NodeRecord {
   // The P2P flow end points.
   repeated FlowEndpoint p2p_flow_endpoints = 8;
 
-  reserved 9, 10, 11, 12, 13;
+  reserved 9, 10, 11, 12, 13, 14;
   reserved "dcop_principal_id";
   reserved "prometheus_metrics_http";
   reserved "public_api";
   reserved "private_api";
   reserved "prometheus_metrics";
-  
-
-  // Endpoints on which the XNet API is served
-  repeated ConnectionEndpoint xnet_api = 14;
+  reserved "xnet_api";  
 
   // The id of the node operator that added this node.
   bytes node_operator_id = 15;

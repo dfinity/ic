@@ -907,14 +907,7 @@ impl XNetEndpointResolver {
             PeerLocation::Remote
         };
 
-        // TODO(OR4-18): Handle more than one xnet endpoint if given. This
-        // prefers the first entry in `.xnet_api`, or the only entry in `.xnet`.
-        let xnet_endpoint = if node_record.xnet_api.is_empty() {
-            node_record.xnet.ok_or(Error::MissingXNetEndpoint(node))
-        } else {
-            Ok(node_record.xnet_api.into_iter().next().unwrap())
-        }?;
-
+        let xnet_endpoint = node_record.xnet.ok_or(Error::MissingXNetEndpoint(node))?;
         let xnet_endpoint = ConnectionEndpoint::try_from(xnet_endpoint)
             .map_err(|e| Error::InvalidXNetEndpoint(node, e.to_string()))?;
 
