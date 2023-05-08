@@ -54,7 +54,7 @@ pub use transaction_manager::TransactionManager;
 
 /// This struct is used to represent commands given to the adapter in order to interact
 /// with BTC nodes.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Command {
     /// This is the address of the Bitcoin node to which the message is supposed to be sent.
     /// If the address is None, then the message will be sent to all the peers.

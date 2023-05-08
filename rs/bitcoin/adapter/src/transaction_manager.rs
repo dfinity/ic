@@ -1,20 +1,19 @@
+use std::collections::HashSet;
 use std::net::SocketAddr;
-use std::{collections::HashMap, time::Duration, time::SystemTime};
+use std::{time::Duration, time::SystemTime};
 
 use bitcoin::consensus::deserialize;
 use bitcoin::{
     blockdata::transaction::Transaction, hash_types::Txid, network::message::NetworkMessage,
     network::message_blockdata::Inventory,
 };
+use hashlink::LinkedHashMap;
 use ic_logger::{debug, trace, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 
 use crate::metrics::TransactionMetrics;
 use crate::ProcessBitcoinNetworkMessageError;
 use crate::{Channel, Command};
-
-/// How often the cached transactions' IDs are broadcasted to peers.
-const TX_ADVERTISE_INTERVAL: u64 = 2 * 60; // 2 minutes
 
 /// How long should the transaction manager hold on to a transaction.
 const TX_CACHE_TIMEOUT_PERIOD_SECS: u64 = 10 * 60; // 10 minutes
@@ -23,14 +22,22 @@ const TX_CACHE_TIMEOUT_PERIOD_SECS: u64 = 10 * 60; // 10 minutes
 // https://developer.bitcoin.org/reference/p2p_networking.html#inv
 const MAXIMUM_TRANSACTION_PER_INV: usize = 50_000;
 
+/// Maximum number of transactions the adapter holds.
+/// A transaction gets removed from the cache in two cases:
+///     - Transaction times out
+///     - Cache size limit is hit and this transaction is the oldest.
+/// Note: This number should not be too large since it holds user generated
+/// transaction data, which can be a few Mb per transaction.
+const TX_CACHE_SIZE: usize = 250;
+
 /// This struct represents the current information to track the
 /// broadcasting of a transaction.
 #[derive(Debug)]
 struct TransactionInfo {
     /// The actual transaction to be sent to the BTC network.
     transaction: Transaction,
-    /// This field represents the time that the transaction was last broadcasted out to peers.
-    last_advertised_at: Option<SystemTime>,
+    /// Set of peer to which we advertised this transaction.
+    advertised: HashSet<SocketAddr>,
     /// How long the transaction should be held on to.
     timeout_at: SystemTime,
 }
@@ -40,19 +47,8 @@ impl TransactionInfo {
     fn new(transaction: &Transaction) -> Self {
         Self {
             transaction: transaction.clone(),
-            last_advertised_at: None,
+            advertised: HashSet::new(),
             timeout_at: SystemTime::now() + Duration::from_secs(TX_CACHE_TIMEOUT_PERIOD_SECS),
-        }
-    }
-
-    /// This function is used to determine when the next broadcast should be.
-    /// Defaults to the UNIX epoch if the transaction has not been broadcast before.
-    fn next_advertisement_at(&self) -> SystemTime {
-        match self.last_advertised_at {
-            Some(last_broadcast_at) => {
-                last_broadcast_at + Duration::from_secs(TX_ADVERTISE_INTERVAL)
-            }
-            None => SystemTime::UNIX_EPOCH,
         }
     }
 }
@@ -62,7 +58,7 @@ pub struct TransactionManager {
     /// This field contains a logger for the transaction manager to
     logger: ReplicaLogger,
     /// This field contains the transactions being tracked by the manager.
-    transactions: HashMap<Txid, TransactionInfo>,
+    transactions: LinkedHashMap<Txid, TransactionInfo>,
     metrics: TransactionMetrics,
 }
 
@@ -71,7 +67,7 @@ impl TransactionManager {
     pub fn new(logger: ReplicaLogger, metrics_registry: &MetricsRegistry) -> Self {
         TransactionManager {
             logger,
-            transactions: HashMap::new(),
+            transactions: LinkedHashMap::new(),
             metrics: TransactionMetrics::new(metrics_registry),
         }
     }
@@ -92,6 +88,10 @@ impl TransactionManager {
         if let Ok(transaction) = deserialize::<Transaction>(raw_tx) {
             let txid = transaction.txid();
             trace!(self.logger, "Received {} from the system component", txid);
+            // If hashmap has `TX_CACHE_SIZE` values we remove the oldest transaction in the cache.
+            if self.transactions.len() == TX_CACHE_SIZE {
+                self.transactions.pop_front();
+            }
             self.transactions
                 .entry(txid)
                 .or_insert_with(|| TransactionInfo::new(&transaction));
@@ -123,36 +123,38 @@ impl TransactionManager {
     /// If the timeout period has passed for a transaction ID, it is broadcasted again.
     /// If the transaction has not been broadcasted, the transaction ID is broadcasted.
     fn advertise_txids(&mut self, channel: &mut impl Channel) {
-        let now = SystemTime::now();
-        let mut inventory = vec![];
-        for (txid, info) in self.transactions.iter_mut() {
-            if info.next_advertisement_at() <= now {
-                inventory.push(Inventory::Transaction(*txid));
-                info.last_advertised_at = Some(now);
-            }
-            // If inventory contains maximum allowed amount of transation we will send it
-            // and start building a new one.
-            if inventory.len() == MAXIMUM_TRANSACTION_PER_INV {
-                debug!(self.logger, "Broadcasting Txids ({:?}) to peers", inventory);
-                for address in channel.available_connections() {
-                    channel
-                        .send(Command {
-                            address: Some(address),
-                            message: NetworkMessage::Inv(inventory.clone()),
-                        })
-                        .ok();
-                }
-                inventory = vec![];
-            }
-        }
-
-        if inventory.is_empty() {
-            return;
-        }
-
-        debug!(self.logger, "Broadcasting Txids ({:?}) to peers", inventory);
-
         for address in channel.available_connections() {
+            let mut inventory = vec![];
+            for (txid, info) in self.transactions.iter_mut() {
+                if !info.advertised.contains(&address) {
+                    inventory.push(Inventory::Transaction(*txid));
+                    info.advertised.insert(address);
+                }
+                // If the inventory contains the maximum allowed number of transactions, we will send it
+                // and start building a new one.
+                if inventory.len() == MAXIMUM_TRANSACTION_PER_INV {
+                    debug!(self.logger, "Broadcasting Txids ({:?}) to peers", inventory);
+                    for address in channel.available_connections() {
+                        channel
+                            .send(Command {
+                                address: Some(address),
+                                message: NetworkMessage::Inv(inventory.clone()),
+                            })
+                            .ok();
+                    }
+                    inventory = vec![];
+                }
+            }
+
+            if inventory.is_empty() {
+                continue;
+            }
+
+            debug!(
+                self.logger,
+                "Broadcasting Txids ({:?}) to peer {:?}", inventory, address
+            );
+
             channel
                 .send(Command {
                     address: Some(address),
@@ -179,17 +181,15 @@ impl TransactionManager {
 
             for inv in inventory {
                 if let Inventory::Transaction(txid) = inv {
-                    if let Some(TransactionInfo { transaction, .. }) = self.transactions.get(txid) {
-                        let result = channel.send(Command {
-                            address: Some(addr),
-                            message: NetworkMessage::Tx(transaction.clone()),
-                        });
-                        // We remove the transaction as soon as one peer requests it.
-                        // Since each node in the subnet performs this step,
-                        // the transaction is probably sent to #subnet_nodes distinct Bitcoin peers.
-                        if result.is_ok() {
-                            self.transactions.remove(txid);
-                        }
+                    if let Some(TransactionInfo { transaction, .. }) =
+                        self.transactions.get_mut(txid)
+                    {
+                        channel
+                            .send(Command {
+                                address: Some(addr),
+                                message: NetworkMessage::Tx(transaction.clone()),
+                            })
+                            .ok();
                     }
                 }
             }
@@ -253,9 +253,6 @@ mod test {
     /// Test Steps:
     /// 1. Receive a transaction
     /// 2. Perform an initial broadcast.
-    /// 3. Attempt to re-broadcast.
-    /// 4. Update the transaction's `last_broadcast_at` field so it may be re-broadcast.
-    /// 5. Attempt to re-broadcast.
     #[test]
     fn test_broadcast_txids() {
         let mut channel = TestChannel::new(vec![
@@ -271,14 +268,14 @@ mod test {
             .transactions
             .get(&transaction.txid())
             .expect("transaction should be map");
-        assert!(info.last_advertised_at.is_none());
+        assert!(info.advertised.is_empty());
         // Initial broadcast
         manager.advertise_txids(&mut channel);
         let info = manager
             .transactions
             .get_mut(&txid)
             .expect("transaction should be map");
-        assert!(info.last_advertised_at.is_some());
+        assert!(info.advertised.len() == 1);
         assert_eq!(channel.command_count(), 1);
         let command = channel.pop_front().expect("There should be one.");
         assert!(command.address.is_some());
@@ -291,40 +288,24 @@ mod test {
         assert!(
             matches!(inventory.first().expect("should be one entry"), Inventory::Transaction(ctxid) if *ctxid == txid)
         );
-
-        // Set up for a re-broadcast
-        info.last_advertised_at =
-            Some(SystemTime::now() - Duration::from_secs(TX_ADVERTISE_INTERVAL));
-        manager.advertise_txids(&mut channel);
-
-        let info = manager
-            .transactions
-            .get(&txid)
-            .expect("transaction should be map");
-        assert!(info.last_advertised_at.is_some());
-        assert_eq!(channel.command_count(), 1);
-
-        // Attempt re-broadcast, but it should be ignored as the timeout period has not passed.
-        manager.advertise_txids(&mut channel);
-        assert_eq!(channel.command_count(), 1);
     }
 
-    /// This function tests the that `TransactionManager::broadcast_txids(...)` splits
-    /// the invetory messages of `MAXIMUM_TRANSACTION_PER_INV`.
+    /// This function tests that the oldest transaction gets removed in case of a full transaction cache.
     /// Test Steps:
-    /// 1. Receive more than `MAXIMUM_TRANSACTION_PER_INV` transactions.
-    /// 2. Perform broadcast.
-    /// 3. Make sure transaction is split up into multiple inventory messages.
+    /// 1. Add transaction that should be removed to manager.
+    /// 2. Add n transaction such that the first one gets evicted.
+    /// 3. Make sure the first transaction is actually removed from the cache.
     #[test]
-    fn test_broadcast_txid_with_maximum_limit() {
-        let num_transaction = MAXIMUM_TRANSACTION_PER_INV * 3 + 1;
-        let expected_inv_messages = 4;
-        let mut channel = TestChannel::new(vec![
-            SocketAddr::from_str("127.0.0.1:8333").expect("invalid address")
-        ]);
+    fn test_adapter_transaction_cache_full() {
         let mut manager = make_transaction_manager();
 
-        for i in 0..num_transaction {
+        // Send one transaction. This transaction should be removed first if we are at capacity.
+        let mut first_tx = get_transaction();
+        first_tx.lock_time = u32::MAX;
+        let raw_tx = serialize(&first_tx);
+        manager.send_transaction(&raw_tx);
+
+        for i in 0..TX_CACHE_SIZE {
             // First regtest genesis transaction.
             let mut transaction = get_transaction();
             // Alter transaction such that we get a different `txid`
@@ -332,28 +313,154 @@ mod test {
             let raw_tx = serialize(&transaction);
             manager.send_transaction(&raw_tx);
         }
-        assert_eq!(manager.transactions.len(), num_transaction);
+        assert_eq!(manager.transactions.len(), TX_CACHE_SIZE);
+        assert!(manager.transactions.get(&first_tx.txid()).is_none());
+    }
 
-        // Broadcast. We expect 4 inventory messages.
-        manager.advertise_txids(&mut channel);
-        assert_eq!(channel.command_count(), expected_inv_messages);
+    /// This function tests that we don't readvertise transactions that were already advertised.
+    /// Test Steps:
+    /// 1. Add transaction to manager.
+    /// 2. Advertise that transaction and create requests from peer.
+    /// 3. Check that this transaction does not get advertised again during manager tick.
+    /// 3. Check transaction advertisment is correctly tracked.
+    #[test]
+    fn test_adapter_dont_readvertise() {
+        let address = SocketAddr::from_str("127.0.0.1:8333").expect("invalid address");
+        let mut channel = TestChannel::new(vec![address]);
+        let mut manager = make_transaction_manager();
 
-        let mut expected_txs_per_inv = num_transaction;
-        for _ in 0..expected_inv_messages {
-            let command = channel.pop_front().expect("There should be one.");
-            assert!(command.address.is_some());
-            assert!(matches!(command.message, NetworkMessage::Inv(_)));
-            let inventory = if let NetworkMessage::Inv(inv) = command.message {
-                inv
-            } else {
-                vec![]
-            };
-            assert_eq!(
-                inventory.len(),
-                expected_txs_per_inv.min(MAXIMUM_TRANSACTION_PER_INV)
-            );
-            expected_txs_per_inv -= inventory.len();
-        }
+        let mut transaction = get_transaction();
+        transaction.lock_time = 0;
+        let raw_tx = serialize(&transaction);
+        manager.send_transaction(&raw_tx);
+        manager.tick(&mut channel);
+        channel.pop_front().unwrap();
+
+        // Request transaction
+        manager
+            .process_bitcoin_network_message(
+                &mut channel,
+                address,
+                &NetworkMessage::GetData(vec![Inventory::Transaction(transaction.txid())]),
+            )
+            .unwrap();
+        // Send transaction
+        channel.pop_front().unwrap();
+
+        manager.tick(&mut channel);
+        // Transaction should not be readvertised.
+        assert_eq!(channel.command_count(), 0);
+        // Transaction should be marked as advertised
+        assert_eq!(
+            manager
+                .transactions
+                .get(&transaction.txid())
+                .unwrap()
+                .advertised
+                .len(),
+            1
+        );
+        assert_eq!(
+            manager
+                .transactions
+                .get(&transaction.txid())
+                .unwrap()
+                .advertised
+                .get(&address),
+            Some(&address)
+        );
+    }
+
+    /// This function tests that we advertise to muliple peers and don't readvertise after
+    /// first adverisment.
+    /// Test Steps:
+    /// 1. Add transaction to manager.
+    /// 2. Advertise that transaction and request it from peer 1.
+    /// 3. Check that this transaction does not get readvertised.
+    #[test]
+    fn test_adapter_dont_readvertise_multiple_peers() {
+        let address1 = SocketAddr::from_str("127.0.0.1:8333").expect("invalid address");
+        let address2 = SocketAddr::from_str("127.0.0.1:8334").expect("invalid address");
+        let mut channel = TestChannel::new(vec![address1, address2]);
+        let mut manager = make_transaction_manager();
+
+        let mut transaction = get_transaction();
+        transaction.lock_time = 0;
+        let raw_tx = serialize(&transaction);
+        manager.send_transaction(&raw_tx);
+        manager.tick(&mut channel);
+        // Transaction advertisment to both peers.
+        assert_eq!(channel.command_count(), 2);
+        channel.pop_front().unwrap();
+        channel.pop_front().unwrap();
+
+        // Request transaction from peer 1
+        manager
+            .process_bitcoin_network_message(
+                &mut channel,
+                address1,
+                &NetworkMessage::GetData(vec![Inventory::Transaction(transaction.txid())]),
+            )
+            .unwrap();
+        // Send transaction to peer 1
+        channel.pop_front().unwrap();
+        assert_eq!(channel.command_count(), 0);
+
+        manager.tick(&mut channel);
+        // Transaction should not be readvertised.
+        assert_eq!(channel.command_count(), 0);
+    }
+
+    /// This function tests that we advertise and already advertised tx to new peers.
+    /// Test Steps:
+    /// 1. Add transaction to manager.
+    /// 2. Advertise that transaction and request it.
+    /// 3. Check that this transaction does not get readvertised to peer 1.
+    /// 4. Add new peer to available connections.
+    /// 5. Check that new peer get advertisment.
+    #[test]
+    fn test_adapter_advertise_new_peer() {
+        let address1 = SocketAddr::from_str("127.0.0.1:8333").expect("invalid address");
+        let mut channel = TestChannel::new(vec![address1]);
+        let mut manager = make_transaction_manager();
+
+        // 1.
+        let mut transaction = get_transaction();
+        transaction.lock_time = 0;
+        let raw_tx = serialize(&transaction);
+        manager.send_transaction(&raw_tx);
+        manager.tick(&mut channel);
+        assert_eq!(channel.command_count(), 1);
+        channel.pop_front().unwrap();
+
+        // 2.
+        manager
+            .process_bitcoin_network_message(
+                &mut channel,
+                address1,
+                &NetworkMessage::GetData(vec![Inventory::Transaction(transaction.txid())]),
+            )
+            .unwrap();
+        channel.pop_front().unwrap();
+        assert_eq!(channel.command_count(), 0);
+
+        // 3.
+        manager.tick(&mut channel);
+        assert_eq!(channel.command_count(), 0);
+
+        // 4.
+        let address2 = SocketAddr::from_str("127.0.0.2:8333").expect("invalid address");
+        channel.add_address(address2);
+        manager.tick(&mut channel);
+
+        // 5.
+        assert_eq!(
+            channel.pop_front().unwrap(),
+            Command {
+                address: Some(address2),
+                message: NetworkMessage::Inv(vec![Inventory::Transaction(transaction.txid())])
+            }
+        );
     }
 
     /// This function tests the `TransactionManager::process_bitcoin_network_message(...)` method.
@@ -437,7 +544,7 @@ mod test {
             )
             .ok();
         assert_eq!(channel.command_count(), 2);
-        assert_eq!(manager.transactions.len(), 0);
+        assert_eq!(manager.transactions.len(), 1);
 
         let command = channel.pop_front().unwrap();
         assert!(matches!(command.message, NetworkMessage::Inv(_)));
