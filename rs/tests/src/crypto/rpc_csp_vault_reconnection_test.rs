@@ -11,10 +11,12 @@ Runbook::
 . Set up a subnet with a single node
 . Ensure that usual crypto operations work: install a message canister and store message
   (uses update calls that need crypto to go through consensus)
-. Simulate an RPC connection problem by shutting down the crypto CSP vault server via SSH
+. Simulate an RPC connection problem by shutting down (SIGTERM) the crypto CSP vault server via SSH
 . Ensure disconnection was noticed by CSP vault client (like the one managed by the replica process).
 . (Reconnection should be handled transparently, the CSP vault server will be automatically restarted
   by systemd upon the next connection to the socket.)
+. Ensure that crypto operations work as usual: try to store a message in the message canister (uses an update call).
+. Simulate a panic in the server by killing the server (SIGKILL).
 . Ensure that crypto operations work as usual: try to store a message in the message canister (uses an update call).
 
 Success:: The shutdown of the crypto CSP vault server is handled transparently for the node
@@ -71,6 +73,14 @@ pub fn rpc_csp_vault_reconnection_test(env: TestEnv) {
 
     ensure_replica_is_not_stuck(&node, canister_id, &logger);
     assert_eq!("active".to_string(), crypto_csp_service.state());
+
+    crypto_csp_service.kill();
+    crypto_csp_service.wait_until_log_entry_contains(
+        "ic-crypto-csp.service: Main process exited, code=killed, status=9/KILL",
+    );
+
+    ensure_replica_is_not_stuck(&node, canister_id, &logger);
+    assert_eq!("active".to_string(), crypto_csp_service.state());
 }
 
 struct SystemdCli<'a> {
@@ -91,6 +101,16 @@ impl SystemdCli<'_> {
             .expect("run command")
             .trim()
             .to_string()
+    }
+
+    fn kill(&self) {
+        info!(self.logger, "Killing {}", self.service);
+        let cmd = format!(
+            "sudo kill -9 $(systemctl show --property MainPID --value {})",
+            &self.service
+        );
+        self.log_ssh_command(&cmd);
+        self.node.block_on_bash_script(&cmd).expect("run command");
     }
 
     fn stop(&self) {
