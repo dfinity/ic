@@ -65,10 +65,10 @@ use tokio::net::{TcpSocket, TcpStream};
 use tower::{util::BoxCloneService, Service, ServiceExt};
 use tower_test::mock::Handle;
 
-pub(crate) type IngressFilterHandle =
+pub type IngressFilterHandle =
     Handle<(ProvisionalWhitelist, SignedIngressContent), Result<(), UserError>>;
-pub(crate) type IngressIngestionHandle = Handle<SignedIngress, Result<(), IngressError>>;
-pub(crate) type QueryExecutionHandle =
+pub type IngressIngestionHandle = Handle<SignedIngress, Result<(), IngressError>>;
+pub type QueryExecutionHandle =
     Handle<(UserQuery, Option<CertificateDelegation>), HttpQueryResponse>;
 
 fn setup_query_execution_mock() -> (QueryExecutionService, QueryExecutionHandle) {
@@ -153,7 +153,7 @@ fn setup_ingress_ingestion_mock() -> (IngressIngestionService, IngressIngestionH
 }
 
 // Basic state manager with one subnet (nns) at height 1.
-pub(crate) fn basic_state_manager_mock() -> MockStateManager {
+pub fn basic_state_manager_mock() -> MockStateManager {
     let mut mock_state_manager = MockStateManager::new();
     let mut metadata = SystemMetadata::new(subnet_test_id(1), SubnetType::Application);
     let network_topology = NetworkTopology {
@@ -211,7 +211,7 @@ pub(crate) fn basic_state_manager_mock() -> MockStateManager {
 }
 
 // Basic mock consensus pool cache at height 1.
-pub(crate) fn basic_consensus_pool_cache() -> MockConsensusCache {
+pub fn basic_consensus_pool_cache() -> MockConsensusCache {
     let mut mock_consensus_cache = MockConsensusCache::new();
     mock_consensus_cache
         .expect_finalized_block()
@@ -240,7 +240,7 @@ pub(crate) fn basic_consensus_pool_cache() -> MockConsensusCache {
 }
 
 // Basic registry client mock at version 1
-pub(crate) fn basic_registry_client() -> MockRegistryClient {
+pub fn basic_registry_client() -> MockRegistryClient {
     let mut mock_registry_client = MockRegistryClient::new();
     mock_registry_client
         .expect_get_latest_version()
@@ -299,7 +299,7 @@ pub(crate) fn basic_registry_client() -> MockRegistryClient {
     mock_registry_client
 }
 
-pub(crate) async fn wait_for_status_healthy(agent: &Agent) -> Result<(), &'static str> {
+pub async fn wait_for_status_healthy(agent: &Agent) -> Result<(), &'static str> {
     let fut = async {
         loop {
             let result = agent.status().await;
@@ -318,7 +318,7 @@ pub(crate) async fn wait_for_status_healthy(agent: &Agent) -> Result<(), &'stati
 }
 
 // Get a free port on this host to which we can connect transport to.
-pub(crate) fn get_free_localhost_socket_addr() -> SocketAddr {
+pub fn get_free_localhost_socket_addr() -> SocketAddr {
     let socket = TcpSocket::new_v4().unwrap();
     socket.set_reuseport(false).unwrap();
     socket.set_reuseaddr(false).unwrap();
@@ -326,9 +326,7 @@ pub(crate) fn get_free_localhost_socket_addr() -> SocketAddr {
     socket.local_addr().unwrap()
 }
 
-pub(crate) async fn create_conn_and_send_request(
-    addr: SocketAddr,
-) -> (SendRequest<Body>, StatusCode) {
+pub async fn create_conn_and_send_request(addr: SocketAddr) -> (SendRequest<Body>, StatusCode) {
     let target_stream = TcpStream::connect(addr)
         .await
         .expect("tcp connection to server address failed");
@@ -355,7 +353,7 @@ pub(crate) async fn create_conn_and_send_request(
     (request_sender, response.status())
 }
 
-pub(crate) fn start_http_endpoint(
+pub fn start_http_endpoint(
     rt: tokio::runtime::Handle,
     config: Config,
     state_manager: Arc<dyn StateReader<State = ReplicatedState>>,
