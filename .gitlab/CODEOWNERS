@@ -108,6 +108,7 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/config/                             @dfinity-lab/teams/interface-owners
 /rs/config/src/embedders.rs             @dfinity-lab/teams/runtime-owners
 /rs/config/src/execution_environment.rs @dfinity-lab/teams/execution-owners @dfinity-lab/teams/runtime-owners
+/rs/config/src/http_handler.rs          @dfinity-lab/teams/networking-team
 /rs/consensus/                          @dfinity-lab/teams/consensus-owners
 /rs/constants/                          @dfinity-lab/teams/interface-owners
 /rs/crypto/                             @dfinity-lab/teams/crypto-owners
