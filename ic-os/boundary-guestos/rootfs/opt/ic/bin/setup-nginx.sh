@@ -77,7 +77,10 @@ function copy_certs() {
     # TODO: remove when the bugs are fixed
     local -r SW="/var/www/html/sw.js"
     local -r CERT_HASH=$(sha256sum "${CERT_DST}/fullchain.pem" | awk '{print $1}')
-    echo -e "/* ${CERT_HASH} */\n$(cat ${SW})" >"${SW}"
+    echo "/* ${CERT_HASH} */" >"${SW}.prefix"
+    cat "${SW}.prefix" "${SW}" >"${SW}.new"
+    mv -f "${SW}.new" "${SW}"
+    rm -f "${SW}.prefix"
 
     local -r SNAKEOIL_KEY='/etc/ssl/private/ssl-cert-snakeoil.key'
     local -r KEYS_SRC="${CERT_SRC}"
