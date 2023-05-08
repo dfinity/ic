@@ -17,10 +17,34 @@ ls -l $(bazel info bazel-bin)/rs/rust_canisters/memory_test/memory_test_canister
 Run
 ---
 
+Create a new `single_large_node` testnet:
+
+```bash
+ic$ gitlab-ci/container/container-run.sh
+container:/ic$ ict testnet single_large_node
+```
+
+Wait for the setup task to complete:
+
+```bash
+============================= Summary =============================
+Task setup              PASSED               -- Exited with code 0.
+Task debugKeepAliveTask PASSED              
+===================================================================
+```
+
+Pick the node IP address from the logs above:
+
+```bash
+2023-05-04 00:18:43.754 INFO[setup:rs/tests/src/driver/farm.rs:94:0] VM(qkg7v-disch-y7mq6-ny6kj-q6aqr-sfzov-cgfrq-milqk-4veuz-3mxfp-oqe) Host: dm1-dll21.dm1.dfinity.network IPv6: 2604:6800:258:1:5071:f2ff:fea6:3fb1 vCPUs: 64 Memory: 512142680 KiB
+```
+
+Run the workload generator:
+
 ```bash
 # Bazel will produce the build artifacts in `bazel-bin` at the root of the ic repo.
-WASM='bazel-bin/rs/rust_canisters/memory_test/memory_test_canister.wasm'
-NODE='http://[2001:4d78:40d:0:5000:67ff:fe4f:650d]:8080'
+WASM="$(bazel info bazel-bin)/rs/rust_canisters/memory_test/memory_test_canister.wasm"
+NODE='http://[2604:6800:258:1:5071:f2ff:fea6:3fb1]:8080'
 # Payload (a json string) has to be encoded in hex.
 PAYLOAD=$(echo -n '{"size":  5000000}'|od -t x1 -A none|xargs|sed -e 's/ //g')
 # Run a query
