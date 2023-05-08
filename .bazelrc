@@ -49,6 +49,8 @@ build --bes_upload_mode=fully_async
 build --remote_local_fallback
 build --workspace_status_command=$(pwd)/bazel/workspace_status.sh
 
+build --experimental_repository_downloader_retries=3 # https://bazel.build/reference/command-line-reference#flag--experimental_repository_downloader_retries
+
 build --cxxopt='-std=c++17'
 
 build:clippy --aspects=@rules_rust//rust:defs.bzl%rust_clippy_aspect
