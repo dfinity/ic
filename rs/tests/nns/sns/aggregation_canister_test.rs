@@ -3,7 +3,7 @@ use ic_tests::driver::group::SystemTestGroup;
 use ic_tests::nns_tests::sns_aggregator::{
     config_fast, validate_aggregator_data, wait_until_aggregator_finds_sns,
 };
-use ic_tests::nns_tests::sns_deployment::initiate_token_swap;
+use ic_tests::nns_tests::sns_deployment::initiate_token_swap_with_oc_parameters;
 use ic_tests::systest;
 
 /// This is a non-interactive load test:
@@ -15,7 +15,7 @@ fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_setup(config_fast)
         .add_test(systest!(wait_until_aggregator_finds_sns))
-        .add_test(systest!(initiate_token_swap))
+        .add_test(systest!(initiate_token_swap_with_oc_parameters))
         .add_test(systest!(validate_aggregator_data))
         .execute_from_args()?;
     Ok(())

@@ -187,6 +187,10 @@ name = "ic-systest-sns-payment-flow-test"
 path = "payment_flow_test.rs"
 
 [[bin]]
+name = "ic-systest-sns-payment-flow-with-finalization-test"
+path = "payment_flow_with_finalization_test.rs"
+
+[[bin]]
 name = "ic-systest-sns-payment-flow-load-test"
 path = "payment_flow_load_test.rs"
 

@@ -27,7 +27,10 @@ use ic_ledger_core::Tokens;
 use ic_nervous_system_common::E8;
 use ic_rosetta_api::models::RosettaSupportedKeyPair;
 use ic_rosetta_test_utils::EdKeypair;
-use ic_sns_swap::pb::v1::{new_sale_ticket_response, Lifecycle};
+use ic_sns_swap::pb::v1::{
+    new_sale_ticket_response, params::NeuronBasketConstructionParameters, FinalizeSwapResponse,
+    Lifecycle, Params,
+};
 use ic_sns_swap::swap::principal_to_subaccount;
 use ic_types::Height;
 use icp_ledger::{AccountIdentifier, Subaccount};
@@ -39,7 +42,10 @@ use slog::info;
 use tokio::runtime::Builder;
 
 use crate::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
-use crate::sns_client::{SnsClient, SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S};
+use crate::sns_client::{
+    two_days_from_now_in_secs, SnsClient, SNS_SALE_PARAM_MAX_PARTICIPANT_ICP_E8S,
+    SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S,
+};
 use crate::util::{assert_create_agent_with_identity, block_on};
 
 use crate::driver::ic::{
@@ -525,18 +531,46 @@ pub fn install_sns(env: &TestEnv, canister_wasm_strategy: NnsCanisterWasmStrateg
     );
 }
 
-pub fn initiate_token_swap(env: TestEnv) {
+/// Initiates a token swap using the given parameters. Specifically, it creates
+/// an OpenSnsTokenSwap proposal and executes it, then asserts that the SNS swap
+/// is open.
+pub fn initiate_token_swap(env: TestEnv, params: Params, community_fund_investment_e8s: u64) {
     let log = env.logger();
     let start_time = Instant::now();
 
     let sns_client = SnsClient::read_attribute(&env);
-    sns_client.initiate_token_swap(&env);
+    sns_client.initiate_token_swap(&env, params, community_fund_investment_e8s);
     sns_client.assert_state(&env, Lifecycle::Open);
     info!(
         log,
         "==== The SNS token sale has been initialized successfully in {:?} ====",
         start_time.elapsed()
     );
+}
+
+/// Like [`initiate_token_swap`], but initiates the token swap with "openchat-ish"
+/// parameters. (Not guaranteed to be exactly the same as the actual parameters
+/// used by openchat.)
+///
+/// This function should be the one used "by default" for most tests, to ensure
+/// that the tests are using realistic parameters.
+pub fn initiate_token_swap_with_oc_parameters(env: TestEnv) {
+    let params = Params {
+        min_participants: 100,
+        min_icp_e8s: 500_000 * E8,
+        max_icp_e8s: 1_000_000 * E8,
+        min_participant_icp_e8s: SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S,
+        max_participant_icp_e8s: SNS_SALE_PARAM_MAX_PARTICIPANT_ICP_E8S,
+        swap_due_timestamp_seconds: two_days_from_now_in_secs(),
+        sns_token_e8s: 25_000_000 * E8,
+        neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
+            count: 5,
+            dissolve_delay_interval_seconds: 7_889_400,
+        }),
+        sale_delay_seconds: None,
+    };
+    let community_fund_investment_e8s = 333_333 * E8;
+    initiate_token_swap(env, params, community_fund_investment_e8s);
 }
 
 pub fn workload_many_users_rps20_refresh_buyer_tokens(env: TestEnv) {
@@ -1130,14 +1164,15 @@ pub fn generate_ticket_participants_workload(
                     }
                     .await
                     .check_response(|response| {
-                        let response = response.ticket().map_err(|err| {
-                            // Convert the error code to a string for easier debugging
-                            let err = new_sale_ticket_response::err::Type::from_i32(err)
-                                .unwrap_or_else(|| {
-                                    panic!("{err} could not be converted to error type")
-                                });
-                            anyhow::anyhow!("get_open_ticket failed: {:?}", err)
-                        })?;
+                        let response = response
+                            .ticket()
+                            .map_err(|err| {
+                                // Convert the error code to a string for easier debugging
+                                new_sale_ticket_response::err::Type::from_i32(err).unwrap_or_else(
+                                    || panic!("{err} could not be converted to error type"),
+                                )
+                            })
+                            .map_err(|err| anyhow::anyhow!("get_open_ticket failed: {err:?}"))?;
                         if response.is_some() {
                             Err(anyhow::anyhow!(
                                 "get_open_ticket: ticket has not been deleted"
@@ -1180,6 +1215,35 @@ pub fn generate_ticket_participants_workload(
     }
     .unwrap();
     env.emit_report(format!("{metrics}"));
+}
+
+/// Finalizes the swap
+pub fn finalize_swap(env: TestEnv) {
+    block_on(async move {
+        let sns_client = SnsClient::read_attribute(&env);
+        let sns_request_provider = SnsRequestProvider::from_sns_client(&sns_client);
+        let app_node = env.get_first_healthy_application_node_snapshot();
+        let canister_agent = app_node.build_canister_agent().await;
+        let finalize_swap_request = sns_request_provider.finalize_swap();
+        let _finalize_swap_response = canister_agent
+            .call_and_parse::<FinalizeSwapResponse>(&finalize_swap_request)
+            .await
+            .result()
+            .unwrap();
+    });
+
+    // TODO: We should check that the swap finalized as expected. Some ideas for what might be relevant:
+    // 1. Call swap's `get_state` and assert it contains the correct information?
+    //    - cf_participants, neuron_recipes, and buyers will be empty, that's expected (they're not returned by this API)
+    //    - lifecycle in particular should be `CLOSED`
+    //    - buyer_total_icp_e8s should be verified
+    //    - actually, we should also add the number of buyers to derived_state (closing NNS1-2237) and check that here as well
+    // 2. Get the neurons that were created in SNS governance
+    //    - Should be possible via repeated calls to list_neurons.
+    // 3. Check the number of neurons is correct
+    //    - If there is a CF contribution, neurons will also be created for each of the CF participants
+    // 4. Check that every participant got the neurons we expected them to
+    // 5. Ask Lara Schmid, Max Summe, and Björn Assmann for additional suggestions
 }
 
 const SNS_ENDPOINT_RETRY_TIMEOUT: Duration = Duration::from_secs(5 * 60); // 5 minutes

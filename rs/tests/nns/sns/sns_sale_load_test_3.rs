@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use ic_tests::driver::group::SystemTestGroup;
 use ic_tests::nns_tests::sns_deployment::{
-    initiate_token_swap, sns_setup_with_many_sale_participants,
+    initiate_token_swap_with_oc_parameters, sns_setup_with_many_sale_participants,
     workload_many_users_rps100_refresh_buyer_tokens,
     workload_many_users_rps200_refresh_buyer_tokens,
     workload_many_users_rps20_refresh_buyer_tokens,
@@ -22,7 +22,7 @@ fn main() -> Result<()> {
     SystemTestGroup::new()
         .with_overall_timeout(Duration::from_secs(30 * 60)) // 30 min
         .with_setup(sns_setup_with_many_sale_participants)
-        .add_test(systest!(initiate_token_swap))
+        .add_test(systest!(initiate_token_swap_with_oc_parameters))
         .add_test(systest!(workload_many_users_rps20_refresh_buyer_tokens))
         .add_test(systest!(workload_many_users_rps100_refresh_buyer_tokens))
         .add_test(systest!(workload_many_users_rps200_refresh_buyer_tokens))
