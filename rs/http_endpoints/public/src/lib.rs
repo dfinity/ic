@@ -290,6 +290,7 @@ pub fn start_server(
         malicious_flags,
     );
     let status_service = StatusService::new_service(
+        config.clone(),
         log.clone(),
         nns_subnet_id,
         Arc::clone(&registry_client),
