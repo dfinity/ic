@@ -5,12 +5,30 @@ use std::{
 };
 
 use ic_base_types::CanisterId;
+use ic_metrics::{buckets::decimal_buckets_with_zero, MetricsRegistry};
+use prometheus::Histogram;
 
 /// An estimate of the average query execution duration. It is used at the
 /// start when there are no stats about the actual query execution duration.
 /// The value of this constant doesn't affect correctness of the algorithm
 /// and can be set to any reasonable duration from 1ms to 1000ms.
 pub(crate) const DEFAULT_QUERY_DURATION: Duration = Duration::from_millis(5);
+
+pub(crate) struct QuerySchedulerMetrics {
+    pub queue_length: Histogram,
+}
+
+impl QuerySchedulerMetrics {
+    pub fn new(metrics_registry: &MetricsRegistry) -> Self {
+        Self {
+            queue_length: metrics_registry.histogram(
+                "execution_query_scheduler_queue_length",
+                "The length of the query queue sampled for each arriving query",
+                decimal_buckets_with_zero(0, 4),
+            ),
+        }
+    }
+}
 
 /// The closure that executes a query and returns the execution duration.
 pub(crate) struct Query(pub Box<dyn FnOnce() -> Duration + Send + 'static>);
@@ -110,16 +128,24 @@ struct QuerySchedulerCore {
     // This flag is set to true if tear-down was requested.
     // It is used to stop query execution threads.
     tearing_down: bool,
+
+    // The query scheduler metrics.
+    metrics: QuerySchedulerMetrics,
 }
 
 impl QuerySchedulerCore {
-    fn new(max_threads_per_canister: usize, time_slice_per_canister: Duration) -> Self {
+    fn new(
+        max_threads_per_canister: usize,
+        time_slice_per_canister: Duration,
+        metrics_registry: &MetricsRegistry,
+    ) -> Self {
         Self {
             canisters: HashMap::default(),
             scheduled: VecDeque::default(),
             max_threads_per_canister,
             time_slice_per_canister,
             tearing_down: false,
+            metrics: QuerySchedulerMetrics::new(metrics_registry),
         }
     }
 
@@ -131,6 +157,10 @@ impl QuerySchedulerCore {
             .entry(canister_id)
             .or_insert_with(CanisterData::new);
         canister.incoming.push_back(query);
+
+        self.metrics
+            .queue_length
+            .observe((canister.incoming.len() + canister.leftover.len()) as f64);
 
         if !canister.has_been_scheduled
             && canister.should_be_scheduled(self.max_threads_per_canister)
@@ -245,11 +275,16 @@ pub(crate) struct QuerySchedulerInternal {
 }
 
 impl QuerySchedulerInternal {
-    pub fn new(max_threads_per_canister: usize, time_slice_per_canister: Duration) -> Self {
+    pub fn new(
+        max_threads_per_canister: usize,
+        time_slice_per_canister: Duration,
+        metrics_registry: &MetricsRegistry,
+    ) -> Self {
         Self {
             core: Arc::new(Mutex::new(QuerySchedulerCore::new(
                 max_threads_per_canister,
                 time_slice_per_canister,
+                metrics_registry,
             ))),
             work_is_available: Arc::new(Condvar::new()),
         }
@@ -310,5 +345,33 @@ impl QuerySchedulerInternal {
         let mut core = self.core.lock().unwrap();
         core.notify_teardown();
         self.work_is_available.notify_all();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use ic_types_test_utils::ids::canister_test_id;
+
+    use super::*;
+
+    #[test]
+    fn query_scheduler_metrics_recorded() {
+        let metrics_registry = MetricsRegistry::new();
+        let scheduler =
+            QuerySchedulerInternal::new(2, Duration::from_millis(100), &metrics_registry);
+
+        scheduler.push(
+            canister_test_id(0),
+            Query(Box::new(move || std::time::Duration::from_millis(100))),
+        );
+
+        scheduler.push(
+            canister_test_id(0),
+            Query(Box::new(move || std::time::Duration::from_millis(100))),
+        );
+
+        let core = scheduler.core.lock().unwrap();
+        assert_eq!(2, core.metrics.queue_length.get_sample_count());
+        assert_eq!(1 + 2, core.metrics.queue_length.get_sample_sum() as usize);
     }
 }

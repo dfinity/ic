@@ -6,6 +6,7 @@ use std::{
     time::Duration,
 };
 
+use ic_metrics::MetricsRegistry;
 use ic_types_test_utils::ids::canister_test_id;
 
 use crate::query_handler::query_scheduler::internal::DEFAULT_QUERY_DURATION;
@@ -17,10 +18,12 @@ use super::{
 
 #[test]
 fn query_scheduler_does_not_starve_canisters() {
+    let metrics_registry = MetricsRegistry::new();
     let scheduler = QueryScheduler::new(
         1,
         1,
         Duration::from_millis(1),
+        &metrics_registry,
         QuerySchedulerFlag::UseNewSchedulingAlgorithm,
     );
     let canister_count = 3;
@@ -53,10 +56,12 @@ fn query_scheduler_does_not_starve_canisters() {
 
 #[test]
 fn query_scheduler_with_single_threaded_canister() {
+    let metrics_registry = MetricsRegistry::new();
     let scheduler = QueryScheduler::new(
         4,
         1,
         Duration::from_millis(1),
+        &metrics_registry,
         QuerySchedulerFlag::UseNewSchedulingAlgorithm,
     );
     let execution_count = Arc::new(AtomicU32::default());
@@ -83,7 +88,8 @@ fn query_scheduler_with_single_threaded_canister() {
 
 #[test]
 fn query_scheduler_respects_max_threads_per_canister() {
-    let scheduler = QuerySchedulerInternal::new(2, Duration::from_millis(1));
+    let metrics_registry = MetricsRegistry::new();
+    let scheduler = QuerySchedulerInternal::new(2, Duration::from_millis(1), &metrics_registry);
     for _ in 0..100 {
         scheduler.push(
             canister_test_id(0),
@@ -114,7 +120,8 @@ fn query_scheduler_respects_max_threads_per_canister() {
 
 #[test]
 fn query_scheduler_does_round_robin() {
-    let scheduler = QuerySchedulerInternal::new(2, Duration::from_millis(1));
+    let metrics_registry = MetricsRegistry::new();
+    let scheduler = QuerySchedulerInternal::new(2, Duration::from_millis(1), &metrics_registry);
 
     for c in 0..10 {
         for _ in 0..100 {
@@ -154,7 +161,8 @@ fn query_scheduler_does_round_robin() {
 
 #[test]
 fn query_scheduler_adjusts_batch_size() {
-    let scheduler = QuerySchedulerInternal::new(2, Duration::from_millis(100));
+    let metrics_registry = MetricsRegistry::new();
+    let scheduler = QuerySchedulerInternal::new(2, Duration::from_millis(100), &metrics_registry);
 
     for _ in 0..100 {
         scheduler.push(
@@ -186,7 +194,8 @@ fn query_scheduler_adjusts_batch_size() {
 
 #[test]
 fn query_scheduler_drains_leftover_queue_before_new_queries() {
-    let scheduler = QuerySchedulerInternal::new(2, Duration::from_millis(100));
+    let metrics_registry = MetricsRegistry::new();
+    let scheduler = QuerySchedulerInternal::new(2, Duration::from_millis(100), &metrics_registry);
 
     for i in 0..100 {
         scheduler.push(
@@ -212,7 +221,8 @@ fn query_scheduler_drains_leftover_queue_before_new_queries() {
 
 #[test]
 fn query_scheduler_properly_reads_leftover_queries() {
-    let scheduler = QuerySchedulerInternal::new(2, Duration::from_millis(100));
+    let metrics_registry = MetricsRegistry::new();
+    let scheduler = QuerySchedulerInternal::new(2, Duration::from_millis(100), &metrics_registry);
 
     scheduler.push(
         canister_test_id(0),
