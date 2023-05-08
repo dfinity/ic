@@ -1,87 +1,183 @@
-.build-base-images: &build-base-images |
+.rules-build-base-images:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "build-push-base-images"'
+    - if: '$CI_COMMIT_BRANCH == "master"'
+      when: manual
+      allow_failure: true
+    - if: '$CI_PARENT_PIPELINE_SOURCE == "merge_request_event"'
+      changes:
+        - gitlab-ci/config/46--guest-os-build--guest-base-image.yml
+        - ic-os/boundary-guestos/rootfs/Dockerfile.base
+        - ic-os/boundary-api-guestos/rootfs/Dockerfile.base
+        - ic-os/guestos/rootfs/Dockerfile.base
+        - ic-os/guestos/rootfs/packages.common
+        - ic-os/guestos/rootfs/packages.dev
+        - ic-os/hostos/rootfs/Dockerfile.base
+        - ic-os/hostos/rootfs/packages.common
+        - ic-os/hostos/rootfs/packages.dev
+        - ic-os/setupos/rootfs/Dockerfile.base
+        - ic-os/setupos/rootfs/packages.common
+        - ic-os/setupos/rootfs/packages.dev
+
+.build-base-image: &build-base-image |
+  set -euo pipefail
+
   TAG=$(date '+%Y-%m-%d-%H%M')
-  # guestos-base & guestos-base-dev
-  cd "${CI_PROJECT_DIR}/ic-os/guestos/rootfs"
-  docker build -q --no-cache -t docker.io/dfinity/guestos-base:"$TAG" -t docker.io/dfinity/guestos-base:latest \
-      -f Dockerfile.base .
-  docker build -q --no-cache -t docker.io/dfinity/guestos-base-dev:"$TAG" -t docker.io/dfinity/guestos-base-dev:latest \
-      --build-arg PACKAGE_FILES="packages.common packages.dev" -f Dockerfile.base .
-  # boundaryos-base & boundaryos-base-snp
-  cd "${CI_PROJECT_DIR}/ic-os/boundary-guestos/rootfs"
-  docker build -q --no-cache -t docker.io/dfinity/boundaryos-base:"$TAG" -t docker.io/dfinity/boundaryos-base:latest \
-      -f Dockerfile.base .
-  docker build -q --no-cache -t docker.io/dfinity/boundaryos-base-snp:"$TAG" -t docker.io/dfinity/boundaryos-base-snp:latest \
-      --build-arg CPU_SUPPORT="snp" -f Dockerfile.base .
-  # boundary-api-guestos-base & boundary-api-guestos-base-snp
-  cd "${CI_PROJECT_DIR}/ic-os/boundary-api-guestos/rootfs"
-  docker build -q --no-cache -t docker.io/dfinity/boundary-api-guestos-base:"$TAG" -t docker.io/dfinity/boundary-api-guestos-base:latest \
-      -f Dockerfile.base .
-  docker build -q --no-cache -t docker.io/dfinity/boundary-api-guestos-base-snp:"$TAG" -t docker.io/dfinity/boundary-api-guestos-base-snp:latest \
-      --build-arg CPU_SUPPORT="snp" -f Dockerfile.base .
-  # hostos-base & hostos-base-dev
-  cd "${CI_PROJECT_DIR}/ic-os/hostos/rootfs"
-  docker build -q --no-cache -t docker.io/dfinity/hostos-base:"$TAG" -t docker.io/dfinity/hostos-base:latest \
-      -f Dockerfile.base .
-  docker build -q --no-cache -t docker.io/dfinity/hostos-base-dev:"$TAG" -t docker.io/dfinity/hostos-base-dev:latest \
-      --build-arg PACKAGE_FILES="packages.common packages.dev" -f Dockerfile.base .
-  # setupos-base & setupos-base-dev
-  cd "${CI_PROJECT_DIR}/ic-os/setupos/rootfs"
-  docker build -q --no-cache -t docker.io/dfinity/setupos-base:"$TAG" -t docker.io/dfinity/setupos-base:latest \
-      -f Dockerfile.base .
-  docker build -q --no-cache -t docker.io/dfinity/setupos-base-dev:"$TAG" -t docker.io/dfinity/setupos-base-dev:latest \
-      --build-arg PACKAGE_FILES="packages.common packages.dev" -f Dockerfile.base .
+  echo -e "\e[0Ksection_start:$(date +%s):${IMAGE}[collapsed=true]\r\e[0KClick here to see the ${IMAGE} build"
+  pushd "$CONTEXT"
+  podman build "${BUILD_ARGS[@]}" --squash-all --no-cache -t "docker.io/dfinity/${IMAGE}:${TAG}" -f Dockerfile.base .
+  popd
+  echo -e "\e[0Ksection_end:$(date +%s):${IMAGE}\r\e[0K"
 
-build-base-images:
+  if [ "${CI_COMMIT_REF_NAME:-}" == "master" ]; then
+      podman login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD" docker.io
+      podman push "dfinity/${IMAGE}:${TAG}" --digestfile digestfile
+      echo "dfinity/${IMAGE}@$(cat digestfile)" > "digestfile-${IMAGE}"
+      echo "$REF_FILE" >> "digestfile-${IMAGE}"
+      rm -f digestfile
+  fi
+
+.build-base-image-job:
   extends:
-    # TODO(IDX-2829) fix working with podman and then switch to k8s runners.
-    - .ubuntu-docker
-    - .rules-dockerfile-base-changes
+    - .ubuntu-k8s
+    - .rules-build-base-images
   stage: guest-os-build
   needs: []
-  timeout: 2h
+  artifacts:
+    paths:
+      - digestfile*
   script:
-  - set -euo pipefail
-  - *build-base-images
+  - *build-base-image
 
-build-push-base-images:
+build-guestos-base:
   extends:
-    # TODO(IDX-2829) fix working with podman and then switch to k8s runners.
-    - .ubuntu-docker
-    - .rules-build-base-images-schedule
-  stage: guest-os-build
-  needs: []
-  timeout: 2h
+    - .build-base-image-job
+  variables:
+    CONTEXT: "${CI_PROJECT_DIR}/ic-os/guestos/rootfs"
+    IMAGE: "guestos-base"
+    REF_FILE: "ic-os/guestos/rootfs/docker-base.prod"
+
+build-guestos-base-dev:
+  extends:
+    - .build-base-image-job
+  variables:
+    CONTEXT: "${CI_PROJECT_DIR}/ic-os/guestos/rootfs"
+    IMAGE: "guestos-base-dev"
+    REF_FILE: "ic-os/guestos/rootfs/docker-base.dev"
   script:
-   - set -euo pipefail
-   - *build-base-images
+  - BUILD_ARGS=(--build-arg "PACKAGE_FILES=packages.common packages.dev")
+  - *build-base-image
+
+build-boundaryos-base:
+  extends:
+    - .build-base-image-job
+  variables:
+    CONTEXT: "${CI_PROJECT_DIR}/ic-os/boundary-guestos/rootfs"
+    IMAGE: "boundaryos-base"
+    REF_FILE: "ic-os/boundary-guestos/rootfs/docker-base.prod"
+
+build-boundaryos-base-snp:
+  extends:
+    - .build-base-image-job
+  variables:
+    CONTEXT: "${CI_PROJECT_DIR}/ic-os/boundary-guestos/rootfs"
+    IMAGE: "boundaryos-base-snp"
+    REF_FILE: "ic-os/boundary-guestos/rootfs/docker-base.snp"
+  script:
+  - BUILD_ARGS=(--build-arg "CPU_SUPPORT=snp")
+  - *build-base-image
+
+build-boundaryos-api-guestos-base:
+  extends:
+    - .build-base-image-job
+  variables:
+    CONTEXT: "${CI_PROJECT_DIR}/ic-os/boundary-api-guestos/rootfs"
+    IMAGE: "boundary-api-guestos-base"
+    REF_FILE: "ic-os/boundary-api-guestos/rootfs/docker-base.prod"
+
+build-boundaryos-api-guestos-base-snp:
+  extends:
+    - .build-base-image-job
+  variables:
+    CONTEXT: "${CI_PROJECT_DIR}/ic-os/boundary-api-guestos/rootfs"
+    IMAGE: "boundary-api-guestos-base-snp"
+    REF_FILE: "ic-os/boundary-api-guestos/rootfs/docker-base.snp"
+  script:
+  - BUILD_ARGS=(--build-arg "CPU_SUPPORT=snp")
+  - *build-base-image
+
+build-hostos-base:
+  extends:
+    - .build-base-image-job
+  variables:
+    CONTEXT: "${CI_PROJECT_DIR}/ic-os/hostos/rootfs"
+    IMAGE: "hostos-base"
+    REF_FILE: "ic-os/hostos/rootfs/docker-base.prod"
+
+build-hostos-base-dev:
+  extends:
+    - .build-base-image-job
+  variables:
+    CONTEXT: "${CI_PROJECT_DIR}/ic-os/hostos/rootfs"
+    IMAGE: "hostos-base-dev"
+    REF_FILE: "ic-os/hostos/rootfs/docker-base.dev"
+  script:
+  - BUILD_ARGS=(--build-arg "PACKAGE_FILES=packages.common packages.dev")
+  - *build-base-image
+
+build-setupos-base:
+  extends:
+    - .build-base-image-job
+  variables:
+    CONTEXT: "${CI_PROJECT_DIR}/ic-os/setupos/rootfs"
+    IMAGE: "setupos-base"
+    REF_FILE: "ic-os/setupos/rootfs/docker-base.prod"
+
+build-setupos-base-dev:
+  extends:
+    - .build-base-image-job
+  variables:
+    CONTEXT: "${CI_PROJECT_DIR}/ic-os/setupos/rootfs"
+    IMAGE: "setupos-base-dev"
+    REF_FILE: "ic-os/setupos/rootfs/docker-base.dev"
+  script:
+  - BUILD_ARGS=(--build-arg "PACKAGE_FILES=packages.common packages.dev")
+  - *build-base-image
+
+build-base-images-ref-update:
+  extends:
+    - .ubuntu-k8s
+    - .rules-build-base-images
+  stage: guest-os-build
+  needs:
+    - build-guestos-base
+    - build-guestos-base-dev
+    - build-boundaryos-base
+    - build-boundaryos-base-snp
+    - build-boundaryos-api-guestos-base
+    - build-boundaryos-api-guestos-base-snp
+    - build-hostos-base
+    - build-hostos-base-dev
+    - build-setupos-base
+    - build-setupos-base-dev
+  script:
    - |
-     docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD"
+     set -euo pipefail
+     if ! ls -1 digestfile-*; then
+       echo "No digestfiles, nothing to do!"
+       exit 0
+     fi
 
-     IMAGE_FILES=(
-         ic-os/guestos/rootfs/docker-base.prod
-         ic-os/guestos/rootfs/docker-base.dev
-         ic-os/boundary-guestos/rootfs/docker-base.prod
-         ic-os/boundary-guestos/rootfs/docker-base.snp
-         ic-os/boundary-api-guestos/rootfs/docker-base.prod
-         ic-os/boundary-api-guestos/rootfs/docker-base.snp
-         ic-os/hostos/rootfs/docker-base.prod
-         ic-os/hostos/rootfs/docker-base.dev
-         ic-os/setupos/rootfs/docker-base.prod
-         ic-os/setupos/rootfs/docker-base.dev
-     )
-     # search, replace & push
-     for FILE in "${IMAGE_FILES[@]}"; do
-         IMAGE="$(cut -d @ -f 1 "${CI_PROJECT_DIR}/${FILE}")"
-         # TAG gets defined in *build-base-images
-         docker push "${IMAGE}":"${TAG}"
-         docker push "${IMAGE}":latest
-
-         NEW_REF="$(docker inspect --format='{{index .RepoDigests 0}}' "${IMAGE}":"${TAG}")"
-         echo "${NEW_REF}" > "${CI_PROJECT_DIR}/${FILE}"
+     # update image ref in ref files
+     for FILE in digestfile-*; do
+         IMAGE="$(head -1 "$FILE")"
+         REF_FILE="$(tail -1 "$FILE")"
+         echo "$IMAGE" > "$REF_FILE"
      done
+     rm -f digestfile*
 
-     # commit, push & create new merge request 
-     cd "${CI_PROJECT_DIR}"
+     # commit, push & create new merge request
+     TAG=$(date '+%Y-%m-%d-%H%M')
      git remote set-url origin \
          "https://gitlab-ci-token:${GITLAB_API_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git" || true
      git config --global user.email "idx@dfinity.org"
