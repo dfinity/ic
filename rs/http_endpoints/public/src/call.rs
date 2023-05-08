@@ -32,7 +32,10 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
-use tower::{load_shed::LoadShed, util::BoxCloneService, Service, ServiceBuilder, ServiceExt};
+use tower::{
+    limit::GlobalConcurrencyLimitLayer, load_shed::LoadShed, util::BoxCloneService, Service,
+    ServiceBuilder, ServiceExt,
+};
 
 #[derive(Clone)]
 pub(crate) struct CallService {
@@ -59,16 +62,23 @@ impl CallService {
         ingress_filter: IngressFilterService,
         malicious_flags: MaliciousFlags,
     ) -> EndpointService {
-        let base_service = BoxCloneService::new(ServiceBuilder::new().service(Self {
-            log,
-            metrics,
-            subnet_id,
-            registry_client,
-            validator_executor,
-            ingress_sender,
-            ingress_filter: ServiceBuilder::new().load_shed().service(ingress_filter),
-            malicious_flags,
-        }));
+        let base_service = BoxCloneService::new(
+            ServiceBuilder::new()
+                .layer(GlobalConcurrencyLimitLayer::new(
+                    config.max_call_concurrent_requests,
+                ))
+                .service(Self {
+                    log,
+                    metrics,
+                    subnet_id,
+                    registry_client,
+                    validator_executor,
+                    ingress_sender,
+                    ingress_filter: ServiceBuilder::new().load_shed().service(ingress_filter),
+                    malicious_flags,
+                }),
+        );
+
         BoxCloneService::new(
             ServiceBuilder::new()
                 .layer(BodyReceiverLayer::new(&config))
