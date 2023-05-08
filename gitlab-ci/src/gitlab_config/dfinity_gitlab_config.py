@@ -35,7 +35,7 @@ import yaml
 from gitlab_config import utils
 
 GITLAB_URL = "https://gitlab.com"
-GITLAB_PROJECT_ID = urllib.parse.quote_plus("25333072")
+GITLAB_PROJECT_ID = urllib.parse.quote_plus("31166135")  # IC_Public
 
 
 # TODO: this is likely a very poor escape. We should do here exactly the same as GitLab.
@@ -316,7 +316,7 @@ class DfinityGitLabConfig:
 
         # Validate a gitlab CI configuration with a namespace.
         result = self._gl.http_post(
-            f"{self.gitlab_url}/api/v4/ci/lint",
+            f"{self.gitlab_url}/api/v4/projects/{GITLAB_PROJECT_ID}/ci/lint",
             post_data=data,
         )
 
