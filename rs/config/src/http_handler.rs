@@ -56,6 +56,18 @@ pub struct Config {
     /// `max_request_receive_seconds`, then the request will be rejected and
     /// [`408 Request Timeout`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/408) will be returned to the user.
     pub max_request_receive_seconds: u64,
+
+    /// Serving at most `max_read_state_concurrent_requests` requests concurrently for endpoint `/api/v2/read_state`
+    pub max_read_state_concurrent_requests: usize,
+
+    /// Serving at most `max_status_concurrent_requests` requests concurrently for endpoint `/api/v2/status`
+    pub max_status_concurrent_requests: usize,
+
+    /// Serving at most `max_catch_up_package_concurrent_requests` requests concurrently for endpoint `/_/catch_up_package`
+    pub max_catch_up_package_concurrent_requests: usize,
+
+    /// Serving at most `max_dashboard_concurrent_requests` requests concurrently for endpoint `/_/dashboard`
+    pub max_dashboard_concurrent_requests: usize,
 }
 
 impl Default for Config {
@@ -74,6 +86,10 @@ impl Default for Config {
             max_request_size_bytes: 5 * 1024 * 1024, // 5MB
             max_delegation_certificate_size_bytes: 1024 * 1024, // 1MB
             max_request_receive_seconds: 300,        // 5 min
+            max_read_state_concurrent_requests: 100,
+            max_catch_up_package_concurrent_requests: 100,
+            max_dashboard_concurrent_requests: 100,
+            max_status_concurrent_requests: 100,
         }
     }
 }

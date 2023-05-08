@@ -23,8 +23,6 @@ use tower::{
 // See build.rs
 include!(concat!(env!("OUT_DIR"), "/dashboard.rs"));
 
-const MAX_DASHBOARD_CONCURRENT_REQUESTS: usize = 100;
-
 #[derive(Clone)]
 pub(crate) struct DashboardService {
     config: Config,
@@ -38,17 +36,16 @@ impl DashboardService {
         subnet_type: SubnetType,
         state_reader_executor: StateReaderExecutor,
     ) -> EndpointService {
-        let base_service = Self {
-            config,
-            subnet_type,
-            state_reader_executor,
-        };
         BoxCloneService::new(
             ServiceBuilder::new()
                 .layer(GlobalConcurrencyLimitLayer::new(
-                    MAX_DASHBOARD_CONCURRENT_REQUESTS,
+                    config.max_dashboard_concurrent_requests,
                 ))
-                .service(base_service),
+                .service(Self {
+                    config,
+                    subnet_type,
+                    state_reader_executor,
+                }),
         )
     }
 }

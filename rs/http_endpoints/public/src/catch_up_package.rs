@@ -20,8 +20,6 @@ use tower::{
     limit::concurrency::GlobalConcurrencyLimitLayer, util::BoxCloneService, Service, ServiceBuilder,
 };
 
-const MAX_CATCH_UP_PACKAGE_CONCURRENT_REQUESTS: usize = 100;
-
 #[derive(Clone)]
 pub(crate) struct CatchUpPackageService {
     metrics: HttpHandlerMetrics,
@@ -37,7 +35,7 @@ impl CatchUpPackageService {
         let base_service = BoxCloneService::new(
             ServiceBuilder::new()
                 .layer(GlobalConcurrencyLimitLayer::new(
-                    MAX_CATCH_UP_PACKAGE_CONCURRENT_REQUESTS,
+                    config.max_catch_up_package_concurrent_requests,
                 ))
                 .service(Self {
                     metrics,

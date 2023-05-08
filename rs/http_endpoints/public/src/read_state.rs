@@ -36,8 +36,6 @@ use tower::{
     limit::concurrency::GlobalConcurrencyLimitLayer, util::BoxCloneService, Service, ServiceBuilder,
 };
 
-const MAX_READ_STATE_CONCURRENT_REQUESTS: usize = 100;
-
 #[derive(Clone)]
 pub(crate) struct ReadStateService {
     log: ReplicaLogger,
@@ -76,7 +74,7 @@ impl ReadStateService {
         let base_service = BoxCloneService::new(
             ServiceBuilder::new()
                 .layer(GlobalConcurrencyLimitLayer::new(
-                    MAX_READ_STATE_CONCURRENT_REQUESTS,
+                    config.max_read_state_concurrent_requests,
                 ))
                 .service(base_service),
         );
