@@ -897,9 +897,8 @@ message NervousSystemParameters {
 
   // By default, maturity modulation is enabled; however, an SNS can use this
   // field to disable it. When disabled, this canister will still poll the
-  // Cycles Minting Canister (CMC), and store the value received
-  // therefrom. However, the fetched value does not get when this is set to
-  // true.
+  // Cycles Minting Canister (CMC), and store the value received therefrom.
+  // However, the fetched value does not get used when this is set to true.
   //
   // The reason we call this "disabled" instead of (positive) "enabled" is so
   // that the PB default (bool fields are false) and our application default
