@@ -1,5 +1,5 @@
 {
-  "checksum": "aeb52cc1f367eb0565364a9b0a7ed47b45d3e7bf859a5aa433e88b7b52c09f08",
+  "checksum": "4bb4da8ab99a9729915281b989f915292d9ccd2792967ce2863b626a988b1c45",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -7069,7 +7069,7 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "displaydoc 0.2.3",
+              "id": "displaydoc 0.2.4",
               "target": "displaydoc"
             }
           ],
@@ -13064,6 +13064,11 @@
               "target": "indicatif"
             },
             {
+              "id": "indicatif 0.17.3",
+              "target": "indicatif",
+              "alias": "indicatif_0_17_3"
+            },
+            {
               "id": "insta 1.8.0",
               "target": "insta"
             },
@@ -13284,7 +13289,7 @@
               "target": "pico_args"
             },
             {
-              "id": "pkg-config 0.3.26",
+              "id": "pkg-config 0.3.27",
               "target": "pkg_config"
             },
             {
@@ -14119,13 +14124,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "displaydoc 0.2.3": {
+    "displaydoc 0.2.4": {
       "name": "displaydoc",
-      "version": "0.2.3",
+      "version": "0.2.4",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/displaydoc/0.2.3/download",
-          "sha256": "3bf95dc3f046b9da4f2d51833c0d3547d8564ef6910f5c1ed130306a75b92886"
+          "url": "https://crates.io/api/v1/crates/displaydoc/0.2.4/download",
+          "sha256": "487585f4d0c6655fe74905e2504d8ad6908e4db67f744eb140876906c2f3175d"
         }
       },
       "targets": [
@@ -14158,14 +14163,14 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.109",
+              "id": "syn 2.0.15",
               "target": "syn"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.2.3"
+        "version": "0.2.4"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -22025,6 +22030,64 @@
       },
       "license": "MIT"
     },
+    "indicatif 0.17.3": {
+      "name": "indicatif",
+      "version": "0.17.3",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/indicatif/0.17.3/download",
+          "sha256": "cef509aa9bc73864d6756f0d34d35504af3cf0844373afe9b8669a5b8005a729"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "indicatif",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "indicatif",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": [
+          "default",
+          "unicode-width"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "console 0.15.5",
+              "target": "console"
+            },
+            {
+              "id": "number_prefix 0.4.0",
+              "target": "number_prefix"
+            },
+            {
+              "id": "portable-atomic 0.3.19",
+              "target": "portable_atomic"
+            },
+            {
+              "id": "unicode-width 0.1.10",
+              "target": "unicode_width"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.17.3"
+      },
+      "license": "MIT"
+    },
     "indoc 1.0.9": {
       "name": "indoc",
       "version": "1.0.9",
@@ -22959,7 +23022,7 @@
           "selects": {
             "cfg(not(any(windows, target_os = \"hermit\", target_os = \"unknown\")))": [
               {
-                "id": "rustix 0.37.18",
+                "id": "rustix 0.37.19",
                 "target": "rustix"
               }
             ],
@@ -25518,7 +25581,7 @@
               "target": "cc"
             },
             {
-              "id": "pkg-config 0.3.26",
+              "id": "pkg-config 0.3.27",
               "target": "pkg_config"
             },
             {
@@ -25613,7 +25676,7 @@
               "target": "cc"
             },
             {
-              "id": "pkg-config 0.3.26",
+              "id": "pkg-config 0.3.27",
               "target": "pkg_config"
             }
           ],
@@ -25743,7 +25806,7 @@
         "deps": {
           "common": [
             {
-              "id": "pkg-config 0.3.26",
+              "id": "pkg-config 0.3.27",
               "target": "pkg_config"
             }
           ],
@@ -25823,7 +25886,7 @@
               "target": "cc"
             },
             {
-              "id": "pkg-config 0.3.26",
+              "id": "pkg-config 0.3.27",
               "target": "pkg_config"
             }
           ],
@@ -25912,13 +25975,13 @@
       },
       "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT"
     },
-    "linux-raw-sys 0.3.6": {
+    "linux-raw-sys 0.3.7": {
       "name": "linux-raw-sys",
-      "version": "0.3.6",
+      "version": "0.3.7",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/linux-raw-sys/0.3.6/download",
-          "sha256": "b64f40e5e03e0d54f03845c8197d0291253cdbedfb1cb46b13c2c117554a9f4c"
+          "url": "https://crates.io/api/v1/crates/linux-raw-sys/0.3.7/download",
+          "sha256": "ece97ea872ece730aed82664c424eb4c8291e1ff2480247ccf7409044bc6479f"
         }
       },
       "targets": [
@@ -25947,7 +26010,7 @@
           "no_std"
         ],
         "edition": "2018",
-        "version": "0.3.6"
+        "version": "0.3.7"
       },
       "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT"
     },
@@ -26619,7 +26682,7 @@
               "target": "cc"
             },
             {
-              "id": "pkg-config 0.3.26",
+              "id": "pkg-config 0.3.27",
               "target": "pkg_config"
             }
           ],
@@ -26963,7 +27026,7 @@
         "deps": {
           "common": [
             {
-              "id": "rustix 0.37.18",
+              "id": "rustix 0.37.19",
               "target": "rustix"
             }
           ],
@@ -30280,6 +30343,43 @@
       },
       "license": "MIT"
     },
+    "number_prefix 0.4.0": {
+      "name": "number_prefix",
+      "version": "0.4.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/number_prefix/0.4.0/download",
+          "sha256": "830b246a0e5f20af87141b25c173cd1b609bd7779a4617d6ec582abaf90870f3"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "number_prefix",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "number_prefix",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": [
+          "default",
+          "std"
+        ],
+        "edition": "2015",
+        "version": "0.4.0"
+      },
+      "license": "MIT"
+    },
     "object 0.30.3": {
       "name": "object",
       "version": "0.30.3",
@@ -30862,7 +30962,7 @@
               "target": "cc"
             },
             {
-              "id": "pkg-config 0.3.26",
+              "id": "pkg-config 0.3.27",
               "target": "pkg_config"
             }
           ],
@@ -33174,13 +33274,13 @@
       },
       "license": "Apache-2.0 OR MIT"
     },
-    "pkg-config 0.3.26": {
+    "pkg-config 0.3.27": {
       "name": "pkg-config",
-      "version": "0.3.26",
+      "version": "0.3.27",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/pkg-config/0.3.26/download",
-          "sha256": "6ac9a59f73473f1b8d852421e59e64809f025994837ef743615c6d0c5b305160"
+          "url": "https://crates.io/api/v1/crates/pkg-config/0.3.27/download",
+          "sha256": "26072860ba924cbfa98ea39c8c19b4dd6a4a25423dbdf219c1eca91aa0cf6964"
         }
       },
       "targets": [
@@ -33203,7 +33303,7 @@
           "**"
         ],
         "edition": "2015",
-        "version": "0.3.26"
+        "version": "0.3.27"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -33399,6 +33499,69 @@
         },
         "edition": "2021",
         "version": "0.8.0"
+      },
+      "license": "Apache-2.0 OR MIT"
+    },
+    "portable-atomic 0.3.19": {
+      "name": "portable-atomic",
+      "version": "0.3.19",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/portable-atomic/0.3.19/download",
+          "sha256": "26f6a7b87c2e435a3241addceeeff740ff8b7e76b74c13bf9acb17fa454ea00b"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "portable_atomic",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "portable_atomic",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": [
+          "default",
+          "fallback"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "portable-atomic 0.3.19",
+              "target": "build_script_build"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.3.19"
+      },
+      "build_script_attrs": {
+        "data_glob": [
+          "**"
+        ]
       },
       "license": "Apache-2.0 OR MIT"
     },
@@ -37698,7 +37861,7 @@
               "target": "log"
             },
             {
-              "id": "slice-group-by 0.3.0",
+              "id": "slice-group-by 0.3.1",
               "target": "slice_group_by"
             },
             {
@@ -39441,13 +39604,13 @@
       },
       "license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT"
     },
-    "rustix 0.37.18": {
+    "rustix 0.37.19": {
       "name": "rustix",
-      "version": "0.37.18",
+      "version": "0.37.19",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/rustix/0.37.18/download",
-          "sha256": "8bbfc1d1c7c40c01715f47d71444744a81669ca84e8b63e25a55e169b1f86433"
+          "url": "https://crates.io/api/v1/crates/rustix/0.37.19/download",
+          "sha256": "acf8729d8542766f1b2cf77eb034d52f40d375bb8b615d0b147089946e16613d"
         }
       },
       "targets": [
@@ -39501,14 +39664,14 @@
               "target": "io_lifetimes"
             },
             {
-              "id": "rustix 0.37.18",
+              "id": "rustix 0.37.19",
               "target": "build_script_build"
             }
           ],
           "selects": {
             "cfg(all(any(target_os = \"android\", target_os = \"linux\"), any(rustix_use_libc, miri, not(all(target_os = \"linux\", any(target_arch = \"x86\", all(target_arch = \"x86_64\", target_pointer_width = \"64\"), all(target_endian = \"little\", any(target_arch = \"arm\", all(target_arch = \"aarch64\", target_pointer_width = \"64\"), target_arch = \"powerpc64\", target_arch = \"riscv64\", target_arch = \"mips\", target_arch = \"mips64\"))))))))": [
               {
-                "id": "linux-raw-sys 0.3.6",
+                "id": "linux-raw-sys 0.3.7",
                 "target": "linux_raw_sys"
               }
             ],
@@ -39518,7 +39681,7 @@
                 "target": "libc"
               },
               {
-                "id": "linux-raw-sys 0.3.6",
+                "id": "linux-raw-sys 0.3.7",
                 "target": "linux_raw_sys"
               }
             ],
@@ -39547,7 +39710,7 @@
           }
         },
         "edition": "2018",
-        "version": "0.37.18"
+        "version": "0.37.19"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -42866,13 +43029,13 @@
       },
       "license": "MIT"
     },
-    "slice-group-by 0.3.0": {
+    "slice-group-by 0.3.1": {
       "name": "slice-group-by",
-      "version": "0.3.0",
+      "version": "0.3.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/slice-group-by/0.3.0/download",
-          "sha256": "03b634d87b960ab1a38c4fe143b508576f075e7c978bfad18217645ebfdfa2ec"
+          "url": "https://crates.io/api/v1/crates/slice-group-by/0.3.1/download",
+          "sha256": "826167069c09b99d56f31e9ae5c99049e932a98c9dc2dac47645b08dbbf76ba7"
         }
       },
       "targets": [
@@ -42899,7 +43062,7 @@
           "std"
         ],
         "edition": "2018",
-        "version": "0.3.0"
+        "version": "0.3.1"
       },
       "license": "MIT"
     },
@@ -45341,7 +45504,7 @@
           "selects": {
             "cfg(any(unix, target_os = \"wasi\"))": [
               {
-                "id": "rustix 0.37.18",
+                "id": "rustix 0.37.19",
                 "target": "rustix"
               }
             ],
@@ -50436,18 +50599,6 @@
         },
         {
           "Binary": {
-            "crate_name": "exit",
-            "crate_root": "src/bin/exit.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        },
-        {
-          "Binary": {
             "crate_name": "reader",
             "crate_root": "src/bin/reader.rs",
             "srcs": {
@@ -50462,6 +50613,18 @@
           "Binary": {
             "crate_name": "sleep",
             "crate_root": "src/bin/sleep.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        },
+        {
+          "Binary": {
+            "crate_name": "exit",
+            "crate_root": "src/bin/exit.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -55508,7 +55671,7 @@
               "target": "cc"
             },
             {
-              "id": "pkg-config 0.3.26",
+              "id": "pkg-config 0.3.27",
               "target": "pkg_config"
             }
           ],

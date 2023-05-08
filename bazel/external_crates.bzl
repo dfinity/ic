@@ -537,6 +537,10 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                     "improved_unicode",
                 ],
             ),
+            "indicatif_0_17_3": crate.spec(
+                package = "indicatif",
+                version = "^0.17.3",
+            ),
             "indoc": crate.spec(
                 version = "^1.0.6",
             ),

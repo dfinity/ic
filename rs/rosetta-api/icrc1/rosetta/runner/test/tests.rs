@@ -1,5 +1,5 @@
-use candid::Principal;
 use ic_icrc_rosetta_runner::start_rosetta;
+use ic_icrc_rosetta_runner::RosettaOptions;
 use ic_starter_tests::{start_replica, ReplicaBins, ReplicaStarterConfig};
 use reqwest::StatusCode;
 use std::path::PathBuf;
@@ -27,7 +27,14 @@ async fn test() {
     let replica_url = format!("http://localhost:{}", context.port);
 
     let rosetta_bin = path_from_env("ROSETTA_BIN_PATH");
-    let context = start_rosetta(&rosetta_bin, Principal::anonymous(), replica_url).await;
+    let context = start_rosetta(
+        &rosetta_bin,
+        RosettaOptions {
+            network_url: Some(replica_url),
+            ..RosettaOptions::default()
+        },
+    )
+    .await;
     let res = reqwest::get(format!("http://localhost:{}/health", context.port))
         .await
         .expect("Unable to GET /health");

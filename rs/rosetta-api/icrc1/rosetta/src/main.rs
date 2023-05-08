@@ -11,11 +11,14 @@ use ic_agent::{
     agent::http_transport::ReqwestHttpReplicaV2Transport, identity::AnonymousIdentity, Agent,
 };
 use ic_base_types::CanisterId;
-use ic_icrc_rosetta::{common::storage::storage_client::StorageClient, AppState};
+use ic_icrc_rosetta::{
+    common::storage::storage_client::StorageClient,
+    ledger_blocks_synchronization::blocks_synchronizer::start_synching_blocks, AppState,
+};
 use icrc_ledger_agent::Icrc1Agent;
 use lazy_static::lazy_static;
-use std::path::PathBuf;
 use std::{net::TcpListener, sync::Arc};
+use std::{path::PathBuf, process};
 use tower_http::classify::{ServerErrorsAsFailures, SharedClassifier};
 use tower_http::trace::TraceLayer;
 use tower_request_id::{RequestId, RequestIdLayer};
@@ -26,6 +29,7 @@ mod endpoints;
 lazy_static! {
     static ref MAINNET_DEFAULT_URL: &'static str = "https://ic0.app";
     static ref TESTNET_DEFAULT_URL: &'static str = "https://exchanges.testnet.dfinity.network";
+    static ref MAXIMUM_BLOCKS_PER_REQUEST: u64 = 2000;
 }
 
 #[derive(Clone, Debug, ValueEnum)]
@@ -76,6 +80,14 @@ struct Args {
 
     #[arg(short = 'L', long, default_value_t = Level::INFO)]
     log_level: Level,
+
+    /// Set this option to only do one full sync of the ledger and then exit rosetta
+    #[arg(long = "exit-on-sync")]
+    exit_on_sync: bool,
+
+    /// Set this option to only run the rosetta server, no block synchronization will be performed and no transactions can be submitted in this mode.
+    #[arg(long)]
+    offline: bool,
 }
 
 impl Args {
@@ -178,10 +190,25 @@ async fn main() -> Result<()> {
         ic_agent.status().await?.replica_health_status
     );
 
-    let _icrc1_agent = Icrc1Agent {
+    let icrc1_agent = Arc::new(Icrc1Agent {
         agent: ic_agent,
         ledger_canister_id: args.ledger_id.into(),
-    };
+    });
+
+    if !args.offline {
+        info!("Starting to sync blocks");
+        start_synching_blocks(
+            icrc1_agent.clone(),
+            storage.clone(),
+            *MAXIMUM_BLOCKS_PER_REQUEST,
+        )
+        .await?;
+    }
+
+    // If the option of exiting after the synchronization is completed is set we can exit rosetta
+    if args.exit_on_sync {
+        process::exit(0);
+    }
 
     let app = Router::new()
         .route("/health", get(health))

@@ -1,6 +1,6 @@
-use candid::Principal;
 use ic_icrc_rosetta_client::RosettaClient;
 use ic_icrc_rosetta_runner::start_rosetta;
+use ic_icrc_rosetta_runner::RosettaOptions;
 use ic_starter_tests::{start_replica, ReplicaBins, ReplicaStarterConfig};
 use std::path::PathBuf;
 
@@ -29,7 +29,14 @@ async fn test_health() {
     let replica_url = format!("http://localhost:{}", context.port);
 
     let rosetta_bin = path_from_env("ROSETTA_BIN_PATH");
-    let context = start_rosetta(&rosetta_bin, Principal::anonymous(), replica_url).await;
+    let context = start_rosetta(
+        &rosetta_bin,
+        RosettaOptions {
+            network_url: Some(replica_url),
+            ..RosettaOptions::default()
+        },
+    )
+    .await;
     let client = RosettaClient::from_str_url(&format!("http://0.0.0.0:{}", context.port))
         .expect("Unable to parse url");
     assert!(client.health().await.is_ok())
