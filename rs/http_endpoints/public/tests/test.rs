@@ -1,3 +1,8 @@
+// Using a `pub mod` works around spurious dead code warnings; see
+// https://users.rust-lang.org/t/invalid-dead-code-warning-for-submodule-in-integration-test/80259/2 and
+// https://github.com/rust-lang/rust/issues/46379
+pub mod common;
+
 use crate::common::{
     basic_consensus_pool_cache, basic_registry_client, basic_state_manager_mock,
     create_conn_and_send_request, get_free_localhost_socket_addr, start_http_endpoint,
@@ -60,8 +65,6 @@ use tokio::{
     time::{sleep, Duration},
 };
 use tower::ServiceExt;
-
-mod common;
 
 #[test]
 fn test_healthy_behind() {
