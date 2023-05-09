@@ -3,18 +3,22 @@ use crate::{
     pool_common::PoolSection,
 };
 use ic_interfaces::{
-    artifact_pool::{MutablePool, UnvalidatedArtifact, ValidatedArtifact, ValidatedPoolReader},
+    artifact_pool::{
+        ChangeResult, MutablePool, UnvalidatedArtifact, ValidatedArtifact, ValidatedPoolReader,
+    },
     dkg::{ChangeAction, ChangeSet, DkgPool},
     time_source::TimeSource,
 };
 use ic_metrics::MetricsRegistry;
-use ic_types::consensus::dkg;
 use ic_types::{
+    artifact::{ArtifactKind, DkgMessageId},
     artifact_kind::DkgArtifact,
+    consensus,
+    consensus::dkg,
     crypto::CryptoHashOf,
     time::{current_time, Time},
+    Height,
 };
-use ic_types::{consensus, Height};
 use std::{ops::Sub, time::Duration};
 
 /// The DkgPool is used to store messages that are exchanged between replicas in
@@ -53,8 +57,9 @@ impl DkgPoolImpl {
     }
 
     /// Deletes all validated and unvalidated messages, which do not correspond
-    /// to the current DKG interval.
-    fn purge(&mut self, height: Height) {
+    /// to the current DKG interval. Return the Ids of validated messages that were
+    /// purged
+    fn purge(&mut self, height: Height) -> Vec<DkgMessageId> {
         self.current_start_height = height;
         // TODO: use drain_filter once it's stable.
         let unvalidated_keys: Vec<_> = self
@@ -75,9 +80,10 @@ impl DkgPoolImpl {
             .map(|(hash, _)| hash)
             .cloned()
             .collect();
-        for hash in validated_keys {
-            self.validated.remove(&hash);
+        for hash in &validated_keys {
+            self.validated.remove(hash);
         }
+        validated_keys
     }
 
     /// Returns the validated entries that have creation timestamp <= timestamp
@@ -105,13 +111,20 @@ impl MutablePool<DkgArtifact, ChangeSet> for DkgPoolImpl {
     /// It panics if we pass a hash for an artifact to be moved into the
     /// validated section, but it cannot be found in the unvalidated
     /// section.
-    fn apply_changes(&mut self, _time_source: &dyn TimeSource, change_set: ChangeSet) {
+    fn apply_changes(
+        &mut self,
+        _time_source: &dyn TimeSource,
+        change_set: ChangeSet,
+    ) -> ChangeResult<DkgArtifact> {
+        let mut adverts = Vec::new();
+        let mut purged = Vec::new();
         for action in change_set {
             match action {
                 ChangeAction::HandleInvalid(hash, _) => {
                     self.unvalidated.remove(&hash);
                 }
                 ChangeAction::AddToValidated(message) => {
+                    adverts.push(DkgArtifact::message_to_advert(&message));
                     self.validated.insert(
                         ic_types::crypto::crypto_hash(&message),
                         ValidatedArtifact {
@@ -121,6 +134,7 @@ impl MutablePool<DkgArtifact, ChangeSet> for DkgPoolImpl {
                     );
                 }
                 ChangeAction::MoveToValidated(message) => {
+                    adverts.push(DkgArtifact::message_to_advert(&message));
                     let hash = ic_types::crypto::crypto_hash(&message);
                     self.unvalidated
                         .remove(&hash)
@@ -139,9 +153,10 @@ impl MutablePool<DkgArtifact, ChangeSet> for DkgPoolImpl {
                         .remove(&hash)
                         .expect("Unvalidated artifact was not found.");
                 }
-                ChangeAction::Purge(height) => self.purge(height),
+                ChangeAction::Purge(height) => purged.append(&mut self.purge(height)),
             }
         }
+        ChangeResult(purged, adverts)
     }
 }
 
@@ -229,7 +244,7 @@ mod test {
         let last_dkg_id_start_height = Height::from(10);
         let mut pool = DkgPoolImpl::new(MetricsRegistry::new());
         // add two validated messages, one for every DKG instance
-        pool.apply_changes(
+        let ChangeResult(purged, adverts) = pool.apply_changes(
             &SysTimeSource::new(),
             [
                 make_message(current_dkg_id_start_height, node_test_id(0)),
@@ -252,23 +267,29 @@ mod test {
             timestamp: mock_time(),
         });
         // ensure we have 2 validated and 2 unvalidated artifacts
+        assert_eq!(adverts.len(), 2);
+        assert!(purged.is_empty());
         assert_eq!(pool.get_validated().count(), 2);
         assert_eq!(pool.get_unvalidated().count(), 2);
 
         // purge below the height of the current dkg and make sure the older artifacts
         // are purged from the validated and unvalidated sections
-        pool.apply_changes(
+        let ChangeResult(purged, adverts) = pool.apply_changes(
             &SysTimeSource::new(),
             vec![ChangeAction::Purge(current_dkg_id_start_height)],
         );
+        assert_eq!(purged.len(), 1);
+        assert!(adverts.is_empty());
         assert_eq!(pool.get_validated().count(), 1);
         assert_eq!(pool.get_unvalidated().count(), 1);
 
         // purge the highest height and make sure everything is gone
-        pool.apply_changes(
+        let ChangeResult(purged, adverts) = pool.apply_changes(
             &SysTimeSource::new(),
             vec![ChangeAction::Purge(current_dkg_id_start_height.increment())],
         );
+        assert_eq!(purged.len(), 1);
+        assert!(adverts.is_empty());
         assert_eq!(pool.get_validated().count(), 0);
         assert_eq!(pool.get_unvalidated().count(), 0);
     }

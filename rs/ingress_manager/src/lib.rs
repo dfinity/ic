@@ -204,7 +204,7 @@ pub(crate) mod tests {
     use super::*;
     use ic_artifact_pool::ingress_pool::IngressPoolImpl;
     use ic_interfaces::{
-        artifact_pool::{MutablePool, UnvalidatedArtifact, ValidatedPoolReader},
+        artifact_pool::{ChangeResult, MutablePool, UnvalidatedArtifact, ValidatedPoolReader},
         ingress_pool::{
             ChangeSet, IngressPool, PoolSection, UnvalidatedIngressArtifact,
             ValidatedIngressArtifact,
@@ -296,6 +296,7 @@ pub(crate) mod tests {
                         .build(),
                 );
                 let ingress_pool = Arc::new(RwLock::new(IngressPoolImpl::new(
+                    node_test_id(VALIDATOR_NODE_ID),
                     pool_config,
                     metrics_registry.clone(),
                     log.clone(),
@@ -354,7 +355,11 @@ pub(crate) mod tests {
             self.0.insert(unvalidated_artifact)
         }
 
-        fn apply_changes(&mut self, time_source: &dyn TimeSource, change_set: ChangeSet) {
+        fn apply_changes(
+            &mut self,
+            time_source: &dyn TimeSource,
+            change_set: ChangeSet,
+        ) -> ChangeResult<IngressArtifact> {
             self.0.apply_changes(time_source, change_set)
         }
     }

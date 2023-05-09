@@ -3,7 +3,7 @@
 use crate::time_source::TimeSource;
 use derive_more::From;
 use ic_types::{
-    artifact::{ArtifactKind, PriorityFn},
+    artifact::{Advert, ArtifactKind, PriorityFn},
     replica_version::ReplicaVersion,
     CountBytes, NodeId, Time,
 };
@@ -32,6 +32,10 @@ pub trait ChangeSetProducer<Pool>: Send {
     fn on_state_change(&self, pool: &Pool) -> Self::ChangeSet;
 }
 
+/// Ids of validated artifacts that were purged during the pool mutation, and adverts
+/// of artifacts that were validated during the pool mutation.
+pub struct ChangeResult<Artifact: ArtifactKind>(pub Vec<Artifact::Id>, pub Vec<Advert<Artifact>>);
+
 /// Defines the canonical way for mutating an artifact pool.
 /// Mutations should happen from a single place/component.
 pub trait MutablePool<Artifact: ArtifactKind, C> {
@@ -44,7 +48,11 @@ pub trait MutablePool<Artifact: ArtifactKind, C> {
     }
 
     /// Applies a set of change actions to the pool.
-    fn apply_changes(&mut self, time_source: &dyn TimeSource, change_set: C);
+    fn apply_changes(
+        &mut self,
+        time_source: &dyn TimeSource,
+        change_set: C,
+    ) -> ChangeResult<Artifact>;
 }
 
 pub trait PriorityFnAndFilterProducer<Artifact: ArtifactKind, Pool>: Send + Sync {

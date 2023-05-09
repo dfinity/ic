@@ -191,6 +191,7 @@ impl<'a> ConsensusRunner<'a> {
             out_queue: Default::default(),
 
             driver: ConsensusDriver::new(
+                node_id,
                 pool_config,
                 consensus,
                 dkg,

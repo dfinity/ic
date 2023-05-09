@@ -96,6 +96,7 @@ fn execute_test(
         ));
 
         let artifact_pools = init_artifact_pools(
+            node_id,
             subnet_id,
             artifact_pool_config,
             metrics_registry.clone(),
@@ -259,6 +260,7 @@ fn execute_test_chunking_pool(
             Arc::new(FakeLocalStoreCertifiedTimeReader::new(time_source));
 
         let artifact_pools = init_artifact_pools(
+            node_id,
             subnet_id,
             artifact_pool_config,
             metrics_registry.clone(),

@@ -92,6 +92,7 @@ pub fn construct_ic_stack(
     };
     let artifact_pool_config = ArtifactPoolConfig::from(config.artifact_pool.clone());
     let artifact_pools = init_artifact_pools(
+        node_id,
         subnet_id,
         artifact_pool_config,
         metrics_registry.clone(),

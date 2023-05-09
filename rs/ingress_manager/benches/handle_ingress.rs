@@ -64,6 +64,8 @@ const MAX_INGRESS_COUNT_PER_PAYLOAD: usize = 1000;
 /// Block time
 const BLOCK_TIME: Duration = Duration::from_secs(2);
 
+const VALIDATOR_NODE_ID: u64 = 42;
+
 type Histories = Arc<RwLock<Vec<Arc<(Time, HashSet<MessageId>)>>>>;
 
 struct SimulatedIngressHistory {
@@ -197,7 +199,6 @@ where
                 .returning(move || Some(time_source_cl.get_relative_time()));
 
             let subnet_id = subnet_test_id(0);
-            const VALIDATOR_NODE_ID: u64 = 42;
             let ingress_signature_crypto = Arc::new(temp_crypto_component_with_fake_registry(
                 node_test_id(VALIDATOR_NODE_ID),
             ));
@@ -211,6 +212,7 @@ where
 
             let metrics_registry = MetricsRegistry::new();
             let ingress_pool = Arc::new(RwLock::new(IngressPoolImpl::new(
+                node_test_id(VALIDATOR_NODE_ID),
                 pool_config.clone(),
                 metrics_registry.clone(),
                 no_op_logger(),
@@ -268,7 +270,12 @@ fn setup(
     log: ReplicaLogger,
     messages: Vec<SignedIngress>,
 ) -> (IngressPoolImpl, BTreeMap<Time, MessageId>) {
-    let mut pool = IngressPoolImpl::new(pool_config, MetricsRegistry::new(), log);
+    let mut pool = IngressPoolImpl::new(
+        node_test_id(VALIDATOR_NODE_ID),
+        pool_config,
+        MetricsRegistry::new(),
+        log,
+    );
     let mut message_ids = BTreeMap::new();
     let timestamp = time_source.get_relative_time();
     for (i, ingress) in messages.into_iter().enumerate() {

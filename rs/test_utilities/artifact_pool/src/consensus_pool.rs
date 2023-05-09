@@ -3,7 +3,7 @@ use ic_artifact_pool::dkg_pool::DkgPoolImpl;
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_interfaces::{
-    artifact_pool::MutablePool,
+    artifact_pool::{ChangeResult, MutablePool},
     consensus_pool::{
         ChangeAction, ChangeSet, ConsensusBlockCache, ConsensusPool, ConsensusPoolCache,
         PoolSection, UnvalidatedConsensusArtifact, ValidatedConsensusArtifact,
@@ -642,7 +642,7 @@ impl TestConsensusPool {
         self.apply_changes(
             time_source.as_ref(),
             vec![ChangeAction::AddToValidated(msg)],
-        )
+        );
     }
 
     pub fn remove_validated<T: ConsensusMessageHashable>(&mut self, value: T) {
@@ -651,7 +651,7 @@ impl TestConsensusPool {
         self.apply_changes(
             time_source.as_ref(),
             vec![ChangeAction::RemoveFromValidated(msg)],
-        )
+        );
     }
 
     pub fn insert_validated<T: ConsensusMessageHashable>(&mut self, value: T) {
@@ -660,7 +660,7 @@ impl TestConsensusPool {
         self.apply_changes(
             time_source.as_ref(),
             vec![ChangeAction::AddToValidated(msg)],
-        )
+        );
     }
 
     pub fn remove_unvalidated<T: ConsensusMessageHashable>(&mut self, value: T) {
@@ -669,7 +669,7 @@ impl TestConsensusPool {
         self.apply_changes(
             time_source.as_ref(),
             vec![ChangeAction::RemoveFromUnvalidated(msg)],
-        )
+        );
     }
 
     pub fn insert_unvalidated<T: ConsensusMessageHashable>(&mut self, value: T) {
@@ -712,7 +712,11 @@ impl MutablePool<ConsensusArtifact, ChangeSet> for TestConsensusPool {
         self.pool.insert(unvalidated_artifact)
     }
 
-    fn apply_changes(&mut self, time_source: &dyn TimeSource, change_set: ChangeSet) {
+    fn apply_changes(
+        &mut self,
+        time_source: &dyn TimeSource,
+        change_set: ChangeSet,
+    ) -> ChangeResult<ConsensusArtifact> {
         self.pool.apply_changes(time_source, change_set)
     }
 }

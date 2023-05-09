@@ -14,7 +14,7 @@ use ic_interfaces::{
 use ic_logger::{debug, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_test_artifact_pool::ingress_pool::TestIngressPool;
-use ic_types::consensus::ConsensusMessage;
+use ic_types::{consensus::ConsensusMessage, NodeId};
 use std::cell::RefCell;
 use std::sync::{Arc, RwLock};
 
@@ -24,6 +24,7 @@ impl<'a> ConsensusDriver<'a> {
     /// component.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
+        node_id: NodeId,
         pool_config: ArtifactPoolConfig,
         consensus: ConsensusImpl,
         dkg: ic_consensus::dkg::DkgImpl,
@@ -35,7 +36,7 @@ impl<'a> ConsensusDriver<'a> {
         logger: ReplicaLogger,
         metrics_registry: MetricsRegistry,
     ) -> ConsensusDriver<'a> {
-        let ingress_pool = RefCell::new(TestIngressPool::new(pool_config.clone()));
+        let ingress_pool = RefCell::new(TestIngressPool::new(node_id, pool_config.clone()));
         let certification_pool = Arc::new(RwLock::new(CertificationPoolImpl::new(
             pool_config,
             logger.clone(),

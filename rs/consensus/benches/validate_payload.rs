@@ -126,6 +126,7 @@ where
         ));
 
         let ingress_pool = Arc::new(RwLock::new(IngressPoolImpl::new(
+            node_test_id(VALIDATOR_NODE_ID),
             pool_config,
             metrics_registry.clone(),
             no_op_logger(),

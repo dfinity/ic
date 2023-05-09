@@ -158,7 +158,7 @@ fn consensus_produces_expected_batches() {
             no_op_logger(),
         );
         let certifier = CertifierImpl::new(
-            replica_config,
+            replica_config.clone(),
             Arc::clone(&membership) as Arc<_>,
             Arc::clone(&fake_crypto) as Arc<_>,
             Arc::clone(&state_manager) as Arc<_>,
@@ -168,6 +168,7 @@ fn consensus_produces_expected_batches() {
         );
 
         let driver = ConsensusDriver::new(
+            replica_config.node_id,
             pool_config,
             consensus,
             dkg,

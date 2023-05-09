@@ -10,7 +10,7 @@
 use crate::metrics::{EcdsaPoolMetrics, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED};
 use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
 use ic_interfaces::artifact_pool::{
-    IntoInner, MutablePool, UnvalidatedArtifact, ValidatedPoolReader,
+    ChangeResult, IntoInner, MutablePool, UnvalidatedArtifact, ValidatedPoolReader,
 };
 use ic_interfaces::ecdsa::{
     EcdsaChangeAction, EcdsaChangeSet, EcdsaPool, EcdsaPoolSection, EcdsaPoolSectionOp,
@@ -19,7 +19,7 @@ use ic_interfaces::ecdsa::{
 use ic_interfaces::time_source::{SysTimeSource, TimeSource};
 use ic_logger::{info, warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
-use ic_types::artifact::EcdsaMessageId;
+use ic_types::artifact::{ArtifactKind, EcdsaMessageId};
 use ic_types::artifact_kind::EcdsaArtifact;
 use ic_types::consensus::BlockPayload;
 use ic_types::consensus::{
@@ -381,33 +381,46 @@ impl MutablePool<EcdsaArtifact, EcdsaChangeSet> for EcdsaPoolImpl {
         self.unvalidated.mutate(ops);
     }
 
-    fn apply_changes(&mut self, _time_source: &dyn TimeSource, change_set: EcdsaChangeSet) {
+    fn apply_changes(
+        &mut self,
+        _time_source: &dyn TimeSource,
+        change_set: EcdsaChangeSet,
+    ) -> ChangeResult<EcdsaArtifact> {
         let mut unvalidated_ops = EcdsaPoolSectionOps::new();
         let mut validated_ops = EcdsaPoolSectionOps::new();
+        let mut adverts = Vec::new();
+        let mut purged = Vec::new();
         for action in change_set {
             match action {
                 EcdsaChangeAction::AddToValidated(message) => {
+                    adverts.push(EcdsaArtifact::message_to_advert(&message));
                     validated_ops.insert(message);
                 }
                 EcdsaChangeAction::MoveToValidated(message) => {
+                    match &message {
+                        EcdsaMessage::EcdsaDealingSupport(_) => (),
+                        _ => adverts.push(EcdsaArtifact::message_to_advert(&message)),
+                    }
                     unvalidated_ops.remove(ecdsa_msg_id(&message));
                     validated_ops.insert(message);
                 }
-                EcdsaChangeAction::RemoveValidated(ref msg_id) => {
-                    validated_ops.remove(msg_id.clone());
+                EcdsaChangeAction::RemoveValidated(msg_id) => {
+                    purged.push(msg_id.clone());
+                    validated_ops.remove(msg_id);
                 }
-                EcdsaChangeAction::RemoveUnvalidated(ref msg_id) => {
-                    unvalidated_ops.remove(msg_id.clone());
+                EcdsaChangeAction::RemoveUnvalidated(msg_id) => {
+                    unvalidated_ops.remove(msg_id);
                 }
-                EcdsaChangeAction::HandleInvalid(ref msg_id, ref msg) => {
-                    if self.unvalidated.as_pool_section().contains(msg_id) {
-                        unvalidated_ops.remove(msg_id.clone());
-                    } else if self.validated.as_pool_section().contains(msg_id) {
-                        validated_ops.remove(msg_id.clone());
+                EcdsaChangeAction::HandleInvalid(msg_id, msg) => {
+                    if self.unvalidated.as_pool_section().contains(&msg_id) {
+                        unvalidated_ops.remove(msg_id);
+                    } else if self.validated.as_pool_section().contains(&msg_id) {
+                        purged.push(msg_id.clone());
+                        validated_ops.remove(msg_id);
                     } else {
                         warn!(
                             self.log,
-                            "HandleInvalid:: artifact was not found: {:?}, msg = {}", action, msg
+                            "HandleInvalid:: artifact was not found: msg_id = {msg_id:?}, msg = {msg}" 
                         );
                     }
                 }
@@ -416,6 +429,7 @@ impl MutablePool<EcdsaArtifact, EcdsaChangeSet> for EcdsaPoolImpl {
 
         self.unvalidated.mutate(unvalidated_ops);
         self.validated.mutate(validated_ops);
+        ChangeResult(purged, adverts)
     }
 }
 
@@ -565,9 +579,12 @@ mod tests {
                 });
             } else {
                 let change_set = vec![EcdsaChangeAction::AddToValidated(
-                    EcdsaMessage::EcdsaDealingSupport(support),
+                    EcdsaMessage::EcdsaDealingSupport(support.clone()),
                 )];
-                ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
+                let ChangeResult(purged, adverts) =
+                    ecdsa_pool.apply_changes(&SysTimeSource::new(), change_set);
+                assert!(purged.is_empty());
+                assert_eq!(adverts[0].id, support.message_id());
             }
         }
 
@@ -827,12 +844,34 @@ mod tests {
                     });
                     (msg_id, msg)
                 };
+                let msg_3 = {
+                    let support = IDkgDealingSupport {
+                        transcript_id: dummy_idkg_transcript_id_for_tests(100),
+                        dealer_id: NODE_2,
+                        dealing_hash: CryptoHashOf::new(CryptoHash(vec![1])),
+                        sig_share: BasicSignature::fake(NODE_2),
+                    };
+                    let msg = EcdsaMessage::EcdsaDealingSupport(support);
+                    ecdsa_pool.insert(UnvalidatedArtifact {
+                        message: msg.clone(),
+                        peer_id: NODE_1,
+                        timestamp: time_source.get_relative_time(),
+                    });
+                    msg
+                };
                 check_state(&ecdsa_pool, &[msg_id_2.clone()], &[msg_id_1.clone()]);
 
-                ecdsa_pool.apply_changes(
+                let ChangeResult(purged, adverts) = ecdsa_pool.apply_changes(
                     &SysTimeSource::new(),
-                    vec![EcdsaChangeAction::MoveToValidated(msg_2)],
+                    vec![
+                        EcdsaChangeAction::MoveToValidated(msg_2),
+                        EcdsaChangeAction::MoveToValidated(msg_3),
+                    ],
                 );
+                assert!(purged.is_empty());
+                // No advert is created for moved dealing support
+                assert_eq!(adverts.len(), 1);
+                assert_eq!(adverts[0].id, msg_id_2);
                 check_state(&ecdsa_pool, &[], &[msg_id_1, msg_id_2]);
             })
         })
@@ -883,16 +922,20 @@ mod tests {
                     &[msg_id_1.clone(), msg_id_2.clone()],
                 );
 
-                ecdsa_pool.apply_changes(
+                let ChangeResult(purged, adverts) = ecdsa_pool.apply_changes(
                     &SysTimeSource::new(),
-                    vec![EcdsaChangeAction::RemoveValidated(msg_id_1)],
+                    vec![EcdsaChangeAction::RemoveValidated(msg_id_1.clone())],
                 );
+                assert!(adverts.is_empty());
+                assert_eq!(purged, vec![msg_id_1]);
                 check_state(&ecdsa_pool, &[msg_id_3.clone()], &[msg_id_2.clone()]);
 
-                ecdsa_pool.apply_changes(
+                let ChangeResult(purged, adverts) = ecdsa_pool.apply_changes(
                     &SysTimeSource::new(),
-                    vec![EcdsaChangeAction::RemoveValidated(msg_id_2)],
+                    vec![EcdsaChangeAction::RemoveValidated(msg_id_2.clone())],
                 );
+                assert!(adverts.is_empty());
+                assert_eq!(purged, vec![msg_id_2]);
                 check_state(&ecdsa_pool, &[msg_id_3], &[]);
             })
         })
@@ -919,10 +962,12 @@ mod tests {
                 };
                 check_state(&ecdsa_pool, &[msg_id.clone()], &[]);
 
-                ecdsa_pool.apply_changes(
+                let ChangeResult(purged, adverts) = ecdsa_pool.apply_changes(
                     &SysTimeSource::new(),
                     vec![EcdsaChangeAction::RemoveUnvalidated(msg_id)],
                 );
+                assert!(purged.is_empty());
+                assert!(adverts.is_empty());
                 check_state(&ecdsa_pool, &[], &[]);
             })
         })
