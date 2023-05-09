@@ -98,9 +98,8 @@ pub mod util {
             let public_key = crypto::individual_public_key(public_coefficients, index as NodeIndex);
 
             // Correct values validate:
-            assert_eq!(
+            assert!(
                 crypto::verify(message, signature, &public_key),
-                Ok(()),
                 "Individual signature failed verification for signatory number {}/{}",
                 index,
                 secret_keys.len()
@@ -112,7 +111,7 @@ pub mod util {
                 let wrong_public_key =
                     crypto::individual_public_key(public_coefficients, wrong_index as NodeIndex);
                 assert!(
-                    crypto::verify(message, signature, &wrong_public_key).is_err(),
+                    !crypto::verify(message, signature, &wrong_public_key),
                     "Individual signature verification accepted incorrect signatory {} instead of {}/{}",
                     wrong_index,
                     index,
@@ -132,7 +131,7 @@ pub mod util {
             .expect("Failed to combine signatures");
 
         // Correct values validate:
-        assert_eq!(crypto::verify(message, &signature, &public_key), Ok(()));
+        assert!(crypto::verify(message, &signature, &public_key));
 
         // Incorrect values are rejected:
         if !public_coefficients.coefficients.is_empty() {
@@ -141,12 +140,12 @@ pub mod util {
                 incorrect_message != message,
                 "Bad test: The messages should be different"
             );
-            assert!(crypto::verify(&incorrect_message, &signature, &public_key).is_err());
+            assert!(!crypto::verify(&incorrect_message, &signature, &public_key));
         }
         if public_coefficients.coefficients.len() > 1 {
             let some_individual_signature = signatures[0].clone();
             assert!(
-                crypto::verify(message, &some_individual_signature, &public_key).is_err(),
+                !crypto::verify(message, &some_individual_signature, &public_key),
                 "Signature verification passed with incorrect signature: got {:?} expected {:?}",
                 some_individual_signature,
                 signature
@@ -155,7 +154,11 @@ pub mod util {
         if public_coefficients.coefficients.len() > 1 {
             let some_individual_public_key =
                 crypto::individual_public_key(public_coefficients, 11_u32);
-            assert!(crypto::verify(message, &signature, &some_individual_public_key).is_err());
+            assert!(!crypto::verify(
+                message,
+                &signature,
+                &some_individual_public_key
+            ));
         }
     }
 
@@ -272,7 +275,7 @@ fn omnipotent_dealer() {
             let signature = crypto::sign_message(message, secret_key);
             let public_key =
                 crypto::individual_public_key(&public_coefficients, index as NodeIndex);
-            assert!(crypto::verify(&message[..], &signature, &public_key).is_ok());
+            assert!(crypto::verify(&message[..], &signature, &public_key));
             Some(signature)
         })
         .collect();
@@ -281,10 +284,11 @@ fn omnipotent_dealer() {
         crypto::combine_signatures(&signature_options, threshold)
             .expect("Combining signatures failed");
 
-    assert_eq!(
-        crypto::verify(&message[..], &combined_signature, &public_key),
-        Ok(())
-    );
+    assert!(crypto::verify(
+        &message[..],
+        &combined_signature,
+        &public_key
+    ));
 }
 
 proptest! {

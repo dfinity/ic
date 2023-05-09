@@ -14,6 +14,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
 use std::fmt::{self, Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
+use std::num::TryFromIntError;
 
 pub mod conversions;
 pub mod proto_conversions;
@@ -1084,8 +1085,8 @@ impl Debug for IDkgOpening {
     }
 }
 
-fn number_of_nodes_from_usize(number: usize) -> Result<NumberOfNodes, ()> {
-    let count = NodeIndex::try_from(number).map_err(|_| ())?;
+fn number_of_nodes_from_usize(number: usize) -> Result<NumberOfNodes, TryFromIntError> {
+    let count = NodeIndex::try_from(number)?;
     Ok(NumberOfNodes::from(count))
 }
 

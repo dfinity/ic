@@ -21,21 +21,20 @@ pub fn fs_ni_dkg_pubkey_from_proto(
             error: format!("{}", e),
         }
     })?;
-    let dkg_dealing_enc_pubkey = clib_fs_ni_dkg_pubkey_from_csp_pubkey_with_pop(&csp_pk, &csp_pop)
-        .map_err(|_| FsNiDkgPubkeyFromPubkeyProtoError::InternalConversion)?;
-    Ok(dkg_dealing_enc_pubkey)
+    clib_fs_ni_dkg_pubkey_from_csp_pubkey_with_pop(&csp_pk, &csp_pop)
+        .ok_or(FsNiDkgPubkeyFromPubkeyProtoError::InternalConversion)
 }
 
 fn clib_fs_ni_dkg_pubkey_from_csp_pubkey_with_pop(
     csp_pubkey: &CspFsEncryptionPublicKey,
     csp_pop: &CspFsEncryptionPop,
-) -> Result<ClibFsNiDkgPublicKey, ()> {
+) -> Option<ClibFsNiDkgPublicKey> {
     match (csp_pubkey, csp_pop) {
         (
             CspFsEncryptionPublicKey::Groth20_Bls12_381(pubkey),
             CspFsEncryptionPop::Groth20WithPop_Bls12_381(pop),
-        ) => ClibFsNiDkgPublicKey::deserialize(pubkey, pop).ok_or(()),
-        _ => Err(()),
+        ) => ClibFsNiDkgPublicKey::deserialize(pubkey, pop),
+        _ => None,
     }
 }
 

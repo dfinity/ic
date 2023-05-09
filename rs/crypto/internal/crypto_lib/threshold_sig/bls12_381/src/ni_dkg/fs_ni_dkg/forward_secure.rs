@@ -17,6 +17,9 @@ use crate::ni_dkg::fs_ni_dkg::encryption_key_pop::{
 };
 use crate::ni_dkg::fs_ni_dkg::random_oracles::{random_oracle, HashedMap};
 
+use crate::ni_dkg::fs_ni_dkg::forward_secure::CiphertextIntegrityError::{
+    CrszVectorsLengthMismatch, InvalidNidkgCiphertext,
+};
 use crate::ni_dkg::groth20_bls12_381::types::{BTENodeBytes, FsEncryptionSecretKey};
 use ic_crypto_internal_bls12_381_type::{
     G1Affine, G1Projective, G2Affine, G2Prepared, G2Projective, Gt, Scalar,
@@ -856,8 +859,6 @@ pub fn dec_chunks(
     Ok(PlaintextChunks::from_dlogs(&dlogs).recombine_to_scalar())
 }
 
-// TODO(IDX-1866)
-#[allow(clippy::result_unit_err)]
 /// Verify ciphertext integrity
 ///
 /// Part of DVfy of Section 7.1 of <https://eprint.iacr.org/2021/339.pdf>
@@ -869,7 +870,7 @@ pub fn verify_ciphertext_integrity(
     epoch: Epoch,
     associated_data: &[u8],
     sys: &SysParam,
-) -> Result<(), ()> {
+) -> Result<(), CiphertextIntegrityError> {
     let n = if crsz.cc.is_empty() {
         0
     } else {
@@ -879,7 +880,7 @@ pub fn verify_ciphertext_integrity(
         // In theory, this is unreachable fail because deserialization only succeeds
         // when the vectors of a CRSZ have the same length. (In practice, it's
         // surprising how often "unreachable" code is reached!)
-        return Err(());
+        return Err(CrszVectorsLengthMismatch);
     }
 
     let id = ftau_extended(&crsz.cc, &crsz.rr, &crsz.ss, sys, epoch, associated_data);
@@ -895,10 +896,16 @@ pub fn verify_ciphertext_integrity(
         let v = Gt::multipairing(&[(r, &precomp_id), (s, &sys.h_prep), (&g1_neg, &z)]);
 
         if !v.is_identity() {
-            return Err(());
+            return Err(InvalidNidkgCiphertext);
         }
     }
     Ok(())
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum CiphertextIntegrityError {
+    CrszVectorsLengthMismatch,
+    InvalidNidkgCiphertext,
 }
 
 /// Returns (tau || RO(cc, rr, ss, tau, associated_data)).
