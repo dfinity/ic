@@ -22,7 +22,7 @@ use std::convert::TryFrom;
 use std::sync::Arc;
 use std::{collections::BTreeMap, ops};
 use std::{convert::Infallible, fmt};
-use tower::{limit::ConcurrencyLimit, util::BoxCloneService};
+use tower::util::BoxCloneService;
 
 /// Instance execution statistics. The stats are cumulative and
 /// contain measurements from the point in time when the instance was
@@ -282,37 +282,20 @@ pub enum ExecutionMode {
 pub type HypervisorResult<T> = Result<T, HypervisorError>;
 
 /// Interface for the component to execute internal queries triggered by IC.
-// Since this service will be shared across many connections we must
-// make it cloneable by introducing a bounded buffer infront of it.
-// https://docs.rs/tower/0.4.10/tower/buffer/index.html
-// The buffer also dampens usage by reducing the risk of
-// spiky traffic when users retry in case failed requests.
 pub type AnonymousQueryService =
-    ConcurrencyLimit<BoxCloneService<AnonymousQuery, AnonymousQueryResponse, Infallible>>;
+    BoxCloneService<AnonymousQuery, AnonymousQueryResponse, Infallible>;
 
 /// Interface for the component to filter out ingress messages that
 /// the canister is not willing to accept.
-// Since this service will be shared across many connections we must
-// make it cloneable by introducing a bounded buffer infront of it.
-// https://docs.rs/tower/0.4.10/tower/buffer/index.html
-// The buffer also dampens usage by reducing the risk of
-// spiky traffic when users retry in case failed requests.
-pub type IngressFilterService = ConcurrencyLimit<
-    BoxCloneService<
-        (ProvisionalWhitelist, SignedIngressContent),
-        Result<(), UserError>,
-        Infallible,
-    >,
+pub type IngressFilterService = BoxCloneService<
+    (ProvisionalWhitelist, SignedIngressContent),
+    Result<(), UserError>,
+    Infallible,
 >;
 
-// Since this service will be shared across many connections we must
-// make it cloneable by introducing a bounded buffer infront of it.
-// https://docs.rs/tower/0.4.10/tower/buffer/index.html
-// The buffer also dampens usage by reducing the risk of
-// spiky traffic when users retry in case failed requests.
-pub type QueryExecutionService = ConcurrencyLimit<
-    BoxCloneService<(UserQuery, Option<CertificateDelegation>), HttpQueryResponse, Infallible>,
->;
+/// Interface for the component to execute queries.
+pub type QueryExecutionService =
+    BoxCloneService<(UserQuery, Option<CertificateDelegation>), HttpQueryResponse, Infallible>;
 
 /// Interface for the component to execute queries on canisters.  It can be used
 /// by the HttpHandler and other system components to execute queries.

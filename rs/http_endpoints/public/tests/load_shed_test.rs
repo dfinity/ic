@@ -24,6 +24,7 @@ fn test_load_shedding_query() {
 
     let config = Config {
         listen_addr: addr,
+        max_query_concurrent_requests: 1,
         ..Default::default()
     };
 

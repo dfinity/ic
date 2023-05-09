@@ -28,7 +28,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, RwLock};
 use std::task::{Context, Poll};
-use tower::{util::BoxCloneService, Service, ServiceBuilder};
+use tower::{limit::GlobalConcurrencyLimitLayer, util::BoxCloneService, Service, ServiceBuilder};
 
 #[derive(Clone)]
 pub(crate) struct QueryService {
@@ -55,16 +55,22 @@ impl QueryService {
         query_execution_service: QueryExecutionService,
         malicious_flags: MaliciousFlags,
     ) -> EndpointService {
-        let base_service = BoxCloneService::new(ServiceBuilder::new().service(Self {
-            log,
-            metrics,
-            health_status,
-            delegation_from_nns,
-            validator_executor,
-            registry_client,
-            query_execution_service,
-            malicious_flags,
-        }));
+        let base_service = BoxCloneService::new(
+            ServiceBuilder::new()
+                .layer(GlobalConcurrencyLimitLayer::new(
+                    config.max_query_concurrent_requests,
+                ))
+                .service(Self {
+                    log,
+                    metrics,
+                    health_status,
+                    delegation_from_nns,
+                    validator_executor,
+                    registry_client,
+                    query_execution_service,
+                    malicious_flags,
+                }),
+        );
         BoxCloneService::new(
             ServiceBuilder::new()
                 .layer(BodyReceiverLayer::new(&config))

@@ -42,9 +42,6 @@ use query_handler::{HttpQueryHandler, QueryScheduler, QuerySchedulerFlag};
 pub use scheduler::RoundSchedule;
 use scheduler::SchedulerImpl;
 use std::sync::Arc;
-use tower::limit::GlobalConcurrencyLimitLayer;
-
-const MAX_INFLIGHT_QUERIES_PER_THREAD: usize = 100;
 
 /// When executing a wasm method of query type, this enum indicates if we are
 /// running in an replicated or non-replicated context. This information is
@@ -151,25 +148,19 @@ impl ExecutionServices {
             QuerySchedulerFlag::UseNewSchedulingAlgorithm,
         );
 
-        let concurrency_buffer = GlobalConcurrencyLimitLayer::new(
-            config.query_execution_threads_total * MAX_INFLIGHT_QUERIES_PER_THREAD,
-        );
         // Creating the async services require that a tokio runtime context is available.
 
         let async_query_handler = HttpQueryHandler::new_service(
-            concurrency_buffer.clone(),
             Arc::clone(&sync_query_handler) as Arc<_>,
             query_scheduler.clone(),
             Arc::clone(&state_reader),
         );
         let ingress_filter = IngressFilter::new_service(
-            concurrency_buffer.clone(),
             query_scheduler.clone(),
             Arc::clone(&state_reader),
             Arc::clone(&exec_env),
         );
         let anonymous_query_handler = AnonymousQueryHandler::new_service(
-            concurrency_buffer,
             query_scheduler,
             Arc::clone(&state_reader),
             Arc::clone(&exec_env),
