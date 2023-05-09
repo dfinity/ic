@@ -12,4 +12,4 @@ export PATH="$CANDID_PATH:$PATH"
 
 didc --version
 
-find . -name "*.did" -type f ! -path "./rs/nns/empty.did" -exec "$SCRIPT" {} \+
+find . -name "*.did" -type f ! -path "./rs/nns/empty.did" ! -path "./.git/*" -exec "$SCRIPT" {} \+

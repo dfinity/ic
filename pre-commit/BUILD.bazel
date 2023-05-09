@@ -211,7 +211,10 @@ sh_test(
         "script_path": "$(rootpath //gitlab-ci/src/checks:candid_changes_are_backwards_compatible.py)",
         "candid_path": "$(rootpath @candid//:didc)",
     },
-    env_inherit = ["CI_MERGE_REQUEST_TITLE"],
+    env_inherit = [
+        "CI_MERGE_REQUEST_TITLE",
+        "CI_MERGE_REQUEST_TARGET_BRANCH_NAME",
+    ],
     tags = [
         "external",  # force test to be unconditionally executed.
         "local",  # precludes the action or test from being remotely cached, remotely executed, or run inside the sandbox.
