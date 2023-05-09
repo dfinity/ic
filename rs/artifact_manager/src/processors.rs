@@ -3,15 +3,15 @@
 
 use ic_interfaces::{
     artifact_manager::{ArtifactProcessor, ProcessingResult},
-    artifact_pool::{ChangeSetProducer, MutablePool, UnvalidatedArtifact},
-    canister_http::{CanisterHttpChangeAction, CanisterHttpChangeSet},
+    artifact_pool::{ChangeResult, ChangeSetProducer, MutablePool, UnvalidatedArtifact},
+    canister_http::CanisterHttpChangeSet,
     certification::{
         ChangeAction as CertificationChangeAction, ChangeSet as CertificationChangeSet,
     },
     consensus_pool::{ChangeAction as ConsensusAction, ChangeSet as CoonsensusChangeSet},
     dkg::{ChangeAction as DkgChangeAction, ChangeSet as DkgChangeSet},
-    ecdsa::{EcdsaChangeAction, EcdsaChangeSet},
-    ingress_pool::{ChangeAction as IngressAction, ChangeSet as IngressChangeSet},
+    ecdsa::EcdsaChangeSet,
+    ingress_pool::ChangeSet as IngressChangeSet,
     time_source::TimeSource,
 };
 use ic_logger::{debug, warn, ReplicaLogger};
@@ -23,7 +23,6 @@ use ic_types::{
     consensus::HasRank,
     consensus::{certification::CertificationMessage, dkg, ConsensusMessage},
     messages::SignedIngress,
-    NodeId,
 };
 use prometheus::{histogram_opts, Histogram, IntCounter};
 use std::sync::{Arc, RwLock};
@@ -81,7 +80,6 @@ impl<
                 consensus_pool.insert(artifact)
             }
         }
-        let mut adverts = Vec::new();
         let change_set = {
             let consensus_pool = self.consensus_pool.read().unwrap();
             self.client.on_state_change(&*consensus_pool)
@@ -101,9 +99,8 @@ impl<
             );
             match change_action {
                 ConsensusAction::AddToValidated(to_add) => {
-                    adverts.push(ConsensusArtifact::message_to_advert(to_add));
                     if let ConsensusMessage::BlockProposal(p) = to_add {
-                        let rank = p.clone().content.decompose().1.rank();
+                        let rank = p.content.as_ref().rank();
                         debug!(
                             self.log,
                             "Added proposal {:?} of rank {:?} to artifact pool", p, rank
@@ -111,9 +108,8 @@ impl<
                     }
                 }
                 ConsensusAction::MoveToValidated(to_move) => {
-                    adverts.push(ConsensusArtifact::message_to_advert(to_move));
                     if let ConsensusMessage::BlockProposal(p) = to_move {
-                        let rank = p.clone().content.decompose().1.rank();
+                        let rank = p.content.as_ref().rank();
                         debug!(
                             self.log,
                             "Moved proposal {:?} of rank {:?} to artifact pool", p, rank
@@ -138,7 +134,8 @@ impl<
             serde_json::to_string(&time_source.get_relative_time()).unwrap()
         );
 
-        self.consensus_pool
+        let ChangeResult(_purged, adverts) = self
+            .consensus_pool
             .write()
             .unwrap()
             .apply_changes(time_source, change_set);
@@ -154,20 +151,16 @@ pub struct IngressProcessor<PoolIngress> {
     ingress_pool: Arc<RwLock<PoolIngress>>,
     /// The ingress handler.
     client: Arc<dyn ChangeSetProducer<PoolIngress, ChangeSet = IngressChangeSet> + Send + Sync>,
-    /// Our node id
-    node_id: NodeId,
 }
 
 impl<PoolIngress> IngressProcessor<PoolIngress> {
     pub fn new(
         ingress_pool: Arc<RwLock<PoolIngress>>,
         client: Arc<dyn ChangeSetProducer<PoolIngress, ChangeSet = IngressChangeSet> + Send + Sync>,
-        node_id: NodeId,
     ) -> Self {
         Self {
             ingress_pool,
             client,
-            node_id,
         }
     }
 }
@@ -191,32 +184,8 @@ impl<PoolIngress: MutablePool<IngressArtifact, IngressChangeSet> + Send + Sync +
             let pool = self.ingress_pool.read().unwrap();
             self.client.on_state_change(&*pool)
         };
-
-        let mut adverts = Vec::new();
-        for change_action in change_set.iter() {
-            match change_action {
-                IngressAction::MoveToValidated((
-                    message_id,
-                    source_node_id,
-                    size,
-                    attribute,
-                    integrity_hash,
-                )) => {
-                    if *source_node_id == self.node_id {
-                        adverts.push(Advert {
-                            size: *size,
-                            id: message_id.clone(),
-                            attribute: attribute.clone(),
-                            integrity_hash: integrity_hash.clone(),
-                        });
-                    }
-                }
-                IngressAction::RemoveFromUnvalidated(_)
-                | IngressAction::RemoveFromValidated(_)
-                | IngressAction::PurgeBelowExpiry(_) => {}
-            }
-        }
-        self.ingress_pool
+        let ChangeResult(_purged, adverts) = self
+            .ingress_pool
             .write()
             .unwrap()
             .apply_changes(time_source, change_set);
@@ -271,7 +240,6 @@ impl<
                 certification_pool.insert(artifact)
             }
         }
-        let mut adverts = Vec::new();
         let change_set = self
             .client
             .on_state_change(&*self.certification_pool.read().unwrap());
@@ -282,24 +250,16 @@ impl<
         };
 
         for action in change_set.iter() {
-            match action {
-                CertificationChangeAction::AddToValidated(msg) => {
-                    adverts.push(CertificationArtifact::message_to_advert(msg));
-                }
-                CertificationChangeAction::MoveToValidated(msg) => {
-                    adverts.push(CertificationArtifact::message_to_advert(msg));
-                }
-                CertificationChangeAction::HandleInvalid(msg, reason) => {
-                    self.invalidated_artifacts.inc();
-                    warn!(
-                        self.log,
-                        "Invalid certification message ({:?}): {:?}", reason, msg
-                    );
-                }
-                _ => {}
+            if let CertificationChangeAction::HandleInvalid(msg, reason) = action {
+                self.invalidated_artifacts.inc();
+                warn!(
+                    self.log,
+                    "Invalid certification message ({:?}): {:?}", reason, msg
+                );
             }
         }
-        self.certification_pool
+        let ChangeResult(_purged, adverts) = self
+            .certification_pool
             .write()
             .unwrap()
             .apply_changes(time_source, change_set);
@@ -354,23 +314,13 @@ impl<PoolDkg: MutablePool<DkgArtifact, DkgChangeSet> + Send + Sync + 'static>
                 dkg_pool.insert(artifact)
             }
         }
-        let mut adverts = Vec::new();
         let change_set = {
             let dkg_pool = self.dkg_pool.read().unwrap();
             let change_set = self.client.on_state_change(&*dkg_pool);
             for change_action in change_set.iter() {
-                match change_action {
-                    DkgChangeAction::AddToValidated(to_add) => {
-                        adverts.push(DkgArtifact::message_to_advert(to_add));
-                    }
-                    DkgChangeAction::MoveToValidated(message) => {
-                        adverts.push(DkgArtifact::message_to_advert(message));
-                    }
-                    DkgChangeAction::HandleInvalid(msg, reason) => {
-                        self.invalidated_artifacts.inc();
-                        warn!(self.log, "Invalid DKG message ({:?}): {:?}", reason, msg);
-                    }
-                    _ => (),
+                if let DkgChangeAction::HandleInvalid(msg, reason) = change_action {
+                    self.invalidated_artifacts.inc();
+                    warn!(self.log, "Invalid DKG message ({:?}): {:?}", reason, msg);
                 }
             }
             change_set
@@ -381,7 +331,8 @@ impl<PoolDkg: MutablePool<DkgArtifact, DkgChangeSet> + Send + Sync + 'static>
             ProcessingResult::StateUnchanged
         };
 
-        self.dkg_pool
+        let ChangeResult(_purged, adverts) = self
+            .dkg_pool
             .write()
             .unwrap()
             .apply_changes(time_source, change_set);
@@ -435,29 +386,9 @@ impl<PoolEcdsa: MutablePool<EcdsaArtifact, EcdsaChangeSet> + Send + Sync + 'stat
             }
         }
 
-        let mut adverts = Vec::new();
         let change_set = {
             let ecdsa_pool = self.ecdsa_pool.read().unwrap();
-            let change_set = self.client.on_state_change(&*ecdsa_pool);
-
-            for change_action in change_set.iter() {
-                match change_action {
-                    // 1. Notify all peers for ecdsa messages received directly by us
-                    // 2. For relayed ecdsa support messages: don't notify any peers.
-                    // 3. For other relayed messages: still notify peers.
-                    EcdsaChangeAction::AddToValidated(msg) => {
-                        adverts.push(EcdsaArtifact::message_to_advert(msg));
-                    }
-                    EcdsaChangeAction::MoveToValidated(msg) => match msg {
-                        EcdsaMessage::EcdsaDealingSupport(_) => (),
-                        _ => adverts.push(EcdsaArtifact::message_to_advert(msg)),
-                    },
-                    EcdsaChangeAction::RemoveValidated(_) => {}
-                    EcdsaChangeAction::RemoveUnvalidated(_) => {}
-                    EcdsaChangeAction::HandleInvalid(_, _) => {}
-                }
-            }
-            change_set
+            self.client.on_state_change(&*ecdsa_pool)
         };
 
         let changed = if !change_set.is_empty() {
@@ -467,7 +398,8 @@ impl<PoolEcdsa: MutablePool<EcdsaArtifact, EcdsaChangeSet> + Send + Sync + 'stat
         };
 
         let _timer = self.ecdsa_pool_update_duration.start_timer();
-        self.ecdsa_pool
+        let ChangeResult(_purged, adverts) = self
+            .ecdsa_pool
             .write()
             .unwrap()
             .apply_changes(time_source, change_set);
@@ -507,25 +439,9 @@ impl<
                 pool.insert(artifact);
             }
         }
-        let mut adverts = Vec::new();
         let change_set = self
             .client
             .on_state_change(&*self.canister_http_pool.read().unwrap());
-
-        for change_action in change_set.iter() {
-            match change_action {
-                CanisterHttpChangeAction::AddToValidated(share, _) => {
-                    adverts.push(CanisterHttpArtifact::message_to_advert(share));
-                }
-                CanisterHttpChangeAction::MoveToValidated(msg) => {
-                    adverts.push(CanisterHttpArtifact::message_to_advert(msg));
-                }
-                CanisterHttpChangeAction::RemoveContent(_) => {}
-                CanisterHttpChangeAction::RemoveValidated(_) => {}
-                CanisterHttpChangeAction::RemoveUnvalidated(_) => {}
-                CanisterHttpChangeAction::HandleInvalid(_, _) => {}
-            }
-        }
 
         let changed = if !change_set.is_empty() {
             ProcessingResult::StateChanged
@@ -533,7 +449,8 @@ impl<
             ProcessingResult::StateUnchanged
         };
 
-        self.canister_http_pool
+        let ChangeResult(_purged, adverts) = self
+            .canister_http_pool
             .write()
             .unwrap()
             .apply_changes(time_source, change_set);

@@ -115,7 +115,7 @@ use ic_interfaces::{
 };
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
-use ic_types::{artifact::*, artifact_kind::*, malicious_flags::MaliciousFlags, NodeId};
+use ic_types::{artifact::*, artifact_kind::*, malicious_flags::MaliciousFlags};
 use prometheus::{histogram_opts, labels, Histogram};
 use std::sync::{
     atomic::{AtomicBool, Ordering::SeqCst},
@@ -321,10 +321,9 @@ pub fn create_ingress_handlers<
     >,
     log: ReplicaLogger,
     metrics_registry: MetricsRegistry,
-    node_id: NodeId,
     malicious_flags: MaliciousFlags,
 ) -> (ArtifactClientHandle<IngressArtifact>, Box<dyn JoinGuard>) {
-    let client = processors::IngressProcessor::new(ingress_pool.clone(), ingress_handler, node_id);
+    let client = processors::IngressProcessor::new(ingress_pool.clone(), ingress_handler);
     let (jh, sender) = run_artifact_processor(
         time_source.clone(),
         metrics_registry,

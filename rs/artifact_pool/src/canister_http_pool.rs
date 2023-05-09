@@ -7,13 +7,15 @@ use crate::{
     pool_common::PoolSection,
 };
 use ic_interfaces::{
-    artifact_pool::{MutablePool, UnvalidatedArtifact, ValidatedArtifact, ValidatedPoolReader},
+    artifact_pool::{
+        ChangeResult, MutablePool, UnvalidatedArtifact, ValidatedArtifact, ValidatedPoolReader,
+    },
     canister_http::{CanisterHttpChangeAction, CanisterHttpChangeSet, CanisterHttpPool},
     time_source::TimeSource,
 };
 use ic_metrics::MetricsRegistry;
 use ic_types::{
-    artifact::CanisterHttpResponseId,
+    artifact::{ArtifactKind, CanisterHttpResponseId},
     artifact_kind::CanisterHttpArtifact,
     canister_http::{CanisterHttpResponse, CanisterHttpResponseShare},
     crypto::CryptoHashOf,
@@ -104,10 +106,17 @@ impl MutablePool<CanisterHttpArtifact, CanisterHttpChangeSet> for CanisterHttpPo
             .insert(ic_types::crypto::crypto_hash(&artifact.message), artifact);
     }
 
-    fn apply_changes(&mut self, _time_source: &dyn TimeSource, change_set: CanisterHttpChangeSet) {
+    fn apply_changes(
+        &mut self,
+        _time_source: &dyn TimeSource,
+        change_set: CanisterHttpChangeSet,
+    ) -> ChangeResult<CanisterHttpArtifact> {
+        let mut adverts = Vec::new();
+        let mut purged = Vec::new();
         for action in change_set {
             match action {
                 CanisterHttpChangeAction::AddToValidated(share, content) => {
+                    adverts.push(CanisterHttpArtifact::message_to_advert(&share));
                     self.validated.insert(
                         ic_types::crypto::crypto_hash(&share),
                         ValidatedArtifact {
@@ -123,6 +132,7 @@ impl MutablePool<CanisterHttpArtifact, CanisterHttpChangeSet> for CanisterHttpPo
                     match self.unvalidated.remove(&id) {
                         None => (),
                         Some(value) => {
+                            adverts.push(CanisterHttpArtifact::message_to_advert(&share));
                             self.validated.insert(
                                 id,
                                 ValidatedArtifact {
@@ -134,7 +144,9 @@ impl MutablePool<CanisterHttpArtifact, CanisterHttpChangeSet> for CanisterHttpPo
                     }
                 }
                 CanisterHttpChangeAction::RemoveValidated(id) => {
-                    self.validated.remove(&id);
+                    if self.validated.remove(&id).is_some() {
+                        purged.push(id);
+                    }
                 }
 
                 CanisterHttpChangeAction::RemoveUnvalidated(id) => {
@@ -148,6 +160,7 @@ impl MutablePool<CanisterHttpArtifact, CanisterHttpChangeSet> for CanisterHttpPo
                 }
             }
         }
+        ChangeResult(purged, adverts)
     }
 }
 

@@ -8,6 +8,7 @@ use crate::{
     metrics::{LABEL_POOL_TYPE, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED},
 };
 use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
+use ic_interfaces::artifact_pool::ChangeResult;
 use ic_interfaces::{
     artifact_pool::{MutablePool, ValidatedPoolReader},
     consensus_pool::{
@@ -20,6 +21,7 @@ use ic_interfaces::{
 use ic_logger::ReplicaLogger;
 use ic_metrics::buckets::linear_buckets;
 use ic_protobuf::types::v1 as pb;
+use ic_types::artifact::ArtifactKind;
 use ic_types::{
     artifact::ConsensusMessageFilter, artifact::ConsensusMessageId,
     artifact_kind::ConsensusArtifact, consensus::*, Height, SubnetId, Time,
@@ -522,23 +524,29 @@ impl MutablePool<ConsensusArtifact, ChangeSet> for ConsensusPoolImpl {
         self.apply_changes_unvalidated(ops);
     }
 
-    fn apply_changes(&mut self, time_source: &dyn TimeSource, change_set: ChangeSet) {
+    fn apply_changes(
+        &mut self,
+        time_source: &dyn TimeSource,
+        change_set: ChangeSet,
+    ) -> ChangeResult<ConsensusArtifact> {
         let updates = self.cache.prepare(&change_set);
         let mut unvalidated_ops = PoolSectionOps::new();
         let mut validated_ops = PoolSectionOps::new();
-
+        let mut adverts = Vec::new();
         // DO NOT Add a default nop. Explicitly mention all cases.
         // This helps with keeping this readable and obvious what
         // change is causing tests to break.
         for change_action in change_set {
             match change_action {
                 ChangeAction::AddToValidated(to_add) => {
+                    adverts.push(ConsensusArtifact::message_to_advert(&to_add));
                     validated_ops.insert(ValidatedConsensusArtifact {
                         msg: to_add,
                         timestamp: time_source.get_relative_time(),
                     });
                 }
                 ChangeAction::MoveToValidated(to_move) => {
+                    adverts.push(ConsensusArtifact::message_to_advert(&to_move));
                     let msg_id = to_move.get_id();
                     let timestamp = self.unvalidated.get_timestamp(&msg_id).unwrap_or_else(|| {
                         panic!("Timestmap is not found for MoveToValidated: {:?}", to_move)
@@ -579,13 +587,14 @@ impl MutablePool<ConsensusArtifact, ChangeSet> for ConsensusPoolImpl {
             })
             .collect();
         self.apply_changes_unvalidated(unvalidated_ops);
-        self.apply_changes_validated(validated_ops);
+        let purged = self.apply_changes_validated(validated_ops);
         if let Some(backup) = &self.backup {
             backup.store(time_source, artifacts_for_backup);
         }
         if !updates.is_empty() {
             self.cache.update(self, updates);
         }
+        ChangeResult(purged, adverts)
     }
 }
 
@@ -949,6 +958,76 @@ mod tests {
             // Check timestamp is removed for msg_1.
             assert_eq!(pool.unvalidated().get_timestamp(&msg_id_1), None);
             assert_eq!(pool.validated().get_timestamp(&msg_id_1), None);
+        })
+    }
+
+    #[test]
+    fn test_adverts() {
+        ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
+            let time_source = FastForwardTimeSource::new();
+            let mut pool = ConsensusPoolImpl::new_from_cup_without_bytes(
+                subnet_test_id(0),
+                make_genesis(ic_types::consensus::dkg::Summary::fake()),
+                pool_config,
+                ic_metrics::MetricsRegistry::new(),
+                no_op_logger(),
+            );
+
+            let random_beacon_1 = RandomBeacon::fake(RandomBeaconContent::new(
+                Height::from(1),
+                CryptoHashOf::from(CryptoHash(Vec::new())),
+            ))
+            .into_message();
+
+            let random_beacon_2 = RandomBeacon::fake(RandomBeaconContent::new(
+                Height::from(2),
+                CryptoHashOf::from(CryptoHash(Vec::new())),
+            ))
+            .into_message();
+
+            let random_beacon_3 = RandomBeacon::fake(RandomBeaconContent::new(
+                Height::from(3),
+                CryptoHashOf::from(CryptoHash(Vec::new())),
+            ))
+            .into_message();
+
+            pool.insert(UnvalidatedArtifact {
+                message: random_beacon_1,
+                peer_id: node_test_id(0),
+                timestamp: time_source.get_relative_time(),
+            });
+
+            pool.insert(UnvalidatedArtifact {
+                message: random_beacon_2.clone(),
+                peer_id: node_test_id(0),
+                timestamp: time_source.get_relative_time(),
+            });
+
+            let changeset = vec![
+                ChangeAction::MoveToValidated(random_beacon_2.clone()),
+                ChangeAction::AddToValidated(random_beacon_3.clone()),
+            ];
+            let ChangeResult(purged, adverts) = pool.apply_changes(time_source.as_ref(), changeset);
+            assert!(purged.is_empty());
+            assert_eq!(adverts.len(), 2);
+            assert_eq!(adverts[0].id, random_beacon_2.get_id());
+            assert_eq!(adverts[1].id, random_beacon_3.get_id());
+
+            let ChangeResult(purged, adverts) = pool.apply_changes(
+                time_source.as_ref(),
+                vec![ChangeAction::PurgeValidatedBelow(Height::from(3))],
+            );
+            assert!(adverts.is_empty());
+            // purging genesis CUP & beacon + validated beacon at height 2
+            assert_eq!(purged.len(), 3);
+            assert!(purged.contains(&random_beacon_2.get_id()));
+
+            let ChangeResult(purged, adverts) = pool.apply_changes(
+                time_source.as_ref(),
+                vec![ChangeAction::PurgeUnvalidatedBelow(Height::from(3))],
+            );
+            assert!(adverts.is_empty());
+            assert!(purged.is_empty());
         })
     }
 

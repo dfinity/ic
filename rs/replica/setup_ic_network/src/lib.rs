@@ -398,7 +398,6 @@ fn setup_artifact_manager(
             ingress_manager,
             replica_logger.clone(),
             metrics_registry.clone(),
-            node_id,
             malicious_flags.clone(),
         );
         join_handles.push(jh);
@@ -532,6 +531,7 @@ fn setup_artifact_manager(
 
 /// The function initializes the artifact pools.
 pub fn init_artifact_pools(
+    node_id: NodeId,
     subnet_id: SubnetId,
     config: ArtifactPoolConfig,
     registry: MetricsRegistry,
@@ -541,6 +541,7 @@ pub fn init_artifact_pools(
     ensure_persistent_pool_replica_version_compatibility(config.persistent_pool_db_path());
 
     let ingress_pool = Arc::new(RwLock::new(IngressPoolImpl::new(
+        node_id,
         config.clone(),
         registry.clone(),
         log.clone(),

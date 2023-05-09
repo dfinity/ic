@@ -802,7 +802,7 @@ fn add_received_shares_to_pool(
         pool.apply_changes(
             &SysTimeSource::new(),
             vec![CanisterHttpChangeAction::MoveToValidated(share)],
-        )
+        );
     }
 }
 
