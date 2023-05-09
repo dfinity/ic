@@ -55,19 +55,18 @@ mod gen_node_siging_key_pair_tests {
         let result = csp.gen_node_signing_key_pair();
 
         assert_matches!(result,
-            Err(CryptoError::InternalError { internal_error })
+            Err(CspBasicSignatureKeygenError::InternalError { internal_error })
             if internal_error.contains("node signing public key already set")
         );
 
         assert_matches!(csp.gen_node_signing_key_pair(),
-            Err(CryptoError::InternalError { internal_error })
+            Err(CspBasicSignatureKeygenError::InternalError { internal_error })
             if internal_error.contains("node signing public key already set")
         );
     }
 
     #[test]
-    #[should_panic(expected = "has already been inserted")]
-    fn should_panic_upon_duplicate_key() {
+    fn should_not_panic_upon_duplicate_key() {
         let duplicated_key_id = KeyId::from([42; 32]);
         use crate::LocalCspVault;
         let csp = Csp::builder()
@@ -81,7 +80,9 @@ mod gen_node_siging_key_pair_tests {
             )
             .build();
 
-        let _ = csp.gen_node_signing_key_pair();
+        let result = csp.gen_node_signing_key_pair();
+
+        assert_matches!(result, Err(CspBasicSignatureKeygenError::DuplicateKeyId {key_id}) if key_id == duplicated_key_id)
     }
 }
 
@@ -111,8 +112,7 @@ mod gen_key_pair_with_pop_tests {
     }
 
     #[test]
-    #[should_panic(expected = "has already been inserted")]
-    fn should_panic_upon_duplicate_key() {
+    fn should_not_panic_upon_duplicate_key() {
         let duplicated_key_id = KeyId::from([42; 32]);
         use crate::LocalCspVault;
         let csp = Csp::builder()
@@ -126,7 +126,9 @@ mod gen_key_pair_with_pop_tests {
             )
             .build();
 
-        let _ = csp.gen_committee_signing_key_pair();
+        let result = csp.gen_committee_signing_key_pair();
+
+        assert_matches!(result, Err(CspMultiSignatureKeygenError::DuplicateKeyId {key_id}) if key_id == duplicated_key_id)
     }
 
     #[test]
@@ -138,8 +140,8 @@ mod gen_key_pair_with_pop_tests {
         // the attemtps after the first one should fail
         for _ in 0..5 {
             assert_matches!(csp.gen_committee_signing_key_pair(),
-                Err(CryptoError::InvalidArgument { message })
-                if message.contains("committee signing public key already set")
+                Err(CspMultiSignatureKeygenError::InternalError { internal_error })
+                if internal_error.contains("committee signing public key already set")
             );
         }
     }
@@ -313,8 +315,7 @@ mod tls {
     }
 
     #[test]
-    #[should_panic(expected = "has already been inserted")]
-    fn should_panic_if_secret_key_insertion_yields_duplicate_error() {
+    fn should_not_panic_if_secret_key_insertion_yields_duplicate_error() {
         let duplicated_key_id = KeyId::from([42; 32]);
         use crate::LocalCspVault;
         let csp = Csp::builder()
@@ -328,7 +329,9 @@ mod tls {
             )
             .build();
 
-        let _ = csp.gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER);
+        let result = csp.gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER);
+
+        assert_matches!(result, Err(CspTlsKeygenError::DuplicateKeyId {key_id}) if key_id == duplicated_key_id)
     }
 
     #[test]
@@ -447,7 +450,7 @@ mod tls {
         let invalid_not_after = "invalid_not_after_date";
 
         let result = csp.gen_tls_key_pair(node_test_id(NODE_1), invalid_not_after);
-        assert_matches!(result, Err(CryptoError::InvalidNotAfterDate { message, not_after })
+        assert_matches!(result, Err(CspTlsKeygenError::InvalidNotAfterDate { message, not_after })
             if message.eq("invalid X.509 certificate expiration date (not_after)") && not_after.eq(invalid_not_after)
         );
     }
@@ -458,7 +461,7 @@ mod tls {
         let date_in_the_past = "20211004235959Z";
 
         let result = csp.gen_tls_key_pair(node_test_id(NODE_1), date_in_the_past);
-        assert_matches!(result, Err(CryptoError::InvalidNotAfterDate { message, not_after })
+        assert_matches!(result, Err(CspTlsKeygenError::InvalidNotAfterDate { message, not_after })
             if message.eq("'not after' date must not be in the past") && not_after.eq(date_in_the_past)
         );
     }
@@ -471,11 +474,11 @@ mod tls {
             .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
             .is_ok());
 
-        // the attemtps after the first one should fail
+        // the attempts after the first one should fail
         for _ in 0..5 {
             assert_matches!(csp
                 .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER),
-                Err(CryptoError::InternalError { internal_error })
+                Err(CspTlsKeygenError::InternalError { internal_error })
                 if internal_error.contains("TLS certificate already set")
             );
         }
