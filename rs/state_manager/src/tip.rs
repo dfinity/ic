@@ -216,6 +216,7 @@ pub(crate) fn spawn_tip_thread(
                             height,
                             page_map_type,
                         } => {
+                            #[cfg(debug_assert)]
                             match tip_state {
                                 TipState::ReadyForPageDeltas(h) => debug_assert!(height >= h),
                                 _ => panic!("Unexpected tip state: {:?}", tip_state),
