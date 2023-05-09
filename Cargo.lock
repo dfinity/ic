@@ -6798,6 +6798,7 @@ dependencies = [
  "ic-icrc1-test-utils",
  "ic-ledger-canister-core",
  "ic-ledger-core",
+ "ic-state-machine-tests",
  "icrc-ledger-types",
  "leb128",
  "num-traits",
@@ -6945,6 +6946,25 @@ dependencies = [
 [[package]]
 name = "ic-icrc1-index-ng"
 version = "0.8.0"
+dependencies = [
+ "candid",
+ "ciborium",
+ "ic-base-types",
+ "ic-cdk 0.6.10",
+ "ic-cdk-macros",
+ "ic-cdk-timers",
+ "ic-icrc1",
+ "ic-icrc1-ledger",
+ "ic-ledger-canister-core",
+ "ic-ledger-core",
+ "ic-stable-structures",
+ "ic-state-machine-tests",
+ "ic-test-utilities-load-wasm",
+ "icrc-ledger-types",
+ "num-traits",
+ "scopeguard",
+ "serde",
+]
 
 [[package]]
 name = "ic-icrc1-ledger"
