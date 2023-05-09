@@ -9,6 +9,7 @@ use receivers::NiDkgReceivers;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::convert::TryFrom;
+use std::num::TryFromIntError;
 
 #[cfg(test)]
 mod tests;
@@ -339,7 +340,7 @@ impl NiDkgThreshold {
     }
 }
 
-fn number_of_nodes_from_usize(count: usize) -> Result<NumberOfNodes, ()> {
-    let count = NodeIndex::try_from(count).map_err(|_| ())?;
+fn number_of_nodes_from_usize(count: usize) -> Result<NumberOfNodes, TryFromIntError> {
+    let count = NodeIndex::try_from(count)?;
     Ok(NumberOfNodes::from(count))
 }
