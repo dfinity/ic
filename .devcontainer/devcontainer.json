@@ -24,8 +24,17 @@
       "source": "${localEnv:HOME}/.config",
       "target": "/home/ubuntu/.config",
       "type": "bind"
+    },
+    {
+      "source": "${localEnv:SSH_AUTH_SOCK}",
+      "target": "${localEnv:SSH_AUTH_SOCK}",
+      "type": "bind"
     }
   ],
+  "containerEnv": {
+    "SSH_AUTH_SOCK": "${localEnv:SSH_AUTH_SOCK}",
+    "TERM": "xterm-256color"
+  },
   "customizations": {
     "vscode": {
       "extensions": [
