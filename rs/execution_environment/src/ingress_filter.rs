@@ -12,7 +12,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 use tokio::sync::oneshot;
-use tower::{limit::GlobalConcurrencyLimitLayer, util::BoxCloneService, Service, ServiceBuilder};
+use tower::{util::BoxCloneService, Service};
 
 #[derive(Clone)]
 pub(crate) struct IngressFilter {
@@ -23,19 +23,15 @@ pub(crate) struct IngressFilter {
 
 impl IngressFilter {
     pub(crate) fn new_service(
-        concurrency_buffer: GlobalConcurrencyLimitLayer,
         query_scheduler: QueryScheduler,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
         exec_env: Arc<ExecutionEnvironment>,
     ) -> IngressFilterService {
-        let base_service = BoxCloneService::new(Self {
+        BoxCloneService::new(Self {
             exec_env,
             state_reader,
             query_scheduler,
-        });
-        ServiceBuilder::new()
-            .layer(concurrency_buffer)
-            .service(base_service)
+        })
     }
 }
 

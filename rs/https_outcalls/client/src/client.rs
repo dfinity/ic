@@ -491,12 +491,7 @@ mod tests {
                 })
             }
         });
-        (
-            tower::ServiceBuilder::new()
-                .concurrency_limit(1)
-                .service(BoxCloneService::new(infallible_service)),
-            handle,
-        )
+        (BoxCloneService::new(infallible_service), handle)
     }
 
     /// Test canister http client send/receive without transform.  

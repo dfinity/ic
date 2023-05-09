@@ -90,12 +90,7 @@ fn setup_query_execution_mock() -> (QueryExecutionService, QueryExecutionHandle)
                 })
             }
         });
-    (
-        tower::ServiceBuilder::new()
-            .concurrency_limit(1)
-            .service(BoxCloneService::new(infallible_service)),
-        handle,
-    )
+    (BoxCloneService::new(infallible_service), handle)
 }
 
 #[allow(clippy::type_complexity)]
@@ -121,12 +116,7 @@ fn setup_ingress_filter_mock() -> (IngressFilterService, IngressFilterHandle) {
             }
         },
     );
-    (
-        tower::ServiceBuilder::new()
-            .concurrency_limit(1)
-            .service(BoxCloneService::new(infallible_service)),
-        handle,
-    )
+    (BoxCloneService::new(infallible_service), handle)
 }
 
 fn setup_ingress_ingestion_mock() -> (IngressIngestionService, IngressIngestionHandle) {
@@ -146,10 +136,7 @@ fn setup_ingress_ingestion_mock() -> (IngressIngestionService, IngressIngestionH
             })
         }
     });
-    (
-        tower::ServiceBuilder::new().service(BoxCloneService::new(infallible_service)),
-        handle,
-    )
+    (BoxCloneService::new(infallible_service), handle)
 }
 
 // Basic state manager with one subnet (nns) at height 1.

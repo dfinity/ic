@@ -42,7 +42,7 @@ use std::{
     task::{Context, Poll},
 };
 use tokio::sync::oneshot;
-use tower::{limit::GlobalConcurrencyLimitLayer, util::BoxCloneService, Service, ServiceBuilder};
+use tower::{util::BoxCloneService, Service};
 
 pub(crate) use self::query_scheduler::{QueryScheduler, QuerySchedulerFlag};
 
@@ -223,19 +223,15 @@ impl QueryHandler for InternalHttpQueryHandler {
 
 impl HttpQueryHandler {
     pub(crate) fn new_service(
-        concurrency_buffer: GlobalConcurrencyLimitLayer,
         internal: Arc<dyn QueryHandler<State = ReplicatedState>>,
         query_scheduler: QueryScheduler,
         state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
     ) -> QueryExecutionService {
-        let base_service = BoxCloneService::new(Self {
+        BoxCloneService::new(Self {
             internal,
             state_reader,
             query_scheduler,
-        });
-        ServiceBuilder::new()
-            .layer(concurrency_buffer)
-            .service(base_service)
+        })
     }
 }
 

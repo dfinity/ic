@@ -1,3 +1,4 @@
+use crate::execution_environment::QUERY_EXECUTION_THREADS_TOTAL;
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -71,6 +72,9 @@ pub struct Config {
 
     /// Serving at most `max_call_concurrent_requests` requests concurrently for endpoint `/api/v2/call`.
     pub max_call_concurrent_requests: usize,
+
+    /// Serving at most `max_call_concurrent_requests` requests concurrently for endpoint `/api/v2/query`.
+    pub max_query_concurrent_requests: usize,
 }
 
 impl Default for Config {
@@ -94,6 +98,7 @@ impl Default for Config {
             max_dashboard_concurrent_requests: 100,
             max_status_concurrent_requests: 100,
             max_call_concurrent_requests: 50,
+            max_query_concurrent_requests: QUERY_EXECUTION_THREADS_TOTAL * 100,
         }
     }
 }
