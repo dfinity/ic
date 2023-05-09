@@ -143,3 +143,12 @@ async fn main() -> Result<(), Error> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod test {
+    /// Remove me when there are real tests
+    #[test]
+    fn noop_test() {
+        assert_eq!(1, 1);
+    }
+}
