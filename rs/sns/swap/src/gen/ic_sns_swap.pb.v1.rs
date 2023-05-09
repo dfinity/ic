@@ -250,6 +250,11 @@ pub struct Init {
     /// the values match is not checked. If they don't match things will break.
     #[prost(uint64, optional, tag = "14")]
     pub neuron_minimum_stake_e8s: ::core::option::Option<u64>,
+    /// An optional text that swap participants should confirm before they may
+    /// participate in the swap. If the field is set, its value should be plain text
+    /// with at least 1 and at most 1,000 characters.
+    #[prost(string, optional, tag = "15")]
+    pub confirmation_text: ::core::option::Option<::prost::alloc::string::String>,
 }
 /// Represents one NNS neuron from the community fund participating in this swap.
 #[derive(

@@ -373,6 +373,7 @@ impl Environment for FakeDriver {
                         // Similar to NNS, but different.
                         transaction_fee_e8s: Some(12_345),
                         neuron_minimum_stake_e8s: Some(123_456_789),
+                        confirmation_text: None,
                     }),
                     ..Default::default() // Not realistic, but sufficient for tests.
                 }),

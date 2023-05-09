@@ -477,6 +477,7 @@ impl TryFrom<SnsCliInitConfig> for SnsInitPayload {
             wait_for_quiet_deadline_increase_seconds: sns_cli_init_config
                 .sns_governance
                 .wait_for_quiet_deadline_increase_seconds,
+            confirmation_text: None, // TODO[NNS1-2233]
         })
     }
 }
@@ -1149,6 +1150,7 @@ wait_for_quiet_deadline_increase_seconds: 1000
             initial_voting_period_seconds,
             wait_for_quiet_deadline_increase_seconds,
             initial_token_distribution,
+            confirmation_text: _, // TODO[NNS1-2233]
         } = sns_init_payload;
 
         assert_eq!(

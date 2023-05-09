@@ -2836,6 +2836,7 @@ mod tests {
             fallback_controller_principal_ids: vec![PrincipalId::new_user_test_id(5).to_string()],
             transaction_fee_e8s: Some(0),
             neuron_minimum_stake_e8s: Some(0),
+            confirmation_text: None,
         });
     }
 
@@ -3414,6 +3415,7 @@ mod tests {
                     fallback_controller_principal_ids: vec![Principal::anonymous().to_string()],
                     transaction_fee_e8s: Some(10_000),
                     neuron_minimum_stake_e8s: Some(10_010_000),
+                    confirmation_text: None,
                 }),
                 params: Some(Params {
                     min_participants: 1,
@@ -3651,6 +3653,7 @@ mod tests {
                 fallback_controller_principal_ids: vec![PrincipalId::new_anonymous().to_string()],
                 transaction_fee_e8s: Some(DEFAULT_TRANSFER_FEE.get_e8s()),
                 neuron_minimum_stake_e8s: Some(0),
+                confirmation_text: None,
             }),
             params: Some(Params {
                 min_participants: 0,

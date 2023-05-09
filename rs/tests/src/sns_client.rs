@@ -403,6 +403,7 @@ async fn open_sns_token_swap(nns_api: &'_ Runtime, payload: OpenSnsTokenSwap) {
             fallback_controller_principal_ids: vec![],
             transaction_fee_e8s: Some(0),
             neuron_minimum_stake_e8s: Some(0),
+            confirmation_text: None,
         })
         .unwrap();
 

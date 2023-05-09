@@ -114,6 +114,11 @@ pub struct SnsInitPayload {
     /// <https://wiki.internetcomputer.org/wiki/Network_Nervous_System#Proposal_decision_and_wait-for-quiet>
     #[prost(uint64, optional, tag = "22")]
     pub wait_for_quiet_deadline_increase_seconds: ::core::option::Option<u64>,
+    /// An optional text that swap participants should confirm before they may
+    /// participate in the swap. If the field is set, its value should be plain text
+    /// with at least 1 and at most 1,000 characters.
+    #[prost(string, optional, tag = "23")]
+    pub confirmation_text: ::core::option::Option<::prost::alloc::string::String>,
     /// The initial tokens and neurons available at genesis will be distributed according
     /// to the strategy and configuration picked via the initial_token_distribution
     /// parameter.

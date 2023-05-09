@@ -1151,6 +1151,8 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
                 ),
 
                 initial_token_distribution: None,
+
+                confirmation_text: None,
             },
         );
 
