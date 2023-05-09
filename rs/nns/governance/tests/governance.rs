@@ -11319,6 +11319,7 @@ lazy_static! {
         // standard values by code under test.
         transaction_fee_e8s: Some(12_345),
         neuron_minimum_stake_e8s: Some(123_456_789),
+        confirmation_text: None,
     };
 }
 

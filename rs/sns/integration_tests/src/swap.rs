@@ -2705,6 +2705,7 @@ fn test_upgrade() {
         fallback_controller_principal_ids: vec![Principal::anonymous().to_string()],
         transaction_fee_e8s: Some(10_000),
         neuron_minimum_stake_e8s: Some(1_000_000),
+        confirmation_text: None,
     })
     .unwrap();
     let canister_id = state_machine
@@ -3091,6 +3092,7 @@ fn test_last_man_less_than_min() {
         fallback_controller_principal_ids: vec![Principal::anonymous().to_string()],
         transaction_fee_e8s: Some(10_000),
         neuron_minimum_stake_e8s: Some(1_000_000),
+        confirmation_text: None,
     })
     .unwrap();
     state_machine

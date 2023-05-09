@@ -282,6 +282,11 @@ message Init {
   // Same as SNS governance. Must hold the same value as SNS governance. Whether
   // the values match is not checked. If they don't match things will break.
   optional uint64 neuron_minimum_stake_e8s = 14;
+
+  // An optional text that swap participants should confirm before they may
+  // participate in the swap. If the field is set, its value should be plain text
+  // with at least 1 and at most 1,000 characters.
+  optional string confirmation_text = 15;
 }
 
 // Represents one NNS neuron from the community fund participating in this swap.

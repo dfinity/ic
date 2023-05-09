@@ -94,6 +94,9 @@ fn init() -> Init {
         // Similar to, but different from values used in NNS.
         transaction_fee_e8s: Some(12_345),
         neuron_minimum_stake_e8s: Some(123_456_789),
+        confirmation_text: Some(
+            "Please confirm that you agree with this text for the greater good.".to_string(),
+        ),
     };
     assert_is_ok!(result.validate());
     result

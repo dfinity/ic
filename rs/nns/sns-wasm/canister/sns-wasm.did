@@ -84,6 +84,7 @@ type SnsInitPayload = record {
   token_symbol : opt text;
   final_reward_rate_basis_points : opt nat64;
   neuron_minimum_stake_e8s : opt nat64;
+  confirmation_text : opt text;
   logo : opt text;
   name : opt text;
   initial_voting_period_seconds : opt nat64;

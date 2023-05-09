@@ -194,6 +194,7 @@ impl PaymentProtocolTestSetup {
                 .collect(),
             transaction_fee_e8s: Some(DEFAULT_TRANSFER_FEE.get_e8s()),
             neuron_minimum_stake_e8s: Some(*DEFAULT_NEURON_MINIMUM_STAKE),
+            confirmation_text: None,
         }
     }
 

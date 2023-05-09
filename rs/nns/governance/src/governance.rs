@@ -8382,6 +8382,7 @@ fn is_information_about_swap_from_different_sources_consistent(
                 icp_ledger_canister_id: _,
                 transaction_fee_e8s: _,
                 neuron_minimum_stake_e8s: _,
+                confirmation_text: _,
             } = swap_init;
 
             (
@@ -8704,6 +8705,7 @@ impl TryFrom<CreateServiceNervousSystem> for SnsInitPayload {
             max_age_bonus_percentage,
             initial_voting_period_seconds,
             wait_for_quiet_deadline_increase_seconds,
+            confirmation_text: None, // TODO[NNS1-2232]
         };
 
         result.validate().map_err(|err| err.to_string())?;
