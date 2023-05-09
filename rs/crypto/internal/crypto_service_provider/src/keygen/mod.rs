@@ -1,12 +1,12 @@
 //! Utilities for key generation and key identifier generation
 
 use crate::api::CspKeyGenerator;
-use crate::secret_key_store::panic_due_to_duplicated_key_id;
 use crate::types::{CspPop, CspPublicKey};
-use crate::vault::api::CspTlsKeygenError;
+use crate::vault::api::{
+    CspBasicSignatureKeygenError, CspMultiSignatureKeygenError, CspTlsKeygenError,
+};
 use crate::Csp;
 use ic_crypto_tls_interfaces::TlsPublicKeyCert;
-use ic_types::crypto::CryptoError;
 use ic_types::NodeId;
 
 #[cfg(test)]
@@ -15,43 +15,22 @@ mod fixtures;
 mod tests;
 
 impl CspKeyGenerator for Csp {
-    fn gen_node_signing_key_pair(&self) -> Result<CspPublicKey, CryptoError> {
-        Ok(self.csp_vault.gen_node_signing_key_pair()?)
+    fn gen_node_signing_key_pair(&self) -> Result<CspPublicKey, CspBasicSignatureKeygenError> {
+        self.csp_vault.gen_node_signing_key_pair()
     }
 
-    fn gen_committee_signing_key_pair(&self) -> Result<(CspPublicKey, CspPop), CryptoError> {
-        Ok(self.csp_vault.gen_committee_signing_key_pair()?)
+    fn gen_committee_signing_key_pair(
+        &self,
+    ) -> Result<(CspPublicKey, CspPop), CspMultiSignatureKeygenError> {
+        self.csp_vault.gen_committee_signing_key_pair()
     }
 
     fn gen_tls_key_pair(
         &self,
-        node: NodeId,
+        node_id: NodeId,
         not_after: &str,
-    ) -> Result<TlsPublicKeyCert, CryptoError> {
-        let cert = self
-            .csp_vault
-            .gen_tls_key_pair(node, not_after)
-            .map_err(|e| match e {
-                CspTlsKeygenError::InvalidNotAfterDate {
-                    message: msg,
-                    not_after: date,
-                } => CryptoError::InvalidNotAfterDate {
-                    message: msg,
-                    not_after: date,
-                },
-                CspTlsKeygenError::InternalError {
-                    internal_error: msg,
-                } => CryptoError::InternalError {
-                    internal_error: msg,
-                },
-                CspTlsKeygenError::DuplicateKeyId { key_id } => {
-                    panic_due_to_duplicated_key_id(key_id)
-                }
-                CspTlsKeygenError::TransientInternalError { internal_error } => {
-                    CryptoError::TransientInternalError { internal_error }
-                }
-            })?;
-        Ok(cert)
+    ) -> Result<TlsPublicKeyCert, CspTlsKeygenError> {
+        self.csp_vault.gen_tls_key_pair(node_id, not_after)
     }
 }
 
