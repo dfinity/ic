@@ -295,6 +295,7 @@ fn dashboard_label_value_from(code: ErrorCode) -> &'static str {
         QueryCallGraphTotalInstructionLimitExceeded => "Total instructions limit exceeded for query call graph",
         CompositeQueryCalledInReplicatedMode => "Composite query cannot be called in replicated mode",
         CanisterNotHostedBySubnet => "Canister is not hosted by subnet",
-        QueryTimeLimitExceeded => "Canister exceeded the time limit for composite query execution"
+        QueryTimeLimitExceeded => "Canister exceeded the time limit for composite query execution",
+        QueryCallGraphInternal => "System error while executing a composite query",
     }
 }

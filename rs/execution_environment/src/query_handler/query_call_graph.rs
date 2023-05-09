@@ -108,6 +108,9 @@ pub(super) fn evaluate_query_call_graph(
                     ExecutionResult::Response(result) => {
                         callee_result = Some(result);
                     }
+                    ExecutionResult::SystemError(err) => {
+                        return QueryResponse::UserError(err);
+                    }
                 }
             }
             // There is no response, so we need to execute the next outgoing
@@ -139,6 +142,9 @@ pub(super) fn evaluate_query_call_graph(
                         }
                         ExecutionResult::Response(result) => {
                             callee_result = Some(result);
+                        }
+                        ExecutionResult::SystemError(err) => {
+                            return QueryResponse::UserError(err);
                         }
                     }
                 }

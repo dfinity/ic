@@ -8,6 +8,8 @@ use ic_types::{
 use prometheus::{Histogram, IntCounter};
 use std::{cell::RefCell, rc::Rc, time::Instant};
 
+pub(crate) const QUERY_HANDLER_CRITICAL_ERROR: &str = "query_handler_critical_error";
+
 pub(crate) struct QueryHandlerMetrics {
     pub query: ScopedMetrics,
     pub query_initial_call: ScopedMetrics,
@@ -18,6 +20,7 @@ pub(crate) struct QueryHandlerMetrics {
     pub query_cache_evicted_entries: IntCounter,
     pub query_cache_invalidated_entries: IntCounter,
     pub query_cache_count_bytes: Histogram,
+    pub query_critical_error: IntCounter,
 }
 
 impl QueryHandlerMetrics {
@@ -142,6 +145,7 @@ impl QueryHandlerMetrics {
                 "The replica side query cache size in bytes",
                 metrics_registry,
             ),
+            query_critical_error: metrics_registry.error_counter(QUERY_HANDLER_CRITICAL_ERROR),
         }
     }
 }

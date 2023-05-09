@@ -193,6 +193,7 @@ impl QueryHandler for InternalHttpQueryHandler {
             self.config.instruction_overhead_per_query_call,
             self.config.composite_queries,
             query.receiver,
+            &self.metrics.query_critical_error,
         );
         let result = context.run(
             query,
