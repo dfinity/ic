@@ -212,6 +212,7 @@ pub fn participate_in_swap(
             "refresh_buyer_tokens",
             Encode!(&RefreshBuyerTokensRequest {
                 buyer: participant_principal_id.to_string(),
+                confirmation_text: None,
             })
             .unwrap(),
         )
@@ -549,9 +550,11 @@ pub fn refresh_buyer_tokens(
     env: &StateMachine,
     swap_id: &CanisterId,
     sender: &PrincipalId,
+    confirmation_text: Option<String>,
 ) -> Result<RefreshBuyerTokensResponse, String> {
     let args = Encode!(&RefreshBuyerTokensRequest {
-        buyer: sender.to_string()
+        buyer: sender.to_string(),
+        confirmation_text,
     })
     .unwrap();
     match env.execute_ingress_as(*sender, *swap_id, "refresh_buyer_tokens", args) {

@@ -292,6 +292,7 @@ impl NewSaleTicketRequest {
 pub struct RefreshBuyerTokensRequest {
     sale_canister: Principal,
     buyer: Option<PrincipalId>,
+    confirmation_text: Option<String>,
 }
 
 impl Request<RefreshBuyerTokensRes> for RefreshBuyerTokensRequest {
@@ -309,17 +310,23 @@ impl Request<RefreshBuyerTokensRes> for RefreshBuyerTokensRequest {
             buyer: self
                 .buyer
                 .map(|p| p.to_string())
-                .unwrap_or_else(|| "".to_string())
+                .unwrap_or_else(|| "".to_string()),
+            confirmation_text: self.confirmation_text.clone(),
         })
         .unwrap()
     }
 }
 
 impl RefreshBuyerTokensRequest {
-    pub fn new(sale_canister: Principal, buyer: Option<PrincipalId>) -> Self {
+    pub fn new(
+        sale_canister: Principal,
+        buyer: Option<PrincipalId>,
+        confirmation_text: Option<String>,
+    ) -> Self {
         Self {
             sale_canister,
             buyer,
+            confirmation_text,
         }
     }
 }
@@ -704,9 +711,10 @@ impl SnsRequestProvider {
     pub fn refresh_buyer_tokens(
         &self,
         buyer: Option<PrincipalId>,
+        confirmation_text: Option<String>,
     ) -> impl Request<RefreshBuyerTokensRes> + std::fmt::Debug + Clone + Sync + Send {
         let sale_canister = self.sns_canisters.swap().get().into();
-        RefreshBuyerTokensRequest::new(sale_canister, buyer)
+        RefreshBuyerTokensRequest::new(sale_canister, buyer, confirmation_text)
     }
 
     pub fn get_buyer_state(

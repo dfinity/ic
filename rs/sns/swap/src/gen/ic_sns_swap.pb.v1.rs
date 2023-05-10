@@ -803,6 +803,11 @@ pub struct RefreshBuyerTokensRequest {
     /// If not specified, the caller is used.
     #[prost(string, tag = "1")]
     pub buyer: ::prost::alloc::string::String,
+    /// To accept the swap participation confirmation, a participant should send the
+    /// confirmation text via refresh_buyer_tokens, matching the text set during SNS
+    /// initialization.
+    #[prost(string, optional, tag = "2")]
+    pub confirmation_text: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(
     candid::CandidType,

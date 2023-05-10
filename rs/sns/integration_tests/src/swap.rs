@@ -2811,6 +2811,7 @@ fn test_deletion_of_sale_ticket() {
         &state_machine,
         &sns_canister_ids.swap(),
         &TEST_USER1_PRINCIPAL,
+        None,
     );
     assert_eq!(
         refresh_response.unwrap(),
@@ -2867,6 +2868,7 @@ fn test_deletion_of_sale_ticket() {
         &state_machine,
         &sns_canister_ids.swap(),
         &TEST_USER1_PRINCIPAL,
+        None,
     );
     assert!(refresh_response.unwrap_err().contains("smaller"));
 
@@ -2904,6 +2906,7 @@ fn test_deletion_of_sale_ticket() {
         &state_machine,
         &sns_canister_ids.swap(),
         &TEST_USER1_PRINCIPAL,
+        None,
     );
     assert_eq!(
         refresh_response.unwrap(),
@@ -2947,6 +2950,7 @@ fn test_deletion_of_sale_ticket() {
         &state_machine,
         &sns_canister_ids.swap(),
         &TEST_USER1_PRINCIPAL,
+        None,
     );
     assert_eq!(
         refresh_response.unwrap(),
@@ -3156,6 +3160,7 @@ fn test_last_man_less_than_min() {
             &state_machine,
             &swap_id,
             &PrincipalId::new_user_test_id(user),
+            None,
         )
     };
     // /utilities
@@ -3253,6 +3258,7 @@ fn test_refresh_buyer_token() {
             &state_machine,
             &sns_canister_ids.swap(),
             &TEST_USER1_PRINCIPAL,
+            None,
         );
 
         assert_eq!(

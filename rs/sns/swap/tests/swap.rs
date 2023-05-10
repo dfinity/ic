@@ -83,7 +83,7 @@ const START_TIMESTAMP_SECONDS: u64 = START_OF_2022_TIMESTAMP_SECONDS + 42 * SECO
 const END_TIMESTAMP_SECONDS: u64 = START_TIMESTAMP_SECONDS + 7 * SECONDS_PER_DAY;
 
 /// Returns a valid Init.
-fn init() -> Init {
+fn init_with_confirmation_text(confirmation_text: Option<String>) -> Init {
     let result = Init {
         nns_governance_canister_id: NNS_GOVERNANCE_CANISTER_ID.to_string(),
         sns_governance_canister_id: SNS_GOVERNANCE_CANISTER_ID.to_string(),
@@ -94,12 +94,14 @@ fn init() -> Init {
         // Similar to, but different from values used in NNS.
         transaction_fee_e8s: Some(12_345),
         neuron_minimum_stake_e8s: Some(123_456_789),
-        confirmation_text: Some(
-            "Please confirm that you agree with this text for the greater good.".to_string(),
-        ),
+        confirmation_text,
     };
     assert_is_ok!(result.validate());
     result
+}
+
+fn init() -> Init {
+    init_with_confirmation_text(None)
 }
 
 pub fn params() -> Params {
@@ -378,6 +380,7 @@ fn test_min_icp() {
     assert!(swap
         .refresh_buyer_token_e8s(
             *TEST_USER1_PRINCIPAL,
+            None,
             SWAP_CANISTER_ID,
             &mock_stub(vec![LedgerExpect::AccountBalance(
                 Account {
@@ -401,6 +404,7 @@ fn test_min_icp() {
     assert!(swap
         .refresh_buyer_token_e8s(
             *TEST_USER2_PRINCIPAL,
+            None,
             SWAP_CANISTER_ID,
             &mock_stub(vec![LedgerExpect::AccountBalance(
                 Account {
@@ -525,6 +529,7 @@ fn test_min_max_icp_per_buyer() {
         let e = swap
             .refresh_buyer_token_e8s(
                 *TEST_USER1_PRINCIPAL,
+                None,
                 SWAP_CANISTER_ID,
                 &mock_stub(vec![LedgerExpect::AccountBalance(
                     Account {
@@ -544,6 +549,7 @@ fn test_min_max_icp_per_buyer() {
         let e = swap
             .refresh_buyer_token_e8s(
                 *TEST_USER1_PRINCIPAL,
+                None,
                 SWAP_CANISTER_ID,
                 &mock_stub(vec![LedgerExpect::AccountBalance(
                     Account {
@@ -568,6 +574,7 @@ fn test_min_max_icp_per_buyer() {
         let e = swap
             .refresh_buyer_token_e8s(
                 *TEST_USER1_PRINCIPAL,
+                None,
                 SWAP_CANISTER_ID,
                 &mock_stub(vec![LedgerExpect::AccountBalance(
                     Account {
@@ -638,6 +645,7 @@ fn test_max_icp() {
     assert!(swap
         .refresh_buyer_token_e8s(
             *TEST_USER1_PRINCIPAL,
+            None,
             SWAP_CANISTER_ID,
             &mock_stub(vec![LedgerExpect::AccountBalance(
                 Account {
@@ -661,6 +669,7 @@ fn test_max_icp() {
     assert!(swap
         .refresh_buyer_token_e8s(
             *TEST_USER2_PRINCIPAL,
+            None,
             SWAP_CANISTER_ID,
             &mock_stub(vec![LedgerExpect::AccountBalance(
                 Account {
@@ -761,6 +770,7 @@ fn test_scenario_happy() {
     assert!(swap
         .refresh_buyer_token_e8s(
             *TEST_USER1_PRINCIPAL,
+            None,
             SWAP_CANISTER_ID,
             &mock_stub(vec![LedgerExpect::AccountBalance(
                 Account {
@@ -786,6 +796,7 @@ fn test_scenario_happy() {
     assert!(swap
         .refresh_buyer_token_e8s(
             *TEST_USER2_PRINCIPAL,
+            None,
             SWAP_CANISTER_ID,
             &mock_stub(vec![LedgerExpect::AccountBalance(
                 Account {
@@ -816,6 +827,7 @@ fn test_scenario_happy() {
     assert!(swap
         .refresh_buyer_token_e8s(
             *TEST_USER3_PRINCIPAL,
+            None,
             SWAP_CANISTER_ID,
             &mock_stub(vec![LedgerExpect::AccountBalance(
                 Account {
@@ -1945,6 +1957,7 @@ fn test_get_buyer_state() {
     assert!(swap
         .refresh_buyer_token_e8s(
             *TEST_USER1_PRINCIPAL,
+            None,
             SWAP_CANISTER_ID,
             &mock_stub(vec![LedgerExpect::AccountBalance(
                 Account {
@@ -1981,6 +1994,7 @@ fn test_get_buyer_state() {
     assert!(swap
         .refresh_buyer_token_e8s(
             *TEST_USER2_PRINCIPAL,
+            None,
             SWAP_CANISTER_ID,
             &mock_stub(vec![LedgerExpect::AccountBalance(
                 Account {
@@ -3801,6 +3815,7 @@ fn test_list_direct_participants_list_is_deterministic() {
     for i in 0..4 {
         swap.refresh_buyer_token_e8s(
             PrincipalId::new_user_test_id(i),
+            None,
             SWAP_CANISTER_ID,
             &spy_ledger,
         )
@@ -3840,6 +3855,7 @@ fn test_list_direct_participants_paginates_all_participants() {
     for i in 0..4 {
         swap.refresh_buyer_token_e8s(
             PrincipalId::new_user_test_id(i),
+            None,
             SWAP_CANISTER_ID,
             &spy_ledger,
         )
@@ -3927,6 +3943,7 @@ fn test_rebuild_indexes_ignores_existing_index() {
     for i in 0..2 {
         swap.refresh_buyer_token_e8s(
             PrincipalId::new_user_test_id(i),
+            None,
             SWAP_CANISTER_ID,
             &spy_ledger,
         )
@@ -3982,6 +3999,7 @@ fn test_refresh_buyer_tokens() {
             assert_eq!(
                 swap.refresh_buyer_token_e8s(
                     *user,
+                    None,
                     SWAP_CANISTER_ID,
                     &mock_stub(vec![LedgerExpect::AccountBalance(
                         Account {
@@ -4006,6 +4024,7 @@ fn test_refresh_buyer_tokens() {
             assert!(swap
                 .refresh_buyer_token_e8s(
                     *user,
+                    None,
                     SWAP_CANISTER_ID,
                     &mock_stub(vec![LedgerExpect::AccountBalance(
                         Account {
@@ -4080,7 +4099,7 @@ fn test_refresh_buyer_tokens() {
 
         // Make sure tokens can only be commited once the swap is open
         assert!(swap
-            .refresh_buyer_token_e8s(user1, SWAP_CANISTER_ID, &mock_stub(vec![]))
+            .refresh_buyer_token_e8s(user1, None, SWAP_CANISTER_ID, &mock_stub(vec![]))
             .now_or_never()
             .unwrap()
             .unwrap_err()
@@ -4410,7 +4429,7 @@ fn test_refresh_buyer_tokens() {
         );
     }
 
-    //Test committing with no funds sent
+    // Test committing with no funds sent
     {
         let params = Params {
             max_icp_e8s: 100 * E8,
@@ -4443,6 +4462,87 @@ fn test_refresh_buyer_tokens() {
         buy_token_ok(&mut swap, &user1, &amount_user1_0, &(2 * E8));
 
         check_final_conditions(&mut swap, &user1, &(2 * E8), &(params.max_icp_e8s));
+    }
+}
+
+/// Test that the `refresh_buyer_token_e8s` function handles confirmations correctly.
+#[test]
+fn test_swap_participation_confirmation() {
+    let confirmation_text = "Please confirm that 2+2=4".to_string();
+    let another_text = "Please confirm that 2+2=5".to_string();
+    let user = PrincipalId::new_user_test_id(1);
+    let account = Account {
+        owner: SWAP_CANISTER_ID.get().into(),
+        subaccount: None,
+    };
+    let amount = 101 * E8;
+
+    let buy_token = |swap: &mut Swap, confirmation_text: Option<String>| {
+        swap.refresh_buyer_token_e8s(
+            user,
+            confirmation_text,
+            SWAP_CANISTER_ID,
+            &mock_stub(vec![LedgerExpect::AccountBalance(
+                Account {
+                    owner: SWAP_CANISTER_ID.get().into(),
+                    subaccount: Some(principal_to_subaccount(&user)),
+                },
+                Ok(Tokens::from_e8s(amount)),
+            )]),
+        )
+        .now_or_never()
+        .unwrap()
+    };
+
+    let open_swap = |swap: &mut Swap, params: &Params| {
+        assert!(swap
+            .open(
+                SWAP_CANISTER_ID,
+                &mock_stub(vec![LedgerExpect::AccountBalance(
+                    account,
+                    Ok(Tokens::from_e8s(params.sns_token_e8s)),
+                )]),
+                START_TIMESTAMP_SECONDS,
+                OpenRequest {
+                    params: Some(params.clone()),
+                    cf_participants: vec![],
+                    open_sns_token_swap_proposal_id: Some(OPEN_SNS_TOKEN_SWAP_PROPOSAL_ID),
+                }
+            )
+            .now_or_never()
+            .unwrap()
+            .is_ok());
+    };
+
+    // A. SNS specifies confirmation text & client sends confirmation text
+    {
+        let mut swap = Swap::new(init_with_confirmation_text(Some(confirmation_text.clone())));
+        open_swap(&mut swap, &params());
+        // A.1. The texts match
+        assert_is_ok!(buy_token(&mut swap, Some(confirmation_text.clone())));
+        // A.2. The texts do not match
+        assert_is_err!(buy_token(&mut swap, Some(another_text)));
+    }
+
+    // B. SNS specifies confirmation text & client does not send a confirmation text
+    {
+        let mut swap = Swap::new(init_with_confirmation_text(Some(confirmation_text.clone())));
+        open_swap(&mut swap, &params());
+        assert_is_err!(buy_token(&mut swap, None));
+    }
+
+    // C. SNS does not specify confirmation text & client sends a confirmation text
+    {
+        let mut swap = Swap::new(init_with_confirmation_text(None));
+        open_swap(&mut swap, &params());
+        assert_is_err!(buy_token(&mut swap, Some(confirmation_text)));
+    }
+
+    // D. SNS does not specify confirmation text & client does not send a confirmation text
+    {
+        let mut swap = Swap::new(init_with_confirmation_text(None));
+        open_swap(&mut swap, &params());
+        assert_is_ok!(buy_token(&mut swap, None));
     }
 }
 

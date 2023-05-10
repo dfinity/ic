@@ -569,6 +569,11 @@ message SetOpenTimeWindowResponse {}
 message RefreshBuyerTokensRequest {
   // If not specified, the caller is used.
   string buyer = 1;
+
+  // To accept the swap participation confirmation, a participant should send the
+  // confirmation text via refresh_buyer_tokens, matching the text set during SNS
+  // initialization.
+  optional string confirmation_text = 2;
 }
 message RefreshBuyerTokensResponse {
   uint64 icp_accepted_participation_e8s = 1;
