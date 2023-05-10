@@ -45,6 +45,12 @@ pub const MAX_TOKEN_NAME_LENGTH: usize = 255;
 /// The minimum number of characters allowed for token name.
 pub const MIN_TOKEN_NAME_LENGTH: usize = 4;
 
+/// The maximum number of characters allowed for confirmation text.
+pub const MAX_CONFIRMATION_TEXT_LENGTH: usize = 1_000;
+
+/// The minimum number of characters allowed for confirmation text.
+pub const MIN_CONFIRMATION_TEXT_LENGTH: usize = 1;
+
 // Token Symbols that can not be used.
 lazy_static! {
     static ref BANNED_TOKEN_SYMBOLS: HashSet<&'static str> = hashset! {
@@ -428,6 +434,7 @@ impl SnsInitPayload {
             self.validate_max_age_bonus_percentage(),
             self.validate_initial_voting_period_seconds(),
             self.validate_wait_for_quiet_deadline_increase_seconds(),
+            self.validate_confirmation_text(),
         ];
 
         let defect_msg = validation_fns
@@ -836,6 +843,30 @@ impl SnsInitPayload {
             Ok(())
         }
     }
+
+    fn validate_confirmation_text(&self) -> Result<(), String> {
+        if let Some(confirmation_text) = &self.confirmation_text {
+            if confirmation_text.len() < MIN_CONFIRMATION_TEXT_LENGTH {
+                return Err(
+                    format!(
+                        "NervousSystemParameters.confirmation_text must be greater than {} characters, given character count: {}",
+                        MIN_CONFIRMATION_TEXT_LENGTH,
+                        confirmation_text.len(),
+                    )
+                );
+            }
+            if MAX_CONFIRMATION_TEXT_LENGTH < confirmation_text.len() {
+                return Err(
+                    format!(
+                        "NervousSystemParameters.confirmation_text must be fewer than {} characters, given character count: {}",
+                        MAX_CONFIRMATION_TEXT_LENGTH,
+                        confirmation_text.len(),
+                    )
+                );
+            }
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -845,8 +876,8 @@ mod test {
         FractionalDeveloperVotingPower as FractionalDVP, NeuronDistribution,
     };
     use crate::{
-        FractionalDeveloperVotingPower, SnsCanisterIds, SnsInitPayload, MAX_TOKEN_NAME_LENGTH,
-        MAX_TOKEN_SYMBOL_LENGTH,
+        FractionalDeveloperVotingPower, SnsCanisterIds, SnsInitPayload,
+        MAX_CONFIRMATION_TEXT_LENGTH, MAX_TOKEN_NAME_LENGTH, MAX_TOKEN_SYMBOL_LENGTH,
     };
     use ic_base_types::{CanisterId, PrincipalId};
     use ic_icrc1_ledger::LedgerArgument;
@@ -1114,6 +1145,56 @@ mod test {
 
         // Assert that the swap canister would accept this payload.
         assert!(swap.validate().is_ok());
+    }
+
+    #[test]
+    fn test_confirmation_text_is_valid() {
+        // Create valid CanisterIds
+        let sns_canister_ids = create_canister_ids();
+        // Test that `confirmation_text` is indeed optional.
+        {
+            let sns_init_payload = SnsInitPayload {
+                confirmation_text: None,
+                ..SnsInitPayload::with_valid_values_for_testing()
+            };
+            assert!(sns_init_payload
+                .build_canister_payloads(&sns_canister_ids, None, false)
+                .is_ok());
+        }
+        // Test that some non-trivial value of `confirmation_text` validates.
+        {
+            let sns_init_payload: SnsInitPayload = SnsInitPayload {
+                confirmation_text: Some("Please confirm that 2+2=4".to_string()),
+                ..SnsInitPayload::with_valid_values_for_testing()
+            };
+            assert!(sns_init_payload
+                .build_canister_payloads(&sns_canister_ids, None, false)
+                .is_ok());
+        }
+        // Test that `confirmation_text` set to an empty string is rejected.
+        {
+            let sns_init_payload = SnsInitPayload {
+                confirmation_text: Some("".to_string()),
+                ..SnsInitPayload::with_valid_values_for_testing()
+            };
+            assert!(sns_init_payload
+                .build_canister_payloads(&sns_canister_ids, None, false)
+                .is_err());
+        }
+        // Test that `confirmation_text` set to a very long string is rejected.
+        {
+            let sns_init_payload = SnsInitPayload {
+                confirmation_text: Some(
+                    (0..MAX_CONFIRMATION_TEXT_LENGTH + 1)
+                        .map(|x| x.to_string())
+                        .collect(),
+                ),
+                ..SnsInitPayload::with_valid_values_for_testing()
+            };
+            assert!(sns_init_payload
+                .build_canister_payloads(&sns_canister_ids, None, false)
+                .is_err());
+        }
     }
 
     #[test]
