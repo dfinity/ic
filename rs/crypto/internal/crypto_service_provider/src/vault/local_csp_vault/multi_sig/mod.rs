@@ -2,9 +2,7 @@
 use crate::key_id::KeyId;
 use crate::keygen::utils::committee_signing_pk_to_proto;
 use crate::public_key_store::{PublicKeySetOnceError, PublicKeyStore};
-use crate::secret_key_store::{
-    SecretKeyStore, SecretKeyStoreError, SecretKeyStorePersistenceError,
-};
+use crate::secret_key_store::{SecretKeyStore, SecretKeyStoreInsertionError};
 use crate::types::{CspPop, CspPublicKey, CspSecretKey, CspSignature, MultiBls12_381_Signature};
 use crate::vault::api::{
     CspMultiSignatureError, CspMultiSignatureKeygenError, MultiSignatureCspVault,
@@ -81,13 +79,13 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         sks_write_lock
             .insert(key_id, secret_key, None)
             .map_err(|sks_error| match sks_error {
-                SecretKeyStoreError::DuplicateKeyId(key_id) => {
+                SecretKeyStoreInsertionError::DuplicateKeyId(key_id) => {
                     CspMultiSignatureKeygenError::DuplicateKeyId { key_id }
                 }
-                SecretKeyStoreError::PersistenceError(SecretKeyStorePersistenceError::SerializationError(serialization_error)) => {
+                SecretKeyStoreInsertionError::SerializationError(serialization_error) => {
                     CspMultiSignatureKeygenError::InternalError {internal_error:
                     format!("Error persisting secret key store during CSP multi-signature key generation: {}", serialization_error)}}
-                SecretKeyStoreError::PersistenceError(SecretKeyStorePersistenceError::IoError(io_error)) => {
+                SecretKeyStoreInsertionError::TransientError(io_error) => {
                     CspMultiSignatureKeygenError::TransientInternalError {internal_error:
                     format!("Error persisting secret key store during CSP multi-signature key generation: {}", io_error)}
                 }

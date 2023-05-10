@@ -1,9 +1,7 @@
 //! TLS handshake operations provided by the CSP vault
 use crate::key_id::KeyId;
 use crate::public_key_store::{PublicKeySetOnceError, PublicKeyStore};
-use crate::secret_key_store::{
-    SecretKeyStore, SecretKeyStoreError, SecretKeyStorePersistenceError,
-};
+use crate::secret_key_store::{SecretKeyStore, SecretKeyStoreInsertionError};
 use crate::types::{CspSecretKey, CspSignature};
 use crate::vault::api::{CspTlsKeygenError, CspTlsSignError, TlsHandshakeCspVault};
 use crate::vault::local_csp_vault::LocalCspVault;
@@ -154,25 +152,25 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         sks_write_lock
             .insert(key_id, secret_key, None)
             .map_err(|sks_error| match sks_error {
-                SecretKeyStoreError::DuplicateKeyId(key_id) => {
+                SecretKeyStoreInsertionError::DuplicateKeyId(key_id) => {
                     CspTlsKeygenError::DuplicateKeyId { key_id }
                 }
-                SecretKeyStoreError::PersistenceError(
-                    SecretKeyStorePersistenceError::SerializationError(serialization_error),
-                ) => CspTlsKeygenError::InternalError {
-                    internal_error: format!(
-                        "Error persisting secret key store during CSP TLS key generation: {}",
-                        serialization_error
-                    ),
-                },
-                SecretKeyStoreError::PersistenceError(SecretKeyStorePersistenceError::IoError(
-                    io_error,
-                )) => CspTlsKeygenError::TransientInternalError {
-                    internal_error: format!(
-                        "Error persisting secret key store during CSP TLS key generation: {}",
-                        io_error
-                    ),
-                },
+                SecretKeyStoreInsertionError::SerializationError(serialization_error) => {
+                    CspTlsKeygenError::InternalError {
+                        internal_error: format!(
+                            "Error persisting secret key store during CSP TLS key generation: {}",
+                            serialization_error
+                        ),
+                    }
+                }
+                SecretKeyStoreInsertionError::TransientError(io_error) => {
+                    CspTlsKeygenError::TransientInternalError {
+                        internal_error: format!(
+                            "Error persisting secret key store during CSP TLS key generation: {}",
+                            io_error
+                        ),
+                    }
+                }
             })
             .and_then(|()| {
                 pks_write_lock

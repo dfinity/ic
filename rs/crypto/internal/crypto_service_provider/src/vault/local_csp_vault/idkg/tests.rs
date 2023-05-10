@@ -1,7 +1,6 @@
 use crate::api::CspCreateMEGaKeyError;
-use crate::secret_key_store::SecretKeyStoreError;
+use crate::secret_key_store::SecretKeyStoreInsertionError;
 use crate::vault::api::IDkgProtocolCspVault;
-use crate::vault::local_csp_vault::idkg::SecretKeyStorePersistenceError;
 use crate::vault::local_csp_vault::PublicKeyStore;
 use crate::vault::test_utils;
 use crate::LocalCspVault;
@@ -180,8 +179,8 @@ mod idkg_gen_dealing_encryption_key_pair {
         sks_returning_io_error
             .expect_insert()
             .times(1)
-            .return_const(Err(SecretKeyStoreError::PersistenceError(
-                SecretKeyStorePersistenceError::IoError(expected_io_error.clone()),
+            .return_const(Err(SecretKeyStoreInsertionError::TransientError(
+                expected_io_error.clone(),
             )));
         let vault = LocalCspVault::builder()
             .with_node_secret_key_store(sks_returning_io_error)
@@ -204,10 +203,8 @@ mod idkg_gen_dealing_encryption_key_pair {
         sks_returning_serialization_error
             .expect_insert()
             .times(1)
-            .return_const(Err(SecretKeyStoreError::PersistenceError(
-                SecretKeyStorePersistenceError::SerializationError(
-                    expected_serialization_error.clone(),
-                ),
+            .return_const(Err(SecretKeyStoreInsertionError::SerializationError(
+                expected_serialization_error.clone(),
             )));
         let vault = LocalCspVault::builder()
             .with_node_secret_key_store(sks_returning_serialization_error)

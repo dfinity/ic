@@ -3,7 +3,7 @@ use crate::canister_threshold::IDKG_MEGA_SCOPE;
 use crate::secret_key_store::temp_secret_key_store::TempSecretKeyStore;
 use crate::secret_key_store::test_utils::{make_key_id, make_secret_key};
 use crate::secret_key_store::{
-    scope::ConstScope, Scope, SecretKeyStore, SecretKeyStoreError, SecretKeyStorePersistenceError,
+    scope::ConstScope, Scope, SecretKeyStore, SecretKeyStoreInsertionError,
 };
 use crate::types::CspSecretKey;
 use assert_matches::assert_matches;
@@ -415,10 +415,8 @@ fn should_fail_to_write_to_read_only_secret_key_store_directory() {
 
     assert_matches!(
         secret_key_store.insert(key_id, key, None),
-        Err(SecretKeyStoreError::PersistenceError(
-            SecretKeyStorePersistenceError::IoError(msg)
-        ))
-        if msg.to_lowercase().contains("permission denied")
+        Err(SecretKeyStoreInsertionError::TransientError(msg))
+        if msg.to_lowercase().contains("secret key store internal error writing protobuf using tmp file: permission denied")
     );
 
     fs::set_permissions(temp_dir.path(), Permissions::from_mode(0o700)).expect(
@@ -444,9 +442,7 @@ fn should_fail_to_write_to_secret_key_store_directory_without_execute_permission
 
     assert_matches!(
         secret_key_store.insert(key_id, key, None),
-        Err(SecretKeyStoreError::PersistenceError(
-            SecretKeyStorePersistenceError::IoError(msg)
-        ))
+        Err(SecretKeyStoreInsertionError::TransientError(msg))
         if msg.to_lowercase().contains("permission denied")
     );
 
@@ -473,9 +469,7 @@ fn should_fail_to_write_to_secret_key_store_directory_without_write_permissions(
 
     assert_matches!(
         secret_key_store.insert(key_id, key, None),
-        Err(SecretKeyStoreError::PersistenceError(
-            SecretKeyStorePersistenceError::IoError(msg)
-        ))
+        Err(SecretKeyStoreInsertionError::TransientError(msg))
         if msg.to_lowercase().contains("permission denied")
     );
 

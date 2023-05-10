@@ -1,7 +1,6 @@
 #![allow(clippy::unwrap_used)]
 
-use crate::vault::local_csp_vault::tls::SecretKeyStoreError;
-use crate::vault::local_csp_vault::tls::SecretKeyStorePersistenceError;
+use crate::vault::local_csp_vault::tls::SecretKeyStoreInsertionError;
 use crate::vault::test_utils;
 use crate::vault::test_utils::sks::secret_key_store_containing_key_with_invalid_encoding;
 use crate::vault::test_utils::sks::secret_key_store_with_duplicated_key_id_error_on_insert;
@@ -203,8 +202,8 @@ mod keygen {
         sks_returning_io_error
             .expect_insert()
             .times(1)
-            .return_const(Err(SecretKeyStoreError::PersistenceError(
-                SecretKeyStorePersistenceError::IoError(expected_io_error.clone()),
+            .return_const(Err(SecretKeyStoreInsertionError::TransientError(
+                expected_io_error.clone(),
             )));
         let vault = LocalCspVault::builder()
             .with_node_secret_key_store(sks_returning_io_error)
@@ -227,10 +226,8 @@ mod keygen {
         sks_returning_serialization_error
             .expect_insert()
             .times(1)
-            .return_const(Err(SecretKeyStoreError::PersistenceError(
-                SecretKeyStorePersistenceError::SerializationError(
-                    expected_serialization_error.clone(),
-                ),
+            .return_const(Err(SecretKeyStoreInsertionError::SerializationError(
+                expected_serialization_error.clone(),
             )));
         let vault = LocalCspVault::builder()
             .with_node_secret_key_store(sks_returning_serialization_error)

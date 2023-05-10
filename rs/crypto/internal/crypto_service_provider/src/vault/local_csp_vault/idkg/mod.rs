@@ -4,7 +4,7 @@ use crate::key_id::KeyId;
 use crate::keygen::utils::idkg_dealing_encryption_pk_to_proto;
 use crate::public_key_store::{PublicKeyAddError, PublicKeyRetainError, PublicKeyStore};
 use crate::secret_key_store::{
-    SecretKeyStore, SecretKeyStoreError, SecretKeyStorePersistenceError,
+    SecretKeyStore, SecretKeyStoreInsertionError, SecretKeyStoreWriteError,
 };
 use crate::types::CspSecretKey;
 use crate::vault::api::IDkgProtocolCspVault;
@@ -303,10 +303,10 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                         Some(IDKG_THRESHOLD_KEYS_SCOPE),
                     ) {
                         Ok(_) => Ok(BTreeMap::new()),
-                        Err(SecretKeyStorePersistenceError::SerializationError(e)) => {
+                        Err(SecretKeyStoreWriteError::SerializationError(e)) => {
                             Err(IDkgLoadTranscriptError::InternalError { internal_error: e })
                         }
-                        Err(SecretKeyStorePersistenceError::IoError(e)) => {
+                        Err(SecretKeyStoreWriteError::TransientError(e)) => {
                             Err(IDkgLoadTranscriptError::TransientInternalError {
                                 internal_error: e,
                             })
@@ -383,10 +383,10 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                             Some(IDKG_THRESHOLD_KEYS_SCOPE),
                         )
                         .map_err(|e| match e {
-                            SecretKeyStorePersistenceError::SerializationError(e) => {
+                            SecretKeyStoreWriteError::SerializationError(e) => {
                                 IDkgLoadTranscriptError::InternalError { internal_error: e }
                             }
-                            SecretKeyStorePersistenceError::IoError(e) => {
+                            SecretKeyStoreWriteError::TransientError(e) => {
                                 IDkgLoadTranscriptError::TransientInternalError {
                                     internal_error: e,
                                 }
@@ -442,10 +442,10 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         sks_write_lock
             .insert(key_id, csp_secret_key, Some(IDKG_MEGA_SCOPE))
             .map_err(|sks_error| match sks_error {
-                SecretKeyStoreError::DuplicateKeyId(key_id) => {
+                SecretKeyStoreInsertionError::DuplicateKeyId(key_id) => {
                     CspCreateMEGaKeyError::DuplicateKeyId { key_id }
                 }
-                SecretKeyStoreError::PersistenceError(SecretKeyStorePersistenceError::IoError(e)) => {
+                SecretKeyStoreInsertionError::TransientError(e) => {
                     CspCreateMEGaKeyError::TransientInternalError {
                         internal_error: format!(
                             "Secret key store persistence I/O error while creating MEGa keys: {}",
@@ -453,9 +453,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                         ),
                     }
                 }
-                SecretKeyStoreError::PersistenceError(
-                    SecretKeyStorePersistenceError::SerializationError(e),
-                ) => CspCreateMEGaKeyError::InternalError {
+                SecretKeyStoreInsertionError::SerializationError(e) => CspCreateMEGaKeyError::InternalError {
                     internal_error: format!(
                         "Secret key store persistence serialization error while creating MEGa keys: {}",
                         e
@@ -540,13 +538,13 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                 IDKG_THRESHOLD_KEYS_SCOPE,
             )
             .map_err(|e| match e {
-                SecretKeyStorePersistenceError::SerializationError(e) => {
+                SecretKeyStoreWriteError::SerializationError(e) => {
                     IDkgRetainKeysError::SerializationError {
                         internal_error: format!("Serialization error while retaining active IDKG canister secret shares: {:?}", e),
                     }
 
                 }
-                SecretKeyStorePersistenceError::IoError(e) => {
+                SecretKeyStoreWriteError::TransientError(e) => {
                     IDkgRetainKeysError::TransientInternalError {
                         internal_error: format!("IO error while retaining active IDKG canister secret shares: {:?}", e)
                     }
@@ -705,12 +703,12 @@ fn idkg_retain_active_dealing_encryption_secret_keys<S: SecretKeyStore>(
             IDKG_MEGA_SCOPE,
         )
         .map_err(|sks_error| match sks_error {
-            SecretKeyStorePersistenceError::SerializationError(e) => {
+            SecretKeyStoreWriteError::SerializationError(e) => {
                 IDkgRetainKeysError::SerializationError {
                     internal_error: format!("Serialization error while retaining active IDKG dealing encryption secret keys: {:?}", e),
                 }
             }
-            SecretKeyStorePersistenceError::IoError(e) => {
+            SecretKeyStoreWriteError::TransientError(e) => {
                 IDkgRetainKeysError::TransientInternalError {
                     internal_error: format!("IO error while retaining active IDKG dealing encryption secret keys: {:?}", e)
                 }

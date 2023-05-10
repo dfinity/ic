@@ -31,7 +31,7 @@ pub trait SecretKeyStore: Send + Sync {
         id: KeyId,
         key: CspSecretKey,
         scope: Option<Scope>,
-    ) -> Result<(), SecretKeyStoreError>;
+    ) -> Result<(), SecretKeyStoreInsertionError>;
 
     /// Inserts a key with a given `id` into the store, replacing any existing
     /// entry.
@@ -44,17 +44,22 @@ pub trait SecretKeyStore: Send + Sync {
         id: KeyId,
         key: CspSecretKey,
         scope: Option<Scope>,
-    ) -> Result<(), SecretKeyStorePersistenceError> {
+    ) -> Result<(), SecretKeyStoreWriteError> {
         self.remove(&id)?;
         self.insert(id, key, scope).map_err(|e| match e {
-            SecretKeyStoreError::DuplicateKeyId(e) => {
+            SecretKeyStoreInsertionError::DuplicateKeyId(e) => {
                 // unreachable, because key with `id` was removed prior to insertion
                 panic!(
                     "Duplicate key error although the key was just removed: {}",
                     e
                 );
             }
-            SecretKeyStoreError::PersistenceError(e) => e,
+            SecretKeyStoreInsertionError::SerializationError(e) => {
+                SecretKeyStoreWriteError::SerializationError(e)
+            }
+            SecretKeyStoreInsertionError::TransientError(e) => {
+                SecretKeyStoreWriteError::TransientError(e)
+            }
         })
     }
 
@@ -74,7 +79,7 @@ pub trait SecretKeyStore: Send + Sync {
     /// The return value indicates whether a key with the given `id` was
     /// previously contained and removed, or an error if the updated secret key store
     /// could not be written.
-    fn remove(&mut self, id: &KeyId) -> Result<bool, SecretKeyStorePersistenceError>;
+    fn remove(&mut self, id: &KeyId) -> Result<bool, SecretKeyStoreWriteError>;
 
     /// Keeps only entries in a scope for which the filter function returns
     /// `true` and removes the rest.
@@ -104,7 +109,7 @@ pub trait SecretKeyStore: Send + Sync {
     /// can be added to this implementation and we may require `panic="unwind"`.
     /// See the (book)[https://doc.rust-lang.org/edition-guide/rust-2018/error-handling-and-panics/controlling-panics-with-std-panic.html]
     /// and function documentation for more details.
-    fn retain<F>(&mut self, _filter: F, _scope: Scope) -> Result<(), SecretKeyStorePersistenceError>
+    fn retain<F>(&mut self, _filter: F, _scope: Scope) -> Result<(), SecretKeyStoreWriteError>
     where
         F: Fn(&KeyId, &CspSecretKey) -> bool + 'static,
     {
@@ -112,45 +117,64 @@ pub trait SecretKeyStore: Send + Sync {
     }
 }
 
-/// Errors that can occur while interacting with the secret key store
+/// Errors that can occur while inserting a key into the secret key store
 #[derive(Clone, Debug)]
-pub enum SecretKeyStoreError {
+pub enum SecretKeyStoreInsertionError {
     DuplicateKeyId(KeyId),
-    PersistenceError(SecretKeyStorePersistenceError),
+    /// Happens when writing to disk, see `SecretKeyStoreWriteError::SerializationError`
+    SerializationError(String),
+    /// Happens when writing to disk, see `SecretKeyStoreWriteError::TransientError`
+    TransientError(String),
 }
 
-impl std::error::Error for SecretKeyStoreError {}
+impl std::error::Error for SecretKeyStoreInsertionError {}
 
-impl fmt::Display for SecretKeyStoreError {
+impl fmt::Display for SecretKeyStoreInsertionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            SecretKeyStoreError::DuplicateKeyId(key_id) => {
+            SecretKeyStoreInsertionError::DuplicateKeyId(key_id) => {
                 write!(f, "Key with ID {} already exists in the key store", key_id)
             }
-            SecretKeyStoreError::PersistenceError(e) => {
-                write!(f, "{}", e)
+            SecretKeyStoreInsertionError::SerializationError(e) => {
+                write!(f, "Error serializing secret key store: {}", e)
+            }
+            SecretKeyStoreInsertionError::TransientError(e) => {
+                write!(f, "Transient error persisting secret key store: {}", e)
             }
         }
     }
 }
 
-/// Errors that can occur while persisting the secret key store
-#[derive(Clone, Debug)]
-pub enum SecretKeyStorePersistenceError {
-    SerializationError(String),
-    IoError(String),
+impl From<SecretKeyStoreWriteError> for SecretKeyStoreInsertionError {
+    fn from(e: SecretKeyStoreWriteError) -> Self {
+        match e {
+            SecretKeyStoreWriteError::SerializationError(e) => {
+                SecretKeyStoreInsertionError::SerializationError(e)
+            }
+            SecretKeyStoreWriteError::TransientError(e) => {
+                SecretKeyStoreInsertionError::TransientError(e)
+            }
+        }
+    }
 }
 
-impl std::error::Error for SecretKeyStorePersistenceError {}
+/// Errors that can occur while writing a secret key store to disk
+#[derive(Clone, Debug)]
+pub enum SecretKeyStoreWriteError {
+    SerializationError(String),
+    TransientError(String),
+}
 
-impl fmt::Display for SecretKeyStorePersistenceError {
+impl std::error::Error for SecretKeyStoreWriteError {}
+
+impl fmt::Display for SecretKeyStoreWriteError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            SecretKeyStorePersistenceError::SerializationError(e) => {
+            SecretKeyStoreWriteError::SerializationError(e) => {
                 write!(f, "Error serializing secret key store: {}", e)
             }
-            SecretKeyStorePersistenceError::IoError(e) => {
-                write!(f, "I/O error persisting secret key store: {}", e)
+            SecretKeyStoreWriteError::TransientError(e) => {
+                write!(f, "Transient error persisting secret key store: {}", e)
             }
         }
     }
