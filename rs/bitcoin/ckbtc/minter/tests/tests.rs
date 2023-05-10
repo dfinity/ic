@@ -5,6 +5,7 @@ use ic_ckbtc_minter::lifecycle::init::InitArgs as CkbtcMinterInitArgs;
 use ic_ckbtc_minter::lifecycle::init::MinterArg;
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
 use ic_ckbtc_minter::state::Mode;
+use ic_ckbtc_minter::updates::get_btc_address::GetBtcAddressArgs;
 use ic_ckbtc_minter::updates::retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError, RetrieveBtcOk};
 use ic_ckbtc_minter::updates::update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus};
 use ic_icrc1_ledger::{InitArgs as LedgerInitArgs, LedgerArgument};
@@ -288,4 +289,63 @@ fn test_illegal_caller() {
         Encode!(&update_balance_args).unwrap(),
     );
     assert!(res.is_err());
+}
+
+pub fn get_btc_address(
+    env: &StateMachine,
+    minter_id: CanisterId,
+    arg: &GetBtcAddressArgs,
+) -> String {
+    Decode!(
+        &env.execute_ingress_as(
+            CanisterId::from_u64(100).into(),
+            minter_id,
+            "get_btc_address",
+            Encode!(arg).unwrap()
+        )
+        .expect("failed to transfer funds")
+        .bytes(),
+        String
+    )
+    .expect("failed to decode String response")
+}
+
+#[test]
+fn test_minter() {
+    use bitcoin::Address;
+
+    let env = StateMachine::new();
+    let args = MinterArg::Init(CkbtcMinterInitArgs {
+        btc_network: Network::Regtest,
+        ecdsa_key_name: "master_ecdsa_public_key".into(),
+        retrieve_btc_min_amount: 100_000,
+        ledger_id: CanisterId::from_u64(0),
+        max_time_in_queue_nanos: 100,
+        min_confirmations: Some(6_u32),
+        mode: Mode::GeneralAvailability,
+        kyt_fee: Some(1001),
+        kyt_principal: None,
+    });
+    let args = Encode!(&args).unwrap();
+    let minter_id = env.install_canister(minter_wasm(), args, None).unwrap();
+
+    let btc_address_1 = get_btc_address(
+        &env,
+        minter_id,
+        &GetBtcAddressArgs {
+            owner: None,
+            subaccount: None,
+        },
+    );
+    let address_1 = Address::from_str(&btc_address_1).expect("invalid bitcoin address");
+    let btc_address_2 = get_btc_address(
+        &env,
+        minter_id,
+        &GetBtcAddressArgs {
+            owner: None,
+            subaccount: Some([1; 32]),
+        },
+    );
+    let address_2 = Address::from_str(&btc_address_2).expect("invalid bitcoin address");
+    assert_ne!(address_1, address_2);
 }

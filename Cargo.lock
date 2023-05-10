@@ -9481,6 +9481,7 @@ dependencies = [
  "ic-config",
  "ic-constants",
  "ic-crypto",
+ "ic-crypto-ecdsa-secp256k1",
  "ic-crypto-internal-seed",
  "ic-crypto-internal-threshold-sig-bls12381",
  "ic-crypto-internal-types",
