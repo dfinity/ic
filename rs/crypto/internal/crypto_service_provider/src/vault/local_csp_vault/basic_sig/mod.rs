@@ -2,9 +2,7 @@
 use crate::key_id::KeyId;
 use crate::keygen::utils::node_signing_pk_to_proto;
 use crate::public_key_store::{PublicKeySetOnceError, PublicKeyStore};
-use crate::secret_key_store::{
-    SecretKeyStore, SecretKeyStoreError, SecretKeyStorePersistenceError,
-};
+use crate::secret_key_store::{SecretKeyStore, SecretKeyStoreInsertionError};
 use crate::types::{CspPublicKey, CspSecretKey, CspSignature};
 use crate::vault::api::{
     BasicSignatureCspVault, CspBasicSignatureError, CspBasicSignatureKeygenError,
@@ -81,10 +79,10 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         sks_write_lock
             .insert(key_id, secret_key, None)
             .map_err(|sks_error| match sks_error {
-                SecretKeyStoreError::DuplicateKeyId(key_id) => {
+                SecretKeyStoreInsertionError::DuplicateKeyId(key_id) => {
                     CspBasicSignatureKeygenError::DuplicateKeyId { key_id }
                 }
-                SecretKeyStoreError::PersistenceError(SecretKeyStorePersistenceError::IoError(e)) => {
+                SecretKeyStoreInsertionError::TransientError(e) => {
                     CspBasicSignatureKeygenError::TransientInternalError {
                         internal_error: format!(
                             "Error persisting secret key store during CSP basic signature key generation: {}",
@@ -92,9 +90,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                         ),
                     }
                 }
-                SecretKeyStoreError::PersistenceError(
-                    SecretKeyStorePersistenceError::SerializationError(e),
-                ) => CspBasicSignatureKeygenError::InternalError {
+                SecretKeyStoreInsertionError::SerializationError(e) => CspBasicSignatureKeygenError::InternalError {
                     internal_error: format!(
                         "Error persisting secret key store during CSP basic signature key generation: {}",
                         e

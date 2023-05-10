@@ -3,7 +3,7 @@
 use crate::canister_threshold::IDKG_MEGA_SCOPE;
 use crate::key_id::KeyId;
 use crate::secret_key_store::{
-    Scope, SecretKeyStore, SecretKeyStoreError, SecretKeyStorePersistenceError,
+    Scope, SecretKeyStore, SecretKeyStoreInsertionError, SecretKeyStoreWriteError,
 };
 use crate::types::CspSecretKey;
 use hex::{FromHex, ToHex};
@@ -178,7 +178,7 @@ impl ProtoSecretKeyStore {
     fn write_secret_keys_to_disk(
         &self,
         secret_keys: &SecretKeys,
-    ) -> Result<(), SecretKeyStorePersistenceError> {
+    ) -> Result<(), SecretKeyStoreWriteError> {
         let sks_proto = ProtoSecretKeyStore::secret_keys_to_sks_proto(secret_keys)?;
         match self.proto_file.try_exists() {
             Ok(exists) => {
@@ -209,7 +209,7 @@ impl ProtoSecretKeyStore {
         // Write the new keystore to a new file and atomically replace the existing keystore.
         // The previously created hard link still points to the old keystore file.
         ic_utils::fs::write_protobuf_using_tmp_file(&self.proto_file, &sks_proto).map_err(|e| {
-            SecretKeyStorePersistenceError::IoError(format!(
+            SecretKeyStoreWriteError::TransientError(format!(
                 "Secret key store internal error writing protobuf using tmp file: {}",
                 e
             ))
@@ -329,7 +329,7 @@ impl ProtoSecretKeyStore {
 
     fn secret_keys_to_sks_proto(
         secret_keys: &SecretKeys,
-    ) -> Result<pb::SecretKeyStore, SecretKeyStorePersistenceError> {
+    ) -> Result<pb::SecretKeyStore, SecretKeyStoreWriteError> {
         let mut sks_proto = pb::SecretKeyStore {
             version: CURRENT_SKS_VERSION,
             ..Default::default()
@@ -338,7 +338,7 @@ impl ProtoSecretKeyStore {
             let key_id_hex = key_id.encode_hex();
             let key_as_cbor =
                 serde_cbor::to_vec(&csp_key).map_err(|_ignored_so_that_no_data_is_leaked| {
-                    SecretKeyStorePersistenceError::SerializationError(format!(
+                    SecretKeyStoreWriteError::SerializationError(format!(
                         "Error serializing key with ID {}",
                         key_id
                     ))
@@ -365,20 +365,19 @@ impl SecretKeyStore for ProtoSecretKeyStore {
         id: KeyId,
         key: CspSecretKey,
         scope: Option<Scope>,
-    ) -> Result<(), SecretKeyStoreError> {
-        let inserted: Result<bool, SecretKeyStorePersistenceError> =
-            with_write_lock(&self.keys, |keys| match keys.get(&id) {
-                Some(_) => Ok(false),
-                None => {
-                    keys.insert(id, (key, scope));
-                    self.write_secret_keys_to_disk(keys)?;
-                    Ok(true)
-                }
-            });
-        match inserted {
-            Ok(false) => Err(SecretKeyStoreError::DuplicateKeyId(id)),
-            Ok(true) => Ok(()),
-            Err(e) => Err(SecretKeyStoreError::PersistenceError(e)),
+    ) -> Result<(), SecretKeyStoreInsertionError> {
+        let inserted = with_write_lock(&self.keys, |keys| match keys.get(&id) {
+            Some(_) => Ok(false),
+            None => {
+                keys.insert(id, (key, scope));
+                self.write_secret_keys_to_disk(keys)?;
+                Ok(true)
+            }
+        })?;
+        if inserted {
+            Ok(())
+        } else {
+            Err(SecretKeyStoreInsertionError::DuplicateKeyId(id))
         }
     }
 
@@ -392,7 +391,7 @@ impl SecretKeyStore for ProtoSecretKeyStore {
         self.get(id).is_some()
     }
 
-    fn remove(&mut self, id: &KeyId) -> Result<bool, SecretKeyStorePersistenceError> {
+    fn remove(&mut self, id: &KeyId) -> Result<bool, SecretKeyStoreWriteError> {
         with_write_lock(&self.keys, |keys| match keys.get(id) {
             Some(_) => {
                 keys.remove(id);
@@ -403,7 +402,7 @@ impl SecretKeyStore for ProtoSecretKeyStore {
         })
     }
 
-    fn retain<F>(&mut self, filter: F, scope: Scope) -> Result<(), SecretKeyStorePersistenceError>
+    fn retain<F>(&mut self, filter: F, scope: Scope) -> Result<(), SecretKeyStoreWriteError>
     where
         F: Fn(&KeyId, &CspSecretKey) -> bool,
     {
@@ -476,10 +475,10 @@ fn overwrite_file_with_zeroes_and_delete_if_it_exists<P: AsRef<Path>>(
     };
 }
 
-fn with_write_lock<T, I, R, F>(v: T, f: F) -> Result<R, SecretKeyStorePersistenceError>
+fn with_write_lock<T, I, R, F>(v: T, f: F) -> Result<R, SecretKeyStoreWriteError>
 where
     T: AsRef<RwLock<I>>,
-    F: FnOnce(&mut I) -> Result<R, SecretKeyStorePersistenceError>,
+    F: FnOnce(&mut I) -> Result<R, SecretKeyStoreWriteError>,
 {
     let mut lock_result = v.as_ref().write();
     f(lock_result.borrow_mut())

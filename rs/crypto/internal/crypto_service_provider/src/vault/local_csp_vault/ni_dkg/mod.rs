@@ -1,8 +1,6 @@
 use crate::keygen::utils::dkg_dealing_encryption_pk_to_proto;
 use crate::public_key_store::{PublicKeySetOnceError, PublicKeyStore};
-use crate::secret_key_store::{
-    SecretKeyStore, SecretKeyStoreError, SecretKeyStorePersistenceError,
-};
+use crate::secret_key_store::{SecretKeyStore, SecretKeyStoreInsertionError};
 use crate::threshold::ni_dkg::specialise;
 use crate::threshold::ni_dkg::{NIDKG_FS_SCOPE, NIDKG_THRESHOLD_SCOPE};
 use crate::types::{CspPublicCoefficients, CspSecretKey};
@@ -182,26 +180,26 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         sks_write_lock
             .insert(key_id, secret_key, None)
             .map_err(|e| match e {
-                SecretKeyStoreError::DuplicateKeyId(key_id) => {
+                SecretKeyStoreInsertionError::DuplicateKeyId(key_id) => {
                     CspDkgCreateFsKeyError::DuplicateKeyId(format!(
                         "duplicate ni-dkg dealing encryption secret key id: {}",
                         key_id
                     ))
                 }
-                SecretKeyStoreError::PersistenceError(SecretKeyStorePersistenceError::IoError(
-                    io_error,
-                )) => CspDkgCreateFsKeyError::TransientInternalError(format!(
-                    "error persisting ni-dkg dealing encryption secret key: {}",
-                    io_error
-                )),
-                SecretKeyStoreError::PersistenceError(
-                    SecretKeyStorePersistenceError::SerializationError(serialization_error),
-                ) => CspDkgCreateFsKeyError::InternalError(InternalError {
-                    internal_error: format!(
+                SecretKeyStoreInsertionError::TransientError(io_error) => {
+                    CspDkgCreateFsKeyError::TransientInternalError(format!(
                         "error persisting ni-dkg dealing encryption secret key: {}",
-                        serialization_error
-                    ),
-                }),
+                        io_error
+                    ))
+                }
+                SecretKeyStoreInsertionError::SerializationError(serialization_error) => {
+                    CspDkgCreateFsKeyError::InternalError(InternalError {
+                        internal_error: format!(
+                            "error persisting ni-dkg dealing encryption secret key: {}",
+                            serialization_error
+                        ),
+                    })
+                }
             })
             .and_then(|()| {
                 pks_write_lock
@@ -426,8 +424,9 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
                 );
                 match result {
                     Ok(()) => Ok(()),
-                    Err(SecretKeyStoreError::DuplicateKeyId(_key_id)) => Ok(()),
-                    Err(SecretKeyStoreError::PersistenceError(e)) => {
+                    Err(SecretKeyStoreInsertionError::DuplicateKeyId(_key_id)) => Ok(()),
+                    Err(SecretKeyStoreInsertionError::TransientError(e))
+                    | Err(SecretKeyStoreInsertionError::SerializationError(e)) => {
                         panic!("Error persisting secret key store while loading threshold signing key: {}", e)
                     }
                 }

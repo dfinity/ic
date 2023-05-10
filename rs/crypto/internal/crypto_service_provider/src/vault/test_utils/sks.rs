@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used)]
 use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
 use crate::secret_key_store::temp_secret_key_store::TempSecretKeyStore;
-use crate::secret_key_store::{SecretKeyStoreError, SecretKeyStorePersistenceError};
+use crate::secret_key_store::SecretKeyStoreInsertionError;
 use crate::types::CspSecretKey;
 use crate::vault::api::CspVault;
 use crate::{KeyId, SecretKeyStore};
@@ -107,7 +107,9 @@ pub fn secret_key_store_with_duplicated_key_id_error_on_insert(
     sks_returning_duplicate_key_id_error_on_insert
         .expect_insert()
         .times(1)
-        .return_const(Err(SecretKeyStoreError::DuplicateKeyId(duplicated_key_id)));
+        .return_const(Err(SecretKeyStoreInsertionError::DuplicateKeyId(
+            duplicated_key_id,
+        )));
     sks_returning_duplicate_key_id_error_on_insert
 }
 
@@ -116,8 +118,8 @@ pub fn secret_key_store_with_serialization_error_on_insert() -> impl SecretKeySt
     sks_returning_serialization_error_on_insert
         .expect_insert()
         .times(1)
-        .return_const(Err(SecretKeyStoreError::PersistenceError(
-            SecretKeyStorePersistenceError::SerializationError("error serializing key".to_string()),
+        .return_const(Err(SecretKeyStoreInsertionError::SerializationError(
+            "error serializing key".to_string(),
         )));
     sks_returning_serialization_error_on_insert
 }
@@ -127,10 +129,8 @@ pub fn secret_key_store_with_io_error_on_insert() -> impl SecretKeyStore {
     sks_returning_io_error_on_insert
         .expect_insert()
         .times(1)
-        .return_const(Err(SecretKeyStoreError::PersistenceError(
-            SecretKeyStorePersistenceError::IoError(
-                "io error persisting secret key store".to_string(),
-            ),
+        .return_const(Err(SecretKeyStoreInsertionError::TransientError(
+            "io error persisting secret key store".to_string(),
         )));
     sks_returning_io_error_on_insert
 }

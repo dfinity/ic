@@ -5,9 +5,7 @@ use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
 use crate::public_key_store::PublicKeySetOnceError;
 use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
 use crate::secret_key_store::temp_secret_key_store::TempSecretKeyStore;
-use crate::secret_key_store::{
-    SecretKeyStore, SecretKeyStoreError, SecretKeyStorePersistenceError,
-};
+use crate::secret_key_store::{SecretKeyStore, SecretKeyStoreInsertionError};
 use crate::types::{CspPublicKey, CspSignature};
 use crate::vault::api::PublicKeyStoreCspVault;
 use crate::vault::api::SecretKeyStoreCspVault;
@@ -131,8 +129,8 @@ fn should_fail_with_transient_internal_error_if_node_signing_secret_key_persiste
     sks_returning_io_error
         .expect_insert()
         .times(1)
-        .return_const(Err(SecretKeyStoreError::PersistenceError(
-            SecretKeyStorePersistenceError::IoError(expected_io_error.clone()),
+        .return_const(Err(SecretKeyStoreInsertionError::TransientError(
+            expected_io_error.clone(),
         )));
     let vault = LocalCspVault::builder()
         .with_node_secret_key_store(sks_returning_io_error)
@@ -155,10 +153,8 @@ fn should_fail_with_internal_error_if_node_signing_secret_key_persistence_fails_
     sks_returning_serialization_error
         .expect_insert()
         .times(1)
-        .return_const(Err(SecretKeyStoreError::PersistenceError(
-            SecretKeyStorePersistenceError::SerializationError(
-                expected_serialization_error.clone(),
-            ),
+        .return_const(Err(SecretKeyStoreInsertionError::SerializationError(
+            expected_serialization_error.clone(),
         )));
     let vault = LocalCspVault::builder()
         .with_node_secret_key_store(sks_returning_serialization_error)

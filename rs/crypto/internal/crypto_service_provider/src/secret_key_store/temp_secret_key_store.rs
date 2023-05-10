@@ -1,7 +1,7 @@
 use crate::key_id::KeyId;
 use crate::secret_key_store::proto_store::ProtoSecretKeyStore;
 use crate::secret_key_store::{
-    SecretKeyStore, SecretKeyStoreError, SecretKeyStorePersistenceError,
+    SecretKeyStore, SecretKeyStoreInsertionError, SecretKeyStoreWriteError,
 };
 use crate::types::CspSecretKey;
 use ic_crypto_internal_types::scope::Scope;
@@ -47,7 +47,7 @@ impl SecretKeyStore for TempSecretKeyStore {
         id: KeyId,
         key: CspSecretKey,
         scope: Option<Scope>,
-    ) -> Result<(), SecretKeyStoreError> {
+    ) -> Result<(), SecretKeyStoreInsertionError> {
         self.store.insert(id, key, scope)
     }
 
@@ -59,7 +59,7 @@ impl SecretKeyStore for TempSecretKeyStore {
         self.store.contains(id)
     }
 
-    fn remove(&mut self, id: &KeyId) -> Result<bool, SecretKeyStorePersistenceError> {
+    fn remove(&mut self, id: &KeyId) -> Result<bool, SecretKeyStoreWriteError> {
         self.store.remove(id)
     }
 
@@ -67,7 +67,7 @@ impl SecretKeyStore for TempSecretKeyStore {
         &mut self,
         filter: F,
         scope: Scope,
-    ) -> Result<(), SecretKeyStorePersistenceError>
+    ) -> Result<(), SecretKeyStoreWriteError>
     where
         F: Fn(&KeyId, &CspSecretKey) -> bool,
     {

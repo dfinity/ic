@@ -2,8 +2,7 @@
 use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
 use crate::public_key_store::PublicKeySetOnceError;
 use crate::secret_key_store::mock_secret_key_store::MockSecretKeyStore;
-use crate::secret_key_store::SecretKeyStoreError;
-use crate::secret_key_store::SecretKeyStorePersistenceError;
+use crate::secret_key_store::SecretKeyStoreInsertionError;
 use crate::vault::api::NiDkgCspVault;
 use crate::vault::local_csp_vault::LocalCspVault;
 use crate::vault::test_utils;
@@ -117,8 +116,8 @@ fn should_fail_with_transient_internal_error_if_nidkg_secret_key_persistence_fai
     sks_returning_io_error
         .expect_insert()
         .times(1)
-        .return_const(Err(SecretKeyStoreError::PersistenceError(
-            SecretKeyStorePersistenceError::IoError(expected_io_error.clone()),
+        .return_const(Err(SecretKeyStoreInsertionError::TransientError(
+            expected_io_error.clone(),
         )));
     let vault = LocalCspVault::builder()
         .with_node_secret_key_store(sks_returning_io_error)
@@ -141,10 +140,8 @@ fn should_fail_with_internal_error_if_nidkg_secret_key_persistence_fails_due_to_
     sks_returning_serialization_error
         .expect_insert()
         .times(1)
-        .return_const(Err(SecretKeyStoreError::PersistenceError(
-            SecretKeyStorePersistenceError::SerializationError(
-                expected_serialization_error.clone(),
-            ),
+        .return_const(Err(SecretKeyStoreInsertionError::SerializationError(
+            expected_serialization_error.clone(),
         )));
     let vault = LocalCspVault::builder()
         .with_node_secret_key_store(sks_returning_serialization_error)
