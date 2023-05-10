@@ -13,6 +13,7 @@ hex = "0.4.2"
 ic-config = { path = "../config" }
 ic-constants = { path = "../constants" }
 ic-crypto = { path = "../crypto" }
+ic-crypto-ecdsa-secp256k1 = { path = "../crypto/ecdsa_secp256k1" }
 ic-crypto-internal-seed = { path= "../crypto/internal/crypto_lib/seed" }
 ic-crypto-internal-threshold-sig-bls12381 = { path= "../crypto/internal/crypto_lib/threshold_sig/bls12_381" }
 ic-crypto-internal-types = { path= "../crypto/internal/crypto_lib/types" }

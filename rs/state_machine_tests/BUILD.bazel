@@ -6,6 +6,7 @@ DEPENDENCIES = [
     # Keep sorted.
     "//rs/config",
     "//rs/constants",
+    "//rs/crypto/ecdsa_secp256k1",
     "//rs/crypto/internal/crypto_lib/seed",
     "//rs/crypto/internal/crypto_lib/threshold_sig/bls12_381",
     "//rs/crypto/internal/crypto_lib/types",
@@ -37,6 +38,7 @@ DEPENDENCIES = [
     "//rs/types/ic00_types",
     "//rs/types/types",
     "@crate_index//:candid",
+    "@crate_index//:hex",
     "@crate_index//:maplit",
     "@crate_index//:serde",
     "@crate_index//:serde_cbor",

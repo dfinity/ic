@@ -4,6 +4,7 @@ use ic_config::{
     subnet_config::{SubnetConfig, SubnetConfigs},
 };
 use ic_constants::{MAX_INGRESS_TTL, PERMITTED_DRIFT, SMALL_APP_SUBNET_MAX_SIZE};
+use ic_crypto_ecdsa_secp256k1::PrivateKey;
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::{
     combine_signatures, combined_public_key, generate_threshold_key, sign_message,
@@ -16,8 +17,8 @@ pub use ic_error_types::{ErrorCode, UserError};
 use ic_execution_environment::ExecutionServices;
 use ic_ic00_types::{self as ic00, CanisterIdRecord, InstallCodeArgs, Method, Payload};
 pub use ic_ic00_types::{
-    CanisterHttpResponsePayload, CanisterInstallMode, CanisterSettingsArgs, EcdsaKeyId, HttpHeader,
-    HttpMethod, UpdateSettingsArgs,
+    CanisterHttpResponsePayload, CanisterInstallMode, CanisterSettingsArgs, ECDSAPublicKeyResponse,
+    EcdsaCurve, EcdsaKeyId, HttpHeader, HttpMethod, SignWithECDSAReply, UpdateSettingsArgs,
 };
 use ic_interfaces::{
     certification::{Verifier, VerifierError},
@@ -280,6 +281,7 @@ pub struct StateMachine {
     subnet_id: SubnetId,
     public_key: ThresholdSigPublicKey,
     secret_key: SecretKeyBytes,
+    ecdsa_secret_key: PrivateKey,
     registry_data_provider: Arc<ProtoRegistryDataProvider>,
     registry_client: Arc<FakeRegistryClient>,
     pub state_manager: Arc<StateManagerImpl>,
@@ -341,7 +343,10 @@ impl StateMachineBuilder {
             nns_subnet_id: own_subnet_id,
             subnet_id: own_subnet_id,
             routing_table: RoutingTable::new(),
-            ecdsa_keys: Vec::new(),
+            ecdsa_keys: vec![EcdsaKeyId {
+                curve: EcdsaCurve::Secp256k1,
+                name: "master_ecdsa_public_key".to_string(),
+            }],
             features: SubnetFeatures {
                 http_requests: true,
                 ..SubnetFeatures::default()
@@ -595,11 +600,36 @@ impl StateMachine {
                 },
             );
         }
+        // The following key has been randomly generated using:
+        // https://sourcegraph.com/github.com/dfinity/ic/-/blob/rs/crypto/ecdsa_secp256k1/src/lib.rs
+        // It's the sec1 representation of the key in a hex string.
+        // let private_key: PrivateKey = PrivateKey::generate();
+        // let private_str = hex::encode(private_key.serialize_sec1());
+        // We always set it to the same value to have deterministic results.
+        // Please do not use this private key anywhere.
+        let private_key_bytes =
+            hex::decode("fb7d1f5b82336bb65b82bf4f27776da4db71c1ef632c6a7c171c0cbfa2ea4920")
+                .unwrap();
+
+        let ecdsa_secret_key: PrivateKey =
+            PrivateKey::deserialize_sec1(private_key_bytes.as_slice()).unwrap();
+
+        ecdsa_subnet_public_keys.insert(
+            EcdsaKeyId {
+                curve: EcdsaCurve::Secp256k1,
+                name: "master_ecdsa_public_key".to_string(),
+            },
+            MasterEcdsaPublicKey {
+                algorithm_id: AlgorithmId::EcdsaSecp256k1,
+                public_key: ecdsa_secret_key.public_key().serialize_sec1(true),
+            },
+        );
 
         Self {
             subnet_id,
             secret_key: secret_key_bytes.get(0).unwrap().clone(),
             public_key,
+            ecdsa_secret_key,
             registry_data_provider,
             registry_client,
             state_manager,
@@ -703,7 +733,30 @@ impl StateMachine {
     /// Triggers a single round of execution without any new inputs.  The state
     /// machine will invoke heartbeats and make progress on pending async calls.
     pub fn tick(&self) {
-        self.execute_payload(PayloadBuilder::default())
+        let mut payload = PayloadBuilder::default();
+        let state = self.state_manager.get_latest_state().take();
+        let sign_with_ecdsa_contexts = state
+            .metadata
+            .subnet_call_context_manager
+            .sign_with_ecdsa_contexts
+            .clone();
+        for (id, ecdsa_context) in sign_with_ecdsa_contexts {
+            // TODO Here we use the same key to sign every message.
+            // Once https://dfinity.atlassian.net/browse/CRP-2029 is closed,
+            // we should use the derived private key to sign the message.
+            let signature = self
+                .ecdsa_secret_key
+                .sign_message(&ecdsa_context.message_hash);
+            let reply = SignWithECDSAReply { signature };
+            payload.consensus_responses.push(Response {
+                originator: CanisterId::ic_00(),
+                respondent: CanisterId::ic_00(),
+                originator_reply_callback: id,
+                refund: Cycles::zero(),
+                response_payload: MsgPayload::Data(reply.encode()),
+            });
+        }
+        self.execute_payload(payload)
     }
 
     /// Makes the state machine tick until there are no more messages in the system.
