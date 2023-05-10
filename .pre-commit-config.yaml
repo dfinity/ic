@@ -42,6 +42,7 @@ repos:
     pass_filenames: false
     language: system
     always_run: true
+    verbose: true
 
 # The following repo is maintained by us at
 # https://gitlab.com/dfinity-lab/open/pre-commit-tools.
