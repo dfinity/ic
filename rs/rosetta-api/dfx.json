@@ -11,7 +11,7 @@
     },
     "icrc1_ledger": {
       "type": "custom",
-      "candid": "./icrc1/ledger/icrc1.did",
+      "candid": "./icrc1/ledger/ledger.did",
       "build": [
         "bazel build //rs/rosetta-api/icrc1/ledger:ledger_canister"
       ],

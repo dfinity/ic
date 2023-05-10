@@ -26,7 +26,7 @@ Download the ledger wasm and its candid file and unzip the ledger wasm
 [,console]
 ----
 $ curl -o ic-icrc1-ledger.wasm.gz https://download.dfinity.systems/ic/${IC_VERSION}/canisters/ic-icrc1-ledger.wasm.gz
-$ curl -o icrc1.did https://raw.githubusercontent.com/dfinity/ic/${IC_VERSION}/rs/rosetta-api/icrc1/ledger/icrc1.did
+$ curl -o ledger.did https://raw.githubusercontent.com/dfinity/ic/${IC_VERSION}/rs/rosetta-api/icrc1/ledger/ledger.did
 $ gunzip ic-icrc1-ledger.wasm.gz
 ----
 
@@ -38,7 +38,7 @@ Note that your specific data size may vary depending on the IC_VERSION you are u
 $ ls -sh1 *       
 
 1.4M ic-icrc1-ledger.wasm
-3.5K icrc1.did
+3.5K ledger.did
 ----
 
 == Step 2: Start the replica
@@ -60,7 +60,7 @@ insert the following information.
       "icrc1-ledger": {
         "type": "custom",
         "wasm": "ic-icrc1-ledger.wasm",
-        "candid": "icrc1.did"
+        "candid": "ledger.did"
       }
     },
     "networks": {

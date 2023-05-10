@@ -14,7 +14,7 @@
   "canisters": {
     "icrc1-ledger": {
       "type": "custom",
-      "candid": "../ledger/icrc1.did",
+      "candid": "../ledger/ledger.did",
       "build": "cargo build --target wasm32-unknown-unknown --release -p ic-icrc1-ledger",
       "wasm": "../../../target/wasm32-unknown-unknown/release/ic-icrc1-ledger.wasm",
       "shrink": true

@@ -69,7 +69,7 @@
     "sns-1-ledger": {
       "build": "",
       "wasm": "",
-      "candid": "../rosetta-api/icrc1/ledger/icrc1.did",
+      "candid": "../rosetta-api/icrc1/ledger/ledger.did",
       "type": "custom",
       "remote": {
         "id": {
@@ -135,7 +135,7 @@
     "oc-sns-ledger": {
       "build": "",
       "wasm": "",
-      "candid": "../rosetta-api/icrc1/ledger/icrc1.did",
+      "candid": "../rosetta-api/icrc1/ledger/ledger.did",
       "type": "custom",
       "remote": {
         "id": {
@@ -169,7 +169,7 @@
     "sns-ledger": {
       "build": "",
       "wasm": "",
-      "candid": "../rosetta-api/icrc1/ledger/icrc1.did",
+      "candid": "../rosetta-api/icrc1/ledger/ledger.did",
       "type": "custom"
     },
     "sns-root": {

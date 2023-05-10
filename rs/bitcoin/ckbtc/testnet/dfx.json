@@ -13,7 +13,7 @@
       "type": "custom",
       "build": ["bazel build //rs/rosetta-api/icrc1/ledger:ledger_canister"],
       "wasm": "../../../../bazel-bin/rs/rosetta-api/icrc1/ledger/ledger_canister.wasm",
-      "candid": "../../../rosetta-api/icrc1/ledger/icrc1.did",
+      "candid": "../../../rosetta-api/icrc1/ledger/ledger.did",
       "shrink": false
     },
     "archive": {
