@@ -60,31 +60,6 @@ function get_first_boot_state() {
     fi
 }
 
-function request_hsm() {
-    retry=0
-    /opt/ic/bin/hsm-utils.sh --check
-    while [ ${?} -ne 0 ]; do
-        let retry=retry+1
-        if [ ${retry} -ge 3600 ]; then
-            write_log "Nitrokey HSM USB device could not be detected, giving up."
-            write_metric "hostos_guestos_first_boot_hsm_state" \
-                "1" \
-                "GuestOS virtual machine first boot HSM state" \
-                "gauge"
-            exit 1
-        else
-            message="Please insert Nitrokey HSM USB device."
-            print_to_terminal "* $(echo ${message}).."
-            write_log "${message}"
-            write_metric "hostos_guestos_first_boot_hsm_state" \
-                "0" \
-                "GuestOS virtual machine first boot HSM state" \
-                "gauge"
-            sleep 3
-        fi
-    done
-}
-
 function write_first_boot_state() {
     echo "0" >${FIRST_BOOT_FILE}
 }
@@ -94,8 +69,6 @@ function detect_first_boot() {
 
     if [ ${FIRST_BOOT_STATE} -eq 1 ]; then
         write_log "First boot detected."
-        request_hsm
-        write_log "HSM was detected, continuing with startup."
         write_first_boot_state
         write_metric "hostos_guestos_first_boot_state state" \
             "1" \
