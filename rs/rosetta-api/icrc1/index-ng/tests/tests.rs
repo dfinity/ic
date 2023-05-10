@@ -1,6 +1,6 @@
 use candid::{Decode, Encode};
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_icrc1_index_ng::{GetBlocksResponse, InitArg as IndexInitArg};
+use ic_icrc1_index_ng::{GetBlocksResponse, IndexArg, InitArg as IndexInitArg};
 use ic_icrc1_ledger::{InitArgs as LedgerInitArgs, LedgerArgument};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_state_machine_tests::StateMachine;
@@ -90,9 +90,9 @@ fn install_ledger(
 }
 
 fn install_index(env: &StateMachine, ledger_id: CanisterId) -> CanisterId {
-    let args = IndexInitArg {
+    let args = IndexArg::InitArg(IndexInitArg {
         ledger_id: ledger_id.into(),
-    };
+    });
     env.install_canister(index_wasm(), Encode!(&args).unwrap(), None)
         .unwrap()
 }

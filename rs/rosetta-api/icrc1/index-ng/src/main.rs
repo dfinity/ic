@@ -1,8 +1,9 @@
 use candid::{candid_method, Nat, Principal};
+use ic_cdk::trap;
 use ic_cdk_macros::{init, query};
 use ic_cdk_timers::TimerId;
 use ic_icrc1::blocks::{encoded_block_to_generic_block, generic_block_to_encoded_block};
-use ic_icrc1_index_ng::InitArg;
+use ic_icrc1_index_ng::IndexArg;
 use ic_ledger_core::block::EncodedBlock;
 use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
 use ic_stable_structures::{
@@ -115,7 +116,12 @@ fn with_blocks<R>(f: impl FnOnce(&BlockLog) -> R) -> R {
 
 #[init]
 #[candid_method(init)]
-fn init(init_arg: InitArg) {
+fn init(index_arg: Option<IndexArg>) {
+    let init_arg = match index_arg {
+        Some(IndexArg::InitArg(arg)) => arg,
+        _ => trap("Index initialization must take in input an InitArg argument"),
+    };
+
     // stable memory initialization
     change_state(|state| {
         state.ledger_id = init_arg.ledger_id;
@@ -260,6 +266,30 @@ fn decode_block_range<R>(start: u64, length: u64, decoder: impl Fn(u64, Vec<u8>)
 }
 
 fn main() {}
+
+#[cfg(test)]
+candid::export_service!();
+
+#[test]
+fn check_candid_interface() {
+    use candid::utils::{service_compatible, CandidSource};
+    use std::path::PathBuf;
+
+    let new_interface = __export_service();
+    let manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+    let old_interface = manifest_dir.join("index-ng.did");
+    service_compatible(
+        CandidSource::Text(&new_interface),
+        CandidSource::File(old_interface.as_path()),
+    )
+    .unwrap_or_else(|e| {
+        panic!(
+            "the index interface is not compatible with {}: {:?}",
+            old_interface.display(),
+            e
+        )
+    });
+}
 
 #[test]
 fn compute_wait_time_test() {
