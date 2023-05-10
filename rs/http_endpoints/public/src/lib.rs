@@ -443,7 +443,7 @@ async fn handshake_and_serve_connection(
 
     let mut b = [0_u8; 1];
     let app_layer = match timeout(
-        Duration::from_secs(config.max_tcp_peek_timeout_seconds),
+        Duration::from_secs(config.connection_read_timeout_seconds),
         tcp_stream.peek(&mut b),
     )
     .await
@@ -466,7 +466,7 @@ async fn handshake_and_serve_connection(
             warn!(
                 log,
                 "TCP peeking timeout after {}s, error = {}",
-                config.max_tcp_peek_timeout_seconds,
+                config.connection_read_timeout_seconds,
                 err
             );
             metrics.observe_connection_error(ConnectionError::PeekTimeout, connection_start_time);

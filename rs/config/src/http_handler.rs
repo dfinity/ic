@@ -36,15 +36,6 @@ pub struct Config {
     /// The `SETTINGS_MAX_CONCURRENT_STREAMS` option for HTTP2 connections.
     pub http_max_concurrent_streams: u32,
 
-    /// The maximum time we should wait for a peeking the first bytes on a TCP
-    /// connection. Effectively, if we can't read the first bytes within the
-    /// timeout the connection is broken.
-    /// If you modify this constant please also adjust:
-    /// - `ic_canister_client::agent::MAX_POLL_INTERVAL`,
-    /// - `canister_test::canister::MAX_BACKOFF_INTERVAL`.
-    /// See VER-1060 for details.
-    pub max_tcp_peek_timeout_seconds: u64,
-
     /// Request with body size bigger than `max_request_size_bytes` will be rejected
     /// and [`413 Content Too Large`](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/413) will be returned to the user.
     pub max_request_size_bytes: u64,
@@ -89,7 +80,6 @@ impl Default for Config {
             connection_read_timeout_seconds: 1_200, // 20 min
             request_timeout_seconds: 300,           // 5 min
             http_max_concurrent_streams: 256,
-            max_tcp_peek_timeout_seconds: 11,
             max_request_size_bytes: 5 * 1024 * 1024, // 5MB
             max_delegation_certificate_size_bytes: 1024 * 1024, // 1MB
             max_request_receive_seconds: 300,        // 5 min
