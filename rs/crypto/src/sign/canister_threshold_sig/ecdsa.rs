@@ -3,6 +3,7 @@ use ic_crypto_internal_csp::api::{CspThresholdEcdsaSigVerifier, CspThresholdEcds
 use ic_crypto_internal_threshold_sig_ecdsa::{
     IDkgTranscriptInternal, ThresholdEcdsaCombinedSigInternal, ThresholdEcdsaSigShareInternal,
 };
+use ic_logger::{info, ReplicaLogger};
 use ic_types::crypto::canister_threshold_sig::error::{
     ThresholdEcdsaCombineSigSharesError, ThresholdEcdsaSignShareError,
     ThresholdEcdsaVerifyCombinedSignatureError, ThresholdEcdsaVerifySigShareError,
@@ -19,10 +20,22 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
 
+/// Extracts the master public key from the given `idkg_transcript`.
+fn get_tecdsa_master_public_key_from_internal_transcript(
+    idkg_transcript_internal: &IDkgTranscriptInternal,
+) -> MasterEcdsaPublicKey {
+    let pub_key = idkg_transcript_internal.constant_term();
+    MasterEcdsaPublicKey {
+        algorithm_id: AlgorithmId::EcdsaSecp256k1,
+        public_key: pub_key.serialize(),
+    }
+}
+
 pub fn sign_share<C: CspThresholdEcdsaSigner>(
     csp_client: &C,
     self_node_id: &NodeId,
     inputs: &ThresholdEcdsaSigInputs,
+    logger: &ReplicaLogger,
 ) -> Result<ThresholdEcdsaSigShare, ThresholdEcdsaSignShareError> {
     ensure_self_was_receiver(self_node_id, inputs.receivers().get())?;
 
@@ -35,6 +48,12 @@ pub fn sign_share<C: CspThresholdEcdsaSigner>(
     let key_times_lambda =
         internal_transcript_from_transcript(inputs.presig_quadruple().key_times_lambda())?;
     let key = internal_transcript_from_transcript(inputs.key_transcript())?;
+    let master_key = get_tecdsa_master_public_key_from_internal_transcript(&key);
+    info!(
+        logger,
+        "MASTER tECDSA PUBLIC KEY: '{}'",
+        hex::encode(master_key.public_key)
+    );
 
     let internal_sig_share = csp_client.ecdsa_sign_share(
         inputs.derivation_path(),
