@@ -1182,7 +1182,7 @@ mod tests {
     fn check_candid_interface_compatibility() {
         let new_interface = __export_service();
         let manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
-        for candid_file in ["../ledger.did", "../../icrc1/ledger/icrc1.did"].iter() {
+        for candid_file in ["../ledger.did", "./icrc1.did"].iter() {
             let old_interface = manifest_dir.join(candid_file);
 
             service_compatible(

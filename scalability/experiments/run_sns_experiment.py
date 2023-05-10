@@ -215,7 +215,7 @@ class SnsExperiment(base_experiment.BaseExperiment):
             "rs/nns/governance/canister/governance.did",
             "rs/rosetta-api/ledger.did",
             "rs/rosetta-api/icp_ledger/ledger.did",
-            "rs/rosetta-api/icrc1/ledger/icrc1.did",
+            "rs/rosetta-api/icrc1/ledger/ledger.did",
             "rs/nns/gtc/canister/gtc.did",
             "rs/nns/cmc/cmc.did",
             "rs/nns/sns-wasm/canister/sns-wasm.did",

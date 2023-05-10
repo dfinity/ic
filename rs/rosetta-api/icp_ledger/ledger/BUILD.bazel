@@ -78,7 +78,7 @@ LEDGER_CANISTER_DEPS = [
 
 LEDGER_CANISTER_DATA = [
     "//rs/rosetta-api/icp_ledger:ledger.did",
-    "//rs/rosetta-api/icrc1/ledger:icrc1.did",
+    "//rs/rosetta-api/icp_ledger/ledger:icrc1.did",
     "//rs/rosetta-api/icp_ledger/ledger:ledger_candid_backwards_compatible.did",
 ]
 

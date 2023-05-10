@@ -44,7 +44,7 @@ rust_canister(
     proc_macro_deps = [
         "@crate_index//:ic-cdk-macros",
     ],
-    service_file = ":icrc1.did",
+    service_file = ":ledger.did",
     deps = [
         ":ledger",
         "//packages/icrc-ledger-types:icrc_ledger_types",
@@ -67,8 +67,7 @@ rust_test(
     name = "ledger_canister_test",
     crate = ":_wasm_ledger_canister",
     data = [
-        ":icrc1.did",
-        ":txlog.did",
+        ":ledger.did",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/rosetta-api/icrc1/ledger",

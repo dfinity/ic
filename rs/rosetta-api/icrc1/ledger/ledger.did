@@ -1,8 +1,84 @@
+type BlockIndex = nat;
+type Subaccount = blob;
+// Number of nanoseconds since the UNIX epoch in UTC timezone.
+type Timestamp = nat64;
+// Number of nanoseconds between two [Timestamp]s.
+type Duration = nat64;
+type Tokens = nat;
 type TxIndex = nat;
 
 type Account = record {
     owner : principal;
-    subaccount : opt blob;
+    subaccount : opt Subaccount;
+};
+
+type TransferArg = record {
+    from_subaccount : opt Subaccount;
+    to : Account;
+    amount : Tokens;
+    fee : opt Tokens;
+    memo : opt blob;
+    created_at_time: opt Timestamp;
+};
+
+type TransferError = variant {
+    BadFee : record { expected_fee : Tokens };
+    BadBurn : record { min_burn_amount : Tokens };
+    InsufficientFunds : record { balance : Tokens };
+    TooOld;
+    CreatedInFuture : record { ledger_time : nat64 };
+    TemporarilyUnavailable;
+    Duplicate : record { duplicate_of : BlockIndex };
+    GenericError : record { error_code : nat; message : text };
+};
+
+type TransferResult = variant {
+    Ok : BlockIndex;
+    Err : TransferError;
+};
+
+// The value returned from the [icrc1_metadata] endpoint.
+type MetadataValue = variant {
+    Nat : nat;
+    Int : int;
+    Text : text;
+    Blob : blob;
+};
+
+// The initialization parameters of the Ledger
+type InitArgs = record {
+    minting_account : Account;
+    fee_collector_account : opt Account;
+    transfer_fee : nat64;
+    token_symbol : text;
+    token_name : text;
+    metadata : vec record { text; MetadataValue };
+    initial_balances : vec record { Account; nat64 };
+    archive_options : record {
+        num_blocks_to_archive : nat64;
+        trigger_threshold : nat64;
+        max_message_size_bytes : opt nat64;
+        cycles_for_archive_creation : opt nat64;
+        node_max_memory_size_bytes : opt nat64;
+        controller_id : principal;
+    };
+};
+
+type ChangeFeeCollector = variant {
+    Unset; SetTo: Account;
+};
+
+type UpgradeArgs = record {
+    metadata : opt vec record { text; MetadataValue };
+    token_symbol : opt text;
+    token_name : opt text;
+    transfer_fee : opt nat64;
+    change_fee_collector : opt ChangeFeeCollector;
+};
+
+type LedgerArg = variant {
+    Init: InitArgs;
+    Upgrade: opt UpgradeArgs;
 };
 
 type GetTransactionsRequest = record {
@@ -111,9 +187,6 @@ type Map = vec record { text; Value };
 
 type Block = Value;
 
-// Sequence number of a block produced by the ledger.
-type BlockIndex = nat;
-
 type GetBlocksArgs = record {
     // The index of the first block to fetch.
     start : BlockIndex;
@@ -184,10 +257,20 @@ type GetBlocksResponse = record {
 type DataCertificate = record {
     certificate : opt blob;
     hash_tree : blob;
-}
+};
 
-service : {
-  get_transactions : (GetTransactionsRequest) -> (GetTransactionsResponse) query;
-  get_blocks : (GetBlocksArgs) -> (GetBlocksResponse) query;  
-  get_data_certificate : () -> (DataCertificate) query;
+service : (ledger_arg : LedgerArg) -> {
+    icrc1_name : () -> (text) query;
+    icrc1_symbol : () -> (text) query;
+    icrc1_decimals : () -> (nat8) query;
+    icrc1_metadata : () -> (vec record { text; MetadataValue }) query;
+    icrc1_total_supply : () -> (Tokens) query;
+    icrc1_fee : () -> (Tokens) query;
+    icrc1_minting_account : () -> (opt Account) query;
+    icrc1_balance_of : (Account) -> (Tokens) query;
+    icrc1_transfer : (TransferArg) -> (TransferResult);
+    icrc1_supported_standards : () -> (vec record { name : text; url : text }) query;
+    get_transactions : (GetTransactionsRequest) -> (GetTransactionsResponse) query;
+    get_blocks : (GetBlocksArgs) -> (GetBlocksResponse) query;  
+    get_data_certificate : () -> (DataCertificate) query;    
 }
