@@ -966,6 +966,9 @@ mod verify_transcript {
 
 mod sign_share {
     use super::*;
+    use ic_protobuf::log::log_entry::v1::LogEntry;
+    use ic_test_utilities_in_memory_logger::assertions::LogEntriesAssert;
+    use slog::Level;
 
     #[test]
     fn should_create_signature_share_successfully_with_new_key() {
@@ -1003,6 +1006,132 @@ mod sign_share {
 
         let result = crypto_for(signer_id, &env.crypto_components).sign_share(&inputs);
         assert_matches!(result, Ok(_));
+    }
+
+    #[test]
+    fn should_log_public_key_successfully() {
+        let mut rng = thread_rng();
+
+        let subnet_size: usize = 1;
+        let mut env = CanisterThresholdSigTestEnvironment::new(subnet_size);
+
+        let key_transcript = generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1);
+        let quadruple =
+            generate_presig_quadruple(&env, AlgorithmId::ThresholdEcdsaSecp256k1, &key_transcript);
+
+        let inputs = {
+            let derivation_path = ExtendedDerivationPath {
+                caller: PrincipalId::new_user_test_id(1),
+                derivation_path: vec![],
+            };
+
+            let hashed_message = rng.gen::<[u8; 32]>();
+            let seed = Randomness::from(rng.gen::<[u8; 32]>());
+
+            ThresholdEcdsaSigInputs::new(
+                &derivation_path,
+                &hashed_message,
+                seed,
+                quadruple,
+                key_transcript,
+            )
+            .expect("failed to create signature inputs")
+        };
+
+        let signer_id = random_receiver_for_inputs(&inputs);
+
+        load_input_transcripts(&env.crypto_components, signer_id, &inputs);
+
+        let _result = crypto_for(signer_id, &env.crypto_components).sign_share(&inputs);
+        let in_memory_logger = env
+            .in_memory_loggers
+            .remove(&signer_id)
+            .expect("no in_memory_logger for node id");
+        let logs = in_memory_logger.drain_logs();
+        LogEntriesAssert::assert_that(logs)
+            .has_only_one_message_containing(&Level::Info, "MASTER tECDSA PUBLIC KEY: ");
+    }
+
+    #[test]
+    fn should_log_same_public_key_successfully_for_multiple_quadruples_and_inputs() {
+        let mut rng = thread_rng();
+
+        const SUBNET_SIZE: usize = 1;
+        const NUM_SIGNATURES: usize = 2;
+        let mut env = CanisterThresholdSigTestEnvironment::new(SUBNET_SIZE);
+
+        let key_transcript = generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1);
+        let mut inputs: Vec<ThresholdEcdsaSigInputs> = Vec::new();
+        for _ in 0..NUM_SIGNATURES {
+            let quadruple = generate_presig_quadruple(
+                &env,
+                AlgorithmId::ThresholdEcdsaSecp256k1,
+                &key_transcript,
+            );
+
+            let sig_inputs = {
+                let derivation_path = ExtendedDerivationPath {
+                    caller: PrincipalId::new_user_test_id(1),
+                    derivation_path: vec![],
+                };
+
+                let hashed_message = rng.gen::<[u8; 32]>();
+                let seed = Randomness::from(rng.gen::<[u8; 32]>());
+
+                ThresholdEcdsaSigInputs::new(
+                    &derivation_path,
+                    &hashed_message,
+                    seed,
+                    quadruple,
+                    key_transcript.clone(),
+                )
+                .expect("failed to create signature inputs")
+            };
+            inputs.push(sig_inputs);
+        }
+
+        let signer_id = random_receiver_for_inputs(inputs.first().expect("missing inputs"));
+
+        load_input_transcripts(
+            &env.crypto_components,
+            signer_id,
+            inputs.first().expect("missing inputs"),
+        );
+
+        for i in 0..NUM_SIGNATURES {
+            let _result = crypto_for(signer_id, &env.crypto_components)
+                .sign_share(inputs.get(i).expect("missing input"));
+        }
+
+        let in_memory_logger = env
+            .in_memory_loggers
+            .remove(&signer_id)
+            .expect("no in_memory_logger for node id");
+        let logs = in_memory_logger.drain_logs();
+        let logged_public_keys = parse_logged_public_keys(&logs);
+        assert_eq!(NUM_SIGNATURES, logged_public_keys.len());
+        let first_public_key = logged_public_keys
+            .first()
+            .expect("missing logged public key");
+        assert!(first_public_key.contains("MASTER tECDSA PUBLIC KEY: "));
+        for i in 1..NUM_SIGNATURES {
+            assert_eq!(
+                first_public_key,
+                logged_public_keys
+                    .get(i)
+                    .expect("missing logged public key")
+            )
+        }
+    }
+
+    fn parse_logged_public_keys(logs: &Vec<LogEntry>) -> Vec<String> {
+        let mut logged_public_keys: Vec<String> = Vec::new();
+        for log in logs {
+            if log.message.contains("MASTER tECDSA PUBLIC KEY: ") {
+                logged_public_keys.push(log.message.clone());
+            }
+        }
+        logged_public_keys
     }
 
     #[test]

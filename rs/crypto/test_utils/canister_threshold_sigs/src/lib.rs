@@ -6,9 +6,11 @@ use ic_crypto_temp_crypto::TempCryptoComponent;
 use ic_interfaces::crypto::{
     BasicSigner, IDkgProtocol, KeyManager, ThresholdEcdsaSigVerifier, ThresholdEcdsaSigner,
 };
+use ic_logger::ReplicaLogger;
 use ic_registry_client_fake::FakeRegistryClient;
 use ic_registry_keys::make_crypto_node_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
+use ic_test_utilities_in_memory_logger::InMemoryReplicaLogger;
 use ic_types::crypto::canister_threshold_sig::idkg::{
     BatchSignedIDkgDealing, IDkgComplaint, IDkgDealing, IDkgMaskedTranscriptOrigin, IDkgReceivers,
     IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams,
@@ -468,6 +470,7 @@ pub struct CanisterThresholdSigTestEnvironment {
     pub registry_data: Arc<ProtoRegistryDataProvider>,
     pub registry: Arc<FakeRegistryClient>,
     pub newest_registry_version: RegistryVersion,
+    pub in_memory_loggers: BTreeMap<NodeId, InMemoryReplicaLogger>,
 }
 
 impl CanisterThresholdSigTestEnvironment {
@@ -482,13 +485,17 @@ impl CanisterThresholdSigTestEnvironment {
             registry_data,
             registry,
             newest_registry_version: registry_version,
+            in_memory_loggers: BTreeMap::new(),
         };
 
         for node_id in n_random_node_ids(num_of_nodes) {
+            let in_memory_logger = InMemoryReplicaLogger::new();
             env.create_crypto_component_with_sign_mega_and_multisign_keys_in_registry(
                 node_id,
                 registry_version,
+                ReplicaLogger::from(&in_memory_logger),
             );
+            env.in_memory_loggers.insert(node_id, in_memory_logger);
         }
         env.registry.update_to_latest_version();
 
@@ -519,6 +526,7 @@ impl CanisterThresholdSigTestEnvironment {
         &mut self,
         node_id: NodeId,
         registry_version: RegistryVersion,
+        logger: ReplicaLogger,
     ) {
         if self.crypto_components.contains_key(&node_id) {
             return;
@@ -534,6 +542,7 @@ impl CanisterThresholdSigTestEnvironment {
                 generate_idkg_dealing_encryption_keys: true,
                 generate_tls_keys_and_certificate: false,
             })
+            .with_logger(logger)
             .build();
         let node_keys = temp_crypto
             .current_node_public_keys()
