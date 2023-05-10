@@ -265,6 +265,12 @@ fn decode_block_range<R>(start: u64, length: u64, decoder: impl Fn(u64, Vec<u8>)
     })
 }
 
+#[query]
+#[candid_method(query)]
+fn ledger_id() -> Principal {
+    with_state(|state| state.ledger_id)
+}
+
 fn main() {}
 
 #[cfg(test)]
