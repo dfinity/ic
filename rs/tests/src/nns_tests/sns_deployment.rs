@@ -238,7 +238,7 @@ pub fn workload_static_testnet_sale_bot(env: TestEnv) {
             let agent = agent.clone();
             async move {
                 let agent = agent.clone();
-                let request = sns_request_provider.refresh_buyer_tokens(None);
+                let request = sns_request_provider.refresh_buyer_tokens(None, None);
                 agent.call(&request).await.map(|_| ()).into_test_outcome()
             }
         }
@@ -423,7 +423,8 @@ pub fn init_participants(env: TestEnv) {
             let canister_agent = app_node
                 .build_canister_agent_with_identity(participant.clone())
                 .await;
-            let request = sns_request_provider.refresh_buyer_tokens(Some(participant.principal_id));
+            let request =
+                sns_request_provider.refresh_buyer_tokens(Some(participant.principal_id), None);
             info!(
                 log,
                 "Submitting request {request:?} from {:?} ...", participant.principal_id
@@ -574,25 +575,25 @@ pub fn initiate_token_swap_with_oc_parameters(env: TestEnv) {
 }
 
 pub fn workload_many_users_rps20_refresh_buyer_tokens(env: TestEnv) {
-    let request = SnsRequestProvider::from_env(&env).refresh_buyer_tokens(None);
+    let request = SnsRequestProvider::from_env(&env).refresh_buyer_tokens(None, None);
     let rps: usize = 20;
     generate_sns_workload_with_many_users(env, rps, Duration::from_secs(10), request);
 }
 
 pub fn workload_many_users_rps100_refresh_buyer_tokens(env: TestEnv) {
-    let request = SnsRequestProvider::from_env(&env).refresh_buyer_tokens(None);
+    let request = SnsRequestProvider::from_env(&env).refresh_buyer_tokens(None, None);
     let rps: usize = 100;
     generate_sns_workload_with_many_users(env, rps, WORKLOAD_GENERATION_DURATION, request);
 }
 
 pub fn workload_many_users_rps200_refresh_buyer_tokens(env: TestEnv) {
-    let request = SnsRequestProvider::from_env(&env).refresh_buyer_tokens(None);
+    let request = SnsRequestProvider::from_env(&env).refresh_buyer_tokens(None, None);
     let rps: usize = 200;
     generate_sns_workload_with_many_users(env, rps, WORKLOAD_GENERATION_DURATION, request);
 }
 
 pub fn workload_many_users_rps400_refresh_buyer_tokens(env: TestEnv) {
-    let request = SnsRequestProvider::from_env(&env).refresh_buyer_tokens(None);
+    let request = SnsRequestProvider::from_env(&env).refresh_buyer_tokens(None, None);
     let rps: usize = 400;
     generate_sns_workload_with_many_users(env, rps, WORKLOAD_GENERATION_DURATION, request);
 }
@@ -801,8 +802,8 @@ pub fn add_one_participant(env: TestEnv) {
     info!(log, "Checking that buyer identity is correctly set up by calling `sns_sale.refresh_buyer_tokens` in two different ways ...");
     // Use the default identity to call refresh_buyer_tokens for the wealthy user
     let res_1 = {
-        let request =
-            sns_request_provider.refresh_buyer_tokens(Some(wealthy_user_identity.principal_id));
+        let request = sns_request_provider
+            .refresh_buyer_tokens(Some(wealthy_user_identity.principal_id), None);
         block_on(default_sns_agent.call(&request)).result()
     };
     info!(
@@ -813,7 +814,7 @@ pub fn add_one_participant(env: TestEnv) {
     assert!(res_1.is_err());
     // Use the wealthy user's identity refresh_buyer_tokens for "self"
     let res_2 = {
-        let request = sns_request_provider.refresh_buyer_tokens(None);
+        let request = sns_request_provider.refresh_buyer_tokens(None, None);
         block_on(wealthy_sns_agent.call(&request)).result()
     };
     info!(
@@ -902,8 +903,8 @@ pub fn add_one_participant(env: TestEnv) {
     info!(log, "Validating the participation setup by calling `sns_sale.refresh_buyer_tokens` in two different ways ...");
     // Use the default identity to call refresh_buyer_tokens for the wealthy user
     let res_4 = {
-        let request =
-            sns_request_provider.refresh_buyer_tokens(Some(wealthy_user_identity.principal_id));
+        let request = sns_request_provider
+            .refresh_buyer_tokens(Some(wealthy_user_identity.principal_id), None);
         block_on(default_sns_agent.call_and_parse(&request))
             .result()
             .unwrap()
@@ -915,7 +916,7 @@ pub fn add_one_participant(env: TestEnv) {
     );
     // Use the wealthy user's identity to call refresh_buyer_tokens for "self"
     let res_5 = {
-        let request = sns_request_provider.refresh_buyer_tokens(None);
+        let request = sns_request_provider.refresh_buyer_tokens(None, None);
         block_on(wealthy_sns_agent.call_and_parse(&request))
             .result()
             .unwrap()
@@ -925,7 +926,7 @@ pub fn add_one_participant(env: TestEnv) {
         "Fourth update call to `sns_sale.refresh_buyer_tokens` returned {res_5:?} (elapsed {:?})",
         start_time.elapsed()
     );
-    assert_eq!(res_4, res_5, "sns_sale.refresh_buyer_tokens(Some({:?})) = {res_4:?}, but sns_sale.refresh_buyer_tokens(None) = {res_5:?}", wealthy_user_identity.principal_id);
+    assert_eq!(res_4, res_5, "sns_sale.refresh_buyer_tokens(Some({:?}), None) = {res_4:?}, but sns_sale.refresh_buyer_tokens(None, None) = {res_5:?}", wealthy_user_identity.principal_id);
     info!(log, "After setting up sale participation, the response from `sns_sale.refresh_buyer_tokens` is {res_4:?}");
 
     info!(
@@ -1110,7 +1111,7 @@ pub fn generate_ticket_participants_workload(
                 // 3. Call sns.refresh_buyer_tokens
                 if overall_result.is_ok() {
                     overall_result = {
-                        let request = sns_request_provider.refresh_buyer_tokens(None);
+                        let request = sns_request_provider.refresh_buyer_tokens(None, None);
                         canister_agent.call_with_retries(
                             request,
                             SNS_ENDPOINT_RETRY_TIMEOUT,
@@ -1277,17 +1278,17 @@ pub fn workload_rps1200_get_state_update(env: TestEnv) {
 
 pub fn workload_rps400_refresh_buyer_tokens(env: TestEnv) {
     let buyer = Some(*TEST_USER1_PRINCIPAL);
-    let request = SnsRequestProvider::from_env(&env).refresh_buyer_tokens(buyer);
+    let request = SnsRequestProvider::from_env(&env).refresh_buyer_tokens(buyer, None);
     generate_sns_workload(env, 400, WORKLOAD_GENERATION_DURATION, request);
 }
 pub fn workload_rps800_refresh_buyer_tokens(env: TestEnv) {
     let buyer = Some(*TEST_USER1_PRINCIPAL);
-    let request = SnsRequestProvider::from_env(&env).refresh_buyer_tokens(buyer);
+    let request = SnsRequestProvider::from_env(&env).refresh_buyer_tokens(buyer, None);
     generate_sns_workload(env, 800, WORKLOAD_GENERATION_DURATION, request);
 }
 pub fn workload_rps1200_refresh_buyer_tokens(env: TestEnv) {
     let buyer = Some(*TEST_USER1_PRINCIPAL);
-    let request = SnsRequestProvider::from_env(&env).refresh_buyer_tokens(buyer);
+    let request = SnsRequestProvider::from_env(&env).refresh_buyer_tokens(buyer, None);
     generate_sns_workload(env, 1_200, WORKLOAD_GENERATION_DURATION, request);
 }
 

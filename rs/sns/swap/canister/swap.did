@@ -150,7 +150,10 @@ type Possibility = variant {
 };
 type Possibility_1 = variant { Ok : Response; Err : CanisterCallError };
 type Possibility_2 = variant { Ok : record {}; Err : CanisterCallError };
-type RefreshBuyerTokensRequest = record { buyer : text };
+type RefreshBuyerTokensRequest = record {
+  confirmation_text : opt text;
+  buyer : text;
+};
 type RefreshBuyerTokensResponse = record {
   icp_accepted_participation_e8s : nat64;
   icp_ledger_account_balance_e8s : nat64;

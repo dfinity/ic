@@ -287,8 +287,14 @@ impl PaymentProtocolTestSetup {
     pub fn refresh_buyer_tokens(
         &self,
         buyer: &PrincipalId,
+        confirmation_text: Option<String>,
     ) -> Result<RefreshBuyerTokensResponse, String> {
-        refresh_buyer_tokens(&self.state_machine, &self.sns_sale_canister_id, buyer)
+        refresh_buyer_tokens(
+            &self.state_machine,
+            &self.sns_sale_canister_id,
+            buyer,
+            confirmation_text,
+        )
     }
 
     pub fn get_lifecycle(&self) -> GetLifecycleResponse {
@@ -522,7 +528,9 @@ fn test_simple_refresh_buyer_token() {
         .unwrap();
 
     // Get ICP accepted by the SNS sale canister
-    assert!(payment_flow_protocol.refresh_buyer_tokens(&user0).is_ok());
+    assert!(payment_flow_protocol
+        .refresh_buyer_tokens(&user0, None)
+        .is_ok());
 
     // Check that the buyer state was updated accordingly
     assert_eq!(
@@ -582,7 +590,9 @@ fn test_multiple_payment_flows() {
             .unwrap();
 
         // Step3: Get ICP accepted by the SNS sale canister
-        assert!(payment_flow_protocol.refresh_buyer_tokens(&user0).is_ok());
+        assert!(payment_flow_protocol
+            .refresh_buyer_tokens(&user0, None)
+            .is_ok());
         amount_committed += amount0_0;
 
         // Step 4: Check that the buyer state was updated accordingly
@@ -663,7 +673,7 @@ fn test_payment_flow_multiple_users_concurrent() {
         assert!(payment_flow_protocol
             .lock()
             .unwrap()
-            .refresh_buyer_tokens(&user)
+            .refresh_buyer_tokens(&user, None)
             .is_ok());
 
         // Check that the buyer state was updated accordingly
@@ -770,7 +780,9 @@ fn test_multiple_spending() {
         .contains(&format!("duplicate_of: Nat({})", idx)),);
 
     // Get ICP accepted by the SNS sale canister
-    assert!(payment_flow_protocol.refresh_buyer_tokens(&user0).is_ok());
+    assert!(payment_flow_protocol
+        .refresh_buyer_tokens(&user0, None)
+        .is_ok());
 
     // Check that the buyer state was updated accordingly
     assert_eq!(
@@ -847,7 +859,9 @@ fn test_maximum_reached() {
                 .unwrap();
 
             // Get ICP accepted by the SNS sale canister
-            assert!(payment_flow_protocol.refresh_buyer_tokens(user).is_ok());
+            assert!(payment_flow_protocol
+                .refresh_buyer_tokens(user, None)
+                .is_ok());
 
             // Check that the ticket has been deleted
             assert!(payment_flow_protocol
@@ -945,7 +959,9 @@ fn test_committment_below_participant_minimum() {
                 .unwrap(),
         )
         .unwrap();
-    assert!(payment_flow_protocol.refresh_buyer_tokens(&user0).is_ok());
+    assert!(payment_flow_protocol
+        .refresh_buyer_tokens(&user0, None)
+        .is_ok());
 
     payment_flow_protocol
         .commit_icp_e8s(
@@ -955,7 +971,9 @@ fn test_committment_below_participant_minimum() {
                 .unwrap(),
         )
         .unwrap();
-    assert!(payment_flow_protocol.refresh_buyer_tokens(&user1).is_ok());
+    assert!(payment_flow_protocol
+        .refresh_buyer_tokens(&user1, None)
+        .is_ok());
 
     // The amount bought now should be below the maximum and the amount left should be less than the minimum per participant
     assert!(
@@ -980,7 +998,9 @@ fn test_committment_below_participant_minimum() {
             &amount2_0,
         )
         .unwrap();
-    assert!(payment_flow_protocol.refresh_buyer_tokens(&user2).is_err());
+    assert!(payment_flow_protocol
+        .refresh_buyer_tokens(&user2, None)
+        .is_err());
 
     // User0 who has participated in the sale should be able to purchase the missing tokens
     payment_flow_protocol
@@ -991,7 +1011,9 @@ fn test_committment_below_participant_minimum() {
                 .unwrap(),
         )
         .unwrap();
-    assert!(payment_flow_protocol.refresh_buyer_tokens(&user0).is_ok());
+    assert!(payment_flow_protocol
+        .refresh_buyer_tokens(&user0, None)
+        .is_ok());
 
     //Check that user1's purchase was registerred
     assert_eq!(

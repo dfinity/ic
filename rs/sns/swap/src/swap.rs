@@ -605,15 +605,21 @@ impl Swap {
     /// (i.e. the requested increment is >= that the ticket amount).
     /// (This allows participation to be increased later.)
     ///
-    /// If a ledger transfer was successfully made, but this calls
+    /// If the SNS had specified a swap confirmation text, the caller of this
+    /// function must accept this confirmation by sending the exact same text
+    /// as an argument to this function (otherwise, the call will result in
+    /// an error).
+    ///
+    /// If a ledger transfer was successfully made, but this call
     /// fails (many reasons are possible), the owner of the ICP sent
-    /// to the subaccount can be reclaimed using `error_refund_icp`
+    /// to the subaccount can reclaim their tokens using `error_refund_icp`
     /// once this swap is closed (committed or aborted).
     ///
     /// TODO(NNS1-1682): attempt to refund ICP that cannot be accepted.
     pub async fn refresh_buyer_token_e8s(
         &mut self,
         buyer: PrincipalId,
+        confirmation_text: Option<String>,
         this_canister: CanisterId,
         icp_ledger: &dyn ICRC1Ledger,
     ) -> Result<RefreshBuyerTokensResponse, String> {
@@ -625,6 +631,24 @@ impl Swap {
         }
         if self.icp_target_reached() {
             return Err("The ICP target for this token swap has already been reached.".to_string());
+        }
+
+        match (
+            self.init_or_panic().confirmation_text.as_ref(),
+            confirmation_text,
+        ) {
+            (Some(expected_text), Some(text)) => {
+                if &text != expected_text {
+                    return Err("The value of `confirmation_text` does not match the value provided in SNS init payload.".to_string());
+                }
+            }
+            (Some(_), None) => {
+                return Err("No value provided for `confirmation_text`.".to_string());
+            }
+            (None, Some(_)) => {
+                return Err("Found a value for `confirmation_text`, expected none.".to_string());
+            }
+            (None, None) => {}
         }
 
         // Look for the token balance of the specified principal's subaccount on 'this' canister.

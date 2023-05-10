@@ -171,7 +171,7 @@ async fn refresh_buyer_tokens_(arg: RefreshBuyerTokensRequest) -> RefreshBuyerTo
     };
     let icp_ledger = create_real_icp_ledger(swap().init_or_panic().icp_ledger_or_panic());
     match swap_mut()
-        .refresh_buyer_token_e8s(p, id(), &icp_ledger)
+        .refresh_buyer_token_e8s(p, arg.confirmation_text, id(), &icp_ledger)
         .await
     {
         Ok(r) => r,

@@ -337,7 +337,7 @@ pub async fn open_swap(swap: &mut Swap, params: &Params) {
 
 pub async fn buy_token(swap: &mut Swap, user: &PrincipalId, amount: &u64, ledger: &MockLedger) {
     assert!(swap
-        .refresh_buyer_token_e8s(*user, SWAP_CANISTER_ID, ledger)
+        .refresh_buyer_token_e8s(*user, None, SWAP_CANISTER_ID, ledger)
         .await
         .is_ok());
     assert_eq!(
