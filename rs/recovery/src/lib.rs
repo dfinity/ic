@@ -619,9 +619,9 @@ impl Recovery {
             }
         }
 
-        Err(RecoveryError::invalid_output_error(
-            "No hash found in the SHA256SUMS file".to_string(),
-        ))
+        Err(RecoveryError::invalid_output_error(format!(
+            "No hash found in the SHA256SUMS file: {output}"
+        )))
     }
 
     /// Return an [AdminStep] step electing the given [ReplicaVersion].
