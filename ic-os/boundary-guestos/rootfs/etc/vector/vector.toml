@@ -43,6 +43,22 @@ if err != null || remote_addr == "" {
   .remote_addr_hashed = truncate(.remote_addr_hashed, limit: 32, ellipsis: false)
 }
 
+# In some rare cases several replicas are contacted and it makes the following fields
+# comma- and/or colon-separated depending on the request flow. This breaks Clickhouse ingests.
+# See http://nginx.org/en/docs/http/ngx_http_upstream_module.html#var_upstream_addr
+#
+# We're trying to parse all these potentially multi-value fields as ints/floats and fall back to zero if that fails
+.upstream_bytes_received = to_int(.upstream_bytes_received) ?? 0
+.upstream_bytes_sent = to_int(.upstream_bytes_sent) ?? 0
+.upstream_connect_time = to_float(.upstream_connect_time) ?? 0.0
+.upstream_header_time = to_float(.upstream_header_time) ?? 0.0
+.upstream_response_length = to_int(.upstream_response_length) ?? 0
+.upstream_response_time = to_float(.upstream_response_time) ?? 0.0
+
+# Also sometimes status contains a dash "-" and this also breaks ingests.
+# This happens e.g. when a client closed connection before the upstream returned a reply.
+.upstream_status = to_int(.upstream_status) ?? 0
+
 # Remove privacy related info
 del(.remote_user)
 del(.remote_addr)
