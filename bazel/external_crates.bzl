@@ -1,5 +1,7 @@
 """
 This module declares all direct rust dependencies.
+
+Run `./bin/bazel-pin.sh` from the top-level directory of the working tree after changing this file to regenerate Cargo Bazel lockfiles.
 """
 
 load("@rules_rust//crate_universe:defs.bzl", "crate", "crates_repository", "splicing_config")
