@@ -23,9 +23,11 @@ type Config struct {
 func TestCommandWithConfig(cfg *Config) func(cmd *cobra.Command, args []string) error {
 	return func(cmd *cobra.Command, args []string) error {
 		target := args[0]
-		if all_targets, err := get_all_system_test_targets(); err != nil {
+		all_targets, err := get_all_system_test_targets()
+		if err != nil {
 			return err
-		} else if !any_equals(all_targets, target) {
+		}
+		if !any_equals(all_targets, target) {
 			if match_target, msg, err := find_matching_target(all_targets, target, cfg.isFuzzyMatch); err == nil {
 				if len(msg) > 0 {
 					cmd.Printf(CYAN + msg + NC)
