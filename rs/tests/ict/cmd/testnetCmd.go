@@ -30,10 +30,16 @@ func ValidateTestnetCommand(cfg *TestnetConfig) func(cmd *cobra.Command, args []
 
 func TestnetCommand(cfg *TestnetConfig) func(cmd *cobra.Command, args []string) error {
 	return func(cmd *cobra.Command, args []string) error {
-		target := args[0]
-		if all_targets, err := get_all_testnets(); err != nil {
+		// If the target name is not fully qualified, we make it to be such.
+		target, err := make_fully_qualified_target(args[0])
+		if err != nil {
 			return err
-		} else if !any_equals(all_targets, target) {
+		}
+		all_targets, err := get_all_testnets()
+		if err != nil {
+			return err
+		}
+		if !any_equals(all_targets, target) {
 			if match_target, msg, err := find_matching_target(all_targets, target, cfg.isFuzzyMatch); err == nil {
 				if len(msg) > 0 {
 					cmd.Printf(CYAN + msg + NC)

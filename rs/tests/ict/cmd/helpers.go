@@ -95,6 +95,18 @@ func get_all_system_test_targets() ([]string, error) {
 	return all_targets, nil
 }
 
+func make_fully_qualified_target(target string) (string, error) {
+	if strings.Contains(target, ":") {
+		return target, nil
+	}
+	all_targets, err := get_all_testnets()
+	if err != nil {
+		return "", nil
+	}
+	target_prefix := strings.Split(all_targets[0], ":")
+	return target_prefix[0] + ":" + target, nil
+}
+
 func get_all_testnets() ([]string, error) {
 	command := []string{"bazel", "query", "attr(tags, 'dynamic_testnet', tests(//rs/tests/...))"}
 	queryCmd := exec.Command(command[0], command[1:]...)
