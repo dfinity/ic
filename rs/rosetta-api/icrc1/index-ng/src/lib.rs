@@ -2,6 +2,11 @@ use candid::{CandidType, Deserialize, Principal};
 use icrc_ledger_types::icrc3::blocks::GenericBlock;
 
 #[derive(CandidType, Debug, Deserialize)]
+pub enum IndexArg {
+    InitArg(InitArg),
+}
+
+#[derive(CandidType, Debug, Deserialize)]
 pub struct InitArg {
     pub ledger_id: Principal,
 }

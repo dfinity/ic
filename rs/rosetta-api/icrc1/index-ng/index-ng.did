@@ -1,1 +1,35 @@
-// FILL ME //
+type InitArg = record {
+    ledger_id: principal;
+};
+
+type IndexArg = variant {
+    init_arg: InitArg;
+};
+
+type GetBlocksRequest = record {
+    start : nat;
+    length : nat;
+};
+
+type Value = variant {
+    Blob : blob;
+    Text : text;
+    Nat : nat;
+    Nat64: nat64;
+    Int : int;
+    Array : vec Value;
+    Map : Map;
+};
+
+type Map = vec record { text; Value };
+
+type Block = Value;
+
+type GetBlocksResponse = record {
+    chain_length: nat64;
+    blocks: vec Block;
+};
+
+service : (index_arg: IndexArg) -> {
+    get_blocks : (GetBlocksRequest) -> (GetBlocksResponse) query;
+}
