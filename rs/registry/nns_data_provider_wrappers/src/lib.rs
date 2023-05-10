@@ -92,14 +92,17 @@ impl RegistryDataProvider for CertifiedNnsDataProvider {
         let rt_handle = self.rt_handle.clone();
         let registry_canister = self.registry_canister.clone();
         let nns_public_key = self.nns_public_key.clone();
-        rt_handle.block_on(async move {
-            registry_canister
-                .get_certified_changes_since(version.get(), &nns_public_key)
-                .await
-                .map(|v| v.0)
-                .map_err(|source| RegistryDataProviderError::Transfer {
-                    source: source.to_string(),
-                })
+        #[allow(clippy::disallowed_methods)]
+        tokio::task::block_in_place(|| {
+            rt_handle.block_on(async move {
+                registry_canister
+                    .get_certified_changes_since(version.get(), &nns_public_key)
+                    .await
+                    .map(|v| v.0)
+                    .map_err(|source| RegistryDataProviderError::Transfer {
+                        source: source.to_string(),
+                    })
+            })
         })
     }
 }
