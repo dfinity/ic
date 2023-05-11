@@ -352,6 +352,13 @@ impl PayloadBuilder {
         self
     }
 
+    /// Pushes the performance counter of the specified type on top of the stack.
+    pub fn performance_counter(mut self, _type: u32) -> Self {
+        self = self.push_int(_type);
+        self.0.push(Ops::GetPerformanceCounter as u8);
+        self
+    }
+
     pub fn debug_print(mut self, msg: &[u8]) -> Self {
         self = self.push_bytes(msg);
         self.0.push(Ops::DebugPrint as u8);
