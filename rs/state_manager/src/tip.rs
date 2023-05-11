@@ -83,7 +83,6 @@ pub(crate) enum TipRequest {
     SerializeToTip {
         height: Height,
         replicated_state: Box<ReplicatedState>,
-        separate_ingress_history: bool,
     },
     /// Run one round of tip defragmentation.
     /// State: ReadyForPageDeltas(h) -> ReadyForPageDeltas(height), height >= h
@@ -253,7 +252,6 @@ pub(crate) fn spawn_tip_thread(
                         TipRequest::SerializeToTip {
                             height,
                             replicated_state,
-                            separate_ingress_history,
                         } => {
                             let _timer = request_timer(&metrics, "serialize_to_tip");
                             #[cfg(debug_assert)]
@@ -274,7 +272,6 @@ pub(crate) fn spawn_tip_thread(
                                     );
                                 }),
                                 &mut thread_pool,
-                                separate_ingress_history,
                             )
                             .unwrap_or_else(|err| {
                                 fatal!(log, "Failed to serialize to tip @{}: {}", height, err);
@@ -356,21 +353,14 @@ fn serialize_to_tip(
     state: &ReplicatedState,
     tip: &CheckpointLayout<RwPolicy<TipHandler>>,
     thread_pool: &mut scoped_threadpool::Pool,
-    separate_ingress_history: bool,
 ) -> Result<(), CheckpointError> {
-    if separate_ingress_history {
-        // Take out ingress history from system_metadata and serialize it separately.
-        let mut system_metadata: SystemMetadata = state.system_metadata().into();
-        let ingress_history = system_metadata.ingress_history.take().unwrap();
-        tip.system_metadata().serialize(system_metadata)?;
-        tip.ingress_history().serialize(ingress_history)?;
-    } else {
-        // Serialize full system_metadata, including ingress history.
-        tip.system_metadata()
-            .serialize(state.system_metadata().into())?;
-        // Delete ingress history file if present.
-        tip.ingress_history().try_remove_file()?;
-    }
+    // Serialize ingress history separately. The `SystemMetadata` proto does not
+    // encode it.
+    let ingress_history = (&state.system_metadata().ingress_history).into();
+    tip.ingress_history().serialize(ingress_history)?;
+
+    let system_metadata: SystemMetadata = state.system_metadata().into();
+    tip.system_metadata().serialize(system_metadata)?;
 
     tip.subnet_queues()
         .serialize((state.subnet_queues()).into())?;

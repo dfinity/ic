@@ -14,7 +14,6 @@ use ic_replicated_state::{
 };
 use ic_state_layout::{CheckpointLayout, ReadOnly};
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
-use ic_state_manager::checkpoint::SEPARATE_INGRESS_HISTORY;
 use ic_state_manager::manifest::{build_meta_manifest, manifest_from_path, validate_manifest};
 use ic_state_manager::{DirtyPageMap, FileType, PageMapType, StateManagerImpl};
 use ic_sys::PAGE_SIZE;
@@ -1719,10 +1718,7 @@ fn state_sync_message_contains_manifest() {
         // 1. "ingress_history.pbuf"
         // 2. "subnet_queues.pbuf"
         // 3. "system_metadata.pbuf"
-        assert_eq!(
-            if SEPARATE_INGRESS_HISTORY { 3 } else { 2 },
-            msg.manifest.file_table.len()
-        );
+        assert_eq!(3, msg.manifest.file_table.len());
 
         // Check that all the files are accessible
         for file_info in msg.manifest.file_table.iter() {
@@ -4223,25 +4219,10 @@ fn can_recover_ingress_history() {
             NumBytes::from(u64::MAX),
         );
 
-        // Checkpoint with old representation (ingress history in system_metadata.pbuf).
-        state_manager.set_separate_ingress_history(false);
         state_manager.commit_and_certify(state.clone(), height(2), CertificationScope::Full);
         let (_height, state2) = state_manager.take_tip();
         state.metadata.prev_state_hash = state2.metadata.prev_state_hash.clone();
         assert_eq!(state2, state);
-
-        state_manager.set_separate_ingress_history(true);
-        state_manager.commit_and_certify(state2, height(3), CertificationScope::Full);
-        let (_height, state3) = state_manager.take_tip();
-        state.metadata.prev_state_hash = state3.metadata.prev_state_hash.clone();
-        assert_eq!(state3, state);
-
-        // And a downgrade to the old representation.
-        state_manager.set_separate_ingress_history(false);
-        state_manager.commit_and_certify(state3, height(4), CertificationScope::Full);
-        let (_height, state4) = state_manager.take_tip();
-        state.metadata.prev_state_hash = state4.metadata.prev_state_hash.clone();
-        assert_eq!(state4, state);
     });
 }
 

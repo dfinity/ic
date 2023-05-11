@@ -275,8 +275,6 @@ pub struct SystemMetadata {
     pub prev_state_hash: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
     #[prost(uint64, tag = "3")]
     pub batch_time_nanos: u64,
-    #[prost(message, optional, tag = "4")]
-    pub ingress_history: ::core::option::Option<super::super::ingress::v1::IngressHistoryState>,
     #[prost(message, repeated, tag = "5")]
     pub streams: ::prost::alloc::vec::Vec<super::super::queues::v1::StreamEntry>,
     #[prost(message, optional, tag = "6")]
