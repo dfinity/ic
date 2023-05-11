@@ -6,11 +6,13 @@
 
 use crate::manifest::{
     manifest_hash, tests::computation::dummy_file_table_and_chunk_table, DEFAULT_CHUNK_SIZE,
-    MAX_SUPPORTED_STATE_SYNC_VERSION, STATE_SYNC_V1, STATE_SYNC_V2,
 };
 use ic_protobuf::state::sync::v1 as pb;
 use ic_test_utilities::types::arbitrary;
-use ic_types::state_sync::{encode_manifest, ChunkInfo, FileInfo, Manifest};
+use ic_types::state_sync::{
+    encode_manifest, ChunkInfo, FileInfo, Manifest, StateSyncVersion,
+    MAX_SUPPORTED_STATE_SYNC_VERSION,
+};
 use proptest::prelude::*;
 
 fn encode_file_info(file_info: &FileInfo) -> Vec<u8> {
@@ -111,7 +113,7 @@ fn encode_chunk_info_expected(chunk_info: &ChunkInfo) -> Vec<u8> {
 fn encode_manifest_expected(manifest: &Manifest) -> Vec<u8> {
     let mut result = Vec::new();
 
-    if manifest.version != 0 {
+    if manifest.version != StateSyncVersion::V0 {
         result.extend(TAG_MANIFEST_VERSION);
         result.extend(encode_integer_expected(manifest.version as u64));
     }
@@ -512,7 +514,7 @@ fn testcase_file_table_and_chunk_table() -> (Vec<FileInfo>, Vec<ChunkInfo>) {
 #[test]
 fn test_encoding_manifest() {
     let (file_table, chunk_table) = testcase_file_table_and_chunk_table();
-    let manifest = Manifest::new(STATE_SYNC_V2, file_table, chunk_table);
+    let manifest = Manifest::new(StateSyncVersion::V2, file_table, chunk_table);
 
     assert_eq!(
         hex::encode(encode_manifest_expected(&manifest)),
@@ -528,12 +530,16 @@ fn test_encoding_manifest() {
 #[test]
 fn deterministic_manifest_hash() {
     let (file_table, chunk_table) = testcase_file_table_and_chunk_table();
-    let manifest_v1 = Manifest::new(STATE_SYNC_V1, file_table.clone(), chunk_table.clone());
+    let manifest_v1 = Manifest::new(
+        StateSyncVersion::V1,
+        file_table.clone(),
+        chunk_table.clone(),
+    );
     assert_eq!(
         hex::encode(manifest_hash(&manifest_v1)),
         "7569c279f5054addc6949493293c8ad24f87b166fbff18a5bfe3908c23f8d3b5".to_owned()
     );
-    let manifest_v2 = Manifest::new(STATE_SYNC_V2, file_table, chunk_table);
+    let manifest_v2 = Manifest::new(StateSyncVersion::V2, file_table, chunk_table);
     assert_eq!(
         hex::encode(manifest_hash(&manifest_v2)),
         "24dad2a74373217053106e533da8fa2dc67560e0780df06bdd5ca9eb749d1242".to_owned()
@@ -541,12 +547,16 @@ fn deterministic_manifest_hash() {
 
     // Ensure the hash is still stable when the manifest is larger than 100 MiB after encoding.
     let (file_table, chunk_table) = dummy_file_table_and_chunk_table();
-    let manifest_v1 = Manifest::new(STATE_SYNC_V1, file_table.clone(), chunk_table.clone());
+    let manifest_v1 = Manifest::new(
+        StateSyncVersion::V1,
+        file_table.clone(),
+        chunk_table.clone(),
+    );
     assert_eq!(
         hex::encode(manifest_hash(&manifest_v1)),
         "18aabe0f8bc12b80bc232c02e0d6ca1b8a078980b7f8799ac992f06696fc1385".to_owned()
     );
-    let manifest_v2 = Manifest::new(STATE_SYNC_V2, file_table, chunk_table);
+    let manifest_v2 = Manifest::new(StateSyncVersion::V2, file_table, chunk_table);
     assert!(
         encode_manifest(&manifest_v2).len() > 100 * DEFAULT_CHUNK_SIZE as usize,
         "The encoded manifest is supposed to be larger than 100 MiB."
@@ -570,11 +580,11 @@ proptest! {
 
     #[test]
     fn manifest_deterministic_encoding(
-        version in 0..=MAX_SUPPORTED_STATE_SYNC_VERSION,
+        version in 0..=(MAX_SUPPORTED_STATE_SYNC_VERSION as u32),
         file_table in prop::collection::vec(arbitrary::file_info(), 0..=1000),
         chunk_table in prop::collection::vec(arbitrary::chunk_info(), 0..=1000)
     ) {
-        let manifest = Manifest::new(version, file_table, chunk_table);
+        let manifest = Manifest::new(version.try_into().unwrap(), file_table, chunk_table);
         assert_eq!(encode_manifest(&manifest), encode_manifest_expected(&manifest));
     }
 }

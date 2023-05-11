@@ -26,7 +26,8 @@ use ic_types::{
     crypto::CryptoHash,
     state_sync::{
         encode_manifest, ChunkInfo, FileGroupChunks, FileInfo, Manifest, MetaManifest,
-        FILE_CHUNK_ID_OFFSET, FILE_GROUP_CHUNK_ID_OFFSET,
+        StateSyncVersion, FILE_CHUNK_ID_OFFSET, FILE_GROUP_CHUNK_ID_OFFSET,
+        MAX_SUPPORTED_STATE_SYNC_VERSION,
     },
     CryptoHashOfState, Height,
 };
@@ -39,20 +40,6 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, Weak};
 
 pub use ic_types::state_sync::DEFAULT_CHUNK_SIZE;
-
-/// Initial version.
-pub const STATE_SYNC_V1: u32 = 1;
-
-/// Compute the manifest hash based on the encoded manifest.
-pub const STATE_SYNC_V2: u32 = 2;
-
-/// The version of StateSync protocol that should be used for all newly created manifests.
-pub const CURRENT_STATE_SYNC_VERSION: u32 = STATE_SYNC_V2;
-
-/// Maximum supported StateSync version.
-///
-/// The replica will panic if trying to deal with a manifest with a version higher than this.
-pub const MAX_SUPPORTED_STATE_SYNC_VERSION: u32 = STATE_SYNC_V2;
 
 /// When computing a manifest, we recompute the hash of every
 /// `REHASH_EVERY_NTH_CHUNK` chunk, even if we know it to be unchanged and
@@ -88,8 +75,8 @@ pub enum ManifestValidationError {
         actual_hash: Vec<u8>,
     },
     UnsupportedManifestVersion {
-        manifest_version: u32,
-        max_supported_version: u32,
+        manifest_version: StateSyncVersion,
+        max_supported_version: StateSyncVersion,
     },
 }
 
@@ -122,7 +109,7 @@ impl fmt::Display for ManifestValidationError {
             } => write!(
                 f,
                 "manifest version {} not supported, maximum supported version {}",
-                manifest_version, max_supported_version,
+                *manifest_version as u32, *max_supported_version as u32,
             ),
         }
     }
@@ -829,7 +816,7 @@ pub fn compute_manifest(
     thread_pool: &mut scoped_threadpool::Pool,
     metrics: &ManifestMetrics,
     log: &ReplicaLogger,
-    version: u32,
+    version: StateSyncVersion,
     checkpoint: &CheckpointLayout<ReadOnly>,
     max_chunk_size: u32,
     opt_manifest_delta: Option<ManifestDelta>,
@@ -1041,7 +1028,7 @@ pub fn validate_sub_manifest(
 /// See note [Manifest Hash].
 pub fn manifest_hash(manifest: &Manifest) -> [u8; 32] {
     assert!(manifest.version <= MAX_SUPPORTED_STATE_SYNC_VERSION);
-    if manifest.version >= STATE_SYNC_V2 {
+    if manifest.version >= StateSyncVersion::V2 {
         manifest_hash_v2(manifest)
     } else {
         manifest_hash_v1(manifest)
@@ -1049,12 +1036,12 @@ pub fn manifest_hash(manifest: &Manifest) -> [u8; 32] {
 }
 
 fn manifest_hash_v1(manifest: &Manifest) -> [u8; 32] {
-    assert!(manifest.version <= STATE_SYNC_V1);
+    assert!(manifest.version <= StateSyncVersion::V1);
 
     let mut hash = manifest_hasher();
 
-    if manifest.version >= STATE_SYNC_V1 {
-        manifest.version.update_hash(&mut hash);
+    if manifest.version >= StateSyncVersion::V1 {
+        (manifest.version as u32).update_hash(&mut hash);
     }
 
     (manifest.file_table.len() as u32).update_hash(&mut hash);
@@ -1070,7 +1057,7 @@ fn manifest_hash_v1(manifest: &Manifest) -> [u8; 32] {
         f.hash.update_hash(&mut hash);
     }
 
-    if manifest.version >= STATE_SYNC_V1 {
+    if manifest.version >= StateSyncVersion::V1 {
         (manifest.chunk_table.len() as u32).update_hash(&mut hash);
 
         for c in manifest.chunk_table.iter() {
@@ -1116,7 +1103,7 @@ pub fn build_meta_manifest(manifest: &Manifest) -> MetaManifest {
 /// Computes the hash of meta-manifest.
 fn meta_manifest_hash(meta_manifest: &MetaManifest) -> [u8; 32] {
     let mut hash = meta_manifest_hasher();
-    meta_manifest.version.update_hash(&mut hash);
+    (meta_manifest.version as u32).update_hash(&mut hash);
     (meta_manifest.sub_manifest_hashes.len() as u32).update_hash(&mut hash);
     for sub_manifest_hash in &meta_manifest.sub_manifest_hashes {
         sub_manifest_hash.update_hash(&mut hash);
@@ -1124,9 +1111,9 @@ fn meta_manifest_hash(meta_manifest: &MetaManifest) -> [u8; 32] {
     hash.finish()
 }
 
-/// The meta-manifest hash is used as the manifest hash if its version is greater than or equal to `STATE_SYNC_V2`.
+/// The meta-manifest hash is used as the manifest hash if its version is greater than or equal to `StateSyncVersion::V1`.
 fn manifest_hash_v2(manifest: &Manifest) -> [u8; 32] {
-    assert!(manifest.version >= STATE_SYNC_V2);
+    assert!(manifest.version >= StateSyncVersion::V2);
     let meta_manifest = build_meta_manifest(manifest);
     meta_manifest_hash(&meta_manifest)
 }
@@ -1134,7 +1121,7 @@ fn manifest_hash_v2(manifest: &Manifest) -> [u8; 32] {
 /// Computes the bundled metadata from a manifest.
 pub(crate) fn compute_bundled_manifest(manifest: Manifest) -> BundledManifest {
     let meta_manifest = build_meta_manifest(&manifest);
-    let hash = if manifest.version >= STATE_SYNC_V2 {
+    let hash = if manifest.version >= StateSyncVersion::V2 {
         meta_manifest_hash(&meta_manifest)
     } else {
         manifest_hash_v1(&manifest)
@@ -1303,7 +1290,14 @@ pub fn manifest_from_path(path: &Path) -> Result<Manifest, CheckpointError> {
         &mut thread_pool,
         &manifest_metrics,
         &no_op_logger(),
-        metadata.state_sync_version,
+        metadata
+            .state_sync_version
+            .try_into()
+            .map_err(|v| CheckpointError::ProtoError {
+                path: path.to_path_buf(),
+                field: "SystemMetadata::state_sync_version".into(),
+                proto_err: format!("Replica does not implement state sync version {}", v),
+            })?,
         &cp_layout,
         DEFAULT_CHUNK_SIZE,
         None,

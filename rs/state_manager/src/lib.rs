@@ -10,7 +10,7 @@ pub mod tree_diff;
 pub mod tree_hash;
 
 use crate::{
-    manifest::{compute_bundled_manifest, MAX_SUPPORTED_STATE_SYNC_VERSION},
+    manifest::compute_bundled_manifest,
     state_sync::chunkable::cache::StateSyncCache,
     tip::{spawn_tip_thread, TipRequest},
 };
@@ -46,7 +46,7 @@ use ic_types::{
     consensus::certification::Certification,
     crypto::CryptoHash,
     malicious_flags::MaliciousFlags,
-    state_sync::{FileGroupChunks, Manifest, MetaManifest},
+    state_sync::{FileGroupChunks, Manifest, MetaManifest, CURRENT_STATE_SYNC_VERSION},
     xnet::{CertifiedStreamSlice, StreamIndex, StreamSlice},
     CryptoHashOfPartialState, CryptoHashOfState, Height, RegistryVersion, SubnetId,
 };
@@ -1776,7 +1776,7 @@ impl StateManagerImpl {
     }
 
     fn populate_extra_metadata(&self, state: &mut ReplicatedState, height: Height) {
-        state.metadata.state_sync_version = manifest::CURRENT_STATE_SYNC_VERSION;
+        state.metadata.state_sync_version = CURRENT_STATE_SYNC_VERSION;
         state.metadata.certification_version = ic_canonical_state::CURRENT_CERTIFICATION_VERSION;
 
         if height == Self::INITIAL_STATE_HEIGHT {

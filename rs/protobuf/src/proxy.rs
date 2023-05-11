@@ -118,6 +118,9 @@ pub enum ProxyDecodeError {
     /// Certification version not implemented.
     UnknownCertificationVersion(u32),
 
+    /// State sync version not implemented.
+    UnknownStateSyncVersion(u32),
+
     /// Generic error.
     Other(String),
 }
@@ -180,6 +183,11 @@ impl std::fmt::Display for ProxyDecodeError {
             Self::UnknownCertificationVersion(version) => write!(
                 f,
                 "Replica does not implement certification version {}",
+                version
+            ),
+            Self::UnknownStateSyncVersion(version) => write!(
+                f,
+                "Replica does not implement state sync version {}",
                 version
             ),
             Self::Other(msg) => f.write_str(msg),

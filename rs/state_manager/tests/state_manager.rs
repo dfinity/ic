@@ -3152,10 +3152,9 @@ fn can_get_dirty_pages() {
 
 #[test]
 fn can_reuse_chunk_hashes_when_computing_manifest() {
-    use ic_state_manager::manifest::{
-        compute_manifest, validate_manifest, CURRENT_STATE_SYNC_VERSION, DEFAULT_CHUNK_SIZE,
-    };
+    use ic_state_manager::manifest::{compute_manifest, validate_manifest, DEFAULT_CHUNK_SIZE};
     use ic_state_manager::ManifestMetrics;
+    use ic_types::state_sync::CURRENT_STATE_SYNC_VERSION;
 
     state_manager_test(|metrics, state_manager| {
         let (_, mut state) = state_manager.take_tip();
