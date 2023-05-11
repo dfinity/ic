@@ -3,6 +3,7 @@ package_group(
     packages = [
         "//rs/nervous_system/...",
         "//rs/nns/...",
+        "//rs/registry/admin/...",
         "//rs/sns/...",
     ],
 )
