@@ -29,7 +29,7 @@ impl From<ChunkInfo> for pb::ChunkInfo {
 impl From<Manifest> for pb::Manifest {
     fn from(manifest: Manifest) -> Self {
         Self {
-            version: manifest.version,
+            version: manifest.version as u32,
             file_table: manifest
                 .file_table
                 .iter()
@@ -49,7 +49,7 @@ impl From<Manifest> for pb::Manifest {
 impl From<MetaManifest> for pb::MetaManifest {
     fn from(meta_manifest: MetaManifest) -> Self {
         Self {
-            version: meta_manifest.version,
+            version: meta_manifest.version as u32,
             sub_manifest_hashes: meta_manifest
                 .sub_manifest_hashes
                 .iter()
@@ -89,7 +89,10 @@ impl TryFrom<pb::Manifest> for Manifest {
 
     fn try_from(manifest: pb::Manifest) -> Result<Self, ProxyDecodeError> {
         Ok(Self::new(
-            manifest.version,
+            manifest
+                .version
+                .try_into()
+                .map_err(|v| ProxyDecodeError::UnknownStateSyncVersion(v))?,
             manifest
                 .file_table
                 .into_iter()
@@ -109,7 +112,10 @@ impl TryFrom<pb::MetaManifest> for MetaManifest {
 
     fn try_from(meta_manifest: pb::MetaManifest) -> Result<Self, ProxyDecodeError> {
         Ok(Self {
-            version: meta_manifest.version,
+            version: meta_manifest
+                .version
+                .try_into()
+                .map_err(|v| ProxyDecodeError::UnknownStateSyncVersion(v))?,
             sub_manifest_hashes: meta_manifest
                 .sub_manifest_hashes
                 .into_iter()

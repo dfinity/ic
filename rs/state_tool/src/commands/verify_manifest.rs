@@ -1,8 +1,8 @@
 use ic_crypto_sha::Sha256;
-use ic_state_manager::manifest::{
-    hash::file_hasher, manifest_hash, MAX_SUPPORTED_STATE_SYNC_VERSION,
+use ic_state_manager::manifest::{hash::file_hasher, manifest_hash};
+use ic_types::state_sync::{
+    ChunkInfo, FileInfo, Manifest, StateSyncVersion, MAX_SUPPORTED_STATE_SYNC_VERSION,
 };
-use ic_types::state_sync::{ChunkInfo, FileInfo, Manifest};
 use std::{
     collections::BTreeMap,
     convert::TryInto,
@@ -43,7 +43,7 @@ fn parse_hash(hash: &str) -> [u8; 32] {
 fn compute_root_hash(
     file_table: BTreeMap<u32, FileInfo>,
     chunk_table: Vec<ChunkInfo>,
-    state_sync_version: u32,
+    state_sync_version: StateSyncVersion,
 ) -> [u8; 32] {
     // verify the file hash in file info
     for (idx, f) in &file_table {
@@ -182,13 +182,17 @@ fn canister_hash(
     canister_hash
 }
 
-fn extract_manifest_version(lines: &[String]) -> Option<u32> {
+fn extract_manifest_version(lines: &[String]) -> Option<StateSyncVersion> {
     lines
         .iter()
         .find(|line| line.starts_with("MANIFEST VERSION: "))?
         .replace("MANIFEST VERSION: ", "")
         .parse::<u32>()
         .ok()
+        .map(TryInto::try_into)
+        .transpose()
+        .ok()
+        .flatten()
 }
 
 fn extract_file_table(lines: &[String]) -> BTreeMap<u32, FileInfo> {
@@ -254,7 +258,7 @@ fn extract_root_hash(lines: &[String]) -> [u8; 32] {
 fn parse_manifest(
     file: File,
 ) -> (
-    Option<u32>,
+    Option<StateSyncVersion>,
     BTreeMap<u32, FileInfo>,
     Vec<ChunkInfo>,
     [u8; 32],
@@ -275,10 +279,10 @@ fn parse_manifest(
     (manifest_version, file_table, chunk_table, root_hash)
 }
 
-fn verify_manifest(file: File, mut version: u32) -> Result<(), String> {
+fn verify_manifest(file: File, mut version: StateSyncVersion) -> Result<(), String> {
     if version > MAX_SUPPORTED_STATE_SYNC_VERSION {
         panic!(
-            "Unsupported state sync version provided {}. Max supported version {}",
+            "Unsupported state sync version provided {:?}. Max supported version {:?}",
             version, MAX_SUPPORTED_STATE_SYNC_VERSION
         );
     }
@@ -289,7 +293,7 @@ fn verify_manifest(file: File, mut version: u32) -> Result<(), String> {
     if let Some(manifest_version) = manifest_version {
         if version != manifest_version {
             println!(
-                "WARNING: The manifest version {} provided in the arguments is overridden by the version {} in the file",
+                "WARNING: The manifest version {:?} provided in the arguments is overridden by the version {:?} in the file",
                 version,
                 manifest_version,
             );
@@ -323,7 +327,7 @@ pub fn do_canister_hash(file: &Path, canister: &str) -> Result<(), String> {
 //
 // Note that this means that it doesn't recompute the chunk hashes as
 // recomputing these would require to have the respective files at hand.
-pub fn do_verify_manifest(file: &Path, version: u32) -> Result<(), String> {
+pub fn do_verify_manifest(file: &Path, version: StateSyncVersion) -> Result<(), String> {
     verify_manifest(File::open(file).unwrap(), version)
 }
 
@@ -336,9 +340,11 @@ mod tests {
 
     use ic_state_manager::manifest::{
         hash::{chunk_hasher, file_hasher},
-        manifest_hash, CURRENT_STATE_SYNC_VERSION, STATE_SYNC_V1, STATE_SYNC_V2,
+        manifest_hash,
     };
-    use ic_types::state_sync::{ChunkInfo, FileInfo, Manifest};
+    use ic_types::state_sync::{
+        ChunkInfo, FileInfo, Manifest, StateSyncVersion, CURRENT_STATE_SYNC_VERSION,
+    };
 
     use super::{canister_hash, verify_manifest};
 
@@ -374,7 +380,10 @@ mod tests {
         )
     }
 
-    fn test_manifest(version: u32, file_infos: &[(FileInfo, ChunkInfo)]) -> (Manifest, String) {
+    fn test_manifest(
+        version: StateSyncVersion,
+        file_infos: &[(FileInfo, ChunkInfo)],
+    ) -> (Manifest, String) {
         let manifest = Manifest::new(
             version,
             file_infos.iter().map(|info| info.0.clone()).collect(),
@@ -408,7 +417,7 @@ mod tests {
 
     fn test_manifest_2() -> (Manifest, String) {
         test_manifest(
-            STATE_SYNC_V2,
+            StateSyncVersion::V2,
             &[
                 test_manifest_entry(0, "root.bin", 0),
                 test_manifest_entry(1, "canister_states/canister_0/test.bin", 1),
@@ -437,7 +446,7 @@ mod tests {
         tmp_file.seek(std::io::SeekFrom::Start(0)).unwrap();
 
         // The manifest version is already written in the file and will override the one from the arguments.
-        verify_manifest(tmp_file, STATE_SYNC_V1).unwrap();
+        verify_manifest(tmp_file, StateSyncVersion::V1).unwrap();
     }
 
     #[test]

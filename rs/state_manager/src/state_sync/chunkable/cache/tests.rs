@@ -2,7 +2,7 @@ use super::*;
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::page_map::TestPageAllocatorFileDescriptorImpl;
 use ic_test_utilities_logger::with_test_replica_logger;
-use ic_types::crypto::CryptoHash;
+use ic_types::{crypto::CryptoHash, state_sync::StateSyncVersion};
 use tempfile::TempDir;
 
 const NUM_THREADS: u32 = 3;
@@ -43,9 +43,10 @@ impl TestEnvironment {
 /// We only use download states for comparison in tests, so it doesn't matter
 /// if the contents make sense.
 fn fake_loading(seed: u32) -> (DownloadState, Manifest, HashSet<usize>, FileGroupChunks) {
-    let manifest = Manifest::new(seed, vec![], vec![]);
+    let version = seed.try_into().unwrap();
+    let manifest = Manifest::new(version, vec![], vec![]);
     let meta_manifest = MetaManifest {
-        version: 0,
+        version,
         sub_manifest_hashes: vec![],
     };
     let fetch_chunks: HashSet<usize> =
@@ -63,9 +64,9 @@ fn fake_loading(seed: u32) -> (DownloadState, Manifest, HashSet<usize>, FileGrou
 
 /// Creates a fake DownloadState::Completed for an empty state.
 fn fake_complete() -> DownloadState {
-    let manifest = Manifest::new(0, vec![], vec![]);
+    let manifest = Manifest::new(StateSyncVersion::V0, vec![], vec![]);
     let meta_manifest = MetaManifest {
-        version: 0,
+        version: StateSyncVersion::V0,
         sub_manifest_hashes: vec![],
     };
     let artifact = Artifact::StateSync(StateSyncMessage {
@@ -137,7 +138,8 @@ fn incomplete_state_for_tests(
     } = &result.state
     {
         std::fs::create_dir(&result.root).unwrap();
-        let mut _file = std::fs::File::create(result.root.join(manifest.version.to_string()));
+        let mut _file =
+            std::fs::File::create(result.root.join((manifest.version as u32).to_string()));
     }
     result
 }
@@ -228,7 +230,7 @@ fn loading_sync() {
         }
 
         // Third sync at the same height as the cache, should replace cache
-        let (state, manifest, fetch_chunks, file_groups) = fake_loading(3);
+        let (state, manifest, fetch_chunks, file_groups) = fake_loading(2);
         let sync = incomplete_state_for_tests(&env, Height::new(5), state);
         let scratchpad = sync.root.clone();
 
@@ -250,13 +252,13 @@ fn loading_sync() {
                 ungroup_fetch_chunks(&fetch_chunks, &file_groups)
             );
             assert!(entry.path.exists());
-            assert!(entry.path.join("3").exists());
+            assert!(entry.path.join("2").exists());
             assert!(!entry.path.join("1").exists());
         }
 
         // Fourth sync at higher height than cache, should replace
         let old_cache_path = env.cache.read().get().unwrap().path.clone();
-        let (state, manifest, fetch_chunks, file_groups) = fake_loading(4);
+        let (state, manifest, fetch_chunks, file_groups) = fake_loading(2);
 
         let sync = incomplete_state_for_tests(&env, Height::new(6), state);
         let scratchpad = sync.root.clone();
@@ -279,7 +281,7 @@ fn loading_sync() {
                 ungroup_fetch_chunks(&fetch_chunks, &file_groups)
             );
             assert!(entry.path.exists());
-            assert!(entry.path.join("4").exists());
+            assert!(entry.path.join("2").exists());
         }
     })
 }

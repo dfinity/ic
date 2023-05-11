@@ -34,6 +34,7 @@ use ic_types::{
     messages::{MessageId, RequestOrResponse},
     node_id_into_protobuf, node_id_try_from_option,
     nominal_cycles::NominalCycles,
+    state_sync::{StateSyncVersion, CURRENT_STATE_SYNC_VERSION},
     subnet_id_into_protobuf, subnet_id_try_from_protobuf,
     time::{Time, UNIX_EPOCH},
     xnet::{StreamHeader, StreamIndex, StreamIndexedQueue, StreamSlice},
@@ -94,7 +95,7 @@ pub struct SystemMetadata {
 
     /// The version of StateSync protocol that should be used to compute
     /// manifest of this state.
-    pub state_sync_version: u32,
+    pub state_sync_version: StateSyncVersion,
 
     /// The version of certification procedure that should be used for this
     /// state.
@@ -499,7 +500,7 @@ impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
                 .collect(),
             network_topology: Some((&item.network_topology).into()),
             subnet_call_context_manager: Some((&item.subnet_call_context_manager).into()),
-            state_sync_version: item.state_sync_version,
+            state_sync_version: item.state_sync_version as u32,
             certification_version: item.certification_version as u32,
             heap_delta_estimate: item.heap_delta_estimate.get(),
             own_subnet_features: Some(item.own_subnet_features.into()),
@@ -533,7 +534,6 @@ impl TryFrom<pb_metadata::SystemMetadata> for SystemMetadata {
                 try_from_option_field(entry.subnet_stream, "SystemMetadata::streams::V")?,
             );
         }
-        let certification_version = item.certification_version;
 
         let canister_allocation_ranges: CanisterIdRanges = match item.canister_allocation_ranges {
             Some(canister_allocation_ranges) => canister_allocation_ranges.try_into()?,
@@ -594,9 +594,12 @@ impl TryFrom<pb_metadata::SystemMetadata> for SystemMetadata {
                 item.network_topology,
                 "SystemMetadata::network_topology",
             )?,
-            state_sync_version: item.state_sync_version,
+            state_sync_version: item
+                .state_sync_version
+                .try_into()
+                .map_err(|_| ProxyDecodeError::UnknownStateSyncVersion(item.state_sync_version))?,
             certification_version: item.certification_version.try_into().map_err(|_| {
-                ProxyDecodeError::UnknownCertificationVersion(certification_version)
+                ProxyDecodeError::UnknownCertificationVersion(item.certification_version)
             })?,
             subnet_call_context_manager: match item.subnet_call_context_manager {
                 Some(manager) => SubnetCallContextManager::try_from((batch_time, manager))?,
@@ -631,12 +634,12 @@ impl SystemMetadata {
             // StateManager populates proper values of these fields before
             // committing each state.
             prev_state_hash: Default::default(),
-            state_sync_version: 0,
+            state_sync_version: CURRENT_STATE_SYNC_VERSION,
             // NB. State manager relies on the root hash of the hash tree
             // corresponding to the initial state to be a constant.  Thus we fix
             // the certification version that we use for the initial state. If
             // we used CURRENT_CERTIFICATION_VERSION here, the state hash would
-            // NOT guaranteed to be constant, potentially leading to
+            // NOT be guaranteed to be constant, potentially leading to
             // hard-to-track bugs in state manager.
             certification_version: CertificationVersion::V0,
             heap_delta_estimate: NumBytes::from(0),

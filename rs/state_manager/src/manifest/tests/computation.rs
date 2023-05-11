@@ -3,15 +3,15 @@ use crate::manifest::{
     file_chunk_range, filter_out_zero_chunks, hash::ManifestHash, manifest_hash, manifest_hash_v1,
     manifest_hash_v2, meta_manifest_hash, validate_chunk, validate_manifest,
     validate_meta_manifest, validate_sub_manifest, ChunkValidationError, DiffScript,
-    ManifestMetrics, ManifestValidationError, CURRENT_STATE_SYNC_VERSION, DEFAULT_CHUNK_SIZE,
-    MAX_FILE_SIZE_TO_GROUP, MAX_SUPPORTED_STATE_SYNC_VERSION, STATE_SYNC_V1, STATE_SYNC_V2,
+    ManifestMetrics, ManifestValidationError, StateSyncVersion, DEFAULT_CHUNK_SIZE,
+    MAX_FILE_SIZE_TO_GROUP,
 };
 
 use ic_crypto_sha::Sha256;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
 use ic_state_layout::CheckpointLayout;
-use ic_types::state_sync::MetaManifest;
+use ic_types::state_sync::{MetaManifest, CURRENT_STATE_SYNC_VERSION};
 use ic_types::{
     crypto::CryptoHash,
     state_sync::{
@@ -168,11 +168,15 @@ pub(crate) fn dummy_file_table_and_chunk_table() -> (Vec<FileInfo>, Vec<ChunkInf
 
 fn simple_manifest() -> ([u8; 32], Manifest) {
     let (file_table, chunk_table) = simple_file_table_and_chunk_table();
-    let manifest = Manifest::new(STATE_SYNC_V1, file_table.clone(), chunk_table.clone());
+    let manifest = Manifest::new(
+        StateSyncVersion::V1,
+        file_table.clone(),
+        chunk_table.clone(),
+    );
     let expected_hash = hash_concat!(
         17u8,
         b"ic-state-manifest",
-        STATE_SYNC_V1,
+        StateSyncVersion::V1 as u32,
         // files
         4u32,
         "root.bin",
@@ -221,7 +225,7 @@ fn simple_manifest() -> ([u8; 32], Manifest) {
 
 fn simple_manifest_v2() -> ([u8; 32], Manifest) {
     let (file_table, chunk_table) = simple_file_table_and_chunk_table();
-    let manifest = Manifest::new(STATE_SYNC_V2, file_table, chunk_table);
+    let manifest = Manifest::new(StateSyncVersion::V2, file_table, chunk_table);
     let encoded_manifest = encode_manifest(&manifest);
     // The encoded bytes of the simple manifest is no greater than 1 MiB.
     // If it is not the case due to future changes, the `sub_manifest_hash` below should also be updated.
@@ -231,7 +235,7 @@ fn simple_manifest_v2() -> ([u8; 32], Manifest) {
     let expected_hash = hash_concat!(
         22u8,
         b"ic-state-meta-manifest",
-        STATE_SYNC_V2,
+        StateSyncVersion::V2 as u32,
         1u32,
         &sub_manifest_hash[..]
     );
@@ -265,7 +269,7 @@ fn test_simple_manifest_computation() {
             &mut thread_pool,
             &manifest_metrics,
             &no_op_logger(),
-            STATE_SYNC_V1,
+            StateSyncVersion::V1,
             &CheckpointLayout::new_untracked(root.to_path_buf(), Height::new(0)).unwrap(),
             1024,
             None,
@@ -281,7 +285,7 @@ fn test_simple_manifest_computation() {
             &mut thread_pool,
             &manifest_metrics,
             &no_op_logger(),
-            STATE_SYNC_V2,
+            StateSyncVersion::V2,
             &CheckpointLayout::new_untracked(root.to_path_buf(), Height::new(0)).unwrap(),
             1024,
             None,
@@ -302,14 +306,14 @@ fn test_simple_manifest_computation() {
 #[test]
 fn test_meta_manifest_computation() {
     let (file_table, chunk_table) = simple_file_table_and_chunk_table();
-    let manifest = Manifest::new(STATE_SYNC_V2, file_table, chunk_table);
+    let manifest = Manifest::new(StateSyncVersion::V2, file_table, chunk_table);
     let meta_manifest = build_meta_manifest(&manifest);
     let encoded_manifest = encode_manifest(&manifest);
     assert!(encoded_manifest.len() <= DEFAULT_CHUNK_SIZE as usize);
 
     let sub_manifest_hash = hash_concat!(21u8, b"ic-state-sub-manifest", &encoded_manifest[..]);
     let expected_meta_manifest = MetaManifest {
-        version: STATE_SYNC_V2,
+        version: StateSyncVersion::V2,
         sub_manifest_hashes: vec![sub_manifest_hash],
     };
 
@@ -319,7 +323,7 @@ fn test_meta_manifest_computation() {
 #[test]
 fn test_validate_sub_manifest() {
     let (file_table, chunk_table) = dummy_file_table_and_chunk_table();
-    let manifest = Manifest::new(STATE_SYNC_V2, file_table, chunk_table);
+    let manifest = Manifest::new(StateSyncVersion::V2, file_table, chunk_table);
     let meta_manifest = build_meta_manifest(&manifest);
 
     let encoded_manifest = encode_manifest(&manifest);
@@ -379,7 +383,7 @@ fn test_validate_sub_manifest() {
 #[test]
 fn test_get_sub_manifest_based_on_index() {
     let (file_table, chunk_table) = dummy_file_table_and_chunk_table();
-    let manifest = Manifest::new(STATE_SYNC_V2, file_table, chunk_table);
+    let manifest = Manifest::new(StateSyncVersion::V2, file_table, chunk_table);
     let meta_manifest = build_meta_manifest(&manifest);
     let encoded_manifest = encode_manifest(&manifest);
 
@@ -421,7 +425,7 @@ fn simple_manifest_passes_validation() {
 #[test]
 fn meta_manifest_passes_validation() {
     let (file_table, chunk_table) = simple_file_table_and_chunk_table();
-    let manifest = Manifest::new(STATE_SYNC_V2, file_table, chunk_table);
+    let manifest = Manifest::new(StateSyncVersion::V2, file_table, chunk_table);
     let meta_manifest = build_meta_manifest(&manifest);
     assert_eq!(
         Ok(()),
@@ -433,39 +437,10 @@ fn meta_manifest_passes_validation() {
 }
 
 #[test]
-fn unsupported_manifest_version_detected() {
-    let (file_table, chunk_table) = simple_file_table_and_chunk_table();
-    let manifest = Manifest::new(
-        MAX_SUPPORTED_STATE_SYNC_VERSION + 1,
-        file_table,
-        chunk_table,
-    );
-    let meta_manifest = build_meta_manifest(&manifest);
-    let root_hash =
-        CryptoHashOfState::from(CryptoHash(meta_manifest_hash(&meta_manifest).to_vec()));
-
-    assert_eq!(
-        validate_manifest(&manifest, &root_hash),
-        Err(ManifestValidationError::UnsupportedManifestVersion {
-            manifest_version: manifest.version,
-            max_supported_version: MAX_SUPPORTED_STATE_SYNC_VERSION,
-        })
-    );
-
-    assert_eq!(
-        validate_meta_manifest(&meta_manifest, &root_hash),
-        Err(ManifestValidationError::UnsupportedManifestVersion {
-            manifest_version: meta_manifest.version,
-            max_supported_version: MAX_SUPPORTED_STATE_SYNC_VERSION,
-        })
-    );
-}
-
-#[test]
 fn bad_root_hash_detected_for_meta_manifest() {
     let bogus_hash = CryptoHashOfState::from(CryptoHash(vec![1u8; 32]));
     let (file_table, chunk_table) = simple_file_table_and_chunk_table();
-    let manifest = Manifest::new(STATE_SYNC_V2, file_table, chunk_table);
+    let manifest = Manifest::new(StateSyncVersion::V2, file_table, chunk_table);
     let meta_manifest = build_meta_manifest(&manifest);
     assert_eq!(
         validate_meta_manifest(&meta_manifest, &bogus_hash),

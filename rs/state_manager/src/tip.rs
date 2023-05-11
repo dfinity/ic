@@ -1,7 +1,7 @@
 use crate::{
     compute_bundled_manifest, release_lock_and_persist_metadata, CheckpointError, PageMapType,
     SharedState, StateManagerMetrics, CRITICAL_ERROR_CHUNK_ID_USAGE_NEARING_LIMITS,
-    MAX_SUPPORTED_STATE_SYNC_VERSION, NUMBER_OF_CHECKPOINT_THREADS,
+    NUMBER_OF_CHECKPOINT_THREADS,
 };
 use crossbeam_channel::{unbounded, Sender};
 use ic_logger::{error, fatal, info, ReplicaLogger};
@@ -15,7 +15,9 @@ use ic_state_layout::{
     error::LayoutError, CanisterStateBits, CheckpointLayout, ExecutionStateBits, ReadOnly,
     RwPolicy, StateLayout, TipHandler,
 };
-use ic_types::state_sync::{FILE_GROUP_CHUNK_ID_OFFSET, MANIFEST_CHUNK_ID_OFFSET};
+use ic_types::state_sync::{
+    FILE_GROUP_CHUNK_ID_OFFSET, MANIFEST_CHUNK_ID_OFFSET, MAX_SUPPORTED_STATE_SYNC_VERSION,
+};
 use ic_types::{malicious_flags::MaliciousFlags, CanisterId, Height};
 use ic_utils::fs::defrag_file_partially;
 use ic_utils::thread::parallel_map;
@@ -606,7 +608,7 @@ fn handle_compute_manifest_request(
             )
         });
 
-    let state_sync_version = system_metadata.state_sync_version;
+    let state_sync_version = system_metadata.state_sync_version.try_into().unwrap();
 
     assert!(
         state_sync_version <= MAX_SUPPORTED_STATE_SYNC_VERSION,
@@ -644,7 +646,7 @@ fn handle_compute_manifest_request(
 
     info!(
         log,
-        "Computed manifest version {} for state @{} in {:?}",
+        "Computed manifest version {:?} for state @{} in {:?}",
         manifest.version,
         checkpoint_layout.height(),
         elapsed
