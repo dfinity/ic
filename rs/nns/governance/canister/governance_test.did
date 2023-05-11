@@ -468,10 +468,10 @@ type SwapDistribution = record { total : opt Tokens };
 type SwapParameters = record {
   minimum_participants : opt nat64;
   neuron_basket_construction_parameters : opt NeuronBasketConstructionParameters;
-  maximum_participant_icp : opt nat64;
-  minimum_icp : opt nat64;
-  minimum_participant_icp : opt nat64;
-  maximum_icp : opt nat64;
+  maximum_participant_icp : opt Tokens;
+  minimum_icp : opt Tokens;
+  minimum_participant_icp : opt Tokens;
+  maximum_icp : opt Tokens;
 };
 type Tally = record {
   no : nat64;

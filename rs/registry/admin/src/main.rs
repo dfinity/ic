@@ -8,6 +8,7 @@ use anyhow::anyhow;
 use async_trait::async_trait;
 use candid::{CandidType, Decode, Encode};
 use clap::Parser;
+use core::fmt::Display;
 use cycles_minting_canister::{
     ChangeSubnetTypeAssignmentArgs, SetAuthorizedSubnetworkListArgs, SubnetListWithType,
     UpdateSubnetTypeArgs,
@@ -34,6 +35,7 @@ use ic_nervous_system_common_test_keys::{
     TEST_USER2_PRINCIPAL, TEST_USER3_KEYPAIR, TEST_USER3_PRINCIPAL, TEST_USER4_KEYPAIR,
     TEST_USER4_PRINCIPAL,
 };
+use ic_nervous_system_proto::pb::v1 as nervous_system_pb;
 use ic_nervous_system_root::{
     canister_status::CanisterStatusResult,
     change_canister::{
@@ -43,9 +45,20 @@ use ic_nervous_system_root::{
 use ic_nns_common::types::{NeuronId, ProposalId, UpdateIcpXdrConversionRatePayload};
 use ic_nns_constants::{memory_allocation_of, GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_governance::pb::v1::{
-    add_or_remove_node_provider::Change, manage_neuron::Command, proposal::Action,
-    AddOrRemoveNodeProvider, GovernanceError, ManageNeuron, NodeProvider, OpenSnsTokenSwap,
-    Proposal, RewardNodeProviders,
+    add_or_remove_node_provider::Change,
+    create_service_nervous_system::{
+        governance_parameters::VotingRewardParameters,
+        initial_token_distribution::{
+            developer_distribution::NeuronDistribution, DeveloperDistribution, SwapDistribution,
+            TreasuryDistribution,
+        },
+        swap_parameters, Canister as NervousSystemCanisterId, GovernanceParameters,
+        InitialTokenDistribution, LedgerParameters, SwapParameters,
+    },
+    manage_neuron::Command,
+    proposal::Action,
+    AddOrRemoveNodeProvider, CreateServiceNervousSystem, GovernanceError, ManageNeuron,
+    NodeProvider, OpenSnsTokenSwap, Proposal, RewardNodeProviders,
 };
 use ic_nns_governance::{
     governance::{BitcoinNetwork, BitcoinSetConfigProposal},
@@ -101,6 +114,7 @@ use ic_registry_routing_table::{
 use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
 use ic_registry_transport::Error;
+use ic_sns_init::pb::v1::SnsInitPayload; // To validate CreateServiceNervousSystem.
 use ic_sns_wasm::pb::v1::{
     AddWasmRequest, InsertUpgradePathEntriesRequest, PrettySnsVersion, SnsCanisterType, SnsUpgrade,
     SnsVersion, SnsWasm, UpdateAllowedPrincipalsRequest, UpdateSnsSubnetListRequest,
@@ -109,7 +123,11 @@ use ic_types::{
     crypto::{threshold_sig::ThresholdSigPublicKey, KeyPurpose},
     CanisterId, NodeId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId,
 };
+use itertools::izip;
+use lazy_static::lazy_static;
+use maplit::hashmap;
 use prost::Message;
+use regex::Regex;
 use registry_canister::mutations::common::decode_registry_value;
 use registry_canister::mutations::do_create_subnet::{EcdsaInitialConfig, EcdsaKeyRequest};
 use registry_canister::mutations::do_set_firewall_config::SetFirewallConfigPayload;
@@ -151,8 +169,142 @@ use std::{
 use types::{ProvisionalWhitelistRecord, Registry, RegistryRecord, RegistryValue, SubnetRecord};
 use url::Url;
 
+#[cfg(test)]
+mod main_tests;
+
 const IC_ROOT_PUBLIC_KEY_BASE64: &str = r#"MIGCMB0GDSsGAQQBgtx8BQMBAgEGDCsGAQQBgtx8BQMCAQNhAIFMDm7HH6tYOwi9gTc8JVw8NxsuhIY8mKTx4It0I10U+12cDNVG2WhfkToMCyzFNBWDv0tDkuRn25bWW5u0y3FxEvhHLg1aTRRQX/10hLASkQkcX4e5iINGP5gJGguqrg=="#;
 const IC_DOMAIN: &str = "ic0.app";
+
+// TODO: Move the new handful of functions to rs/utils/humanize, or somewhere
+// like that.
+
+/// A wrapper around humantime::parse_duration that does some additional
+/// mechanical conversions.
+///
+/// To recapitulate the docs for humantime, "1w 2d 3h" gets parsed as
+///
+///     1 week + 2 days + 3 hours
+///         =
+///     (1 * (7 * 24 * 60 * 60) + 2 * 24 * 60 * 60 + 3 * (60 * 60)) seconds
+fn parse_duration(s: &str) -> Result<nervous_system_pb::Duration, String> {
+    humantime::parse_duration(s)
+        .map(|d| nervous_system_pb::Duration {
+            seconds: Some(d.as_secs()),
+        })
+        .map_err(|err| err.to_string())
+}
+
+/// Multiplies n by 10^count.
+fn shift_decimal_right<I>(n: u64, count: I) -> Result<u64, String>
+where
+    u32: TryFrom<I>,
+    <u32 as TryFrom<I>>::Error: Display,
+    I: Display + Copy,
+{
+    let count = u32::try_from(count)
+        .map_err(|err| format!("Unable to convert {} to u32. Reason: {}", count, err))?;
+
+    let boost = 10_u64
+        .checked_pow(count)
+        .ok_or_else(|| format!("Too large of an exponent: {}", count))?;
+
+    n.checked_mul(boost)
+        .ok_or_else(|| format!("Too large of a decimal shift: {} >> {}", n, count))
+}
+
+/// Parses strings like "123_456.789" into 123456789. Notice that in this
+/// example, the decimal point in the result has been shifted to the right by 3
+/// places. The amount of such shifting is specified using the decimal_places
+/// parameter.
+///
+/// Also, notice that "_" (underscore) can be sprinkled as you wish in the input
+/// for readability. No need to use groups of size 3, although it is
+/// recommended, since that's what people are used to.
+///
+/// s is considered invalid if it the number of digits after the decimal point >
+/// decimal_places.
+///
+/// The decimal point is optional, but if it is included, it must have at least
+/// one digit on each side (of course, the digit can be "0").
+///
+/// Prefixes (such as "0") do not change the base; base 10 is always
+/// used. Therefore, s = "0xDEAD_BEEF" is invalid, for example.
+fn parse_fixed_point_decimal(s: &str, decimal_places: usize) -> Result<u64, String> {
+    lazy_static! {
+        static ref REGEX: Regex = Regex::new(
+            r"(?x) # Verbose (ignore white space, and comments, like this).
+            ^  # begin
+            (?P<whole>[\d_]+)  # Digit or underscores (for grouping digits).
+            (  # The dot + fractional part...
+                [.]  # dot
+                (?P<fractional>[\d_]+)
+            )?  # ... is optional.
+            $  # end
+        "
+        )
+        .unwrap();
+    }
+
+    let found = REGEX
+        .captures(s)
+        .ok_or_else(|| format!("Not a number: {}", s))?;
+
+    let whole = u64::from_str(
+        &found
+            .name("whole")
+            .expect("Missing capture group?!")
+            .as_str()
+            .replace('_', ""),
+    )
+    .map_err(|err| err.to_string())?;
+
+    let fractional = format!(
+        // Pad so that fractional ends up being of length (at least) decimal_places.
+        "{:0<decimal_places$}",
+        found
+            .name("fractional")
+            .map(|m| m.as_str())
+            .unwrap_or("0")
+            .replace('_', ""),
+    );
+    if fractional.len() > decimal_places {
+        return Err(format!("Too many digits after the decimal place: {}", s));
+    }
+    let fractional = u64::from_str(&fractional).map_err(|err| err.to_string())?;
+
+    Ok(shift_decimal_right(whole, decimal_places)? + fractional)
+}
+
+/// Similar to parse_fixed_point_decimal(s, 2), except a trailing percent sign
+/// is REQUIRED (and not fed into parse_fixed_point_decimal).
+fn parse_percentage(s: &str) -> Result<nervous_system_pb::Percentage, String> {
+    let number = s
+        .strip_suffix('%')
+        .ok_or_else(|| format!("Input string must end with a percent sign: {}", s))?;
+
+    let basis_points = Some(parse_fixed_point_decimal(
+        number, /* decimal_places = */ 2,
+    )?);
+    Ok(nervous_system_pb::Percentage { basis_points })
+}
+
+/// Parses decimal strings ending in "T", or integer strings (again, base 10)
+/// ending in "e8s". In the case of "T" strings, the maximum number of digits
+/// after the (optional) decimal point is 8.
+///
+/// As with parse_fixed_point_decimal, "_" may be sprinkled throughout.
+fn parse_tokens(s: &str) -> Result<nervous_system_pb::Tokens, String> {
+    let e8s = if let Some(s) = s.strip_suffix('T') {
+        parse_fixed_point_decimal(s, /* decimal_places = */ 8)?
+    } else if let Some(s) = s.strip_suffix("e8s") {
+        u64::from_str(&s.replace('_', "")).map_err(|err| err.to_string())?
+    } else {
+        return Err(format!("Invalid tokens input string: {}", s));
+    };
+    let e8s = Some(e8s);
+
+    Ok(nervous_system_pb::Tokens { e8s })
+}
 
 /// Common command-line options for `ic-admin`.
 #[derive(Parser)]
@@ -301,6 +453,8 @@ enum SubCommand {
     ProposeToUpdateElectedReplicaVersions(ProposeToUpdateElectedReplicaVersionsCmd),
     /// Submits a proposal to create a new subnet.
     ProposeToCreateSubnet(ProposeToCreateSubnetCmd),
+    /// Submits a proposal to create a new service nervous system (usually referred to as SNS).
+    ProposeToCreateServiceNervousSystem(ProposeToCreateServiceNervousSystemCmd),
     /// Submits a proposal to update an existing subnet.
     ProposeToAddNodesToSubnet(ProposeToAddNodesToSubnetCmd),
     /// Submits a proposal to update a subnet's recovery CUP
@@ -3619,6 +3773,426 @@ impl ProposalPayload<BitcoinSetConfigProposal> for ProposeToSetBitcoinConfig {
     }
 }
 
+#[derive_common_proposal_fields]
+#[derive(ProposalMetadata, Parser, Clone, Debug)]
+struct ProposeToCreateServiceNervousSystemCmd {
+    #[clap(long)]
+    name: String,
+
+    #[clap(long)]
+    description: String,
+
+    #[clap(long)]
+    url: String,
+
+    #[clap(long)]
+    logo: String,
+
+    // Canister Control
+    // ----------------
+    #[clap(long)]
+    fallback_controller_principal_ids: Vec<PrincipalId>,
+
+    #[clap(long)]
+    dapp_canisters: Vec<PrincipalId>,
+
+    // Initial SNS Tokens and Neurons
+    // ------------------------------
+    #[clap(long)]
+    developer_neuron_controller: Vec<PrincipalId>,
+
+    #[clap(long, value_parser=parse_duration)]
+    developer_neuron_dissolve_delay: Vec<nervous_system_pb::Duration>,
+
+    #[clap(long)]
+    developer_neuron_memo: Vec<u64>,
+
+    #[clap(long, value_parser=parse_tokens)]
+    developer_neuron_stake: Vec<nervous_system_pb::Tokens>,
+
+    #[clap(long, value_parser=parse_duration)]
+    developer_neuron_vesting_period: Vec<nervous_system_pb::Duration>,
+
+    #[clap(long, value_parser=parse_tokens)]
+    treasury_amount: nervous_system_pb::Tokens,
+
+    #[clap(long, value_parser=parse_tokens)]
+    swap_amount: nervous_system_pb::Tokens,
+
+    // Swap
+    // ----
+    #[clap(long)]
+    swap_minimum_participants: u64,
+
+    #[clap(long, value_parser=parse_tokens)]
+    swap_minimum_icp: nervous_system_pb::Tokens,
+
+    #[clap(long, value_parser=parse_tokens)]
+    swap_maximum_icp: nervous_system_pb::Tokens,
+
+    #[clap(long, value_parser=parse_tokens)]
+    swap_minimum_participant_icp: nervous_system_pb::Tokens,
+
+    #[clap(long, value_parser=parse_tokens)]
+    swap_maximum_participant_icp: nervous_system_pb::Tokens,
+
+    #[clap(long)]
+    swap_neuron_count: u64,
+
+    #[clap(long, value_parser=parse_duration)]
+    swap_neuron_dissolve_delay: nervous_system_pb::Duration,
+
+    // Ledger
+    // ------
+    #[clap(long, value_parser=parse_tokens)]
+    transaction_fee: nervous_system_pb::Tokens,
+
+    #[clap(long)]
+    token_name: String,
+
+    #[clap(long)]
+    token_symbol: String,
+
+    #[clap(long)]
+    token_logo_url: String,
+
+    // Proposals
+    // ---------
+    #[clap(long, value_parser=parse_tokens)]
+    proposal_rejection_fee: nervous_system_pb::Tokens,
+
+    #[clap(long, value_parser=parse_duration)]
+    proposal_initial_voting_period: nervous_system_pb::Duration,
+
+    #[clap(long, value_parser=parse_duration)]
+    proposal_wait_for_quiet_deadline_increase: nervous_system_pb::Duration,
+
+    // Neurons
+    // -------
+    #[clap(long, value_parser=parse_tokens)]
+    neuron_minimum_stake: nervous_system_pb::Tokens,
+
+    #[clap(long, value_parser=parse_duration)]
+    neuron_minimum_dissolve_delay_to_vote: nervous_system_pb::Duration,
+
+    #[clap(long, value_parser=parse_duration)]
+    neuron_maximum_dissolve_delay: nervous_system_pb::Duration,
+
+    #[clap(long, value_parser=parse_percentage)]
+    neuron_maximum_dissolve_delay_bonus: nervous_system_pb::Percentage,
+
+    #[clap(long, value_parser=parse_duration)]
+    neuron_maximum_age_for_age_bonus: nervous_system_pb::Duration,
+
+    #[clap(long, value_parser=parse_percentage)]
+    neuron_maximum_age_bonus: nervous_system_pb::Percentage,
+
+    // Voting Reward(s)
+    // ----------------
+    #[clap(long, value_parser=parse_percentage)]
+    initial_voting_reward_rate: nervous_system_pb::Percentage,
+
+    #[clap(long, value_parser=parse_percentage)]
+    final_voting_reward_rate: nervous_system_pb::Percentage,
+
+    #[clap(long, value_parser=parse_duration)]
+    voting_reward_rate_transition_duration: nervous_system_pb::Duration,
+}
+
+impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSystem {
+    type Error = String;
+    fn try_from(cmd: ProposeToCreateServiceNervousSystemCmd) -> Result<Self, String> {
+        let ProposeToCreateServiceNervousSystemCmd {
+            name,
+            description,
+            url,
+            logo,
+
+            fallback_controller_principal_ids,
+            dapp_canisters,
+
+            developer_neuron_controller,
+            developer_neuron_dissolve_delay,
+            developer_neuron_memo,
+            developer_neuron_stake,
+            developer_neuron_vesting_period,
+
+            treasury_amount,
+            swap_amount,
+
+            swap_minimum_participants,
+            swap_minimum_icp,
+            swap_maximum_icp,
+            swap_minimum_participant_icp,
+            swap_maximum_participant_icp,
+            swap_neuron_count,
+            swap_neuron_dissolve_delay,
+
+            transaction_fee,
+            token_name,
+            token_symbol,
+            token_logo_url,
+
+            proposal_rejection_fee,
+            proposal_initial_voting_period,
+            proposal_wait_for_quiet_deadline_increase,
+
+            neuron_minimum_stake,
+            neuron_minimum_dissolve_delay_to_vote,
+            neuron_maximum_dissolve_delay,
+            neuron_maximum_dissolve_delay_bonus,
+            neuron_maximum_age_for_age_bonus,
+            neuron_maximum_age_bonus,
+
+            initial_voting_reward_rate,
+            final_voting_reward_rate,
+            voting_reward_rate_transition_duration,
+
+            // Not used.
+            proposer: _,
+            test_neuron_proposer: _,
+            proposal_url: _,
+            proposal_title: _,
+            summary: _,
+            summary_file: _,
+            dry_run: _,
+            json: _,
+        } = cmd;
+
+        let name = Some(name);
+        let description = Some(description);
+        let url = Some(url);
+        let logo = Some(nervous_system_pb::Image {
+            base64_encoding: Some(logo),
+        });
+
+        let dapp_canisters = dapp_canisters
+            .into_iter()
+            .map(|id| NervousSystemCanisterId { id: Some(id) })
+            .collect();
+
+        let initial_token_distribution = {
+            let developer_distribution = {
+                // Require that all the --developer_neuron_* receive the same
+                // number of values.
+                let lengths = hashmap! {
+                    "controller" => developer_neuron_controller.len(),
+                    "dissolve_delay" => developer_neuron_dissolve_delay.len(),
+                    "memo" => developer_neuron_memo.len(),
+                    "stake" => developer_neuron_stake.len(),
+                    "vesting_period" => developer_neuron_vesting_period.len(),
+                };
+                let distinct_lengths = lengths.values().copied().collect::<HashSet<_>>();
+                if distinct_lengths.len() != 1 {
+                    return Err(format!(
+                        "--developer_neuron_* flags must receive the same number \
+                         of values. lengths: {:#?}",
+                        lengths,
+                    ));
+                }
+
+                let developer_neurons = izip!(
+                    developer_neuron_controller,
+                    developer_neuron_dissolve_delay,
+                    developer_neuron_memo,
+                    developer_neuron_stake,
+                    developer_neuron_vesting_period,
+                )
+                .map(
+                    |(controller, dissolve_delay, memo, stake, vesting_period)| {
+                        let controller = Some(controller);
+                        let dissolve_delay = Some(dissolve_delay);
+                        let memo = Some(memo);
+                        let stake = Some(stake);
+                        let vesting_period = Some(vesting_period);
+
+                        NeuronDistribution {
+                            controller,
+                            dissolve_delay,
+                            memo,
+                            stake,
+                            vesting_period,
+                        }
+                    },
+                )
+                .collect();
+
+                Some(DeveloperDistribution { developer_neurons })
+            };
+
+            let treasury_distribution = Some(TreasuryDistribution {
+                total: Some(treasury_amount),
+            });
+
+            let swap_distribution = Some(SwapDistribution {
+                total: Some(swap_amount),
+            });
+
+            Some(InitialTokenDistribution {
+                developer_distribution,
+                treasury_distribution,
+                swap_distribution,
+            })
+        };
+
+        let swap_parameters = {
+            let minimum_participants = Some(swap_minimum_participants);
+            let minimum_icp = Some(swap_minimum_icp);
+            let maximum_icp = Some(swap_maximum_icp);
+            let minimum_participant_icp = Some(swap_minimum_participant_icp);
+            let maximum_participant_icp = Some(swap_maximum_participant_icp);
+
+            let neuron_basket_construction_parameters = {
+                let count = Some(swap_neuron_count);
+                let dissolve_delay_interval = Some(swap_neuron_dissolve_delay);
+
+                Some(swap_parameters::NeuronBasketConstructionParameters {
+                    count,
+                    dissolve_delay_interval,
+                })
+            };
+
+            Some(SwapParameters {
+                minimum_participants,
+                minimum_icp,
+                maximum_icp,
+                minimum_participant_icp,
+                maximum_participant_icp,
+
+                neuron_basket_construction_parameters,
+            })
+        };
+
+        let ledger_parameters = {
+            let transaction_fee = Some(transaction_fee);
+            let token_name = Some(token_name);
+            let token_symbol = Some(token_symbol);
+            let token_logo = Some(nervous_system_pb::Image {
+                base64_encoding: Some(token_logo_url),
+            });
+
+            Some(LedgerParameters {
+                transaction_fee,
+                token_name,
+                token_symbol,
+                token_logo,
+            })
+        };
+
+        let governance_parameters = {
+            let proposal_rejection_fee = Some(proposal_rejection_fee);
+            let proposal_initial_voting_period = Some(proposal_initial_voting_period);
+            let proposal_wait_for_quiet_deadline_increase =
+                Some(proposal_wait_for_quiet_deadline_increase);
+
+            let neuron_minimum_stake = Some(neuron_minimum_stake);
+            let neuron_minimum_dissolve_delay_to_vote = Some(neuron_minimum_dissolve_delay_to_vote);
+            let neuron_maximum_dissolve_delay = Some(neuron_maximum_dissolve_delay);
+            let neuron_maximum_dissolve_delay_bonus = Some(neuron_maximum_dissolve_delay_bonus);
+            let neuron_maximum_age_for_age_bonus = Some(neuron_maximum_age_for_age_bonus);
+            let neuron_maximum_age_bonus = Some(neuron_maximum_age_bonus);
+
+            let voting_reward_parameters = {
+                let initial_reward_rate = Some(initial_voting_reward_rate);
+                let final_reward_rate = Some(final_voting_reward_rate);
+                let reward_rate_transition_duration = Some(voting_reward_rate_transition_duration);
+
+                Some(VotingRewardParameters {
+                    initial_reward_rate,
+                    final_reward_rate,
+                    reward_rate_transition_duration,
+                })
+            };
+
+            Some(GovernanceParameters {
+                proposal_rejection_fee,
+                proposal_initial_voting_period,
+                proposal_wait_for_quiet_deadline_increase,
+
+                neuron_minimum_stake,
+                neuron_minimum_dissolve_delay_to_vote,
+                neuron_maximum_dissolve_delay,
+                neuron_maximum_dissolve_delay_bonus,
+                neuron_maximum_age_for_age_bonus,
+                neuron_maximum_age_bonus,
+
+                voting_reward_parameters,
+            })
+        };
+
+        let result = CreateServiceNervousSystem {
+            name,
+            description,
+            url,
+            logo,
+
+            fallback_controller_principal_ids,
+            dapp_canisters,
+
+            initial_token_distribution,
+
+            swap_parameters,
+            ledger_parameters,
+            governance_parameters,
+        };
+
+        SnsInitPayload::try_from(result.clone())?;
+
+        Ok(result)
+    }
+}
+
+impl ProposalTitle for ProposeToCreateServiceNervousSystemCmd {
+    fn title(&self) -> String {
+        format!("Create a New Service Nervous System: {}", self.name)
+    }
+}
+
+async fn propose_to_create_service_nervous_system(
+    cmd: ProposeToCreateServiceNervousSystemCmd,
+    agent: Agent,
+    proposer: NeuronId,
+) {
+    let is_dry_run = cmd.is_dry_run();
+
+    let action = Some(Action::CreateServiceNervousSystem(
+        CreateServiceNervousSystem::try_from(cmd.clone()).unwrap(),
+    ));
+    let title = cmd.title();
+    let summary = cmd.summary.clone().unwrap();
+    let url = parse_proposal_url(cmd.proposal_url.clone());
+    let proposal = Proposal {
+        title: Some(title.clone()),
+        summary,
+        url,
+        action,
+    };
+    print_proposal(&proposal, &cmd);
+
+    if is_dry_run {
+        return;
+    }
+
+    let canister_client = GovernanceCanisterClient(NnsCanisterClient::new(
+        agent,
+        GOVERNANCE_CANISTER_ID,
+        Some(proposer),
+    ));
+    let response = canister_client
+        .submit_external_proposal(&create_make_proposal_payload(proposal, &proposer), &title)
+        .await;
+
+    match response {
+        Ok(ok) => {
+            println!("{:#?}", ok);
+        }
+        Err(err) => {
+            eprintln!("propose_to_create_service_nervous_system error: {:?}", err);
+            std::process::exit(1);
+        }
+    }
+}
+
 async fn get_firewall_rules_from_registry(
     registry_canister: &RegistryCanister,
     scope: &FirewallRulesScope,
@@ -4048,6 +4622,20 @@ async fn main() {
             propose_external_proposal_from_command(
                 cmd,
                 NnsFunction::CreateSubnet,
+                make_canister_client(
+                    opts.nns_url,
+                    opts.verify_nns_responses,
+                    opts.nns_public_key_pem_file,
+                    sender,
+                ),
+                proposer,
+            )
+            .await;
+        }
+        SubCommand::ProposeToCreateServiceNervousSystem(cmd) => {
+            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            propose_to_create_service_nervous_system(
+                cmd,
                 make_canister_client(
                     opts.nns_url,
                     opts.verify_nns_responses,

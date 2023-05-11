@@ -1605,11 +1605,11 @@ message CreateServiceNervousSystem {
   message SwapParameters {
     optional uint64 minimum_participants = 1;
 
-    optional uint64 minimum_icp = 2;
-    optional uint64 maximum_icp = 3;
+    optional ic_nervous_system.pb.v1.Tokens minimum_icp = 2;
+    optional ic_nervous_system.pb.v1.Tokens maximum_icp = 3;
 
-    optional uint64 minimum_participant_icp = 4;
-    optional uint64 maximum_participant_icp = 5;
+    optional ic_nervous_system.pb.v1.Tokens minimum_participant_icp = 4;
+    optional ic_nervous_system.pb.v1.Tokens maximum_participant_icp = 5;
 
     message NeuronBasketConstructionParameters {
       optional uint64 count = 1;

@@ -2232,14 +2232,16 @@ pub mod create_service_nervous_system {
     pub struct SwapParameters {
         #[prost(uint64, optional, tag = "1")]
         pub minimum_participants: ::core::option::Option<u64>,
-        #[prost(uint64, optional, tag = "2")]
-        pub minimum_icp: ::core::option::Option<u64>,
-        #[prost(uint64, optional, tag = "3")]
-        pub maximum_icp: ::core::option::Option<u64>,
-        #[prost(uint64, optional, tag = "4")]
-        pub minimum_participant_icp: ::core::option::Option<u64>,
-        #[prost(uint64, optional, tag = "5")]
-        pub maximum_participant_icp: ::core::option::Option<u64>,
+        #[prost(message, optional, tag = "2")]
+        pub minimum_icp: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Tokens>,
+        #[prost(message, optional, tag = "3")]
+        pub maximum_icp: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Tokens>,
+        #[prost(message, optional, tag = "4")]
+        pub minimum_participant_icp:
+            ::core::option::Option<::ic_nervous_system_proto::pb::v1::Tokens>,
+        #[prost(message, optional, tag = "5")]
+        pub maximum_participant_icp:
+            ::core::option::Option<::ic_nervous_system_proto::pb::v1::Tokens>,
         #[prost(message, optional, tag = "6")]
         pub neuron_basket_construction_parameters:
             ::core::option::Option<swap_parameters::NeuronBasketConstructionParameters>,
