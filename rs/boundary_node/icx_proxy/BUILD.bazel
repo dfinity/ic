@@ -24,6 +24,7 @@ DEPENDENCIES = [
     "@crate_index//:opentelemetry-prometheus",
     "@crate_index//:prometheus",
     "@crate_index//:rustls",
+    "@crate_index//:rustls-native-certs",
     "@crate_index//:rustls-pemfile",
     "@crate_index//:tower",
     "@crate_index//:tower-http",
@@ -34,7 +35,6 @@ DEPENDENCIES = [
     "@crate_index//:serde_json",
     "@crate_index//:sha2",
     "@crate_index//:tokio",
-    "@crate_index//:webpki-roots",
     "@crate_index//:ic-response-verification",
     "@crate_index//:thiserror",
 ]

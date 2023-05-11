@@ -29,7 +29,7 @@ garcon = "0.2"
 humantime = "2.0"
 hex = "0.4.2"
 hyper = "0.14.18"
-hyper-rustls = { version = "0.23.0", features = [ "webpki-roots" ] }
+hyper-rustls = "0.23.0"
 hyper-tls = "0.5.0"
 ic-agent = "=0.22.0"
 ic-artifact-pool = { path = "../../../artifact_pool" }

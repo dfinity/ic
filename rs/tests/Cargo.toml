@@ -102,7 +102,7 @@ icrc-ledger-types = { path = "../../packages/icrc-ledger-types" }
 json5 = "0.4.1"
 k256 = { version = "0.12", features = ["ecdsa"] }
 hyper = "0.14.18"
-hyper-rustls = { version = "0.24.0", features = [ "webpki-roots" ] }
+hyper-rustls = "0.24.0"
 lazy_static = "1.4.0"
 icp-ledger = { path = "../rosetta-api/icp_ledger" }
 leb128 = "0.2.5"
