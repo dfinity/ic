@@ -101,6 +101,20 @@ pub fn setup(opts: HttpClientOpts) -> Result<impl HyperService<Body>, Error> {
         use rustls::{Certificate, RootCertStore};
 
         let mut root_cert_store = RootCertStore::empty();
+
+        if !ssl_root_certificate.is_empty() {
+            match rustls_native_certs::load_native_certs() {
+                Err(e) => tracing::warn!("Could not load native certs: {}", e),
+                Ok(certs) => {
+                    for cert in certs {
+                        if let Err(e) = root_cert_store.add(&rustls::Certificate(cert.0)) {
+                            tracing::warn!("Could not add native cert: {}", e);
+                        }
+                    }
+                }
+            }
+        }
+
         for cert_path in ssl_root_certificate {
             let mut buf = Vec::new();
 
@@ -152,16 +166,6 @@ pub fn setup(opts: HttpClientOpts) -> Result<impl HyperService<Body>, Error> {
                 ),
             }
         }
-
-        use rustls::OwnedTrustAnchor;
-        let trust_anchors = webpki_roots::TLS_SERVER_ROOTS.0.iter().map(|trust_anchor| {
-            OwnedTrustAnchor::from_subject_spki_name_constraints(
-                trust_anchor.subject,
-                trust_anchor.spki,
-                trust_anchor.name_constraints,
-            )
-        });
-        root_cert_store.add_server_trust_anchors(trust_anchors);
 
         builder
             .with_root_certificates(root_cert_store)
@@ -236,9 +240,14 @@ pub fn setup(opts: HttpClientOpts) -> Result<impl HyperService<Body>, Error> {
     let mut connector = HttpConnector::new_with_resolver(resolver);
     connector.enforce_http(false);
 
-    let connector = HttpsConnectorBuilder::new()
-        .with_tls_config(tls_config)
-        .https_or_http()
+    let build = HttpsConnectorBuilder::new().with_tls_config(tls_config);
+
+    #[cfg(feature = "allow_http")]
+    let build = build.https_or_http();
+    #[cfg(not(feature = "allow_http"))]
+    let build = build.https_only();
+
+    let connector = build
         .enable_http1()
         .enable_http2()
         .wrap_connector(connector);

@@ -75,8 +75,8 @@ struct Opts {
     ignore_url_canister_param: bool,
 
     /// The list of custom root HTTPS certificates to use to talk to the replica. This can be used
-    /// to connect to an IC that has a self-signed certificate, for example. Do not use this when
-    /// talking to the Internet Computer blockchain mainnet as it is unsecure.
+    /// to connect to an IC that has a self-signed certificate, or to limit the certificates. Do not use this
+    /// when talking to the Internet Computer blockchain mainnet unless you know what you're doing.
     #[clap(long)]
     ssl_root_certificate: Vec<PathBuf>,
 

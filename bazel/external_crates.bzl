@@ -435,7 +435,6 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             "hyper-rustls": crate.spec(
                 version = "^0.24.0",
                 features = [
-                    "webpki-roots",
                     "http2",
                 ],
             ),
@@ -902,6 +901,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             "rustls": crate.spec(
                 version = "^0.21.0",
             ),
+            "rustls-native-certs": crate.spec(
+                version = "^0.6.2",
+            ),
             "rustls-pemfile": crate.spec(
                 version = "^1",
             ),
@@ -1248,9 +1250,6 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             ),
             "wat": crate.spec(
                 version = "^1.0.57",
-            ),
-            "webpki-roots": crate.spec(
-                version = "^0.23",
             ),
             "wee_alloc": crate.spec(
                 version = "^0.4.3",

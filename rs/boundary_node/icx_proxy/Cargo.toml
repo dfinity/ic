@@ -30,7 +30,7 @@ garcon = { version = "0.2", features = ["async"] }
 hex = "0.4"
 http-body = "0.4"
 hyper = { version = "0.14.11", features = ["client", "http2", "http1"] }
-hyper-rustls = { version = "0.24.0", features = [ "webpki-roots", "http2" ] }
+hyper-rustls = { version = "0.24.0", features = [ "http2" ] }
 itertools = "0.10"
 ic-agent = { version = "0.23.2", default-features = false, features = ["hyper"] }
 ic-utils = { version = "0.23.2", features = ["raw"] }
@@ -39,6 +39,7 @@ opentelemetry = "0.17"
 opentelemetry-prometheus = "0.10"
 prometheus = "0.13"
 rustls = { version = "0.21", features = ["dangerous_configuration"] }
+rustls-native-certs = "0.6.2"
 rustls-pemfile = "1"
 tower = "0.4"
 tower-http = { version = "0.3", features = ["trace"] }
@@ -49,12 +50,12 @@ serde_cbor = "0.11"
 serde_json = "1"
 sha2 = "0.10"
 tokio = { version = "1", features = ["full"] }
-webpki-roots = "0.23"
 ic-response-verification = "0.2.1"
 thiserror = "1.0.40"
 
 [features]
 skip_body_verification = []
+allow_http = []
 
 [dev-dependencies]
 tokio-test = "0.4.2"
