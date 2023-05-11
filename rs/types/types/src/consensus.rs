@@ -309,7 +309,7 @@ impl From<&BlockProposal> for pb::BlockProposal {
             hash: block_proposal.content.hash.clone().get().0,
             value: Some((&block_proposal.content.value).into()),
             signature: block_proposal.signature.signature.clone().get().0,
-            signer: block_proposal.signature.signer.get().into_vec(),
+            signer: Some(node_id_into_protobuf(block_proposal.signature.signer)),
         }
     }
 }
@@ -329,9 +329,7 @@ impl TryFrom<pb::BlockProposal> for BlockProposal {
             },
             signature: BasicSignature {
                 signature: BasicSigOf::from(BasicSig(block_proposal.signature)),
-                // TODO(CON-1002): BlockProposal protobuf definition should use nodeid
-                // instead of opaque bytes
-                signer: NodeId::from(PrincipalId::try_from(block_proposal.signer)?),
+                signer: node_id_try_from_option(block_proposal.signer)?,
             },
         };
         if ret.check_integrity() {
