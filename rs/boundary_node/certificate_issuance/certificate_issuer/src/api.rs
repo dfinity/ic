@@ -234,6 +234,7 @@ pub async fn remove_handler(
     match ck.check(&reg.name).await {
         Err(CheckError::MissingDnsCname { .. }) => {}
         Err(CheckError::MissingDnsTxtCanisterId { .. }) => {}
+        Err(CheckError::MissingKnownDomains { .. }) => {}
         _ => {
             return Response::builder()
                 .status(400)
