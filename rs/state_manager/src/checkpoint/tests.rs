@@ -64,7 +64,6 @@ fn make_checkpoint_and_get_state_impl(
     state: &ReplicatedState,
     height: Height,
     tip_channel: &Sender<TipRequest>,
-    separate_ingress_history: bool,
 ) -> ReplicatedState {
     make_checkpoint(
         state,
@@ -73,7 +72,6 @@ fn make_checkpoint_and_get_state_impl(
         &state_manager_metrics().checkpoint_metrics,
         &mut thread_pool(),
         Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
-        separate_ingress_history,
     )
     .unwrap_or_else(|err| panic!("Expected make_checkpoint to succeed, got {:?}", err))
     .1
@@ -84,7 +82,7 @@ fn make_checkpoint_and_get_state(
     height: Height,
     tip_channel: &Sender<TipRequest>,
 ) -> ReplicatedState {
-    make_checkpoint_and_get_state_impl(state, height, tip_channel, SEPARATE_INGRESS_HISTORY)
+    make_checkpoint_and_get_state_impl(state, height, tip_channel)
 }
 
 #[test]
@@ -133,15 +131,13 @@ fn can_make_a_checkpoint() {
             .join("canister_states")
             .join("000000000000000a0101");
 
-        let mut expected_paths = vec![
+        let expected_paths = vec![
+            checkpoint_path.join("ingress_history.pbuf"),
             checkpoint_path.join("subnet_queues.pbuf"),
             checkpoint_path.join("system_metadata.pbuf"),
             canister_path.join("queues.pbuf"),
             canister_path.join("canister.pbuf"),
         ];
-        if SEPARATE_INGRESS_HISTORY {
-            expected_paths.push(checkpoint_path.join("ingress_history.pbuf"));
-        }
 
         for path in expected_paths {
             assert!(path.exists(), "Expected path {} to exist", path.display());
@@ -194,7 +190,6 @@ fn scratchpad_dir_is_deleted_if_checkpointing_failed() {
             &state_manager_metrics.checkpoint_metrics,
             &mut thread_pool(),
             Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
-            SEPARATE_INGRESS_HISTORY,
         );
 
         match replicated_state {

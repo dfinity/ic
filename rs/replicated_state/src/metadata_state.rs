@@ -489,7 +489,6 @@ impl From<&SystemMetadata> for pb_metadata::SystemMetadata {
                 .clone()
                 .map(|prev_hash| prev_hash.get().0),
             batch_time_nanos: item.batch_time.as_nanos_since_unix_epoch(),
-            ingress_history: Some((&item.ingress_history).into()),
             streams: item
                 .streams
                 .iter()
@@ -584,10 +583,9 @@ impl TryFrom<pb_metadata::SystemMetadata> for SystemMetadata {
             last_generated_canister_id,
             prev_state_hash: item.prev_state_hash.map(|b| CryptoHash(b).into()),
             batch_time,
-            ingress_history: try_from_option_field(
-                item.ingress_history,
-                "SystemMetadata::ingress_history",
-            )?,
+            // Ingress history is persisted separately. We rely on `load_checkpoint()` to
+            // properly set this value.
+            ingress_history: Default::default(),
             streams: Arc::new(Streams {
                 responses_size_bytes: Streams::calculate_stats(&streams),
                 streams,

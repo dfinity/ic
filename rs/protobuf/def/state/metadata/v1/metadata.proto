@@ -179,13 +179,12 @@ message BitcoinGetSuccessorsFollowUpResponses {
 }
 
 message SystemMetadata {
-  reserved 1, 12, 14;
-  reserved "generated_id_counter", "stable_memory_delta_estimate",
+  reserved 1, 4, 12, 14;
+  reserved "generated_id_counter", "ingress_history", "stable_memory_delta_estimate",
       "time_of_last_allocation_charge_nanos";
 
   google.protobuf.BytesValue prev_state_hash = 2;
   uint64 batch_time_nanos = 3;
-  ingress.v1.IngressHistoryState ingress_history = 4;
   repeated queues.v1.StreamEntry streams = 5;
   NetworkTopology network_topology = 6;
   types.v1.SubnetId own_subnet_id = 7;

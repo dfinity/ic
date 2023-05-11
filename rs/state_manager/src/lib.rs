@@ -10,7 +10,6 @@ pub mod tree_diff;
 pub mod tree_hash;
 
 use crate::{
-    checkpoint::SEPARATE_INGRESS_HISTORY,
     manifest::{compute_bundled_manifest, MAX_SUPPORTED_STATE_SYNC_VERSION},
     state_sync::chunkable::cache::StateSyncCache,
     tip::{spawn_tip_thread, TipRequest},
@@ -59,7 +58,7 @@ use std::fs::File;
 use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
 use std::sync::{
-    atomic::{AtomicBool, AtomicU64, Ordering},
+    atomic::{AtomicU64, Ordering},
     Arc,
 };
 use std::time::{Duration, Instant, SystemTime};
@@ -718,7 +717,6 @@ pub struct StateManagerImpl {
     _tip_thread_handle: JoinOnDrop<()>,
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
     malicious_flags: MaliciousFlags,
-    separate_ingress_history: Arc<AtomicBool>,
 }
 
 fn load_checkpoint(
@@ -1540,7 +1538,6 @@ impl StateManagerImpl {
             _tip_thread_handle,
             fd_factory,
             malicious_flags,
-            separate_ingress_history: Arc::new(AtomicBool::new(SEPARATE_INGRESS_HISTORY)),
         }
     }
     /// Returns the Page Allocator file descriptor factory. This will then be
@@ -2170,11 +2167,6 @@ impl StateManagerImpl {
         result
     }
 
-    pub fn set_separate_ingress_history(&self, value: bool) {
-        self.separate_ingress_history
-            .store(value, Ordering::Relaxed);
-    }
-
     // Creates a checkpoint and switches state to it.
     fn create_checkpoint_and_switch(
         &self,
@@ -2235,7 +2227,6 @@ impl StateManagerImpl {
                 &self.metrics.checkpoint_metrics,
                 &mut scoped_threadpool::Pool::new(NUMBER_OF_CHECKPOINT_THREADS),
                 self.get_fd_factory(),
-                self.separate_ingress_history.load(Ordering::Relaxed),
             )
         };
         let elapsed = start.elapsed();
