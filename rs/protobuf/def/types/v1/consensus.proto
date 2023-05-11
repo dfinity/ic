@@ -73,7 +73,8 @@ message BlockProposal {
 	bytes hash = 1;
 	Block value = 2;
 	bytes signature = 3;
-	bytes signer = 4;
+	reserved 4;
+	NodeId signer = 5;
 }
 
 message RandomBeacon {
