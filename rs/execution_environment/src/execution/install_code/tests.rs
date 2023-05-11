@@ -7,8 +7,8 @@ use ic_test_utilities_execution_environment::{
     check_ingress_status, ExecutionTest, ExecutionTestBuilder,
 };
 use ic_test_utilities_metrics::fetch_int_counter;
-use ic_types::ingress::WasmResult;
 use ic_types::messages::MessageId;
+use ic_types::{ingress::WasmResult, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES};
 use ic_types_test_utils::ids::user_test_id;
 
 const DTS_INSTALL_WAT: &str = r#"
@@ -70,7 +70,10 @@ fn install_code_fails_on_invalid_memory_allocation() {
         .unwrap_err();
     assert_eq!(ErrorCode::CanisterContractViolation, err.code());
     assert_eq!(
-        "MemoryAllocation expected to be in the range [0..55_834_574_848], got 18_446_744_073_709_551_615",
+        format!(
+            "MemoryAllocation expected to be in the range [0..{}], got 18_446_744_073_709_551_615",
+            candid::Nat((MAX_STABLE_MEMORY_IN_BYTES + MAX_WASM_MEMORY_IN_BYTES).into())
+        ),
         err.description()
     );
 }
