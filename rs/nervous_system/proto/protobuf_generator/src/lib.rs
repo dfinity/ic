@@ -31,7 +31,7 @@ pub fn generate_prost_files(proto_paths: ProtoPaths<'_>, out_dir: &Path) {
     // Make most types copy (currently, only Image is not Copy).
     for type_name in COPY_TYPE_NAMES {
         config.type_attribute(
-            format!(".ic_nervous_system_proto.pb.v1.{}", type_name),
+            format!("ic_nervous_system.pb.v1.{}", type_name),
             "#[derive(Copy)]",
         );
     }
