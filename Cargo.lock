@@ -5238,6 +5238,7 @@ name = "ic-crypto-ecdsa-secp256r1"
 version = "0.1.0"
 dependencies = [
  "hex",
+ "ic-crypto-getrandom-for-wasm",
  "lazy_static",
  "p256",
  "pem 1.1.1",
@@ -5438,6 +5439,7 @@ name = "ic-crypto-internal-basic-sig-rsa-pkcs1"
 version = "0.8.0"
 dependencies = [
  "hex",
+ "ic-crypto-getrandom-for-wasm",
  "ic-crypto-internal-basic-sig-der-utils",
  "ic-crypto-sha",
  "ic-types",
