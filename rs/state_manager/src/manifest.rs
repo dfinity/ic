@@ -109,7 +109,7 @@ impl fmt::Display for ManifestValidationError {
             } => write!(
                 f,
                 "manifest version {} not supported, maximum supported version {}",
-                *manifest_version as u32, *max_supported_version as u32,
+                manifest_version, max_supported_version,
             ),
         }
     }
@@ -270,8 +270,11 @@ pub(crate) fn build_file_group_chunks(manifest: &Manifest) -> FileGroupChunks {
     FileGroupChunks::new(file_group_chunks)
 }
 
-fn write_chunk_hash(hasher: &mut Sha256, chunk_info: &ChunkInfo) {
-    chunk_info.file_index.update_hash(hasher);
+fn write_chunk_hash(hasher: &mut Sha256, chunk_info: &ChunkInfo, version: StateSyncVersion) {
+    // Starting with `V3`, no longer include file index in chunk/file hash.
+    if version < StateSyncVersion::V3 {
+        chunk_info.file_index.update_hash(hasher);
+    }
     chunk_info.size_bytes.update_hash(hasher);
     chunk_info.offset.update_hash(hasher);
     chunk_info.hash.update_hash(hasher);
@@ -302,6 +305,7 @@ fn build_chunk_table_parallel(
     files: Vec<FileWithSize>,
     max_chunk_size: u32,
     chunk_actions: Vec<ChunkAction>,
+    version: StateSyncVersion,
 ) -> (Vec<FileInfo>, Vec<ChunkInfo>) {
     // Build a chunk table and file table filled with blank hashes.
     let mut chunk_table: Vec<ChunkInfo> = {
@@ -422,7 +426,7 @@ fn build_chunk_table_parallel(
         let chunk_range = file_chunk_range(&chunk_table, file_index);
         (chunk_range.len() as u32).update_hash(&mut hasher);
         for chunk_idx in chunk_range {
-            write_chunk_hash(&mut hasher, &chunk_table[chunk_idx])
+            write_chunk_hash(&mut hasher, &chunk_table[chunk_idx], version);
         }
         file_info.hash = hasher.finish();
     }
@@ -439,6 +443,7 @@ fn build_chunk_table_sequential(
     files: Vec<FileWithSize>,
     max_chunk_size: u32,
     chunk_actions: Vec<ChunkAction>,
+    version: StateSyncVersion,
 ) -> (Vec<FileInfo>, Vec<ChunkInfo>) {
     let mut chunk_table = Vec::new();
     let mut file_table = Vec::new();
@@ -516,7 +521,7 @@ fn build_chunk_table_sequential(
                     hash: chunk_hash,
                 };
 
-                write_chunk_hash(&mut file_hash, &chunk_info);
+                write_chunk_hash(&mut file_hash, &chunk_info, version);
 
                 chunk_table.push(chunk_info);
 
@@ -866,6 +871,7 @@ pub fn compute_manifest(
             files.clone(),
             max_chunk_size,
             chunk_actions.clone(),
+            version,
         )
     };
 
@@ -877,6 +883,7 @@ pub fn compute_manifest(
         files,
         max_chunk_size,
         chunk_actions,
+        version,
     );
 
     #[cfg(debug_assertions)]
@@ -935,7 +942,7 @@ pub fn validate_manifest(
 
         for chunk_info in manifest.chunk_table[chunk_start..chunk_start + chunk_count].iter() {
             assert_eq!(chunk_info.file_index, file_index as u32);
-            write_chunk_hash(&mut hasher, chunk_info);
+            write_chunk_hash(&mut hasher, chunk_info, manifest.version);
         }
 
         chunk_start += chunk_count;
@@ -1041,7 +1048,7 @@ fn manifest_hash_v1(manifest: &Manifest) -> [u8; 32] {
     let mut hash = manifest_hasher();
 
     if manifest.version >= StateSyncVersion::V1 {
-        (manifest.version as u32).update_hash(&mut hash);
+        manifest.version.update_hash(&mut hash);
     }
 
     (manifest.file_table.len() as u32).update_hash(&mut hash);
@@ -1061,7 +1068,7 @@ fn manifest_hash_v1(manifest: &Manifest) -> [u8; 32] {
         (manifest.chunk_table.len() as u32).update_hash(&mut hash);
 
         for c in manifest.chunk_table.iter() {
-            write_chunk_hash(&mut hash, c);
+            write_chunk_hash(&mut hash, c, manifest.version);
         }
     }
 
@@ -1103,7 +1110,7 @@ pub fn build_meta_manifest(manifest: &Manifest) -> MetaManifest {
 /// Computes the hash of meta-manifest.
 fn meta_manifest_hash(meta_manifest: &MetaManifest) -> [u8; 32] {
     let mut hash = meta_manifest_hasher();
-    (meta_manifest.version as u32).update_hash(&mut hash);
+    meta_manifest.version.update_hash(&mut hash);
     (meta_manifest.sub_manifest_hashes.len() as u32).update_hash(&mut hash);
     for sub_manifest_hash in &meta_manifest.sub_manifest_hashes {
         sub_manifest_hash.update_hash(&mut hash);

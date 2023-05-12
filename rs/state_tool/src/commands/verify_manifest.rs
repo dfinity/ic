@@ -185,11 +185,11 @@ fn canister_hash(
 fn extract_manifest_version(lines: &[String]) -> Option<StateSyncVersion> {
     lines
         .iter()
-        .find(|line| line.starts_with("MANIFEST VERSION: "))?
-        .replace("MANIFEST VERSION: ", "")
+        .find(|line| line.starts_with("MANIFEST VERSION: V"))?
+        .replace("MANIFEST VERSION: V", "")
         .parse::<u32>()
         .ok()
-        .map(TryInto::try_into)
+        .map(StateSyncVersion::try_from)
         .transpose()
         .ok()
         .flatten()
