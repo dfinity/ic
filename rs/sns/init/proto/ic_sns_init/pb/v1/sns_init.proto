@@ -3,6 +3,7 @@ syntax = "proto3";
 package ic_sns_init.pb.v1;
 
 import "ic_base_types/pb/v1/types.proto";
+import "ic_nervous_system/pb/v1/nervous_system.proto";
 
 // This struct contains all the parameters necessary to initialize an SNS. All fields are optional
 // to avoid future candid compatibility problems. However, for the struct to be "valid", all fields
@@ -125,6 +126,9 @@ message SnsInitPayload {
   // participate in the swap. If the field is set, its value should be plain text
   // with at least 1 and at most 1,000 characters.
   optional string confirmation_text = 23;
+
+  // An optional set of countries that should not participate in the swap.
+  optional ic_nervous_system.pb.v1.Countries restricted_countries = 24;
 }
 
 // The FractionalDeveloperVotingPower token distribution strategy configures

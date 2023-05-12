@@ -119,6 +119,9 @@ pub struct SnsInitPayload {
     /// with at least 1 and at most 1,000 characters.
     #[prost(string, optional, tag = "23")]
     pub confirmation_text: ::core::option::Option<::prost::alloc::string::String>,
+    /// An optional set of countries that should not participate in the swap.
+    #[prost(message, optional, tag = "24")]
+    pub restricted_countries: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Countries>,
     /// The initial tokens and neurons available at genesis will be distributed according
     /// to the strategy and configuration picked via the initial_token_distribution
     /// parameter.

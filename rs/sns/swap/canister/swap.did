@@ -18,6 +18,7 @@ type CfParticipant = record {
   hotkey_principal : text;
   cf_neurons : vec CfNeuron;
 };
+type Countries = record { iso_codes : vec text };
 type DefiniteCanisterSettingsArgs = record {
   controller : principal;
   freezing_threshold : nat;
@@ -79,6 +80,7 @@ type Init = record {
   icp_ledger_canister_id : text;
   sns_ledger_canister_id : text;
   sns_governance_canister_id : text;
+  restricted_countries : opt Countries;
 };
 type InvalidUserAmount = record {
   min_amount_icp_e8s_included : nat64;

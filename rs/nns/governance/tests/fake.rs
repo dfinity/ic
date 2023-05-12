@@ -374,6 +374,7 @@ impl Environment for FakeDriver {
                         transaction_fee_e8s: Some(12_345),
                         neuron_minimum_stake_e8s: Some(123_456_789),
                         confirmation_text: None,
+                        restricted_countries: None,
                     }),
                     ..Default::default() // Not realistic, but sufficient for tests.
                 }),

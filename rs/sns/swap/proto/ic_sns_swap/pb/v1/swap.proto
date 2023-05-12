@@ -10,6 +10,7 @@ syntax = "proto3";
 package ic_sns_swap.pb.v1;
 
 import "ic_base_types/pb/v1/types.proto";
+import "ic_nervous_system/pb/v1/nervous_system.proto";
 
 
 // Lifecycle states of the swap canister. The details of their meanings
@@ -287,6 +288,9 @@ message Init {
   // participate in the swap. If the field is set, its value should be plain text
   // with at least 1 and at most 1,000 characters.
   optional string confirmation_text = 15;
+
+  // An optional set of countries that should not participate in the swap.
+  optional ic_nervous_system.pb.v1.Countries restricted_countries = 16;
 }
 
 // Represents one NNS neuron from the community fund participating in this swap.

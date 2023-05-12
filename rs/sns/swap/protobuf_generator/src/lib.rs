@@ -10,6 +10,7 @@ pub struct ProtoPaths<'a> {
     // These are indirect dependencies.
     pub base_types: &'a Path,
     pub ledger: &'a Path,
+    pub nervous_system: &'a Path,
 }
 
 /// Build protos using prost_build.
@@ -22,6 +23,11 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
     // Imports.
     // TODO(NNS1-1589): Uncomment.
     // config.extern_path(".ic_sns_root.pb.v1", "::ic_sns_root::pb::v1");
+    config.extern_path(
+        ".ic_nervous_system.pb.v1",
+        "::ic-nervous-system-proto::pb::v1",
+    );
+
     // Indirect imports.
     config.extern_path(".ic_base_types.pb.v1", "::ic-base-types");
     config.extern_path(".ic_ledger.pb.v1", "::ledger-canister::protobuf");
@@ -50,6 +56,7 @@ pub fn generate_prost_files(proto: ProtoPaths<'_>, out: &Path) {
                 // proto.sns_root,
                 proto.base_types,
                 proto.ledger,
+                proto.nervous_system,
             ],
         )
         .unwrap();

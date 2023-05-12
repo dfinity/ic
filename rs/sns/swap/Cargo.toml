@@ -37,6 +37,7 @@ ic-ledger-core = { path = "../../rosetta-api/ledger_core" }
 ic-metrics-encoder = "1"
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-root = { path = "../../nervous_system/root" }
+ic-nervous-system-proto = { path = "../../nervous_system/proto" }
 ic-protobuf = { path = "../../protobuf" }
 ic-stable-structures = "0.5.0"
 ic-sns-governance = { path = "../governance" }

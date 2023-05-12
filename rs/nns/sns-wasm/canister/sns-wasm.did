@@ -1,6 +1,7 @@
 type AddWasmRequest = record { hash : vec nat8; wasm : opt SnsWasm };
 type AddWasmResponse = record { result : opt Result };
 type AirdropDistribution = record { airdrop_neurons : vec NeuronDistribution };
+type Countries = record { iso_codes : vec text };
 type DeployNewSnsRequest = record { sns_init_payload : opt SnsInitPayload };
 type DeployNewSnsResponse = record {
   subnet_id : opt principal;
@@ -99,6 +100,7 @@ type SnsInitPayload = record {
   reward_rate_transition_duration_seconds : opt nat64;
   token_name : opt text;
   proposal_reject_cost_e8s : opt nat64;
+  restricted_countries : opt Countries;
 };
 type SnsUpgrade = record {
   next_version : opt SnsVersion;

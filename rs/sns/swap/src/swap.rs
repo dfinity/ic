@@ -2861,6 +2861,7 @@ mod tests {
             transaction_fee_e8s: Some(0),
             neuron_minimum_stake_e8s: Some(0),
             confirmation_text: None,
+            restricted_countries: None,
         });
     }
 
@@ -3440,6 +3441,7 @@ mod tests {
                     transaction_fee_e8s: Some(10_000),
                     neuron_minimum_stake_e8s: Some(10_010_000),
                     confirmation_text: None,
+                    restricted_countries: None,
                 }),
                 params: Some(Params {
                     min_participants: 1,
@@ -3678,6 +3680,7 @@ mod tests {
                 transaction_fee_e8s: Some(DEFAULT_TRANSFER_FEE.get_e8s()),
                 neuron_minimum_stake_e8s: Some(0),
                 confirmation_text: None,
+                restricted_countries: None,
             }),
             params: Some(Params {
                 min_participants: 0,

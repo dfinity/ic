@@ -127,6 +127,7 @@ impl SnsInitPayload {
             wait_for_quiet_deadline_increase_seconds: nervous_system_parameters_default
                 .wait_for_quiet_deadline_increase_seconds,
             confirmation_text: None,
+            restricted_countries: None,
         }
     }
 
@@ -311,6 +312,7 @@ impl SnsInitPayload {
             transaction_fee_e8s: self.transaction_fee_e8s,
             neuron_minimum_stake_e8s: self.neuron_minimum_stake_e8s,
             confirmation_text: self.confirmation_text.clone(),
+            restricted_countries: self.restricted_countries.clone(),
         }
     }
 
@@ -372,6 +374,7 @@ impl SnsInitPayload {
             initial_voting_period_seconds,
             wait_for_quiet_deadline_increase_seconds,
             confirmation_text: _,
+            restricted_countries: _,
         } = self.clone();
 
         let voting_rewards_parameters = Some(VotingRewardsParameters {
