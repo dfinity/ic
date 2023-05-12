@@ -165,7 +165,12 @@ pub struct Ledger {
     token_symbol: String,
     token_name: String,
     metadata: Vec<(String, StoredValue)>,
+    #[serde(default = "default_max_memo_length")]
     max_memo_length: u16,
+}
+
+fn default_max_memo_length() -> u16 {
+    DEFAULT_MAX_MEMO_LENGTH
 }
 
 impl Ledger {
