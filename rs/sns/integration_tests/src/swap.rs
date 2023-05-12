@@ -2706,6 +2706,7 @@ fn test_upgrade() {
         transaction_fee_e8s: Some(10_000),
         neuron_minimum_stake_e8s: Some(1_000_000),
         confirmation_text: None,
+        restricted_countries: None,
     })
     .unwrap();
     let canister_id = state_machine
@@ -3097,6 +3098,7 @@ fn test_last_man_less_than_min() {
         transaction_fee_e8s: Some(10_000),
         neuron_minimum_stake_e8s: Some(1_000_000),
         confirmation_text: None,
+        restricted_countries: None,
     })
     .unwrap();
     state_machine

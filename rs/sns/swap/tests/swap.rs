@@ -30,6 +30,7 @@ use ic_nervous_system_common_test_utils::{
     drain_receiver_channel, InterleavingTestLedger, LedgerCall, LedgerControlMessage, LedgerReply,
     SpyLedger,
 };
+use ic_nervous_system_proto::pb::v1::Countries;
 use ic_sns_governance::{
     pb::v1::{
         claim_swap_neurons_request::NeuronParameters,
@@ -95,6 +96,9 @@ fn init_with_confirmation_text(confirmation_text: Option<String>) -> Init {
         transaction_fee_e8s: Some(12_345),
         neuron_minimum_stake_e8s: Some(123_456_789),
         confirmation_text,
+        restricted_countries: Some(Countries {
+            iso_codes: vec!["CH".to_string()],
+        }),
     };
     assert_is_ok!(result.validate());
     result

@@ -404,6 +404,7 @@ async fn open_sns_token_swap(nns_api: &'_ Runtime, payload: OpenSnsTokenSwap) {
             transaction_fee_e8s: Some(0),
             neuron_minimum_stake_e8s: Some(0),
             confirmation_text: None,
+            restricted_countries: None,
         })
         .unwrap();
 

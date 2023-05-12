@@ -20,3 +20,10 @@ message Image {
 message Percentage {
   optional uint64 basis_points = 1;
 }
+
+// Represents a set of countries. To be used in country-specific configurations,
+// e.g., to restrict the geography of an SNS swap.
+message Countries {
+  // ISO 3166-1 alpha-2 codes
+  repeated string iso_codes = 1;
+}

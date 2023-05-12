@@ -255,6 +255,9 @@ pub struct Init {
     /// with at least 1 and at most 1,000 characters.
     #[prost(string, optional, tag = "15")]
     pub confirmation_text: ::core::option::Option<::prost::alloc::string::String>,
+    /// An optional set of countries that should not participate in the swap.
+    #[prost(message, optional, tag = "16")]
+    pub restricted_countries: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Countries>,
 }
 /// Represents one NNS neuron from the community fund participating in this swap.
 #[derive(

@@ -13,6 +13,7 @@ DEPENDENCIES = [
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/crypto/sha",
     "//rs/nervous_system/common",
+    "//rs/nervous_system/proto",
     "//rs/nns/constants",
     "//rs/rosetta-api/icrc1",
     "//rs/rosetta-api/icrc1/index",
@@ -71,6 +72,7 @@ generated_files_check(
     data = glob(["src/gen/**"]) + [
         ":protos",
         "//rs/types/base_types:protos",
+        "//rs/nervous_system/proto:protos",
     ],
     manifest_dir = "rs/sns/init",
     deps = DEV_DEPENDENCIES,

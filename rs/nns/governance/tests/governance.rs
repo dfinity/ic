@@ -11320,6 +11320,7 @@ lazy_static! {
         transaction_fee_e8s: Some(12_345),
         neuron_minimum_stake_e8s: Some(123_456_789),
         confirmation_text: None,
+        restricted_countries: None,
     };
 }
 

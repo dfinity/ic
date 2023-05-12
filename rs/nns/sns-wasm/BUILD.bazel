@@ -15,6 +15,7 @@ DEPENDENCIES = [
     "//rs/crypto/sha",
     "//rs/nns/constants",
     "//rs/nervous_system/common",
+    "//rs/nervous_system/proto",
     "//rs/nervous_system/root",
     "//rs/rust_canisters/dfn_candid",
     "//rs/rust_canisters/dfn_core",
@@ -176,6 +177,7 @@ generated_files_check(
         ":protos",
         "//rs/types/base_types:protos",
         "//rs/sns/init:protos",
+        "//rs/nervous_system/proto:protos",
     ],
     manifest_dir = "rs/nns/sns-wasm",
     deps = [

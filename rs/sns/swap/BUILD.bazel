@@ -15,6 +15,7 @@ DEPENDENCIES = [
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/crypto/sha",
     "//rs/nervous_system/common",
+    "//rs/nervous_system/proto",
     "//rs/nervous_system/root",
     "//rs/protobuf",
     "//rs/registry/canister",
@@ -179,6 +180,7 @@ generated_files_check(
     data = glob(["src/gen/**"]) + [
         ":protos",
         "//rs/types/base_types:protos",
+        "//rs/nervous_system/proto:protos",
     ],
     manifest_dir = "rs/sns/swap",
     deps = [

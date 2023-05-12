@@ -28,6 +28,7 @@ ic-ic00-types = { path = "../../types/ic00_types" }
 ic-metrics-encoder = "1"
 ic-nervous-system-common = { path = "../../nervous_system/common" }
 ic-nervous-system-root = { path = "../../nervous_system/root" }
+ic-nervous-system-proto = { path = "../../nervous_system/proto" }
 ic-nns-constants = { path = "../constants" }
 ic-sns-governance = { path = "../../sns/governance" }
 ic-sns-init = { path = "../../sns/init" }
