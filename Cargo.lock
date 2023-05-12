@@ -3550,28 +3550,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d2fabcfbdc87f4758337ca535fb41a6d701b65693ce38287d856d1674551ec9b"
 
 [[package]]
-name = "governance_upgrader"
-version = "0.1.0"
-dependencies = [
- "bytes",
- "candid",
- "canister-test",
- "clap 3.2.23",
- "dfn_candid",
- "garcon",
- "ic-agent 0.22.0",
- "ic-base-types",
- "ic-identity-hsm",
- "ic-nns-constants",
- "ic-nns-init",
- "ic-types",
- "ic-utils 0.22.0",
- "on_wire",
- "tokio",
- "url",
-]
-
-[[package]]
 name = "group"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7048,21 +7026,6 @@ dependencies = [
  "ic-crypto-internal-types",
  "ic-crypto-utils-basic-sig",
  "rand 0.8.5",
-]
-
-[[package]]
-name = "ic-identity-hsm"
-version = "0.22.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ec2335ec6c8bf1fdeb8b034c2a81c87a5b8373b6d919b8fee0c67ca2f14aa93"
-dependencies = [
- "hex",
- "ic-agent 0.22.0",
- "num-bigint 0.4.3",
- "pkcs11",
- "sha2 0.10.6",
- "simple_asn1 0.6.2",
- "thiserror",
 ]
 
 [[package]]
@@ -12880,16 +12843,6 @@ dependencies = [
  "der 0.5.1",
  "pkcs8 0.8.0",
  "zeroize",
-]
-
-[[package]]
-name = "pkcs11"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3aca6d67e4c8613bfe455599d0233d00735f85df2001f6bfd9bb7ac0496b10af"
-dependencies = [
- "libloading",
- "num-bigint 0.2.6",
 ]
 
 [[package]]

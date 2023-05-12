@@ -155,7 +155,6 @@ members = [
   "rs/nns/cmc",
   "rs/nns/governance",
   "rs/nns/governance/protobuf_generator",
-  "rs/nns/governance_upgrader",
   "rs/nns/handlers/lifeline",
   "rs/nns/handlers/root",
   "rs/nns/handlers/root/protobuf_generator",
