@@ -28,7 +28,10 @@ type By = variant {
   NeuronId : record {};
 };
 type CanisterStatusResultV2 = record {
+  controller : principal;
   status : CanisterStatusType;
+  freezing_threshold : nat;
+  balance : vec record { vec nat8; nat };
   memory_size : nat;
   cycles : nat;
   settings : DefiniteCanisterSettingsArgs;
@@ -96,6 +99,7 @@ type Command_2 = variant {
 type Configure = record { operation : opt Operation };
 type DefaultFollowees = record { followees : vec record { nat64; Followees } };
 type DefiniteCanisterSettingsArgs = record {
+  controller : principal;
   freezing_threshold : nat;
   controllers : vec principal;
   memory_allocation : nat;
