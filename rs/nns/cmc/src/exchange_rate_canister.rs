@@ -504,6 +504,7 @@ mod test {
         cell::RefCell,
         collections::VecDeque,
         sync::{Arc, Mutex},
+        time::UNIX_EPOCH,
     };
 
     use super::*;
@@ -948,8 +949,21 @@ mod test {
             static STATE: RefCell<Option<State>> = RefCell::new(Some(State::default()));
         }
 
+        let average_icp_xdr_conversion_rate = read_state(&STATE, |state| {
+            state.average_icp_xdr_conversion_rate.clone()
+        });
+
+        assert!(matches!(average_icp_xdr_conversion_rate, None));
+
+        let now_timestamp_seconds = (dfn_core::api::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs()
+            / 60)
+            * 60;
+
         let env = TestExchangeRateCanisterEnvironment {
-            now_timestamp_seconds: 1680044700,
+            now_timestamp_seconds,
             ..Default::default()
         };
         let xrc_client = MockExchangeRateCanisterClient::new(
@@ -969,11 +983,24 @@ mod test {
         assert!(xrc_client.calls.lock().unwrap().is_empty());
         let icp_xdr_conversion_rate =
             read_state(&STATE, |state| state.icp_xdr_conversion_rate.clone());
+        let expected_rate_timestamp = (now_timestamp_seconds / 60) * 60;
         assert!(
-            matches!(icp_xdr_conversion_rate, Some(rate) if rate.xdr_permyriad_per_icp == 200_000 && rate.timestamp_seconds == 1680044700)
+            matches!(icp_xdr_conversion_rate, Some(ref rate) if rate.xdr_permyriad_per_icp == 200_000 && rate.timestamp_seconds == expected_rate_timestamp),
+            "rate: {:#?} expected timestamp: {}",
+            icp_xdr_conversion_rate,
+            expected_rate_timestamp
         );
         // Ensure the certified data has been set.
         assert!(!env.certified_data.borrow().is_empty());
+
+        let average_icp_xdr_conversion_rate = read_state(&STATE, |state| {
+            state.average_icp_xdr_conversion_rate.clone()
+        });
+        assert!(
+            matches!(average_icp_xdr_conversion_rate, Some(ref rate) if rate.xdr_permyriad_per_icp == 200_000),
+            "rate: {:#?}",
+            icp_xdr_conversion_rate
+        );
     }
 
     #[test]
