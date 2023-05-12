@@ -596,7 +596,7 @@ fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::i
     )?;
     w.encode_gauge(
         "sale_cf_neurons_count",
-        swap().cf_neurons_count() as f64,
+        swap().cf_neuron_count() as f64,
         "The number of Community Fund NNS Neurons in the sale",
     )?;
     w.encode_gauge(
