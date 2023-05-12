@@ -33,9 +33,24 @@
 //! ```text
 //!   chunk_hash := hash(dsep("ic-state-chunk") · file[offset:offset + size_bytes])
 //! ```
+//! where
+//! ```text
+//! dsep(seq) = byte(len(seq)) · seq
+//! ```
 //!
 //! * The hash in the file table is the hash of the slice of the chunk table
 //!   corresponding to this file:
+//! ```text
+//!   file_hash   := hash(dsep("ic-state-file") · len(slice) as u32 · chunk_entry*)
+//!   chunk_entry := size_bytes as u32
+//!                  · offset as u64
+//!                  · chunk_hash
+//! ```
+//!
+//! * The manifest hash is the hash of the protobuf-encoded meta manifest.
+//!
+//! * Before `StateSyncVersion::V3` the file hash additionally includes the file
+//!   index within every chunk entry:
 //! ```text
 //!   file_hash   := hash(dsep("ic-state-file") · len(slice) as u32 · chunk_entry*)
 //!   chunk_entry := file_index as u32
@@ -44,8 +59,8 @@
 //!                  · chunk_hash
 //! ```
 //!
-//! * When the manifest version is less than or equal to `StateSyncVersion::V1`,
-//!   the hash of the whole manifest is computed by hashing the file table:
+//! * The `StateSyncVersion::V1` manifest hash is computed by hashing the file
+//!   and chunk tables:
 //! ```text
 //!   manifest_hash := hash(dsep("ic-state-manifest")
 //!                    · version as u32
@@ -59,12 +74,9 @@
 //!                    · size_bytes as u64
 //!                    · file_hash
 //! ```
-//! where
-//! ```text
-//! dsep(seq) = byte(len(seq)) · seq
-//! ```
-//! * When the manifest version is greater than or equal to `StateSyncVersion::V2`,
-//!   the hash of the meta-manifest functions as the manifest hash.
+//!
+//! * The `StateSyncVersion::V0` manifest hash is computed by hashing the file
+//!   table only and does not include a version number.
 pub mod proto;
 
 use crate::chunkable::ChunkId;
@@ -72,7 +84,7 @@ use ic_protobuf::{proxy::ProtoProxy, state::sync::v1 as pb};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
-    fmt,
+    fmt::{self, Display},
     ops::{Deref, Range},
     sync::Arc,
 };
@@ -125,6 +137,10 @@ pub enum StateSyncVersion {
 
     /// Compute the manifest hash based on the encoded manifest.
     V2 = 2,
+
+    /// File index-independent manifest hash: file index no longer included in file
+    /// hash.
+    V3 = 3,
 }
 
 impl std::convert::TryFrom<u32> for StateSyncVersion {
@@ -141,13 +157,19 @@ impl std::convert::TryFrom<u32> for StateSyncVersion {
     }
 }
 
+impl Display for StateSyncVersion {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
 /// The version of StateSync protocol that should be used for all newly created manifests.
 pub const CURRENT_STATE_SYNC_VERSION: StateSyncVersion = StateSyncVersion::V2;
 
 /// Maximum supported StateSync version.
 ///
 /// The replica will panic if trying to deal with a manifest with a version higher than this.
-pub const MAX_SUPPORTED_STATE_SYNC_VERSION: StateSyncVersion = StateSyncVersion::V2;
+pub const MAX_SUPPORTED_STATE_SYNC_VERSION: StateSyncVersion = StateSyncVersion::V3;
 
 /// The type and associated index (if applicable) of a chunk in state sync.
 #[derive(Debug, PartialEq, Eq)]
@@ -329,7 +351,7 @@ impl fmt::Display for Manifest {
             .max()
             .unwrap_or(6);
 
-        writeln!(f, "MANIFEST VERSION: {}", self.version as u32)?;
+        writeln!(f, "MANIFEST VERSION: {}", self.version)?;
         writeln!(f, "FILE TABLE")?;
         write_header(
             f,

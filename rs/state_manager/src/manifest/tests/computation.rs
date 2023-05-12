@@ -22,6 +22,7 @@ use ic_types::{
 };
 use std::collections::{HashMap, HashSet};
 use std::fs;
+use std::path::PathBuf;
 
 const NUM_THREADS: u32 = 3;
 
@@ -176,7 +177,7 @@ fn simple_manifest() -> ([u8; 32], Manifest) {
     let expected_hash = hash_concat!(
         17u8,
         b"ic-state-manifest",
-        StateSyncVersion::V1 as u32,
+        StateSyncVersion::V1,
         // files
         4u32,
         "root.bin",
@@ -235,7 +236,7 @@ fn simple_manifest_v2() -> ([u8; 32], Manifest) {
     let expected_hash = hash_concat!(
         22u8,
         b"ic-state-meta-manifest",
-        StateSyncVersion::V2 as u32,
+        StateSyncVersion::V2,
         1u32,
         &sub_manifest_hash[..]
     );
@@ -887,6 +888,7 @@ fn test_hash_plan() {
             files.clone(),
             max_chunk_size,
             hash_plan,
+            CURRENT_STATE_SYNC_VERSION,
         );
 
         Manifest::new(CURRENT_STATE_SYNC_VERSION, file_table, chunk_table)
@@ -1112,4 +1114,74 @@ fn test_build_file_group_chunks() {
     });
 
     assert_eq!(computed_file_group_chunks, expected);
+}
+
+#[test]
+fn test_file_index_independent_file_hash() {
+    let file1 = PathBuf::from("file1.bin");
+    let file2 = PathBuf::from("file2.bin");
+    let file3 = PathBuf::from("file3.bin");
+
+    let metrics_registry = MetricsRegistry::new();
+    let manifest_metrics = ManifestMetrics::new(&metrics_registry);
+    let dir = tempfile::TempDir::new().expect("failed to create a temporary directory");
+
+    let root = dir.path();
+
+    let find_file_hash = |manifest: &Manifest, file: &PathBuf| {
+        manifest
+            .file_table
+            .iter()
+            .find(|file_info| file_info.relative_path == *file)
+            .unwrap_or_else(|| panic!("could not find {}", file.display()))
+            .hash
+    };
+
+    let compute_file1_and_file3_hashes = |version: StateSyncVersion| {
+        let mut thread_pool = scoped_threadpool::Pool::new(1);
+        let manifest = compute_manifest(
+            &mut thread_pool,
+            &manifest_metrics,
+            &no_op_logger(),
+            version,
+            &CheckpointLayout::new_untracked(root.to_path_buf(), Height::new(0)).unwrap(),
+            1024,
+            None,
+        )
+        .expect("failed to compute manifest");
+
+        (
+            find_file_hash(&manifest, &file1),
+            find_file_hash(&manifest, &file3),
+        )
+    };
+
+    // A directory only containing `file1` and `file3`.
+    fs::write(root.join(&file1), vec![1u8; 1000])
+        .unwrap_or_else(|_| panic!("failed to create file '{}'", file1.display()));
+    fs::write(root.join(&file3), vec![3u8; 1000])
+        .unwrap_or_else(|_| panic!("failed to create file '{}'", file3.display()));
+
+    let (file1_hash_v2_before, file3_hash_v2_before) =
+        compute_file1_and_file3_hashes(StateSyncVersion::V2);
+    let (file1_hash_v3_before, file3_hash_v3_before) =
+        compute_file1_and_file3_hashes(StateSyncVersion::V3);
+
+    // Directory now contains `file1`, `file2` and `file3`.
+    fs::write(root.join(&file2), vec![2u8; 1000])
+        .unwrap_or_else(|_| panic!("failed to create file '{}'", file2.display()));
+
+    let (file1_hash_v2_after, file3_hash_v2_after) =
+        compute_file1_and_file3_hashes(StateSyncVersion::V2);
+    let (file1_hash_v3_after, file3_hash_v3_after) =
+        compute_file1_and_file3_hashes(StateSyncVersion::V3);
+
+    // The `file1` `V2` hashes should be equal (same contents, same file index).
+    assert_eq!(file1_hash_v2_before, file1_hash_v2_after);
+    // But the `file3` `V2` hashes should be different (different file index).
+    assert_ne!(file3_hash_v2_before, file3_hash_v2_after);
+
+    // And the `V3` hashes should be the same, regardless of file index.
+    assert_eq!(file1_hash_v3_before, file1_hash_v3_after);
+    assert_eq!(file3_hash_v3_before, file3_hash_v3_after);
 }

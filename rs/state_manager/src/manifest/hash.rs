@@ -1,4 +1,5 @@
 use ic_crypto_sha::Sha256;
+use ic_types::state_sync::StateSyncVersion;
 
 /// Trait specifying how a type should be hashed when it's included into a
 /// manifest.
@@ -40,6 +41,12 @@ impl ManifestHash for str {
 impl ManifestHash for [u8] {
     fn update_hash(&self, h: &mut Sha256) {
         h.write(self)
+    }
+}
+
+impl ManifestHash for StateSyncVersion {
+    fn update_hash(&self, h: &mut Sha256) {
+        (*self as u32).update_hash(h)
     }
 }
 
