@@ -25,6 +25,7 @@ const UNASSIGNED_NODES_CONFIG_RECORD_KEY: &str = "unassigned_nodes_config";
 pub const NODE_RECORD_KEY_PREFIX: &str = "node_record_";
 pub const NODE_OPERATOR_RECORD_KEY_PREFIX: &str = "node_operator_record_";
 pub const REPLICA_VERSION_KEY_PREFIX: &str = "replica_version_";
+pub const HOSTOS_VERSION_KEY_PREFIX: &str = "hostos_version_";
 pub const SUBNET_RECORD_KEY_PREFIX: &str = "subnet_record_";
 pub const CRYPTO_RECORD_KEY_PREFIX: &str = "crypto_record_";
 pub const CRYPTO_TLS_CERT_KEY_PREFIX: &str = "crypto_tls_cert_";
@@ -72,6 +73,15 @@ pub fn make_replica_version_key<S: AsRef<str>>(replica_version_id: S) -> String 
         "{}{}",
         REPLICA_VERSION_KEY_PREFIX,
         replica_version_id.as_ref()
+    )
+}
+
+/// Makes a key for a HostOsVersion registry entry.
+pub fn make_hostos_version_key<S: AsRef<str>>(hostos_version_id: S) -> String {
+    format!(
+        "{}{}",
+        HOSTOS_VERSION_KEY_PREFIX,
+        hostos_version_id.as_ref()
     )
 }
 

@@ -5,14 +5,17 @@ use std::{
     error,
     fmt::{Display, Formatter, Result as FmtResult},
 };
+use url::Url;
 
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use ic_nns_common::registry::decode_or_panic;
 use ic_protobuf::registry::{
-    crypto::v1::EcdsaSigningSubnetList, node::v1::NodeRecord, subnet::v1::SubnetListRecord,
+    crypto::v1::EcdsaSigningSubnetList, hostos_version::v1::HostOsVersionRecord,
+    node::v1::NodeRecord, subnet::v1::SubnetListRecord,
 };
 use ic_registry_keys::{
     get_node_record_node_id, make_subnet_list_record_key, ECDSA_SIGNING_SUBNET_LIST_KEY_PREFIX,
+    HOSTOS_VERSION_KEY_PREFIX,
 };
 
 /// A representation of the data held by the registry.
@@ -73,6 +76,26 @@ pub(crate) fn get_all_ecdsa_signing_subnet_list_records(
     result
 }
 
+// Retrieve all HostOS version records
+pub(crate) fn get_all_hostos_version_records(
+    snapshot: &RegistrySnapshot,
+) -> Vec<HostOsVersionRecord> {
+    let mut result = Vec::new();
+    for key in snapshot.keys() {
+        let hostos_version_key = String::from_utf8(key.clone()).unwrap();
+        if hostos_version_key.starts_with(HOSTOS_VERSION_KEY_PREFIX) {
+            let hostos_version_record = match snapshot.get(key) {
+                Some(hostos_version_record_bytes) => {
+                    decode_or_panic::<HostOsVersionRecord>(hostos_version_record_bytes.clone())
+                }
+                None => panic!("Cannot fetch HostOsVersionRecord for an existing key"),
+            };
+            result.push(hostos_version_record);
+        }
+    }
+    result
+}
+
 /// Returns all node records from the snapshot.
 pub(crate) fn get_node_records_from_snapshot(
     snapshot: &RegistrySnapshot,
@@ -103,4 +126,37 @@ pub(crate) fn get_subnet_ids_from_snapshot(snapshot: &RegistrySnapshot) -> Vec<S
                 .collect()
         })
         .unwrap_or_else(Vec::new)
+}
+
+pub(crate) fn assert_sha256(s: &str) {
+    if s.bytes().any(|x| !x.is_ascii_hexdigit()) {
+        panic!("Hash contains at least one invalid character: `{s}`");
+    }
+
+    if s.len() != 64 {
+        panic!("Hash is an invalid length: `{s}`");
+    }
+}
+
+pub(crate) fn assert_valid_urls_and_hash(urls: &[String], hash: &str, allow_file_url: bool) {
+    // Either both, the URL and the hash are set, or both are not set.
+    if (urls.is_empty() as i32 ^ hash.is_empty() as i32) > 0 {
+        panic!("Either both, an url and a hash must be set, or none.");
+    }
+    if urls.is_empty() {
+        return;
+    }
+
+    assert_sha256(hash);
+
+    urls.iter().for_each(|url|
+        // File URLs are used in test deployments. We only disallow non-ASCII.
+        if allow_file_url && url.starts_with("file://") {
+            assert!(url.is_ascii(), "file-URL {url} contains non-ASCII characters.");
+        }
+        // if it's not a file URL, it should be a valid URL.
+        else if let Err(e) = Url::parse(url) {
+            panic!("Release package URL {url} is not valid: {e}");
+        }
+    );
 }

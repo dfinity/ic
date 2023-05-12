@@ -68,4 +68,7 @@ message NodeRecord {
 
   // The SEV-SNP chip_identifier for this node.
   bytes chip_id = 16;
+
+  // ID of the HostOS version to run.
+  optional string hostos_version_id = 17;
 }

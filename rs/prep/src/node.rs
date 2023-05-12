@@ -401,6 +401,7 @@ mod node_configuration {
                 protocol: Protocol::Http1 as i32,
             }),
             chip_id: vec![],
+            hostos_version_id: None,
         };
 
         assert_eq!(got, want);

@@ -62,7 +62,9 @@ fn test_submit_and_accept_update_elected_replica_versions_proposal() {
 
         let update_versions_payload =
             |elect: Option<String>, unelect: Vec<&str>| UpdateElectedReplicaVersionsPayload {
-                release_package_sha256_hex: elect.as_ref().map(|_| "C0FFEE".into()),
+                release_package_sha256_hex: elect.as_ref().map(|_| {
+                    "C0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEED00D".into()
+                }),
                 release_package_urls: elect
                     .as_ref()
                     .map(|_| vec!["http://release_package.tar.gz".to_string()])

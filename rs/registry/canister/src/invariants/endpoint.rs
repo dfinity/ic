@@ -449,6 +449,7 @@ mod tests {
                     protocol: Protocol::Http1 as i32,
                 }),
                 chip_id: vec![],
+                hostos_version_id: None,
             }),
         );
 
@@ -479,6 +480,7 @@ mod tests {
                     protocol: Protocol::Http1 as i32,
                 }),
                 chip_id: vec![],
+                hostos_version_id: None,
             }),
         );
         // TODO: change to `assert!(check_endpoint_invariants(&snapshot, true).is_err());` after NNS1-2228 is closed.
@@ -511,6 +513,7 @@ mod tests {
                     protocol: Protocol::Http1 as i32,
                 }),
                 chip_id: vec![],
+                hostos_version_id: None,
             }),
         );
         check_endpoint_invariants(&snapshot, true).unwrap();

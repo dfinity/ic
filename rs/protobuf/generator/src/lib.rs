@@ -261,6 +261,10 @@ fn build_registry_proto(def: &Path, out: &Path) {
         "#[derive(serde::Serialize, serde::Deserialize)]",
     );
     config.type_attribute(
+        ".registry.hostos_version",
+        "#[derive(serde::Serialize, serde::Deserialize)]",
+    );
+    config.type_attribute(
         ".registry.node_rewards.v2",
         "#[derive(candid::CandidType, serde::Serialize, candid::Deserialize)]",
     );
@@ -287,6 +291,7 @@ fn build_registry_proto(def: &Path, out: &Path) {
         def.join("registry/provisional_whitelist/v1/provisional_whitelist.proto"),
         def.join("registry/subnet/v1/subnet.proto"),
         def.join("registry/replica_version/v1/replica_version.proto"),
+        def.join("registry/hostos_version/v1/hostos_version.proto"),
         def.join("registry/node_rewards/v1/node_rewards.proto"),
         def.join("registry/node_rewards/v2/node_rewards.proto"),
         def.join("registry/dc/v1/dc.proto"),

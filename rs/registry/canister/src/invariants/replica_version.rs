@@ -1,10 +1,9 @@
 use std::collections::BTreeSet;
 
 use crate::invariants::common::{
-    get_subnet_ids_from_snapshot, get_value_from_snapshot, InvariantCheckError, RegistrySnapshot,
+    assert_valid_urls_and_hash, get_subnet_ids_from_snapshot, get_value_from_snapshot,
+    InvariantCheckError, RegistrySnapshot,
 };
-
-use url::Url;
 
 use ic_base_types::SubnetId;
 use ic_nns_common::registry::decode_or_panic;
@@ -102,35 +101,6 @@ fn get_all_replica_versions_of_subnets(snapshot: &RegistrySnapshot) -> BTreeSet<
         .collect()
 }
 
-fn assert_sha256(s: &str) {
-    if s.bytes().any(|x| !x.is_ascii_hexdigit()) {
-        panic!("Hash contains at least one invalid character: `{s}`");
-    }
-}
-
-fn assert_valid_urls_and_hash(urls: &[String], hash: &str, allow_file_url: bool) {
-    // Either both, the URL and the hash are set, or both are not set.
-    if (urls.is_empty() as i32 ^ hash.is_empty() as i32) > 0 {
-        panic!("Either both, an url and a hash must be set, or none.");
-    }
-    if urls.is_empty() {
-        return;
-    }
-
-    assert_sha256(hash);
-
-    urls.iter().for_each(|url|
-        // File URLs are used in test deployments. We only disallow non-ASCII.
-        if allow_file_url && url.starts_with("file://") {
-            assert!(url.is_ascii(), "file-URL {url} contains non-ASCII characters.");
-        }
-        // if it's not a file URL, it should be a valid URL.
-        else if let Err(e) = Url::parse(url) {
-            panic!("Release package URL {url} is not valid: {e}");
-        }
-    );
-}
-
 #[cfg(test)]
 mod tests {
     use crate::{
@@ -142,7 +112,7 @@ mod tests {
     use ic_registry_transport::{insert, upsert};
     use ic_types::ReplicaVersion;
 
-    const MOCK_HASH: &str = "C0FFEE";
+    const MOCK_HASH: &str = "C0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEED00D";
     const MOCK_URL: &str = "http://release_package.tar.gz";
 
     fn check_bless_version(versions: Vec<String>) {

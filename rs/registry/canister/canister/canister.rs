@@ -33,6 +33,7 @@ use registry_canister::{
     init::RegistryCanisterInitPayload,
     mutations::{
         complete_canister_migration::CompleteCanisterMigrationPayload,
+        do_add_hostos_version::AddHostOsVersionPayload,
         do_add_node_operator::AddNodeOperatorPayload,
         do_add_nodes_to_subnet::AddNodesToSubnetPayload,
         do_bless_replica_version::BlessReplicaVersionPayload,
@@ -47,6 +48,7 @@ use registry_canister::{
         do_update_node_directly::UpdateNodeDirectlyPayload,
         do_update_node_operator_config::UpdateNodeOperatorConfigPayload,
         do_update_node_operator_config_directly::UpdateNodeOperatorConfigDirectlyPayload,
+        do_update_nodes_hostos_version::UpdateNodesHostOsVersionPayload,
         do_update_subnet::UpdateSubnetPayload,
         do_update_subnet_replica::UpdateSubnetReplicaVersionPayload,
         do_update_unassigned_nodes_config::UpdateUnassignedNodesConfigPayload,
@@ -426,6 +428,34 @@ fn update_subnet_replica_version() {
 #[candid_method(update, rename = "update_subnet_replica_version")]
 fn update_subnet_replica_version_(payload: UpdateSubnetReplicaVersionPayload) {
     registry_mut().do_update_subnet_replica_version(payload);
+    recertify_registry();
+}
+
+#[export_name = "canister_update add_hostos_version"]
+fn add_hostos_version() {
+    check_caller_is_governance_and_log("add_hostos_version");
+    over(candid_one, |payload: AddHostOsVersionPayload| {
+        add_hostos_version_(payload)
+    });
+}
+
+#[candid_method(update, rename = "add_hostos_version")]
+fn add_hostos_version_(payload: AddHostOsVersionPayload) {
+    registry_mut().do_add_hostos_version(payload);
+    recertify_registry();
+}
+
+#[export_name = "canister_update update_nodes_hostos_version"]
+fn update_nodes_hostos_version() {
+    check_caller_is_governance_and_log("update_nodes_hostos_version");
+    over(candid_one, |payload: UpdateNodesHostOsVersionPayload| {
+        update_nodes_hostos_version_(payload)
+    });
+}
+
+#[candid_method(update, rename = "update_nodes_hostos_version")]
+fn update_nodes_hostos_version_(payload: UpdateNodesHostOsVersionPayload) {
+    registry_mut().do_update_nodes_hostos_version(payload);
     recertify_registry();
 }
 
