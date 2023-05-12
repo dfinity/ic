@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Config {
-    state_root: PathBuf,
+    pub state_root: PathBuf,
     /// A feature flag that enables/disables the file backed memory allocator.
     #[serde(default = "file_backed_memory_allocator_default")]
     pub file_backed_memory_allocator: FlagStatus,
@@ -16,10 +16,6 @@ impl Config {
             state_root,
             file_backed_memory_allocator: FlagStatus::Disabled,
         }
-    }
-
-    pub fn state_root(&self) -> PathBuf {
-        self.state_root.clone()
     }
 }
 

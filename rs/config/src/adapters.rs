@@ -9,11 +9,11 @@ pub struct AdaptersConfig {
     pub bitcoin_testnet_uds_metrics_path: Option<PathBuf>,
     pub https_outcalls_uds_path: Option<PathBuf>,
     pub https_outcalls_uds_metrics_path: Option<PathBuf>,
-    #[serde(default = "should_enable_onchain_observability_grpc_server_default")]
+    #[serde(default = "enable_onchain_observability_grpc_server_default")]
     pub onchain_observability_enable_grpc_server: bool,
     pub onchain_observability_uds_metrics_path: Option<PathBuf>,
 }
 
-fn should_enable_onchain_observability_grpc_server_default() -> bool {
+fn enable_onchain_observability_grpc_server_default() -> bool {
     false
 }

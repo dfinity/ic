@@ -507,7 +507,7 @@ fn remove_node_state(replica_config_file: PathBuf, cup_path: PathBuf) -> Result<
         )
     })?;
 
-    let state_path = config.state_manager.state_root();
+    let state_path = config.state_manager.state_root;
     remove_dir_all(&state_path)
         .map_err(|err| format!("Couldn't delete the state at {:?}: {:?}", state_path, err))?;
 

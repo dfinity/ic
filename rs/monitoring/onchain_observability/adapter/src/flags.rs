@@ -236,7 +236,6 @@ pub mod test {
         transport: {
             node_ip: "2a0b:21c0:4003:2:509c:e5ff:fe45:ab4f",
             listening_port: 4100,
-            send_queue_size: 51200,
         },
         // ============================================
         // Configuration of registry client
@@ -290,14 +289,6 @@ pub mod test {
         // Configuration of the message scheduling.
         // ========================================
         scheduler: {
-            /// Number of canisters that the scheduler is allowed to schedule in
-            /// parallel on the NNS subnet.
-            nns_subnet_scheduler_cores: 1,
-            
-            /// Number of canisters that the scheduler is allowed to schedule in
-            /// parallel on the non-NNS subnets.
-            non_nns_subnet_scheduler_cores: 32,
-            
             // Maximum amount of instructions a single round can consume.
             max_instructions_per_round: 26843545600,
             // Maximum number of instructions a single message's execution
@@ -309,11 +300,6 @@ pub mod test {
         // Configuration of the Wasm execution environment.
         // ================================================
         hypervisor: {
-            // Which technology to use to intercept Wasm memory changes.
-            // Options:
-            // - "sigsegv" - use mprotect + SIGSEGV
-            // - { fuse: { mount_point: "/tmp/fuse", }, } (experimental)
-            persistence_type: "sigsegv",
             // A whitelist of principal IDs that are allowed to call the
             // "dev_create_canister_with_funds" and "dev_set_funds" methods on
             // the subnet.

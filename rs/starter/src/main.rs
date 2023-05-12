@@ -293,10 +293,6 @@ struct CliArgs {
     #[clap(long = "dkg-interval-length")]
     dkg_interval_length: Option<u64>,
 
-    /// Whether or not to detect and warn of starvations in consensus.
-    #[clap(long = "detect-consensus-starvation")]
-    detect_consensus_starvation: Option<bool>,
-
     /// The backend DB used by Consensus, can be rocksdb or lmdb.
     #[clap(long = "consensus-pool-backend",
                 possible_values = &["lmdb", "rocksdb"])]
@@ -538,7 +534,6 @@ impl CliArgs {
             unit_delay,
             initial_notary_delay,
             dkg_interval_length: self.dkg_interval_length.map(Height::from),
-            detect_consensus_starvation: self.detect_consensus_starvation,
             consensus_pool_backend: self.consensus_pool_backend,
             subnet_features: to_subnet_features(&self.subnet_features),
             ecdsa_keyid,
@@ -605,7 +600,6 @@ struct ValidatedConfig {
     unit_delay: Option<Duration>,
     initial_notary_delay: Option<Duration>,
     dkg_interval_length: Option<Height>,
-    detect_consensus_starvation: Option<bool>,
     consensus_pool_backend: Option<String>,
     subnet_features: SubnetFeatures,
     ecdsa_keyid: Option<EcdsaKeyId>,
@@ -671,7 +665,7 @@ impl ValidatedConfig {
 
         let hypervisor = Some(hypervisor_config);
 
-        let consensus = self.detect_consensus_starvation.map(ConsensusConfig::new);
+        let consensus = Some(ConsensusConfig::default());
 
         let adapters_config = Some(AdaptersConfig {
             bitcoin_testnet_uds_path: self.bitcoin_testnet_uds_path.clone(),
