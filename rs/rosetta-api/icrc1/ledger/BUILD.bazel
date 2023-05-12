@@ -83,10 +83,12 @@ rust_test(
         "//rs/canister_sandbox",
         "//rs/canister_sandbox/sandbox_launcher",
         "//rs/rosetta-api/icrc1/archive:archive_canister.wasm.gz",
+        "@ic-icrc1-ledger-first-version.wasm.gz//file",
     ],
     env = {
         "CARGO_MANIFEST_DIR": "rs/rosetta-api/icrc1/ledger",
         "IC_ICRC1_LEDGER_WASM_PATH": "$(rootpath :ledger_canister.wasm)",
+        "IC_ICRC1_LEDGER_FIRST_VERSION_WASM_PATH": "$(rootpath @ic-icrc1-ledger-first-version.wasm.gz//file)",
         "IC_ICRC1_ARCHIVE_WASM_PATH": "$(rootpath //rs/rosetta-api/icrc1/archive:archive_canister.wasm.gz)",
         "LAUNCHER_BINARY": "$(rootpath //rs/canister_sandbox/sandbox_launcher)",
         "SANDBOX_BINARY": "$(rootpath //rs/canister_sandbox)",

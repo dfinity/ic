@@ -1,3 +1,4 @@
+use candid::Encode;
 use ic_base_types::PrincipalId;
 use ic_icrc1_ledger::{InitArgs, LedgerArgument};
 use ic_icrc1_ledger_sm_tests::{
@@ -6,6 +7,7 @@ use ic_icrc1_ledger_sm_tests::{
     TOKEN_NAME, TOKEN_SYMBOL,
 };
 use ic_ledger_canister_core::archive::ArchiveOptions;
+use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
 use std::path::PathBuf;
 
@@ -146,4 +148,46 @@ fn check_fee_collector_blocks() {
 #[test]
 fn check_memo_max_len() {
     ic_icrc1_ledger_sm_tests::test_memo_max_len(ledger_wasm(), encode_init_args);
+}
+
+// Validate upgrade of the Ledger from previous versions
+
+#[test]
+fn test_upgrade_from_first_version() {
+    let env = StateMachine::new();
+
+    let ledger_wasm_first_version =
+        std::fs::read(std::env::var("IC_ICRC1_LEDGER_FIRST_VERSION_WASM_PATH").unwrap()).unwrap();
+    let init_args = Encode!(&InitArgs {
+        minting_account: MINTER,
+        fee_collector_account: None,
+        initial_balances: vec![],
+        transfer_fee: FEE,
+        token_name: TOKEN_NAME.to_string(),
+        token_symbol: TOKEN_SYMBOL.to_string(),
+        metadata: vec![
+            Value::entry(NAT_META_KEY, NAT_META_VALUE),
+            Value::entry(INT_META_KEY, INT_META_VALUE),
+            Value::entry(TEXT_META_KEY, TEXT_META_VALUE),
+            Value::entry(BLOB_META_KEY, BLOB_META_VALUE),
+        ],
+        archive_options: ArchiveOptions {
+            trigger_threshold: ARCHIVE_TRIGGER_THRESHOLD as usize,
+            num_blocks_to_archive: NUM_BLOCKS_TO_ARCHIVE as usize,
+            node_max_memory_size_bytes: None,
+            max_message_size_bytes: None,
+            controller_id: PrincipalId::new_user_test_id(100),
+            cycles_for_archive_creation: None,
+            max_transactions_per_response: None,
+        },
+        max_memo_length: None,
+    })
+    .unwrap();
+    let ledger_id = env
+        .install_canister(ledger_wasm_first_version, init_args, None)
+        .unwrap();
+
+    let upgrade_args = Encode!(&LedgerArgument::Upgrade(None)).unwrap();
+    env.upgrade_canister(ledger_id, ledger_wasm(), upgrade_args)
+        .expect("Unable to upgrade the ledger canister");
 }
