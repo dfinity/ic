@@ -1297,11 +1297,12 @@ impl StateManagerImpl {
         info!(
             log,
             "Using path '{}' to manage local state",
-            config.state_root().display()
+            config.state_root.display()
         );
         let starting_time = Instant::now();
-        let state_layout = StateLayout::try_new(log.clone(), config.state_root(), metrics_registry)
-            .unwrap_or_else(|err| fatal!(&log, "Failed to init state layout: {:?}", err));
+        let state_layout =
+            StateLayout::try_new(log.clone(), config.state_root.clone(), metrics_registry)
+                .unwrap_or_else(|err| fatal!(&log, "Failed to init state layout: {:?}", err));
         info!(log, "StateLayout init took {:?}", starting_time.elapsed());
 
         // Create the file descriptor factory that is used to create files for PageMaps.

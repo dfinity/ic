@@ -79,8 +79,6 @@ pub const SAMPLE_CONFIG: &str = r#"
         node_ip: "127.0.0.1",
         // Listening port used by transport to establish peer connections.
         listening_port: 3000,
-        // The size of the buffered messages on the transport send queue.
-        send_queue_size: 1024,
     },
     // ============================================
     // Configuration of registry client
@@ -118,8 +116,6 @@ pub const SAMPLE_CONFIG: &str = r#"
     // Consensus related config.
     // ============================================
     consensus: {
-        // Whether or not to detect starvation. Should only be set to false in tests.
-        detect_starvation: true,
     },
     // ============================================
     // Configuration of the node state persistence.
@@ -153,14 +149,6 @@ pub const SAMPLE_CONFIG: &str = r#"
     // Configuration of the execution environment.
     // ================================================
     hypervisor: {
-        // Which technology to use to intercept Wasm memory changes.
-        //
-        // Alternatives:
-        // - EXAMPLE: persistence_type: "sigsegv",
-        //   Use memory persistence based on mprotect + SIGSEGV.
-        // - EXAMPLE: persistence_type: "pagemap",
-        //   Use memory persistence based on /proc/pid/pagemap (Linux) or Mac OS equivalent.
-        persistence_type: "sigsegv",
     },
     // ====================================
     // Configuration of the HTTPS endpoint.

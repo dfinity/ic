@@ -11,7 +11,6 @@
     transport: {
         node_ip: "{{ ipv6_address }}",
         listening_port: 4100,
-        send_queue_size: 51200,
     },
     // ============================================
     // Configuration of registry client
@@ -49,7 +48,6 @@
     // Consensus related config.
     // ============================================
     consensus: {
-        detect_starvation: true,
     },
 
     // ============================================
@@ -65,14 +63,6 @@
     // Configuration of the message scheduling.
     // ========================================
     scheduler: {
-        /// Number of canisters that the scheduler is allowed to schedule in
-        /// parallel on the NNS subnet.
-        nns_subnet_scheduler_cores: 1,
-
-        /// Number of canisters that the scheduler is allowed to schedule in
-        /// parallel on the non-NNS subnets.
-        non_nns_subnet_scheduler_cores: 32,
-
         // Maximum amount of instructions a single round can consume.
         max_instructions_per_round: 26843545600,
         // Maximum number of instructions a single message's execution
@@ -84,11 +74,6 @@
     // Configuration of the Wasm execution environment.
     // ================================================
     hypervisor: {
-        // Which technology to use to intercept Wasm memory changes.
-        // Options:
-        // - "sigsegv" - use mprotect + SIGSEGV
-        // - { fuse: { mount_point: "/tmp/fuse", }, } (experimental)
-        persistence_type: "sigsegv",
         // A whitelist of principal IDs that are allowed to call the
         // "dev_create_canister_with_funds" and "dev_set_funds" methods on
         // the subnet.
@@ -129,7 +114,6 @@
         // The canister http adapter socket file is: /ic-os/guestos/rootfs/etc/systemd/system/ic-https-outcalls-adapter.socket
         https_outcalls_uds_path: "/run/ic-node/https-outcalls-adapter/socket",
         https_outcalls_uds_metrics_path: "/run/ic-node/https-outcalls-adapter/metrics",
-        onchain_observability_enable_grpc_server: false,
         onchain_observability_uds_metrics_path: "/run/ic-node/onchain-observability-adapter/metrics",
     },
 

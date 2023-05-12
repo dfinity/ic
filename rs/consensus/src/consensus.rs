@@ -510,7 +510,7 @@ impl<T: ConsensusPool> ChangeSetProducer<T> for ConsensusImpl {
                     .set(time_since_last_invoked.as_secs_f64());
 
                 // Log starvation if configured
-                if self.config.detect_starvation() && time_since_last_invoked > unit_delay {
+                if self.config.detect_starvation && time_since_last_invoked > unit_delay {
                     self.metrics
                         .starvation_counter
                         .with_label_values(&[component_name])
