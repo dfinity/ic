@@ -166,6 +166,9 @@ impl From<DerivedState> for GetDerivedStateResponse {
     fn from(state: DerivedState) -> GetDerivedStateResponse {
         GetDerivedStateResponse {
             buyer_total_icp_e8s: Some(state.buyer_total_icp_e8s),
+            direct_participant_count: Some(state.direct_participant_count),
+            cf_participant_count: Some(state.cf_participant_count),
+            cf_neuron_count: Some(state.cf_neuron_count),
             sns_tokens_per_icp: Some(state.sns_tokens_per_icp as f64),
         }
     }
@@ -299,7 +302,7 @@ impl Swap {
     }
 
     /// The count of unique CommunityFund Neurons.
-    pub fn cf_neurons_count(&self) -> u64 {
+    pub fn cf_neuron_count(&self) -> u64 {
         self.cf_participants
             .iter()
             .flat_map(|cf_participant| &cf_participant.cf_neurons)
@@ -2281,6 +2284,9 @@ impl Swap {
     /// `sns_tokens_per_icp` will be 0 if `participant_total_icp_e8s` is 0.
     pub fn derived_state(&self) -> DerivedState {
         let participant_total_icp_e8s = self.participant_total_icp_e8s();
+        let direct_participant_count = self.buyers.len() as u64;
+        let cf_participant_count = self.cf_participants.len() as u64;
+        let cf_neuron_count = self.cf_neuron_count();
         let tokens_available_for_sale = match self.sns_token_e8s() {
             Ok(tokens) => tokens,
             Err(err) => {
@@ -2288,12 +2294,16 @@ impl Swap {
                 0
             }
         };
+        let sns_tokens_per_icp = i2d(tokens_available_for_sale)
+            .checked_div(i2d(participant_total_icp_e8s))
+            .and_then(|d| d.to_f32())
+            .unwrap_or(0.0);
         DerivedState {
             buyer_total_icp_e8s: participant_total_icp_e8s,
-            sns_tokens_per_icp: i2d(tokens_available_for_sale)
-                .checked_div(i2d(participant_total_icp_e8s))
-                .and_then(|d| d.to_f32())
-                .unwrap_or(0.0),
+            direct_participant_count,
+            cf_participant_count,
+            cf_neuron_count,
+            sns_tokens_per_icp,
         }
     }
 
@@ -2920,11 +2930,17 @@ mod tests {
         let derived_state = DerivedState {
             buyer_total_icp_e8s: 400_000_000,
             sns_tokens_per_icp: 2.5f32,
+            direct_participant_count: 1000,
+            cf_participant_count: 100,
+            cf_neuron_count: 200,
         };
 
         let response: GetDerivedStateResponse = derived_state.into();
         assert_eq!(response.sns_tokens_per_icp, Some(2.5f64));
         assert_eq!(response.buyer_total_icp_e8s, Some(400_000_000));
+        assert_eq!(response.direct_participant_count, Some(1000));
+        assert_eq!(response.cf_participant_count, Some(100));
+        assert_eq!(response.cf_neuron_count, Some(200));
     }
 
     #[test]
@@ -3968,6 +3984,6 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(7, swap.cf_neurons_count());
+        assert_eq!(7, swap.cf_neuron_count());
     }
 }

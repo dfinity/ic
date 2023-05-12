@@ -3231,6 +3231,9 @@ fn test_derived_state() {
     let expected_derived_state1 = DerivedState {
         buyer_total_icp_e8s: 0,
         sns_tokens_per_icp: 0f32,
+        direct_participant_count: 0,
+        cf_participant_count: 0,
+        cf_neuron_count: 0,
     };
     let actual_derived_state1 = swap.derived_state();
     assert_eq!(expected_derived_state1, actual_derived_state1);
@@ -3244,6 +3247,9 @@ fn test_derived_state() {
     let expected_derived_state2 = DerivedState {
         buyer_total_icp_e8s: 0,
         sns_tokens_per_icp: 0f32,
+        direct_participant_count: 0,
+        cf_participant_count: 0,
+        cf_neuron_count: 0,
     };
     let actual_derived_state2 = swap.derived_state();
     assert_eq!(expected_derived_state2, actual_derived_state2);
@@ -3265,21 +3271,33 @@ fn test_derived_state() {
     let expected_derived_state3 = DerivedState {
         buyer_total_icp_e8s: 100_000_000,
         sns_tokens_per_icp: 10f32,
+        direct_participant_count: 1,
+        cf_participant_count: 0,
+        cf_neuron_count: 0,
     };
     let actual_derived_state3 = swap.derived_state();
     assert_eq!(expected_derived_state3, actual_derived_state3);
 
     swap.cf_participants = vec![CfParticipant {
         hotkey_principal: "".to_string(),
-        cf_neurons: vec![CfNeuron {
-            nns_neuron_id: 0,
-            amount_icp_e8s: 300_000_000,
-        }],
+        cf_neurons: vec![
+            CfNeuron {
+                nns_neuron_id: 0,
+                amount_icp_e8s: 300_000_000,
+            },
+            CfNeuron {
+                nns_neuron_id: 1,
+                amount_icp_e8s: 400_000_000,
+            },
+        ],
     }];
 
     let expected_derived_state4 = DerivedState {
-        buyer_total_icp_e8s: 400_000_000,
-        sns_tokens_per_icp: 2.5f32,
+        buyer_total_icp_e8s: 800_000_000,
+        sns_tokens_per_icp: 1.25f32,
+        direct_participant_count: 1,
+        cf_participant_count: 1,
+        cf_neuron_count: 2,
     };
     let actual_derived_state4 = swap.derived_state();
     assert_eq!(expected_derived_state4, actual_derived_state4);

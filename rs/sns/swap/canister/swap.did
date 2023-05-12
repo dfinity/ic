@@ -28,6 +28,9 @@ type DefiniteCanisterSettingsArgs = record {
 type DerivedState = record {
   sns_tokens_per_icp : float32;
   buyer_total_icp_e8s : nat64;
+  cf_participant_count : nat64;
+  direct_participant_count : nat64;
+  cf_neuron_count : nat64;
 };
 type DirectInvestment = record { buyer_principal : text };
 type Err = record { description : opt text; error_type : opt int32 };
@@ -58,6 +61,9 @@ type GetBuyersTotalResponse = record { buyers_total : nat64 };
 type GetDerivedStateResponse = record {
   sns_tokens_per_icp : opt float64;
   buyer_total_icp_e8s : opt nat64;
+  cf_participant_count : opt nat64;
+  direct_participant_count : opt nat64;
+  cf_neuron_count : opt nat64;
 };
 type GetInitResponse = record { init : opt Init };
 type GetLifecycleResponse = record {
