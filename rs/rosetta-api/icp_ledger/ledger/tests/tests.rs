@@ -1,6 +1,5 @@
 use ic_ledger_core::Tokens;
-use icp_ledger::LedgerCanisterInitPayload as InitArgs;
-use std::collections::HashSet;
+use icp_ledger::LedgerCanisterInitPayload;
 
 fn ledger_wasm() -> Vec<u8> {
     ic_test_utilities_load_wasm::load_wasm(
@@ -10,24 +9,21 @@ fn ledger_wasm() -> Vec<u8> {
     )
 }
 
-fn encode_init_args(args: ic_icrc1_ledger_sm_tests::InitArgs) -> InitArgs {
+fn encode_init_args(args: ic_icrc1_ledger_sm_tests::InitArgs) -> LedgerCanisterInitPayload {
     let initial_values = args
         .initial_balances
         .into_iter()
         .map(|(account, amount)| (account.into(), Tokens::from_e8s(amount)))
         .collect();
-    InitArgs {
-        minting_account: args.minting_account.into(),
-        icrc1_minting_account: Some(args.minting_account),
-        initial_values,
-        max_message_size_bytes: None,
-        transaction_window: None,
-        archive_options: Some(args.archive_options),
-        send_whitelist: HashSet::new(),
-        transfer_fee: Some(Tokens::from_e8s(args.transfer_fee)),
-        token_symbol: Some(args.token_symbol),
-        token_name: Some(args.token_name),
-    }
+    LedgerCanisterInitPayload::builder()
+        .initial_values(initial_values)
+        .minting_account(args.minting_account.into())
+        .icrc1_minting_account(args.minting_account)
+        .archive_options(args.archive_options)
+        .transfer_fee(Tokens::from_e8s(args.transfer_fee))
+        .token_symbol_and_name(&args.token_symbol, &args.token_name)
+        .build()
+        .unwrap()
 }
 
 #[test]

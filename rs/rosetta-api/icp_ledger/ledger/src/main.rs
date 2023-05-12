@@ -1,8 +1,10 @@
 use candid::{candid_method, Nat};
 use dfn_candid::{candid, candid_one, CandidOne};
+#[allow(unused_imports)]
+use dfn_core::BytesS;
 use dfn_core::{
     api::{caller, data_certificate, print, set_certified_data, trap_with},
-    over, over_async, over_async_may_reject, over_init, printer, setup, stable, BytesS,
+    over, over_async, over_async_may_reject, over_init, printer, setup, stable,
 };
 use dfn_protobuf::protobuf;
 use ic_base_types::CanisterId;
@@ -23,7 +25,7 @@ use ic_ledger_core::{
 use icp_ledger::{
     protobuf, tokens_into_proto, AccountBalanceArgs, AccountIdentifier, ArchiveInfo,
     ArchivedBlocksRange, Archives, BinaryAccountBalanceArgs, Block, BlockArg, BlockRes,
-    CandidBlock, Decimals, GetBlocksArgs, IterBlocksArgs, LedgerCanisterInitPayload, Memo, Name,
+    CandidBlock, Decimals, GetBlocksArgs, IterBlocksArgs, LedgerCanisterPayload, Memo, Name,
     Operation, PaymentError, QueryArchiveFn, QueryBlocksResponse, SendArgs, Subaccount, Symbol,
     TipOfChainRes, TotalSupplyArgs, Transaction, TransferArgs, TransferError, TransferFee,
     TransferFeeArgs, MAX_BLOCKS_PER_REQUEST,
@@ -615,19 +617,24 @@ fn icrc1_decimals() -> u8 {
 }
 
 #[candid_method(init)]
-fn canister_init(arg: LedgerCanisterInitPayload) {
-    init(
-        arg.minting_account,
-        arg.icrc1_minting_account,
-        arg.initial_values,
-        arg.max_message_size_bytes,
-        arg.transaction_window,
-        arg.archive_options,
-        arg.send_whitelist,
-        arg.transfer_fee,
-        arg.token_symbol,
-        arg.token_name,
-    )
+fn canister_init(args: LedgerCanisterPayload) {
+    match args {
+        LedgerCanisterPayload::Init(arg) => init(
+            arg.minting_account,
+            arg.icrc1_minting_account,
+            arg.initial_values,
+            arg.max_message_size_bytes,
+            arg.transaction_window,
+            arg.archive_options,
+            arg.send_whitelist,
+            arg.transfer_fee,
+            arg.token_symbol,
+            arg.token_name,
+        ),
+        LedgerCanisterPayload::Upgrade(_) => {
+            ic_cdk::trap("Cannot initialize the canister with an Upgrade argument. Please provide an Init argument.");
+        }
+    }
 }
 
 #[export_name = "canister_init"]
@@ -635,23 +642,37 @@ fn main() {
     over_init(|CandidOne(arg)| canister_init(arg))
 }
 
+fn post_upgrade(args: Option<LedgerCanisterPayload>) {
+    let mut ledger = LEDGER.write().unwrap();
+    *ledger = ciborium::de::from_reader(stable::StableReader::new())
+        .expect("Decoding stable memory failed");
+
+    if let Some(args) = args {
+        match args {
+            LedgerCanisterPayload::Init(_) => ic_cdk::trap("Cannot upgrade the canister with an Init argument. Please provide an Upgrade argument."),
+            LedgerCanisterPayload::Upgrade(upgrade_args) => {
+                if let Some(upgrade_args) = upgrade_args {
+
+                    if let Some(max_accounts) = upgrade_args.maximum_number_of_accounts{
+                        ledger.maximum_number_of_accounts = max_accounts;
+                    }
+                }
+            }
+        }
+    }
+
+    set_certified_data(
+        &ledger
+            .blockchain
+            .last_hash
+            .map(|h| h.into_bytes())
+            .unwrap_or([0u8; 32]),
+    );
+}
+
 #[export_name = "canister_post_upgrade"]
-fn post_upgrade() {
-    over_init(|_: BytesS| {
-        let mut ledger = LEDGER.write().unwrap();
-        *ledger = ciborium::de::from_reader(stable::StableReader::new())
-            .expect("Decoding stable memory failed");
-
-        ledger.maximum_number_of_accounts = 28_000_000;
-
-        set_certified_data(
-            &ledger
-                .blockchain
-                .last_hash
-                .map(|h| h.into_bytes())
-                .unwrap_or([0u8; 32]),
-        );
-    })
+fn post_upgrade_() {
+    over_init(|CandidOne(args)| post_upgrade(args));
 }
 
 #[export_name = "canister_pre_upgrade"]

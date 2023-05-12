@@ -98,7 +98,11 @@ impl NnsInitPayloadsBuilder {
     }
 
     pub fn with_ledger_account(&mut self, account: AccountIdentifier, icpts: Tokens) -> &mut Self {
-        self.ledger.initial_values.insert(account, icpts);
+        self.ledger
+            .init_args()
+            .unwrap()
+            .initial_values
+            .insert(account, icpts);
         self
     }
 
@@ -209,10 +213,11 @@ impl NnsInitPayloadsBuilder {
     pub fn build(&mut self) -> NnsInitPayloads {
         assert!(self
             .ledger
+            .init_args()
+            .unwrap()
             .initial_values
             .get(&GOVERNANCE_CANISTER_ID.get().into())
             .is_none());
-
         for n in self.governance.proto.neurons.values() {
             let sub = Subaccount(n.account.as_slice().try_into().unwrap_or_else(|e| {
                 panic!(
@@ -227,12 +232,13 @@ impl NnsInitPayloadsBuilder {
             let aid = ledger::AccountIdentifier::new(GOVERNANCE_CANISTER_ID.get(), Some(sub));
             let previous_value = self
                 .ledger
+                .init_args()
+                .unwrap()
                 .initial_values
                 .insert(aid, Tokens::from_e8s(n.cached_neuron_stake_e8s));
 
             assert_eq!(previous_value, None);
         }
-
         NnsInitPayloads {
             registry: self.registry.build(),
             governance: self.governance.build(),

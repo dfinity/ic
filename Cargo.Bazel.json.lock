@@ -1,5 +1,5 @@
 {
-  "checksum": "84b3459993deeae8b6602a09c2bebf3dc6866d81a91dcc864ee64e7e20b81d1a",
+  "checksum": "517417e8819dd158bc45874e2e98ab32dd8d1defce718bfdb5a4b7b876105fd2",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -48461,7 +48461,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tracing-core 0.1.30",
+              "id": "tracing-core 0.1.31",
               "target": "tracing_core"
             }
           ],
@@ -48581,13 +48581,13 @@
       },
       "license": "MIT"
     },
-    "tracing-core 0.1.30": {
+    "tracing-core 0.1.31": {
       "name": "tracing-core",
-      "version": "0.1.30",
+      "version": "0.1.31",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/tracing-core/0.1.30/download",
-          "sha256": "24eb03ba0eab1fd845050058ce5e616558e8f8d8fca633e6b163fe25c797213a"
+          "url": "https://crates.io/api/v1/crates/tracing-core/0.1.31/download",
+          "sha256": "0955b8137a1df6f1a2e9a37d8a6656291ff0297c1a97c24e0d8425fe2312f79a"
         }
       },
       "targets": [
@@ -48632,7 +48632,7 @@
           }
         },
         "edition": "2018",
-        "version": "0.1.30"
+        "version": "0.1.31"
       },
       "license": "MIT"
     },
@@ -48731,7 +48731,7 @@
               "target": "log"
             },
             {
-              "id": "tracing-core 0.1.30",
+              "id": "tracing-core 0.1.31",
               "target": "tracing_core"
             }
           ],
@@ -48785,7 +48785,7 @@
               "target": "tracing"
             },
             {
-              "id": "tracing-core 0.1.30",
+              "id": "tracing-core 0.1.31",
               "target": "tracing_core"
             },
             {
@@ -48835,7 +48835,7 @@
               "target": "serde"
             },
             {
-              "id": "tracing-core 0.1.30",
+              "id": "tracing-core 0.1.31",
               "target": "tracing_core"
             }
           ],
@@ -48918,7 +48918,7 @@
               "target": "thread_local"
             },
             {
-              "id": "tracing-core 0.1.30",
+              "id": "tracing-core 0.1.31",
               "target": "tracing_core"
             },
             {

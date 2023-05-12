@@ -264,10 +264,15 @@ fn create_init_payloads(args: &CliArgs) -> NnsInitPayloads {
     }
 
     for account in test_ledger_accounts.into_iter() {
-        init_payloads_builder.ledger.initial_values.insert(
-            account,
-            icp_ledger::Tokens::from_tokens(1_000_000_000).expect("Couldn't create icpts"),
-        );
+        init_payloads_builder
+            .ledger
+            .init_args()
+            .unwrap()
+            .initial_values
+            .insert(
+                account,
+                icp_ledger::Tokens::from_tokens(1_000_000_000).expect("Couldn't create icpts"),
+            );
         eprintln!(
             "{}Initializing with test ledger account: {}",
             LOG_PREFIX,

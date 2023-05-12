@@ -12,7 +12,6 @@ use std::sync::Arc;
 use std::thread::sleep;
 use std::time::Duration;
 use url::Url;
-
 pub const LEDGER_CANISTER_INDEX_IN_NNS_SUBNET: u64 = 2;
 const ATTEMPTS: u8 = 100;
 const DURATION_BETWEEN_ATTEMPTS: Duration = Duration::from_millis(100);
@@ -83,18 +82,10 @@ fn icp_ledger_init() -> Vec<u8> {
     let sender = test_identity()
         .sender()
         .expect("test identity sender not found!");
-    Encode!(&icp_ledger::LedgerCanisterInitPayload {
-        minting_account: AccountIdentifier::new(sender.into(), None),
-        icrc1_minting_account: None,
-        initial_values: std::collections::HashMap::new(),
-        max_message_size_bytes: None,
-        transaction_window: None,
-        archive_options: None,
-        send_whitelist: std::collections::HashSet::new(),
-        transfer_fee: None,
-        token_symbol: None,
-        token_name: None,
-    })
+    Encode!(&icp_ledger::LedgerCanisterInitPayload::builder()
+        .minting_account(AccountIdentifier::new(sender.into(), None))
+        .build()
+        .unwrap())
     .unwrap()
 }
 
