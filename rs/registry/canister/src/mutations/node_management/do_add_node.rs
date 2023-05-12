@@ -58,6 +58,7 @@ impl Registry {
                 .collect(),
             node_operator_id: caller.into_vec(),
             chip_id: vec![],
+            hostos_version_id: None,
         };
 
         // 5. Insert node, public keys, and crypto keys

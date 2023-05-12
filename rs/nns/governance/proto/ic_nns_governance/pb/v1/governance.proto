@@ -536,6 +536,17 @@ enum NnsFunction {
   NNS_FUNCTION_UPDATE_ELECTED_REPLICA_VERSIONS = 38;
 
   NNS_FUNCTION_BITCOIN_SET_CONFIG = 39;
+
+  // A proposal to add a new version to which the HostOS can be
+  // upgraded.
+  // The proposal registers a HostOS version (identified by the hash of the
+  // installation image) in the registry. By itself, this proposal
+  // does not effect any upgrade.
+  NNS_FUNCTION_ADD_HOST_OS_VERSION = 40;
+  // Update the HostOS version running on a given list of nodes.
+  // The proposal changes the HostOS version that is used on the specified
+  // nodes. The version must be contained in the list of HostOS versions.
+  NNS_FUNCTION_UPDATE_NODES_HOST_OS_VERSION = 41;
 }
 
 // Payload of a proposal that calls a function on another NNS

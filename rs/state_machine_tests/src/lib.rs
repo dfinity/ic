@@ -199,6 +199,7 @@ fn make_nodes_registry(
             }),
             p2p_flow_endpoints: vec![],
             chip_id: vec![],
+            hostos_version_id: None,
         };
         data_provider
             .add(

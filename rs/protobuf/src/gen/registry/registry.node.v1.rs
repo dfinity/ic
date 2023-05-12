@@ -47,6 +47,9 @@ pub struct NodeRecord {
     /// The SEV-SNP chip_identifier for this node.
     #[prost(bytes = "vec", tag = "16")]
     pub chip_id: ::prost::alloc::vec::Vec<u8>,
+    /// ID of the HostOS version to run.
+    #[prost(string, optional, tag = "17")]
+    pub hostos_version_id: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]

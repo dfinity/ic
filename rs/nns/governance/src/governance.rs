@@ -487,6 +487,10 @@ impl NnsFunction {
             NnsFunction::UpdateSubnetReplicaVersion => {
                 (REGISTRY_CANISTER_ID, "update_subnet_replica_version")
             }
+            NnsFunction::AddHostOsVersion => (REGISTRY_CANISTER_ID, "add_hostos_version"),
+            NnsFunction::UpdateNodesHostOsVersion => {
+                (REGISTRY_CANISTER_ID, "update_nodes_hostos_version")
+            }
             NnsFunction::UpdateConfigOfSubnet => (REGISTRY_CANISTER_ID, "update_subnet"),
             NnsFunction::IcpXdrConversionRate => {
                 (CYCLES_MINTING_CANISTER_ID, "set_icp_xdr_conversion_rate")
@@ -1177,7 +1181,9 @@ impl Proposal {
                             | NnsFunction::UpdateNodeOperatorConfig
                             | NnsFunction::RemoveNodeOperators
                             | NnsFunction::RemoveNodes
-                            | NnsFunction::UpdateUnassignedNodesConfig => Topic::NodeAdmin,
+                            | NnsFunction::UpdateUnassignedNodesConfig
+                            | NnsFunction::AddHostOsVersion
+                            | NnsFunction::UpdateNodesHostOsVersion => Topic::NodeAdmin,
                             NnsFunction::CreateSubnet
                             | NnsFunction::AddNodeToSubnet
                             | NnsFunction::RecoverSubnet

@@ -327,6 +327,7 @@ mod tests {
             http: None,
             p2p_flow_endpoints: vec![],
             chip_id: vec![],
+            hostos_version_id: None,
         }
     }
 
