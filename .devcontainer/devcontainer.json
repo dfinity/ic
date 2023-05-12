@@ -1,7 +1,10 @@
 {
   "image": "dfinity/ic-build-bazel:fada76216f1e9ea6cada497cd949e1c9e76ff7b767bdb018bd204935351dbc07",
   "remoteUser": "ubuntu",
-  "runArgs": ["--hostname", "devenv-container"],
+  "runArgs": [
+    "--hostname",
+    "devenv-container"
+  ],
   "workspaceMount": "source=${localWorkspaceFolder},target=/ic,type=bind",
   "workspaceFolder": "/ic",
   "mounts": [
@@ -34,6 +37,9 @@
   "containerEnv": {
     "SSH_AUTH_SOCK": "${localEnv:SSH_AUTH_SOCK}",
     "TERM": "xterm-256color"
+  },
+  "remoteEnv": {
+    "PATH": "${containerEnv:PATH}:/ic/bin"
   },
   "customizations": {
     "vscode": {
