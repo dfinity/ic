@@ -1,6 +1,10 @@
 //! The main function of ic-recovery processes command line arguments.
 //! Calls the corresponding recovery process CLI.
 use clap::Parser;
+use ic_canister_sandbox_backend_lib::{
+    canister_sandbox_main, RUN_AS_CANISTER_SANDBOX_FLAG, RUN_AS_SANDBOX_LAUNCHER_FLAG,
+};
+use ic_canister_sandbox_launcher::sandbox_launcher_main;
 use ic_recovery::args_merger::merge;
 use ic_recovery::cmd::{RecoveryToolArgs, SubCommand};
 use ic_recovery::recovery_state::RecoveryState;
@@ -9,8 +13,15 @@ use ic_recovery::{cli, util};
 use slog::{info, warn, Logger};
 
 fn main() {
-    let logger = util::make_logger();
+    if std::env::args().any(|arg| arg == RUN_AS_CANISTER_SANDBOX_FLAG) {
+        canister_sandbox_main();
+        return;
+    } else if std::env::args().any(|arg| arg == RUN_AS_SANDBOX_LAUNCHER_FLAG) {
+        sandbox_launcher_main();
+        return;
+    }
 
+    let logger = util::make_logger();
     let args = RecoveryToolArgs::parse();
     let mut recovery_args = RecoveryArgs {
         dir: args.dir,
