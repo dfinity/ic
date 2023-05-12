@@ -51,6 +51,15 @@ impl SecretKeyStore for TempSecretKeyStore {
         self.store.insert(id, key, scope)
     }
 
+    fn insert_or_replace(
+        &mut self,
+        id: KeyId,
+        key: CspSecretKey,
+        scope: Option<Scope>,
+    ) -> Result<(), SecretKeyStoreWriteError> {
+        self.store.insert_or_replace(id, key, scope)
+    }
+
     fn get(&self, id: &KeyId) -> Option<CspSecretKey> {
         self.store.get(id)
     }
