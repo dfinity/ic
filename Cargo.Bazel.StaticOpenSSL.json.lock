@@ -1,5 +1,5 @@
 {
-  "checksum": "265157e98baf5791cd493437f21c56d133d645b418b059cce64d663bd57c9d21",
+  "checksum": "378944963f4e36b56a3935a5f7112c6be312a0e23183238d50076f38fc80cfed",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -48485,7 +48485,7 @@
               "target": "pin_project_lite"
             },
             {
-              "id": "tracing-core 0.1.30",
+              "id": "tracing-core 0.1.31",
               "target": "tracing_core"
             }
           ],
@@ -48605,13 +48605,13 @@
       },
       "license": "MIT"
     },
-    "tracing-core 0.1.30": {
+    "tracing-core 0.1.31": {
       "name": "tracing-core",
-      "version": "0.1.30",
+      "version": "0.1.31",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/tracing-core/0.1.30/download",
-          "sha256": "24eb03ba0eab1fd845050058ce5e616558e8f8d8fca633e6b163fe25c797213a"
+          "url": "https://crates.io/api/v1/crates/tracing-core/0.1.31/download",
+          "sha256": "0955b8137a1df6f1a2e9a37d8a6656291ff0297c1a97c24e0d8425fe2312f79a"
         }
       },
       "targets": [
@@ -48656,7 +48656,7 @@
           }
         },
         "edition": "2018",
-        "version": "0.1.30"
+        "version": "0.1.31"
       },
       "license": "MIT"
     },
@@ -48755,7 +48755,7 @@
               "target": "log"
             },
             {
-              "id": "tracing-core 0.1.30",
+              "id": "tracing-core 0.1.31",
               "target": "tracing_core"
             }
           ],
@@ -48809,7 +48809,7 @@
               "target": "tracing"
             },
             {
-              "id": "tracing-core 0.1.30",
+              "id": "tracing-core 0.1.31",
               "target": "tracing_core"
             },
             {
@@ -48859,7 +48859,7 @@
               "target": "serde"
             },
             {
-              "id": "tracing-core 0.1.30",
+              "id": "tracing-core 0.1.31",
               "target": "tracing_core"
             }
           ],
@@ -48942,7 +48942,7 @@
               "target": "thread_local"
             },
             {
-              "id": "tracing-core 0.1.30",
+              "id": "tracing-core 0.1.31",
               "target": "tracing_core"
             },
             {
@@ -50640,8 +50640,8 @@
         },
         {
           "Binary": {
-            "crate_name": "reader",
-            "crate_root": "src/bin/reader.rs",
+            "crate_name": "sleep",
+            "crate_root": "src/bin/sleep.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -50664,8 +50664,8 @@
         },
         {
           "Binary": {
-            "crate_name": "sleep",
-            "crate_root": "src/bin/sleep.rs",
+            "crate_name": "reader",
+            "crate_root": "src/bin/reader.rs",
             "srcs": {
               "include": [
                 "**/*.rs"

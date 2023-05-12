@@ -13,10 +13,10 @@ use ic_ledger_core::{
 use icp_ledger::{
     tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Archives, BinaryAccountBalanceArgs,
     Block, BlockArg, BlockRange, BlockRes, CandidBlock, GetBlocksArgs, GetBlocksError,
-    GetBlocksRes, GetBlocksResult, IterBlocksArgs, IterBlocksRes, LedgerCanisterInitPayload, Memo,
-    NotifyCanisterArgs, Operation, QueryBlocksResponse, SendArgs, Subaccount, Tokens,
-    TotalSupplyArgs, Transaction, TransferArgs, TransferError, TransferFee, TransferFeeArgs,
-    DEFAULT_TRANSFER_FEE,
+    GetBlocksRes, GetBlocksResult, IterBlocksArgs, IterBlocksRes, LedgerCanisterInitPayload,
+    LedgerCanisterPayload, LedgerCanisterUpgradePayload, Memo, NotifyCanisterArgs, Operation,
+    QueryBlocksResponse, SendArgs, Subaccount, Tokens, TotalSupplyArgs, Transaction, TransferArgs,
+    TransferError, TransferFee, TransferFeeArgs, DEFAULT_TRANSFER_FEE,
 };
 use on_wire::IntoWire;
 use serde::Deserialize;
@@ -244,7 +244,33 @@ fn upgrade_test() {
         let GetBlocksRes(blocks_before) = get_blocks_pb(&ledger, 0..20).await?;
         let blocks_before = blocks_before.unwrap();
 
-        ledger.upgrade_to_self_binary(Vec::new()).await?;
+        // Try upgrading with none
+        ledger
+            .upgrade_to_self_binary(
+                CandidOne(LedgerCanisterPayload::Upgrade(None))
+                    .into_bytes()
+                    .unwrap(),
+            )
+            .await?;
+
+        let GetBlocksRes(blocks_after) = get_blocks_pb(&ledger, 0..20).await?;
+        let blocks_after = blocks_after.unwrap();
+        // Blocks should be the same
+        assert_eq!(blocks_before, blocks_after);
+
+        // Now try to update with some arguments
+        ledger
+            .upgrade_to_self_binary(
+                CandidOne(Some(
+                    LedgerCanisterUpgradePayload::builder()
+                        .maximum_number_of_accounts(28_000_000)
+                        .build()
+                        .unwrap(),
+                ))
+                .into_bytes()
+                .unwrap(),
+            )
+            .await?;
 
         let GetBlocksRes(blocks_after) = get_blocks_pb(&ledger, 0..20).await?;
         let blocks_after = blocks_after.unwrap();

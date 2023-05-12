@@ -1811,14 +1811,13 @@ pub fn install_nns_canisters(
                 info!(logger, "Initial ledger: {:?}", ledger_balances);
             }
 
-            let mut ledger_init_payload = LedgerCanisterInitPayload::builder()
+            let ledger_init_payload = LedgerCanisterInitPayload::builder()
                 .minting_account(GOVERNANCE_CANISTER_ID.get().into())
                 .initial_values(ledger_balances)
+                .send_whitelist(HashSet::from([CYCLES_MINTING_CANISTER_ID]))
                 .build()
                 .unwrap();
-            ledger_init_payload
-                .send_whitelist
-                .insert(CYCLES_MINTING_CANISTER_ID);
+
             init_payloads
                 .with_test_neurons()
                 .with_ledger_init_state(ledger_init_payload);

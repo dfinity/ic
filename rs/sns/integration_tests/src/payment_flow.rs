@@ -1,5 +1,4 @@
 use std::{
-    collections::{HashMap, HashSet},
     sync::{Arc, Mutex},
     thread,
 };
@@ -147,18 +146,13 @@ impl PaymentProtocolTestSetup {
     }
 
     pub fn default_icp_init_args() -> IcpInitArgs {
-        IcpInitArgs {
-            minting_account: AccountIdentifier::from(*DEFAULT_MINTING_ACCOUNT),
-            icrc1_minting_account: Some(*DEFAULT_MINTING_ACCOUNT),
-            initial_values: HashMap::new(),
-            max_message_size_bytes: None,
-            transaction_window: None,
-            archive_options: None,
-            send_whitelist: HashSet::new(),
-            transfer_fee: Some(DEFAULT_TRANSFER_FEE),
-            token_symbol: Some("ICP".to_string()),
-            token_name: Some("Internet Computer".to_string()),
-        }
+        IcpInitArgs::builder()
+            .minting_account(AccountIdentifier::from(*DEFAULT_MINTING_ACCOUNT))
+            .icrc1_minting_account(*DEFAULT_MINTING_ACCOUNT)
+            .transfer_fee(DEFAULT_TRANSFER_FEE)
+            .token_symbol_and_name("Internet Computer", "ICP")
+            .build()
+            .unwrap()
     }
     pub fn default_icrc1_init_args() -> Icrc1InitArgs {
         Icrc1InitArgs {

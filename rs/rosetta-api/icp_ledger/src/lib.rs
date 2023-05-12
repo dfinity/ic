@@ -390,9 +390,28 @@ impl Default for TransferFee {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
+#[derive(Serialize, Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
+pub enum LedgerCanisterPayload {
+    Init(InitArgs),
+    Upgrade(Option<UpgradeArgs>),
+}
+
+#[derive(Serialize, Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
+pub struct LedgerCanisterInitPayload(pub LedgerCanisterPayload);
+
+#[derive(Serialize, Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
+pub struct LedgerCanisterUpgradePayload(pub LedgerCanisterPayload);
+
+#[derive(Serialize, Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
+pub struct UpgradeArgs {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub maximum_number_of_accounts: Option<usize>,
+}
+
 // This is how we pass arguments to 'init' in main.rs
 #[derive(Serialize, Deserialize, CandidType, Clone, Debug, PartialEq, Eq)]
-pub struct LedgerCanisterInitPayload {
+pub struct InitArgs {
     pub minting_account: AccountIdentifier,
     pub icrc1_minting_account: Option<Account>,
     pub initial_values: HashMap<AccountIdentifier, Tokens>,
@@ -408,6 +427,18 @@ pub struct LedgerCanisterInitPayload {
 impl LedgerCanisterInitPayload {
     pub fn builder() -> LedgerCanisterInitPayloadBuilder {
         LedgerCanisterInitPayloadBuilder::new()
+    }
+    pub fn init_args(&mut self) -> Option<&mut InitArgs> {
+        match &mut self.0 {
+            LedgerCanisterPayload::Init(args) => Some(args),
+            LedgerCanisterPayload::Upgrade(_) => None,
+        }
+    }
+}
+
+impl LedgerCanisterUpgradePayload {
+    pub fn builder() -> LedgerCanisterUpgradePayloadBuilder {
+        LedgerCanisterUpgradePayloadBuilder::new()
     }
 }
 
@@ -504,18 +535,45 @@ impl LedgerCanisterInitPayloadBuilder {
             );
         }
 
-        Ok(LedgerCanisterInitPayload {
-            minting_account,
-            icrc1_minting_account: self.icrc1_minting_account,
-            initial_values: self.initial_values,
-            max_message_size_bytes: self.max_message_size_bytes,
-            transaction_window: self.transaction_window,
-            archive_options: self.archive_options,
-            send_whitelist: self.send_whitelist,
-            transfer_fee: self.transfer_fee,
-            token_symbol: self.token_symbol,
-            token_name: self.token_name,
-        })
+        Ok(LedgerCanisterInitPayload(LedgerCanisterPayload::Init(
+            InitArgs {
+                minting_account,
+                icrc1_minting_account: self.icrc1_minting_account,
+                initial_values: self.initial_values,
+                max_message_size_bytes: self.max_message_size_bytes,
+                transaction_window: self.transaction_window,
+                archive_options: self.archive_options,
+                send_whitelist: self.send_whitelist,
+                transfer_fee: self.transfer_fee,
+                token_symbol: self.token_symbol,
+                token_name: self.token_name,
+            },
+        )))
+    }
+}
+
+pub struct LedgerCanisterUpgradePayloadBuilder {
+    maximum_number_of_accounts: Option<usize>,
+}
+
+impl LedgerCanisterUpgradePayloadBuilder {
+    fn new() -> Self {
+        Self {
+            maximum_number_of_accounts: None,
+        }
+    }
+
+    pub fn maximum_number_of_accounts(mut self, maximum_number_of_accounts: usize) -> Self {
+        self.maximum_number_of_accounts = Some(maximum_number_of_accounts);
+        self
+    }
+
+    pub fn build(self) -> Result<LedgerCanisterUpgradePayload, String> {
+        Ok(LedgerCanisterUpgradePayload(
+            LedgerCanisterPayload::Upgrade(Some(UpgradeArgs {
+                maximum_number_of_accounts: self.maximum_number_of_accounts,
+            })),
+        ))
     }
 }
 
