@@ -725,6 +725,102 @@ fn should_fail_to_read_from_secret_key_store_with_no_read_permissions() {
     );
 }
 
+mod insert_or_replace {
+    use super::*;
+    use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
+    use ic_test_utilities_in_memory_logger::assertions::LogEntriesAssert;
+    use ic_test_utilities_in_memory_logger::InMemoryReplicaLogger;
+    use proptest::option;
+    use slog::Level;
+
+    proptest! {
+        #[test]
+        fn should_insert_secret_key(seed: [u8; 32], scope in option::of(arb_scope())) {
+            let mut rng = ReproducibleRng::from_seed(seed);
+            let mut key_store = proto_key_store();
+            let key_id: KeyId = KeyId::from(rng.gen::<[u8; 32]>());
+            let secret_key = secret_key(&mut rng);
+
+            assert!(key_store.insert_or_replace(key_id, secret_key.clone(), scope).is_ok());
+
+            let retrieved_key = key_store.get(&key_id).unwrap();
+            assert_eq!(secret_key, retrieved_key);
+        }
+
+        #[test]
+        fn should_replace_previously_inserted_secret_key_with_same_or_different_scope(
+            seed: [u8; 32],
+            scope_first_key in option::of(arb_scope()),
+            scope_second_key in option::of(arb_scope())
+        ) {
+            let mut rng = ReproducibleRng::from_seed(seed);
+            let mut key_store = proto_key_store();
+            let key_id: KeyId = KeyId::from(rng.gen::<[u8; 32]>());
+            let first_secret_key = secret_key(&mut rng);
+            assert!(key_store.insert(key_id, first_secret_key.clone(), scope_first_key).is_ok());
+
+            let second_secret_key = secret_key(&mut rng);
+            assert_ne!(first_secret_key, second_secret_key);
+            assert!(key_store.insert_or_replace(key_id, second_secret_key.clone(), scope_second_key).is_ok());
+
+            let retrieved_key = key_store.get(&key_id).unwrap();
+            assert_eq!(second_secret_key, retrieved_key);
+        }
+
+         #[test]
+        fn should_replace_scope_in_previously_inserted_secret_key(
+            seed: [u8; 32],
+            scope1 in option::of(arb_scope()),
+            scope2 in option::of(arb_scope())
+        ) {
+            let mut rng = ReproducibleRng::from_seed(seed);
+            let mut key_store = proto_key_store();
+            let key_id: KeyId = KeyId::from(rng.gen::<[u8; 32]>());
+            let secret_key = secret_key(&mut rng);
+            assert!(key_store.insert(key_id, secret_key.clone(), scope1).is_ok());
+
+            assert!(key_store.insert_or_replace(key_id, secret_key.clone(), scope2).is_ok());
+
+            let retrieved_key = key_store.get(&key_id).unwrap();
+            assert_eq!(secret_key, retrieved_key);
+        }
+
+        #[test]
+        fn should_overwrite_key_store_only_once(seed: [u8; 32], scope in option::of(arb_scope())) {
+            let temp_dir: TempDir = mk_temp_dir_with_permissions(0o700);
+            let in_memory_logger = InMemoryReplicaLogger::new();
+            let replica_logger = ReplicaLogger::from(&in_memory_logger);
+            let mut key_store = ProtoSecretKeyStore::open(temp_dir.path(), "sks_data.pb", Some(replica_logger));
+            let mut rng = ReproducibleRng::from_seed(seed);
+            let key_id: KeyId = KeyId::from(rng.gen::<[u8; 32]>());
+            let secret_key = secret_key(&mut rng);
+
+            assert!(key_store.insert(key_id, secret_key.clone(), scope).is_ok()); // 1 overwrite
+            assert!(key_store.insert_or_replace(key_id, secret_key, scope).is_ok()); // expect 1 overwrite
+
+            let logs = in_memory_logger.drain_logs();
+            LogEntriesAssert::assert_that(logs)
+                .has_exactly_n_messages_containing(2, &Level::Debug, "Secret key store written to");
+        }
+    }
+
+    fn secret_key<R: Rng>(rng: &mut R) -> CspSecretKey {
+        CspSecretKey::Ed25519(ed25519_types::SecretKeyBytes(
+            SecretArray::new_and_dont_zeroize_argument(&rng.gen()),
+        ))
+    }
+
+    fn arb_scope() -> impl Strategy<Value = Scope> {
+        prop_oneof![
+            Just(Scope::Const(ConstScope::Test0)),
+            Just(Scope::Const(ConstScope::Test1)),
+            Just(Scope::Const(ConstScope::NiDkgThresholdKeys)),
+            Just(Scope::Const(ConstScope::NiDkgFsEncryptionKeys)),
+            Just(Scope::Const(ConstScope::IDkgMEGaEncryptionKeys)),
+            Just(Scope::Const(ConstScope::IDkgThresholdKeys)),
+        ]
+    }
+}
 fn copy_file_to_dir(source_file: &Path, target_dir: &Path) {
     let filename = source_file.file_name().expect("expected file name");
     let target_file = target_dir.join(filename);

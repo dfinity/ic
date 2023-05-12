@@ -10,7 +10,7 @@ use hex::{FromHex, ToHex};
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::groth20_bls12_381::types::convert_keyset_to_keyset_with_pop;
 use ic_crypto_internal_threshold_sig_bls12381::ni_dkg::types::CspFsEncryptionKeySet;
-use ic_logger::{info, replica_logger::no_op_logger, warn, ReplicaLogger};
+use ic_logger::{debug, info, replica_logger::no_op_logger, warn, ReplicaLogger};
 use parking_lot::RwLock;
 use prost::Message;
 use std::borrow::{Borrow, BorrowMut};
@@ -214,6 +214,10 @@ impl ProtoSecretKeyStore {
                 e
             ))
         })?;
+        debug!(
+            self.logger,
+            "Secret key store written to {:?}", self.proto_file
+        );
         // Use the previously created hard link to zeroize and delete the old keystore file.
         overwrite_file_with_zeroes_and_delete_if_it_exists(
             &self.old_proto_file_to_zeroize,
@@ -371,6 +375,7 @@ impl SecretKeyStore for ProtoSecretKeyStore {
             None => {
                 keys.insert(id, (key, scope));
                 self.write_secret_keys_to_disk(keys)?;
+                debug!(self.logger, "Inserted new secret key {}", id);
                 Ok(true)
             }
         })?;
@@ -379,6 +384,23 @@ impl SecretKeyStore for ProtoSecretKeyStore {
         } else {
             Err(SecretKeyStoreInsertionError::DuplicateKeyId(id))
         }
+    }
+
+    fn insert_or_replace(
+        &mut self,
+        id: KeyId,
+        key: CspSecretKey,
+        scope: Option<Scope>,
+    ) -> Result<(), SecretKeyStoreWriteError> {
+        with_write_lock(&self.keys, |keys| {
+            let previous_key = keys.insert(id, (key, scope));
+            self.write_secret_keys_to_disk(keys)?;
+            match previous_key {
+                None => debug!(self.logger, "Inserted new secret key {}", id),
+                Some(_) => debug!(self.logger, "Replaced existing secret key {}", id),
+            };
+            Ok(())
+        })
     }
 
     fn get(&self, id: &KeyId) -> Option<CspSecretKey> {
@@ -396,6 +418,7 @@ impl SecretKeyStore for ProtoSecretKeyStore {
             Some(_) => {
                 keys.remove(id);
                 self.write_secret_keys_to_disk(keys)?;
+                debug!(self.logger, "Removed secret key {}", id);
                 Ok(true)
             }
             None => Ok(false),

@@ -44,24 +44,7 @@ pub trait SecretKeyStore: Send + Sync {
         id: KeyId,
         key: CspSecretKey,
         scope: Option<Scope>,
-    ) -> Result<(), SecretKeyStoreWriteError> {
-        self.remove(&id)?;
-        self.insert(id, key, scope).map_err(|e| match e {
-            SecretKeyStoreInsertionError::DuplicateKeyId(e) => {
-                // unreachable, because key with `id` was removed prior to insertion
-                panic!(
-                    "Duplicate key error although the key was just removed: {}",
-                    e
-                );
-            }
-            SecretKeyStoreInsertionError::SerializationError(e) => {
-                SecretKeyStoreWriteError::SerializationError(e)
-            }
-            SecretKeyStoreInsertionError::TransientError(e) => {
-                SecretKeyStoreWriteError::TransientError(e)
-            }
-        })
-    }
+    ) -> Result<(), SecretKeyStoreWriteError>;
 
     /// Retrieves the key with the given `id`.
     ///
@@ -111,10 +94,7 @@ pub trait SecretKeyStore: Send + Sync {
     /// and function documentation for more details.
     fn retain<F>(&mut self, _filter: F, _scope: Scope) -> Result<(), SecretKeyStoreWriteError>
     where
-        F: Fn(&KeyId, &CspSecretKey) -> bool + 'static,
-    {
-        unimplemented!()
-    }
+        F: Fn(&KeyId, &CspSecretKey) -> bool + 'static;
 }
 
 /// Errors that can occur while inserting a key into the secret key store
