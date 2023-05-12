@@ -25,13 +25,14 @@ use dfn_core::{
 use ic_base_types::CanisterId;
 use ic_canister_log::log;
 use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
+use ic_ic00_types::CanisterStatusResultV2;
 use ic_nervous_system_common::{
     cmc::CMCCanister,
+    get_canister_status,
     ledger::IcpLedgerCanister,
     serve_logs, serve_logs_v2, serve_metrics,
     stable_mem_utils::{BufferedStableMemReader, BufferedStableMemWriter},
 };
-use ic_nervous_system_root::canister_status::CanisterStatusResultV2;
 use ic_nns_constants::LEDGER_CANISTER_ID as NNS_LEDGER_CANISTER_ID;
 use ic_sns_governance::{
     governance::{log_prefix, Governance, TimeWarp, ValidGovernanceProto},
@@ -482,8 +483,20 @@ fn get_latest_reward_event_() -> RewardEvent {
     governance().latest_reward_event()
 }
 
-/// Deprecated method. Previously returned the root canister's status.
-/// No longer necessary now that canisters can get their own status.
+/// Returns the root canister's status.
+///
+/// Deprecated and should no longer be used. Use root's
+/// `get_sns_canisters_summary` instead.
+///
+/// This is a specialized version of the root canister's `canister_status`
+/// method. Getting the root canister's status is special, because root is the
+/// canister that gets the status of all other canisters in the SNS.
+///
+/// The way the underlying system call works is that a principal can only
+/// request the status of canisters that it controls. In theory, this interface
+/// could be generalized to target any canister, but in practice, only the root
+/// canister would ever be targeted, because that is the only canister that
+/// governance controls.
 #[export_name = "canister_update get_root_canister_status"]
 fn get_root_canister_status() {
     over_async(candid_one, get_root_canister_status_)
@@ -492,9 +505,15 @@ fn get_root_canister_status() {
 /// Internal method for calling get_root_canister_status.
 #[candid_method(update, rename = "get_root_canister_status")]
 async fn get_root_canister_status_(_: ()) -> CanisterStatusResultV2 {
-    panic!("This method is deprecated and should not be used. Please use the root canister's `get_sns_canisters_summary` method.")
+    get_canister_status(
+        governance()
+            .proto
+            .root_canister_id
+            .expect("Root canister ID not set"),
+    )
+    .await
+    .expect("Unable to get the status of the SNS root canister.")
 }
-
 /// Gets the current SNS version, as understood by Governance.  This is useful
 /// for diagnosing upgrade problems, such as if multiple ledger archives are not
 /// running the same version.
