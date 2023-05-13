@@ -1,11 +1,10 @@
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
 use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use candid::{Decode, Encode, Principal};
 use certificate_orchestrator_interface::{self as ifc, EncryptedPair, Id};
 use futures::{stream, StreamExt, TryStreamExt};
-use garcon::Delay;
 use ic_agent::Agent;
 use mockall::automock;
 use serde::Serialize;
@@ -72,11 +71,6 @@ impl Upload for CanisterUploader {
     async fn upload(&self, id: &Id, pair: Pair) -> Result<(), UploadError> {
         use ifc::{UploadCertificateError as Error, UploadCertificateResponse as Response};
 
-        let waiter = Delay::builder()
-            .throttle(Duration::from_millis(500))
-            .timeout(Duration::from_millis(10000))
-            .build();
-
         let pair = EncryptedPair(
             self.encoder.encode(&pair.0).await?,
             self.encoder.encode(&pair.1).await?,
@@ -88,7 +82,7 @@ impl Upload for CanisterUploader {
             .agent
             .update(&self.canister_id, "uploadCertificate")
             .with_arg(args)
-            .call_and_wait(waiter)
+            .call_and_wait()
             .await
             .context("failed to query canister")?;
 

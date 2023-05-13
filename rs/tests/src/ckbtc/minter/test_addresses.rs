@@ -8,7 +8,7 @@ use crate::{
         test_env::TestEnv,
         test_env_api::{HasPublicApiUrl, IcNodeContainer},
     },
-    util::{assert_create_agent, block_on, delay, runtime_from_url},
+    util::{assert_create_agent, block_on, runtime_from_url},
 };
 use candid::{Decode, Encode, Principal};
 use ic_base_types::PrincipalId;
@@ -60,7 +60,7 @@ pub fn test_ckbtc_addresses(env: TestEnv) {
         let res = agent
             .update(&minter, "get_btc_address")
             .with_arg(arg)
-            .call_and_wait(delay())
+            .call_and_wait()
             .await
             .expect("Error while calling endpoint.");
         let address = Decode!(res.as_slice(), String).expect("Error while decoding response.");
@@ -81,7 +81,7 @@ pub fn test_ckbtc_addresses(env: TestEnv) {
         let res = agent
             .update(&minter, "get_withdrawal_account")
             .with_arg(arg)
-            .call_and_wait(delay())
+            .call_and_wait()
             .await
             .expect("Error while calling endpoint.");
         let res = Decode!(res.as_slice(), Account).expect("Error while decoding response.");

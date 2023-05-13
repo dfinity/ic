@@ -130,7 +130,7 @@ pub fn can_access_big_heap_and_big_stable_memory(env: TestEnv) {
                 .create_canister()
                 .as_provisional_create_with_amount(None)
                 .with_effective_canister_id(node.effective_canister_id())
-                .call_and_wait(delay())
+                .call_and_wait()
                 .await
                 .unwrap()
                 .0;
@@ -174,7 +174,7 @@ pub fn can_access_big_heap_and_big_stable_memory(env: TestEnv) {
 
             mgr.install_code(&canister_id, &wasm)
                 .with_raw_arg(vec![])
-                .call_and_wait(delay())
+                .call_and_wait()
                 .await
                 .unwrap();
 
@@ -182,33 +182,33 @@ pub fn can_access_big_heap_and_big_stable_memory(env: TestEnv) {
             // 9GiB.
             agent
                 .update(&canister_id, "grow_stable_memory")
-                .call_and_wait(delay())
+                .call_and_wait()
                 .await
                 .unwrap();
 
             agent
                 .update(&canister_id, "write_stable_memory")
-                .call_and_wait(delay())
+                .call_and_wait()
                 .await
                 .unwrap();
 
             agent
                 .update(&canister_id, "read_stable_memory")
-                .call_and_wait(delay())
+                .call_and_wait()
                 .await
                 .unwrap();
 
             // Update memory allocation of canister to 12GiB.
             mgr.update_settings(&canister_id)
                 .with_memory_allocation(12u64 * 1024 * 1024 * 1024)
-                .call_and_wait(delay())
+                .call_and_wait()
                 .await
                 .unwrap();
 
             // Grow stable memory by another 5GiB. Should fail.
             let res = agent
                 .update(&canister_id, "grow_stable_memory")
-                .call_and_wait(delay())
+                .call_and_wait()
                 .await;
 
             assert_reject(res, RejectCode::CanisterError);

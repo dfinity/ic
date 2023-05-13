@@ -26,14 +26,13 @@ use crate::{
             NnsInstallationExt, RetrieveIpv4Addr, SshSession, READY_WAIT_TIMEOUT, RETRY_BACKOFF,
         },
     },
-    util::{assert_create_agent, delay},
+    util::assert_create_agent,
 };
 
 use std::{convert::TryFrom, io::Read, net::SocketAddrV6, time::Duration};
 
 use anyhow::{anyhow, bail, Context, Error};
 use futures::stream::FuturesUnordered;
-use garcon::Delay;
 use ic_agent::{agent::http_transport::ReqwestHttpReplicaV2Transport, export::Principal, Agent};
 use ic_base_types::PrincipalId;
 use ic_interfaces_registry::RegistryValue;
@@ -137,7 +136,7 @@ async fn create_canister(
         .create_canister()
         .as_provisional_create_with_amount(None)
         .with_effective_canister_id(effective_canister_id)
-        .call_and_wait(delay())
+        .call_and_wait()
         .await
         .map_err(|err| format!("Couldn't create canister with provisional API: {}", err))?
         .0;
@@ -148,7 +147,7 @@ async fn create_canister(
     }
 
     install_code
-        .call_and_wait(delay())
+        .call_and_wait()
         .await
         .map_err(|err| format!("Couldn't install canister: {}", err))?;
 
@@ -1692,10 +1691,7 @@ pub fn direct_to_replica_test(env: TestEnv) {
             agent.fetch_root_key().await?;
 
             info!(&logger, "updating canister");
-            agent
-                .update(&cid, "write")
-                .call_and_wait(Delay::builder().build())
-                .await?;
+            agent.update(&cid, "write").call_and_wait().await?;
 
             info!(&logger, "querying canister");
             let out = agent.query(&cid, "read").call().await?;
@@ -2038,10 +2034,7 @@ pub fn direct_to_replica_rosetta_test(env: TestEnv) {
             agent.fetch_root_key().await?;
 
             info!(&logger, "updating canister");
-            agent
-                .update(&cid, "write")
-                .call_and_wait(Delay::builder().build())
-                .await?;
+            agent.update(&cid, "write").call_and_wait().await?;
 
             info!(&logger, "querying canister");
             let out = agent.query(&cid, "read").call().await?;

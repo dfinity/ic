@@ -50,7 +50,6 @@ DEV_DEPENDENCIES = [
     "//rs/rosetta-api/icrc1/rosetta/client:ic-icrc-rosetta-client",
     "//rs/rosetta-api/icrc1/rosetta/runner:ic-icrc-rosetta-runner",
     ":ic-icrc-rosetta",
-    "@crate_index//:garcon",
     "@crate_index//:futures",
     "@crate_index//:ring",
     "@crate_index//:once_cell",

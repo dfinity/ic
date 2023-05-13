@@ -348,14 +348,10 @@ pub(crate) async fn set_kyt_api_key(
     kyt_canister: &Principal,
     api_key: String,
 ) {
-    let waiter = garcon::Delay::builder()
-        .throttle(std::time::Duration::from_millis(100))
-        .timeout(std::time::Duration::from_secs(60 * 5))
-        .build();
     agent
         .update(kyt_canister, "set_api_key")
         .with_arg(candid::Encode!(&SetApiKeyArg { api_key }).unwrap())
-        .call_and_wait(waiter)
+        .call_and_wait()
         .await
         .expect("failed to set api key");
 }

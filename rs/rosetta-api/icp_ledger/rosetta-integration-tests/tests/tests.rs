@@ -89,13 +89,6 @@ fn icp_ledger_init() -> Vec<u8> {
     .unwrap()
 }
 
-fn delay() -> garcon::Delay {
-    garcon::Delay::builder()
-        .throttle(std::time::Duration::from_millis(500))
-        .timeout(std::time::Duration::from_secs(60 * 5))
-        .build()
-}
-
 #[derive(CandidType, Deserialize)]
 struct CreateCanisterResult {
     canister_id: Principal,
@@ -110,7 +103,7 @@ async fn create_canister(
             "provisional_create_canister_with_cycles",
         )
         .with_arg(&Encode!(&CreateCanisterArgs::default())?)
-        .call_and_wait(delay())
+        .call_and_wait()
         .await?;
     let result = Decode!(&response, CreateCanisterResult)?;
     Ok(result)
@@ -135,7 +128,7 @@ async fn install_canister(
             memory_allocation: None,
             compute_allocation: None,
         })?)
-        .call_and_wait(delay())
+        .call_and_wait()
         .await?;
     Ok(())
 }

@@ -4,7 +4,6 @@ use anyhow::{anyhow, Context};
 use async_trait::async_trait;
 use candid::{Decode, Encode, Principal};
 use certificate_orchestrator_interface as ifc;
-use garcon::Delay;
 use ic_agent::Agent;
 use serde::Serialize;
 use trust_dns_resolver::{error::ResolveErrorKind, proto::rr::RecordType};
@@ -119,18 +118,13 @@ impl Queue for CanisterQueuer {
     async fn queue(&self, id: &Id, t: u64) -> Result<(), QueueError> {
         use ifc::{QueueTaskError as Error, QueueTaskResponse as Response};
 
-        let waiter = Delay::builder()
-            .throttle(Duration::from_millis(500))
-            .timeout(Duration::from_millis(10000))
-            .build();
-
         let args = Encode!(id, &t).context("failed to encode arg")?;
 
         let resp = self
             .0
             .update(&self.1, "queueTask")
             .with_arg(args)
-            .call_and_wait(waiter)
+            .call_and_wait()
             .await
             .context("failed to query canister")?;
 
@@ -185,18 +179,13 @@ impl Dispense for CanisterDispenser {
         let id = {
             use ifc::{DispenseTaskError as Error, DispenseTaskResponse as Response};
 
-            let waiter = Delay::builder()
-                .throttle(Duration::from_millis(500))
-                .timeout(Duration::from_millis(10000))
-                .build();
-
             let args = Encode!().context("failed to encode arg")?;
 
             let resp = self
                 .0
                 .update(&self.1, "dispenseTask")
                 .with_arg(args)
-                .call_and_wait(waiter)
+                .call_and_wait()
                 .await
                 .context("failed to query canister")?;
 

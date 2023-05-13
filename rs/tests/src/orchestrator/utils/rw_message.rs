@@ -47,9 +47,14 @@ pub(crate) fn can_store_msg(log: &Logger, url: &Url, canister_id: Principal, msg
                 debug!(log, "Try to get canister reference");
                 let mcan = MessageCanister::from_canister_id(&agent, canister_id);
                 debug!(log, "Success, will try to write next");
-                mcan.try_store_msg(msg.to_string(), create_delay(500, 30))
-                    .await
-                    .is_ok()
+                matches!(
+                    tokio::time::timeout(
+                        Duration::from_secs(30),
+                        mcan.try_store_msg(msg.to_string()),
+                    )
+                    .await,
+                    Ok(Ok(_))
+                )
             }
             Err(e) => {
                 debug!(log, "Could not create agent: {:?}", e,);

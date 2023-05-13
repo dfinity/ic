@@ -61,14 +61,10 @@ impl Icrc1Agent {
         method_name: S,
         arg: &[u8],
     ) -> Result<Vec<u8>, Icrc1AgentError> {
-        let waiter = garcon::Delay::builder()
-            .throttle(std::time::Duration::from_millis(500))
-            .timeout(std::time::Duration::from_secs(60 * 5))
-            .build();
         self.agent
             .update(&self.ledger_canister_id, method_name)
             .with_arg(arg)
-            .call_and_wait(waiter)
+            .call_and_wait()
             .await
             .map_err(Icrc1AgentError::AgentError)
     }

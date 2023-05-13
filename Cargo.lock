@@ -1065,13 +1065,12 @@ dependencies = [
  "candid",
  "clap 3.2.23",
  "futures",
- "garcon",
  "glob",
  "humantime 2.1.0",
  "hyper",
- "ic-agent 0.22.0",
+ "ic-agent",
  "ic-error-types",
- "ic-utils 0.22.0",
+ "ic-utils 0.23.2",
  "indoc",
  "mockall 0.11.3",
  "opentelemetry 0.17.0",
@@ -1485,11 +1484,10 @@ dependencies = [
  "cloudflare",
  "flate2",
  "futures",
- "garcon",
  "hyper",
  "hyper-rustls 0.24.0",
- "ic-agent 0.22.0",
- "ic-utils 0.22.0",
+ "ic-agent",
+ "ic-utils 0.23.2",
  "idna 0.3.0",
  "instant-acme",
  "mockall 0.11.3",
@@ -3437,15 +3435,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "garcon"
-version = "0.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e83fb8961dcd3c26123863998521ae4d07e5e5aa8fb50b503380448f2e0ea069"
-dependencies = [
- "futures-util",
-]
-
-[[package]]
 name = "generic-array"
 version = "0.14.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4160,43 +4149,6 @@ dependencies = [
 
 [[package]]
 name = "ic-agent"
-version = "0.22.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "261a977b6cc35db6ee84195148f5e8307ffc1bbcb1895a221fe16d0fb097a427"
-dependencies = [
- "async-trait",
- "base32",
- "base64 0.13.1",
- "byteorder",
- "candid",
- "futures-util",
- "garcon",
- "hex",
- "http",
- "http-body",
- "hyper-rustls 0.23.2",
- "ic-verify-bls-signature",
- "k256 0.11.6",
- "leb128",
- "mime",
- "pem 1.1.1",
- "pkcs8 0.9.0",
- "rand 0.8.5",
- "reqwest",
- "ring",
- "rustls 0.20.8",
- "sec1",
- "serde",
- "serde_bytes",
- "serde_cbor",
- "sha2 0.10.6",
- "simple_asn1 0.6.2",
- "thiserror",
- "url",
-]
-
-[[package]]
-name = "ic-agent"
 version = "0.23.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "59cadbe5208d33c651ea55d56eb1c38a6f917dc836cc93973faa4bb0a95b71b5"
@@ -4218,8 +4170,10 @@ dependencies = [
  "k256 0.11.6",
  "leb128",
  "mime",
+ "pem 1.1.1",
  "pkcs8 0.9.0",
  "rand 0.8.5",
+ "reqwest",
  "ring",
  "rustls 0.20.8",
  "sec1",
@@ -4356,7 +4310,7 @@ dependencies = [
  "futures",
  "humantime 2.1.0",
  "hyper",
- "ic-agent 0.22.0",
+ "ic-agent",
  "indoc",
  "mockall 0.11.3",
  "opentelemetry 0.17.0",
@@ -4907,8 +4861,7 @@ name = "ic-ckbtc-agent"
 version = "0.1.0"
 dependencies = [
  "candid",
- "garcon",
- "ic-agent 0.22.0",
+ "ic-agent",
  "ic-canisters-http-types",
  "ic-ckbtc-minter",
  "ic-icrc1",
@@ -6487,7 +6440,7 @@ dependencies = [
  "http",
  "hyper",
  "hyper-tls",
- "ic-agent 0.22.0",
+ "ic-agent",
  "ic-async-utils",
  "ic-certification 0.8.0",
  "ic-config",
@@ -6713,10 +6666,9 @@ dependencies = [
  "ciborium",
  "clap 4.1.8",
  "futures",
- "garcon",
  "hex",
  "http",
- "ic-agent 0.22.0",
+ "ic-agent",
  "ic-base-types",
  "ic-crypto-tree-hash",
  "ic-ic00-types",
@@ -7207,7 +7159,7 @@ dependencies = [
  "candid",
  "clap 3.2.23",
  "dfn_protobuf",
- "ic-agent 0.22.0",
+ "ic-agent",
  "ic-certification 0.8.0",
  "ic-ledger-canister-blocks-synchronizer-test-utils",
  "ic-ledger-canister-core",
@@ -8817,9 +8769,8 @@ dependencies = [
  "dfn_macro",
  "dfn_protobuf",
  "futures",
- "garcon",
  "hex",
- "ic-agent 0.22.0",
+ "ic-agent",
  "ic-base-types",
  "ic-canister-client",
  "ic-canister-client-sender",
@@ -9411,8 +9362,7 @@ name = "ic-starter-tests"
 version = "0.8.0"
 dependencies = [
  "anyhow",
- "garcon",
- "ic-agent 0.22.0",
+ "ic-agent",
  "reqwest",
  "tempfile",
  "tokio",
@@ -10096,35 +10046,13 @@ dependencies = [
 
 [[package]]
 name = "ic-utils"
-version = "0.22.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d4fe431f4ee1f86da88d5cac3979476888dbcd9d44481409f103da5b2b44a440"
-dependencies = [
- "async-trait",
- "candid",
- "garcon",
- "ic-agent 0.22.0",
- "leb128",
- "num-bigint 0.4.3",
- "once_cell",
- "paste 1.0.12",
- "semver",
- "serde",
- "serde_bytes",
- "strum 0.24.1",
- "strum_macros 0.24.3",
- "thiserror",
-]
-
-[[package]]
-name = "ic-utils"
 version = "0.23.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7a66ae113ea8e759a874aa7cc3bc296273274b61fcf67b4bb6bb273c67aad02e"
 dependencies = [
  "async-trait",
  "candid",
- "ic-agent 0.23.2",
+ "ic-agent",
  "leb128",
  "num-bigint 0.4.3",
  "once_cell",
@@ -10468,8 +10396,7 @@ name = "icrc-ledger-agent"
 version = "0.1.0"
 dependencies = [
  "candid",
- "garcon",
- "ic-agent 0.22.0",
+ "ic-agent",
  "icrc-ledger-types",
 ]
 
@@ -10499,12 +10426,11 @@ dependencies = [
  "flate2",
  "form_urlencoded",
  "futures",
- "garcon",
  "hex",
  "http-body",
  "hyper",
  "hyper-rustls 0.24.0",
- "ic-agent 0.23.2",
+ "ic-agent",
  "ic-response-verification",
  "ic-utils 0.23.2",
  "itertools",
@@ -15021,13 +14947,12 @@ dependencies = [
  "dfn_protobuf",
  "flate2",
  "futures",
- "garcon",
  "hex",
  "humantime 2.1.0",
  "hyper",
  "hyper-rustls 0.23.2",
  "hyper-tls",
- "ic-agent 0.22.0",
+ "ic-agent",
  "ic-artifact-pool",
  "ic-backup",
  "ic-base-types",
@@ -15092,7 +15017,7 @@ dependencies = [
  "ic-types",
  "ic-types-test-utils",
  "ic-universal-canister",
- "ic-utils 0.22.0",
+ "ic-utils 0.23.2",
  "ic-utils 0.8.0",
  "icp-ledger",
  "itertools",
@@ -15639,13 +15564,12 @@ dependencies = [
  "dfn_protobuf",
  "flate2",
  "futures",
- "garcon",
  "hex",
  "humantime 2.1.0",
  "hyper",
  "hyper-rustls 0.24.0",
  "hyper-tls",
- "ic-agent 0.22.0",
+ "ic-agent",
  "ic-artifact-pool",
  "ic-backup",
  "ic-base-types",
@@ -15712,7 +15636,7 @@ dependencies = [
  "ic-types",
  "ic-types-test-utils",
  "ic-universal-canister",
- "ic-utils 0.22.0",
+ "ic-utils 0.23.2",
  "ic-utils 0.8.0",
  "icp-ledger",
  "icrc-ledger-agent",

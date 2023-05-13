@@ -2,9 +2,7 @@
 end::catalog[] */
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
-use crate::util::{
-    agent_with_identity, block_on, delay, random_ed25519_identity, UniversalCanister,
-};
+use crate::util::{agent_with_identity, block_on, random_ed25519_identity, UniversalCanister};
 use ic_agent::export::Principal;
 use ic_agent::{identity::AnonymousIdentity, Identity, Signature};
 use ic_types::messages::{
@@ -213,7 +211,7 @@ async fn test_valid_request_succeeds<T: Identity + 'static>(
     let res = agent
         .update(&canister_id, "update")
         .with_arg(wasm().caller().reply_data_append().reply().build())
-        .call_and_wait(delay())
+        .call_and_wait()
         .await
         .unwrap();
 

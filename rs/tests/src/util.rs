@@ -191,7 +191,7 @@ impl<'a> UniversalCanister<'a> {
             .with_optional_compute_allocation(compute_allocation)
             .as_provisional_create_with_amount(cycles)
             .with_effective_canister_id(effective_canister_id)
-            .call_and_wait(delay())
+            .call_and_wait()
             .await
             .map_err(|err| format!("Couldn't create canister with provisional API: {}", err))?
             .0;
@@ -199,7 +199,7 @@ impl<'a> UniversalCanister<'a> {
         // Install the universal canister.
         mgr.install_code(&canister_id, UNIVERSAL_CANISTER_WASM)
             .with_raw_arg(payload.clone())
-            .call_and_wait(delay())
+            .call_and_wait()
             .await
             .map_err(|err| format!("Couldn't install universal canister: {}", err))?;
         Ok(Self { agent, canister_id })
@@ -218,7 +218,7 @@ impl<'a> UniversalCanister<'a> {
             .create_canister()
             .as_provisional_create_with_amount(Some(cycles.into()))
             .with_effective_canister_id(effective_canister_id)
-            .call_and_wait(delay())
+            .call_and_wait()
             .await
             .unwrap_or_else(|err| panic!("Couldn't create canister with provisional API: {}", err))
             .0;
@@ -226,7 +226,7 @@ impl<'a> UniversalCanister<'a> {
         // Install the universal canister.
         mgr.install_code(&canister_id, UNIVERSAL_CANISTER_WASM)
             .with_raw_arg(payload.clone())
-            .call_and_wait(delay())
+            .call_and_wait()
             .await
             .map_err(|err| format!("Couldn't install universal canister: {}", err))?;
         Ok(Self { agent, canister_id })
@@ -246,7 +246,7 @@ impl<'a> UniversalCanister<'a> {
             .create_canister()
             .as_provisional_create_with_amount(None)
             .with_effective_canister_id(effective_canister_id)
-            .call_and_wait(delay())
+            .call_and_wait()
             .await
             .map_err(|err| format!("Couldn't create canister with provisional API: {}", err))?
             .0;
@@ -254,7 +254,7 @@ impl<'a> UniversalCanister<'a> {
         // Install the universal canister.
         mgr.install_code(&canister_id, UNIVERSAL_CANISTER_WASM)
             .with_raw_arg(payload.clone())
-            .call_and_wait(delay())
+            .call_and_wait()
             .await
             .map_err(|err| format!("Couldn't install universal canister: {}", err))?;
 
@@ -325,17 +325,12 @@ impl<'a> UniversalCanister<'a> {
     }
 
     /// Try to store `msg` in stable memory starting at `offset` bytes.
-    pub async fn try_store_to_stable(
-        &self,
-        offset: u32,
-        msg: &[u8],
-        delay: garcon::Delay,
-    ) -> Result<(), AgentError> {
+    pub async fn try_store_to_stable(&self, offset: u32, msg: &[u8]) -> Result<(), AgentError> {
         let res = self
             .agent
             .update(&self.canister_id, "update")
             .with_arg(Self::stable_writer(offset, msg))
-            .call_and_wait(delay)
+            .call_and_wait()
             .await;
         match res {
             Ok(_) => Ok(()),
@@ -348,7 +343,7 @@ impl<'a> UniversalCanister<'a> {
         self.agent
             .update(&self.canister_id, "update")
             .with_arg(Self::stable_writer(offset, msg))
-            .call_and_wait(delay())
+            .call_and_wait()
             .await
             .unwrap_or_else(|err| panic!("Could not push message to stable: {}", err));
     }
@@ -431,7 +426,7 @@ impl<'a> UniversalCanister<'a> {
         self.agent
             .update(&self.canister_id, "update")
             .with_arg(universal_canister_payload)
-            .call_and_wait(delay())
+            .call_and_wait()
             .await
     }
 
@@ -468,7 +463,7 @@ impl<'a> UniversalCanister<'a> {
         self.agent
             .update(&self.canister_id, "update")
             .with_arg(payload.into())
-            .call_and_wait(delay())
+            .call_and_wait()
             .await
     }
 }
@@ -525,14 +520,14 @@ impl<'a> MessageCanister<'a> {
             .with_optional_compute_allocation(compute_allocation)
             .as_provisional_create_with_amount(cycles)
             .with_effective_canister_id(effective_canister_id)
-            .call_and_wait(delay())
+            .call_and_wait()
             .await
             .map_err(|err| format!("Couldn't create canister with provisional API: {}", err))?
             .0;
 
         // Install the universal canister.
         mgr.install_code(&canister_id, MESSAGE_CANISTER_WASM)
-            .call_and_wait(delay())
+            .call_and_wait()
             .await
             .map_err(|err| format!("Couldn't install message canister: {}", err))?;
         Ok(Self { agent, canister_id })
@@ -549,14 +544,14 @@ impl<'a> MessageCanister<'a> {
             .create_canister()
             .as_provisional_create_with_amount(Some(cycles.into()))
             .with_effective_canister_id(effective_canister_id)
-            .call_and_wait(delay())
+            .call_and_wait()
             .await
             .unwrap_or_else(|err| panic!("Couldn't create canister with provisional API: {}", err))
             .0;
 
         // Install the universal canister.
         mgr.install_code(&canister_id, MESSAGE_CANISTER_WASM)
-            .call_and_wait(delay())
+            .call_and_wait()
             .await
             .unwrap_or_else(|err| panic!("Couldn't install message canister: {}", err));
 
@@ -592,7 +587,7 @@ impl<'a> MessageCanister<'a> {
         self.agent
             .update(&self.canister_id, "forward")
             .with_arg(&Encode!(&params).unwrap())
-            .call_and_wait(delay())
+            .call_and_wait()
             .await
             .map(|bytes| Decode!(&bytes, Vec<u8>).unwrap())
     }
@@ -614,21 +609,17 @@ impl<'a> MessageCanister<'a> {
         .await
     }
 
-    pub async fn try_store_msg<P: Into<String>>(
-        &self,
-        msg: P,
-        delay: garcon::Delay,
-    ) -> Result<(), AgentError> {
+    pub async fn try_store_msg<P: Into<String>>(&self, msg: P) -> Result<(), AgentError> {
         self.agent
             .update(&self.canister_id, "store")
             .with_arg(&Encode!(&msg.into()).unwrap())
-            .call_and_wait(delay)
+            .call_and_wait()
             .await
             .map(|_| ())
     }
 
     pub async fn store_msg<P: Into<String>>(&self, msg: P) {
-        self.try_store_msg(msg, delay())
+        self.try_store_msg(msg)
             .await
             .unwrap_or_else(|err| panic!("Could not store message: {}", err))
     }
@@ -761,21 +752,6 @@ pub fn random_ed25519_identity() -> BasicIdentity {
         ring::signature::Ed25519KeyPair::from_pkcs8(key_pair.as_ref())
             .expect("Could not read the key pair."),
     )
-}
-
-// How `Agent` is instructed to wait for update calls.
-pub fn delay() -> garcon::Delay {
-    garcon::Delay::builder()
-        .throttle(std::time::Duration::from_millis(500))
-        .timeout(std::time::Duration::from_secs(60 * 5))
-        .build()
-}
-
-pub fn create_delay(throttle_duration_millis: u64, timeout_seconds: u64) -> garcon::Delay {
-    garcon::Delay::builder()
-        .throttle(std::time::Duration::from_millis(throttle_duration_millis))
-        .timeout(std::time::Duration::from_secs(timeout_seconds))
-        .build()
 }
 
 pub fn get_nns_node(topo_snapshot: &TopologySnapshot) -> IcNodeSnapshot {
@@ -919,7 +895,7 @@ pub(crate) async fn create_canister_with_cycles(
     mgr.create_canister()
         .as_provisional_create_with_amount(Some(amount.into()))
         .with_effective_canister_id(effective_canister_id)
-        .call_and_wait(delay())
+        .call_and_wait()
         .await
         .unwrap_or_else(|err| panic!("Couldn't create canister with provisional API: {}", err))
         .0
@@ -934,7 +910,7 @@ pub async fn install_canister(
     let mgr = ManagementCanister::create(agent);
     mgr.install_code(&canister_id, canister_wasm)
         .with_raw_arg(arg)
-        .call_and_wait(delay())
+        .call_and_wait()
         .await
         .unwrap_or_else(|err| panic!("Couldn't install canister: {}", err));
 }
@@ -965,7 +941,7 @@ pub(crate) async fn get_balance(canister_id: &Principal, agent: &Agent) -> u128 
     let mgr = ManagementCanister::create(agent);
     let canister_status = mgr
         .canister_status(canister_id)
-        .call_and_wait(delay())
+        .call_and_wait()
         .await
         .unwrap_or_else(|err| panic!("Could not get canister status: {}", err))
         .0;
@@ -980,7 +956,7 @@ pub(crate) async fn set_controller(
     let mgr = ManagementCanister::create(controllee_agent);
     mgr.update_settings(controllee)
         .with_controller(*controller)
-        .call_and_wait(delay())
+        .call_and_wait()
         .await
         .unwrap_or_else(|err| panic!("Could not set controller: {}", err))
 }
@@ -1123,7 +1099,7 @@ pub(crate) fn to_principal_id(principal: &Principal) -> PrincipalId {
 pub async fn agent_observes_canister_module(agent: &Agent, canister_id: &Principal) -> bool {
     let status = ManagementCanister::create(agent)
         .canister_status(canister_id)
-        .call_and_wait(delay())
+        .call_and_wait()
         .await;
     match status {
         Ok(s) => s.0.module_hash.is_some(),

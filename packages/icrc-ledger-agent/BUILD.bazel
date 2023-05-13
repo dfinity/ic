@@ -10,7 +10,6 @@ rust_library(
     deps = [
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "@crate_index//:candid",
-        "@crate_index//:garcon",
         "@crate_index//:ic-agent",
     ],
 )

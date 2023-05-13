@@ -1,7 +1,7 @@
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{HasPublicApiUrl, IcNodeContainer};
 use crate::rosetta_tests::setup::subnet_sys;
-use crate::util::{assert_create_agent, block_on, delay};
+use crate::util::{assert_create_agent, block_on};
 use candid::{Decode, Encode, Principal};
 use canister_test::PrincipalId;
 use ic_agent::Agent;
@@ -59,7 +59,7 @@ impl GovernanceClient {
             .agent
             .update(&self.governance_principal, "manage_neuron")
             .with_arg(arg)
-            .call_and_wait(delay())
+            .call_and_wait()
             .await
             .expect("Error while calling endpoint.");
         //Make sure that the one making the proposal is also the controller of the neuron

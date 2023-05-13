@@ -370,9 +370,6 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             "futures-core": crate.spec(
                 version = "^0.3.21",
             ),
-            "garcon": crate.spec(
-                version = "^0.2.3",
-            ),
             "getrandom": crate.spec(
                 version = "^0.2",
                 features = [
@@ -451,14 +448,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "0.18.9",
             ),
             "ic-agent": crate.spec(
-                version = "^0.22.0",
-                features = [
-                    "hyper",
-                ],
-            ),
-            "ic-agent-0_23": crate.spec(
-                package = "ic-agent",
-                version = "^0.23.2",
+                version = "^0.23.0",
                 features = [
                     "hyper",
                 ],
@@ -487,9 +477,6 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             "ic-certified-map": crate.spec(
                 version = "^0.3.1",
             ),
-            "ic-identity-hsm": crate.spec(
-                version = "=0.22.0",
-            ),
             "ic-ledger-types": crate.spec(
                 version = "^0.1.1",
             ),
@@ -510,14 +497,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^2.1.0",
             ),
             "ic-utils": crate.spec(
-                version = "^0.22.0",
-                features = [
-                    "raw",
-                ],
-            ),
-            "ic-utils-0_23": crate.spec(
-                package = "ic-utils",
-                version = "^0.23.2",
+                version = "^0.23.0",
                 features = [
                     "raw",
                 ],

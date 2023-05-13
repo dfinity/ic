@@ -53,7 +53,7 @@ url = "2.1.1"
 
 [dev-dependencies]
 bytes = "1.0.1"
-ic-agent = "=0.22.0"
+ic-agent = { workspace = true }
 ic-crypto-tls-interfaces-mocks = { path = "../../crypto/tls_interfaces/mocks" }
 ic-interfaces-registry-mocks = { path = "../../interfaces/registry/mocks" }
 ic-interfaces-state-manager-mocks = { path = "../../interfaces/state_manager/mocks" }

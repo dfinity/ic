@@ -13,15 +13,12 @@ Coverage:: The certificate orchestrator interface works as expected.
 
 end::catalog[] */
 
-use crate::{
-    driver::{
-        ic::InternetComputer,
-        test_env::TestEnv,
-        test_env_api::{
-            GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
-        },
+use crate::driver::{
+    ic::InternetComputer,
+    test_env::TestEnv,
+    test_env_api::{
+        GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
     },
-    util::delay,
 };
 
 use std::time::Duration;
@@ -130,7 +127,7 @@ pub fn certificate_orchestrator_test(env: TestEnv) {
             let out = agent
                 .update(&cid, "addAllowedPrincipal")
                 .with_arg(Encode!(&principal).unwrap())
-                .call_and_wait(delay())
+                .call_and_wait()
                 .await
                 .expect("Could not addAllowedPrincipal");
             Decode!(&out, ModifyAllowedPrincipalResponse).unwrap()
@@ -141,7 +138,7 @@ pub fn certificate_orchestrator_test(env: TestEnv) {
             let out = agent
                 .update(&cid, "rmAllowedPrincipal")
                 .with_arg(Encode!(&principal).unwrap())
-                .call_and_wait(delay())
+                .call_and_wait()
                 .await
                 .expect("Could not rmAllowedPrincipal");
             Decode!(&out, ModifyAllowedPrincipalResponse).unwrap()

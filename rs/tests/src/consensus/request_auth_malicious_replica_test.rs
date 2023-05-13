@@ -96,7 +96,7 @@ pub fn test(env: TestEnv) {
             agent
                 .update(&canister.canister_id(), "update")
                 .with_arg(wasm().set_global_data(&[1, 2, 3]).reply())
-                .call_and_wait(delay())
+                .call_and_wait()
                 .await
                 .unwrap();
 
