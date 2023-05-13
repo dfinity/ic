@@ -18,8 +18,7 @@ dfn_candid = {path = "../rust_canisters/dfn_candid"}
 dfn_macro = {path = "../rust_canisters/dfn_macro"}
 dfn_protobuf = {path = "../rust_canisters/dfn_protobuf"}
 hex = "0.4.2"
-garcon = "0.2"
-ic-agent = "0.22.0"
+ic-agent = { workspace = true }
 ic-canister-client = { path = "../canister_client" }
 ic-canister-client-sender = { path = "../canister_client/sender" }
 ic-constants = { path = "../constants" }

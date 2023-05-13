@@ -40,7 +40,7 @@ use crate::{
             HasWasm, IcNodeContainer,
         },
     },
-    util::{block_on, delay},
+    util::block_on,
 };
 
 use super::sns_deployment::{self, install_nns, install_sns, SaleParticipant};
@@ -151,7 +151,7 @@ impl AggregatorClient {
         relative_url: String,
     ) -> Result<HttpResponse> {
         let (response,) = canister
-            .http_request("GET", relative_url.clone(), vec![], vec![])
+            .http_request("GET", relative_url.clone(), vec![], vec![], None)
             .call()
             .await
             .unwrap();
@@ -317,7 +317,7 @@ impl AggregatorClient {
                         .create_canister()
                         .as_provisional_create_with_amount(None)
                         .with_effective_canister_id(effective_canister_id)
-                        .call_and_wait(delay())
+                        .call_and_wait()
                         .await
                         .unwrap();
                     info!(
@@ -326,7 +326,7 @@ impl AggregatorClient {
                     );
                     management_canister
                         .install_code(&canister_id, &canister_bytes)
-                        .call_and_wait(delay())
+                        .call_and_wait()
                         .await
                         .unwrap();
                     info!(log, "Successfully installed canister {canister_id:?}");

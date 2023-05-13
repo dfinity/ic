@@ -13,7 +13,6 @@ DEPENDENCIES = [
     "@crate_index//:cloudflare",
     "@crate_index//:flate2",
     "@crate_index//:futures",
-    "@crate_index//:garcon",
     "@crate_index//:hyper-rustls",
     "@crate_index//:hyper",
     "@crate_index//:ic-agent",

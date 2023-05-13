@@ -97,21 +97,21 @@ async fn install_canister(agent: &Agent, effective_canister_id: PrincipalId) -> 
         .create_canister()
         .as_provisional_create_with_amount(None)
         .with_effective_canister_id(effective_canister_id)
-        .call_and_wait(delay())
+        .call_and_wait()
         .await
         .unwrap()
         .0;
 
     // Install the cow safety canister.
     mgr.install_code(&canister_id, COW_SAFETY_CANISTER)
-        .call_and_wait(delay())
+        .call_and_wait()
         .await
         .expect("Couldn't install?");
 
     agent
         .update(&canister_id, "init_array")
         .with_arg(&Encode!(&MAX_MEM_SIZE).unwrap())
-        .call_and_wait(delay())
+        .call_and_wait()
         .await
         .expect("could not push message to stable");
 
@@ -151,7 +151,7 @@ async fn modify_mem_and_verify<R: Rng>(
         let rs = agent
             .update(canister_id, "query_and_update")
             .with_arg(&Encode!(&(val_to_write + i as u8), &TEST_MEM_SIZE).unwrap())
-            .call_and_wait(delay())
+            .call_and_wait()
             .await
             .expect("could not push message to stable");
         let wrote = Decode!(rs.as_slice(), u128).unwrap();

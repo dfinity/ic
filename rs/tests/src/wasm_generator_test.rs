@@ -78,12 +78,12 @@ async fn install_random_canister(
         .create_canister()
         .as_provisional_create_with_amount(None)
         .with_effective_canister_id(effective_canister_id)
-        .call_and_wait(util::delay())
+        .call_and_wait()
         .await
         .expect("failed to create a canister")
         .0;
     mgr.install_code(&cid, random_canister.as_slice())
-        .call_and_wait(util::delay())
+        .call_and_wait()
         .await
         .expect("failed to install canister");
     cid

@@ -80,7 +80,7 @@ pub fn stopping_a_canister_with_a_heartbeat_succeeds(env: TestEnv) {
             .await;
             let mgr = ManagementCanister::create(&agent);
             mgr.stop_canister(&canister.canister_id())
-                .call_and_wait(util::delay())
+                .call_and_wait()
                 .await
                 .expect("Couldn't stop canister");
         }
@@ -272,7 +272,7 @@ pub fn canister_heartbeat_can_stop(env: TestEnv) {
                 .create_canister()
                 .as_provisional_create_with_amount(None)
                 .with_effective_canister_id(node.effective_canister_id())
-                .call_and_wait(util::delay())
+                .call_and_wait()
                 .await
                 .unwrap()
                 .0;
@@ -300,7 +300,7 @@ pub fn canister_heartbeat_can_stop(env: TestEnv) {
             // Install the universal canister.
             mgr.install_code(&canister_c, UNIVERSAL_CANISTER_WASM)
                 .with_raw_arg(vec![])
-                .call_and_wait(util::delay())
+                .call_and_wait()
                 .await
                 .unwrap();
 
@@ -308,7 +308,7 @@ pub fn canister_heartbeat_can_stop(env: TestEnv) {
             // Try stopping canister A
             eprintln!("Trying to stop the canister");
             mgr.stop_canister(&canister_a.canister_id())
-                .call_and_wait(util::delay())
+                .call_and_wait()
                 .await
                 .expect("Couldn't stop canister");
         }

@@ -100,7 +100,6 @@ DEPENDENCIES = [
     "@crate_index//:crossbeam-utils",
     "@crate_index//:flate2",
     "@crate_index//:futures",
-    "@crate_index//:garcon",
     "@crate_index//:hex",
     "@crate_index//:humantime",
     "@crate_index//:hyper",

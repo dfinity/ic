@@ -39,7 +39,6 @@ DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:clap",
     "@crate_index//:hex",
-    "@crate_index//:garcon",
     "@crate_index//:ic-agent",
     "@crate_index//:lazy_static",
     "@crate_index//:log",

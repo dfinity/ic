@@ -7,8 +7,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.58"
-ic-agent = "0.22.0"
-garcon = "0.2.3"
+ic-agent = { workspace = true }
 reqwest = "0.11.13"
 tempfile = "3.3.0"
 tokio = "1.20.1"

@@ -1440,7 +1440,7 @@ checksum = "c688fc74432808e3eb684cae8830a86be1d66a2bd58e1f248ed0960a590baf6f"
 dependencies = [
  "glob",
  "libc",
- "libloading 0.7.4",
+ "libloading",
 ]
 
 [[package]]
@@ -2439,7 +2439,6 @@ dependencies = [
  "futures",
  "futures-core",
  "futures-util",
- "garcon",
  "getrandom 0.2.9",
  "gflags",
  "gflags-derive",
@@ -2459,8 +2458,7 @@ dependencies = [
  "hyper-socks2",
  "hyper-tls",
  "iai",
- "ic-agent 0.22.0",
- "ic-agent 0.23.2",
+ "ic-agent",
  "ic-btc-interface",
  "ic-btc-test-utils",
  "ic-btc-validation",
@@ -2468,15 +2466,13 @@ dependencies = [
  "ic-cdk-macros",
  "ic-cdk-timers",
  "ic-certified-map",
- "ic-identity-hsm",
  "ic-ledger-types",
  "ic-metrics-encoder",
  "ic-response-verification",
  "ic-stable-structures 0.2.0",
  "ic-stable-structures 0.5.3",
  "ic-test-state-machine-client",
- "ic-utils 0.22.0",
- "ic-utils 0.23.2",
+ "ic-utils",
  "ic-wasm",
  "ic-xrc-types",
  "ic0",
@@ -3291,15 +3287,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "garcon"
-version = "0.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e83fb8961dcd3c26123863998521ae4d07e5e5aa8fb50b503380448f2e0ea069"
-dependencies = [
- "futures-util",
-]
-
-[[package]]
 name = "generic-array"
 version = "0.14.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3416,9 +3403,9 @@ dependencies = [
 
 [[package]]
 name = "h2"
-version = "0.3.18"
+version = "0.3.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "17f8a914c2987b688368b5138aa05321db91f4090cf26118185672ad588bce21"
+checksum = "d357c7ae988e7d2182f7d7871d0b963962420b0678b0997ce7de72001aeab782"
 dependencies = [
  "bytes",
  "fnv",
@@ -3792,44 +3779,6 @@ checksum = "71a816c97c42258aa5834d07590b718b4c9a598944cd39a52dc25b351185d678"
 
 [[package]]
 name = "ic-agent"
-version = "0.22.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "261a977b6cc35db6ee84195148f5e8307ffc1bbcb1895a221fe16d0fb097a427"
-dependencies = [
- "async-trait",
- "base32",
- "base64 0.13.1",
- "byteorder",
- "candid 0.8.4",
- "futures-util",
- "garcon",
- "hex",
- "http",
- "http-body",
- "hyper",
- "hyper-rustls 0.23.2",
- "ic-verify-bls-signature",
- "k256 0.11.6",
- "leb128",
- "mime",
- "pem 1.1.1",
- "pkcs8 0.9.0",
- "rand 0.8.5",
- "reqwest",
- "ring",
- "rustls 0.20.8",
- "sec1",
- "serde",
- "serde_bytes",
- "serde_cbor",
- "sha2 0.10.6",
- "simple_asn1 0.6.2",
- "thiserror",
- "url",
-]
-
-[[package]]
-name = "ic-agent"
 version = "0.23.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "59cadbe5208d33c651ea55d56eb1c38a6f917dc836cc93973faa4bb0a95b71b5"
@@ -3970,21 +3919,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-identity-hsm"
-version = "0.22.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ec2335ec6c8bf1fdeb8b034c2a81c87a5b8373b6d919b8fee0c67ca2f14aa93"
-dependencies = [
- "hex",
- "ic-agent 0.22.0",
- "num-bigint 0.4.3",
- "pkcs11",
- "sha2 0.10.6",
- "simple_asn1 0.6.2",
- "thiserror",
-]
-
-[[package]]
 name = "ic-ledger-types"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4081,35 +4015,13 @@ dependencies = [
 
 [[package]]
 name = "ic-utils"
-version = "0.22.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d4fe431f4ee1f86da88d5cac3979476888dbcd9d44481409f103da5b2b44a440"
-dependencies = [
- "async-trait",
- "candid 0.8.4",
- "garcon",
- "ic-agent 0.22.0",
- "leb128",
- "num-bigint 0.4.3",
- "once_cell",
- "paste 1.0.12",
- "semver",
- "serde",
- "serde_bytes",
- "strum",
- "strum_macros",
- "thiserror",
-]
-
-[[package]]
-name = "ic-utils"
 version = "0.23.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7a66ae113ea8e759a874aa7cc3bc296273274b61fcf67b4bb6bb273c67aad02e"
 dependencies = [
  "async-trait",
  "candid 0.8.4",
- "ic-agent 0.23.2",
+ "ic-agent",
  "leb128",
  "num-bigint 0.4.3",
  "once_cell",
@@ -4773,16 +4685,6 @@ dependencies = [
  "arbitrary",
  "cc",
  "once_cell",
-]
-
-[[package]]
-name = "libloading"
-version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f2b111a074963af1d37a139918ac6d49ad1d0d5e47f72fd55388619691a7d753"
-dependencies = [
- "cc",
- "winapi 0.3.9",
 ]
 
 [[package]]
@@ -6216,16 +6118,6 @@ dependencies = [
  "der 0.5.1",
  "pkcs8 0.8.0",
  "zeroize",
-]
-
-[[package]]
-name = "pkcs11"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3aca6d67e4c8613bfe455599d0233d00735f85df2001f6bfd9bb7ac0496b10af"
-dependencies = [
- "libloading 0.5.2",
- "num-bigint 0.2.6",
 ]
 
 [[package]]

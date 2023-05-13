@@ -32,7 +32,7 @@ use crate::driver::test_env_api::{
 };
 use crate::generic_workload_engine::engine::Engine;
 use crate::generic_workload_engine::metrics::{LoadTestMetricsProvider, RequestOutcome};
-use crate::util::{assert_canister_counter_with_retries, block_on, delay};
+use crate::util::{assert_canister_counter_with_retries, block_on};
 
 use ic_agent::{export::Principal, Agent};
 use ic_base_types::PrincipalId;
@@ -262,7 +262,7 @@ pub async fn install_counter_canister(
         .create_canister()
         .as_provisional_create_with_amount(None)
         .with_effective_canister_id(effective_canister_id)
-        .call_and_wait(delay())
+        .call_and_wait()
         .await
         .unwrap()
         .0;
@@ -271,7 +271,7 @@ pub async fn install_counter_canister(
         &canister_id,
         wat::parse_str(COUNTER_CANISTER_WAT).unwrap().as_slice(),
     )
-    .call_and_wait(delay())
+    .call_and_wait()
     .await
     .expect("Failed to install counter canister.");
 

@@ -356,3 +356,7 @@ jsonrpc = { git = "https://github.com/apoelstra/rust-jsonrpc", rev = "e42044d" }
 ciborium = { git = "https://github.com/enarx/ciborium", rev = "e719537c99b564c3674a56defe53713c702c6f46" }
 # This version pins prost 0.11. Please remove after the next pprof release.
 pprof = { git = "https://github.com/tikv/pprof-rs", rev = "059d3c80395c74e9f82ca1f9cbb3c013acfffb75" }
+
+[workspace.dependencies]
+ic-agent = "0.23"
+ic-utils = "0.23"

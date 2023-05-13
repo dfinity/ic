@@ -52,7 +52,7 @@ pub fn canister_accepts_ingress_by_default(env: TestEnv) {
             // Now send the canister an ingress message.  It should succeed.
             agent
                 .update(&canister_id, "hello")
-                .call_and_wait(delay())
+                .call_and_wait()
                 .await
                 .expect("should succeed");
         }
@@ -155,7 +155,7 @@ pub fn canister_only_accepts_ingress_with_payload(env: TestEnv) {
             agent
                 .update(&canister_id, "hello")
                 .with_arg(vec![1])
-                .call_and_wait(delay())
+                .call_and_wait()
                 .await
                 .expect("should succeed");
         }

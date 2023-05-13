@@ -138,7 +138,7 @@ use super::test_setup::GroupSetup;
 use crate::driver::constants::{self, kibana_link, SSH_USERNAME};
 use crate::driver::farm::{Farm, GroupSpec};
 use crate::driver::test_env::{HasIcPrepDir, SshKeyGen, TestEnv, TestEnvAttribute};
-use crate::util::{create_agent, delay};
+use crate::util::create_agent;
 use anyhow::{anyhow, bail, Context, Result};
 use async_trait::async_trait;
 use canister_test::{RemoteTestRuntime, Runtime};
@@ -641,7 +641,7 @@ impl IcNodeSnapshot {
                 .create_canister()
                 .as_provisional_create_with_amount(None)
                 .with_effective_canister_id(effective_canister_id)
-                .call_and_wait(delay())
+                .call_and_wait()
                 .await
                 .map_err(|err| format!("Couldn't create canister with provisional API: {}", err))?
                 .0;
@@ -651,7 +651,7 @@ impl IcNodeSnapshot {
                 install_code = install_code.with_raw_arg(arg)
             }
             install_code
-                .call_and_wait(delay())
+                .call_and_wait()
                 .await
                 .map_err(|err| format!("Couldn't install canister: {}", err))?;
             Ok::<_, String>(canister_id)

@@ -9,7 +9,6 @@ DEPENDENCIES = [
     "@crate_index//:candid",
     "@crate_index//:clap",
     "@crate_index//:futures",
-    "@crate_index//:garcon",
     "@crate_index//:glob",
     "@crate_index//:humantime",
     "@crate_index//:hyper",

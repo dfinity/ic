@@ -68,7 +68,7 @@ pub fn mint_cycles_not_supported_on_system_subnet(env: TestEnv) {
 
         let res = nns_agent
             .update(&nns_canister_id, "test")
-            .call_and_wait(delay())
+            .call_and_wait()
             .await
             .expect_err("should not succeed");
 
@@ -117,10 +117,7 @@ pub fn mint_cycles_not_supported_on_application_subnet(env: TestEnv) {
 
         // The test function on the wasm module will call the mint_cycles system
         // call.
-        let res = agent
-            .update(&canister_id, "test")
-            .call_and_wait(delay())
-            .await;
+        let res = agent.update(&canister_id, "test").call_and_wait().await;
 
         assert_reject(res, RejectCode::CanisterError);
         let after_balance = get_balance(&canister_id, &agent).await;

@@ -25,13 +25,12 @@ dfn_protobuf = { path = "../../../rust_canisters/dfn_protobuf" }
 dfn_core = { path = "../../../rust_canisters/dfn_core" }
 flate2 = "1.0.22"
 futures = "0.3.10"
-garcon = "0.2"
 humantime = "2.0"
 hex = "0.4.2"
 hyper = "0.14.18"
 hyper-rustls = "0.23.0"
 hyper-tls = "0.5.0"
-ic-agent = "=0.22.0"
+ic-agent = { workspace = true }
 ic-artifact-pool = { path = "../../../artifact_pool" }
 ic-backup = { path = "../../../backup" }
 ic-base-types = { path = "../../../types/base_types" }
@@ -96,7 +95,7 @@ ic-test-utilities = { path = "../../../test_utilities" }
 ic-types = { path = "../../../types/types" }
 ic-types-test-utils = { path = "../../../types/types_test_utils" }
 ic-universal-canister = { path = "../../../universal_canister/lib" }
-ic-utils = "=0.22.0"
+ic-utils = { workspace = true }
 icp-ledger = { path = "../../../rosetta-api/icp_ledger" }
 itertools = "0.10.0"
 json5 = "0.4.1"

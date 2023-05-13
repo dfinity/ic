@@ -23,7 +23,7 @@ use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{
     HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer, NnsInstallationExt,
 };
-use crate::util::{delay, runtime_from_url, UniversalCanister};
+use crate::util::{runtime_from_url, UniversalCanister};
 use crate::{
     nns::{submit_external_proposal_with_test_id, vote_execute_proposal_assert_executed},
     types::CanisterIdRecord,
@@ -106,7 +106,7 @@ async fn assert_canister_update_call(
     let has_module_hash = || async {
         ManagementCanister::create(agent)
             .canister_status(canister_id)
-            .call_and_wait(delay())
+            .call_and_wait()
             .await
             .unwrap()
             .0

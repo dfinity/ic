@@ -68,13 +68,6 @@ use crate::transaction_id::TransactionIdentifier;
 
 use self::proposal_info_response::ProposalInfoResponse;
 
-fn waiter() -> garcon::Delay {
-    garcon::Delay::builder()
-        .throttle(std::time::Duration::from_millis(500))
-        .timeout(std::time::Duration::from_secs(60 * 5))
-        .build()
-}
-
 struct LedgerBlocksSynchronizerMetricsImpl {}
 
 impl LedgerBlocksSynchronizerMetrics for LedgerBlocksSynchronizerMetricsImpl {
@@ -376,7 +369,7 @@ impl LedgerAccess for LedgerClient {
                     "get_neuron_info_by_id_or_subaccount",
                 )
                 .with_arg(arg)
-                .call_and_wait(waiter())
+                .call_and_wait()
                 .await
         } else {
             agent

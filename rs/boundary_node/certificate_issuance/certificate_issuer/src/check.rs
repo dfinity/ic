@@ -154,7 +154,7 @@ impl Check for Checker {
 
         // Phase 4 - Ensure canister mentions known domain
         let (response,) = HttpRequestCanister::create(&self.agent, canister_id)
-            .http_request("GET", "/.well-known/ic-domains", vec![], vec![])
+            .http_request("GET", "/.well-known/ic-domains", vec![], vec![], None)
             .call()
             .await
             .map_err(|_| CheckError::KnownDomainsUnavailable {

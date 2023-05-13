@@ -79,7 +79,7 @@ pub fn test(env: TestEnv) {
                 let mut result = agent
                     .update(&canister.canister_id(), "update")
                     .with_arg(wasm().set_global_data(&[n as u8]).reply())
-                    .call_and_wait(delay())
+                    .call_and_wait()
                     .await;
                 // Error is expected after the malicious node panics due to divergence.
                 if result.is_err() {
@@ -114,7 +114,7 @@ pub fn test(env: TestEnv) {
                 agent
                     .update(&canister.canister_id(), "update")
                     .with_arg(wasm().set_global_data(&[n as u8]).reply())
-                    .call_and_wait(delay())
+                    .call_and_wait()
                     .await
                     .expect("failed to update");
                 let response = canister

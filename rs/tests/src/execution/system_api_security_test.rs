@@ -162,13 +162,13 @@ pub fn malicious_inputs(env: TestEnv) {
             .create_canister()
             .as_provisional_create_with_amount(None)
             .with_effective_canister_id(node.effective_canister_id())
-            .call_and_wait(delay())
+            .call_and_wait()
             .await
             .expect("Error creating canister")
             .0;
 
         mgr.install_code(&canister_id, &wasm)
-            .call_and_wait(delay())
+            .call_and_wait()
             .await
             .unwrap();
 

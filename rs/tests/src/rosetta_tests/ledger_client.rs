@@ -1,7 +1,7 @@
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{HasPublicApiUrl, IcNodeContainer};
 use crate::rosetta_tests::setup::subnet_sys;
-use crate::util::{assert_create_agent, block_on, delay};
+use crate::util::{assert_create_agent, block_on};
 use candid::{Decode, Encode, Principal};
 use dfn_protobuf::ProtoBuf;
 use ic_agent::Agent;
@@ -46,7 +46,7 @@ impl LedgerClient {
             .agent
             .update(&self.ledger_canister_id, "account_balance_dfx")
             .with_arg(arg)
-            .call_and_wait(delay())
+            .call_and_wait()
             .await
             .expect("Error while calling endpoint.");
         Decode!(res.as_slice(), Tokens).expect("Error while decoding response.")

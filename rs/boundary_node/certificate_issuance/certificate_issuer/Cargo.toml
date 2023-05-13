@@ -18,11 +18,10 @@ clap = { version = "4.0.18", features = ["derive"] }
 cloudflare = "0.9.1"
 flate2 = "1.0.22"
 futures = "0.3.25"
-garcon = "0.2.3"
 hyper = { version = "0.14.20", features = ["full"] }
 hyper-rustls = "0.24.0"
-ic-agent = "0.22.0"
-ic-utils = { version = "0.22.0", features = ["raw"] }
+ic-agent = { workspace = true }
+ic-utils = { workspace = true, features = ["raw"] }
 idna = "0.3.0"
 instant-acme = "0.2.1"
 mockall = "0.11.3"
