@@ -299,6 +299,10 @@ name = "ic-systest-single-large-node"
 path = "testing_verification/testnets/single_large_node.rs"
 
 [[bin]]
+name = "ic-systest-single-app-large-node"
+path = "testing_verification/testnets/single_app_large_node.rs"
+
+[[bin]]
 name = "ic-systest-cow-safety-test"
 path = "consensus/cow_safety_test.rs"
 
