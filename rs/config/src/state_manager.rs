@@ -17,6 +17,16 @@ impl Config {
             file_backed_memory_allocator: FlagStatus::Disabled,
         }
     }
+
+    pub fn state_root(&self) -> PathBuf {
+        self.state_root.clone()
+    }
+
+    // The page_deltas directory stores files backing the file
+    // allocator and is a child of the state directory.
+    pub fn page_deltas_dirname(&self) -> String {
+        "page_deltas".to_string()
+    }
 }
 
 fn file_backed_memory_allocator_default() -> FlagStatus {
