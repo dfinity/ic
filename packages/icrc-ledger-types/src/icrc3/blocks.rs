@@ -6,7 +6,7 @@ use serde_bytes::ByteBuf;
 
 pub type GenericBlock = Value;
 
-#[derive(Debug, CandidType, Deserialize)]
+#[derive(Debug, CandidType, Deserialize, PartialEq, Eq)]
 pub struct GetBlocksResponse {
     pub first_index: BlockIndex,
     pub chain_length: u64,
