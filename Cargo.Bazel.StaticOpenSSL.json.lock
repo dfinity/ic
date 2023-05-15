@@ -1,5 +1,5 @@
 {
-  "checksum": "a7b74a9741d486199d95a6c0329abb2697f2cd3dca404caa1ee46ef998a2f3df",
+  "checksum": "4c6e3a9b648b7759aa2fc35b089dfadb1020f1f5901ca409cb5a25ba006f9f33",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -143,13 +143,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "actix-codec 0.5.0": {
+    "actix-codec 0.5.1": {
       "name": "actix-codec",
-      "version": "0.5.0",
+      "version": "0.5.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/actix-codec/0.5.0/download",
-          "sha256": "57a7559404a7f3573127aab53c08ce37a6c6a315c374a31070f3c91cd1b4a7fe"
+          "url": "https://crates.io/api/v1/crates/actix-codec/0.5.1/download",
+          "sha256": "617a8268e3537fe1d8c9ead925fca49ef6400927ee7bc26750e90ecee14ce4b8"
         }
       },
       "targets": [
@@ -190,10 +190,6 @@
               "target": "futures_sink"
             },
             {
-              "id": "log 0.4.17",
-              "target": "log"
-            },
-            {
               "id": "memchr 2.5.0",
               "target": "memchr"
             },
@@ -208,12 +204,16 @@
             {
               "id": "tokio-util 0.7.8",
               "target": "tokio_util"
+            },
+            {
+              "id": "tracing 0.1.37",
+              "target": "tracing"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.5.0"
+        "version": "0.5.1"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -265,7 +265,7 @@
         "deps": {
           "common": [
             {
-              "id": "actix-codec 0.5.0",
+              "id": "actix-codec 0.5.1",
               "target": "actix_codec"
             },
             {
@@ -794,7 +794,7 @@
         "deps": {
           "common": [
             {
-              "id": "actix-codec 0.5.0",
+              "id": "actix-codec 0.5.1",
               "target": "actix_codec"
             },
             {
@@ -2729,7 +2729,7 @@
               "target": "futures"
             },
             {
-              "id": "pin-project 1.0.12",
+              "id": "pin-project 1.1.0",
               "target": "pin_project"
             },
             {
@@ -2897,7 +2897,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.15",
+              "id": "syn 2.0.16",
               "target": "syn"
             }
           ],
@@ -2963,7 +2963,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.15",
+              "id": "syn 2.0.16",
               "target": "syn"
             }
           ],
@@ -4774,6 +4774,63 @@
       },
       "license": "MIT/Apache-2.0"
     },
+    "bitvec 1.0.1": {
+      "name": "bitvec",
+      "version": "1.0.1",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/bitvec/1.0.1/download",
+          "sha256": "1bc2832c24239b0141d5674bb9174f9d68a8b5b3f2753311927c172ca46f7e9c"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "bitvec",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "bitvec",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": [
+          "alloc"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "funty 2.0.0",
+              "target": "funty"
+            },
+            {
+              "id": "radium 0.7.0",
+              "target": "radium"
+            },
+            {
+              "id": "tap 1.0.1",
+              "target": "tap"
+            },
+            {
+              "id": "wyz 0.5.1",
+              "target": "wyz"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2021",
+        "version": "1.0.1"
+      },
+      "license": "MIT"
+    },
     "block-buffer 0.10.4": {
       "name": "block-buffer",
       "version": "0.10.4",
@@ -5893,13 +5950,13 @@
       },
       "license": "MIT"
     },
-    "bytecheck 0.6.10": {
+    "bytecheck 0.6.11": {
       "name": "bytecheck",
-      "version": "0.6.10",
+      "version": "0.6.11",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/bytecheck/0.6.10/download",
-          "sha256": "13fe11640a23eb24562225322cd3e452b93a3d4091d62fab69c70542fcd17d1f"
+          "url": "https://crates.io/api/v1/crates/bytecheck/0.6.11/download",
+          "sha256": "8b6372023ac861f6e6dc89c8344a8f398fb42aaba2b5dbc649ca0c0e9dbcb627"
         }
       },
       "targets": [
@@ -5940,7 +5997,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytecheck 0.6.10",
+              "id": "bytecheck 0.6.11",
               "target": "build_script_build"
             },
             {
@@ -5958,13 +6015,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "bytecheck_derive 0.6.10",
+              "id": "bytecheck_derive 0.6.11",
               "target": "bytecheck_derive"
             }
           ],
           "selects": {}
         },
-        "version": "0.6.10"
+        "version": "0.6.11"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -5973,13 +6030,13 @@
       },
       "license": "MIT"
     },
-    "bytecheck_derive 0.6.10": {
+    "bytecheck_derive 0.6.11": {
       "name": "bytecheck_derive",
-      "version": "0.6.10",
+      "version": "0.6.11",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/bytecheck_derive/0.6.10/download",
-          "sha256": "e31225543cb46f81a7e224762764f4a6a0f097b1db0b175f69e8065efaa42de5"
+          "url": "https://crates.io/api/v1/crates/bytecheck_derive/0.6.11/download",
+          "sha256": "a7ec4c6f261935ad534c0c22dbef2201b45918860eb1c574b972bd213a76af61"
         }
       },
       "targets": [
@@ -6023,7 +6080,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.6.10"
+        "version": "0.6.11"
       },
       "license": "MIT"
     },
@@ -8112,7 +8169,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.15",
+              "id": "syn 2.0.16",
               "target": "syn"
             }
           ],
@@ -11209,7 +11266,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.15",
+              "id": "syn 2.0.16",
               "target": "syn"
             }
           ],
@@ -12909,7 +12966,7 @@
               "target": "h2"
             },
             {
-              "id": "hashlink 0.8.1",
+              "id": "hashlink 0.8.2",
               "target": "hashlink"
             },
             {
@@ -14145,7 +14202,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.15",
+              "id": "syn 2.0.16",
               "target": "syn"
             }
           ],
@@ -14923,7 +14980,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.15",
+              "id": "syn 2.0.16",
               "target": "syn"
             }
           ],
@@ -16680,6 +16737,39 @@
       },
       "license": "BSD-3-Clause"
     },
+    "funty 2.0.0": {
+      "name": "funty",
+      "version": "2.0.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/funty/2.0.0/download",
+          "sha256": "e6d5a32815ae3f33302d95fdcb2ce17862f8c65363dcfd29360480ba1001fc9c"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "funty",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "funty",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2018",
+        "version": "2.0.0"
+      },
+      "license": "MIT"
+    },
     "futures 0.3.28": {
       "name": "futures",
       "version": "0.3.28",
@@ -17021,7 +17111,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.15",
+              "id": "syn 2.0.16",
               "target": "syn"
             }
           ],
@@ -17752,7 +17842,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.15",
+              "id": "syn 2.0.16",
               "target": "syn"
             }
           ],
@@ -18119,13 +18209,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "hashlink 0.8.1": {
+    "hashlink 0.8.2": {
       "name": "hashlink",
-      "version": "0.8.1",
+      "version": "0.8.2",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/hashlink/0.8.1/download",
-          "sha256": "69fe1fcf8b4278d860ad0548329f892a3631fb63f82574df68275f34cdbe0ffa"
+          "url": "https://crates.io/api/v1/crates/hashlink/0.8.2/download",
+          "sha256": "0761a1b9491c4f2e3d66aa0f62d0fba0af9a0e2852e4d48ea506632a4b56e6aa"
         }
       },
       "targets": [
@@ -18150,14 +18240,14 @@
         "deps": {
           "common": [
             {
-              "id": "hashbrown 0.12.3",
+              "id": "hashbrown 0.13.2",
               "target": "hashbrown"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.8.1"
+        "version": "0.8.2"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -28010,11 +28100,11 @@
                 "target": "libc"
               },
               {
-                "id": "security-framework 2.8.2",
+                "id": "security-framework 2.9.0",
                 "target": "security_framework"
               },
               {
-                "id": "security-framework-sys 2.8.0",
+                "id": "security-framework-sys 2.9.0",
                 "target": "security_framework_sys"
               },
               {
@@ -30352,7 +30442,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.15",
+              "id": "syn 2.0.16",
               "target": "syn"
             }
           ],
@@ -30579,7 +30669,7 @@
               "target": "percent_encoding"
             },
             {
-              "id": "pin-project 1.0.12",
+              "id": "pin-project 1.1.0",
               "target": "pin_project"
             },
             {
@@ -32192,7 +32282,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.15",
+              "id": "syn 2.0.16",
               "target": "syn"
             }
           ],
@@ -32424,13 +32514,13 @@
       },
       "license": "MIT"
     },
-    "pin-project 1.0.12": {
+    "pin-project 1.1.0": {
       "name": "pin-project",
-      "version": "1.0.12",
+      "version": "1.1.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/pin-project/1.0.12/download",
-          "sha256": "ad29a609b6bcd67fee905812e544992d216af9d755757c05ed2d0e15a74c6ecc"
+          "url": "https://crates.io/api/v1/crates/pin-project/1.1.0/download",
+          "sha256": "c95a7476719eab1e366eaf73d0260af3021184f18177925b07f54b30089ceead"
         }
       },
       "targets": [
@@ -32456,23 +32546,23 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "pin-project-internal 1.0.12",
+              "id": "pin-project-internal 1.1.0",
               "target": "pin_project_internal"
             }
           ],
           "selects": {}
         },
-        "version": "1.0.12"
+        "version": "1.1.0"
       },
       "license": "Apache-2.0 OR MIT"
     },
-    "pin-project-internal 1.0.12": {
+    "pin-project-internal 1.1.0": {
       "name": "pin-project-internal",
-      "version": "1.0.12",
+      "version": "1.1.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/pin-project-internal/1.0.12/download",
-          "sha256": "069bdb1e05adc7a8990dce9cc75370895fbe4e3d58b9b73bf1aee56359344a55"
+          "url": "https://crates.io/api/v1/crates/pin-project-internal/1.1.0/download",
+          "sha256": "39407670928234ebc5e6e580247dd567ad73a3578460c5990f9503df207e8f07"
         }
       },
       "targets": [
@@ -32505,14 +32595,14 @@
               "target": "quote"
             },
             {
-              "id": "syn 1.0.109",
+              "id": "syn 2.0.16",
               "target": "syn"
             }
           ],
           "selects": {}
         },
         "edition": "2018",
-        "version": "1.0.12"
+        "version": "1.1.0"
       },
       "license": "Apache-2.0 OR MIT"
     },
@@ -35746,6 +35836,65 @@
       },
       "license": "MIT OR Apache-2.0"
     },
+    "radium 0.7.0": {
+      "name": "radium",
+      "version": "0.7.0",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/radium/0.7.0/download",
+          "sha256": "dc33ff2d4973d518d823d61aa239014831e521c75da58e3df4840d3f47749d09"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "radium",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        },
+        {
+          "BuildScript": {
+            "crate_name": "build_script_build",
+            "crate_root": "build.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "radium",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "radium 0.7.0",
+              "target": "build_script_build"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.7.0"
+      },
+      "build_script_attrs": {
+        "data_glob": [
+          "**"
+        ]
+      },
+      "license": "MIT"
+    },
     "rand 0.6.5": {
       "name": "rand",
       "version": "0.6.5",
@@ -37346,7 +37495,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.15",
+              "id": "syn 2.0.16",
               "target": "syn"
             }
           ],
@@ -37653,7 +37802,7 @@
         "deps": {
           "common": [
             {
-              "id": "bytecheck 0.6.10",
+              "id": "bytecheck 0.6.11",
               "target": "bytecheck"
             },
             {
@@ -38243,13 +38392,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "rkyv 0.7.41": {
+    "rkyv 0.7.42": {
       "name": "rkyv",
-      "version": "0.7.41",
+      "version": "0.7.42",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/rkyv/0.7.41/download",
-          "sha256": "21499ed91807f07ae081880aabb2ccc0235e9d88011867d984525e9a4c3cfa3e"
+          "url": "https://crates.io/api/v1/crates/rkyv/0.7.42/download",
+          "sha256": "0200c8230b013893c0b2d6213d6ec64ed2b9be2e0e016682b7224ff82cff5c58"
         }
       },
       "targets": [
@@ -38285,16 +38434,18 @@
         ],
         "crate_features": [
           "alloc",
-          "bytecheck",
           "hashbrown",
-          "rend",
           "size_32",
           "std"
         ],
         "deps": {
           "common": [
             {
-              "id": "bytecheck 0.6.10",
+              "id": "bitvec 1.0.1",
+              "target": "bitvec"
+            },
+            {
+              "id": "bytecheck 0.6.11",
               "target": "bytecheck"
             },
             {
@@ -38310,12 +38461,20 @@
               "target": "rend"
             },
             {
-              "id": "rkyv 0.7.41",
+              "id": "rkyv 0.7.42",
               "target": "build_script_build"
             },
             {
               "id": "seahash 4.1.0",
               "target": "seahash"
+            },
+            {
+              "id": "tinyvec 1.6.0",
+              "target": "tinyvec"
+            },
+            {
+              "id": "uuid 1.3.2",
+              "target": "uuid"
             }
           ],
           "selects": {}
@@ -38324,13 +38483,13 @@
         "proc_macro_deps": {
           "common": [
             {
-              "id": "rkyv_derive 0.7.41",
+              "id": "rkyv_derive 0.7.42",
               "target": "rkyv_derive"
             }
           ],
           "selects": {}
         },
-        "version": "0.7.41"
+        "version": "0.7.42"
       },
       "build_script_attrs": {
         "data_glob": [
@@ -38339,13 +38498,13 @@
       },
       "license": "MIT"
     },
-    "rkyv_derive 0.7.41": {
+    "rkyv_derive 0.7.42": {
       "name": "rkyv_derive",
-      "version": "0.7.41",
+      "version": "0.7.42",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/rkyv_derive/0.7.41/download",
-          "sha256": "ac1c672430eb41556291981f45ca900a0239ad007242d1cb4b4167af842db666"
+          "url": "https://crates.io/api/v1/crates/rkyv_derive/0.7.42/download",
+          "sha256": "b2e06b915b5c230a17d7a736d1e2e63ee753c256a8614ef3f5147b13a4f5541d"
         }
       },
       "targets": [
@@ -38388,7 +38547,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "0.7.41"
+        "version": "0.7.42"
       },
       "license": "MIT"
     },
@@ -38704,7 +38863,7 @@
               "target": "fallible_streaming_iterator"
             },
             {
-              "id": "hashlink 0.8.1",
+              "id": "hashlink 0.8.2",
               "target": "hashlink"
             },
             {
@@ -38779,7 +38938,7 @@
               "target": "borsh"
             },
             {
-              "id": "bytecheck 0.6.10",
+              "id": "bytecheck 0.6.11",
               "target": "bytecheck"
             },
             {
@@ -38799,7 +38958,7 @@
               "target": "rand"
             },
             {
-              "id": "rkyv 0.7.41",
+              "id": "rkyv 0.7.42",
               "target": "rkyv"
             },
             {
@@ -39466,7 +39625,7 @@
             ],
             "cfg(target_os = \"macos\")": [
               {
-                "id": "security-framework 2.8.2",
+                "id": "security-framework 2.9.0",
                 "target": "security_framework"
               }
             ],
@@ -40202,13 +40361,13 @@
       },
       "license": "CC0-1.0"
     },
-    "security-framework 2.8.2": {
+    "security-framework 2.9.0": {
       "name": "security-framework",
-      "version": "2.8.2",
+      "version": "2.9.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/security-framework/2.8.2/download",
-          "sha256": "a332be01508d814fed64bf28f798a146d73792121129962fdf335bb3c49a4254"
+          "url": "https://crates.io/api/v1/crates/security-framework/2.9.0/download",
+          "sha256": "ca2855b3715770894e67cbfa3df957790aa0c9edc3bf06efa1a84d77fa0839d1"
         }
       },
       "targets": [
@@ -40254,24 +40413,24 @@
               "target": "libc"
             },
             {
-              "id": "security-framework-sys 2.8.0",
+              "id": "security-framework-sys 2.9.0",
               "target": "security_framework_sys"
             }
           ],
           "selects": {}
         },
         "edition": "2021",
-        "version": "2.8.2"
+        "version": "2.9.0"
       },
       "license": "MIT OR Apache-2.0"
     },
-    "security-framework-sys 2.8.0": {
+    "security-framework-sys 2.9.0": {
       "name": "security-framework-sys",
-      "version": "2.8.0",
+      "version": "2.9.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/security-framework-sys/2.8.0/download",
-          "sha256": "31c9bb296072e961fcbd8853511dd39c2d8be2deb1e17c6860b1d30732b323b4"
+          "url": "https://crates.io/api/v1/crates/security-framework-sys/2.9.0/download",
+          "sha256": "f51d0c0d83bec45f16480d0ce0058397a69e48fcdc52d1dc8855fb68acbd31a7"
         }
       },
       "targets": [
@@ -40311,7 +40470,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "2.8.0"
+        "version": "2.9.0"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -40784,7 +40943,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.15",
+              "id": "syn 2.0.16",
               "target": "syn"
             }
           ],
@@ -44517,13 +44676,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "syn 2.0.15": {
+    "syn 2.0.16": {
       "name": "syn",
-      "version": "2.0.15",
+      "version": "2.0.16",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/syn/2.0.15/download",
-          "sha256": "a34fcf3e8b60f57e6a14301a2e916d323af98b0ea63c599441eec8558660c822"
+          "url": "https://crates.io/api/v1/crates/syn/2.0.16/download",
+          "sha256": "a6f671d4b5ffdb8eadec19c0ae67fe2639df8684bd7bc4b83d986b8db549cf01"
         }
       },
       "targets": [
@@ -44576,7 +44735,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "2.0.15"
+        "version": "2.0.16"
       },
       "license": "MIT OR Apache-2.0"
     },
@@ -44685,6 +44844,39 @@
         ],
         "edition": "2015",
         "version": "0.2.2"
+      },
+      "license": "MIT"
+    },
+    "tap 1.0.1": {
+      "name": "tap",
+      "version": "1.0.1",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/tap/1.0.1/download",
+          "sha256": "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "tap",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "tap",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "edition": "2015",
+        "version": "1.0.1"
       },
       "license": "MIT"
     },
@@ -44871,7 +45063,7 @@
               "target": "opentelemetry"
             },
             {
-              "id": "pin-project 1.0.12",
+              "id": "pin-project 1.1.0",
               "target": "pin_project"
             },
             {
@@ -45615,7 +45807,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.15",
+              "id": "syn 2.0.16",
               "target": "syn"
             }
           ],
@@ -46556,7 +46748,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.15",
+              "id": "syn 2.0.16",
               "target": "syn"
             }
           ],
@@ -46851,7 +47043,7 @@
               "target": "futures_sink"
             },
             {
-              "id": "pin-project 1.0.12",
+              "id": "pin-project 1.1.0",
               "target": "pin_project"
             },
             {
@@ -47406,7 +47598,7 @@
               "target": "percent_encoding"
             },
             {
-              "id": "pin-project 1.0.12",
+              "id": "pin-project 1.1.0",
               "target": "pin_project"
             },
             {
@@ -47600,7 +47792,7 @@
               "target": "indexmap"
             },
             {
-              "id": "pin-project 1.0.12",
+              "id": "pin-project 1.1.0",
               "target": "pin_project"
             },
             {
@@ -47885,7 +48077,7 @@
               "target": "futures_util"
             },
             {
-              "id": "pin-project 1.0.12",
+              "id": "pin-project 1.1.0",
               "target": "pin_project"
             },
             {
@@ -48071,7 +48263,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.15",
+              "id": "syn 2.0.16",
               "target": "syn"
             }
           ],
@@ -48174,7 +48366,7 @@
         "deps": {
           "common": [
             {
-              "id": "pin-project 1.0.12",
+              "id": "pin-project 1.1.0",
               "target": "pin_project"
             },
             {
@@ -50117,6 +50309,18 @@
         },
         {
           "Binary": {
+            "crate_name": "reader",
+            "crate_root": "src/bin/reader.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        },
+        {
+          "Binary": {
             "crate_name": "exit",
             "crate_root": "src/bin/exit.rs",
             "srcs": {
@@ -50131,18 +50335,6 @@
           "Binary": {
             "crate_name": "sleep",
             "crate_root": "src/bin/sleep.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        },
-        {
-          "Binary": {
-            "crate_name": "reader",
-            "crate_root": "src/bin/reader.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -50473,7 +50665,7 @@
               "target": "percent_encoding"
             },
             {
-              "id": "pin-project 1.0.12",
+              "id": "pin-project 1.1.0",
               "target": "pin_project"
             },
             {
@@ -50774,7 +50966,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.15",
+              "id": "syn 2.0.16",
               "target": "syn"
             },
             {
@@ -50937,7 +51129,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.15",
+              "id": "syn 2.0.16",
               "target": "syn"
             },
             {
@@ -54674,6 +54866,48 @@
       },
       "license": "Apache-2.0"
     },
+    "wyz 0.5.1": {
+      "name": "wyz",
+      "version": "0.5.1",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/wyz/0.5.1/download",
+          "sha256": "05f360fc0b24296329c78fda852a1e9ae82de9cf7b27dae4b7f62f118f77b9ed"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "wyz",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "wyz",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "tap 1.0.1",
+              "target": "tap"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.5.1"
+      },
+      "license": "MIT"
+    },
     "x509-parser 0.12.0": {
       "name": "x509-parser",
       "version": "0.12.0",
@@ -55047,7 +55281,7 @@
               "target": "quote"
             },
             {
-              "id": "syn 2.0.15",
+              "id": "syn 2.0.16",
               "target": "syn"
             }
           ],
