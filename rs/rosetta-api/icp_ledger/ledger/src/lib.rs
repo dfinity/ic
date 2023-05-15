@@ -14,7 +14,7 @@ use ic_ledger_core::{
 use ic_ledger_core::{block::BlockIndex, tokens::Tokens};
 use icp_ledger::{
     AccountIdentifier, ApprovalKey, Block, LedgerBalances, Memo, Operation, PaymentError,
-    Transaction, TransferError, TransferFee, DEFAULT_TRANSFER_FEE,
+    Transaction, TransferError, TransferFee, UpgradeArgs, DEFAULT_TRANSFER_FEE,
 };
 use icrc_ledger_types::icrc1::account::Account;
 use intmap::IntMap;
@@ -411,6 +411,20 @@ impl Ledger {
     pub fn transfer_fee(&self) -> TransferFee {
         TransferFee {
             transfer_fee: self.transfer_fee,
+        }
+    }
+
+    pub fn upgrade(&mut self, args: UpgradeArgs) {
+        if let Some(maximum_number_of_accounts) = args.maximum_number_of_accounts {
+            self.maximum_number_of_accounts = maximum_number_of_accounts;
+        }
+        if let Some(icrc1_minting_account) = args.icrc1_minting_account {
+            if Some(AccountIdentifier::from(icrc1_minting_account)) != self.minting_account_id {
+                ic_cdk::trap(
+                    "The icrc1 minting account is not the same as the minting account set during initialization",
+                );
+            }
+            self.icrc1_minting_account = Some(icrc1_minting_account);
         }
     }
 }

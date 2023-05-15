@@ -652,15 +652,11 @@ fn post_upgrade(args: Option<LedgerCanisterPayload>) {
             LedgerCanisterPayload::Init(_) => ic_cdk::trap("Cannot upgrade the canister with an Init argument. Please provide an Upgrade argument."),
             LedgerCanisterPayload::Upgrade(upgrade_args) => {
                 if let Some(upgrade_args) = upgrade_args {
-
-                    if let Some(max_accounts) = upgrade_args.maximum_number_of_accounts{
-                        ledger.maximum_number_of_accounts = max_accounts;
-                    }
+                    ledger.upgrade(upgrade_args);
                 }
-            }
         }
     }
-
+    }
     set_certified_data(
         &ledger
             .blockchain

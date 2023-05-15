@@ -1,4 +1,4 @@
-use candid::{utils::service_compatible, utils::CandidSource, CandidType};
+use candid::{utils::service_compatible, utils::CandidSource, CandidType, Principal};
 use canister_test::*;
 use dfn_candid::{candid, candid_one, CandidOne};
 use dfn_protobuf::protobuf;
@@ -18,6 +18,7 @@ use icp_ledger::{
     QueryBlocksResponse, SendArgs, Subaccount, Tokens, TotalSupplyArgs, Transaction, TransferArgs,
     TransferError, TransferFee, TransferFeeArgs, DEFAULT_TRANSFER_FEE,
 };
+use icrc_ledger_types::icrc1::account::Account;
 use on_wire::IntoWire;
 use serde::Deserialize;
 use serde_bytes::ByteBuf;
@@ -99,6 +100,10 @@ async fn query_balance(ledger: &Canister<'_>, acc: &Sender) -> Result<Tokens, St
         )
         .await
         .map(tokens_from_proto)
+}
+
+async fn get_minting_account(ledger: &Canister<'_>) -> Result<Option<Account>, String> {
+    ledger.query_("icrc1_minting_account", candid, ()).await
 }
 
 async fn account_balance_candid(ledger: &Canister<'_>, acc: &AccountIdentifier) -> Tokens {
@@ -227,13 +232,17 @@ fn upgrade_test() {
 
         let accounts = make_accounts(5, 4);
 
+        // The minting account should be the governance canister
+        let minting_account_principal =
+            Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap();
+
         let mut ledger = proj
             .cargo_bin("ledger-canister", &[])
             .install_(
                 &r,
                 CandidOne(
                     LedgerCanisterInitPayload::builder()
-                        .minting_account(CanisterId::from_u64(0).into())
+                        .minting_account(PrincipalId::from(minting_account_principal).into())
                         .initial_values(accounts)
                         .build()
                         .unwrap(),
@@ -243,6 +252,9 @@ fn upgrade_test() {
 
         let GetBlocksRes(blocks_before) = get_blocks_pb(&ledger, 0..20).await?;
         let blocks_before = blocks_before.unwrap();
+
+        // Icrc1 Minting Account should be None at this point
+        assert!(get_minting_account(&ledger).await?.is_none());
 
         // Try upgrading with none
         ledger
@@ -257,6 +269,9 @@ fn upgrade_test() {
         let blocks_after = blocks_after.unwrap();
         // Blocks should be the same
         assert_eq!(blocks_before, blocks_after);
+
+        // Icrc1 Minting Account should still be None
+        assert!(get_minting_account(&ledger).await?.is_none());
 
         // Now try to update with some arguments
         ledger
@@ -274,8 +289,35 @@ fn upgrade_test() {
 
         let GetBlocksRes(blocks_after) = get_blocks_pb(&ledger, 0..20).await?;
         let blocks_after = blocks_after.unwrap();
-
         assert_eq!(blocks_before, blocks_after);
+
+        // Icrc1 Minting Account should still be None
+        assert!(get_minting_account(&ledger).await?.is_none());
+
+        // Now try to update with the minting account argument set
+        ledger
+            .upgrade_to_self_binary(
+                CandidOne(Some(
+                    LedgerCanisterUpgradePayload::builder()
+                        .maximum_number_of_accounts(28_000_000)
+                        .icrc1_minting_account(minting_account_principal.into())
+                        .build()
+                        .unwrap(),
+                ))
+                .into_bytes()
+                .unwrap(),
+            )
+            .await?;
+        let GetBlocksRes(blocks_after) = get_blocks_pb(&ledger, 0..20).await?;
+        let blocks_after = blocks_after.unwrap();
+        assert_eq!(blocks_before, blocks_after);
+
+        let minting_account_post_upgrade: Option<Account> = get_minting_account(&ledger).await?;
+        // Now the icrc1 minting account should be changed to the minting account set during initialization
+        assert_eq!(
+            minting_account_post_upgrade.unwrap(),
+            minting_account_principal.into()
+        );
         Ok(())
     })
 }

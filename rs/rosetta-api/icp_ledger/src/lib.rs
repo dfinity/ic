@@ -407,6 +407,9 @@ pub struct LedgerCanisterUpgradePayload(pub LedgerCanisterPayload);
 pub struct UpgradeArgs {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub maximum_number_of_accounts: Option<usize>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icrc1_minting_account: Option<Account>,
 }
 
 // This is how we pass arguments to 'init' in main.rs
@@ -554,12 +557,14 @@ impl LedgerCanisterInitPayloadBuilder {
 
 pub struct LedgerCanisterUpgradePayloadBuilder {
     maximum_number_of_accounts: Option<usize>,
+    icrc1_minting_account: Option<Account>,
 }
 
 impl LedgerCanisterUpgradePayloadBuilder {
     fn new() -> Self {
         Self {
             maximum_number_of_accounts: None,
+            icrc1_minting_account: None,
         }
     }
 
@@ -568,10 +573,16 @@ impl LedgerCanisterUpgradePayloadBuilder {
         self
     }
 
+    pub fn icrc1_minting_account(mut self, minting_account: Account) -> Self {
+        self.icrc1_minting_account = Some(minting_account);
+        self
+    }
+
     pub fn build(self) -> Result<LedgerCanisterUpgradePayload, String> {
         Ok(LedgerCanisterUpgradePayload(
             LedgerCanisterPayload::Upgrade(Some(UpgradeArgs {
                 maximum_number_of_accounts: self.maximum_number_of_accounts,
+                icrc1_minting_account: self.icrc1_minting_account,
             })),
         ))
     }
