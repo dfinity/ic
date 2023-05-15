@@ -68,6 +68,9 @@ pub const IC_STATE_DIR: &str = "data/ic_state";
 pub const IC_CHECKPOINTS_PATH: &str = "ic_state/checkpoints";
 pub const IC_CERTIFICATIONS_PATH: &str = "ic_consensus_pool/certification";
 pub const IC_JSON5_PATH: &str = "/run/ic-node/config/ic.json5";
+// The page_deltas/ directory should not be copied over on rsync as well,
+// it is a new directory used for storing the files backing up the
+// page deltas. We do not need to copy page deltas when nodes are re-assigned.
 pub const IC_STATE_EXCLUDES: &[&str] = &[
     "images",
     "tip",
@@ -75,6 +78,7 @@ pub const IC_STATE_EXCLUDES: &[&str] = &[
     "fs_tmp",
     "cups",
     "recovery",
+    "page_deltas",
     IC_REGISTRY_LOCAL_STORE,
 ];
 pub const IC_STATE: &str = "ic_state";

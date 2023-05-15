@@ -507,9 +507,73 @@ fn remove_node_state(replica_config_file: PathBuf, cup_path: PathBuf) -> Result<
         )
     })?;
 
-    let state_path = config.state_manager.state_root;
-    remove_dir_all(&state_path)
-        .map_err(|err| format!("Couldn't delete the state at {:?}: {:?}", state_path, err))?;
+    let state_path = config.state_manager.state_root();
+
+    // We have to explicitly delete child sub-directories and files from the state_root,
+    // instead of calling remove_dir_all(state_path) because
+    // deleting the "page_deltas" directory results in a SELinux issue: upon deletion of
+    // a directory/file, its SELinux class is not persisted if it's recreated. Upon
+    // re-creation, the SELinux rights of the creator are applied, not the "old" ones.
+    // Deleting the page_deltas directory would thus remove the sandbox capacity to
+    // do IO in the page delta files.
+    for entry in std::fs::read_dir(state_path.as_path()).map_err(|err| {
+        format!(
+            "Error iterating through dir {:?}, because {:?}",
+            state_path.as_path(),
+            err
+        )
+    })? {
+        let en = entry
+            .as_ref()
+            .expect("Getting reference of dir entry failed.");
+        // If this isn't the page deltas directory, it's safe to delete.
+        if en
+            .file_name()
+            .into_string()
+            .expect("Converting file name to string failed.")
+            != config.state_manager.page_deltas_dirname()
+        {
+            if en
+                .file_type()
+                .expect("IO error fetching file type.")
+                .is_dir()
+            {
+                remove_dir_all(en.path())
+            } else {
+                std::fs::remove_file(en.path())
+            }
+            .map_err(|err| {
+                format!(
+                    "Couldn't delete the path {:?}, because {:?}",
+                    en.path(),
+                    err
+                )
+            })?;
+        } else {
+            // Look into the page_deltas/ directory and delete any possible leftover files.
+            for entry in std::fs::read_dir(
+                state_path
+                    .as_path()
+                    .join(config.state_manager.page_deltas_dirname()),
+            )
+            .map_err(|err| {
+                format!(
+                    "Error iterating through dir {:?}, because {:?}",
+                    state_path.as_path(),
+                    err
+                )
+            })? {
+                std::fs::remove_file(entry.expect("Error getting file under page_delta/.").path())
+                    .map_err(|err| {
+                        format!(
+                            "Couldn't delete the file {:?}, because {:?}",
+                            en.path(),
+                            err
+                        )
+                    })?;
+            }
+        }
+    }
 
     remove_file(&cup_path)
         .map_err(|err| format!("Couldn't delete the CUP at {:?}: {:?}", cup_path, err))?;
