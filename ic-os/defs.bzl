@@ -446,16 +446,6 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
             tags = ["manual"],
         )
 
-        native.filegroup(
-            name = "hash_and_upload_update-img-test",
-            srcs = [
-                ":upload_update-img-test",
-                ":update-img-test.tar.zst.sha256",
-            ],
-            visibility = ["//visibility:public"],
-            tags = ["manual"],
-        )
-
     if upgrades:
         upgrade_outputs = [
             ":update-img.tar.zst",
