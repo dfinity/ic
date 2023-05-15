@@ -1,4 +1,4 @@
-use candid::{candid_method, Nat};
+use candid::{candid_method, Decode, Nat};
 use dfn_candid::{candid, candid_one, CandidOne};
 #[allow(unused_imports)]
 use dfn_core::BytesS;
@@ -25,9 +25,9 @@ use ic_ledger_core::{
 use icp_ledger::{
     protobuf, tokens_into_proto, AccountBalanceArgs, AccountIdentifier, ArchiveInfo,
     ArchivedBlocksRange, Archives, BinaryAccountBalanceArgs, Block, BlockArg, BlockRes,
-    CandidBlock, Decimals, GetBlocksArgs, IterBlocksArgs, LedgerCanisterPayload, Memo, Name,
-    Operation, PaymentError, QueryArchiveFn, QueryBlocksResponse, SendArgs, Subaccount, Symbol,
-    TipOfChainRes, TotalSupplyArgs, Transaction, TransferArgs, TransferError, TransferFee,
+    CandidBlock, Decimals, GetBlocksArgs, InitArgs, IterBlocksArgs, LedgerCanisterPayload, Memo,
+    Name, Operation, PaymentError, QueryArchiveFn, QueryBlocksResponse, SendArgs, Subaccount,
+    Symbol, TipOfChainRes, TotalSupplyArgs, Transaction, TransferArgs, TransferError, TransferFee,
     TransferFeeArgs, MAX_BLOCKS_PER_REQUEST,
 };
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
@@ -617,8 +617,8 @@ fn icrc1_decimals() -> u8 {
 }
 
 #[candid_method(init)]
-fn canister_init(args: LedgerCanisterPayload) {
-    match args {
+fn canister_init(arg: LedgerCanisterPayload) {
+    match arg {
         LedgerCanisterPayload::Init(arg) => init(
             arg.minting_account,
             arg.icrc1_minting_account,
@@ -639,7 +639,34 @@ fn canister_init(args: LedgerCanisterPayload) {
 
 #[export_name = "canister_init"]
 fn main() {
-    over_init(|CandidOne(arg)| canister_init(arg))
+    over_init(|bytes: BytesS| {
+        // We support the old init argument for backward
+        // compatibility. If decoding the bytes as the new
+        // init arguments fails then we fallback to the old
+        // init arguments.
+        match Decode!(&bytes.0, LedgerCanisterPayload) {
+            Ok(arg) => canister_init(arg),
+            Err(new_err) => {
+                // fallback to old init
+                match Decode!(&bytes.0, InitArgs) {
+                    Ok(arg) => init(
+                        arg.minting_account,
+                        arg.icrc1_minting_account,
+                        arg.initial_values,
+                        arg.max_message_size_bytes,
+                        arg.transaction_window,
+                        arg.archive_options,
+                        arg.send_whitelist,
+                        arg.transfer_fee,
+                        arg.token_symbol,
+                        arg.token_name,
+                    ),
+                    Err(old_err) =>
+                        ic_cdk::trap(&format!("Unable to decode init argument.\nDecode as new init returned the error {}\nDecode as old init returned the error {}", new_err, old_err))
+                }
+            }
+        }
+    })
 }
 
 fn post_upgrade(args: Option<LedgerCanisterPayload>) {
