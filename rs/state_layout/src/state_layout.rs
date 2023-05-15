@@ -523,7 +523,7 @@ impl StateLayout {
         debug_assert_eq!(height, layout.height);
         let scratchpad = layout.raw_path();
         let checkpoints_path = self.checkpoints();
-        let cp_path = checkpoints_path.join(self.checkpoint_name(height));
+        let cp_path = checkpoints_path.join(Self::checkpoint_name(height));
         sync_and_mark_files_readonly(scratchpad, thread_pool).map_err(|err| {
             LayoutError::IoError {
                 path: scratchpad.to_path_buf(),
@@ -554,9 +554,9 @@ impl StateLayout {
     }
 
     pub fn clone_checkpoint(&self, from: Height, to: Height) -> Result<(), LayoutError> {
-        let src = self.checkpoints().join(self.checkpoint_name(from));
-        let dst = self.checkpoints().join(self.checkpoint_name(to));
-        self.copy_and_sync_checkpoint(&self.checkpoint_name(to), &src, &dst, None)
+        let src = self.checkpoints().join(Self::checkpoint_name(from));
+        let dst = self.checkpoints().join(Self::checkpoint_name(to));
+        self.copy_and_sync_checkpoint(&Self::checkpoint_name(to), &src, &dst, None)
             .map_err(|io_err| {
                 if is_already_exists_err(&io_err) {
                     LayoutError::AlreadyExists(to)
@@ -574,7 +574,7 @@ impl StateLayout {
     /// Returns the layout of the checkpoint with the given height (if
     /// there is one).
     pub fn checkpoint(&self, height: Height) -> Result<CheckpointLayout<ReadOnly>, LayoutError> {
-        let cp_name = self.checkpoint_name(height);
+        let cp_name = Self::checkpoint_name(height);
         let path = self.checkpoints().join(cp_name);
         if !path.exists() {
             return Err(LayoutError::NotFound(height));
@@ -706,7 +706,7 @@ impl StateLayout {
     /// Precondition:
     ///   h ∈ self.diverged_checkpoint_heights()
     pub fn diverged_checkpoint_path(&self, h: Height) -> PathBuf {
-        self.diverged_checkpoints().join(self.checkpoint_name(h))
+        self.diverged_checkpoints().join(Self::checkpoint_name(h))
     }
 
     /// Returns a path to a backed up state given its height.
@@ -714,7 +714,7 @@ impl StateLayout {
     /// Precondition:
     ///   h ∈ self.backup_heights()
     pub fn backup_checkpoint_path(&self, h: Height) -> PathBuf {
-        self.backups().join(self.checkpoint_name(h))
+        self.backups().join(Self::checkpoint_name(h))
     }
 
     /// Removes a checkpoint for a given height if it exists.
@@ -728,7 +728,7 @@ impl StateLayout {
         drop_after_rename: T,
     ) -> Result<(), LayoutError> {
         let start = Instant::now();
-        let cp_name = self.checkpoint_name(height);
+        let cp_name = Self::checkpoint_name(height);
         let cp_path = self.checkpoints().join(&cp_name);
         let tmp_path = self.fs_tmp().join(&cp_name);
 
@@ -812,7 +812,7 @@ impl StateLayout {
     ///   height ∈ self.diverged_checkpoint_heights() ∧
     ///   height ∉ self.checkpoint_heights()
     pub fn mark_checkpoint_diverged(&self, height: Height) -> Result<(), LayoutError> {
-        let cp_name = self.checkpoint_name(height);
+        let cp_name = Self::checkpoint_name(height);
         let cp_path = self.checkpoints().join(&cp_name);
 
         let dst_path = self.diverged_checkpoints().join(&cp_name);
@@ -840,7 +840,7 @@ impl StateLayout {
     /// Path of diverged state marker for the given height.
     pub fn diverged_state_marker_path(&self, height: Height) -> PathBuf {
         self.diverged_state_markers()
-            .join(self.checkpoint_name(height))
+            .join(Self::checkpoint_name(height))
     }
 
     /// Creates a diverged state marker for the given height.
@@ -870,7 +870,7 @@ impl StateLayout {
     /// Precondition:
     ///   h ∈ self.diverged_checkpoint_heights()
     pub fn remove_diverged_checkpoint(&self, height: Height) -> Result<(), LayoutError> {
-        let checkpoint_name = self.checkpoint_name(height);
+        let checkpoint_name = Self::checkpoint_name(height);
         let cp_path = self.diverged_checkpoints().join(&checkpoint_name);
         let tmp_path = self
             .fs_tmp()
@@ -891,7 +891,7 @@ impl StateLayout {
     /// check the difference between these two states and debug the
     /// non-determinism even if the whole subnet moved forward.
     pub fn backup_checkpoint(&self, height: Height) -> Result<(), LayoutError> {
-        let cp_name = self.checkpoint_name(height);
+        let cp_name = Self::checkpoint_name(height);
         let cp_path = self.checkpoints().join(&cp_name);
         if !cp_path.exists() {
             return Err(LayoutError::NotFound(height));
@@ -917,7 +917,7 @@ impl StateLayout {
     /// Precondition:
     ///   h ∈ self.backup_heights()
     pub fn remove_backup(&self, height: Height) -> Result<(), LayoutError> {
-        let backup_name = self.checkpoint_name(height);
+        let backup_name = Self::checkpoint_name(height);
         let backup_path = self.backups().join(&backup_name);
         let tmp_path = self.fs_tmp().join(format!("backup_{}", &backup_name));
         self.atomically_remove_via_path(backup_path.as_path(), tmp_path.as_path(), ())
@@ -934,7 +934,7 @@ impl StateLayout {
     /// If checkpoint at `height` was already backed-up/archived before, it's
     /// removed.
     pub fn archive_checkpoint(&self, height: Height) -> Result<(), LayoutError> {
-        let cp_name = self.checkpoint_name(height);
+        let cp_name = Self::checkpoint_name(height);
         let cp_path = self.checkpoints().join(&cp_name);
         if !cp_path.exists() {
             return Err(LayoutError::NotFound(height));
@@ -968,7 +968,8 @@ impl StateLayout {
         })
     }
 
-    fn checkpoint_name(&self, height: Height) -> String {
+    /// Returns the name of the checkpoint directory with the given block height.
+    pub fn checkpoint_name(height: Height) -> String {
         format!("{:016x}", height.get())
     }
 
@@ -1091,6 +1092,7 @@ fn is_already_exists_err(err: &std::io::Error) -> bool {
 fn collect_subdirs<F, T>(dir: &Path, transform: F) -> Result<Vec<T>, LayoutError>
 where
     F: Fn(&str) -> T,
+    T: Ord,
 {
     let mut ids = Vec::new();
 
@@ -1115,6 +1117,7 @@ where
             ids.push(transform(file_name));
         }
     }
+    ids.sort();
     Ok(ids)
 }
 
