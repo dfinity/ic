@@ -1,3 +1,35 @@
+//! The catchup package provider module is responsible for identifying and retrieving the latest CUP
+//! for the orchestrator.
+//!
+//! The latest CUP can come from two places: from the registry or from peers. Every time we manage
+//! to detect a new CUP we persist it locally. The CUP carries an important information for the
+//! orchestrator: it indicates whether the current node is still a member of the current subnet and
+//! if yes, whether this node is running the correct replica version.
+//!
+//! The registry can contain the newest CUP in two cases: the subnet genesis (in fact, this is the very
+//! first CUP of a subnet) and a subnet recovery. In the case of the subnet recovery, the CUP
+//! contains a state hash and a height from which the subnet is supposed to restart its
+//! computation.
+//!
+//! In the normal operation mode, the CUP fetched from the peers will be eventually always newer than
+//! the one we have persisted locally because CUPs are produced by the subnet on a regular basis.
+//! We try to fetch a newer CUP every 10 seconds. The orchestrator always tries to fetch the CUP
+//! from its own replica first and if no newer CUP is available, it tries to fetch one from one of the
+//! random peers. To avoid bandwidth waste, every request contains the CUP version available locally.
+//! The request will only be responded to with a new CUP if a newer one actually exists. Moreover, trying to
+//! fetch the CUP from the node's own replica makes the upgrade behaviour of a subnet more efficient. This
+//! is because if all replicas are up to date, they will obtain a new CUP at about the same time. Then
+//! some nodes will instantly go into the upgrade process and stop serving CUPs to their peers.
+//! Hence, fetching the CUP from the node's own replica first allows the orchestrator to get the CUP
+//! quicker because its own replica will serve the CUP until it gets shut down before an upgrade.
+//!
+//! CUPs are persisted in Protobuf format and are expected to be backwards compatible. For example,
+//! if a node stays offline for a long period of time and its subnet goes through an upgrade in
+//! that time, it is the CUP served by peers that will help such a node to get back on track. It
+//! will contain a registry version indicating the correct replica version and a list of peers that
+//! can be used to fetch newer CUPs. This way a node does not rely on the P2P protocol to catch up
+//! with its subnet and allows us to upgrade the protocol with breaking changes on any protocol layer.
+
 use crate::error::{OrchestratorError, OrchestratorResult};
 use crate::registry_helper::RegistryHelper;
 use ic_canister_client::Sender;
