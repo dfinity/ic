@@ -4361,6 +4361,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-bitcoin-canister-mock"
+version = "0.1.0"
+dependencies = [
+ "bech32 0.9.1",
+ "bitcoin",
+ "candid",
+ "hex",
+ "ic-base-types",
+ "ic-btc-interface",
+ "ic-cdk 0.7.3",
+ "ic-cdk-macros",
+ "ic-ckbtc-minter",
+ "ic-state-machine-tests",
+ "ic-test-utilities-load-wasm",
+ "rand 0.8.5",
+ "serde",
+ "serde_bytes",
+]
+
+[[package]]
 name = "ic-boundary"
 version = "0.1.0"
 dependencies = [
