@@ -549,19 +549,6 @@ pub trait SystemApi {
         heap: &mut [u8],
     ) -> HypervisorResult<()>;
 
-    /// Returns the size of the blob corresponding to the id of the controller.
-    fn ic0_controller_size(&self) -> HypervisorResult<usize>;
-
-    /// Copies `size` bytes starting from `offset` in the id blob of the
-    /// controller to heap[dst..dst+size].
-    fn ic0_controller_copy(
-        &mut self,
-        dst: u32,
-        offset: u32,
-        size: u32,
-        heap: &mut [u8],
-    ) -> HypervisorResult<()>;
-
     /// Outputs the specified bytes on the heap as a string on STDOUT.
     fn ic0_debug_print(&self, src: u32, size: u32, heap: &[u8]) -> HypervisorResult<()>;
 

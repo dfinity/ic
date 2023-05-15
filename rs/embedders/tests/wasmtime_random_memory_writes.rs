@@ -207,10 +207,6 @@ fn make_module_wat_for_api_calls(heap_size: usize) -> String {
         (func $ic0_canister_self_copy (param i32) (param i32) (param i32)))
       (import "ic0" "canister_self_size"
         (func $ic0_canister_self_size (result i32)))
-      (import "ic0" "controller_copy"
-        (func $ic0_controller_copy (param i32) (param i32) (param i32)))
-      (import "ic0" "controller_size"
-        (func $ic0_controller_size (result i32)))
 
       (import "ic0" "canister_cycle_balance128"
         (func $ic0_canister_cycle_balance128 (param i32)))
@@ -226,7 +222,6 @@ fn make_module_wat_for_api_calls(heap_size: usize) -> String {
         (call $ic0_msg_caller_copy (i32.const 4096) (i32.const 0) (call $ic0_msg_caller_size))
         (call $ic0_msg_arg_data_copy (i32.const 12288) (i32.const 0) (call $ic0_msg_arg_data_size))
         (call $ic0_canister_self_copy (i32.const 20480) (i32.const 0) (call $ic0_canister_self_size))
-        (call $ic0_controller_copy (i32.const 28672) (i32.const 0) (call $ic0_controller_size))
         (call $ic0_canister_cycle_balance128 (i32.const 36864))
  
         (; Write some data to page 10 using stable_read, by first copying 4
@@ -1314,7 +1309,6 @@ mod tests {
             expected_dirty_pages.insert(1); // caller_copy
             expected_dirty_pages.insert(3); // data_copy
             expected_dirty_pages.insert(5); // canister_self_copy
-            expected_dirty_pages.insert(7); // controller_copy
             expected_dirty_pages.insert(9); // canister_cycle_balance128
             expected_dirty_pages.insert(9); // msg_cycles_available128
             expected_dirty_pages.insert(10); // stable_read

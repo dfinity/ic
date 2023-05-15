@@ -4010,45 +4010,45 @@ fn max_number_of_canisters_is_respected_when_creating_canisters() {
     })
 }
 
-/// This canister exports a query that returns its controller's length.
-const CONTROLLER_LENGTH: &str = r#"
+/// This canister exports a query that returns its canister version.
+const CANISTER_VERSION: &str = r#"
     (module
         (import "ic0" "msg_reply" (func $msg_reply))
         (import "ic0" "msg_reply_data_append"
             (func $msg_reply_data_append (param i32 i32)))
-        (import "ic0" "controller_size"
-            (func $controller_size (result i32)))
-        (func $controller
-            (i32.store (i32.const 0) (call $controller_size))
+        (import "ic0" "canister_version"
+            (func $canister_version (result i64)))
+        (func $version
+            (i64.store (i32.const 0) (call $canister_version))
             (call $msg_reply_data_append
                 (i32.const 0) ;; the counter from heap[0]
                 (i32.const 1)) ;; length (assume the i32 actually fits in one byte)
             (call $msg_reply))
         (func $canister_init)
         (memory $memory 1)
-        (export "canister_query controller" (func $controller))
+        (export "canister_query version" (func $version))
         (export "canister_init" (func $canister_init))
     )"#;
 
 /// With sandboxing, we are caching some information about a canister's state
-/// (including the controler) with the sandboxed process. This test verifies
-/// that the canister sees the proper change when the controller is updated.
+/// (including the canister version) with the sandboxed process. This test verifies
+/// that the canister sees the proper change when the canister version is updated.
 #[test]
-fn controller_changes_are_visible() {
+fn canister_version_changes_are_visible() {
     let mut test = ExecutionTestBuilder::new().build();
-    let canister_id = test.canister_from_wat(CONTROLLER_LENGTH).unwrap();
-    let result = test.ingress(canister_id, "controller", vec![]);
+    let canister_id = test.canister_from_wat(CANISTER_VERSION).unwrap();
+    let result = test.ingress(canister_id, "version", vec![]);
     let reply = get_reply(result);
-    assert_eq!(reply, vec![test.user_id().get().to_vec().len() as u8]);
+    assert_eq!(reply, vec![1]);
 
-    // Change to a new controller with a different length.
+    // Change controllers to bump canister version.
     let new_controller = PrincipalId::try_from(&[1, 2, 3][..]).unwrap();
     assert!(new_controller != test.user_id().get());
     test.set_controller(canister_id, new_controller).unwrap();
 
-    let result = test.ingress(canister_id, "controller", vec![]);
+    let result = test.ingress(canister_id, "version", vec![]);
     let reply = get_reply(result);
-    assert_eq!(reply, vec![new_controller.to_vec().len() as u8]);
+    assert_eq!(reply, vec![2]);
 }
 
 // This test confirms that we can always create as many canisters as possible if

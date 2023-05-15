@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use ic_logger::info;
 use ic_replicated_state::canister_state::execution_state::WasmBinary;
 use ic_replicated_state::page_map::PageAllocatorFileDescriptor;
 use ic_replicated_state::{ExportedFunctions, Global, Memory, NumWasmPages, PageMap};
@@ -61,10 +60,6 @@ pub trait WasmExecutor: Send + Sync {
 }
 
 struct WasmExecutorMetrics {
-    // TODO(EXC-365): Remove these metrics once we confirm that no module imports these IC0 methods
-    // anymore.
-    imports_controller_size: IntCounter,
-    imports_controller_copy: IntCounter,
     // TODO(EXC-376): Remove these metrics once we confirm that no module imports these IC0 methods
     // anymore.
     imports_call_cycles_add: IntCounter,
@@ -79,14 +74,6 @@ impl WasmExecutorMetrics {
     #[doc(hidden)] // pub for usage in tests
     pub fn new(metrics_registry: &MetricsRegistry) -> Self {
         Self {
-            imports_controller_size: metrics_registry.int_counter(
-                "execution_wasm_imports_controller_size_total",
-                "The number of Wasm modules that import ic0.controller_size",
-            ),
-            imports_controller_copy: metrics_registry.int_counter(
-                "execution_wasm_imports_controller_copy_total",
-                "The number of Wasm modules that import ic0.controller_copy",
-            ),
             imports_call_cycles_add: metrics_registry.int_counter(
                 "execution_wasm_imports_call_cycles_add",
                 "The number of Wasm modules that import ic0.call_cycles_add",
@@ -216,10 +203,7 @@ impl WasmExecutor for WasmExecutorImpl {
         };
 
         if let Some(serialized_module) = serialized_module {
-            self.observe_metrics(
-                &serialized_module.imports_details,
-                sandbox_safe_system_state.canister_id(),
-            );
+            self.observe_metrics(&serialized_module.imports_details);
         }
 
         let wasm_reserved_pages = get_wasm_reserved_pages(execution_state);
@@ -298,7 +282,7 @@ impl WasmExecutor for WasmExecutorImpl {
                 } => (cache, serialized_module, compilation_result),
                 _ => panic!("Newly created WasmBinary must be compiled or deserialized."),
             };
-        self.observe_metrics(&serialized_module.imports_details, canister_id);
+        self.observe_metrics(&serialized_module.imports_details);
         let exported_functions = serialized_module.exported_functions.clone();
         let wasm_metadata = serialized_module.wasm_metadata.clone();
 
@@ -359,21 +343,7 @@ impl WasmExecutorImpl {
         }
     }
 
-    pub fn observe_metrics(&self, imports_details: &WasmImportsDetails, canister_id: CanisterId) {
-        if imports_details.imports_controller_size {
-            info!(
-                self.log,
-                "Canister {} imports deprecated system API ic0.controller_size.", canister_id
-            );
-            self.metrics.imports_controller_size.inc();
-        }
-        if imports_details.imports_controller_copy {
-            info!(
-                self.log,
-                "Canister {} imports deprecated system API ic0.controller_copy.", canister_id
-            );
-            self.metrics.imports_controller_copy.inc();
-        }
+    pub fn observe_metrics(&self, imports_details: &WasmImportsDetails) {
         if imports_details.imports_call_cycles_add {
             self.metrics.imports_call_cycles_add.inc();
         }
