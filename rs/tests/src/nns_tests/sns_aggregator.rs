@@ -15,7 +15,7 @@ use crate::{
         engine::Engine,
         metrics::{LoadTestMetrics, RequestOutcome},
     },
-    sns_client::SnsClient,
+    sns_client::{oc_sns_init_payload, SnsClient},
 };
 use anyhow::{bail, Context};
 use candid::{Decode, Principal};
@@ -70,7 +70,8 @@ fn config_for_security_testing(env: &TestEnv, wasm_strategy: NnsCanisterWasmStra
             .for_each(|node| node.await_status_is_healthy().unwrap())
     });
     install_nns(env, wasm_strategy, NnsCustomizations::default());
-    install_sns(env, wasm_strategy);
+    let init = oc_sns_init_payload();
+    install_sns(env, wasm_strategy, init);
 }
 
 pub fn benchmark_config(env: TestEnv) {

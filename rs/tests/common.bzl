@@ -129,6 +129,7 @@ DEPENDENCIES = [
     "@crate_index//:regex",
     "@crate_index//:reqwest",
     "@crate_index//:ring",
+    "@crate_index//:rust_decimal",
     "@crate_index//:rustls",
     "@crate_index//:serde",
     "@crate_index//:serde_bytes",
