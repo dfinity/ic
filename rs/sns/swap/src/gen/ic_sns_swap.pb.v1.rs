@@ -759,17 +759,17 @@ pub struct DerivedState {
     #[prost(uint64, tag = "1")]
     pub buyer_total_icp_e8s: u64,
     /// Current number of non-community-fund swap participants
-    #[prost(uint64, tag = "3")]
-    pub direct_participant_count: u64,
+    #[prost(uint64, optional, tag = "3")]
+    pub direct_participant_count: ::core::option::Option<u64>,
     /// Current number of community-fund swap participants. In particular, it's the
     /// number of unique controllers of the neurons participating in the CF.
-    #[prost(uint64, tag = "4")]
-    pub cf_participant_count: u64,
+    #[prost(uint64, optional, tag = "4")]
+    pub cf_participant_count: ::core::option::Option<u64>,
     /// Current number of community-fund neurons participating in the swap
     /// May be greater than cf_participant_count if multiple neurons in the CF have
     /// the same controller.
-    #[prost(uint64, tag = "5")]
-    pub cf_neuron_count: u64,
+    #[prost(uint64, optional, tag = "5")]
+    pub cf_neuron_count: ::core::option::Option<u64>,
     /// Current approximate rate SNS tokens per ICP.
     #[prost(float, tag = "2")]
     pub sns_tokens_per_icp: f32,

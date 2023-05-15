@@ -3235,9 +3235,9 @@ fn test_derived_state() {
     let expected_derived_state1 = DerivedState {
         buyer_total_icp_e8s: 0,
         sns_tokens_per_icp: 0f32,
-        direct_participant_count: 0,
-        cf_participant_count: 0,
-        cf_neuron_count: 0,
+        direct_participant_count: Some(0),
+        cf_participant_count: Some(0),
+        cf_neuron_count: Some(0),
     };
     let actual_derived_state1 = swap.derived_state();
     assert_eq!(expected_derived_state1, actual_derived_state1);
@@ -3251,9 +3251,9 @@ fn test_derived_state() {
     let expected_derived_state2 = DerivedState {
         buyer_total_icp_e8s: 0,
         sns_tokens_per_icp: 0f32,
-        direct_participant_count: 0,
-        cf_participant_count: 0,
-        cf_neuron_count: 0,
+        direct_participant_count: Some(0),
+        cf_participant_count: Some(0),
+        cf_neuron_count: Some(0),
     };
     let actual_derived_state2 = swap.derived_state();
     assert_eq!(expected_derived_state2, actual_derived_state2);
@@ -3275,9 +3275,9 @@ fn test_derived_state() {
     let expected_derived_state3 = DerivedState {
         buyer_total_icp_e8s: 100_000_000,
         sns_tokens_per_icp: 10f32,
-        direct_participant_count: 1,
-        cf_participant_count: 0,
-        cf_neuron_count: 0,
+        direct_participant_count: Some(1),
+        cf_participant_count: Some(0),
+        cf_neuron_count: Some(0),
     };
     let actual_derived_state3 = swap.derived_state();
     assert_eq!(expected_derived_state3, actual_derived_state3);
@@ -3299,9 +3299,9 @@ fn test_derived_state() {
     let expected_derived_state4 = DerivedState {
         buyer_total_icp_e8s: 800_000_000,
         sns_tokens_per_icp: 1.25f32,
-        direct_participant_count: 1,
-        cf_participant_count: 1,
-        cf_neuron_count: 2,
+        direct_participant_count: Some(1),
+        cf_participant_count: Some(1),
+        cf_neuron_count: Some(2),
     };
     let actual_derived_state4 = swap.derived_state();
     assert_eq!(expected_derived_state4, actual_derived_state4);
