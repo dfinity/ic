@@ -477,18 +477,11 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             "ic-certified-map": crate.spec(
                 version = "^0.3.1",
             ),
-            "ic-ledger-types": crate.spec(
-                version = "^0.1.1",
-            ),
             "ic-metrics-encoder": crate.spec(
                 version = "^1.1.0",
             ),
             "ic-stable-structures": crate.spec(
                 version = "^0.5.0",
-            ),
-            "ic-stable-structures-0_2_0": crate.spec(
-                package = "ic-stable-structures",
-                version = "^0.2.0",
             ),
             "ic-response-verification": crate.spec(
                 version = "^0.2.1",
