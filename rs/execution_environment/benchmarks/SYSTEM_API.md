@@ -35,9 +35,6 @@ Local  (new) profile:release-lto commit:04f38ce0 branch:master
 | update/ic0_canister_self_size()            |    1.30G |    1.85G |    +42% |      3.78s |
 | update/ic0_canister_self_copy()/1B         |     224M |     193M |    -14% |     36.27s |
 | update/ic0_canister_self_copy()/10B        |     224M |     191M |    -15% |     36.65s |
-| update/ic0_controller_size()               |    1.29G |    1.80G |    +39% |      3.89s |
-| update/ic0_controller_copy()/1B            |     224M |     193M |    -14% |     36.27s |
-| update/ic0_controller_copy()/10B           |     223M |     192M |    -14% |     36.46s |
 | update/ic0_debug_print()/1B                |    5.45G |    3.27G |    -40% |      2.14s |
 | update/ic0_debug_print()/64B               |    8.48G |    5.13G |    -40% |      1.36s |
 | update/ic0_call_new()                      |    10.8M |    73.1M |   +576% |     95.76s |
@@ -106,9 +103,6 @@ Average speedup of the local (new) changes: +3% (throughput)
 | update/ic0_canister_self_size()            |   8.45ms |   5.91ms |    -31% |
 | update/ic0_canister_self_copy()/1B         |   57.8ms |   67.3ms |    +16% |
 | update/ic0_canister_self_copy()/10B        |     58ms |   67.7ms |    +16% |
-| update/ic0_controller_size()               |   8.47ms |   6.09ms |    -29% |
-| update/ic0_controller_copy()/1B            |   57.9ms |   67.1ms |    +15% |
-| update/ic0_controller_copy()/10B           |     58ms |   67.4ms |    +16% |
 | update/ic0_debug_print()/1B                |   20.7ms |   34.4ms |    +66% |
 | update/ic0_debug_print()/64B               |   20.7ms |   34.2ms |    +65% |
 | update/ic0_call_new()                      |    251ms |    246ms |     -2% |

@@ -115,18 +115,6 @@ impl SystemApi for SystemApiEmpty {
     ) -> HypervisorResult<()> {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }
-    fn ic0_controller_size(&self) -> HypervisorResult<usize> {
-        unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
-    }
-    fn ic0_controller_copy(
-        &mut self,
-        _: u32,
-        _: u32,
-        _: u32,
-        _: &mut [u8],
-    ) -> HypervisorResult<()> {
-        unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
-    }
     fn ic0_debug_print(&self, _: u32, _: u32, _: &[u8]) -> HypervisorResult<()> {
         unimplemented!("{}", MESSAGE_UNIMPLEMENTED)
     }

@@ -494,7 +494,6 @@ pub struct SandboxSafeSystemState {
     #[doc(hidden)]
     pub system_state_changes: SystemStateChanges,
     pub(super) canister_id: CanisterId,
-    pub(super) controller: PrincipalId,
     pub(super) status: CanisterStatusView,
     pub(super) subnet_type: SubnetType,
     pub(super) subnet_size: usize,
@@ -522,7 +521,6 @@ impl SandboxSafeSystemState {
     #[allow(clippy::too_many_arguments)]
     pub fn new_internal(
         canister_id: CanisterId,
-        controller: PrincipalId,
         status: CanisterStatusView,
         freeze_threshold: NumSeconds,
         memory_allocation: MemoryAllocation,
@@ -541,7 +539,6 @@ impl SandboxSafeSystemState {
     ) -> Self {
         Self {
             canister_id,
-            controller,
             status,
             subnet_type: cycles_account_manager.subnet_type(),
             subnet_size,
@@ -602,7 +599,6 @@ impl SandboxSafeSystemState {
 
         Self::new_internal(
             system_state.canister_id,
-            *system_state.controller(),
             CanisterStatusView::from_full_status(&system_state.status),
             system_state.freeze_threshold,
             system_state.memory_allocation,

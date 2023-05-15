@@ -1723,58 +1723,6 @@ impl SystemApi for SystemApiImpl {
         result
     }
 
-    fn ic0_controller_size(&self) -> HypervisorResult<usize> {
-        let result = match &self.api_type {
-            ApiType::Start { .. } => Err(self.error_for("ic0_controller_size")),
-            ApiType::Init { .. }
-            | ApiType::SystemTask { .. }
-            | ApiType::Update { .. }
-            | ApiType::Cleanup { .. }
-            | ApiType::ReplicatedQuery { .. }
-            | ApiType::NonReplicatedQuery { .. }
-            | ApiType::PreUpgrade { .. }
-            | ApiType::ReplyCallback { .. }
-            | ApiType::RejectCallback { .. }
-            | ApiType::InspectMessage { .. } => {
-                Ok(self.sandbox_safe_system_state.controller.as_slice().len())
-            }
-        };
-        trace_syscall!(self, ic0_controller_size, result);
-        result
-    }
-
-    fn ic0_controller_copy(
-        &mut self,
-        dst: u32,
-        offset: u32,
-        size: u32,
-        heap: &mut [u8],
-    ) -> HypervisorResult<()> {
-        let result = match &self.api_type {
-            ApiType::Start { .. } => Err(self.error_for("ic0_controller_copy")),
-            ApiType::Init { .. }
-            | ApiType::SystemTask { .. }
-            | ApiType::Update { .. }
-            | ApiType::Cleanup { .. }
-            | ApiType::ReplicatedQuery { .. }
-            | ApiType::NonReplicatedQuery { .. }
-            | ApiType::PreUpgrade { .. }
-            | ApiType::ReplyCallback { .. }
-            | ApiType::RejectCallback { .. }
-            | ApiType::InspectMessage { .. } => {
-                valid_subslice("ic0.controller_copy heap", dst, size, heap)?;
-                let controller = self.sandbox_safe_system_state.controller;
-                let id_bytes = controller.as_slice();
-                let slice = valid_subslice("ic0.controller_copy id", offset, size, id_bytes)?;
-                let (dst, size) = (dst as usize, size as usize);
-                deterministic_copy_from_slice(&mut heap[dst..dst + size], slice);
-                Ok(())
-            }
-        };
-        trace_syscall!(self, ic0_controller_copy, result);
-        result
-    }
-
     fn ic0_call_new(
         &mut self,
         callee_src: u32,

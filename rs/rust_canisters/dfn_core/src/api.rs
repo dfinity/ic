@@ -31,8 +31,6 @@ pub mod ic0 {
     extern "C" {
         pub fn canister_self_copy(dst: u32, offset: u32, size: u32);
         pub fn canister_self_size() -> u32;
-        pub fn controller_copy(dst: u32, offset: u32, size: u32);
-        pub fn controller_size() -> u32;
         pub fn debug_print(offset: u32, size: u32);
         pub fn msg_arg_data_copy(dst: u32, offset: u32, size: u32);
         pub fn msg_arg_data_size() -> u32;
@@ -111,12 +109,6 @@ pub mod ic0 {
     }
     pub unsafe fn canister_self_size() -> u32 {
         wrong_arch("canister_self_size")
-    }
-    pub unsafe fn controller_copy(_dst: u32, _offset: u32, _size: u32) {
-        wrong_arch("controller_copy")
-    }
-    pub unsafe fn controller_size() -> u32 {
-        wrong_arch("controller_size")
     }
     pub unsafe fn debug_print(_offset: u32, _size: u32) {
         println!("You tried to debug_print, that isn't supported in native code")
@@ -669,16 +661,6 @@ pub fn id() -> CanisterId {
         ic0::canister_self_copy(bytes.as_mut_ptr() as u32, 0, len);
     }
     CanisterId::try_from(bytes).unwrap()
-}
-
-/// Returns the controller of the canister as a blob.
-pub fn controller() -> PrincipalId {
-    let len: u32 = unsafe { ic0::controller_size() };
-    let mut bytes = vec![0; len as usize];
-    unsafe {
-        ic0::controller_copy(bytes.as_mut_ptr() as u32, 0, len);
-    }
-    PrincipalId::try_from(bytes.as_slice()).unwrap()
 }
 
 /// Returns the rejection message.

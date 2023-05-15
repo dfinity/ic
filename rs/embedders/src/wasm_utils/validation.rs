@@ -209,26 +209,6 @@ fn get_valid_system_apis() -> HashMap<String, HashMap<String, FunctionSignature>
                 },
             )],
         ),
-        (
-            "controller_size",
-            vec![(
-                API_VERSION_IC0,
-                FunctionSignature {
-                    param_types: vec![],
-                    return_type: vec![ValType::I32],
-                },
-            )],
-        ),
-        (
-            "controller_copy",
-            vec![(
-                API_VERSION_IC0,
-                FunctionSignature {
-                    param_types: vec![ValType::I32, ValType::I32, ValType::I32],
-                    return_type: vec![],
-                },
-            )],
-        ),
         // Inter-canister method calls
         (
             "public",
@@ -724,8 +704,6 @@ fn set_imports_details(import_details: &mut WasmImportsDetails, import_module: &
         return;
     }
     match field {
-        "controller_size" => import_details.imports_controller_size = true,
-        "controller_copy" => import_details.imports_controller_copy = true,
         "call_cycles_add" => import_details.imports_call_cycles_add = true,
         "canister_cycle_balance" => import_details.imports_canister_cycle_balance = true,
         "msg_cycles_available" => import_details.imports_msg_cycles_available = true,

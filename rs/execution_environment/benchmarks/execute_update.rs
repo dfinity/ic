@@ -116,21 +116,6 @@ lazy_static! {
             13_000_004,
         ),
         common::Benchmark(
-            "ic0_controller_size()",
-            Module::Test.from_ic0("controller_size", NoParams, Result::I32),
-            11_000_004,
-        ),
-        common::Benchmark(
-            "ic0_controller_copy()/1B",
-            Module::Test.from_ic0("controller_copy", Params3(0, 0, 1), Result::No),
-            13_000_004,
-        ),
-        common::Benchmark(
-            "ic0_controller_copy()/10B",
-            Module::Test.from_ic0("controller_copy", Params3(0, 0, 10), Result::No), // 10B max
-            13_000_004,
-        ),
-        common::Benchmark(
             "ic0_debug_print()/1B",
             Module::Test.from_ic0("debug_print", Params2(0, 1), Result::No),
             113_000_004,

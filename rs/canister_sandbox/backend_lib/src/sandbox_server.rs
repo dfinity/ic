@@ -193,7 +193,6 @@ mod tests {
         let controller = user_test_id(0).get();
         SandboxSafeSystemState::new_internal(
             canister_test_id(0),
-            controller,
             CanisterStatusView::Running,
             NumSeconds::from(3600),
             MemoryAllocation::BestEffort,

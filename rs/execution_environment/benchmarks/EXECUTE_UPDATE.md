@@ -36,9 +36,6 @@ The most important metric is `IPS`. The goal is to have roughly the same `IPS` a
 | canister_self_size()        |  572M | 19.2 ms |   11M |  +55 |                                |
 | canister_self_copy()/1B     |  156M | 86.1 ms |   13M | +287 | VERY LOW                       |
 | canister_self_copy()/10B    |  156M | 82.2 ms |   13M | +273 | VERY LOW                       |
-| controller_size()           |  449M | 24.4 ms |   11M |  +74 |                                |
-| controller_copy()/1B        |  150M | 86.5 ms |   13M | +288 | VERY LOW                       |
-| controller_copy()/10B       |  150M | 86.3 ms |   13M | +287 | VERY LOW                       |
 | stable_size()               | 1063M | 10.3 ms |   11M |  +24 |                                |
 | stable_grow()               |  196M | 60.9 ms |   12M | +200 | VERY LOW                       |
 | stable_read()/1B            |  106M |  131 ms |   14M | +442 | VERY LOW                       |
