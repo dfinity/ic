@@ -5139,8 +5139,8 @@ dependencies = [
  "ic-crypto-test-utils-local-csp-vault",
  "ic-crypto-test-utils-metrics",
  "ic-crypto-test-utils-multi-sigs",
+ "ic-crypto-test-utils-ni-dkg",
  "ic-crypto-test-utils-reproducible-rng",
- "ic-crypto-test-utils-threshold-sigs",
  "ic-crypto-tls-cert-validation",
  "ic-crypto-tls-interfaces",
  "ic-crypto-tree-hash",
@@ -6038,6 +6038,7 @@ dependencies = [
  "ic-registry-proto-data-provider",
  "ic-types",
  "ic-types-test-utils",
+ "rand 0.8.5",
  "serde",
 ]
 
@@ -6047,21 +6048,6 @@ version = "0.1.0"
 dependencies = [
  "rand 0.8.5",
  "rand_chacha 0.3.1",
-]
-
-[[package]]
-name = "ic-crypto-test-utils-threshold-sigs"
-version = "0.8.0"
-dependencies = [
- "ic-config",
- "ic-crypto-internal-types",
- "ic-crypto-temp-crypto",
- "ic-interfaces",
- "ic-registry-client-fake",
- "ic-registry-keys",
- "ic-registry-proto-data-provider",
- "ic-types",
- "rand 0.8.5",
 ]
 
 [[package]]

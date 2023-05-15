@@ -17,6 +17,7 @@ ic-registry-client-helpers = { path = "../../../registry/helpers" }
 ic-registry-keys = { path = "../../../registry/keys" }
 ic-registry-proto-data-provider = { path = "../../../registry/proto_data_provider" }
 ic-types = { path = "../../../types/types" }
+rand = "0.8"
 serde = { version = "1.0.99", features = [ "derive" ] }
 
 [dev-dependencies]

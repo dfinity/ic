@@ -1,5 +1,5 @@
 use ic_base_types::RegistryVersion;
-use ic_crypto_test_utils_threshold_sigs::non_interactive::{
+use ic_crypto_test_utils_ni_dkg::{
     create_dealing, create_transcript, load_transcript, retain_only_active_keys, verify_dealing,
     NiDkgTestEnvironment,
 };
@@ -255,14 +255,12 @@ impl TestCase {
 
 mod nidkg_benches_test_vectors {
     use super::TestCase;
-    use ic_crypto_test_utils_threshold_sigs::non_interactive::{
-        NiDkgTestEnvironment, RandomNiDkgConfig,
-    };
+    use ic_crypto_test_utils_ni_dkg::{NiDkgTestEnvironment, RandomNiDkgConfig};
     use serde::{de, ser};
     use std::collections::HashSet;
     use std::path::PathBuf;
 
-    use ic_crypto_test_utils_threshold_sigs::non_interactive::{
+    use ic_crypto_test_utils_ni_dkg::{
         create_dealing, create_dealings, load_transcript, run_ni_dkg_and_create_single_transcript,
     };
     use ic_types::crypto::threshold_sig::ni_dkg::config::NiDkgConfig;

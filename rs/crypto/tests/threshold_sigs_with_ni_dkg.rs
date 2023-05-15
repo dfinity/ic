@@ -2,7 +2,7 @@
 use assert_matches::assert_matches;
 use ic_crypto_temp_crypto::TempCryptoComponent;
 use ic_crypto_test_utils::crypto_for;
-use ic_crypto_test_utils_threshold_sigs::non_interactive::{
+use ic_crypto_test_utils_ni_dkg::{
     create_dealings, run_ni_dkg_and_create_single_transcript, NiDkgTestEnvironment,
     RandomNiDkgConfig,
 };
