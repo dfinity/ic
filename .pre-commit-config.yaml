@@ -60,15 +60,6 @@ repos:
             .*/Cargo\.nix|
             experimental/.*
         )$
-  - id: rustfmt
-    exclude: |
-        (?x)(
-            experimental/|
-            rust_canisters/|
-            nix/overlays/|
-            gitlab-ci/|
-            crypto/internal/crypto_lib/fs_ni_dkg/miracl_core
-        ) # exclude these directories.
 
 - repo: https://github.com/willthames/ansible-lint.git
   rev: v4.2.0
