@@ -226,8 +226,20 @@ pub fn encode_metrics(
         "Total number of e8s locked in non-dissolved neurons..",
     )?;
 
-    let total_voting_power = match governance.proto.proposals.iter().next_back() {
-        Some((_, proposal)) => match &proposal.latest_tally {
+    let total_voting_power = match governance
+        .proto
+        .proposals
+        .iter()
+        .filter(|(_, proposal_data)| {
+            proposal_data
+                .proposal
+                .as_ref()
+                .map(|proposal| !proposal.is_manage_neuron())
+                .unwrap_or_default()
+        })
+        .next_back()
+    {
+        Some((_, proposal_data)) => match &proposal_data.latest_tally {
             Some(tally) => tally.total as f64,
             None => 0f64,
         },
