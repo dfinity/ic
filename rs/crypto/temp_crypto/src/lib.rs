@@ -6,7 +6,7 @@ use ic_crypto_internal_csp::vault::local_csp_vault::ProdLocalCspVault;
 use ic_crypto_internal_csp::{CryptoServiceProvider, Csp};
 use ic_crypto_internal_logmon::metrics::CryptoMetrics;
 use ic_crypto_node_key_generation::{
-    derive_node_id, generate_committee_signing_keys, generate_dkg_dealing_encryption_keys,
+    generate_committee_signing_keys, generate_dkg_dealing_encryption_keys,
     generate_idkg_dealing_encryption_keys, generate_node_signing_keys, generate_tls_keys,
 };
 use ic_crypto_temp_crypto_vault::{
@@ -16,6 +16,7 @@ use ic_crypto_tls_interfaces::{
     AllowedClients, AuthenticatedPeer, TlsClientHandshakeError, TlsHandshake, TlsPublicKeyCert,
     TlsServerHandshakeError, TlsStream,
 };
+use ic_crypto_utils_basic_sig::conversions::derive_node_id;
 use ic_crypto_utils_time::CurrentSystemTimeSource;
 use ic_interfaces::crypto::{
     BasicSigVerifier, BasicSigVerifierByPublicKey, BasicSigner, CanisterSigVerifier,
@@ -195,12 +196,13 @@ impl TempCryptoBuilder {
         let node_signing_pk = node_keys_to_generate
             .generate_node_signing_keys
             .then(|| generate_node_signing_keys(&csp));
-        let node_id = self.node_id.unwrap_or_else(|| {
-            node_signing_pk.as_ref().map_or(
-                NodeId::from(PrincipalId::new_node_test_id(Self::DEFAULT_NODE_ID)),
-                derive_node_id,
-            )
-        });
+        let node_id = self
+            .node_id
+            .unwrap_or_else(|| match node_signing_pk.as_ref() {
+                None => NodeId::from(PrincipalId::new_node_test_id(Self::DEFAULT_NODE_ID)),
+                Some(node_signing_pk) => derive_node_id(node_signing_pk)
+                    .expect("Node signing public key should be valid"),
+            });
         let committee_signing_pk = node_keys_to_generate
             .generate_committee_signing_keys
             .then(|| generate_committee_signing_keys(&csp));

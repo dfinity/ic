@@ -16,9 +16,9 @@ use std::sync::Arc;
 #[cfg(test)]
 mod tests;
 
-pub fn derive_node_id(node_signing_pk: &PublicKeyProto) -> NodeId {
+fn derive_node_id(node_signing_pk: &PublicKeyProto) -> NodeId {
     basicsig_conversions::derive_node_id(node_signing_pk)
-        .expect("Corrupted node signing public key")
+        .expect("Node signing public key should be valid")
 }
 
 pub fn generate_node_signing_keys<T: CryptoServiceProvider>(csp: &T) -> PublicKeyProto {

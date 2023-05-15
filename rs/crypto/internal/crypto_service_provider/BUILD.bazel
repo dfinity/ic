@@ -67,6 +67,7 @@ DEV_DEPENDENCIES = [
     "//rs/crypto/test_utils/keys",
     "//rs/crypto/test_utils/local_csp_vault",
     "//rs/crypto/test_utils/reproducible_rng",
+    "//rs/crypto/utils/basic_sig",
     "//rs/test_utilities",
     "//rs/test_utilities/in_memory_logger",
     "//rs/types/types_test_utils",
