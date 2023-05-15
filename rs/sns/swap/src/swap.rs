@@ -166,9 +166,9 @@ impl From<DerivedState> for GetDerivedStateResponse {
     fn from(state: DerivedState) -> GetDerivedStateResponse {
         GetDerivedStateResponse {
             buyer_total_icp_e8s: Some(state.buyer_total_icp_e8s),
-            direct_participant_count: Some(state.direct_participant_count),
-            cf_participant_count: Some(state.cf_participant_count),
-            cf_neuron_count: Some(state.cf_neuron_count),
+            direct_participant_count: state.direct_participant_count,
+            cf_participant_count: state.cf_participant_count,
+            cf_neuron_count: state.cf_neuron_count,
             sns_tokens_per_icp: Some(state.sns_tokens_per_icp as f64),
         }
     }
@@ -2300,9 +2300,9 @@ impl Swap {
             .unwrap_or(0.0);
         DerivedState {
             buyer_total_icp_e8s: participant_total_icp_e8s,
-            direct_participant_count,
-            cf_participant_count,
-            cf_neuron_count,
+            direct_participant_count: Some(direct_participant_count),
+            cf_participant_count: Some(cf_participant_count),
+            cf_neuron_count: Some(cf_neuron_count),
             sns_tokens_per_icp,
         }
     }
@@ -2931,9 +2931,9 @@ mod tests {
         let derived_state = DerivedState {
             buyer_total_icp_e8s: 400_000_000,
             sns_tokens_per_icp: 2.5f32,
-            direct_participant_count: 1000,
-            cf_participant_count: 100,
-            cf_neuron_count: 200,
+            direct_participant_count: Some(1000),
+            cf_participant_count: Some(100),
+            cf_neuron_count: Some(200),
         };
 
         let response: GetDerivedStateResponse = derived_state.into();
