@@ -42,26 +42,19 @@
           gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" \
           "artifacts/canisters" "${CI_JOB_NAME}/canisters"
 
-      # TODO IDX-2757
-      if [ -e artifacts/icos/guestos ]; then
-        # guestos images
-        buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
-            gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" \
-            "artifacts/icos/guestos" "${CI_JOB_NAME}/guest-os"
-        # hostos images
-        buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
-            gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" \
-            "artifacts/icos/hostos" "${CI_JOB_NAME}/host-os"
-        # setupos images
-        buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
-            gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" \
-            "artifacts/icos/setupos" "${CI_JOB_NAME}/setup-os"
-      else
-        # ic-os update img
-        buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
-            gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" \
-            "artifacts/icos" "${CI_JOB_NAME}/guest-os/update-img"
-      fi
+      # guestos images
+      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
+          gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" \
+          "artifacts/icos/guestos" "${CI_JOB_NAME}/guest-os"
+      # hostos images
+      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
+          gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" \
+          "artifacts/icos/hostos" "${CI_JOB_NAME}/host-os"
+      # setupos images
+      buildevents cmd "${ROOT_PIPELINE_ID}" "${CI_JOB_ID}" rclone -- \
+          gitlab-ci/src/artifacts/rclone_upload.py --version="${VERSION}" \
+          "artifacts/icos/setupos" "${CI_JOB_NAME}/setup-os"
+
       # collect dotenv
       if [ -f /tmp/nns.release.env ]; then
           mv /tmp/nns.release.env .
