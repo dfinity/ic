@@ -310,7 +310,7 @@ def test_get_findings_for_bazel_repo():
         executor = MockBazelCargoExecutor(expected_cargo_audit_output=json.load(audit), expected_bazel_queries=expected_queries, expected_bazel_responses=expected_responses)
         bazel_test = BazelRustDependencyManager(executor=executor)
 
-        findings = bazel_test.get_findings("ic", Project("ic", "ic"), None)
+        findings = bazel_test.get_findings("ic", None, None)
 
         assert findings is not None
         assert len(findings) == 3
