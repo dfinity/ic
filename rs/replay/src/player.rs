@@ -941,7 +941,7 @@ impl Player {
             match result {
                 // Since the pool cache assumes we always have at most one CUP inside the pool,
                 // we should deliver all batches before inserting a new CUP into the pool.
-                backup::ExitPoint::CUPHeightWasFinalized(cup_height) => {
+                Err(backup::ExitPoint::CUPHeightWasFinalized(cup_height)) => {
                     backup::insert_cup_at_height(
                         self.consensus_pool.as_mut().unwrap(),
                         &backup_dir,
@@ -958,7 +958,7 @@ impl Player {
                 }
                 // When we run into an NNS block referencing a newer registry version, we need to dump
                 // all changes from the registry canister into the local store and apply them.
-                backup::ExitPoint::NewerRegistryVersion(new_version) => {
+                Err(backup::ExitPoint::NewerRegistryVersion(new_version)) => {
                     self.update_registry_local_store();
                     self.registry
                         .poll_once()
@@ -970,14 +970,7 @@ impl Player {
                     );
                     println!("Updated the registry.");
                 }
-                backup::ExitPoint::Done => {
-                    println!(
-                        "Restored the state at the height {:?}",
-                        self.state_manager.latest_state_height()
-                    );
-                    return Ok(self.get_latest_state_params(None, invalid_artifacts));
-                }
-                backup::ExitPoint::ValidationIncomplete(last_validated_height) => {
+                Err(backup::ExitPoint::ValidationIncomplete(last_validated_height)) => {
                     println!(
                         "Validation of artifacts at height {:?} is not complete",
                         last_validated_height
@@ -986,6 +979,13 @@ impl Player {
                         last_validated_height,
                         invalid_artifacts,
                     ));
+                }
+                Ok(_) => {
+                    println!(
+                        "Restored the state at the height {:?}",
+                        self.state_manager.latest_state_height()
+                    );
+                    return Ok(self.get_latest_state_params(None, invalid_artifacts));
                 }
             }
         }
