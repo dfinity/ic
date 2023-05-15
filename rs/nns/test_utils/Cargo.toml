@@ -14,7 +14,7 @@ dfn_json = { path = "../../rust_canisters/dfn_json" }
 futures = "0.3.8"
 ic-icrc1 = { path = "../../rosetta-api/icrc1" }
 ic-base-types = { path = "../../types/base_types"}
-ic-btc-interface = { git = "https://github.com/dfinity/bitcoin-canister", rev = "e4e89f2caedffbe0cfdec6f9d4a77f66dcb9119e" }
+ic-btc-interface = { workspace = true }
 ic-canister-client-sender = { path = "../../canister_client/sender" }
 ic-config = { path = "../../config" }
 ic-crypto-node-key-generation = { path = "../../crypto/node_key_generation" }

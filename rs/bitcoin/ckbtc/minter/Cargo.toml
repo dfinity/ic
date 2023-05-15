@@ -16,7 +16,7 @@ ciborium = { git = "https://github.com/enarx/ciborium", rev = "e719537c99b564c36
 hex = "0.4.3"
 ic0 = "0.18.9"
 ic-base-types = { path = "../../../types/base_types" }
-ic-btc-interface = { git = "https://github.com/dfinity/bitcoin-canister", rev = "e4e89f2caedffbe0cfdec6f9d4a77f66dcb9119e" }
+ic-btc-interface = { workspace = true }
 ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
 ic-canister-log = { path = "../../../rust_canisters/canister_log" }
 ic-cdk = "0.7.0"
