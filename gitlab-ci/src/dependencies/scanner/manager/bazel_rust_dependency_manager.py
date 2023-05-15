@@ -240,7 +240,8 @@ class BazelRustDependencyManager(DependencyManager):
         # perform the move. The second result will be used for creating the findings,
         # and the delta between the results will be logged for now.
         # TODO : Remove when cargo is completely out of the system.
-        path = self.root.parent / project.path
+        project_path = project.path if project else "ic"
+        path = self.root.parent / project_path
         # currently only the ic repo uses bazel
         use_bazel = repository_name == "ic"
         if use_bazel:
