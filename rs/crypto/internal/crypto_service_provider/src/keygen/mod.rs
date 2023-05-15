@@ -132,4 +132,44 @@ pub mod utils {
             }
         })
     }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use assert_matches::assert_matches;
+        use ic_crypto_test_utils_keys::public_keys::valid_idkg_dealing_encryption_public_key;
+
+        #[test]
+        fn should_convert_mega_proto() {
+            let mega_proto = valid_idkg_dealing_encryption_public_key();
+            let mega_public_key = mega_public_key_from_proto(&mega_proto);
+            assert_matches!(mega_public_key, Ok(key) if key.serialize() == mega_proto.key_value)
+        }
+
+        #[test]
+        fn should_fail_to_convert_mega_pubkey_from_proto_if_algorithm_unsupported() {
+            let mut mega_proto = valid_idkg_dealing_encryption_public_key();
+            mega_proto.algorithm = AlgorithmIdProto::Ed25519 as i32;
+
+            let result = mega_public_key_from_proto(&mega_proto);
+
+            assert_matches!(
+                result,
+                Err(MEGaPublicKeyFromProtoError::UnsupportedAlgorithm { .. })
+            );
+        }
+
+        #[test]
+        fn should_fail_to_convert_mega_pubkey_from_proto_if_pubkey_malformed() {
+            let mut mega_proto = valid_idkg_dealing_encryption_public_key();
+            mega_proto.key_value = b"malformed public key".to_vec();
+
+            let result = mega_public_key_from_proto(&mega_proto);
+
+            assert_matches!(
+                result,
+                Err(MEGaPublicKeyFromProtoError::MalformedPublicKey { .. })
+            );
+        }
+    }
 }
