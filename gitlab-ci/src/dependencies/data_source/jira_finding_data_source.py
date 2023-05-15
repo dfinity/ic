@@ -366,7 +366,7 @@ class JiraFindingDataSource(FindingDataSource):
             issue.get_field(JIRA_FINDING_TO_CUSTOM_FIELD.get("dependencies")[0])
         )
         if all_deps is None:
-            raise RuntimeError(f"could not parse dependencies for issue {issue.id}")
+            raise RuntimeError(f"could not parse dependencies for issue {issue.permalink()}")
         else:
             res["vulnerable_dependency"] = all_deps[0]
             # id & version might have been escaped with __finding_to_jira_escape_wiki_renderer_chars, so use unescaped variants
@@ -382,21 +382,21 @@ class JiraFindingDataSource(FindingDataSource):
             issue.get_field(JIRA_FINDING_TO_CUSTOM_FIELD.get("vulnerabilities")[0])
         )
         if vulns is None:
-            raise RuntimeError(f"could not parse vulnerabilities for issue {issue.id}")
+            raise RuntimeError(f"could not parse vulnerabilities for issue {issue.permalink()}")
         else:
             res["vulnerabilities"] = vulns
 
         if not JiraFindingDataSource.__jira_to_finding_patch_version(
             issue.get_field(JIRA_FINDING_TO_CUSTOM_FIELD.get("patch_versions")[0]), all_deps, vulns
         ):
-            logging.warning(f"could not parse patch table for issue {issue.id}")
+            logging.warning(f"could not parse patch table for issue {issue.permalink()}")
 
         projects: Optional[List[str]] = JiraFindingDataSource.__jira_to_finding_projects(
             issue.get_field(JIRA_FINDING_TO_CUSTOM_FIELD.get("projects")[0])
         )
         if projects is None:
             res["projects"] = []
-            logging.warning(f"could not parse projects for issue {issue.id}")
+            logging.warning(f"could not parse projects for issue {issue.permalink()}")
         else:
             res["projects"] = projects
 

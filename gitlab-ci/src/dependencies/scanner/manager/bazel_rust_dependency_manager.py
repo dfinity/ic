@@ -1,6 +1,7 @@
 import fnmatch
 import json
 import logging
+import os
 import pathlib
 import shutil
 import subprocess
@@ -22,9 +23,63 @@ from scanner.process_executor import ProcessExecutor
 RUSTSEC_URL = "https://rustsec.org/advisories/"
 CRATES_IO_URL = "https://crates.io/crates/"
 
+# noinspection PyMethodMayBeStatic
+class BazelCargoExecutor:
+
+    def get_bazel_query_output(self, bazel_query: str, path: pathlib.Path) -> str:
+        bazel_query_command = "bazel query"
+        bazel_extra_arguments = "--output package --notool_deps --noimplicit_deps --nohost_deps"
+
+        command = f"{bazel_query_command} {bazel_query} {bazel_extra_arguments}"
+        environment = {}
+        result = ""
+
+        try:
+            result = ProcessExecutor.execute_command(command, path.resolve(), environment, "--keep_going" in command, False)
+        except subprocess.CalledProcessError:
+            logging.debug(f"Command execution failed for bazel projects:\n{traceback.format_exc()}")
+        finally:
+            return result
+
+    def get_cargo_audit_output(self, path: pathlib.Path, cargo_home=None) -> typing.Dict:
+        environment = {}
+
+        if cargo_home is not None:
+            # Custom cargo home. For testing
+            cargo_bin = f"{cargo_home}/bin/"
+            environment["CARGO_HOME"] = cargo_home
+            advisory_path = f"{cargo_home}/advisory-db/"
+            command = f"{cargo_bin}cargo audit --json -d {advisory_path} --stale -n"
+        else:
+            command = "cargo audit --json"
+
+        result = ProcessExecutor.execute_command(command, path.resolve(), environment)
+        audit_out = json.loads(result)
+        return audit_out
+
+    def get_cargo_tree_output_for_vulnerable_dependency(self, vulnerable_dependency: Dependency, path: pathlib.Path, cargo_home=None) -> str:
+        environment = {}
+
+        if cargo_home is not None:
+            # Custom cargo home. For testing
+            cargo_bin = f"{cargo_home}/bin/"
+            environment["CARGO_HOME"] = cargo_home
+            advisory_path = f"{cargo_home}/advisory-db/"
+            command = f"{cargo_bin}cargo tree --edges=no-dev,no-proc-macro --prefix=depth -d {advisory_path} --stale -n -i " + ":".join([vulnerable_dependency.name, vulnerable_dependency.version])
+        else:
+            command = "cargo tree --edges=no-dev,no-proc-macro --prefix=depth -i " + ":".join([vulnerable_dependency.name, vulnerable_dependency.version])
+
+        try:
+            return ProcessExecutor.execute_command(command, path.resolve(), environment)
+        except subprocess.CalledProcessError:
+            return ""
 
 class BazelRustDependencyManager(DependencyManager):
     """Helper for Bazel-related functions."""
+
+    def __init__(self, executor: BazelCargoExecutor = BazelCargoExecutor()):
+        super().__init__()
+        self.executor = executor
 
     def get_scanner_id(self) -> str:
         return "BAZEL_RUST"
@@ -101,38 +156,7 @@ class BazelRustDependencyManager(DependencyManager):
             score=score,
         )
 
-    def __get_bazel_query_output(self, bazel_query: str) -> str:
-        bazel_query_command = "bazel query"
-        bazel_extra_arguments = "--output package --notool_deps --noimplicit_deps --nohost_deps"
 
-        command = f"{bazel_query_command} {bazel_query} {bazel_extra_arguments}"
-        environment = {}
-        cwd = self.root
-        result = ""
-
-        try:
-            result = ProcessExecutor.execute_command(command, cwd.resolve(), environment)
-        except subprocess.CalledProcessError:
-            logging.error(f"Command execution failed for bazel projects:\n{traceback.format_exc()}")
-        finally:
-            return result
-
-    def __get_cargo_audit_output(self, cargo_home=None) -> typing.Dict:
-        environment = {}
-        cwd = self.root
-
-        if cargo_home is not None:
-            # Custom cargo home. For testing
-            cargo_bin = f"{cargo_home}/bin/"
-            environment["CARGO_HOME"] = cargo_home
-            advisory_path = f"{cargo_home}/advisory-db/"
-            command = f"{cargo_bin}cargo audit --json -d {advisory_path} --stale -n"
-        else:
-            command = "cargo audit --json"
-
-        result = ProcessExecutor.execute_command(command, cwd.resolve(), environment)
-        audit_out = json.loads(result)
-        return audit_out
 
     def has_dependencies_changed(self) -> typing.Dict[str, bool]:
 
@@ -154,7 +178,7 @@ class BazelRustDependencyManager(DependencyManager):
         dependency_builder = []
 
         bazel_query = '"deps(@crate_index//:all)"'
-        branch_dependencies = self.__get_bazel_query_output(bazel_query)
+        branch_dependencies = self.executor.get_bazel_query_output(bazel_query, self.root)
         branch_dependencies = branch_dependencies.split("\n")
 
         # Reset any modified files
@@ -173,7 +197,7 @@ class BazelRustDependencyManager(DependencyManager):
         logging.info("Checking out merge base")
         repo.git.checkout(git_changes.get_merge_base(repo)[0].hexsha)
 
-        base_dependencies = self.__get_bazel_query_output(bazel_query)
+        base_dependencies = self.executor.get_bazel_query_output(bazel_query, self.root)
         base_dependencies = base_dependencies.split("\n")
 
         logging.info("Resetting local git changes")
@@ -216,21 +240,24 @@ class BazelRustDependencyManager(DependencyManager):
         # perform the move. The second result will be used for creating the findings,
         # and the delta between the results will be logged for now.
         # TODO : Remove when cargo is completely out of the system.
+        path = self.root.parent / project.path
+        # currently only the ic repo uses bazel
+        use_bazel = repository_name == "ic"
+        if use_bazel:
+            logging.info("Performing cargo audit on old Cargo.lock")
+            old_cargo_audit = self.executor.get_cargo_audit_output(path)
+            logging.info("Old cargo audit output %s", old_cargo_audit)
 
-        logging.info("Performing cargo audit on old Cargo.lock")
-        old_cargo_audit = self.__get_cargo_audit_output()
-        logging.info("Old cargo audit output %s", old_cargo_audit)
+            # move Cargo.Bazel.toml.lock to Cargo.lock
+            logging.info("Moving Cargo.Bazel.toml.lock to Cargo.lock")
+            src = self.root / "Cargo.Bazel.toml.lock"
+            dst = self.root / "Cargo.lock"
 
-        # move Cargo.Bazel.toml.lock to Cargo.lock
-        logging.info("Moving Cargo.Bazel.toml.lock to Cargo.lock")
-        src = self.root / "Cargo.Bazel.toml.lock"
-        dst = self.root / "Cargo.lock"
-
-        if src.is_file() and dst.is_file():
-            shutil.copy(src, dst)
+            if src.is_file() and dst.is_file():
+                shutil.copy(src, dst)
 
         logging.info("Performing cargo audit on new Cargo.lock")
-        new_cargo_audit = self.__get_cargo_audit_output()
+        new_cargo_audit = self.executor.get_cargo_audit_output(path)
 
         # cargo_audit_diff = jsondiff.diff(old_cargo_audit, new_cargo_audit)
 
@@ -243,12 +270,15 @@ class BazelRustDependencyManager(DependencyManager):
                 vulnerable_dependency = self.__parse_vulnerable_dependency_from_cargo_audit(
                     vulnerability.id, audit_vulnerability
                 )
-                first_level_dependencies = self.__get_first_level_dependencies_for_vulnerable_dependency(
-                    vulnerable_dependency
-                )
-                projects = self.__get_projects_for_vulnerable_dependency(
-                    vulnerable_dependency, first_level_dependencies
-                )
+                if use_bazel:
+                    first_level_dependencies = self.__get_first_level_dependencies_for_vulnerable_dependency(
+                        vulnerable_dependency
+                    )
+                    projects = self.__get_projects_for_vulnerable_dependency(
+                        vulnerable_dependency, first_level_dependencies
+                    )
+                else:
+                    first_level_dependencies, projects = self.__get_first_level_dependencies_and_projects_from_cargo(vulnerable_dependency, path)
                 lookup = next(
                     (
                         index
@@ -290,13 +320,115 @@ class BazelRustDependencyManager(DependencyManager):
             finding.projects.sort()
         return finding_builder
 
+    @staticmethod
+    def __cargo_tree_parse_depth(dep_line: str) -> typing.Tuple[int, str]:
+        i = 0
+        while dep_line[i].isdigit():
+            i += 1
+        return int(dep_line[:i]), dep_line[i:]
+
+    @staticmethod
+    def __cargo_tree_is_duplicate_line(dep_line) -> bool:
+        return dep_line.endswith("(*)")
+
+    @staticmethod
+    def __cargo_tree_parse_dependency_or_project(line: str, project_path: pathlib.Path) -> typing.Union[Dependency, str]:
+        # a few sample lines (crates.io dep, repo dep, project):
+        # build-info-build v0.0.26
+        # cycles-minting-canister v0.8.0 (https://github.com/dfinity/ic?rev=89129b8212791d7e05cab62ff08eece2888a86e0#89129b82)
+        # nns-dapp v2.0.29 (/Users/tmu/Projects/nns-dapp/rs/backend)
+
+        name, line = line.split(" ", 1)
+        path: typing.Optional[str] = None
+        if " " in line:
+            vers, line = line.split(" ", 1)
+            path = line.split(" ")[0]
+            if path:
+                # path is surrounded by brackets
+                path = path[1:-1]
+        else:
+            vers = line
+
+        if vers[0] != "v":
+            raise ValueError("Version should start with v")
+        vers = vers[1:]
+
+        if path is None:
+            # crates.io dependency
+            return Dependency(id=f"{CRATES_IO_URL}{name}", name=name, version=vers, fix_version_for_vulnerability={})
+        if path.startswith("/"):
+            # project
+            return os.path.relpath(path, project_path.parent)
+        # if it is not a crates.io crate and not project path it is most likely a repo path, e.g.,
+        # ic-sns-wasm v1.0.0 (https://github.com/dfinity/ic?rev=89129b8212791d7e05cab62ff08eece2888a86e0#89129b82)
+        # in this case the path doesn't uniquely identify the dependency so we use the name as ID
+        return Dependency(id=name, name=name, version=vers, fix_version_for_vulnerability={})
+
+    def __get_first_level_dependencies_and_projects_from_cargo(self, vulnerable_dependency: Dependency, path: pathlib.Path) -> typing.Tuple[typing.List[Dependency],typing.List[str]]:
+        tree = self.executor.get_cargo_tree_output_for_vulnerable_dependency(vulnerable_dependency, path)
+        # sample cargo tree output:
+        # 0time v0.1.45
+        # 1chrono v0.4.19
+        # 2build-info-build v0.0.26
+        # 3cycles-minting-canister v0.8.0 (https://github.com/dfinity/ic?rev=89129b8212791d7e05cab62ff08eece2888a86e0#89129b82)
+        # 4ic-nns-governance v0.8.0 (https://github.com/dfinity/ic?rev=89129b8212791d7e05cab62ff08eece2888a86e0#89129b82)
+        # 5nns-dapp v2.0.29 (/Users/tmu/Projects/nns-dapp/rs/backend)
+        # 4nns-dapp v2.0.29 (/Users/tmu/Projects/nns-dapp/rs/backend)
+        if not tree:
+            logging.error(f"cargo tree is empty for {vulnerable_dependency}")
+            return [], []
+        while tree[0] != "0":
+            _, tree = tree.split("\n", 1)
+        dep_line, tree = tree.split("\n", 1)
+        depth, dep_line = self.__cargo_tree_parse_depth(dep_line)
+        if depth != 0:
+            logging.error(f"Cargo tree output format error. Expected depth 0, got {depth}!")
+            return [], []
+        current_depth = 0
+        skip_higher_depth = False
+        current_chain = list()
+        first_level_dependencies = {}
+        projects = set()
+        try:
+            for dep_line in tree.split("\n"):
+                dep_line = dep_line.strip()
+                if not dep_line or self.__cargo_tree_is_duplicate_line(dep_line):
+                    continue
+                depth, dep_line = self.__cargo_tree_parse_depth(dep_line)
+
+                # Hot fix - Cargo tree produces 2 trees for some instances.
+                # if depth == 0:
+                #     raise RuntimeError("Cargo tree output format error. There can be only one item with depth 0!")
+                if depth == 0 or skip_higher_depth is True and depth > current_depth:
+                    continue
+                skip_higher_depth = False
+                if len(current_chain) >= depth:
+                    del current_chain[depth - 1:]
+
+                dependency_or_project = self.__cargo_tree_parse_dependency_or_project(dep_line, path)
+                if isinstance(dependency_or_project, str):
+                    # a project was returned
+                    projects.add(dependency_or_project)
+                    if len(current_chain) > 0:
+                        # the dependency before the project in the chain is the 1st lvl dep
+                        first_level_dependencies[current_chain[-1].id + ":" + current_chain[-1].version] = current_chain[-1]
+                    skip_higher_depth = True
+                else:
+                    # a dependency was returned
+                    current_chain.append(dependency_or_project)
+                current_depth = depth
+        except (RuntimeError, ValueError):
+            logging.error(f"error while parsing 1st level deps & projects from cargo tree {tree}\n{traceback.format_exc()}")
+
+        return list(first_level_dependencies.values()), list(projects)
+
     def __is_transitive_dependency_first_level_dependency(self, dep: Dependency) -> bool:
         direct_dependency_string = self.__dependency_to_direct_bazel_string(dep)
         # Need to provide keep_going
         bazel_query = f'"rdeps(@crate_index//:all, {direct_dependency_string} ,1)" --keep_going'
         # TODO : require a way for supressing bazel query ERRORs
         # Since, ERROR signifies the package is not declared in the crate_index
-        result = self.__get_bazel_query_output(bazel_query)
+        result = self.executor.get_bazel_query_output(bazel_query, self.root)
         if not result:
             return False
         result = result.split("\n")
@@ -309,7 +441,7 @@ class BazelRustDependencyManager(DependencyManager):
         dependecy_builder: typing.List[Dependency] = []
         bazel_dependency = self.__dependency_to_transitive_bazel_string(dep)
         bazel_query = f'"rdeps(@crate_index//:all, {bazel_dependency}) except {bazel_dependency}"'
-        result = self.__get_bazel_query_output(bazel_query)
+        result = self.executor.get_bazel_query_output(bazel_query, self.root)
 
         if not result:
             return dependecy_builder
@@ -338,8 +470,8 @@ class BazelRustDependencyManager(DependencyManager):
         for dependency in dependencies:
             bazel_dependency = self.__dependency_to_transitive_bazel_string(dependency)
             # rank 2 because package -> crate_index -> dependency
-            bazel_query = f'"kind("rust_library", rdeps(//rs/..., {bazel_dependency}, 2)) except rdeps(@crate_index//:all, {bazel_dependency})"'
-            result = self.__get_bazel_query_output(bazel_query)
+            bazel_query = f'"kind("rust_library", rdeps(//rs/..., {bazel_dependency}, 2)) except rdeps(@crate_index//:all, {bazel_dependency})" --keep_going'
+            result = self.executor.get_bazel_query_output(bazel_query, self.root)
 
             if not result:
                 continue

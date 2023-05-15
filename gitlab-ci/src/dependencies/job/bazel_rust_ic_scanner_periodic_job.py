@@ -10,6 +10,9 @@ from scanner.scanner_job_type import ScannerJobType
 
 REPOS_TO_SCAN = [
     Repository("ic", "https://gitlab.com/dfinity-lab/public/ic", [Project("ic", "ic")]),
+    Repository("nns-dapp", "https://github.com/dfinity/nns-dapp", [Project("nns-dapp", "nns-dapp")]),
+    Repository("internet-identity", "https://github.com/dfinity/internet-identity", [Project("internet-identity", "internet-identity")]),
+    Repository("response-verification", "https://github.com/dfinity/response-verification", [Project("response-verification", "response-verification")]),
 ]
 
 if __name__ == "__main__":
