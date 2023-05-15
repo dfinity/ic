@@ -48,6 +48,9 @@ pub const MIN_TOKEN_NAME_LENGTH: usize = 4;
 /// The maximum number of characters allowed for confirmation text.
 pub const MAX_CONFIRMATION_TEXT_LENGTH: usize = 1_000;
 
+/// The maximum number of bytes allowed for confirmation text.
+pub const MAX_CONFIRMATION_TEXT_BYTES: usize = 8 * MAX_CONFIRMATION_TEXT_LENGTH;
+
 /// The minimum number of characters allowed for confirmation text.
 pub const MIN_CONFIRMATION_TEXT_LENGTH: usize = 1;
 
@@ -849,21 +852,31 @@ impl SnsInitPayload {
 
     fn validate_confirmation_text(&self) -> Result<(), String> {
         if let Some(confirmation_text) = &self.confirmation_text {
-            if confirmation_text.len() < MIN_CONFIRMATION_TEXT_LENGTH {
+            if MAX_CONFIRMATION_TEXT_BYTES < confirmation_text.len() {
                 return Err(
                     format!(
-                        "NervousSystemParameters.confirmation_text must be greater than {} characters, given character count: {}",
-                        MIN_CONFIRMATION_TEXT_LENGTH,
+                        "NervousSystemParameters.confirmation_text must be fewer than {} bytes, given bytes: {}",
+                        MAX_CONFIRMATION_TEXT_BYTES,
                         confirmation_text.len(),
                     )
                 );
             }
-            if MAX_CONFIRMATION_TEXT_LENGTH < confirmation_text.len() {
+            let confirmation_text_length = confirmation_text.chars().count();
+            if confirmation_text_length < MIN_CONFIRMATION_TEXT_LENGTH {
+                return Err(
+                    format!(
+                        "NervousSystemParameters.confirmation_text must be greater than {} characters, given character count: {}",
+                        MIN_CONFIRMATION_TEXT_LENGTH,
+                        confirmation_text_length,
+                    )
+                );
+            }
+            if MAX_CONFIRMATION_TEXT_LENGTH < confirmation_text_length {
                 return Err(
                     format!(
                         "NervousSystemParameters.confirmation_text must be fewer than {} characters, given character count: {}",
                         MAX_CONFIRMATION_TEXT_LENGTH,
-                        confirmation_text.len(),
+                        confirmation_text_length,
                     )
                 );
             }
