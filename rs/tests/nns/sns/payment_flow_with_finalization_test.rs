@@ -1,19 +1,26 @@
-use anyhow::Result;
-use ic_nervous_system_common::E8;
-use ic_sns_swap::pb::v1::params::NeuronBasketConstructionParameters;
-use ic_sns_swap::pb::v1::Params;
-use ic_tests::driver::test_env::TestEnv;
-use ic_tests::sns_client::{
-    two_days_from_now_in_secs, SNS_SALE_PARAM_MAX_PARTICIPANT_ICP_E8S,
-    SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S,
-};
 use std::time::Duration;
 
+use anyhow::Result;
+use ic_sns_init::pb::v1::SnsInitPayload;
+use ic_tests::driver::test_env_api::NnsCanisterWasmStrategy;
+use rust_decimal::prelude::ToPrimitive;
+
+use ic_nervous_system_common::{i2d, E8};
+use ic_sns_swap::pb::v1::{params::NeuronBasketConstructionParameters, DerivedState, Params};
 use ic_tests::driver::group::SystemTestGroup;
-use ic_tests::nns_tests::sns_deployment::{
-    finalize_swap, generate_ticket_participants_workload, initiate_token_swap, sns_setup_fast,
+use ic_tests::driver::test_env::TestEnv;
+use ic_tests::nns_tests::{
+    sns_deployment,
+    sns_deployment::{
+        finalize_swap_and_check_success, generate_ticket_participants_workload, initiate_token_swap,
+    },
+};
+use ic_tests::sns_client::{
+    oc_sns_init_payload, two_days_from_now_in_secs, SNS_SALE_PARAM_MAX_PARTICIPANT_ICP_E8S,
+    SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S,
 };
 use ic_tests::systest;
+use ic_tests::util::block_on;
 
 fn sale_params() -> Params {
     Params {
@@ -30,6 +37,20 @@ fn sale_params() -> Params {
         }),
         sale_delay_seconds: None,
     }
+}
+
+fn init_payload() -> SnsInitPayload {
+    oc_sns_init_payload()
+}
+
+fn sns_setup_fast(env: TestEnv) {
+    sns_deployment::setup(
+        env,
+        vec![],
+        init_payload(),
+        NnsCanisterWasmStrategy::TakeBuiltFromSources,
+        true,
+    );
 }
 
 fn initiate_token_swap_with_custom_parameters(env: TestEnv) {
@@ -69,6 +90,31 @@ fn multiple_ticket_participants(env: TestEnv) {
         Duration::from_secs(num_participants),
         contribution_per_user,
     );
+}
+
+fn finalize_swap(env: TestEnv) {
+    let params = sale_params();
+    let init_payload = init_payload();
+
+    let sns_tokens_per_icp = i2d(params.sns_token_e8s)
+        .checked_div(i2d(params.max_icp_e8s))
+        .and_then(|d| d.to_f32())
+        .unwrap();
+
+    let expected_derived_swap_state = DerivedState {
+        direct_participant_count: Some(params.min_participants as u64),
+        cf_participant_count: Some(0),
+        cf_neuron_count: Some(0),
+        buyer_total_icp_e8s: params.max_icp_e8s,
+        sns_tokens_per_icp,
+    };
+
+    block_on(finalize_swap_and_check_success(
+        env,
+        expected_derived_swap_state,
+        params,
+        init_payload,
+    ));
 }
 
 /// This test is similar to //rs/tests/nns/sns:payment_flow_test, except it also finalizes the sale.

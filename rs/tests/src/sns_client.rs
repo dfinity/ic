@@ -107,6 +107,7 @@ impl SnsClient {
     pub fn install_sns_and_check_healthy(
         env: &TestEnv,
         canister_wasm_strategy: NnsCanisterWasmStrategy,
+        init: SnsInitPayload,
     ) -> Self {
         add_all_wasms_to_sns_wasm(env, canister_wasm_strategy);
 
@@ -136,48 +137,6 @@ impl SnsClient {
         block_on(add_subnet_to_sns_deploy_whitelist(&runtime, subnet_id));
 
         info!(log, "Sending deploy_new_sns to SNS WASM canister");
-        let mut init = SnsInitPayload::with_valid_values_for_testing();
-        // let mut init = SnsInitPayload::with_default_values();
-        // Taken from https://github.com/open-ic/open-chat/blob/master/sns.yml
-        init.transaction_fee_e8s = Some(100_000);
-        init.proposal_reject_cost_e8s = Some(1_000_000_000);
-        init.neuron_minimum_stake_e8s = Some(400_000_000);
-        init.neuron_minimum_dissolve_delay_to_vote_seconds = Some(2_629_800);
-        init.reward_rate_transition_duration_seconds = Some(0);
-        // init.initial_reward_rate_percentage = Some(2.5);
-        // init.final_reward_rate_percentage = Some(2.5);
-        init.max_dissolve_delay_seconds = Some(31_557_600);
-        init.max_neuron_age_seconds_for_age_bonus = Some(15_778_800);
-        // init.max_dissolve_delay_bonus_multiplier = Some(2.0);
-        // init.max_age_bonus_multiplier = Some(1.25);
-        init.fallback_controller_principal_ids = vec![TEST_NEURON_1_OWNER_PRINCIPAL.to_string()];
-        init.initial_voting_period_seconds = Some(345_600);
-        init.wait_for_quiet_deadline_increase_seconds = Some(86_400);
-        init.initial_token_distribution =
-            Some(InitialTokenDistribution::FractionalDeveloperVotingPower(
-                FractionalDeveloperVotingPower {
-                    developer_distribution: Some(DeveloperDistribution {
-                        developer_neurons: vec![NeuronDistribution {
-                            controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
-                            stake_e8s: 230000000000000, // 23%
-                            memo: 0,
-                            dissolve_delay_seconds: 2629800,
-                            vesting_period_seconds: Some(0),
-                        }],
-                    }),
-                    treasury_distribution: Some(TreasuryDistribution {
-                        total_e8s: 5200000000000000, // 52%
-                    }),
-                    swap_distribution: Some(SwapDistribution {
-                        total_e8s: 2500000000000000, // 25%
-                        initial_swap_amount_e8s: 2500000000000000,
-                    }),
-                    airdrop_distribution: Some(AirdropDistribution {
-                        airdrop_neurons: Default::default(),
-                    }),
-                },
-            ));
-
         let res = block_on(deploy_new_sns(&wallet_canister, init)).expect("Deploy new SNS failed");
         info!(log, "Received {res:?}");
         if let Some(error) = res.error {
@@ -222,6 +181,55 @@ impl SnsClient {
         sns_client.write_attribute(env);
         sns_client
     }
+}
+
+/// An SnsInitPayload with "openchat-ish" parameters. (Not guaranteed to be
+/// exactly the same as the actual parameters used by openchat.)
+///
+/// These parameters should be the one used "by default" for most tests, to ensure
+/// that the tests are using realistic parameters.
+pub fn oc_sns_init_payload() -> SnsInitPayload {
+    let mut init = SnsInitPayload::with_valid_values_for_testing();
+    // let mut init = SnsInitPayload::with_default_values();
+    // Taken from https://github.com/open-ic/open-chat/blob/master/sns.yml
+    init.transaction_fee_e8s = Some(100_000);
+    init.proposal_reject_cost_e8s = Some(1_000_000_000);
+    init.neuron_minimum_stake_e8s = Some(400_000_000);
+    init.neuron_minimum_dissolve_delay_to_vote_seconds = Some(2_629_800);
+    init.reward_rate_transition_duration_seconds = Some(0);
+    // init.initial_reward_rate_percentage = Some(2.5);
+    // init.final_reward_rate_percentage = Some(2.5);
+    init.max_dissolve_delay_seconds = Some(31_557_600);
+    init.max_neuron_age_seconds_for_age_bonus = Some(15_778_800);
+    // init.max_dissolve_delay_bonus_multiplier = Some(2.0);
+    // init.max_age_bonus_multiplier = Some(1.25);
+    init.fallback_controller_principal_ids = vec![TEST_NEURON_1_OWNER_PRINCIPAL.to_string()];
+    init.initial_voting_period_seconds = Some(345_600);
+    init.wait_for_quiet_deadline_increase_seconds = Some(86_400);
+    init.initial_token_distribution = Some(
+        InitialTokenDistribution::FractionalDeveloperVotingPower(FractionalDeveloperVotingPower {
+            developer_distribution: Some(DeveloperDistribution {
+                developer_neurons: vec![NeuronDistribution {
+                    controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
+                    stake_e8s: 230_000_000_000_000, // 23%
+                    memo: 0,
+                    dissolve_delay_seconds: 2_629_800,
+                    vesting_period_seconds: Some(0),
+                }],
+            }),
+            treasury_distribution: Some(TreasuryDistribution {
+                total_e8s: 5_200_000_000_000_000, // 52%
+            }),
+            swap_distribution: Some(SwapDistribution {
+                total_e8s: 2_500_000_000_000_000, // 25%
+                initial_swap_amount_e8s: 2_500_000_000_000_000,
+            }),
+            airdrop_distribution: Some(AirdropDistribution {
+                airdrop_neurons: Default::default(),
+            }),
+        }),
+    );
+    init
 }
 
 /// Send and execute 6 proposals to add all SNS canister WASMs to the SNS WASM canister

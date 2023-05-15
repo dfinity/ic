@@ -19,6 +19,7 @@ use crate::driver::test_env_api::{
 };
 use crate::generic_workload_engine::engine::Engine;
 use crate::generic_workload_engine::metrics::{LoadTestMetrics, LoadTestOutcome, RequestOutcome};
+use crate::sns_client::oc_sns_init_payload;
 use candid::{Nat, Principal};
 use ic_agent::{Identity, Signature};
 use ic_base_types::PrincipalId;
@@ -27,9 +28,12 @@ use ic_ledger_core::Tokens;
 use ic_nervous_system_common::E8;
 use ic_rosetta_api::models::RosettaSupportedKeyPair;
 use ic_rosetta_test_utils::EdKeypair;
+
+use ic_sns_init::pb::v1::sns_init_payload::InitialTokenDistribution;
+use ic_sns_init::pb::v1::{FractionalDeveloperVotingPower, SnsInitPayload};
 use ic_sns_swap::pb::v1::{
-    new_sale_ticket_response, params::NeuronBasketConstructionParameters, FinalizeSwapResponse,
-    Lifecycle, Params,
+    new_sale_ticket_response, params::NeuronBasketConstructionParameters, DerivedState,
+    FinalizeSwapResponse, GetStateResponse, Lifecycle, Params,
 };
 use ic_sns_swap::swap::principal_to_subaccount;
 use ic_types::Height;
@@ -256,9 +260,32 @@ pub fn workload_static_testnet_sale_bot(env: TestEnv) {
     env.emit_report(format!("{metrics}"));
 }
 
-fn setup(
+/// Like [`setup`], but initiates the SNS with an "openchat-ish" init payload.
+/// (Not guaranteed to be exactly the same as the actual payload used by
+/// openchat.)
+///
+/// This function should be the one used "by default" for most tests, to ensure
+/// that the tests are using realistic parameters.
+pub fn setup_with_oc_init_payload(
     env: TestEnv,
     sale_participants: Vec<SaleParticipant>,
+    canister_wasm_strategy: NnsCanisterWasmStrategy,
+    fast_test_setup: bool,
+) {
+    let sns_init_payload = oc_sns_init_payload();
+    setup(
+        env,
+        sale_participants,
+        sns_init_payload,
+        canister_wasm_strategy,
+        fast_test_setup,
+    );
+}
+
+pub fn setup(
+    env: TestEnv,
+    sale_participants: Vec<SaleParticipant>,
+    sns_init_payload: SnsInitPayload,
     canister_wasm_strategy: NnsCanisterWasmStrategy,
     fast_test_setup: bool,
 ) {
@@ -314,11 +341,12 @@ fn setup(
     // Install NNS with ledger customizations
     install_nns(&env, canister_wasm_strategy, nns_customizations);
 
-    install_sns(&env, canister_wasm_strategy);
+    // Install the SNS with an "OC-ish" init payload
+    install_sns(&env, canister_wasm_strategy, sns_init_payload);
 }
 
 pub fn sns_setup(env: TestEnv) {
-    setup(
+    setup_with_oc_init_payload(
         env,
         vec![],
         NnsCanisterWasmStrategy::TakeBuiltFromSources,
@@ -327,7 +355,7 @@ pub fn sns_setup(env: TestEnv) {
 }
 
 pub fn sns_setup_fast(env: TestEnv) {
-    setup(
+    setup_with_oc_init_payload(
         env,
         vec![],
         NnsCanisterWasmStrategy::TakeBuiltFromSources,
@@ -366,7 +394,7 @@ fn sns_setup_with_many_sale_participants_impl(env: TestEnv, fast_test_setup: boo
     participants.write_attribute(&env);
 
     // Run the actual setup
-    setup(
+    setup_with_oc_init_payload(
         env,
         participants,
         NnsCanisterWasmStrategy::TakeBuiltFromSources,
@@ -399,7 +427,7 @@ pub fn sns_setup_with_many_icp_users(env: TestEnv) {
     participants.write_attribute(&env);
 
     // Run the actual setup
-    setup(
+    setup_with_oc_init_payload(
         env,
         participants,
         NnsCanisterWasmStrategy::TakeBuiltFromSources,
@@ -512,10 +540,14 @@ pub fn install_nns(
     );
 }
 
-pub fn install_sns(env: &TestEnv, canister_wasm_strategy: NnsCanisterWasmStrategy) {
+pub fn install_sns(
+    env: &TestEnv,
+    canister_wasm_strategy: NnsCanisterWasmStrategy,
+    init: SnsInitPayload,
+) {
     let log = env.logger();
     let start_time = Instant::now();
-    let sns_client = SnsClient::install_sns_and_check_healthy(env, canister_wasm_strategy);
+    let sns_client = SnsClient::install_sns_and_check_healthy(env, canister_wasm_strategy, init);
     {
         let observed = sns_client.sns_canisters.swap().get();
         let expected = PrincipalId::from_str(SNS_SALE_CANISTER_ID)
@@ -1218,33 +1250,125 @@ pub fn generate_ticket_participants_workload(
     env.emit_report(format!("{metrics}"));
 }
 
-/// Finalizes the swap
-pub fn finalize_swap(env: TestEnv) {
-    block_on(async move {
-        let sns_client = SnsClient::read_attribute(&env);
-        let sns_request_provider = SnsRequestProvider::from_sns_client(&sns_client);
-        let app_node = env.get_first_healthy_application_node_snapshot();
-        let canister_agent = app_node.build_canister_agent().await;
-        let finalize_swap_request = sns_request_provider.finalize_swap();
-        let _finalize_swap_response = canister_agent
-            .call_and_parse::<FinalizeSwapResponse>(&finalize_swap_request)
-            .await
-            .result()
-            .unwrap();
-    });
+/// Finalizes the swap, and verifies that the swap was finalized as expected.
+pub async fn finalize_swap_and_check_success(
+    env: TestEnv,
+    expected_derived_swap_state: DerivedState,
+    swap_params: Params,
+    sns_init_payload: SnsInitPayload,
+) {
+    let log = env.logger();
+    info!(log, "Finalizing the swap");
 
-    // TODO: We should check that the swap finalized as expected. Some ideas for what might be relevant:
-    // 1. Call swap's `get_state` and assert it contains the correct information?
-    //    - cf_participants, neuron_recipes, and buyers will be empty, that's expected (they're not returned by this API)
-    //    - lifecycle in particular should be `CLOSED`
-    //    - buyer_total_icp_e8s should be verified
-    //    - actually, we should also add the number of buyers to derived_state (closing NNS1-2237) and check that here as well
-    // 2. Get the neurons that were created in SNS governance
-    //    - Should be possible via repeated calls to list_neurons.
-    // 3. Check the number of neurons is correct
-    //    - If there is a CF contribution, neurons will also be created for each of the CF participants
-    // 4. Check that every participant got the neurons we expected them to
-    // 5. Ask Lara Schmid, Max Summe, and Björn Assmann for additional suggestions
+    let sns_client = SnsClient::read_attribute(&env);
+    let sns_request_provider = SnsRequestProvider::from_sns_client(&sns_client);
+    let app_node = env.get_first_healthy_application_node_snapshot();
+    let canister_agent = app_node.build_canister_agent().await;
+    let finalize_swap_request = sns_request_provider.finalize_swap();
+    let finalize_swap_response = canister_agent
+        .call_and_parse(&finalize_swap_request)
+        .await
+        .result()
+        .unwrap();
+
+    let FinalizeSwapResponse {
+            sweep_icp_result: Some(_),
+            sweep_sns_result: Some(_),
+            claim_neuron_result: Some(_),
+            set_mode_call_result: Some(_),
+            set_dapp_controllers_call_result: _, // currently None because there's currently no dapps to control
+            settle_community_fund_participation_result: Some(_),
+            error_message: None,
+        } = finalize_swap_response else {
+            panic!("Unexpected finalize_swap_response: {finalize_swap_response:#?}");
+        };
+
+    info!(log, "Checking that the swap finalized successfully");
+
+    info!(log, "Swap finalization check 1: Call swap's `get_state` and assert it contains the correct information");
+    let get_state_request = sns_request_provider.get_state(CallMode::Query);
+    let get_state_response = canister_agent
+        .call_and_parse(&get_state_request)
+        .await
+        .result()
+        .unwrap();
+
+    let GetStateResponse { swap: Some(swap_state), derived: Some(derived_swap_state) } = get_state_response else {
+        panic!("Unexpected get_state_response: {get_state_response:?}");
+    };
+
+    assert_eq!(
+        Lifecycle::from_i32(swap_state.lifecycle).unwrap(),
+        Lifecycle::Committed
+    );
+    assert_eq!(derived_swap_state, expected_derived_swap_state);
+
+    info!(
+        log,
+        "Swap finalization check 2: Get all neurons from SNS governance"
+    );
+    let neurons = {
+        let mut start_page_at = None;
+        let mut neurons = Vec::new();
+        // Call list_neurons up to 1000 times to get all neurons.
+        // (if this is not enough, we panic, so the limit can be increased.)
+        'repeatedly_call_list_neurons: {
+            let max_pages = 1000;
+            for _ in 0..max_pages {
+                let list_neurons_request = sns_request_provider.list_neurons(
+                    0,
+                    start_page_at.clone(),
+                    None,
+                    CallMode::Query,
+                );
+                let neurons_page = canister_agent
+                    .call_and_parse(&list_neurons_request)
+                    .await
+                    .result()
+                    .unwrap()
+                    .neurons;
+                match neurons_page.last() {
+                    Some(last_neuron) => {
+                        start_page_at = last_neuron.id.clone();
+                    }
+                    None => {
+                        assert!(neurons_page.is_empty());
+                        break 'repeatedly_call_list_neurons;
+                    }
+                }
+                neurons.extend(neurons_page);
+            }
+            panic!("Too many neurons created in SNS governance, unable to read all of them! (Tried calling list_neurons {max_pages} times.)");
+        }
+        neurons
+    };
+
+    info!(
+        log,
+        "Swap finalization check 3: Verify that the correct number of neurons were created"
+    );
+    let InitialTokenDistribution::FractionalDeveloperVotingPower(FractionalDeveloperVotingPower {
+        developer_distribution: Some(developer_distribution),
+        airdrop_distribution: Some(airdrop_distribution),
+        ..
+    }) = sns_init_payload.initial_token_distribution.as_ref().unwrap() else {
+        panic!("Could not unwrap fields from provided SNS init payload: {sns_init_payload:#?}");
+    };
+    let initial_neuron_count =
+        developer_distribution.developer_neurons.len() + airdrop_distribution.airdrop_neurons.len();
+
+    let neuron_basket_construction_parameters =
+        swap_params.neuron_basket_construction_parameters.unwrap();
+    let created_neuron_count = (derived_swap_state.direct_participant_count.unwrap()
+        + derived_swap_state.cf_neuron_count.unwrap())
+        * neuron_basket_construction_parameters.count;
+
+    let expected_neuron_count = initial_neuron_count as u64 + created_neuron_count;
+    assert_eq!(neurons.len() as u64, expected_neuron_count);
+
+    // TODO(NNS1-2250): We should check that the swap finalized as expected. Some ideas for what might be relevant:
+    // 1. Check that every participant got the neurons we expected them to
+    // 2. Ask Lara Schmid, Max Summe, and Björn Assmann for additional suggestions
 }
 
 const SNS_ENDPOINT_RETRY_TIMEOUT: Duration = Duration::from_secs(5 * 60); // 5 minutes

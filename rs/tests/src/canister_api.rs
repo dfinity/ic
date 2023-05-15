@@ -5,6 +5,7 @@ use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_gtc::pb::v1::AccountState;
 use ic_sns_governance::pb::v1::{
     GetMetadataRequest as GetMetadataReq, GetMetadataResponse as GetMetadataRes,
+    ListNeurons as ListNeuronsReq, ListNeuronsResponse as ListNeuronsRes, NeuronId,
 };
 use ic_sns_root::pb::v1::ListSnsCanistersResponse as ListSnsCanistersRes;
 use ic_sns_swap::pb::v1::{
@@ -646,6 +647,48 @@ impl Icrc1RequestProvider {
 }
 
 #[derive(Clone, Debug)]
+pub struct ListNeuronRequest {
+    mode: CallMode,
+    governance_canister: Principal,
+    payload: ListNeuronsReq,
+}
+
+impl Request<ListNeuronsRes> for ListNeuronRequest {
+    fn mode(&self) -> CallMode {
+        self.mode.clone()
+    }
+    fn canister_id(&self) -> Principal {
+        self.governance_canister
+    }
+    fn method_name(&self) -> String {
+        "list_neurons".to_string()
+    }
+    fn payload(&self) -> Vec<u8> {
+        Encode!(&self.payload).unwrap()
+    }
+}
+
+impl ListNeuronRequest {
+    pub fn new(
+        governance_canister: Principal,
+        limit: u32,
+        start_page_at: Option<NeuronId>,
+        of_principal: Option<PrincipalId>,
+        mode: CallMode,
+    ) -> Self {
+        Self {
+            mode,
+            governance_canister,
+            payload: ListNeuronsReq {
+                limit,
+                start_page_at,
+                of_principal,
+            },
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct GetStateRequest {
     mode: CallMode,
     sale_canister: Principal,
@@ -789,5 +832,22 @@ impl SnsRequestProvider {
     ) -> impl Request<GetStateRes> + std::fmt::Debug + Clone + Sync + Send {
         let sale_canister = self.sns_canisters.swap().get().into();
         GetStateRequest::new(sale_canister, mode)
+    }
+
+    pub fn list_neurons(
+        &self,
+        limit: u32,
+        start_page_at: Option<NeuronId>,
+        of_principal: Option<PrincipalId>,
+        mode: CallMode,
+    ) -> impl Request<ListNeuronsRes> + std::fmt::Debug + Clone + Sync + Send {
+        let governance_canister = self.sns_canisters.governance().get().into();
+        ListNeuronRequest::new(
+            governance_canister,
+            limit,
+            start_page_at,
+            of_principal,
+            mode,
+        )
     }
 }
