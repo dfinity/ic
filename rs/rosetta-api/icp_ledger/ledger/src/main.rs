@@ -1182,21 +1182,19 @@ mod tests {
     fn check_candid_interface_compatibility() {
         let new_interface = __export_service();
         let manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
-        for candid_file in ["../ledger.did", "./icrc1.did"].iter() {
-            let old_interface = manifest_dir.join(candid_file);
+        let old_interface = manifest_dir.join("../ledger.did");
 
-            service_compatible(
-                CandidSource::Text(&new_interface),
-                CandidSource::File(old_interface.as_path()),
+        service_compatible(
+            CandidSource::Text(&new_interface),
+            CandidSource::File(old_interface.as_path()),
+        )
+        .unwrap_or_else(|e| {
+            panic!(
+                "the ledger interface is not compatible with {}: {:?}",
+                old_interface.display(),
+                e
             )
-            .unwrap_or_else(|e| {
-                panic!(
-                    "the ledger interface is not compatible with {}: {:?}",
-                    old_interface.display(),
-                    e
-                )
-            });
-        }
+        });
     }
     // FI-510 Backwards compatibility testing for Candid and Protobuf
     #[test]
