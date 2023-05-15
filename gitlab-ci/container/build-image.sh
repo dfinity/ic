@@ -54,12 +54,12 @@ DOCKER_BUILDKIT=1 docker build "${build_args[@]}" \
 
 # build the container image
 DOCKER_BUILDKIT=1 docker build "${build_args[@]}" \
-    -t ic-build:"$DOCKER_IMG_TAG" \
-    -t docker.io/dfinity/ic-build:"$DOCKER_IMG_TAG" \
-    -t docker.io/dfinity/ic-build:latest \
-    -t registry.gitlab.com/dfinity-lab/core/docker/ic-build:"$DOCKER_IMG_TAG" \
+    -t ic-build-legacy:"$DOCKER_IMG_TAG" \
+    -t docker.io/dfinity/ic-build-legacy:"$DOCKER_IMG_TAG" \
+    -t docker.io/dfinity/ic-build-legacy:latest \
+    -t registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:"$DOCKER_IMG_TAG" \
     --build-arg SRC_IMG_PATH="dfinity/ic-build-src:$DOCKER_IMG_TAG" \
     --build-arg USE_BAZEL_VERSION="${USE_BAZEL_VERSION}" \
-    -f gitlab-ci/container/Dockerfile .
+    -f gitlab-ci/container/Dockerfile.legacy .
 
 popd
