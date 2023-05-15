@@ -739,6 +739,12 @@ impl BackupHelper {
                 debug!(self.log, "Will execute: {:?}", cmd2);
                 exec_cmd(&mut cmd2).map_err(|err| format!("Error copying artifacts: {:?}", err))?;
             }
+            ls_path(
+                &self.log,
+                self.cold_storage_dir
+                    .join(format!("{}", self.subnet_id))
+                    .as_path(),
+            )?;
         }
 
         info!(
@@ -778,6 +784,12 @@ impl BackupHelper {
                     reversed.nth(self.daily_replays - 2);
                 }
             }
+            ls_path(
+                &self.log,
+                self.cold_storage_dir
+                    .join(format!("{}", self.subnet_id))
+                    .as_path(),
+            )?;
         }
 
         let trash_dir = self.trash_dir();
@@ -810,6 +822,16 @@ impl BackupHelper {
         );
         Ok(())
     }
+}
+
+pub fn ls_path(log: &Logger, dir: &Path) -> Result<(), String> {
+    let mut cmd = Command::new("ls");
+    cmd.arg(dir);
+    debug!(log, "Will execute: {:?}", cmd);
+    let res = exec_cmd(&mut cmd)
+        .map_err(|err| format!("Error listing cold store directory: {:?}", err))?;
+    debug!(log, "{:?}", res);
+    Ok(())
 }
 
 fn into_replica_version(log: &Logger, spool_dir: &DirEntry) -> Option<ReplicaVersion> {

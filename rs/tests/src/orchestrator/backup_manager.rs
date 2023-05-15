@@ -42,13 +42,14 @@ use crate::{
     },
     util::{block_on, get_nns_node},
 };
+use ic_backup::backup_helper::ls_path;
 use ic_backup::config::{ColdStorage, Config, SubnetConfig};
 use ic_backup::util::sleep_secs;
 use ic_base_types::SubnetId;
 use ic_recovery::file_sync_helper::{download_binary, write_file};
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{Height, ReplicaVersion};
-use slog::{error, info, Logger};
+use slog::{debug, error, info, Logger};
 use std::ffi::OsStr;
 use std::fs::{self, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
@@ -293,7 +294,10 @@ pub fn test(env: TestEnv) {
     info!(log, "Modified memory file");
 
     let mut command = Command::new(&ic_backup_path);
-    command.arg("--config-file").arg(&config_file);
+    command
+        .arg("--config-file")
+        .arg(&config_file)
+        .arg("--debug");
     info!(log, "Will execute: {:?}", command);
     let mut child = command
         .stdout(Stdio::piped())
@@ -302,12 +306,13 @@ pub fn test(env: TestEnv) {
     info!(log, "Started process: {}", child.id());
 
     assert!(cold_storage_exists(
+        &log,
         cold_storage_dir.join(subnet_id.to_string())
     ));
     info!(log, "Artifacts and states are moved to cold storage");
 
     let mut hash_mismatch = false;
-    for _ in 0..12 {
+    for _ in 0..13 {
         info!(log, "Checking logs for hash mismatch...");
         if let Ok(dirs) = fs::read_dir(backup_dir.join("logs")) {
             for en in dirs {
@@ -373,10 +378,11 @@ fn modify_byte_in_file(file_path: PathBuf) -> std::io::Result<()> {
     file.write_all(&byte)
 }
 
-fn cold_storage_exists(cold_storage_dir: PathBuf) -> bool {
+fn cold_storage_exists(log: &Logger, cold_storage_dir: PathBuf) -> bool {
     for _ in 0..12 {
-        if dir_exists_and_have_file(&cold_storage_dir.join("states"))
-            && dir_exists_and_have_file(&cold_storage_dir.join("artifacts"))
+        _ = ls_path(log, &cold_storage_dir);
+        if dir_exists_and_have_file(log, &cold_storage_dir.join("states"))
+            && dir_exists_and_have_file(log, &cold_storage_dir.join("artifacts"))
         {
             return true;
         }
@@ -385,14 +391,20 @@ fn cold_storage_exists(cold_storage_dir: PathBuf) -> bool {
     false
 }
 
-fn dir_exists_and_have_file(dir: &PathBuf) -> bool {
+fn dir_exists_and_have_file(log: &Logger, dir: &PathBuf) -> bool {
+    debug!(log, "Check directory: {:?}", dir);
     if !dir.exists() {
+        debug!(log, "Doesn't exists!");
         return false;
     }
-    fs::read_dir(dir)
+    debug!(log, "Directory exists!");
+    _ = ls_path(log, dir);
+    let have_file = fs::read_dir(dir)
         .expect("Should be able to read existing directory")
         .next()
-        .is_some()
+        .is_some();
+    debug!(log, "Check does it contain file(s): {}", have_file);
+    have_file
 }
 
 fn copy_file(binaries_path: &Path, backup_binaries_dir: &Path, file_name: &str) {
