@@ -94,6 +94,44 @@ lazy_static! {
         );
 }
 
+struct StubIcpLedger {}
+#[async_trait]
+impl IcpLedger for StubIcpLedger {
+    async fn transfer_funds(
+        &self,
+        _amount_e8s: u64,
+        _fee_e8s: u64,
+        _from_subaccount: Option<Subaccount>,
+        _to: AccountIdentifier,
+        _memo: u64,
+    ) -> Result<u64, NervousSystemError> {
+        unimplemented!()
+    }
+
+    async fn total_supply(&self) -> Result<Tokens, NervousSystemError> {
+        unimplemented!()
+    }
+
+    async fn account_balance(
+        &self,
+        _account: AccountIdentifier,
+    ) -> Result<Tokens, NervousSystemError> {
+        unimplemented!()
+    }
+
+    fn canister_id(&self) -> CanisterId {
+        unimplemented!()
+    }
+}
+
+struct StubCMC {}
+#[async_trait]
+impl CMC for StubCMC {
+    async fn neuron_maturity_modulation(&mut self) -> Result<i32, String> {
+        unimplemented!()
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone)]
 struct ExpectedCallCanisterMethodCallArguments<'a> {
     target: CanisterId,
@@ -111,6 +149,7 @@ struct MockEnvironment<'a> {
             )>,
         >,
     >,
+    now: Arc<Mutex<u64>>,
 }
 
 impl Default for MockEnvironment<'_> {
@@ -134,6 +173,7 @@ impl Default for MockEnvironment<'_> {
                     .unwrap()),
                 ),
             ]))),
+            now: Arc::new(Mutex::new(0)),
         }
     }
 }
@@ -141,7 +181,7 @@ impl Default for MockEnvironment<'_> {
 #[async_trait]
 impl Environment for MockEnvironment<'_> {
     fn now(&self) -> u64 {
-        unimplemented!();
+        *self.now.lock().unwrap()
     }
 
     fn random_u64(&mut self) -> u64 {
@@ -298,6 +338,7 @@ async fn validate_open_sns_token_swap_sns_wasm_list_deployed_snses_fail() {
                     },
                     Err((None, "derp".to_string())),
                 ),]),)),
+                now: Arc::new(Mutex::new(0))
             },
         )
         .await
@@ -318,6 +359,7 @@ async fn validate_open_sns_token_swap_unknown_swap() {
                     },
                     Ok(Encode!(&ListDeployedSnsesResponse { instances: vec![] }).unwrap()),
                 )]))),
+                now: Arc::new(Mutex::new(0))
             },
         )
         .await
@@ -341,6 +383,7 @@ async fn validate_open_sns_token_swap_swap_get_state_fail() {
                         Err((None, "derp".to_string())),
                     )
                 ]),)),
+                now: Arc::new(Mutex::new(0))
             },
         )
         .await
@@ -1253,5 +1296,79 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
             Ok(ok) => panic!("Invalid data was not rejected. Result: {:#?}", ok),
             Err(err) => assert!(err.contains("wait_for_quiet"), "{}", err),
         }
+    }
+}
+
+mod metrics_tests {
+    use crate::encode_metrics;
+    use crate::governance::tests::{MockEnvironment, StubCMC, StubIcpLedger};
+    use crate::governance::Governance;
+    use crate::pb::v1::{
+        proposal, Governance as GovernanceProto, Motion, Proposal, ProposalData, Tally,
+    };
+    use maplit::btreemap;
+    use std::sync::{Arc, Mutex};
+
+    #[test]
+    fn test_metrics_total_voting_power() {
+        let proposal_1 = ProposalData {
+            proposal: Some(Proposal {
+                title: Some("Foo Foo Bar".to_string()),
+                action: Some(proposal::Action::Motion(Motion {
+                    motion_text: "Text for this motion".to_string(),
+                })),
+                ..Proposal::default()
+            }),
+            latest_tally: Some(Tally {
+                timestamp_seconds: 0,
+                yes: 0,
+                no: 0,
+                total: 555,
+            }),
+            ..ProposalData::default()
+        };
+
+        let proposal_2 = ProposalData {
+            proposal: Some(Proposal {
+                title: Some("Foo Foo Bar".to_string()),
+                action: Some(proposal::Action::ManageNeuron(Box::default())),
+
+                ..Proposal::default()
+            }),
+            latest_tally: Some(Tally {
+                timestamp_seconds: 0,
+                yes: 0,
+                no: 0,
+                total: 1,
+            }),
+            ..ProposalData::default()
+        };
+
+        let governance = Governance::new(
+            GovernanceProto {
+                proposals: btreemap! {
+                    1 =>  proposal_1,
+                    2 => proposal_2
+                },
+                ..GovernanceProto::default()
+            },
+            Box::new(MockEnvironment {
+                expected_call_canister_method_calls: Arc::new(Mutex::new(Default::default())),
+                now: Arc::new(Mutex::new(0)),
+            }),
+            Box::new(StubIcpLedger {}),
+            Box::new(StubCMC {}),
+        );
+
+        let mut writer = ic_metrics_encoder::MetricsEncoder::new(vec![], 1000);
+
+        encode_metrics(&governance, &mut writer).unwrap();
+
+        let body = writer.into_inner();
+        let s = String::from_utf8_lossy(&body);
+
+        // We assert that it is '555' instead of '1', so that we know the correct
+        // proposal action is filtered out.
+        assert!(s.contains("governance_voting_power_total 555 1000"));
     }
 }
