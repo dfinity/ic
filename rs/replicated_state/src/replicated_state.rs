@@ -799,8 +799,9 @@ impl ReplicatedState {
         crate::bitcoin::push_response(self, response)
     }
 
-    /// Times out requests in all `OutputQueues` found in the replicated state (except the subnet
-    /// queues). Returns the number of requests that were timed out.
+    /// Times out all requests with expired deadlines (given `current_time`) in all
+    /// canister (but not subnet) `OutputQueues`. Returns the number of timed out
+    /// requests.
     ///
     /// See `CanisterQueues::time_out_requests` for further details.
     #[allow(clippy::needless_collect)]
