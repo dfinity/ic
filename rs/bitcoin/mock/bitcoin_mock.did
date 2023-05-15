@@ -1,0 +1,46 @@
+type GetCurrentFeePercentilesRequest = record { network : NetworkInRequest };
+type GetUtxosRequest = record {
+  network : NetworkInRequest;
+  filter : opt UtxosFilterInRequest;
+  address : text;
+};
+type GetUtxosResponse = record {
+  next_page : opt vec nat8;
+  tip_height : nat32;
+  tip_block_hash : vec nat8;
+  utxos : vec Utxo;
+};
+type NetworkInRequest = variant {
+  Mainnet;
+  mainnet;
+  Regtest;
+  regtest;
+  Testnet;
+  testnet;
+};
+type OutPoint = record { txid : vec nat8; vout : nat32 };
+type PushUtxoToAddress = record { utxo : Utxo; address : text };
+type SendTransactionRequest = record {
+  transaction : vec nat8;
+  network : NetworkInRequest;
+};
+type Utxo = record { height : nat32; value : nat64; outpoint : OutPoint };
+type UtxosFilterInRequest = variant {
+  Page : vec nat8;
+  page : vec nat8;
+  min_confirmations : nat32;
+  MinConfirmations : nat32;
+};
+service : (network: NetworkInRequest) -> {
+  bitcoin_get_current_fee_percentiles : (GetCurrentFeePercentilesRequest) -> (
+      vec nat64,
+    );
+  bitcoin_get_utxos : (GetUtxosRequest) -> (GetUtxosResponse);
+  bitcoin_send_transaction : (SendTransactionRequest) -> ();
+  change_availability : (bool) -> ();
+  get_mempool : () -> (vec vec nat8);
+  push_utxo_to_address : (PushUtxoToAddress) -> ();
+  remove_utxo : (Utxo) -> ();
+  reset_mempool : () -> ();
+  set_fee_percentiles : (vec nat64) -> ();
+}
