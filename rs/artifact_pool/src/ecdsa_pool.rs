@@ -30,6 +30,7 @@ use ic_types::consensus::{
     CatchUpPackage,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{IDkgDealingSupport, SignedIDkgDealing};
+use prometheus::IntCounter;
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 use std::fmt::Debug;
@@ -281,6 +282,7 @@ pub struct EcdsaPoolImpl {
     validated: Box<dyn MutableEcdsaPoolSection>,
     unvalidated: Box<dyn MutableEcdsaPoolSection>,
     stats: Box<dyn EcdsaStats>,
+    invalidated_artifacts: IntCounter,
     log: ReplicaLogger,
 }
 
@@ -309,6 +311,10 @@ impl EcdsaPoolImpl {
             )) as Box<_>,
         };
         Self {
+            invalidated_artifacts: metrics_registry.int_counter(
+                "ecdsa_invalidated_artifacts",
+                "The number of invalidated ECDSA artifacts",
+            ),
             validated,
             unvalidated: Box::new(InMemoryEcdsaPoolSection::new(
                 metrics_registry,
@@ -412,6 +418,8 @@ impl MutablePool<EcdsaArtifact, EcdsaChangeSet> for EcdsaPoolImpl {
                     unvalidated_ops.remove(msg_id);
                 }
                 EcdsaChangeAction::HandleInvalid(msg_id, msg) => {
+                    self.invalidated_artifacts.inc();
+                    warn!(self.log, "Invalid ECDSA artifact ({:?}): {:?}", msg, msg_id);
                     if self.unvalidated.as_pool_section().contains(&msg_id) {
                         unvalidated_ops.remove(msg_id);
                     } else if self.validated.as_pool_section().contains(&msg_id) {

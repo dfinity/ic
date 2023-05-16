@@ -18,7 +18,7 @@ use ic_interfaces::{
     },
     time_source::TimeSource,
 };
-use ic_logger::ReplicaLogger;
+use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::buckets::linear_buckets;
 use ic_protobuf::types::v1 as pb;
 use ic_types::artifact::ArtifactKind;
@@ -26,7 +26,7 @@ use ic_types::{
     artifact::ConsensusMessageFilter, artifact::ConsensusMessageId,
     artifact_kind::ConsensusArtifact, consensus::*, Height, SubnetId, Time,
 };
-use prometheus::{histogram_opts, labels, opts, Histogram, IntGauge};
+use prometheus::{histogram_opts, labels, opts, Histogram, IntCounter, IntGauge};
 use std::cmp::Ordering;
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -257,8 +257,10 @@ pub struct ConsensusPoolImpl {
     unvalidated: Box<dyn MutablePoolSection<UnvalidatedConsensusArtifact> + Send + Sync>,
     validated_metrics: PoolMetrics,
     unvalidated_metrics: PoolMetrics,
+    invalidated_artifacts: IntCounter,
     cache: Arc<ConsensusCacheImpl>,
     backup: Option<Backup>,
+    log: ReplicaLogger,
 }
 
 // A temporary pool implementation used for genesis initialization.
@@ -371,7 +373,7 @@ impl ConsensusPoolImpl {
     ) -> ConsensusPoolImpl {
         let mut pool = UncachedConsensusPoolImpl::new(config.clone(), log.clone());
         Self::init_genesis(cup_proto, pool.validated.as_mut());
-        let mut pool = Self::from_uncached(pool, registry.clone());
+        let mut pool = Self::from_uncached(pool, registry.clone(), log.clone());
         // If the back up directory is set, instantiate the backup component
         // and create a subdirectory with the subnet id as directory name.
         pool.backup = config.backup_config.map(|config| {
@@ -422,15 +424,21 @@ impl ConsensusPoolImpl {
     pub fn from_uncached(
         uncached: UncachedConsensusPoolImpl,
         registry: ic_metrics::MetricsRegistry,
+        log: ReplicaLogger,
     ) -> ConsensusPoolImpl {
         let cache = Arc::new(ConsensusCacheImpl::new(&uncached));
         ConsensusPoolImpl {
             validated: uncached.validated,
             unvalidated: uncached.unvalidated,
+            invalidated_artifacts: registry.int_counter(
+                "consensus_invalidated_artifacts",
+                "The number of invalidated consensus artifacts",
+            ),
             validated_metrics: PoolMetrics::new(registry.clone(), POOL_TYPE_VALIDATED),
             unvalidated_metrics: PoolMetrics::new(registry, POOL_TYPE_UNVALIDATED),
             cache,
             backup: None,
+            log,
         }
     }
 
@@ -572,7 +580,12 @@ impl MutablePool<ConsensusArtifact, ChangeSet> for ConsensusPoolImpl {
                 ChangeAction::PurgeUnvalidatedBelow(height) => {
                     unvalidated_ops.purge_below(height);
                 }
-                ChangeAction::HandleInvalid(to_remove, _) => {
+                ChangeAction::HandleInvalid(to_remove, s) => {
+                    self.invalidated_artifacts.inc();
+                    warn!(
+                        self.log,
+                        "Invalid consensus artifact ({}): {:?}", s, to_remove
+                    );
                     unvalidated_ops.remove(to_remove.get_id());
                 }
             }

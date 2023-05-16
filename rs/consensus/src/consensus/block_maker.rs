@@ -880,6 +880,7 @@ mod tests {
             );
             let dkg_pool = Arc::new(RwLock::new(ic_artifact_pool::dkg_pool::DkgPoolImpl::new(
                 MetricsRegistry::new(),
+                no_op_logger(),
             )));
             let ecdsa_pool = Arc::new(RwLock::new(
                 ic_artifact_pool::ecdsa_pool::EcdsaPoolImpl::new(

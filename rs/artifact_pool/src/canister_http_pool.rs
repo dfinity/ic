@@ -13,6 +13,7 @@ use ic_interfaces::{
     canister_http::{CanisterHttpChangeAction, CanisterHttpChangeSet, CanisterHttpPool},
     time_source::TimeSource,
 };
+use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
     artifact::{ArtifactKind, CanisterHttpResponseId},
@@ -21,6 +22,7 @@ use ic_types::{
     crypto::CryptoHashOf,
     time::current_time,
 };
+use prometheus::IntCounter;
 
 const POOL_CANISTER_HTTP: &str = "canister_http";
 const POOL_CANISTER_HTTP_CONTENT: &str = "canister_http_content";
@@ -42,11 +44,17 @@ pub struct CanisterHttpPoolImpl {
     validated: ValidatedCanisterHttpPoolSection,
     unvalidated: UnvalidatedCanisterHttpPoolSection,
     content: ContentCanisterHttpPoolSection,
+    invalidated_artifacts: IntCounter,
+    log: ReplicaLogger,
 }
 
 impl CanisterHttpPoolImpl {
-    pub fn new(metrics: MetricsRegistry) -> Self {
+    pub fn new(metrics: MetricsRegistry, log: ReplicaLogger) -> Self {
         Self {
+            invalidated_artifacts: metrics.int_counter(
+                "canister_http_invalidated_artifacts",
+                "The number of invalidated canister http artifacts",
+            ),
             validated: PoolSection::new(metrics.clone(), POOL_CANISTER_HTTP, POOL_TYPE_VALIDATED),
             unvalidated: PoolSection::new(
                 metrics.clone(),
@@ -58,6 +66,7 @@ impl CanisterHttpPoolImpl {
                 POOL_CANISTER_HTTP_CONTENT,
                 POOL_TYPE_VALIDATED,
             ),
+            log,
         }
     }
 }
@@ -155,7 +164,12 @@ impl MutablePool<CanisterHttpArtifact, CanisterHttpChangeSet> for CanisterHttpPo
                 CanisterHttpChangeAction::RemoveContent(id) => {
                     self.content.remove(&id);
                 }
-                CanisterHttpChangeAction::HandleInvalid(id, _) => {
+                CanisterHttpChangeAction::HandleInvalid(id, reason) => {
+                    self.invalidated_artifacts.inc();
+                    warn!(
+                        self.log,
+                        "Invalid CanisterHttp message ({:?}): {:?}", reason, id
+                    );
                     self.unvalidated.remove(&id);
                 }
             }

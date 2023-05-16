@@ -5,26 +5,20 @@ use ic_interfaces::{
     artifact_manager::{ArtifactProcessor, ProcessingResult},
     artifact_pool::{ChangeResult, ChangeSetProducer, MutablePool, UnvalidatedArtifact},
     canister_http::CanisterHttpChangeSet,
-    certification::{
-        ChangeAction as CertificationChangeAction, ChangeSet as CertificationChangeSet,
-    },
-    consensus_pool::{ChangeAction as ConsensusAction, ChangeSet as CoonsensusChangeSet},
-    dkg::{ChangeAction as DkgChangeAction, ChangeSet as DkgChangeSet},
+    certification::ChangeSet as CertificationChangeSet,
+    consensus_pool::ChangeSet as CoonsensusChangeSet,
+    dkg::ChangeSet as DkgChangeSet,
     ecdsa::EcdsaChangeSet,
     ingress_pool::ChangeSet as IngressChangeSet,
     time_source::TimeSource,
 };
-use ic_logger::{debug, warn, ReplicaLogger};
-use ic_metrics::MetricsRegistry;
 use ic_types::{
     artifact::*,
     artifact_kind::*,
     canister_http::CanisterHttpResponseShare,
-    consensus::HasRank,
     consensus::{certification::CertificationMessage, dkg, ConsensusMessage},
     messages::SignedIngress,
 };
-use prometheus::{histogram_opts, Histogram, IntCounter};
 use std::sync::{Arc, RwLock};
 
 /// *Consensus* `OnStateChange` client.
@@ -33,27 +27,16 @@ pub struct ConsensusProcessor<PoolConsensus> {
     consensus_pool: Arc<RwLock<PoolConsensus>>,
     /// The *Consensus* client.
     client: Box<dyn ChangeSetProducer<PoolConsensus, ChangeSet = CoonsensusChangeSet>>,
-    /// The invalidated artifacts counter.
-    invalidated_artifacts: IntCounter,
-    /// The logger.
-    log: ReplicaLogger,
 }
 
 impl<PoolConsensus> ConsensusProcessor<PoolConsensus> {
     pub fn new(
         consensus_pool: Arc<RwLock<PoolConsensus>>,
         client: Box<dyn ChangeSetProducer<PoolConsensus, ChangeSet = CoonsensusChangeSet>>,
-        log: ReplicaLogger,
-        metrics_registry: &MetricsRegistry,
     ) -> Self {
         Self {
             consensus_pool,
             client,
-            log,
-            invalidated_artifacts: metrics_registry.int_counter(
-                "consensus_invalidated_artifacts",
-                "The number of invalidated consensus artifacts",
-            ),
         }
     }
 }
@@ -71,12 +54,6 @@ impl<
         {
             let mut consensus_pool = self.consensus_pool.write().unwrap();
             for artifact in artifacts {
-                debug!(
-                    tag => "consensus_trace",
-                    self.log,
-                    "process_change::artifact {}",
-                    serde_json::to_string(&artifact).unwrap()
-                );
                 consensus_pool.insert(artifact)
             }
         }
@@ -89,50 +66,6 @@ impl<
         } else {
             ProcessingResult::StateUnchanged
         };
-
-        for change_action in change_set.iter() {
-            debug!(
-                tag => "consensus_trace",
-                self.log,
-                "process_change::change_action {}",
-                serde_json::to_string(&change_action).unwrap()
-            );
-            match change_action {
-                ConsensusAction::AddToValidated(to_add) => {
-                    if let ConsensusMessage::BlockProposal(p) = to_add {
-                        let rank = p.content.as_ref().rank();
-                        debug!(
-                            self.log,
-                            "Added proposal {:?} of rank {:?} to artifact pool", p, rank
-                        );
-                    }
-                }
-                ConsensusAction::MoveToValidated(to_move) => {
-                    if let ConsensusMessage::BlockProposal(p) = to_move {
-                        let rank = p.content.as_ref().rank();
-                        debug!(
-                            self.log,
-                            "Moved proposal {:?} of rank {:?} to artifact pool", p, rank
-                        );
-                    }
-                }
-                ConsensusAction::RemoveFromValidated(_) => {}
-                ConsensusAction::RemoveFromUnvalidated(_) => {}
-                ConsensusAction::PurgeValidatedBelow(_) => {}
-                ConsensusAction::PurgeValidatedSharesBelow(_) => {}
-                ConsensusAction::PurgeUnvalidatedBelow(_) => {}
-                ConsensusAction::HandleInvalid(artifact, s) => {
-                    self.invalidated_artifacts.inc();
-                    warn!(self.log, "Invalid artifact {} {:?}", s, artifact);
-                }
-            }
-        }
-        debug!(
-            tag => "consensus_trace",
-            self.log,
-            "process_change::apply_changes {}",
-            serde_json::to_string(&time_source.get_relative_time()).unwrap()
-        );
 
         let ChangeResult(_purged, adverts) = self
             .consensus_pool
@@ -199,27 +132,16 @@ pub struct CertificationProcessor<PoolCertification> {
     certification_pool: Arc<RwLock<PoolCertification>>,
     /// The certifier.
     client: Box<dyn ChangeSetProducer<PoolCertification, ChangeSet = CertificationChangeSet>>,
-    /// The invalidated artifacts counter.
-    invalidated_artifacts: IntCounter,
-    /// The logger.
-    log: ReplicaLogger,
 }
 
 impl<PoolCertification> CertificationProcessor<PoolCertification> {
     pub fn new(
         certification_pool: Arc<RwLock<PoolCertification>>,
         client: Box<dyn ChangeSetProducer<PoolCertification, ChangeSet = CertificationChangeSet>>,
-        log: ReplicaLogger,
-        metrics_registry: &MetricsRegistry,
     ) -> Self {
         Self {
             certification_pool,
             client,
-            log,
-            invalidated_artifacts: metrics_registry.int_counter(
-                "certification_invalidated_artifacts",
-                "The number of invalidated certification artifacts",
-            ),
         }
     }
 }
@@ -249,15 +171,6 @@ impl<
             ProcessingResult::StateUnchanged
         };
 
-        for action in change_set.iter() {
-            if let CertificationChangeAction::HandleInvalid(msg, reason) = action {
-                self.invalidated_artifacts.inc();
-                warn!(
-                    self.log,
-                    "Invalid certification message ({:?}): {:?}", reason, msg
-                );
-            }
-        }
         let ChangeResult(_purged, adverts) = self
             .certification_pool
             .write()
@@ -274,28 +187,14 @@ pub struct DkgProcessor<PoolDkg> {
     dkg_pool: Arc<RwLock<PoolDkg>>,
     /// The DKG client.
     client: Box<dyn ChangeSetProducer<PoolDkg, ChangeSet = DkgChangeSet>>,
-    /// The invalidated artifacts counter.
-    invalidated_artifacts: IntCounter,
-    /// The logger.
-    log: ReplicaLogger,
 }
 
 impl<PoolDkg> DkgProcessor<PoolDkg> {
     pub fn new(
         dkg_pool: Arc<RwLock<PoolDkg>>,
         client: Box<dyn ChangeSetProducer<PoolDkg, ChangeSet = DkgChangeSet>>,
-        log: ReplicaLogger,
-        metrics_registry: &MetricsRegistry,
     ) -> Self {
-        Self {
-            dkg_pool,
-            client,
-            log,
-            invalidated_artifacts: metrics_registry.int_counter(
-                "dkg_invalidated_artifacts",
-                "The number of invalidated DKG artifacts",
-            ),
-        }
+        Self { dkg_pool, client }
     }
 }
 
@@ -316,14 +215,7 @@ impl<PoolDkg: MutablePool<DkgArtifact, DkgChangeSet> + Send + Sync + 'static>
         }
         let change_set = {
             let dkg_pool = self.dkg_pool.read().unwrap();
-            let change_set = self.client.on_state_change(&*dkg_pool);
-            for change_action in change_set.iter() {
-                if let DkgChangeAction::HandleInvalid(msg, reason) = change_action {
-                    self.invalidated_artifacts.inc();
-                    warn!(self.log, "Invalid DKG message ({:?}): {:?}", reason, msg);
-                }
-            }
-            change_set
+            self.client.on_state_change(&*dkg_pool)
         };
         let changed = if !change_set.is_empty() {
             ProcessingResult::StateChanged
@@ -344,30 +236,14 @@ impl<PoolDkg: MutablePool<DkgArtifact, DkgChangeSet> + Send + Sync + 'static>
 pub struct EcdsaProcessor<PoolEcdsa> {
     ecdsa_pool: Arc<RwLock<PoolEcdsa>>,
     client: Box<dyn ChangeSetProducer<PoolEcdsa, ChangeSet = EcdsaChangeSet>>,
-    ecdsa_pool_update_duration: Histogram,
 }
 
 impl<PoolEcdsa> EcdsaProcessor<PoolEcdsa> {
     pub fn new(
         ecdsa_pool: Arc<RwLock<PoolEcdsa>>,
         client: Box<dyn ChangeSetProducer<PoolEcdsa, ChangeSet = EcdsaChangeSet>>,
-        metrics_registry: &MetricsRegistry,
     ) -> Self {
-        Self {
-            ecdsa_pool,
-            client,
-            ecdsa_pool_update_duration: metrics_registry.register(
-                Histogram::with_opts(histogram_opts!(
-                    "ecdsa_pool_update_duration_seconds",
-                    "Time to apply changes to ECDSA artifact pool, in seconds",
-                    vec![
-                        0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.8, 1.0, 1.2, 1.5, 2.0, 2.2, 2.5, 5.0,
-                        8.0, 10.0, 15.0, 20.0, 50.0,
-                    ]
-                ))
-                .unwrap(),
-            ),
-        }
+        Self { ecdsa_pool, client }
     }
 }
 
@@ -397,7 +273,6 @@ impl<PoolEcdsa: MutablePool<EcdsaArtifact, EcdsaChangeSet> + Send + Sync + 'stat
             ProcessingResult::StateUnchanged
         };
 
-        let _timer = self.ecdsa_pool_update_duration.start_timer();
         let ChangeResult(_purged, adverts) = self
             .ecdsa_pool
             .write()

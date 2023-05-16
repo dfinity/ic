@@ -171,11 +171,11 @@ impl ConsensusDependencies {
             metrics_registry.clone(),
             no_op_logger(),
         )));
-        let dkg_pool = dkg_pool::DkgPoolImpl::new(metrics_registry.clone());
+        let dkg_pool = dkg_pool::DkgPoolImpl::new(metrics_registry.clone(), no_op_logger());
         let ecdsa_pool =
             ecdsa_pool::EcdsaPoolImpl::new(pool_config, no_op_logger(), metrics_registry.clone());
         let canister_http_pool =
-            canister_http_pool::CanisterHttpPoolImpl::new(metrics_registry.clone());
+            canister_http_pool::CanisterHttpPoolImpl::new(metrics_registry.clone(), no_op_logger());
 
         let xnet_payload_builder = FakeXNetPayloadBuilder::new();
 

@@ -9,6 +9,7 @@ use ic_interfaces::{
     dkg::{ChangeAction, ChangeSet, DkgPool},
     time_source::TimeSource,
 };
+use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::{
     artifact::{ArtifactKind, DkgMessageId},
@@ -19,6 +20,7 @@ use ic_types::{
     time::{current_time, Time},
     Height,
 };
+use prometheus::IntCounter;
 use std::{ops::Sub, time::Duration};
 
 /// The DkgPool is used to store messages that are exchanged between replicas in
@@ -32,18 +34,25 @@ pub struct DkgPoolImpl {
         CryptoHashOf<consensus::dkg::Message>,
         UnvalidatedArtifact<consensus::dkg::Message>,
     >,
+    invalidated_artifacts: IntCounter,
     current_start_height: Height,
+    log: ReplicaLogger,
 }
 
 const POOL_DKG: &str = "dkg";
 
 impl DkgPoolImpl {
     /// Instantiates a new DKG pool from the time source.
-    pub fn new(metrics_registry: MetricsRegistry) -> Self {
+    pub fn new(metrics_registry: MetricsRegistry, log: ReplicaLogger) -> Self {
         Self {
+            invalidated_artifacts: metrics_registry.int_counter(
+                "dkg_invalidated_artifacts",
+                "The number of invalidated DKG artifacts",
+            ),
             validated: PoolSection::new(metrics_registry.clone(), POOL_DKG, POOL_TYPE_VALIDATED),
             unvalidated: PoolSection::new(metrics_registry, POOL_DKG, POOL_TYPE_UNVALIDATED),
             current_start_height: Height::from(1),
+            log,
         }
     }
 
@@ -120,7 +129,9 @@ impl MutablePool<DkgArtifact, ChangeSet> for DkgPoolImpl {
         let mut purged = Vec::new();
         for action in change_set {
             match action {
-                ChangeAction::HandleInvalid(hash, _) => {
+                ChangeAction::HandleInvalid(hash, reason) => {
+                    self.invalidated_artifacts.inc();
+                    warn!(self.log, "Invalid DKG message ({:?}): {:?}", reason, hash);
                     self.unvalidated.remove(&hash);
                 }
                 ChangeAction::AddToValidated(message) => {
@@ -212,6 +223,7 @@ mod test {
     use super::*;
     use ic_interfaces::dkg::DkgPool;
     use ic_interfaces::time_source::SysTimeSource;
+    use ic_logger::replica_logger::no_op_logger;
     use ic_test_utilities::{
         consensus::fake::FakeSigner,
         mock_time,
@@ -242,7 +254,7 @@ mod test {
         // create 2 DKGs for the same subnet
         let current_dkg_id_start_height = Height::from(30);
         let last_dkg_id_start_height = Height::from(10);
-        let mut pool = DkgPoolImpl::new(MetricsRegistry::new());
+        let mut pool = DkgPoolImpl::new(MetricsRegistry::new(), no_op_logger());
         // add two validated messages, one for every DKG instance
         let ChangeResult(purged, adverts) = pool.apply_changes(
             &SysTimeSource::new(),
@@ -296,7 +308,7 @@ mod test {
 
     #[test]
     fn test_dkg_pool_filter_by_age() {
-        let mut pool = DkgPoolImpl::new(MetricsRegistry::new());
+        let mut pool = DkgPoolImpl::new(MetricsRegistry::new(), no_op_logger());
         let now = current_time();
 
         // 200 sec old

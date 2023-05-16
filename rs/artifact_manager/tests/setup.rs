@@ -46,12 +46,11 @@ fn setup_manager(
 ) -> (Arc<dyn ArtifactManager>, Box<dyn JoinGuard>) {
     let time_source = Arc::new(SysTimeSource::new());
     let metrics_registry = MetricsRegistry::new();
-    let replica_logger = no_op_logger();
 
     let consensus_pool = init_artifact_pools(
         artifact_pool_config,
         metrics_registry.clone(),
-        replica_logger.clone(),
+        no_op_logger(),
     );
 
     let consensus = MockConsensus {};
@@ -64,7 +63,6 @@ fn setup_manager(
         (consensus, consensus_gossip),
         Arc::clone(&time_source) as Arc<_>,
         Arc::clone(&consensus_pool),
-        replica_logger,
         metrics_registry,
     );
     backends.insert(ConsensusArtifact::TAG, Box::new(client));
