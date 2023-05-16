@@ -229,6 +229,7 @@ table = "http_access"
     "query_string",
     "remote_addr_hashed",
     "remote_addr_family",
+    "request_id",
     "request_length",
     "request_method",
     "request_time_ms",
