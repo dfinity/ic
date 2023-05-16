@@ -5,7 +5,10 @@ package(default_visibility = ["//visibility:public"])
 
 MAINNET_REVISION_RUNTIME_DEPS = ["//testnet:mainnet_nns_revision"]
 
-SUBNET_RECOVERY_RUNTIME_DEPS = ["//rs/tests:recovery/binaries"]
+SUBNET_RECOVERY_RUNTIME_DEPS = [
+    "//rs/tests:recovery/binaries",
+    "//ic-os/guestos/envs/prod:hash_and_upload_update-img",
+]
 
 ORCHESTRATOR_UNIVERSAL_VM_ACTIVATION = ["//rs/tests:src/orchestrator/orchestrator_universal_vm_activation.sh"]
 
