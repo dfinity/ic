@@ -30,6 +30,7 @@ use crate::{
     dashboard::DashboardService,
     health_status_refresher::HealthStatusRefreshLayer,
     metrics::{LABEL_REQUEST_TYPE, LABEL_STATUS, REQUESTS_LABEL_NAMES, REQUESTS_NUM_LABELS},
+    pprof::{PprofFlamegraphService, PprofHomeService, PprofProfileService},
     query::QueryService,
     read_state::ReadStateService,
     state_reader_executor::StateReaderExecutor,
@@ -117,6 +118,9 @@ struct HttpHandler {
     dashboard_service: EndpointService,
     status_service: EndpointService,
     read_state_service: EndpointService,
+    pprof_home_service: EndpointService,
+    pprof_profile_service: EndpointService,
+    pprof_flamegraph_service: EndpointService,
     health_status_refresher: HealthStatusRefreshLayer,
 }
 
@@ -305,6 +309,10 @@ pub fn start_server(
         consensus_pool_cache.clone(),
     );
 
+    let pprof_home_service = PprofHomeService::new_service();
+    let pprof_profile_service = PprofProfileService::new_service();
+    let pprof_flamegraph_service = PprofFlamegraphService::new_service();
+
     let health_status_refresher = HealthStatusRefreshLayer::new(
         log.clone(),
         metrics.clone(),
@@ -333,6 +341,9 @@ pub fn start_server(
         catchup_service,
         dashboard_service,
         read_state_service,
+        pprof_home_service,
+        pprof_profile_service,
+        pprof_flamegraph_service,
         health_status_refresher,
     };
     let main_service = create_main_service(metrics.clone(), config.clone(), http_handler);
@@ -563,6 +574,9 @@ async fn make_router(
     let catch_up_package_service = http_handler.catchup_service.clone();
     let dashboard_service = http_handler.dashboard_service.clone();
     let read_state_service = http_handler.read_state_service.clone();
+    let pprof_home_service = http_handler.pprof_home_service.clone();
+    let pprof_profile_service = http_handler.pprof_profile_service.clone();
+    let pprof_flamegraph_service = http_handler.pprof_flamegraph_service.clone();
 
     let svc = match req.method().clone() {
         Method::POST => {
@@ -657,15 +671,15 @@ async fn make_router(
             }
             "/_/pprof" => {
                 timer.set_label(LABEL_REQUEST_TYPE, ApiReqType::PprofHome.into());
-                return (pprof::home(), timer);
+                pprof_home_service
             }
             "/_/pprof/profile" => {
                 timer.set_label(LABEL_REQUEST_TYPE, ApiReqType::PprofProfile.into());
-                return (pprof::cpu_profile(req.into_parts().0).await, timer);
+                pprof_profile_service
             }
             "/_/pprof/flamegraph" => {
                 timer.set_label(LABEL_REQUEST_TYPE, ApiReqType::PprofFlamegraph.into());
-                return (pprof::cpu_flamegraph(req.into_parts().0).await, timer);
+                pprof_flamegraph_service
             }
             _ => {
                 timer.set_label(LABEL_REQUEST_TYPE, ApiReqType::InvalidArgument.into());
