@@ -1,4 +1,5 @@
 //! Messages used in various components.
+use ic_ic00_types::CanisterChangeOrigin;
 use ic_types::{
     messages::{Ingress, Request, Response, StopCanisterContext},
     methods::SystemMethod,
@@ -83,6 +84,15 @@ impl CanisterCall {
         match self {
             CanisterCall::Request(request) => Arc::make_mut(request).payment.take(),
             CanisterCall::Ingress(_) => Cycles::zero(),
+        }
+    }
+
+    pub fn canister_change_origin(&self, canister_version: Option<u64>) -> CanisterChangeOrigin {
+        match self {
+            CanisterCall::Ingress(msg) => CanisterChangeOrigin::from_user(msg.source.get()),
+            CanisterCall::Request(msg) => {
+                CanisterChangeOrigin::from_canister(msg.sender.into(), canister_version)
+            }
         }
     }
 }

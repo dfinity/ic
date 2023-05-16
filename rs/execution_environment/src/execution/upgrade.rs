@@ -131,7 +131,7 @@ pub(crate) fn execute_upgrade(
         )
     } else {
         let wasm_execution_result = round.hypervisor.execute_dts(
-            ApiType::pre_upgrade(original.time, context.sender),
+            ApiType::pre_upgrade(original.time, context.sender()),
             execution_state,
             &helper.canister().system_state,
             helper.canister_memory_usage(),
@@ -227,6 +227,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
     round_limits: &mut RoundLimits,
 ) -> DtsInstallCodeResult {
     let canister_id = helper.canister().canister_id();
+    let context_sender = context.sender();
     // Stage 2: create a new execution state based on the new Wasm code, deactivate global timer, and bump canister version.
     // Replace the execution state of the canister with a new execution state, but
     // persist the stable memory (if it exists).
@@ -261,7 +262,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
         // If the Wasm module does not export the method, then this execution
         // succeeds as a no-op.
         upgrade_stage_4a_call_post_upgrade(
-            context.sender,
+            context_sender,
             context.arg,
             clean_canister,
             helper,
@@ -287,7 +288,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
                 upgrade_stage_3b_process_start_result(
                     canister_state_changes,
                     output,
-                    context.sender,
+                    context_sender,
                     context.arg,
                     clean_canister,
                     helper,
@@ -309,7 +310,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
                 let paused_execution = Box::new(PausedStartExecutionDuringUpgrade {
                     paused_wasm_execution,
                     paused_helper: helper.pause(),
-                    context_sender: context.sender,
+                    context_sender,
                     context_arg: context.arg,
                     original,
                 });

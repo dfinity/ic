@@ -14,8 +14,8 @@ use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_ic00_types::{
-    CanisterInstallMode, CanisterStatusResultV2, CanisterStatusType, InstallCodeArgs,
-    Method as Ic00Method,
+    CanisterChangeOrigin, CanisterInstallMode, CanisterStatusResultV2, CanisterStatusType,
+    InstallCodeArgs, Method as Ic00Method,
 };
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, IngressHistoryWriter, SubnetAvailableMemory,
@@ -133,7 +133,7 @@ impl CanisterMgrConfig {
 
 #[derive(Clone, Debug)]
 pub struct InstallCodeContext {
-    pub sender: PrincipalId,
+    pub origin: CanisterChangeOrigin,
     pub mode: CanisterInstallMode,
     pub canister_id: CanisterId,
     pub wasm_module: CanisterModule,
@@ -141,6 +141,12 @@ pub struct InstallCodeContext {
     pub compute_allocation: Option<ComputeAllocation>,
     pub memory_allocation: Option<MemoryAllocation>,
     pub query_allocation: QueryAllocation,
+}
+
+impl InstallCodeContext {
+    pub fn sender(&self) -> PrincipalId {
+        self.origin.origin()
+    }
 }
 
 /// Errors that can occur when converting from (sender, [`InstallCodeArgs`]) to
@@ -208,11 +214,11 @@ impl From<InvalidMemoryAllocationError> for InstallCodeContextError {
     }
 }
 
-impl TryFrom<(PrincipalId, InstallCodeArgs)> for InstallCodeContext {
+impl TryFrom<(CanisterChangeOrigin, InstallCodeArgs)> for InstallCodeContext {
     type Error = InstallCodeContextError;
 
-    fn try_from(input: (PrincipalId, InstallCodeArgs)) -> Result<Self, Self::Error> {
-        let (sender, args) = input;
+    fn try_from(input: (CanisterChangeOrigin, InstallCodeArgs)) -> Result<Self, Self::Error> {
+        let (origin, args) = input;
         let canister_id = CanisterId::new(args.canister_id).map_err(|err| {
             InstallCodeContextError::InvalidCanisterId(format!(
                 "Converting canister id {} failed with {}",
@@ -242,7 +248,7 @@ impl TryFrom<(PrincipalId, InstallCodeArgs)> for InstallCodeContext {
         let query_allocation = QueryAllocation::default();
 
         Ok(InstallCodeContext {
-            sender,
+            origin,
             mode: args.mode,
             canister_id,
             wasm_module: CanisterModule::new(args.wasm_module),
@@ -463,11 +469,14 @@ impl CanisterManager {
     /// `canister_id`.
     pub(crate) fn update_settings(
         &self,
-        sender: PrincipalId,
+        _timestamp_nanos: Time,
+        origin: CanisterChangeOrigin,
         settings: CanisterSettings,
         canister: &mut CanisterState,
         round_limits: &mut RoundLimits,
     ) -> Result<(), CanisterManagerError> {
+        let sender = origin.origin();
+
         // Verify controller.
         validate_controller(canister, &sender)?;
         validate_compute_allocation(
@@ -538,7 +547,7 @@ impl CanisterManager {
     /// Returns the auto-generated id the new canister that has been created.
     pub(crate) fn create_canister(
         &self,
-        sender: PrincipalId,
+        origin: CanisterChangeOrigin,
         sender_subnet_id: SubnetId,
         cycles: Cycles,
         settings: CanisterSettings,
@@ -582,7 +591,7 @@ impl CanisterManager {
             Err(err) => (Err(err), cycles),
             Ok(validate_settings) => {
                 let canister_id = match self.create_canister_helper(
-                    sender,
+                    origin,
                     cycles,
                     fee,
                     validate_settings,
@@ -706,7 +715,7 @@ impl CanisterManager {
         execution_refund_error_counter: &IntCounter,
         subnet_size: usize,
     ) -> DtsInstallCodeResult {
-        if let Err(err) = validate_controller(&canister, &context.sender) {
+        if let Err(err) = validate_controller(&canister, &context.sender()) {
             return DtsInstallCodeResult::Finished {
                 canister,
                 message,
@@ -751,7 +760,7 @@ impl CanisterManager {
             subnet_size,
             requested_compute_allocation: context.compute_allocation,
             requested_memory_allocation: context.memory_allocation,
-            sender: context.sender,
+            sender: context.sender(),
             canister_id: canister.canister_id(),
         };
 
@@ -779,10 +788,11 @@ impl CanisterManager {
     /// See https://sdk.dfinity.org/docs/interface-spec/index.html#ic-uninstall_code
     pub(crate) fn uninstall_code(
         &self,
+        origin: CanisterChangeOrigin,
         canister_id: CanisterId,
-        sender: PrincipalId,
         state: &mut ReplicatedState,
     ) -> Result<(), CanisterManagerError> {
+        let sender = origin.origin();
         let time = state.time();
         let canister = match state.canister_state_mut(&canister_id) {
             Some(canister) => canister,
@@ -796,7 +806,7 @@ impl CanisterManager {
             validate_controller(canister, &sender)?
         }
 
-        let rejects = uninstall_canister(&self.log, canister, time);
+        let rejects = uninstall_canister(&self.log, canister, time, Some(origin));
         crate::util::process_responses(
             rejects,
             state,
@@ -970,7 +980,8 @@ impl CanisterManager {
     /// the canister is able to run this, otherwise an error is returned.
     pub(crate) fn set_controller(
         &self,
-        sender: PrincipalId,
+        timestamp_nanos: Time,
+        origin: CanisterChangeOrigin,
         canister_id: CanisterId,
         new_controller: PrincipalId,
         state: &mut ReplicatedState,
@@ -983,7 +994,7 @@ impl CanisterManager {
         let settings = CanisterSettingsBuilder::new()
             .with_controller(new_controller)
             .build();
-        self.update_settings(sender, settings, canister, round_limits)
+        self.update_settings(timestamp_nanos, origin, settings, canister, round_limits)
     }
 
     /// Permanently deletes a canister from `ReplicatedState`.
@@ -1076,7 +1087,7 @@ impl CanisterManager {
     /// Returns the auto-generated id the new canister that has been created.
     pub(crate) fn create_canister_with_cycles(
         &self,
-        sender: PrincipalId,
+        origin: CanisterChangeOrigin,
         cycles_amount: Option<u128>,
         settings: CanisterSettings,
         specified_id: Option<PrincipalId>,
@@ -1085,6 +1096,8 @@ impl CanisterManager {
         max_number_of_canisters: u64,
         round_limits: &mut RoundLimits,
     ) -> Result<CanisterId, CanisterManagerError> {
+        let sender = origin.origin();
+
         if !provisional_whitelist.contains(&sender) {
             return Err(CanisterManagerError::SenderNotInWhitelist(sender));
         }
@@ -1103,7 +1116,7 @@ impl CanisterManager {
         ) {
             Err(err) => Err(err),
             Ok(validated_settings) => self.create_canister_helper(
-                sender,
+                origin,
                 cycles,
                 Cycles::new(0),
                 validated_settings,
@@ -1151,7 +1164,7 @@ impl CanisterManager {
 
     fn create_canister_helper(
         &self,
-        sender: PrincipalId,
+        origin: CanisterChangeOrigin,
         cycles: Cycles,
         creation_fee: Cycles,
         settings: ValidatedCanisterSettings,
@@ -1160,6 +1173,8 @@ impl CanisterManager {
         round_limits: &mut RoundLimits,
         specified_id: Option<PrincipalId>,
     ) -> Result<CanisterId, CanisterManagerError> {
+        let sender = origin.origin();
+
         // A value of 0 is equivalent to setting no limit.
         // See documentation of `SubnetRecord` for the semantics of `max_number_of_canisters`.
         if max_number_of_canisters > 0 && state.num_canisters() as u64 >= max_number_of_canisters {
@@ -1526,6 +1541,7 @@ pub fn uninstall_canister(
     log: &ReplicaLogger,
     canister: &mut CanisterState,
     time: Time,
+    _origin: Option<CanisterChangeOrigin>,
 ) -> Vec<Response> {
     // Drop the canister's execution state.
     canister.execution_state = None;
