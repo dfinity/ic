@@ -18,32 +18,33 @@ self.addEventListener('activate', (event) => {
 
 // Intercept and proxy all fetch requests made by the browser or DOM on this scope.
 self.addEventListener('fetch', (event) => {
-  const isNavigation = event.request.mode === 'navigate';
-  try {
-    const request = new RequestProcessor(event.request);
-    event.respondWith(
-      request
-        .perform()
-        .then((response) => {
-          if (response.status >= 400) {
-            return handleErrorResponse({
-              isNavigation,
-              error: response.statusText,
-            });
-          }
+  event.respondWith(
+    (async () => {
+      const isNavigation = event.request.mode === 'navigate';
 
-          return response;
-        })
-        .catch((e) => handleErrorResponse({ isNavigation, error: e }))
-    );
-  } catch (e) {
-    return event.respondWith(
-      handleErrorResponse({
-        isNavigation,
-        error: e,
-      })
-    );
-  }
+      try {
+        const request = new RequestProcessor(event.request);
+        const response = await request.perform();
+
+        if (response.status >= 400) {
+          return handleErrorResponse({
+            isNavigation,
+            error: response.statusText ?? (await response.text()),
+            request: event.request,
+            response,
+          });
+        }
+
+        return response;
+      } catch (error) {
+        return await handleErrorResponse({
+          isNavigation,
+          error,
+          request: event.request,
+        });
+      }
+    })()
+  );
 });
 
 // handle events from the client messages

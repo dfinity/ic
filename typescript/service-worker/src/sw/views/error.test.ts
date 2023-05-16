@@ -5,6 +5,7 @@ describe('Error page', () => {
     const response = await handleErrorResponse({
       isNavigation: false,
       error: new Error('some unknown error'),
+      request: new Request('https://nns.ic0.app/'),
     });
 
     expect(response.status).toEqual(502);
@@ -17,6 +18,7 @@ describe('Error page', () => {
     const response = await handleErrorResponse({
       isNavigation: true,
       error: new Error('some unknown error'),
+      request: new Request('https://nns.ic0.app/'),
     });
 
     expect(response.status).toEqual(502);
@@ -28,6 +30,7 @@ describe('Error page', () => {
     const response = await handleErrorResponse({
       isNavigation: true,
       error,
+      request: new Request('https://nns.ic0.app/'),
     });
 
     expect(await response.text()).toContain(String(error));

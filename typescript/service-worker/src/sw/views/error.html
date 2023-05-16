@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <meta charset="utf8" />
+    <meta charset="UTF-8" />
     <title>Error</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <style>
@@ -51,15 +51,93 @@
         border-color: transparent;
         padding: 2rem;
         background-color: hsla(0, 0%, 100%, 0.8);
+        border-radius: 8px;
+        margin-bottom: 16px;
       }
 
       h1 {
         font-size: 20px;
         line-height: 20px;
+        margin-bottom: 20px;
       }
 
       [role='doc-subtitle'] {
         margin-bottom: 1rem;
+      }
+
+      button {
+        cursor: pointer;
+        background-color: transparent;
+        border: none;
+        display: inline-block;
+      }
+
+      .collapsible-container {
+        background-color: hsla(0, 0%, 100%, 0.8);
+        border-radius: 8px;
+      }
+
+      .collapsible-trigger {
+        cursor: pointer;
+        color: #1c1e21;
+        padding: 16px 20px;
+        box-sizing: border-box;
+        width: 100%;
+        text-align: left;
+        font-weight: 700;
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+      }
+
+      .collapsible-trigger:hover,
+      .collapsible-trigger:active {
+        background-color: transparent;
+      }
+
+      .collapsible-trigger .chevron {
+        transition: transform 0.2s;
+      }
+
+      .collapsible-trigger.active .chevron {
+        transform: rotate(180deg);
+      }
+
+      .collapsible-trigger .clipboard {
+        display: none;
+      }
+
+      .collapsible-trigger.active .clipboard {
+        display: block;
+      }
+
+      .spacer {
+        flex: 1;
+      }
+
+      .collapsible-content {
+        display: none;
+        padding: 0 16px 20px;
+      }
+
+      .collapsible-content.active {
+        display: block;
+      }
+
+      .copy-to-clipboard-feedback {
+        display: none;
+      }
+
+      textarea {
+        box-sizing: border-box;
+        width: 100%;
+        resize: none;
+        border: none;
+        background-color: transparent;
+      }
+
+      textarea:focus-visible {
+        outline: none;
       }
     </style>
   </head>
@@ -122,9 +200,46 @@
       <div class="banner">
         <div class="container">
           <h1>Page failed to load.</h1>
-          <div role="doc-subtitle"><!--{{message}}--></div>
+          <!--{{content}}-->
         </div>
+
+        <!--{{extraDetailsContent}}-->
       </div>
     </main>
+
+    <script>
+      document.addEventListener('DOMContentLoaded', () => {
+        const collapsibleTrigger = document.querySelector(
+          '.collapsible-trigger'
+        );
+        const collapsibleContent = document.querySelector(
+          '.collapsible-content'
+        );
+        const textArea = document.querySelector('textarea');
+
+        collapsibleTrigger.addEventListener('click', () => {
+          collapsibleTrigger.classList.toggle('active');
+          collapsibleContent.classList.toggle('active');
+          textArea.style.height = `${textArea.scrollHeight + 1}px`;
+        });
+
+        const copyToClipboard = document.querySelector('.copy-to-clipboard');
+        const copyToClipboardFeedback = document.querySelector(
+          '.copy-to-clipboard-feedback'
+        );
+        copyToClipboard.addEventListener('click', (event) => {
+          event.stopPropagation();
+
+          textArea.select();
+          textArea.setSelectionRange(0, 99999); // For mobile devices
+          navigator.clipboard.writeText(textArea.value);
+
+          copyToClipboardFeedback.style.display = 'block';
+          setTimeout(() => {
+            copyToClipboardFeedback.style.display = 'none';
+          }, 3000);
+        });
+      });
+    </script>
   </body>
 </html>
