@@ -6588,6 +6588,7 @@ dependencies = [
  "ic-config",
  "ic-consensus-mocks",
  "ic-consensus-utils",
+ "ic-error-types",
  "ic-interfaces",
  "ic-interfaces-https-outcalls-adapter-client",
  "ic-interfaces-registry",
@@ -6604,6 +6605,7 @@ dependencies = [
  "ic-types",
  "mockall 0.7.2",
  "prometheus 0.12.0",
+ "prost",
  "slog",
 ]
 

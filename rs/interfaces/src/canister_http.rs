@@ -1,6 +1,7 @@
 //! Canister Http related public interfaces.
 use crate::validation::ValidationError;
 use ic_base_types::{NumBytes, RegistryVersion};
+use ic_protobuf::proxy::ProxyDecodeError;
 use ic_types::{
     artifact::CanisterHttpResponseId,
     batch::{CanisterHttpPayload, ValidationContext},
@@ -69,6 +70,8 @@ pub enum CanisterHttpPermanentValidationError {
     DuplicateResponse(CallbackId),
     DivergenceProofContainsMultipleCallbackIds,
     DivergenceProofDoesNotMeetDivergenceCriteria,
+    /// The payload could not be deserialized
+    DecodeError(ProxyDecodeError),
 }
 
 /// A transient error that can occur during validation of a [`CanisterHttpPayload`]

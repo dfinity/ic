@@ -10,12 +10,14 @@ use ic_consensus_utils::{
     crypto::ConsensusCrypto, membership::Membership, registry_version_at_height,
 };
 use ic_interfaces::{
+    batch_payload::{BatchPayloadBuilder, BatchPayloadValidationError, PastPayload},
     canister_http::{
         CanisterHttpPayloadBuilder, CanisterHttpPayloadValidationError,
         CanisterHttpPermanentValidationError, CanisterHttpPool,
         CanisterHttpTransientValidationError,
     },
     consensus_pool::ConsensusPoolCache,
+    validation::ValidationError,
 };
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
@@ -32,16 +34,20 @@ use ic_types::{
     },
     consensus::Committee,
     crypto::Signed,
+    messages::CallbackId,
     registry::RegistryClientError,
     signature::BasicSignature,
     CountBytes, Height, NodeId, NumBytes, RegistryVersion, SubnetId,
 };
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeSet, HashSet},
     mem::size_of,
     sync::{Arc, RwLock},
 };
 
+mod parse;
+#[cfg(all(test, feature = "proptest"))]
+mod proptests;
 #[cfg(test)]
 mod tests;
 mod utils;
@@ -134,14 +140,12 @@ impl CanisterHttpPayloadBuilderImpl {
             }),
         }
     }
-}
 
-impl CanisterHttpPayloadBuilder for CanisterHttpPayloadBuilderImpl {
-    fn get_canister_http_payload(
+    fn get_canister_http_payload_impl(
         &self,
         height: Height,
         validation_context: &ValidationContext,
-        past_payloads: &[&CanisterHttpPayload],
+        delivered_ids: HashSet<CallbackId>,
         byte_limit: NumBytes,
     ) -> CanisterHttpPayload {
         let _time = self
@@ -167,8 +171,6 @@ impl CanisterHttpPayloadBuilder for CanisterHttpPayloadBuilderImpl {
             NumBytes::new(MAX_CANISTER_HTTP_PAYLOAD_SIZE as u64),
         );
 
-        // Get a set of the messages of the already delivered responses
-        let delivered_ids = utils::get_past_payload_ids(past_payloads);
         // Get the threshold value that is needed for consensus
         let threshold = match self
             .membership
@@ -383,12 +385,12 @@ impl CanisterHttpPayloadBuilder for CanisterHttpPayloadBuilderImpl {
         payload
     }
 
-    fn validate_canister_http_payload(
+    fn validate_canister_http_payload_impl(
         &self,
         height: Height,
         payload: &CanisterHttpPayload,
         validation_context: &ValidationContext,
-        past_payloads: &[&CanisterHttpPayload],
+        delivered_ids: HashSet<CallbackId>,
     ) -> Result<NumBytes, CanisterHttpPayloadValidationError> {
         let _time = self
             .metrics
@@ -437,8 +439,6 @@ impl CanisterHttpPayloadBuilder for CanisterHttpPayloadBuilderImpl {
                 },
             ));
         }
-
-        let delivered_ids = utils::get_past_payload_ids(past_payloads);
 
         // Validate the timed out calls
         let state = &self
@@ -614,5 +614,65 @@ impl CanisterHttpPayloadBuilder for CanisterHttpPayloadBuilderImpl {
 
         // Successfully return with payload size
         Ok(NumBytes::from(payload_size as u64))
+    }
+}
+
+impl BatchPayloadBuilder for CanisterHttpPayloadBuilderImpl {
+    fn build_payload(
+        &self,
+        height: Height,
+        max_size: NumBytes,
+        past_payloads: &[PastPayload],
+        context: &ValidationContext,
+    ) -> Vec<u8> {
+        let delivered_ids = parse::parse_past_payload_ids(past_payloads);
+        let payload = self.get_canister_http_payload_impl(height, context, delivered_ids, max_size);
+        parse::payload_to_bytes(&payload)
+    }
+
+    fn validate_payload(
+        &self,
+        height: Height,
+        payload: &[u8],
+        past_payloads: &[PastPayload],
+        context: &ValidationContext,
+    ) -> Result<(), BatchPayloadValidationError> {
+        let payload_len = payload.len() as u64;
+
+        let delivered_ids = parse::parse_past_payload_ids(past_payloads);
+        let payload = parse::bytes_to_payload(payload).map_err(|e| {
+            BatchPayloadValidationError::CanisterHttp(ValidationError::Permanent(e))
+        })?;
+        self.validate_canister_http_payload_impl(height, &payload, context, delivered_ids)
+            .map(|num_bytes| {
+                // TODO: Remove after switching to new interface. We can enforce size constraint on the serialized payload
+                assert!(num_bytes.get() <= payload_len);
+            })
+            .map_err(BatchPayloadValidationError::CanisterHttp)
+    }
+}
+
+// TODO: Remove after migrating to new interface
+impl CanisterHttpPayloadBuilder for CanisterHttpPayloadBuilderImpl {
+    fn get_canister_http_payload(
+        &self,
+        height: Height,
+        validation_context: &ValidationContext,
+        past_payloads: &[&CanisterHttpPayload],
+        byte_limit: NumBytes,
+    ) -> CanisterHttpPayload {
+        let delivered_ids = utils::get_past_payload_ids(past_payloads);
+        self.get_canister_http_payload_impl(height, validation_context, delivered_ids, byte_limit)
+    }
+
+    fn validate_canister_http_payload(
+        &self,
+        height: Height,
+        payload: &CanisterHttpPayload,
+        validation_context: &ValidationContext,
+        past_payloads: &[&CanisterHttpPayload],
+    ) -> Result<NumBytes, CanisterHttpPayloadValidationError> {
+        let delivered_ids = utils::get_past_payload_ids(past_payloads);
+        self.validate_canister_http_payload_impl(height, payload, validation_context, delivered_ids)
     }
 }
