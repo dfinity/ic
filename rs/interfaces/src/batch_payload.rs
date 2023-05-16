@@ -10,6 +10,7 @@ use ic_types::{
 
 /// Collection of all possible validation errors that may occur during
 /// validation of a batch payload.
+#[derive(Debug)]
 pub enum BatchPayloadValidationError {
     Ingress(IngressPayloadValidationError),
     XNet(XNetPayloadValidationError),
@@ -76,6 +77,7 @@ pub trait BatchPayloadBuilder: Send {
     /// The payload in its serialized form
     fn build_payload(
         &self,
+        height: Height,
         max_size: NumBytes,
         past_payloads: &[PastPayload],
         context: &ValidationContext,
@@ -95,6 +97,7 @@ pub trait BatchPayloadBuilder: Send {
     /// - A [`BatchPayloadValidationError`] describing the problem otherwise
     fn validate_payload(
         &self,
+        height: Height,
         payload: &[u8],
         past_payloads: &[PastPayload],
         context: &ValidationContext,
