@@ -30,6 +30,8 @@ use rand::prelude::*;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
+pub mod dummy_values;
+
 pub fn create_params_for_dealers(
     dealer_set: &BTreeSet<NodeId>,
     operation: IDkgTranscriptOperation,

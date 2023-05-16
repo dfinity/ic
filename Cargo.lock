@@ -4219,6 +4219,7 @@ dependencies = [
  "criterion",
  "ic-config",
  "ic-constants",
+ "ic-crypto-test-utils-canister-threshold-sigs",
  "ic-ic00-types",
  "ic-interfaces",
  "ic-logger",

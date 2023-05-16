@@ -9,6 +9,9 @@ use ic_crypto_test_utils_canister_threshold_sigs::node_id;
 use rand::Rng;
 use std::collections::{BTreeMap, BTreeSet};
 
+// Due to a quasi-circular dependency with ic-types
+// the test utilities here cannot be replaced by the ones in
+// ic-crypto-test-utils-canister-threshold-sigs
 pub fn create_params_for_dealers(
     dealer_set: &BTreeSet<NodeId>,
     operation: IDkgTranscriptOperation,

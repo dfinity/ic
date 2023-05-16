@@ -25,15 +25,12 @@ use ic_types::crypto::canister_threshold_sig::error::{
     ThresholdEcdsaSignShareError,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    BatchSignedIDkgDealing, IDkgComplaint, IDkgMaskedTranscriptOrigin, IDkgReceivers,
-    IDkgTranscript, IDkgTranscriptOperation, IDkgTranscriptParams, IDkgTranscriptType,
-    IDkgUnmaskedTranscriptOrigin, InitialIDkgDealings, SignedIDkgDealing,
+    BatchSignedIDkgDealing, IDkgComplaint, IDkgReceivers, IDkgTranscript, IDkgTranscriptOperation,
+    IDkgTranscriptParams, InitialIDkgDealings, SignedIDkgDealing,
 };
-use ic_types::crypto::canister_threshold_sig::{
-    ExtendedDerivationPath, PreSignatureQuadruple, ThresholdEcdsaSigInputs,
-};
+use ic_types::crypto::canister_threshold_sig::{ExtendedDerivationPath, ThresholdEcdsaSigInputs};
 use ic_types::crypto::{AlgorithmId, BasicSigOf, CryptoError};
-use ic_types::{NodeId, NodeIndex, Randomness, RegistryVersion};
+use ic_types::{NodeId, NodeIndex, Randomness};
 use maplit::hashset;
 use rand::distributions::uniform::SampleRange;
 use rand::prelude::*;
@@ -1182,9 +1179,28 @@ mod sign_share {
         let subnet_size = rng.gen_range(1..10);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
 
-        // This allows the `inputs` to be accepted by `sign_share`,
-        // but the transcripts weren't loaded.
-        let inputs = fake_sig_inputs(&env.receivers());
+        let key_transcript = generate_key_transcript(&env, AlgorithmId::ThresholdEcdsaSecp256k1);
+        let quadruple =
+            generate_presig_quadruple(&env, AlgorithmId::ThresholdEcdsaSecp256k1, &key_transcript);
+
+        let inputs = {
+            let derivation_path = ExtendedDerivationPath {
+                caller: PrincipalId::new_user_test_id(1),
+                derivation_path: vec![],
+            };
+
+            let hashed_message = rng.gen::<[u8; 32]>();
+            let seed = Randomness::from(rng.gen::<[u8; 32]>());
+
+            ThresholdEcdsaSigInputs::new(
+                &derivation_path,
+                &hashed_message,
+                seed,
+                quadruple,
+                key_transcript,
+            )
+            .expect("failed to create signature inputs")
+        };
 
         let signer_id = random_receiver_for_inputs(&inputs);
 
@@ -3114,111 +3130,6 @@ mod verify_opening {
             Err(IDkgVerifyOpeningError::MissingDealingInTranscript { .. })
         );
     }
-}
-
-fn fake_key_and_presig_quadruple(
-    nodes: &BTreeSet<NodeId>,
-) -> (IDkgTranscript, PreSignatureQuadruple) {
-    let internal_transcript_raw = {
-        // Just generate a transcript and use its "raw" field,
-        // so the others will at least be correctly parsable
-        let env = CanisterThresholdSigTestEnvironment::new(1);
-
-        let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
-        let transcript = run_idkg_and_create_and_verify_transcript(&params, &env.crypto_components);
-        transcript.internal_transcript_raw
-    };
-
-    let original_kappa_id = dummy_idkg_transcript_id_for_tests(1);
-    let kappa_id = dummy_idkg_transcript_id_for_tests(2);
-    let lambda_id = dummy_idkg_transcript_id_for_tests(3);
-    let key_id = dummy_idkg_transcript_id_for_tests(4);
-
-    let fake_kappa = IDkgTranscript {
-        transcript_id: kappa_id,
-        receivers: IDkgReceivers::new(nodes.clone()).unwrap(),
-        registry_version: RegistryVersion::from(1),
-        verified_dealings: BTreeMap::new(),
-        transcript_type: IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareMasked(
-            original_kappa_id,
-        )),
-        algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
-        internal_transcript_raw: internal_transcript_raw.clone(),
-    };
-
-    let fake_lambda = IDkgTranscript {
-        transcript_id: lambda_id,
-        receivers: IDkgReceivers::new(nodes.clone()).unwrap(),
-        registry_version: RegistryVersion::from(1),
-        verified_dealings: BTreeMap::new(),
-        transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
-        algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
-        internal_transcript_raw: internal_transcript_raw.clone(),
-    };
-
-    let fake_kappa_times_lambda = IDkgTranscript {
-        transcript_id: dummy_idkg_transcript_id_for_tests(40),
-        receivers: IDkgReceivers::new(nodes.clone()).unwrap(),
-        registry_version: RegistryVersion::from(1),
-        verified_dealings: BTreeMap::new(),
-        transcript_type: IDkgTranscriptType::Masked(
-            IDkgMaskedTranscriptOrigin::UnmaskedTimesMasked(kappa_id, lambda_id),
-        ),
-        algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
-        internal_transcript_raw: internal_transcript_raw.clone(),
-    };
-
-    let fake_key = IDkgTranscript {
-        transcript_id: key_id,
-        receivers: IDkgReceivers::new(nodes.clone()).unwrap(),
-        registry_version: RegistryVersion::from(1),
-        verified_dealings: BTreeMap::new(),
-        transcript_type: IDkgTranscriptType::Unmasked(IDkgUnmaskedTranscriptOrigin::ReshareMasked(
-            dummy_idkg_transcript_id_for_tests(50),
-        )),
-        algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
-        internal_transcript_raw: internal_transcript_raw.clone(),
-    };
-
-    let fake_key_times_lambda = IDkgTranscript {
-        transcript_id: dummy_idkg_transcript_id_for_tests(50),
-        receivers: IDkgReceivers::new(nodes.clone()).unwrap(),
-        registry_version: RegistryVersion::from(1),
-        verified_dealings: BTreeMap::new(),
-        transcript_type: IDkgTranscriptType::Masked(
-            IDkgMaskedTranscriptOrigin::UnmaskedTimesMasked(key_id, lambda_id),
-        ),
-        algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
-        internal_transcript_raw,
-    };
-
-    let presig_quadruple = PreSignatureQuadruple::new(
-        fake_kappa,
-        fake_lambda,
-        fake_kappa_times_lambda,
-        fake_key_times_lambda,
-    )
-    .unwrap();
-
-    (fake_key, presig_quadruple)
-}
-
-fn fake_sig_inputs(nodes: &BTreeSet<NodeId>) -> ThresholdEcdsaSigInputs {
-    let (fake_key, fake_presig_quadruple) = fake_key_and_presig_quadruple(nodes);
-
-    let derivation_path = ExtendedDerivationPath {
-        caller: PrincipalId::new_user_test_id(1),
-        derivation_path: vec![],
-    };
-
-    ThresholdEcdsaSigInputs::new(
-        &derivation_path,
-        &[0u8; 32],
-        Randomness::from([0_u8; 32]),
-        fake_presig_quadruple,
-        fake_key,
-    )
-    .expect("failed to create signature inputs")
 }
 
 /// Corrupts the dealing by modifying the ciphertext intended for the specified receiver.

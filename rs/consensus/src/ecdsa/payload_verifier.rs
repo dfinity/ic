@@ -587,6 +587,7 @@ mod test {
         },
         utils::test_utils::*,
     };
+    use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_dealings;
     use ic_crypto_test_utils_canister_threshold_sigs::{
         generate_key_transcript, run_idkg_and_create_and_verify_transcript,
         CanisterThresholdSigTestEnvironment,
@@ -595,7 +596,7 @@ mod test {
     use ic_logger::replica_logger::no_op_logger;
     use ic_replicated_state::metadata_state::subnet_call_context_manager::*;
     use ic_test_utilities::{
-        crypto::{mock_dealings, CryptoReturningOk},
+        crypto::CryptoReturningOk,
         mock_time,
         types::{ids::subnet_test_id, messages::RequestBuilder},
     };
@@ -764,7 +765,7 @@ mod test {
 
         // Create completed dealings for request 1.
         let reshare_params = payload.ongoing_xnet_reshares.get(&req_1).unwrap().as_ref();
-        let dealings = mock_dealings(reshare_params.transcript_id, &reshare_params.dealers);
+        let dealings = dummy_dealings(reshare_params.transcript_id, &reshare_params.dealers);
         transcript_builder.add_dealings(reshare_params.transcript_id, dealings);
         update_completed_reshare_requests(
             &mut payload,
@@ -798,7 +799,7 @@ mod test {
 
         // Create another request and dealings
         let reshare_params = payload.ongoing_xnet_reshares.get(&req_2).unwrap().as_ref();
-        let dealings = mock_dealings(reshare_params.transcript_id, &reshare_params.dealers);
+        let dealings = dummy_dealings(reshare_params.transcript_id, &reshare_params.dealers);
         transcript_builder.add_dealings(reshare_params.transcript_id, dealings);
         let mut prev_payload = payload.clone();
         update_completed_reshare_requests(
