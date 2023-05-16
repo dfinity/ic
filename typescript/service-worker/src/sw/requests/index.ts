@@ -72,12 +72,13 @@ export class RequestProcessor {
     // make sure that we don't make a request against the service worker's origin,
     // else we'll end up in a service worker loading loop
     if (this.url.hostname === self.location.hostname) {
-      console.error(
-        `URL ${JSON.stringify(
-          this.url.toString()
-        )} did not resolve to a canister ID.`
+      return new Response(
+        `${this.url.toString()} did not resolve to a canister ID.`,
+        {
+          status: 404,
+          statusText: `${this.url.toString()} did not resolve to a canister ID.`,
+        }
       );
-      return new Response('Could not find the canister ID.', { status: 404 });
     }
 
     return await this.directRequestHandler();
@@ -87,7 +88,10 @@ export class RequestProcessor {
    * We refuse any request to /_/*
    */
   private denyRequestHandler(): Response {
-    return new Response(null, { status: 404 });
+    return new Response(null, {
+      status: 404,
+      statusText: 'Requests to /_/* are not allowed',
+    });
   }
 
   /**
@@ -117,38 +121,22 @@ export class RequestProcessor {
     gatewayUrl: URL,
     canisterId: Principal
   ): Promise<VerifiedResponse> {
-    try {
-      await loadResponseVerification();
+    await loadResponseVerification();
 
-      const [agent, actor] = await createAgentAndActor(
-        gatewayUrl,
-        canisterId,
-        shouldFetchRootKey
-      );
+    const [agent, actor] = await createAgentAndActor(
+      gatewayUrl,
+      canisterId,
+      shouldFetchRootKey
+    );
 
-      const httpRequest = await createHttpRequest(this.request);
-      const httpResponse = await actor.http_request(httpRequest);
+    const httpRequest = await createHttpRequest(this.request);
+    const httpResponse = await actor.http_request(httpRequest);
 
-      if (shouldUpgradeToUpdateCall(httpResponse)) {
-        return await updateCallHandler(agent, actor, canisterId, httpRequest);
-      }
-
-      return await queryCallHandler(
-        agent,
-        httpRequest,
-        httpResponse,
-        canisterId
-      );
-    } catch (error) {
-      console.error(error);
-      const errMessage =
-        error instanceof Error ? error.message : 'Failed to fetch response';
-
-      return {
-        response: new Response(errMessage, { status: 500 }),
-        certifiedHeaders: new Headers(),
-      };
+    if (shouldUpgradeToUpdateCall(httpResponse)) {
+      return await updateCallHandler(agent, actor, canisterId, httpRequest);
     }
+
+    return await queryCallHandler(agent, httpRequest, httpResponse, canisterId);
   }
 
   /**
