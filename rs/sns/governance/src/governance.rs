@@ -1753,7 +1753,7 @@ impl Governance {
                 ErrorType::PreconditionFailed,
                 "No proposal for given ProposalId.",
             )),
-            Some(pd) => get_proposal_response::Result::Proposal(pd.clone()),
+            Some(pd) => get_proposal_response::Result::Proposal(pd.strip_large_fields()),
         };
 
         GetProposalResponse {

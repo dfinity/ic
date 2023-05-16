@@ -19,8 +19,8 @@ use crate::{
         DeregisterDappCanisters, Empty, ExecuteGenericNervousSystemFunction, GovernanceError,
         ManageNeuronResponse, Motion, NervousSystemFunction, NervousSystemParameters, Neuron,
         NeuronId, NeuronPermission, NeuronPermissionList, NeuronPermissionType, ProposalId,
-        RegisterDappCanisters, RewardEvent, TransferSnsTreasuryFunds, UpgradeSnsToNextVersion,
-        Vote, VotingRewardsParameters,
+        RegisterDappCanisters, RewardEvent, TransferSnsTreasuryFunds, UpgradeSnsControlledCanister,
+        UpgradeSnsToNextVersion, Vote, VotingRewardsParameters,
     },
     pb::{
         sns_root_types::{
@@ -34,6 +34,7 @@ use crate::{
 use async_trait::async_trait;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_log::log;
+use ic_crypto_sha::Sha256;
 use ic_ic00_types::CanisterInstallModeError;
 use ic_ledger_core::{tokens::Tokens, tokens::TOKEN_SUBDIVIDABLE_BY};
 use ic_nervous_system_common::{validate_proposal_url, NervousSystemError};
@@ -1407,6 +1408,85 @@ impl Action {
             .map(|m| m.id)
             .collect()
     }
+
+    // Returns a clone of self, except that "large blob fields" are replaced
+    // with a (UTF-8 encoded) textual summary of their contents. See
+    // summarize_blob_field.
+    pub(crate) fn strip_large_fields(&self) -> Self {
+        match self {
+            Action::UpgradeSnsControlledCanister(action) => {
+                Action::UpgradeSnsControlledCanister(action.strip_large_fields())
+            }
+            Action::ExecuteGenericNervousSystemFunction(action) => {
+                Action::ExecuteGenericNervousSystemFunction(action.strip_large_fields())
+            }
+            action => action.clone(),
+        }
+    }
+}
+
+impl UpgradeSnsControlledCanister {
+    // Returns a clone of self, except that "large blob fields" are replaced
+    // with a (UTF-8 encoded) textual summary of their contents. See
+    // summarize_blob_field.
+    pub(crate) fn strip_large_fields(&self) -> Self {
+        Self {
+            new_canister_wasm: summarize_blob_field(&self.new_canister_wasm),
+            canister_upgrade_arg: self
+                .canister_upgrade_arg
+                .as_ref()
+                .map(|blob| summarize_blob_field(blob)),
+            ..self.clone()
+        }
+    }
+}
+
+impl ExecuteGenericNervousSystemFunction {
+    // Returns a clone of self, except that "large blob fields" are replaced
+    // with a (UTF-8 encoded) textual summary of their contents. See
+    // summarize_blob_field.
+    pub(crate) fn strip_large_fields(&self) -> Self {
+        Self {
+            payload: summarize_blob_field(&self.payload),
+            ..self.clone()
+        }
+    }
+}
+
+/// If blob is of length <= 64 (bytes), a copy is returned. Otherwise, a (UTF-8
+/// encoded) human-readable textual summary is returned. This summary is
+/// guaranteed to be of length > 64. Therefore, it is always possible to
+/// disambiguate between direct copying and summary.
+fn summarize_blob_field(blob: &[u8]) -> Vec<u8> {
+    if blob.len() <= 64 {
+        return Vec::from(blob);
+    }
+
+    fn format_u8_slice(blob: &[u8]) -> String {
+        blob.iter()
+            // Hexify each element.
+            .map(|elt| format!("{:02X?}", elt))
+            // Join them with a space. (To do that, we must first collect them into a Vec.)
+            .collect::<Vec<String>>()
+            .join(" ")
+    }
+
+    Vec::<u8>::from(
+        format!(
+            "⚠️ NOT THE ORIGINAL CONTENTS OF THIS FIELD ⚠️\n\
+             \n\
+             The original value had the following properties:\n\
+             - Length: {}\n\
+             - SHA256 Hash:                {}\n\
+             - Leading  32 Bytes (in hex): {}\n\
+             - Trailing 32 Bytes (in hex): {}",
+            blob.len(),
+            format_u8_slice(&Sha256::hash(blob)),
+            format_u8_slice(blob.chunks_exact(32).next().unwrap_or(&[])),
+            format_u8_slice(blob.rchunks_exact(32).next().unwrap_or(&[])),
+        )
+        .as_bytes(),
+    )
 }
 
 // Mapping of action to the unique function id of that action.
@@ -2132,7 +2212,7 @@ pub(crate) mod tests {
         governance::Mode::PreInitializationSwap,
         nervous_system_function::{FunctionType, GenericNervousSystemFunction},
         neuron::Followees,
-        ExecuteGenericNervousSystemFunction, VotingRewardsParameters,
+        ExecuteGenericNervousSystemFunction, Proposal, ProposalData, VotingRewardsParameters,
     };
     use ic_base_types::PrincipalId;
     use ic_nervous_system_common_test_keys::{TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL};
@@ -2991,5 +3071,92 @@ pub(crate) mod tests {
                 test_signature("b2")
             );
         }
+    }
+
+    #[test]
+    fn test_summarize_blob_field() {
+        for len in 0..=64 {
+            let direct_copy_input = (0..len).collect::<Vec<u8>>();
+
+            assert_eq!(summarize_blob_field(&direct_copy_input), direct_copy_input);
+        }
+
+        let too_long = (0..65).collect::<Vec<u8>>();
+        let result = summarize_blob_field(&too_long);
+        assert_ne!(result, too_long);
+        assert!(result.len() > 64, "{:X?}", result);
+
+        let result = String::from_utf8(summarize_blob_field(&too_long)).unwrap();
+        assert!(
+            result.contains("⚠️ NOT THE ORIGINAL CONTENTS OF THIS FIELD ⚠"),
+            "{:X?}",
+            result,
+        );
+        assert!(result.contains("00 01 02 03"), "{:X?}", result);
+        assert!(result.contains("3D 3E 3F 40"), "{:X?}", result);
+        assert!(result.contains("Length: 65"), "{:X?}", result);
+        assert!(
+            // SHA256
+            result.contains(
+                // Independently calculating using Python.
+                "4B FD 2C 8B 6F 1E EC 7A \
+                 2A FE B4 8B 93 4E E4 B2 \
+                 69 41 82 02 7E 6D 0F C0 \
+                 75 07 4F 2F AB B3 17 81",
+            ),
+            "{:X?}",
+            result,
+        );
+    }
+
+    #[test]
+    fn test_strip_large_fields() {
+        let motion_proposal = ProposalData {
+            proposal: Some(Proposal {
+                action: Some(Action::Motion(Motion {
+                    motion_text: "Hello, world!".to_string(),
+                })),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        assert_eq!(motion_proposal.strip_large_fields(), motion_proposal,);
+
+        let upgrade_sns_controlled_canister_proposal = ProposalData {
+            proposal: Some(Proposal {
+                action: Some(Action::UpgradeSnsControlledCanister(
+                    UpgradeSnsControlledCanister {
+                        new_canister_wasm: (0..=255).collect(),
+                        ..Default::default()
+                    },
+                )),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        assert_ne!(
+            upgrade_sns_controlled_canister_proposal.strip_large_fields(),
+            upgrade_sns_controlled_canister_proposal,
+        );
+
+        let execute_generic_nervous_system_function_proposal = ProposalData {
+            proposal: Some(Proposal {
+                action: Some(Action::ExecuteGenericNervousSystemFunction(
+                    ExecuteGenericNervousSystemFunction {
+                        payload: (0..=255).collect(),
+                        ..Default::default()
+                    },
+                )),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        assert_ne!(
+            execute_generic_nervous_system_function_proposal.strip_large_fields(),
+            execute_generic_nervous_system_function_proposal,
+        );
     }
 }
