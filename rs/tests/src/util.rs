@@ -1458,3 +1458,34 @@ pub fn divide_perfectly(
         }
     }
 }
+
+pub fn add_box_drawing_left_border(s: String) -> String {
+    let mut result = String::new();
+    let lines = s.lines().map(|l| l.to_string()).collect::<Vec<_>>();
+    for (index, line) in lines.iter().enumerate() {
+        if index == 0 {
+            result.push_str("╭ ");
+        } else {
+            result.push('\n');
+            if index != lines.len() - 1 {
+                result.push_str("│ ");
+            } else {
+                result.push_str("╰ ");
+            }
+        }
+        result.push_str(line);
+    }
+    result
+}
+
+pub fn pad_all_lines_but_first(s: String, padding: usize) -> String {
+    let mut result = String::new();
+    for (index, line) in s.lines().enumerate() {
+        if index != 0 {
+            result.push('\n');
+            result.push_str(&" ".repeat(padding));
+        }
+        result.push_str(line);
+    }
+    result
+}

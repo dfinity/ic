@@ -161,12 +161,7 @@ impl TaskReport {
             if !msg.contains('\n') {
                 format!(" -- {}", msg)
             } else {
-                report_lines.append(
-                    &mut msg
-                        .split('\n')
-                        .map(|line| format!("     {}", line))
-                        .collect(),
-                );
+                report_lines.append(&mut msg.lines().map(|line| format!("     {line}")).collect());
                 "".to_owned()
             }
         } else {
@@ -179,7 +174,7 @@ impl TaskReport {
         res.append(&mut report_lines);
         res
     }
-} //
+}
 
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
 pub struct TaskReport {

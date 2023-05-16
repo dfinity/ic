@@ -10,6 +10,8 @@ use async_trait::async_trait;
 use itertools::Itertools;
 use slog::{info, Logger};
 
+use crate::util::{add_box_drawing_left_border, pad_all_lines_but_first};
+
 use super::engine::Engine;
 
 #[derive(Default, Clone, Debug)]
@@ -356,7 +358,18 @@ impl Display for RequestMetrics {
             } else {
                 writeln!(f, " errors:").and(
                     self.errors_map.iter().sorted_unstable_by(|(err_a, count_a), (err_b, count_b)| count_a.cmp(count_b).then(err_a.cmp(err_b))).fold(write!(f, ""), |acc, (error, count)| {
-                        acc.and(writeln!(f, "          {count:>7} x {error:?}"))
+                        let error: String = error.replace("\\n", "\n");
+                        let prefix = format!("         {count:>7} x ");
+                        // Format the error if it's multiple lines, otherwise just print it as is.
+                        let error = {
+                            if error.contains('\n') {
+                                pad_all_lines_but_first(add_box_drawing_left_border(error), prefix.len())
+                            } else {
+                                error
+                            }
+                        };
+
+                        acc.and(writeln!(f, "{prefix}{error}"))
                     })
                 ).and(writeln!(f, "     }}"))
             }
@@ -490,6 +503,12 @@ impl<ResultType, ErrorType> RequestOutcome<ResultType, ErrorType> {
     }
 }
 
+impl<ResultType> RequestOutcome<ResultType, anyhow::Error> {
+    pub fn context(self, context: &str) -> Self {
+        self.map_err(|err| err.context(context.to_string()))
+    }
+}
+
 impl<ResultType: Clone, ErrorType: Clone> RequestOutcome<ResultType, ErrorType> {
     /// A convenience function - equivalent to `RequestOutcome::push_outcome_owned`,
     /// except it clones the result so you don't have to.
@@ -499,7 +518,7 @@ impl<ResultType: Clone, ErrorType: Clone> RequestOutcome<ResultType, ErrorType> 
     }
 }
 
-impl<ResultType: Clone, ErrorType: ToString> RequestOutcome<ResultType, ErrorType> {
+impl<ResultType: Clone, ErrorType: std::fmt::Debug> RequestOutcome<ResultType, ErrorType> {
     /// Convenience function. Like `push_outcome`, but converts its `ErrorType` to a `String` first.
     pub fn push_outcome_display_error(
         self,
@@ -508,7 +527,7 @@ impl<ResultType: Clone, ErrorType: ToString> RequestOutcome<ResultType, ErrorTyp
         let new = RequestOutcome::<ResultType, String> {
             result: match self.result {
                 Ok(ref result) => Ok(result.clone()),
-                Err(ref err) => Err(err.to_string()),
+                Err(ref err) => Err(format!("{err:?}")),
             },
             workflow_pos: self.workflow_pos,
             label: self.label.clone(),
