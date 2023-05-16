@@ -6,6 +6,9 @@ rust_library(
     name = "pprof",
     srcs = glob(["src/**"]),
     crate_name = "ic_pprof",
+    proc_macro_deps = [
+        "@crate_index//:async-trait",
+    ],
     version = "0.8.0",
     deps = [
         "@crate_index//:lazy_static",

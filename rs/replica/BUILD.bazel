@@ -28,6 +28,7 @@ DEPENDENCIES = [
     "//rs/monitoring/logger",
     "//rs/monitoring/metrics",
     "//rs/monitoring/onchain_observability/server",
+    "//rs/monitoring/pprof",
     "//rs/nns/constants",
     "//rs/p2p",
     "//rs/protobuf",

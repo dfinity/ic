@@ -1,5 +1,6 @@
 //! In-process CPU profiling support.
 
+use async_trait::async_trait;
 use lazy_static::lazy_static;
 use pprof::{ProfilerGuard, Report};
 use prost::Message;
@@ -53,7 +54,6 @@ fn extract_thread_name(thread_name: &str) -> String {
 pub async fn collect(duration: Duration, frequency: i32) -> Result<Report, pprof::Error> {
     let guard = ProfilerGuard::new(frequency)?;
     sleep(duration).await;
-
     guard
         .report()
         .frames_post_processor(move |frames| {
@@ -62,23 +62,35 @@ pub async fn collect(duration: Duration, frequency: i32) -> Result<Report, pprof
         .build()
 }
 
-/// Collects a protobuf-encoded `pprof` CPU profile for the given `duration` by
-/// sampling at the given `frequency`.
-pub async fn profile(duration: Duration, frequency: i32) -> Result<Vec<u8>, Error> {
-    let mut body: Vec<u8> = Vec::new();
-    collect(duration, frequency)
-        .await?
-        .pprof()?
-        .encode(&mut body)?;
-
-    Ok(body)
+#[async_trait]
+pub trait PprofCollector: Send + Sync {
+    async fn profile(&self, duration: Duration, frequency: i32) -> Result<Vec<u8>, Error>;
+    async fn flamegraph(&self, duration: Duration, frequency: i32) -> Result<Vec<u8>, Error>;
 }
 
-/// Collects a CPU profile as SVG flamegraph for the given `duration` by
-/// sampling at the given `frequency`.
-pub async fn flamegraph(duration: Duration, frequency: i32) -> Result<Vec<u8>, Error> {
-    let mut body: Vec<u8> = Vec::new();
-    collect(duration, frequency).await?.flamegraph(&mut body)?;
+#[derive(Default)]
+pub struct Pprof;
 
-    Ok(body)
+#[async_trait]
+impl PprofCollector for Pprof {
+    /// Collects a protobuf-encoded `pprof` CPU profile for the given `duration` by
+    /// sampling at the given `frequency`.
+    async fn profile(&self, duration: Duration, frequency: i32) -> Result<Vec<u8>, Error> {
+        let mut body: Vec<u8> = Vec::new();
+        collect(duration, frequency)
+            .await?
+            .pprof()?
+            .encode(&mut body)?;
+
+        Ok(body)
+    }
+
+    /// Collects a CPU profile as SVG flamegraph for the given `duration` by
+    /// sampling at the given `frequency`.
+    async fn flamegraph(&self, duration: Duration, frequency: i32) -> Result<Vec<u8>, Error> {
+        let mut body: Vec<u8> = Vec::new();
+        collect(duration, frequency).await?.flamegraph(&mut body)?;
+
+        Ok(body)
+    }
 }

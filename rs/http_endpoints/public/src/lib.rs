@@ -61,6 +61,7 @@ use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::{debug, error, fatal, info, warn, ReplicaLogger};
 use ic_metrics::{histogram_vec_timer::HistogramVecTimer, MetricsRegistry};
+use ic_pprof::PprofCollector;
 use ic_registry_client_helpers::{
     crypto::CryptoRegistry, node::NodeRegistry, node_operator::ConnectionEndpoint,
     subnet::SubnetRegistry,
@@ -239,6 +240,7 @@ pub fn start_server(
     consensus_pool_cache: Arc<dyn ConsensusPoolCache>,
     subnet_type: SubnetType,
     malicious_flags: MaliciousFlags,
+    pprof_collector: Arc<dyn PprofCollector>,
 ) {
     let listen_addr = config.listen_addr;
     info!(log, "Starting HTTP server...");
@@ -310,8 +312,8 @@ pub fn start_server(
     );
 
     let pprof_home_service = PprofHomeService::new_service();
-    let pprof_profile_service = PprofProfileService::new_service();
-    let pprof_flamegraph_service = PprofFlamegraphService::new_service();
+    let pprof_profile_service = PprofProfileService::new_service(pprof_collector.clone());
+    let pprof_flamegraph_service = PprofFlamegraphService::new_service(pprof_collector);
 
     let health_status_refresher = HealthStatusRefreshLayer::new(
         log.clone(),

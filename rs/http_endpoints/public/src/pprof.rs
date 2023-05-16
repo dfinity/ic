@@ -5,10 +5,11 @@ use crate::{
 use futures_util::Future;
 use http::{header, request::Parts, Request};
 use hyper::{self, Body, Response, StatusCode};
-use ic_pprof::{flamegraph, profile, Error};
+use ic_pprof::{Error, PprofCollector};
 use std::{
     collections::HashMap,
     pin::Pin,
+    sync::Arc,
     task::{Context, Poll},
     time::Duration,
 };
@@ -129,11 +130,13 @@ impl Service<Request<Body>> for PprofHomeService {
 }
 
 #[derive(Clone)]
-pub(crate) struct PprofProfileService;
+pub(crate) struct PprofProfileService {
+    collector: Arc<dyn PprofCollector>,
+}
 
 impl PprofProfileService {
-    pub fn new_service() -> EndpointService {
-        BoxCloneService::new(Self)
+    pub fn new_service(collector: Arc<dyn PprofCollector>) -> EndpointService {
+        BoxCloneService::new(Self { collector })
     }
 }
 
@@ -158,11 +161,14 @@ impl Service<Request<Body>> for PprofProfileService {
     /// [`man 7 time`](https://linux.die.net/man/7/time) for details.
     fn call(&mut self, body: Request<Body>) -> Self::Future {
         let parts = body.into_parts().0;
+        let collector = self.collector.clone();
+
         Box::pin(async move {
             Ok(match query(parts) {
-                Ok((duration, frequency)) => {
-                    into_response(profile(duration, frequency).await, CONTENT_TYPE_PROTOBUF)
-                }
+                Ok((duration, frequency)) => into_response(
+                    collector.profile(duration, frequency).await,
+                    CONTENT_TYPE_PROTOBUF,
+                ),
                 Err(err) => make_plaintext_response(StatusCode::BAD_REQUEST, err),
             })
         })
@@ -170,11 +176,13 @@ impl Service<Request<Body>> for PprofProfileService {
 }
 
 #[derive(Clone)]
-pub(crate) struct PprofFlamegraphService;
+pub(crate) struct PprofFlamegraphService {
+    collector: Arc<dyn PprofCollector>,
+}
 
 impl PprofFlamegraphService {
-    pub fn new_service() -> EndpointService {
-        BoxCloneService::new(Self)
+    pub fn new_service(collector: Arc<dyn PprofCollector>) -> EndpointService {
+        BoxCloneService::new(Self { collector })
     }
 }
 
@@ -190,11 +198,14 @@ impl Service<Request<Body>> for PprofFlamegraphService {
 
     fn call(&mut self, body: Request<Body>) -> Self::Future {
         let parts = body.into_parts().0;
+        let collector = self.collector.clone();
+
         Box::pin(async move {
             Ok(match query(parts) {
-                Ok((duration, frequency)) => {
-                    into_response(flamegraph(duration, frequency).await, CONTENT_TYPE_SVG)
-                }
+                Ok((duration, frequency)) => into_response(
+                    collector.flamegraph(duration, frequency).await,
+                    CONTENT_TYPE_SVG,
+                ),
                 Err(err) => make_plaintext_response(StatusCode::BAD_REQUEST, err),
             })
         })
