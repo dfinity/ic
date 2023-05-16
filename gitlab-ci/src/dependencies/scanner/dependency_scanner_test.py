@@ -7,6 +7,7 @@ from model.dependency import Dependency
 from model.finding import Finding
 from model.repository import Project, Repository
 from model.security_risk import SecurityRisk
+from model.team import Team
 from model.user import User
 from model.vulnerability import Vulnerability
 from scanner.dependency_scanner import DependencyScanner
@@ -125,9 +126,10 @@ def test_on_periodic_job_one_finding(jira_lib_mock):
     fake_bazel = FakeBazel(2)
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
 
-    repository = Repository("ic", "https://gitlab.com/dfinity-lab/public/ic", [Project("ic", "ic")])
+    repository = Repository("ic", "https://gitlab.com/dfinity-lab/public/ic", [Project(name="ic", path="ic", owner=Team.EXECUTION_TEAM)])
     finding = fake_bazel.get_findings(repository.name, repository.projects[0], repository.engine_version)[0]
     finding.risk_assessor = [User("mickey", "Mickey Mouse")]
+    finding.owning_teams = [Team.EXECUTION_TEAM]
 
     scanner_job.do_periodic_scan([repository])
 
@@ -157,6 +159,7 @@ def test_on_periodic_job_one_finding_in_jira(jira_lib_mock):
         projects=["foo", "bar", "bear"],
         risk_assessor=[User("mickey", "Mickey Mouse")],
         risk=SecurityRisk.INFORMATIONAL,
+        owning_teams=[Team.GIX_TEAM],
         patch_responsible=[],
         due_date=100,
         score=100,
@@ -167,7 +170,7 @@ def test_on_periodic_job_one_finding_in_jira(jira_lib_mock):
     sub2 = Mock()
     fake_bazel = FakeBazel(2)
     scanner_job = DependencyScanner(fake_bazel, jira_lib_mock, [sub1, sub2])
-    repos = [Repository("ic", "https://gitlab.com/dfinity-lab/public/ic", [Project("ic", "ic")])]
+    repos = [Repository("ic", "https://gitlab.com/dfinity-lab/public/ic", [Project(name="ic", path="ic", owner=Team.NODE_TEAM)])]
 
     scanner_job.do_periodic_scan(repos)
 
@@ -177,6 +180,7 @@ def test_on_periodic_job_one_finding_in_jira(jira_lib_mock):
     assert jira_finding.first_level_dependencies == finding.first_level_dependencies
     assert jira_finding.projects == finding.projects
     assert jira_finding.risk is None
+    assert jira_finding.owning_teams == [Team.NODE_TEAM, Team.GIX_TEAM]
     assert jira_finding.score == finding.score
 
     jira_lib_mock.get_open_findings_for_repo_and_scanner.assert_called_once()
@@ -381,7 +385,7 @@ def test_on_merge_request_changes_all_findings_have_jira_findings(jira_lib_mock)
     sub2.on_scan_job_failed.assert_not_called()
 
 
-@patch("gitlab_api.gitlab_comment.GitlabComment.comment_on_gitlab")
+@patch("integration.gitlab.gitlab_api.GitlabApi.comment_on_gitlab")
 def test_on_merge_request_changes_with_findings_to_flag_and_commit_exception(gitlab_comment_mock, jira_lib_mock):
     scanner = "BAZEL_RUST"
     repository = "ic"
@@ -420,7 +424,7 @@ def test_on_merge_request_changes_with_findings_to_flag_and_commit_exception(git
     sub2.on_scan_job_failed.assert_not_called()
 
 
-@patch("gitlab_api.gitlab_comment.GitlabComment.comment_on_gitlab")
+@patch("integration.gitlab.gitlab_api.GitlabApi.comment_on_gitlab")
 def test_on_merge_request_changes_with_findings_to_flag_no_commit_exception(gitlab_comment_mock, jira_lib_mock):
     scanner = "BAZEL_RUST"
     repository = "ic"

@@ -82,12 +82,11 @@ def test_return_os_finding():
             version="2.0",
             fix_version_for_vulnerability={"http://vuln.org/CVE-0815": ["2.1"]},
         ),
-        Dependency(id="ubuntu", name="ubuntu", version="ubuntu 20.04"),
     ]
-    assert res[0].projects == ["/some/path (https://some.link)"]
+    assert res[0].projects == ["OSP: /some/path (https://some.link)"]
     assert res[0].risk_assessor == []
     assert res[0].risk is None
-    assert res[0].patch_responsible == ()
+    assert res[0].patch_responsible == []
     assert res[0].due_date is None
     assert res[0].score == 9
     assert res[0].more_info is None
@@ -161,10 +160,10 @@ def test_return_binary_finding():
             fix_version_for_vulnerability={"https://avd.aquasec.com/nvd/cve-2022-21698": ["n/a"]},
         ),
     ]
-    assert res[0].projects == ["/some/path"]
+    assert res[0].projects == ["BIN: /some/path"]
     assert res[0].risk_assessor == []
     assert res[0].risk is None
-    assert res[0].patch_responsible == ()
+    assert res[0].patch_responsible == []
     assert res[0].due_date is None
     assert res[0].score == -1
     assert res[0].more_info is None
@@ -196,10 +195,10 @@ def test_return_secret_finding():
         Vulnerability(id="private-key", name="private-key", description="Asymmetric Private Key", score=-1)
     ]
     assert res[0].first_level_dependencies == []
-    assert res[0].projects == ["/some/path"]
+    assert res[0].projects == ["SEC: /some/path"]
     assert res[0].risk_assessor == []
     assert res[0].risk is None
-    assert res[0].patch_responsible == ()
+    assert res[0].patch_responsible == []
     assert res[0].due_date is None
     assert res[0].score == -1
     assert res[0].more_info is None

@@ -248,7 +248,7 @@ def test_get_findings_for_cargo_only_repo():
             assert finding.projects[1].endswith("nns-dapp/rs/sns_aggregator")
             assert finding.risk_assessor == []
             assert finding.risk is None
-            assert finding.patch_responsible == ()
+            assert finding.patch_responsible == []
             assert finding.due_date is None
             assert finding.more_info is None
 
@@ -319,7 +319,7 @@ def test_get_findings_for_bazel_repo():
             assert finding.scanner == bazel_test.get_scanner_id()
             assert finding.risk_assessor == []
             assert finding.risk is None
-            assert finding.patch_responsible == ()
+            assert finding.patch_responsible == []
             assert finding.due_date is None
             assert finding.more_info is None
 

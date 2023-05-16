@@ -577,7 +577,7 @@ def test_findings_helper_one_finding(npm_test):
         projects=["ic"],
         risk_assessor=[],
         risk=None,
-        patch_responsible=(),
+        patch_responsible=[],
         due_date=None,
         score=-1,
         more_info=None,

@@ -1,7 +1,7 @@
 import abc
 
 
-class Notifier(metaclass=abc.ABCMeta):
+class AppOwnerMsgSubscriber(metaclass=abc.ABCMeta):
     @classmethod
     def __subclasshook__(cls, subclass):
         """Used to detect if given class is subclass of this class"""

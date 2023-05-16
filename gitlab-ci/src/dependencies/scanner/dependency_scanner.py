@@ -9,7 +9,7 @@ import typing
 
 from data_source.commit_type import CommitType
 from data_source.finding_data_source import FindingDataSource
-from gitlab_api.gitlab_comment import GitlabComment
+from integration.gitlab.gitlab_api import GitlabApi
 from model.finding import Finding
 from model.repository import Repository
 from model.security_risk import SecurityRisk
@@ -70,6 +70,9 @@ class DependencyScanner:
                         repository.name, project, repository.engine_version
                     )
                     for finding in findings_for_project:
+                        if project.owner and project.owner not in finding.owning_teams:
+                            finding.owning_teams.append(project.owner)
+                            finding.owning_teams.sort()
                         if finding.id() in finding_by_id:
                             finding_by_id[finding.id()].merge_with(finding)
                         else:
@@ -103,6 +106,13 @@ class DependencyScanner:
                                 jira_finding.projects = current_findings[index].projects
                             if jira_finding.vulnerable_dependency != current_findings[index].vulnerable_dependency:
                                 jira_finding.vulnerable_dependency = current_findings[index].vulnerable_dependency
+                            if jira_finding.owning_teams != current_findings[index].owning_teams:
+                                # add all owning teams from the current finding to the jira finding
+                                # this allows manually adding owning teams in jira
+                                for team in current_findings[index].owning_teams:
+                                    if team not in jira_finding.owning_teams:
+                                        jira_finding.owning_teams.append(team)
+                                jira_finding.owning_teams.sort()
                             # max score is already calculated by the dependency manager.
                             jira_finding.score = current_findings[index].score
                             self.finding_data_source.create_or_update_open_finding(jira_finding)
@@ -183,8 +193,8 @@ class DependencyScanner:
                     dep for dep in temp_first_level_dependencies if dep in dependency_diff
                 ]
 
-            gitlab_comment = GitlabComment(job_type=ScannerJobType.MERGE_SCAN)
-            gitlab_comment.comment_on_gitlab(info=findings_to_flag)
+            gitlab_api = GitlabApi()
+            gitlab_api.comment_on_gitlab(info=findings_to_flag)
 
             merge_request_id = os.environ.get("CI_MERGE_REQUEST_IID", "CI_MERGE_REQUEST_IID")
             for subscriber in self.subscribers:
@@ -252,9 +262,6 @@ class DependencyScanner:
 
             # At this point, there are failures and there is no exceptions
             # Job must be failed
-            # TODO : Figure where to comment for gitlab
-            # gitlab_comment = GitlabComment(job_type=ScannerJobType.RELEASE_SCAN)
-            # gitlab_comment.comment_on_gitlab(info=failures)
             for subscriber in self.subscribers:
                 subscriber.on_release_build_blocked(self.dependency_manager.get_scanner_id(), self.job_id)
             logging.error(f"Release job failed with failures : {failures}")

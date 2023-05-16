@@ -1,6 +1,8 @@
 from dataclasses import dataclass, field
-from typing import Dict
+from typing import Dict, List
 
+from integration.slack.slack_default_notification_handler import SlackDefaultNotificationHandler
+from notification.notification_handler import NotificationHandler
 from scanner.scanner_job_type import ScannerJobType
 
 
@@ -24,6 +26,8 @@ class NotificationConfig:
     merge_request_base_url: str = "https://gitlab.com/dfinity-lab/public/ic/-/merge_requests/"
     ci_pipeline_base_url: str = "https://gitlab.com/dfinity-lab/public/ic/-/pipelines/"
 
+    notification_handlers: List[NotificationHandler] = field(default_factory=lambda: [SlackDefaultNotificationHandler()])
+
     def __post_init__(self):
         """Validate field values after initialization"""
         for boolean_field in [
@@ -43,3 +47,5 @@ class NotificationConfig:
 
         for str_field in [self.merge_request_base_url, self.ci_pipeline_base_url]:
             assert str_field is not None and len(str_field) > 0
+
+        assert self.notification_handlers is not None
