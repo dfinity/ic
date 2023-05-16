@@ -1540,7 +1540,7 @@ impl ExecutionEnvironment {
             max_instructions_per_query,
         );
         let execution_parameters =
-            self.execution_parameters(&canister, instruction_limits, ExecutionMode::NonReplicated);
+            self.execution_parameters(canister, instruction_limits, ExecutionMode::NonReplicated);
         let subnet_available_memory = subnet_memory_capacity(&self.config);
         let mut round_limits = RoundLimits {
             instructions: as_round_instructions(max_instructions_per_query),
@@ -1555,7 +1555,7 @@ impl ExecutionEnvironment {
             },
             WasmMethod::Query(anonymous_query.method_name.to_string()),
             &anonymous_query.method_payload,
-            canister,
+            canister.clone(),
             None,
             state.time(),
             execution_parameters,

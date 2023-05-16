@@ -184,7 +184,7 @@ impl<'a> QueryContext<'a> {
 
         let call_origin = CallOrigin::Query(query.source);
 
-        let method = match wasm_query_method(&old_canister, query.method_name.clone()) {
+        let method = match wasm_query_method(old_canister, query.method_name.clone()) {
             Ok(method) => method,
             Err(err) => return Err(err.into_user_error(&canister_id)),
         };
@@ -205,7 +205,7 @@ impl<'a> QueryContext<'a> {
             let measurement_scope =
                 MeasurementScope::nested(&metrics.query_initial_call, measurement_scope);
             self.execute_query(
-                old_canister,
+                old_canister.clone(),
                 method.clone(),
                 query.method_payload.as_slice(),
                 query_kind,
@@ -227,7 +227,7 @@ impl<'a> QueryContext<'a> {
                         MeasurementScope::nested(&metrics.query_retry_call, measurement_scope);
                     let old_canister = self.state.get_active_canister(&canister_id)?;
                     let (new_canister, new_result) = self.execute_query(
-                        old_canister,
+                        old_canister.clone(),
                         method,
                         query.method_payload.as_slice(),
                         NonReplicatedQueryKind::Stateful {
@@ -641,7 +641,7 @@ impl<'a> QueryContext<'a> {
 
         let call_origin = CallOrigin::CanisterQuery(request.sender, request.sender_reply_callback);
 
-        let method = match wasm_query_method(&canister, request.method_name.clone()) {
+        let method = match wasm_query_method(canister, request.method_name.clone()) {
             Ok(method) => method,
             Err(err) => {
                 return ExecutionResult::Response(to_query_result(Payload::Reject(
@@ -651,7 +651,7 @@ impl<'a> QueryContext<'a> {
         };
 
         let (mut canister, result) = self.execute_query(
-            canister,
+            canister.clone(),
             method,
             request.method_payload.as_slice(),
             NonReplicatedQueryKind::Stateful {

@@ -472,7 +472,7 @@ impl ReplicatedState {
     pub fn get_active_canister(
         &self,
         canister_id: &CanisterId,
-    ) -> Result<CanisterState, UserError> {
+    ) -> Result<&CanisterState, UserError> {
         let canister = self.canister_state(canister_id).ok_or_else(|| {
             UserError::new(
                 ErrorCode::CanisterNotFound,
@@ -489,7 +489,7 @@ impl ReplicatedState {
                 ),
             ))
         } else {
-            Ok(canister.clone())
+            Ok(canister)
         }
     }
 
@@ -505,8 +505,8 @@ impl ReplicatedState {
             .unwrap_or(IngressStatus::Unknown)
     }
 
-    pub fn get_ingress_history(&self) -> IngressHistoryState {
-        self.metadata.ingress_history.clone()
+    pub fn get_ingress_history(&self) -> &IngressHistoryState {
+        &self.metadata.ingress_history
     }
 
     /// Sets the `status` for `message_id` in the ingress history. It will
