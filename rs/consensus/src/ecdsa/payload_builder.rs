@@ -1744,6 +1744,8 @@ mod tests {
     use crate::ecdsa::utils::test_utils::*;
     use assert_matches::assert_matches;
     use ic_consensus_mocks::{dependencies, Dependencies};
+    use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_dealings;
+    use ic_crypto_test_utils_canister_threshold_sigs::dummy_values::dummy_initial_idkg_dealing_for_tests;
     use ic_crypto_test_utils_canister_threshold_sigs::{
         generate_key_transcript, run_idkg_and_create_and_verify_transcript,
         CanisterThresholdSigTestEnvironment,
@@ -1755,7 +1757,6 @@ mod tests {
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
     use ic_test_utilities::consensus::fake::{Fake, FakeContentSigner};
     use ic_test_utilities::{
-        crypto::{dummy_initial_idkg_dealing_for_tests, mock_dealings},
         mock_time,
         state::ReplicatedStateBuilder,
         types::{
@@ -3215,7 +3216,7 @@ mod tests {
         // Request 1 dealings are created, it should be moved from in
         // progress -> completed
         let reshare_params = payload.ongoing_xnet_reshares.get(&req_1).unwrap().as_ref();
-        let dealings = mock_dealings(reshare_params.transcript_id, &reshare_params.dealers);
+        let dealings = dummy_dealings(reshare_params.transcript_id, &reshare_params.dealers);
         transcript_builder.add_dealings(reshare_params.transcript_id, dealings);
         update_completed_reshare_requests(
             &mut payload,
@@ -3236,7 +3237,7 @@ mod tests {
         // Request 2 dealings are created, it should be moved from in
         // progress -> completed
         let reshare_params = payload.ongoing_xnet_reshares.get(&req_2).unwrap().as_ref();
-        let dealings = mock_dealings(reshare_params.transcript_id, &reshare_params.dealers);
+        let dealings = dummy_dealings(reshare_params.transcript_id, &reshare_params.dealers);
         transcript_builder.add_dealings(reshare_params.transcript_id, dealings);
         update_completed_reshare_requests(
             &mut payload,
