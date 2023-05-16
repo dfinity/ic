@@ -84,11 +84,8 @@ COPY ./gitlab-ci/container/files/entrypoint.sh /entrypoint.sh
 
 # Add mold linker
 ARG mold_version=1.11.0
-ARG mold_platform="mold-${mold_version}-x86_64-linux"
-RUN curl -L "https://github.com/rui314/mold/releases/download/v${mold_version}/${mold_platform}.tar.gz" --output "$mold_platform" && \
-    tar xvf "$mold_platform" && \
-    mv "${mold_platform}/bin/mold" /usr/bin/mold && \
-    rm -rf "$mold_platform"
+RUN curl -L --retry 10 --silent --show-error "https://github.com/rui314/mold/releases/download/v${mold_version}/mold-${mold_version}-$(uname -m)-linux.tar.gz" | tar -C /usr/local --strip-components=1 -xzf - && \
+    ln -sf /usr/local/bin/mold "$(realpath /usr/bin/ld)"
 
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["/bin/bash"]
