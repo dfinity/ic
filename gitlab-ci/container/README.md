@@ -2,13 +2,13 @@
 
 Codebase for containerized build and development environment.
 <br>
-See [Dockerfile.bazel](Dockerfile.bazel) for info about required dependencies.
+See [Dockerfile](Dockerfile) for info about required dependencies.
 
 ## Requirements
 
 - x86-64 based system (at least 8 CPUs, 16 GB MEM/SWAP, 100 GB available disk space)
 - Ubuntu 20.04 or newer
-- [Podman](https://podman.io/getting-started/installation) 
+- [Podman](https://podman.io/getting-started/installation)
 
 **Note:** With *Ubuntu 20.10* and newer, you can simply do `sudo apt install -y podman`. With older versions see Ubuntu section of [Podman Installation Guide](https://podman.io/getting-started/installation). It's recommended to use Ubuntu 22.04.
 

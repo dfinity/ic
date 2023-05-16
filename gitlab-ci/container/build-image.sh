@@ -32,12 +32,12 @@ pushd "$REPO_ROOT"
 build_args=("${DOCKER_BUILD_ARGS:---rm=true}")
 
 DOCKER_BUILDKIT=1 docker build "${build_args[@]}" \
-    -t ic-build-bazel:"$DOCKER_IMG_TAG" \
-    -t docker.io/dfinity/ic-build-bazel:"$DOCKER_IMG_TAG" \
-    -t docker.io/dfinity/ic-build-bazel:latest \
-    -t registry.gitlab.com/dfinity-lab/core/docker/ic-build-bazel:"$DOCKER_IMG_TAG" \
+    -t ic-build:"$DOCKER_IMG_TAG" \
+    -t docker.io/dfinity/ic-build:"$DOCKER_IMG_TAG" \
+    -t docker.io/dfinity/ic-build:latest \
+    -t registry.gitlab.com/dfinity-lab/core/docker/ic-build:"$DOCKER_IMG_TAG" \
     --build-arg USE_BAZEL_VERSION="${USE_BAZEL_VERSION}" \
-    -f gitlab-ci/container/Dockerfile.bazel .
+    -f gitlab-ci/container/Dockerfile .
 
 if [ "${ONLY_BAZEL:-false}" == "true" ]; then
     popd
