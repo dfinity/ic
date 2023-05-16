@@ -105,6 +105,19 @@ type ExportCertificatesResponse = variant {
     Err: ExportCertificatesError;
 };
 
+type IcCertificate = record {
+    cert: blob;
+    tree: blob;
+};
+
+type ExportCertificatesCertifiedResponse = variant {
+    Ok: record {
+        vec ExportPackage;
+        IcCertificate;
+    };
+    Err: ExportCertificatesError;
+};
+
 type QueueTaskError = variant {
     NotFound;
     Unauthorized;
@@ -184,6 +197,7 @@ service: (InitArg) -> {
     uploadCertificate: (Id, EncryptedPair) -> (UploadCertificateResponse);
     exportCertificates: () -> (ExportCertificatesResponse);
     exportCertificatesPaginated: (opt Id, nat64) -> (ExportCertificatesResponse);
+    exportCertificatesCertified: (opt Id, nat64) -> (ExportCertificatesCertifiedResponse);
 
     // Tasks
     queueTask: (Id, Timestamp) -> (QueueTaskResponse);

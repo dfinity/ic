@@ -1,12 +1,15 @@
 use std::ops::Bound;
 
 use anyhow::anyhow;
-use certificate_orchestrator_interface::{EncryptedPair, ExportPackage, Id, Registration};
+use certificate_orchestrator_interface::{
+    EncryptedPair, ExportPackage, IcCertificate, Id, Registration, LEFT_GUARD, RIGHT_GUARD,
+};
 use ic_cdk::caller;
 use prometheus::labels;
 
 use crate::{
     acl::{Authorize, AuthorizeError, WithAuthorize},
+    ic_certification::{add_cert, get_cert_for_range, set_root_hash},
     LocalRef, StableMap, StorableId, WithMetrics,
 };
 
@@ -47,10 +50,40 @@ impl Upload for Uploader {
             let regs = regs.borrow();
             regs.get(&id.into()).ok_or(UploadError::NotFound)
         })?;
-
         self.pairs
             .with(|pairs| pairs.borrow_mut().insert(id.into(), pair));
+        Ok(())
+    }
+}
 
+pub struct WithIcCertification<T> {
+    uploader: T,
+    registrations: LocalRef<StableMap<StorableId, Registration>>,
+}
+
+impl<T: Upload> WithIcCertification<T> {
+    pub fn new(uploader: T, registrations: LocalRef<StableMap<StorableId, Registration>>) -> Self {
+        Self {
+            uploader,
+            registrations,
+        }
+    }
+}
+
+impl<T: Upload> Upload for WithIcCertification<T> {
+    fn upload(&self, id: &Id, pair: EncryptedPair) -> Result<(), UploadError> {
+        self.uploader.upload(id, pair.clone())?;
+        let package_to_certify = self.registrations.with(|regs| {
+            let reg = regs.borrow().get(&id.into()).unwrap();
+            ExportPackage {
+                id: id.into(),
+                name: reg.name,
+                canister: reg.canister,
+                pair,
+            }
+        });
+        add_cert(id.into(), &package_to_certify);
+        set_root_hash();
         Ok(())
     }
 }
@@ -101,6 +134,11 @@ pub enum ExportError {
 
 pub trait Export {
     fn export(&self, key: Option<String>, limit: u64) -> Result<Vec<ExportPackage>, ExportError>;
+    fn export_certified(
+        &self,
+        key: Option<String>,
+        limit: u64,
+    ) -> Result<(Vec<ExportPackage>, IcCertificate), ExportError>;
 }
 
 pub struct Exporter {
@@ -127,10 +165,10 @@ impl Export for Exporter {
                 pairs
                     .borrow()
                     .range((
-                        Bound::Excluded(match key {
-                            Some(key) => StorableId::from(key),
-                            None => StorableId::default(),
-                        }),
+                        match key {
+                            Some(key) => Bound::Excluded(StorableId::from(key)),
+                            None => Bound::Unbounded,
+                        },
                         Bound::Unbounded,
                     ))
                     .take(limit as usize)
@@ -149,6 +187,70 @@ impl Export for Exporter {
             })
         })
     }
+
+    fn export_certified(
+        &self,
+        key: Option<String>,
+        limit: u64,
+    ) -> Result<(Vec<ExportPackage>, IcCertificate), ExportError> {
+        let result: Result<Vec<ExportPackage>, ExportError> = self.pairs.with(|pairs| {
+            self.registrations.with(|regs| {
+                let pairs = pairs.borrow();
+                let iter = match key.clone() {
+                    None => pairs.iter(),
+                    Some(s) => {
+                        let k = StorableId::from(s);
+                        if pairs.contains_key(&k) {
+                            let mut i = pairs.iter_upper_bound(&k);
+                            if i.next().is_none() {
+                                pairs.iter()
+                            } else {
+                                i
+                            }
+                        } else {
+                            pairs.iter_upper_bound(&k)
+                        }
+                    }
+                };
+                iter.take(limit as usize)
+                    .map(|(id, pair)| match regs.borrow().get(&id) {
+                        None => Err(ExportError::UnexpectedError(anyhow!(
+                            "registration {id} is missing",
+                        ))),
+                        Some(Registration { name, canister, .. }) => Ok(ExportPackage {
+                            id: id.into(),
+                            name,
+                            canister,
+                            pair,
+                        }),
+                    })
+                    .collect()
+            })
+        });
+        match result {
+            Err(e) => Err(e),
+            Ok(pkgs) => {
+                let first = match (key, pkgs.first()) {
+                    (None, _) => LEFT_GUARD.to_string(),
+                    (_, None) => LEFT_GUARD.to_string(),
+                    (Some(k), Some(p)) => {
+                        if p.id > k {
+                            LEFT_GUARD.to_string()
+                        } else {
+                            p.id.clone()
+                        }
+                    }
+                };
+                let last = if (pkgs.len() as u64) < limit {
+                    RIGHT_GUARD.to_string()
+                } else {
+                    pkgs.last().unwrap().id.clone()
+                };
+                let cert = get_cert_for_range(&first, &last);
+                Ok((pkgs, cert))
+            }
+        }
+    }
 }
 
 impl<T: Export, A: Authorize> Export for WithAuthorize<T, A> {
@@ -161,5 +263,20 @@ impl<T: Export, A: Authorize> Export for WithAuthorize<T, A> {
         };
 
         self.0.export(key, limit)
+    }
+
+    fn export_certified(
+        &self,
+        key: Option<String>,
+        limit: u64,
+    ) -> Result<(Vec<ExportPackage>, IcCertificate), ExportError> {
+        if let Err(err) = self.1.authorize(&caller()) {
+            return Err(match err {
+                AuthorizeError::Unauthorized => ExportError::Unauthorized,
+                AuthorizeError::UnexpectedError(err) => ExportError::UnexpectedError(err),
+            });
+        };
+
+        self.0.export_certified(key, limit)
     }
 }

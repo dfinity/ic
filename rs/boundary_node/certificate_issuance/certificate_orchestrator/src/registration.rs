@@ -12,13 +12,16 @@ use prometheus::labels;
 cfg_if::cfg_if! {
     if #[cfg(test)] {
         use tests::time;
+        use tests::set_root_hash;
     } else {
         use ic_cdk::api::time;
+        use crate::ic_certification::set_root_hash;
     }
 }
 
 use crate::{
     acl::{Authorize, AuthorizeError, WithAuthorize},
+    ic_certification::remove_cert,
     id::Generate,
     LocalRef, StableMap, StorableId, WithMetrics, REGISTRATION_EXPIRATION_TTL,
 };
@@ -372,6 +375,9 @@ impl Remove for Remover {
         self.encrypted_certificates
             .with(|certs| certs.borrow_mut().remove(&id.into()));
 
+        // remove the IC certificate for the domain
+        remove_cert(id.into());
+
         Ok(())
     }
 }
@@ -445,7 +451,6 @@ impl Expire for Expirer {
     fn expire(&self, t: u64) -> Result<(), ExpireError> {
         self.expirations.with(|exps| {
             let mut exps = exps.borrow_mut();
-
             #[allow(clippy::while_let_loop)]
             loop {
                 // Check for next expiration
@@ -466,7 +471,7 @@ impl Expire for Expirer {
                 // Remove registration
                 self.remover.with(|r| r.borrow().remove(&id))?;
             }
-
+            set_root_hash();
             Ok(())
         })
     }
@@ -488,6 +493,8 @@ mod tests {
     pub fn time() -> u64 {
         0
     }
+
+    pub fn set_root_hash() {}
 
     #[test]
     fn get_empty() {

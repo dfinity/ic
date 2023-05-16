@@ -1487,9 +1487,11 @@ dependencies = [
  "hyper",
  "hyper-rustls 0.24.0",
  "ic-agent",
+ "ic-response-verification",
  "ic-utils 0.23.2",
  "idna 0.3.0",
  "instant-acme",
+ "leb128",
  "mockall 0.11.3",
  "opentelemetry 0.18.0",
  "opentelemetry-prometheus 0.11.0",
@@ -1499,6 +1501,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_bytes",
+ "serde_cbor",
  "serde_json",
  "sha2 0.10.6",
  "thiserror",
@@ -1557,6 +1560,7 @@ dependencies = [
  "prometheus 0.13.3",
  "serde",
  "serde_bytes",
+ "serde_cbor",
  "sha2 0.10.6",
  "thiserror",
 ]
@@ -9344,9 +9348,9 @@ dependencies = [
 
 [[package]]
 name = "ic-stable-structures"
-version = "0.5.1"
+version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1c44a6b5418cf179c13d3d6a09de56aa258d74bf45b7992871935f7e27f51700"
+checksum = "0c0c68bf2fb590e3c3b4e0719383fb2cdceb308cd62df9fef571323b418f7e1c"
 
 [[package]]
 name = "ic-starter"
