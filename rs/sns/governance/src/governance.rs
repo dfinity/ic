@@ -3014,13 +3014,14 @@ impl Governance {
             let function_id = u64::from(action);
             // Cast a 'yes'-vote for the proposer, including following.
             Governance::cast_vote_and_cascade_follow(
-                &mut proposal_data.ballots,
+                &proposal_id,
                 proposer_id,
                 Vote::Yes,
                 function_id,
                 &self.function_followee_index,
-                &mut self.proto.neurons,
+                &self.proto.neurons,
                 now_seconds,
+                &mut proposal_data.ballots,
             );
 
             // Finally, add this proposal as an open proposal.
@@ -3038,117 +3039,120 @@ impl Governance {
     /// This method should only be called with `vote_of_neuron` being `yes`
     /// or `no`.
     fn cast_vote_and_cascade_follow(
-        ballots: &mut BTreeMap<String, Ballot>,
+        proposal_id: &ProposalId,
         voting_neuron_id: &NeuronId,
         vote_of_neuron: Vote,
         function_id: u64,
         function_followee_index: &BTreeMap<u64, BTreeMap<String, BTreeSet<NeuronId>>>,
-        neurons: &mut BTreeMap<String, Neuron>,
+        neurons: &BTreeMap<String, Neuron>,
         now_seconds: u64,
+        ballots: &mut BTreeMap<String, Ballot>, // This is ultimately what gets changed.
     ) {
+        // Select the "follow graph" that belongs to the type of proposal being
+        // voted on.
         let unspecified_function_id = u64::from(&Action::Unspecified(Empty {}));
         assert!(function_id != unspecified_function_id);
-        // This is the induction variable of the loop: a map from
-        // neuron ID to the neuron's vote - 'yes' or 'no' (other
-        // values not allowed).
+        // The follow graph is the union of these two "successor list" tables.
+        let empty_neuron_id_to_follower_neuron_ids = BTreeMap::new();
+        let neuron_id_to_follower_neuron_ids_on_function = function_followee_index
+            .get(&function_id)
+            .unwrap_or(&empty_neuron_id_to_follower_neuron_ids);
+        let neuron_id_to_blanket_follower_neuron_ids = function_followee_index
+            .get(&unspecified_function_id)
+            .unwrap_or(&empty_neuron_id_to_follower_neuron_ids);
+
+        // Traverse the follow graph using breadth first search (BFS).
+
+        // Each "tier" in the BFS is listed here. Of course, the first tier just
+        // contains the original "triggering" ballot.
         let mut induction_votes = BTreeMap::new();
         induction_votes.insert(voting_neuron_id.to_string(), vote_of_neuron);
-        let function_cache = function_followee_index.get(&function_id);
-        let unspecified_cache = function_followee_index.get(&unspecified_function_id);
-        loop {
-            // First, we cast the specified votes (in the first round,
-            // this will be a single vote) and collect all neurons
-            // that follow some of the neurons that are voting.
-            let mut all_followers = BTreeSet::new();
-            for (k, v) in induction_votes.iter() {
-                // The new/induction votes cannot be unspecified.
-                assert_ne!(*v, Vote::Unspecified);
-                if let Some(k_ballot) = ballots.get_mut(k) {
-                    // Neuron with ID k is eligible to vote.
 
-                    // Only update a vote if it was previously
-                    // unspecified. Following can trigger votes
-                    // for neurons that have already voted
-                    // (manually) and we don't change these votes.
-                    if k_ballot.vote == (Vote::Unspecified as i32) {
-                        if let Some(_k_neuron) = neurons.get_mut(k) {
-                            k_ballot.vote = *v as i32;
-                            k_ballot.cast_timestamp_seconds = now_seconds;
-                            // Here k is the followee, i.e., the neuron
-                            // that has just cast a vote that may be
-                            // followed by other neurons.
-                            //
-                            // Insert followers for 'action'
-                            if let Some(more_followers) = function_cache.and_then(|x| x.get(k)) {
-                                all_followers.append(&mut more_followers.clone());
-                            }
-                            // Insert followers for 'Unspecified' (default followers)
-                            if let Some(more_followers) = unspecified_cache.and_then(|x| x.get(k)) {
-                                all_followers.append(&mut more_followers.clone());
-                            }
-                        } else {
-                            // The voting neuron was not found in the
-                            // neurons table. This is a bad
-                            // inconsistency, but there is nothing
-                            // that can be done about it at this
-                            // place.
-                        }
+        // Each iteration of this loop processes one tier in the BFS.
+        //
+        // This has to terminate, because if we keep going around in a cycle, that
+        // means the same neuron keeps getting swayed, but once a neuron is swayed,
+        // it does not matter how its "other" followees vote (i.e. those that have
+        // not (directly or indirectly) voted yet). That is, once a neuron is swayed,
+        // its vote is "locked in". IOW, swaying is "monotonic".
+        while !induction_votes.is_empty() {
+            // This will be populated with the followers of neurons in the
+            // current BFS tier, who might be swayed to indirectly vote, thus
+            // forming the next tier in the BFS.
+            let mut follower_neuron_ids = BTreeSet::new();
+
+            // Process the current tier in the BFS.
+            for (current_neuron_id, current_new_vote) in &induction_votes {
+                let current_ballot = match ballots.get_mut(current_neuron_id) {
+                    Some(b) => b,
+                    None => {
+                        // neuron_id has no (blank) ballot, which means they
+                        // were not eligible when the proposal was first
+                        // created. This is fairly unusual, but does not
+                        // indicate a bug (therefore, no log).
+                        continue;
                     }
-                } else {
-                    // A non-eligible voter was specified in
-                    // new/induction votes. We don't compute the
-                    // followers of this neuron as it didn't actually
-                    // vote.
+                };
+
+                // Only fill in "blank" ballots. I.e. those with vote ==
+                // Unspecified. This check could just as well be done before
+                // current_neuron_id is added to induction_votes.
+                if current_ballot.vote != (Vote::Unspecified as i32) {
+                    continue;
                 }
+
+                // Fill in current_ballot.
+                assert_ne!(*current_new_vote, Vote::Unspecified);
+                current_ballot.vote = *current_new_vote as i32;
+                current_ballot.cast_timestamp_seconds = now_seconds;
+
+                // Take note of the followers of current_neuron_id, and add them
+                // to the next "tier" in the BFS.
+                let mut specific_follower_neuron_ids = neuron_id_to_follower_neuron_ids_on_function
+                    .get(current_neuron_id)
+                    .cloned()
+                    .unwrap_or_else(|| BTreeSet::new());
+                let mut blanket_follower_neuron_ids = neuron_id_to_blanket_follower_neuron_ids
+                    .get(current_neuron_id)
+                    .cloned()
+                    .unwrap_or_else(|| BTreeSet::new());
+                follower_neuron_ids.append(&mut specific_follower_neuron_ids);
+                follower_neuron_ids.append(&mut blanket_follower_neuron_ids);
             }
-            // Clear the induction_votes, as we are going to compute a
-            // new set now.
+
+            // Prepare for the next iteration of the (outer most) loop by
+            // constructing the next BFS tier (from follower_neuron_ids).
             induction_votes.clear();
-            for f in all_followers.iter() {
-                if let Some(f_neuron) = neurons.get(&f.to_string()) {
-                    let f_vote = f_neuron.would_follow_ballots(function_id, ballots);
-                    if f_vote != Vote::Unspecified {
-                        // f_vote is yes or no, i.e., f_neuron's
-                        // followee relations indicates that it should
-                        // vote now.
-                        induction_votes.insert(f.to_string(), f_vote);
+            for follower_neuron_id in follower_neuron_ids {
+                let follower_neuron = match neurons.get(&follower_neuron_id.to_string()) {
+                    Some(n) => n,
+                    None => {
+                        // This is a highly suspicious, because currently, we do not
+                        // delete neurons, which means that we have an invalid NeuronId
+                        // floating around in the system, which indicates that we have a
+                        // bug. For now, we deal with that by logging, and pretending like
+                        // we did not see follower_neuron_id.
+                        log!(
+                            ERROR,
+                            "Missing neuron {} while trying to record (and cascade) \
+                             a vote on proposal {:#?}.",
+                            follower_neuron_id,
+                            proposal_id,
+                        );
+                        continue;
                     }
+                };
+
+                let follower_vote = follower_neuron.would_follow_ballots(function_id, ballots);
+                if follower_vote != Vote::Unspecified {
+                    // follower_neuron would be swayed by its followees!
+                    //
+                    // This is the other (earlier) point at which we could
+                    // consider whether a neuron is already locked in, and that
+                    // no recursion is needed.
+                    induction_votes.insert(follower_neuron_id.to_string(), follower_vote);
                 }
             }
-            // If induction_votes is empty, the loop will terminate
-            // here.
-            if induction_votes.is_empty() {
-                return;
-            }
-            // We now continue to the next iteration of the loop.
-            // Because induction_votes is not empty, either at least
-            // one entry in 'ballots' will change from unspecified to
-            // yes or no, or all_followers will be empty, hence
-            // induction_votes will become empty.
-            //
-            // Thus, for each iteration of the loop, the number of
-            // entries in 'ballots' that have an unspecified value
-            // decreases, or else the loop terminates. As nothing is
-            // added to 'ballots' (or removed for that matter), the
-            // loop terminates in at most 'ballots.len()+1' steps.
-            //
-            // The worst case is attained if there is a linear
-            // following graph, like this:
-            //
-            // X follows A follows B follows C,
-            //
-            // where X is not eligible to vote and nobody has
-            // voted, i.e.,
-            //
-            // ballots = {
-            //   A -> unspecified, B -> unspecified, C -> unspecified
-            // }
-            //
-            // In this case, the subsequent values of
-            // 'induction_votes' will be {C}, {B}, {A}, {X}.
-            //
-            // Note that it does not matter if X has followers. As X
-            // doesn't vote, its followers are not considered.
         }
     }
 
@@ -3171,7 +3175,7 @@ impl Governance {
         &mut self,
         neuron_id: &NeuronId,
         caller: &PrincipalId,
-        pb: &manage_neuron::RegisterVote,
+        request: &manage_neuron::RegisterVote,
     ) -> Result<(), GovernanceError> {
         measure_span(self.profiling_information, "register_vote", || {
             let now_seconds = self.env.now();
@@ -3185,9 +3189,15 @@ impl Governance {
                 GovernanceError::new_with_message(ErrorType::NotFound, "Neuron not found"))?;
 
             neuron.check_authorized(caller, NeuronPermissionType::Vote)?;
-            let proposal_id = pb.proposal.as_ref().ok_or_else(||
-            // Proposal not specified.
-            GovernanceError::new_with_message(ErrorType::PreconditionFailed, "Registering of vote must include a proposal id."))?;
+            let proposal_id = request.proposal.as_ref().ok_or_else(|| {
+                GovernanceError::new_with_message(
+                    // InvalidCommand would probably be more apt, but that would
+                    // be a non-backwards compatible change.
+                    ErrorType::PreconditionFailed,
+                    "Registering of vote must include a proposal id.",
+                )
+            })?;
+
             let proposal = self.proto.proposals.get_mut(&proposal_id.id).ok_or_else(||
             // Proposal not found.
             GovernanceError::new_with_message(ErrorType::NotFound, "Can't find proposal."))?;
@@ -3199,7 +3209,7 @@ impl Governance {
                 .as_ref()
                 .expect("Proposal must have an action");
 
-            let vote = Vote::from_i32(pb.vote).unwrap_or(Vote::Unspecified);
+            let vote = Vote::from_i32(request.vote).unwrap_or(Vote::Unspecified);
             if vote == Vote::Unspecified {
                 // Invalid vote specified, i.e., not yes or no.
                 return Err(GovernanceError::new_with_message(
@@ -3228,17 +3238,17 @@ impl Governance {
                 ));
             }
 
-            // Cast the vote
+            // Update ballots.
             let function_id = u64::from(action);
             Governance::cast_vote_and_cascade_follow(
-                // Actually update the ballot, including following.
-                &mut proposal.ballots,
+                proposal_id,
                 neuron_id,
                 vote,
                 function_id,
                 &self.function_followee_index,
-                &mut self.proto.neurons,
+                &self.proto.neurons,
                 now_seconds,
+                &mut proposal.ballots,
             );
 
             self.process_proposal(proposal_id.id);
