@@ -35,6 +35,7 @@ ic-http-endpoints-metrics = { path = "../http_endpoints/metrics" }
 ic-nns-constants = { path = "../nns/constants" }
 ic-onchain-observability-server = { path = "../monitoring/onchain_observability/server" }
 ic-p2p = { path = "../p2p" }
+ic-pprof = { path = "../monitoring/pprof" }
 ic-protobuf = { path = "../protobuf" }
 ic-registry-client = { path = "../registry/client" }
 ic-registry-client-helpers = { path = "../registry/helpers" }

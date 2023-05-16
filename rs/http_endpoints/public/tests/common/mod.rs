@@ -18,6 +18,7 @@ use ic_interfaces_state_manager::StateReader;
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
+use ic_pprof::Pprof;
 use ic_protobuf::registry::{
     crypto::v1::{AlgorithmId as AlgorithmIdProto, PublicKey as PublicKeyProto},
     provisional_whitelist::v1::ProvisionalWhitelist as ProvisionalWhitelistProto,
@@ -397,6 +398,7 @@ pub fn start_http_endpoint(
         consensus_cache,
         SubnetType::Application,
         MaliciousFlags::default(),
+        Arc::new(Pprof::default()),
     );
     (
         ingress_filter_handle,

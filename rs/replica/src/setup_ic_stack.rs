@@ -15,6 +15,7 @@ use ic_interfaces_registry::{LocalStoreCertifiedTimeReader, RegistryClient};
 use ic_logger::{info, ReplicaLogger};
 use ic_messaging::MessageRoutingImpl;
 use ic_metrics::MetricsRegistry;
+use ic_pprof::Pprof;
 use ic_registry_subnet_type::SubnetType;
 use ic_replica_setup_ic_network::{
     create_networking_stack, init_artifact_pools, P2PStateSyncClient,
@@ -266,6 +267,7 @@ pub fn construct_ic_stack(
         consensus_pool_cache,
         subnet_type,
         config.malicious_behaviour.malicious_flags,
+        Arc::new(Pprof::default()),
     );
 
     Ok((
