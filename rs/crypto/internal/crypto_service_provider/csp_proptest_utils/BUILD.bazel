@@ -17,7 +17,9 @@ DEPENDENCIES = [
 
 DEV_DEPENDENCIES = []
 
-MACRO_DEPENDENCIES = []
+MACRO_DEPENDENCIES = [
+    "@crate_index//:paste",
+]
 
 DEV_MACRO_DEPENDENCIES = []
 
