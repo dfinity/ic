@@ -90,6 +90,14 @@ pub struct SystemMetadata {
 
     pub own_subnet_features: SubnetFeatures,
 
+    /// "Subnet split in progress" marker: `Some(original_subnet_id)` if this
+    /// replicated state is in the process of being split from `original_subnet_id`;
+    /// `None` otherwise.
+    ///
+    /// During a subnet split, `original_subnet_id` may be used to determine whether
+    /// this is subnet A' (when equal to `own_subnet_id`) or B (when different).
+    pub split_from: Option<SubnetId>,
+
     /// Asynchronously handled subnet messages.
     pub subnet_call_context_manager: SubnetCallContextManager,
 
@@ -579,6 +587,9 @@ impl TryFrom<pb_metadata::SystemMetadata> for SystemMetadata {
             // properly set this value.
             own_subnet_type: SubnetType::default(),
             own_subnet_features: item.own_subnet_features.unwrap_or_default().into(),
+            // Note: `load_checkpoint()` will set this to the contents of `split_marker.pbuf`,
+            // when present.
+            split_from: None,
             canister_allocation_ranges,
             last_generated_canister_id,
             prev_state_hash: item.prev_state_hash.map(|b| CryptoHash(b).into()),
@@ -631,6 +642,7 @@ impl SystemMetadata {
             network_topology: Default::default(),
             subnet_call_context_manager: Default::default(),
             own_subnet_features: SubnetFeatures::default(),
+            split_from: None,
             // StateManager populates proper values of these fields before
             // committing each state.
             prev_state_hash: Default::default(),
@@ -773,6 +785,143 @@ impl SystemMetadata {
             _ => 0,
         };
         self.canister_allocation_ranges.total_count() as u64 - generated_canister_ids
+    }
+
+    /// Splits the `MetadataState` as part of subnet splitting phase 1: produces a
+    /// new `MetadataState` for the split subnet (B); retains the old one unmodified
+    /// for the subnet that retains the original subnet's ID (A').
+    ///
+    /// A subnet split starts with a subnet A and results in two subnets, A' and B.
+    /// For the sake of clarity, comments refer to the two resulting subnets as
+    /// *subnet A'* and *subnet B*. And to the original subnet as *subnet A*.
+    /// Because subnet A' retains the subnet ID of subnet A, it is identified by
+    /// having `new_subnet_id == self.own_subnet_id`. Conversely, subnet B has
+    /// `new_subnet_id != self.own_subnet_id`.
+    ///
+    /// In this first phase, the ingress history is left untouched on both subnets,
+    /// in order to make it trivial to verify that no tampering has occurred. A
+    /// split marker is added to both subnets, containing the original subnet ID.
+    ///
+    /// In phase 2 (see [`Self::after_split()`]) the ingress history is pruned and
+    /// the split marker is reset.
+    pub fn split(mut self, new_subnet_id: SubnetId) -> Self {
+        assert_eq!(0, self.heap_delta_estimate.get());
+        assert!(self.expected_compiled_wasms.is_empty());
+
+        // No-op for subnet A'.
+        if self.own_subnet_id == new_subnet_id {
+            // Set the split marker to the original subnet ID.
+            self.split_from = Some(self.own_subnet_id);
+
+            return self;
+        }
+
+        // This is subnet B: use `new_subnet_id` as its subnet ID.
+        let mut res = SystemMetadata::new(new_subnet_id, self.own_subnet_type);
+
+        // Set the split marker to the original subnet ID (that of subnet A).
+        res.split_from = Some(self.own_subnet_id);
+
+        // Preserve ingress history.
+        res.ingress_history = self.ingress_history;
+
+        // All other fields have been reset to default.
+        res
+    }
+
+    /// Adjusts the `MetadataState` as part of the second phase of subnet splitting,
+    /// during the new subnets' startup.
+    ///
+    /// A subnet split starts with a subnet A and results in two subnets, A' and B,
+    /// with canisters split among the two subnets according to the routing table.
+    /// Because subnet A' retains the subnet ID of subnet A, it is identified by
+    /// having `self.split_from == Some(self.own_subnet_id)`. Conversely, subnet B
+    /// has `self.split_from == Some(self.own_subnet_id)`.
+    ///
+    /// In the first phase (see [`Self::split()`]), the ingress history was left
+    /// untouched on both subnets, in order to make it trivial to verify that no
+    /// tampering had occurred. Streams, subnet call contexts and metrics and all
+    /// other metadata were preserved on subnet A' and set to default on subnet B.
+    ///
+    /// In this second phase, `ingress_history` is pruned, retaining only messages
+    /// in terminal states and messages addressed to local canisters.
+    ///
+    /// Notes:
+    ///  * `own_subnet_type` has just been set during `load_checkpoint()`, based on
+    ///    the registry subnet record of the subnet that this node is part of.
+    ///  * `batch_time`, `network_topology` and `own_subnet_features` will be set
+    ///    by Message Routing before the start of the next round.
+    ///  * `state_sync_version` and `certification_version` will be set by
+    ///    `commit_and_certify()` at the end of the round; and not used before.
+    ///  * `heap_delta_estimate` and `expected_compiled_wasms` are expected to be
+    ///    empty/zero.
+    #[allow(dead_code)]
+    pub(crate) fn after_split<F>(self, is_local_canister: F) -> Self
+    where
+        F: Fn(&CanisterId) -> bool,
+    {
+        // Take apart `self` and put it back together, in order for the compiler to
+        // enforce an explicit decision whenever new fields are added.
+        let SystemMetadata {
+            mut ingress_history,
+            streams,
+            canister_allocation_ranges,
+            last_generated_canister_id,
+            prev_state_hash: _,
+            // Overwritten as soon as the round begins, no explicit action needed.
+            batch_time,
+            // Overwritten as soon as the round begins, no explicit action needed.
+            network_topology,
+            own_subnet_id,
+            // `own_subnet_type` has been set by `load_checkpoint()` based on the subnet
+            // registry record of B, do not touch it.
+            own_subnet_type,
+            // Overwritten as soon as the round begins, no explicit action needed.
+            own_subnet_features,
+            split_from,
+            subnet_call_context_manager,
+            // Set by `commit_and_certify()` at the end of the round. Not used before.
+            state_sync_version,
+            // Set by `commit_and_certify()` at the end of the round. Not used before.
+            certification_version,
+            heap_delta_estimate,
+            subnet_metrics,
+            expected_compiled_wasms,
+            bitcoin_get_successors_follow_up_responses,
+        } = self;
+
+        split_from.expect("Not a state resulting from a subnet split");
+
+        assert_eq!(0, heap_delta_estimate.get());
+        assert!(expected_compiled_wasms.is_empty());
+
+        // Prune the ingress history.
+        ingress_history = ingress_history.prune_after_split(is_local_canister);
+
+        // This is a genesis state, there is no previous state hash.
+        let prev_state_hash = None;
+
+        SystemMetadata {
+            ingress_history,
+            streams,
+            canister_allocation_ranges,
+            last_generated_canister_id,
+            prev_state_hash,
+            batch_time,
+            network_topology,
+            own_subnet_id,
+            own_subnet_type,
+            own_subnet_features,
+            // Split complete, reset split marker.
+            split_from: None,
+            subnet_call_context_manager,
+            state_sync_version,
+            certification_version,
+            heap_delta_estimate,
+            subnet_metrics,
+            expected_compiled_wasms,
+            bitcoin_get_successors_follow_up_responses,
+        }
     }
 }
 
@@ -1518,13 +1667,12 @@ impl IngressHistoryState {
         statuses.values().map(|status| status.payload_bytes()).sum()
     }
 
-    /// Prunes the ingress history (as part of subnet splitting), retaining:
+    /// Prunes the ingress history (as part of subnet splitting phase 2), retaining:
     ///
     ///  * all terminal states (since they are immutable and will get pruned); and
     ///  * all non-terminal states for ingress messages addressed to local canisters
     ///    (as determined by the provided predicate).
-    #[allow(dead_code)]
-    fn split<F>(self, is_local_canister: F) -> Self
+    fn prune_after_split<F>(self, is_local_canister: F) -> Self
     where
         F: Fn(&CanisterId) -> bool,
     {
