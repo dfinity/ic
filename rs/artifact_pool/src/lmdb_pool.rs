@@ -308,7 +308,12 @@ fn create_db_env(path: &Path, read_only: bool, max_dbs: c_uint) -> Environment {
     builder.set_map_size(MAX_PERSISTENT_POOL_SIZE);
     let db_env = builder
         .open_with_permissions(path, permission)
-        .unwrap_or_else(|err| panic!("Error opening LMDB environment at {:?}: {:?}", path, err));
+        .unwrap_or_else(|err| {
+            panic!(
+                "Error opening LMDB environment with permissions at {:?}: {:?}",
+                path, err
+            )
+        });
 
     unsafe {
         // Mark fds created by lmdb as FD_CLOEXEC to prevent them from leaking into
