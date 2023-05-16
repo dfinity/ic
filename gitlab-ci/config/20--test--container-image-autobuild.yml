@@ -18,7 +18,7 @@ container-autobuild-protected:
       TAG=$(cat ./gitlab-ci/container/TAG)
       # check if we have it in dockerhub
       EXISTS=$(curl -s https://hub.docker.com/v2/repositories/dfinity/ic-build-legacy/tags | jq -r "[.results? | .[]? | .name == \"$TAG\"] | any")
-      EXISTS_BAZEL=$(curl -s https://hub.docker.com/v2/repositories/dfinity/ic-build-bazel/tags | jq -r "[.results? | .[]? | .name == \"$TAG\"] | any")
+      EXISTS_BAZEL=$(curl -s https://hub.docker.com/v2/repositories/dfinity/ic-build/tags | jq -r "[.results? | .[]? | .name == \"$TAG\"] | any")
 
       if [ "$EXISTS" != "true" ] || [ "$EXISTS_BAZEL" != "true" ]; then
         # build it
@@ -29,8 +29,8 @@ container-autobuild-protected:
         docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASSWORD"
         docker push docker.io/dfinity/ic-build-legacy:"$TAG"
         docker push docker.io/dfinity/ic-build-legacy:latest
-        docker push docker.io/dfinity/ic-build-bazel:"$TAG"
-        docker push docker.io/dfinity/ic-build-bazel:latest
+        docker push docker.io/dfinity/ic-build:"$TAG"
+        docker push docker.io/dfinity/ic-build:latest
       fi
 
 container-autobuild:
@@ -62,8 +62,8 @@ container-autobuild:
       cd ../config
       # names must match with names in docker-build-image.sh!
       IMG_NAME="registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy"
-      IMG_BAZEL_NAME="registry.gitlab.com/dfinity-lab/core/docker/ic-build-bazel"
-      IMG_BAZEL_DOCKER_HUB="dfinity/ic-build-bazel"
+      IMG_BAZEL_NAME="registry.gitlab.com/dfinity-lab/core/docker/ic-build"
+      IMG_BAZEL_DOCKER_HUB="dfinity/ic-build"
 
       IMG_NAME_FULL="$IMG_NAME:$TAG"
       IMG_BAZEL_NAME_FULL="$IMG_BAZEL_NAME:$TAG"

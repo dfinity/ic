@@ -25,11 +25,11 @@ Usage: $0 -h | --help, -f | --full
     -f | --full  Use full container image (dfinity/ic-build-legacy)
     -h | --help  Print help
 
-Script uses dfinity/ic-build-bazel image by default.
+Script uses dfinity/ic-build image by default.
 EOF
 }
 
-IMAGE="docker.io/dfinity/ic-build-bazel"
+IMAGE="docker.io/dfinity/ic-build"
 BUILD_ARGS=(--bazel)
 CTR=0
 while test $# -gt $CTR; do
