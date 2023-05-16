@@ -18,7 +18,183 @@ system_test(
 )
 
 system_test(
-    name = "rosetta_split_test",
+    name = "rosetta_derive_test",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS +
+        UNIVERSAL_VM_RUNTIME_DEPS +
+        NNS_CANISTER_RUNTIME_DEPS + [
+            "//rs/tests:rosetta_workspace",
+            "//rs/rosetta-api:ic-rosetta-api",
+            "//rs/rosetta-api:rosetta_image.tar",
+            "@rosetta-cli//:rosetta-cli",
+        ],
+    deps = DEPENDENCIES + ["//rs/tests"],
+)
+
+system_test(
+    name = "rosetta_make_transactions_test",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS +
+        UNIVERSAL_VM_RUNTIME_DEPS +
+        NNS_CANISTER_RUNTIME_DEPS + [
+            "//rs/tests:rosetta_workspace",
+            "//rs/rosetta-api:ic-rosetta-api",
+            "//rs/rosetta-api:rosetta_image.tar",
+            "@rosetta-cli//:rosetta-cli",
+        ],
+    deps = DEPENDENCIES + ["//rs/tests"],
+)
+
+system_test(
+    name = "rosetta_network_test",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS +
+        UNIVERSAL_VM_RUNTIME_DEPS +
+        NNS_CANISTER_RUNTIME_DEPS + [
+            "//rs/tests:rosetta_workspace",
+            "//rs/rosetta-api:ic-rosetta-api",
+            "//rs/rosetta-api:rosetta_image.tar",
+            "@rosetta-cli//:rosetta-cli",
+        ],
+    deps = DEPENDENCIES + ["//rs/tests"],
+)
+
+system_test(
+    name = "rosetta_neuron_disbourse_test",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS +
+        UNIVERSAL_VM_RUNTIME_DEPS +
+        NNS_CANISTER_RUNTIME_DEPS + [
+            "//rs/tests:rosetta_workspace",
+            "//rs/rosetta-api:ic-rosetta-api",
+            "//rs/rosetta-api:rosetta_image.tar",
+            "@rosetta-cli//:rosetta-cli",
+        ],
+    deps = DEPENDENCIES + ["//rs/tests"],
+)
+
+system_test(
+    name = "rosetta_neuron_dissolve_test",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS +
+        UNIVERSAL_VM_RUNTIME_DEPS +
+        NNS_CANISTER_RUNTIME_DEPS + [
+            "//rs/tests:rosetta_workspace",
+            "//rs/rosetta-api:ic-rosetta-api",
+            "//rs/rosetta-api:rosetta_image.tar",
+            "@rosetta-cli//:rosetta-cli",
+        ],
+    deps = DEPENDENCIES + ["//rs/tests"],
+)
+
+system_test(
+    name = "rosetta_neuron_follow_test",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS +
+        UNIVERSAL_VM_RUNTIME_DEPS +
+        NNS_CANISTER_RUNTIME_DEPS + [
+            "//rs/tests:rosetta_workspace",
+            "//rs/rosetta-api:ic-rosetta-api",
+            "//rs/rosetta-api:rosetta_image.tar",
+            "@rosetta-cli//:rosetta-cli",
+        ],
+    deps = DEPENDENCIES + ["//rs/tests"],
+)
+
+system_test(
+    name = "rosetta_neuron_hotkey_test",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS +
+        UNIVERSAL_VM_RUNTIME_DEPS +
+        NNS_CANISTER_RUNTIME_DEPS + [
+            "//rs/tests:rosetta_workspace",
+            "//rs/rosetta-api:ic-rosetta-api",
+            "//rs/rosetta-api:rosetta_image.tar",
+            "@rosetta-cli//:rosetta-cli",
+        ],
+    deps = DEPENDENCIES + ["//rs/tests"],
+)
+
+system_test(
+    name = "rosetta_neuron_info_test",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS +
+        UNIVERSAL_VM_RUNTIME_DEPS +
+        NNS_CANISTER_RUNTIME_DEPS + [
+            "//rs/tests:rosetta_workspace",
+            "//rs/rosetta-api:ic-rosetta-api",
+            "//rs/rosetta-api:rosetta_image.tar",
+            "@rosetta-cli//:rosetta-cli",
+        ],
+    deps = DEPENDENCIES + ["//rs/tests"],
+)
+
+system_test(
+    name = "rosetta_neuron_maturity_test",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS +
+        UNIVERSAL_VM_RUNTIME_DEPS +
+        NNS_CANISTER_RUNTIME_DEPS + [
+            "//rs/tests:rosetta_workspace",
+            "//rs/rosetta-api:ic-rosetta-api",
+            "//rs/rosetta-api:rosetta_image.tar",
+            "@rosetta-cli//:rosetta-cli",
+        ],
+    deps = DEPENDENCIES + ["//rs/tests"],
+)
+
+system_test(
+    name = "rosetta_neuron_spawn_test",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS +
+        UNIVERSAL_VM_RUNTIME_DEPS +
+        NNS_CANISTER_RUNTIME_DEPS + [
+            "//rs/tests:rosetta_workspace",
+            "//rs/rosetta-api:ic-rosetta-api",
+            "//rs/rosetta-api:rosetta_image.tar",
+            "@rosetta-cli//:rosetta-cli",
+        ],
+    deps = DEPENDENCIES + ["//rs/tests"],
+)
+
+system_test(
+    name = "rosetta_neuron_staking_test",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    runtime_deps =
+        GUESTOS_RUNTIME_DEPS +
+        UNIVERSAL_VM_RUNTIME_DEPS +
+        NNS_CANISTER_RUNTIME_DEPS + [
+            "//rs/tests:rosetta_workspace",
+            "//rs/rosetta-api:ic-rosetta-api",
+            "//rs/rosetta-api:rosetta_image.tar",
+            "@rosetta-cli//:rosetta-cli",
+        ],
+    deps = DEPENDENCIES + ["//rs/tests"],
+)
+
+system_test(
+    name = "rosetta_neuron_voting_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
     target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
     runtime_deps =
