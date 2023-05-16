@@ -1,8 +1,9 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
 from model.dependency import Dependency
 from model.security_risk import SecurityRisk
+from model.team import Team
 from model.user import User
 from model.vulnerability import Vulnerability
 
@@ -26,8 +27,10 @@ class Finding:
     risk_assessor: List[User]
     """current risk assessment, might be None if no risk assessment was done or reassessment is necessary"""
     risk: Optional[SecurityRisk] = None
+    """teams that own the projects listed in the corresponding property, might be empty if unknown"""
+    owning_teams: List[Team] = field(default_factory=lambda: [])
     """users responsible for patching the vulnerable dependency, might be empty if no one was assigned yet"""
-    patch_responsible: List[User] = ()
+    patch_responsible: List[User] = field(default_factory=lambda: [])
     """UTC timestamp of the due date of the finding, if it is in future, releases with the vuln. dep. are allowed, might be None if no date was assigned yet"""
     due_date: Optional[int] = None
     """highest vulnerability score or -1 if no score could be determined"""
@@ -43,6 +46,7 @@ class Finding:
         assert self.vulnerabilities is not None and len(self.vulnerabilities) > 0
         assert self.projects is not None
         assert self.risk_assessor is not None
+        assert self.owning_teams is not None
         assert self.patch_responsible is not None
         assert self.due_date is None or self.due_date >= 0
         assert self.score >= -1
@@ -150,3 +154,8 @@ class Finding:
                 self.first_level_dependencies.append(first_lvl_dep)
                 dep_by_id_version[id_version] = first_lvl_dep
         self.first_level_dependencies.sort(key=lambda x: x.id)
+
+        for team in other.owning_teams:
+            if team not in self.owning_teams:
+                self.owning_teams.append(team)
+        self.owning_teams.sort()

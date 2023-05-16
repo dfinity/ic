@@ -15,6 +15,7 @@ from jira.resources import CustomFieldOption
 from model.dependency import Dependency
 from model.finding import Finding
 from model.security_risk import SecurityRisk
+from model.team import Team
 from model.user import User
 from model.vulnerability import Vulnerability
 
@@ -43,6 +44,7 @@ JIRA_FINDING_TO_CUSTOM_FIELD = {
     "projects": ("customfield_10317", "cf[10317]"),
     "risk_assessor": ("customfield_10325", "cf[10325]"),
     "risk": ("customfield_10327", "cf[10327]"),
+    "owning_teams": ("customfield_10338", "cf[10338]"),
     "patch_responsible": ("customfield_10326", "cf[10326]"),
     "due_date": ("duedate", "duedate"),
     "score": ("customfield_10328", "cf[10328]"),
@@ -53,6 +55,16 @@ JIRA_SECURITY_RISK_TO_ID = {
     SecurityRisk.MEDIUM: "10592",
     SecurityRisk.HIGH: "10593",
     SecurityRisk.CRITICAL: "10594",
+}
+JIRA_OWNER_GROUP_BY_TEAM = {
+    Team.NODE_TEAM : {"name": "dept-Node"},
+    Team.BOUNDARY_NODE_TEAM : {"name": "dept-Boundary Nodes"},
+    Team.TRUST_TEAM : {"name": "dept-Trust"},
+    Team.GIX_TEAM : {"name": "dept-GIX"},
+    Team.SDK_TEAM : {"name": "dept-SDK"},
+    Team.FINANCIAL_INTEGRATIONS_TEAM : {"name": "dept-Financial Integrations"},
+    Team.EXECUTION_TEAM : {"name": "dept-Execution"},
+    Team.NNS_TEAM : {"name": "dept-NNS"},
 }
 JIRA_LABEL_PATCH_VULNDEP_PUBLISHED = "patch_published_vulndep"
 JIRA_LABEL_PATCH_ALLDEP_PUBLISHED = "patch_published_alldep"
@@ -160,6 +172,28 @@ class JiraFindingDataSource(FindingDataSource):
             return SecurityRisk.HIGH
         if risk.id == JIRA_SECURITY_RISK_TO_ID[SecurityRisk.CRITICAL]:
             return SecurityRisk.CRITICAL
+
+    @staticmethod
+    def __jira_to_finding_owning_teams(owning_teams: Optional[List[Any]]) -> List[Team]:
+        owners = []
+        if owning_teams:
+            for team_obj in owning_teams:
+                team = team_obj.name
+                if team == JIRA_OWNER_GROUP_BY_TEAM[Team.NODE_TEAM]:
+                    owners.append(Team.NODE_TEAM)
+                elif team == JIRA_OWNER_GROUP_BY_TEAM[Team.BOUNDARY_NODE_TEAM]:
+                    owners.append(Team.BOUNDARY_NODE_TEAM)
+                elif team == JIRA_OWNER_GROUP_BY_TEAM[Team.TRUST_TEAM]:
+                    owners.append(Team.TRUST_TEAM)
+                elif team == JIRA_OWNER_GROUP_BY_TEAM[Team.GIX_TEAM]:
+                    owners.append(Team.GIX_TEAM)
+                elif team == JIRA_OWNER_GROUP_BY_TEAM[Team.SDK_TEAM]:
+                    owners.append(Team.SDK_TEAM)
+                elif team == JIRA_OWNER_GROUP_BY_TEAM[Team.FINANCIAL_INTEGRATIONS_TEAM]:
+                    owners.append(Team.FINANCIAL_INTEGRATIONS_TEAM)
+                elif team == JIRA_OWNER_GROUP_BY_TEAM[Team.EXECUTION_TEAM]:
+                    owners.append(Team.EXECUTION_TEAM)
+        return owners
 
     @staticmethod
     def __finding_to_jira_dependencies(dependencies: List[Dependency]) -> str:
@@ -322,6 +356,11 @@ class JiraFindingDataSource(FindingDataSource):
             res[JIRA_FINDING_TO_CUSTOM_FIELD.get("risk")[0]] = JiraFindingDataSource.__finding_to_jira_risk(
                 finding_new.risk
             )
+        if finding_old is None or finding_old.owning_teams != finding_new.owning_teams:
+            owning_teams = []
+            for team in finding_new.owning_teams:
+                owning_teams.append(JIRA_OWNER_GROUP_BY_TEAM[team])
+            res[JIRA_FINDING_TO_CUSTOM_FIELD.get("owning_teams")[0]] = owning_teams
         if finding_old is None or finding_old.patch_responsible != finding_new.patch_responsible:
             res[
                 JIRA_FINDING_TO_CUSTOM_FIELD.get("patch_responsible")[0]
@@ -405,6 +444,9 @@ class JiraFindingDataSource(FindingDataSource):
         )
         res["risk"] = JiraFindingDataSource.__jira_to_finding_risk(
             issue.get_field(JIRA_FINDING_TO_CUSTOM_FIELD.get("risk")[0])
+        )
+        res["owning_teams"] = JiraFindingDataSource.__jira_to_finding_owning_teams(
+            issue.get_field(JIRA_FINDING_TO_CUSTOM_FIELD.get("owning_teams")[0])
         )
         res["patch_responsible"] = JiraFindingDataSource.__jira_to_finding_users(
             issue.get_field(JIRA_FINDING_TO_CUSTOM_FIELD.get("patch_responsible")[0])

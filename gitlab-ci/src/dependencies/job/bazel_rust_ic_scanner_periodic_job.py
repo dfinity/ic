@@ -1,18 +1,19 @@
 from data_source.console_logger_finding_data_source_subscriber import ConsoleLoggerFindingDataSourceSubscriber
 from data_source.jira_finding_data_source import JiraFindingDataSource
 from model.repository import Project, Repository
+from model.team import Team
 from notification.notification_config import NotificationConfig
-from notification.slack_notification import SlackNotifier
+from notification.notification_creator import NotificationCreator
 from scanner.console_logger_scanner_subscriber import ConsoleLoggerScannerSubscriber
 from scanner.dependency_scanner import DependencyScanner
 from scanner.manager.bazel_rust_dependency_manager import BazelRustDependencyManager
 from scanner.scanner_job_type import ScannerJobType
 
 REPOS_TO_SCAN = [
-    Repository("ic", "https://gitlab.com/dfinity-lab/public/ic", [Project("ic", "ic")]),
-    Repository("nns-dapp", "https://github.com/dfinity/nns-dapp", [Project("nns-dapp", "nns-dapp")]),
-    Repository("internet-identity", "https://github.com/dfinity/internet-identity", [Project("internet-identity", "internet-identity")]),
-    Repository("response-verification", "https://github.com/dfinity/response-verification", [Project("response-verification", "response-verification")]),
+    Repository("ic", "https://gitlab.com/dfinity-lab/public/ic", [Project(name="ic", path="ic")]),
+    Repository("nns-dapp", "https://github.com/dfinity/nns-dapp", [Project(name="nns-dapp", path="nns-dapp", owner=Team.NNS_TEAM)]),
+    Repository("internet-identity", "https://github.com/dfinity/internet-identity", [Project(name="internet-identity", path="internet-identity", owner=Team.GIX_TEAM)]),
+    Repository("response-verification", "https://github.com/dfinity/response-verification", [Project(name="response-verification", path="response-verification", owner=Team.TRUST_TEAM)]),
 ]
 
 if __name__ == "__main__":
@@ -31,9 +32,9 @@ if __name__ == "__main__":
         notify_on_scan_job_succeeded=notify_on_scan_job_succeeded,
         notify_on_scan_job_failed=notify_on_scan_job_failed,
     )
-    slack_subscriber = SlackNotifier(config)
-    finding_data_source_subscribers = [ConsoleLoggerFindingDataSourceSubscriber(), slack_subscriber]
-    scanner_subscribers = [ConsoleLoggerScannerSubscriber(), slack_subscriber]
+    notifier = NotificationCreator(config)
+    finding_data_source_subscribers = [ConsoleLoggerFindingDataSourceSubscriber(), notifier]
+    scanner_subscribers = [ConsoleLoggerScannerSubscriber(), notifier]
     scanner_job = DependencyScanner(
         BazelRustDependencyManager(), JiraFindingDataSource(finding_data_source_subscribers), scanner_subscribers
     )

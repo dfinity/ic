@@ -9,17 +9,22 @@ from model.dependency import Dependency
 from model.finding import Finding
 from model.repository import Project
 from model.vulnerability import Vulnerability
-from notification.console_logger_notifier import ConsoleLoggerNotifier
-from notification.notifier import Notifier
+from notification.app_owner_msg_subscriber import AppOwnerMsgSubscriber
+from notification.console_logger_app_owner_msg_subsriber import ConsoleLoggerAppOwnerMsgSubscriber
 from scanner.manager.dependency_manager import DependencyManager
 from scanner.process_executor import ProcessExecutor
 
+TRIVY_SCANNER_ID = "BAZEL_TRIVY_CS"
 RE_SHA256_HASH = re.compile(r"^[\da-fA-F]{64}$")
 RE_ROOTFS_FILE = re.compile(r"^/tmp/tmp\.\w+/tmp_rootfs/(.+)$")
 
 
 class TrivyResultParser(abc.ABC):
     """Base class for helper classes for converting different trivy results to findings."""
+
+    @abc.abstractmethod
+    def get_parser_id(self) -> str:
+        raise NotImplementedError
 
     @abc.abstractmethod
     def is_supported_type(self, result_class: str, result_type: typing.Optional[str]) -> bool:
@@ -95,12 +100,16 @@ class TrivyResultParser(abc.ABC):
             vulnerabilities_by_vuln_dep[vulnerable_dependency_id] = [vulnerable_dependency, vulnerabilities]
         return [*vulnerabilities_by_vuln_dep.values()]
 
-    @staticmethod
-    def convert_project_for_finding(project: Project):
-        return project.path if project.link is None else f"{project.path} ({project.link})"
+    def convert_project_for_finding(self, project: Project):
+        proj = project.path if project.link is None else f"{project.path} ({project.link})"
+        return f"{self.get_parser_id()}: {proj}"
 
 
 class OSPackageTrivyResultParser(TrivyResultParser):
+
+    def get_parser_id(self) -> str:
+        return "OSP"
+
     def is_supported_type(self, result_class: str, result_type: typing.Optional[str]) -> bool:
         return result_class == "os-pkgs"
 
@@ -113,14 +122,11 @@ class OSPackageTrivyResultParser(TrivyResultParser):
         scanner: str,
         project: Project,
     ) -> typing.List[Finding]:
-        """For OS packages one finding is created for all packages that have the same vulnerabilities and the OS is listed as first level dependency"""
+        """For OS packages one finding is created for all packages that have the same vulnerabilities"""
         vulnerabilities_by_vuln_dep = self.trivy_result_to_dependencies_and_vulnerabilities(trivy_data, result_index)
         if len(vulnerabilities_by_vuln_dep) == 0:
             return []
 
-        os_name = trivy_data["Metadata"]["OS"]["Family"]
-        os_version = trivy_data["Metadata"]["OS"]["Name"]
-        os_dependency = Dependency(id=os_name, name=os_name, version=os_version)
         findings_by_vulnerabilities: typing.Dict[str, Finding] = {}
         for vulnerable_dependency, vulnerabilities in vulnerabilities_by_vuln_dep:
             max_score = 0
@@ -151,13 +157,17 @@ class OSPackageTrivyResultParser(TrivyResultParser):
             dependencies = [finding.vulnerable_dependency] + finding.first_level_dependencies
             dependencies.sort(key=lambda x: x.id)
             finding.vulnerable_dependency = dependencies[0]
-            finding.first_level_dependencies = dependencies[1:] + [os_dependency]
+            finding.first_level_dependencies = dependencies[1:]
             finding.vulnerabilities.sort(key=lambda x: x.id)
             findings.append(finding)
         return findings
 
 
 class BinaryTrivyResultParser(TrivyResultParser):
+
+    def get_parser_id(self) -> str:
+        return "BIN"
+
     def is_supported_type(self, result_class: str, result_type: typing.Optional[str]) -> bool:
         return result_class == "lang-pkgs" and result_type is not None and result_type.endswith("binary")
 
@@ -214,6 +224,10 @@ class BinaryTrivyResultParser(TrivyResultParser):
 
 
 class SecretTrivyResultParser(TrivyResultParser):
+
+    def get_parser_id(self) -> str:
+        return "SEC"
+
     def is_supported_type(self, result_class: str, result_type: typing.Optional[str]) -> bool:
         return result_class == "secret"
 
@@ -280,14 +294,14 @@ class TrivyExecutor:
 class BazelTrivyContainer(DependencyManager):
     """Helper for Trivy-related functions."""
 
-    def __init__(self, executor: TrivyExecutor = TrivyExecutor(), notifier: Notifier = ConsoleLoggerNotifier()):
+    def __init__(self, executor: TrivyExecutor = TrivyExecutor(), app_owner_msg_subscriber: AppOwnerMsgSubscriber = ConsoleLoggerAppOwnerMsgSubscriber()):
         super().__init__()
         self.parsers = (OSPackageTrivyResultParser(), BinaryTrivyResultParser(), SecretTrivyResultParser())
         self.executor = executor
-        self.notifier = notifier
+        self.app_owner_msg_subscriber = app_owner_msg_subscriber
 
     def get_scanner_id(self) -> str:
-        return "BAZEL_TRIVY_CS"
+        return TRIVY_SCANNER_ID
 
     def get_dependency_diff(self) -> typing.List[Dependency]:
         raise NotImplementedError
@@ -326,6 +340,6 @@ class BazelTrivyContainer(DependencyManager):
             if not result_parsed:
                 log_msg = f"skipping trivy result {i} with class {result_class} and type {result_type} in repo {repository_name} project {project} because no parser can handle the result"
                 logging.warning(log_msg)
-                self.notifier.send_notification_to_app_owners(log_msg)
+                self.app_owner_msg_subscriber.send_notification_to_app_owners(log_msg)
 
         return findings
