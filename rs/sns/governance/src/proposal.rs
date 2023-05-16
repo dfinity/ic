@@ -66,6 +66,19 @@ impl Proposal {
             .as_ref()
             .map_or(false, |a| a.allowed_when_resources_are_low())
     }
+
+    // Returns a clone of self, except that "large blob fields" are replaced
+    // with a (UTF-8 encoded) textual summary of their contents. See
+    // summarize_blob_field.
+    pub(crate) fn strip_large_fields(&self) -> Self {
+        Self {
+            action: self
+                .action
+                .as_ref()
+                .map(|action| action.strip_large_fields()),
+            ..self.clone()
+        }
+    }
 }
 
 /// Validates a proposal and returns a displayable text rendering of the payload
@@ -1123,6 +1136,19 @@ impl ProposalData {
     /// if it is allowed to be garbage collected.
     pub(crate) fn can_be_purged(&self, now_seconds: u64) -> bool {
         self.status().is_final() && self.reward_status(now_seconds).is_final()
+    }
+
+    // Returns a clone of self, except that "large blob fields" are replaced
+    // with a (UTF-8 encoded) textual summary of their contents. See
+    // summarize_blob_field.
+    pub(crate) fn strip_large_fields(&self) -> Self {
+        Self {
+            proposal: self
+                .proposal
+                .as_ref()
+                .map(|proposal| proposal.strip_large_fields()),
+            ..self.clone()
+        }
     }
 }
 
