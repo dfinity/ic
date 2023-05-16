@@ -32,6 +32,7 @@ impl<'a> Persister<'a> {
 #[async_trait]
 impl<'a> Persist for Persister<'a> {
     async fn persist(&self, rt: RoutingTable) -> Result<PersistStatus, Error> {
-        todo!("TODO(BOUN-724): Implement mapping of RoutingTable into Routes")
+        // "TODO(BOUN-724): Implement mapping of RoutingTable into Routes"
+        Ok(PersistStatus::SkippedEmpty)
     }
 }

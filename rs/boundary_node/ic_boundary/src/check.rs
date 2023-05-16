@@ -22,6 +22,6 @@ impl<'a, P: Persist> Runner<'a, P> {
 impl<'a, P: Persist> Run for Runner<'a, P> {
     async fn run(&mut self) -> Result<(), Error> {
         // TODO(BOUN-725): Implement health check, similar to rs/boundary_node/control_plane/src/check.rs
-        todo!()
+        Ok(())
     }
 }

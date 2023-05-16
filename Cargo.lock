@@ -4392,11 +4392,19 @@ dependencies = [
  "axum",
  "clap 4.1.8",
  "futures",
+ "ic-config",
+ "ic-crypto-utils-threshold-sig-der",
+ "ic-logger",
+ "ic-registry-client",
+ "ic-registry-local-store",
+ "ic-registry-replicator",
  "lazy_static",
  "prometheus 0.13.3",
+ "slog",
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "url",
 ]
 
 [[package]]
