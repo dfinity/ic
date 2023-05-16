@@ -5536,6 +5536,7 @@ dependencies = [
  "ic-crypto-internal-multi-sig-bls12381",
  "ic-crypto-internal-threshold-sig-bls12381",
  "ic-types",
+ "paste 1.0.12",
  "proptest",
 ]
 

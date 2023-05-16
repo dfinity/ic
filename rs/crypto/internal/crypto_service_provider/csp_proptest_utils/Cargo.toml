@@ -15,4 +15,5 @@ ic-crypto-internal-csp = { path = "../../crypto_service_provider" }
 ic-crypto-internal-multi-sig-bls12381 = { path = "../../crypto_lib/multi_sig/bls12_381" }
 ic-crypto-internal-threshold-sig-bls12381 = { path = "../../crypto_lib/threshold_sig/bls12_381" }
 ic-types = { path = "../../../../types/types" }
+paste = "1.0.12"
 proptest = "1.0"
