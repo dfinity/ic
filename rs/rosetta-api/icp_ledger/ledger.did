@@ -268,8 +268,9 @@ type AccountBalanceArgsDfx = record {
     account: TextAccountIdentifier;
 };
 
-type LedgerCanisterInitPayload = record {
+type InitArgs = record {
     minting_account: TextAccountIdentifier;
+    icrc1_minting_account: opt Account;
     initial_values: vec record {TextAccountIdentifier; Tokens};
     max_message_size_bytes: opt nat64;
     transaction_window: opt Duration;
@@ -323,7 +324,17 @@ type Value = variant {
     Blob : blob;
 };
 
-service: (LedgerCanisterInitPayload) -> {
+type UpgradeArgs = record {
+  maximum_number_of_accounts : opt nat64;
+  icrc1_minting_account : opt Account;
+};
+
+type LedgerCanisterPayload = variant {
+    Init: InitArgs;
+    Upgrade: opt UpgradeArgs;
+};
+
+service: (LedgerCanisterPayload) -> {
     // Transfers tokens from a subaccount of the caller to the destination address.
     // The source address is computed from the principal of the caller and the specified subaccount.
     // When successful, returns the index of the block containing the transaction.
