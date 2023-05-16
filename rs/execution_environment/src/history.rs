@@ -30,7 +30,8 @@ impl IngressHistoryReader for IngressHistoryReaderImpl {
             .state_reader
             .get_latest_state()
             .take()
-            .get_ingress_history();
+            .get_ingress_history()
+            .clone();
         Box::new(move |message_id| {
             history
                 .get(message_id)
@@ -52,7 +53,7 @@ impl IngressHistoryReader for IngressHistoryReaderImpl {
                     IngressHistoryError::StateNotAvailableYet(h)
                 }
             })?;
-        let history = labeled_state.take().get_ingress_history();
+        let history = labeled_state.take().get_ingress_history().clone();
         Ok(Box::new(move |message_id| {
             history
                 .get(message_id)
