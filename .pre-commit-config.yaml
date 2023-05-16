@@ -44,6 +44,14 @@ repos:
     always_run: true
     verbose: true
 
+  - id: bazel_rust_format_check
+    name: Run rust format check
+    entry: bazel build --aspects=@rules_rust//rust:defs.bzl%rustfmt_aspect --output_groups=rustfmt_checks //...
+    pass_filenames: false
+    language: system
+    always_run: true
+    verbose: true
+
 # The following repo is maintained by us at
 # https://gitlab.com/dfinity-lab/open/pre-commit-tools.
 - repo: https://gitlab.com/dfinity-lab/open/pre-commit-tools.git
@@ -60,15 +68,6 @@ repos:
             .*/Cargo\.nix|
             experimental/.*
         )$
-  - id: rustfmt
-    exclude: |
-        (?x)(
-            experimental/|
-            rust_canisters/|
-            nix/overlays/|
-            gitlab-ci/|
-            crypto/internal/crypto_lib/fs_ni_dkg/miracl_core
-        ) # exclude these directories.
 
 - repo: https://github.com/willthames/ansible-lint.git
   rev: v4.2.0
