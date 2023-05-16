@@ -72,6 +72,7 @@ use ic_nns_handler_root::root_proposals::{GovernanceUpgradeRootProposal, RootPro
 use ic_nns_init::make_hsm_sender;
 use ic_nns_test_utils::ids::TEST_NEURON_1_ID;
 use ic_protobuf::registry::firewall::v1::{FirewallConfig, FirewallRule, FirewallRuleSet};
+use ic_protobuf::registry::hostos_version::v1::HostOsVersionRecord;
 use ic_protobuf::registry::node_rewards::v2::{
     NodeRewardRate, UpdateNodeRewardsTableProposalPayload,
 };
@@ -100,7 +101,8 @@ use ic_registry_keys::{
     make_node_operator_record_key, make_node_record_key, make_provisional_whitelist_record_key,
     make_replica_version_key, make_routing_table_record_key, make_subnet_list_record_key,
     make_subnet_record_key, make_unassigned_nodes_config_record_key, FirewallRulesScope,
-    NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY, ROOT_SUBNET_ID_KEY,
+    HOSTOS_VERSION_KEY_PREFIX, NODE_OPERATOR_RECORD_KEY_PREFIX, NODE_REWARDS_TABLE_KEY,
+    ROOT_SUBNET_ID_KEY,
 };
 use ic_registry_local_store::{
     Changelog, ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreWriter,
@@ -141,13 +143,15 @@ use registry_canister::mutations::firewall::{
 use registry_canister::mutations::node_management::do_remove_nodes::RemoveNodesPayload;
 use registry_canister::mutations::{
     complete_canister_migration::CompleteCanisterMigrationPayload,
-    do_add_node_operator::AddNodeOperatorPayload, do_add_nodes_to_subnet::AddNodesToSubnetPayload,
+    do_add_hostos_version::AddHostOsVersionPayload, do_add_node_operator::AddNodeOperatorPayload,
+    do_add_nodes_to_subnet::AddNodesToSubnetPayload,
     do_bless_replica_version::BlessReplicaVersionPayload,
     do_change_subnet_membership::ChangeSubnetMembershipPayload,
     do_create_subnet::CreateSubnetPayload, do_recover_subnet::RecoverSubnetPayload,
     do_remove_nodes_from_subnet::RemoveNodesFromSubnetPayload,
     do_retire_replica_version::RetireReplicaVersionPayload,
     do_update_node_operator_config::UpdateNodeOperatorConfigPayload,
+    do_update_nodes_hostos_version::UpdateNodesHostOsVersionPayload,
     do_update_subnet::UpdateSubnetPayload,
     do_update_subnet_replica::UpdateSubnetReplicaVersionPayload,
     prepare_canister_migration::PrepareCanisterMigrationPayload,
@@ -572,6 +576,12 @@ enum SubCommand {
     ProposeToOpenSnsTokenSwap(ProposeToOpenSnsTokenSwap),
     /// Propose to set the Bitcoin configuration
     ProposeToSetBitcoinConfig(ProposeToSetBitcoinConfig),
+    /// Add a HostOS version
+    ProposeToAddHostOsVersion(ProposeToAddHostOsVersionCmd),
+    /// Set or remove a HostOS version on Nodes
+    ProposeToManageHostOsVersion(ProposeToManageHostOsVersionCmd),
+    /// Get current list of HostOS versions
+    GetHostOsVersions,
 }
 
 /// Indicates whether a value should be added or removed.
@@ -4193,6 +4203,94 @@ async fn propose_to_create_service_nervous_system(
     }
 }
 
+/// Sub-command to add a new HostOS version to the registry.
+#[derive_common_proposal_fields]
+#[derive(ProposalMetadata, Parser)]
+struct ProposeToAddHostOsVersionCmd {
+    /// Version ID. This can be anything, it has no semantics. The reason it is
+    /// part of the payload is that it will be needed in the subsequent step
+    /// of upgrading the HostOSs of individual nodes.
+    pub hostos_version_id: String,
+
+    /// The hex-formatted SHA-256 hash of the archive served by
+    /// 'release_package_urls'.
+    release_package_sha256_hex: String,
+
+    /// The URLs against which an HTTP GET request will return a release
+    /// package that corresponds to this version.
+    pub release_package_urls: Vec<String>,
+}
+
+impl ProposalTitle for ProposeToAddHostOsVersionCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => format!("Add HostOS version: {}", self.hostos_version_id,),
+        }
+    }
+}
+
+#[async_trait]
+impl ProposalPayload<AddHostOsVersionPayload> for ProposeToAddHostOsVersionCmd {
+    async fn payload(&self, _: Url) -> AddHostOsVersionPayload {
+        AddHostOsVersionPayload {
+            hostos_version_id: self.hostos_version_id.clone(),
+            release_package_sha256_hex: self.release_package_sha256_hex.clone(),
+            release_package_urls: self.release_package_urls.clone(),
+        }
+    }
+}
+
+/// Sub-command to set HostOS version on a set of Nodes.
+#[derive_common_proposal_fields]
+#[derive(ProposalMetadata, Parser)]
+struct ProposeToManageHostOsVersionCmd {
+    /// The list of nodes on which to set the given HostOsVersion
+    #[clap(name = "NODE_ID", multiple_values(true), required = true)]
+    pub node_ids: Vec<PrincipalId>,
+
+    /// Version ID. This should correspond to a HostOS version previously added
+    /// to the registry.
+    #[clap(long)]
+    pub hostos_version_id: Option<String>,
+}
+
+impl ProposalTitle for ProposeToManageHostOsVersionCmd {
+    fn title(&self) -> String {
+        match &self.proposal_title {
+            Some(title) => title.clone(),
+            None => match &self.hostos_version_id {
+                Some(hostos_version_id) => format!(
+                    "Set HostOS version: '{}' on nodes: '{}'",
+                    hostos_version_id,
+                    shortened_pids_string(&self.node_ids)
+                ),
+                None => format!(
+                    "Unsetting HostOS version on nodes: '{}'",
+                    shortened_pids_string(&self.node_ids)
+                ),
+            },
+        }
+    }
+}
+
+#[async_trait]
+impl ProposalPayload<UpdateNodesHostOsVersionPayload> for ProposeToManageHostOsVersionCmd {
+    async fn payload(&self, _: Url) -> UpdateNodesHostOsVersionPayload {
+        let node_ids = self
+            .node_ids
+            .clone()
+            .into_iter()
+            .map(NodeId::from)
+            .collect();
+
+        UpdateNodesHostOsVersionPayload {
+            node_ids,
+            hostos_version_id: self.hostos_version_id.clone(),
+        }
+    }
+}
+
 async fn get_firewall_rules_from_registry(
     registry_canister: &RegistryCanister,
     scope: &FirewallRulesScope,
@@ -4281,6 +4379,8 @@ async fn main() {
             SubCommand::ProposeToUpdateSnsDeployWhitelist(_) => (),
             SubCommand::ProposeToOpenSnsTokenSwap(_) => (),
             SubCommand::ProposeToInsertSnsWasmUpgradePathEntries(_) => (),
+            SubCommand::ProposeToAddHostOsVersion(_) => (),
+            SubCommand::ProposeToManageHostOsVersion(_) => (),
             _ => panic!(
                 "Specifying a secret key or HSM is only supported for \
                      methods that interact with NNS handlers."
@@ -5401,6 +5501,67 @@ async fn main() {
                 proposer,
             )
             .await;
+        }
+        SubCommand::ProposeToAddHostOsVersion(cmd) => {
+            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            propose_external_proposal_from_command(
+                cmd,
+                NnsFunction::AddHostOsVersion,
+                make_canister_client(
+                    opts.nns_url,
+                    opts.verify_nns_responses,
+                    opts.nns_public_key_pem_file,
+                    sender,
+                ),
+                proposer,
+            )
+            .await;
+        }
+        SubCommand::ProposeToManageHostOsVersion(cmd) => {
+            let (proposer, sender) = cmd.proposer_and_sender(sender);
+            propose_external_proposal_from_command(
+                cmd,
+                NnsFunction::UpdateNodesHostOsVersion,
+                make_canister_client(
+                    opts.nns_url,
+                    opts.verify_nns_responses,
+                    opts.nns_public_key_pem_file,
+                    sender,
+                ),
+                proposer,
+            )
+            .await;
+        }
+        SubCommand::GetHostOsVersions => {
+            let registry_client = RegistryClientImpl::new(
+                Arc::new(NnsDataProvider::new(
+                    tokio::runtime::Handle::current(),
+                    registry_canister,
+                )),
+                None,
+            );
+
+            // maximum number of retries, let the user ctrl+c if necessary
+            registry_client
+                .try_polling_latest_version(usize::MAX)
+                .unwrap();
+
+            let keys = registry_client
+                .get_key_family(
+                    HOSTOS_VERSION_KEY_PREFIX,
+                    registry_client.get_latest_version(),
+                )
+                .unwrap();
+
+            for key in keys {
+                let bytes = registry_client
+                    .get_value(&key, registry_client.get_latest_version())
+                    .unwrap()
+                    .unwrap();
+                let hostos_version_record = HostOsVersionRecord::decode(&bytes[..])
+                    .expect("Error decoding HostOsVersionRecord from registry");
+                println!("{}", hostos_version_record.hostos_version_id);
+            }
         }
     }
 }
