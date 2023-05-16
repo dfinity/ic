@@ -1,6 +1,7 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 load("//bazel:prost.bzl", "generated_files_check")
 load("//bazel:canisters.bzl", "rust_canister")
+load("//bazel:candid.bzl", "did_git_test")
 load("@rules_motoko//motoko:defs.bzl", "motoko_binary", "motoko_library")
 
 package(default_visibility = ["//visibility:public"])
@@ -134,11 +135,10 @@ rust_test(
     ],
 )
 
-# TODO enable this test after the refactoring
-# did_git_test(
-#     name = "ledger_did_git_test",
-#     did = ":ledger.did",
-# )
+did_git_test(
+    name = "ledger_did_git_test",
+    did = ":ledger.did",
+)
 
 generated_files_check(
     name = "check_generated_files",
