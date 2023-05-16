@@ -49,13 +49,17 @@ use trust_dns_resolver::{
 use crate::{
     acme::Acme,
     acme_idna::WithIDNA,
-    certificate::{CanisterExporter, CanisterUploader, Export, WithPagination},
+    certificate::{
+        CanisterExporter, CanisterUploader, Export, WithDecode, WithPagination, WithRetries,
+        WithVerify,
+    },
     check::{Check, Checker},
     cloudflare::Cloudflare,
     dns::Resolver,
     encode::{Decoder, Encoder},
     metrics::{MetricParams, WithMetrics},
     registration::{Create, Get, Remove, State, Update, UpdateType},
+    verification::CertificateVerifier,
     work::{Dispense, DispenseError, Peek, PeekError, Process, Queue},
 };
 
@@ -69,6 +73,7 @@ mod dns;
 mod encode;
 mod metrics;
 mod registration;
+mod verification;
 mod work;
 
 const SERVICE_NAME: &str = "certificate-issuer";
@@ -248,13 +253,28 @@ async fn main() -> Result<(), Error> {
     );
     let registration_getter = Arc::new(registration_getter);
 
+    // Verifier
+    let certificate_verifier =
+        CertificateVerifier::new(agent.clone(), cli.orchestrator_canister_id);
+    let certificate_verifier = WithMetrics(
+        certificate_verifier,
+        MetricParams::new(&meter, SERVICE_NAME, "verify_certificates"),
+    );
+    let certificate_verifier = Arc::new(certificate_verifier);
+
     // Certificates
-    let certificate_exporter =
-        CanisterExporter::new(agent.clone(), cli.orchestrator_canister_id, decoder);
+    let certificate_exporter = CanisterExporter::new(agent.clone(), cli.orchestrator_canister_id);
+    let certificate_exporter = WithVerify(certificate_exporter, certificate_verifier);
+    let certificate_exporter = WithRetries(
+        certificate_exporter,
+        20, // Number of retries
+    );
+    let certificate_exporter = WithDecode(certificate_exporter, decoder);
     let certificate_exporter = WithMetrics(
         certificate_exporter,
         MetricParams::new(&meter, SERVICE_NAME, "export_certificates"),
     );
+
     let certificate_exporter = WithPagination(
         certificate_exporter,
         50, // Page Size

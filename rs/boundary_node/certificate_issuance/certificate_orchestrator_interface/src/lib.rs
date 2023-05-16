@@ -15,10 +15,14 @@ const ENCRYPTED_PAIR_LEN: u32 = ENCRYPTED_PRIVATE_KEY_LEN + ENCRYPTED_CERTIFICAT
 
 pub type Id = String;
 
+pub const LABEL_DOMAINS: &[u8] = b"custom_domains";
+pub const LEFT_GUARD: &str = "0";
+pub const RIGHT_GUARD: &str = "z";
+
 #[derive(Clone, Debug, CandidType, Deserialize)]
 pub struct EncryptedPair(
-    pub Vec<u8>, // PrivateKey
-    pub Vec<u8>, // Certificate
+    #[serde(with = "serde_bytes")] pub Vec<u8>, // PrivateKey
+    #[serde(with = "serde_bytes")] pub Vec<u8>, // Certificate
 );
 
 impl Storable for EncryptedPair {
@@ -324,6 +328,20 @@ pub enum ExportCertificatesResponse {
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct IcCertificate {
+    #[serde(with = "serde_bytes")]
+    pub cert: Vec<u8>,
+    #[serde(with = "serde_bytes")]
+    pub tree: Vec<u8>,
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub enum ExportCertificatesCertifiedResponse {
+    Ok((Vec<ExportPackage>, IcCertificate)),
+    Err(ExportCertificatesError),
+}
+
+#[derive(Clone, Debug, CandidType, Deserialize)]
 pub enum QueueTaskError {
     NotFound,
     Unauthorized,
@@ -404,6 +422,7 @@ pub struct HttpRequest {
     pub method: String,
     pub url: String,
     pub headers: Vec<HeaderField>,
+    #[serde(with = "serde_bytes")]
     pub body: Vec<u8>,
 }
 
@@ -411,12 +430,32 @@ pub struct HttpRequest {
 pub struct HttpResponse {
     pub status_code: u16,
     pub headers: Vec<HeaderField>,
+    #[serde(with = "serde_bytes")]
     pub body: Vec<u8>,
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn serde_bytes_is_ok() {
+        #[derive(Clone, Debug, CandidType, Deserialize)]
+        struct WithSerdeBytes {
+            #[serde(with = "serde_bytes")]
+            field: Vec<u8>,
+        }
+        #[derive(Clone, Debug, CandidType, Deserialize)]
+        struct WithoutSerdeBytes {
+            field: Vec<u8>,
+        }
+        let some_bytes: Vec<u8> = [200, 201, 202].to_vec();
+        let struct1 = WithSerdeBytes {
+            field: some_bytes.clone(),
+        };
+        let struct2 = WithoutSerdeBytes { field: some_bytes };
+        assert_eq!(Encode!(&struct1).unwrap(), Encode!(&struct2).unwrap());
+    }
 
     #[test]
     fn name_ok_idna() {

@@ -264,7 +264,6 @@ pub async fn remove_handler(
     Response::builder().status(200).body(Body::empty()).unwrap()
 }
 
-// TODO(or): wrap this export_handler with ttl-based caching and E-tag check
 pub async fn export_handler(
     Extension(e): Extension<Arc<dyn Export>>,
     _: Request<Body>,
@@ -276,7 +275,7 @@ pub async fn export_handler(
         )
         .await
     {
-        Ok(pkgs) => pkgs,
+        Ok((pkgs, _)) => pkgs,
         Err(_) => {
             return Response::builder()
                 .status(500)

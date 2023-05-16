@@ -2,13 +2,14 @@ use std::{cell::RefCell, cmp::Reverse, thread::LocalKey, time::Duration};
 
 use certificate_orchestrator_interface::{
     BoundedString, CreateRegistrationError, CreateRegistrationResponse, DispenseTaskError,
-    DispenseTaskResponse, EncryptedPair, ExportCertificatesError, ExportCertificatesResponse,
-    GetRegistrationError, GetRegistrationResponse, HeaderField, HttpRequest, HttpResponse, Id,
-    InitArg, ListAllowedPrincipalsError, ListAllowedPrincipalsResponse,
-    ModifyAllowedPrincipalError, ModifyAllowedPrincipalResponse, Name, PeekTaskError,
-    PeekTaskResponse, QueueTaskError, QueueTaskResponse, Registration, RemoveRegistrationError,
-    RemoveRegistrationResponse, State, UpdateRegistrationError, UpdateRegistrationResponse,
-    UpdateType, UploadCertificateError, UploadCertificateResponse,
+    DispenseTaskResponse, EncryptedPair, ExportCertificatesCertifiedResponse,
+    ExportCertificatesError, ExportCertificatesResponse, ExportPackage, GetRegistrationError,
+    GetRegistrationResponse, HeaderField, HttpRequest, HttpResponse, Id, InitArg,
+    ListAllowedPrincipalsError, ListAllowedPrincipalsResponse, ModifyAllowedPrincipalError,
+    ModifyAllowedPrincipalResponse, Name, PeekTaskError, PeekTaskResponse, QueueTaskError,
+    QueueTaskResponse, Registration, RemoveRegistrationError, RemoveRegistrationResponse, State,
+    UpdateRegistrationError, UpdateRegistrationResponse, UpdateType, UploadCertificateError,
+    UploadCertificateResponse,
 };
 use ic_cdk::{api::time, caller, export::Principal, post_upgrade, pre_upgrade, trap};
 use ic_cdk_macros::{init, query, update};
@@ -23,7 +24,10 @@ use work::{Peek, PeekError};
 
 use crate::{
     acl::{Authorize, AuthorizeError, Authorizer, WithAuthorize},
-    certificate::{Export, ExportError, Exporter, Upload, UploadError, Uploader},
+    certificate::{
+        Export, ExportError, Exporter, Upload, UploadError, Uploader, WithIcCertification,
+    },
+    ic_certification::{add_cert, init_cert_tree, set_root_hash},
     id::{Generate, Generator},
     registration::{
         Create, CreateError, Creator, Expire, Expirer, Get, GetError, Getter, Remove, RemoveError,
@@ -34,6 +38,7 @@ use crate::{
 
 mod acl;
 mod certificate;
+mod ic_certification;
 mod id;
 mod persistence;
 mod registration;
@@ -324,6 +329,7 @@ thread_local! {
 thread_local! {
     static UPLOADER: RefCell<Box<dyn Upload>> = RefCell::new({
         let u = Uploader::new(&ENCRYPTED_CERTIFICATES, &REGISTRATIONS);
+        let u = WithIcCertification::new(u, &REGISTRATIONS);
         let u = WithAuthorize(u, &MAIN_AUTHORIZER);
         let u = WithMetrics(u, &COUNTER_UPLOAD_CERTIFICATE_TOTAL);
         Box::new(u)
@@ -424,6 +430,7 @@ fn init_fn(
     });
 
     init_timers_fn();
+    init_cert_tree();
 }
 
 #[pre_upgrade]
@@ -480,6 +487,27 @@ fn post_upgrade_fn() {
     });
 
     init_timers_fn();
+
+    // rebuild the IC certification tree
+    init_cert_tree();
+    ENCRYPTED_CERTIFICATES.with(|pairs| {
+        REGISTRATIONS.with(|regs| {
+            let regs = regs.borrow();
+            for (id, pair) in pairs.borrow().iter() {
+                let package_to_certify = {
+                    let reg = regs.get(&id.clone()).unwrap();
+                    ExportPackage {
+                        id: id.clone().into(),
+                        name: reg.name,
+                        canister: reg.canister,
+                        pair,
+                    }
+                };
+                add_cert(id, &package_to_certify);
+            }
+            set_root_hash();
+        })
+    });
 }
 
 // Registration
@@ -530,7 +558,10 @@ fn update_registration(id: Id, typ: UpdateType) -> UpdateRegistrationResponse {
 #[update(name = "removeRegistration")]
 fn remove_registration(id: Id) -> RemoveRegistrationResponse {
     match REMOVER.with(|r| r.borrow().remove(&id)) {
-        Ok(()) => RemoveRegistrationResponse::Ok(()),
+        Ok(()) => {
+            set_root_hash();
+            RemoveRegistrationResponse::Ok(())
+        }
         Err(err) => RemoveRegistrationResponse::Err(match err {
             RemoveError::NotFound => RemoveRegistrationError::NotFound,
             RemoveError::Unauthorized => RemoveRegistrationError::Unauthorized,
@@ -562,6 +593,22 @@ fn export_certificates_paginated(key: Option<String>, limit: u64) -> ExportCerti
     match EXPORTER.with(|e| e.borrow().export(key, limit)) {
         Ok(pkgs) => ExportCertificatesResponse::Ok(pkgs),
         Err(err) => ExportCertificatesResponse::Err(match err {
+            ExportError::Unauthorized => ExportCertificatesError::Unauthorized,
+            ExportError::UnexpectedError(_) => {
+                ExportCertificatesError::UnexpectedError(err.to_string())
+            }
+        }),
+    }
+}
+
+#[query(name = "exportCertificatesCertified")]
+fn export_certificates_certified(
+    key: Option<String>,
+    limit: u64,
+) -> ExportCertificatesCertifiedResponse {
+    match EXPORTER.with(|e| e.borrow().export_certified(key, limit)) {
+        Ok(pkgs) => ExportCertificatesCertifiedResponse::Ok(pkgs),
+        Err(err) => ExportCertificatesCertifiedResponse::Err(match err {
             ExportError::Unauthorized => ExportCertificatesError::Unauthorized,
             ExportError::UnexpectedError(_) => {
                 ExportCertificatesError::UnexpectedError(err.to_string())
