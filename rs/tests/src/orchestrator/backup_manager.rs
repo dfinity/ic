@@ -226,6 +226,16 @@ pub fn test(env: TestEnv) {
         &log,
     ));
 
+    let archive_dir = backup_dir.join("archive").join(subnet_id.to_string());
+    // make sure we have some archive of the old version before upgrading to the new one
+    loop {
+        if highest_dir_entry(&archive_dir, 10) > 0 {
+            info!(log, "A checkpoint has been archived");
+            break;
+        }
+        sleep_secs(5);
+    }
+
     info!(log, "Proposal to upgrade the subnet replica version");
     block_on(update_subnet_replica_version(
         &nns_node,
@@ -250,7 +260,6 @@ pub fn test(env: TestEnv) {
         .join(subnet_id.to_string())
         .join(mainnet_version)
         .join("0");
-    let archive_dir = backup_dir.join("archive").join(subnet_id.to_string());
 
     info!(
         log,
@@ -264,7 +273,7 @@ pub fn test(env: TestEnv) {
         let archive_height = highest_dir_entry(&archive_dir, 10);
         info!(
             log,
-            "New version: {}  Checkpoint: {}  Archive: {} Progress: {} ",
+            "New version: {}  Checkpoint: {}  Archive: {} Target: {} ",
             new_height,
             checkpoint,
             archive_height,
