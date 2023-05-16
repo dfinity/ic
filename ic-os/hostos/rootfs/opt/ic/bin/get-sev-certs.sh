@@ -19,7 +19,8 @@ fi
 
 if [[ -e /dev/sev ]]; then
     # Get ark.pem and ask.pem, and convert ask.pem to ask.dir
-    curl -6 --output "${DIR}/cert_chain.pem" "https://kdsintf.amd.com/vcek/v1/Milan/cert_chain"
+    # The provide --resolve address uses a pre-resolved address from https://nat64.net/
+    curl -6 --resolve kdsintf.amd.com:443:2a00:1098:2c::5:a5cc:5b4e --output "${DIR}/cert_chain.pem" "https://kdsintf.amd.com/vcek/v1/Milan/cert_chain"
     csplit -z -f "${DIR}/cert-chain-" "${DIR}/cert_chain.pem" '/-----BEGIN CERTIFICATE-----/' '{*}'
     mv "${DIR}/cert-chain-00" "${DIR}/ask.pem"
     mv "${DIR}/cert-chain-01" "${DIR}/ark.pem"
