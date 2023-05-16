@@ -3,6 +3,12 @@ load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_test")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    "//rs/config",
+    "//rs/crypto/utils/threshold_sig_der",
+    "//rs/monitoring/logger",
+    "//rs/orchestrator/registry_replicator",
+    "//rs/registry/client",
+    "//rs/registry/local_store",
     "@crate_index//:anyhow",
     "@crate_index//:arc-swap",
     "@crate_index//:async-scoped",
@@ -11,9 +17,11 @@ DEPENDENCIES = [
     "@crate_index//:futures",
     "@crate_index//:lazy_static",
     "@crate_index//:prometheus",
+    "@crate_index//:slog",
     "@crate_index//:tokio",
     "@crate_index//:tracing-subscriber",
     "@crate_index//:tracing",
+    "@crate_index//:url",
 ]
 
 MACRO_DEPENDENCIES = [
