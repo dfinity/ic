@@ -85,6 +85,7 @@ pub(crate) fn execute_install(
     // Stage 1: create a new execution state based on the new Wasm binary, clear certified data, deactivate global timer, and bump canister version.
     let canister_id = helper.canister().canister_id();
     let layout = canister_layout(&original.canister_layout_path, &canister_id);
+    let context_sender = context.sender();
     let (instructions_from_compilation, result) = round.hypervisor.create_execution_state(
         context.wasm_module,
         layout.raw_path(),
@@ -114,7 +115,7 @@ pub(crate) fn execute_install(
         // If the Wasm module does not export the method, then this execution
         // succeeds as a no-op.
         install_stage_2b_continue_install_after_start(
-            context.sender,
+            context_sender,
             context.arg,
             clean_canister,
             helper,
@@ -140,7 +141,7 @@ pub(crate) fn execute_install(
                 install_stage_2a_process_start_result(
                     canister_state_changes,
                     output,
-                    context.sender,
+                    context_sender,
                     context.arg,
                     clean_canister,
                     helper,
@@ -162,7 +163,7 @@ pub(crate) fn execute_install(
                 let paused_execution = Box::new(PausedStartExecutionDuringInstall {
                     paused_wasm_execution,
                     paused_helper: helper.pause(),
-                    context_sender: context.sender,
+                    context_sender,
                     context_arg: context.arg,
                     original,
                 });

@@ -1004,7 +1004,7 @@ impl SchedulerImpl {
                     )
                     .is_err()
                 {
-                    all_rejects.push(uninstall_canister(&self.log, canister, state_time));
+                    all_rejects.push(uninstall_canister(&self.log, canister, state_time, None));
                     canister.scheduler_state.compute_allocation = ComputeAllocation::zero();
                     canister.system_state.memory_allocation = MemoryAllocation::BestEffort;
                     // Burn the remaining balance of the canister.
