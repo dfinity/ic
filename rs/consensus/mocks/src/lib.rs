@@ -92,16 +92,19 @@ pub fn dependencies_with_subnet_records_with_raw_state_manager(
     };
     let crypto = Arc::new(CryptoReturningOk::default());
     let state_manager = Arc::new(RefMockStateManager::default());
+    let log = ic_logger::replica_logger::no_op_logger();
     let dkg_pool = Arc::new(RwLock::new(DkgPoolImpl::new(
         ic_metrics::MetricsRegistry::new(),
+        log.clone(),
     )));
     let ecdsa_pool = Arc::new(RwLock::new(EcdsaPoolImpl::new(
         pool_config.clone(),
-        ic_logger::replica_logger::no_op_logger(),
+        log.clone(),
         ic_metrics::MetricsRegistry::new(),
     )));
     let canister_http_pool = Arc::new(RwLock::new(CanisterHttpPoolImpl::new(
         ic_metrics::MetricsRegistry::new(),
+        log,
     )));
     let pool = TestConsensusPool::new(
         subnet_id,

@@ -206,6 +206,7 @@ impl Player {
             let consensus_pool = ConsensusPoolImpl::from_uncached(
                 UncachedConsensusPoolImpl::new(artifact_pool_config, log.clone()),
                 MetricsRegistry::new(),
+                log.clone(),
             );
             Some(consensus_pool)
         } else {

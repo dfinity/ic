@@ -379,7 +379,6 @@ fn setup_artifact_manager(
             ),
             Arc::clone(&time_source) as Arc<_>,
             Arc::clone(&artifact_pools.consensus_pool),
-            replica_logger.clone(),
             metrics_registry.clone(),
         );
         join_handles.push(jh);
@@ -420,7 +419,6 @@ fn setup_artifact_manager(
             ),
             Arc::clone(&time_source) as Arc<_>,
             Arc::clone(&artifact_pools.certification_pool),
-            replica_logger.clone(),
             metrics_registry.clone(),
         );
         join_handles.push(jh);
@@ -445,7 +443,6 @@ fn setup_artifact_manager(
             ),
             Arc::clone(&time_source) as Arc<_>,
             Arc::clone(&artifact_pools.dkg_pool),
-            replica_logger.clone(),
             metrics_registry.clone(),
         );
         join_handles.push(jh);
@@ -565,11 +562,11 @@ pub fn init_artifact_pools(
     )));
     let certification_pool = Arc::new(RwLock::new(CertificationPoolImpl::new(
         config,
-        log,
+        log.clone(),
         registry.clone(),
     )));
-    let dkg_pool = Arc::new(RwLock::new(DkgPoolImpl::new(registry.clone())));
-    let canister_http_pool = Arc::new(RwLock::new(CanisterHttpPoolImpl::new(registry)));
+    let dkg_pool = Arc::new(RwLock::new(DkgPoolImpl::new(registry.clone(), log.clone())));
+    let canister_http_pool = Arc::new(RwLock::new(CanisterHttpPoolImpl::new(registry, log)));
     ArtifactPools {
         ingress_pool,
         consensus_pool,

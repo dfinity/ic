@@ -8,7 +8,7 @@ use ic_interfaces::{
     consensus_pool::HeightIndexedPool,
     time_source::TimeSource,
 };
-use ic_logger::ReplicaLogger;
+use ic_logger::{warn, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_types::artifact::ArtifactKind;
 use ic_types::crypto::crypto_hash;
@@ -22,6 +22,7 @@ use ic_types::{
     consensus::HasHeight,
     Height,
 };
+use prometheus::IntCounter;
 use std::collections::HashSet;
 
 /// Certification pool contains 2 types of artifacts: partial and
@@ -37,6 +38,9 @@ pub struct CertificationPoolImpl {
 
     unvalidated_pool_metrics: PoolMetrics,
     validated_pool_metrics: PoolMetrics,
+    invalidated_artifacts: IntCounter,
+
+    log: ReplicaLogger,
 }
 
 const POOL_CERTIFICATION: &str = "certification";
@@ -52,13 +56,14 @@ impl CertificationPoolImpl {
                 crate::lmdb_pool::PersistentHeightIndexedPool::new_certification_pool(
                     lmdb_config,
                     config.persistent_pool_read_only,
-                    log,
+                    log.clone(),
                 ),
             ) as Box<_>,
             #[cfg(feature = "rocksdb_backend")]
             PersistentPoolBackend::RocksDB(config) => Box::new(
                 crate::rocksdb_pool::PersistentHeightIndexedPool::new_certification_pool(
-                    config, log,
+                    config,
+                    log.clone(),
                 ),
             ) as Box<_>,
             #[allow(unreachable_patterns)]
@@ -71,6 +76,10 @@ impl CertificationPoolImpl {
             unvalidated_shares: HeightIndex::default(),
             unvalidated_certifications: HeightIndex::default(),
             persistent_pool,
+            invalidated_artifacts: metrics_registry.int_counter(
+                "certification_invalidated_artifacts",
+                "The number of invalidated certification artifacts",
+            ),
             unvalidated_pool_metrics: PoolMetrics::new(
                 metrics_registry.clone(),
                 POOL_CERTIFICATION,
@@ -81,6 +90,7 @@ impl CertificationPoolImpl {
                 POOL_CERTIFICATION,
                 POOL_TYPE_VALIDATED,
             ),
+            log,
         }
     }
 
@@ -182,7 +192,12 @@ impl MutablePool<CertificationArtifact, ChangeSet> for CertificationPoolImpl {
                 purged.append(&mut self.persistent_pool.purge_below(height));
             }
 
-            ChangeAction::HandleInvalid(msg, _) => {
+            ChangeAction::HandleInvalid(msg, reason) => {
+                self.invalidated_artifacts.inc();
+                warn!(
+                    self.log,
+                    "Invalid certification message ({:?}): {:?}", reason, msg
+                );
                 let height = msg.height();
                 match msg {
                     CertificationMessage::CertificationShare(share) => {

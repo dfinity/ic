@@ -166,20 +166,20 @@ impl TestConsensusPool {
         state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
         dkg_pool: Option<Arc<RwLock<DkgPoolImpl>>>,
     ) -> Self {
-        let dkg_payload_builder =
-            Box::new(dkg_payload_builder_fn(
-                subnet_id,
-                registry_client.clone(),
-                crypto,
-                state_manager.clone(),
-                dkg_pool.unwrap_or_else(|| {
-                    Arc::new(std::sync::RwLock::new(
-                        ic_artifact_pool::dkg_pool::DkgPoolImpl::new(
-                            ic_metrics::MetricsRegistry::new(),
-                        ),
-                    ))
-                }),
-            ));
+        let dkg_payload_builder = Box::new(dkg_payload_builder_fn(
+            subnet_id,
+            registry_client.clone(),
+            crypto,
+            state_manager.clone(),
+            dkg_pool.unwrap_or_else(|| {
+                Arc::new(std::sync::RwLock::new(
+                    ic_artifact_pool::dkg_pool::DkgPoolImpl::new(
+                        ic_metrics::MetricsRegistry::new(),
+                        no_op_logger(),
+                    ),
+                ))
+            }),
+        ));
         let summary = ic_consensus::dkg::make_genesis_summary(&*registry_client, subnet_id, None);
         let pool = ConsensusPoolImpl::new_from_cup_without_bytes(
             subnet_id,

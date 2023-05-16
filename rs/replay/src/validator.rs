@@ -116,7 +116,7 @@ impl ReplayValidator {
             subnet_id,
         ));
         let time_source = Arc::new(SysTimeSource::new());
-        let dkg_pool = RwLock::new(DkgPoolImpl::new(metrics_registry.clone()));
+        let dkg_pool = RwLock::new(DkgPoolImpl::new(metrics_registry.clone(), log.clone()));
         let node_id = NodeId::from(PrincipalId::new_node_test_id(1));
         let replica_cfg = ReplicaConfig::new(node_id, subnet_id);
 

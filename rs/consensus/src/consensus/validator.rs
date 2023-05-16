@@ -1710,6 +1710,7 @@ pub mod test {
         );
         let dkg_pool = Arc::new(RwLock::new(ic_artifact_pool::dkg_pool::DkgPoolImpl::new(
             MetricsRegistry::new(),
+            no_op_logger(),
         )));
         (
             Arc::new(MockPayloadBuilder::new()),

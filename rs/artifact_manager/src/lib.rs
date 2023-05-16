@@ -361,15 +361,9 @@ pub fn create_consensus_handlers<
     (consensus, consensus_gossip): (C, G),
     time_source: Arc<SysTimeSource>,
     consensus_pool: Arc<RwLock<PoolConsensus>>,
-    log: ReplicaLogger,
     metrics_registry: MetricsRegistry,
 ) -> (ArtifactClientHandle<ConsensusArtifact>, Box<dyn JoinGuard>) {
-    let client = processors::ConsensusProcessor::new(
-        consensus_pool.clone(),
-        Box::new(consensus),
-        log,
-        &metrics_registry,
-    );
+    let client = processors::ConsensusProcessor::new(consensus_pool.clone(), Box::new(consensus));
     let (jh, sender) = run_artifact_processor(
         time_source.clone(),
         metrics_registry,
@@ -403,18 +397,13 @@ pub fn create_certification_handlers<
     (certifier, certifier_gossip): (C, G),
     time_source: Arc<SysTimeSource>,
     certification_pool: Arc<RwLock<PoolCertification>>,
-    log: ReplicaLogger,
     metrics_registry: MetricsRegistry,
 ) -> (
     ArtifactClientHandle<CertificationArtifact>,
     Box<dyn JoinGuard>,
 ) {
-    let client = processors::CertificationProcessor::new(
-        certification_pool.clone(),
-        Box::new(certifier),
-        log,
-        &metrics_registry,
-    );
+    let client =
+        processors::CertificationProcessor::new(certification_pool.clone(), Box::new(certifier));
     let (jh, sender) = run_artifact_processor(
         time_source.clone(),
         metrics_registry,
@@ -448,11 +437,9 @@ pub fn create_dkg_handlers<
     (dkg, dkg_gossip): (C, G),
     time_source: Arc<SysTimeSource>,
     dkg_pool: Arc<RwLock<PoolDkg>>,
-    log: ReplicaLogger,
     metrics_registry: MetricsRegistry,
 ) -> (ArtifactClientHandle<DkgArtifact>, Box<dyn JoinGuard>) {
-    let client =
-        processors::DkgProcessor::new(dkg_pool.clone(), Box::new(dkg), log, &metrics_registry);
+    let client = processors::DkgProcessor::new(dkg_pool.clone(), Box::new(dkg));
     let (jh, sender) = run_artifact_processor(
         time_source.clone(),
         metrics_registry,
@@ -485,8 +472,7 @@ pub fn create_ecdsa_handlers<
     ecdsa_pool: Arc<RwLock<PoolEcdsa>>,
     metrics_registry: MetricsRegistry,
 ) -> (ArtifactClientHandle<EcdsaArtifact>, Box<dyn JoinGuard>) {
-    let client =
-        processors::EcdsaProcessor::new(ecdsa_pool.clone(), Box::new(ecdsa), &metrics_registry);
+    let client = processors::EcdsaProcessor::new(ecdsa_pool.clone(), Box::new(ecdsa));
     let (jh, sender) = run_artifact_processor(
         time_source.clone(),
         metrics_registry,

@@ -90,6 +90,7 @@ fn consensus_produces_expected_batches() {
         let time = FastForwardTimeSource::new();
         let dkg_pool = Arc::new(RwLock::new(dkg_pool::DkgPoolImpl::new(
             metrics_registry.clone(),
+            no_op_logger(),
         )));
         let ecdsa_pool = Arc::new(RwLock::new(ecdsa_pool::EcdsaPoolImpl::new(
             pool_config.clone(),

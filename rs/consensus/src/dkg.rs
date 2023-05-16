@@ -1610,9 +1610,9 @@ mod tests {
                     pool.get_cache(),
                     dkg_key_manager_2.clone(),
                     MetricsRegistry::new(),
-                    logger,
+                    logger.clone(),
                 );
-                let dkg_pool_2 = DkgPoolImpl::new(MetricsRegistry::new());
+                let dkg_pool_2 = DkgPoolImpl::new(MetricsRegistry::new(), logger);
                 sync_dkg_key_manager(&dkg_key_manager_2, &pool);
                 match &dkg_2.on_state_change(&dkg_pool_2).as_slice() {
                     &[ChangeAction::AddToValidated(message), ChangeAction::AddToValidated(message2)] =>
@@ -2044,7 +2044,7 @@ mod tests {
                 let Dependencies {
                     mut pool, crypto, ..
                 } = dependencies(pool_config.clone(), 2);
-                let mut dkg_pool = DkgPoolImpl::new(MetricsRegistry::new());
+                let mut dkg_pool = DkgPoolImpl::new(MetricsRegistry::new(), logger.clone());
                 // Let's check that replica 3, who's not a dealer, does not produce dealings.
                 let dkg_key_manager =
                     new_dkg_key_manager(crypto.clone(), logger.clone(), &PoolReader::new(&pool));
@@ -2192,13 +2192,13 @@ mod tests {
                     pool.get_cache(),
                     dkg_key_manager.clone(),
                     MetricsRegistry::new(),
-                    logger,
+                    logger.clone(),
                 );
 
                 // We did not advance the consensus pool yet. The configs for remote transcripts
                 // are not added to a summary block yet. That's why we see two dealings for
                 // local thresholds.
-                let mut dkg_pool = DkgPoolImpl::new(MetricsRegistry::new());
+                let mut dkg_pool = DkgPoolImpl::new(MetricsRegistry::new(), logger);
                 sync_dkg_key_manager(&dkg_key_manager, &pool);
                 let change_set = dkg.on_state_change(&dkg_pool);
                 match &change_set.as_slice() {
@@ -2353,10 +2353,11 @@ mod tests {
                 let node_id_2 = node_test_id(0);
                 let consensus_pool_1 = dependencies(pool_config_1, 2).pool;
                 let consensus_pool_2 = dependencies(pool_config_2, 2).pool;
-                let dkg_pool_1 = DkgPoolImpl::new(MetricsRegistry::new());
-                let dkg_pool_2 = DkgPoolImpl::new(MetricsRegistry::new());
 
                 with_test_replica_logger(|logger| {
+                    let dkg_pool_1 = DkgPoolImpl::new(MetricsRegistry::new(), logger.clone());
+                    let dkg_pool_2 = DkgPoolImpl::new(MetricsRegistry::new(), logger.clone());
+
                     // We instantiate the DKG component for node Id = 1 nd Id = 2.
                     let dkg_key_manager_1 = new_dkg_key_manager(
                         crypto.clone(),
@@ -2841,10 +2842,10 @@ mod tests {
                         pool_2.get_cache(),
                         new_dkg_key_manager(crypto_2, logger.clone(), &PoolReader::new(&pool_2)),
                         MetricsRegistry::new(),
-                        logger,
+                        logger.clone(),
                     );
-                    let mut dkg_pool_1 = DkgPoolImpl::new(MetricsRegistry::new());
-                    let mut dkg_pool_2 = DkgPoolImpl::new(MetricsRegistry::new());
+                    let mut dkg_pool_1 = DkgPoolImpl::new(MetricsRegistry::new(), logger.clone());
+                    let mut dkg_pool_2 = DkgPoolImpl::new(MetricsRegistry::new(), logger);
 
                     // First we expect a new purge.
                     let change_set = dkg_1.on_state_change(&dkg_pool_1);
