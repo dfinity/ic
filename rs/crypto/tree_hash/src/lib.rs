@@ -177,15 +177,15 @@ impl Label {
 
 impl fmt::Debug for Label {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fn printable(byte: u8) -> bool {
+        fn is_printable_ascii(byte: u8) -> bool {
             (32..127).contains(&byte)
         }
         let bytes = self.as_bytes();
-        if bytes.iter().all(|b| printable(*b)) {
+        if bytes.iter().all(|b| is_printable_ascii(*b)) {
             write!(
                 f,
                 "{}",
-                std::str::from_utf8(bytes).expect("Failed to convert to utf8")
+                std::str::from_utf8(bytes).expect("Conversion of ASCII to UTF8 should never fail")
             )
         } else {
             write!(f, "0x")?;
@@ -374,42 +374,6 @@ impl HashTree {
             HashTree::Leaf { digest } => digest,
             HashTree::Node { digest, .. } => digest,
             HashTree::Fork { digest, .. } => digest,
-        }
-    }
-
-    /// Returns the left sub-tree of the tree, assuming the tree is
-    /// `HashTree::Fork`. panic!s if the tree is not a fork.
-    pub fn left_tree(&self) -> &HashTree {
-        match &self {
-            HashTree::Fork { left_tree, .. } => left_tree,
-            _ => panic!("Not a fork: {:?}", self),
-        }
-    }
-
-    /// Returns the right sub-tree of the tree, assuming the tree is
-    /// `HashTree::Fork`. panic!s if the tree is not a fork.
-    pub fn right_tree(&self) -> &HashTree {
-        match &self {
-            HashTree::Fork { right_tree, .. } => right_tree,
-            _ => panic!("Not a fork: {:?}", self),
-        }
-    }
-
-    /// Returns the contained `hash_tree` of the tree, assuming the tree is
-    /// `HashTree::Node`. panic!s if the tree is not `HashTree::Node`.
-    pub fn node_tree(&self) -> &HashTree {
-        match &self {
-            HashTree::Node { hash_tree, .. } => hash_tree,
-            _ => panic!("Not a node: {:?}", self),
-        }
-    }
-
-    /// Returns the label of the tree, assuming the tree is `HashTree::Node`.
-    /// panic!s if the tree is not `HashTree::Node`.
-    pub fn label(&self) -> &Label {
-        match &self {
-            HashTree::Node { label, .. } => label,
-            _ => panic!("Not a node: {:?}", self),
         }
     }
 }

@@ -8,6 +8,54 @@ use rand::{CryptoRng, RngCore};
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
+trait HashTreeTestUtils {
+    /// Returns the left sub-tree of the tree, assuming the tree is
+    /// `HashTree::Fork`. panic!s if the tree is not a fork.
+    fn left_tree(&self) -> &Self;
+
+    /// Returns the right sub-tree of the tree, assuming the tree is
+    /// `HashTree::Fork`. panic!s if the tree is not a fork.
+    fn right_tree(&self) -> &Self;
+
+    /// Returns the contained `hash_tree` of the tree, assuming the tree is
+    /// `HashTree::Node`. panic!s if the tree is not `HashTree::Node`.
+    fn node_tree(&self) -> &Self;
+
+    /// Returns the label of the tree, assuming the tree is `HashTree::Node`.
+    /// panic!s if the tree is not `HashTree::Node`.
+    fn label(&self) -> &Label;
+}
+
+impl HashTreeTestUtils for HashTree {
+    fn left_tree(&self) -> &Self {
+        match &self {
+            Self::Fork { left_tree, .. } => left_tree,
+            _ => panic!("Not a fork: {:?}", self),
+        }
+    }
+
+    fn right_tree(&self) -> &Self {
+        match &self {
+            Self::Fork { right_tree, .. } => right_tree,
+            _ => panic!("Not a fork: {:?}", self),
+        }
+    }
+
+    fn node_tree(&self) -> &Self {
+        match &self {
+            Self::Node { hash_tree, .. } => hash_tree,
+            _ => panic!("Not a node: {:?}", self),
+        }
+    }
+
+    fn label(&self) -> &Label {
+        match &self {
+            Self::Node { label, .. } => label,
+            _ => panic!("Not a node: {:?}", self),
+        }
+    }
+}
+
 fn assert_labeled_equal(tree_1: &LabeledTree<Digest>, tree_2: &LabeledTree<Digest>) {
     assert_eq!(tree_1, tree_2);
 }
@@ -1672,16 +1720,13 @@ fn witness_for_a_triple_fork_in_a_big_tree() {
 
 #[test]
 fn sparse_labeled_tree_empty() {
-    assert_eq!(
-        sparse_labeled_tree_from_paths(&mut []),
-        LabeledTree::Leaf(())
-    );
+    assert_eq!(sparse_labeled_tree_from_paths(&[]), LabeledTree::Leaf(()));
 }
 
 #[test]
 fn sparse_labeled_tree_shallow_path() {
     assert_eq!(
-        sparse_labeled_tree_from_paths(&mut [Path::from(Label::from("0"))]),
+        sparse_labeled_tree_from_paths(&[Path::from(Label::from("0"))]),
         LabeledTree::SubTree(flatmap! {
             Label::from("0") => LabeledTree::Leaf(())
         })
@@ -1701,14 +1746,14 @@ fn sparse_labeled_tree_deep_path() {
         })
     });
 
-    assert_eq!(labeled_tree, sparse_labeled_tree_from_paths(&mut [path]));
+    assert_eq!(labeled_tree, sparse_labeled_tree_from_paths(&[path]));
 }
 
 #[test]
 fn sparse_labeled_tree_duplicate_paths() {
     let (segment1, segment2, segment3) = (Label::from("0"), Label::from("1"), Label::from("2"));
 
-    let mut paths = vec![
+    let paths = vec![
         Path::from_iter(vec![&segment1, &segment2, &segment3]),
         Path::from_iter(vec![&segment1, &segment2, &segment3]),
     ];
@@ -1721,7 +1766,7 @@ fn sparse_labeled_tree_duplicate_paths() {
         })
     });
 
-    assert_eq!(labeled_tree, sparse_labeled_tree_from_paths(&mut paths));
+    assert_eq!(labeled_tree, sparse_labeled_tree_from_paths(&paths));
 }
 
 #[test]
@@ -1741,19 +1786,19 @@ fn sparse_labeled_tree_path_prefixes_another_path() {
         })
     });
 
-    let mut paths = vec![
+    let paths = vec![
         Path::from_iter(vec![&segment1, &segment2, &segment3]),
         Path::from_iter(vec![&segment1, &segment2, &segment3, &segment4]),
     ];
 
-    assert_eq!(labeled_tree, sparse_labeled_tree_from_paths(&mut paths));
+    assert_eq!(labeled_tree, sparse_labeled_tree_from_paths(&paths));
 
-    let mut paths = vec![
+    let paths = vec![
         Path::from_iter(vec![&segment1, &segment2, &segment3, &segment4]),
         Path::from_iter(vec![&segment1, &segment2, &segment3]),
     ];
 
-    assert_eq!(labeled_tree, sparse_labeled_tree_from_paths(&mut paths));
+    assert_eq!(labeled_tree, sparse_labeled_tree_from_paths(&paths));
 }
 
 #[test]
@@ -1781,7 +1826,7 @@ fn sparse_labeled_tree_multiple_paths_with_prefixes() {
         })
     });
 
-    let mut paths = vec![
+    let paths = vec![
         Path::from_iter(vec![&segment1, &segment2, &segment3, &segment4]),
         Path::from_iter(vec![&segment1, &segment2, &segment3]),
         Path::from_iter(vec![&segment5, &segment6]),
@@ -1789,7 +1834,7 @@ fn sparse_labeled_tree_multiple_paths_with_prefixes() {
         Path::from_iter(vec![&segment5, &segment7]),
     ];
 
-    assert_eq!(labeled_tree, sparse_labeled_tree_from_paths(&mut paths));
+    assert_eq!(labeled_tree, sparse_labeled_tree_from_paths(&paths));
 }
 
 /// Recursive implementation of `prune_labeled_tree()`.
@@ -1950,8 +1995,8 @@ impl LabeledTreeFixture {
     }
 
     fn partial_tree(&self, paths: &[&Path]) -> LabeledTree<Vec<u8>> {
-        let mut paths: Vec<_> = paths.iter().map(|p| p.to_owned().to_owned()).collect();
-        let selection = sparse_labeled_tree_from_paths(&mut paths);
+        let paths: Vec<_> = paths.iter().map(|p| p.to_owned().to_owned()).collect();
+        let selection = sparse_labeled_tree_from_paths(&paths);
         prune_labeled_tree(self.labeled_tree.clone(), &selection).unwrap()
     }
 
