@@ -5,7 +5,7 @@ use hyper::{
 use ic_agent::Agent;
 use ic_config::http_handler::Config;
 use ic_crypto_tls_interfaces_mocks::MockTlsHandshake;
-use ic_crypto_tree_hash::MixedHashTree;
+use ic_crypto_tree_hash::{LabeledTree, MixedHashTree};
 use ic_error_types::UserError;
 use ic_http_endpoints_public::start_server;
 use ic_interfaces::consensus_pool::ConsensusPoolCache;
@@ -139,10 +139,37 @@ fn setup_ingress_ingestion_mock() -> (IngressIngestionService, IngressIngestionH
     (BoxCloneService::new(infallible_service), handle)
 }
 
-// Basic state manager with one subnet (nns) at height 1.
-pub fn basic_state_manager_mock() -> MockStateManager {
-    let mut mock_state_manager = MockStateManager::new();
+pub fn default_read_certified_state(
+    _labeled_tree: &LabeledTree<()>,
+) -> Option<(
+    Arc<ReplicatedState>,
+    ic_crypto_tree_hash::MixedHashTree,
+    ic_types::consensus::certification::Certification,
+)> {
+    let rs: Arc<ReplicatedState> = Arc::new(ReplicatedStateBuilder::new().build());
+    let mht = MixedHashTree::Leaf(Vec::new());
+    let cert = Certification {
+        height: Height::from(1),
+        signed: Signed {
+            signature: ThresholdSignature {
+                signer: NiDkgId {
+                    start_block_height: Height::from(0),
+                    dealer_subnet: subnet_test_id(0),
+                    dkg_tag: NiDkgTag::HighThreshold,
+                    target_subnet: NiDkgTargetSubnet::Local,
+                },
+                signature: CombinedThresholdSigOf::new(CombinedThresholdSig(vec![])),
+            },
+            content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(vec![]))),
+        },
+    };
+
+    Some((rs, mht, cert))
+}
+
+pub fn default_get_latest_state() -> Labeled<Arc<ReplicatedState>> {
     let mut metadata = SystemMetadata::new(subnet_test_id(1), SubnetType::Application);
+
     let network_topology = NetworkTopology {
         subnets: BTreeMap::new(),
         routing_table: Arc::new(RoutingTable::default()),
@@ -152,48 +179,40 @@ pub fn basic_state_manager_mock() -> MockStateManager {
         bitcoin_mainnet_canister_id: None,
         bitcoin_testnet_canister_id: None,
     };
+
     metadata.network_topology = network_topology;
+    metadata.batch_time = mock_time();
+
+    Labeled::new(
+        Height::from(1),
+        Arc::new(ReplicatedState::new_from_checkpoint(
+            BTreeMap::new(),
+            metadata,
+            CanisterQueues::default(),
+        )),
+    )
+}
+
+pub fn default_latest_certified_height() -> Height {
+    Height::from(1)
+}
+
+/// Basic state manager with one subnet (nns) at height 1.
+pub fn basic_state_manager_mock() -> MockStateManager {
+    let mut mock_state_manager = MockStateManager::new();
+
     mock_state_manager
         .expect_get_latest_state()
-        .returning(move || {
-            let mut metadata = SystemMetadata::new(subnet_test_id(1), SubnetType::Application);
-            metadata.batch_time = mock_time();
-            Labeled::new(
-                Height::from(1),
-                Arc::new(ReplicatedState::new_from_checkpoint(
-                    BTreeMap::new(),
-                    metadata,
-                    CanisterQueues::default(),
-                )),
-            )
-        });
-    mock_state_manager
-        .expect_latest_certified_height()
-        .returning(move || Height::from(1));
+        .returning(default_get_latest_state);
+
     mock_state_manager
         .expect_read_certified_state()
-        .returning(move |_labeled_tree| {
-            let rs: Arc<ReplicatedState> = Arc::new(ReplicatedStateBuilder::new().build());
-            let mht = MixedHashTree::Leaf(Vec::new());
-            let cert = Certification {
-                height: Height::from(1),
-                signed: Signed {
-                    signature: ThresholdSignature {
-                        signer: NiDkgId {
-                            start_block_height: Height::from(0),
-                            dealer_subnet: subnet_test_id(0),
-                            dkg_tag: NiDkgTag::HighThreshold,
-                            target_subnet: NiDkgTargetSubnet::Local,
-                        },
-                        signature: CombinedThresholdSigOf::new(CombinedThresholdSig(vec![])),
-                    },
-                    content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(
-                        vec![],
-                    ))),
-                },
-            };
-            Some((rs, mht, cert))
-        });
+        .returning(default_read_certified_state);
+
+    mock_state_manager
+        .expect_latest_certified_height()
+        .returning(default_latest_certified_height);
+
     mock_state_manager
 }
 

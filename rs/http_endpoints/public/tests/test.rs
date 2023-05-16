@@ -18,46 +18,23 @@ use ic_agent::{
     Agent, AgentError,
 };
 use ic_config::http_handler::Config;
-use ic_crypto_tree_hash::MixedHashTree;
 use ic_interfaces_registry_mocks::MockRegistryClient;
-use ic_interfaces_state_manager::Labeled;
-use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_protobuf::registry::crypto::v1::{
     AlgorithmId as AlgorithmIdProto, PublicKey as PublicKeyProto,
 };
 use ic_registry_keys::make_crypto_threshold_signing_pubkey_key;
-use ic_registry_routing_table::{CanisterMigrations, RoutingTable};
-use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{CanisterQueues, NetworkTopology, ReplicatedState, SystemMetadata};
-use ic_test_utilities::{
-    consensus::MockConsensusCache, mock_time, state::ReplicatedStateBuilder,
-    types::ids::subnet_test_id,
-};
+use ic_test_utilities::{consensus::MockConsensusCache, mock_time, types::ids::subnet_test_id};
 use ic_types::{
     batch::{BatchPayload, ValidationContext},
-    consensus::{
-        certification::{Certification, CertificationContent},
-        dkg::Dealings,
-        Block, Payload, Rank,
-    },
-    crypto::{
-        threshold_sig::{
-            ni_dkg::{NiDkgId, NiDkgTag, NiDkgTargetSubnet},
-            ThresholdSigPublicKey,
-        },
-        CombinedThresholdSig, CombinedThresholdSigOf, CryptoHash, CryptoHashOf, Signed,
-    },
+    consensus::{dkg::Dealings, Block, Payload, Rank},
+    crypto::{threshold_sig::ThresholdSigPublicKey, CryptoHash, CryptoHashOf},
     messages::{Blob, HttpQueryResponse, HttpQueryResponseReply},
-    signature::ThresholdSignature,
-    CryptoHashOfPartialState, Height, RegistryVersion,
+    Height, RegistryVersion,
 };
 use prost::Message;
-use std::{
-    collections::BTreeMap,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
 };
 use tokio::{
     net::TcpStream,
@@ -77,59 +54,7 @@ fn test_healthy_behind() {
     let certified_state_height = Height::from(1);
     let consensus_height = Height::from(certified_state_height.get() + 25);
 
-    let mut mock_state_manager = MockStateManager::new();
-    let mut metadata = SystemMetadata::new(subnet_test_id(1), SubnetType::Application);
-    let network_topology = NetworkTopology {
-        subnets: BTreeMap::new(),
-        routing_table: Arc::new(RoutingTable::default()),
-        canister_migrations: Arc::new(CanisterMigrations::default()),
-        nns_subnet_id: subnet_test_id(1),
-        ecdsa_signing_subnets: Default::default(),
-        bitcoin_mainnet_canister_id: None,
-        bitcoin_testnet_canister_id: None,
-    };
-    metadata.network_topology = network_topology;
-    mock_state_manager
-        .expect_get_latest_state()
-        .returning(move || {
-            let mut metadata = SystemMetadata::new(subnet_test_id(1), SubnetType::Application);
-            metadata.batch_time = mock_time();
-            Labeled::new(
-                certified_state_height,
-                Arc::new(ReplicatedState::new_from_checkpoint(
-                    BTreeMap::new(),
-                    metadata,
-                    CanisterQueues::default(),
-                )),
-            )
-        });
-    mock_state_manager
-        .expect_latest_certified_height()
-        .returning(move || certified_state_height);
-    mock_state_manager
-        .expect_read_certified_state()
-        .returning(move |_labeled_tree| {
-            let rs: Arc<ReplicatedState> = Arc::new(ReplicatedStateBuilder::new().build());
-            let mht = MixedHashTree::Leaf(Vec::new());
-            let cert = Certification {
-                height: certified_state_height,
-                signed: Signed {
-                    signature: ThresholdSignature {
-                        signer: NiDkgId {
-                            start_block_height: Height::from(0),
-                            dealer_subnet: subnet_test_id(0),
-                            dkg_tag: NiDkgTag::HighThreshold,
-                            target_subnet: NiDkgTargetSubnet::Local,
-                        },
-                        signature: CombinedThresholdSigOf::new(CombinedThresholdSig(vec![])),
-                    },
-                    content: CertificationContent::new(CryptoHashOfPartialState::from(CryptoHash(
-                        vec![],
-                    ))),
-                },
-            };
-            Some((rs, mht, cert))
-        });
+    let mock_state_manager = basic_state_manager_mock();
 
     // We use this atomic to make sure that the health transistion is from healthy -> certified_state_behind
     let healthy = Arc::new(AtomicBool::new(false));
