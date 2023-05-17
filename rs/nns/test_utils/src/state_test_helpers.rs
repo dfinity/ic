@@ -87,7 +87,7 @@ pub fn create_canister_with_cycles(
     cycles: Cycles,
     canister_settings: Option<CanisterSettingsArgs>,
 ) -> CanisterId {
-    let canister_id = machine.create_canister_with_cycles(cycles, canister_settings);
+    let canister_id = machine.create_canister_with_cycles(None, cycles, canister_settings);
     machine
         .install_wasm_in_mode(
             canister_id,
@@ -237,7 +237,7 @@ pub fn get_controllers(
 pub fn set_up_universal_canister(machine: &StateMachine, cycles: Option<Cycles>) -> CanisterId {
     let canister_id = match cycles {
         None => machine.create_canister(None),
-        Some(cycles) => machine.create_canister_with_cycles(cycles, None),
+        Some(cycles) => machine.create_canister_with_cycles(None, cycles, None),
     };
     machine
         .install_wasm_in_mode(

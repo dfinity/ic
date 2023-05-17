@@ -393,7 +393,7 @@ fn upgrade_archive_sns_canister_via_sns_wasms() {
     // Create some canisterIDs
     let root = machine.create_canister(None);
     // Ledger needs cycles to spawn the archives
-    let ledger = machine.create_canister_with_cycles(Cycles::new(10 * 1000000000000), None);
+    let ledger = machine.create_canister_with_cycles(None, Cycles::new(10 * 1000000000000), None);
     let governance = machine.create_canister(None);
     let swap = machine.create_canister(None);
     let index = machine.create_canister(None);
@@ -668,7 +668,7 @@ fn test_out_of_sync_version_still_allows_upgrade_to_succeed() {
     // Create some canisterIDs
     let root = machine.create_canister(None);
     // Ledger needs cycles to spawn the archives
-    let ledger = machine.create_canister_with_cycles(Cycles::new(10 * 1000000000000), None);
+    let ledger = machine.create_canister_with_cycles(None, Cycles::new(10 * 1000000000000), None);
     let governance = machine.create_canister(None);
     let swap = machine.create_canister(None);
     let index = machine.create_canister(None);
