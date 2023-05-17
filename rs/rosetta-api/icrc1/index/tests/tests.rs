@@ -417,7 +417,7 @@ fn test_wait_time() {
 
     let txs = get_account_transactions(&env, index_id, account(3), None, u64::MAX);
     assert!(txs.transactions.is_empty());
-    env.advance_time(Duration::from_secs(4));
+    env.advance_time(Duration::from_secs(1));
     env.tick();
 
     let txs = get_account_transactions(&env, index_id, account(3), None, u64::MAX);

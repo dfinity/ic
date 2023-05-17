@@ -28,8 +28,8 @@ const MAX_TRANSACTIONS_PER_RESPONSE: usize = 1000;
 
 // One second in nanosecond
 const SEC_NANOS: u64 = 1_000_000_000;
-const DEFAULT_MAX_WAIT_TIME_NANOS: u64 = 5_u64 * SEC_NANOS;
-const DEFAULT_RETRY_WAIT_TIME_NANOS: u64 = 5_u64 * SEC_NANOS;
+const DEFAULT_MAX_WAIT_TIME_NANOS: u64 = 2_u64 * SEC_NANOS;
+const DEFAULT_RETRY_WAIT_TIME_NANOS: u64 = 2_u64 * SEC_NANOS;
 
 const LOG_PREFIX: &str = "[ic-icrc1-index] ";
 
