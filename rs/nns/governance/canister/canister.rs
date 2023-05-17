@@ -503,6 +503,19 @@ fn update_neuron_(neuron: Neuron) -> Option<GovernanceError> {
     governance_mut().update_neuron(neuron).err()
 }
 
+#[export_name = "canister_update simulate_manage_neuron"]
+fn simulate_manage_neuron() {
+    println!("{}simulate_manage_neuron", LOG_PREFIX);
+    over_async(candid_one, simulate_manage_neuron_)
+}
+
+#[candid_method(update, rename = "simulate_manage_neuron")]
+async fn simulate_manage_neuron_(manage_neuron: ManageNeuron) -> ManageNeuronResponse {
+    governance()
+        .simulate_manage_neuron(&caller(), manage_neuron)
+        .await
+}
+
 /// Returns the full neuron corresponding to the neuron id or subaccount.
 #[export_name = "canister_query get_full_neuron_by_id_or_subaccount"]
 fn get_full_neuron_by_id_or_subaccount() {

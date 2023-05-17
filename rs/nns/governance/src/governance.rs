@@ -74,11 +74,13 @@ use registry_canister::{
     mutations::do_add_node_operator::AddNodeOperatorPayload, pb::v1::NodeProvidersMonthlyXdrRewards,
 };
 
-use crate::governance::manage_neuron_actions::{ManageNeuronAction, MergeNeuronAction};
+use crate::governance::manage_neuron_request::{
+    execute_manage_neuron, simulate_manage_neuron, ManageNeuronRequest,
+};
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 
-mod manage_neuron_actions;
+mod manage_neuron_request;
 pub mod test_data;
 #[cfg(test)]
 mod tests;
@@ -427,11 +429,9 @@ impl ManageNeuronResponse {
         }
     }
 
-    pub fn merge_response() -> Self {
+    pub fn merge_response(merge_response: manage_neuron_response::MergeResponse) -> Self {
         ManageNeuronResponse {
-            command: Some(manage_neuron_response::Command::Merge(
-                manage_neuron_response::MergeResponse {},
-            )),
+            command: Some(manage_neuron_response::Command::Merge(merge_response)),
         }
     }
 
@@ -745,14 +745,12 @@ impl Neuron {
         &mut self,
         now_seconds: u64,
         additional_dissolve_delay_seconds: u32,
-    ) -> Result<(), GovernanceError> {
-        // TODO(NNS-194).
+    ) {
         let additional_delay = additional_dissolve_delay_seconds as u64;
+        // If there is no dissolve delay, this is a no-op.  Upstream validation can decide if
+        // an error should be returned to the user.
         if additional_delay == 0 {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::InvalidCommand,
-                "Additional delay is 0.",
-            ));
+            return;
         }
         match self.dissolve_state {
             Some(DissolveState::DissolveDelaySeconds(delay)) => {
@@ -767,7 +765,6 @@ impl Neuron {
                     // We transition from `Dissolved` to `NotDissolving`: reset age.
                     self.aging_since_timestamp_seconds = now_seconds;
                 }
-                Ok(())
             }
             Some(DissolveState::WhenDissolvedTimestampSeconds(ts)) => {
                 if ts > now_seconds {
@@ -788,7 +785,6 @@ impl Neuron {
                     // zero by having an `aging_since` timestamp
                     // in the far future. Reset it just in case.
                     self.aging_since_timestamp_seconds = u64::MAX;
-                    Ok(())
                 } else {
                     // ts <= now_seconds
                     // This neuron is dissolved. Set it to non-dissolving.
@@ -806,7 +802,6 @@ impl Neuron {
                     // dissolve delay of a dissolved neuron
                     // instead of dissolving it.
                     self.aging_since_timestamp_seconds = ts;
-                    Ok(())
                 }
             }
             None => {
@@ -815,7 +810,6 @@ impl Neuron {
                 self.dissolve_state = Some(DissolveState::DissolveDelaySeconds(new_delay));
                 // We transition from `Dissolved` to `NotDissolving`: reset age.
                 self.aging_since_timestamp_seconds = now_seconds;
-                Ok(())
             }
         }
     }
@@ -994,7 +988,14 @@ impl Neuron {
         })?;
         match op {
             manage_neuron::configure::Operation::IncreaseDissolveDelay(d) => {
-                self.increase_dissolve_delay(now_seconds, d.additional_dissolve_delay_seconds)
+                if d.additional_dissolve_delay_seconds == 0 {
+                    return Err(GovernanceError::new_with_message(
+                        ErrorType::InvalidCommand,
+                        "Additional delay is 0.",
+                    ));
+                }
+                self.increase_dissolve_delay(now_seconds, d.additional_dissolve_delay_seconds);
+                Ok(())
             }
             manage_neuron::configure::Operation::SetDissolveTimestamp(d) => {
                 if now_seconds > d.dissolve_timestamp_seconds {
@@ -1014,6 +1015,12 @@ impl Neuron {
                 }
 
                 let dd_diff = desired_dd - current_dd;
+                if dd_diff == 0 {
+                    return Err(GovernanceError::new_with_message(
+                        ErrorType::InvalidCommand,
+                        "Additional delay is 0.",
+                    ));
+                }
                 self.increase_dissolve_delay(
                     now_seconds,
                     dd_diff.try_into().map_err(|_| {
@@ -1022,7 +1029,8 @@ impl Neuron {
                             "Can't convert u64 dissolve delay into u32.",
                         )
                     })?,
-                )
+                );
+                Ok(())
             }
             manage_neuron::configure::Operation::StartDissolving(_) => {
                 self.start_dissolving(now_seconds)
@@ -3166,242 +3174,57 @@ impl Governance {
         id: &NeuronId,
         caller: &PrincipalId,
         merge: &manage_neuron::Merge,
-    ) -> Result<(), GovernanceError> {
-        let source_id = merge.source_neuron_id.as_ref().ok_or_else(|| {
+    ) -> Result<ManageNeuronResponse, GovernanceError> {
+        let source_neuron_id = merge.source_neuron_id.as_ref().ok_or_else(|| {
             GovernanceError::new_with_message(
                 ErrorType::InvalidCommand,
                 "There was no source neuron id",
             )
         })?;
 
-        let action = MergeNeuronAction::new(merge.clone(), id.clone());
-        action.validate_request(self, *caller)?;
-
-        // Get the neuron and clone to appease the borrow checker.
-        let target_neuron = self.get_neuron(id)?.clone();
-        let source_neuron = self.get_neuron(source_id)?.clone();
-
-        let from_subaccount = subaccount_from_slice(&source_neuron.account)?.ok_or_else(|| {
-            GovernanceError::new_with_message(
-                ErrorType::InvalidCommand,
-                "Subaccount of source neuron is not valid",
-            )
-        })?;
-        let to_subaccount = subaccount_from_slice(&target_neuron.account)?.ok_or_else(|| {
-            GovernanceError::new_with_message(
-                ErrorType::InvalidCommand,
-                "Subaccount of target neuron is not valid",
-            )
-        })?;
-
         let now = self.env.now();
-
         let in_flight_command = NeuronInFlightCommand {
             timestamp: now,
             command: Some(InFlightCommand::Merge(merge.clone())),
         };
-
         // Make sure the source and target neurons are not already
         // undergoing a ledger update.
         let _target_lock = self.lock_neuron_for_command(id.id, in_flight_command.clone())?;
-        let _source_lock = self.lock_neuron_for_command(source_id.id, in_flight_command.clone())?;
+        let _source_lock =
+            self.lock_neuron_for_command(source_neuron_id.id, in_flight_command.clone())?;
 
-        // Do not allow this command to be called for any neuron that is the
-        // involved in an open proposal.
-        fn involved_with_proposal(proto: &GovernanceProto, id: &NeuronId) -> bool {
-            proto.proposals.values().any(|p| {
-                p.status() == ProposalStatus::Open
-                    && (p.proposer.as_ref() == Some(id)
-                        || (p.is_manage_neuron()
-                            && p.proposal.as_ref().map_or(false, |pr| {
-                                pr.managed_neuron()
-                                    == Some(NeuronIdOrSubaccount::NeuronId(id.clone()))
-                            })))
-            })
-        }
-        if involved_with_proposal(&self.proto, id) || involved_with_proposal(&self.proto, source_id)
-        {
-            return Err(GovernanceError::new_with_message(
-                ErrorType::PreconditionFailed,
-                "Cannot merge neurons that are involved in open proposals",
-            ));
-        }
+        let action = ManageNeuronRequest::new(merge.clone(), id.clone(), *caller);
+        execute_manage_neuron(self, action).await
+    }
 
-        let transaction_fee_e8s = self.transaction_fee();
-
-        let source_neuron_fees_e8s = self.get_neuron(source_id)?.neuron_fees_e8s;
-
-        // Before transferring stake from the source to the target, burn any
-        // fees present in the source neuron.
-        let mut subtract_fees = false;
-        if source_neuron_fees_e8s > transaction_fee_e8s {
-            let _result = self
-                .ledger
-                .transfer_funds(
-                    source_neuron_fees_e8s,
-                    0, // Burning transfers don't pay a fee.
-                    Some(from_subaccount),
-                    governance_minting_account(),
-                    now,
-                )
-                .await?;
-            subtract_fees = true;
-        }
-
-        let source_neuron_mut = self
-            .get_neuron_mut(source_id)
-            .expect("Expected the source neuron to exist");
-
-        if subtract_fees {
-            source_neuron_mut.cached_neuron_stake_e8s = source_neuron_mut
-                .cached_neuron_stake_e8s
-                .saturating_sub(source_neuron_fees_e8s);
-
-            // It could be that, during the await above, the source_neuron
-            // makes a new proposal and thus the fees are increased and if we
-            // then just set the fees to 0 here, effectively the source_neuron
-            // prevented from paying the fees.
-            source_neuron_mut.neuron_fees_e8s = source_neuron_mut
-                .neuron_fees_e8s
-                .saturating_sub(source_neuron_fees_e8s);
-        }
-
-        let source_dissolve_delay = source_neuron.dissolve_delay_seconds(now);
-        let source_age_seconds = if source_neuron.is_dissolved(now) {
-            // Do not credit age from dissolved neurons.
-            0
-        } else {
-            source_neuron.age_seconds(now)
+    pub async fn simulate_manage_neuron(
+        &self,
+        caller: &PrincipalId,
+        manage_neuron: ManageNeuron,
+    ) -> ManageNeuronResponse {
+        let id = match self.neuron_id_from_manage_neuron(&manage_neuron) {
+            Ok(id) => id,
+            Err(e) => return ManageNeuronResponse::error(e),
         };
-        let source_stake_e8s = source_neuron_mut.minted_stake_e8s();
-        let source_stake_less_transaction_fee_e8s =
-            source_stake_e8s.saturating_sub(transaction_fee_e8s);
 
-        if source_stake_less_transaction_fee_e8s > 0 {
-            // We must zero out the source neuron's cached stake before
-            // submitting the call to transfer_funds. If we do not do this,
-            // there would be a window of opportunity -- from the moment the
-            // stake is transferred but before the cached stake is updated --
-            // when a proposal could be submitted and rejected on behalf of
-            // the source neuron (since cached stake is high enough), but that
-            // would be impossible to charge because the account had been
-            // emptied. To guard against this, we preemptively set the stake
-            // to zero, and set it back in case of transfer failure.
-            //
-            // Another important reason to set the cached stake to zero (net
-            // fees) is so that the source neuron cannot use the stake that is
-            // getting merged to vote or propose. Also, the source neuron
-            // should not be able to increase stake while locked because we do
-            // not allow the source to have pending proposals.
-            source_neuron_mut.cached_neuron_stake_e8s = source_neuron_mut
-                .cached_neuron_stake_e8s
-                .saturating_sub(source_stake_e8s);
-
-            // Reset source aging. In other words, if it was aging before, it
-            // is still aging now, although the timer is reset to the time of
-            // the merge -- but only if there is stake being transferred.
-            // Since all fees have been burned (if they were greater in value
-            // than the transaction fee) and since this neuron is not
-            // currently participating in any proposal, it means the cached
-            // stake is 0 and increasing the stake will not take advantage of
-            // this age. However, it is consistent with the use of
-            // aging_since_timestamp_seconds that we simply reset the age
-            // here, since we do not change the dissolve state in any other
-            // way.
-            let source_age_timestamp_seconds = source_neuron_mut.aging_since_timestamp_seconds;
-            if source_neuron_mut.aging_since_timestamp_seconds != u64::MAX {
-                source_neuron_mut.aging_since_timestamp_seconds = now;
+        let action = match manage_neuron.command {
+            Some(Command::Merge(merge)) => ManageNeuronRequest::new(merge, id.clone(), *caller),
+            Some(_) => {
+                return ManageNeuronResponse::error(GovernanceError::new_with_message(
+                    ErrorType::InvalidCommand,
+                    "Simulating manage_neuron is not supported for this request type",
+                ));
             }
-
-            let _block_height: u64 = self
-                .ledger
-                .transfer_funds(
-                    source_stake_less_transaction_fee_e8s,
-                    transaction_fee_e8s,
-                    Some(from_subaccount),
-                    neuron_subaccount(to_subaccount),
-                    now,
-                )
-                .await
-                .map_err(|err| {
-                    let source_neuron_mut = self
-                        .proto
-                        .neurons
-                        .get_mut(&source_id.id)
-                        .expect("Expected the source neuron to exist");
-                    source_neuron_mut.cached_neuron_stake_e8s += source_stake_e8s;
-                    source_neuron_mut.aging_since_timestamp_seconds = source_age_timestamp_seconds;
-                    err
-                })?;
-        }
-
-        // Lookup the neuron again, since it may have changed since the
-        // (potential) call to the Ledger canister above.
-        let source_neuron_mut = self
-            .get_neuron_mut(source_id)
-            .expect("Expected the source neuron to exist");
-
-        // Set source maturity to zero
-        let source_maturity = source_neuron_mut.maturity_e8s_equivalent;
-        source_neuron_mut.maturity_e8s_equivalent = 0;
-        let source_staked_maturity = source_neuron_mut.staked_maturity_e8s_equivalent;
-        source_neuron_mut.staked_maturity_e8s_equivalent = None;
-
-        let mut target_neuron_mut = self
-            .get_neuron_mut(id)
-            .expect("Expected the target neuron to exist");
-
-        let target_dissolve_delay = target_neuron_mut.dissolve_delay_seconds(now);
-        let target_age_seconds = if target_neuron_mut.is_dissolved(now) {
-            // Do not credit age from dissolved neurons.
-            0
-        } else {
-            target_neuron_mut.age_seconds(now)
+            None => {
+                return ManageNeuronResponse::error(GovernanceError::new_with_message(
+                    ErrorType::InvalidCommand,
+                    "No Command given in simulate_manage_neuron request",
+                ));
+            }
         };
-        let highest_dissolve_delay = std::cmp::max(target_dissolve_delay, source_dissolve_delay);
-        let target_delta = highest_dissolve_delay.saturating_sub(target_dissolve_delay);
-
-        // Set dissolve delay or when dissolved timestamp of the target to
-        // whichever is the greater between the source and target neurons.
-        // Note that this must happen before the
-        // `aging_since_timestamp_seconds` is updated, because of the various
-        // ways in which this call to `increase_dissolve_delay` might change
-        // that value. We already know what the aggregate age of the merged
-        // neurons should be, so we ignore the changes that this function may
-        // make.
-        if target_delta > 0 {
-            target_neuron_mut.increase_dissolve_delay(now, target_delta.try_into().unwrap())?;
-        }
-
-        // Move the source's stake (net fees) and any accumulated
-        // neuron age from the source neuron into target.
-        let (new_stake_e8s, new_age_seconds) = combine_aged_stakes(
-            target_neuron_mut.cached_neuron_stake_e8s,
-            target_age_seconds,
-            source_stake_less_transaction_fee_e8s,
-            source_age_seconds,
-        );
-        target_neuron_mut.cached_neuron_stake_e8s = new_stake_e8s;
-        target_neuron_mut.aging_since_timestamp_seconds = now.saturating_sub(new_age_seconds);
-
-        // Move regular and staked maturity from source neuron to target
-        target_neuron_mut.maturity_e8s_equivalent += source_maturity;
-        target_neuron_mut.staked_maturity_e8s_equivalent = match (
-            target_neuron_mut.staked_maturity_e8s_equivalent,
-            source_staked_maturity,
-        ) {
-            (None, None) => None,
-            (Some(x), None) => Some(x),
-            (None, Some(y)) => Some(y),
-            (Some(x), Some(y)) => Some(x.saturating_add(y)),
-        };
-
-        println!(
-            "{}Merged neuron {} into {} at {:?}",
-            LOG_PREFIX, source_id.id, id.id, now
-        );
-
-        Ok(())
+        simulate_manage_neuron(self, action)
+            .await
+            .unwrap_or_else(ManageNeuronResponse::error)
     }
 
     /// Spawn an neuron from an existing neuron's maturity.
@@ -6721,23 +6544,7 @@ impl Governance {
             };
         }
 
-        let id = match mgmt.get_neuron_id_or_subaccount()? {
-            Some(NeuronIdOrSubaccount::NeuronId(id)) => Ok(id),
-            Some(NeuronIdOrSubaccount::Subaccount(sid)) => {
-                let subaccount = Self::bytes_to_subaccount(&sid)?;
-                match self.get_neuron_by_subaccount(&subaccount) {
-                    Some(neuron) => Ok(neuron.id.clone().expect("neuron doesn't have an ID")),
-                    None => Err(GovernanceError::new_with_message(
-                        ErrorType::NotFound,
-                        "No neuron ID specified in the management request.",
-                    )),
-                }
-            }
-            None => Err(GovernanceError::new_with_message(
-                ErrorType::NotFound,
-                "No neuron ID specified in the management request.",
-            )),
-        }?;
+        let id = self.neuron_id_from_manage_neuron(mgmt)?;
 
         match &mgmt.command {
             Some(manage_neuron::Command::Configure(c)) => self
@@ -6765,10 +6572,7 @@ impl Governance {
                 .disburse_to_neuron(&id, caller, d)
                 .await
                 .map(ManageNeuronResponse::disburse_to_neuron_response),
-            Some(manage_neuron::Command::Merge(s)) => self
-                .merge_neurons(&id, caller, s)
-                .await
-                .map(|_| ManageNeuronResponse::merge_response()),
+            Some(manage_neuron::Command::Merge(s)) => self.merge_neurons(&id, caller, s).await,
             Some(manage_neuron::Command::Follow(f)) => self
                 .follow(&id, caller, f)
                 .map(|_| ManageNeuronResponse::follow_response()),
@@ -6784,6 +6588,31 @@ impl Governance {
             }
             None => panic!(),
         }
+    }
+
+    fn neuron_id_from_manage_neuron(
+        &self,
+        mgmt: &ManageNeuron,
+    ) -> Result<NeuronId, GovernanceError> {
+        let id = match mgmt.get_neuron_id_or_subaccount()? {
+            Some(NeuronIdOrSubaccount::NeuronId(id)) => Ok(id),
+            Some(NeuronIdOrSubaccount::Subaccount(sid)) => {
+                let subaccount = Self::bytes_to_subaccount(&sid)?;
+                match self.get_neuron_by_subaccount(&subaccount) {
+                    Some(neuron) => Ok(neuron.id.clone().expect("neuron doesn't have an ID")),
+                    None => Err(GovernanceError::new_with_message(
+                        ErrorType::NotFound,
+                        "No neuron ID specified in the management request.",
+                    )),
+                }
+            }
+            None => Err(GovernanceError::new_with_message(
+                ErrorType::NotFound,
+                "No neuron ID specified in the management request.",
+            )),
+        }?;
+
+        Ok(id)
     }
 
     /// Garbage collect obsolete data from the governance canister.

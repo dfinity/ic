@@ -1020,7 +1020,17 @@ message ManageNeuronResponse {
     ic_nns_common.pb.v1.NeuronId created_neuron_id = 1;
   }
 
-  message MergeResponse {}
+  // A response for merging or simulating merge neurons
+  message MergeResponse {
+    // The resulting state of the source neuron
+    Neuron source_neuron = 1;
+    // The resulting state of the target neuron
+    Neuron target_neuron = 2;
+    // The NeuronInfo of the source neuron
+    NeuronInfo source_neuron_info = 3;
+    // The NeuronInfo of the target neuron
+    NeuronInfo target_neuron_info = 4;
+  }
 
   message DisburseToNeuronResponse {
     // The ID of the Neuron created from disbursing a Neuron

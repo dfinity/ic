@@ -15,7 +15,7 @@ use ic_nns_governance::pb::v1::manage_neuron::Merge;
 use ic_nns_governance::pb::v1::manage_neuron::NeuronIdOrSubaccount;
 use ic_nns_governance::pb::v1::manage_neuron::Spawn;
 use ic_nns_governance::pb::v1::manage_neuron_response::Command as CommandResponse;
-use ic_nns_governance::pb::v1::manage_neuron_response::{self, MergeResponse};
+use ic_nns_governance::pb::v1::manage_neuron_response::{self};
 use ic_nns_governance::pb::v1::GovernanceError;
 use ic_nns_governance::pb::v1::NeuronState;
 use ic_nns_governance::pb::v1::{
@@ -31,7 +31,7 @@ use ic_state_machine_tests::StateMachine;
 use icp_ledger::{tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Tokens};
 
 #[test]
-fn test_merge_neurons() {
+fn test_merge_neurons_and_simulate_merge_neurons() {
     local_test_on_nns_subnet(|runtime| async move {
         const TWELVE_MONTHS_SECONDS: u64 = 30 * 12 * 24 * 60 * 60;
 
@@ -93,30 +93,51 @@ fn test_merge_neurons() {
         // Let us transfer ICP into the main account, and stake two neurons
         // owned by TEST_NEURON_1_OWNER_PRINCIPAL.
 
+        let mgmt_request = ManageNeuron {
+            neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronIdProto {
+                id: TEST_NEURON_1_ID,
+            })),
+            id: None,
+            command: Some(Command::Merge(Merge {
+                source_neuron_id: Some(neuron_id_4),
+            })),
+        };
+
+        let simulate_1_res: ManageNeuronResponse = nns_canisters
+            .governance
+            .query_from_sender(
+                "manage_neuron",
+                candid_one,
+                mgmt_request.clone(),
+                &Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
+            )
+            .await
+            .unwrap();
+
         let merge1_res: ManageNeuronResponse = nns_canisters
             .governance
             .update_from_sender(
                 "manage_neuron",
                 candid_one,
-                ManageNeuron {
-                    neuron_id_or_subaccount: Some(NeuronIdOrSubaccount::NeuronId(NeuronIdProto {
-                        id: TEST_NEURON_1_ID,
-                    })),
-                    id: None,
-                    command: Some(Command::Merge(Merge {
-                        source_neuron_id: Some(neuron_id_4),
-                    })),
-                },
+                mgmt_request,
                 &Sender::from_keypair(&TEST_NEURON_1_OWNER_KEYPAIR),
             )
             .await
             .unwrap();
-        assert_eq!(
-            merge1_res,
-            ManageNeuronResponse {
-                command: Some(manage_neuron_response::Command::Merge(MergeResponse {}),),
-            }
-        );
+
+        // assert simulated response is identical
+        let ManageNeuronResponse {
+            command: Some(manage_neuron_response::Command::Merge(merge_simulate)),
+        } = simulate_1_res else {panic!("Wrong response");};
+        let ManageNeuronResponse {
+            command: Some(manage_neuron_response::Command::Merge(merge_real)),
+        } = merge1_res else {panic!("Wrong response");};
+
+        // We test we're getting the same info. neuron_info is derived and tested
+        // in unit tests.
+        // That the results are correct is tested in nns/governance/tests/governance.rs
+        assert_eq!(merge_real.source_neuron, merge_simulate.source_neuron);
+        assert_eq!(merge_real.target_neuron, merge_simulate.target_neuron);
 
         Ok(())
     });

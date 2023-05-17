@@ -77,7 +77,7 @@ type Command_1 = variant {
   ClaimOrRefresh : ClaimOrRefreshResponse;
   Configure : record {};
   RegisterVote : record {};
-  Merge : record {};
+  Merge : MergeResponse;
   DisburseToNeuron : SpawnResponse;
   MakeProposal : MakeProposalResponse;
   StakeMaturity : StakeMaturityResponse;
@@ -236,6 +236,12 @@ type MergeMaturity = record { percentage_to_merge : nat32 };
 type MergeMaturityResponse = record {
   merged_maturity_e8s : nat64;
   new_stake_e8s : nat64;
+};
+type MergeResponse = record {
+  target_neuron : opt Neuron;
+  source_neuron : opt Neuron;
+  target_neuron_info : opt NeuronInfo;
+  source_neuron_info : opt NeuronInfo;
 };
 type MostRecentMonthlyNodeProviderRewards = record {
   timestamp : nat64;
@@ -524,6 +530,7 @@ service : (Governance) -> {
   settle_community_fund_participation : (SettleCommunityFundParticipation) -> (
       Result,
     );
+  simulate_manage_neuron : (ManageNeuron) -> (ManageNeuronResponse);
   transfer_gtc_neuron : (NeuronId, NeuronId) -> (Result);
   update_node_provider : (UpdateNodeProvider) -> (Result);
 }

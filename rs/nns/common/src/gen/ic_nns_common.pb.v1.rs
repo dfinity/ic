@@ -13,6 +13,8 @@ pub struct CanisterId {
     serde::Serialize,
     candid::CandidType,
     candid::Deserialize,
+    Ord,
+    PartialOrd,
     Eq,
     std::hash::Hash,
     comparable::Comparable,
