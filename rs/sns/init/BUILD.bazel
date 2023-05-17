@@ -28,6 +28,7 @@ DEPENDENCIES = [
     "//rs/types/base_types",
     "@crate_index//:anyhow",
     "@crate_index//:candid",
+    "@crate_index//:isocountry",
     "@crate_index//:lazy_static",
     "@crate_index//:maplit",
     "@crate_index//:num",

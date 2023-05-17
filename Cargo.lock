@@ -9068,6 +9068,7 @@ dependencies = [
  "ic-sns-swap",
  "ic-test-utilities-compare-dirs",
  "icrc-ledger-types",
+ "isocountry",
  "lazy_static",
  "maplit",
  "num",
@@ -10725,6 +10726,16 @@ dependencies = [
  "io-lifetimes",
  "rustix",
  "windows-sys 0.45.0",
+]
+
+[[package]]
+name = "isocountry"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1ea1dc4bf0fb4904ba83ffdb98af3d9c325274e92e6e295e4151e86c96363e04"
+dependencies = [
+ "serde",
+ "thiserror",
 ]
 
 [[package]]

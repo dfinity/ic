@@ -530,6 +530,9 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             "ipnet": crate.spec(
                 version = "^2.5.0",
             ),
+            "isocountry": crate.spec(
+                version = "0.3.2",
+            ),
             "itertools": crate.spec(
                 version = "^0.10.0",
             ),
