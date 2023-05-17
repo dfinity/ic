@@ -7,7 +7,7 @@ use prost::Message;
 use regex::Regex;
 use std::time::Duration;
 use thiserror::Error;
-use tokio::time::sleep;
+use tokio::{task::spawn_blocking, time::sleep};
 
 /// Errors returned by `profile()` and `flamegraph()`.
 #[derive(Error, Debug)]
@@ -26,6 +26,8 @@ pub enum Error {
         #[from]
         source: prost::EncodeError,
     },
+    #[error("An internal error occurred.")]
+    Internal,
 }
 
 /// Drops the thread number, if any, from the thread name and replaces all
@@ -51,8 +53,13 @@ fn extract_thread_name(thread_name: &str) -> String {
 
 /// Collects a CPU profile for the given `duration` by sampling at the given
 /// `frequency`.
-pub async fn collect(duration: Duration, frequency: i32) -> Result<Report, pprof::Error> {
-    let guard = ProfilerGuard::new(frequency)?;
+pub async fn collect(duration: Duration, frequency: i32) -> Result<Report, Error> {
+    // ProfilerGuard has a latency of 40-60 miliseconds. Hence we want to run it
+    // without blocking the runtime with `spawn_blocking`.
+    let guard = spawn_blocking(move || ProfilerGuard::new(frequency))
+        .await
+        .map_err(|_| Error::Internal)??;
+
     sleep(duration).await;
     guard
         .report()
@@ -60,6 +67,7 @@ pub async fn collect(duration: Duration, frequency: i32) -> Result<Report, pprof
             frames.thread_name = extract_thread_name(&frames.thread_name);
         })
         .build()
+        .map_err(|source| Error::Pprof { source })
 }
 
 #[async_trait]
