@@ -12,6 +12,7 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
+use std::time::Duration;
 use url::Url;
 
 use crate::driver::test_env_api::{HasDependencies, SshSession};
@@ -33,6 +34,9 @@ pub const TRANSFER_FEE: u64 = 10_000;
 
 /// Set to true to activate journal logs from the VM.
 const WITH_JOURNAL_LOGS: bool = false;
+
+pub const ROSETTA_TESTS_OVERALL_TIMEOUT: Duration = Duration::from_secs(18 * 60);
+pub const ROSETTA_TESTS_PER_TEST_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 
 /// Setup a test environment and return a client for the Rosetta API.
 pub fn setup(
@@ -317,6 +321,7 @@ echo \"Rosetta container started \"
 
     UniversalVm::new(String::from(vm_name))
         .with_config_dir(config_dir)
+        .disable_ipv4()
         .start(env)
         .expect("Failed to setup universal VM for Rosetta");
 
