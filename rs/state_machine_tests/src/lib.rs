@@ -399,6 +399,30 @@ impl StateMachineBuilder {
         }
     }
 
+    pub fn with_default_canister_range(mut self) -> Self {
+        self.routing_table = RoutingTable::new();
+        routing_table_insert_subnet(&mut self.routing_table, self.subnet_id)
+            .expect("failed to update the routing table");
+        self
+    }
+
+    pub fn with_extra_canister_range(
+        mut self,
+        id_range: std::ops::RangeInclusive<CanisterId>,
+    ) -> Self {
+        self.routing_table
+            .assign_ranges(
+                CanisterIdRanges::try_from(vec![CanisterIdRange {
+                    start: *id_range.start(),
+                    end: *id_range.end(),
+                }])
+                .expect("invalid canister range"),
+                self.subnet_id,
+            )
+            .expect("failed to assign a canister range");
+        self
+    }
+
     pub fn with_routing_table(self, routing_table: RoutingTable) -> Self {
         Self {
             routing_table,
@@ -1155,12 +1179,13 @@ impl StateMachine {
 
     /// Creates a new canister and returns the canister principal.
     pub fn create_canister(&self, settings: Option<CanisterSettingsArgs>) -> CanisterId {
-        self.create_canister_with_cycles(Cycles::new(0), settings)
+        self.create_canister_with_cycles(None, Cycles::new(0), settings)
     }
 
     /// Creates a new canister with a cycles balance and returns the canister principal.
     pub fn create_canister_with_cycles(
         &self,
+        specified_id: Option<PrincipalId>,
         cycles: Cycles,
         settings: Option<CanisterSettingsArgs>,
     ) -> CanisterId {
@@ -1171,7 +1196,7 @@ impl StateMachine {
                 ic00::ProvisionalCreateCanisterWithCyclesArgs {
                     amount: Some(candid::Nat::from(cycles.get())),
                     settings,
-                    specified_id: None,
+                    specified_id,
                     sender_canister_version: None,
                 }
                 .encode(),
@@ -1236,7 +1261,7 @@ impl StateMachine {
         settings: Option<CanisterSettingsArgs>,
         cycles: Cycles,
     ) -> Result<CanisterId, UserError> {
-        let canister_id = self.create_canister_with_cycles(cycles, settings);
+        let canister_id = self.create_canister_with_cycles(None, cycles, settings);
         self.install_wasm_in_mode(canister_id, CanisterInstallMode::Install, module, payload)?;
         Ok(canister_id)
     }

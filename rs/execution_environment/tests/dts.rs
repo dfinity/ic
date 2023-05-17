@@ -243,6 +243,7 @@ fn setup_dts_install_code(
     );
 
     let canister_id = env.create_canister_with_cycles(
+        None,
         initial_balance,
         Some(
             CanisterSettingsArgsBuilder::new()
@@ -559,7 +560,7 @@ fn dts_scheduling_of_install_code() {
     let mut canister = vec![];
 
     for i in 0..n {
-        let id = env.create_canister_with_cycles(INITIAL_CYCLES_BALANCE, settings.clone());
+        let id = env.create_canister_with_cycles(None, INITIAL_CYCLES_BALANCE, settings.clone());
         eprintln!("canister[{}] = {}", i, id);
         canister.push(id);
     }
@@ -718,7 +719,7 @@ fn dts_pending_install_code_does_not_block_subnet_messages_of_other_canisters() 
     let mut canister = vec![];
 
     for _ in 0..n {
-        let id = env.create_canister_with_cycles(INITIAL_CYCLES_BALANCE, settings.clone());
+        let id = env.create_canister_with_cycles(None, INITIAL_CYCLES_BALANCE, settings.clone());
         canister.push(id);
     }
 
@@ -921,7 +922,7 @@ fn dts_pending_install_code_blocks_update_messages_to_the_same_canister() {
             .build(),
     );
 
-    let canister = env.create_canister_with_cycles(INITIAL_CYCLES_BALANCE, settings);
+    let canister = env.create_canister_with_cycles(None, INITIAL_CYCLES_BALANCE, settings);
 
     // Enable the checkpoints so that the first install code message is always
     // aborted and doesn't make progress.

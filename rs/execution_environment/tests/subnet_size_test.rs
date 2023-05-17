@@ -164,7 +164,7 @@ fn create_canister_with_cycles_install_wasm(
     cycles: Cycles,
     wasm: Vec<u8>,
 ) -> CanisterId {
-    let canister_id = env.create_canister_with_cycles(cycles, None);
+    let canister_id = env.create_canister_with_cycles(None, cycles, None);
     env.install_wasm_in_mode(canister_id, CanisterInstallMode::Install, wasm, vec![])
         .unwrap();
     canister_id
@@ -193,6 +193,7 @@ fn simulate_one_gib_per_second_cost(
         .with_subnet_size(subnet_size)
         .build();
     let canister_id = env.create_canister_with_cycles(
+        None,
         DEFAULT_CYCLES_PER_NODE * subnet_size,
         Some(
             CanisterSettingsArgsBuilder::new()
@@ -285,7 +286,8 @@ fn simulate_execute_install_code_cost(subnet_type: SubnetType, subnet_size: usiz
             HypervisorConfig::default(),
         )))
         .build();
-    let canister_id = env.create_canister_with_cycles(DEFAULT_CYCLES_PER_NODE * subnet_size, None);
+    let canister_id =
+        env.create_canister_with_cycles(None, DEFAULT_CYCLES_PER_NODE * subnet_size, None);
 
     let balance_before = env.cycle_balance(canister_id);
     env.install_wasm_in_mode(

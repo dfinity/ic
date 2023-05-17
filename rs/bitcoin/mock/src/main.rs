@@ -40,23 +40,23 @@ pub fn mutate_state<F, R>(f: F) -> R
 where
     F: FnOnce(&mut State) -> R,
 {
-    __STATE.with(|s| f(&mut s.borrow_mut()))
+    STATE.with(|s| f(&mut s.borrow_mut()))
 }
 
 pub fn read_state<F, R>(f: F) -> R
 where
     F: FnOnce(&State) -> R,
 {
-    __STATE.with(|s| f(&s.borrow()))
+    STATE.with(|s| f(&s.borrow()))
 }
 
 thread_local! {
-    static __STATE: RefCell<State> = RefCell::default();
+    static STATE: RefCell<State> = RefCell::default();
 }
 
 #[init]
 fn init(network: Network) {
-    __STATE.with(|s| {
+    STATE.with(|s| {
         let state = State {
             network,
             fee_percentiles: [0; 100].into(),
@@ -72,17 +72,24 @@ fn init(network: Network) {
 #[candid_method(update)]
 #[update]
 fn bitcoin_get_utxos(utxos_request: GetUtxosRequest) -> GetUtxosResponse {
-    GetUtxosResponse {
-        utxos: read_state(|s| s.address_to_utxos.get(&utxos_request.address).cloned())
-            .unwrap_or_default()
-            .iter()
-            .cloned()
-            .collect::<Vec<Utxo>>(),
-        tip_block_hash: vec![],
-        tip_height: 0,
-        // TODO Handle pagination.
-        next_page: None,
-    }
+    read_state(|s| {
+        assert_eq!(utxos_request.network, s.network.into());
+
+        GetUtxosResponse {
+            utxos: s
+                .address_to_utxos
+                .get(&utxos_request.address)
+                .cloned()
+                .unwrap_or_default()
+                .iter()
+                .cloned()
+                .collect::<Vec<Utxo>>(),
+            tip_block_hash: vec![],
+            tip_height: 0,
+            // TODO Handle pagination.
+            next_page: None,
+        }
+    })
 }
 
 #[candid_method(update)]
@@ -129,6 +136,7 @@ fn set_fee_percentiles(fee_percentiles: Vec<MillisatoshiPerByte>) {
 #[update]
 fn bitcoin_send_transaction(transaction: SendTransactionRequest) {
     mutate_state(|s| {
+        assert_eq!(transaction.network, s.network.into());
         if s.is_available {
             s.mempool.insert(ByteBuf::from(transaction.transaction));
         }
