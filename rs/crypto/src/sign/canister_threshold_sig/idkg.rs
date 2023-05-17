@@ -10,7 +10,7 @@ use ic_types::crypto::canister_threshold_sig::error::{
     IDkgVerifyOpeningError, IDkgVerifyTranscriptError,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    BatchSignedIDkgDealing, IDkgComplaint, IDkgOpening, IDkgTranscript, IDkgTranscriptId,
+    BatchSignedIDkgDealings, IDkgComplaint, IDkgOpening, IDkgTranscript, IDkgTranscriptId,
     IDkgTranscriptParams, InitialIDkgDealings, SignedIDkgDealing,
 };
 use ic_types::NodeId;
@@ -357,7 +357,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentImpl<C> {
     fn create_transcript(
         &self,
         params: &IDkgTranscriptParams,
-        dealings: &BTreeMap<NodeId, BatchSignedIDkgDealing>,
+        dealings: &BatchSignedIDkgDealings,
     ) -> Result<IDkgTranscript, IDkgCreateTranscriptError> {
         let log_id = get_log_id(&self.logger, module_path!());
         let logger = new_logger!(&self.logger;
@@ -368,7 +368,7 @@ impl<C: CryptoServiceProvider> IDkgProtocol for CryptoComponentImpl<C> {
         debug!(logger;
             crypto.description => "start",
             crypto.dkg_config => format!("{:?}", params),
-            crypto.dkg_dealing => format!("dealings: {{ {:?} }}", dealings.keys()),
+            crypto.dkg_dealing => format!("dealings: {{ {:?} }}", dealings.dealer_ids().collect::<Vec<_>>()),
         );
         let start_time = self.metrics.now();
         let result = transcript::create_transcript(

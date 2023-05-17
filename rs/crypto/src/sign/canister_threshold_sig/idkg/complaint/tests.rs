@@ -11,6 +11,7 @@ use ic_crypto_internal_threshold_sig_ecdsa::{EccCurveType, IDkgDealingInternal, 
 use ic_crypto_test_utils_csp::MockAllCryptoServiceProvider;
 use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
+use ic_types::crypto::canister_threshold_sig::idkg::BatchSignedIDkgDealing;
 use ic_types::crypto::canister_threshold_sig::idkg::IDkgDealing;
 use ic_types::crypto::canister_threshold_sig::idkg::{
     IDkgMaskedTranscriptOrigin, IDkgReceivers, IDkgTranscriptId, IDkgTranscriptType,

@@ -10,7 +10,7 @@ use ic_crypto_test_utils_canister_threshold_sigs::{
 };
 use ic_interfaces::crypto::IDkgProtocol;
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    BatchSignedIDkgDealing, IDkgComplaint, IDkgTranscript, IDkgTranscriptOperation,
+    BatchSignedIDkgDealings, IDkgComplaint, IDkgTranscript, IDkgTranscriptOperation,
     IDkgTranscriptParams, InitialIDkgDealings, SignedIDkgDealing,
 };
 use ic_types::crypto::canister_threshold_sig::PreSignatureQuadruple;
@@ -363,7 +363,7 @@ fn verify_initial_dealings(
 fn create_transcript(
     receiver: &TempCryptoComponent,
     params: &IDkgTranscriptParams,
-    dealings: &BTreeMap<NodeId, BatchSignedIDkgDealing>,
+    dealings: &BatchSignedIDkgDealings,
 ) -> IDkgTranscript {
     receiver
         .create_transcript(params, dealings)

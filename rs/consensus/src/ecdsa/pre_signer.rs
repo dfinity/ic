@@ -16,8 +16,8 @@ use ic_types::consensus::ecdsa::{
     IDkgTranscriptParamsRef,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    BatchSignedIDkgDealing, IDkgDealingSupport, IDkgTranscript, IDkgTranscriptId,
-    IDkgTranscriptOperation, IDkgTranscriptParams, SignedIDkgDealing,
+    BatchSignedIDkgDealing, BatchSignedIDkgDealings, IDkgDealingSupport, IDkgTranscript,
+    IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams, SignedIDkgDealing,
 };
 use ic_types::crypto::CryptoHashOf;
 use ic_types::malicious_flags::MaliciousFlags;
@@ -1128,7 +1128,7 @@ impl<'a> EcdsaTranscriptBuilderImpl<'a> {
                 return None;
             }
         };
-        let mut completed_dealings = BTreeMap::new();
+        let mut completed_dealings = BatchSignedIDkgDealings::new();
 
         // Step 1: Build the verified dealings by aggregating the support shares
         timed_call(
@@ -1173,12 +1173,11 @@ impl<'a> EcdsaTranscriptBuilderImpl<'a> {
                         &transcript_params,
                         &dealing_state.support_shares,
                     ) {
-                        let dealer_id = dealing_state.signed_dealing.dealer_id();
                         let verified_dealing = BatchSignedIDkgDealing {
                             content: dealing_state.signed_dealing,
                             signature: sig_batch,
                         };
-                        completed_dealings.insert(dealer_id, verified_dealing);
+                        completed_dealings.insert_or_update(verified_dealing);
                     }
                 }
             },
@@ -1249,7 +1248,7 @@ impl<'a> EcdsaTranscriptBuilderImpl<'a> {
     fn crypto_create_transcript(
         &self,
         transcript_params: &IDkgTranscriptParams,
-        verified_dealings: &BTreeMap<NodeId, BatchSignedIDkgDealing>,
+        verified_dealings: &BatchSignedIDkgDealings,
     ) -> Option<IDkgTranscript> {
         // Check if we have enough dealings to create transcript
         if verified_dealings.len() < (transcript_params.collection_threshold().get() as usize) {

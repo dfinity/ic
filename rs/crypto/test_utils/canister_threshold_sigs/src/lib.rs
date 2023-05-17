@@ -12,9 +12,10 @@ use ic_registry_keys::make_crypto_node_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_test_utilities_in_memory_logger::InMemoryReplicaLogger;
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    BatchSignedIDkgDealing, IDkgComplaint, IDkgDealing, IDkgMaskedTranscriptOrigin, IDkgReceivers,
-    IDkgTranscript, IDkgTranscriptId, IDkgTranscriptOperation, IDkgTranscriptParams,
-    IDkgTranscriptType, IDkgUnmaskedTranscriptOrigin, SignedIDkgDealing,
+    BatchSignedIDkgDealing, BatchSignedIDkgDealings, IDkgComplaint, IDkgDealing,
+    IDkgMaskedTranscriptOrigin, IDkgReceivers, IDkgTranscript, IDkgTranscriptId,
+    IDkgTranscriptOperation, IDkgTranscriptParams, IDkgTranscriptType,
+    IDkgUnmaskedTranscriptOrigin, SignedIDkgDealing,
 };
 use ic_types::crypto::canister_threshold_sig::{
     ExtendedDerivationPath, PreSignatureQuadruple, ThresholdEcdsaSigShare,
@@ -231,15 +232,10 @@ pub fn batch_sign_signed_dealings(
     params: &IDkgTranscriptParams,
     crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
     signed_dealings: BTreeMap<NodeId, SignedIDkgDealing>,
-) -> BTreeMap<NodeId, BatchSignedIDkgDealing> {
+) -> BatchSignedIDkgDealings {
     signed_dealings
-        .into_iter()
-        .map(|(dealer_id, signed_dealing)| {
-            let multisigned_dealing =
-                batch_sign_signed_dealing(params, crypto_components, signed_dealing);
-
-            (dealer_id, multisigned_dealing)
-        })
+        .into_values()
+        .map(|signed_dealing| batch_sign_signed_dealing(params, crypto_components, signed_dealing))
         .collect()
 }
 
@@ -259,7 +255,7 @@ pub fn add_support_from_all_receivers(
 pub fn create_transcript(
     params: &IDkgTranscriptParams,
     crypto_components: &BTreeMap<NodeId, TempCryptoComponent>,
-    dealings: &BTreeMap<NodeId, BatchSignedIDkgDealing>,
+    dealings: &BatchSignedIDkgDealings,
     creator_id: NodeId,
 ) -> IDkgTranscript {
     crypto_for(creator_id, crypto_components)

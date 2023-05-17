@@ -1,3 +1,4 @@
+mod batch_dealings;
 mod context_data;
 mod dealers;
 mod index;

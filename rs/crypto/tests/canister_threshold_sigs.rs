@@ -137,6 +137,23 @@ mod create_dealing {
 mod create_transcript {
     use super::*;
     use ic_crypto_test_utils_canister_threshold_sigs::CorruptBytesCollection;
+    use ic_types::crypto::canister_threshold_sig::idkg::BatchSignedIDkgDealings;
+
+    #[test]
+    fn should_create_transcript() {
+        let subnet_size = thread_rng().gen_range(1..10);
+        let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
+        let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
+        let signed_dealings = create_and_verify_signed_dealings(&params, &env.crypto_components);
+        let batch_signed_dealings =
+            batch_sign_signed_dealings(&params, &env.crypto_components, signed_dealings);
+
+        let creator_id = random_receiver_id(&params);
+        let result = crypto_for(creator_id, &env.crypto_components)
+            .create_transcript(&params, &batch_signed_dealings);
+
+        assert_matches!(result, Ok(transcript) if transcript.transcript_id == params.transcript_id())
+    }
 
     #[test]
     fn should_fail_create_transcript_without_enough_dealings() {
@@ -171,32 +188,36 @@ mod create_transcript {
     }
 
     #[test]
-    fn should_fail_create_transcript_with_mislabeled_dealers() {
+    fn should_fail_create_transcript_with_disallowed_dealer() {
         let subnet_size = thread_rng().gen_range(1..10);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
-
         let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
-
-        let dealings = params
-            .dealers()
-            .get()
-            .iter()
-            .map(|node| {
-                let dealing =
-                    create_and_verify_signed_dealing(&params, &env.crypto_components, *node);
-                // NOTE: Wrong Id!
-                let non_dealer_node = random_node_id_excluding(params.dealers().get());
-                (non_dealer_node, dealing)
-            })
-            .collect();
-
+        let signed_dealings = create_and_verify_signed_dealings(&params, &env.crypto_components);
         let batch_signed_dealings =
-            batch_sign_signed_dealings(&params, &env.crypto_components, dealings);
+            batch_sign_signed_dealings(&params, &env.crypto_components, signed_dealings);
+
+        let params_with_removed_dealer = {
+            let mut dealers = params.dealers().get().clone();
+            let removed_dealer_id = random_dealer_id(&params);
+            assert!(dealers.remove(&removed_dealer_id));
+            IDkgTranscriptParams::new(
+                params.transcript_id(),
+                dealers,
+                params.receivers().get().clone(),
+                params.registry_version(),
+                params.algorithm_id(),
+                params.operation_type().clone(),
+            )
+            .expect("valid IDkgTranscriptParams")
+        };
         let creator_id = random_receiver_id(&params);
         let result = crypto_for(creator_id, &env.crypto_components)
-            .create_transcript(&params, &batch_signed_dealings);
-        let err = result.unwrap_err();
-        assert_matches!(err, IDkgCreateTranscriptError::DealerNotAllowed { .. });
+            .create_transcript(&params_with_removed_dealer, &batch_signed_dealings);
+
+        assert_matches!(
+            result,
+            Err(IDkgCreateTranscriptError::DealerNotAllowed { .. })
+        );
     }
 
     #[test]
@@ -215,7 +236,7 @@ mod create_transcript {
         // consider them eligible to sign
         let mut modified_receivers = params.receivers().get().clone();
         let removed_node_id = random_receiver_id(&params);
-        modified_receivers.remove(&removed_node_id);
+        assert!(modified_receivers.remove(&removed_node_id));
         let modified_params = IDkgTranscriptParams::new(
             params.transcript_id(),
             params.dealers().get().clone(),
@@ -248,26 +269,22 @@ mod create_transcript {
 
         let signed_dealings = create_and_verify_signed_dealings(&params, &env.crypto_components);
         let insufficient_batch_signed_dealings = signed_dealings
-            .into_iter()
-            .map(|(dealer_id, signed_dealing)| {
-                let signature_batch = {
-                    let signers: BTreeSet<_> = params
-                        .receivers()
-                        .get()
-                        .iter()
-                        .take(params.verification_threshold().get() as usize - 1) // Not enough!
-                        .cloned()
-                        .collect();
+            .into_values()
+            .map(|signed_dealing| {
+                let signers: BTreeSet<_> = params
+                    .receivers()
+                    .get()
+                    .iter()
+                    .take(params.verification_threshold().get() as usize - 1) // Not enough!
+                    .cloned()
+                    .collect();
 
-                    batch_signature_from_signers(
-                        params.registry_version(),
-                        &env.crypto_components,
-                        signed_dealing,
-                        &signers,
-                    )
-                };
-
-                (dealer_id, signature_batch)
+                batch_signature_from_signers(
+                    params.registry_version(),
+                    &env.crypto_components,
+                    signed_dealing,
+                    &signers,
+                )
             })
             .collect();
 
@@ -288,13 +305,17 @@ mod create_transcript {
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
         let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
         let creator_id = random_receiver_id(&params);
-        let mut batch_signed_dealings = create_batch_signed_dealings(&env, &params);
-        batch_signed_dealings
-            .values_mut()
-            .for_each(|dealing| dealing.flip_a_bit_in_all());
+        let batch_signed_dealings = create_batch_signed_dealings(&env, &params);
+        let corrupted_dealings = batch_signed_dealings
+            .into_iter()
+            .map(|mut dealing| {
+                dealing.flip_a_bit_in_all();
+                dealing
+            })
+            .collect();
 
         let result = crypto_for(creator_id, &env.crypto_components)
-            .create_transcript(&params, &batch_signed_dealings);
+            .create_transcript(&params, &corrupted_dealings);
 
         assert_matches!(
             result,
@@ -311,11 +332,15 @@ mod create_transcript {
         let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
         let creator_id = random_receiver_id(&params);
         let mut batch_signed_dealings = create_batch_signed_dealings(&env, &params);
-        batch_signed_dealings
-            .values_mut()
-            .next()
-            .expect("empty map")
-            .flip_a_bit_in_all();
+        batch_signed_dealings.insert_or_update({
+            let mut corrupted_dealing = batch_signed_dealings
+                .iter()
+                .next()
+                .expect("at least one dealing to corrupt")
+                .clone();
+            corrupted_dealing.flip_a_bit_in_all();
+            corrupted_dealing
+        });
 
         let result = crypto_for(creator_id, &env.crypto_components)
             .create_transcript(&params, &batch_signed_dealings);
@@ -335,11 +360,15 @@ mod create_transcript {
         let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
         let creator_id = random_receiver_id(&params);
         let mut batch_signed_dealings = create_batch_signed_dealings(&env, &params);
-        batch_signed_dealings
-            .values_mut()
-            .next()
-            .expect("empty map")
-            .flip_a_bit_in_one();
+        batch_signed_dealings.insert_or_update({
+            let mut corrupted_dealing = batch_signed_dealings
+                .iter()
+                .next()
+                .expect("at least one dealing to corrupt")
+                .clone();
+            corrupted_dealing.flip_a_bit_in_one();
+            corrupted_dealing
+        });
 
         let result = crypto_for(creator_id, &env.crypto_components)
             .create_transcript(&params, &batch_signed_dealings);
@@ -355,7 +384,7 @@ mod create_transcript {
     fn create_batch_signed_dealings(
         env: &CanisterThresholdSigTestEnvironment,
         params: &IDkgTranscriptParams,
-    ) -> BTreeMap<NodeId, BatchSignedIDkgDealing> {
+    ) -> BatchSignedIDkgDealings {
         let signed_dealings = create_and_verify_signed_dealings(params, &env.crypto_components);
         batch_sign_signed_dealings(params, &env.crypto_components, signed_dealings)
     }
