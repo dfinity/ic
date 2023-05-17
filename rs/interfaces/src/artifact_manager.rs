@@ -137,6 +137,7 @@ pub trait ArtifactClient<Artifact: artifact::ArtifactKind>: Send + Sync {
 ///   immediately called again.
 /// - no change applied and state was unchanged. So calling 'process_changes' is
 ///   not immediately required.
+#[derive(Debug, PartialEq, Eq)]
 pub enum ProcessingResult {
     StateChanged,
     StateUnchanged,

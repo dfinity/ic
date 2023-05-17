@@ -1,6 +1,6 @@
 //! The artifact pool public interface that defines the Consensus-P2P API.
 //! Consensus clients must implement the traits in this file in order to use the IC P2P protocol.
-use crate::time_source::TimeSource;
+use crate::{artifact_manager::ProcessingResult, time_source::TimeSource};
 use derive_more::From;
 use ic_types::{
     artifact::{Advert, ArtifactKind, PriorityFn},
@@ -33,8 +33,14 @@ pub trait ChangeSetProducer<Pool>: Send {
 }
 
 /// Ids of validated artifacts that were purged during the pool mutation, and adverts
-/// of artifacts that were validated during the pool mutation.
-pub struct ChangeResult<Artifact: ArtifactKind>(pub Vec<Artifact::Id>, pub Vec<Advert<Artifact>>);
+/// of artifacts that were validated during the pool mutation. As some changes (i.e.
+/// to the unvalidated section) might not generate adverts or purged IDs, `changed`
+/// indicates if the mutation changed the pool's state at all.
+pub struct ChangeResult<Artifact: ArtifactKind> {
+    pub purged: Vec<Artifact::Id>,
+    pub adverts: Vec<Advert<Artifact>>,
+    pub changed: ProcessingResult,
+}
 
 /// Defines the canonical way for mutating an artifact pool.
 /// Mutations should happen from a single place/component.

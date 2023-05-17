@@ -7,6 +7,7 @@ use crate::{
     pool_common::PoolSection,
 };
 use ic_interfaces::{
+    artifact_manager::ProcessingResult,
     artifact_pool::{
         ChangeResult, MutablePool, UnvalidatedArtifact, ValidatedArtifact, ValidatedPoolReader,
     },
@@ -120,6 +121,11 @@ impl MutablePool<CanisterHttpArtifact, CanisterHttpChangeSet> for CanisterHttpPo
         _time_source: &dyn TimeSource,
         change_set: CanisterHttpChangeSet,
     ) -> ChangeResult<CanisterHttpArtifact> {
+        let changed = if !change_set.is_empty() {
+            ProcessingResult::StateChanged
+        } else {
+            ProcessingResult::StateUnchanged
+        };
         let mut adverts = Vec::new();
         let mut purged = Vec::new();
         for action in change_set {
@@ -174,7 +180,11 @@ impl MutablePool<CanisterHttpArtifact, CanisterHttpChangeSet> for CanisterHttpPo
                 }
             }
         }
-        ChangeResult(purged, adverts)
+        ChangeResult {
+            purged,
+            adverts,
+            changed,
+        }
     }
 }
 

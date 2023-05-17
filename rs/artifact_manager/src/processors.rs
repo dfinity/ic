@@ -3,13 +3,7 @@
 
 use ic_interfaces::{
     artifact_manager::{ArtifactProcessor, ProcessingResult},
-    artifact_pool::{ChangeResult, ChangeSetProducer, MutablePool, UnvalidatedArtifact},
-    canister_http::CanisterHttpChangeSet,
-    certification::ChangeSet as CertificationChangeSet,
-    consensus_pool::ChangeSet as CoonsensusChangeSet,
-    dkg::ChangeSet as DkgChangeSet,
-    ecdsa::EcdsaChangeSet,
-    ingress_pool::ChangeSet as IngressChangeSet,
+    artifact_pool::{ChangeSetProducer, MutablePool, UnvalidatedArtifact},
     time_source::TimeSource,
 };
 use ic_types::{
@@ -22,17 +16,17 @@ use ic_types::{
 use std::sync::{Arc, RwLock};
 
 /// *Consensus* `OnStateChange` client.
-pub struct ConsensusProcessor<PoolConsensus> {
+pub struct ConsensusProcessor<P, C> {
     /// The *Consensus* pool.
-    consensus_pool: Arc<RwLock<PoolConsensus>>,
+    consensus_pool: Arc<RwLock<P>>,
     /// The *Consensus* client.
-    client: Box<dyn ChangeSetProducer<PoolConsensus, ChangeSet = CoonsensusChangeSet>>,
+    client: Box<dyn ChangeSetProducer<P, ChangeSet = C>>,
 }
 
-impl<PoolConsensus> ConsensusProcessor<PoolConsensus> {
+impl<P, C> ConsensusProcessor<P, C> {
     pub fn new(
-        consensus_pool: Arc<RwLock<PoolConsensus>>,
-        client: Box<dyn ChangeSetProducer<PoolConsensus, ChangeSet = CoonsensusChangeSet>>,
+        consensus_pool: Arc<RwLock<P>>,
+        client: Box<dyn ChangeSetProducer<P, ChangeSet = C>>,
     ) -> Self {
         Self {
             consensus_pool,
@@ -41,9 +35,8 @@ impl<PoolConsensus> ConsensusProcessor<PoolConsensus> {
     }
 }
 
-impl<
-        PoolConsensus: MutablePool<ConsensusArtifact, CoonsensusChangeSet> + Send + Sync + 'static,
-    > ArtifactProcessor<ConsensusArtifact> for ConsensusProcessor<PoolConsensus>
+impl<C, P: MutablePool<ConsensusArtifact, C> + Send + Sync + 'static>
+    ArtifactProcessor<ConsensusArtifact> for ConsensusProcessor<P, C>
 {
     /// The method processes changes in the *Consensus* pool and ingress pool.
     fn process_changes(
@@ -61,35 +54,29 @@ impl<
             let consensus_pool = self.consensus_pool.read().unwrap();
             self.client.on_state_change(&*consensus_pool)
         };
-        let changed = if !change_set.is_empty() {
-            ProcessingResult::StateChanged
-        } else {
-            ProcessingResult::StateUnchanged
-        };
-
-        let ChangeResult(_purged, adverts) = self
+        let result = self
             .consensus_pool
             .write()
             .unwrap()
             .apply_changes(time_source, change_set);
 
-        (adverts, changed)
+        (result.adverts, result.changed)
     }
 }
 
 /// The ingress `OnStateChange` client.
-pub struct IngressProcessor<PoolIngress> {
+pub struct IngressProcessor<P, C> {
     /// The ingress pool, protected by a read-write lock and automatic reference
     /// counting.
-    ingress_pool: Arc<RwLock<PoolIngress>>,
+    ingress_pool: Arc<RwLock<P>>,
     /// The ingress handler.
-    client: Arc<dyn ChangeSetProducer<PoolIngress, ChangeSet = IngressChangeSet> + Send + Sync>,
+    client: Arc<dyn ChangeSetProducer<P, ChangeSet = C> + Send + Sync>,
 }
 
-impl<PoolIngress> IngressProcessor<PoolIngress> {
+impl<P, C> IngressProcessor<P, C> {
     pub fn new(
-        ingress_pool: Arc<RwLock<PoolIngress>>,
-        client: Arc<dyn ChangeSetProducer<PoolIngress, ChangeSet = IngressChangeSet> + Send + Sync>,
+        ingress_pool: Arc<RwLock<P>>,
+        client: Arc<dyn ChangeSetProducer<P, ChangeSet = C> + Send + Sync>,
     ) -> Self {
         Self {
             ingress_pool,
@@ -98,8 +85,8 @@ impl<PoolIngress> IngressProcessor<PoolIngress> {
     }
 }
 
-impl<PoolIngress: MutablePool<IngressArtifact, IngressChangeSet> + Send + Sync + 'static>
-    ArtifactProcessor<IngressArtifact> for IngressProcessor<PoolIngress>
+impl<C, P: MutablePool<IngressArtifact, C> + Send + Sync + 'static>
+    ArtifactProcessor<IngressArtifact> for IngressProcessor<P, C>
 {
     /// The method processes changes in the ingress pool.
     fn process_changes(
@@ -117,27 +104,29 @@ impl<PoolIngress: MutablePool<IngressArtifact, IngressChangeSet> + Send + Sync +
             let pool = self.ingress_pool.read().unwrap();
             self.client.on_state_change(&*pool)
         };
-        let ChangeResult(_purged, adverts) = self
+        let result = self
             .ingress_pool
             .write()
             .unwrap()
             .apply_changes(time_source, change_set);
-        (adverts, ProcessingResult::StateUnchanged)
+        // We ignore the ingress pool's "changed" result and return StateUnchanged,
+        // in order to not trigger an immediate re-processing.
+        (result.adverts, ProcessingResult::StateUnchanged)
     }
 }
 
 /// Certification `OnStateChange` client.
-pub struct CertificationProcessor<PoolCertification> {
+pub struct CertificationProcessor<P, C> {
     /// The certification pool.
-    certification_pool: Arc<RwLock<PoolCertification>>,
+    certification_pool: Arc<RwLock<P>>,
     /// The certifier.
-    client: Box<dyn ChangeSetProducer<PoolCertification, ChangeSet = CertificationChangeSet>>,
+    client: Box<dyn ChangeSetProducer<P, ChangeSet = C>>,
 }
 
-impl<PoolCertification> CertificationProcessor<PoolCertification> {
+impl<P, C> CertificationProcessor<P, C> {
     pub fn new(
-        certification_pool: Arc<RwLock<PoolCertification>>,
-        client: Box<dyn ChangeSetProducer<PoolCertification, ChangeSet = CertificationChangeSet>>,
+        certification_pool: Arc<RwLock<P>>,
+        client: Box<dyn ChangeSetProducer<P, ChangeSet = C>>,
     ) -> Self {
         Self {
             certification_pool,
@@ -146,9 +135,8 @@ impl<PoolCertification> CertificationProcessor<PoolCertification> {
     }
 }
 
-impl<
-        PoolCertification: MutablePool<CertificationArtifact, CertificationChangeSet> + Send + Sync + 'static,
-    > ArtifactProcessor<CertificationArtifact> for CertificationProcessor<PoolCertification>
+impl<C, P: MutablePool<CertificationArtifact, C> + Send + Sync + 'static>
+    ArtifactProcessor<CertificationArtifact> for CertificationProcessor<P, C>
 {
     /// The method processes changes in the certification pool.
     fn process_changes(
@@ -165,41 +153,35 @@ impl<
         let change_set = self
             .client
             .on_state_change(&*self.certification_pool.read().unwrap());
-        let changed = if !change_set.is_empty() {
-            ProcessingResult::StateChanged
-        } else {
-            ProcessingResult::StateUnchanged
-        };
-
-        let ChangeResult(_purged, adverts) = self
+        let result = self
             .certification_pool
             .write()
             .unwrap()
             .apply_changes(time_source, change_set);
-        (adverts, changed)
+        (result.adverts, result.changed)
     }
 }
 
 /// Distributed key generation (DKG) `OnStateChange` client.
-pub struct DkgProcessor<PoolDkg> {
+pub struct DkgProcessor<P, C> {
     /// The DKG pool, protected by a read-write lock and automatic reference
     /// counting.
-    dkg_pool: Arc<RwLock<PoolDkg>>,
+    dkg_pool: Arc<RwLock<P>>,
     /// The DKG client.
-    client: Box<dyn ChangeSetProducer<PoolDkg, ChangeSet = DkgChangeSet>>,
+    client: Box<dyn ChangeSetProducer<P, ChangeSet = C>>,
 }
 
-impl<PoolDkg> DkgProcessor<PoolDkg> {
+impl<P, C> DkgProcessor<P, C> {
     pub fn new(
-        dkg_pool: Arc<RwLock<PoolDkg>>,
-        client: Box<dyn ChangeSetProducer<PoolDkg, ChangeSet = DkgChangeSet>>,
+        dkg_pool: Arc<RwLock<P>>,
+        client: Box<dyn ChangeSetProducer<P, ChangeSet = C>>,
     ) -> Self {
         Self { dkg_pool, client }
     }
 }
 
-impl<PoolDkg: MutablePool<DkgArtifact, DkgChangeSet> + Send + Sync + 'static>
-    ArtifactProcessor<DkgArtifact> for DkgProcessor<PoolDkg>
+impl<C, P: MutablePool<DkgArtifact, C> + Send + Sync + 'static> ArtifactProcessor<DkgArtifact>
+    for DkgProcessor<P, C>
 {
     /// The method processes changes in the DKG pool.
     fn process_changes(
@@ -217,38 +199,32 @@ impl<PoolDkg: MutablePool<DkgArtifact, DkgChangeSet> + Send + Sync + 'static>
             let dkg_pool = self.dkg_pool.read().unwrap();
             self.client.on_state_change(&*dkg_pool)
         };
-        let changed = if !change_set.is_empty() {
-            ProcessingResult::StateChanged
-        } else {
-            ProcessingResult::StateUnchanged
-        };
-
-        let ChangeResult(_purged, adverts) = self
+        let result = self
             .dkg_pool
             .write()
             .unwrap()
             .apply_changes(time_source, change_set);
-        (adverts, changed)
+        (result.adverts, result.changed)
     }
 }
 
 /// ECDSA `OnStateChange` client.
-pub struct EcdsaProcessor<PoolEcdsa> {
-    ecdsa_pool: Arc<RwLock<PoolEcdsa>>,
-    client: Box<dyn ChangeSetProducer<PoolEcdsa, ChangeSet = EcdsaChangeSet>>,
+pub struct EcdsaProcessor<P, C> {
+    ecdsa_pool: Arc<RwLock<P>>,
+    client: Box<dyn ChangeSetProducer<P, ChangeSet = C>>,
 }
 
-impl<PoolEcdsa> EcdsaProcessor<PoolEcdsa> {
+impl<P, C> EcdsaProcessor<P, C> {
     pub fn new(
-        ecdsa_pool: Arc<RwLock<PoolEcdsa>>,
-        client: Box<dyn ChangeSetProducer<PoolEcdsa, ChangeSet = EcdsaChangeSet>>,
+        ecdsa_pool: Arc<RwLock<P>>,
+        client: Box<dyn ChangeSetProducer<P, ChangeSet = C>>,
     ) -> Self {
         Self { ecdsa_pool, client }
     }
 }
 
-impl<PoolEcdsa: MutablePool<EcdsaArtifact, EcdsaChangeSet> + Send + Sync + 'static>
-    ArtifactProcessor<EcdsaArtifact> for EcdsaProcessor<PoolEcdsa>
+impl<C, P: MutablePool<EcdsaArtifact, C> + Send + Sync + 'static> ArtifactProcessor<EcdsaArtifact>
+    for EcdsaProcessor<P, C>
 {
     fn process_changes(
         &self,
@@ -266,31 +242,25 @@ impl<PoolEcdsa: MutablePool<EcdsaArtifact, EcdsaChangeSet> + Send + Sync + 'stat
             let ecdsa_pool = self.ecdsa_pool.read().unwrap();
             self.client.on_state_change(&*ecdsa_pool)
         };
-
-        let changed = if !change_set.is_empty() {
-            ProcessingResult::StateChanged
-        } else {
-            ProcessingResult::StateUnchanged
-        };
-
-        let ChangeResult(_purged, adverts) = self
+        let result = self
             .ecdsa_pool
             .write()
             .unwrap()
             .apply_changes(time_source, change_set);
-        (adverts, changed)
+        (result.adverts, result.changed)
     }
 }
 
-pub struct CanisterHttpProcessor<PoolCanisterHttp> {
-    canister_http_pool: Arc<RwLock<PoolCanisterHttp>>,
-    client: Box<dyn ChangeSetProducer<PoolCanisterHttp, ChangeSet = CanisterHttpChangeSet>>,
+/// CanisterHttp `OnStateChange` client.
+pub struct CanisterHttpProcessor<P, C> {
+    canister_http_pool: Arc<RwLock<P>>,
+    client: Box<dyn ChangeSetProducer<P, ChangeSet = C>>,
 }
 
-impl<PoolCanisterHttp> CanisterHttpProcessor<PoolCanisterHttp> {
+impl<P, C> CanisterHttpProcessor<P, C> {
     pub fn new(
-        canister_http_pool: Arc<RwLock<PoolCanisterHttp>>,
-        client: Box<dyn ChangeSetProducer<PoolCanisterHttp, ChangeSet = CanisterHttpChangeSet>>,
+        canister_http_pool: Arc<RwLock<P>>,
+        client: Box<dyn ChangeSetProducer<P, ChangeSet = C>>,
     ) -> Self {
         Self {
             canister_http_pool,
@@ -299,9 +269,8 @@ impl<PoolCanisterHttp> CanisterHttpProcessor<PoolCanisterHttp> {
     }
 }
 
-impl<
-        PoolCanisterHttp: MutablePool<CanisterHttpArtifact, CanisterHttpChangeSet> + Send + Sync + 'static,
-    > ArtifactProcessor<CanisterHttpArtifact> for CanisterHttpProcessor<PoolCanisterHttp>
+impl<C, P: MutablePool<CanisterHttpArtifact, C> + Send + Sync + 'static>
+    ArtifactProcessor<CanisterHttpArtifact> for CanisterHttpProcessor<P, C>
 {
     fn process_changes(
         &self,
@@ -317,18 +286,11 @@ impl<
         let change_set = self
             .client
             .on_state_change(&*self.canister_http_pool.read().unwrap());
-
-        let changed = if !change_set.is_empty() {
-            ProcessingResult::StateChanged
-        } else {
-            ProcessingResult::StateUnchanged
-        };
-
-        let ChangeResult(_purged, adverts) = self
+        let result = self
             .canister_http_pool
             .write()
             .unwrap()
             .apply_changes(time_source, change_set);
-        (adverts, changed)
+        (result.adverts, result.changed)
     }
 }
