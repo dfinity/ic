@@ -26,6 +26,7 @@ ic-sns-governance = { path = "../governance" }
 ic-sns-root = { path = "../root" }
 ic-sns-swap = { path = "../swap" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
+isocountry = "0.3.2"
 lazy_static = "1.4.0"
 maplit = "1.0.2"
 num = "0.4.0"
