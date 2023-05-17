@@ -212,6 +212,15 @@ rust_bench(
 )
 
 rust_bench(
+    name = "idkg_bench",
+    testonly = True,
+    srcs = ["benches/idkg.rs"],
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES + DEV_DEPENDENCIES,
+)
+
+rust_bench(
     name = "multi_sig_bench",
     testonly = True,
     srcs = ["benches/multi_sig.rs"],
