@@ -28,8 +28,8 @@ const MAX_TRANSACTIONS_PER_RESPONSE: usize = 1000;
 
 // One second in nanosecond
 const SEC_NANOS: u64 = 1_000_000_000;
-const DEFAULT_MAX_WAIT_TIME_NANOS: u64 = 60_u64 * SEC_NANOS;
-const DEFAULT_RETRY_WAIT_TIME_NANOS: u64 = 10_u64 * SEC_NANOS;
+const DEFAULT_MAX_WAIT_TIME_NANOS: u64 = 5_u64 * SEC_NANOS;
+const DEFAULT_RETRY_WAIT_TIME_NANOS: u64 = 5_u64 * SEC_NANOS;
 
 const LOG_PREFIX: &str = "[ic-icrc1-index] ";
 
@@ -44,7 +44,12 @@ struct Index {
     pub next_txid: u64,
 
     // Whether there is a build_index running right now
+    #[serde(default)]
     pub is_build_index_running: bool,
+
+    // Last wait time in nanoseconds.
+    #[serde(default)]
+    pub last_wait_time: u64,
 
     // The index of transactions per account
     pub account_index: BTreeMap<PrincipalId, BTreeMap<Subaccount, Vec<u64>>>,
@@ -61,6 +66,7 @@ impl Index {
             is_build_index_running: false,
             account_index: BTreeMap::new(),
             accounts_num: 0,
+            last_wait_time: 0,
         }
     }
 }
@@ -250,6 +256,7 @@ pub async fn build_index() -> Result<(), String> {
     ScopeGuard::into_inner(failure_guard);
     with_index_mut(|idx| {
         idx.is_build_index_running = false;
+        idx.last_wait_time = wait_time;
     });
     ic_cdk_timers::set_timer(Duration::from_nanos(wait_time), || {
         ic_cdk::spawn(async {
@@ -460,6 +467,11 @@ pub fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> st
         with_index(|idx| idx.accounts_num) as f64,
         "Total number of accounts indexed.",
     )?;
+    w.encode_gauge(
+        "index_last_wait_time",
+        with_index(|idx| idx.last_wait_time) as f64,
+        "Last amount of time waited between two transactions fetch.",
+    )?;
     PROFILING_DATA.with(|cell| -> std::io::Result<()> {
         cell.borrow().record_metrics(w.histogram_vec(
             "index_profile_instructions",
@@ -527,6 +539,7 @@ mod tests {
                 is_build_index_running: false,
                 account_index,
                 accounts_num: 0,
+                last_wait_time: 0,
             });
         });
     }
