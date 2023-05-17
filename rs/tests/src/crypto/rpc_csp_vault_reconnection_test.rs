@@ -34,9 +34,8 @@ use crate::driver::test_env_api::{
     retry, GetFirstHealthyNodeSnapshot, HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer,
     IcNodeSnapshot, SshSession,
 };
-use crate::orchestrator::utils::rw_message::{can_read_msg, can_store_msg, store_message};
+use crate::util::{assert_create_agent, block_on, MessageCanister};
 use anyhow::bail;
-use candid::Principal;
 use ic_registry_subnet_type::SubnetType;
 use slog::{debug, info, Logger};
 
@@ -66,12 +65,19 @@ pub fn rpc_csp_vault_reconnection_test(env: TestEnv) {
     };
 
     assert_eq!("active".to_string(), crypto_csp_service.state());
-    let canister_id = create_message_canister_and_store_message(&node, &logger);
+
+    let agent = block_on(assert_create_agent(node.get_public_url().as_str()));
+    let message_canister = block_on(MessageCanister::new(&agent, node.effective_canister_id()));
+    ensure_replica_is_not_stuck(&message_canister, "Replica process update calls", &logger);
 
     crypto_csp_service.stop();
     replica_service.wait_until_log_entry_contains("Detected disconnection from socket");
 
-    ensure_replica_is_not_stuck(&node, canister_id, &logger);
+    ensure_replica_is_not_stuck(
+        &message_canister,
+        "Replica process update calls after stopping server with systemd",
+        &logger,
+    );
     assert_eq!("active".to_string(), crypto_csp_service.state());
 
     crypto_csp_service.kill();
@@ -79,7 +85,11 @@ pub fn rpc_csp_vault_reconnection_test(env: TestEnv) {
         "ic-crypto-csp.service: Main process exited, code=killed, status=9/KILL",
     );
 
-    ensure_replica_is_not_stuck(&node, canister_id, &logger);
+    ensure_replica_is_not_stuck(
+        &message_canister,
+        "Replica process update calls after killing server",
+        &logger,
+    );
     assert_eq!("active".to_string(), crypto_csp_service.state());
 }
 
@@ -158,25 +168,18 @@ impl SystemdCli<'_> {
     }
 }
 
-fn create_message_canister_and_store_message(node: &IcNodeSnapshot, logger: &Logger) -> Principal {
-    const MSG: &str = "RPC CSP vault reconnection";
-    let canister_id = store_message(&node.get_public_url(), node.effective_canister_id(), MSG);
-    info!(logger, "Stored message to canister ID {}", canister_id);
-    assert!(can_read_msg(
+fn ensure_replica_is_not_stuck(message_canister: &MessageCanister, msg: &str, logger: &Logger) {
+    debug!(
         logger,
-        &node.get_public_url(),
-        canister_id,
-        MSG
-    ));
-    canister_id
-}
+        "Ensure replica can process update calls by storing message '{}' to message canister '{}'",
+        msg,
+        message_canister.canister_id()
+    );
 
-fn ensure_replica_is_not_stuck(node: &IcNodeSnapshot, canister_id: Principal, logger: &Logger) {
-    info!(logger, "Ensure update calls can be processed");
-    assert!(can_store_msg(
-        logger,
-        &node.get_public_url(),
-        canister_id,
-        "alive"
-    ));
+    block_on(message_canister.try_store_msg(msg))
+        .expect("update call to the canister should succeed");
+    assert_eq!(
+        block_on(message_canister.try_read_msg()),
+        Ok(Some(msg.to_string()))
+    );
 }
