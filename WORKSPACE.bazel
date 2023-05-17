@@ -209,13 +209,6 @@ container_pull(
 )
 
 container_pull(
-    name = "httpbin",
-    digest = "sha256:506a878e386b4c3014088b9089e692ecb3cb6a35fb35c9d68c1ac300ce9ab984",
-    registry = "registry.gitlab.com/dfinity-lab/open/public-docker-registry",
-    repository = "dfinity/httpbin",
-)
-
-container_pull(
     name = "minica",
     digest = "sha256:c67e2c1885d438b5927176295d41aaab8a72dd9e1272ba85054bfc78191d05b0",
     registry = "registry.gitlab.com/dfinity-lab/open/public-docker-registry",
@@ -234,6 +227,25 @@ container_pull(
     digest = "sha256:965fbcae990b0467ed5657caceaec165018ef44a4d2d46c7cdea80a9dff0d1ea",
     registry = "docker.io",
     repository = "ubuntu:latest",
+)
+
+# This image was built with bazel (bazel build //rs/tests:ubuntu_test_runtime_image)
+# then uploaded to our GitLab registry using:
+#
+#  $ bazel build //rs/tests:ubuntu_test_runtime_image
+#  $ docker login registry.gitlab.com
+#  $ docker load -i bazel-bin/rs/tests/ubuntu_test_runtime_image.tar
+#  $ docker tag ubuntu_test_runtime_image:latest "registry.gitlab.com/dfinity-lab/open/public-docker-registry/ubuntu_test_runtime_image:latest"
+#  $ docker image push  "registry.gitlab.com/dfinity-lab/open/public-docker-registry/ubuntu_test_runtime_image:latest"
+#
+# The reason we can't directly depend on //rs/tests:ubuntu_test_runtime_image is that
+# the target //rs/tests/httpbin-rs:httpbin_image_base
+# fails to build in our container (gitlab-ci/container/container-run.sh).
+container_pull(
+    name = "ubuntu_test_runtime",
+    digest = "sha256:d5b2f17ee8fcd45b4f1580893680b78a540f491e647a9f6971bdaab393e372f7",
+    registry = "registry.gitlab.com",
+    repository = "dfinity-lab/open/public-docker-registry/ubuntu_test_runtime_image",
 )
 
 # URL: registry.gitlab.com/dfinity-lab/open/public-docker-registry/nns-dapp-specs:latest
@@ -425,8 +437,8 @@ http_archive(
 package(default_visibility = ["//visibility:public"])
 filegroup(name = "artifacts", srcs = glob(["build/*", "test-data/*"]), visibility = ["//visibility:public"])
       """,
-    sha256 = "4a70dbe9ff70ac052e101815510135a457869d847f63180442e0afe5c5bd36ef",
-    urls = ["https://download.dfinity.systems/ic-ref/ic-ref-test-0.0.1-1431d7b5-x86_64-linux.tar.gz"],
+    sha256 = "f91fed3158779b32310e5cf7bcdf7915b38eaf635a72a52c844f656806e3e5d6",
+    urls = ["https://download.dfinity.systems/ic-ref/ic-ref-test-0.0.1-5fc27bdc-x86_64-linux.tar.gz"],
 )
 
 # Deployed NNS canisters
