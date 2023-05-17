@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 askama = "0.11.1"
+async-trait = "0.1.68"
 byte-unit = "4.0.14"
 crossbeam = "0.8.2"
 hex = "0.4.2"

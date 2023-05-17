@@ -19,6 +19,7 @@ use ic_agent::{
 };
 use ic_config::http_handler::Config;
 use ic_interfaces_registry_mocks::MockRegistryClient;
+use ic_pprof::Pprof;
 use ic_protobuf::registry::crypto::v1::{
     AlgorithmId as AlgorithmIdProto, PublicKey as PublicKeyProto,
 };
@@ -120,6 +121,7 @@ fn test_healthy_behind() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
+        Arc::new(Pprof::default()),
     );
 
     let agent = Agent::builder()
@@ -162,6 +164,7 @@ fn test_unathorized_controller() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
+        Arc::new(Pprof::default()),
     );
 
     let agent = Agent::builder()
@@ -217,6 +220,7 @@ fn test_unathorized_query() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
+        Arc::new(Pprof::default()),
     );
 
     let agent = Agent::builder()
@@ -302,6 +306,7 @@ fn test_unathorized_call() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
+        Arc::new(Pprof::default()),
     );
 
     let agent = Agent::builder()
@@ -409,6 +414,7 @@ async fn test_max_tcp_connections() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
+        Arc::new(Pprof::default()),
     );
 
     // Create max connections and store to prevent connections from being closed
@@ -453,6 +459,7 @@ async fn test_connection_read_timeout() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
+        Arc::new(Pprof::default()),
     );
 
     let (mut request_sender, status_code) = create_conn_and_send_request(addr).await;
@@ -487,6 +494,7 @@ fn test_request_timeout() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
+        Arc::new(Pprof::default()),
     );
 
     let agent = Agent::builder()
@@ -553,6 +561,7 @@ fn test_payload_too_large() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
+        Arc::new(Pprof::default()),
     );
 
     let request = |body: Vec<u8>| {
@@ -603,6 +612,7 @@ fn test_request_too_slow() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
+        Arc::new(Pprof::default()),
     );
 
     rt.block_on(async {

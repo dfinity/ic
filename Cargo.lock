@@ -6453,6 +6453,7 @@ name = "ic-http-endpoints-public"
 version = "0.8.0"
 dependencies = [
  "askama",
+ "async-trait",
  "byte-unit",
  "bytes",
  "crossbeam",
