@@ -1396,9 +1396,19 @@ where
     T: prost::Message + std::default::Default,
     P: ReadPolicy,
 {
+    /// Deserializes the value from the underlying file.
+    /// If the file does not exist, deserialize as an empty buffer.
+    /// Returns an error for all other I/O errors.
     pub fn deserialize(&self) -> Result<T, LayoutError> {
-        let file = open_for_read(&self.path)?;
-        self.deserialize_file(file)
+        match open_for_read(&self.path) {
+            Ok(f) => self.deserialize_file(f),
+            Err(LayoutError::IoError { io_err, .. })
+                if io_err.kind() == std::io::ErrorKind::NotFound =>
+            {
+                self.deserialize_buffer(&[])
+            }
+            Err(err) => Err(err),
+        }
     }
 
     fn deserialize_file(&self, f: std::fs::File) -> Result<T, LayoutError> {
@@ -1407,7 +1417,11 @@ where
             message: "failed to mmap a file".to_string(),
             io_err,
         })?;
-        T::decode(mmap.as_slice()).map_err(|err| LayoutError::CorruptedLayout {
+        self.deserialize_buffer(mmap.as_slice())
+    }
+
+    fn deserialize_buffer(&self, buf: &[u8]) -> Result<T, LayoutError> {
+        T::decode(buf).map_err(|err| LayoutError::CorruptedLayout {
             path: self.path.clone(),
             message: format!(
                 "failed to deserialize an object of type {} from protobuf: {}",
@@ -1415,21 +1429,6 @@ where
                 err
             ),
         })
-    }
-
-    /// Deserializes the value if the underlying file exists.
-    /// If the proto file does not exist, returns Ok(None).
-    /// Returns an error for all other I/O errors.
-    pub fn deserialize_opt(&self) -> Result<Option<T>, LayoutError> {
-        match open_for_read(&self.path) {
-            Ok(f) => self.deserialize_file(f).map(Some),
-            Err(LayoutError::IoError { io_err, .. })
-                if io_err.kind() == std::io::ErrorKind::NotFound =>
-            {
-                Ok(None)
-            }
-            Err(err) => Err(err),
-        }
     }
 }
 

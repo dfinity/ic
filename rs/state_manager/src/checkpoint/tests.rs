@@ -607,3 +607,72 @@ fn can_recover_subnet_queues() {
         );
     });
 }
+
+#[test]
+fn missing_protobufs_are_loaded_correctly() {
+    with_test_replica_logger(|log| {
+        let tmp = tmpdir("checkpoint");
+        let root = tmp.path().to_path_buf();
+        let layout = StateLayout::try_new(log.clone(), root, &MetricsRegistry::new()).unwrap();
+        let tip_handler = layout.capture_tip_handler();
+        let state_manager_metrics = state_manager_metrics();
+        let (_tip_thread, tip_channel) = spawn_tip_thread(
+            log,
+            tip_handler,
+            layout.clone(),
+            state_manager_metrics.clone(),
+            MaliciousFlags::default(),
+        );
+
+        const HEIGHT: Height = Height::new(42);
+        let canister_id = canister_test_id(1);
+
+        let own_subnet_type = SubnetType::Application;
+        let subnet_id = subnet_test_id(1);
+        let mut state = ReplicatedState::new(subnet_id, own_subnet_type);
+        let canister_state = new_canister_state(
+            canister_id,
+            user_test_id(24).get(),
+            INITIAL_CYCLES,
+            NumSeconds::from(100_000),
+        );
+        state.put_canister_state(canister_state);
+
+        let _state = make_checkpoint_and_get_state(&state, HEIGHT, &tip_channel);
+
+        let recovered_state = load_checkpoint(
+            &layout.checkpoint(HEIGHT).unwrap(),
+            own_subnet_type,
+            &state_manager_metrics.checkpoint_metrics,
+            Some(&mut thread_pool()),
+            Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
+        )
+        .unwrap();
+
+        let checkpoint_layout = layout.checkpoint(HEIGHT).unwrap();
+        let canister_layout = checkpoint_layout.canister(&canister_id).unwrap();
+
+        let empty_protobufs = vec![
+            checkpoint_layout.subnet_queues().raw_path().to_owned(),
+            checkpoint_layout.ingress_history().raw_path().to_owned(),
+            canister_layout.queues().raw_path().to_owned(),
+        ];
+
+        for path in empty_protobufs {
+            assert!(path.exists());
+            assert_eq!(std::fs::metadata(&path).unwrap().len(), 0);
+            std::fs::remove_file(&path).unwrap();
+        }
+
+        let recovered_state_altered = load_checkpoint(
+            &layout.checkpoint(HEIGHT).unwrap(),
+            own_subnet_type,
+            &state_manager_metrics.checkpoint_metrics,
+            Some(&mut thread_pool()),
+            Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
+        )
+        .unwrap();
+
+        assert_eq!(recovered_state, recovered_state_altered);
+    });
+}
