@@ -849,7 +849,8 @@ impl NNS {
                 },
             )
             .now_or_never()
-            .unwrap()
+            .unwrap()?;
+        Ok(())
     }
 
     pub fn get_neuron(&self, ident: &NeuronId) -> &Neuron {

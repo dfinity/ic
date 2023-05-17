@@ -1354,6 +1354,7 @@ pub mod manage_neuron_response {
         #[prost(message, optional, tag = "1")]
         pub created_neuron_id: ::core::option::Option<::ic_nns_common::pb::v1::NeuronId>,
     }
+    /// A response for merging or simulating merge neurons
     #[derive(
         candid::CandidType,
         candid::Deserialize,
@@ -1363,7 +1364,20 @@ pub mod manage_neuron_response {
         PartialEq,
         ::prost::Message,
     )]
-    pub struct MergeResponse {}
+    pub struct MergeResponse {
+        /// The resulting state of the source neuron
+        #[prost(message, optional, tag = "1")]
+        pub source_neuron: ::core::option::Option<super::Neuron>,
+        /// The resulting state of the target neuron
+        #[prost(message, optional, tag = "2")]
+        pub target_neuron: ::core::option::Option<super::Neuron>,
+        /// The NeuronInfo of the source neuron
+        #[prost(message, optional, tag = "3")]
+        pub source_neuron_info: ::core::option::Option<super::NeuronInfo>,
+        /// The NeuronInfo of the target neuron
+        #[prost(message, optional, tag = "4")]
+        pub target_neuron_info: ::core::option::Option<super::NeuronInfo>,
+    }
     #[derive(
         candid::CandidType,
         candid::Deserialize,

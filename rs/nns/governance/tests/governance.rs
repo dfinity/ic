@@ -122,6 +122,7 @@ pub mod common;
 use common::increase_dissolve_delay_raw;
 use ic_nervous_system_common::ledger::IcpLedger;
 use ic_nervous_system_common_test_utils::{LedgerReply, SpyLedger};
+use ic_nns_governance::pb::v1::manage_neuron_response::MergeResponse;
 use ic_nns_governance::pb::v1::settle_community_fund_participation::Committed;
 
 const DEFAULT_TEST_START_TIMESTAMP_SECONDS: u64 = 999_111_000_u64;
@@ -4946,6 +4947,12 @@ fn test_merge_neurons_fails() {
         .create();
 
     // 1. Source id and target id cannot be the same
+    // Previous iteration of this test looked for a message "Cannot merge a neuron into itself"
+    // but we are now doing the lock_neuron_for_command calls before we get to that validation rule.
+    // If the two neurons have the same ID, we will hit an error that there is already an in-flight
+    // command for that NeuronId.  Thus, we are here checking that we in fact still prevent merging
+    // a neuron into itself, but we are looking for an error message where you try to acquire a lock
+    // for a neuron that already has a lock outstanding.
     assert_matches!(
         nns.merge_neurons(
             &NeuronId { id: 1 },
@@ -4953,8 +4960,8 @@ fn test_merge_neurons_fails() {
             &NeuronId { id: 1 },
         ),
         Err(GovernanceError{error_type: code, error_message: msg})
-        if code == InvalidCommand as i32 &&
-           msg == "Cannot merge a neuron into itself");
+        if code == ErrorType::LedgerUpdateOngoing as i32 &&
+           msg == "Neuron has an ongoing ledger update.");
 
     // 2. Target neuron must be owned by the caller
     assert_matches!(
@@ -5222,7 +5229,34 @@ fn do_test_merge_neurons(
     // advance by a year, just to spice things up
     nns.advance_time_by(ONE_YEAR_SECONDS);
 
-    nns.governance
+    // First simulate
+    let simulate_neuron_response = nns
+        .governance
+        .simulate_manage_neuron(
+            &principal(1),
+            ManageNeuron {
+                id: Some(NeuronId { id: 2 }),
+                neuron_id_or_subaccount: None,
+                command: Some(Command::Merge(Merge {
+                    source_neuron_id: Some(NeuronId { id: 1 }),
+                })),
+            },
+        )
+        .now_or_never()
+        .unwrap();
+
+    // Assert no changes (except time) after simulate.
+    #[cfg(feature = "test")]
+    prop_assert_changes!(
+        nns,
+        Changed::Changed(vec![NNSStateChange::Now(U64Change(
+            epoch,
+            epoch + ONE_YEAR_SECONDS
+        ))])
+    );
+
+    let merge_neuron_response = nns
+        .governance
         .merge_neurons(
             &NeuronId { id: 2 },
             &principal(1),
@@ -5234,6 +5268,52 @@ fn do_test_merge_neurons(
         .unwrap()
         .unwrap();
 
+    // Assert simulated result is the same as actual result
+    assert_eq!(merge_neuron_response, simulate_neuron_response);
+
+    //Assert that simulate response gives correct outputs
+    match merge_neuron_response.command.unwrap() {
+        CommandResponse::Merge(m) => {
+            let MergeResponse {
+                source_neuron,
+                target_neuron,
+                source_neuron_info,
+                target_neuron_info,
+            } = m;
+            let source_neuron = source_neuron.unwrap();
+            let target_neuron = target_neuron.unwrap();
+            let source_neuron_info = source_neuron_info.unwrap();
+            let target_neuron_info = target_neuron_info.unwrap();
+
+            assert_eq!(
+                &source_neuron,
+                nns.governance
+                    .get_neuron(source_neuron.id.as_ref().unwrap())
+                    .unwrap()
+            );
+            assert_eq!(
+                &target_neuron,
+                nns.governance
+                    .get_neuron(target_neuron.id.as_ref().unwrap())
+                    .unwrap()
+            );
+            assert_eq!(
+                source_neuron_info,
+                nns.governance
+                    .get_neuron_info(source_neuron.id.as_ref().unwrap())
+                    .unwrap()
+            );
+            assert_eq!(
+                target_neuron_info,
+                nns.governance
+                    .get_neuron_info(target_neuron.id.as_ref().unwrap())
+                    .unwrap()
+            );
+        }
+        CommandResponse::Error(e) => panic!("Received Error: {}", e),
+        _ => panic!("Wrong response received"),
+    }
+
     #[cfg(feature = "test")]
     let fee = nns
         .governance
@@ -5243,6 +5323,7 @@ fn do_test_merge_neurons(
         .unwrap()
         .transaction_fee_e8s;
 
+    // Test internal changes
     #[cfg(feature = "test")]
     prop_assert_changes!(
         nns,
@@ -5267,8 +5348,6 @@ fn do_test_merge_neurons(
             }
 
             let mut changes = Vec::new();
-
-            let now_change = NNSStateChange::Now(U64Change(epoch, epoch + ONE_YEAR_SECONDS));
 
             let account_changes = {
                 let mut changes = Vec::new();
@@ -5399,7 +5478,6 @@ fn do_test_merge_neurons(
                 changes
             };
 
-            changes.push(now_change);
             if !account_changes.is_empty() {
                 changes.push(NNSStateChange::Accounts(account_changes));
             }
