@@ -13,7 +13,9 @@ use std::{
     task::{Context, Poll},
     time::Duration,
 };
-use tower::{util::BoxCloneService, BoxError, Service};
+use tower::{
+    limit::GlobalConcurrencyLimitLayer, util::BoxCloneService, BoxError, Service, ServiceBuilder,
+};
 
 pub const CONTENT_TYPE_SVG: &str = "image/svg+xml";
 /// Default CPU profile duration.
@@ -101,8 +103,12 @@ fn ok_response(body: Vec<u8>, content_type: &'static str) -> Response<Body> {
 pub(crate) struct PprofHomeService;
 
 impl PprofHomeService {
-    pub fn new_service() -> EndpointService {
-        BoxCloneService::new(Self)
+    pub fn new_service(concurrency_limiter: GlobalConcurrencyLimitLayer) -> EndpointService {
+        BoxCloneService::new(
+            ServiceBuilder::new()
+                .layer(concurrency_limiter)
+                .service(Self),
+        )
     }
 }
 
@@ -135,8 +141,15 @@ pub(crate) struct PprofProfileService {
 }
 
 impl PprofProfileService {
-    pub fn new_service(collector: Arc<dyn PprofCollector>) -> EndpointService {
-        BoxCloneService::new(Self { collector })
+    pub fn new_service(
+        collector: Arc<dyn PprofCollector>,
+        concurrency_limiter: GlobalConcurrencyLimitLayer,
+    ) -> EndpointService {
+        BoxCloneService::new(
+            ServiceBuilder::new()
+                .layer(concurrency_limiter)
+                .service(Self { collector }),
+        )
     }
 }
 
@@ -181,8 +194,15 @@ pub(crate) struct PprofFlamegraphService {
 }
 
 impl PprofFlamegraphService {
-    pub fn new_service(collector: Arc<dyn PprofCollector>) -> EndpointService {
-        BoxCloneService::new(Self { collector })
+    pub fn new_service(
+        collector: Arc<dyn PprofCollector>,
+        concurrency_limiter: GlobalConcurrencyLimitLayer,
+    ) -> EndpointService {
+        BoxCloneService::new(
+            ServiceBuilder::new()
+                .layer(concurrency_limiter)
+                .service(Self { collector }),
+        )
     }
 }
 

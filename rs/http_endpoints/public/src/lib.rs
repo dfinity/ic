@@ -311,9 +311,14 @@ pub fn start_server(
         consensus_pool_cache.clone(),
     );
 
-    let pprof_home_service = PprofHomeService::new_service();
-    let pprof_profile_service = PprofProfileService::new_service(pprof_collector.clone());
-    let pprof_flamegraph_service = PprofFlamegraphService::new_service(pprof_collector);
+    let pprof_concurrency_buffer =
+        GlobalConcurrencyLimitLayer::new(config.max_pprof_concurrent_requests);
+
+    let pprof_home_service = PprofHomeService::new_service(pprof_concurrency_buffer.clone());
+    let pprof_profile_service =
+        PprofProfileService::new_service(pprof_collector.clone(), pprof_concurrency_buffer.clone());
+    let pprof_flamegraph_service =
+        PprofFlamegraphService::new_service(pprof_collector, pprof_concurrency_buffer);
 
     let health_status_refresher = HealthStatusRefreshLayer::new(
         log.clone(),
