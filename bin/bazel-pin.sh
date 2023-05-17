@@ -2,6 +2,11 @@
 
 set -euo pipefail
 
+if [ -n "${IN_NIX_SHELL:-}" ]; then
+    echo "Please do not run $0 inside of nix-shell." >&2
+    exit 1
+fi
+
 REPIN="${1:-1}"
 
 case "${REPIN}" in
