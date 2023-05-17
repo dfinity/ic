@@ -1188,7 +1188,6 @@ impl SystemState {
     /// following a canister migration, based on the updated set of local canisters.
     ///
     /// See [`CanisterQueues::split_input_schedules`] for further details.
-    #[allow(dead_code)]
     pub(crate) fn split_input_schedules(
         &mut self,
         own_canister_id: &CanisterId,
@@ -1324,10 +1323,7 @@ pub(crate) fn push_input(
 }
 
 pub mod testing {
-    use super::SystemState;
-    use crate::CanisterQueues;
-    use ic_interfaces::messages::CanisterMessage;
-    use ic_types::{CanisterId, Cycles};
+    use super::*;
 
     /// Exposes `SystemState` internals for use in other crates' unit tests.
     pub trait SystemStateTesting {
@@ -1343,8 +1339,16 @@ pub mod testing {
         /// Testing only: pops next input message
         fn pop_input(&mut self) -> Option<CanisterMessage>;
 
-        /// Set value of 'cycles_balance'.
+        /// Testing only: sets the value of 'cycles_balance'.
         fn set_balance(&mut self, balance: Cycles);
+
+        /// Testing only: repartitions the local and remote input schedules after a
+        /// subnet split.
+        fn split_input_schedules(
+            &mut self,
+            own_canister_id: &CanisterId,
+            local_canisters: &BTreeMap<CanisterId, CanisterState>,
+        );
     }
 
     impl SystemStateTesting for SystemState {
@@ -1366,6 +1370,14 @@ pub mod testing {
 
         fn set_balance(&mut self, balance: Cycles) {
             self.cycles_balance = balance;
+        }
+
+        fn split_input_schedules(
+            &mut self,
+            own_canister_id: &CanisterId,
+            local_canisters: &BTreeMap<CanisterId, CanisterState>,
+        ) {
+            self.split_input_schedules(own_canister_id, local_canisters)
         }
     }
 }
