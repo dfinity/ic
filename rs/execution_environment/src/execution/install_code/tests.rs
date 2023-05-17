@@ -447,7 +447,9 @@ fn install_code_succeeds_with_enough_wasm_custom_sections_memory() {
 
 #[test]
 fn install_code_respects_wasm_custom_sections_available_memory() {
-    let available_wasm_custom_sections_memory = 200 * 1024; // 200KiB
+    // As we install canisters in a loop, using more memory spawns thousands of
+    // canister sandboxes, which lead to a few GiB memory usage.
+    let available_wasm_custom_sections_memory = 20 * 1024; // 20KiB
 
     // This value might need adjustment if something changes in the canister's
     // wasm that gets installed in the test.
