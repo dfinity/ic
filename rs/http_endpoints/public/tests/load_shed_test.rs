@@ -5,7 +5,8 @@ use crate::common::{
     default_get_latest_state, default_latest_certified_height, default_read_certified_state,
     get_free_localhost_socket_addr, start_http_endpoint, wait_for_status_healthy,
 };
-use http::StatusCode;
+use async_trait::async_trait;
+use hyper::{Body, Client, Method, Request, StatusCode};
 use ic_agent::{
     agent::{http_transport::ReqwestHttpReplicaV2Transport, QueryBuilder},
     agent_error::HttpErrorPayload,
@@ -15,10 +16,14 @@ use ic_agent::{
 };
 use ic_config::http_handler::Config;
 use ic_interfaces_state_manager_mocks::MockStateManager;
+use ic_pprof::{Error, Pprof, PprofCollector};
 use ic_types::messages::{Blob, HttpQueryResponse, HttpQueryResponseReply};
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Arc,
+use std::{
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    time::Duration,
 };
 use tokio::{runtime::Runtime, sync::Notify};
 
@@ -47,6 +52,7 @@ fn test_load_shedding_query() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
+        Arc::new(Pprof::default()),
     );
 
     let query_exec_running = Arc::new(Notify::new());
@@ -181,6 +187,7 @@ fn test_load_shedding_read_state() {
         Arc::new(mock_state_manager),
         Arc::new(mock_consensus_cache),
         Arc::new(mock_registry_client),
+        Arc::new(Pprof::default()),
     );
 
     let ok_agent = Agent::builder()
@@ -226,5 +233,129 @@ fn test_load_shedding_read_state() {
             ),
             "Load shedder did not kick in. Received unexpeceted response: {:?}", response
         );
+    });
+}
+
+/// Test concurrency limiter for `/_/pprof` endpoints, and that when the load shedder kicks in
+/// we return 429.
+/// Test scenario:
+/// 1. Set the concurrency limiter for pprof services, `max_pprof_concurrent_requests`, to 1.
+/// 2. Make 1 get request to `/_/pprof` where we wait before responding.
+/// 3. Make requests to endpoints under `/_/prof` expecting them all to be load shedded.
+/// 4. Return a response for the first request and ssert it does not get load shedded.
+#[test]
+fn test_load_shedding_pprof() {
+    // We have to create this custom MockPprof, as the `MockAll` crate
+    // doesn't support async closures in `returning()` yet.
+    // See: https://github.com/MystenLabs/sui/issues/5155
+    struct MockPprof {
+        buffer_filled: Arc<Notify>,
+        load_shedded_responses_finished: Arc<Notify>,
+    }
+    impl MockPprof {
+        pub fn new(
+            buffer_filled: Arc<Notify>,
+            load_shedded_responses_finished: Arc<Notify>,
+        ) -> Self {
+            Self {
+                buffer_filled,
+                load_shedded_responses_finished,
+            }
+        }
+    }
+    #[async_trait]
+    impl PprofCollector for MockPprof {
+        async fn profile(&self, _: Duration, _: i32) -> Result<Vec<u8>, Error> {
+            Ok(Vec::new())
+        }
+        async fn flamegraph(&self, _: Duration, _: i32) -> Result<Vec<u8>, Error> {
+            self.buffer_filled.notify_one();
+            self.load_shedded_responses_finished.notified().await;
+            Ok(Vec::new())
+        }
+    }
+
+    let rt = Runtime::new().unwrap();
+    let addr = get_free_localhost_socket_addr();
+
+    let buffer_size = 1;
+
+    let config = Config {
+        listen_addr: addr,
+        max_pprof_concurrent_requests: buffer_size,
+        ..Default::default()
+    };
+
+    let buffer_filled = Arc::new(Notify::new());
+    let load_shedded_responses_finished = Arc::new(Notify::new());
+
+    let mock_pprof = MockPprof::new(
+        buffer_filled.clone(),
+        load_shedded_responses_finished.clone(),
+    );
+
+    let mock_state_manager = basic_state_manager_mock();
+    let mock_consensus_cache = basic_consensus_pool_cache();
+    let mock_registry_client = basic_registry_client();
+
+    let _ = start_http_endpoint(
+        rt.handle().clone(),
+        config,
+        Arc::new(mock_state_manager),
+        Arc::new(mock_consensus_cache),
+        Arc::new(mock_registry_client),
+        Arc::new(mock_pprof),
+    );
+
+    let flame_graph_req = move || {
+        Request::builder()
+            .method(Method::GET)
+            .uri(format!("http://{}/_/pprof/{}", addr, "flamegraph"))
+            .body(Body::empty())
+            .expect("request builder")
+    };
+
+    let profile_req = move || {
+        Request::builder()
+            .method(Method::GET)
+            .uri(format!("http://{}/_/pprof/{}", addr, "profile"))
+            .body(Body::empty())
+            .expect("request builder")
+    };
+
+    let pprof_base_req = move || {
+        Request::builder()
+            .method(Method::GET)
+            .uri(format!("http://{}/_/pprof", addr))
+            .body(Body::empty())
+            .expect("request builder")
+    };
+
+    // This request wil fill the load shedder.
+    let ok_request = rt.spawn(async move {
+        let client = Client::new();
+        let response = client.request(flame_graph_req()).await.unwrap();
+        response.status()
+    });
+
+    rt.block_on(async {
+        let requests: Vec<Box<dyn Fn() -> Request<Body>>> = vec![
+            Box::new(flame_graph_req),
+            Box::new(pprof_base_req),
+            Box::new(profile_req),
+        ];
+
+        buffer_filled.notified().await;
+
+        for request_builder in requests {
+            let client = Client::new();
+            let response = client.request(request_builder()).await.unwrap();
+
+            assert_eq!(StatusCode::TOO_MANY_REQUESTS, response.status());
+        }
+
+        load_shedded_responses_finished.notify_one();
+
+        assert_eq!(StatusCode::OK, ok_request.await.unwrap())
     });
 }

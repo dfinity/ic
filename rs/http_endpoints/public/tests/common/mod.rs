@@ -18,7 +18,7 @@ use ic_interfaces_state_manager::StateReader;
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
-use ic_pprof::Pprof;
+use ic_pprof::PprofCollector;
 use ic_protobuf::registry::{
     crypto::v1::{AlgorithmId as AlgorithmIdProto, PublicKey as PublicKeyProto},
     provisional_whitelist::v1::ProvisionalWhitelist as ProvisionalWhitelistProto,
@@ -366,6 +366,7 @@ pub fn start_http_endpoint(
     state_manager: Arc<dyn StateReader<State = ReplicatedState>>,
     consensus_cache: Arc<dyn ConsensusPoolCache>,
     registry_client: Arc<dyn RegistryClient>,
+    pprof_collector: Arc<dyn PprofCollector>,
 ) -> (
     IngressFilterHandle,
     IngressIngestionHandle,
@@ -398,7 +399,7 @@ pub fn start_http_endpoint(
         consensus_cache,
         SubnetType::Application,
         MaliciousFlags::default(),
-        Arc::new(Pprof::default()),
+        pprof_collector,
     );
     (
         ingress_filter_handle,
