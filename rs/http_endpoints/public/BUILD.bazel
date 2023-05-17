@@ -50,7 +50,9 @@ DEPENDENCIES = [
     "@crate_index//:url",
 ]
 
-MACRO_DEPENDENCIES = []
+MACRO_DEPENDENCIES = [
+    "@crate_index//:async-trait",
+]
 
 BUILD_DEPENDENCIES = []
 
