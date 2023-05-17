@@ -5,6 +5,7 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     "//rs/crypto/sha",
     "//rs/nervous_system/common",
+    "//rs/nervous_system/proto",
     "//rs/nns/constants",
     "//rs/nns/sns-wasm",
     "//rs/protobuf",

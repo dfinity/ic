@@ -2,6 +2,7 @@ use candid::Principal;
 use dfn_candid::candid_one;
 use ic_sns_cli::init_config_file::{
     SnsCliInitConfig, SnsGovernanceConfig, SnsInitialTokenDistributionConfig, SnsLedgerConfig,
+    SnsSwapConfig,
 };
 use ic_sns_governance::pb::v1::{
     GetSnsInitializationParametersRequest, GetSnsInitializationParametersResponse,
@@ -47,6 +48,10 @@ fn get_test_sns_cli_init_config() -> SnsCliInitConfig {
             initial_token_distribution: Some(FractionalDeveloperVotingPower(
                 FractionalDVP::with_valid_values_for_testing(),
             )),
+        },
+        sns_swap: SnsSwapConfig {
+            confirmation_text: Some("Please confirm that 2+2=4".to_string()),
+            restricted_countries: Some(vec!["CH".to_string()]),
         },
     }
 }
