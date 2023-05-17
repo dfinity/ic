@@ -3,6 +3,7 @@ use crate::{
     pool_common::PoolSection,
 };
 use ic_interfaces::{
+    artifact_manager::ProcessingResult,
     artifact_pool::{
         ChangeResult, MutablePool, UnvalidatedArtifact, ValidatedArtifact, ValidatedPoolReader,
     },
@@ -125,6 +126,11 @@ impl MutablePool<DkgArtifact, ChangeSet> for DkgPoolImpl {
         _time_source: &dyn TimeSource,
         change_set: ChangeSet,
     ) -> ChangeResult<DkgArtifact> {
+        let changed = if !change_set.is_empty() {
+            ProcessingResult::StateChanged
+        } else {
+            ProcessingResult::StateUnchanged
+        };
         let mut adverts = Vec::new();
         let mut purged = Vec::new();
         for action in change_set {
@@ -167,7 +173,11 @@ impl MutablePool<DkgArtifact, ChangeSet> for DkgPoolImpl {
                 ChangeAction::Purge(height) => purged.append(&mut self.purge(height)),
             }
         }
-        ChangeResult(purged, adverts)
+        ChangeResult {
+            purged,
+            adverts,
+            changed,
+        }
     }
 }
 
@@ -256,7 +266,7 @@ mod test {
         let last_dkg_id_start_height = Height::from(10);
         let mut pool = DkgPoolImpl::new(MetricsRegistry::new(), no_op_logger());
         // add two validated messages, one for every DKG instance
-        let ChangeResult(purged, adverts) = pool.apply_changes(
+        let result = pool.apply_changes(
             &SysTimeSource::new(),
             [
                 make_message(current_dkg_id_start_height, node_test_id(0)),
@@ -279,29 +289,32 @@ mod test {
             timestamp: mock_time(),
         });
         // ensure we have 2 validated and 2 unvalidated artifacts
-        assert_eq!(adverts.len(), 2);
-        assert!(purged.is_empty());
+        assert_eq!(result.adverts.len(), 2);
+        assert!(result.purged.is_empty());
+        assert_eq!(result.changed, ProcessingResult::StateChanged);
         assert_eq!(pool.get_validated().count(), 2);
         assert_eq!(pool.get_unvalidated().count(), 2);
 
         // purge below the height of the current dkg and make sure the older artifacts
         // are purged from the validated and unvalidated sections
-        let ChangeResult(purged, adverts) = pool.apply_changes(
+        let result = pool.apply_changes(
             &SysTimeSource::new(),
             vec![ChangeAction::Purge(current_dkg_id_start_height)],
         );
-        assert_eq!(purged.len(), 1);
-        assert!(adverts.is_empty());
+        assert_eq!(result.purged.len(), 1);
+        assert!(result.adverts.is_empty());
+        assert_eq!(result.changed, ProcessingResult::StateChanged);
         assert_eq!(pool.get_validated().count(), 1);
         assert_eq!(pool.get_unvalidated().count(), 1);
 
         // purge the highest height and make sure everything is gone
-        let ChangeResult(purged, adverts) = pool.apply_changes(
+        let result = pool.apply_changes(
             &SysTimeSource::new(),
             vec![ChangeAction::Purge(current_dkg_id_start_height.increment())],
         );
-        assert_eq!(purged.len(), 1);
-        assert!(adverts.is_empty());
+        assert_eq!(result.purged.len(), 1);
+        assert!(result.adverts.is_empty());
+        assert_eq!(result.changed, ProcessingResult::StateChanged);
         assert_eq!(pool.get_validated().count(), 0);
         assert_eq!(pool.get_unvalidated().count(), 0);
     }

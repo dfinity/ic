@@ -1,6 +1,7 @@
 use crate::height_index::HeightIndex;
 use crate::metrics::{PoolMetrics, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED};
 use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
+use ic_interfaces::artifact_manager::ProcessingResult;
 use ic_interfaces::artifact_pool::ChangeResult;
 use ic_interfaces::{
     artifact_pool::{MutablePool, UnvalidatedArtifact, ValidatedPoolReader},
@@ -141,6 +142,11 @@ impl MutablePool<CertificationArtifact, ChangeSet> for CertificationPoolImpl {
         _time_source: &dyn TimeSource,
         change_set: ChangeSet,
     ) -> ChangeResult<CertificationArtifact> {
+        let changed = if !change_set.is_empty() {
+            ProcessingResult::StateChanged
+        } else {
+            ProcessingResult::StateUnchanged
+        };
         let mut adverts = Vec::new();
         let mut purged = Vec::new();
         change_set.into_iter().for_each(|action| match action {
@@ -209,7 +215,11 @@ impl MutablePool<CertificationArtifact, ChangeSet> for CertificationPoolImpl {
                 };
             }
         });
-        ChangeResult(purged, adverts)
+        ChangeResult {
+            purged,
+            adverts,
+            changed,
+        }
     }
 }
 
@@ -464,15 +474,16 @@ mod tests {
                 CertificationPoolImpl::new(pool_config, no_op_logger(), MetricsRegistry::new());
             let share_msg = fake_share(7, 0);
             let cert_msg = fake_cert(8);
-            let ChangeResult(purged, adverts) = pool.apply_changes(
+            let result = pool.apply_changes(
                 &SysTimeSource::new(),
                 vec![
                     ChangeAction::AddToValidated(share_msg.clone()),
                     ChangeAction::AddToValidated(cert_msg.clone()),
                 ],
             );
-            assert_eq!(adverts.len(), 2);
-            assert!(purged.is_empty());
+            assert_eq!(result.adverts.len(), 2);
+            assert!(result.purged.is_empty());
+            assert_eq!(result.changed, ProcessingResult::StateChanged);
             assert_eq!(
                 pool.certification_at_height(Height::from(8)),
                 Some(msg_to_cert(cert_msg))
@@ -493,15 +504,16 @@ mod tests {
             let cert_msg = fake_cert(20);
             pool.insert(to_unvalidated(share_msg.clone()));
             pool.insert(to_unvalidated(cert_msg.clone()));
-            let ChangeResult(purged, adverts) = pool.apply_changes(
+            let result = pool.apply_changes(
                 &SysTimeSource::new(),
                 vec![
                     ChangeAction::MoveToValidated(share_msg.clone()),
                     ChangeAction::MoveToValidated(cert_msg.clone()),
                 ],
             );
-            assert_eq!(adverts.len(), 2);
-            assert!(purged.is_empty());
+            assert_eq!(result.adverts.len(), 2);
+            assert!(result.purged.is_empty());
+            assert_eq!(result.changed, ProcessingResult::StateChanged);
             assert_eq!(
                 pool.shares_at_height(Height::from(10))
                     .collect::<Vec<CertificationShare>>(),
@@ -557,7 +569,7 @@ mod tests {
                 1
             );
 
-            let ChangeResult(purged, adverts) = pool.apply_changes(
+            let result = pool.apply_changes(
                 &SysTimeSource::new(),
                 vec![ChangeAction::RemoveAllBelow(Height::from(11))],
             );
@@ -574,8 +586,9 @@ mod tests {
                     panic!("Purging couldn't finish in more than 6 seconds.")
                 }
             }
-            assert!(adverts.is_empty());
-            assert_eq!(purged.len(), 2);
+            assert!(result.adverts.is_empty());
+            assert_eq!(result.purged.len(), 2);
+            assert_eq!(result.changed, ProcessingResult::StateChanged);
             assert_eq!(pool.all_heights_with_artifacts().len(), 0);
             assert_eq!(pool.shares_at_height(Height::from(10)).count(), 0);
             assert!(pool.certification_at_height(Height::from(10)).is_none());
@@ -603,19 +616,23 @@ mod tests {
                 pool.unvalidated_shares_at_height(Height::from(10)).count(),
                 1
             );
-            let ChangeResult(purged, adverts) = pool.apply_changes(
+            let result = pool.apply_changes(
                 &SysTimeSource::new(),
                 vec![ChangeAction::HandleInvalid(
                     share_msg,
                     "Testing the removal of invalid artifacts".to_string(),
                 )],
             );
-            assert!(adverts.is_empty());
-            assert!(purged.is_empty());
+            assert!(result.adverts.is_empty());
+            assert!(result.purged.is_empty());
+            assert_eq!(result.changed, ProcessingResult::StateChanged);
             assert_eq!(
                 pool.unvalidated_shares_at_height(Height::from(10)).count(),
                 0
             );
+
+            let result = pool.apply_changes(&SysTimeSource::new(), vec![]);
+            assert_eq!(result.changed, ProcessingResult::StateUnchanged);
         });
     }
 }

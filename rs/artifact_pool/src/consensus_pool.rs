@@ -8,6 +8,7 @@ use crate::{
     metrics::{LABEL_POOL_TYPE, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED},
 };
 use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
+use ic_interfaces::artifact_manager::ProcessingResult;
 use ic_interfaces::artifact_pool::ChangeResult;
 use ic_interfaces::{
     artifact_pool::{MutablePool, ValidatedPoolReader},
@@ -537,6 +538,11 @@ impl MutablePool<ConsensusArtifact, ChangeSet> for ConsensusPoolImpl {
         time_source: &dyn TimeSource,
         change_set: ChangeSet,
     ) -> ChangeResult<ConsensusArtifact> {
+        let changed = if !change_set.is_empty() {
+            ProcessingResult::StateChanged
+        } else {
+            ProcessingResult::StateUnchanged
+        };
         let updates = self.cache.prepare(&change_set);
         let mut unvalidated_ops = PoolSectionOps::new();
         let mut validated_ops = PoolSectionOps::new();
@@ -607,7 +613,11 @@ impl MutablePool<ConsensusArtifact, ChangeSet> for ConsensusPoolImpl {
         if !updates.is_empty() {
             self.cache.update(self, updates);
         }
-        ChangeResult(purged, adverts)
+        ChangeResult {
+            purged,
+            adverts,
+            changed,
+        }
     }
 }
 
@@ -1020,27 +1030,33 @@ mod tests {
                 ChangeAction::MoveToValidated(random_beacon_2.clone()),
                 ChangeAction::AddToValidated(random_beacon_3.clone()),
             ];
-            let ChangeResult(purged, adverts) = pool.apply_changes(time_source.as_ref(), changeset);
-            assert!(purged.is_empty());
-            assert_eq!(adverts.len(), 2);
-            assert_eq!(adverts[0].id, random_beacon_2.get_id());
-            assert_eq!(adverts[1].id, random_beacon_3.get_id());
+            let result = pool.apply_changes(time_source.as_ref(), changeset);
+            assert!(result.purged.is_empty());
+            assert_eq!(result.adverts.len(), 2);
+            assert_eq!(result.changed, ProcessingResult::StateChanged);
+            assert_eq!(result.adverts[0].id, random_beacon_2.get_id());
+            assert_eq!(result.adverts[1].id, random_beacon_3.get_id());
 
-            let ChangeResult(purged, adverts) = pool.apply_changes(
+            let result = pool.apply_changes(
                 time_source.as_ref(),
                 vec![ChangeAction::PurgeValidatedBelow(Height::from(3))],
             );
-            assert!(adverts.is_empty());
+            assert!(result.adverts.is_empty());
             // purging genesis CUP & beacon + validated beacon at height 2
-            assert_eq!(purged.len(), 3);
-            assert!(purged.contains(&random_beacon_2.get_id()));
+            assert_eq!(result.purged.len(), 3);
+            assert!(result.purged.contains(&random_beacon_2.get_id()));
+            assert_eq!(result.changed, ProcessingResult::StateChanged);
 
-            let ChangeResult(purged, adverts) = pool.apply_changes(
+            let result = pool.apply_changes(
                 time_source.as_ref(),
                 vec![ChangeAction::PurgeUnvalidatedBelow(Height::from(3))],
             );
-            assert!(adverts.is_empty());
-            assert!(purged.is_empty());
+            assert!(result.adverts.is_empty());
+            assert!(result.purged.is_empty());
+            assert_eq!(result.changed, ProcessingResult::StateChanged);
+
+            let result = pool.apply_changes(time_source.as_ref(), vec![]);
+            assert_eq!(result.changed, ProcessingResult::StateUnchanged);
         })
     }
 
