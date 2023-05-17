@@ -1070,13 +1070,8 @@ pub fn generate_ticket_participants_workload(
                         ))
                     }
                     .await
-                    .check_response(|response| {
-                        if let Err(error) = response {
-                            Err(anyhow::anyhow!("Minting failed: {error:?}"))
-                        } else {
-                            Ok(())
-                        }
-                    })
+                    .context("unable to \"mint\" tokens for the participant")
+                    .map(|_| ())
                     .with_workflow_position(0)
                     .push_outcome_display_error(&mut sale_outcome)
                     .result();
@@ -1095,13 +1090,8 @@ pub fn generate_ticket_participants_workload(
                         )
                     }
                     .await
-                    .check_response(|response| {
-                        if let Err(error) = response.ticket() {
-                            Err(anyhow::anyhow!("new_sale_ticket: {:?}", error.error_type()))
-                        } else {
-                            Ok(())
-                        }
-                    })
+                    .context("error calling sns.new_sale_ticket")
+                    .map(|_| ())
                     .with_workflow_position(1)
                     .push_outcome_display_error(&mut sale_outcome)
                     .result();
@@ -1128,13 +1118,8 @@ pub fn generate_ticket_participants_workload(
                         ))
                     }
                     .await
-                    .check_response(|response| {
-                        if let Err(error) = response {
-                            Err(anyhow::anyhow!("ICP ledger transfer failed: {error:?}"))
-                        } else {
-                            Ok(())
-                        }
-                    })
+                    .context("error performing an ICP ledger transfer")
+                    .map(|_| ())
                     .with_workflow_position(2)
                     .push_outcome_display_error(&mut sale_outcome)
                     .result();
