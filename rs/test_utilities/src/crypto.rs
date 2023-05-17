@@ -350,14 +350,21 @@ impl IDkgProtocol for CryptoReturningOk {
     fn create_transcript(
         &self,
         params: &IDkgTranscriptParams,
-        verified_dealings: &BTreeMap<NodeId, BatchSignedIDkgDealing>,
+        dealings: &BatchSignedIDkgDealings,
     ) -> Result<IDkgTranscript, IDkgCreateTranscriptError> {
         let mut receivers = BTreeSet::new();
         receivers.insert(node_test_id(0));
 
-        let dealings_by_index = verified_dealings
+        let dealings_by_index = dealings
             .iter()
-            .map(|(id, d)| (params.dealers().position(*id).expect("mock"), d.clone()))
+            .map(|dealing| {
+                (
+                    params.dealer_index(dealing.dealer_id()).expect(
+                        "dealer from BatchSignedIDkgDealing should be in IDkgTranscriptParams",
+                    ),
+                    dealing.clone(),
+                )
+            })
             .collect();
 
         Ok(IDkgTranscript {

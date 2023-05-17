@@ -16,8 +16,8 @@ use ic_types::crypto::canister_threshold_sig::error::{
     IDkgVerifyOpeningError, IDkgVerifyTranscriptError,
 };
 use ic_types::crypto::canister_threshold_sig::idkg::{
-    BatchSignedIDkgDealing, IDkgComplaint, IDkgOpening, IDkgTranscript, IDkgTranscriptParams,
-    IDkgTranscriptType,
+    BatchSignedIDkgDealing, BatchSignedIDkgDealings, IDkgComplaint, IDkgOpening, IDkgTranscript,
+    IDkgTranscriptParams, IDkgTranscriptType,
 };
 use ic_types::crypto::CryptoError;
 use ic_types::{NodeId, NodeIndex, NumberOfNodes, RegistryVersion};
@@ -29,13 +29,13 @@ pub fn create_transcript<C: CspIDkgProtocol + CspSigner>(
     csp_client: &C,
     registry: &dyn RegistryClient,
     params: &IDkgTranscriptParams,
-    dealings: &BTreeMap<NodeId, BatchSignedIDkgDealing>,
+    dealings: &BatchSignedIDkgDealings,
 ) -> Result<IDkgTranscript, IDkgCreateTranscriptError> {
     ensure_sufficient_dealings_collected(params, dealings)?;
     ensure_dealers_allowed_by_params(params, dealings)?;
     ensure_signers_allowed_by_params(params, dealings)?;
 
-    for (dealer, dealing) in dealings {
+    for dealing in dealings {
         verify_signature_batch(
             csp_client,
             registry,
@@ -43,7 +43,9 @@ pub fn create_transcript<C: CspIDkgProtocol + CspSigner>(
             params.verification_threshold(),
             params.registry_version(),
         )
-        .map_err(signature_batch_err_to_create_transcript_err(*dealer))?;
+        .map_err(signature_batch_err_to_create_transcript_err(
+            dealing.dealer_id(),
+        ))?;
     }
 
     let signed_dealings_by_index = dealings_by_index_from_dealings(dealings, params)?;
@@ -331,7 +333,7 @@ pub fn verify_opening<C: CspIDkgProtocol>(
 
 fn ensure_sufficient_dealings_collected(
     params: &IDkgTranscriptParams,
-    dealings: &BTreeMap<NodeId, BatchSignedIDkgDealing>,
+    dealings: &BatchSignedIDkgDealings,
 ) -> Result<(), IDkgCreateTranscriptError> {
     if dealings.len() < params.collection_threshold().get() as usize {
         Err(IDkgCreateTranscriptError::UnsatisfiedCollectionThreshold {
@@ -345,9 +347,9 @@ fn ensure_sufficient_dealings_collected(
 
 fn ensure_dealers_allowed_by_params(
     params: &IDkgTranscriptParams,
-    dealings: &BTreeMap<NodeId, BatchSignedIDkgDealing>,
+    dealings: &BatchSignedIDkgDealings,
 ) -> Result<(), IDkgCreateTranscriptError> {
-    for id in dealings.keys() {
+    for id in dealings.dealer_ids() {
         if !params.dealers().get().contains(id) {
             return Err(IDkgCreateTranscriptError::DealerNotAllowed { node_id: *id });
         }
@@ -358,9 +360,9 @@ fn ensure_dealers_allowed_by_params(
 
 fn ensure_signers_allowed_by_params(
     params: &IDkgTranscriptParams,
-    dealings: &BTreeMap<NodeId, BatchSignedIDkgDealing>,
+    dealings: &BatchSignedIDkgDealings,
 ) -> Result<(), IDkgCreateTranscriptError> {
-    for dealing in dealings.values() {
+    for dealing in dealings {
         for signer in dealing.signers() {
             if !params.receivers().get().contains(&signer) {
                 return Err(IDkgCreateTranscriptError::SignerNotAllowed { node_id: signer });
@@ -396,17 +398,19 @@ fn internal_dealings_from_signed_dealings(
 ///
 /// Only the first collection_threshold dealings are returned
 fn dealings_by_index_from_dealings(
-    dealings: &BTreeMap<NodeId, BatchSignedIDkgDealing>,
+    dealings: &BatchSignedIDkgDealings,
     params: &IDkgTranscriptParams,
 ) -> Result<BTreeMap<NodeIndex, BatchSignedIDkgDealing>, IDkgCreateTranscriptError> {
     dealings
         .iter()
         .take(params.collection_threshold().get() as usize)
-        .map(|(id, d)| {
-            let index = params
-                .dealer_index(*id)
-                .ok_or(IDkgCreateTranscriptError::DealerNotAllowed { node_id: *id })?;
-            Ok((index, d.clone()))
+        .map(|dealing| {
+            let index = params.dealer_index(dealing.dealer_id()).ok_or(
+                IDkgCreateTranscriptError::DealerNotAllowed {
+                    node_id: dealing.dealer_id(),
+                },
+            )?;
+            Ok((index, dealing.clone()))
         })
         .collect()
 }
