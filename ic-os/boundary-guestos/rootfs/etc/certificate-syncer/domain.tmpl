@@ -8,6 +8,9 @@ server {
     ssl_certificate_key {ssl_certificate_key_path};
 
     location / {
+        # Observability
+        include "includes/request_id.conf";
+
         # Prereqs
         include "includes/method_get.conf";
         include "includes/empty_routes_503.conf";
@@ -29,6 +32,9 @@ server {
         internal;
         rewrite ^/sw/(.*)$ $1 break;
 
+        # Observability
+        include "includes/request_id.conf";
+
         # Canister / Gateway (Header)
         add_header "X-Ic-Gateway" "$primary_api_domain" always;
         add_header "X-Ic-Canister-Id" "$inferred_canister_id" always;
@@ -43,6 +49,9 @@ server {
     location /seo/ {
         internal;
         rewrite ^/seo/(.*)$ $1 break;
+
+        # Observability
+        include "includes/request_id.conf";
 
         # CORS
         set $cors_allow_methods "HEAD, GET, OPTIONS";
