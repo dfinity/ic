@@ -68,7 +68,12 @@ fn pre_upgrade() {
 
 #[post_upgrade]
 fn post_upgrade() {
-    ic_icrc1_index::post_upgrade()
+    ic_icrc1_index::post_upgrade();
+    ic_cdk_timers::set_timer(Duration::from_secs(1), || {
+        ic_cdk::spawn(async {
+            let _ = ic_icrc1_index::build_index().await;
+        })
+    });
 }
 
 #[query]
