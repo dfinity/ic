@@ -9,6 +9,7 @@ use ic_ic00_types::{
     Payload as _,
 };
 use ic_interfaces::messages::CanisterMessage;
+use ic_registry_routing_table::{CanisterIdRange, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::replicated_state::testing::ReplicatedStateTesting;
 use ic_replicated_state::testing::{CanisterQueuesTesting, SystemStateTesting};
@@ -16,19 +17,18 @@ use ic_replicated_state::{
     canister_state::execution_state::{CustomSection, CustomSectionType, WasmMetadata},
     metadata_state::subnet_call_context_manager::BitcoinGetSuccessorsContext,
     replicated_state::{MemoryTaken, PeekableOutputIterator, ReplicatedStateMessageRouting},
-    CanisterState, ReplicatedState, SchedulerState, StateError, SystemState,
+    CanisterState, IngressHistoryState, ReplicatedState, SchedulerState, StateError, SystemState,
 };
 use ic_test_utilities::mock_time;
 use ic_test_utilities::state::{arb_replicated_state_with_queues, ExecutionStateBuilder};
-use ic_test_utilities::types::ids::canister_test_id;
-use ic_test_utilities::types::{
-    ids::user_test_id,
-    messages::{RequestBuilder, ResponseBuilder},
-};
+use ic_test_utilities::types::ids::{canister_test_id, message_test_id, user_test_id, SUBNET_1};
+use ic_test_utilities::types::messages::{RequestBuilder, ResponseBuilder};
+use ic_types::ingress::{IngressState, IngressStatus};
 use ic_types::{
     messages::{Payload, Request, RequestOrResponse, Response, MAX_RESPONSE_COUNT_BYTES},
     CountBytes, Cycles, MemoryAllocation, Time,
 };
+use maplit::btreemap;
 use proptest::prelude::*;
 use std::collections::{BTreeMap, VecDeque};
 use std::mem::size_of;
@@ -78,13 +78,14 @@ struct ReplicatedStateFixture {
 
 impl ReplicatedStateFixture {
     fn new() -> ReplicatedStateFixture {
-        ReplicatedStateFixture::from_canister_ids_and_wasm_metadata(
-            &[CANISTER_ID],
-            WasmMetadata::new(BTreeMap::new()),
-        )
+        Self::with_canisters(&[CANISTER_ID])
     }
 
-    pub fn from_canister_ids_and_wasm_metadata(
+    pub fn with_canisters(canister_ids: &[CanisterId]) -> ReplicatedStateFixture {
+        Self::with_wasm_metadata(canister_ids, WasmMetadata::new(BTreeMap::new()))
+    }
+
+    pub fn with_wasm_metadata(
         canister_ids: &[CanisterId],
         wasm_metadata: WasmMetadata,
     ) -> ReplicatedStateFixture {
@@ -157,18 +158,18 @@ impl ReplicatedStateFixture {
         self.state.memory_taken()
     }
 
-    fn remote_subnet_input_schedule(&self) -> &VecDeque<CanisterId> {
+    fn remote_subnet_input_schedule(&self, canister: &CanisterId) -> &VecDeque<CanisterId> {
         self.state
-            .canister_state(&CANISTER_ID)
+            .canister_state(canister)
             .unwrap()
             .system_state
             .queues()
             .get_remote_subnet_input_schedule()
     }
 
-    fn local_subnet_input_schedule(&self) -> &VecDeque<CanisterId> {
+    fn local_subnet_input_schedule(&self, canister: &CanisterId) -> &VecDeque<CanisterId> {
         self.state
-            .canister_state(&CANISTER_ID)
+            .canister_state(canister)
             .unwrap()
             .system_state
             .queues()
@@ -356,8 +357,7 @@ fn memory_taken_by_wasm_custom_sections() {
     let wasm_metadata = WasmMetadata::new(custom_sections);
     let wasm_metadata_memory = wasm_metadata.memory_usage();
 
-    let mut fixture =
-        ReplicatedStateFixture::from_canister_ids_and_wasm_metadata(&[CANISTER_ID], wasm_metadata);
+    let mut fixture = ReplicatedStateFixture::with_wasm_metadata(&[CANISTER_ID], wasm_metadata);
     let mut subnet_available_memory = SUBNET_AVAILABLE_MEMORY;
 
     // Only memory for wasm custom sections is used initially.
@@ -394,7 +394,7 @@ fn memory_taken_by_wasm_custom_sections() {
 
 #[test]
 fn memory_taken_by_canister_history() {
-    let mut fixture = ReplicatedStateFixture::from_canister_ids_and_wasm_metadata(
+    let mut fixture = ReplicatedStateFixture::with_wasm_metadata(
         &[CANISTER_ID],
         WasmMetadata::new(BTreeMap::new()),
     );
@@ -551,8 +551,7 @@ fn system_subnet_memory_taken_by_wasm_custom_sections() {
     let wasm_metadata = WasmMetadata::new(custom_sections);
     let wasm_metadata_memory = wasm_metadata.memory_usage();
 
-    let mut fixture =
-        ReplicatedStateFixture::from_canister_ids_and_wasm_metadata(&[CANISTER_ID], wasm_metadata);
+    let mut fixture = ReplicatedStateFixture::with_wasm_metadata(&[CANISTER_ID], wasm_metadata);
 
     // Make it a system subnet.
     fixture.state.metadata.own_subnet_type = SubnetType::System;
@@ -656,17 +655,17 @@ fn push_input_queues_respects_local_remote_subnet() {
     // Push message from the remote canister, should be in the remote subnet
     // queue.
     fixture.push_input(request_from(OTHER_CANISTER_ID)).unwrap();
-    assert_eq!(fixture.remote_subnet_input_schedule().len(), 1);
+    assert_eq!(fixture.remote_subnet_input_schedule(&CANISTER_ID).len(), 1);
 
     // Push message from the local canister, should be in the local subnet queue.
     fixture.push_input(request_from(CANISTER_ID)).unwrap();
-    assert_eq!(fixture.local_subnet_input_schedule().len(), 1);
+    assert_eq!(fixture.local_subnet_input_schedule(&CANISTER_ID).len(), 1);
 
     // Push message from the local subnet, should be in the local subnet queue.
     fixture
         .push_input(request_from(CanisterId::new(SUBNET_ID.get()).unwrap()))
         .unwrap();
-    assert_eq!(fixture.local_subnet_input_schedule().len(), 2);
+    assert_eq!(fixture.local_subnet_input_schedule(&CANISTER_ID).len(), 2);
 }
 
 #[test]
@@ -724,10 +723,7 @@ fn insert_bitcoin_response() {
 
 #[test]
 fn time_out_requests_updates_subnet_input_schedules_correctly() {
-    let mut fixture = ReplicatedStateFixture::from_canister_ids_and_wasm_metadata(
-        &[CANISTER_ID, OTHER_CANISTER_ID],
-        WasmMetadata::new(BTreeMap::new()),
-    );
+    let mut fixture = ReplicatedStateFixture::with_canisters(&[CANISTER_ID, OTHER_CANISTER_ID]);
 
     // Push 3 requests into the canister with id `local_canister_id1`:
     // - one to self.
@@ -747,14 +743,168 @@ fn time_out_requests_updates_subnet_input_schedules_correctly() {
             .state
             .time_out_requests(Time::from_nanos_since_unix_epoch(u64::MAX)),
     );
-    assert_eq!(2, fixture.local_subnet_input_schedule().len());
+    assert_eq!(2, fixture.local_subnet_input_schedule(&CANISTER_ID).len());
     for canister_id in [CANISTER_ID, OTHER_CANISTER_ID] {
-        assert!(fixture.local_subnet_input_schedule().contains(&canister_id));
+        assert!(fixture
+            .local_subnet_input_schedule(&CANISTER_ID)
+            .contains(&canister_id));
     }
     assert_eq!(
-        fixture.remote_subnet_input_schedule(),
+        fixture.remote_subnet_input_schedule(&CANISTER_ID),
         &VecDeque::from(vec![remote_canister_id])
     );
+}
+
+#[test]
+fn split() {
+    // We will be splitting subnet A into A' and B. C is a third-party subnet.
+    const SUBNET_A: SubnetId = SUBNET_ID;
+    const SUBNET_B: SubnetId = SUBNET_1;
+
+    const CANISTER_1: CanisterId = CANISTER_ID;
+    const CANISTER_2: CanisterId = OTHER_CANISTER_ID;
+    const CANISTERS: [CanisterId; 2] = [CANISTER_1, CANISTER_2];
+
+    // Retain `CANISTER_1` on `SUBNET_A`, migrate `CANISTER_2` to `SUBNET_B`.
+    let routing_table = RoutingTable::try_from(btreemap! {
+        CanisterIdRange {start: CANISTER_1, end: CANISTER_1} => SUBNET_A,
+        CanisterIdRange {start: CANISTER_2, end: CANISTER_2} => SUBNET_B,
+    })
+    .unwrap();
+
+    // Fixture with 2 canisters.
+    let mut fixture = ReplicatedStateFixture::with_canisters(&CANISTERS);
+
+    // Stream with a couple of requests. The details don't matter, should be
+    // retained unmodified on subnet A' only.
+    fixture.push_to_streams(vec![
+        request_to(CANISTER_1).into(),
+        request_to(CANISTER_2).into(),
+    ]);
+
+    // Makes an `IngressHistoryState` with one `Received` message addressed to each
+    // of `canisters`.
+    let make_ingress_history = |canisters: &[CanisterId]| {
+        let mut ingress_history = IngressHistoryState::default();
+        for (i, canister) in CANISTERS.iter().enumerate() {
+            if canisters.contains(canister) {
+                ingress_history.insert(
+                    message_test_id(i as u64),
+                    IngressStatus::Known {
+                        receiver: canister.get(),
+                        user_id: user_test_id(i as u64),
+                        time: mock_time(),
+                        state: IngressState::Received,
+                    },
+                    mock_time(),
+                    NumBytes::from(u64::MAX),
+                );
+            }
+        }
+        ingress_history
+    };
+    // Ingress history: 2 `Received` messages, addressed to canisters 1 and 2.
+    // Should be retained on both sides after phase 1, split after phase 2.
+    fixture.state.metadata.ingress_history = make_ingress_history(&CANISTERS);
+
+    // Subnet queues. Should be preserved on subnet A' only.
+    fixture
+        .push_input(
+            RequestBuilder::default()
+                .sender(CANISTER_1)
+                .receiver(SUBNET_A.into())
+                .build()
+                .into(),
+        )
+        .unwrap();
+
+    // Set up input schedules. Add a couple of input messages to each canister.
+    for sender in CANISTERS {
+        for receiver in CANISTERS {
+            fixture
+                .push_input(
+                    RequestBuilder::default()
+                        .sender(sender)
+                        .receiver(receiver)
+                        .build()
+                        .into(),
+                )
+                .unwrap();
+        }
+    }
+    for canister in CANISTERS {
+        assert_eq!(2, fixture.local_subnet_input_schedule(&canister).len());
+        assert_eq!(0, fixture.remote_subnet_input_schedule(&canister).len());
+    }
+
+    //
+    // Split off subnet A', phase 1.
+    //
+    let state_a_phase_1 = fixture.state.clone().split(SUBNET_A, &routing_table);
+
+    // Start off with the original state.
+    let mut expected = fixture.state.clone();
+    // Only `CANISTER_1` should be left.
+    expected.canister_states.remove(&CANISTER_2);
+    // And the split marker should be set.
+    expected.metadata.split_from = Some(SUBNET_A);
+    // Otherwise, the state shold be the same.
+    assert_eq!(expected, state_a_phase_1);
+
+    //
+    // Subnet A', phase 2.
+    //
+    let state_a_phase_2 = state_a_phase_1.after_split();
+
+    // Ingress history should only contain the message to `CANISTER_1`.
+    expected.metadata.ingress_history = make_ingress_history(&[CANISTER_1]);
+    // The input schedules of `CANISTER_1` should have been repartitioned.
+    let mut canister_state = expected.canister_states.remove(&CANISTER_1).unwrap();
+    canister_state
+        .system_state
+        .split_input_schedules(&CANISTER_1, &expected.canister_states);
+    expected.canister_states.insert(CANISTER_1, canister_state);
+    // And the split marker should be reset.
+    expected.metadata.split_from = None;
+    // Everything else shold be the same as in phase 1.
+    assert_eq!(expected, state_a_phase_2);
+
+    //
+    // Split off subnet B, phase 1.
+    //
+    let state_b_phase_1 = fixture.state.clone().split(SUBNET_B, &routing_table);
+
+    // Subnet B state is based off of an empty state.
+    let mut expected = ReplicatedState::new(SUBNET_B, fixture.state.metadata.own_subnet_type);
+    // Only `CANISTER_2` should be left.
+    expected.canister_states.insert(
+        CANISTER_2,
+        fixture.state.canister_state(&CANISTER_2).unwrap().clone(),
+    );
+    // The full ingress history should be preserved.
+    expected.metadata.ingress_history = fixture.state.metadata.ingress_history;
+    // And the split marker should be set.
+    expected.metadata.split_from = Some(SUBNET_A);
+    // Otherwise, the state shold be the same.
+    assert_eq!(expected, state_b_phase_1);
+
+    //
+    // Subnet B, phase 2.
+    //
+    let state_b_phase_2 = state_b_phase_1.after_split();
+
+    // Ingress history should only contain the message to `CANISTER_2`.
+    expected.metadata.ingress_history = make_ingress_history(&[CANISTER_2]);
+    // The input schedules of `CANISTER_2` should have been repartitioned.
+    let mut canister_state = expected.canister_states.remove(&CANISTER_2).unwrap();
+    canister_state
+        .system_state
+        .split_input_schedules(&CANISTER_2, &expected.canister_states);
+    expected.canister_states.insert(CANISTER_2, canister_state);
+    // And the split marker should be reset.
+    expected.metadata.split_from = None;
+    // Everything else shold be the same as in phase 1.
+    assert_eq!(expected, state_b_phase_2);
 }
 
 proptest! {
