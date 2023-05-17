@@ -57,8 +57,8 @@ if [[ -n $ipv4 ]]; then
 fi
 
 # 3 - setting up httpbin on port 20443
-docker load -i /config/httpbin.tar
-docker tag bazel/image:image httpbin
+docker load -i /config/httpbin_image.tar
+docker tag bazel/rs/tests/httpbin-rs:httpbin_image httpbin
 docker run \
     --rm \
     -d \

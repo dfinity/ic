@@ -68,8 +68,6 @@ impl Response {
     }
     fn set_aux_headers(&mut self) {
         self.headers
-            .push(("Connection".to_string(), "keep-alive".to_string()));
-        self.headers
             .push(("Access-Control-Allow-Origin".to_string(), "*".to_string()));
         self.headers.push((
             "Access-Control-Allow-Credentials".to_string(),
@@ -480,8 +478,8 @@ fn main() {
                     Err(e) => println!("Error: {:?}", e),
                 });
             }
-            Err(_) => {
-                println!("Error");
+            Err(e) => {
+                println!("Error: {:?}", e);
             }
         }
     }

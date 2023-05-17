@@ -1,5 +1,5 @@
 load("@rules_rust//rust:defs.bzl", "rust_binary")
-load("@io_bazel_rules_docker//container:container.bzl", "container_image", "container_push")
+load("@io_bazel_rules_docker//container:container.bzl", "container_image")
 load("@io_bazel_rules_docker//contrib:passwd.bzl", "passwd_entry", "passwd_file")
 load("@bazel_tools//tools/build_defs/pkg:pkg.bzl", "pkg_tar")
 
@@ -57,7 +57,7 @@ pkg_tar(
 
 container_image(
     name = "httpbin_image_base",
-    base = "@ubuntu_base//image",
+    base = "@ubuntu_test_runtime//image",
     tags = ["manual"],
     tars = [
         ":passwd_tar",
@@ -79,13 +79,4 @@ container_image(
     tags = ["manual"],
     user = "httpbin",
     workdir = "/home/httpbin",
-)
-
-container_push(
-    name = "push_httpbin_image",
-    format = "Docker",
-    image = ":httpbin_image",
-    registry = "registry.gitlab.com/dfinity-lab/open/public-docker-registry",
-    repository = "dfinity/httpbin",
-    tags = ["manual"],
 )
