@@ -55,6 +55,49 @@ pub const MAX_CONFIRMATION_TEXT_BYTES: usize = 8 * MAX_CONFIRMATION_TEXT_LENGTH;
 /// The minimum number of characters allowed for confirmation text.
 pub const MIN_CONFIRMATION_TEXT_LENGTH: usize = 1;
 
+pub enum RestrictedCountriesValidationError {
+    EmptyList,
+    TooManyItems(usize),
+    NotIsoComplient(String),
+    ContainsDuplicates(String),
+}
+
+impl RestrictedCountriesValidationError {
+    fn field_name() -> String {
+        "SnsInitPayload.restricted_countries".to_string()
+    }
+}
+
+impl ToString for RestrictedCountriesValidationError {
+    fn to_string(&self) -> String {
+        let msg = match self {
+            Self::EmptyList => {
+                "must either be None or include at least one country code".to_string()
+            }
+            Self::TooManyItems(num_items) => {
+                format!(
+                    "must include fewer than {} country codes, given country code count: {}",
+                    CountryCode::num_country_codes(),
+                    num_items,
+                )
+            }
+            Self::NotIsoComplient(item) => {
+                format!("must include only ISO 3166-1 alpha-2 country codes, found '{item}'",)
+            }
+            Self::ContainsDuplicates(item) => {
+                format!("must not contain duplicates, found '{item}'")
+            }
+        };
+        format!("{} {msg}", Self::field_name())
+    }
+}
+
+impl From<RestrictedCountriesValidationError> for Result<(), String> {
+    fn from(val: RestrictedCountriesValidationError) -> Self {
+        Err(val.to_string())
+    }
+}
+
 // Token Symbols that can not be used.
 lazy_static! {
     static ref BANNED_TOKEN_SYMBOLS: HashSet<&'static str> = hashset! {
@@ -889,34 +932,25 @@ impl SnsInitPayload {
     fn validate_restricted_countries(&self) -> Result<(), String> {
         if let Some(restricted_countries) = &self.restricted_countries {
             if restricted_countries.iso_codes.is_empty() {
-                return Err("NervousSystemParameters.restricted_countries must include at least one country code".to_string());
+                return RestrictedCountriesValidationError::EmptyList.into();
             }
-            if CountryCode::num_country_codes() < restricted_countries.iso_codes.len() {
-                return Err(
-                    format!(
-                        "NervousSystemParameters.restricted_countries must include fewer than {} country codes, given country code count: {}",
-                        CountryCode::num_country_codes(),
-                        restricted_countries.iso_codes.len(),
-                    )
-                );
+            let num_items = restricted_countries.iso_codes.len();
+            if CountryCode::num_country_codes() < num_items {
+                return RestrictedCountriesValidationError::TooManyItems(
+                    restricted_countries.iso_codes.len(),
+                )
+                .into();
             }
-            let unique_iso_codes: BTreeSet<String> =
-                restricted_countries.iso_codes.iter().cloned().collect();
-            for iso_code in &unique_iso_codes {
-                if CountryCode::for_alpha2(iso_code).is_err() {
-                    return Err(
-                        format!(
-                            "NervousSystemParameters.restricted_countries must include only ISO 3166-1 alpha-2 country codes, found '{}'",
-                            iso_code,
-                        )
-                    );
+            let mut unique_iso_codes = BTreeSet::<String>::new();
+            for item in &restricted_countries.iso_codes {
+                if CountryCode::for_alpha2(item).is_err() {
+                    return RestrictedCountriesValidationError::NotIsoComplient(item.clone())
+                        .into();
                 }
-            }
-            if unique_iso_codes.len() != restricted_countries.iso_codes.len() {
-                return Err(
-                    "NervousSystemParameters.restricted_countries must not include duplicates."
-                        .to_string(),
-                );
+                if !unique_iso_codes.insert(item.clone()) {
+                    return RestrictedCountriesValidationError::ContainsDuplicates(item.clone())
+                        .into();
+                }
             }
         }
         Ok(())
@@ -930,8 +964,9 @@ mod test {
         FractionalDeveloperVotingPower as FractionalDVP, NeuronDistribution,
     };
     use crate::{
-        FractionalDeveloperVotingPower, SnsCanisterIds, SnsInitPayload,
-        MAX_CONFIRMATION_TEXT_LENGTH, MAX_TOKEN_NAME_LENGTH, MAX_TOKEN_SYMBOL_LENGTH,
+        FractionalDeveloperVotingPower, RestrictedCountriesValidationError, SnsCanisterIds,
+        SnsInitPayload, MAX_CONFIRMATION_TEXT_LENGTH, MAX_TOKEN_NAME_LENGTH,
+        MAX_TOKEN_SYMBOL_LENGTH,
     };
     use ic_base_types::{CanisterId, PrincipalId};
     use ic_icrc1_ledger::LedgerArgument;
@@ -1253,6 +1288,14 @@ mod test {
         }
     }
 
+    fn assert_error<T, E>(result: anyhow::Result<T>, expected_error: E)
+    where
+        T: std::fmt::Debug,
+        E: ToString,
+    {
+        assert_eq!(result.unwrap_err().to_string(), expected_error.to_string())
+    }
+
     #[test]
     fn test_restricted_countries() {
         // Create valid CanisterIds
@@ -1293,63 +1336,86 @@ mod test {
                 .build_canister_payloads(&sns_canister_ids, None, false)
                 .is_ok());
         }
+        // Check that item count is checked before duplicate analysis.
+        {
+            let num_items = CountryCode::num_country_codes() + 1;
+            let sns_init_payload = SnsInitPayload {
+                restricted_countries: Some(Countries {
+                    iso_codes: (0..num_items).map(|x| x.to_string()).collect(),
+                }),
+                ..SnsInitPayload::with_valid_values_for_testing()
+            };
+            assert_error(
+                sns_init_payload.build_canister_payloads(&sns_canister_ids, None, false),
+                RestrictedCountriesValidationError::TooManyItems(num_items),
+            );
+        }
         // Test that empty `iso_codes` list is rejected.
         {
             let sns_init_payload = SnsInitPayload {
                 restricted_countries: Some(Countries { iso_codes: vec![] }),
                 ..SnsInitPayload::with_valid_values_for_testing()
             };
-            assert!(sns_init_payload
-                .build_canister_payloads(&sns_canister_ids, None, false)
-                .is_err());
+            assert_error(
+                sns_init_payload.build_canister_payloads(&sns_canister_ids, None, false),
+                RestrictedCountriesValidationError::EmptyList,
+            );
         }
         // Test that a lowercase country code is rejected.
         {
+            let item = "ch".to_string();
             let sns_init_payload = SnsInitPayload {
                 restricted_countries: Some(Countries {
-                    iso_codes: vec!["ch".to_string()],
+                    iso_codes: vec![item.clone()],
                 }),
                 ..SnsInitPayload::with_valid_values_for_testing()
             };
-            assert!(sns_init_payload
-                .build_canister_payloads(&sns_canister_ids, None, false)
-                .is_err());
+            assert_error(
+                sns_init_payload.build_canister_payloads(&sns_canister_ids, None, false),
+                RestrictedCountriesValidationError::NotIsoComplient(item),
+            );
         }
         // Test that alpha3 is rejected.
         {
+            let item = "CHE".to_string();
             let sns_init_payload = SnsInitPayload {
                 restricted_countries: Some(Countries {
-                    iso_codes: vec!["CHE".to_string()],
+                    iso_codes: vec![item.clone()],
                 }),
                 ..SnsInitPayload::with_valid_values_for_testing()
             };
-            assert!(sns_init_payload
-                .build_canister_payloads(&sns_canister_ids, None, false)
-                .is_err());
+            assert_error(
+                sns_init_payload.build_canister_payloads(&sns_canister_ids, None, false),
+                RestrictedCountriesValidationError::NotIsoComplient(item),
+            );
         }
         // Test that a non-existing country code is rejected.
         {
+            let item = "QQ".to_string();
             let sns_init_payload = SnsInitPayload {
                 restricted_countries: Some(Countries {
-                    iso_codes: vec!["QQ".to_string()],
+                    iso_codes: vec![item.clone()],
                 }),
                 ..SnsInitPayload::with_valid_values_for_testing()
             };
-            assert!(sns_init_payload
-                .build_canister_payloads(&sns_canister_ids, None, false)
-                .is_err());
+            assert_error(
+                sns_init_payload.build_canister_payloads(&sns_canister_ids, None, false),
+                RestrictedCountriesValidationError::NotIsoComplient(item),
+            );
         }
         // Test that duplicate country codes are rejected.
         {
+            let item = "CH".to_string();
             let sns_init_payload = SnsInitPayload {
                 restricted_countries: Some(Countries {
-                    iso_codes: vec!["CH".to_string(), "CH".to_string()],
+                    iso_codes: vec![item.clone(), item.clone()],
                 }),
                 ..SnsInitPayload::with_valid_values_for_testing()
             };
-            assert!(sns_init_payload
-                .build_canister_payloads(&sns_canister_ids, None, false)
-                .is_err());
+            assert_error(
+                sns_init_payload.build_canister_payloads(&sns_canister_ids, None, false),
+                RestrictedCountriesValidationError::ContainsDuplicates(item),
+            );
         }
     }
 
