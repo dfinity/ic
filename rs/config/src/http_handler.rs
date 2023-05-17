@@ -66,6 +66,9 @@ pub struct Config {
 
     /// Serving at most `max_call_concurrent_requests` requests concurrently for endpoint `/api/v2/query`.
     pub max_query_concurrent_requests: usize,
+
+    /// Serving at most `max_pprof_concurrent_requests` requessts concurrently for all endpoints under `/_/pprof`.
+    pub max_pprof_concurrent_requests: usize,
 }
 
 impl Default for Config {
@@ -89,6 +92,7 @@ impl Default for Config {
             max_status_concurrent_requests: 100,
             max_call_concurrent_requests: 50,
             max_query_concurrent_requests: QUERY_EXECUTION_THREADS_TOTAL * 100,
+            max_pprof_concurrent_requests: 5,
         }
     }
 }
