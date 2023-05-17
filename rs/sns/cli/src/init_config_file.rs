@@ -1,6 +1,7 @@
 use crate::unit_helpers;
 use anyhow::anyhow;
 use clap::Parser;
+use ic_nervous_system_proto::pb::v1::Countries;
 use ic_sns_governance::{
     pb::v1::{governance::SnsMetadata, NervousSystemParameters, VotingRewardsParameters},
     types::{ONE_DAY_SECONDS, ONE_MONTH_SECONDS, ONE_YEAR_SECONDS},
@@ -166,6 +167,18 @@ pub struct SnsGovernanceConfig {
     pub wait_for_quiet_deadline_increase_seconds: Option<u64>,
 }
 
+#[derive(serde::Deserialize, serde::Serialize, Clone, PartialEq, Debug)]
+pub struct SnsSwapConfig {
+    /// An optional text that swap participants should confirm before they may
+    /// participate in the swap. If the field is set, its value should be plain text
+    /// with at least 1 and at most 1,000 characters.
+    pub confirmation_text: Option<String>,
+
+    /// An optional set of countries that should not participate in the swap. If the
+    /// field is set, it must contain (upper case) ISO 3166-1 alpha-2 country codes.
+    pub restricted_countries: Option<Vec<String>>,
+}
+
 #[derive(serde::Deserialize, serde::Serialize, Eq, Clone, PartialEq, Debug)]
 pub struct SnsInitialTokenDistributionConfig {
     /// The initial tokens and neurons available at genesis will be distributed according
@@ -190,6 +203,8 @@ pub struct SnsCliInitConfig {
     pub sns_governance: SnsGovernanceConfig,
     #[serde(flatten)]
     pub initial_token_distribution: SnsInitialTokenDistributionConfig,
+    #[serde(flatten)]
+    pub sns_swap: SnsSwapConfig,
 }
 
 impl Default for SnsCliInitConfig {
@@ -243,6 +258,10 @@ impl Default for SnsCliInitConfig {
             },
             initial_token_distribution: SnsInitialTokenDistributionConfig {
                 initial_token_distribution: None,
+            },
+            sns_swap: SnsSwapConfig {
+                confirmation_text: None,
+                restricted_countries: None,
             },
         }
     }
@@ -477,8 +496,12 @@ impl TryFrom<SnsCliInitConfig> for SnsInitPayload {
             wait_for_quiet_deadline_increase_seconds: sns_cli_init_config
                 .sns_governance
                 .wait_for_quiet_deadline_increase_seconds,
-            confirmation_text: None,    // TODO[NNS1-2233]
-            restricted_countries: None, // TODO[NNS1-2233]
+            confirmation_text: sns_cli_init_config.sns_swap.confirmation_text,
+            restricted_countries: sns_cli_init_config.sns_swap.restricted_countries.map(
+                |country_codes| Countries {
+                    iso_codes: country_codes,
+                },
+            ),
         })
     }
 }
@@ -550,6 +573,27 @@ pub fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String
 #"##,
                 MIN_TOKEN_NAME_LENGTH, MAX_TOKEN_NAME_LENGTH
             ),
+        ),
+        (
+            Regex::new(r"confirmation_text.*").unwrap(),
+            r##"#
+#
+# SNS SWAP
+#
+# An optional text that swap participants should confirm before they may
+# participate in the swap. If the field is set, its value should be plain text
+# with at least 1 and at most 1,000 characters.
+#"##
+            .to_string(),
+        ),
+        (
+            Regex::new(r"restricted_countries.*").unwrap(),
+            r##"#
+#
+# An optional set of countries that should not participate in the swap. If the
+# field is set, it must contain (upper case) ISO 3166-1 alpha-2 country codes.
+#"##
+            .to_string(),
         ),
         (
             Regex::new(r"initial_token_distribution.*").unwrap(),
@@ -1036,12 +1080,22 @@ mod test {
         }
     }
 
+    impl SnsSwapConfig {
+        pub fn with_test_values() -> Self {
+            Self {
+                confirmation_text: Some("Please confirm that 2+2=4".to_string()),
+                restricted_countries: Some(vec!["CH".to_string()]),
+            }
+        }
+    }
+
     impl SnsCliInitConfig {
         pub fn with_test_values() -> Self {
             Self {
                 sns_ledger: SnsLedgerConfig::with_test_values(),
                 sns_governance: SnsGovernanceConfig::with_test_values(),
                 initial_token_distribution: SnsInitialTokenDistributionConfig::with_test_values(),
+                sns_swap: SnsSwapConfig::with_test_values(),
             }
         }
     }
@@ -1151,8 +1205,8 @@ wait_for_quiet_deadline_increase_seconds: 1000
             initial_voting_period_seconds,
             wait_for_quiet_deadline_increase_seconds,
             initial_token_distribution,
-            confirmation_text: _,    // TODO[NNS1-2233]
-            restricted_countries: _, // TODO[NNS1-2233]
+            confirmation_text,
+            restricted_countries,
         } = sns_init_payload;
 
         assert_eq!(
@@ -1247,6 +1301,14 @@ wait_for_quiet_deadline_increase_seconds: 1000
                 .sns_governance
                 .wait_for_quiet_deadline_increase_seconds,
             wait_for_quiet_deadline_increase_seconds
+        );
+        assert_eq!(
+            sns_cli_init_config.sns_swap.confirmation_text,
+            confirmation_text
+        );
+        assert_eq!(
+            sns_cli_init_config.sns_swap.restricted_countries,
+            restricted_countries.map(|items| items.iso_codes)
         );
 
         // Read the test.png file into memory
