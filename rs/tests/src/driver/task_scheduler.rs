@@ -112,6 +112,7 @@ impl TaskScheduler {
             match result {
                 TaskResult::Report(task_id, ref report) => {
                     // debug!(log, "ag: Setting ag node with task_id: {:?} to stop due to result {}", &task_id, &report);
+                    debug!(log, "Task {:?} succeeded due to: {}", &task_id, &report);
                     if let Some((_th, node_idx)) = self.running_tasks.get(&task_id) {
                         self.action_graph.stop(*node_idx, report.to_string());
                     } else {
@@ -123,6 +124,7 @@ impl TaskScheduler {
                 }
                 TaskResult::Failure(task_id, ref reason) => {
                     // debug!(log, "ag: Setting ag node with task_id: {:?} to fail due to result {}", &task_id, &reason);
+                    debug!(log, "Task {:?} failed due to: {}", &task_id, &reason);
                     if let Some((_th, node_idx)) = self.running_tasks.get(&task_id) {
                         self.action_graph.fail(*node_idx, reason.to_string());
                     } else {

@@ -377,10 +377,6 @@ impl SystemTestGroup {
         self.timeout_per_test.unwrap_or(DEFAULT_TIMEOUT_PER_TEST)
     }
 
-    fn effective_overall_timeout(&self) -> Duration {
-        self.overall_timeout.unwrap_or(DEFAULT_OVERALL_TIMEOUT)
-    }
-
     pub fn without_farm(mut self) -> Self {
         self.with_farm = false;
         self
@@ -435,10 +431,6 @@ impl SystemTestGroup {
             min_lifetime <= self.effective_timeout_per_test(),
             "min_lifetime of a SystemTestSubGroup cannot be greater than timeout_per_test"
         );
-        assert!(
-            min_lifetime <= self.effective_overall_timeout(),
-            "min_lifetime of a SystemTestSubGroup cannot be greater than overall_timeout"
-        );
         if min_lifetime.is_zero() {
             // Optimization
             return self.add_group(sub_group, EvalOrder::Parallel);
@@ -489,7 +481,6 @@ impl SystemTestGroup {
 
     fn make_plan(self, rh: &Handle, group_ctx: GroupContext) -> Result<Plan<Box<dyn Task>>> {
         debug!(group_ctx.log(), "SystemTestGroup.make_plan");
-        let effective_overall_timeout = self.effective_overall_timeout();
 
         let mut compose_ctx = ComposeContext {
             rh,
@@ -600,12 +591,16 @@ impl SystemTestGroup {
                     REPORT_TASK_NAME.to_string(),
                 )))),
                 EvalOrder::Sequential,
-                vec![timed(
-                    plan,
-                    effective_overall_timeout,
-                    Some(String::from("::group")),
-                    &mut compose_ctx,
-                )],
+                vec![if let Some(overall_timeout) = self.overall_timeout {
+                    timed(
+                        plan,
+                        overall_timeout,
+                        Some(String::from("::group")),
+                        &mut compose_ctx,
+                    )
+                } else {
+                    plan
+                }],
                 &mut compose_ctx,
             ));
             return plan;
