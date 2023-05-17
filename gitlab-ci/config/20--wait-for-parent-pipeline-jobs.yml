@@ -49,3 +49,4 @@
 wait-for-bazel-test-all:
   extends:
     - .wait-for-parent-pipeline-job
+  timeout: 80 minutes
