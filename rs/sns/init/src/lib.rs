@@ -25,10 +25,11 @@ use ic_sns_governance::types::DEFAULT_TRANSFER_FEE;
 use ic_sns_root::pb::v1::SnsRootCanister;
 use ic_sns_swap::pb::v1::Init as SwapInit;
 use icrc_ledger_types::icrc1::account::Account;
+use isocountry::CountryCode;
 use lazy_static::lazy_static;
 use maplit::{btreemap, hashset};
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 #[cfg(feature = "test")]
 use std::str::FromStr;
@@ -441,6 +442,7 @@ impl SnsInitPayload {
             self.validate_initial_voting_period_seconds(),
             self.validate_wait_for_quiet_deadline_increase_seconds(),
             self.validate_confirmation_text(),
+            self.validate_restricted_countries(),
         ];
 
         let defect_msg = validation_fns
@@ -883,6 +885,42 @@ impl SnsInitPayload {
         }
         Ok(())
     }
+
+    fn validate_restricted_countries(&self) -> Result<(), String> {
+        if let Some(restricted_countries) = &self.restricted_countries {
+            if restricted_countries.iso_codes.is_empty() {
+                return Err("NervousSystemParameters.restricted_countries must include at least one country code".to_string());
+            }
+            if CountryCode::num_country_codes() < restricted_countries.iso_codes.len() {
+                return Err(
+                    format!(
+                        "NervousSystemParameters.restricted_countries must include fewer than {} country codes, given country code count: {}",
+                        CountryCode::num_country_codes(),
+                        restricted_countries.iso_codes.len(),
+                    )
+                );
+            }
+            let unique_iso_codes: BTreeSet<String> =
+                restricted_countries.iso_codes.iter().cloned().collect();
+            for iso_code in &unique_iso_codes {
+                if CountryCode::for_alpha2(iso_code).is_err() {
+                    return Err(
+                        format!(
+                            "NervousSystemParameters.restricted_countries must include only ISO 3166-1 alpha-2 country codes, found '{}'",
+                            iso_code,
+                        )
+                    );
+                }
+            }
+            if unique_iso_codes.len() != restricted_countries.iso_codes.len() {
+                return Err(
+                    "NervousSystemParameters.restricted_countries must not include duplicates."
+                        .to_string(),
+                );
+            }
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -897,10 +935,12 @@ mod test {
     };
     use ic_base_types::{CanisterId, PrincipalId};
     use ic_icrc1_ledger::LedgerArgument;
+    use ic_nervous_system_proto::pb::v1::Countries;
     use ic_sns_governance::governance::ValidGovernanceProto;
     use ic_sns_governance::pb::v1::governance::SnsMetadata;
     use ic_sns_governance::types::ONE_MONTH_SECONDS;
     use icrc_ledger_types::icrc1::account::Account;
+    use isocountry::CountryCode;
     use std::collections::BTreeMap;
     use std::convert::TryInto;
 
@@ -1205,6 +1245,106 @@ mod test {
                         .map(|x| x.to_string())
                         .collect(),
                 ),
+                ..SnsInitPayload::with_valid_values_for_testing()
+            };
+            assert!(sns_init_payload
+                .build_canister_payloads(&sns_canister_ids, None, false)
+                .is_err());
+        }
+    }
+
+    #[test]
+    fn test_restricted_countries() {
+        // Create valid CanisterIds
+        let sns_canister_ids = create_canister_ids();
+        // Test that `restricted_countries` is indeed optional.
+        {
+            let sns_init_payload = SnsInitPayload {
+                restricted_countries: None,
+                ..SnsInitPayload::with_valid_values_for_testing()
+            };
+            assert!(sns_init_payload
+                .build_canister_payloads(&sns_canister_ids, None, false)
+                .is_ok());
+        }
+        // Test that some non-trivial value of `restricted_countries` validates.
+        {
+            let sns_init_payload = SnsInitPayload {
+                restricted_countries: Some(Countries {
+                    iso_codes: vec!["CH".to_string()],
+                }),
+                ..SnsInitPayload::with_valid_values_for_testing()
+            };
+            assert!(sns_init_payload
+                .build_canister_payloads(&sns_canister_ids, None, false)
+                .is_ok());
+        }
+        // Test that multiple countries can be validated.
+        {
+            let sns_init_payload = SnsInitPayload {
+                restricted_countries: Some(Countries {
+                    iso_codes: CountryCode::as_array_alpha2()
+                        .map(|x| x.alpha2().to_string())
+                        .to_vec(),
+                }),
+                ..SnsInitPayload::with_valid_values_for_testing()
+            };
+            assert!(sns_init_payload
+                .build_canister_payloads(&sns_canister_ids, None, false)
+                .is_ok());
+        }
+        // Test that empty `iso_codes` list is rejected.
+        {
+            let sns_init_payload = SnsInitPayload {
+                restricted_countries: Some(Countries { iso_codes: vec![] }),
+                ..SnsInitPayload::with_valid_values_for_testing()
+            };
+            assert!(sns_init_payload
+                .build_canister_payloads(&sns_canister_ids, None, false)
+                .is_err());
+        }
+        // Test that a lowercase country code is rejected.
+        {
+            let sns_init_payload = SnsInitPayload {
+                restricted_countries: Some(Countries {
+                    iso_codes: vec!["ch".to_string()],
+                }),
+                ..SnsInitPayload::with_valid_values_for_testing()
+            };
+            assert!(sns_init_payload
+                .build_canister_payloads(&sns_canister_ids, None, false)
+                .is_err());
+        }
+        // Test that alpha3 is rejected.
+        {
+            let sns_init_payload = SnsInitPayload {
+                restricted_countries: Some(Countries {
+                    iso_codes: vec!["CHE".to_string()],
+                }),
+                ..SnsInitPayload::with_valid_values_for_testing()
+            };
+            assert!(sns_init_payload
+                .build_canister_payloads(&sns_canister_ids, None, false)
+                .is_err());
+        }
+        // Test that a non-existing country code is rejected.
+        {
+            let sns_init_payload = SnsInitPayload {
+                restricted_countries: Some(Countries {
+                    iso_codes: vec!["QQ".to_string()],
+                }),
+                ..SnsInitPayload::with_valid_values_for_testing()
+            };
+            assert!(sns_init_payload
+                .build_canister_payloads(&sns_canister_ids, None, false)
+                .is_err());
+        }
+        // Test that duplicate country codes are rejected.
+        {
+            let sns_init_payload = SnsInitPayload {
+                restricted_countries: Some(Countries {
+                    iso_codes: vec!["CH".to_string(), "CH".to_string()],
+                }),
                 ..SnsInitPayload::with_valid_values_for_testing()
             };
             assert!(sns_init_payload
