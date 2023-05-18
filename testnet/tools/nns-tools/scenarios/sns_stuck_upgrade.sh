@@ -5,18 +5,18 @@ source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"/../func
 
 ensure_variable_set SNS_CLI IC_ADMIN SNS_QUILL IDL2JSON
 
-PEM=$NNS_TOOLS_DIR/nns_test_user_dfx_identity
+PEM=$NNS_TOOLS_DIR/test_user.pem
 
 # Upgrade SNS-W to the version we had when we did the original deploy (sns init parameters need to match)
 propose_upgrade_canister_to_version_pem "$NNS_URL" "$NEURON_ID" "$PEM" "sns-wasm" "090276896af7c5eaa9d9dcbb9af45fe957d0a99b"
 
 # Install all the wasms at the verisons they were at to get our deploy latest-version to match
-upload_canister_wasm_to_sns_wasm "$NNS_URL" "$NEURON_ID" "$PEM" root 1fc0208b9aeed0554b1be2711605e5b54ace9d6a
-upload_canister_wasm_to_sns_wasm "$NNS_URL" "$NEURON_ID" "$PEM" governance 090276896af7c5eaa9d9dcbb9af45fe957d0a99b
-upload_canister_wasm_to_sns_wasm "$NNS_URL" "$NEURON_ID" "$PEM" ledger 090276896af7c5eaa9d9dcbb9af45fe957d0a99b
-upload_canister_wasm_to_sns_wasm "$NNS_URL" "$NEURON_ID" "$PEM" swap c9b2f9653afc2da47e5bd527c192090b860acbf0
-upload_canister_wasm_to_sns_wasm "$NNS_URL" "$NEURON_ID" "$PEM" archive 1fc0208b9aeed0554b1be2711605e5b54ace9d6a
-upload_canister_wasm_to_sns_wasm "$NNS_URL" "$NEURON_ID" "$PEM" index c9b2f9653afc2da47e5bd527c192090b860acbf0
+upload_canister_git_version_to_sns_wasm "$NNS_URL" "$NEURON_ID" "$PEM" root 1fc0208b9aeed0554b1be2711605e5b54ace9d6a
+upload_canister_git_version_to_sns_wasm "$NNS_URL" "$NEURON_ID" "$PEM" governance 090276896af7c5eaa9d9dcbb9af45fe957d0a99b
+upload_canister_git_version_to_sns_wasm "$NNS_URL" "$NEURON_ID" "$PEM" ledger 090276896af7c5eaa9d9dcbb9af45fe957d0a99b
+upload_canister_git_version_to_sns_wasm "$NNS_URL" "$NEURON_ID" "$PEM" swap c9b2f9653afc2da47e5bd527c192090b860acbf0
+upload_canister_git_version_to_sns_wasm "$NNS_URL" "$NEURON_ID" "$PEM" archive 1fc0208b9aeed0554b1be2711605e5b54ace9d6a
+upload_canister_git_version_to_sns_wasm "$NNS_URL" "$NEURON_ID" "$PEM" index c9b2f9653afc2da47e5bd527c192090b860acbf0
 
 echo "Trying to install the SNS (this could take some time...)"
 # Install the new sns
@@ -40,7 +40,7 @@ echo "Trying to finalize..."
 sns_finalize_sale $SUBNET_URL $SWAP_CANISTER_ID
 echo "Finalize..."
 
-upload_canister_wasm_to_sns_wasm "$NNS_URL" "$NEURON_ID" "$PEM" ledger efc4ad843489d21ec44659f115472056b811723d
+upload_canister_git_version_to_sns_wasm "$NNS_URL" "$NEURON_ID" "$PEM" ledger efc4ad843489d21ec44659f115472056b811723d
 
 #Use our developer neuron to upgrade (will fail)
 sns_upgrade_to_next_version $SUBNET_URL $PEM $GOVERNANCE_CANISTER_ID 0

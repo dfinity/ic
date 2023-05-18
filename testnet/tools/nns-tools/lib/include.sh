@@ -7,6 +7,11 @@ NNS_TOOLS_DIR=$LIB_DIR/..
 MY_DOWNLOAD_DIR="/tmp/$(whoami)_nns_tools_tmp"
 mkdir -p $MY_DOWNLOAD_DIR
 
+# Try to find utils in the environment if they're not already set
+IDL2JSON=${IDL2JSON:-$(which idl2json 2>/dev/null || true)}
+SNS_QUILL=${SNS_QUILL:-$(which sns-quill 2>/dev/null || true)}
+IC_ADMIN=${IC_ADMIN:-$(which ic-admin 2>/dev/null || true)}
+
 source "$NNS_TOOLS_DIR/../lib.sh"
 
 source "$LIB_DIR/boundary_node.sh"
@@ -15,5 +20,6 @@ source "$LIB_DIR/canisters.sh"
 source "$LIB_DIR/functions.sh"
 source "$LIB_DIR/installers.sh"
 source "$LIB_DIR/proposals.sh"
+source "$LIB_DIR/sns_upgrades.sh"
 source "$LIB_DIR/topology.sh"
 source "$LIB_DIR/util.sh"

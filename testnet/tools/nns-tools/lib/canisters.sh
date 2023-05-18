@@ -16,7 +16,7 @@ get_info() {
     local NETWORK=$1
     local CANISTER_ID=$2
 
-    dfx canister --network "$NETWORK" info "$CANISTER_ID"
+    dfx -q canister --network "$NETWORK" info "$CANISTER_ID"
 }
 
 nns_canister_hash() {
@@ -57,7 +57,7 @@ canister_git_version() {
     local NETWORK=$1
     local CANISTER_ID=$2
 
-    dfx canister --network "$NETWORK" metadata \
+    dfx -q canister --network "$NETWORK" metadata \
         "$CANISTER_ID" git_commit_id
 }
 
@@ -78,22 +78,59 @@ nns_canister_id() {
     return $FOUND
 }
 
-##: canister_has_version_installed
+##: nns_canister_has_version_installed
 ## Check if canister has the right version (git commit)
 ##      NETWORK: ic, or URL to an NNS subnet (including port)
 ##      CANISTER_NAME: human readable canister name (i.e. governance, registry, sns-wasm, etc...)
 ##      VERSION: Git hash of expected version
-canister_has_version_installed() {
+nns_canister_has_version_installed() {
     local NETWORK=$1
     local CANISTER_NAME=$2
     local VERSION=$3
 
     WASM_GZ=$(get_nns_canister_wasm_gz_for_type "$CANISTER_NAME" "$VERSION")
 
-    canister_has_file_contents_installed "$NETWORK" "$CANISTER_NAME" "$WASM_GZ"
+    nns_canister_has_file_contents_installed "$NETWORK" "$CANISTER_NAME" "$WASM_GZ"
 }
 
 canister_has_file_contents_installed() {
+    local NETWORK=$1
+    local CANISTER_ID=$2
+    local WASM_FILE=$3
+
+    echo "Checking if canister $CANISTER_ID is running $WASM_FILE..."
+
+    WASM_HASH=$(sha_256 "$WASM_FILE")
+    RUNNING_HASH=$(canister_hash "$NETWORK" "$CANISTER_ID")
+
+    if [ "$WASM_HASH" != "$RUNNING_HASH" ]; then
+        echo >&2 "Canister has hash $RUNNING_HASH; expected $WASM_HASH"
+        return 1
+    fi
+
+    echo >&2 "Canister is running with hash $WASM_HASH as expected"
+    return 0
+}
+
+canister_has_hash_installed() {
+    local NETWORK=$1
+    local CANISTER_ID=$2
+    local HASH=$3
+
+    echo "Checking if canister $CANISTER_ID is running $HASH..."
+
+    RUNNING_HASH=$(canister_hash "$NETWORK" "$CANISTER_ID")
+
+    if [ "$HASH" != "$RUNNING_HASH" ]; then
+        echo >&2 "Canister has hash $RUNNING_HASH; expected $HASH"
+        return 1
+    fi
+
+    echo >&2 "Canister is running with hash $HASH as expected"
+    return 0
+}
+
+nns_canister_has_file_contents_installed() {
     local NETWORK=$1
     local CANISTER_NAME=$2
     local WASM_FILE=$3
@@ -112,23 +149,23 @@ canister_has_file_contents_installed() {
     return 0
 }
 
-wait_for_canister_has_version() {
+wait_for_nns_canister_has_version() {
     local NNS_URL=$1
     local CANISTER_NAME=$2
     local VERSION=$3
     WASM_GZ=$(get_nns_canister_wasm_gz_for_type "$CANISTER_NAME" "$VERSION")
 
-    wait_for_canister_has_file_contents "$NNS_URL" "$CANISTER_NAME" "$WASM_GZ"
+    wait_for_nns_canister_has_file_contents "$NNS_URL" "$CANISTER_NAME" "$WASM_GZ"
 }
 
-wait_for_canister_has_file_contents() {
+wait_for_nns_canister_has_file_contents() {
     local NNS_URL=$1
     local CANISTER_NAME=$2
     local WASM=$3
 
     for i in {1..20}; do
         echo "Testing if upgrade was successful..."
-        if canister_has_file_contents_installed "$NNS_URL" "$CANISTER_NAME" "$WASM"; then
+        if nns_canister_has_file_contents_installed "$NNS_URL" "$CANISTER_NAME" "$WASM"; then
             print_green "Canister $CANISTER_NAME successfully upgraded."
             return 0
         fi

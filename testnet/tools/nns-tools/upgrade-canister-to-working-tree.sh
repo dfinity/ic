@@ -5,7 +5,7 @@ NNS_TOOLS_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 source "$NNS_TOOLS_DIR/lib/include.sh"
 
 help() {
-    echo "
+    print_green "
 Usage: $0 <CANISTER_NAME> (<NNS_URL> <NEURON_ID>)
   CANISTER_NAME: Human readable canister name (from rs/nns/canister_ids.json)
   NNS_URL: The url to the subnet running the NNS in your testnet.
@@ -33,7 +33,7 @@ ensure_variable_set NNS_URL || help
 ensure_variable_set NEURON_ID || help
 
 # Allow overriding PEM file, but default to shared identity
-export PEM=${PEM:-$NNS_TOOLS_DIR/nns_test_user_dfx_identity}
+export PEM=${PEM:-$NNS_TOOLS_DIR/test_user.pem}
 
 build_canister_and_propose_upgrade_pem "$NNS_URL" "$NEURON_ID" "$PEM" "$CANISTER_NAME"
 
@@ -41,7 +41,7 @@ build_canister_and_propose_upgrade_pem "$NNS_URL" "$NEURON_ID" "$PEM" "$CANISTER
 WASM_FILE="$(repo_root)/$(canister_bazel_artifact_path "${CANISTER_NAME}")"
 for i in {1..20}; do
     echo "Testing if upgrade was successful..."
-    if canister_has_file_contents_installed $NNS_URL $CANISTER_NAME $WASM_FILE; then
+    if nns_canister_has_file_contents_installed $NNS_URL $CANISTER_NAME $WASM_FILE; then
         print_green "OK: Upgrade was successful."
         exit 0
     fi
