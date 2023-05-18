@@ -18,7 +18,7 @@ Usage: $0 <CANISTER_NAME> <VERSION> (<CANDID_ARGS> <NNS_URL> <NEURON_ID>)
     Using \"source \$YOUR_WORKING_DIRECTORY/output_vars_nns_state_deployment.sh\" will give you the needed
     variables in your shell.
 
-  NOTE: If testing cycles-minting canister upgrade, you may have to set SKIP_STOPPING=true in your environment before
+  NOTE: If testing cycles-minting canister upgrade, you may have to set SKIP_STOPPING=yes in your environment before
     running this script, if your upgrade arguments reference canisters not running on this testnet.
 
   This script will upgrade a canister on a given testnet with a given neuron id.  If that neuron does not have sufficient

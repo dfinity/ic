@@ -55,7 +55,7 @@ This script creates a testnet with mainnet state using a stable shared identity 
 4. Configures SNS-W to create SNS's on application subnet, and to respond to our principal's wallet.
 5. Uploads the latest SNS Wasms into SNS-W canister
 
-It then stores all of the variables in a directory (which is output) so they can be easily referenced for
+It then stores all the variables in a directory (which is output) so they can be easily referenced for
 interaction with the subnet
 
 Needs to be run on zh1-spm22.zh1.dfinity.network. (Ideally, we'd
@@ -85,12 +85,12 @@ read the script source for current descriptions.
 DIR=/tmp/$USER-nns-test/ STEPS='1' ./nns_dev_testnet.sh small02 1a2d86e9d66d93c4a9a9a147774577c377ce0c66
 ```
 
-#### Within step 1, run only substeps 3 and 4 of nns_state_deployment.sh.
+#### Within step 1, run only sub-steps 3 and 4 of nns_state_deployment.sh.
 ```
 DIR=/tmp/$USER-nns-test/ STEPS='1' DEPLOYMENT_STEPS='[34]' ./nns_dev_testnet.sh small02 1a2d86e9d66d93c4a9a9a147774577c377ce0c66
 ```
 
-### Interacting afterwards
+### Interacting Afterward
 
 Variables needed to interact with the testnet are captured in the directory used during the script's operation.  
 
@@ -246,7 +246,7 @@ For example:
 ```
 
 This script will read the proposal and validate the following:
-1. The proposed canister ID is consistent with the human readable canister name in the title.
+1. The proposed canister ID is consistent with the human-readable canister name in the title.
 2. The hash in the proposal matches the hash of the WASM generated for that git version.
 3. There are no TODO items left in the proposal text.
 
@@ -265,7 +265,7 @@ Jump back to the [release runbook in Notion][1].
 ### Could not fetch catch up package
 
 If you seem to be stuck on "6. Recover the NNS subnet to the first
-unassinged node", check out the log mentioned at that step
+unassigned node", check out the log mentioned at that step
 (6_nns_recovery_log.txt). You may see many lines similar to the following:
 
 ```
@@ -296,7 +296,7 @@ to generate coverage reports for the specified canister.
 get_test_coverage.sh <ns-instance> <canister-name>
 ```
 
-For example, to get coverage of SNS governace canister run
+For example, to get coverage of SNS governance canister run
 
 ```
 get_test_coverage.sh sns governance
