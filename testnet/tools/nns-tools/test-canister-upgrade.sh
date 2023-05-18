@@ -5,7 +5,7 @@ NNS_TOOLS_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 source "$NNS_TOOLS_DIR/lib/include.sh"
 
 help() {
-    echo "
+    print_green "
 Usage: $0 <CANISTER_NAME> <VERSION> (<CANDID_ARGS> <NNS_URL> <NEURON_ID>)
   CANISTER_NAME: Human readable canister name (from rs/nns/canister_ids.json)
   VERSION: Version to test (generally git hash, could be build id.  Green checkmarks on gitlab commit list have assets)
@@ -41,7 +41,7 @@ ensure_variable_set NNS_URL || help
 ensure_variable_set NEURON_ID || help
 
 # Allow overriding PEM file, but default to shared identity
-export PEM=${PEM:-$NNS_TOOLS_DIR/nns_test_user_dfx_identity}
+export PEM=${PEM:-$NNS_TOOLS_DIR/test_user.pem}
 
 ENCODED_ARGS_FILE=""
 if [ ! -z "$CANDID_ARGS" ]; then
@@ -67,7 +67,7 @@ if [ "$CANISTER_NAME" == "cycles-minting" ]; then
             "(record {
                 exchange_rate_canister = opt variant { Set = principal \"$XRC_MOCK_CANISTER\" } })")"
 
-    if ! wait_for_canister_has_file_contents "$NNS_URL" "$CANISTER_NAME" "$CURRENT_VERSION_UNZIPPED"; then
+    if ! wait_for_nns_canister_has_file_contents "$NNS_URL" "$CANISTER_NAME" "$CURRENT_VERSION_UNZIPPED"; then
         print_red "Could not upgrade cycles-minting canister to its own version with different arguments"
         exit 1
     fi
@@ -75,7 +75,7 @@ fi
 
 propose_upgrade_canister_to_version_pem "$NNS_URL" "$NEURON_ID" "$PEM" "$CANISTER_NAME" "$VERSION" "$ENCODED_ARGS_FILE"
 
-if ! wait_for_canister_has_version "$NNS_URL" "$CANISTER_NAME" "$VERSION"; then
+if ! wait_for_nns_canister_has_version "$NNS_URL" "$CANISTER_NAME" "$VERSION"; then
     print_red "Aborting test"
     exit 1
 fi
@@ -99,7 +99,7 @@ fi
 # We upgrade to same version but with a different hash so that we can verify that second upgrade worked.
 propose_upgrade_canister_wasm_file_pem "$NNS_URL" "$NEURON_ID" "$PEM" "$CANISTER_NAME" "$UNZIPPED" "$ENCODED_ARGS_FILE"
 
-if wait_for_canister_has_file_contents "$NNS_URL" "$CANISTER_NAME" "$UNZIPPED"; then
+if wait_for_nns_canister_has_file_contents "$NNS_URL" "$CANISTER_NAME" "$UNZIPPED"; then
     echo "Second upgrade successful..."
     print_green "Canister Upgrade test was successful!"
     exit 0
