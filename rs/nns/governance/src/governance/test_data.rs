@@ -110,9 +110,11 @@ lazy_static! {
                 }),
             }),
         }),
+        dapp_canisters: vec![pb::Canister {
+            id: Some(CanisterId::from_u64(1000).get())
+        }],
 
         // Not used.
         swap_parameters: None,
-        dapp_canisters: vec![],
     };
 }

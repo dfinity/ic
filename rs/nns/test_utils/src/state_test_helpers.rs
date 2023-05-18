@@ -323,7 +323,7 @@ pub fn canister_id_to_u64(canister_id: CanisterId) -> u64 {
 
 /// Create a canister at 0-indexed position (assuming canisters are created sequentially)
 /// This also creates all intermediate canisters
-fn create_canister_id_at_position(machine: &StateMachine, position: u64) -> CanisterId {
+pub fn create_canister_id_at_position(machine: &StateMachine, position: u64) -> CanisterId {
     let mut canister_id = machine.create_canister(/* settings = */ None);
     while canister_id_to_u64(canister_id) < position {
         canister_id = machine.create_canister(None);

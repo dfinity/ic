@@ -4,9 +4,9 @@ mod deploy;
 mod init_config_file;
 mod unit_helpers;
 
-use crate::deploy::{DirectSnsDeployerForTests, SnsWasmSnsDeployer};
-use crate::init_config_file::{
-    InitConfigFileArgs, SnsCliInitConfig, SnsInitialTokenDistributionConfig,
+use crate::{
+    deploy::{DirectSnsDeployerForTests, SnsWasmSnsDeployer},
+    init_config_file::{InitConfigFileArgs, SnsCliInitConfig, SnsInitialTokenDistributionConfig},
 };
 use anyhow::anyhow;
 use candid::{CandidType, Encode, IDLArgs};
@@ -14,19 +14,21 @@ use clap::Parser;
 use ic_base_types::PrincipalId;
 use ic_crypto_sha::Sha256;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
-use ic_sns_init::pb::v1::sns_init_payload::InitialTokenDistribution;
 use ic_sns_init::pb::v1::{
-    AirdropDistribution, DeveloperDistribution, FractionalDeveloperVotingPower, NeuronDistribution,
-    SnsInitPayload, SwapDistribution, TreasuryDistribution,
+    sns_init_payload::InitialTokenDistribution, AirdropDistribution, DeveloperDistribution,
+    FractionalDeveloperVotingPower, NeuronDistribution, SnsInitPayload, SwapDistribution,
+    TreasuryDistribution,
 };
 use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsCanisterType, SnsWasm};
 use icp_ledger::{AccountIdentifier, BinaryAccountBalanceArgs};
-use std::convert::TryFrom;
-use std::fs::File;
-use std::io::{Read, Write};
-use std::path::PathBuf;
-use std::process::{exit, Command, Output};
-use std::str::FromStr;
+use std::{
+    convert::TryFrom,
+    fs::File,
+    io::{Read, Write},
+    path::PathBuf,
+    process::{exit, Command, Output},
+    str::FromStr,
+};
 use tempfile::NamedTempFile;
 
 #[derive(Debug, Parser)]

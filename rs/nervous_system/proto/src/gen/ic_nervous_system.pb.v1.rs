@@ -56,6 +56,25 @@ pub struct Percentage {
     #[prost(uint64, optional, tag = "1")]
     pub basis_points: ::core::option::Option<u64>,
 }
+/// A Canister that will be transferred to an SNS.
+#[derive(
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    serde::Serialize,
+    Ord,
+    PartialOrd,
+    Eq,
+    Copy,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
+pub struct Canister {
+    /// The id of the canister.
+    #[prost(message, optional, tag = "1")]
+    pub id: ::core::option::Option<::ic_base_types::PrincipalId>,
+}
 /// Represents a set of countries. To be used in country-specific configurations,
 /// e.g., to restrict the geography of an SNS swap.
 #[derive(

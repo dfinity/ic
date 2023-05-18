@@ -8,6 +8,7 @@ fn main() {
     );
     let primary_search_path = manifest_dir.join("../proto");
     let out_dir = manifest_dir.join("../src/gen");
+    let base_types_proto = manifest_dir.join("../../../types/base_types/proto");
 
     // Delete contents of the output directory.
     match std::fs::remove_dir_all(&out_dir) {
@@ -23,6 +24,7 @@ fn main() {
     generate_prost_files(
         ProtoPaths {
             nervous_system: &primary_search_path,
+            base_types: &base_types_proto,
         },
         out_dir.as_ref(),
     );

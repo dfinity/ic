@@ -1,4 +1,4 @@
-use crate::common::{EXPECTED_SNS_CREATION_FEE, ONE_TRILLION};
+use crate::common::EXPECTED_SNS_CREATION_FEE;
 use candid::{Decode, Encode};
 use canister_test::{Canister, Project, Runtime, Wasm};
 use common::set_up_state_machine_with_nns;
@@ -6,11 +6,14 @@ use dfn_candid::candid_one;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_crypto_sha::Sha256;
 use ic_interfaces_registry::RegistryClient;
+use ic_nervous_system_common::ONE_TRILLION;
+use ic_nervous_system_proto::pb::v1::Canister as NervousSystemProtoCanister;
 use ic_nervous_system_root::canister_status::{
     CanisterStatusResultV2, CanisterStatusType::Running,
 };
 use ic_nns_constants::{
-    ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID, SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET,
+    GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID,
+    SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -19,11 +22,12 @@ use ic_nns_test_utils::{
         try_call_with_cycles_via_universal_canister, NnsCanisters,
     },
     sns_wasm, state_test_helpers,
+    state_test_helpers::{set_controllers, set_up_universal_canister, update_with_sender},
 };
 use ic_protobuf::registry::subnet::v1::SubnetListRecord;
 use ic_registry_keys::make_subnet_list_record_key;
-use ic_sns_init::pb::v1::SnsInitPayload;
-use ic_sns_root::{GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
+use ic_sns_init::pb::v1::{DappCanisters, SnsInitPayload};
+use ic_sns_root::{CanisterSummary, GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
 use ic_sns_swap::pb::v1::GetCanisterStatusRequest;
 use ic_sns_wasm::pb::v1::{
     AddWasmRequest, DeployNewSnsRequest, DeployNewSnsResponse, SnsCanisterIds, SnsCanisterType,
@@ -361,7 +365,7 @@ fn test_deploy_cleanup_on_wasm_install_failure() {
     // 5_000_000_000_000 cycles are burned creating the canisters before the failure
     assert_eq!(
         machine.cycle_balance(wallet_canister),
-        EXPECTED_SNS_CREATION_FEE - 5 * ONE_TRILLION
+        EXPECTED_SNS_CREATION_FEE - 5 * (ONE_TRILLION as u128)
     );
 
     // No canisters should exist above SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 1 (+1 for the wallet
@@ -432,4 +436,90 @@ fn test_deploy_adds_cycles_to_target_canisters() {
 
     assert!(machine.canister_exists(ledger));
     assert_eq!(machine.cycle_balance(ledger), sixth_cycles * 2);
+}
+
+#[test]
+fn test_deploy_sns_and_transfer_dapps() {
+    // Setup the state machine
+    state_test_helpers::reduce_state_machine_logging_unless_env_set();
+    let machine = set_up_state_machine_with_nns(vec![]);
+
+    // Add cycles to the SNS-W canister to deploy the SNS
+    machine.add_cycles(SNS_WASM_CANISTER_ID, 200 * ONE_TRILLION as u128);
+
+    // Add the Wasms of the SNS canisters to SNS-W
+    sns_wasm::add_real_wasms_to_sns_wasms(&machine);
+
+    // Create a dapp_canister and add NNS Root as a controller of it
+    let dapp_canister = set_up_universal_canister(&machine, None);
+    set_controllers(
+        &machine,
+        PrincipalId::new_anonymous(),
+        dapp_canister,
+        vec![ROOT_CANISTER_ID.get()],
+    );
+
+    // Add the dapp to the SnsInitPayload
+    let sns_init_payload = SnsInitPayload {
+        dapp_canisters: Some(DappCanisters {
+            canisters: vec![NervousSystemProtoCanister {
+                id: Some(dapp_canister.get()),
+            }],
+        }),
+        ..SnsInitPayload::with_valid_values_for_testing()
+    };
+
+    // Call the code under test
+    let response = sns_wasm::deploy_new_sns(
+        &machine,
+        GOVERNANCE_CANISTER_ID,
+        SNS_WASM_CANISTER_ID,
+        sns_init_payload,
+        0,
+    );
+
+    // SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 1 is the ID of the wallet canister
+    let root_canister_id = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 2);
+    let governance_canister_id = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 3);
+    let ledger_canister_id = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 4);
+    let swap_canister_id = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 5);
+    let index_canister_id = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 6);
+
+    assert_eq!(
+        response,
+        DeployNewSnsResponse {
+            subnet_id: Some(machine.get_subnet_id().get()),
+            canisters: Some(SnsCanisterIds {
+                governance: Some(governance_canister_id.get()),
+                root: Some(root_canister_id.get()),
+                ledger: Some(ledger_canister_id.get()),
+                swap: Some(swap_canister_id.get()),
+                index: Some(index_canister_id.get()),
+            }),
+            error: None
+        }
+    );
+
+    let canisters_returned = response.canisters.unwrap();
+    let root_canister_principal = canisters_returned.root.unwrap();
+
+    let response: GetSnsCanistersSummaryResponse = update_with_sender(
+        &machine,
+        CanisterId::new(root_canister_principal).unwrap(),
+        "get_sns_canisters_summary",
+        candid_one,
+        GetSnsCanistersSummaryRequest {
+            update_canister_list: None,
+        },
+        PrincipalId::new_anonymous(),
+    )
+    .unwrap();
+
+    assert_eq!(response.dapps.len(), 1);
+    let &CanisterSummary {
+        canister_id: actual_dapp_canister,
+        status: _,
+    } = response.dapps.first().unwrap();
+
+    assert_eq!(actual_dapp_canister, Some(dapp_canister.get()));
 }

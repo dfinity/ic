@@ -51,12 +51,10 @@ const PARAMS: sns_swap_pb::Params = sns_swap_pb::Params {
     min_participants: 2,
     sns_token_e8s: 1000 * E8,
     swap_due_timestamp_seconds: 2524629600, // midnight, Jan 1, 2050
-    neuron_basket_construction_parameters: Some(
-        sns_swap_pb::params::NeuronBasketConstructionParameters {
-            count: 3,
-            dissolve_delay_interval_seconds: 7890000, // 3 months
-        },
-    ),
+    neuron_basket_construction_parameters: Some(NeuronBasketConstructionParameters {
+        count: 3,
+        dissolve_delay_interval_seconds: 7890000, // 3 months
+    }),
     sale_delay_seconds: None,
 };
 
@@ -986,7 +984,7 @@ fn protect_not_concluded_open_sns_token_swap_proposal_from_gc() {
     assert!(rejected_proposal_data.can_be_purged(now_seconds, voting_period_seconds));
 
     // Modify again to make it purge-able.
-    subject.sns_token_swap_lifecycle = Some(sns_swap_pb::Lifecycle::Aborted as i32);
+    subject.sns_token_swap_lifecycle = Some(Lifecycle::Aborted as i32);
     assert!(subject.can_be_purged(now_seconds, voting_period_seconds));
 }
 
@@ -1192,6 +1190,11 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
                 wait_for_quiet_deadline_increase_seconds: unwrap_duration_seconds(
                     &original_governance_parameters.proposal_wait_for_quiet_deadline_increase
                 ),
+                dapp_canisters: Some(sns_init_pb::DappCanisters {
+                    canisters: vec![pb::Canister {
+                        id: Some(CanisterId::from_u64(1000).get()),
+                    }],
+                }),
 
                 initial_token_distribution: None,
 
@@ -1228,7 +1231,7 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
 
         assert_eq!(
             converted.initial_token_distribution.unwrap(),
-            sns_init_pb::sns_init_payload::InitialTokenDistribution::FractionalDeveloperVotingPower(
+            sns_init_payload::InitialTokenDistribution::FractionalDeveloperVotingPower(
                 sns_init_pb::FractionalDeveloperVotingPower {
                     developer_distribution: Some(sns_init_pb::DeveloperDistribution {
                         developer_neurons: vec![sns_init_pb::NeuronDistribution {

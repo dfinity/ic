@@ -1,7 +1,9 @@
 type AddWasmRequest = record { hash : vec nat8; wasm : opt SnsWasm };
 type AddWasmResponse = record { result : opt Result };
 type AirdropDistribution = record { airdrop_neurons : vec NeuronDistribution };
+type Canister = record { id : opt principal };
 type Countries = record { iso_codes : vec text };
+type DappCanisters = record { canisters : vec Canister };
 type DeployNewSnsRequest = record { sns_init_payload : opt SnsInitPayload };
 type DeployNewSnsResponse = record {
   subnet_id : opt principal;
@@ -95,6 +97,7 @@ type SnsInitPayload = record {
   initial_reward_rate_basis_points : opt nat64;
   wait_for_quiet_deadline_increase_seconds : opt nat64;
   transaction_fee_e8s : opt nat64;
+  dapp_canisters : opt DappCanisters;
   max_age_bonus_percentage : opt nat64;
   initial_token_distribution : opt InitialTokenDistribution;
   reward_rate_transition_duration_seconds : opt nat64;

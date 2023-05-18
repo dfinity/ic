@@ -1,6 +1,3 @@
-pub mod distributions;
-pub mod pb;
-
 use crate::pb::v1::{
     sns_init_payload::InitialTokenDistribution::FractionalDeveloperVotingPower,
     FractionalDeveloperVotingPower as FractionalDVP, SnsInitPayload,
@@ -15,13 +12,15 @@ use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID as NNS_GOVERNANCE_CANISTER_ID,
     LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID,
 };
-use ic_sns_governance::init::GovernanceCanisterInitPayloadBuilder;
-use ic_sns_governance::pb::v1::governance::{SnsMetadata, Version};
-use ic_sns_governance::pb::v1::{
-    Governance, NervousSystemParameters, Neuron, NeuronPermissionList, NeuronPermissionType,
-    VotingRewardsParameters,
+use ic_sns_governance::{
+    init::GovernanceCanisterInitPayloadBuilder,
+    pb::v1::{
+        governance::{SnsMetadata, Version},
+        Governance, NervousSystemParameters, Neuron, NeuronPermissionList, NeuronPermissionType,
+        VotingRewardsParameters,
+    },
+    types::DEFAULT_TRANSFER_FEE,
 };
-use ic_sns_governance::types::DEFAULT_TRANSFER_FEE;
 use ic_sns_root::pb::v1::SnsRootCanister;
 use ic_sns_swap::pb::v1::Init as SwapInit;
 use icrc_ledger_types::icrc1::account::Account;
@@ -34,6 +33,9 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 #[cfg(feature = "test")]
 use std::str::FromStr;
 
+pub mod distributions;
+pub mod pb;
+
 /// The maximum number of characters allowed for token symbol.
 pub const MAX_TOKEN_SYMBOL_LENGTH: usize = 10;
 
@@ -45,6 +47,9 @@ pub const MAX_TOKEN_NAME_LENGTH: usize = 255;
 
 /// The minimum number of characters allowed for token name.
 pub const MIN_TOKEN_NAME_LENGTH: usize = 4;
+
+/// The maximum count of dapp canisters that can be initially decentralized.
+pub const MAX_DAPP_CANISTERS_COUNT: usize = 25;
 
 /// The maximum number of characters allowed for confirmation text.
 pub const MAX_CONFIRMATION_TEXT_LENGTH: usize = 1_000;
@@ -173,6 +178,7 @@ impl SnsInitPayload {
                 .initial_voting_period_seconds,
             wait_for_quiet_deadline_increase_seconds: nervous_system_parameters_default
                 .wait_for_quiet_deadline_increase_seconds,
+            dapp_canisters: None,
             confirmation_text: None,
             restricted_countries: None,
         }
@@ -330,11 +336,20 @@ impl SnsInitPayload {
         sns_canister_ids: &SnsCanisterIds,
         testflight: bool,
     ) -> SnsRootCanister {
+        let dapp_canister_ids = match self.dapp_canisters.as_ref() {
+            None => vec![],
+            Some(dapp_canisters) => dapp_canisters
+                .canisters
+                .iter()
+                .map(|canister| canister.id.unwrap())
+                .collect(),
+        };
+
         SnsRootCanister {
             governance_canister_id: Some(sns_canister_ids.governance),
             ledger_canister_id: Some(sns_canister_ids.ledger),
             swap_canister_id: Some(sns_canister_ids.swap),
-            dapp_canister_ids: vec![],
+            dapp_canister_ids,
             archive_canister_ids: vec![],
             latest_ledger_archive_poll_timestamp_seconds: None,
             index_canister_id: Some(sns_canister_ids.index),
@@ -420,6 +435,7 @@ impl SnsInitPayload {
             max_age_bonus_percentage,
             initial_voting_period_seconds,
             wait_for_quiet_deadline_increase_seconds,
+            dapp_canisters: _,
             confirmation_text: _,
             restricted_countries: _,
         } = self.clone();
@@ -484,6 +500,7 @@ impl SnsInitPayload {
             self.validate_max_age_bonus_percentage(),
             self.validate_initial_voting_period_seconds(),
             self.validate_wait_for_quiet_deadline_increase_seconds(),
+            self.validate_dapp_canisters(),
             self.validate_confirmation_text(),
             self.validate_restricted_countries(),
         ];
@@ -895,6 +912,41 @@ impl SnsInitPayload {
         }
     }
 
+    fn validate_dapp_canisters(&self) -> Result<(), String> {
+        let dapp_canisters = match &self.dapp_canisters {
+            None => return Ok(()),
+            Some(dapp_canisters) => dapp_canisters,
+        };
+
+        if dapp_canisters.canisters.len() > MAX_DAPP_CANISTERS_COUNT {
+            return Err(format!(
+                "Error: The number of dapp_canisters exceeded the maximum allowed canisters at \
+                initialization. Count is {}. Maximum allowed is {}.",
+                dapp_canisters.canisters.len(),
+                MAX_DAPP_CANISTERS_COUNT,
+            ));
+        }
+
+        for (index, canister) in dapp_canisters.canisters.iter().enumerate() {
+            if canister.id.is_none() {
+                return Err(format!("Error: dapp_canisters[{}] id field is None", index));
+            }
+        }
+
+        // Disallow duplicate dapp canisters, because it indicates that
+        // the user probably made a mistake (e.g. copy n' paste).
+        let unique_dapp_canisters: BTreeSet<_> = dapp_canisters
+            .canisters
+            .iter()
+            .map(|canister| canister.id)
+            .collect();
+        if unique_dapp_canisters.len() != dapp_canisters.canisters.len() {
+            return Err("Error: Duplicate ids found in dapp_canisters".to_string());
+        }
+
+        Ok(())
+    }
+
     fn validate_confirmation_text(&self) -> Result<(), String> {
         if let Some(confirmation_text) = &self.confirmation_text {
             if MAX_CONFIRMATION_TEXT_BYTES < confirmation_text.len() {
@@ -959,25 +1011,24 @@ impl SnsInitPayload {
 
 #[cfg(test)]
 mod test {
-    use crate::pb::v1::{
-        AirdropDistribution, DeveloperDistribution,
-        FractionalDeveloperVotingPower as FractionalDVP, NeuronDistribution,
-    };
     use crate::{
+        pb::v1::{
+            AirdropDistribution, DappCanisters, DeveloperDistribution,
+            FractionalDeveloperVotingPower as FractionalDVP, NeuronDistribution,
+        },
         FractionalDeveloperVotingPower, RestrictedCountriesValidationError, SnsCanisterIds,
-        SnsInitPayload, MAX_CONFIRMATION_TEXT_LENGTH, MAX_TOKEN_NAME_LENGTH,
-        MAX_TOKEN_SYMBOL_LENGTH,
+        SnsInitPayload, MAX_CONFIRMATION_TEXT_LENGTH, MAX_DAPP_CANISTERS_COUNT,
+        MAX_TOKEN_NAME_LENGTH, MAX_TOKEN_SYMBOL_LENGTH,
     };
     use ic_base_types::{CanisterId, PrincipalId};
     use ic_icrc1_ledger::LedgerArgument;
-    use ic_nervous_system_proto::pb::v1::Countries;
-    use ic_sns_governance::governance::ValidGovernanceProto;
-    use ic_sns_governance::pb::v1::governance::SnsMetadata;
-    use ic_sns_governance::types::ONE_MONTH_SECONDS;
+    use ic_nervous_system_proto::pb::v1::{Canister, Countries};
+    use ic_sns_governance::{
+        governance::ValidGovernanceProto, pb::v1::governance::SnsMetadata, types::ONE_MONTH_SECONDS,
+    };
     use icrc_ledger_types::icrc1::account::Account;
     use isocountry::CountryCode;
-    use std::collections::BTreeMap;
-    use std::convert::TryInto;
+    use std::{collections::BTreeMap, convert::TryInto};
 
     fn create_canister_ids() -> SnsCanisterIds {
         SnsCanisterIds {
@@ -987,6 +1038,17 @@ mod test {
             swap: CanisterId::from_u64(4).into(),
             index: CanisterId::from_u64(5).into(),
         }
+    }
+
+    fn generate_unique_dapp_canisters(count: usize) -> DappCanisters {
+        let canisters = (0..count)
+            .into_iter()
+            .map(|i| Canister {
+                id: Some(CanisterId::from_u64(i as u64).get()),
+            })
+            .collect();
+
+        DappCanisters { canisters }
     }
 
     #[test]
@@ -1507,6 +1569,41 @@ mod test {
             voting_rewards_parameters.reward_rate_transition_duration_seconds,
             test_payload.reward_rate_transition_duration_seconds
         );
+    }
+
+    #[test]
+    fn test_dapp_canisters_validation() {
+        // Build a payload that passes validation, then test the parts that wouldn't
+        let get_sns_init_payload = || {
+            SnsInitPayload::with_valid_values_for_testing()
+                .validate()
+                .expect("Payload did not pass validation.")
+        };
+
+        let mut sns_init_payload = get_sns_init_payload();
+        sns_init_payload.dapp_canisters =
+            Some(generate_unique_dapp_canisters(MAX_DAPP_CANISTERS_COUNT + 1));
+        assert!(sns_init_payload.validate().is_err());
+
+        sns_init_payload.dapp_canisters =
+            Some(generate_unique_dapp_canisters(MAX_DAPP_CANISTERS_COUNT));
+        assert!(sns_init_payload.validate().is_ok());
+
+        sns_init_payload.dapp_canisters = None;
+        assert!(sns_init_payload.validate().is_ok());
+
+        sns_init_payload.dapp_canisters = Some(DappCanisters {
+            canisters: vec![Canister { id: None }],
+        });
+        assert!(sns_init_payload.validate().is_err());
+
+        let duplicate_dapp_canister = Canister {
+            id: Some(CanisterId::from_u64(1).get()),
+        };
+        sns_init_payload.dapp_canisters = Some(DappCanisters {
+            canisters: vec![duplicate_dapp_canister, duplicate_dapp_canister],
+        });
+        assert!(sns_init_payload.validate().is_err());
     }
 
     // Create an initial SNS payload that includes Governance and Ledger init payloads. Then

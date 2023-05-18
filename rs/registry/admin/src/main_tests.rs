@@ -215,7 +215,7 @@ fn convert_from_flags_to_create_service_nervous_system() {
             }),
 
             fallback_controller_principal_ids: vec![PrincipalId::new_user_test_id(354_886)],
-            dapp_canisters: vec![NervousSystemCanisterId {
+            dapp_canisters: vec![nervous_system_pb::Canister {
                 id: Some(PrincipalId::try_from(CanisterId::from_u64(800_219)).unwrap()),
             },],
             swap_parameters: Some(SwapParameters {
