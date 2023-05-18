@@ -22,7 +22,9 @@ fn verify_bip32_extended_key_derivation() -> ExtendedBip32DerivationResult<()> {
     let path1 = DerivationPath::new(vec![index1.clone()]);
 
     assert_ebip32_result(
-        path1.key_derivation(&master_key, &chain_code).unwrap(),
+        path1
+            .public_key_derivation(&master_key, &chain_code)
+            .unwrap(),
         "026b299d834bbb242a961192ba5a1d5663b5fa8d76d88aff93fd2a6044a524ce70",
         "5b37a4f4f656bbe83497232deab1be3a468535ca55c296f123ee8339d56100f5",
     );
@@ -30,7 +32,9 @@ fn verify_bip32_extended_key_derivation() -> ExtendedBip32DerivationResult<()> {
     let path2 = DerivationPath::new(vec![index2.clone()]);
 
     assert_ebip32_result(
-        path2.key_derivation(&master_key, &chain_code).unwrap(),
+        path2
+            .public_key_derivation(&master_key, &chain_code)
+            .unwrap(),
         "03bbe7150acce76b3d155a840a5096e334cddc6a129bd3d481a200518efa066098",
         "68db4ee9e71a592c463e70202b4d49f4408530a7e783c43625360956e6180052",
     );
@@ -38,7 +42,9 @@ fn verify_bip32_extended_key_derivation() -> ExtendedBip32DerivationResult<()> {
     let path12 = DerivationPath::new(vec![index1, index2]);
 
     assert_ebip32_result(
-        path12.key_derivation(&master_key, &chain_code).unwrap(),
+        path12
+            .public_key_derivation(&master_key, &chain_code)
+            .unwrap(),
         "02acd25bb5fbd517e5141aa5bc9b58554a96b9e9436bb285abb2090598cdcf850e",
         "8e808ba4caebadca661fd647fcc8ab5e80a1b538b7ffee7bccf3f3a01a35d19e",
     );
@@ -56,7 +62,7 @@ fn check_bip32_result(
     let input_public_key = hex::decode(input_public_key).expect("Invalid hex");
     let input_chain_code = hex::decode(input_chain_code).expect("Invalid hex");
     let path = DerivationPath::new_bip32(path);
-    let result = path.key_derivation(&input_public_key, &input_chain_code)?;
+    let result = path.public_key_derivation(&input_public_key, &input_chain_code)?;
     assert_eq!(hex::encode(result.derived_public_key), expected_public_key);
     assert_eq!(hex::encode(result.derived_chain_code), expected_chain_code);
 
@@ -97,6 +103,49 @@ fn verify_bip32_standard_key_derivation() -> ExtendedBip32DerivationResult<()> {
         &[0],
         "02fc9e5af0ac8d9b3cecfe2a888e2117ba3d089d8585886c9c826b6b22a98d12ea",
         "f0909affaa7ee7abe5dd4e100598d4dc53cd709d5a5c2cac40e7412f232f7c9c",
+    )?;
+
+    Ok(())
+}
+
+fn check_private_bip32_result(
+    input_private_key: &'static str,
+    input_chain_code: &'static str,
+    path: &[u32],
+    expected_private_key: &'static str,
+    expected_chain_code: &'static str,
+) -> ExtendedBip32DerivationResult<()> {
+    let input_private_key = hex::decode(input_private_key).expect("Invalid hex");
+    let input_chain_code = hex::decode(input_chain_code).expect("Invalid hex");
+    let path = DerivationPath::new_bip32(path);
+    let result = path.private_key_derivation(&input_private_key, &input_chain_code)?;
+    assert_eq!(
+        hex::encode(result.derived_private_key),
+        expected_private_key
+    );
+    assert_eq!(hex::encode(result.derived_chain_code), expected_chain_code);
+
+    Ok(())
+}
+
+#[test]
+fn verify_bip32_standard_private_private_key_derivation() -> ExtendedBip32DerivationResult<()> {
+    // See https://en.bitcoin.it/wiki/BIP_0032_TestVectors
+
+    check_private_bip32_result(
+        "edb2e14f9ee77d26dd93b4ecede8d16ed408ce149b6cd80b0715a2d911a0afea",
+        "47fdacbd0f1097043b78c63c20c34ef4ed9a111d980047ad16282c7ae6236141",
+        &[1],
+        "3c6cb8d0f6a264c91ea8b5030fadaa8e538b020f0a387421a12de9319dc93368",
+        "2a7857631386ba23dacac34180dd1983734e444fdbf774041578e9b6adb37c19",
+    )?;
+
+    check_private_bip32_result(
+        "cbce0d719ecf7431d88e6a89fa1483e02e35092af60c042b1df2ff59fa424dca",
+        "04466b9cc8e161e966409ca52986c584f07e9dc81f735db683c3ff6ec7b1503f",
+        &[2, 1000000000],
+        "471b76e389e528d6de6d816857e012c5455051cad6660850e58372a6c3e6e7c8",
+        "c783e67b921d2beb8f6b389cc646d7263b4145701dadd2161548a8b078e65e9e",
     )?;
 
     Ok(())

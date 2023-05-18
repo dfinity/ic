@@ -51,7 +51,7 @@ impl DerivationPath {
     ///
     /// See https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki#serialization-format
     /// for details
-    const MAXIMUM_DERIVATION_PATH_LENGTH: usize = 255;
+    pub const MAXIMUM_DERIVATION_PATH_LENGTH: usize = 255;
 
     /// Create a standard BIP32 derivation path
     pub fn new_bip32(bip32: &[u32]) -> Self {
@@ -67,7 +67,59 @@ impl DerivationPath {
         Self { path }
     }
 
-    /// BIP32 Public parent key -> public child key (aka CKDpub)
+    /// Return the length of this path
+    pub fn len(&self) -> usize {
+        self.path.len()
+    }
+
+    /// Return if this path is empty
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    pub fn path(&self) -> &[DerivationIndex] {
+        &self.path
+    }
+
+    /// BIP32 CKD used to implement CKDpub and CKDpriv
+    ///
+    /// See <https://en.bitcoin.it/wiki/BIP_0032#Child_key_derivation_.28CKD.29_functions>
+    ///
+    /// Extended to support larger inputs, which is needed for
+    /// deriving the canister public key
+    ///
+    /// This handles both public and private derivation, depending on the value of key_input
+    fn bip32_ckd(
+        key_input: &[u8],
+        curve_type: EccCurveType,
+        chain_key: &[u8],
+        index: &DerivationIndex,
+    ) -> ThresholdEcdsaResult<(Vec<u8>, EccScalar)> {
+        // BIP32 is only defined for secp256k1
+        if curve_type != EccCurveType::K256 {
+            return Err(ThresholdEcdsaError::CurveMismatch);
+        }
+
+        let mut hmac = Hmac::<Sha512>::new(chain_key);
+
+        hmac.write(key_input);
+        hmac.write(&index.0);
+
+        let hmac_output = hmac.finish();
+
+        let key_offset = EccScalar::from_bytes_wide(curve_type, &hmac_output[..32])?;
+
+        let new_chain_key = hmac_output[32..].to_vec();
+
+        // If iL >= order, try again with the "next" index
+        if key_offset.serialize() != hmac_output[..32] {
+            Self::bip32_ckd(key_input, curve_type, chain_key, &index.next())
+        } else {
+            Ok((new_chain_key, key_offset))
+        }
+    }
+
+    /// BIP32 CKDpub
     ///
     /// See <https://en.bitcoin.it/wiki/BIP_0032#Child_key_derivation_.28CKD.29_functions>
     ///
@@ -78,30 +130,21 @@ impl DerivationPath {
         chain_key: &[u8],
         index: &DerivationIndex,
     ) -> ThresholdEcdsaResult<(EccPoint, Vec<u8>, EccScalar)> {
-        // BIP32 is only defined for secp256k1
-        if public_key.curve_type() != EccCurveType::K256 {
-            return Err(ThresholdEcdsaError::CurveMismatch);
-        }
-
-        let mut hmac = Hmac::<Sha512>::new(chain_key);
-
-        hmac.write(&public_key.serialize());
-        hmac.write(&index.0);
-
-        let hmac_output = hmac.finish();
-
-        let key_offset = EccScalar::from_bytes_wide(public_key.curve_type(), &hmac_output[..32])?;
-
-        let new_chain_key = hmac_output[32..].to_vec();
+        let (new_chain_key, key_offset) = Self::bip32_ckd(
+            &public_key.serialize(),
+            public_key.curve_type(),
+            chain_key,
+            index,
+        )?;
 
         let new_key = public_key.add_points(&EccPoint::mul_by_g(&key_offset)?)?;
 
-        // If iL >= order or new_key=inf, try again with the "next" index
-        if key_offset.serialize() != hmac_output[..32] || new_key.is_infinity()? {
-            Self::bip32_ckdpub(public_key, chain_key, &index.next())
-        } else {
-            Ok((new_key, new_chain_key, key_offset))
+        // If the new key is infinity, try again with the next index
+        if new_key.is_infinity()? {
+            return Self::bip32_ckdpub(public_key, chain_key, &index.next());
         }
+
+        Ok((new_key, new_chain_key, key_offset))
     }
 
     pub fn derive_tweak(
@@ -124,10 +167,10 @@ impl DerivationPath {
             )));
         }
 
-        if self.path.len() > Self::MAXIMUM_DERIVATION_PATH_LENGTH {
+        if self.len() > Self::MAXIMUM_DERIVATION_PATH_LENGTH {
             return Err(ThresholdEcdsaError::InvalidArguments(format!(
                 "Derivation path len {} larger than allowed maximum of {}",
-                self.path.len(),
+                self.len(),
                 Self::MAXIMUM_DERIVATION_PATH_LENGTH
             )));
         }
@@ -139,7 +182,7 @@ impl DerivationPath {
             let mut derived_chain_key = chain_code.to_vec();
             let mut derived_offset = EccScalar::zero(curve_type);
 
-            for idx in &self.path {
+            for idx in self.path() {
                 let (next_derived_key, next_chain_key, next_offset) =
                     Self::bip32_ckdpub(&derived_key, &derived_chain_key, idx)?;
 

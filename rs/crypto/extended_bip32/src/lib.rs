@@ -1,13 +1,16 @@
 use ic_crypto_internal_threshold_sig_ecdsa::{
-    DerivationPath as DerivationPathImpl, EccCurveType, EccPoint, ThresholdEcdsaError,
+    DerivationPath as DerivationPathImpl, EccCurveType, EccPoint, EccScalar, ThresholdEcdsaError,
 };
 
 #[derive(Debug, Clone)]
 pub enum ExtendedBip32DerivationError {
     InvalidChainCodeLength,
+    InvalidDerivationPath,
     InvalidPublicKeyEncoding,
     InternalError(ThresholdEcdsaError),
 }
+
+const CURVE_TYPE: EccCurveType = EccCurveType::K256;
 
 pub type ExtendedBip32DerivationResult<T> = std::result::Result<T, ExtendedBip32DerivationError>;
 
@@ -37,6 +40,21 @@ impl ExtendedBip32DerivationOutput {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct ExtendedPrivateBip32DerivationOutput {
+    pub derived_private_key: Vec<u8>,
+    pub derived_chain_code: Vec<u8>,
+}
+
+impl ExtendedPrivateBip32DerivationOutput {
+    fn new(derived_private_key: EccScalar, chain_code: Vec<u8>) -> Self {
+        Self {
+            derived_private_key: derived_private_key.serialize(),
+            derived_chain_code: chain_code,
+        }
+    }
+}
+
 // We wrap DerivationPath in order to add an additional method
 #[derive(Debug, Clone)]
 pub struct DerivationPath {
@@ -58,6 +76,15 @@ impl DerivationPath {
         }
     }
 
+    /// Deprecated equivalent for public_key_derivation
+    pub fn key_derivation(
+        &self,
+        public_key: &[u8],
+        chain_code: &[u8],
+    ) -> ExtendedBip32DerivationResult<ExtendedBip32DerivationOutput> {
+        self.public_key_derivation(public_key, chain_code)
+    }
+
     /// Perform extended BIP32 key derivation on the specified path
     ///
     /// # Arguments
@@ -67,9 +94,8 @@ impl DerivationPath {
     ///  * `chain_code` is the BIP32 chain code, which must be a 32 byte value.
     ///
     /// Returns a result struct containing the SEC1 compressed secp256k1 of
-    /// the derived child public key, the SEC1 formatted offset between
-    /// the master key and the derived key, and the new chain code.
-    pub fn key_derivation(
+    /// the derived child public key, and the new chain code.
+    pub fn public_key_derivation(
         &self,
         public_key: &[u8],
         chain_code: &[u8],
@@ -78,9 +104,11 @@ impl DerivationPath {
             return Err(ExtendedBip32DerivationError::InvalidChainCodeLength);
         }
 
-        let curve_type = EccCurveType::K256;
+        if self.path.len() > DerivationPathImpl::MAXIMUM_DERIVATION_PATH_LENGTH {
+            return Err(ExtendedBip32DerivationError::InvalidDerivationPath);
+        }
 
-        let public_key = EccPoint::deserialize(curve_type, public_key)
+        let public_key = EccPoint::deserialize(CURVE_TYPE, public_key)
             .map_err(|_| ExtendedBip32DerivationError::InvalidPublicKeyEncoding)?;
 
         let (offset, chain_code) = self
@@ -90,5 +118,43 @@ impl DerivationPath {
         let new_key = public_key.add_points(&EccPoint::mul_by_g(&offset)?)?;
 
         Ok(ExtendedBip32DerivationOutput::new(new_key, chain_code))
+    }
+
+    /// Perform extended BIP32 key derivation on the specified path
+    ///
+    /// # Arguments
+    ///  * `private_key` is the SEC1 encoding of a secp256k1 scalar.
+    ///    This should be exactly 32 bytes long.
+    ///  * `chain_code` is the BIP32 chain code, which must be a 32 byte value.
+    ///
+    /// Returns a result struct containing the derived child private
+    /// key, and the new chain code.
+    pub fn private_key_derivation(
+        &self,
+        private_key: &[u8],
+        chain_code: &[u8],
+    ) -> ExtendedBip32DerivationResult<ExtendedPrivateBip32DerivationOutput> {
+        if chain_code.len() != 32 {
+            return Err(ExtendedBip32DerivationError::InvalidChainCodeLength);
+        }
+
+        if self.path.len() > DerivationPathImpl::MAXIMUM_DERIVATION_PATH_LENGTH {
+            return Err(ExtendedBip32DerivationError::InvalidDerivationPath);
+        }
+
+        let private_key = EccScalar::deserialize(CURVE_TYPE, private_key).unwrap();
+
+        let public_key = EccPoint::mul_by_g(&private_key)?;
+
+        let (offset, derived_chain_key) = self
+            .path
+            .derive_tweak_with_chain_code(&public_key, chain_code)?;
+
+        let derived_key = private_key.add(&offset)?;
+
+        Ok(ExtendedPrivateBip32DerivationOutput::new(
+            derived_key,
+            derived_chain_key,
+        ))
     }
 }
