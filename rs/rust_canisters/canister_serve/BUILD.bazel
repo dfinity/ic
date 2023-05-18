@@ -1,0 +1,35 @@
+load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+    "//rs/rust_canisters/canister_log",
+    "@crate_index//:by_address",
+    "@crate_index//:ic-cdk",
+    "@crate_index//:ic-metrics-encoder",
+    "@crate_index//:maplit",
+    "@crate_index//:priority-queue",
+    "@crate_index//:serde",
+    "@crate_index//:serde_json",
+]
+
+rust_library(
+    name = "canister_serve",
+    srcs = [
+        "src/lib.rs",
+    ],
+    crate_name = "ic_canister_serve",
+    version = "0.1.0",
+    deps = DEPENDENCIES,
+)
+
+rust_doc_test(
+    name = "canister_serve_doc_test",
+    crate = ":canister_serve",
+)
+
+rust_test(
+    name = "canister_serve_test",
+    srcs = ["tests/tests.rs"],
+    deps = DEPENDENCIES + [":canister_serve"],
+)

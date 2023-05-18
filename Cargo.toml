@@ -242,6 +242,7 @@ members = [
   "rs/rust_canisters/call_tree_test",
   "rs/rust_canisters/canister_creator",
   "rs/rust_canisters/canister_log",
+  "rs/rust_canisters/canister_serve",
   "rs/rust_canisters/canister_test",
   "rs/rust_canisters/dfn_core",
   "rs/rust_canisters/dfn_candid",

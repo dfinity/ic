@@ -1550,7 +1550,7 @@ dependencies = [
  "certificate_orchestrator_interface",
  "cfg-if 1.0.0",
  "hex",
- "ic-cdk 0.7.3",
+ "ic-cdk 0.7.4",
  "ic-cdk-macros",
  "ic-cdk-timers",
  "ic-certified-map",
@@ -4375,7 +4375,7 @@ dependencies = [
  "hex",
  "ic-base-types",
  "ic-btc-interface",
- "ic-cdk 0.7.3",
+ "ic-cdk 0.7.4",
  "ic-cdk-macros",
  "ic-ckbtc-minter",
  "ic-config",
@@ -4702,6 +4702,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-canister-serve"
+version = "0.1.0"
+dependencies = [
+ "by_address",
+ "ic-canister-log",
+ "ic-cdk 0.7.4",
+ "ic-metrics-encoder",
+ "maplit",
+ "priority-queue",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "ic-canisters-http-types"
 version = "0.8.0"
 dependencies = [
@@ -4761,9 +4775,9 @@ dependencies = [
 
 [[package]]
 name = "ic-cdk"
-version = "0.7.3"
+version = "0.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "774b653cecdd15b6ae0731cce9e655b9cb2489b88458fd80a5b48aace55dfc1d"
+checksum = "9beb0bf1dcd0639c313630e34aa547a2b19450ddf1969c176e13225ef3b29048"
 dependencies = [
  "candid",
  "ic-cdk-macros",
@@ -4793,7 +4807,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c739e7c592cb66df4f15c6b6c4859b1195782f63923e2fb1b29553d9c0819bd4"
 dependencies = [
  "futures",
- "ic-cdk 0.7.3",
+ "ic-cdk 0.7.4",
  "ic0",
  "serde",
  "serde_bytes",
@@ -4864,7 +4878,7 @@ version = "0.1.0"
 dependencies = [
  "candid",
  "hex",
- "ic-cdk 0.7.3",
+ "ic-cdk 0.7.4",
  "ic-cdk-macros",
  "ic-cdk-timers",
  "ic-certified-map",
@@ -4914,7 +4928,7 @@ dependencies = [
  "ciborium",
  "hex",
  "ic-canisters-http-types",
- "ic-cdk 0.7.3",
+ "ic-cdk 0.7.4",
  "ic-cdk-macros",
  "ic-metrics-encoder",
  "ic-stable-structures",
@@ -4942,7 +4956,7 @@ dependencies = [
  "ic-btc-interface",
  "ic-canister-log",
  "ic-canisters-http-types",
- "ic-cdk 0.7.3",
+ "ic-cdk 0.7.4",
  "ic-cdk-macros",
  "ic-ckbtc-kyt",
  "ic-crypto-extended-bip32",
@@ -9655,7 +9669,7 @@ checksum = "be83b09145df43603a6255b2dee2b08055ed37642fe1ee26d2036f2ada81730b"
 dependencies = [
  "candid",
  "ciborium",
- "ic-cdk 0.7.3",
+ "ic-cdk 0.7.4",
  "serde",
  "serde_bytes",
 ]
@@ -9956,7 +9970,7 @@ dependencies = [
  "futures",
  "ic-base-types",
  "ic-canisters-http-types",
- "ic-cdk 0.7.3",
+ "ic-cdk 0.7.4",
  "ic-cdk-macros",
  "ic-cdk-timers",
  "ic-metrics-encoder",
@@ -17554,7 +17568,7 @@ version = "0.1.0"
 dependencies = [
  "candid",
  "ic-base-types",
- "ic-cdk 0.7.3",
+ "ic-cdk 0.7.4",
  "ic-cdk-macros",
  "ic-xrc-types",
  "serde",
