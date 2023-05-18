@@ -1092,7 +1092,7 @@ impl Neuron {
     ///
     /// The stake can be decreased by making proposals that are
     /// subsequently rejected, and increased by transferring funds
-    /// to the acccount of this neuron and then refreshing the stake, or
+    /// to the account of this neuron and then refreshing the stake, or
     /// by accumulating staked maturity.
     pub fn stake_e8s(&self) -> u64 {
         self.cached_neuron_stake_e8s
@@ -4571,11 +4571,11 @@ impl Governance {
     async fn perform_action(
         &mut self,
         pid: u64,
-        action: proposal::Action,
+        action: Action,
         original_total_community_fund_maturity_e8s_equivalent: Option<u64>,
     ) {
         match action {
-            proposal::Action::ManageNeuron(mgmt) => {
+            Action::ManageNeuron(mgmt) => {
                 // An adopted neuron management command is executed
                 // with the privileges of the controller of the
                 // neuron.
@@ -4618,7 +4618,7 @@ impl Governance {
                     Err(e) => self.set_proposal_execution_status(pid, Err(e)),
                 }
             }
-            proposal::Action::ManageNetworkEconomics(ne) => {
+            Action::ManageNetworkEconomics(ne) => {
                 if let Some(economics) = &mut self.proto.economics {
                     // The semantics of the proposal is to modify all values specified with a
                     // non-default value in the proposed new `NetworkEconomics`.
@@ -4658,10 +4658,10 @@ impl Governance {
                 self.set_proposal_execution_status(pid, Ok(()));
             }
             // A motion is not executed, just recorded for posterity.
-            proposal::Action::Motion(_) => {
+            Action::Motion(_) => {
                 self.set_proposal_execution_status(pid, Ok(()));
             }
-            proposal::Action::ExecuteNnsFunction(m) => {
+            Action::ExecuteNnsFunction(m) => {
                 // This will eventually set the proposal execution
                 // status.
                 match self.env.execute_nns_function(pid, &m) {
@@ -4680,11 +4680,11 @@ impl Governance {
                     }
                 }
             }
-            proposal::Action::ApproveGenesisKyc(proposal) => {
+            Action::ApproveGenesisKyc(proposal) => {
                 self.approve_genesis_kyc(&proposal.principals);
                 self.set_proposal_execution_status(pid, Ok(()));
             }
-            proposal::Action::AddOrRemoveNodeProvider(ref proposal) => {
+            Action::AddOrRemoveNodeProvider(ref proposal) => {
                 if let Some(change) = &proposal.change {
                     match change {
                         Change::ToAdd(node_provider) => {
@@ -4759,10 +4759,10 @@ impl Governance {
                     );
                 }
             }
-            proposal::Action::RewardNodeProvider(ref reward) => {
+            Action::RewardNodeProvider(ref reward) => {
                 self.reward_node_provider(pid, reward).await;
             }
-            proposal::Action::SetDefaultFollowees(ref proposal) => {
+            Action::SetDefaultFollowees(ref proposal) => {
                 let validate_result = self
                     .proto
                     .validate_default_followees(&proposal.default_followees);
@@ -4773,18 +4773,18 @@ impl Governance {
                 self.proto.default_followees = proposal.default_followees.clone();
                 self.set_proposal_execution_status(pid, Ok(()));
             }
-            proposal::Action::RewardNodeProviders(proposal) => {
+            Action::RewardNodeProviders(proposal) => {
                 self.reward_node_providers_from_proposal(pid, proposal)
                     .await;
             }
-            proposal::Action::RegisterKnownNeuron(known_neuron) => {
+            Action::RegisterKnownNeuron(known_neuron) => {
                 let result = self.register_known_neuron(known_neuron);
                 self.set_proposal_execution_status(pid, result);
             }
-            proposal::Action::SetSnsTokenSwapOpenTimeWindow(
-                ref set_sns_token_swap_open_time_window,
-            ) => self.set_sns_token_swap_open_time_window(pid, set_sns_token_swap_open_time_window),
-            proposal::Action::OpenSnsTokenSwap(ref open_sns_token_swap) => {
+            Action::SetSnsTokenSwapOpenTimeWindow(ref set_sns_token_swap_open_time_window) => {
+                self.set_sns_token_swap_open_time_window(pid, set_sns_token_swap_open_time_window)
+            }
+            Action::OpenSnsTokenSwap(ref open_sns_token_swap) => {
                 self.open_sns_token_swap(
                     pid,
                     open_sns_token_swap,
@@ -4793,7 +4793,7 @@ impl Governance {
                 )
                 .await;
             }
-            proposal::Action::CreateServiceNervousSystem(ref create_service_nervous_system) => {
+            Action::CreateServiceNervousSystem(ref create_service_nervous_system) => {
                 self.create_service_nervous_system(pid, create_service_nervous_system)
                     .await;
             }
@@ -8397,7 +8397,7 @@ impl TryFrom<CreateServiceNervousSystem> for SnsInitPayload {
             url,
             logo,
             fallback_controller_principal_ids,
-            dapp_canisters: _, // Not used.
+            dapp_canisters,
 
             initial_token_distribution,
 
@@ -8512,6 +8512,10 @@ impl TryFrom<CreateServiceNervousSystem> for SnsInitPayload {
             .proposal_wait_for_quiet_deadline_increase
             .and_then(|duration| duration.seconds);
 
+        let dapp_canisters = Some(sns_init_pb::DappCanisters {
+            canisters: dapp_canisters,
+        });
+
         if !defects.is_empty() {
             return Err(format!(
                 "Failed to convert proposal to SnsInitPayload:\n{}",
@@ -8541,6 +8545,7 @@ impl TryFrom<CreateServiceNervousSystem> for SnsInitPayload {
             max_age_bonus_percentage,
             initial_voting_period_seconds,
             wait_for_quiet_deadline_increase_seconds,
+            dapp_canisters,
             confirmation_text: None,    // TODO[NNS1-2232]
             restricted_countries: None, // TODO[NNS1-2232]
         };

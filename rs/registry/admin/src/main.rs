@@ -52,8 +52,8 @@ use ic_nns_governance::pb::v1::{
             developer_distribution::NeuronDistribution, DeveloperDistribution, SwapDistribution,
             TreasuryDistribution,
         },
-        swap_parameters, Canister as NervousSystemCanisterId, GovernanceParameters,
-        InitialTokenDistribution, LedgerParameters, SwapParameters,
+        swap_parameters, GovernanceParameters, InitialTokenDistribution, LedgerParameters,
+        SwapParameters,
     },
     manage_neuron::Command,
     proposal::Action,
@@ -3978,7 +3978,7 @@ impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSys
 
         let dapp_canisters = dapp_canisters
             .into_iter()
-            .map(|id| NervousSystemCanisterId { id: Some(id) })
+            .map(|id| nervous_system_pb::Canister { id: Some(id) })
             .collect();
 
         let initial_token_distribution = {

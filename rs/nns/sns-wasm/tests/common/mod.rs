@@ -1,14 +1,14 @@
 use candid::Encode;
 use canister_test::Project;
 use ic_base_types::{CanisterId, PrincipalId};
+use ic_nervous_system_common::ONE_TRILLION;
 use ic_nns_test_utils::{
     common::{NnsInitPayloads, NnsInitPayloadsBuilder},
     state_test_helpers::{self, create_canister, setup_nns_canisters},
 };
 use ic_state_machine_tests::StateMachine;
 
-pub const ONE_TRILLION: u128 = 1_000_000_000_000;
-pub const EXPECTED_SNS_CREATION_FEE: u128 = 180 * ONE_TRILLION;
+pub const EXPECTED_SNS_CREATION_FEE: u128 = 180 * ONE_TRILLION as u128;
 
 /// Create a `StateMachine` with NNS installed
 pub fn set_up_state_machine_with_nns(allowed_principals: Vec<PrincipalId>) -> StateMachine {

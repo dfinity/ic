@@ -496,6 +496,7 @@ impl TryFrom<SnsCliInitConfig> for SnsInitPayload {
             wait_for_quiet_deadline_increase_seconds: sns_cli_init_config
                 .sns_governance
                 .wait_for_quiet_deadline_increase_seconds,
+            dapp_canisters: None, // TODO[NNS1-1969]
             confirmation_text: sns_cli_init_config.sns_swap.confirmation_text,
             restricted_countries: sns_cli_init_config.sns_swap.restricted_countries.map(
                 |country_codes| Countries {
@@ -1014,11 +1015,15 @@ fn validate(init_config_file: PathBuf) {
 mod test {
     use super::*;
     use ic_sns_governance::types::{ONE_DAY_SECONDS, ONE_MONTH_SECONDS};
-    use ic_sns_init::pb::v1::sns_init_payload::InitialTokenDistribution::FractionalDeveloperVotingPower as FDVP;
-    use ic_sns_init::pb::v1::{FractionalDeveloperVotingPower, SnsInitPayload};
-    use std::convert::TryFrom;
-    use std::fs::File;
-    use std::io::{BufReader, Read};
+    use ic_sns_init::pb::v1::{
+        sns_init_payload::InitialTokenDistribution::FractionalDeveloperVotingPower as FDVP,
+        FractionalDeveloperVotingPower, SnsInitPayload,
+    };
+    use std::{
+        convert::TryFrom,
+        fs::File,
+        io::{BufReader, Read},
+    };
 
     impl SnsLedgerConfig {
         pub fn with_test_values() -> Self {
@@ -1205,6 +1210,7 @@ wait_for_quiet_deadline_increase_seconds: 1000
             initial_voting_period_seconds,
             wait_for_quiet_deadline_increase_seconds,
             initial_token_distribution,
+            dapp_canisters: _, // TODO[NNS1-1969]
             confirmation_text,
             restricted_countries,
         } = sns_init_payload;

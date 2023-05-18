@@ -39,6 +39,11 @@ pub const SECONDS_PER_DAY: u64 = 24 * 60 * 60;
 // Useful as a piece of realistic test data.
 pub const START_OF_2022_TIMESTAMP_SECONDS: u64 = 1641016800;
 
+pub const ONE_TRILLION: u64 = 1_000_000_000_000;
+
+/// The number of cycles required to create an SNS, charged by the SNS-W canister.
+pub const SNS_CREATION_FEE: u64 = 180 * ONE_TRILLION;
+
 // The size of a WASM page in bytes, as defined by the WASM specification
 #[cfg(any(target_arch = "wasm32"))]
 const WASM_PAGE_SIZE_BYTES: usize = 65536;

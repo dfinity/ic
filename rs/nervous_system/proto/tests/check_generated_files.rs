@@ -12,11 +12,13 @@ fn check_generated_files() {
             .expect("CARGO_MANIFEST_DIR env variable is not defined"),
     );
     let out_dir = tempfile::TempDir::new().expect("failed to create a temporary directory");
-    let nervous_system_proto = manifest_dir.join("proto");
+    let nervous_system_proto = manifest_dir.join("./proto");
+    let base_types_proto = manifest_dir.join("../../types/base_types/proto");
 
     generate_prost_files(
         ProtoPaths {
             nervous_system: &nervous_system_proto,
+            base_types: &base_types_proto,
         },
         out_dir.path(),
     );

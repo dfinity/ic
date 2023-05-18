@@ -241,25 +241,38 @@ fn get_proposal_info(env: &StateMachine, pid: ProposalId) -> Option<ProposalInfo
 /// Make deploy_new_sns request to a canister in the StateMachine
 pub fn deploy_new_sns(
     env: &StateMachine,
-    wallet_canister: CanisterId,
+    caller: CanisterId,
     sns_wasm_canister_id: CanisterId,
     sns_init_payload: SnsInitPayload,
     cycles: u128,
 ) -> DeployNewSnsResponse {
-    let response = try_call_with_cycles_via_universal_canister(
-        env,
-        wallet_canister,
-        sns_wasm_canister_id,
-        "deploy_new_sns",
-        Encode!(&DeployNewSnsRequest {
-            sns_init_payload: Some(sns_init_payload)
-        })
-        .unwrap(),
-        cycles,
-    )
-    .unwrap();
-
-    Decode!(&response, DeployNewSnsResponse).unwrap()
+    if caller == GOVERNANCE_CANISTER_ID {
+        update_with_sender(
+            env,
+            sns_wasm_canister_id,
+            "deploy_new_sns",
+            candid_one,
+            DeployNewSnsRequest {
+                sns_init_payload: Some(sns_init_payload),
+            },
+            caller.get(),
+        )
+        .unwrap()
+    } else {
+        let response = try_call_with_cycles_via_universal_canister(
+            env,
+            caller,
+            sns_wasm_canister_id,
+            "deploy_new_sns",
+            Encode!(&DeployNewSnsRequest {
+                sns_init_payload: Some(sns_init_payload)
+            })
+            .unwrap(),
+            cycles,
+        )
+        .unwrap();
+        Decode!(&response, DeployNewSnsResponse).unwrap()
+    }
 }
 
 /// Make list_deployed_snses request to a canister in the StateMachine

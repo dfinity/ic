@@ -7446,6 +7446,7 @@ version = "0.0.1"
 dependencies = [
  "candid",
  "comparable",
+ "ic-base-types",
  "ic-nervous-system-proto-protobuf-generator",
  "ic-test-utilities-compare-dirs",
  "prost",
@@ -7474,6 +7475,7 @@ dependencies = [
  "ic-crypto-sha",
  "ic-ic00-types",
  "ic-nervous-system-common",
+ "ic-nns-constants",
  "lazy_static",
  "num-traits",
  "serde",

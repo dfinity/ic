@@ -1,8 +1,10 @@
-use crate::pb::v1::{
-    AirdropDistribution, DeveloperDistribution, FractionalDeveloperVotingPower, NeuronDistribution,
-    SwapDistribution, TreasuryDistribution,
+use crate::{
+    pb::v1::{
+        AirdropDistribution, DeveloperDistribution, FractionalDeveloperVotingPower,
+        NeuronDistribution, SwapDistribution, TreasuryDistribution,
+    },
+    SnsCanisterIds,
 };
-use crate::SnsCanisterIds;
 use anyhow::anyhow;
 use ic_base_types::PrincipalId;
 use ic_ledger_core::Tokens;
@@ -10,12 +12,12 @@ use ic_nervous_system_common::ledger::{
     compute_distribution_subaccount_bytes, compute_neuron_staking_subaccount,
     compute_neuron_staking_subaccount_bytes,
 };
-use ic_sns_governance::governance::TREASURY_SUBACCOUNT_NONCE;
-use ic_sns_governance::neuron::DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER;
-use ic_sns_governance::pb::v1::{
-    neuron::DissolveState, NervousSystemParameters, Neuron, NeuronId, NeuronPermission,
+use ic_sns_governance::{
+    governance::TREASURY_SUBACCOUNT_NONCE,
+    neuron::DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER,
+    pb::v1::{neuron::DissolveState, NervousSystemParameters, Neuron, NeuronId, NeuronPermission},
+    types::ONE_MONTH_SECONDS,
 };
-use ic_sns_governance::types::ONE_MONTH_SECONDS;
 use ic_sns_swap::swap::{SALE_NEURON_MEMO_RANGE_END, SALE_NEURON_MEMO_RANGE_START};
 use icrc_ledger_types::icrc1::account::Account;
 use maplit::btreemap;
@@ -563,12 +565,14 @@ impl NeuronDistribution {
 
 #[cfg(test)]
 mod test {
-    use crate::distributions::SWAP_SUBACCOUNT_NONCE;
-    use crate::pb::v1::{
-        AirdropDistribution, DeveloperDistribution, FractionalDeveloperVotingPower,
-        NeuronDistribution, SwapDistribution, TreasuryDistribution,
+    use crate::{
+        distributions::SWAP_SUBACCOUNT_NONCE,
+        pb::v1::{
+            AirdropDistribution, DeveloperDistribution, FractionalDeveloperVotingPower,
+            NeuronDistribution, SwapDistribution, TreasuryDistribution,
+        },
+        SnsCanisterIds, Tokens,
     };
-    use crate::{SnsCanisterIds, Tokens};
     use ic_base_types::{CanisterId, PrincipalId};
     use ic_nervous_system_common::ledger::{
         compute_distribution_subaccount_bytes, compute_neuron_staking_subaccount_bytes,
@@ -576,11 +580,12 @@ mod test {
     use ic_nervous_system_common_test_keys::{
         TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL, TEST_NEURON_3_OWNER_PRINCIPAL,
     };
-    use ic_sns_governance::governance::TREASURY_SUBACCOUNT_NONCE;
-    use ic_sns_governance::neuron::DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER;
-    use ic_sns_governance::pb::v1::neuron::DissolveState;
-    use ic_sns_governance::pb::v1::{NervousSystemParameters, NeuronId, NeuronPermission};
-    use ic_sns_governance::types::{ONE_MONTH_SECONDS, ONE_YEAR_SECONDS};
+    use ic_sns_governance::{
+        governance::TREASURY_SUBACCOUNT_NONCE,
+        neuron::DEFAULT_VOTING_POWER_PERCENTAGE_MULTIPLIER,
+        pb::v1::{neuron::DissolveState, NervousSystemParameters, NeuronId, NeuronPermission},
+        types::{ONE_MONTH_SECONDS, ONE_YEAR_SECONDS},
+    };
     use ic_sns_swap::swap::SALE_NEURON_MEMO_RANGE_START;
     use icrc_ledger_types::icrc1::account::Account;
     use std::str::FromStr;

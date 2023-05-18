@@ -128,7 +128,7 @@ pub struct NeuronStakeTransfer {
     /// The subaccount to which the transfer was made.
     #[prost(bytes = "vec", tag = "4")]
     pub to_subaccount: ::prost::alloc::vec::Vec<u8>,
-    /// The amount of stake that was transfered.
+    /// The amount of stake that was transferred.
     #[prost(uint64, tag = "5")]
     pub neuron_stake_e8s: u64,
     /// The block height at which the transfer occurred.
@@ -502,7 +502,7 @@ pub mod reward_node_provider {
         /// account.
         #[prost(message, tag = "4")]
         RewardToNeuron(RewardToNeuron),
-        /// If this is specificed, executing this proposal will mint to the
+        /// If this is specified, executing this proposal will mint to the
         /// specified account.
         #[prost(message, tag = "5")]
         RewardToAccount(RewardToAccount),
@@ -1152,7 +1152,7 @@ pub mod manage_neuron {
             #[prost(uint64, tag = "1")]
             Memo(u64),
             /// Claim or refresh a neuron, by providing the memo used in the
-            /// staking stransfer and 'controller' as the principal id used to
+            /// staking transfer and 'controller' as the principal id used to
             /// calculate the subaccount to which the transfer was made. If
             /// 'controller' is omitted, the principal id of the caller is
             /// used.
@@ -1503,9 +1503,9 @@ pub mod governance_error {
         /// performed.
         ResourceExhausted = 10,
         /// Some precondition for executing this method was not met (e.g. the
-        /// neuron's desolve time is too short). There could be a change in the
+        /// neuron's dissolve time is too short). There could be a change in the
         /// state of the system such that the operation becomes allowed (e.g. the
-        /// owner of the neuron increases its desolve delay).
+        /// owner of the neuron increases its dissolve delay).
         PreconditionFailed = 11,
         /// Executing this method failed for some reason external to the
         /// governance canister.
@@ -2113,7 +2113,7 @@ pub struct CreateServiceNervousSystem {
     #[prost(message, repeated, tag = "5")]
     pub fallback_controller_principal_ids: ::prost::alloc::vec::Vec<::ic_base_types::PrincipalId>,
     #[prost(message, repeated, tag = "6")]
-    pub dapp_canisters: ::prost::alloc::vec::Vec<create_service_nervous_system::Canister>,
+    pub dapp_canisters: ::prost::alloc::vec::Vec<::ic_nervous_system_proto::pb::v1::Canister>,
     #[prost(message, optional, tag = "7")]
     pub initial_token_distribution:
         ::core::option::Option<create_service_nervous_system::InitialTokenDistribution>,
@@ -2127,19 +2127,6 @@ pub struct CreateServiceNervousSystem {
 }
 /// Nested message and enum types in `CreateServiceNervousSystem`.
 pub mod create_service_nervous_system {
-    #[derive(
-        candid::CandidType,
-        candid::Deserialize,
-        serde::Serialize,
-        comparable::Comparable,
-        Clone,
-        PartialEq,
-        ::prost::Message,
-    )]
-    pub struct Canister {
-        #[prost(message, optional, tag = "1")]
-        pub id: ::core::option::Option<::ic_base_types::PrincipalId>,
-    }
     // Initial SNS Tokens and Neurons
     // ------------------------------
 
@@ -2231,7 +2218,7 @@ pub mod create_service_nervous_system {
             pub total: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Tokens>,
         }
     }
-    // Canistser Initialization
+    // Canister Initialization
     // ------------------------
 
     #[derive(
@@ -2414,7 +2401,7 @@ pub struct Governance {
     /// If there are no ongoing requests, this map should be empty.
     ///
     /// If something goes fundamentally wrong (say we trap at some point
-    /// after issueing a transfer call) the neuron(s) involved are left in a
+    /// after issuing a transfer call) the neuron(s) involved are left in a
     /// "locked" state, meaning new operations can't be applied without
     /// reconciling the state.
     ///
@@ -2490,8 +2477,8 @@ pub mod governance {
     /// Nested message and enum types in `NeuronInFlightCommand`.
     pub mod neuron_in_flight_command {
         /// A general place holder for sync commands. The neuron lock is
-        /// never left holding a sync command (as it either suceeds to
-        /// aquire the lock and releases it in the same call, or never
+        /// never left holding a sync command (as it either succeeds to
+        /// acquire the lock and releases it in the same call, or never
         /// acquires it in the first place), but it still must be acquired
         /// to prevent interleaving with another async command. Thus there's
         /// no value in actually storing the command itself, and this placeholder
@@ -2600,7 +2587,7 @@ pub struct ListProposalInfo {
     /// will be used.
     #[prost(uint32, tag = "1")]
     pub limit: u32,
-    /// If specified, only return proposals that are stricty earlier than
+    /// If specified, only return proposals that are strictly earlier than
     /// the specified proposal according to the proposal ID. If not
     /// specified, start with the most recent proposal.
     #[prost(message, optional, tag = "2")]
@@ -2982,7 +2969,7 @@ impl Topic {
 /// Every neuron is in one of three states.
 ///
 /// Note that `Disbursed` is not a state of a neuron, as the neuron is
-/// consumed throught the act disbursement (using the method
+/// consumed through the act of disbursement (using the method
 /// \[Governance::disburse\]).
 ///
 /// See \[neuron::DissolveState\] for detail on how the different states
@@ -3007,7 +2994,7 @@ pub enum NeuronState {
     /// Not a valid state. Required by Protobufs.
     Unspecified = 0,
     /// In this state, the neuron is not dissolving and has a specific
-    /// `dissolve_delay`. It accrues `age` by the passge of time and it
+    /// `dissolve_delay`. It accrues `age` by the passage of time and it
     /// can vote if `dissolve_delay` is at least six months. The method
     /// \[Neuron::start_dissolving\] can be called to transfer the neuron
     /// to the `Dissolving` state. The method

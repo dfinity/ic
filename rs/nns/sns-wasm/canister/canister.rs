@@ -10,7 +10,10 @@ use ic_ic00_types::{
     CanisterIdRecord, CanisterInstallMode::Install, CanisterSettingsArgsBuilder,
     CreateCanisterArgs, InstallCodeArgs, Method, UpdateSettingsArgs,
 };
-use ic_nervous_system_root::canister_status::{CanisterStatusResultV2, CanisterStatusType};
+use ic_nervous_system_root::{
+    canister_status::{CanisterStatusResultV2, CanisterStatusType},
+    change_canister_controllers::NnsRootCanisterClientImpl,
+};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_sns_wasm::{
     canister_api::CanisterApi,
@@ -73,7 +76,7 @@ impl CanisterApi for CanisterApiImpl {
                 ),
                 sender_canister_version: Some(dfn_core::api::canister_version()),
             },
-            dfn_core::api::Funds::new(cycles.get().try_into().unwrap()),
+            Funds::new(cycles.get().try_into().unwrap()),
         )
         .await;
 
@@ -94,7 +97,7 @@ impl CanisterApi for CanisterApiImpl {
         let response: Result<(), (Option<i32>, String)> = dfn_core::call(
             CanisterId::ic_00(),
             "delete_canister",
-            dfn_candid::candid_one,
+            candid_one,
             CanisterIdRecord::from(canister),
         )
         .await;
@@ -110,13 +113,13 @@ impl CanisterApi for CanisterApiImpl {
         &self,
         target_canister: CanisterId,
         wasm: Vec<u8>,
-        init_paylaod: Vec<u8>,
+        init_payload: Vec<u8>,
     ) -> Result<(), String> {
         let install_args = InstallCodeArgs {
             mode: Install,
             canister_id: target_canister.get(),
             wasm_module: wasm,
-            arg: init_paylaod,
+            arg: init_payload,
             compute_allocation: None,
             memory_allocation: None,
             query_allocation: None,
@@ -194,7 +197,7 @@ impl CanisterApi for CanisterApiImpl {
         let response: Result<(), (Option<i32>, String)> = dfn_core::api::call_with_funds(
             CanisterId::ic_00(),
             "deposit_cycles",
-            dfn_candid::candid_one,
+            candid_one,
             CanisterIdRecord::from(target),
             Funds::new(cycles),
         )
@@ -227,7 +230,7 @@ impl CanisterApiImpl {
         dfn_core::call(
             CanisterId::ic_00(),
             "stop_canister",
-            dfn_candid::candid_one,
+            candid_one,
             CanisterIdRecord::from(canister),
         )
         .await
@@ -417,7 +420,14 @@ fn deploy_new_sns() {
 
 #[candid_method(update, rename = "deploy_new_sns")]
 async fn deploy_new_sns_(deploy_new_sns: DeployNewSnsRequest) -> DeployNewSnsResponse {
-    SnsWasmCanister::deploy_new_sns(&SNS_WASM, &canister_api(), deploy_new_sns, caller()).await
+    SnsWasmCanister::deploy_new_sns(
+        &SNS_WASM,
+        &canister_api(),
+        &NnsRootCanisterClientImpl::default(),
+        deploy_new_sns,
+        caller(),
+    )
+    .await
 }
 
 #[export_name = "canister_query list_deployed_snses"]

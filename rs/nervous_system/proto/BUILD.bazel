@@ -9,6 +9,7 @@ filegroup(
 )
 
 DEPENDENCIES = [
+    "//rs/types/base_types",
     "@crate_index//:candid",
     "@crate_index//:comparable",
     "@crate_index//:prost",
@@ -35,6 +36,7 @@ generated_files_check(
     srcs = ["tests/check_generated_files.rs"],
     data = glob(["src/gen/**/*.rs"]) + [
         ":protos",
+        "//rs/types/base_types:protos",
     ],
     manifest_dir = "rs/nervous_system/proto",
     deps = [

@@ -3,20 +3,22 @@ use std::path::Path;
 /// Search paths used by Prost.
 pub struct ProtoPaths<'a> {
     pub nervous_system: &'a Path,
+    pub base_types: &'a Path,
 }
 
 impl ProtoPaths<'_> {
     fn to_vec(&self) -> Vec<&Path> {
-        vec![self.nervous_system]
+        vec![self.nervous_system, self.base_types]
     }
 }
 
-const COPY_TYPE_NAMES: [&str; 3] = ["Duration", "Tokens", "Percentage"];
-
 /// Build protos using prost_build.
 pub fn generate_prost_files(proto_paths: ProtoPaths<'_>, out_dir: &Path) {
+    let copy_type_names = vec!["Duration", "Tokens", "Percentage", "Canister"];
+
     let mut config = prost_build::Config::new();
     config.protoc_arg("--experimental_allow_proto3_optional");
+    config.extern_path(".ic_base_types.pb.v1", "::ic-base-types");
 
     // Candid-ify generated Rust types.
     config.type_attribute(".", "#[derive(candid::CandidType, candid::Deserialize)]");
@@ -24,6 +26,10 @@ pub fn generate_prost_files(proto_paths: ProtoPaths<'_>, out_dir: &Path) {
     // also add these derives.
     config.type_attribute(".", "#[derive(comparable::Comparable, serde::Serialize)]");
 
+    config.type_attribute(
+        "ic_nervous_system.pb.v1.Canister",
+        "#[derive(Ord, PartialOrd, Eq)]",
+    );
     config.type_attribute("ic_nervous_system.pb.v1.Countries", "#[derive(Eq)]");
 
     let src_file = proto_paths
@@ -31,7 +37,7 @@ pub fn generate_prost_files(proto_paths: ProtoPaths<'_>, out_dir: &Path) {
         .join("ic_nervous_system/pb/v1/nervous_system.proto");
 
     // Make most types copy (currently, only Image is not Copy).
-    for type_name in COPY_TYPE_NAMES {
+    for type_name in copy_type_names {
         config.type_attribute(
             format!("ic_nervous_system.pb.v1.{}", type_name),
             "#[derive(Copy)]",

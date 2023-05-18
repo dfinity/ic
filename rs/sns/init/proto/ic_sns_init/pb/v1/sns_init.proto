@@ -129,6 +129,9 @@ message SnsInitPayload {
 
   // An optional set of countries that should not participate in the swap.
   optional ic_nervous_system.pb.v1.Countries restricted_countries = 24;
+
+  /// Canisters that will be transferred to an SNS.
+  optional DappCanisters dapp_canisters = 25;
 }
 
 // The FractionalDeveloperVotingPower token distribution strategy configures
@@ -229,4 +232,9 @@ message NeuronDistribution {
   // years and dissolve delay to 1 year in order to prove that they are making a minimum 4 year commitment to the
   // project.
   optional uint64 vesting_period_seconds = 5;
+}
+
+/// A Canister that will be transferred to an SNS.
+message DappCanisters {
+  repeated ic_nervous_system.pb.v1.Canister canisters = 1;
 }
