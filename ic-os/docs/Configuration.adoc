@@ -1,0 +1,79 @@
+= Configuration
+
+Each IC-OS has a 100 MB config partition. All IC-OS config partitions are initialized to be empty, except for SetupOS.
+
+In production, the GuestOS config partition is populated through a series of steps:
+
+1. SetupOS copies its configuration files to the HostOS config partition.
+2. The HostOS configuration files are used to populate the GuestOS config partition through a more complicated process described below.
+
+== Detailed configuration steps
+
+=== SetupOS -> HostOS
+
+SetupOS copies all of its configuration files to the HostOS config partition. Refer to link:../setupos/rootfs/opt/ic/bin/devices.sh[devices.sh]
+
+=== HostOS -> GuestOS
+
+HostOS builds the "bootstrap config image". Refer to link:../scripts/build-bootstrap-config-image.sh[build-bootstrap-config-image.sh]
+
+The bootstrap config image contains a tar file with the GuestOS configuration files.
+When the HostOS launches the GuestOS, the bootstrap config image is attached to the GuestOS as a virtual USB. Refer to link:../hostos/rootfs/opt/ic/share/guestos.xml.template[guestos.xml.template]
+
+When the GuestOS boots, it checks for available removable media devices (i.e. the bootstrap config image). If such a device is found, the media must contain a VFAT filesystem and a single file called `ic-bootstrap.tar`. Note that in certain special use cases (containerized testing workflows), the file may be put directly into the /mnt directory instead of being accessible through removable media.
+
+GuestOS then reads from `ic-bootstrap.tar` (link:../guestos/rootfs/opt/ic/bin/bootstrap-ic-node.sh[see bootstrap-ic-node.sh]), and the contents are unpacked and distributed in one of two places:
+
+* *System state:* For node initialization material (initial registry & keys), they are put directly into their target directories for the replica to use.
+* *Config partition:* All other contents of the injected config are stashed into the `/boot/config` directory. The reason is that these configurations also need to be available on subsequent boots (not just the first boot of the system), and they need to be preserved across upgrades.
+** The contents of `/boot/config` are then used in various ways to parameterize system services as they start (ssh keys are installed to their target accounts, network settings are applied by the network set-up scripts, etc).
+** For the IC, the `generate-replica-config.sh` script takes the template `ic.json5` file and fills in various placeholders with information from `/boot/config` and elsewhere to produce the effective configuration just before the replica itself is started (also cf. service file definition).
+
+[NOTE]
+GuestOS only reads a predefined set of files from the bootstrap config image (i.e., it "sanitizes" the bootstrap config image).
+
+[NOTE]
+The reason for the bootstrap config image redirection is to ensure that GuestOS maintains control over what goes onto its config partition. Theoretically, a malicious node operator could modify their HostOS image and place any file onto the bootstrap config image. However, GuestOS will only copy a predefined set of files to its config partition.
+
+== SetupOS and HostOS configuration files
+
+To learn more about the SetupOS and HostOS configuration files, link:ConfigStore-SetupOSHostOS.adoc[see the SetupOS and HostOS ConfigStore.adoc]
+
+== GuestOS configuration files
+
+To learn more about the GuestOS configuration files, link:../guestos/docs/ConfigStore.adoc[see the GuestOS ConfigStore.adoc]
+
+== Implementation notes
+
+=== Guidance for adding configuration bits
+
+To add a new configuration file/directory:
+
+1. Add handling to `build-bootstrap-config-image.sh` to include the new file/directory in the bootstrap config image.
+
+2. Add handling to `bootstrap-ic-node.sh` for the new file/directory.
+
+3. Add interpretation of configuration file/directory to suitable place, e.g. generate-replica-config.sh
+
+4. Adapt testnet and/or prod deployment config as needed
+** E.g. for testnets, you may need to update link:../../testnet/tools/icos_deploy.sh[icos_deploy.sh], and if you are adding a production deployment config file, you may need to add a file to the SetupOS config partition to be piped through to HostOS.
+
+*Values and defaults*: Please ensure that the system is operational even in the absence of specific configuration bits, and fall back to sane production defaults: Already deployed nodes will by definition lack new configuration variables and need to behave properly. And defaults unsuitable for tests need to be overridden in tests (not the other way around).
+
+*Format*: The configuration files are "free-form". In principle, any format will work. However, it is advisable to keep to simple formats whenever possible (e.g. files containing key=value pair lines). For now, parsing is done inside shell scripts and safely parsing "fancy" formats may be tricky. Treat values as potentially attacker-controlled on boot - bootstrapping a node with bogus values will most certainly cause the node to malfunction, but it must not under any circumstances provide an operator with the capacity to gain control over the node via code injection or similar.
+
+*Configuration files*: New configuration bits might be added to either existing configuration files that have a suitable structure (e.g. key=value pairs), or new files. If in doubt, opt for adding additional configuration files.
+
+*Interpretation of configuration bits*: Any script or service in the system may pull configuration bits out of /boot/config to customize its behavior. E.g. if adding parameter-driven customization of ic.json5, then simply augment the generate-replica-config.sh script to pull the configuration values and substitute them into the generated configuration.
+
+*Documentation*: Please keep documentation up-to-date (link:ConfigStore-SetupOSHostOS.adoc[SetupOS/HostOS config store], link:../guestos/docs/ConfigStore.adoc[GuestOS config store])
+
+=== Testing
+
+* *build-bootstrap-config-image.sh*: The GuestOS config partition can be built without SetupOS or HostOS by calling `build-bootstrap-config-image.sh` directly. This is used in testnets and on farm. A similar mechanism is used for populating the Boundary-GuestOS and Boundary-Api-GuestOS config partitions.
+
+* *bootstrap-ic-node.sh* can be temporarily tweaked (internally adapt paths; basically just running the process_bootstrap function of it) to run stand-alone and verify that the config image is unpacked and its files sorted into the correct locations.
+
+* *generate-replica-config.sh* can be run stand-alone to verify that it produces the intended ic.json5 configuration from the template.
+
+After all is done, it is advised to prepare a configuration for a single node and boot it in a VM before conducting testnet deployments.

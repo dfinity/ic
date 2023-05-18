@@ -74,52 +74,33 @@ The https://dfinity.org/[DFINITY Foundation] is a Swiss not-for-profit organizat
 
 - *If you are a systems engineer, security engineer or cryptographer*, and your intent is to see what is going on under the hood by digging through source and building this locally, *_then you are in the right place_*.
 
-== Prerequisites
-*For all environments*
-
-- x86-64 based system (at least 8 CPUs, 16 GB MEM/SWAP, 100 GB available disk space)
-- Ubuntu 20.04 or newer
-- https://podman.io/getting-started/installation[Podman]
-- Git
-
 == Building the code
 
-See link:gitlab-ci/container/README.md[README] for more details.
+*System requirements*
 
-To build the IC-OS disk image run:
-----
-$ ./gitlab-ci/container/build-ic.sh -i
-----
+- x86-64 based system (minimum: 16 GB MEM/SWAP, 100 GB available disk space)
+- Ubuntu 20.04 or newer
+- https://podman.io/getting-started/installation[Podman]
 
-This builds the IC-OS disk image and all its dependencies.
+For detailed information on building IC-OS images, please refer to the link:ic-os/README.adoc[IC-OS README]
 
-In order to build only the binaries and the canisters, use the `-b` and/or `-c` flags on the `build-ic.sh` script:
-----
-$ ./gitlab-ci/container/build-ic.sh -b -c
-----
+Alternatively, to build all IC-OS images using a simple, containerized environment, run:
 
-All the built artifacts can be found in the top-level `artifacts/` directory.
+  $ ./gitlab-ci/container/build-ic.sh -i
+
+To build only the binaries and canisters, use the `-b` and/or `-c` flags:
+
+  $ ./gitlab-ci/container/build-ic.sh -b -c
+
+All built artifacts will be located in the top-level artifacts/ directory.
 
 == Verifying releases
 
-https://dashboard.internetcomputer.org/releases[Each release proposal] contains the information in the payload that allows to verify the disk image: the download url of the disk image, git revision that the image was built from, the SHA256 checksum of the image.
-This information allows anyone to verify this release:
+Each https://dashboard.internetcomputer.org/releases[release proposal] includes instructions on how to verify the build reproducibility of IC-OS update images.
 
-* checkout the source tree at specific git revision
-* build the IC-OS disk image using instructions above
-* compare the SHA256 checksum of resulting image with the one published in the release proposal payload.
+To verify the build reproducibility of a specific git revision, run:
 
-The https://github.com/dfinity/ic/blob/master/gitlab-ci/tools/repro-check.sh[repro-check.sh] script can be used to do it conveniently.
-
-To verify specific git revision:
-----
-$ ./gitlab-ci/tools/repro-check.sh -c <git revision>
-----
-
-To verify specific proposal:
-----
-$ ./gitlab-ci/tools/repro-check.sh -p <proposal id>
-----
+  $ ./gitlab-ci/tools/repro-check.sh -c <git revision>
 
 == Contributing
 

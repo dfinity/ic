@@ -25,11 +25,11 @@ In preparation for future releases:
 
 == *esp*: EFI system partition
 
-Please refer to the link:../../guestos/doc/DiskLayout.adoc#esp-efi-system-partition[documentation] of IC guest OS.
+Please refer to the link:../../guestos/docs/DiskLayout.adoc#esp-efi-system-partition[documentation] of IC guest OS.
 
 == *grub*: Grub bootloader and configuration
 
-Please refer to the link:../../guestos/doc/DiskLayout.adoc#grub-grub-bootloader-and-configuration[documentation] of IC guest OS.
+Please refer to the link:../../guestos/docs/DiskLayout.adoc#grub-grub-bootloader-and-configuration[documentation] of IC guest OS.
 
 == *config* System config store
 

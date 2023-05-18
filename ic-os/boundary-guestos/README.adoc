@@ -1,6 +1,6 @@
 = Boundary Node Guest OS
 
-This contains the instructions to build the system images for a Boundary Node. More detailed information can be found link:doc/README.adoc[here].
+This contains the instructions to build the system images for a Boundary Node. More detailed information can be found link:docs/README.adoc[here].
 
 == Build a Boundary Node image
 
