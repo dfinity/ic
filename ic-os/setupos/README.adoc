@@ -2,9 +2,19 @@
 
 == Introduction
 
-The term SetupOS is used for the operating system installing the IC-OS stack (HostOS and GuestOS / hypervisor and virtual machine). This installer enables the node providers/operators to independently install their nodes.
+SetupOS is an operating system designed for installing both the HostOS (hypervisor) and GuestOS (virtual machine). It enables node providers/operators to independently install their nodes.
 
-To learn more about the onboarding and installation process, as well as the hardware and networking requirements https://wiki.internetcomputer.org/wiki/Node_Provider_Onboarding#[read the Node Provider Onboarding Wiki].
+== SetupOS Installation
+
+To install SetupOS, node operators follow these steps:
+
+1. Obtain a SetupOS image and download it onto a bootable USB drive.
+2. Add the necessary configurations to the image.
+3. Plug the USB drive into the node machine and boot from the USB.
+
+SetupOS will then perform validation tasks, prepare the hardware components, and install the HostOS and GuestOS. Once completed, the machine will reboot into the HostOS.
+
+For more information on the onboarding and installation process, as well as the hardware and networking requirements, https://wiki.internetcomputer.org/wiki/Node_Provider_Onboarding#[visit the Node Provider Onboarding Wiki].
 
 == Building SetupOS
 
@@ -26,66 +36,3 @@ The sequence of the scripts is defined in the main installation script, `setupos
   hostos.sh    # Installs and configures the HostOS operating system
   guestos.sh   # Installs and configures the GuestOS operating system
   devices.sh   # Handles the HSM
-
-== Configuration
-
-This section explains all the files relevant for altering the IC-OS installation. All of these files are copied directly to the HostOS config partition.
-
-=== Config partition
-
-The configuration for SetupOS is stored on its own config partition, which is formatted as a FAT file system and is 100 MB in size.
-
-After burning the SetupOS disk image onto a USB drive, the partition will be available. It can be mounted on any operating system that supports FAT file systems.
-
-The `config` partition contains the following configuration files:
-
-  config.ini                      # Data center-specific network settings
-  ssh_authorized_keys             # SSH private key for obtaining HostOS console access
-  node_operator_private_key.pem   # (OPTIONAL) Node operator private key used in the pseudo-HSM onboarding
-
-==== config.ini
-
-The `config.ini` file contains all network-related settings, which must be provided by the node operator before running the deployment.
-
-The configuration file expects the following key-value pairs in lower-case format:
-
-  ipv6_prefix=2a00:fb01:400:100
-  ipv6_subnet=/64
-  ipv6_gateway=2a00:fb01:400:100::1
-
-[NOTE]
-The values above are examples only.
-
-==== ssh_authorized_keys
-
-Node Operators can add their private key to the admin file in `ssh_authorized_keys/` in order to gain SSH access to the HostOS.
-
-[NOTE]
-HostOS SSH access does not grant Node Operators access to the GuestOS or any of its underlying data.
-
-==== node_operator_private_key.pem
-
-This file does not exist by default in the config partition and is only necessary for the pseudo-HSM onboarding process. If a node operator wants to use the pseudo-HSM onboarding, they must create this file on the config partition, containing their Node Operator private key. If they don't create this file on the config partition, they must use the traditional HSM onboarding process.
-
-=== Other configuration files
-
-There are other configuration files that do not exist in the config partition. These files are not intended to be modified by Node Operators and are kept separate to avoid cluttering the config partition. They should be modified only for testing and development purposes.
-
-These files include:
-
-  deployment.json     # Deployment-specific configurations
-  nns_public_key.pem  # NNS public key
-
-==== deployment.json
-
-The default settings can be found in the `data/deployment.json.template` file.
-
-==== nns_public_key.pem
-
-The `nns_public_key.pem` file contains the public key of the NNS. For mainnet, it is:
-
-  -----BEGIN PUBLIC KEY-----
-  MIGCMB0GDSsGAQQBgtx8BQMBAgEGDCsGAQQBgtx8BQMCAQNhAIFMDm7HH6tYOwi9
-  gTc8JVw8NxsuhIY8mKTx4It0I10U+12cDNVG2WhfkToMCyzFNBWDv0tDkuRn25bW
-  W5u0y3FxEvhHLg1aTRRQX/10hLASkQkcX4e5iINGP5gJGguqrg==
-  -----END PUBLIC KEY-----

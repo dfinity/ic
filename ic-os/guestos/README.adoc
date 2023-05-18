@@ -36,7 +36,7 @@ For more details about the program, refer to the `rs/ic_os/launch-single-vm` dir
 
 The GuestOS disk layout contains two sets of system partitions, called partition sets "A" and "B". The A/B partitions enable a dual-boot system that can be updated and maintained without any downtime.
 
-image:doc/media/guestOS_disk-layout.png[]
+image:docs/media/guestOS_disk-layout.png[]
 
 The image above shows the GuestOS disk layout with partition set "A" in green and partition set "B" in blue.
 
@@ -68,4 +68,4 @@ The Ubuntu configuration and system logic is contained in the rootfs/ subdirecto
 See instructions link:rootfs/README.adoc#[here] on how to make changes to the OS.
 
 For further reading, see the docs in the
-link:doc/README.adoc#[doc/ subdirectory]
+link:docs/README.adoc#[docs/ subdirectory]

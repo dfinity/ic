@@ -55,7 +55,7 @@ and is available at early boot time already (see link:ConfigStore{outfilesuffix}
 
 == Save machine-id
 
-Relevant information can be found in the guestos link:../../guestos/doc/Boot.adoc#_save_machine_id[documentation].
+Relevant information can be found in the guestos link:../../guestos/docs/Boot.adoc#_save_machine_id[documentation].
 
 == Set up ssh host keys
 
