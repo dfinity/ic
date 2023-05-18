@@ -172,8 +172,8 @@ impl EccScalar {
     /// Returns None if self is equal to zero
     pub fn invert(&self) -> Option<Self> {
         match self {
-            Self::K256(s) => s.invert().map(|s| Self::K256(s)),
-            Self::P256(s) => s.invert().map(|s| Self::P256(s)),
+            Self::K256(s) => s.invert().map(Self::K256),
+            Self::P256(s) => s.invert().map(Self::P256),
         }
     }
 
