@@ -1,15 +1,10 @@
 = Implementation of Internet Computer Consensus Protocol
 
-== Build & Test
-
-1. Launch `nix-shell` from the parent `rs` directory.
-2. `cd consensus`
-3. `cargo build`
-4. `cargo test`
-
 == Multi-node test simulation with test framework
 
 We have built a simulated environment that runs consensus instances without real network to help debug consensus protocol and study its behavior.
+More details can be found in the xref:test_framework.adoc[design document of the consensus test framework].
+
 To run from command line and see debug output:
 
 ....
