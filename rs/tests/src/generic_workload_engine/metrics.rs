@@ -504,7 +504,7 @@ impl<ResultType, ErrorType> RequestOutcome<ResultType, ErrorType> {
 }
 
 impl<ResultType> RequestOutcome<ResultType, anyhow::Error> {
-    pub fn context(self, context: &str) -> Self {
+    pub fn context(self, context: impl ToString) -> Self {
         self.map_err(|err| err.context(context.to_string()))
     }
 }

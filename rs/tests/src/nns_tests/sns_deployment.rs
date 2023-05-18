@@ -12,6 +12,7 @@ use crate::canister_requests;
 use crate::driver::farm::HostFeature;
 use crate::driver::prometheus_vm::{HasPrometheus, PrometheusVm};
 use crate::driver::test_env::TestEnv;
+use crate::driver::test_env_api::IcNodeSnapshot;
 use crate::driver::test_env_api::NnsCanisterWasmStrategy;
 use crate::driver::test_env_api::TEST_USER1_STARTING_TOKENS;
 use crate::driver::test_env_api::{
@@ -988,6 +989,44 @@ pub fn add_one_participant(env: TestEnv) {
     );
 }
 
+/// "Mints" tokens by creating a wealthy agent and transferring the tokens from them to the specified account.
+async fn mint_tokens(
+    nns_node: IcNodeSnapshot,
+    to: Account,
+    amount_e8s: u64,
+    ledger_canister_id: Principal,
+) -> RequestOutcome<(), anyhow::Error> {
+    let wealthy_ledger_agent: CanisterAgent = {
+        let wealthy_user_identity = SaleParticipant {
+            name: "wealthy_sale_participant".to_string(),
+            principal_id: *TEST_USER1_PRINCIPAL,
+            secret_key: TEST_USER1_KEYPAIR.secret_key,
+            public_key: TEST_USER1_KEYPAIR.public_key,
+            starting_sns_balance: Tokens::ZERO,
+            starting_icp_balance: TEST_USER1_STARTING_TOKENS,
+        };
+        nns_node
+            .build_canister_agent_with_identity(wealthy_user_identity)
+            .await
+    };
+    let transfer_arg = TransferArg {
+        from_subaccount: None,
+        to,
+        fee: None,
+        created_at_time: None,
+        memo: None,
+        amount: Nat::from(amount_e8s),
+    };
+
+    wealthy_ledger_agent
+        .call_and_parse(&Icrc1TransferRequest::new(ledger_canister_id, transfer_arg))
+        .await
+        .context(
+            format!("Unable to \"mint\" tokens for {to} (by transferring from a freshly-created wealthy account)"),
+        )
+        .map(|_| ())
+}
+
 pub fn generate_ticket_participants_workload(
     env: TestEnv,
     rps: usize,
@@ -1002,207 +1041,27 @@ pub fn generate_ticket_participants_workload(
         let app_node = env.get_first_healthy_application_node_snapshot();
         let sns_client = SnsClient::read_attribute(&env);
         let sns_request_provider = SnsRequestProvider::from_sns_client(&sns_client);
-        let sns_sale_canister_id = sns_client.sns_canisters.swap().get();
         let ledger_canister_id = Principal::try_from(LEDGER_CANISTER_ID.get()).unwrap();
-        let wealthy_ledger_agent: CanisterAgent = {
-            let wealthy_user_identity = SaleParticipant {
-                name: "wealthy_sale_participant".to_string(),
-                principal_id: *TEST_USER1_PRINCIPAL,
-                secret_key: TEST_USER1_KEYPAIR.secret_key,
-                public_key: TEST_USER1_KEYPAIR.public_key,
-                starting_sns_balance: Tokens::ZERO,
-                starting_icp_balance: TEST_USER1_STARTING_TOKENS,
-            };
-            block_on(nns_node.build_canister_agent_with_identity(wealthy_user_identity))
-        };
+
         move |idx| {
-            let (nns_node, app_node, wealthy_ledger_agent) = (
-                nns_node.clone(),
-                app_node.clone(),
-                wealthy_ledger_agent.clone(),
-            );
+            let (nns_node, app_node) = (nns_node.clone(), app_node.clone());
             async move {
-                let (nns_node, app_node, wealthy_ledger_agent) = (
-                    nns_node.clone(),
-                    app_node.clone(),
-                    wealthy_ledger_agent.clone(),
-                );
-                let (participant, ledger_agent, canister_agent) = {
-                    let name = format!("user_{idx}");
-                    let starting_icp_balance = Tokens::ZERO;
-                    // The amount of ICPs in this user's SNS sale sub-account is minimally enough for sale participation.
-                    let starting_sns_balance =
-                        Tokens::from_e8s(SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S);
-                    // The seed should depend on all inputs of `generate_ticket_participants_workload` and this closure to avoid
-                    // re-creating the same participants in subsequent calls to `generate_ticket_participants_workload`, all of which
-                    // are assumed to have different values for `duration` and `rps`).
-                    let seed = ((idx as u64) << 32) + (duration.as_secs() << 16) + (rps as u64);
-                    let p = SaleParticipant::random(
-                        name,
-                        starting_icp_balance,
-                        starting_sns_balance,
-                        seed,
-                    );
-                    let ledger_agent = nns_node.build_canister_agent_with_identity(p.clone()).await;
-                    let canister_agent =
-                        app_node.build_canister_agent_with_identity(p.clone()).await;
-                    (p, ledger_agent, canister_agent)
-                };
-                let sns_subaccount = Subaccount(principal_to_subaccount(&participant.principal_id));
-                let mut sale_outcome = LoadTestOutcome::<(), String>::default();
+                let (nns_node, app_node) = (nns_node.clone(), app_node.clone());
                 let overall_start_time = Instant::now();
-                let mut overall_result: Result<(), anyhow::Error> = Ok(());
+                let seed = ((idx as u64) << 32) + (duration.as_secs() << 16) + (rps as u64);
 
-                // 0. "Mint" tokens
-                if overall_result.is_ok() {
-                    overall_result = {
-                        let transfer_arg = TransferArg {
-                            from_subaccount: None,
-                            to: participant.icp_account(),
-                            fee: None,
-                            created_at_time: None,
-                            memo: None,
-                            amount: Nat::from(contribution_per_user * 2), // should cover one minimal participation + fee
-                        };
-                        wealthy_ledger_agent.call_and_parse(&Icrc1TransferRequest::new(
-                            ledger_canister_id,
-                            transfer_arg,
-                        ))
-                    }
-                    .await
-                    .context("unable to \"mint\" tokens for the participant")
-                    .map(|_| ())
-                    .with_workflow_position(0)
-                    .push_outcome_display_error(&mut sale_outcome)
-                    .result();
-                }
-
-                // 1. Call sns.new_sale_ticket
-                if overall_result.is_ok() {
-                    overall_result = {
-                        let request = sns_request_provider
-                            .new_sale_ticket(contribution_per_user, Some(sns_subaccount));
-                        canister_agent.call_with_retries(
-                            request,
-                            SNS_ENDPOINT_RETRY_TIMEOUT,
-                            SNS_ENDPOINT_RETRY_BACKOFF,
-                            None,
-                        )
-                    }
-                    .await
-                    .context("error calling sns.new_sale_ticket")
-                    .map(|_| ())
-                    .with_workflow_position(1)
-                    .push_outcome_display_error(&mut sale_outcome)
-                    .result();
-                }
-
-                // 2. Call icp_ledger.transfer
-                if overall_result.is_ok() {
-                    overall_result = {
-                        let sns_account = Account {
-                            owner: sns_sale_canister_id.0,
-                            subaccount: Some(sns_subaccount.0),
-                        };
-                        let transfer_arg = TransferArg {
-                            from_subaccount: None,
-                            to: sns_account,
-                            fee: None,
-                            created_at_time: None,
-                            memo: None,
-                            amount: Nat::from(contribution_per_user),
-                        };
-                        ledger_agent.call_and_parse(&Icrc1TransferRequest::new(
-                            ledger_canister_id,
-                            transfer_arg,
-                        ))
-                    }
-                    .await
-                    .context("error performing an ICP ledger transfer")
-                    .map(|_| ())
-                    .with_workflow_position(2)
-                    .push_outcome_display_error(&mut sale_outcome)
-                    .result();
-                }
-
-                // 3. Call sns.refresh_buyer_tokens
-                if overall_result.is_ok() {
-                    overall_result = {
-                        let request = sns_request_provider.refresh_buyer_tokens(None, None);
-                        canister_agent.call_with_retries(
-                            request,
-                            SNS_ENDPOINT_RETRY_TIMEOUT,
-                            SNS_ENDPOINT_RETRY_BACKOFF,
-                            None,
-                        )
-                    }
-                    .await
-                    .check_response(|_response| Ok(()))
-                    .with_workflow_position(3)
-                    .push_outcome_display_error(&mut sale_outcome)
-                    .result();
-                }
-
-                // 4. Call sns.get_buyer_state
-                if overall_result.is_ok() {
-                    overall_result = {
-                        let request = sns_request_provider
-                            .get_buyer_state(Some(participant.principal_id), CallMode::Update);
-                        canister_agent.call_with_retries(
-                            request,
-                            SNS_ENDPOINT_RETRY_TIMEOUT,
-                            SNS_ENDPOINT_RETRY_BACKOFF,
-                            None,
-                        )
-                    }
-                    .await
-                    .check_response(|response| {
-                        let response_amount = response.buyer_state.unwrap().icp.unwrap().amount_e8s;
-                        if response_amount >= contribution_per_user {
-                            Ok(())
-                        } else {
-                            Err(anyhow::anyhow!("get_buyer_state: response ICP amount {response_amount:?} below the minimum amount {contribution_per_user:?}"))
-                        }
-                    })
-                    .with_workflow_position(4)
-                    .push_outcome_display_error(&mut sale_outcome)
-                    .result();
-                }
-
-                // 5. Check that the ticket has been deleted via swap.get_open_ticket
-                if overall_result.is_ok() {
-                    overall_result = {
-                        let request = sns_request_provider.get_open_ticket(CallMode::Update);
-                        canister_agent.call_with_retries(
-                            request,
-                            SNS_ENDPOINT_RETRY_TIMEOUT,
-                            SNS_ENDPOINT_RETRY_BACKOFF,
-                            None,
-                        )
-                    }
-                    .await
-                    .check_response(|response| {
-                        let response = response
-                            .ticket()
-                            .map_err(|err| {
-                                // Convert the error code to a string for easier debugging
-                                new_sale_ticket_response::err::Type::from_i32(err).unwrap_or_else(
-                                    || panic!("{err} could not be converted to error type"),
-                                )
-                            })
-                            .map_err(|err| anyhow::anyhow!("get_open_ticket failed: {err:?}"))?;
-                        if response.is_some() {
-                            Err(anyhow::anyhow!(
-                                "get_open_ticket: ticket has not been deleted"
-                            ))
-                        } else {
-                            Ok(())
-                        }
-                    })
-                    .with_workflow_position(5)
-                    .push_outcome_display_error(&mut sale_outcome)
-                    .result();
-                }
+                let mut sale_outcome = LoadTestOutcome::<(), String>::default();
+                let overall_result = create_one_sale_participant(
+                    format!("user_{idx}"),
+                    seed,
+                    contribution_per_user,
+                    nns_node,
+                    app_node,
+                    ledger_canister_id,
+                    sns_request_provider,
+                    &mut sale_outcome,
+                )
+                .await;
 
                 // Record e2e workflow metrics
                 RequestOutcome::new(
@@ -1233,6 +1092,176 @@ pub fn generate_ticket_participants_workload(
     }
     .unwrap();
     env.emit_report(format!("{metrics}"));
+}
+
+/// Creates an identity for a new participant, and has them participate in the
+/// sale using the ticket API.
+/// Intended to be called in the context of a workload generator.
+///
+/// Process:
+/// 0. Mint tokens
+/// 1. Call sns.new_sale_ticket
+/// 2. Call icp_ledger.transfer
+/// 3. Call sns.refresh_buyer_tokens
+/// 4. Call sns.get_buyer_state
+/// 5. Check that the ticket has been deleted via swap.get_open_ticket
+///    (This step may fail if the swap closes when sns.  is
+///    called)
+async fn create_one_sale_participant(
+    participant_name: String,
+    seed: u64,
+    contribution: u64,
+    nns_node: IcNodeSnapshot,
+    app_node: IcNodeSnapshot,
+    ledger_canister_id: Principal,
+    sns_request_provider: SnsRequestProvider,
+    outcome: &mut Vec<(String, RequestOutcome<(), String>)>,
+) -> Result<(), anyhow::Error> {
+    let sns_swap_canister_id = sns_request_provider.sns_canisters.swap().get();
+    let (participant, ledger_agent, canister_agent) = {
+        let starting_icp_balance = Tokens::ZERO;
+        // Tokens for this user will be minted later.
+        let starting_sns_balance = Tokens::ZERO;
+        // The seed should depend on all inputs of `generate_ticket_participants_workload` and this closure to avoid
+        // re-creating the same participants in subsequent calls to `generate_ticket_participants_workload`, all of which
+        // are assumed to have different values for `duration` and `rps`).
+        let p = SaleParticipant::random(
+            participant_name,
+            starting_icp_balance,
+            starting_sns_balance,
+            seed,
+        );
+        let ledger_agent = nns_node.build_canister_agent_with_identity(p.clone()).await;
+        let canister_agent = app_node.build_canister_agent_with_identity(p.clone()).await;
+        (p, ledger_agent, canister_agent)
+    };
+    let sns_subaccount = Subaccount(principal_to_subaccount(&participant.principal_id));
+
+    // 0. "Mint" tokens
+    mint_tokens(
+        nns_node,
+        participant.icp_account(),
+        contribution + 10 * E8, // should cover the contribution + fees
+        ledger_canister_id,
+    )
+    .await
+    .with_workflow_position(0)
+    .push_outcome_display_error(outcome)
+    .result()?;
+
+    // 1. Call sns.new_sale_ticket
+    {
+        let request = sns_request_provider.new_sale_ticket(contribution, Some(sns_subaccount));
+        canister_agent.call_with_retries(
+            request,
+            SNS_ENDPOINT_RETRY_TIMEOUT,
+            SNS_ENDPOINT_RETRY_BACKOFF,
+            None,
+        )
+    }
+    .await
+    .context("error calling sns.new_sale_ticket")
+    .map(|_| ())
+    .with_workflow_position(1)
+    .push_outcome_display_error(outcome)
+    .result()?;
+
+    // 2. Call icp_ledger.transfer
+    {
+        let sns_account = Account {
+            owner: sns_swap_canister_id.into(),
+            subaccount: Some(sns_subaccount.0),
+        };
+        let transfer_arg = TransferArg {
+            from_subaccount: None,
+            to: sns_account,
+            fee: None,
+            created_at_time: None,
+            memo: None,
+            amount: Nat::from(contribution),
+        };
+        ledger_agent.call_and_parse(&Icrc1TransferRequest::new(ledger_canister_id, transfer_arg))
+    }
+    .await
+    .context("error performing an ICP ledger transfer")
+    .map(|_| ())
+    .with_workflow_position(2)
+    .push_outcome_display_error(outcome)
+    .result()?;
+
+    // 3. Call sns. refresh_buyer_tokens
+    {
+        let request = sns_request_provider.refresh_buyer_tokens(None, None);
+        canister_agent.call_with_retries(
+            request,
+            SNS_ENDPOINT_RETRY_TIMEOUT,
+            SNS_ENDPOINT_RETRY_BACKOFF,
+            None,
+        )
+    }
+    .await
+    .check_response(|_response| Ok(()))
+    .with_workflow_position(3)
+    .push_outcome_display_error(outcome)
+    .result()?;
+
+    // 4. Call sns.get_buyer_state
+    {
+            let request = sns_request_provider
+                .get_buyer_state(Some(participant.principal_id), CallMode::Update);
+            canister_agent.call_with_retries(
+                request,
+                SNS_ENDPOINT_RETRY_TIMEOUT,
+                SNS_ENDPOINT_RETRY_BACKOFF,
+                None,
+            )
+        }
+        .await
+        .check_response(|response| {
+            let response_amount = response.buyer_state.unwrap().icp.unwrap().amount_e8s;
+            if response_amount >= contribution {
+                Ok(())
+            } else {
+                Err(anyhow::anyhow!("get_buyer_state: response ICP amount {response_amount:?} below the minimum amount {contribution:?}"))
+            }
+        })
+        .with_workflow_position(4)
+        .push_outcome_display_error(outcome)
+        .result()?;
+
+    // 5. Check that the ticket has been deleted via swap.get_open_ticket
+    {
+        let request = sns_request_provider.get_open_ticket(CallMode::Update);
+        canister_agent.call_with_retries(
+            request,
+            SNS_ENDPOINT_RETRY_TIMEOUT,
+            SNS_ENDPOINT_RETRY_BACKOFF,
+            None,
+        )
+    }
+    .await
+    .check_response(|response| {
+        let response = response
+            .ticket()
+            .map_err(|err| {
+                // Convert the error code to a string for easier debugging
+                new_sale_ticket_response::err::Type::from_i32(err)
+                    .unwrap_or_else(|| panic!("{err} could not be converted to error type"))
+            })
+            .map_err(|err| anyhow::anyhow!("get_open_ticket failed: {err:?}"))?;
+        if response.is_some() {
+            Err(anyhow::anyhow!(
+                "get_open_ticket: ticket has not been deleted"
+            ))
+        } else {
+            Ok(())
+        }
+    })
+    .with_workflow_position(5)
+    .push_outcome_display_error(outcome)
+    .result()?;
+
+    Ok(())
 }
 
 /// Finalizes the swap, and verifies that the swap was finalized as expected.
