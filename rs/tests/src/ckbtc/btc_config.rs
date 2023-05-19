@@ -49,6 +49,7 @@ docker run  --name=bitcoind-node -d \
 
     UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
         .with_config_dir(config_dir)
+        .enable_ipv4()
         .start(&env)
         .expect("failed to setup universal VM");
 

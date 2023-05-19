@@ -59,7 +59,6 @@ fn setup(env: TestEnv) {
     );
 
     UniversalVm::new(UVM_NAME.to_string())
-        .disable_ipv4()
         .with_config_img(env.get_dependency_path("rs/tests/colocate_uvm_config_image.zst"))
         .start(&env)
         .unwrap_or_else(|e| panic!("Failed to setup Universal VM {UVM_NAME} because: {e}"));

@@ -45,6 +45,7 @@ pub fn config(env: TestEnv) {
 
     UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
         .with_config_img(env.get_dependency_path("rs/tests/http_uvm_config_image.zst"))
+        .enable_ipv4()
         .start(&env)
         .expect("failed to set up universal VM");
 
