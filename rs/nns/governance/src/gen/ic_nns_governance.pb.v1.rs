@@ -249,10 +249,9 @@ pub struct Neuron {
     /// by voting.
     #[prost(bool, tag = "16")]
     pub not_for_profit: bool,
-    /// If set, this neuron participates with all of its stake in the
-    /// Internet Computer's community fund. Setting this value is an
-    /// irreversible decision that can only be made by the neuron's
-    /// controller.
+    /// If set, this neuron is a member of the Community Fund. This means that when
+    /// a proposal to open an SNS token swap is executed, maturity from this neuron
+    /// will be used to participate in the SNS token swap.
     #[prost(uint64, optional, tag = "17")]
     pub joined_community_fund_timestamp_seconds: ::core::option::Option<u64>,
     /// If set, the neuron belongs to the "known neurons". It has been given a name and maybe a description.
