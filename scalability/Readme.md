@@ -261,3 +261,24 @@ pipenv run python3 common/tests/e2e-scalability-tests.py --ic_os_version $(../gi
 ```
 
 For this to work, you need to have run the scalability suite at least once (so that `../artifacts`) is created.
+
+# Run against farm-deployed testnets
+
+Use of the scalability suite is decoupled from testnet deployment. Hence, the suite can happily run against any IC instance when the following extra arguments are specified.
+
+```
+--targets=$TARGET_IPV6 \
+--testnet=none \
+--nns_url=http://[$NNS_IPV6_ADDR]:8080
+```
+
+`$TARGET_IPV6` is the IP address of the target machine to benchmark and `$NNS_IPV6_ADDR` is the IPv6 address of one of the NNS nodes (might not be needed with `--no_instrument=True`).
+
+In case the benchmark also requires a workload generator testnet, add the following in addition to the above:
+
+```
+--workload_generator_machines=$WG_IPV6 \
+--wg_testnet=none
+```
+
+Where `$WG_IPV6` is the IPv6 address of where the workload generator should be deployed.

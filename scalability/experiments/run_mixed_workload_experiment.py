@@ -51,7 +51,7 @@ class MixedWorkloadExperiment(workload_experiment.WorkloadExperiment):
     def __init__(self):
         """Install canisters."""
         super().__init__()
-        self.workload_description = None
+        self.workload_description = []
         self.hooks = get_hooks(os.path.basename(FLAGS.workload))
         print(f"Using hooks from: {self.hooks}")
         shutil.copy(FLAGS.workload, self.out_dir)
@@ -59,6 +59,16 @@ class MixedWorkloadExperiment(workload_experiment.WorkloadExperiment):
             self.raw_description = toml.loads(f.read())
             self.install_canister_from_workload_description(self.raw_description)
             self.workload_description = workload.workload_description_from_dict(self.raw_description, self.canister_ids)
+
+        is_all_queries = True
+        for w in self.workload_description:
+            if w.method is not None and w.method.lower() != "query":
+                is_all_queries = False
+
+        if not is_all_queries:
+            # Make sure we target all replicas in benchmark
+            # Previously, for query calls we would target only a single node, which we want to avoid for mixed workload experiments.
+            self.request_type = "call"
 
     def install_canister_from_workload_description(self, description):
         """Install all canisters required to run the given workload description."""
