@@ -3,7 +3,6 @@ use std::{
     net::SocketAddr,
     path::PathBuf,
     sync::Arc,
-    thread::sleep,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
@@ -38,7 +37,7 @@ use opentelemetry::{
 };
 use opentelemetry_prometheus::{ExporterBuilder, PrometheusExporter};
 use prometheus::{Encoder as PrometheusEncoder, TextEncoder};
-use tokio::{sync::Semaphore, task};
+use tokio::{sync::Semaphore, task, time::sleep};
 use tower::ServiceBuilder;
 use tracing::info;
 use trust_dns_resolver::{
@@ -457,11 +456,11 @@ async fn main() -> Result<(), Error> {
                 if let Err(err) = peeker.peek().await {
                     match err {
                         PeekError::NoTasksAvailable => {
-                            sleep(Duration::from_secs(1));
+                            sleep(Duration::from_secs(1)).await;
                             continue;
                         }
                         PeekError::UnexpectedError(_) => {
-                            sleep(Duration::from_secs(1));
+                            sleep(Duration::from_secs(1)).await;
                             continue;
                         }
                     }
@@ -470,11 +469,11 @@ async fn main() -> Result<(), Error> {
                 let (id, task) = match dispenser.dispense().await {
                     Ok((id, task)) => (id, task),
                     Err(DispenseError::NoTasksAvailable) => {
-                        sleep(Duration::from_secs(1));
+                        sleep(Duration::from_secs(1)).await;
                         continue;
                     }
                     Err(DispenseError::UnexpectedError(_)) => {
-                        sleep(Duration::from_secs(1));
+                        sleep(Duration::from_secs(1)).await;
                         continue;
                     }
                 };
