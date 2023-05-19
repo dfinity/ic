@@ -16,6 +16,7 @@ ExecStart=/opt/ic/bin/boundary-node-control-plane    \
     --local-store                   "/var/opt/registry/store" \
     --min-registry-version          "${MIN_REGISTRY_VERSION}" \
     --min-ok-count                  "5" \
+    --max-height-lag                "50" \
     --legacy-routes-dir             "/var/cache/ic_routes"    \
     --routes-path                   "/var/opt/nginx/ic/ic_routes.js"      \
     --upstreams-path                "/var/opt/nginx/ic/ic_upstreams.conf" \
