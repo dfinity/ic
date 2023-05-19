@@ -45,7 +45,7 @@ pub fn create_local_store_from_changelog<P: AsRef<Path>>(
 pub fn mainnet_config(env: TestEnv) {
     let log = env.logger();
 
-    let group_setup = GroupSetup::from_bazel_env();
+    let group_setup = GroupSetup::new("mainnet_config_group".to_string());
     group_setup.write_attribute(&env);
     info!(&log, "Created group_setup directory");
 

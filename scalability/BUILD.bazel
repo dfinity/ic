@@ -2,7 +2,7 @@ load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
 load("@python_deps//:requirements.bzl", "all_requirements", "requirement")
 load("@aspect_bazel_lib//lib:copy_to_directory.bzl", "copy_to_directory")
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
-load("//rs/tests:system_tests.bzl", "symlink_dir")
+load("//rs/tests:common.bzl", "symlink_dir")
 
 # there were some issues with loading uuid, therefore we need load requirements individually instead of usings all_requirements
 py_library(

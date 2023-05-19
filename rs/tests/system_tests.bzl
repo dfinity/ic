@@ -3,8 +3,8 @@ Rules for system-tests.
 """
 
 load("@rules_rust//rust:defs.bzl", "rust_binary")
-load("@io_bazel_rules_docker//container:container.bzl", "container_image")
 load("@bazel_tools//tools/build_defs/pkg:pkg.bzl", "pkg_tar")
+load("//rs/tests:common.bzl", "UNIVERSAL_VM_RUNTIME_DEPS")
 
 def _run_system_test(ctx):
     run_test_script_file = ctx.actions.declare_file(ctx.label.name + "/run-test.sh")
@@ -20,9 +20,11 @@ def _run_system_test(ctx):
             mkdir root_env
             cp -Rs "$RUNFILES" root_env/dependencies/
             cp -v "$VERSION_FILE" root_env/dependencies/volatile-status.txt
-            "$RUNFILES/{test_executable}" --working-dir . "$@" run
+            "$RUNFILES/{test_executable}" --working-dir . --group-base-name {group_base_name} {no_summary_report} "$@" run
         """.format(
             test_executable = ctx.executable.src.short_path,
+            group_base_name = ctx.label.name,
+            no_summary_report = "--no-summary-report" if ctx.executable.colocated_test_bin != None else "",
         ),
     )
 
@@ -47,7 +49,15 @@ def _run_system_test(ctx):
             ),
         ),
         RunEnvironmentInfo(
-            environment = dict(ctx.attr.env.items() + [("VERSION_FILE_PATH", ctx.file.version_file_path.short_path), ("IC_VERSION_FILE", ctx.file.ic_version_file.short_path)]),
+            environment =
+                dict(
+                    ctx.attr.env.items() +
+                    [
+                        ("VERSION_FILE_PATH", ctx.file.version_file_path.short_path),
+                        ("IC_VERSION_FILE", ctx.file.ic_version_file.short_path),
+                    ] +
+                    ([("COLOCATED_TEST_BIN", ctx.executable.colocated_test_bin.short_path)] if ctx.executable.colocated_test_bin != None else []),
+                ),
         ),
     ]
 
@@ -56,6 +66,7 @@ run_system_test = rule(
     test = True,
     attrs = {
         "src": attr.label(executable = True, cfg = "exec"),
+        "colocated_test_bin": attr.label(executable = True, cfg = "exec", default = None),
         "env": attr.string_dict(allow_empty = True),
         "runtime_deps": attr.label_list(allow_files = True),
         "ic_version_file": attr.label(allow_single_file = True, default = "//ic-os/guestos/envs/dev:version.txt"),
@@ -87,40 +98,6 @@ def system_test(name, runtime_deps = [], tags = [], test_timeout = "long", flaky
         **kwargs
     )
 
-    container_name = name + "_image"
-
-    container_image(
-        name = container_name,
-        base = "//rs/tests/replicated_tests:test_driver_image_base",
-        directory = "/home/root/root_env/dependencies",
-        data_path = "/",
-        entrypoint = "/home/root/root_env/dependencies/rs/tests/%s --working-dir . run" % bin_name,
-        files = [
-            ":" + bin_name,
-        ] + runtime_deps,
-        tags = ["manual"],  # this target will be built if required as a dependency of another target
-        user = "root",
-        workdir = "/home/root",
-    )
-
-    uvm_config_image_name = name + "_uvm_config_image"
-
-    uvm_config_image(
-        name = uvm_config_image_name,
-        srcs = [
-            ":" + container_name + ".tar",
-            ":activate-systest-uvm-config",
-        ],
-        remap_paths = {
-            "/activate-systest-uvm-config": "/activate",
-        },
-        mode = "664",
-        modes = {
-            "activate": "775",
-        },
-        tags = ["manual"],  # this target will be built if required as a dependency of another target
-    )
-
     run_system_test(
         name = name,
         src = bin_name,
@@ -131,25 +108,28 @@ def system_test(name, runtime_deps = [], tags = [], test_timeout = "long", flaky
         flaky = flaky,
     )
 
-def _symlink_dir(ctx):
-    dirname = ctx.attr.name
-    lns = []
-    for target, canister_name in ctx.attr.targets.items():
-        ln = ctx.actions.declare_file(dirname + "/" + canister_name)
-        file = target[DefaultInfo].files.to_list()[0]
-        ctx.actions.symlink(
-            output = ln,
-            target_file = file,
-        )
-        lns.append(ln)
-    return [DefaultInfo(files = depset(direct = lns))]
+    deps = []
+    for dep in runtime_deps:
+        if dep not in UNIVERSAL_VM_RUNTIME_DEPS:
+            deps.append(dep)
 
-symlink_dir = rule(
-    implementation = _symlink_dir,
-    attrs = {
-        "targets": attr.label_keyed_string_dict(allow_files = True),
-    },
-)
+    run_system_test(
+        name = name + "_colocate",
+        src = "//rs/tests/testing_verification:colocate_test_bin",
+        colocated_test_bin = bin_name,
+        runtime_deps = deps + UNIVERSAL_VM_RUNTIME_DEPS + [
+            "//rs/tests:colocate_uvm_config_image",
+            bin_name,
+        ],
+        env = {
+            "COLOCATED_TEST": name,
+        },
+        tags = tags + ["requires-network", "system_test"] +
+               ([] if "experimental_system_test_colocation" in tags else ["manual"]),
+        timeout = test_timeout,
+        # TODO: set flaky = False by default when PFOPS-3148 is resolved
+        flaky = flaky,
+    )
 
 def _uvm_config_image_impl(ctx):
     out = ctx.actions.declare_file(ctx.label.name + ".zst")

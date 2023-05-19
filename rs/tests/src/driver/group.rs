@@ -68,10 +68,31 @@ pub struct CliArgs {
     pub debug_keepalive: bool,
 
     #[clap(
+        long = "no-delete-farm-group",
+        help = "If set, Farm group is not deleted in the tear down."
+    )]
+    pub no_delete_farm_group: bool,
+
+    #[clap(
+        long = "no-summary-report",
+        help = "If set, no summary/report events are produced by the test-driver."
+    )]
+    pub no_summary_report: bool,
+
+    #[clap(
+        long = "no-farm-keepalive",
+        help = "If set, Farm group is not kept alive."
+    )]
+    pub no_farm_keepalive: bool,
+
+    #[clap(
         long = "include-tests",
         help = r#"Execute only those test functions, which contain a substring and skip all the others."#
     )]
     pub filter_tests: Option<String>,
+
+    #[clap(long = "group-base-name", help = r#"Group base name."#)]
+    pub group_base_name: String,
 
     #[clap(
         long = "farm-base-url",
@@ -492,7 +513,7 @@ impl SystemTestGroup {
 
         // The ID of the root task is needed outside this function for awaiting when the plan execution finishes.
         let keepalive_task_id = TaskId::Test(String::from(KEEPALIVE_TASK_NAME));
-        let keepalive_task = if self.with_farm {
+        let keepalive_task = if self.with_farm && !group_ctx.no_farm_keepalive {
             Box::from(subproc(
                 keepalive_task_id.clone(),
                 {
@@ -661,12 +682,14 @@ impl SystemTestGroup {
             args.subproc_id(),
             args.filter_tests,
             args.debug_keepalive,
+            args.no_farm_keepalive,
+            args.group_base_name,
         )?;
         if is_parent_process {
             let root_env = group_ctx.get_root_env().unwrap();
             FarmBaseUrl::new_or_default(args.farm_base_url).write_attribute(&root_env);
             if self.with_farm {
-                root_env.create_group_setup();
+                root_env.create_group_setup(group_ctx.group_base_name.clone());
             }
             debug!(group_ctx.log(), "Created group context: {:?}", group_ctx);
         }
@@ -759,10 +782,12 @@ impl SystemTestGroup {
                 // }
 
                 let report = task_scheduler.create_report();
-                info!(group_ctx.log(), "JSON Report:\n{}", report);
-                info!(group_ctx.log(), "Report:\n{}", report.pretty_print());
+                if !args.no_summary_report {
+                    info!(group_ctx.log(), "JSON Report:\n{}", report);
+                    info!(group_ctx.log(), "Report:\n{}", report.pretty_print());
+                }
 
-                if with_farm {
+                if with_farm && !args.no_delete_farm_group {
                     Self::delete_farm_group(group_ctx.clone());
                 }
                 if report.failure.is_empty() {

@@ -208,8 +208,7 @@ pub fn app_subnet_recovery_test(env: TestEnv, upgrade: bool, ecdsa: bool) {
         .expect("Couldn't read public key");
 
     let recovery_dir = env.get_dependency_path("rs/tests");
-    set_sandbox_env_vars(recovery_dir.join("recovery/binaries"))
-        .expect("Failed to set sandbox env vars");
+    set_sandbox_env_vars(recovery_dir.join("recovery/binaries"));
 
     let recovery_args = RecoveryArgs {
         dir: recovery_dir,

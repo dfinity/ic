@@ -156,6 +156,10 @@ name = "ic_tests"
 path = "src/lib.rs"
 
 [[bin]]
+name = "ic-colocate"
+path = "testing_verification/colocate_test.rs"
+
+[[bin]]
 name = "ic-systest-basic-health"
 path = "testing_verification/basic_health_test.rs"
 

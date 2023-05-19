@@ -12,6 +12,15 @@ ALIASES = {
     "//rs/utils": "utils",
 }
 
+rust_binary(
+    name = "colocate_test_bin",
+    srcs = ["colocate_test.rs"],
+    aliases = ALIASES,
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    target_compatible_with = ["@platforms//os:linux"],  # requires libssh that does not build on Mac OS
+    deps = DEPENDENCIES + ["//rs/tests"],
+)
+
 system_test(
     name = "spec_compliance_application_test",
     proc_macro_deps = MACRO_DEPENDENCIES,

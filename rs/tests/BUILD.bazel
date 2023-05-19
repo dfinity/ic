@@ -1,9 +1,9 @@
 load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
-load(":system_tests.bzl", "symlink_dir", "uvm_config_image")
-load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
-load("//rs/tests:common.bzl", "DEPENDENCIES", "MACRO_DEPENDENCIES", "mainnet_nns_canisters", "mainnet_sns_canisters", "qualifying_nns_canisters", "qualifying_sns_canisters", "tip_nns_canisters", "tip_sns_canisters")
 load("@io_bazel_rules_docker//docker/package_managers:download_pkgs.bzl", "download_pkgs")
 load("@io_bazel_rules_docker//docker/package_managers:install_pkgs.bzl", "install_pkgs")
+load(":system_tests.bzl", "uvm_config_image")
+load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
+load("//rs/tests:common.bzl", "DEPENDENCIES", "MACRO_DEPENDENCIES", "mainnet_nns_canisters", "mainnet_sns_canisters", "qualifying_nns_canisters", "qualifying_sns_canisters", "symlink_dir", "tip_nns_canisters", "tip_sns_canisters")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -61,6 +61,22 @@ install_pkgs(
     installation_cleanup_commands = "rm -rf /var/lib/apt/lists/*",
     output_image_name = "ubuntu_test_runtime_image",
     tags = ["manual"],
+)
+
+uvm_config_image(
+    name = "colocate_uvm_config_image",
+    srcs = [
+        "//rs/tests:activate-systest-uvm-config",
+        "@ubuntu_test_runtime//image",
+    ],
+    mode = "664",
+    modes = {
+        "activate": "775",
+    },
+    remap_paths = {
+        "/activate-systest-uvm-config": "/activate",
+    },
+    tags = ["manual"],  # this target will be built if required as a dependency of another target
 )
 
 rust_test(
