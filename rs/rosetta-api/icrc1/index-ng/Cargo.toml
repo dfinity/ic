@@ -15,9 +15,10 @@ ciborium = "0.2"
 ic-cdk = { version = "0.6.0" }
 ic-cdk-macros = { version = "0.6.0" }
 ic-cdk-timers = "0.1.2"
+ic-crypto-sha = { path = "../../../crypto/sha" }
 ic-icrc1 = { path = "../" }
 ic-ledger-core = { path = "../../ledger_core" }
-ic-stable-structures = "0.5.0"
+ic-stable-structures = "0.5.3"
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 num-traits = "0.2.14"
 scopeguard = "1.1.0"
