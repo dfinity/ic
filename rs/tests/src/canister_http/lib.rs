@@ -78,6 +78,7 @@ pub fn config(env: TestEnv) {
     // Set up Universal VM with HTTP Bin testing service
     UniversalVm::new(String::from(UNIVERSAL_VM_NAME))
         .with_config_img(env.get_dependency_path("rs/tests/http_uvm_config_image.zst"))
+        .enable_ipv4()
         .start(&env)
         .expect("failed to set up universal VM");
 
@@ -113,10 +114,6 @@ pub fn get_universal_vm_address(env: &TestEnv) -> Ipv6Addr {
     let universal_vm = deployed_universal_vm.get_vm().unwrap();
     let webserver_ipv6: Ipv6Addr = universal_vm.ipv6;
     info!(&env.logger(), "Webserver has IPv6 {:?}", webserver_ipv6);
-    let webserver_ipv4 = deployed_universal_vm
-        .block_on_ipv4()
-        .expect("Universal VM IPv4 not found.");
-    info!(&env.logger(), "Webserver has IPv4 {:?}", webserver_ipv4);
     webserver_ipv6
 }
 

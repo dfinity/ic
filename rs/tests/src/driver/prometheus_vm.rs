@@ -85,8 +85,7 @@ impl PrometheusVm {
                     vcpus: Some(NrOfVCPUs::new(2)),
                     memory_kibibytes: Some(AmountOfMemoryKiB::new(16780000)), // 16GiB
                     boot_image_minimal_size_gibibytes: Some(ImageSizeGiB::new(100)),
-                })
-                .disable_ipv4(),
+                }),
             scrape_interval: Duration::from_secs(10),
         }
     }

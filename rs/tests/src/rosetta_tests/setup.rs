@@ -321,7 +321,6 @@ echo \"Rosetta container started \"
 
     UniversalVm::new(String::from(vm_name))
         .with_config_dir(config_dir)
-        .disable_ipv4()
         .start(env)
         .expect("Failed to setup universal VM for Rosetta");
 
