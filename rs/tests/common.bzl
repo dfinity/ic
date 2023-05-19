@@ -2,7 +2,6 @@
 Common dependencies for system-tests.
 """
 
-load(":system_tests.bzl", "symlink_dir")
 load(":qualifying_nns_canisters.bzl", "QUALIFYING_NNS_CANISTERS", "QUALIFYING_SNS_CANISTERS")
 
 DEPENDENCIES = [
@@ -341,3 +340,23 @@ CANISTER_HTTP_RUNTIME_DEPS = [
 ]
 
 XNET_TEST_CANISTER_RUNTIME_DEPS = ["//rs/rust_canisters/xnet_test:xnet-test-canister"]
+
+def _symlink_dir(ctx):
+    dirname = ctx.attr.name
+    lns = []
+    for target, canister_name in ctx.attr.targets.items():
+        ln = ctx.actions.declare_file(dirname + "/" + canister_name)
+        file = target[DefaultInfo].files.to_list()[0]
+        ctx.actions.symlink(
+            output = ln,
+            target_file = file,
+        )
+        lns.append(ln)
+    return [DefaultInfo(files = depset(direct = lns))]
+
+symlink_dir = rule(
+    implementation = _symlink_dir,
+    attrs = {
+        "targets": attr.label_keyed_string_dict(allow_files = True),
+    },
+)

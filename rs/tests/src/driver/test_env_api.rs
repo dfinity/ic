@@ -173,6 +173,7 @@ use serde::{Deserialize, Serialize};
 use slog::{info, warn, Logger};
 use ssh2::Session;
 use std::collections::{HashMap, HashSet};
+use std::ffi::OsStr;
 use std::fs;
 use std::future::Future;
 use std::io::{Read, Write};
@@ -947,36 +948,42 @@ impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
 }
 
 pub trait HasGroupSetup {
-    fn create_group_setup(&self);
+    fn create_group_setup(&self, group_base_name: String);
 }
 
 impl HasGroupSetup for TestEnv {
-    fn create_group_setup(&self) {
+    fn create_group_setup(&self, group_base_name: String) {
         let log = self.logger();
-        let group_setup = GroupSetup::from_bazel_env();
-        let farm_base_url = FarmBaseUrl::read_attribute(self);
-        let farm = Farm::new(farm_base_url.into(), self.logger());
-        let group_spec = GroupSpec {
-            vm_allocation: None,
-            required_host_features: vec![],
-            preferred_network: None,
-            metadata: None,
-        };
-        farm.create_group(
-            &group_setup.farm_group_name,
-            group_setup.group_timeout,
-            group_spec,
-            self,
-        )
-        .unwrap();
-        group_setup.write_attribute(self);
-        self.ssh_keygen().expect("ssh key generation failed");
-        info!(
-            log,
-            "Created new Farm group {}\nReplica logs will appear in Kibana: {}",
-            group_setup.farm_group_name,
-            kibana_link(&group_setup.farm_group_name)
-        );
+        if self.get_json_path(GroupSetup::attribute_name()).exists() {
+            let group_setup = GroupSetup::read_attribute(self);
+            info!(log, "Group {} already set up.", group_setup.farm_group_name);
+        } else {
+            let group_setup = GroupSetup::new(group_base_name);
+            let farm_base_url = FarmBaseUrl::read_attribute(self);
+            let farm = Farm::new(farm_base_url.into(), self.logger());
+            let group_spec = GroupSpec {
+                vm_allocation: None,
+                required_host_features: vec![],
+                preferred_network: None,
+                metadata: None,
+            };
+            farm.create_group(
+                &group_setup.group_base_name,
+                &group_setup.farm_group_name,
+                group_setup.group_timeout,
+                group_spec,
+                self,
+            )
+            .unwrap();
+            group_setup.write_attribute(self);
+            self.ssh_keygen().expect("ssh key generation failed");
+            info!(
+                log,
+                "Created new Farm group {}\nReplica logs will appear in Kibana: {}",
+                group_setup.farm_group_name,
+                kibana_link(&group_setup.farm_group_name)
+            );
+        }
     }
 }
 
@@ -1120,8 +1127,9 @@ pub trait SshSession {
         channel.send_eof()?;
         let mut out = String::new();
         channel.read_to_string(&mut out)?;
-        if channel.exit_status()? != 0 {
-            bail!("block_on_bash_script: exit != 0");
+        let exit_status = channel.exit_status()?;
+        if exit_status != 0 {
+            bail!("block_on_bash_script: exit_status = {exit_status:?}. Output: {out}");
         }
         Ok(out)
     }
@@ -1516,11 +1524,21 @@ impl<T: HasDependencies> CanisterEnvVars for T {
             let env_name = format!("{}_WASM_PATH", canister_name)
                 .replace('-', "_")
                 .to_uppercase();
-            let path = std::fs::read_link(dir.join(file_name))?;
-            std::env::set_var(env_name, path);
+            set_var_to_path(env_name, dir.join(file_name));
         }
         Ok(())
     }
+}
+
+/// Set environment variable `env_name` to `file_path`
+/// or to wherever `file_path` points to in case it's a symlink.
+pub fn set_var_to_path<K: AsRef<OsStr>>(env_name: K, file_path: PathBuf) {
+    let path = if file_path.is_symlink() {
+        std::fs::read_link(file_path).unwrap()
+    } else {
+        file_path
+    };
+    std::env::set_var(env_name, path);
 }
 
 pub trait HasRegistryVersion {

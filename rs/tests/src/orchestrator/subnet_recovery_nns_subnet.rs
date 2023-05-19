@@ -102,8 +102,7 @@ pub fn test(env: TestEnv) {
     ));
 
     let recovery_dir = env.get_dependency_path("rs/tests");
-    set_sandbox_env_vars(recovery_dir.join("recovery/binaries"))
-        .expect("Failed to set sandbox env vars");
+    set_sandbox_env_vars(recovery_dir.join("recovery/binaries"));
 
     let recovery_args = RecoveryArgs {
         dir: recovery_dir,

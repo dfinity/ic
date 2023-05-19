@@ -65,6 +65,8 @@ fn execute_test_scenario_with_default_cmd(scenario_name: &str) -> Output {
     cmd.env("TEST_SCENARIO_NAME", scenario_name).args([
         "--working-dir",
         working_dir.to_str().unwrap(),
+        "--group-base-name",
+        "test-driver-e2e-scenarios",
         "run",
     ]);
     cmd.output().expect("failed to execute process")
@@ -128,6 +130,8 @@ fn test_scenario_with_default_farm_url_succeeds() {
     cmd.env("TEST_SCENARIO_NAME", scenario_name).args([
         "--working-dir",
         working_dir.to_str().unwrap(),
+        "--group-base-name",
+        "test-driver-e2e-scenarios",
         "run",
     ]);
     let result = cmd.output().expect("failed to execute process");
@@ -154,6 +158,8 @@ fn test_scenario_with_custom_farm_url_succeeds() {
     cmd.env("TEST_SCENARIO_NAME", scenario_name).args([
         "--working-dir",
         working_dir.to_str().unwrap(),
+        "--group-base-name",
+        "test-driver-e2e-scenarios",
         "--farm-base-url",
         "https://my_custom_url.com/",
         "run",
@@ -182,6 +188,8 @@ fn test_scenario_with_skipped_panic_test_succeeds() {
     cmd.env("TEST_SCENARIO_NAME", scenario_name).args([
         "--working-dir",
         working_dir.to_str().unwrap(),
+        "--group-base-name",
+        "test-driver-e2e-scenarios",
         "--include-tests",
         "non_existing_test_function", // execute test functions containing this substring (and skip all the others)
         "run",
@@ -209,6 +217,8 @@ fn test_scenario_with_non_skipped_panic_test_fails() {
     cmd.env("TEST_SCENARIO_NAME", scenario_name).args([
         "--working-dir",
         working_dir.to_str().unwrap(),
+        "--group-base-name",
+        "test-driver-e2e-scenarios",
         "--include-tests",
         "test_to_fail", // execute test functions containing this substring (and skip all the others)
         "run",
@@ -240,6 +250,8 @@ fn test_scenario_with_two_skipped_panic_tests_succeeds() {
     cmd.env("TEST_SCENARIO_NAME", scenario_name).args([
         "--working-dir",
         working_dir.to_str().unwrap(),
+        "--group-base-name",
+        "test-driver-e2e-scenarios",
         "--include-tests",
         "test_to_succeed", // execute test functions containing this substring (and skip all the others)
         "run",
@@ -493,6 +505,8 @@ fn test_setup_failure_file_written() {
     cmd.env("TEST_SCENARIO_NAME", scenario_name).args([
         "--working-dir",
         working_dir.to_str().unwrap(),
+        "--group-base-name",
+        "test-driver-e2e-scenarios",
         "run",
     ]);
     let result = cmd.output().expect("failed to execute process");
@@ -516,6 +530,8 @@ fn test_setup_failure_file_not_written() {
     cmd.env("TEST_SCENARIO_NAME", scenario_name).args([
         "--working-dir",
         working_dir.to_str().unwrap(),
+        "--group-base-name",
+        "test-driver-e2e-scenarios",
         "run",
     ]);
     let result = cmd.output().expect("failed to execute process");

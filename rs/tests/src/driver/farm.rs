@@ -69,6 +69,7 @@ impl Farm {
 
     pub fn create_group(
         &self,
+        group_base_name: &str,
         group_name: &str,
         ttl: Duration,
         spec: GroupSpec,
@@ -76,7 +77,7 @@ impl Farm {
     ) -> FarmResult<()> {
         let path = format!("group/{}", group_name);
         let ttl = ttl.as_secs() as u32;
-        let spec = spec.add_meta(env);
+        let spec = spec.add_meta(env, group_base_name);
         let body = CreateGroupRequest { ttl, spec };
         let rb = Self::json(self.post(&path), &body);
         let _resp = self.retry_until_success(rb)?;
@@ -393,24 +394,13 @@ pub struct GroupSpec {
 }
 
 impl GroupSpec {
-    pub fn add_meta(mut self, env: &TestEnv) -> Self {
+    pub fn add_meta(mut self, env: &TestEnv, group_base_name: &str) -> Self {
         use crate::driver::test_env_api::HasDependencies;
         let mut metadata = GroupMetadata {
             user: None,
             job_schedule: None,
-            test_name: None,
+            test_name: Some(group_base_name.to_string()),
         };
-
-        let exec_path = std::env::current_exe().expect("could not acquire path of executable");
-        let test_name = exec_path
-            .file_name()
-            .unwrap()
-            .to_str()
-            .unwrap()
-            .strip_suffix("_bin")
-            .unwrap_or("unknown_test");
-        metadata.test_name = Some(test_name.to_string());
-
         let volatile_status = env.read_dependency_to_string("volatile-status.txt");
         let runtime_args_map = match volatile_status {
             Ok(content) => parse_volatile_status_file(content),
