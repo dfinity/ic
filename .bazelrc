@@ -122,6 +122,7 @@ build:fuzzing --build_tag_filters=fuzz_test
 # TODO(PSEC-1167) Move from define to transition in fuzz_testing.bzl
 build:fuzzing --//bazel:enable_fuzzing_code=True
 
-
+# Suppress all additional output to make it more convenient in scripts
+cquery --ui_event_filters=-info,-debug --noshow_progress
 
 try-import %workspace%/user.bazelrc
