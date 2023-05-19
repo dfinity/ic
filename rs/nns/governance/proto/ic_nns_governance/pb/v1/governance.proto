@@ -362,10 +362,9 @@ message Neuron {
   // by voting.
   bool not_for_profit = 16;
 
-  // If set, this neuron participates with all of its stake in the
-  // Internet Computer's community fund. Setting this value is an
-  // irreversible decision that can only be made by the neuron's
-  // controller.
+  // If set, this neuron is a member of the Community Fund. This means that when
+  // a proposal to open an SNS token swap is executed, maturity from this neuron
+  // will be used to participate in the SNS token swap.
   optional uint64 joined_community_fund_timestamp_seconds = 17;
 
   // If set, the neuron belongs to the "known neurons". It has been given a name and maybe a description.
