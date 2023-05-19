@@ -1,23 +1,33 @@
 use candid::{candid_method, Nat, Principal};
 use ic_cdk::trap;
-use ic_cdk_macros::{init, query};
+use ic_cdk_macros::{init, query, update};
 use ic_cdk_timers::TimerId;
+use ic_crypto_sha::Sha256;
 use ic_icrc1::blocks::{encoded_block_to_generic_block, generic_block_to_encoded_block};
-use ic_icrc1_index_ng::IndexArg;
-use ic_ledger_core::block::EncodedBlock;
+use ic_icrc1::{Block, Operation};
+use ic_icrc1_index_ng::{
+    GetAccountTransactionsArgs, GetAccountTransactionsResponse, GetAccountTransactionsResult,
+    IndexArg, TransactionWithId,
+};
+use ic_ledger_core::block::{BlockIndex as LedgerBlockIndex, BlockType, EncodedBlock};
 use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
 use ic_stable_structures::{
-    cell::Cell as StableCell, log::Log as StableLog, memory_manager::MemoryManager,
-    DefaultMemoryImpl, Storable,
+    memory_manager::MemoryManager, DefaultMemoryImpl, StableBTreeMap, StableCell, StableLog,
+    Storable,
 };
+use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc3::archive::{ArchivedRange, QueryBlockArchiveFn};
 use icrc_ledger_types::icrc3::blocks::{
     BlockRange, GenericBlock, GetBlocksRequest, GetBlocksResponse,
 };
+use icrc_ledger_types::icrc3::transactions::{Burn, Mint, Transaction, Transfer};
+use num_traits::ToPrimitive;
 use scopeguard::{guard, ScopeGuard};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::cell::RefCell;
+use std::cmp::Reverse;
+use std::hash::Hash;
 use std::time::Duration;
 
 /// The maximum number of blocks to return in a single [get_blocks] request.
@@ -26,13 +36,18 @@ const DEFAULT_MAX_BLOCKS_PER_RESPONSE: u64 = 2000;
 const STATE_MEMORY_ID: MemoryId = MemoryId::new(0);
 const BLOCK_LOG_INDEX_MEMORY_ID: MemoryId = MemoryId::new(1);
 const BLOCK_LOG_DATA_MEMORY_ID: MemoryId = MemoryId::new(2);
+const ACCOUNT_BLOCK_IDS_MEMORY_ID: MemoryId = MemoryId::new(3);
 
 const DEFAULT_MAX_WAIT_TIME: Duration = Duration::from_secs(60);
 const DEFAULT_RETRY_WAIT_TIME: Duration = Duration::from_secs(10);
 
-type StateCell = StableCell<State, VirtualMemory<DefaultMemoryImpl>>;
-type BlockLog =
-    StableLog<Vec<u8>, VirtualMemory<DefaultMemoryImpl>, VirtualMemory<DefaultMemoryImpl>>;
+type VM = VirtualMemory<DefaultMemoryImpl>;
+type StateCell = StableCell<State, VM>;
+type BlockLog = StableLog<Vec<u8>, VM, VM>;
+// The block indexes are stored in reverse order because the blocks/transactions
+// are returned in reversed order.
+type AccountBlockIdsMapKey = ([u8; Sha256::DIGEST_LEN], Reverse<u64>);
+type AccountBlockIdsMap = StableBTreeMap<AccountBlockIdsMapKey, (), VM>;
 
 thread_local! {
     /// Static memory manager to manage the memory available for stable structures.
@@ -48,6 +63,12 @@ thread_local! {
     static BLOCKS: RefCell<BlockLog> = with_memory_manager(|memory_manager| {
         RefCell::new(BlockLog::init(memory_manager.get(BLOCK_LOG_INDEX_MEMORY_ID), memory_manager.get(BLOCK_LOG_DATA_MEMORY_ID))
             .expect("failed to initialize stable log"))
+    });
+
+    /// Map that contains the block ids of an account.
+    /// The account is hashed to save space.
+    static ACCOUNT_BLOCK_IDS: RefCell<AccountBlockIdsMap> = with_memory_manager(|memory_manager| {
+        RefCell::new(AccountBlockIdsMap::init(memory_manager.get(ACCOUNT_BLOCK_IDS_MEMORY_ID)))
     });
 }
 
@@ -112,6 +133,15 @@ fn with_memory_manager<R>(f: impl FnOnce(&MemoryManager<DefaultMemoryImpl>) -> R
 /// A helper function to access the block list.
 fn with_blocks<R>(f: impl FnOnce(&BlockLog) -> R) -> R {
     BLOCKS.with(|cell| f(&cell.borrow()))
+}
+
+/// A helper function to access the account block ids.
+fn with_account_block_ids<R>(f: impl FnOnce(&mut AccountBlockIdsMap) -> R) -> R {
+    ACCOUNT_BLOCK_IDS.with(|cell| f(&mut cell.borrow_mut()))
+}
+
+fn with_blocks_and_indices<R>(f: impl FnOnce(&BlockLog, &mut AccountBlockIdsMap) -> R) -> R {
+    with_blocks(|blocks| with_account_block_ids(|account_block_ids| f(blocks, account_block_ids)))
 }
 
 #[init]
@@ -224,15 +254,66 @@ pub fn compute_wait_time(indexed_tx_count: usize) -> Duration {
 }
 
 fn append_blocks(new_blocks: Vec<GenericBlock>) {
-    with_blocks(|blocks| {
+    with_blocks_and_indices(|blocks, account_block_ids| {
+        // the index of the next block that we
+        // are going to append
+        let mut block_index = blocks.len();
         for block in new_blocks {
-            let block =
-                generic_block_to_encoded_block(block).expect("Unable to encode generic block");
+            let block = generic_block_to_encoded_block_or_trap(block_index, block);
+
+            // append the encoded block to the block log
             blocks
-                .append(&block.into_vec())
-                .unwrap_or_else(|_| ic_cdk::api::trap("no space left"));
+                .append(&block.0)
+                .unwrap_or_else(|_| trap("no space left"));
+
+            // add the block idx to the indices
+            let decoded_block = decode_encoded_block_or_trap(block_index, block);
+            for account in get_accounts(decoded_block) {
+                account_block_ids.insert(account_block_ids_key(account, block_index), ());
+            }
+
+            block_index += 1;
         }
+    });
+}
+
+fn generic_block_to_encoded_block_or_trap(
+    block_index: LedgerBlockIndex,
+    block: GenericBlock,
+) -> EncodedBlock {
+    generic_block_to_encoded_block(block).unwrap_or_else(|e| {
+        trap(&format!(
+            "Unable to decode generic block at index {}. Error: {}",
+            block_index, e
+        ))
     })
+}
+
+fn decode_encoded_block_or_trap(block_index: LedgerBlockIndex, block: EncodedBlock) -> Block {
+    Block::decode(block).unwrap_or_else(|e| {
+        trap(&format!(
+            "Unable to decode encoded block at index {}. Error: {}",
+            block_index, e
+        ))
+    })
+}
+
+fn get_accounts(block: Block) -> Vec<Account> {
+    match block.transaction.operation {
+        Operation::Burn { from, .. } => vec![from],
+        Operation::Mint { to, .. } => vec![to],
+        Operation::Transfer { from, to, .. } => vec![from, to],
+    }
+}
+
+pub fn account_sha256(account: Account) -> [u8; Sha256::DIGEST_LEN] {
+    let mut hasher = Sha256::new();
+    account.hash(&mut hasher);
+    hasher.finish()
+}
+
+fn account_block_ids_key(account: Account, block_index: LedgerBlockIndex) -> AccountBlockIdsMapKey {
+    (account_sha256(account), Reverse(block_index))
 }
 
 fn decode_icrc1_block(_txid: u64, bytes: Vec<u8>) -> GenericBlock {
@@ -269,6 +350,118 @@ fn decode_block_range<R>(start: u64, length: u64, decoder: impl Fn(u64, Vec<u8>)
 #[candid_method(query)]
 fn ledger_id() -> Principal {
     with_state(|state| state.ledger_id)
+}
+
+#[update]
+#[candid_method(update)]
+fn get_account_transactions(arg: GetAccountTransactionsArgs) -> GetAccountTransactionsResult {
+    let length = arg
+        .max_results
+        .0
+        .to_u64()
+        .expect("The length must be a u64!")
+        .min(with_state(|opts| opts.max_blocks_per_response))
+        .min(usize::MAX as u64) as usize;
+    // TODO: deal with the user setting start to u64::MAX
+    let start = arg
+        .start
+        .map_or(u64::MAX, |n| n.0.to_u64().expect("start must be a u64!"));
+    let key = account_block_ids_key(arg.account, start);
+    let transactions = with_blocks_and_indices(|blocks, account_block_ids| {
+        let mut transactions = vec![];
+        let indices = account_block_ids
+            .range(key..)
+            // old txs of the requested account and skip the start index
+            .filter(|(k, _)| k.0 == key.0 && k.1 .0 != start)
+            .take(length)
+            .map(|(k, _)| k.1);
+        for id in indices {
+            let block = blocks.get(id.0).unwrap_or_else(|| {
+                trap(&format!(
+                    "Block {} not found in the block log, account blocks map is corrupted!",
+                    id.0
+                ))
+            });
+            let transaction = encoded_block_bytes_to_flat_transaction(id.0, block);
+            let transaction_with_idx = TransactionWithId {
+                id: id.0.into(),
+                transaction,
+            };
+            transactions.push(transaction_with_idx);
+        }
+        transactions
+    });
+    let oldest_tx_id = get_oldest_tx_id(arg.account).map(|tx_id| tx_id.into());
+    Ok(GetAccountTransactionsResponse {
+        transactions,
+        oldest_tx_id,
+    })
+}
+
+fn encoded_block_bytes_to_flat_transaction(
+    block_index: LedgerBlockIndex,
+    block: Vec<u8>,
+) -> Transaction {
+    let block = Block::decode(EncodedBlock::from(block)).unwrap_or_else(|e| {
+        trap(&format!(
+            "Unable to decode encoded block at index {}. Error: {}",
+            block_index, e
+        ))
+    });
+    let timestamp = block.timestamp;
+    let created_at_time = block.transaction.created_at_time;
+    let memo = block.transaction.memo;
+    match block.transaction.operation {
+        Operation::Burn { from, amount } => Transaction::burn(
+            Burn {
+                from,
+                amount: amount.into(),
+                created_at_time,
+                memo,
+            },
+            timestamp,
+        ),
+        Operation::Mint { to, amount } => Transaction::mint(
+            Mint {
+                to,
+                amount: amount.into(),
+                created_at_time,
+                memo,
+            },
+            timestamp,
+        ),
+        Operation::Transfer {
+            from,
+            to,
+            amount,
+            fee,
+        } => Transaction::transfer(
+            Transfer {
+                from,
+                to,
+                amount: amount.into(),
+                fee: fee.map(|fee| fee.into()),
+                created_at_time,
+                memo,
+            },
+            timestamp,
+        ),
+    }
+}
+
+fn get_oldest_tx_id(account: Account) -> Option<LedgerBlockIndex> {
+    // TODO: there is no easy way to get the oldest_tx_id so we traverse
+    //       all the transaction of the account for now. This will be
+    //       fixed in future by storying the oldest_tx_id somewhere and
+    //       replace the body of this function.
+    let first_key = account_block_ids_key(account, u64::MAX);
+    let last_key = account_block_ids_key(account, 0);
+    with_account_block_ids(|account_block_ids| {
+        account_block_ids
+            .range(first_key..=last_key)
+            .last()
+            .map(|(k, _)| k.1 .0)
+    })
 }
 
 fn main() {}

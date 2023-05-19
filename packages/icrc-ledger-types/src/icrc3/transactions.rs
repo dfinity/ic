@@ -51,6 +51,38 @@ pub struct Transaction {
     pub timestamp: u64,
 }
 
+impl Transaction {
+    pub fn burn(burn: Burn, timestamp: u64) -> Self {
+        Self {
+            kind: "burn".into(),
+            timestamp,
+            mint: None,
+            burn: Some(burn),
+            transfer: None,
+        }
+    }
+
+    pub fn mint(mint: Mint, timestamp: u64) -> Self {
+        Self {
+            kind: "mint".into(),
+            timestamp,
+            mint: Some(mint),
+            burn: None,
+            transfer: None,
+        }
+    }
+
+    pub fn transfer(transfer: Transfer, timestamp: u64) -> Self {
+        Self {
+            kind: "transfer".into(),
+            timestamp,
+            mint: None,
+            burn: None,
+            transfer: Some(transfer),
+        }
+    }
+}
+
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct GetTransactionsResponse {
     pub log_length: Nat,

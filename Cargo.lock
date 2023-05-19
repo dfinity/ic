@@ -6934,6 +6934,7 @@ dependencies = [
  "ic-cdk 0.6.10",
  "ic-cdk-macros",
  "ic-cdk-timers",
+ "ic-crypto-sha",
  "ic-icrc1",
  "ic-icrc1-ledger",
  "ic-ledger-canister-core",

@@ -2,6 +2,7 @@ use candid::{CandidType, Nat};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_canister_profiler::{measure_span, SpanStats};
 use ic_cdk::api::stable::{StableReader, StableWriter};
+use icrc_ledger_types::icrc1::transfer::BlockIndex;
 use icrc_ledger_types::icrc3::archive::QueryTxArchiveFn;
 use icrc_ledger_types::icrc3::transactions::{
     GetTransactionsResponse, Transaction, TransactionRange, Transfer,
@@ -32,8 +33,6 @@ const DEFAULT_MAX_WAIT_TIME_NANOS: u64 = 2_u64 * SEC_NANOS;
 const DEFAULT_RETRY_WAIT_TIME_NANOS: u64 = 2_u64 * SEC_NANOS;
 
 const LOG_PREFIX: &str = "[ic-icrc1-index] ";
-
-type TxId = Nat;
 
 #[derive(Serialize, Deserialize, Debug)]
 struct Index {
@@ -104,14 +103,14 @@ pub struct GetAccountTransactionsArgs {
     // The txid of the last transaction seen by the client.
     // If None then the results will start from the most recent
     // txid.
-    pub start: Option<Nat>,
+    pub start: Option<BlockIndex>,
     // Maximum number of transactions to fetch.
     pub max_results: Nat,
 }
 
 #[derive(CandidType, Debug, candid::Deserialize, PartialEq, Eq)]
 pub struct TransactionWithId {
-    pub id: Nat,
+    pub id: BlockIndex,
     pub transaction: Transaction,
 }
 
@@ -119,7 +118,7 @@ pub struct TransactionWithId {
 pub struct GetTransactions {
     pub transactions: Vec<TransactionWithId>,
     // The txid of the oldest transaction the account has
-    pub oldest_tx_id: Option<TxId>,
+    pub oldest_tx_id: Option<BlockIndex>,
 }
 
 #[derive(CandidType, Debug, candid::Deserialize, PartialEq, Eq)]
