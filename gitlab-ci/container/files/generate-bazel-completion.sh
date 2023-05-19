@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -eux
-BAZEL_VERSION=$(bazel --version | grep -Po '(?<=bazel ).*')
+BAZEL_VERSION=$(bazel version | awk '/^Build label:/ {print $NF}')
 bazel-source-file() {
     curl -fsSL "https://raw.githubusercontent.com/bazelbuild/bazel/$BAZEL_VERSION/$1"
 }
