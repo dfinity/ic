@@ -38,6 +38,9 @@ const EXCLUDED: &[&str] = &[
     "$0 ~ /non-existence proofs for non-existing request id/",
     "$0 ~ /module_hash of empty canister/",
     "$0 ~ /metadata.absent/",
+    // Recursive calls from queries are now allowed.
+    // When composite queries are enabled, we should clean up and re-enable this test
+    "$0 ~ /Call from query method traps (in query call)/",
 ];
 
 pub fn config_impl(env: TestEnv) {

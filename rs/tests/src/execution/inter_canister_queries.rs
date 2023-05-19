@@ -63,7 +63,7 @@ pub fn simple_query(env: TestEnv) {
 }
 
 /// User queries canister A; A queries self which fails.
-pub fn self_loop_fails(env: TestEnv) {
+pub fn self_loop_succeeds(env: TestEnv) {
     let logger = env.logger();
     let node = env.get_first_healthy_node_snapshot();
     let agent = node.build_default_agent();
@@ -75,13 +75,13 @@ pub fn self_loop_fails(env: TestEnv) {
             let res = canister
                 .query(wasm().inter_query(canister.canister_id(), call_args()))
                 .await;
-            assert_reject(res, RejectCode::CanisterError);
+            assert!(res.is_ok());
         }
     });
 }
 
 /// User queries canister A; A queries B; B queries A which fails.
-pub fn canisters_loop_fails(env: TestEnv) {
+pub fn canisters_loop_succeeds(env: TestEnv) {
     let logger = env.logger();
     let node = env.get_first_healthy_node_snapshot();
     let agent = node.build_default_agent();
@@ -102,7 +102,7 @@ pub fn canisters_loop_fails(env: TestEnv) {
                     ),
                 )
                 .await;
-            assert_reject(res, RejectCode::CanisterError);
+            assert!(res.is_ok());
         }
     });
 }

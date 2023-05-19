@@ -117,20 +117,6 @@ pub(super) fn evaluate_query_call_graph(
             // request and visit its sub-graph.
             None => match requests.pop_front() {
                 Some(request) => {
-                    // This re-entrancy check is temporary and will be removed.
-                    let receiver = request.receiver;
-                    if call_stack
-                        .iter()
-                        .any(|PendingCall(c, _, _)| c.canister_id() == receiver)
-                        || canister.canister_id() == receiver
-                    {
-                        let error = UserError::new(
-                            ErrorCode::QueryCallGraphLoopDetected,
-                            "Query calls re-entering the same canister are not allowed yet.",
-                        );
-                        return QueryResponse::UserError(error);
-                    }
-
                     // Push the current node (caller) onto the stack before
                     // executing the request (callee). This is needed to
                     // properly handle the response of the callee.

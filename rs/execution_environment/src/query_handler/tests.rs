@@ -1174,6 +1174,52 @@ fn composite_query_callgraph_depth_is_enforced() {
 }
 
 #[test]
+fn composite_query_recursive_calls() {
+    let mut test = ExecutionTestBuilder::new().with_composite_queries().build();
+
+    const NUM_CALLS: usize = 3;
+    let canister = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+
+    fn generate_composite_call_to(
+        canister: ic_types::CanisterId,
+        num_calls_left: usize,
+    ) -> ic_universal_canister::PayloadBuilder {
+        wasm().stable_grow(10).composite_query(
+            canister,
+            call_args()
+                .other_side(generate_return(canister, num_calls_left - 1))
+                .on_reply(wasm().stable_size().reply_int()),
+        )
+    }
+
+    // Either just return or trigger another composite query
+    fn generate_return(
+        canister: ic_types::CanisterId,
+        num_calls_left: usize,
+    ) -> ic_universal_canister::PayloadBuilder {
+        if num_calls_left == 0 {
+            wasm().reply_data(b"ignore".as_ref())
+        } else {
+            generate_composite_call_to(canister, num_calls_left)
+        }
+    }
+
+    test.query(
+        UserQuery {
+            source: user_test_id(2),
+            receiver: canister,
+            method_name: "composite_query".to_string(),
+            method_payload: generate_composite_call_to(canister, NUM_CALLS).build(),
+            ingress_expiry: 0,
+            nonce: None,
+        },
+        Arc::new(test.state().clone()),
+        vec![],
+    )
+    .unwrap();
+}
+
+#[test]
 fn composite_query_callgraph_max_instructions_is_enforced() {
     const NUM_CANISTERS: u64 = 20;
     const NUM_SUCCESSFUL_QUERIES: u64 = 5; // Number of calls expected to succeed
@@ -1665,40 +1711,6 @@ fn composite_query_no_canister_response() {
             format!("Canister {} did not produce a response", canisters[1])
         ),
     }
-}
-
-#[test]
-fn composite_query_recursive() {
-    let mut test = ExecutionTestBuilder::new()
-        .with_composite_queries() // For now, query calls are only allowed in system subnets
-        .build();
-
-    let canister = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
-
-    let payload = wasm().composite_query(
-        canister,
-        call_args().other_side(wasm().message_payload().append_and_reply()),
-    );
-
-    let err = test
-        .query(
-            UserQuery {
-                source: user_test_id(2),
-                receiver: canister,
-                method_name: "composite_query".to_string(),
-                method_payload: payload.build(),
-                ingress_expiry: 0,
-                nonce: None,
-            },
-            Arc::new(test.state().clone()),
-            vec![],
-        )
-        .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::QueryCallGraphLoopDetected);
-    assert_eq!(
-        err.description(),
-        "Query calls re-entering the same canister are not allowed yet."
-    );
 }
 
 #[test]
