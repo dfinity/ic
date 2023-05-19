@@ -47,6 +47,9 @@ gflags.DEFINE_integer(
     "max_rps", 40000, "Maximum requests per second to be sent. Experiment will wrap up beyond this number."
 )
 gflags.DEFINE_integer("num_canisters", 1, "Number of canisters to run against.")
+gflags.DEFINE_boolean("use_random_payload", False, "Add random payload to queries to avoid caching.")
+gflags.DEFINE_string("payload_size", "",
+                     "Size of the payload. Has to be >0 in order for use_random_payload to work. Example: 42KiB")
 
 
 class BaselineExperiment(workload_experiment.WorkloadExperiment):
@@ -60,6 +63,15 @@ class BaselineExperiment(workload_experiment.WorkloadExperiment):
         )
         for _ in range(FLAGS.num_canisters):
             self.install_canister(self.target_nodes[0])
+
+    def get_payload_size():
+        if len(FLAGS.payload_size) > 0:
+            return FLAGS.payload_size
+        else:
+            if FLAGS.use_random_payload:
+                return "1KiB"
+            else:
+                return "0KiB"
 
     def run_experiment_internal(self, config):
         """Run workload generator with the load specified in config."""
@@ -113,12 +125,16 @@ class BaselineExperiment(workload_experiment.WorkloadExperiment):
 
             iter_duration = FLAGS.iter_duration
             t_start = int(time.time())
-            evaluated_summaries = super().run_experiment(
-                {
-                    "load_total": load_total,
-                    "duration": iter_duration,
-                }
-            )
+            config = {
+                "load_total": load_total,
+                "duration": iter_duration,
+            }
+            if FLAGS.use_random_payload:
+                config["arguments"] = [
+                    "--random-query-payload",
+                    f"--payload-size={BaselineExperiment.get_payload_size()}"
+                ]
+            evaluated_summaries = super().run_experiment(config)
             (
                 failure_rate,
                 t_median_list,
@@ -205,8 +221,8 @@ class BaselineExperiment(workload_experiment.WorkloadExperiment):
 
 if __name__ == "__main__":
     misc.parse_command_line_args()
-    exp = BaselineExperiment()
-    iterations = exp.get_datapoints(
+    iterations = BaselineExperiment.get_datapoints(
         misc.get_iterations(FLAGS.target_rps, FLAGS.initial_rps, FLAGS.max_rps, FLAGS.increment_rps, 2)
     )
+    exp = BaselineExperiment()
     exp.run_iterations(iterations)

@@ -49,7 +49,7 @@ ALLOWABLE_LATENCY = 5000
 
 # Default rate to use in wait_for_quiet to determine if the IC has recovered from stressing.
 # The suite will wait between two benchmarking iterations until the HTTP request rate is below this value.
-DEFAULT_QUIET_RATE_RPS = 2
+DEFAULT_QUIET_RATE_RPS = 3
 
 
 class WorkloadExperiment(base_experiment.BaseExperiment):
