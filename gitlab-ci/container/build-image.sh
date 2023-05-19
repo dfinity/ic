@@ -23,7 +23,7 @@ done
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 DOCKER_IMG_TAG=$("$REPO_ROOT"/gitlab-ci/container/get-image-tag.sh)
-USE_BAZEL_VERSION="$(cat $REPO_ROOT/.bazelversion)"
+USE_BAZEL_VERSION="$(tail -1 $REPO_ROOT/.bazelversion)"
 echo "Bazel version: $USE_BAZEL_VERSION"
 
 pushd "$REPO_ROOT"
