@@ -1,5 +1,5 @@
 {
-  "checksum": "9ab4c70d688fc847051fa83ea67a5b26978dd0d77273e25e582079017c625ed6",
+  "checksum": "87a5af9327ba381852c335988c62c22781e11ca3f694a38d9056d943286614e3",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -13766,7 +13766,7 @@
               "target": "wsl"
             },
             {
-              "id": "wycheproof 0.4.0",
+              "id": "wycheproof 0.5.0",
               "target": "wycheproof"
             },
             {
@@ -50151,8 +50151,8 @@
         },
         {
           "Binary": {
-            "crate_name": "exit",
-            "crate_root": "src/bin/exit.rs",
+            "crate_name": "sleep",
+            "crate_root": "src/bin/sleep.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -50175,8 +50175,8 @@
         },
         {
           "Binary": {
-            "crate_name": "sleep",
-            "crate_root": "src/bin/sleep.rs",
+            "crate_name": "exit",
+            "crate_root": "src/bin/exit.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -54654,13 +54654,13 @@
       },
       "license": "MIT"
     },
-    "wycheproof 0.4.0": {
+    "wycheproof 0.5.0": {
       "name": "wycheproof",
-      "version": "0.4.0",
+      "version": "0.5.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/wycheproof/0.4.0/download",
-          "sha256": "183c789620c674b79dac33cd3aadb6c8006b66cba6a680402235aaebc743e3df"
+          "url": "https://crates.io/api/v1/crates/wycheproof/0.5.0/download",
+          "sha256": "ccaef718f69c19f7f66faacc10f747180ceb4883a53c35548be4cac4cec1591c"
         }
       },
       "targets": [
@@ -54703,8 +54703,8 @@
           ],
           "selects": {}
         },
-        "edition": "2018",
-        "version": "0.4.0"
+        "edition": "2021",
+        "version": "0.5.0"
       },
       "license": "Apache-2.0"
     },

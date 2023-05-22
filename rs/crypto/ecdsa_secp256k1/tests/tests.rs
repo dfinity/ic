@@ -16,12 +16,7 @@ fn should_pass_wycheproof_ecdsa_secp256k1_verification_tests() -> Result<(), Key
             // The Wycheproof ECDSA tests do not normalize s so we must use
             // the verification method that accepts either valid s
             let accepted = pk.verify_signature_with_malleability(&test.msg, &test.sig);
-
-            if accepted {
-                assert_eq!(test.result, wycheproof::TestResult::Valid);
-            } else if test.result != wycheproof::TestResult::Invalid {
-                assert!(test.flags.contains(&TestFlag::SigSize));
-            }
+            assert_eq!(accepted, test.result == wycheproof::TestResult::Valid);
         }
     }
 

@@ -15,4 +15,4 @@ lazy_static = "1.4"
 
 [dev-dependencies]
 hex = "0.4"
-wycheproof = "0.4"
+wycheproof = "0.5"

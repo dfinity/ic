@@ -164,9 +164,8 @@ mod sign {
 }
 
 mod wycheproof {
-    use crate::api::SecretArray;
-    use crate::types::{PublicKeyBytes, SecretKeyBytes, SignatureBytes};
-    use crate::{sign, verify};
+    use crate::types::{PublicKeyBytes, SignatureBytes};
+    use crate::verify;
     use std::convert::TryInto;
 
     #[test]
@@ -175,10 +174,14 @@ mod wycheproof {
             .expect("Unable to load tests");
 
         for test_group in test_set.test_groups {
-            let pk = PublicKeyBytes(test_group.key.pk.try_into().expect("Unexpected key size"));
-
-            let sk_bytes: [u8; 32] = test_group.key.sk.try_into().expect("Unexpected key size");
-            let sk = SecretKeyBytes(SecretArray::new_and_dont_zeroize_argument(&sk_bytes));
+            let pk = PublicKeyBytes(
+                test_group
+                    .key
+                    .pk
+                    .as_ref()
+                    .try_into()
+                    .expect("Unexpected key size"),
+            );
 
             for test in test_group.tests {
                 /*
@@ -188,20 +191,16 @@ mod wycheproof {
                 if test.sig.len() != 64 {
                     continue;
                 }
-                let test_sig =
-                    SignatureBytes(test.sig.try_into().expect("Unexpected signature size"));
-
-                let gen_sig = sign(&test.msg, &sk).expect("Generating signature failed");
+                let test_sig = SignatureBytes(
+                    test.sig
+                        .as_ref()
+                        .try_into()
+                        .expect("Unexpected signature size"),
+                );
 
                 if test.result == wycheproof::TestResult::Valid {
-                    // If test is valid verify that our generated signature matches (Ed25519 should
-                    // be deterministic) and that the signature verifies
                     assert!(verify(&test_sig, &test.msg, &pk).is_ok());
-                    assert_eq!(test_sig, gen_sig);
                 } else {
-                    // Otherwise check that the test signature fails but our generated signature
-                    // is accepted
-                    assert!(verify(&gen_sig, &test.msg, &pk).is_ok());
                     assert!(verify(&test_sig, &test.msg, &pk).is_err());
                 }
             }

@@ -18,4 +18,4 @@ ic-crypto-getrandom-for-wasm = { path = "../../../../getrandom_for_wasm" }
 hex = "0.4.2"
 serde = { version = "1.0.115", features = ["derive"] }
 serde_json = "1.0.54"
-wycheproof = "0.4.0"
+wycheproof = "0.5"
