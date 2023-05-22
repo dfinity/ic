@@ -44,6 +44,7 @@ use ic_interfaces::{
     self_validating_payload::SelfValidatingPayloadBuilder,
     time_source::SysTimeSource,
 };
+use ic_interfaces_adapter_client::NonBlockingChannel;
 use ic_interfaces_p2p::IngressIngestionService;
 use ic_interfaces_registry::{LocalStoreCertifiedTimeReader, RegistryClient};
 use ic_interfaces_state_manager::{StateManager, StateReader};
@@ -62,6 +63,7 @@ use ic_types::{
         CanisterHttpArtifact, CertificationArtifact, ConsensusArtifact, DkgArtifact, EcdsaArtifact,
         IngressArtifact,
     },
+    canister_http::{CanisterHttpRequest, CanisterHttpResponse},
     consensus::CatchUpPackage,
     consensus::HasHeight,
     crypto::CryptoHash,
@@ -99,6 +101,9 @@ pub struct ArtifactPools {
     canister_http_pool: Arc<RwLock<CanisterHttpPoolImpl>>,
 }
 
+pub type CanisterHttpAdapterClient =
+    Box<dyn NonBlockingChannel<CanisterHttpRequest, Response = CanisterHttpResponse> + Send>;
+
 /// The function constructs a P2P instance. Currently, it constructs all the
 /// artifact pools and the Consensus/P2P time source. Artifact
 /// clients are constructed and run in their separate actors.
@@ -135,8 +140,7 @@ pub fn create_networking_stack(
     artifact_pools: ArtifactPools,
     cycles_account_manager: Arc<CyclesAccountManager>,
     local_store_time_reader: Arc<dyn LocalStoreCertifiedTimeReader>,
-    canister_http_adapter_client:
-        ic_interfaces_https_outcalls_adapter_client::CanisterHttpAdapterClient,
+    canister_http_adapter_client: CanisterHttpAdapterClient,
     registry_poll_delay_duration_ms: u64,
 ) -> (IngressIngestionService, Vec<Box<dyn JoinGuard>>) {
     let (advert_tx, advert_rx) = channel(MAX_ADVERT_BUFFER);
@@ -246,7 +250,7 @@ fn setup_artifact_manager(
     local_store_time_reader: Arc<dyn LocalStoreCertifiedTimeReader>,
     registry_poll_delay_duration_ms: u64,
     advert_broadcaster: Arc<dyn AdvertBroadcaster + Send + Sync>,
-    canister_http_adapter_client: ic_interfaces_https_outcalls_adapter_client::CanisterHttpAdapterClient,
+    canister_http_adapter_client: CanisterHttpAdapterClient,
 ) -> (
     std::io::Result<Arc<dyn ArtifactManager>>,
     Vec<Box<dyn JoinGuard>>,

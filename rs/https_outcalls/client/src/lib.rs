@@ -7,10 +7,11 @@ use ic_adapter_metrics::AdapterMetrics;
 use ic_async_utils::ExecuteOnTokioRuntime;
 use ic_config::adapters::AdaptersConfig;
 use ic_interfaces::execution_environment::AnonymousQueryService;
-use ic_interfaces_https_outcalls_adapter_client::CanisterHttpAdapterClient;
+use ic_interfaces_adapter_client::NonBlockingChannel;
 use ic_logger::{error, info, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
+use ic_types::canister_http::{CanisterHttpRequest, CanisterHttpResponse};
 use std::convert::TryFrom;
 use tokio::net::UnixStream;
 use tonic::transport::{Endpoint, Uri};
@@ -25,7 +26,7 @@ pub fn setup_canister_http_client(
     anononymous_query_handler: AnonymousQueryService,
     log: ReplicaLogger,
     subnet_type: SubnetType,
-) -> CanisterHttpAdapterClient {
+) -> Box<dyn NonBlockingChannel<CanisterHttpRequest, Response = CanisterHttpResponse> + Send> {
     match adapter_config.https_outcalls_uds_path {
         None => {
             error!(

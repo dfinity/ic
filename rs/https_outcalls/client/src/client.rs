@@ -8,7 +8,7 @@ use ic_https_outcalls_service::{
 };
 use ic_ic00_types::{CanisterHttpResponsePayload, TransformArgs};
 use ic_interfaces::execution_environment::AnonymousQueryService;
-use ic_interfaces_https_outcalls_adapter_client::{NonBlockingChannel, SendError, TryReceiveError};
+use ic_interfaces_adapter_client::{NonBlockingChannel, SendError, TryReceiveError};
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{

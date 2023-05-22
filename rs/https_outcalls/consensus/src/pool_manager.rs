@@ -9,7 +9,7 @@ use ic_consensus_utils::{
 use ic_interfaces::{
     artifact_pool::ChangeSetProducer, canister_http::*, consensus_pool::ConsensusPoolCache,
 };
-use ic_interfaces_https_outcalls_adapter_client::*;
+use ic_interfaces_adapter_client::*;
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::StateReader;
 use ic_logger::*;
@@ -27,6 +27,9 @@ use std::{
     sync::{Arc, Mutex},
     time::Duration,
 };
+
+pub type CanisterHttpAdapterClient =
+    Box<dyn NonBlockingChannel<CanisterHttpRequest, Response = CanisterHttpResponse> + Send>;
 
 /// [`CanisterHttpPoolManagerImpl`] implements the pool and state monitoring
 /// functionality that is necessary to ensure that http requests are made and

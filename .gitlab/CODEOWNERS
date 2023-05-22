@@ -133,9 +133,8 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/ic_p8s_service_discovery/           @dfinity-lab/teams/ic-testing-verification
 /rs/ingress_manager/                    @dfinity-lab/teams/consensus-owners
 /rs/interfaces/                         @dfinity-lab/teams/interface-owners
-/rs/interfaces/bitcoin_adapter_client/  @dfinity-lab/teams/networking-team
+/rs/interfaces/adapter_client/		@dfinity-lab/teams/networking-team
 /rs/interfaces/certified_stream_store/  @dfinity-lab/teams/message-routing-owners
-/rs/interfaces/https_outcalls_adapter_client/    @dfinity-lab/teams/networking-team
 /rs/interfaces/p2p/                     @dfinity-lab/teams/networking-team
 /rs/interfaces/registry/                @dfinity-lab/teams/nns-team
 /rs/interfaces/src/artifact_manager.rs  @dfinity-lab/teams/networking-team

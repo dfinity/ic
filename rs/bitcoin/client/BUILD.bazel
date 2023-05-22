@@ -15,7 +15,7 @@ rust_library(
         "//rs/bitcoin/service",
         "//rs/bitcoin/types/internal",
         "//rs/config",
-        "//rs/interfaces/bitcoin_adapter_client",
+        "//rs/interfaces/adapter_client",
         "//rs/monitoring/adapter_metrics",
         "//rs/monitoring/logger",
         "//rs/monitoring/metrics",
