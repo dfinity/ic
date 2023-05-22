@@ -58,12 +58,20 @@ fn crypto_nidkg_benchmarks(criterion: &mut Criterion) {
         },
     ];
 
-    let toplevel_path: PathBuf = [
-        &std::env::var("CARGO_MANIFEST_DIR").unwrap(),
-        "benches/test_vectors_nidkg",
-    ]
-    .iter()
-    .collect();
+    let toplevel_path: PathBuf = {
+        match std::env::var("CARGO_MANIFEST_DIR") {
+            Ok(cargo_manifest_dir) => [&cargo_manifest_dir, "benches/test_vectors_nidkg"]
+                .iter()
+                .collect(),
+            Err(_) => [
+                &std::env::var("BUILD_WORKSPACE_DIRECTORY")
+                    .expect("Env variable `BUILD_WORKSPACE_DIRECTORY` for Bazel or `CARGO_MANIFEST_DIR` for Cargo should be set"),
+                "rs/crypto/benches/test_vectors_nidkg",
+            ]
+                .iter()
+                .collect(),
+        }
+    };
     let data_mgr = NiDkgBenchDataManager::new(toplevel_path);
 
     data_mgr.recreate_if_requested(&test_cases);
