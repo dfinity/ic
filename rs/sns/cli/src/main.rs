@@ -406,7 +406,7 @@ fn add_sns_wasm_for_tests(args: AddSnsWasmForTestsArgs) {
         .expect("Could not write wasm to temp file");
     let argument_path = argument_file.path().as_os_str().to_str().unwrap();
 
-    call_dfx(&[
+    call_dfx_or_panic(&[
         "canister",
         "--network",
         &args.network,
@@ -435,7 +435,7 @@ fn print_account_balance(args: AccountBalanceArgs) {
 
     let idl = IDLArgs::from_bytes(&Encode!(&account_balance_args).unwrap()).unwrap();
 
-    call_dfx(&[
+    call_dfx_or_panic(&[
         "canister",
         "--network",
         &args.network,
@@ -467,6 +467,7 @@ pub fn get_identity(identity: &str, network: &str) -> PrincipalId {
 }
 
 /// Calls `dfx` with the given args
+#[must_use]
 fn call_dfx(args: &[&str]) -> Output {
     let output = Command::new("dfx")
         .args(args)
@@ -488,6 +489,13 @@ fn call_dfx(args: &[&str]) -> Output {
     }
 
     output
+}
+
+fn call_dfx_or_panic(args: &[&str]) {
+    let output = call_dfx(args);
+
+    // No need to include diagnostics, because call_dfx already prints stderr.
+    assert!(output.status.success());
 }
 
 /// Given a `CandidType`, return the hex encoding of this object.
