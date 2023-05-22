@@ -215,3 +215,9 @@ message SystemMetadata {
 }
 
 message StableMemory { bytes memory = 1; }
+
+message SplitFrom {
+  // If present, the subnet is mid-way through a split. Identifies the original
+  // subnet that this was split from.
+  types.v1.SubnetId subnet_id = 1;
+}

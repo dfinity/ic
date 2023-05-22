@@ -1,6 +1,6 @@
 use crate::{CheckpointError, CheckpointMetrics, TipRequest, NUMBER_OF_CHECKPOINT_THREADS};
 use crossbeam_channel::{unbounded, Sender};
-use ic_base_types::CanisterId;
+use ic_base_types::{subnet_id_try_from_protobuf, CanisterId};
 // TODO(MR-412): uncomment
 //use ic_protobuf::proxy::try_from_option_field;
 use ic_registry_subnet_type::SubnetType;
@@ -146,6 +146,14 @@ pub fn load_checkpoint<P: ReadPolicy + Send + Sync>(
             .map_err(|err| into_checkpoint_error("SystemMetadata".into(), err))?;
         metadata.ingress_history = ingress_history;
         metadata.own_subnet_type = own_subnet_type;
+
+        if let Some(split_from) = checkpoint_layout.split_marker().deserialize()?.subnet_id {
+            metadata.split_from = Some(
+                subnet_id_try_from_protobuf(split_from)
+                    .map_err(|err| into_checkpoint_error("split_from".into(), err))?,
+            );
+        }
+
         metadata
     };
 

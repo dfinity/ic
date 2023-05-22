@@ -195,6 +195,7 @@ struct CheckpointRefData {
 /// │   │       ├── stable_memory.bin
 /// │   │       └── vmemory_0.bin
 /// │   ├── ingress_history.pbuf
+/// │   ├── split_from.pbuf
 /// │   ├── subnet_queues.pbuf
 /// │   └── system_metadata.pbuf
 /// │
@@ -208,6 +209,7 @@ struct CheckpointRefData {
 /// │      │       ├── stable_memory.bin
 /// │      │       └── vmemory_0.bin
 /// │      ├── ingress_history.pbuf
+/// │      ├── split_from.pbuf
 /// │      ├── subnet_queues.pbuf
 /// │      └── system_metadata.pbuf
 /// │
@@ -1223,6 +1225,10 @@ impl<Permissions: AccessPolicy> CheckpointLayout<Permissions> {
 
     pub fn subnet_queues(&self) -> ProtoFileWith<pb_queues::CanisterQueues, Permissions> {
         self.root.join("subnet_queues.pbuf").into()
+    }
+
+    pub fn split_marker(&self) -> ProtoFileWith<pb_metadata::SplitFrom, Permissions> {
+        self.root.join("split_from.pbuf").into()
     }
 
     pub fn canister_ids(&self) -> Result<Vec<CanisterId>, LayoutError> {

@@ -660,7 +660,7 @@ impl BatchProcessor for BatchProcessorImpl {
         let timer = Timer::start();
 
         // Fetch the mutable tip from StateManager
-        let state = match self
+        let mut state = match self
             .state_manager
             .take_tip_at(batch.batch_number.decrement())
         {
@@ -681,6 +681,15 @@ impl BatchProcessor for BatchProcessorImpl {
                 self.state_manager.latest_state_height()
             ),
         };
+        // If the subnet is starting up after a split, execute splitting phase 2.
+        if let Some(split_from) = state.metadata.split_from {
+            info!(
+                self.log,
+                "State has resulted from splitting subnet {}, running phase 2 of state splitting",
+                split_from
+            );
+            state = state.after_split();
+        }
         self.observe_phase_duration(PHASE_LOAD_STATE, &timer);
 
         debug!(self.log, "Processing batch {}", batch.batch_number);
