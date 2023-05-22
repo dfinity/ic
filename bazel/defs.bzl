@@ -67,7 +67,7 @@ def _sha256sum2url_impl(ctx):
     out = ctx.actions.declare_file(ctx.label.name)
     ctx.actions.run(
         executable = "awk",
-        arguments = ["-v", "out=" + out.path, '{ printf "https://artifacts.idx.dfinity.network/cas/%s", $1 > out }', ctx.file.src.path],
+        arguments = ["-v", "out=" + out.path, "-v", "base_url=" + ctx.attr.base_url, '{ printf "%s/cas/%s", base_url, $1 > out }', ctx.file.src.path],
         inputs = [ctx.file.src],
         outputs = [out],
     )
@@ -77,6 +77,7 @@ sha256sum2url = rule(
     implementation = _sha256sum2url_impl,
     attrs = {
         "src": attr.label(allow_single_file = True),
+        "base_url": attr.string(default = "https://artifacts.idx.dfinity.network"),
     },
 )
 
