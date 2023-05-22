@@ -25,7 +25,7 @@ proptest! {
 
     #[test]
     fn ni_dkg_should_work_with_all_players_acting_correctly(seed: [u8;32], network_size in MockNetwork::MIN_SIZE..MockNetwork::DEFAULT_MAX_SIZE, num_reshares in 0..4) {
-      test_utils::ni_dkg::test_ni_dkg_should_work_with_all_players_acting_correctly(seed, network_size, num_reshares, || LocalCspVault::builder().build_into_arc() );
+      test_utils::ni_dkg::test_ni_dkg_should_work_with_all_players_acting_correctly(seed, network_size, num_reshares, || LocalCspVault::builder_for_test().build_into_arc() );
     }
 }
 
@@ -38,19 +38,19 @@ proptest! {
 
     #[test]
     fn create_dealing_should_detect_errors(seed: [u8;32], network_size in MockNetwork::MIN_SIZE..=MockNetwork::DEFAULT_MAX_SIZE, num_reshares in 0..4) {
-      test_utils::ni_dkg::test_create_dealing_should_detect_errors(seed, network_size, num_reshares, || LocalCspVault::builder().build_into_arc());
+      test_utils::ni_dkg::test_create_dealing_should_detect_errors(seed, network_size, num_reshares, || LocalCspVault::builder_for_test().build_into_arc());
     }
 }
 
 #[test]
 fn test_retention() {
-    test_utils::ni_dkg::test_retention(|| LocalCspVault::builder().build_into_arc());
+    test_utils::ni_dkg::test_retention(|| LocalCspVault::builder_for_test().build_into_arc());
 }
 
 #[test]
 fn should_generate_dealing_encryption_key_pair_and_store_keys() {
     test_utils::ni_dkg::should_generate_dealing_encryption_key_pair_and_store_keys(
-        LocalCspVault::builder().build_into_arc(),
+        LocalCspVault::builder_for_test().build_into_arc(),
     );
 }
 
@@ -67,7 +67,7 @@ fn should_store_dkg_dealing_encryption_secret_key_before_public_key() {
         .times(1)
         .returning(|_key| Ok(()))
         .in_sequence(&mut seq);
-    let vault = LocalCspVault::builder()
+    let vault = LocalCspVault::builder_for_test()
         .with_node_secret_key_store(sks)
         .with_public_key_store(pks)
         .build_into_arc();
@@ -81,7 +81,7 @@ fn should_fail_with_internal_error_if_dkg_dealing_encryption_key_already_set() {
     pks_returning_already_set_error
         .expect_set_once_ni_dkg_dealing_encryption_pubkey()
         .returning(|_key| Err(PublicKeySetOnceError::AlreadySet));
-    let vault = LocalCspVault::builder()
+    let vault = LocalCspVault::builder_for_test()
         .with_public_key_store(pks_returning_already_set_error)
         .build_into_arc();
     test_utils::ni_dkg::should_fail_with_internal_error_if_ni_dkg_dealing_encryption_key_already_set(vault);
@@ -89,7 +89,7 @@ fn should_fail_with_internal_error_if_dkg_dealing_encryption_key_already_set() {
 
 #[test]
 fn should_fail_with_internal_error_if_dkg_dealing_encryption_key_generated_more_than_once() {
-    let vault = LocalCspVault::builder().build_into_arc();
+    let vault = LocalCspVault::builder_for_test().build_into_arc();
     test_utils::ni_dkg::should_fail_with_internal_error_if_dkg_dealing_encryption_key_generated_more_than_once(vault);
 }
 
@@ -100,7 +100,7 @@ fn should_fail_with_transient_internal_error_if_dkg_dealing_encryption_key_persi
     pks_returning_io_error
         .expect_set_once_ni_dkg_dealing_encryption_pubkey()
         .return_once(|_key| Err(PublicKeySetOnceError::Io(io_error)));
-    let vault = LocalCspVault::builder()
+    let vault = LocalCspVault::builder_for_test()
         .with_public_key_store(pks_returning_io_error)
         .build_into_arc();
     test_utils::ni_dkg::should_fail_with_transient_internal_error_if_dkg_dealing_encryption_key_persistence_fails(
@@ -119,7 +119,7 @@ fn should_fail_with_transient_internal_error_if_nidkg_secret_key_persistence_fai
         .return_const(Err(SecretKeyStoreInsertionError::TransientError(
             expected_io_error.clone(),
         )));
-    let vault = LocalCspVault::builder()
+    let vault = LocalCspVault::builder_for_test()
         .with_node_secret_key_store(sks_returning_io_error)
         .build();
 
@@ -143,7 +143,7 @@ fn should_fail_with_internal_error_if_nidkg_secret_key_persistence_fails_due_to_
         .return_const(Err(SecretKeyStoreInsertionError::SerializationError(
             expected_serialization_error.clone(),
         )));
-    let vault = LocalCspVault::builder()
+    let vault = LocalCspVault::builder_for_test()
         .with_node_secret_key_store(sks_returning_serialization_error)
         .build();
 

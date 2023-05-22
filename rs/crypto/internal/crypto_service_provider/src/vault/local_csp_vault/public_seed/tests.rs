@@ -7,7 +7,7 @@ use rand_chacha::ChaCha20Rng;
 #[test]
 fn local_csp_vault_should_generate_correct_public_seeds() {
     let mut csprng = ChaCha20Rng::from_seed(thread_rng().gen::<[u8; 32]>());
-    let vault = LocalCspVault::builder()
+    let vault = LocalCspVault::builder_for_test()
         .with_rng(csprng.clone())
         .build_into_arc();
     let expected_seeds: Vec<_> = (0..10)

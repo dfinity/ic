@@ -127,7 +127,7 @@ mod csp_new {
 
 #[test]
 fn should_have_separate_sks_and_canister_sks() {
-    let vault = LocalCspVault::builder().build();
+    let vault = LocalCspVault::builder_for_test().build();
     let key_id = make_key_id(42);
     let secret_key = make_secret_key(42);
 
@@ -147,7 +147,7 @@ fn should_have_separate_sks_and_canister_sks() {
 
 #[test]
 fn should_insert_keys_in_canister_sks() {
-    let vault = LocalCspVault::builder().build();
+    let vault = LocalCspVault::builder_for_test().build();
 
     let key_id = make_key_id(42);
     let secret_key = make_secret_key(42);

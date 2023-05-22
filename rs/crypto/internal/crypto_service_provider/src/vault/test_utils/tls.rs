@@ -183,7 +183,7 @@ pub fn should_sign_with_valid_key(csp_vault: Arc<dyn CspVault>) {
 }
 
 pub fn should_sign_verifiably(csp_vault: Arc<dyn CspVault>) {
-    let verifier = Csp::builder().build();
+    let verifier = Csp::builder_for_test().build();
     let public_key_cert = csp_vault
         .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
         .expect("Generation of TLS keys failed.");

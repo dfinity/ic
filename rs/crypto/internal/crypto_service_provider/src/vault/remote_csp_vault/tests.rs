@@ -222,7 +222,7 @@ mod ni_dkg {
                 .times(1)
                 .returning(|_key| Ok(()))
                 .in_sequence(&mut seq);
-            LocalCspVault::builder()
+            LocalCspVault::builder_for_test()
                 .with_node_secret_key_store(sks)
                 .with_public_key_store(pks)
                 .build_into_arc()
@@ -243,7 +243,7 @@ mod ni_dkg {
             pks_returning_already_set_error
                 .expect_set_once_ni_dkg_dealing_encryption_pubkey()
                 .returning(|_key| Err(PublicKeySetOnceError::AlreadySet));
-            LocalCspVault::builder()
+            LocalCspVault::builder_for_test()
                 .with_public_key_store(pks_returning_already_set_error)
                 .build_into_arc()
         };
@@ -272,7 +272,7 @@ mod ni_dkg {
             pks_returning_io_error
                 .expect_set_once_ni_dkg_dealing_encryption_pubkey()
                 .return_once(|_key| Err(PublicKeySetOnceError::Io(io_error)));
-            LocalCspVault::builder()
+            LocalCspVault::builder_for_test()
                 .with_public_key_store(pks_returning_io_error)
                 .build_into_arc()
         };
@@ -314,7 +314,7 @@ mod idkg {
                 .times(1)
                 .return_once(|_key| Ok(()))
                 .in_sequence(&mut seq);
-            LocalCspVault::builder()
+            LocalCspVault::builder_for_test()
                 .with_node_secret_key_store(sks)
                 .with_public_key_store(pks)
                 .build_into_arc()
@@ -335,7 +335,7 @@ mod idkg {
             pks_returning_io_error
                 .expect_add_idkg_dealing_encryption_pubkey()
                 .return_once(|_| Err(PublicKeyAddError::Io(io_error)));
-            LocalCspVault::builder()
+            LocalCspVault::builder_for_test()
                 .with_public_key_store(pks_returning_io_error)
                 .build_into_arc()
         };
@@ -372,7 +372,7 @@ mod tls_keygen {
         let duplicated_key_id = KeyId::from([42; 32]);
         let secret_key_store =
             secret_key_store_with_duplicated_key_id_error_on_insert(duplicated_key_id);
-        let local_csp_vault = LocalCspVault::builder()
+        let local_csp_vault = LocalCspVault::builder_for_test()
             .with_node_secret_key_store(secret_key_store)
             .build_into_arc();
         let remote_csp_vault =
@@ -421,7 +421,7 @@ mod tls_keygen {
 
     #[test]
     fn should_set_random_cert_serial_number() {
-        let local_csp_vault = LocalCspVault::builder()
+        let local_csp_vault = LocalCspVault::builder_for_test()
             .with_rng(test_utils::tls::csprng_seeded_with(
                 test_utils::tls::FIXED_SEED,
             ))
@@ -483,7 +483,7 @@ mod tls_keygen {
                 .times(1)
                 .returning(|_key| Ok(()))
                 .in_sequence(&mut seq);
-            LocalCspVault::builder()
+            LocalCspVault::builder_for_test()
                 .with_node_secret_key_store(sks)
                 .with_public_key_store(pks)
                 .build_into_arc()
@@ -502,7 +502,7 @@ mod tls_keygen {
             pks_returning_already_set_error
                 .expect_set_once_tls_certificate()
                 .returning(|_key| Err(PublicKeySetOnceError::AlreadySet));
-            LocalCspVault::builder()
+            LocalCspVault::builder_for_test()
                 .with_public_key_store(pks_returning_already_set_error)
                 .build_into_arc()
         };
@@ -530,7 +530,7 @@ mod tls_keygen {
             pks_returning_io_error
                 .expect_set_once_tls_certificate()
                 .return_once(|_key| Err(PublicKeySetOnceError::Io(io_error)));
-            LocalCspVault::builder()
+            LocalCspVault::builder_for_test()
                 .with_public_key_store(pks_returning_io_error)
                 .build_into_arc()
         };
@@ -580,7 +580,7 @@ mod tls_sign {
     fn should_fail_to_sign_if_secret_key_in_store_has_invalid_encoding() {
         let key_id = KeyId::from([42; 32]);
         let key_store = secret_key_store_containing_key_with_invalid_encoding(key_id);
-        let local_csp_vault = LocalCspVault::builder()
+        let local_csp_vault = LocalCspVault::builder_for_test()
             .with_node_secret_key_store(key_store)
             .build_into_arc();
         let tokio_rt = new_tokio_runtime();
@@ -597,7 +597,7 @@ mod tls_sign {
     fn should_fail_to_sign_if_secret_key_in_store_has_invalid_length() {
         let key_id = KeyId::from([43; 32]);
         let key_store = secret_key_store_containing_key_with_invalid_length(key_id);
-        let local_csp_vault = LocalCspVault::builder()
+        let local_csp_vault = LocalCspVault::builder_for_test()
             .with_node_secret_key_store(key_store)
             .build_into_arc();
         let tokio_rt = new_tokio_runtime();
@@ -678,7 +678,7 @@ mod public_key_store {
 
         #[test]
         fn should_retrieve_timestamp_of_generated_idkg_public_key() {
-            let local_vault = LocalCspVault::builder()
+            let local_vault = LocalCspVault::builder_for_test()
                 .with_time_source(genesis_time_source())
                 .build_into_arc();
             let tokio_rt = new_tokio_runtime();
@@ -712,7 +712,7 @@ mod public_seed {
     fn remote_csp_vault_should_generate_correct_public_seeds() {
         let tokio_rt = new_tokio_runtime();
         let mut csprng = ChaCha20Rng::from_seed(thread_rng().gen::<[u8; 32]>());
-        let vault = LocalCspVault::builder()
+        let vault = LocalCspVault::builder_for_test()
             .with_rng(csprng.clone())
             .build_into_arc();
         let expected_seeds: Vec<_> = (0..10)

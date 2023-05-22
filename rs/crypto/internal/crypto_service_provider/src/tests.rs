@@ -18,7 +18,7 @@ mod csp_tests {
 
         #[test]
         fn should_return_empty_when_no_public_keys() {
-            let csp = Csp::builder().build();
+            let csp = Csp::builder_for_test().build();
 
             let current_node_public_keys = csp
                 .current_node_public_keys()
@@ -38,7 +38,7 @@ mod csp_tests {
 
         #[test]
         fn should_return_zero_key_count_when_no_public_keys() {
-            let csp = Csp::builder().build();
+            let csp = Csp::builder_for_test().build();
 
             let key_count = csp
                 .idkg_dealing_encryption_pubkeys_count()
@@ -81,7 +81,7 @@ mod csp_tests {
     }
 
     fn csp_with_node_signing_key_pair() -> (Csp, CspPublicKey) {
-        let csp = Csp::builder().build();
+        let csp = Csp::builder_for_test().build();
         let public_key = csp
             .gen_node_signing_key_pair()
             .expect("error generating public/private key pair");
@@ -91,7 +91,7 @@ mod csp_tests {
     fn csp_with_tls_key_pair() -> (Csp, TlsPublicKeyCert) {
         const NODE_1: u64 = 4241;
         const NOT_AFTER: &str = "99991231235959Z";
-        let csp = Csp::builder().build();
+        let csp = Csp::builder_for_test().build();
         let cert = csp
             .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
             .expect("error generating TLS key pair");

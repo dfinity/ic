@@ -20,7 +20,7 @@ proptest! {
         let mut rng = ChaChaRng::from_seed(seed);
         let csp_vault  = {
             let csprng = ChaChaRng::from_seed(rng.gen::<[u8; 32]>());
-            LocalCspVault::builder().with_rng(csprng).build_into_arc()
+            LocalCspVault::builder_for_test().with_rng(csprng).build_into_arc()
         };
         test_utils::threshold_sig::test_threshold_scheme_with_basic_keygen(Seed::from_rng(&mut rng), csp_vault, &message);
     }

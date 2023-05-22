@@ -8,6 +8,7 @@ use std::fmt;
 
 // Implementations
 pub mod proto_store;
+
 #[cfg(test)]
 pub mod temp_secret_key_store;
 

@@ -30,7 +30,7 @@ use strum::IntoEnumIterator;
 
 #[test]
 fn should_generate_node_signing_key_pair_and_store_keys() {
-    let csp_vault = LocalCspVault::builder().build_into_arc();
+    let csp_vault = LocalCspVault::builder_for_test().build_into_arc();
 
     let gen_key_result = csp_vault
         .gen_node_signing_key_pair()
@@ -63,7 +63,7 @@ fn should_store_node_signing_secret_key_before_public_key() {
         .times(1)
         .returning(|_key| Ok(()))
         .in_sequence(&mut seq);
-    let vault = LocalCspVault::builder()
+    let vault = LocalCspVault::builder_for_test()
         .with_node_secret_key_store(sks)
         .with_public_key_store(pks)
         .build_into_arc();
@@ -77,7 +77,7 @@ fn should_fail_with_internal_error_if_node_signing_key_already_set() {
     pks_returning_already_set_error
         .expect_set_once_node_signing_pubkey()
         .returning(|_key| Err(PublicKeySetOnceError::AlreadySet));
-    let vault = LocalCspVault::builder()
+    let vault = LocalCspVault::builder_for_test()
         .with_public_key_store(pks_returning_already_set_error)
         .build_into_arc();
 
@@ -91,7 +91,7 @@ fn should_fail_with_internal_error_if_node_signing_key_already_set() {
 
 #[test]
 fn should_fail_with_internal_error_if_node_signing_key_generated_more_than_once() {
-    let vault = LocalCspVault::builder().build_into_arc();
+    let vault = LocalCspVault::builder_for_test().build_into_arc();
     assert!(vault.gen_node_signing_key_pair().is_ok());
 
     let result = vault.gen_node_signing_key_pair();
@@ -109,7 +109,7 @@ fn should_fail_with_transient_internal_error_if_node_signing_public_key_persiste
     pks_returning_io_error
         .expect_set_once_node_signing_pubkey()
         .return_once(|_key| Err(PublicKeySetOnceError::Io(io_error)));
-    let vault = LocalCspVault::builder()
+    let vault = LocalCspVault::builder_for_test()
         .with_public_key_store(pks_returning_io_error)
         .build_into_arc();
 
@@ -132,7 +132,7 @@ fn should_fail_with_transient_internal_error_if_node_signing_secret_key_persiste
         .return_const(Err(SecretKeyStoreInsertionError::TransientError(
             expected_io_error.clone(),
         )));
-    let vault = LocalCspVault::builder()
+    let vault = LocalCspVault::builder_for_test()
         .with_node_secret_key_store(sks_returning_io_error)
         .build();
 
@@ -156,7 +156,7 @@ fn should_fail_with_internal_error_if_node_signing_secret_key_persistence_fails_
         .return_const(Err(SecretKeyStoreInsertionError::SerializationError(
             expected_serialization_error.clone(),
         )));
-    let vault = LocalCspVault::builder()
+    let vault = LocalCspVault::builder_for_test()
         .with_node_secret_key_store(sks_returning_serialization_error)
         .build();
 
@@ -188,7 +188,7 @@ fn should_correctly_sign_compared_to_testvec() {
             .expect("failed to insert key into SKS");
 
         let csprng = ChaChaRng::from_seed(rng.gen::<[u8; 32]>());
-        LocalCspVault::builder()
+        LocalCspVault::builder_for_test()
             .with_rng(csprng)
             .with_node_secret_key_store(key_store)
             .build()
@@ -204,7 +204,7 @@ fn should_correctly_sign_compared_to_testvec() {
 
 #[test]
 fn should_sign_verifiably_with_generated_node_signing_key() {
-    let csp_vault = LocalCspVault::builder().build_into_arc();
+    let csp_vault = LocalCspVault::builder_for_test().build_into_arc();
     let mut rng = reproducible_rng();
     let msg_len_in_bytes = rng.gen_range(0..1024);
     let message = random_message(&mut rng, msg_len_in_bytes);
@@ -214,7 +214,7 @@ fn should_sign_verifiably_with_generated_node_signing_key() {
 
 #[test]
 fn should_fail_to_sign_with_unsupported_algorithm_id() {
-    let csp_vault = LocalCspVault::builder().build_into_arc();
+    let csp_vault = LocalCspVault::builder_for_test().build_into_arc();
     let public_key = csp_vault
         .gen_node_signing_key_pair()
         .expect("failed to generate keys");
@@ -239,7 +239,7 @@ fn should_fail_to_sign_with_unsupported_algorithm_id() {
 
 #[test]
 fn should_fail_to_sign_with_non_existent_key() {
-    let csp_vault = LocalCspVault::builder().build_into_arc();
+    let csp_vault = LocalCspVault::builder_for_test().build_into_arc();
     let mut rng = thread_rng();
     let (_, pk_bytes) = ed25519::keypair_from_rng(&mut rng);
 
@@ -251,7 +251,7 @@ fn should_fail_to_sign_with_non_existent_key() {
 
 #[test]
 fn should_fail_to_sign_if_secret_key_in_store_has_wrong_type() {
-    let csp_vault = LocalCspVault::builder().build();
+    let csp_vault = LocalCspVault::builder_for_test().build();
 
     let threshold = NumberOfNodes::from(1);
     let (_pub_coeffs, key_ids) = csp_vault
