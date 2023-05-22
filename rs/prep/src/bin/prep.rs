@@ -381,6 +381,12 @@ fn parse_nodes_deprecated(src: &str) -> Result<Node> {
     // P2P is special, and needs a custom protocol
     let p2p_addr: Url = format!("org.internetcomputer.p2p1://{}", parts[2]).parse()?;
 
+    // chip_id is optional
+    let mut chip_id = vec![];
+    if parts.len() > 6 {
+        chip_id = hex::decode(parts[6])?;
+    }
+
     Ok(Node {
         node_index,
         subnet_index,
@@ -390,6 +396,7 @@ fn parse_nodes_deprecated(src: &str) -> Result<Node> {
             p2p_addr: ConnectionEndpoint::try_from(p2p_addr)?,
             node_operator_principal_id: None,
             secret_key_store: None,
+            chip_id,
         },
     })
 }
@@ -404,6 +411,7 @@ struct NodeFlag {
     pub public_api: Option<ConnectionEndpoint>,
     /// The initial endpoint that P2P uses.
     pub p2p_addr: Option<ConnectionEndpoint>,
+    pub chip_id: Option<Vec<u8>>,
 }
 
 #[derive(Error, Clone, Debug, PartialEq)]
@@ -444,6 +452,7 @@ impl TryFrom<NodeFlag> for Node {
         let xnet_api = value.xnet_api.ok_or(MissingFieldError::Xnet)?;
         let public_api = value.public_api.ok_or(MissingFieldError::PublicApi)?;
         let p2p_addr = value.p2p_addr.ok_or(MissingFieldError::P2PAddr)?;
+        let chip_id = value.chip_id.unwrap_or_default();
 
         Ok(Self {
             node_index,
@@ -454,6 +463,7 @@ impl TryFrom<NodeFlag> for Node {
                 p2p_addr,
                 node_operator_principal_id: None,
                 secret_key_store: None,
+                chip_id,
             },
         })
     }
@@ -797,6 +807,7 @@ mod test_flag_nodes_parser_deprecated {
                 p2p_addr: "org.internetcomputer.p2p1://1.2.3.4:80".parse().unwrap(),
                 node_operator_principal_id: None,
                 secret_key_store: None,
+                chip_id: vec![],
             },
         };
 
@@ -817,6 +828,7 @@ mod test_flag_nodes_parser_deprecated {
                 p2p_addr: "org.internetcomputer.p2p1://1.2.3.4:80".parse().unwrap(),
                 node_operator_principal_id: None,
                 secret_key_store: None,
+                chip_id: vec![],
             },
         };
 
@@ -845,6 +857,7 @@ mod test_flag_node_parser {
                 p2p_addr: "org.internetcomputer.p2p1://1.2.3.4:80".parse().unwrap(),
                 node_operator_principal_id: None,
                 secret_key_store: None,
+                chip_id: vec![],
             },
         };
 

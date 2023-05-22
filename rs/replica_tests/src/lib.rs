@@ -241,6 +241,7 @@ pub fn get_ic_config() -> IcConfig {
                 .expect("can't fail"),
             node_operator_principal_id: None,
             secret_key_store: Some(node_sks),
+            chip_id: vec![],
         },
     );
 

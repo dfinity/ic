@@ -126,6 +126,7 @@ mod tests {
                 p2p_addr: "org.internetcomputer.p2p1://1.2.3.4:4".parse()?,
                 node_operator_principal_id: None,
                 secret_key_store: None,
+                chip_id: vec![],
             },
         );
 
