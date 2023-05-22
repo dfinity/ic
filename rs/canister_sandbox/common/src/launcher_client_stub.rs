@@ -1,6 +1,6 @@
 use crate::launcher_service::LauncherService;
 use crate::protocol::launchersvc::*;
-use crate::rpc::{Call, Channel};
+use crate::rpc::{Call, Channel, Error};
 
 pub struct LauncherClientStub {
     channel: Channel<Request, Reply>,
@@ -16,9 +16,18 @@ impl LauncherService for LauncherClientStub {
     fn launch_sandbox(&self, req: LaunchSandboxRequest) -> Call<LaunchSandboxReply> {
         let cell = self
             .channel
-            .call(Request::LaunchSandbox(req), |Reply::LaunchSandbox(rep)| {
-                Ok(rep)
+            .call(Request::LaunchSandbox(req), |rep| match rep {
+                Reply::LaunchSandbox(rep) => Ok(rep),
+                _ => Err(Error::ServerError),
             });
+        Call::new(cell)
+    }
+
+    fn terminate(&self, req: TerminateRequest) -> Call<TerminateReply> {
+        let cell = self.channel.call(Request::Terminate(req), |rep| match rep {
+            Reply::Terminate(rep) => Ok(rep),
+            _ => Err(Error::ServerError),
+        });
         Call::new(cell)
     }
 }

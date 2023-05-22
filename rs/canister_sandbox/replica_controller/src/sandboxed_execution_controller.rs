@@ -570,6 +570,19 @@ pub struct SandboxedExecutionController {
     fd_factory: Arc<dyn PageAllocatorFileDescriptor>,
 }
 
+impl Drop for SandboxedExecutionController {
+    fn drop(&mut self) {
+        // Evict all the sandbox processes.
+        let mut guard = self.backends.lock().unwrap();
+        evict_sandbox_processes(&mut guard, 0, 0, Duration::default());
+
+        // Terminate the Sandbox Launcher process.
+        self.launcher_service
+            .terminate(protocol::launchersvc::TerminateRequest {})
+            .on_completion(|_| {});
+    }
+}
+
 impl WasmExecutor for SandboxedExecutionController {
     fn execute(
         self: Arc<Self>,
@@ -1568,6 +1581,8 @@ fn get_sandbox_process_stats(
 
 pub fn panic_due_to_exit(output: ExitStatus, pid: u32) {
     match output.code() {
+        // Do nothing when the Sandbox Launcher process terminates normally.
+        Some(code) if code == 0 => {}
         Some(code) => panic!(
             "Error from launcher process, pid {} exited with status code: {}",
             pid, code
