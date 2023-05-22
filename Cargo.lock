@@ -1038,7 +1038,7 @@ dependencies = [
  "ic-registry-local-store",
  "ic-types",
  "lazy_static",
- "mockall 0.11.3",
+ "mockall 0.11.4",
  "nix 0.24.3",
  "opentelemetry 0.18.0",
  "opentelemetry-prometheus 0.11.0",
@@ -1072,7 +1072,7 @@ dependencies = [
  "ic-error-types",
  "ic-utils 0.23.2",
  "indoc",
- "mockall 0.11.3",
+ "mockall 0.11.4",
  "opentelemetry 0.17.0",
  "opentelemetry-prometheus 0.10.0",
  "prometheus 0.13.3",
@@ -1492,7 +1492,7 @@ dependencies = [
  "idna 0.3.0",
  "instant-acme",
  "leb128",
- "mockall 0.11.3",
+ "mockall 0.11.4",
  "opentelemetry 0.18.0",
  "opentelemetry-prometheus 0.11.0",
  "pem 1.1.1",
@@ -1524,7 +1524,7 @@ dependencies = [
  "futures",
  "hyper",
  "hyper-rustls 0.24.0",
- "mockall 0.11.3",
+ "mockall 0.11.4",
  "nix 0.26.2",
  "opentelemetry 0.18.0",
  "opentelemetry-prometheus 0.11.0",
@@ -1555,7 +1555,7 @@ dependencies = [
  "ic-cdk-timers",
  "ic-certified-map",
  "ic-stable-structures",
- "mockall 0.11.3",
+ "mockall 0.11.4",
  "priority-queue",
  "prometheus 0.13.3",
  "serde",
@@ -2536,7 +2536,7 @@ dependencies = [
  "futures",
  "httptest",
  "humantime 2.1.0",
- "mockall 0.11.3",
+ "mockall 0.11.4",
  "nix 0.24.3",
  "opentelemetry 0.17.0",
  "opentelemetry-prometheus 0.10.0",
@@ -4317,7 +4317,7 @@ dependencies = [
  "hyper",
  "ic-agent",
  "indoc",
- "mockall 0.11.3",
+ "mockall 0.11.4",
  "opentelemetry 0.17.0",
  "opentelemetry-prometheus 0.10.0",
  "prometheus 0.13.3",
@@ -4455,7 +4455,7 @@ dependencies = [
  "ic-btc-service",
  "ic-btc-types-internal",
  "ic-config",
- "ic-interfaces-bitcoin-adapter-client",
+ "ic-interfaces-adapter-client",
  "ic-logger",
  "ic-metrics",
  "prometheus 0.12.0",
@@ -4474,7 +4474,7 @@ dependencies = [
  "ic-btc-interface",
  "ic-btc-types-internal",
  "ic-interfaces",
- "ic-interfaces-bitcoin-adapter-client",
+ "ic-interfaces-adapter-client",
  "ic-interfaces-registry",
  "ic-interfaces-registry-mocks",
  "ic-interfaces-state-manager",
@@ -4488,6 +4488,7 @@ dependencies = [
  "ic-test-utilities",
  "ic-test-utilities-logger",
  "ic-types",
+ "mockall 0.11.4",
  "prometheus 0.12.0",
  "slog",
  "thiserror",
@@ -6126,7 +6127,7 @@ dependencies = [
  "async-trait",
  "ic-base-types",
  "ic-crypto-tls-interfaces",
- "mockall 0.11.3",
+ "mockall 0.11.4",
  "tokio",
 ]
 
@@ -6594,7 +6595,7 @@ dependencies = [
  "ic-https-outcalls-service",
  "ic-ic00-types",
  "ic-interfaces",
- "ic-interfaces-https-outcalls-adapter-client",
+ "ic-interfaces-adapter-client",
  "ic-logger",
  "ic-metrics",
  "ic-protobuf",
@@ -6619,7 +6620,7 @@ dependencies = [
  "ic-consensus-utils",
  "ic-error-types",
  "ic-interfaces",
- "ic-interfaces-https-outcalls-adapter-client",
+ "ic-interfaces-adapter-client",
  "ic-interfaces-registry",
  "ic-interfaces-state-manager",
  "ic-logger",
@@ -7100,22 +7101,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "ic-interfaces-bitcoin-adapter-client"
+name = "ic-interfaces-adapter-client"
 version = "0.8.0"
 dependencies = [
- "ic-btc-types-internal",
  "strum_macros 0.24.3",
 ]
 
 [[package]]
 name = "ic-interfaces-certified-stream-store"
-version = "0.8.0"
-dependencies = [
- "ic-types",
-]
-
-[[package]]
-name = "ic-interfaces-https-outcalls-adapter-client"
 version = "0.8.0"
 dependencies = [
  "ic-types",
@@ -7145,7 +7138,7 @@ dependencies = [
  "ic-base-types",
  "ic-interfaces-registry",
  "ic-types",
- "mockall 0.11.3",
+ "mockall 0.11.4",
 ]
 
 [[package]]
@@ -7166,7 +7159,7 @@ dependencies = [
  "ic-interfaces-state-manager",
  "ic-replicated-state",
  "ic-types",
- "mockall 0.11.3",
+ "mockall 0.11.4",
 ]
 
 [[package]]
@@ -7188,7 +7181,7 @@ version = "0.8.0"
 dependencies = [
  "ic-base-types",
  "ic-interfaces-transport",
- "mockall 0.11.3",
+ "mockall 0.11.4",
 ]
 
 [[package]]
@@ -8591,7 +8584,7 @@ dependencies = [
  "ic-ic00-types",
  "ic-icos-sev",
  "ic-interfaces",
- "ic-interfaces-bitcoin-adapter-client",
+ "ic-interfaces-adapter-client",
  "ic-interfaces-certified-stream-store",
  "ic-interfaces-p2p",
  "ic-interfaces-registry",
@@ -8657,7 +8650,7 @@ dependencies = [
  "ic-icos-sev-interfaces",
  "ic-ingress-manager",
  "ic-interfaces",
- "ic-interfaces-https-outcalls-adapter-client",
+ "ic-interfaces-adapter-client",
  "ic-interfaces-p2p",
  "ic-interfaces-registry",
  "ic-interfaces-state-manager",
@@ -9704,7 +9697,6 @@ dependencies = [
  "ic-execution-environment",
  "ic-ic00-types",
  "ic-interfaces",
- "ic-interfaces-bitcoin-adapter-client",
  "ic-interfaces-certified-stream-store",
  "ic-interfaces-p2p",
  "ic-interfaces-registry",
@@ -9955,7 +9947,7 @@ dependencies = [
  "ic-test-utilities-registry",
  "ic-transport",
  "ic-types-test-utils",
- "mockall 0.11.3",
+ "mockall 0.11.4",
  "tokio",
  "tower",
  "tower-test",
@@ -11808,15 +11800,15 @@ dependencies = [
 
 [[package]]
 name = "mockall"
-version = "0.11.3"
+version = "0.11.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "50e4a1c770583dac7ab5e2f6c139153b783a53a1bbee9729613f193e59828326"
+checksum = "4c84490118f2ee2d74570d114f3d0493cbf02790df303d2707606c3e14e07c96"
 dependencies = [
  "cfg-if 1.0.0",
  "downcast 0.11.0",
  "fragile 2.0.0",
  "lazy_static",
- "mockall_derive 0.11.3",
+ "mockall_derive 0.11.4",
  "predicates 2.1.5",
  "predicates-tree",
 ]
@@ -11847,9 +11839,9 @@ dependencies = [
 
 [[package]]
 name = "mockall_derive"
-version = "0.11.3"
+version = "0.11.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "832663583d5fa284ca8810bf7015e46c9fff9622d3cf34bd1eea5003fec06dd0"
+checksum = "22ce75669015c4f47b289fd4d4f56e894e4c96003ffdf3ac51313126f94c6cbb"
 dependencies = [
  "cfg-if 1.0.0",
  "proc-macro2 1.0.52",

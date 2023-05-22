@@ -19,7 +19,7 @@ rust_library(
         "//rs/ic_os/sev_interfaces",
         "//rs/ingress_manager",
         "//rs/interfaces",
-        "//rs/interfaces/https_outcalls_adapter_client",
+        "//rs/interfaces/adapter_client",
         "//rs/interfaces/p2p",
         "//rs/interfaces/registry",
         "//rs/interfaces/state_manager",

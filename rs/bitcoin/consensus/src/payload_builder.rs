@@ -7,7 +7,7 @@ use ic_interfaces::self_validating_payload::{
     InvalidSelfValidatingPayload, SelfValidatingPayloadBuilder,
     SelfValidatingPayloadValidationError, SelfValidatingTransientValidationError,
 };
-use ic_interfaces_bitcoin_adapter_client::{BitcoinAdapterClient, Options};
+use ic_interfaces_adapter_client::{Options, RpcAdapterClient};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{StateManagerError, StateReader};
 use ic_logger::{log, ReplicaLogger};
@@ -54,8 +54,18 @@ impl GetPayloadError {
 pub struct BitcoinPayloadBuilder {
     state_manager: Arc<dyn StateReader<State = ReplicatedState>>,
     metrics: Arc<BitcoinPayloadBuilderMetrics>,
-    bitcoin_mainnet_adapter_client: Box<dyn BitcoinAdapterClient>,
-    bitcoin_testnet_adapter_client: Box<dyn BitcoinAdapterClient>,
+    bitcoin_mainnet_adapter_client: Box<
+        dyn RpcAdapterClient<
+            BitcoinAdapterRequestWrapper,
+            Response = BitcoinAdapterResponseWrapper,
+        >,
+    >,
+    bitcoin_testnet_adapter_client: Box<
+        dyn RpcAdapterClient<
+            BitcoinAdapterRequestWrapper,
+            Response = BitcoinAdapterResponseWrapper,
+        >,
+    >,
     subnet_id: SubnetId,
     registry: Arc<dyn RegistryClient + Send + Sync>,
     log: ReplicaLogger,
@@ -65,8 +75,18 @@ impl BitcoinPayloadBuilder {
     pub fn new(
         state_manager: Arc<dyn StateReader<State = ReplicatedState>>,
         metrics_registry: &MetricsRegistry,
-        bitcoin_mainnet_adapter_client: Box<dyn BitcoinAdapterClient>,
-        bitcoin_testnet_adapter_client: Box<dyn BitcoinAdapterClient>,
+        bitcoin_mainnet_adapter_client: Box<
+            dyn RpcAdapterClient<
+                BitcoinAdapterRequestWrapper,
+                Response = BitcoinAdapterResponseWrapper,
+            >,
+        >,
+        bitcoin_testnet_adapter_client: Box<
+            dyn RpcAdapterClient<
+                BitcoinAdapterRequestWrapper,
+                Response = BitcoinAdapterResponseWrapper,
+            >,
+        >,
         subnet_id: SubnetId,
         registry: Arc<dyn RegistryClient + Send + Sync>,
         log: ReplicaLogger,
@@ -130,7 +150,7 @@ impl BitcoinPayloadBuilder {
 
             // Send request to the adapter.
             let timer = Timer::start();
-            let result = adapter_client.send_request(
+            let result = adapter_client.send_blocking(
                 request.clone(),
                 Options {
                     timeout: Duration::from_millis(50),

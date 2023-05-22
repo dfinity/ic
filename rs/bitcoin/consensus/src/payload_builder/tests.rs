@@ -5,25 +5,39 @@ use ic_btc_types_internal::{
     GetSuccessorsRequestInitial, GetSuccessorsResponseComplete,
 };
 use ic_interfaces::self_validating_payload::SelfValidatingPayloadBuilder;
-use ic_interfaces_bitcoin_adapter_client::BitcoinAdapterClientError;
+use ic_interfaces_adapter_client::{Options, RpcAdapterClient, RpcError, RpcResult};
 use ic_interfaces_registry::RegistryValue;
 use ic_interfaces_registry_mocks::MockRegistryClient;
 use ic_interfaces_state_manager_mocks::MockStateManager;
 use ic_metrics::MetricsRegistry;
 use ic_protobuf::registry::subnet::v1::SubnetRecord;
 use ic_test_utilities::{
-    bitcoin_adapter_client::MockBitcoinAdapterClient, mock_time,
-    self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
+    mock_time, self_validating_payload_builder::FakeSelfValidatingPayloadBuilder,
     state::ReplicatedStateBuilder, types::ids::subnet_test_id,
 };
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_types::{batch::ValidationContext, Height, NumBytes, RegistryVersion, SubnetId};
+use mockall::mock;
 use std::sync::Arc;
 
 const CERTIFIED_HEIGHT: Height = Height::new(9);
 const REGISTRY_VERSION: RegistryVersion = RegistryVersion::new(101);
 const SELF_VALIDATING_PAYLOAD_BYTE_LIMIT: NumBytes = NumBytes::new(2 * 1024 * 1024); // 2MiB.
 const MAX_BLOCK_PAYLOAD_SIZE: NumBytes = NumBytes::new(4 * 1024 * 1024); // 4MiB.
+
+mock! {
+    pub BitcoinAdapterClient {}
+
+    impl RpcAdapterClient<BitcoinAdapterRequestWrapper> for BitcoinAdapterClient {
+        type Response = BitcoinAdapterResponseWrapper;
+
+        fn send_blocking(
+            &self,
+            request: BitcoinAdapterRequestWrapper,
+            opts: Options,
+        ) -> RpcResult<BitcoinAdapterResponseWrapper>;
+    }
+}
 
 // Returns a `MockStateManager` that returns a state with the provided
 // `bitcoin_adapter_requests`.
@@ -104,7 +118,7 @@ fn can_successfully_create_bitcoin_payload() {
     fn mock_adapter() -> MockBitcoinAdapterClient {
         let mut adapter_client = MockBitcoinAdapterClient::new();
         adapter_client
-            .expect_send_request()
+            .expect_send_blocking()
             .times(1)
             .returning(|_, _| {
                 Ok(BitcoinAdapterResponseWrapper::GetSuccessorsResponse(
@@ -167,7 +181,7 @@ fn includes_only_successful_responses_in_the_payload() {
     fn mock_adapter() -> MockBitcoinAdapterClient {
         let mut adapter_client = MockBitcoinAdapterClient::new();
         adapter_client
-            .expect_send_request()
+            .expect_send_blocking()
             .times(1)
             .returning(|_, _| {
                 Ok(BitcoinAdapterResponseWrapper::GetSuccessorsResponse(
@@ -178,9 +192,9 @@ fn includes_only_successful_responses_in_the_payload() {
                 ))
             });
         adapter_client
-            .expect_send_request()
+            .expect_send_blocking()
             .times(1)
-            .returning(|_, _| Err(BitcoinAdapterClientError::ConnectionBroken));
+            .returning(|_, _| Err(RpcError::ConnectionBroken));
         adapter_client
     }
 
@@ -235,7 +249,7 @@ fn includes_only_responses_for_callback_ids_not_seen_in_past_payloads() {
     let bitcoin_mainnet_adapter_client = MockBitcoinAdapterClient::new();
     let mut bitcoin_testnet_adapter_client = MockBitcoinAdapterClient::new();
     bitcoin_testnet_adapter_client
-        .expect_send_request()
+        .expect_send_blocking()
         .times(1)
         .returning(|_, _| {
             Ok(BitcoinAdapterResponseWrapper::GetSuccessorsResponse(
@@ -368,7 +382,7 @@ fn bitcoin_payload_builder_respects_byte_limit() {
         let bitcoin_mainnet_adapter_client = MockBitcoinAdapterClient::new();
         let mut bitcoin_testnet_adapter_client = MockBitcoinAdapterClient::new();
         bitcoin_testnet_adapter_client
-            .expect_send_request()
+            .expect_send_blocking()
             .returning(move |_, _| {
                 Ok(BitcoinAdapterResponseWrapper::GetSuccessorsResponse(
                     GetSuccessorsResponseComplete {

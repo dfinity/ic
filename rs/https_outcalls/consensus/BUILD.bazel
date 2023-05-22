@@ -5,7 +5,7 @@ package(default_visibility = ["//visibility:public"])
 DEPENDENCIES = [
     "//rs/consensus/utils",
     "//rs/interfaces",
-    "//rs/interfaces/https_outcalls_adapter_client",
+    "//rs/interfaces/adapter_client",
     "//rs/interfaces/registry",
     "//rs/interfaces/state_manager",
     "//rs/monitoring/logger",
