@@ -5,6 +5,7 @@
 # [Misc]
 /.dependencies/           @dfinity-lab/teams/prodsec
 /.devcontainer/           @dfinity-lab/teams/idx
+/.github/                 @dfinity-lab/teams/idx
 /buf.yaml                 @dfinity-lab/teams/message-routing-owners
 /dshell/                  @dfinity-lab/teams/idx
 /hs/                      @dfinity-lab/teams/ic-testing-verification
