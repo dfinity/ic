@@ -8,10 +8,8 @@ use crate::{
     metrics::{LABEL_POOL_TYPE, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED},
 };
 use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
-use ic_interfaces::artifact_manager::ProcessingResult;
-use ic_interfaces::artifact_pool::ChangeResult;
 use ic_interfaces::{
-    artifact_pool::{MutablePool, ValidatedPoolReader},
+    artifact_pool::{ChangeResult, MutablePool, ProcessingResult, ValidatedPoolReader},
     consensus_pool::{
         ChangeAction, ChangeSet, ConsensusBlockCache, ConsensusBlockChain, ConsensusPool,
         ConsensusPoolCache, HeightIndexedPool, HeightRange, PoolSection,

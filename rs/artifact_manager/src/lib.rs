@@ -100,10 +100,10 @@ mod processors;
 
 use crossbeam_channel::{Receiver, RecvTimeoutError, Sender};
 use ic_interfaces::{
-    artifact_manager::{ArtifactClient, ArtifactProcessor, JoinGuard, ProcessingResult},
+    artifact_manager::{ArtifactClient, ArtifactProcessor, JoinGuard},
     artifact_pool::{
-        ChangeSetProducer, MutablePool, PriorityFnAndFilterProducer, UnvalidatedArtifact,
-        ValidatedPoolReader,
+        ChangeSetProducer, MutablePool, PriorityFnAndFilterProducer, ProcessingResult,
+        UnvalidatedArtifact, ValidatedPoolReader,
     },
     canister_http::CanisterHttpChangeSet,
     certification::ChangeSet as CertificationChangeSet,
@@ -363,7 +363,7 @@ pub fn create_consensus_handlers<
     consensus_pool: Arc<RwLock<PoolConsensus>>,
     metrics_registry: MetricsRegistry,
 ) -> (ArtifactClientHandle<ConsensusArtifact>, Box<dyn JoinGuard>) {
-    let client = processors::ConsensusProcessor::new(consensus_pool.clone(), Box::new(consensus));
+    let client = processors::Processor::new(consensus_pool.clone(), Box::new(consensus));
     let (jh, sender) = run_artifact_processor(
         time_source.clone(),
         metrics_registry,
@@ -402,8 +402,7 @@ pub fn create_certification_handlers<
     ArtifactClientHandle<CertificationArtifact>,
     Box<dyn JoinGuard>,
 ) {
-    let client =
-        processors::CertificationProcessor::new(certification_pool.clone(), Box::new(certifier));
+    let client = processors::Processor::new(certification_pool.clone(), Box::new(certifier));
     let (jh, sender) = run_artifact_processor(
         time_source.clone(),
         metrics_registry,
@@ -439,7 +438,7 @@ pub fn create_dkg_handlers<
     dkg_pool: Arc<RwLock<PoolDkg>>,
     metrics_registry: MetricsRegistry,
 ) -> (ArtifactClientHandle<DkgArtifact>, Box<dyn JoinGuard>) {
-    let client = processors::DkgProcessor::new(dkg_pool.clone(), Box::new(dkg));
+    let client = processors::Processor::new(dkg_pool.clone(), Box::new(dkg));
     let (jh, sender) = run_artifact_processor(
         time_source.clone(),
         metrics_registry,
@@ -472,7 +471,7 @@ pub fn create_ecdsa_handlers<
     ecdsa_pool: Arc<RwLock<PoolEcdsa>>,
     metrics_registry: MetricsRegistry,
 ) -> (ArtifactClientHandle<EcdsaArtifact>, Box<dyn JoinGuard>) {
-    let client = processors::EcdsaProcessor::new(ecdsa_pool.clone(), Box::new(ecdsa));
+    let client = processors::Processor::new(ecdsa_pool.clone(), Box::new(ecdsa));
     let (jh, sender) = run_artifact_processor(
         time_source.clone(),
         metrics_registry,
@@ -508,8 +507,7 @@ pub fn create_https_outcalls_handlers<
     ArtifactClientHandle<CanisterHttpArtifact>,
     Box<dyn JoinGuard>,
 ) {
-    let client =
-        processors::CanisterHttpProcessor::new(canister_http_pool.clone(), Box::new(pool_manager));
+    let client = processors::Processor::new(canister_http_pool.clone(), Box::new(pool_manager));
     let (jh, sender) = run_artifact_processor(
         time_source.clone(),
         metrics_registry,

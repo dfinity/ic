@@ -5,10 +5,9 @@ use crate::metrics::{PoolMetrics, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED};
 use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_constants::MAX_INGRESS_TTL;
 use ic_interfaces::{
-    artifact_manager::ProcessingResult,
     artifact_pool::{
-        ChangeResult, HasTimestamp, MutablePool, PriorityFnAndFilterProducer, UnvalidatedArtifact,
-        ValidatedPoolReader,
+        ChangeResult, HasTimestamp, MutablePool, PriorityFnAndFilterProducer, ProcessingResult,
+        UnvalidatedArtifact, ValidatedPoolReader,
     },
     ingress_pool::{
         ChangeAction, ChangeSet, IngressPool, IngressPoolObject, IngressPoolSelect,

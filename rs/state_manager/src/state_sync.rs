@@ -6,8 +6,8 @@ use crate::{
     NUMBER_OF_CHECKPOINT_THREADS,
 };
 use ic_interfaces::{
-    artifact_manager::{ArtifactClient, ArtifactProcessor, ProcessingResult},
-    artifact_pool::UnvalidatedArtifact,
+    artifact_manager::{ArtifactClient, ArtifactProcessor},
+    artifact_pool::{ProcessingResult, UnvalidatedArtifact},
     time_source::TimeSource,
 };
 use ic_interfaces_state_manager::{StateManager, CERT_CERTIFIED};

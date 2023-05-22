@@ -3,8 +3,8 @@
 //! Use this artifact pool *ONLY* for representing and testing pools backed by a
 //! filesystem tree like layout.
 
-use ic_interfaces::artifact_manager::{ArtifactClient, ArtifactProcessor, ProcessingResult};
-use ic_interfaces::artifact_pool::UnvalidatedArtifact;
+use ic_interfaces::artifact_manager::{ArtifactClient, ArtifactProcessor};
+use ic_interfaces::artifact_pool::{ProcessingResult, UnvalidatedArtifact};
 use ic_interfaces::time_source::TimeSource;
 use ic_replica_setup_ic_network::{
     TestArtifact, TestArtifactAttribute, TestArtifactId, TestArtifactMessage,
