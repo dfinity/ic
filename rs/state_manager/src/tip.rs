@@ -4,8 +4,9 @@ use crate::{
     NUMBER_OF_CHECKPOINT_THREADS,
 };
 use crossbeam_channel::{unbounded, Sender};
+use ic_base_types::subnet_id_into_protobuf;
 use ic_logger::{error, fatal, info, ReplicaLogger};
-use ic_protobuf::state::system_metadata::v1::SystemMetadata;
+use ic_protobuf::state::system_metadata::v1::{SplitFrom, SystemMetadata};
 #[allow(unused)]
 use ic_replicated_state::{
     canister_state::execution_state::SandboxMemory, CanisterState, NumWasmPages, PageMap,
@@ -358,11 +359,29 @@ fn serialize_to_tip(
 ) -> Result<(), CheckpointError> {
     // Serialize ingress history separately. The `SystemMetadata` proto does not
     // encode it.
+    //
+    // This also makes it possible to validate post-split states simply by comparing
+    // manifest file hashes (the ingress history is initially preserved unmodified
+    // on both sides of the split, while the system metadata is not).
     let ingress_history = (&state.system_metadata().ingress_history).into();
     tip.ingress_history().serialize(ingress_history)?;
 
     let system_metadata: SystemMetadata = state.system_metadata().into();
     tip.system_metadata().serialize(system_metadata)?;
+
+    // The split marker is also serialized separately from `SystemMetadata` because
+    // preserving the latter unmodified during a split makes verification a matter
+    // of comparing manifest file hashes.
+    match state.system_metadata().split_from {
+        Some(subnet_id) => {
+            tip.split_marker().serialize(SplitFrom {
+                subnet_id: Some(subnet_id_into_protobuf(subnet_id)),
+            })?;
+        }
+        None => {
+            tip.split_marker().try_remove_file()?;
+        }
+    }
 
     tip.subnet_queues()
         .serialize((state.subnet_queues()).into())?;

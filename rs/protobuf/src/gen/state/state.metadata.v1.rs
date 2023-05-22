@@ -312,6 +312,14 @@ pub struct StableMemory {
     pub memory: ::prost::alloc::vec::Vec<u8>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SplitFrom {
+    /// If present, the subnet is mid-way through a split. Identifies the original
+    /// subnet that this was split from.
+    #[prost(message, optional, tag = "1")]
+    pub subnet_id: ::core::option::Option<super::super::super::types::v1::SubnetId>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum HttpMethod {
