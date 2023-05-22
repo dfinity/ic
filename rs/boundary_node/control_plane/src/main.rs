@@ -83,6 +83,30 @@ struct Cli {
     #[clap(long, default_value = "1")]
     min_ok_count: u8,
 
+    // Timeout for the whole HTTP request in seconds
+    #[clap(long, default_value = "2")]
+    http_timeout: u64,
+
+    // Timeout for the HTTP connect phase in seconds
+    #[clap(long, default_value = "1")]
+    http_timeout_connect: u64,
+
+    // How frequently to run node checks in seconds
+    #[clap(long, default_value = "10")]
+    check_interval: u64,
+
+    // How many attempts to do when checking a node
+    #[clap(long, default_value = "3")]
+    check_retries: u32,
+
+    // How long to wait between retries in seconds
+    #[clap(long, default_value = "1")]
+    check_retry_interval: u64,
+
+    // How many nodes to check concurrently
+    #[clap(long, default_value = "64")]
+    concurrency: usize,
+
     /// Maximum block height lag for a replica to be included in the routing table
     #[clap(long, default_value = "1000")]
     max_height_lag: u64,
@@ -146,7 +170,10 @@ async fn main() -> Result<(), Error> {
     // Control-Plane
     let routing_table: Arc<Mutex<Option<RoutingTable>>> = Arc::new(Mutex::new(None));
 
-    let http_client = reqwest::Client::builder().timeout(10 * SECOND).build()?;
+    let http_client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(cli.http_timeout))
+        .connect_timeout(Duration::from_secs(cli.http_timeout_connect))
+        .build()?;
 
     let local_store = Arc::new(ic_registry_local_store::LocalStoreImpl::new(
         cli.local_store,
@@ -191,10 +218,10 @@ async fn main() -> Result<(), Error> {
     );
     let checker = WithRetry(
         checker,
-        3,          // max_attempts
-        1 * SECOND, // attempt_interval
+        cli.check_retries,                             // max_attempts
+        Duration::from_secs(cli.check_retry_interval), // attempt_interval
     );
-    let checker = WithSemaphore::wrap(checker, 32);
+    let checker = WithSemaphore::wrap(checker, cli.concurrency);
 
     // Service Reloads
     let ngx_reloader = PidReloader::new(cli.pid_path, Signal::SIGHUP);
@@ -262,7 +289,10 @@ async fn main() -> Result<(), Error> {
         check_persist_runner,
         MetricParams::new(&meter, SERVICE_NAME, "run"),
     );
-    let check_persist_runner = WithThrottle(check_persist_runner, ThrottleParams::new(10 * SECOND));
+    let check_persist_runner = WithThrottle(
+        check_persist_runner,
+        ThrottleParams::new(Duration::from_secs(cli.check_interval)),
+    );
     let mut check_persist_runner = check_persist_runner;
 
     // Metrics
