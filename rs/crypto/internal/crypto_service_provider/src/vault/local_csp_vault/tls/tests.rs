@@ -24,7 +24,7 @@ mod keygen {
     #[test]
     fn should_generate_tls_key_pair_and_store_certificate() {
         test_utils::tls::should_generate_tls_key_pair_and_store_certificate(
-            LocalCspVault::builder().build_into_arc(),
+            LocalCspVault::builder_for_test().build_into_arc(),
         );
     }
 
@@ -33,7 +33,7 @@ mod keygen {
         let duplicated_key_id = KeyId::from([42; 32]);
         let secret_key_store =
             secret_key_store_with_duplicated_key_id_error_on_insert(duplicated_key_id);
-        let csp_vault = LocalCspVault::builder()
+        let csp_vault = LocalCspVault::builder_for_test()
             .with_node_secret_key_store(secret_key_store)
             .build_into_arc();
 
@@ -46,41 +46,41 @@ mod keygen {
     #[test]
     fn should_return_der_encoded_self_signed_certificate() {
         test_utils::tls::should_return_der_encoded_self_signed_certificate(
-            LocalCspVault::builder().build_into_arc(),
+            LocalCspVault::builder_for_test().build_into_arc(),
         );
     }
 
     #[test]
     fn should_set_cert_subject_cn_as_node_id() {
         test_utils::tls::should_set_cert_subject_cn_as_node_id(
-            LocalCspVault::builder().build_into_arc(),
+            LocalCspVault::builder_for_test().build_into_arc(),
         );
     }
 
     #[test]
     fn should_use_stable_node_id_string_representation_as_subject_cn() {
         test_utils::tls::should_use_stable_node_id_string_representation_as_subject_cn(
-            LocalCspVault::builder().build_into_arc(),
+            LocalCspVault::builder_for_test().build_into_arc(),
         );
     }
 
     #[test]
     fn should_set_cert_issuer_cn_as_node_id() {
         test_utils::tls::should_set_cert_issuer_cn_as_node_id(
-            LocalCspVault::builder().build_into_arc(),
+            LocalCspVault::builder_for_test().build_into_arc(),
         );
     }
 
     #[test]
     fn should_not_set_cert_subject_alt_name() {
         test_utils::tls::should_not_set_cert_subject_alt_name(
-            LocalCspVault::builder().build_into_arc(),
+            LocalCspVault::builder_for_test().build_into_arc(),
         );
     }
 
     #[test]
     fn should_set_random_cert_serial_number() {
-        let csp_vault = LocalCspVault::builder()
+        let csp_vault = LocalCspVault::builder_for_test()
             .with_rng(test_utils::tls::csprng_seeded_with(
                 test_utils::tls::FIXED_SEED,
             ))
@@ -91,20 +91,20 @@ mod keygen {
     #[test]
     fn should_set_different_serial_numbers_for_multiple_certs() {
         test_utils::tls::should_set_different_serial_numbers_for_multiple_certs(
-            &(|| LocalCspVault::builder().build_into_arc()),
+            &(|| LocalCspVault::builder_for_test().build_into_arc()),
         );
     }
 
     #[test]
     fn should_set_cert_not_after_correctly() {
         test_utils::tls::should_set_cert_not_after_correctly(
-            LocalCspVault::builder().build_into_arc(),
+            LocalCspVault::builder_for_test().build_into_arc(),
         );
     }
 
     #[test]
     fn should_return_error_on_invalid_not_after_date() {
-        let csp_vault = LocalCspVault::builder().build_into_arc();
+        let csp_vault = LocalCspVault::builder_for_test().build_into_arc();
         let invalid_not_after = "invalid_not_after_date";
         let result =
             csp_vault.gen_tls_key_pair(node_test_id(test_utils::tls::NODE_1), invalid_not_after);
@@ -115,7 +115,7 @@ mod keygen {
 
     #[test]
     fn should_return_error_if_not_after_date_is_in_the_past() {
-        let csp_vault = LocalCspVault::builder().build_into_arc();
+        let csp_vault = LocalCspVault::builder_for_test().build_into_arc();
         let date_in_the_past = "20211004235959Z";
 
         let result =
@@ -127,7 +127,7 @@ mod keygen {
 
     #[test]
     fn should_return_error_if_not_after_date_does_not_equal_99991231235959z() {
-        let csp_vault = LocalCspVault::builder().build_into_arc();
+        let csp_vault = LocalCspVault::builder_for_test().build_into_arc();
         let unexpected_not_after_date = "25670102030405Z";
 
         let result = csp_vault.gen_tls_key_pair(
@@ -153,7 +153,7 @@ mod keygen {
             .times(1)
             .returning(|_key| Ok(()))
             .in_sequence(&mut seq);
-        let vault = LocalCspVault::builder()
+        let vault = LocalCspVault::builder_for_test()
             .with_node_secret_key_store(sks)
             .with_public_key_store(pks)
             .build_into_arc();
@@ -167,7 +167,7 @@ mod keygen {
         pks_returning_already_set_error
             .expect_set_once_tls_certificate()
             .returning(|_key| Err(PublicKeySetOnceError::AlreadySet));
-        let vault = LocalCspVault::builder()
+        let vault = LocalCspVault::builder_for_test()
             .with_public_key_store(pks_returning_already_set_error)
             .build_into_arc();
         test_utils::tls::should_fail_with_internal_error_if_tls_certificate_already_set(vault);
@@ -175,7 +175,7 @@ mod keygen {
 
     #[test]
     fn should_fail_with_internal_error_if_tls_certificate_generated_more_than_once() {
-        let vault = LocalCspVault::builder().build_into_arc();
+        let vault = LocalCspVault::builder_for_test().build_into_arc();
         test_utils::tls::should_fail_with_internal_error_if_tls_certificate_generated_more_than_once(vault);
     }
 
@@ -186,7 +186,7 @@ mod keygen {
         pks_returning_io_error
             .expect_set_once_tls_certificate()
             .return_once(|_key| Err(PublicKeySetOnceError::Io(io_error)));
-        let vault = LocalCspVault::builder()
+        let vault = LocalCspVault::builder_for_test()
             .with_public_key_store(pks_returning_io_error)
             .build_into_arc();
         test_utils::tls::should_fail_with_transient_internal_error_if_tls_keygen_persistance_fails(
@@ -205,7 +205,7 @@ mod keygen {
             .return_const(Err(SecretKeyStoreInsertionError::TransientError(
                 expected_io_error.clone(),
             )));
-        let vault = LocalCspVault::builder()
+        let vault = LocalCspVault::builder_for_test()
             .with_node_secret_key_store(sks_returning_io_error)
             .build();
 
@@ -229,7 +229,7 @@ mod keygen {
             .return_const(Err(SecretKeyStoreInsertionError::SerializationError(
                 expected_serialization_error.clone(),
             )));
-        let vault = LocalCspVault::builder()
+        let vault = LocalCspVault::builder_for_test()
             .with_node_secret_key_store(sks_returning_serialization_error)
             .build();
 
@@ -250,25 +250,27 @@ mod sign {
 
     #[test]
     fn should_sign_with_valid_key() {
-        test_utils::tls::should_sign_with_valid_key(LocalCspVault::builder().build_into_arc());
+        test_utils::tls::should_sign_with_valid_key(
+            LocalCspVault::builder_for_test().build_into_arc(),
+        );
     }
 
     #[test]
     fn should_sign_verifiably() {
-        test_utils::tls::should_sign_verifiably(LocalCspVault::builder().build_into_arc());
+        test_utils::tls::should_sign_verifiably(LocalCspVault::builder_for_test().build_into_arc());
     }
 
     #[test]
     fn should_fail_to_sign_if_secret_key_not_found() {
         test_utils::tls::should_fail_to_sign_if_secret_key_not_found(
-            LocalCspVault::builder().build_into_arc(),
+            LocalCspVault::builder_for_test().build_into_arc(),
         );
     }
 
     #[test]
     fn should_fail_to_sign_if_secret_key_in_store_has_wrong_type() {
         test_utils::tls::should_fail_to_sign_if_secret_key_in_store_has_wrong_type(
-            LocalCspVault::builder().build_into_arc(),
+            LocalCspVault::builder_for_test().build_into_arc(),
         );
     }
 
@@ -276,7 +278,7 @@ mod sign {
     fn should_fail_to_sign_if_secret_key_in_store_has_invalid_encoding() {
         let key_id = KeyId::from([42; 32]);
         let key_store = secret_key_store_containing_key_with_invalid_encoding(key_id);
-        let csp_vault = LocalCspVault::builder()
+        let csp_vault = LocalCspVault::builder_for_test()
             .with_node_secret_key_store(key_store)
             .build_into_arc();
 
@@ -289,7 +291,7 @@ mod sign {
     fn should_fail_to_sign_if_secret_key_in_store_has_invalid_length() {
         let key_id = KeyId::from([43; 32]);
         let key_store = secret_key_store_containing_key_with_invalid_length(key_id);
-        let csp_vault = LocalCspVault::builder()
+        let csp_vault = LocalCspVault::builder_for_test()
             .with_node_secret_key_store(key_store)
             .build_into_arc();
 

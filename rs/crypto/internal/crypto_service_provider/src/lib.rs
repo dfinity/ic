@@ -5,6 +5,7 @@
 //! Interface for the cryptographic service provider
 
 pub mod api;
+pub mod builder;
 pub mod canister_threshold;
 pub mod imported_test_utils;
 pub mod imported_utilities;
@@ -184,16 +185,9 @@ impl Csp {
             logger,
             "Proceeding with an in-replica csp_vault, CryptoConfig: {:?}", config
         );
-        let csp_vault = Arc::new(LocalCspVault::new_in_dir(
-            &config.crypto_root,
-            metrics.clone(),
-            new_logger!(&logger),
-        ));
-        Csp {
-            csp_vault,
-            logger,
-            metrics,
-        }
+        let csp_vault =
+            LocalCspVault::new_in_dir(&config.crypto_root, metrics.clone(), new_logger!(&logger));
+        Csp::builder(csp_vault, logger, metrics).build()
     }
 
     fn new_with_unix_socket_vault(
@@ -220,11 +214,7 @@ impl Csp {
                 socket_path, e
             )
         });
-        Csp {
-            csp_vault: Arc::new(csp_vault),
-            logger,
-            metrics,
-        }
+        Csp::builder(csp_vault, logger, metrics).build()
     }
 }
 
@@ -254,54 +244,5 @@ impl CspPublicAndSecretKeyStoreChecker for Csp {
 
     fn validate_pks_and_sks(&self) -> Result<ValidNodePublicKeys, ValidatePksAndSksError> {
         self.csp_vault.validate_pks_and_sks()
-    }
-}
-
-#[cfg(test)]
-pub mod builder {
-    use super::*;
-    use crate::public_key_store::temp_pubkey_store::TempPublicKeyStore;
-    use crate::secret_key_store::temp_secret_key_store::TempSecretKeyStore;
-    use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
-
-    pub struct CspBuilder<V> {
-        vault: Box<dyn FnOnce() -> V>,
-        logger: ReplicaLogger,
-        metrics: CryptoMetrics,
-    }
-
-    impl Csp {
-        pub fn builder() -> CspBuilder<
-            LocalCspVault<
-                ReproducibleRng,
-                TempSecretKeyStore,
-                TempSecretKeyStore,
-                TempPublicKeyStore,
-            >,
-        > {
-            CspBuilder {
-                vault: Box::new(|| LocalCspVault::builder().build()),
-                logger: no_op_logger(),
-                metrics: CryptoMetrics::none(),
-            }
-        }
-    }
-
-    impl<V: CspVault + 'static> CspBuilder<V> {
-        pub fn with_vault<W: CspVault + 'static>(self, vault: W) -> CspBuilder<W> {
-            CspBuilder {
-                vault: Box::new(|| vault),
-                logger: self.logger,
-                metrics: self.metrics,
-            }
-        }
-
-        pub fn build(self) -> Csp {
-            Csp {
-                csp_vault: Arc::new((self.vault)()),
-                logger: self.logger,
-                metrics: Arc::new(self.metrics),
-            }
-        }
     }
 }

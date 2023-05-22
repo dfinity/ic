@@ -34,9 +34,9 @@ mod sign_common {
 
     #[test]
     fn should_fail_with_secret_key_not_found_if_secret_key_not_found_in_key_store() {
-        let csp = Csp::builder()
+        let csp = Csp::builder_for_test()
             .with_vault(
-                LocalCspVault::builder()
+                LocalCspVault::builder_for_test()
                     .with_mock_stores()
                     .with_node_secret_key_store(secret_key_store_returning_none())
                     .build(),
@@ -51,9 +51,9 @@ mod sign_common {
     #[test]
     #[should_panic]
     fn should_panic_when_secret_key_store_panics() {
-        let csp = Csp::builder()
+        let csp = Csp::builder_for_test()
             .with_vault(
-                LocalCspVault::builder()
+                LocalCspVault::builder_for_test()
                     .with_mock_stores()
                     .with_node_secret_key_store(secret_key_store_panicking_on_usage())
                     .build(),
@@ -72,9 +72,9 @@ mod sign_ed25519 {
     #[test]
     fn should_correctly_sign() {
         let (sk, _, msg, sig) = csp_testvec(RFC8032_ED25519_SHA_ABC);
-        let csp = Csp::builder()
+        let csp = Csp::builder_for_test()
             .with_vault(
-                LocalCspVault::builder()
+                LocalCspVault::builder_for_test()
                     .with_mock_stores()
                     .with_node_secret_key_store(secret_key_store_with(KeyId::from(KEY_ID), sk))
                     .build(),
@@ -93,9 +93,9 @@ mod sign_ed25519 {
         let sk_with_wrong_type = CspSecretKey::MultiBls12_381(multi_types::SecretKeyBytes::new(
             SecretArray::new_and_dont_zeroize_argument(&[0u8; multi_types::SecretKeyBytes::SIZE]),
         ));
-        let csp = Csp::builder()
+        let csp = Csp::builder_for_test()
             .with_vault(
-                LocalCspVault::builder()
+                LocalCspVault::builder_for_test()
                     .with_mock_stores()
                     .with_node_secret_key_store(secret_key_store_with(
                         KeyId::from(KEY_ID),
@@ -117,9 +117,9 @@ mod verify_common {
     #[test]
     fn should_not_use_secret_key_store_during_verification() {
         let (_, pk, msg, sig) = csp_testvec(RFC8032_ED25519_SHA_ABC);
-        let csp = Csp::builder()
+        let csp = Csp::builder_for_test()
             .with_vault(
-                LocalCspVault::builder()
+                LocalCspVault::builder_for_test()
                     .with_mock_stores()
                     .with_node_secret_key_store(secret_key_store_panicking_on_usage())
                     .build(),
@@ -144,8 +144,8 @@ mod verify_ecdsa_p256 {
             test_data::CHROME_ECDSA_P256_PK_DER_HEX.as_ref(),
             test_data::CHROME_ECDSA_P256_SIG_RAW_HEX.as_ref(),
         );
-        let csp = Csp::builder()
-            .with_vault(LocalCspVault::builder().with_mock_stores().build())
+        let csp = Csp::builder_for_test()
+            .with_vault(LocalCspVault::builder_for_test().with_mock_stores().build())
             .build();
 
         assert!(csp.verify(&csp_sig, EMPTY_MSG, EcdsaP256, csp_pk).is_ok());
@@ -157,8 +157,8 @@ mod verify_ecdsa_p256 {
             test_data::FIREFOX_ECDSA_P256_PK_DER_HEX.as_ref(),
             test_data::FIREFOX_ECDSA_P256_SIG_RAW_HEX.as_ref(),
         );
-        let csp = Csp::builder()
-            .with_vault(LocalCspVault::builder().with_mock_stores().build())
+        let csp = Csp::builder_for_test()
+            .with_vault(LocalCspVault::builder_for_test().with_mock_stores().build())
             .build();
 
         assert!(csp.verify(&csp_sig, EMPTY_MSG, EcdsaP256, csp_pk).is_ok());
@@ -170,8 +170,8 @@ mod verify_ecdsa_p256 {
             test_data::SAFARI_ECDSA_P256_PK_DER_HEX.as_ref(),
             test_data::SAFARI_ECDSA_P256_SIG_RAW_HEX.as_ref(),
         );
-        let csp = Csp::builder()
-            .with_vault(LocalCspVault::builder().with_mock_stores().build())
+        let csp = Csp::builder_for_test()
+            .with_vault(LocalCspVault::builder_for_test().with_mock_stores().build())
             .build();
 
         assert!(csp.verify(&csp_sig, EMPTY_MSG, EcdsaP256, csp_pk).is_ok());
@@ -183,8 +183,8 @@ mod verify_ecdsa_p256 {
             test_data::SAFARI_ECDSA_P256_PK_DER_HEX.as_ref(),
             test_data::FIREFOX_ECDSA_P256_SIG_RAW_HEX.as_ref(),
         );
-        let csp = Csp::builder()
-            .with_vault(LocalCspVault::builder().with_mock_stores().build())
+        let csp = Csp::builder_for_test()
+            .with_vault(LocalCspVault::builder_for_test().with_mock_stores().build())
             .build();
         let result = csp.verify(&wrong_sig, EMPTY_MSG, EcdsaP256, csp_pk);
         assert!(result.unwrap_err().is_signature_verification_error());
@@ -199,8 +199,8 @@ mod verify_ecdsa_p256 {
         let wrong_msg = b"wrong message";
         assert_ne!(EMPTY_MSG, wrong_msg);
 
-        let csp = Csp::builder()
-            .with_vault(LocalCspVault::builder().with_mock_stores().build())
+        let csp = Csp::builder_for_test()
+            .with_vault(LocalCspVault::builder_for_test().with_mock_stores().build())
             .build();
         let result = csp.verify(&csp_sig, wrong_msg, EcdsaP256, csp_pk);
         assert!(result.unwrap_err().is_signature_verification_error());
@@ -214,8 +214,8 @@ mod verify_ecdsa_p256 {
         );
         let sig_with_wrong_type =
             CspSignature::multi_bls12381_individual_from_hex(TESTVEC_MULTI_BLS12_381_1_SIG);
-        let csp = Csp::builder()
-            .with_vault(LocalCspVault::builder().with_mock_stores().build())
+        let csp = Csp::builder_for_test()
+            .with_vault(LocalCspVault::builder_for_test().with_mock_stores().build())
             .build();
         let result = csp.verify(&sig_with_wrong_type, EMPTY_MSG, EcdsaP256, csp_pk);
         assert!(result.unwrap_err().is_signature_verification_error());
@@ -229,8 +229,8 @@ mod verify_ecdsa_p256 {
         );
         let pk_with_wrong_type =
             CspPublicKey::multi_bls12381_from_hex(TESTVEC_MULTI_BLS12_381_1_PK);
-        let csp = Csp::builder()
-            .with_vault(LocalCspVault::builder().with_mock_stores().build())
+        let csp = Csp::builder_for_test()
+            .with_vault(LocalCspVault::builder_for_test().with_mock_stores().build())
             .build();
         let result = csp.verify(&csp_sig, EMPTY_MSG, EcdsaP256, pk_with_wrong_type);
         assert!(result.unwrap_err().is_signature_verification_error());
@@ -259,8 +259,8 @@ mod verify_secp256k1 {
     #[test]
     fn should_correctly_verify_signature() {
         let (csp_pk, csp_sig) = get_csp_pk_and_sig(PK, SIG);
-        let csp = Csp::builder()
-            .with_vault(LocalCspVault::builder().with_mock_stores().build())
+        let csp = Csp::builder_for_test()
+            .with_vault(LocalCspVault::builder_for_test().with_mock_stores().build())
             .build();
         assert!(csp
             .verify(&csp_sig, EMPTY_MSG, EcdsaSecp256k1, csp_pk)
@@ -271,8 +271,8 @@ mod verify_secp256k1 {
     fn should_fail_to_verify_under_wrong_signature() {
         let (csp_pk, wrong_sig) =
             get_csp_pk_and_sig(PK, test_data::FIREFOX_ECDSA_P256_SIG_RAW_HEX.as_ref());
-        let csp = Csp::builder()
-            .with_vault(LocalCspVault::builder().with_mock_stores().build())
+        let csp = Csp::builder_for_test()
+            .with_vault(LocalCspVault::builder_for_test().with_mock_stores().build())
             .build();
         let result = csp.verify(&wrong_sig, EMPTY_MSG, EcdsaSecp256k1, csp_pk);
         assert!(result.unwrap_err().is_signature_verification_error());
@@ -284,8 +284,8 @@ mod verify_secp256k1 {
         let wrong_msg = b"wrong message";
         assert_ne!(EMPTY_MSG, wrong_msg);
 
-        let csp = Csp::builder()
-            .with_vault(LocalCspVault::builder().with_mock_stores().build())
+        let csp = Csp::builder_for_test()
+            .with_vault(LocalCspVault::builder_for_test().with_mock_stores().build())
             .build();
         let result = csp.verify(&csp_sig, wrong_msg, EcdsaSecp256k1, csp_pk);
         assert!(result.unwrap_err().is_signature_verification_error());
@@ -296,8 +296,8 @@ mod verify_secp256k1 {
         let (csp_pk, _csp_sig) = get_csp_pk_and_sig(PK, SIG);
         let sig_with_wrong_type =
             CspSignature::multi_bls12381_individual_from_hex(TESTVEC_MULTI_BLS12_381_1_SIG);
-        let csp = Csp::builder()
-            .with_vault(LocalCspVault::builder().with_mock_stores().build())
+        let csp = Csp::builder_for_test()
+            .with_vault(LocalCspVault::builder_for_test().with_mock_stores().build())
             .build();
         let result = csp.verify(&sig_with_wrong_type, EMPTY_MSG, EcdsaSecp256k1, csp_pk);
         assert!(result.unwrap_err().is_signature_verification_error());
@@ -308,8 +308,8 @@ mod verify_secp256k1 {
         let (_csp_pk, csp_sig) = get_csp_pk_and_sig(PK, SIG);
         let pk_with_wrong_type =
             CspPublicKey::multi_bls12381_from_hex(TESTVEC_MULTI_BLS12_381_1_PK);
-        let csp = Csp::builder()
-            .with_vault(LocalCspVault::builder().with_mock_stores().build())
+        let csp = Csp::builder_for_test()
+            .with_vault(LocalCspVault::builder_for_test().with_mock_stores().build())
             .build();
         let result = csp.verify(&csp_sig, EMPTY_MSG, EcdsaSecp256k1, pk_with_wrong_type);
         assert!(result.unwrap_err().is_signature_verification_error());
@@ -607,9 +607,9 @@ mod verify_ed25519 {
         const RANDOM_MSG_MAX_LEN: usize = 100;
 
         pub fn new_csp<R: Rng + CryptoRng>(rng: &mut R) -> Csp {
-            Csp::builder()
+            Csp::builder_for_test()
                 .with_vault(
-                    LocalCspVault::builder()
+                    LocalCspVault::builder_for_test()
                         .with_rng(Seed::from_rng(rng).into_rng())
                         .build(),
                 )
@@ -709,7 +709,7 @@ mod multi {
 
     #[test]
     fn pop_verifies() {
-        let csp0 = Csp::builder().build();
+        let csp0 = Csp::builder_for_test().build();
         let (public_key0, pop0) = csp0
             .gen_committee_signing_key_pair()
             .expect("Failed to generate key pair with PoP");
@@ -969,9 +969,9 @@ mod batch {
     #[test]
     fn should_verify_batch_of_single_signature_without_querying_secret_key_store() {
         let (_sk, pk, msg, sig) = csp_testvec(RFC8032_ED25519_1);
-        let verifier = Csp::builder()
+        let verifier = Csp::builder_for_test()
             .with_vault(
-                LocalCspVault::builder()
+                LocalCspVault::builder_for_test()
                     .with_mock_stores()
                     .with_node_secret_key_store(secret_key_store_panicking_on_usage())
                     .build(),
@@ -998,7 +998,8 @@ fn vault_builder_with_different_seeds<const N: usize>() -> [LocalCspVaultBuilder
     let mut seeds = HashSet::with_capacity(N);
     for _ in 0..N {
         let seed: [u8; 32] = rng.gen();
-        vault_builders.push(LocalCspVault::builder().with_rng(Seed::from_bytes(&seed).into_rng()));
+        vault_builders
+            .push(LocalCspVault::builder_for_test().with_rng(Seed::from_bytes(&seed).into_rng()));
         assert!(seeds.insert(seed));
     }
     vault_builders
@@ -1015,7 +1016,7 @@ fn csp_and_verifier_with_different_seeds<const N: usize>() -> [Csp; N] {
     let mut csps = Vec::with_capacity(N);
     for (i, vault_builder) in vaults.into_iter().enumerate() {
         let csp = if i == N - 1 {
-            Csp::builder()
+            Csp::builder_for_test()
                 .with_vault(
                     vault_builder
                         .with_mock_stores()
@@ -1024,7 +1025,9 @@ fn csp_and_verifier_with_different_seeds<const N: usize>() -> [Csp; N] {
                 )
                 .build()
         } else {
-            Csp::builder().with_vault(vault_builder.build()).build()
+            Csp::builder_for_test()
+                .with_vault(vault_builder.build())
+                .build()
         };
         csps.push(csp);
     }
@@ -1037,7 +1040,7 @@ fn csp_with_different_seeds<const N: usize>() -> [Csp; N] {
     let vaults: [LocalCspVaultBuilder<_, _, _, _>; N] = vault_builder_with_different_seeds();
     vaults
         .into_iter()
-        .map(|vault| Csp::builder().with_vault(vault.build()).build())
+        .map(|vault| Csp::builder_for_test().with_vault(vault.build()).build())
         .collect::<Vec<_>>()
         .try_into()
         .map_err(|_err| "cannot convert to fixed size array".to_string())

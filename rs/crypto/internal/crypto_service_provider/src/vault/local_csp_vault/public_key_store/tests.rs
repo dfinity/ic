@@ -4,35 +4,35 @@ use crate::LocalCspVault;
 #[test]
 fn should_retrieve_current_public_keys() {
     test_utils::public_key_store::should_retrieve_current_public_keys(
-        LocalCspVault::builder().build_into_arc(),
+        LocalCspVault::builder_for_test().build_into_arc(),
     );
 }
 
 #[test]
 fn should_retrieve_last_idkg_public_key() {
     test_utils::public_key_store::should_retrieve_last_idkg_public_key(
-        LocalCspVault::builder().build_into_arc(),
+        LocalCspVault::builder_for_test().build_into_arc(),
     );
 }
 
 #[test]
 fn should_correctly_return_idkg_dealing_encryption_pubkeys_count_for_no_keys() {
     test_utils::public_key_store::should_correctly_return_idkg_dealing_encryption_pubkeys_count_for_no_keys(
-        LocalCspVault::builder().build_into_arc(),
+        LocalCspVault::builder_for_test().build_into_arc(),
     );
 }
 
 #[test]
 fn should_correctly_return_idkg_dealing_encryption_pubkeys_count_for_single_key() {
     test_utils::public_key_store::should_correctly_return_idkg_dealing_encryption_pubkeys_count_for_single_key(
-        LocalCspVault::builder().build_into_arc(),
+        LocalCspVault::builder_for_test().build_into_arc(),
     );
 }
 
 #[test]
 fn should_correctly_return_idkg_dealing_encryption_pubkeys_count_for_two_keys() {
     test_utils::public_key_store::should_correctly_return_idkg_dealing_encryption_pubkeys_count_for_two_keys(
-        LocalCspVault::builder().build_into_arc(),
+        LocalCspVault::builder_for_test().build_into_arc(),
     );
 }
 
@@ -40,7 +40,7 @@ fn should_correctly_return_idkg_dealing_encryption_pubkeys_count_for_two_keys() 
 fn should_correctly_return_idkg_dealing_encryption_pubkeys_count_when_all_other_keys_exist_except_idkg_key(
 ) {
     test_utils::public_key_store::should_correctly_return_idkg_dealing_encryption_pubkeys_count_when_all_other_keys_exist_except_idkg_key(
-        LocalCspVault::builder().build_into_arc(),
+        LocalCspVault::builder_for_test().build_into_arc(),
     );
 }
 
@@ -58,13 +58,13 @@ mod current_node_public_keys_with_timestamps {
     #[test]
     fn should_be_consistent_with_current_node_public_keys() {
         test_utils::public_key_store::should_be_consistent_with_current_node_public_keys(
-            LocalCspVault::builder().build_into_arc(),
+            LocalCspVault::builder_for_test().build_into_arc(),
         );
     }
 
     #[test]
     fn should_retrieve_timestamp_of_generated_idkg_public_key() {
-        let vault = LocalCspVault::builder()
+        let vault = LocalCspVault::builder_for_test()
             .with_time_source(genesis_time_source())
             .build_into_arc();
         test_utils::public_key_store::should_retrieve_timestamp_of_generated_idkg_public_key(
@@ -75,7 +75,7 @@ mod current_node_public_keys_with_timestamps {
     #[test]
     fn should_not_retrieve_timestamps_of_other_generated_keys_because_they_are_not_set_yet() {
         test_utils::public_key_store::should_not_retrieve_timestamps_of_other_generated_keys_because_they_are_not_set_yet(
-            LocalCspVault::builder().build_into_arc(),
+            LocalCspVault::builder_for_test().build_into_arc(),
         );
     }
 
@@ -107,7 +107,7 @@ mod current_node_public_keys_with_timestamps {
         public_key_store
             .expect_idkg_dealing_encryption_pubkeys()
             .return_const(vec![public_key_with_key_value(4)]);
-        let vault = LocalCspVault::builder()
+        let vault = LocalCspVault::builder_for_test()
             .with_public_key_store(public_key_store)
             .build();
 

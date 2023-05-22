@@ -49,7 +49,7 @@ mod gen_node_siging_key_pair_tests {
 
     #[test]
     fn should_fail_with_internal_error_if_node_signing_public_key_already_set() {
-        let csp = Csp::builder().build();
+        let csp = Csp::builder_for_test().build();
 
         assert!(csp.gen_node_signing_key_pair().is_ok());
         let result = csp.gen_node_signing_key_pair();
@@ -69,9 +69,9 @@ mod gen_node_siging_key_pair_tests {
     fn should_not_panic_upon_duplicate_key() {
         let duplicated_key_id = KeyId::from([42; 32]);
         use crate::LocalCspVault;
-        let csp = Csp::builder()
+        let csp = Csp::builder_for_test()
             .with_vault(
-                LocalCspVault::builder()
+                LocalCspVault::builder_for_test()
                     .with_mock_stores()
                     .with_node_secret_key_store(
                         secret_key_store_with_duplicated_key_id_error_on_insert(duplicated_key_id),
@@ -115,9 +115,9 @@ mod gen_key_pair_with_pop_tests {
     fn should_not_panic_upon_duplicate_key() {
         let duplicated_key_id = KeyId::from([42; 32]);
         use crate::LocalCspVault;
-        let csp = Csp::builder()
+        let csp = Csp::builder_for_test()
             .with_vault(
-                LocalCspVault::builder()
+                LocalCspVault::builder_for_test()
                     .with_mock_stores()
                     .with_node_secret_key_store(
                         secret_key_store_with_duplicated_key_id_error_on_insert(duplicated_key_id),
@@ -133,7 +133,7 @@ mod gen_key_pair_with_pop_tests {
 
     #[test]
     fn should_fail_with_internal_error_if_committee_signing_public_key_already_set() {
-        let csp = Csp::builder().build();
+        let csp = Csp::builder_for_test().build();
 
         assert!(csp.gen_committee_signing_key_pair().is_ok());
 
@@ -172,9 +172,9 @@ mod idkg_create_mega_key_pair_tests {
     fn should_fail_upon_duplicate_key() {
         let duplicated_key_id = KeyId::from([42; 32]);
         use crate::LocalCspVault;
-        let csp = Csp::builder()
+        let csp = Csp::builder_for_test()
             .with_vault(
-                LocalCspVault::builder()
+                LocalCspVault::builder_for_test()
                     .with_mock_stores()
                     .with_node_secret_key_store(
                         secret_key_store_with_duplicated_key_id_error_on_insert(duplicated_key_id),
@@ -194,9 +194,9 @@ mod idkg_create_mega_key_pair_tests {
     #[test]
     fn should_handle_serialization_failure_upon_insert() {
         use crate::LocalCspVault;
-        let csp = Csp::builder()
+        let csp = Csp::builder_for_test()
             .with_vault(
-                LocalCspVault::builder()
+                LocalCspVault::builder_for_test()
                     .with_mock_stores()
                     .with_node_secret_key_store(
                         secret_key_store_with_serialization_error_on_insert(),
@@ -217,9 +217,9 @@ mod idkg_create_mega_key_pair_tests {
     #[test]
     fn should_handle_io_error_upon_insert() {
         use crate::LocalCspVault;
-        let csp = Csp::builder()
+        let csp = Csp::builder_for_test()
             .with_vault(
-                LocalCspVault::builder()
+                LocalCspVault::builder_for_test()
                     .with_mock_stores()
                     .with_node_secret_key_store(secret_key_store_with_io_error_on_insert())
                     .build(),
@@ -289,7 +289,7 @@ mod tls {
 
     #[test]
     fn should_return_self_signed_certificate() {
-        let csp = Csp::builder().build();
+        let csp = Csp::builder_for_test().build();
 
         let cert = csp
             .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
@@ -303,7 +303,7 @@ mod tls {
 
     #[test]
     fn should_not_set_subject_alt_name() {
-        let csp = Csp::builder().build();
+        let csp = Csp::builder_for_test().build();
 
         let cert = csp
             .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
@@ -318,9 +318,9 @@ mod tls {
     fn should_not_panic_if_secret_key_insertion_yields_duplicate_error() {
         let duplicated_key_id = KeyId::from([42; 32]);
         use crate::LocalCspVault;
-        let csp = Csp::builder()
+        let csp = Csp::builder_for_test()
             .with_vault(
-                LocalCspVault::builder()
+                LocalCspVault::builder_for_test()
                     .with_mock_stores()
                     .with_node_secret_key_store(
                         secret_key_store_with_duplicated_key_id_error_on_insert(duplicated_key_id),
@@ -336,7 +336,7 @@ mod tls {
 
     #[test]
     fn should_return_der_encoded_self_signed_certificate() {
-        let csp = Csp::builder().build();
+        let csp = Csp::builder_for_test().build();
 
         let cert = csp
             .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
@@ -350,7 +350,7 @@ mod tls {
 
     #[test]
     fn should_set_cert_subject_cn_as_node_id() {
-        let csp = Csp::builder().build();
+        let csp = Csp::builder_for_test().build();
 
         let cert = csp
             .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
@@ -365,7 +365,7 @@ mod tls {
 
     #[test]
     fn should_use_stable_node_id_string_representation_as_subject_cn() {
-        let csp = Csp::builder().build();
+        let csp = Csp::builder_for_test().build();
 
         let cert = csp
             .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
@@ -377,7 +377,7 @@ mod tls {
 
     #[test]
     fn should_set_cert_issuer_cn_as_node_id() {
-        let csp = Csp::builder().build();
+        let csp = Csp::builder_for_test().build();
 
         let cert = csp
             .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
@@ -395,7 +395,7 @@ mod tls {
 
     #[test]
     fn should_not_set_cert_subject_alt_name() {
-        let csp = Csp::builder().build();
+        let csp = Csp::builder_for_test().build();
 
         let cert = csp
             .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
@@ -434,7 +434,7 @@ mod tls {
 
     #[test]
     fn should_set_cert_not_after_correctly() {
-        let csp = Csp::builder().build();
+        let csp = Csp::builder_for_test().build();
         let not_after = NOT_AFTER;
 
         let cert = csp
@@ -446,7 +446,7 @@ mod tls {
 
     #[test]
     fn should_panic_on_invalid_not_after_date() {
-        let csp = Csp::builder().build();
+        let csp = Csp::builder_for_test().build();
         let invalid_not_after = "invalid_not_after_date";
 
         let result = csp.gen_tls_key_pair(node_test_id(NODE_1), invalid_not_after);
@@ -457,7 +457,7 @@ mod tls {
 
     #[test]
     fn should_panic_if_not_after_date_is_in_the_past() {
-        let csp = Csp::builder().build();
+        let csp = Csp::builder_for_test().build();
         let date_in_the_past = "20211004235959Z";
 
         let result = csp.gen_tls_key_pair(node_test_id(NODE_1), date_in_the_past);
@@ -468,7 +468,7 @@ mod tls {
 
     #[test]
     fn should_fail_with_internal_error_if_tls_public_key_certificate_already_set() {
-        let csp = Csp::builder().build();
+        let csp = Csp::builder_for_test().build();
 
         assert!(csp
             .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
@@ -496,9 +496,9 @@ mod tls {
 fn csp_seeded_with(seed: u64) -> Csp {
     use crate::LocalCspVault;
 
-    Csp::builder()
+    Csp::builder_for_test()
         .with_vault(
-            LocalCspVault::builder()
+            LocalCspVault::builder_for_test()
                 .with_rng(ChaCha20Rng::seed_from_u64(seed))
                 .build(),
         )
