@@ -201,7 +201,7 @@ pub struct NodeConfiguration {
     /// The principal id of the node operator that operates this node.
     pub node_operator_principal_id: Option<PrincipalId>,
 
-    /// If set, the specified secret key store will be used. Ohterwise, a new
+    /// If set, the specified secret key store will be used. Otherwise, a new
     /// one will be created when initializing the internet computer.
     ///
     /// Creating the secret key store ahead of time allows for the node id to be
@@ -212,6 +212,9 @@ pub struct NodeConfiguration {
     /// directory chosen by ic-prep.
     #[serde(skip_serializing, skip_deserializing)]
     pub secret_key_store: Option<NodeSecretKeyStore>,
+
+    /// The SEV-SNP chip_identifier for this node.
+    pub chip_id: Vec<u8>,
 }
 
 #[derive(Error, Debug)]
@@ -388,6 +391,7 @@ mod node_configuration {
             p2p_addr: "org.internetcomputer.p2p1://1.2.3.4:1234".parse().unwrap(),
             node_operator_principal_id: None,
             secret_key_store: None,
+            chip_id: vec![],
         };
 
         let got = pbNodeRecord::try_from(node_configuration).unwrap();

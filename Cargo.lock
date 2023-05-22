@@ -8099,6 +8099,7 @@ dependencies = [
  "chrono",
  "clap 3.2.23",
  "fs_extra",
+ "hex",
  "ic-config",
  "ic-constants",
  "ic-crypto",

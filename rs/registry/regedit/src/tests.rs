@@ -134,6 +134,7 @@ pub fn run_ic_prep() -> (TempDir, IcPrepStateDir) {
                 .expect("can't fail"),
             node_operator_principal_id: None,
             secret_key_store: None,
+            chip_id: vec![],
         },
     );
 

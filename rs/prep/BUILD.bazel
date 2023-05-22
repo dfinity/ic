@@ -28,6 +28,7 @@ DEPENDENCIES = [
     "@crate_index//:chrono",
     "@crate_index//:clap",
     "@crate_index//:fs_extra",
+    "@crate_index//:hex",
     "@crate_index//:json5",
     "@crate_index//:maplit",
     "@crate_index//:openssl",
