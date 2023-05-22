@@ -189,7 +189,7 @@ mod create_transcript {
 
     #[test]
     fn should_fail_create_transcript_with_disallowed_dealer() {
-        let subnet_size = thread_rng().gen_range(1..10);
+        let subnet_size = thread_rng().gen_range(2..10);
         let env = CanisterThresholdSigTestEnvironment::new(subnet_size);
         let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
         let signed_dealings = create_and_verify_signed_dealings(&params, &env.crypto_components);
