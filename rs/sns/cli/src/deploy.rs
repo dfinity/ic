@@ -25,7 +25,9 @@ use anyhow::anyhow;
 #[cfg(test)]
 use std::io::BufReader;
 
-use crate::{call_dfx, get_identity, hex_encode_candid, DeployArgs, DeployTestflightArgs};
+use crate::{
+    call_dfx, call_dfx_or_panic, get_identity, hex_encode_candid, DeployArgs, DeployTestflightArgs,
+};
 
 /// If SNS canisters have already been created, return their canister IDs, else create the
 /// SNS canisters and return their canister IDs.
@@ -72,7 +74,7 @@ fn create_canisters(
     println!("Creating SNS canisters...");
     let cycles = format!("{}", initial_cycles_per_canister.unwrap_or_default());
 
-    call_dfx(&[
+    call_dfx_or_panic(&[
         "canister",
         "--network",
         network,
@@ -534,7 +536,7 @@ impl DirectSnsDeployerForTests {
     /// Call Governance's `get_nervous_system_parameters` method and print the result
     fn print_nervous_system_parameters(&self) {
         println!("Governance Nervous System Parameters:");
-        call_dfx(&[
+        call_dfx_or_panic(&[
             "canister",
             "--network",
             &self.network,
@@ -548,7 +550,7 @@ impl DirectSnsDeployerForTests {
     /// Call the Ledger's `icrc1_metadata` method and print the result
     fn print_ledger_metadata(&self) {
         println!("Ledger metadata:");
-        call_dfx(&[
+        call_dfx_or_panic(&[
             "canister",
             "--network",
             &self.network,
@@ -562,7 +564,7 @@ impl DirectSnsDeployerForTests {
     /// Call the Ledger's `symbol` method and print the result
     fn print_token_symbol(&self) {
         println!("Ledger token symbol:");
-        call_dfx(&[
+        call_dfx_or_panic(&[
             "canister",
             "--network",
             &self.network,
@@ -576,7 +578,7 @@ impl DirectSnsDeployerForTests {
     /// Call the Ledger's `name` method and print the result
     fn print_token_name(&self) {
         println!("Ledger token name:");
-        call_dfx(&[
+        call_dfx_or_panic(&[
             "canister",
             "--network",
             &self.network,
@@ -683,7 +685,7 @@ impl DirectSnsDeployerForTests {
 
     /// Remove `controller` as a controller of the canister given by `canister_name`
     fn remove_controller(&self, controller: PrincipalId, canister_name: &str) {
-        call_dfx(&[
+        call_dfx_or_panic(&[
             "canister",
             "--network",
             &self.network,
@@ -737,7 +739,7 @@ impl DirectSnsDeployerForTests {
     fn install_canister(&self, sns_canister_name: &str, wasm_name: &str, init_args: &str) {
         let mut wasm = self.wasms_dir.clone();
         wasm.push(format!("{}.wasm", wasm_name));
-        call_dfx(&[
+        call_dfx_or_panic(&[
             "canister",
             "--network",
             &self.network,
