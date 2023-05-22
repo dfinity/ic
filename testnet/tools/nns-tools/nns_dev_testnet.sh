@@ -126,7 +126,7 @@ step 5 "Configure SNS-WASMs" || time (
     dfx -q canister --network $NNS_URL call qaa6y-5yaaa-aaaaa-aaafa-cai get_sns_subnet_ids '(record {})'
 
     echo "Currently allowed principals?"
-    dfx-q canister --network $NNS_URL call qaa6y-5yaaa-aaaaa-aaafa-cai get_allowed_principals '(record {})'
+    dfx -q canister --network $NNS_URL call qaa6y-5yaaa-aaaaa-aaafa-cai get_allowed_principals '(record {})'
 
 )
 
