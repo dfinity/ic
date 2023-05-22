@@ -1,5 +1,5 @@
 {
-  "checksum": "ab80b814e81e0f34b3bede1529dc3855eb18e6f5dd5fe7ca547337e23d1a7b3c",
+  "checksum": "6ee9224073d1c20dd9523a8a061a5500f3716a0c62b19612a3da665af44d9c13",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -13766,7 +13766,7 @@
               "target": "wsl"
             },
             {
-              "id": "wycheproof 0.4.0",
+              "id": "wycheproof 0.5.0",
               "target": "wycheproof"
             },
             {
@@ -54630,13 +54630,13 @@
       },
       "license": "MIT"
     },
-    "wycheproof 0.4.0": {
+    "wycheproof 0.5.0": {
       "name": "wycheproof",
-      "version": "0.4.0",
+      "version": "0.5.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/wycheproof/0.4.0/download",
-          "sha256": "183c789620c674b79dac33cd3aadb6c8006b66cba6a680402235aaebc743e3df"
+          "url": "https://crates.io/api/v1/crates/wycheproof/0.5.0/download",
+          "sha256": "ccaef718f69c19f7f66faacc10f747180ceb4883a53c35548be4cac4cec1591c"
         }
       },
       "targets": [
@@ -54679,8 +54679,8 @@
           ],
           "selects": {}
         },
-        "edition": "2018",
-        "version": "0.4.0"
+        "edition": "2021",
+        "version": "0.5.0"
       },
       "license": "Apache-2.0"
     },

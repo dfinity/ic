@@ -19,9 +19,9 @@ fn should_pass_wycheproof_test_vectors() {
         };
 
         for test in &test_group.tests {
-            let sig = match types::SignatureBytes::try_from(test.sig.clone()).ok() {
+            let sig = match types::SignatureBytes::try_from(test.sig.to_vec()).ok() {
                 None => {
-                    assert!(test.result.must_fail() || test.flags.contains(&TestFlag::SigSize));
+                    assert!(test.result.must_fail());
                     continue;
                 }
                 Some(sig) => sig,

@@ -17,4 +17,4 @@ ic-crypto-getrandom-for-wasm = { path = "../getrandom_for_wasm" }
 
 [dev-dependencies]
 hex = "0.4"
-wycheproof = "0.4"
+wycheproof = "0.5"

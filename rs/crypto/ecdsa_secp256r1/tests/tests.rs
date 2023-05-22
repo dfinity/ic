@@ -17,8 +17,8 @@ fn should_pass_wycheproof_ecdsa_secp256r1_verification_tests() -> Result<(), Key
 
             if accepted {
                 assert_eq!(test.result, wycheproof::TestResult::Valid);
-            } else if test.result != wycheproof::TestResult::Invalid {
-                assert!(test.flags.contains(&TestFlag::SigSize));
+            } else {
+                assert_eq!(test.result, wycheproof::TestResult::Invalid);
             }
         }
     }

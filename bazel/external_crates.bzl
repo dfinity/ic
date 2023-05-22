@@ -1237,7 +1237,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^0.1.0",
             ),
             "wycheproof": crate.spec(
-                version = "^0.4",
+                version = "^0.5",
             ),
             "x509-parser": crate.spec(
                 version = "^0.12.0",

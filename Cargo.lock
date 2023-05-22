@@ -17482,9 +17482,9 @@ checksum = "f8dab7ac864710bdea6594becbea5b5050333cf34fefb0dc319567eb347950d4"
 
 [[package]]
 name = "wycheproof"
-version = "0.4.0"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "183c789620c674b79dac33cd3aadb6c8006b66cba6a680402235aaebc743e3df"
+checksum = "ccaef718f69c19f7f66faacc10f747180ceb4883a53c35548be4cac4cec1591c"
 dependencies = [
  "base64 0.13.1",
  "hex",
