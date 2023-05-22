@@ -221,12 +221,14 @@ pub fn get_resource_request_for_universal_vm(
 }
 
 pub fn allocate_resources(farm: &Farm, req: &ResourceRequest) -> FarmResult<ResourceGroup> {
-    let group_name = &req.group_name;
-    let mut res_group = ResourceGroup::new(group_name.clone());
+    let group_name = req.group_name.clone();
+    // Create VMs in parallel via Farm.
+    let mut threads = vec![];
     for vm_config in req.vm_configs.iter() {
-        let name = vm_config.name.clone();
+        let farm_cloned = farm.clone();
+        let vm_name = vm_config.name.clone();
         let create_vm_request = CreateVmRequest::new(
-            name.clone(),
+            vm_name.clone(),
             VmType::Production,
             vm_config.vcpus,
             vm_config.memory_kibibytes,
@@ -240,13 +242,25 @@ pub fn allocate_resources(farm: &Farm, req: &ResourceRequest) -> FarmResult<Reso
             vm_config.vm_allocation.clone(),
             vm_config.required_host_features.clone(),
         );
-
-        let created_vm = farm.create_vm(group_name, create_vm_request)?;
+        let group_name = group_name.clone();
+        // Spin up another thread
+        threads.push(std::thread::spawn(move || {
+            (
+                vm_name,
+                farm_cloned.create_vm(&group_name, create_vm_request),
+            )
+        }));
+    }
+    let mut res_group = ResourceGroup::new(group_name.clone());
+    for thread in threads {
+        let (vm_name, created_vm) = thread
+            .join()
+            .expect("Couldn't join on the associated thread");
         res_group.add_vm(AllocatedVm {
-            name,
+            name: vm_name,
             group_name: group_name.clone(),
-            ipv6: created_vm.ipv6,
-        });
+            ipv6: created_vm?.ipv6,
+        })
     }
     Ok(res_group)
 }
