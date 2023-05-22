@@ -116,6 +116,9 @@ struct Cli {
     #[arg(long)]
     cloudflare_api_key: String,
 
+    #[arg(long, default_value = "60")]
+    peek_sleep_sec: u64,
+
     #[arg(long, default_value = "127.0.0.1:9090")]
     metrics_addr: SocketAddr,
 }
@@ -456,11 +459,11 @@ async fn main() -> Result<(), Error> {
                 if let Err(err) = peeker.peek().await {
                     match err {
                         PeekError::NoTasksAvailable => {
-                            sleep(Duration::from_secs(1)).await;
+                            sleep(Duration::from_secs(cli.peek_sleep_sec)).await;
                             continue;
                         }
                         PeekError::UnexpectedError(_) => {
-                            sleep(Duration::from_secs(1)).await;
+                            sleep(Duration::from_secs(10)).await;
                             continue;
                         }
                     }
@@ -469,11 +472,11 @@ async fn main() -> Result<(), Error> {
                 let (id, task) = match dispenser.dispense().await {
                     Ok((id, task)) => (id, task),
                     Err(DispenseError::NoTasksAvailable) => {
-                        sleep(Duration::from_secs(1)).await;
+                        sleep(Duration::from_secs(cli.peek_sleep_sec)).await;
                         continue;
                     }
                     Err(DispenseError::UnexpectedError(_)) => {
-                        sleep(Duration::from_secs(1)).await;
+                        sleep(Duration::from_secs(10)).await;
                         continue;
                     }
                 };
