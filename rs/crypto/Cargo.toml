@@ -118,6 +118,10 @@ name = "threshold_sig"
 harness = false
 
 [[bench]]
+name = "idkg"
+harness = false
+
+[[bench]]
 name = "ni_dkg"
 harness = false
 
