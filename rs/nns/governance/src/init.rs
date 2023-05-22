@@ -90,73 +90,70 @@ impl GovernanceCanisterInitPayloadBuilder {
             TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
             TEST_NEURON_3_OWNER_PRINCIPAL,
         };
-        let neuron_id = NeuronIdProto::from(self.new_neuron_id());
-        let subaccount = self.make_subaccount().into();
-        assert_eq!(
-            self.proto.neurons.insert(
-                neuron_id.id,
-                Neuron {
-                    id: Some(neuron_id),
-                    controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
-                    dissolve_state: Some(DissolveState::DissolveDelaySeconds(
-                        TWELVE_MONTHS_SECONDS
-                    )),
-                    cached_neuron_stake_e8s: 1_000_000_000, /* invariant: part of
-                                                             * TEST_NEURON_TOTAL_STAKE_E8S */
-                    account: subaccount,
-                    not_for_profit: true,
-                    ..Default::default()
-                }
-            ),
-            None,
-            "There is more than one neuron with the same id."
-        );
-        let neuron_id = NeuronIdProto::from(self.new_neuron_id());
-        let subaccount = self.make_subaccount().into();
-        assert_eq!(
-            self.proto.neurons.insert(
-                neuron_id.id,
-                Neuron {
-                    id: Some(neuron_id),
-                    controller: Some(*TEST_NEURON_2_OWNER_PRINCIPAL),
-                    dissolve_state: Some(DissolveState::DissolveDelaySeconds(
-                        TWELVE_MONTHS_SECONDS
-                    )),
-                    cached_neuron_stake_e8s: 100_000_000, /* invariant: part of
-                                                           * TEST_NEURON_TOTAL_STAKE_E8S */
-                    created_timestamp_seconds: 1,
-                    aging_since_timestamp_seconds: 1,
-                    account: subaccount,
-                    not_for_profit: false,
-                    ..Default::default()
-                }
-            ),
-            None,
-            "There is more than one neuron with the same id."
-        );
-        let neuron_id = NeuronIdProto::from(self.new_neuron_id());
-        let subaccount = self.make_subaccount().into();
-        assert_eq!(
-            self.proto.neurons.insert(
-                neuron_id.id,
-                Neuron {
-                    id: Some(neuron_id),
-                    controller: Some(*TEST_NEURON_3_OWNER_PRINCIPAL),
-                    dissolve_state: Some(DissolveState::DissolveDelaySeconds(
-                        TWELVE_MONTHS_SECONDS
-                    )),
-                    cached_neuron_stake_e8s: 10_000_000, /* invariant: part of
-                                                          * TEST_NEURON_TOTAL_STAKE_E8S */
-                    created_timestamp_seconds: 10,
-                    aging_since_timestamp_seconds: 10,
-                    account: subaccount,
-                    not_for_profit: false,
-                    ..Default::default()
-                }
-            ),
-            None,
-            "There is more than one neuron with the same id."
-        );
+
+        let neuron1 = {
+            let neuron_id = NeuronIdProto::from(self.new_neuron_id());
+            let subaccount = self.make_subaccount().into();
+            Neuron {
+                id: Some(neuron_id),
+                controller: Some(*TEST_NEURON_1_OWNER_PRINCIPAL),
+                dissolve_state: Some(DissolveState::DissolveDelaySeconds(TWELVE_MONTHS_SECONDS)),
+                cached_neuron_stake_e8s: 1_000_000_000, /* invariant: part of
+                                                         * TEST_NEURON_TOTAL_STAKE_E8S */
+                account: subaccount,
+                not_for_profit: true,
+                ..Default::default()
+            }
+        };
+
+        let neuron2 = {
+            let neuron_id = NeuronIdProto::from(self.new_neuron_id());
+            let subaccount = self.make_subaccount().into();
+            Neuron {
+                id: Some(neuron_id),
+                controller: Some(*TEST_NEURON_2_OWNER_PRINCIPAL),
+                dissolve_state: Some(DissolveState::DissolveDelaySeconds(TWELVE_MONTHS_SECONDS)),
+                cached_neuron_stake_e8s: 100_000_000, /* invariant: part of
+                                                       * TEST_NEURON_TOTAL_STAKE_E8S */
+                created_timestamp_seconds: 1,
+                aging_since_timestamp_seconds: 1,
+                account: subaccount,
+                not_for_profit: false,
+                ..Default::default()
+            }
+        };
+
+        let neuron3 = {
+            let neuron_id = NeuronIdProto::from(self.new_neuron_id());
+            let subaccount = self.make_subaccount().into();
+            Neuron {
+                id: Some(neuron_id),
+                controller: Some(*TEST_NEURON_3_OWNER_PRINCIPAL),
+                dissolve_state: Some(DissolveState::DissolveDelaySeconds(TWELVE_MONTHS_SECONDS)),
+                cached_neuron_stake_e8s: 10_000_000, /* invariant: part of
+                                                      * TEST_NEURON_TOTAL_STAKE_E8S */
+                created_timestamp_seconds: 10,
+                aging_since_timestamp_seconds: 10,
+                account: subaccount,
+                not_for_profit: false,
+                ..Default::default()
+            }
+        };
+        self.with_additional_neurons(vec![neuron1, neuron2, neuron3])
+    }
+
+    /// Initializes the governance canister with the given neurons.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn with_additional_neurons(&mut self, neurons: Vec<Neuron>) -> &mut Self {
+        for neuron in neurons {
+            let id: u64 = neuron.id.as_ref().unwrap().id;
+            assert_eq!(
+                self.proto.neurons.insert(id, neuron),
+                None,
+                "There is more than one neuron with the same id ({:?}).",
+                id
+            );
+        }
         self
     }
 

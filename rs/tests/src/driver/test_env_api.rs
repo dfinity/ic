@@ -152,6 +152,7 @@ use ic_nervous_system_common_test_keys::TEST_USER1_PRINCIPAL;
 use ic_nns_constants::{
     CYCLES_MINTING_CANISTER_ID, GOVERNANCE_CANISTER_ID, LIFELINE_CANISTER_ID, REGISTRY_CANISTER_ID,
 };
+use ic_nns_governance::pb::v1::Neuron;
 use ic_nns_init::read_initial_mutations_from_local_store_dir;
 use ic_nns_test_utils::{common::NnsInitPayloadsBuilder, itest_helpers::NnsCanisters};
 use ic_prep_lib::prep_state_directory::IcPrepStateDir;
@@ -1336,6 +1337,7 @@ pub trait NnsInstallationExt {
 pub struct NnsCustomizations {
     /// Summarizes the custom parameters that a newly installed NNS should have.
     pub ledger_balances: Option<HashMap<AccountIdentifier, Tokens>>,
+    pub neurons: Option<Vec<Neuron>>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -1393,6 +1395,7 @@ where
             true,
             false,
             customizations.ledger_balances,
+            customizations.neurons,
         );
         Ok(())
     }
@@ -1430,7 +1433,7 @@ where
         };
         info!(log, "Wait for node reporting healthy status");
         self.await_status_is_healthy().unwrap();
-        install_nns_canisters(&log, url, &prep_dir, true, true, None);
+        install_nns_canisters(&log, url, &prep_dir, true, true, None, None);
         Ok(())
     }
 }
@@ -1794,6 +1797,7 @@ pub fn install_nns_canisters(
     nns_test_neurons_present: bool,
     install_at_ids: bool,
     ledger_balances: Option<HashMap<AccountIdentifier, Tokens>>,
+    neurons: Option<Vec<Neuron>>,
 ) {
     let rt = Rt::new().expect("Could not create tokio runtime.");
     info!(
@@ -1807,6 +1811,11 @@ pub fn install_nns_canisters(
                 ledger_balances
             } else {
                 HashMap::new()
+            };
+            let neurons = if let Some(neurons) = neurons {
+                neurons
+            } else {
+                Vec::new()
             };
             ledger_balances.insert(
                 LIFELINE_CANISTER_ID.get().into(),
@@ -1838,6 +1847,7 @@ pub fn install_nns_canisters(
 
             init_payloads
                 .with_test_neurons()
+                .with_additional_neurons(neurons)
                 .with_ledger_init_state(ledger_init_payload);
         }
         let registry_local_store = ic_prep_state_dir.registry_local_store_path();

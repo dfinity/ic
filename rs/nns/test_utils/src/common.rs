@@ -10,7 +10,10 @@ use ic_nns_common::init::{LifelineCanisterInitPayload, LifelineCanisterInitPaylo
 use ic_nns_constants::{
     ALL_NNS_CANISTER_IDS, GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, ROOT_CANISTER_ID,
 };
-use ic_nns_governance::{init::GovernanceCanisterInitPayloadBuilder, pb::v1::Governance};
+use ic_nns_governance::{
+    init::GovernanceCanisterInitPayloadBuilder,
+    pb::v1::{Governance, Neuron},
+};
 use ic_nns_gtc::{init::GenesisTokenCanisterInitPayloadBuilder, pb::v1::Gtc};
 use ic_nns_gtc_accounts::{ECT_ACCOUNTS, SEED_ROUND_ACCOUNTS};
 use ic_nns_handler_root::init::{RootCanisterInitPayload, RootCanisterInitPayloadBuilder};
@@ -123,6 +126,11 @@ impl NnsInitPayloadsBuilder {
 
     pub fn with_test_neurons(&mut self) -> &mut Self {
         self.governance.with_test_neurons();
+        self
+    }
+
+    pub fn with_additional_neurons(&mut self, neurons: Vec<Neuron>) -> &mut Self {
+        self.governance.with_additional_neurons(neurons);
         self
     }
 
