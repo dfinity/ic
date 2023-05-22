@@ -6780,7 +6780,6 @@ dependencies = [
  "ic-icrc1-test-utils",
  "ic-ledger-canister-core",
  "ic-ledger-core",
- "ic-state-machine-tests",
  "icrc-ledger-types",
  "leb128",
  "num-traits",
