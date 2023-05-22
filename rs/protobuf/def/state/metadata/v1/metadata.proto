@@ -12,14 +12,10 @@ import "google/protobuf/wrappers.proto";
 
 message Time { uint64 time_nanos = 1; }
 
-message NodeTopology {
-  string ip_address = 1;
-  uint32 http_port = 2;
-}
 
 message SubnetTopologyEntry {
   types.v1.NodeId node_id = 1;
-  NodeTopology node_topology = 2;
+  reserved 2;
 }
 
 message SubnetTopology {

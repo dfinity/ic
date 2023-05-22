@@ -20,7 +20,7 @@ pub use canister_state::{
     NumWasmPages, SchedulerState,
 };
 pub use metadata_state::{
-    IngressHistoryState, NetworkTopology, NodeTopology, Stream, SubnetTopology, SystemMetadata,
+    IngressHistoryState, NetworkTopology, Stream, SubnetTopology, SystemMetadata,
 };
 pub use page_map::{PageIndex, PageMap};
 pub use replicated_state::{InputQueueType, NextInputQueue, ReplicatedState, StateError};

@@ -340,7 +340,6 @@ impl From<&SubnetTopology> for pb_metadata::SubnetTopology {
                 .iter()
                 .map(|node_id| pb_metadata::SubnetTopologyEntry {
                     node_id: Some(node_id_into_protobuf(*node_id)),
-                    node_topology: Some(pb_metadata::NodeTopology::default()),
                 })
                 .collect(),
             subnet_type: i32::from(item.subnet_type),
@@ -375,31 +374,6 @@ impl TryFrom<pb_metadata::SubnetTopology> for SubnetTopology {
                 .map(SubnetFeatures::from)
                 .unwrap_or_default(),
             ecdsa_keys_held,
-        })
-    }
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct NodeTopology {
-    pub ip_address: String,
-    pub http_port: u16,
-}
-
-impl From<&NodeTopology> for pb_metadata::NodeTopology {
-    fn from(item: &NodeTopology) -> Self {
-        Self {
-            ip_address: item.ip_address.clone(),
-            http_port: item.http_port as u32,
-        }
-    }
-}
-
-impl TryFrom<pb_metadata::NodeTopology> for NodeTopology {
-    type Error = ProxyDecodeError;
-    fn try_from(item: pb_metadata::NodeTopology) -> Result<Self, Self::Error> {
-        Ok(Self {
-            ip_address: item.ip_address,
-            http_port: item.http_port as u16,
         })
     }
 }
