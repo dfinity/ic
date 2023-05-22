@@ -266,6 +266,9 @@ pub fn workload_static_testnet_sale_bot(env: TestEnv) {
 ///
 /// This function should be the one used "by default" for most tests, to ensure
 /// that the tests are using realistic parameters.
+///
+/// The NNS will be initialized with only the "test" neurons.
+/// (See [`ic_nns_governance::init::GovernanceCanisterInitPayloadBuilder::with_test_neurons`].)
 pub fn setup_with_oc_init_payload(
     env: TestEnv,
     sale_participants: Vec<SaleParticipant>,
@@ -276,6 +279,7 @@ pub fn setup_with_oc_init_payload(
     setup(
         env,
         sale_participants,
+        vec![], // no neurons
         sns_init_payload,
         canister_wasm_strategy,
         fast_test_setup,
@@ -285,6 +289,7 @@ pub fn setup_with_oc_init_payload(
 pub fn setup(
     env: TestEnv,
     sale_participants: Vec<SaleParticipant>,
+    neurons: Vec<ic_nns_governance::pb::v1::Neuron>, // NNS Neurons to add in addition to the "test" neurons
     sns_init_payload: SnsInitPayload,
     canister_wasm_strategy: NnsCanisterWasmStrategy,
     fast_test_setup: bool,
@@ -336,6 +341,7 @@ pub fn setup(
     }
     let nns_customizations = NnsCustomizations {
         ledger_balances: Some(ledger_balances),
+        neurons: Some(neurons),
     };
 
     // Install NNS with ledger customizations

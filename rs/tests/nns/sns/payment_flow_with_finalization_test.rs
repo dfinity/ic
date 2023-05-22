@@ -1,8 +1,14 @@
 use std::time::Duration;
 
 use anyhow::Result;
+use ic_nns_common::pb::v1::NeuronId;
+use ic_nns_governance::pb::v1::{neuron::DissolveState, Neuron};
 use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_tests::driver::test_env_api::NnsCanisterWasmStrategy;
+use icp_ledger::Subaccount;
+use rand::RngCore;
+use rand_chacha::rand_core::SeedableRng;
+use rand_chacha::ChaChaRng;
 use rust_decimal::prelude::ToPrimitive;
 
 use ic_nervous_system_common::{i2d, E8};
@@ -20,7 +26,9 @@ use ic_tests::sns_client::{
     SNS_SALE_PARAM_MIN_PARTICIPANT_ICP_E8S,
 };
 use ic_tests::systest;
-use ic_tests::util::block_on;
+use ic_tests::util::{block_on, generate_identity};
+
+const CF_CONTRIBUTION: u64 = 100 * E8;
 
 fn sale_params() -> Params {
     Params {
@@ -39,6 +47,34 @@ fn sale_params() -> Params {
     }
 }
 
+/// Deterministically generates a neuron that's joined the community fund (CF).
+/// As long as at least one neuron is in the CF, the CF will contribute to the SNS.
+fn nns_cf_neuron() -> Neuron {
+    const TWELVE_MONTHS_SECONDS: u64 = 12 * 30 * 24 * 60 * 60;
+
+    let (_keypair, _pubkey, principal) = generate_identity(2000);
+
+    let mut rng = ChaChaRng::seed_from_u64(2000_u64);
+
+    let id = Some(NeuronId { id: rng.next_u64() });
+    let account = {
+        let mut bytes = [0u8; 32];
+        rng.fill_bytes(&mut bytes);
+        Subaccount(bytes)
+    };
+    Neuron {
+        id,
+        account: account.into(),
+        maturity_e8s_equivalent: CF_CONTRIBUTION,
+        cached_neuron_stake_e8s: E8,
+        controller: Some(principal),
+        dissolve_state: Some(DissolveState::DissolveDelaySeconds(TWELVE_MONTHS_SECONDS)),
+        not_for_profit: false,
+        joined_community_fund_timestamp_seconds: Some(1000), // should be a long time ago
+        ..Default::default()
+    }
+}
+
 fn init_payload() -> SnsInitPayload {
     oc_sns_init_payload()
 }
@@ -47,6 +83,7 @@ fn sns_setup_fast(env: TestEnv) {
     sns_deployment::setup(
         env,
         vec![],
+        vec![nns_cf_neuron()],
         init_payload(),
         NnsCanisterWasmStrategy::TakeBuiltFromSources,
         true,
@@ -55,9 +92,7 @@ fn sns_setup_fast(env: TestEnv) {
 
 fn initiate_token_swap_with_custom_parameters(env: TestEnv) {
     let params = sale_params();
-    // TODO: NNS1-2194: Add community fund investment and verify that it works as intended.
-    let community_fund_investment_e8s = 0;
-    initiate_token_swap(env, params, community_fund_investment_e8s);
+    initiate_token_swap(env, params, CF_CONTRIBUTION);
 }
 
 /// Creates ticket participants and has them contribute in such a way that they'll hit max_icp_e8s with min_participants.
@@ -73,10 +108,10 @@ fn multiple_ticket_participants(env: TestEnv) {
     let num_participants = params.min_participants as u64;
 
     // Calculate a value for `contribution_per_user` that will cause the icp
-    // raised by the swap to exactly equal `params.max_participant_icp_e8s`.
+    // raised by the swap to exactly equal `params.max_icp_e8s - CF_CONTRIBUTION`.
     let contribution_per_user = ic_tests::util::divide_perfectly(
-        "max_participant_icp_e8s",
-        params.max_participant_icp_e8s,
+        "max_icp_e8s",
+        params.max_icp_e8s - CF_CONTRIBUTION,
         num_participants,
     )
     .unwrap();
@@ -103,8 +138,8 @@ fn finalize_swap(env: TestEnv) {
 
     let expected_derived_swap_state = DerivedState {
         direct_participant_count: Some(params.min_participants as u64),
-        cf_participant_count: Some(0),
-        cf_neuron_count: Some(0),
+        cf_participant_count: Some(1),
+        cf_neuron_count: Some(1),
         buyer_total_icp_e8s: params.max_icp_e8s,
         sns_tokens_per_icp,
     };

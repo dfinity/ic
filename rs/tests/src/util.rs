@@ -15,6 +15,7 @@ use ic_agent::{
     agent::http_transport::ReqwestHttpReplicaV2Transport, Agent, AgentError, Identity, RequestId,
 };
 use ic_canister_client::{Agent as DeprecatedAgent, Sender};
+use ic_canister_client_sender::{ed25519_public_key_to_der, Ed25519KeyPair};
 use ic_config::ConfigOptional;
 use ic_constants::MAX_INGRESS_TTL;
 use ic_ic00_types::{CanisterStatusResult, EmptyBlob, Payload};
@@ -23,6 +24,7 @@ use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
 use ic_nns_test_utils::governance::upgrade_nns_canister_with_args_by_proposal;
 use ic_registry_subnet_type::SubnetType;
 use ic_rosetta_api::convert::to_arg;
+use ic_types::crypto::{AlgorithmId, UserPublicKey};
 use ic_types::{CanisterId, Cycles, PrincipalId};
 use ic_universal_canister::{
     call_args, wasm as universal_canister_argument_builder, UNIVERSAL_CANISTER_WASM,
@@ -35,6 +37,8 @@ use icp_ledger::{
 };
 use itertools::Itertools;
 use on_wire::FromWire;
+use rand::SeedableRng;
+use rand_chacha::ChaChaRng;
 use slog::{debug, info};
 use std::collections::BTreeMap;
 use std::net::{Ipv6Addr, SocketAddr, SocketAddrV6};
@@ -1488,4 +1492,16 @@ pub fn pad_all_lines_but_first(s: String, padding: usize) -> String {
         result.push_str(line);
     }
     result
+}
+
+pub fn generate_identity(seed: u64) -> (Ed25519KeyPair, UserPublicKey, PrincipalId) {
+    let mut rng = ChaChaRng::seed_from_u64(seed);
+    let keypair = Ed25519KeyPair::generate(&mut rng);
+    let pubkey = UserPublicKey {
+        key: keypair.public_key.to_vec(),
+        algorithm_id: AlgorithmId::Ed25519,
+    };
+    let principal =
+        PrincipalId::new_self_authenticating(&ed25519_public_key_to_der(pubkey.key.clone()));
+    (keypair, pubkey, principal)
 }
