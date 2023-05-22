@@ -6,19 +6,9 @@ pub struct Time {
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct NodeTopology {
-    #[prost(string, tag = "1")]
-    pub ip_address: ::prost::alloc::string::String,
-    #[prost(uint32, tag = "2")]
-    pub http_port: u32,
-}
-#[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct SubnetTopologyEntry {
     #[prost(message, optional, tag = "1")]
     pub node_id: ::core::option::Option<super::super::super::types::v1::NodeId>,
-    #[prost(message, optional, tag = "2")]
-    pub node_topology: ::core::option::Option<NodeTopology>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
