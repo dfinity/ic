@@ -7,9 +7,9 @@ use crate::{
     pool_common::PoolSection,
 };
 use ic_interfaces::{
-    artifact_manager::ProcessingResult,
     artifact_pool::{
-        ChangeResult, MutablePool, UnvalidatedArtifact, ValidatedArtifact, ValidatedPoolReader,
+        ChangeResult, MutablePool, ProcessingResult, UnvalidatedArtifact, ValidatedArtifact,
+        ValidatedPoolReader,
     },
     canister_http::{CanisterHttpChangeAction, CanisterHttpChangeSet, CanisterHttpPool},
     time_source::TimeSource,

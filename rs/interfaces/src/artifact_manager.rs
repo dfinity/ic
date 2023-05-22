@@ -1,6 +1,6 @@
 //! The traits in this file define the interface between the `p2p` and `artifact_manager` crates/packages.
 use crate::{
-    artifact_pool::{ArtifactPoolError, UnvalidatedArtifact},
+    artifact_pool::{ArtifactPoolError, ProcessingResult, UnvalidatedArtifact},
     time_source::TimeSource,
 };
 use derive_more::From;
@@ -130,17 +130,6 @@ pub trait ArtifactClient<Artifact: artifact::ArtifactKind>: Send + Sync {
         &self,
         artifact_id: &Artifact::Id,
     ) -> Box<dyn chunkable::Chunkable + Send + Sync>;
-}
-
-/// The result of a single 'process_changes' call can result in either:
-/// - new changes applied to the state. So 'process_changes' should be
-///   immediately called again.
-/// - no change applied and state was unchanged. So calling 'process_changes' is
-///   not immediately required.
-#[derive(Debug, PartialEq, Eq)]
-pub enum ProcessingResult {
-    StateChanged,
-    StateUnchanged,
 }
 
 /// An abstraction of processing changes for each artifact client.

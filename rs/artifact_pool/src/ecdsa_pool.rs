@@ -9,9 +9,9 @@
 
 use crate::metrics::{EcdsaPoolMetrics, POOL_TYPE_UNVALIDATED, POOL_TYPE_VALIDATED};
 use ic_config::artifact_pool::{ArtifactPoolConfig, PersistentPoolBackend};
-use ic_interfaces::artifact_manager::ProcessingResult;
 use ic_interfaces::artifact_pool::{
-    ChangeResult, IntoInner, MutablePool, UnvalidatedArtifact, ValidatedPoolReader,
+    ChangeResult, IntoInner, MutablePool, ProcessingResult, UnvalidatedArtifact,
+    ValidatedPoolReader,
 };
 use ic_interfaces::ecdsa::{
     EcdsaChangeAction, EcdsaChangeSet, EcdsaPool, EcdsaPoolSection, EcdsaPoolSectionOp,
