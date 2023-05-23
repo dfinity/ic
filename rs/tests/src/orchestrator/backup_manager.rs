@@ -207,7 +207,10 @@ pub fn test(env: TestEnv) {
     info!(log, "Start the backup process in a separate thread");
     let ic_backup_path = binaries_path.join("ic-backup");
     let mut command = Command::new(&ic_backup_path);
-    command.arg("--config-file").arg(&config_file);
+    command
+        .arg("--config-file")
+        .arg(&config_file)
+        .arg("--debug");
     info!(log, "Will execute: {:?}", command);
 
     let mut child = command
@@ -299,8 +302,8 @@ pub fn test(env: TestEnv) {
         .join(canister_id_hex)
         .join("vmemory_0.bin");
     assert!(memory_artifact_path.exists());
+    info!(log, "Modify memory file: {:?}", memory_artifact_path);
     modify_byte_in_file(memory_artifact_path).expect("Modifying a byte failed");
-    info!(log, "Modified memory file");
 
     let mut command = Command::new(&ic_backup_path);
     command
@@ -321,14 +324,18 @@ pub fn test(env: TestEnv) {
     info!(log, "Artifacts and states are moved to cold storage");
 
     let mut hash_mismatch = false;
-    for _ in 0..13 {
+    for i in 0..60 {
         info!(log, "Checking logs for hash mismatch...");
         if let Ok(dirs) = fs::read_dir(backup_dir.join("logs")) {
             for en in dirs {
+                info!(log, "DirEntry in logs: {:?}", en);
                 match en {
                     Ok(d) => {
                         let contents = fs::read_to_string(d.path())
                             .expect("Should have been able to read the log file");
+                        if i == 15 {
+                            println!("{}", contents);
+                        }
 
                         if contents.contains(DIVERGENCE_LOG_STR) {
                             hash_mismatch = true;
@@ -346,11 +353,12 @@ pub fn test(env: TestEnv) {
         }
         sleep_secs(10);
     }
-    assert!(hash_mismatch);
-    info!(log, "There was a divergence of the state");
 
     info!(log, "Kill child process");
     child.kill().expect("Error killing backup process");
+
+    assert!(hash_mismatch);
+    info!(log, "There was a divergence of the state");
 }
 
 fn some_checkpoint_dir(backup_dir: &Path, subnet_id: &SubnetId) -> Option<PathBuf> {
