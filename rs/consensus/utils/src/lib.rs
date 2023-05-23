@@ -379,7 +379,7 @@ pub fn get_block_hash_string(block: &Block) -> String {
 
 /// Helper function to lookup replica version, and log errors if any.
 pub fn lookup_replica_version(
-    registry_client: &dyn RegistryClient,
+    registry_client: &(impl RegistryClient + ?Sized),
     subnet_id: SubnetId,
     log: &ReplicaLogger,
     registry_version: RegistryVersion,
@@ -410,18 +410,14 @@ pub fn lookup_replica_version(
 /// version and the block height.
 pub fn is_upgrade_pending(
     height: Height,
-    registry_client: &dyn RegistryClient,
-    replica_config: &ReplicaConfig,
+    registry_client: &(impl RegistryClient + ?Sized),
+    subnet_id: SubnetId,
     log: &ReplicaLogger,
     pool: &PoolReader<'_>,
 ) -> Option<bool> {
     let registry_version = pool.registry_version(height)?;
-    let replica_version = lookup_replica_version(
-        registry_client,
-        replica_config.subnet_id,
-        log,
-        registry_version,
-    )?;
+    let replica_version =
+        lookup_replica_version(registry_client, subnet_id, log, registry_version)?;
 
     Some(replica_version != ReplicaVersion::default())
 }

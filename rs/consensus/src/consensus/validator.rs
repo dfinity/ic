@@ -3,13 +3,17 @@
 //! artifacts.
 
 use crate::{
-    consensus::{metrics::ValidatorMetrics, ConsensusMessageId},
+    consensus::{
+        metrics::ValidatorMetrics,
+        status::{self, Status},
+        ConsensusMessageId,
+    },
     dkg, ecdsa,
 };
 use ic_consensus_utils::{
     active_high_threshold_transcript, active_low_threshold_transcript,
     crypto::ConsensusCrypto,
-    find_lowest_ranked_proposals, is_time_to_make_block, lookup_replica_version,
+    find_lowest_ranked_proposals, is_time_to_make_block,
     membership::{Membership, MembershipError},
     pool_reader::PoolReader,
     RoundRobin,
@@ -38,11 +42,13 @@ use ic_types::{
     registry::RegistryClientError,
     replica_config::ReplicaConfig,
     signature::{MultiSignature, MultiSignatureShare, ThresholdSignatureShare},
-    Height, NodeId, NodeIndex, RegistryVersion, ReplicaVersion,
+    Height, NodeId, NodeIndex, RegistryVersion,
 };
-use std::collections::{BTreeMap, HashMap, HashSet};
-use std::sync::{Arc, RwLock};
-use std::time::Duration;
+use std::{
+    collections::{BTreeMap, HashMap, HashSet},
+    sync::{Arc, RwLock},
+    time::Duration,
+};
 
 /// The number of seconds spent in unvalidated pool, after which we start
 /// logging why we cannot validate an artifact.
@@ -933,29 +939,22 @@ impl Validator {
             return Err(PermanentError::CannotVerifyBlockHeightZero.into());
         }
 
-        // If the replica is upgrading, block payload should be empty.
-        // If that is the case, skip_empty_payload_validation becomes true.
-        let mut skip_empty_payload_validation = false;
-        match pool_reader
-            .registry_version(proposal.height())
-            .and_then(|registry_version| {
-                lookup_replica_version(
-                    self.registry_client.as_ref(),
-                    self.replica_config.subnet_id,
-                    &self.log,
-                    registry_version,
-                )
-            }) {
-            Some(replica_version) => {
-                if replica_version != ReplicaVersion::default() {
-                    let payload = proposal.as_ref().payload.as_ref();
-                    if !payload.is_summary() && !payload.is_empty() {
-                        return Err(PermanentError::NonEmptyPayloadPastUpgradePoint.into());
-                    }
-                    skip_empty_payload_validation = true;
-                }
+        let Some(status) = status::get_status(
+            proposal.height(),
+            self.registry_client.as_ref(),
+            self.replica_config.subnet_id,
+            pool_reader,
+            &self.log,
+        ) else {
+            return Err(TransientError::FailedToGetRegistryVersion.into());
+        };
+
+        // If the replica is halted, block payload should be empty.
+        if status == Status::Halting || status == Status::Halted {
+            let payload = proposal.as_ref().payload.as_ref();
+            if !payload.is_summary() && !payload.is_empty() {
+                return Err(PermanentError::NonEmptyPayloadPastUpgradePoint.into());
             }
-            None => return Err(TransientError::FailedToGetRegistryVersion.into()),
         }
 
         let parent = get_notarized_parent(pool_reader, proposal)?;
@@ -983,7 +982,9 @@ impl Validator {
             .into());
         }
 
-        if skip_empty_payload_validation {
+        // If the replica is halted, the block payload is empty so we can skip the rest of the
+        // validation.
+        if status == Status::Halting || status == Status::Halted {
             return Ok(());
         }
 
@@ -1642,16 +1643,20 @@ pub mod test {
         FastForwardTimeSource,
     };
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
-    use ic_types::consensus::{
-        CatchUpPackageShare, Finalization, FinalizationShare, HashedBlock, HashedRandomBeacon,
-        NotarizationShare, RandomTapeContent,
+    use ic_types::{
+        consensus::{
+            CatchUpPackageShare, Finalization, FinalizationShare, HashedBlock, HashedRandomBeacon,
+            NotarizationShare, RandomTapeContent,
+        },
+        crypto::{CombinedMultiSig, CombinedMultiSigOf, CryptoHash},
+        replica_config::ReplicaConfig,
+        signature::ThresholdSignature,
+        CryptoHashOfState, Time,
     };
-    use ic_types::crypto::{CombinedMultiSig, CombinedMultiSigOf, CryptoHash};
-    use ic_types::replica_config::ReplicaConfig;
-    use ic_types::signature::ThresholdSignature;
-    use ic_types::{CryptoHashOfState, Time};
-    use std::borrow::Borrow;
-    use std::sync::{Arc, RwLock};
+    use std::{
+        borrow::Borrow,
+        sync::{Arc, RwLock},
+    };
 
     pub fn assert_block_valid(results: &[ChangeAction], block: &BlockProposal) {
         match results.first() {
