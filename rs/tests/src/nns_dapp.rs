@@ -2,13 +2,16 @@ use crate::driver::{
     boundary_node::BoundaryNodeVm,
     test_env::TestEnv,
     test_env_api::{
-        HasPublicApiUrl, HasTopologySnapshot, HasWasm, IcNodeContainer, NnsCustomizations,
+        HasPublicApiUrl, HasTopologySnapshot, HasWasm, IcNodeContainer, IcNodeSnapshot,
+        NnsCustomizations,
     },
 };
 use crate::nns::set_authorized_subnetwork_list;
+use crate::sns_client::add_subnet_to_sns_deploy_whitelist;
 use crate::util::{block_on, create_canister, install_canister, runtime_from_url};
 use candid::Principal;
 use candid::{CandidType, Encode};
+use ic_base_types::SubnetId;
 use ic_ledger_core::Tokens;
 use ic_registry_subnet_type::SubnetType;
 use icp_ledger::AccountIdentifier;
@@ -19,6 +22,7 @@ use std::collections::HashMap;
 pub const INTERNET_IDENTITY_WASM: &str =
     "external/ii_test_canister/file/internet_identity_test.wasm";
 pub const NNS_DAPP_WASM: &str = "external/nns_dapp_canister/file/nns_dapp_canister.wasm";
+pub const SNS_AGGREGATOR_WASM: &str = "external/sns_aggregator/file/sns_aggregator_dev.wasm";
 
 /// Init and post_upgrade arguments for NNS frontend dapp.
 #[derive(Debug, Default, Eq, PartialEq, CandidType, Serialize, Deserialize)]
@@ -48,7 +52,44 @@ pub fn nns_dapp_customizations() -> NnsCustomizations {
     }
 }
 
-pub fn install_ii_and_nns_dapp(env: &TestEnv, boundary_node_name: &str) -> (Principal, Principal) {
+pub fn install_sns_aggregator(
+    env: &TestEnv,
+    boundary_node_name: &str,
+    sns_node: IcNodeSnapshot,
+) -> Principal {
+    let boundary_node = env
+        .get_deployed_boundary_node(boundary_node_name)
+        .unwrap()
+        .get_snapshot()
+        .unwrap();
+    let farm_url = boundary_node.get_playnet().unwrap();
+
+    let sns_agent = sns_node.build_default_agent();
+    let sns_aggregator_wasm = env.load_wasm(SNS_AGGREGATOR_WASM);
+    let logger = env.logger();
+    block_on(async move {
+        let sns_aggregator_canister_id =
+            create_canister(&sns_agent, sns_node.effective_canister_id()).await;
+        install_canister(
+            &sns_agent,
+            sns_aggregator_canister_id,
+            sns_aggregator_wasm.as_slice(),
+            Encode!(&()).unwrap(),
+        )
+        .await;
+        info!(
+            logger,
+            "SNS aggregator: https://{}.{}", sns_aggregator_canister_id, farm_url
+        );
+        sns_aggregator_canister_id
+    })
+}
+
+pub fn install_ii_and_nns_dapp(
+    env: &TestEnv,
+    boundary_node_name: &str,
+    sns_aggregator_canister_id: Option<Principal>,
+) -> (Principal, Principal) {
     let boundary_node = env
         .get_deployed_boundary_node(boundary_node_name)
         .unwrap()
@@ -83,7 +124,7 @@ pub fn install_ii_and_nns_dapp(env: &TestEnv, boundary_node_name: &str) -> (Prin
             ("OWN_CANISTER_ID".to_string(), nns_dapp_canister_id.to_string()),
             ("OWN_CANISTER_URL".to_string(), format!("https://{}.{}", nns_dapp_canister_id, farm_url)),
             ("ROBOTS".to_string(), "<meta name=\"robots\" content=\"noindex, nofollow\" />".to_string()),
-            ("SNS_AGGREGATOR_URL".to_string(), "".to_string()),
+            ("SNS_AGGREGATOR_URL".to_string(), sns_aggregator_canister_id.map(|s| format!("https://{}.{}", s, farm_url)).unwrap_or_else(|| "".to_string())),
             ("STATIC_HOST".to_string(), https_farm_url),
             ("WASM_CANISTER_ID".to_string(), "qaa6y-5yaaa-aaaaa-aaafa-cai".to_string())
         ];
@@ -122,5 +163,15 @@ pub fn set_authorized_subnets(env: &TestEnv) {
         set_authorized_subnetwork_list(&nns_runtime, None, app_subnet_ids)
             .await
             .unwrap();
+    });
+}
+
+pub fn set_sns_subnet(env: &TestEnv, subnet_id: SubnetId) {
+    let topology = env.topology_snapshot();
+    let nns_node = topology.root_subnet().nodes().next().unwrap();
+    let nns_runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
+
+    block_on(async move {
+        add_subnet_to_sns_deploy_whitelist(&nns_runtime, subnet_id).await;
     });
 }

@@ -1,19 +1,20 @@
-// Set up a testnet similar to the "small" testnet containing:
-// 1-node System and Application subnets, single unassigned node, single boundary node and a p8s (with grafana) VM.
+// Set up a testnet for SNS testing:
+// single 1-node System and two 1-node Application subnets, single unassigned node, single boundary node and a p8s (with grafana) VM.
 // All nodes use the following resources: 4 vCPUs, 24GiB of RAM and 50 GiB disk.
 //
-// In addition to the "small" testnet this testnet additionally installs the NNS
-// and the NNS and II frontend canisters.
+// In addition to these subnets, this testnet additionally installs the NNS canisters,
+// the NNS and II frontend canisters (on the NNS subnet),
+// and SNS aggregator canister (on the SNS subnet).
 //
 // You can setup this testnet by executing the following commands:
 //
 //   $ gitlab-ci/container/container-run.sh
-//   $ ict testnet small_nns -- --test_tmpdir=./small_nns
+//   $ ict testnet sns_testing -- --test_tmpdir=./sns_testing
 //
-// The --test_tmpdir=./small_nns will store the test output in the specified directory.
+// The --test_tmpdir=./sns_testing will store the test output in the specified directory.
 // This is useful to have access to in case you need to SSH into an IC node for example like:
 //
-//   $ ssh -i small_nns/_tmp/*/setup/ssh/authorized_priv_keys/admin admin@$ipv6
+//   $ ssh -i sns_testing/_tmp/*/setup/ssh/authorized_priv_keys/admin admin@$ipv6
 //
 // Note that you can get the $ipv6 address of the IC node by looking for a log line like:
 //
@@ -27,11 +28,11 @@
 // To get access to P8s and Grafana look for the following log lines:
 //
 //   Apr 11 15:33:58.903 INFO[rs/tests/src/driver/prometheus_vm.rs:168:0]
-//     Prometheus Web UI at http://prometheus.small_nns--1681227226065.testnet.farm.dfinity.systems
+//     Prometheus Web UI at http://prometheus.sns_testing--1681227226065.testnet.farm.dfinity.systems
 //   Apr 11 15:33:58.903 INFO[rs/tests/src/driver/prometheus_vm.rs:169:0]
-//     Grafana at http://grafana.small_nns--1681227226065.testnet.farm.dfinity.systems
+//     Grafana at http://grafana.sns_testing--1681227226065.testnet.farm.dfinity.systems
 //   Apr 11 15:33:58.903 INFO[rs/tests/src/driver/prometheus_vm.rs:170:0]
-//     IC Progress Clock at http://grafana.small_nns--1681227226065.testnet.farm.dfinity.systems/d/ic-progress-clock/ic-progress-clock?refresh=10s&from=now-5m&to=now
+//     IC Progress Clock at http://grafana.sns_testing--1681227226065.testnet.farm.dfinity.systems/d/ic-progress-clock/ic-progress-clock?refresh=10s&from=now-5m&to=now
 //
 // To access the NNS or II dapps look for the following log lines:
 //
@@ -51,12 +52,17 @@ use ic_tests::driver::{
     ic::{InternetComputer, Subnet},
     prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
-    test_env_api::{await_boundary_node_healthy, HasTopologySnapshot, NnsCanisterWasmStrategy},
+    test_env_api::{
+        await_boundary_node_healthy, HasTopologySnapshot, IcNodeContainer, NnsCanisterWasmStrategy,
+    },
 };
 use ic_tests::nns_dapp::{
-    install_ii_and_nns_dapp, nns_dapp_customizations, set_authorized_subnets,
+    install_ii_and_nns_dapp, install_sns_aggregator, nns_dapp_customizations,
+    set_authorized_subnets, set_sns_subnet,
 };
 use ic_tests::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
+use ic_tests::sns_client::add_all_wasms_to_sns_wasm;
+use slog::info;
 
 const BOUNDARY_NODE_NAME: &str = "boundary-node-1";
 
@@ -74,6 +80,7 @@ pub fn setup(env: TestEnv) {
     InternetComputer::new()
         .add_subnet(Subnet::new(SubnetType::System).add_nodes(1))
         .add_subnet(Subnet::new(SubnetType::Application).add_nodes(1))
+        .add_subnet(Subnet::new(SubnetType::Application).add_nodes(1))
         .with_unassigned_nodes(1)
         .setup_and_start(&env)
         .expect("Failed to setup IC under test");
@@ -89,8 +96,26 @@ pub fn setup(env: TestEnv) {
         .use_real_certs_and_dns()
         .start(&env)
         .expect("failed to setup BoundaryNode VM");
-    install_ii_and_nns_dapp(&env, BOUNDARY_NODE_NAME, None);
-    set_authorized_subnets(&env);
     env.sync_prometheus_config_with_topology();
+
+    let topology = env.topology_snapshot();
+    let mut app_subnets = topology
+        .subnets()
+        .filter(|s| s.subnet_type() == SubnetType::Application);
+    let sns_subnet = app_subnets.next().unwrap();
+    let sns_node = sns_subnet.nodes().next().unwrap();
+    let app_subnet = app_subnets.next().unwrap();
+    let app_node = app_subnet.nodes().next().unwrap();
+
+    let app_effective_canister_id = app_node.effective_canister_id();
+    let logger = env.logger();
+    info!(logger, "Use {} as effective canister ID when creating canisters for your dapp, e.g., using --provisional-create-canister-effective-canister-id {} with DFX", app_effective_canister_id, app_effective_canister_id);
+
+    let sns_aggregator_canister_id = install_sns_aggregator(&env, BOUNDARY_NODE_NAME, sns_node);
+    install_ii_and_nns_dapp(&env, BOUNDARY_NODE_NAME, Some(sns_aggregator_canister_id));
+    set_authorized_subnets(&env);
+    set_sns_subnet(&env, sns_subnet.subnet_id);
+    add_all_wasms_to_sns_wasm(&env, NnsCanisterWasmStrategy::TakeBuiltFromSources);
+
     await_boundary_node_healthy(&env, BOUNDARY_NODE_NAME);
 }
