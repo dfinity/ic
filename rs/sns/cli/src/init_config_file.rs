@@ -19,6 +19,8 @@ use std::{
     str::FromStr,
 };
 
+mod friendly;
+
 const DEFAULT_INIT_CONFIG_PATH: &str = "sns_init.yaml";
 
 #[derive(Debug, Parser)]
