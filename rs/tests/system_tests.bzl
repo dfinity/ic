@@ -74,7 +74,21 @@ run_system_test = rule(
     },
 )
 
-def system_test(name, runtime_deps = [], tags = [], test_timeout = "long", flaky = True, **kwargs):
+default_vm_resources = {
+    "vcpus": None,
+    "memory_kibibytes": None,
+    "boot_image_minimal_size_gibibytes": None,
+}
+
+def system_test(
+        name,
+        runtime_deps = [],
+        tags = [],
+        test_timeout = "long",
+        flaky = True,
+        colocated_test_driver_vm_resources = default_vm_resources,
+        colocated_test_driver_vm_required_host_features = [],
+        **kwargs):
     """Declares a system-test.
 
     Args:
@@ -83,6 +97,17 @@ def system_test(name, runtime_deps = [], tags = [], test_timeout = "long", flaky
       tags: additional tags for the system_test.
       test_timeout: bazel test timeout (short, moderate, long or eternal).
       flaky: rerun in case of failure (up to 3 times).
+      colocated_test_driver_vm_resources: a structure describing
+      the required resources of the colocated test-driver VM. For example:
+        {
+          "vcpus": 64,
+          "memory_kibibytes": 512142680,
+          "boot_image_minimal_size_gibibytes": 500,
+        }
+      Fields can be None or left out.
+      colocated_test_driver_vm_required_host_features: a list of strings
+      specifying the required host features of the colocated test-driver VM.
+      For example: [ "performance" ]
       **kwargs: additional arguments to pass to the rust_binary rule.
     """
 
@@ -123,6 +148,8 @@ def system_test(name, runtime_deps = [], tags = [], test_timeout = "long", flaky
         ],
         env = {
             "COLOCATED_TEST": name,
+            "COLOCATED_TEST_DRIVER_VM_REQUIRED_HOST_FEATURES": json.encode(colocated_test_driver_vm_required_host_features),
+            "COLOCATED_TEST_DRIVER_VM_RESOURCES": json.encode(colocated_test_driver_vm_resources),
         },
         tags = tags + ["requires-network", "system_test"] +
                ([] if "experimental_system_test_colocation" in tags else ["manual"]),
