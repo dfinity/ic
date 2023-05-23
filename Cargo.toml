@@ -179,6 +179,7 @@ members = [
   "rs/orchestrator/dashboard",
   "rs/orchestrator/registry_replicator",
   "rs/p2p",
+  "rs/p2p/peer_manager",
   "rs/p2p/experimental/prototype",
   "rs/replica/setup_ic_network",
   "rs/phantom_newtype",
