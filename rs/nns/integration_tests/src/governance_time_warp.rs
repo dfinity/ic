@@ -6,14 +6,15 @@ use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL,
 };
 use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
-use ic_nns_governance::governance::TimeWarp;
-use ic_nns_governance::pb::v1::governance_error::ErrorType;
-use ic_nns_governance::pb::v1::manage_neuron::Command;
-use ic_nns_governance::pb::v1::manage_neuron::Disburse;
-use ic_nns_governance::pb::v1::manage_neuron::NeuronIdOrSubaccount;
-use ic_nns_governance::pb::v1::manage_neuron_response;
-use ic_nns_governance::pb::v1::{
-    neuron::DissolveState, ManageNeuron, ManageNeuronResponse, Neuron,
+use ic_nns_governance::{
+    governance::TimeWarp,
+    pb::v1::{
+        governance_error::ErrorType,
+        manage_neuron::{Command, Disburse, NeuronIdOrSubaccount},
+        manage_neuron_response,
+        neuron::DissolveState,
+        ManageNeuron, ManageNeuronResponse, Neuron,
+    },
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,

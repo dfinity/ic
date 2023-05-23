@@ -1,16 +1,20 @@
 use by_address::ByAddress;
 use candid::{CandidType, Deserialize};
-use dfn_core::api::{call, time_nanos, CanisterId};
-use maplit::hashmap;
-use priority_queue::priority_queue::PriorityQueue;
-use rust_decimal::Decimal;
-use serde::Serialize;
-
 use core::{
     cmp::Reverse,
     fmt::Debug,
     ops::{Add, AddAssign, Div, Mul, Sub},
 };
+use dfn_core::api::{call, time_nanos, CanisterId};
+use ic_base_types::PrincipalId;
+use ic_canister_log::{export, GlobalBuffer, LogBuffer, LogEntry};
+use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
+use ic_ic00_types::{CanisterIdRecord, CanisterStatusResultV2, IC_00};
+use ic_ledger_core::Tokens;
+use maplit::hashmap;
+use priority_queue::priority_queue::PriorityQueue;
+use rust_decimal::Decimal;
+use serde::Serialize;
 use std::{
     collections::HashMap,
     convert::TryInto,
@@ -18,12 +22,6 @@ use std::{
     mem::size_of,
     str::FromStr,
 };
-
-use ic_base_types::PrincipalId;
-use ic_canister_log::{export, GlobalBuffer, LogBuffer, LogEntry};
-use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
-use ic_ic00_types::{CanisterIdRecord, CanisterStatusResultV2, IC_00};
-use ic_ledger_core::Tokens;
 
 pub mod cmc;
 pub mod ledger;

@@ -27,8 +27,7 @@ use icp_ledger::{
 };
 use lifeline::LIFELINE_CANISTER_WASM;
 use registry_canister::init::{RegistryCanisterInitPayload, RegistryCanisterInitPayloadBuilder};
-use std::convert::TryInto;
-use std::path::Path;
+use std::{convert::TryInto, path::Path};
 
 /// Payloads for all the canisters that exist at genesis.
 #[derive(Clone, Debug)]

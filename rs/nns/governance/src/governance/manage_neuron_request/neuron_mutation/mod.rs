@@ -1,13 +1,13 @@
-use std::cmp::Ordering;
-use std::collections::btree_map::Entry;
-use std::collections::BTreeMap;
-
+use crate::{
+    governance::Governance,
+    pb::v1::{GovernanceError, Neuron},
+};
 use async_trait::async_trait;
-
 use ic_nns_common::pb::v1::NeuronId;
-
-use crate::governance::Governance;
-use crate::pb::v1::{GovernanceError, Neuron};
+use std::{
+    cmp::Ordering,
+    collections::{btree_map::Entry, BTreeMap},
+};
 
 pub(crate) mod burn_fees_mutation;
 pub(crate) mod merge_neuron_mutation;

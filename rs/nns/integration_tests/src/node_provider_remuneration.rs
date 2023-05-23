@@ -1,8 +1,12 @@
+use cycles_minting_canister::IcpXdrConversionRateCertifiedResponse;
+use dfn_candid::candid_one;
+use dfn_protobuf::protobuf;
 use ic_canister_client_sender::Sender;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_USER1_PRINCIPAL, TEST_USER2_PRINCIPAL, TEST_USER3_PRINCIPAL,
     TEST_USER4_PRINCIPAL, TEST_USER5_PRINCIPAL, TEST_USER6_PRINCIPAL, TEST_USER7_PRINCIPAL,
 };
+use ic_nns_common::pb::v1::NeuronId as ProtoNeuronId;
 use ic_nns_common::types::{NeuronId, ProposalId, UpdateIcpXdrConversionRatePayload};
 use ic_nns_governance::pb::v1::{
     manage_neuron::{Command, NeuronIdOrSubaccount},
@@ -11,32 +15,33 @@ use ic_nns_governance::pb::v1::{
     GovernanceError, ManageNeuron, ManageNeuronResponse, MostRecentMonthlyNodeProviderRewards,
     NnsFunction, NodeProvider, Proposal, ProposalStatus, RewardNodeProvider, RewardNodeProviders,
 };
+use ic_nns_governance::{
+    governance::TimeWarp,
+    pb::v1::reward_node_provider::{RewardMode, RewardToAccount},
+};
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
-    governance::{add_node_provider, submit_external_update_proposal},
-    governance::{get_pending_proposals, wait_for_final_state},
+    governance::{
+        add_node_provider, get_pending_proposals, submit_external_update_proposal,
+        wait_for_final_state,
+    },
     ids::TEST_NEURON_1_ID,
     itest_helpers::{local_test_on_nns_subnet, NnsCanisters},
 };
-use ic_protobuf::registry::dc::v1::{AddOrRemoveDataCentersProposalPayload, DataCenterRecord};
-use ic_protobuf::registry::node_rewards::v2::{
-    NodeRewardRate, NodeRewardRates, UpdateNodeRewardsTableProposalPayload,
+use ic_protobuf::registry::{
+    dc::v1::{AddOrRemoveDataCentersProposalPayload, DataCenterRecord},
+    node_rewards::v2::{NodeRewardRate, NodeRewardRates, UpdateNodeRewardsTableProposalPayload},
 };
-use maplit::btreemap;
-use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
-
-use cycles_minting_canister::IcpXdrConversionRateCertifiedResponse;
-use dfn_candid::candid_one;
-use dfn_protobuf::protobuf;
-use ic_nns_common::pb::v1::NeuronId as ProtoNeuronId;
-use ic_nns_governance::governance::TimeWarp;
-use ic_nns_governance::pb::v1::reward_node_provider::{RewardMode, RewardToAccount};
 use ic_types::PrincipalId;
 use icp_ledger::{
     tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Tokens, TOKEN_SUBDIVIDABLE_BY,
 };
-use std::collections::BTreeMap;
-use std::time::{SystemTime, UNIX_EPOCH};
+use maplit::btreemap;
+use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
+use std::{
+    collections::BTreeMap,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 // TODO: Re-enable this test at a later time. There was a bug in the CMC
 // that did not enforce rate timestamp checking. This test relies on backfilling

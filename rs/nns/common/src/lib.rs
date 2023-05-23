@@ -1,11 +1,11 @@
+use ic_crypto_sha::Sha256;
+use std::convert::TryInto;
+
 pub mod access_control;
 pub mod init;
 pub mod pb;
 pub mod registry;
 pub mod types;
-
-use ic_crypto_sha::Sha256;
-use std::convert::TryInto;
 
 impl pb::v1::NeuronId {
     pub fn from_subaccount(subaccount: &[u8; 32]) -> Self {

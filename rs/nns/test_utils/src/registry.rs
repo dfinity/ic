@@ -1,11 +1,6 @@
-//! Utilities to intialize and mutate the registry, for tests.
-
-use std::convert::TryFrom;
+//! Utilities to initialize and mutate the registry, for tests.
 
 use assert_matches::assert_matches;
-use maplit::btreemap;
-use prost::Message;
-
 use canister_test::Canister;
 use ic_base_types::{CanisterId, PrincipalId, SubnetId};
 use ic_config::crypto::CryptoConfig;
@@ -16,8 +11,8 @@ use ic_nervous_system_common_test_keys::{
     TEST_USER5_PRINCIPAL, TEST_USER6_PRINCIPAL, TEST_USER7_PRINCIPAL,
 };
 use ic_nns_common::registry::encode_or_panic;
-use ic_protobuf::registry::crypto::v1::{PublicKey, X509PublicKeyCert};
 use ic_protobuf::registry::{
+    crypto::v1::{PublicKey, X509PublicKeyCert},
     node::v1::{ConnectionEndpoint, NodeRecord, Protocol},
     node_operator::v1::NodeOperatorRecord,
     replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
@@ -41,13 +36,17 @@ use ic_registry_transport::{
     serialize_get_value_request, Error,
 };
 use ic_test_utilities::types::ids::{node_test_id, subnet_test_id, user_test_id};
-use ic_types::p2p::build_default_gossip_config;
-use ic_types::{crypto::KeyPurpose, NodeId, ReplicaVersion};
+use ic_types::{crypto::KeyPurpose, p2p::build_default_gossip_config, NodeId, ReplicaVersion};
+use maplit::btreemap;
 use on_wire::bytes;
-use registry_canister::mutations::common::decode_registry_value;
-use registry_canister::mutations::node_management::do_add_node::{
-    connection_endpoint_from_string, flow_endpoint_from_string, AddNodePayload,
+use prost::Message;
+use registry_canister::mutations::{
+    common::decode_registry_value,
+    node_management::do_add_node::{
+        connection_endpoint_from_string, flow_endpoint_from_string, AddNodePayload,
+    },
 };
+use std::convert::TryFrom;
 
 /// ID used in multiple tests.
 pub const TEST_ID: u64 = 999;

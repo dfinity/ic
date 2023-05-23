@@ -1,9 +1,11 @@
 use candid::CandidType;
 use ic_types::Cycles;
 use serde::{Deserialize, Serialize};
-use std::collections::VecDeque;
-use std::convert::TryInto;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::{
+    collections::VecDeque,
+    convert::TryInto,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
 /// A record of how many cycles have been minted in the last `max_age`
 /// period. Minting events are aggregated into windows of `resolution`

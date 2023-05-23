@@ -2,13 +2,10 @@ use crate::pb::v1::{AccountState, Gtc};
 use ic_crypto_sha::Sha256;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::GENESIS_TOKEN_CANISTER_ID;
-use ic_nns_governance::pb::v1::neuron::DissolveState;
-use ic_nns_governance::pb::v1::Neuron;
+use ic_nns_governance::pb::v1::{neuron::DissolveState, Neuron};
 use icp_ledger::Tokens;
-use rand::rngs::StdRng;
-use rand::{RngCore, SeedableRng};
-use std::collections::HashMap;
-use std::time::SystemTime;
+use rand::{rngs::StdRng, RngCore, SeedableRng};
+use std::{collections::HashMap, time::SystemTime};
 
 /// A few helper constants for durations.
 const ONE_DAY_SECONDS: u64 = 24 * 60 * 60;

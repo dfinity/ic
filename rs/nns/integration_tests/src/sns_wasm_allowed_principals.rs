@@ -1,8 +1,7 @@
 use candid::{Decode, Encode};
 use ic_base_types::PrincipalId;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID};
-use ic_nns_test_utils::common::NnsInitPayloadsBuilder;
-use ic_nns_test_utils::state_test_helpers::setup_nns_canisters;
+use ic_nns_test_utils::{common::NnsInitPayloadsBuilder, state_test_helpers::setup_nns_canisters};
 use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_wasm::pb::v1::{
     update_allowed_principals_response, DeployNewSnsRequest, DeployNewSnsResponse,

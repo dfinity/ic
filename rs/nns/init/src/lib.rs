@@ -8,9 +8,11 @@ use ic_interfaces_registry::{RegistryDataProvider, ZERO_REGISTRY_VERSION};
 use ic_nns_constants::NNS_CANISTER_WASMS;
 use ic_registry_local_store::{ChangelogEntry, KeyMutation, LocalStoreImpl, LocalStoreReader};
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-use ic_registry_transport::pb::v1::RegistryAtomicMutateRequest;
-use ic_registry_transport::pb::v1::{registry_mutation, RegistryMutation};
-use ic_registry_transport::{delete, upsert};
+use ic_registry_transport::{
+    delete,
+    pb::v1::{registry_mutation, RegistryAtomicMutateRequest, RegistryMutation},
+    upsert,
+};
 use ic_sys::utility_command::{UtilityCommand, UtilityCommandError};
 use std::path::Path;
 
@@ -87,8 +89,7 @@ pub fn read_initial_mutations_from_local_store_dir(
 mod test {
     use super::*;
     use ic_base_types::RegistryVersion;
-    use ic_registry_local_store::Changelog;
-    use ic_registry_local_store::LocalStoreWriter;
+    use ic_registry_local_store::{Changelog, LocalStoreWriter};
     use tempfile::TempDir;
 
     /// In this test, a directory written by the `LocalStore::store` function is

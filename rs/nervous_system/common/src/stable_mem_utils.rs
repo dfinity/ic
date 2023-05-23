@@ -1,16 +1,11 @@
 //! Implements `BufferedStableMemWriter` and `BufferedStableMemReader` types for
 //! buffered serialization and deserialization to/from stable memory.
 
-use std::cmp::min;
-use std::convert::TryFrom;
-
+use bytes::{buf::UninitSlice, Buf, BufMut};
+use dfn_core::stable;
 #[cfg(test)]
 use std::sync::{Arc, Mutex};
-
-use bytes::buf::UninitSlice;
-use bytes::{Buf, BufMut};
-
-use dfn_core::stable;
+use std::{cmp::min, convert::TryFrom};
 
 /// A trait for stable memory operations, to allow testing.
 trait StableMemory {

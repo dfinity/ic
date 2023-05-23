@@ -2,12 +2,10 @@
 
 use dfn_candid::candid;
 use dfn_core::{over, println, stable};
-
 use ic_nervous_system_common::stable_mem_utils::{
     BufferedStableMemReader, BufferedStableMemWriter,
 };
 use ic_nns_governance::pb::v1::{Governance, Neuron};
-
 use prost::Message;
 
 const LOG_PREFIX: &str = "[Governance mem utils test] ";

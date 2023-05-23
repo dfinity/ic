@@ -9,11 +9,6 @@
 // annotated with `#[candid_method(query/update)]` to be able to generate the
 // did definition of the method.
 
-use std::borrow::Cow;
-use std::boxed::Box;
-use std::str::FromStr;
-use std::time::SystemTime;
-
 use async_trait::async_trait;
 use candid::{candid_method, Decode, Encode};
 use dfn_candid::{candid, candid_one};
@@ -22,10 +17,6 @@ use dfn_core::{
     over, over_async, println,
 };
 use dfn_protobuf::protobuf;
-use prost::Message;
-use rand::{RngCore, SeedableRng};
-use rand_chacha::ChaCha20Rng;
-
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_common::{
     cmc::CMCCanister,
@@ -39,7 +30,6 @@ use ic_nns_common::{
     types::{CallCanisterProposal, NeuronId, ProposalId},
 };
 use ic_nns_constants::LEDGER_CANISTER_ID;
-use ic_nns_governance::pb::v1::governance::GovernanceCachedMetrics;
 use ic_nns_governance::{
     encode_metrics,
     governance::{
@@ -48,6 +38,7 @@ use ic_nns_governance::{
     },
     pb::v1::{
         claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshNeuronFromAccountResponseResult,
+        governance::GovernanceCachedMetrics,
         governance_error::ErrorType,
         manage_neuron::{
             claim_or_refresh::{By, MemoAndController},
@@ -62,6 +53,10 @@ use ic_nns_governance::{
         RewardNodeProviders, SettleCommunityFundParticipation, UpdateNodeProvider, Vote,
     },
 };
+use prost::Message;
+use rand::{RngCore, SeedableRng};
+use rand_chacha::ChaCha20Rng;
+use std::{borrow::Cow, boxed::Box, str::FromStr, time::SystemTime};
 
 /// Size of the buffer for stable memory reads and writes.
 ///

@@ -1,8 +1,7 @@
-use std::collections::HashMap;
-use std::convert::TryFrom;
-use std::string::ToString;
 use std::{
-    collections::VecDeque,
+    collections::{HashMap, VecDeque},
+    convert::TryFrom,
+    string::ToString,
     sync::{Arc, Mutex},
 };
 
@@ -18,10 +17,11 @@ use ic_nervous_system_common::{assert_is_err, assert_is_ok, E8};
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
 use ic_sns_init::pb::v1::{self as sns_init_pb, SnsInitPayload};
-use ic_sns_swap::pb::v1 as sns_swap_pb;
-use ic_sns_swap::pb::v1::{params::NeuronBasketConstructionParameters, Swap};
-use ic_sns_wasm::pb::v1::DeployedSns;
-use ic_sns_wasm::pb::v1::{ListDeployedSnsesRequest, ListDeployedSnsesResponse};
+use ic_sns_swap::pb::{
+    v1 as sns_swap_pb,
+    v1::{params::NeuronBasketConstructionParameters, Swap},
+};
+use ic_sns_wasm::pb::v1::{DeployedSns, ListDeployedSnsesRequest, ListDeployedSnsesResponse};
 
 use crate::pb::v1::{
     proposal::Action, settle_community_fund_participation, ExecuteNnsFunction, GovernanceError,
@@ -1303,11 +1303,13 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
 }
 
 mod metrics_tests {
-    use crate::encode_metrics;
-    use crate::governance::tests::{MockEnvironment, StubCMC, StubIcpLedger};
-    use crate::governance::Governance;
-    use crate::pb::v1::{
-        proposal, Governance as GovernanceProto, Motion, Proposal, ProposalData, Tally,
+    use crate::{
+        encode_metrics,
+        governance::{
+            tests::{MockEnvironment, StubCMC, StubIcpLedger},
+            Governance,
+        },
+        pb::v1::{proposal, Governance as GovernanceProto, Motion, Proposal, ProposalData, Tally},
     };
     use maplit::btreemap;
     use std::sync::{Arc, Mutex};

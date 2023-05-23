@@ -1,9 +1,8 @@
 //! Make sure the governance canister scales
 
-use std::time::Duration;
-
 use canister_test::{CanisterInstallMode, Project, Runtime};
 use ic_nns_test_utils::itest_helpers::local_test_on_nns_subnet;
+use std::time::Duration;
 
 #[test]
 fn governance_mem_test() {

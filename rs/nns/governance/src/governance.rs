@@ -1,45 +1,38 @@
-use crate::pb::v1::{
-    add_or_remove_node_provider::Change,
-    create_service_nervous_system,
-    governance::GovernanceCachedMetrics,
-    governance::{
-        neuron_in_flight_command::{Command as InFlightCommand, SyncCommand},
-        NeuronInFlightCommand,
+use crate::{
+    governance::manage_neuron_request::{
+        execute_manage_neuron, simulate_manage_neuron, ManageNeuronRequest,
     },
-    governance_error::ErrorType,
-    manage_neuron,
-    manage_neuron::{
-        claim_or_refresh::{By, MemoAndController},
-        ClaimOrRefresh, Command, NeuronIdOrSubaccount,
+    pb::v1::{
+        add_or_remove_node_provider::Change,
+        create_service_nervous_system,
+        governance::{
+            neuron_in_flight_command::{Command as InFlightCommand, SyncCommand},
+            GovernanceCachedMetrics, NeuronInFlightCommand,
+        },
+        governance_error::ErrorType,
+        manage_neuron,
+        manage_neuron::{
+            claim_or_refresh::{By, MemoAndController},
+            ClaimOrRefresh, Command, NeuronIdOrSubaccount,
+        },
+        manage_neuron_response,
+        manage_neuron_response::{MergeMaturityResponse, StakeMaturityResponse},
+        neuron::{DissolveState, Followees},
+        proposal,
+        proposal::Action,
+        reward_node_provider::{RewardMode, RewardToAccount},
+        settle_community_fund_participation, swap_background_information, Ballot, BallotInfo,
+        CreateServiceNervousSystem, DerivedProposalInformation, ExecuteNnsFunction,
+        Governance as GovernanceProto, GovernanceError, KnownNeuron, KnownNeuronData,
+        ListKnownNeuronsResponse, ListNeurons, ListNeuronsResponse, ListProposalInfo,
+        ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse,
+        MostRecentMonthlyNodeProviderRewards, Motion, NetworkEconomics, Neuron, NeuronInfo,
+        NeuronState, NnsFunction, NodeProvider, OpenSnsTokenSwap, Proposal, ProposalData,
+        ProposalInfo, ProposalRewardStatus, ProposalStatus, RewardEvent, RewardNodeProvider,
+        RewardNodeProviders, SetSnsTokenSwapOpenTimeWindow, SettleCommunityFundParticipation,
+        SwapBackgroundInformation, Tally, Topic, UpdateNodeProvider, Vote, WaitForQuietState,
     },
-    manage_neuron_response,
-    manage_neuron_response::{MergeMaturityResponse, StakeMaturityResponse},
-    neuron::DissolveState,
-    neuron::Followees,
-    proposal,
-    proposal::Action,
-    reward_node_provider::RewardMode,
-    reward_node_provider::RewardToAccount,
-    settle_community_fund_participation, swap_background_information, Ballot, BallotInfo,
-    CreateServiceNervousSystem, DerivedProposalInformation, ExecuteNnsFunction,
-    Governance as GovernanceProto, GovernanceError, KnownNeuron, KnownNeuronData,
-    ListKnownNeuronsResponse, ListNeurons, ListNeuronsResponse, ListProposalInfo,
-    ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse,
-    MostRecentMonthlyNodeProviderRewards, Motion, NetworkEconomics, Neuron, NeuronInfo,
-    NeuronState, NnsFunction, NodeProvider, OpenSnsTokenSwap, Proposal, ProposalData, ProposalInfo,
-    ProposalRewardStatus, ProposalStatus, RewardEvent, RewardNodeProvider, RewardNodeProviders,
-    SetSnsTokenSwapOpenTimeWindow, SettleCommunityFundParticipation, SwapBackgroundInformation,
-    Tally, Topic, UpdateNodeProvider, Vote, WaitForQuietState,
 };
-
-use std::cmp::Ordering;
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
-use std::convert::{TryFrom, TryInto};
-use std::fmt;
-use std::ops::RangeInclusive;
-use std::str::FromStr;
-use std::string::ToString;
-
 use async_trait::async_trait;
 use candid::{Decode, Encode};
 use cycles_minting_canister::IcpXdrConversionRateCertifiedResponse;
@@ -73,10 +66,16 @@ use itertools::Itertools;
 use registry_canister::{
     mutations::do_add_node_operator::AddNodeOperatorPayload, pb::v1::NodeProvidersMonthlyXdrRewards,
 };
-
-use crate::governance::manage_neuron_request::{
-    execute_manage_neuron, simulate_manage_neuron, ManageNeuronRequest,
+use std::{
+    cmp::Ordering,
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+    convert::{TryFrom, TryInto},
+    fmt,
+    ops::RangeInclusive,
+    str::FromStr,
+    string::ToString,
 };
+
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
 

@@ -1,15 +1,18 @@
-use crate::governance::manage_neuron_request::neuron_mutation::{
-    saturating_add_or_subtract_u64_i128, GovernanceMutationProxy, GovernanceNeuronMutation,
-    NeuronDeltas,
+use crate::{
+    governance::{
+        combine_aged_stakes,
+        manage_neuron_request::neuron_mutation::{
+            saturating_add_or_subtract_u64_i128, GovernanceMutationProxy, GovernanceNeuronMutation,
+            NeuronDeltas,
+        },
+        neuron_subaccount, subaccount_from_slice,
+    },
+    pb::v1::{governance_error::ErrorType, GovernanceError},
 };
-use crate::governance::{combine_aged_stakes, neuron_subaccount, subaccount_from_slice};
-use crate::pb::v1::governance_error::ErrorType;
-use crate::pb::v1::GovernanceError;
 use async_trait::async_trait;
 use ic_nns_common::pb::v1::NeuronId;
 use maplit::btreemap;
-use std::collections::BTreeMap;
-use std::ops::Neg;
+use std::{collections::BTreeMap, ops::Neg};
 
 pub struct MergeNeuronMutation {
     source_neuron_id: NeuronId,

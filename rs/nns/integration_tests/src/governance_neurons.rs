@@ -1,8 +1,5 @@
 //! Test neuron operations using the governance and other NNS canisters.
 
-use std::time::SystemTime;
-use std::time::UNIX_EPOCH;
-
 use dfn_candid::candid_one;
 use dfn_protobuf::protobuf;
 use ic_canister_client_sender::Sender;
@@ -10,16 +7,13 @@ use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_KEYPAIR, TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
 };
 use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
-use ic_nns_governance::pb::v1::manage_neuron::Command;
-use ic_nns_governance::pb::v1::manage_neuron::Merge;
-use ic_nns_governance::pb::v1::manage_neuron::NeuronIdOrSubaccount;
-use ic_nns_governance::pb::v1::manage_neuron::Spawn;
-use ic_nns_governance::pb::v1::manage_neuron_response::Command as CommandResponse;
-use ic_nns_governance::pb::v1::manage_neuron_response::{self};
-use ic_nns_governance::pb::v1::GovernanceError;
-use ic_nns_governance::pb::v1::NeuronState;
 use ic_nns_governance::pb::v1::{
-    neuron::DissolveState, ManageNeuron, ManageNeuronResponse, Neuron,
+    manage_neuron::{Command, Merge, NeuronIdOrSubaccount, Spawn},
+    manage_neuron_response::{
+        Command as CommandResponse, {self},
+    },
+    neuron::DissolveState,
+    GovernanceError, ManageNeuron, ManageNeuronResponse, Neuron, NeuronState,
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -29,6 +23,7 @@ use ic_nns_test_utils::{
 };
 use ic_state_machine_tests::StateMachine;
 use icp_ledger::{tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Tokens};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[test]
 fn test_merge_neurons_and_simulate_merge_neurons() {
