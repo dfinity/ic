@@ -8986,6 +8986,7 @@ dependencies = [
  "json-patch",
  "maplit",
  "on_wire",
+ "pretty_assertions 0.6.1",
  "prost",
  "rand 0.8.5",
  "regex",

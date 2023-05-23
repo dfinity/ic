@@ -1,0 +1,68 @@
+# This is used in a unit test, so if you make non-comment changes, you might
+# break the test.
+
+name: Daniel
+description: >
+    The best software engineer you ever did saw.
+
+logo: batman.png
+url: https://www.example.com
+
+Principals:
+    - id: hello-world-big-opaque-blob-here-to-ruin-your-eyes
+      name: Bruce Wayne
+      email: batman@superherosinc.com
+
+fallback_controller_principals:
+    - Bruce Wayne
+
+Token:
+    name: Batman
+    symbol: BTM
+    transaction_fee: 10_000 e8s
+
+Proposals:
+    rejection_fee: 1 token
+    initial_voting_period: 4d
+    maximum_wait_for_quiet_deadline_extension: 1 day
+
+Neurons:
+    minimum_creation_stake: 10 tokens
+
+Voting:
+    minimum_dissolve_delay: 26 weeks
+
+    MaximumVotingPowerBonuses:
+        DissolveDelay:
+            duration: 8 years
+            boost: 100%
+
+        Age:
+            duration: 4 years
+            boost: 25%
+
+    RewardRate:
+        initial: 10%
+        final: 2.25%
+        transition_duration: 12 years
+
+Distribution:
+
+    Neurons:
+
+        - principal: Bruce Wayne
+          stake: 15 tokens
+          memo: 42
+          dissolve_delay: 0.5 years
+
+        - principal: Bruce Wayne
+          stake: 15 tokens
+          dissolve_delay: 0.5 years
+
+    Balances:
+        governance: 50 tokens
+        swap: 30 tokens
+
+    # Optional, but highly recommended. This is a literal
+    # checksum.
+    total: 95 tokens
