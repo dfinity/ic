@@ -1,0 +1,33 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+
+package(default_visibility = [
+    "//rs/p2p:__subpackages__",
+])
+
+DEPENDENCIES = [
+    "//rs/interfaces",
+    "//rs/interfaces/registry",
+    "//rs/monitoring/logger",
+    "//rs/monitoring/metrics",
+    "//rs/registry/helpers",
+    "//rs/types/types",
+    "@crate_index//:prometheus",
+    "@crate_index//:slog",
+    "@crate_index//:tokio",
+]
+
+MACRO_DEPENDENCIES = [
+    "@crate_index//:async-trait",
+]
+
+ALIASES = {}
+
+rust_library(
+    name = "peer_manager",
+    srcs = glob(["src/**"]),
+    aliases = ALIASES,
+    crate_name = "ic_peer_manager",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    version = "0.8.0",
+    deps = DEPENDENCIES,
+)

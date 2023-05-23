@@ -8064,6 +8064,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-peer-manager"
+version = "0.1.0"
+dependencies = [
+ "ic-interfaces",
+ "ic-interfaces-registry",
+ "ic-logger",
+ "ic-metrics",
+ "ic-registry-client-helpers",
+ "ic-types",
+ "prometheus 0.12.0",
+ "serde",
+ "slog",
+ "tokio",
+]
+
+[[package]]
 name = "ic-pprof"
 version = "0.8.0"
 dependencies = [
