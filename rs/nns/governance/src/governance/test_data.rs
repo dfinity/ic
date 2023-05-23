@@ -18,7 +18,7 @@ mod src {
             developer_distribution::NeuronDistribution, DeveloperDistribution, SwapDistribution,
             TreasuryDistribution,
         },
-        GovernanceParameters, InitialTokenDistribution, LedgerParameters,
+        GovernanceParameters, InitialTokenDistribution, LedgerParameters, SwapParameters,
     };
 } // end mod src
 
@@ -114,7 +114,19 @@ lazy_static! {
             id: Some(CanisterId::from_u64(1000).get())
         }],
 
-        // Not used.
-        swap_parameters: None,
+        swap_parameters: Some(src::SwapParameters {
+            confirmation_text: Some("Confirm you are a human".to_string()),
+            restricted_countries: Some(pb::Countries {
+                iso_codes: vec!["CH".to_string()]
+            }),
+
+            // Not used.
+            minimum_participants: None,
+            minimum_icp: None,
+            maximum_icp: None,
+            minimum_participant_icp: None,
+            maximum_participant_icp: None,
+            neuron_basket_construction_parameters: None,
+        })
     };
 }

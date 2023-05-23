@@ -1123,6 +1123,11 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
             .as_ref()
             .unwrap();
 
+        let original_swap_parameters: &_ = CREATE_SERVICE_NERVOUS_SYSTEM
+            .swap_parameters
+            .as_ref()
+            .unwrap();
+
         assert_eq!(
             SnsInitPayload {
                 initial_token_distribution: None, // We'll look at this separately.
@@ -1195,11 +1200,10 @@ mod convert_from_create_service_nervous_system_to_sns_init_payload_tests {
                         id: Some(CanisterId::from_u64(1000).get()),
                     }],
                 }),
+                confirmation_text: original_swap_parameters.confirmation_text.clone(),
+                restricted_countries: original_swap_parameters.restricted_countries.clone(),
 
                 initial_token_distribution: None,
-
-                confirmation_text: None,
-                restricted_countries: None,
             },
         );
 

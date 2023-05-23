@@ -119,10 +119,14 @@ fn convert_from_flags_to_create_service_nervous_system() {
             "https://www.example.com",
             "--logo",
             logo,
-            "--fallback-controller-principal-ids",
+            "--fallback-controller-principal-id",
             &PrincipalId::new_user_test_id(354_886).to_string(),
-            "--dapp-canisters",
+            "--fallback-controller-principal-id",
+            &PrincipalId::new_user_test_id(354_887).to_string(),
+            "--dapp-canister",
             &CanisterId::from_u64(800_219).to_string(),
+            "--dapp-canister",
+            &CanisterId::from_u64(800_220).to_string(),
             // Developer 1
             "--developer-neuron-controller",
             &PrincipalId::new_user_test_id(308_651).to_string(),
@@ -159,6 +163,12 @@ fn convert_from_flags_to_create_service_nervous_system() {
             "2_T",
             "--swap-maximum-participant-icp",
             "100_T",
+            "--confirmation-text",
+            "I confirm that I am a human",
+            "--restrict-swap-in-country",
+            "CH",
+            "--restrict-swap-in-country",
+            "US",
             "--swap-neuron-count",
             "3",
             "--swap-neuron-dissolve-delay",
@@ -214,10 +224,18 @@ fn convert_from_flags_to_create_service_nervous_system() {
                 base64_encoding: Some(logo.to_string())
             }),
 
-            fallback_controller_principal_ids: vec![PrincipalId::new_user_test_id(354_886)],
-            dapp_canisters: vec![nervous_system_pb::Canister {
-                id: Some(PrincipalId::try_from(CanisterId::from_u64(800_219)).unwrap()),
-            },],
+            fallback_controller_principal_ids: vec![
+                PrincipalId::new_user_test_id(354_886),
+                PrincipalId::new_user_test_id(354_887)
+            ],
+            dapp_canisters: vec![
+                nervous_system_pb::Canister {
+                    id: Some(PrincipalId::try_from(CanisterId::from_u64(800_219)).unwrap()),
+                },
+                nervous_system_pb::Canister {
+                    id: Some(PrincipalId::try_from(CanisterId::from_u64(800_220)).unwrap())
+                }
+            ],
             swap_parameters: Some(SwapParameters {
                 minimum_participants: Some(42),
                 minimum_icp: Some(nervous_system_pb::Tokens {
@@ -238,6 +256,10 @@ fn convert_from_flags_to_create_service_nervous_system() {
                         }),
                     }
                 ),
+                confirmation_text: Some("I confirm that I am a human".to_string()),
+                restricted_countries: Some(nervous_system_pb::Countries {
+                    iso_codes: vec!["CH".to_string(), "US".to_string()],
+                }),
             }),
             ledger_parameters: Some(LedgerParameters {
                 transaction_fee: Some(nervous_system_pb::Tokens { e8s: Some(10_000) }),
