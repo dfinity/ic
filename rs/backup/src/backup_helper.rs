@@ -504,8 +504,10 @@ impl BackupHelper {
             "{}_{:010}_{:012}.log",
             self.subnet_id, timestamp, start_height
         );
-        let mut file = File::create(self.logs_dir().join(log_file_name))
-            .map_err(|err| format!("Error creating log file: {:?}", err))?;
+        let file_name = self.logs_dir().join(log_file_name);
+        debug!(self.log, "Write replay log to: {:?}", file_name);
+        let mut file =
+            File::create(file_name).map_err(|err| format!("Error creating log file: {:?}", err))?;
         file.write_all(stdout.as_bytes())
             .map_err(|err| format!("Error writing log file: {:?}", err))?;
         Ok(())
