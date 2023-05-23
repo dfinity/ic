@@ -5,6 +5,7 @@ use ic_icrc1_index_ng::{
     GetBlocksResponse, IndexArg, InitArg as IndexInitArg, TransactionWithId,
 };
 use ic_icrc1_ledger::{InitArgs as LedgerInitArgs, LedgerArgument};
+use ic_icrc1_test_utils::{valid_transactions_strategy, CallerTransferArg};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
@@ -13,6 +14,8 @@ use icrc_ledger_types::icrc1::transfer::{BlockIndex, TransferArg, TransferError}
 use icrc_ledger_types::icrc3::blocks::{BlockRange, GenericBlock, GetBlocksRequest};
 use icrc_ledger_types::icrc3::transactions::{Mint, Transaction, Transfer};
 use num_traits::cast::ToPrimitive;
+use proptest::test_runner::{Config as TestRunnerConfig, TestRunner};
+use std::collections::HashSet;
 use std::convert::TryInto;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -111,6 +114,18 @@ fn account(owner: u64, subaccount: u128) -> Account {
     }
 }
 
+fn icrc1_balance_of(env: &StateMachine, canister_id: CanisterId, account: Account) -> u64 {
+    let res = env
+        .execute_ingress(canister_id, "icrc1_balance_of", Encode!(&account).unwrap())
+        .expect("Failed to send icrc1_balance_of")
+        .bytes();
+    Decode!(&res, Nat)
+        .expect("Failed to decode icrc1_balance_of response")
+        .0
+        .to_u64()
+        .expect("Balance must be a u64!")
+}
+
 fn icrc1_get_blocks(env: &StateMachine, ledger_id: CanisterId) -> Vec<GenericBlock> {
     let req = GetBlocksRequest {
         start: 0.into(),
@@ -157,6 +172,22 @@ fn get_blocks(env: &StateMachine, index_id: CanisterId) -> GetBlocksResponse {
     Decode!(&res, GetBlocksResponse).expect("Failed to decode GetBlocksResponse")
 }
 
+fn icrc1_transfer(
+    env: &StateMachine,
+    ledger_id: CanisterId,
+    caller: PrincipalId,
+    arg: TransferArg,
+) -> BlockIndex {
+    let req = Encode!(&arg).expect("Failed to encode TransferArg");
+    let res = env
+        .execute_ingress_as(caller, ledger_id, "icrc1_transfer", req)
+        .expect("Failed to transfer tokens")
+        .bytes();
+    Decode!(&res, Result<BlockIndex, TransferError>)
+        .expect("Failed to decode Result<BlockIndex, TransferError>")
+        .expect("Failed to transfer tokens")
+}
+
 fn transfer(
     env: &StateMachine,
     ledger_id: CanisterId,
@@ -173,14 +204,7 @@ fn transfer(
         fee: None,
         memo: None,
     };
-    let req = Encode!(&req).expect("Failed to encode TransferArg");
-    let res = env
-        .execute_ingress_as(owner.into(), ledger_id, "icrc1_transfer", req)
-        .expect("Failed to transfer tokens")
-        .bytes();
-    Decode!(&res, Result<BlockIndex, TransferError>)
-        .expect("Failed to decode Result<BlockIndex, TransferError>")
-        .expect("Failed to transfer tokens")
+    icrc1_transfer(env, ledger_id, owner.into(), req)
 }
 
 fn get_account_transactions(
@@ -535,4 +559,41 @@ fn test_get_account_transactions_pagination() {
 
         start = Some(start.unwrap_or(0) + res.transactions.len() as u64);
     }
+}
+
+#[test]
+fn test_icrc1_balance_of() {
+    // 1 case only because the test is expensive to run
+    let mut runner = TestRunner::new(TestRunnerConfig::with_cases(1));
+    runner
+        .run(
+            &(valid_transactions_strategy(MINTER, FEE, 100),),
+            |(transactions,)| {
+                let env = &StateMachine::new();
+                let ledger_id = install_ledger(env, vec![], default_archive_options());
+                let index_id = install_index(env, ledger_id);
+
+                for CallerTransferArg {
+                    caller,
+                    transfer_arg,
+                } in &transactions
+                {
+                    icrc1_transfer(env, ledger_id, PrincipalId(*caller), transfer_arg.clone());
+                }
+                trigger_heartbeat(env);
+
+                for account in transactions
+                    .iter()
+                    .flat_map(|tx| tx.accounts())
+                    .collect::<HashSet<Account>>()
+                {
+                    assert_eq!(
+                        icrc1_balance_of(env, ledger_id, account),
+                        icrc1_balance_of(env, index_id, account)
+                    );
+                }
+                Ok(())
+            },
+        )
+        .unwrap();
 }

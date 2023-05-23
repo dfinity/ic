@@ -9,11 +9,12 @@ use ic_icrc1_index_ng::{
     GetAccountTransactionsArgs, GetAccountTransactionsResponse, GetAccountTransactionsResult,
     IndexArg, TransactionWithId,
 };
-use ic_ledger_core::block::{BlockIndex as LedgerBlockIndex, BlockType, EncodedBlock};
+use ic_ledger_core::block::{BlockIndex as BlockIndex64, BlockType, EncodedBlock};
 use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
+use ic_stable_structures::storable::Blob;
 use ic_stable_structures::{
-    memory_manager::MemoryManager, DefaultMemoryImpl, StableBTreeMap, StableCell, StableLog,
-    Storable,
+    memory_manager::MemoryManager, BoundedStorable, DefaultMemoryImpl, StableBTreeMap, StableCell,
+    StableLog, Storable,
 };
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc3::archive::{ArchivedRange, QueryBlockArchiveFn};
@@ -27,6 +28,7 @@ use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::cmp::Reverse;
+use std::convert::TryFrom;
 use std::hash::Hash;
 use std::time::Duration;
 
@@ -37,6 +39,7 @@ const STATE_MEMORY_ID: MemoryId = MemoryId::new(0);
 const BLOCK_LOG_INDEX_MEMORY_ID: MemoryId = MemoryId::new(1);
 const BLOCK_LOG_DATA_MEMORY_ID: MemoryId = MemoryId::new(2);
 const ACCOUNT_BLOCK_IDS_MEMORY_ID: MemoryId = MemoryId::new(3);
+const ACCOUNT_DATA_MEMORY_ID: MemoryId = MemoryId::new(4);
 
 const DEFAULT_MAX_WAIT_TIME: Duration = Duration::from_secs(60);
 const DEFAULT_RETRY_WAIT_TIME: Duration = Duration::from_secs(10);
@@ -48,6 +51,11 @@ type BlockLog = StableLog<Vec<u8>, VM, VM>;
 // are returned in reversed order.
 type AccountBlockIdsMapKey = ([u8; Sha256::DIGEST_LEN], Reverse<u64>);
 type AccountBlockIdsMap = StableBTreeMap<AccountBlockIdsMapKey, (), VM>;
+
+// The second element of this tuple is the account represented
+// as principal of type Blob<29> and the effective subaccount
+type AccountDataMapKey = (AccountDataType, (Blob<29>, [u8; 32]));
+type AccountDataMap = StableBTreeMap<AccountDataMapKey, u64, VM>;
 
 thread_local! {
     /// Static memory manager to manage the memory available for stable structures.
@@ -69,6 +77,11 @@ thread_local! {
     /// The account is hashed to save space.
     static ACCOUNT_BLOCK_IDS: RefCell<AccountBlockIdsMap> = with_memory_manager(|memory_manager| {
         RefCell::new(AccountBlockIdsMap::init(memory_manager.get(ACCOUNT_BLOCK_IDS_MEMORY_ID)))
+    });
+
+    /// Map that contains account aggregated data.
+    static ACCOUNT_DATA: RefCell<AccountDataMap> = with_memory_manager(|memory_manager| {
+        RefCell::new(AccountDataMap::init(memory_manager.get(ACCOUNT_DATA_MEMORY_ID)))
     });
 }
 
@@ -108,6 +121,47 @@ impl Storable for State {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+enum AccountDataType {
+    #[default]
+    Balance = 0,
+}
+
+impl Storable for AccountDataType {
+    fn to_bytes(&self) -> Cow<'_, [u8]> {
+        match self {
+            Self::Balance => Cow::Borrowed(&[0x00]),
+        }
+    }
+
+    fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
+        if bytes.len() != 1 {
+            panic!(
+                "Expected a single byte for AccountDataType but found {}",
+                bytes.len()
+            );
+        }
+        if bytes[0] == 0x00 {
+            Self::Balance
+        } else {
+            panic!("Unknown AccountDataType {}", bytes[0]);
+        }
+    }
+}
+
+#[test]
+fn test_account_data_type_storable() {
+    assert_eq!(
+        AccountDataType::Balance,
+        AccountDataType::from_bytes(AccountDataType::Balance.to_bytes())
+    );
+}
+
+impl BoundedStorable for AccountDataType {
+    const MAX_SIZE: u32 = 1;
+    const IS_FIXED_SIZE: bool = true;
+}
+
 /// A helper function to access the scalar state.
 fn with_state<R>(f: impl FnOnce(&State) -> R) -> R {
     STATE.with(|cell| f(cell.borrow().get()))
@@ -140,8 +194,34 @@ fn with_account_block_ids<R>(f: impl FnOnce(&mut AccountBlockIdsMap) -> R) -> R 
     ACCOUNT_BLOCK_IDS.with(|cell| f(&mut cell.borrow_mut()))
 }
 
-fn with_blocks_and_indices<R>(f: impl FnOnce(&BlockLog, &mut AccountBlockIdsMap) -> R) -> R {
-    with_blocks(|blocks| with_account_block_ids(|account_block_ids| f(blocks, account_block_ids)))
+/// A helper function to access the account data.
+fn with_account_data<R>(f: impl FnOnce(&mut AccountDataMap) -> R) -> R {
+    ACCOUNT_DATA.with(|cell| f(&mut cell.borrow_mut()))
+}
+
+/// A helper function to access the balance of an account.
+fn get_balance(account: Account) -> u64 {
+    with_account_data(|account_data| account_data.get(&balance_key(account)).unwrap_or(0))
+}
+
+/// A helper function to change the balance of an account.
+/// It removes an account balance if the balance is 0.
+fn change_balance(account: Account, f: impl FnOnce(u64) -> u64) {
+    let key = balance_key(account);
+    let new_balance = f(get_balance(account));
+    if new_balance == 0 {
+        with_account_data(|account_data| account_data.remove(&key));
+    } else {
+        with_account_data(|account_data| account_data.insert(key, new_balance));
+    }
+}
+
+fn balance_key(account: Account) -> (AccountDataType, (Blob<29>, [u8; 32])) {
+    let owner = Blob::try_from(account.owner.as_slice()).unwrap();
+    (
+        AccountDataType::Balance,
+        (owner, *account.effective_subaccount()),
+    )
 }
 
 #[init]
@@ -254,31 +334,79 @@ pub fn compute_wait_time(indexed_tx_count: usize) -> Duration {
 }
 
 fn append_blocks(new_blocks: Vec<GenericBlock>) {
-    with_blocks_and_indices(|blocks, account_block_ids| {
-        // the index of the next block that we
-        // are going to append
-        let mut block_index = blocks.len();
-        for block in new_blocks {
-            let block = generic_block_to_encoded_block_or_trap(block_index, block);
+    // the index of the next block that we
+    // are going to append
+    let mut block_index = with_blocks(|blocks| blocks.len());
+    for block in new_blocks {
+        let block = generic_block_to_encoded_block_or_trap(block_index, block);
 
-            // append the encoded block to the block log
+        // append the encoded block to the block log
+        with_blocks(|blocks| {
             blocks
                 .append(&block.0)
-                .unwrap_or_else(|_| trap("no space left"));
+                .unwrap_or_else(|_| trap("no space left"))
+        });
 
-            // add the block idx to the indices
-            let decoded_block = decode_encoded_block_or_trap(block_index, block);
-            for account in get_accounts(decoded_block) {
+        let decoded_block = decode_encoded_block_or_trap(block_index, block);
+
+        // add the block idx to the indices
+        with_account_block_ids(|account_block_ids| {
+            for account in get_accounts(&decoded_block) {
                 account_block_ids.insert(account_block_ids_key(account, block_index), ());
             }
+        });
 
-            block_index += 1;
+        // change the balance of the involved accounts
+        process_balance_changes(block_index, &decoded_block);
+
+        block_index += 1;
+    }
+}
+
+fn process_balance_changes(block_index: BlockIndex64, block: &Block) {
+    match block.transaction.operation {
+        Operation::Burn { from, amount } => debit(block_index, from, amount),
+        Operation::Mint { to, amount } => credit(block_index, to, amount),
+        Operation::Transfer {
+            from,
+            to,
+            amount,
+            fee,
+        } => {
+            let fee = block.effective_fee.or(fee).unwrap_or_else(|| {
+                ic_cdk::trap(&format!(
+                    "Block {} is of type Transfer but has no fee or effective fee!",
+                    block_index
+                ))
+            });
+            debit(block_index, from, amount + fee);
+            credit(block_index, to, amount);
         }
+    }
+}
+
+fn debit(block_index: BlockIndex64, account: Account, amount: u64) {
+    change_balance(account, |balance| {
+        if balance < amount {
+            ic_cdk::trap(&format!("Block {} caused an underflow for account {} when calculating balance {} - amount {}",
+                block_index, account, balance, amount));
+        }
+        balance - amount
+    })
+}
+
+fn credit(block_index: BlockIndex64, account: Account, amount: u64) {
+    change_balance(account, |balance| {
+        if u64::MAX - balance < amount {
+            ic_cdk::trap(&format!("Block {} caused an overflow for account {} when calculating balance {} + amount {}",
+                block_index, account, balance, amount));
+        }
+        balance + amount
     });
 }
 
 fn generic_block_to_encoded_block_or_trap(
-    block_index: LedgerBlockIndex,
+    block_index: BlockIndex64,
     block: GenericBlock,
 ) -> EncodedBlock {
     generic_block_to_encoded_block(block).unwrap_or_else(|e| {
@@ -289,7 +417,7 @@ fn generic_block_to_encoded_block_or_trap(
     })
 }
 
-fn decode_encoded_block_or_trap(block_index: LedgerBlockIndex, block: EncodedBlock) -> Block {
+fn decode_encoded_block_or_trap(block_index: BlockIndex64, block: EncodedBlock) -> Block {
     Block::decode(block).unwrap_or_else(|e| {
         trap(&format!(
             "Unable to decode encoded block at index {}. Error: {}",
@@ -298,7 +426,7 @@ fn decode_encoded_block_or_trap(block_index: LedgerBlockIndex, block: EncodedBlo
     })
 }
 
-fn get_accounts(block: Block) -> Vec<Account> {
+fn get_accounts(block: &Block) -> Vec<Account> {
     match block.transaction.operation {
         Operation::Burn { from, .. } => vec![from],
         Operation::Mint { to, .. } => vec![to],
@@ -312,7 +440,7 @@ pub fn account_sha256(account: Account) -> [u8; Sha256::DIGEST_LEN] {
     hasher.finish()
 }
 
-fn account_block_ids_key(account: Account, block_index: LedgerBlockIndex) -> AccountBlockIdsMapKey {
+fn account_block_ids_key(account: Account, block_index: BlockIndex64) -> AccountBlockIdsMapKey {
     (account_sha256(account), Reverse(block_index))
 }
 
@@ -367,39 +495,43 @@ fn get_account_transactions(arg: GetAccountTransactionsArgs) -> GetAccountTransa
         .start
         .map_or(u64::MAX, |n| n.0.to_u64().expect("start must be a u64!"));
     let key = account_block_ids_key(arg.account, start);
-    let transactions = with_blocks_and_indices(|blocks, account_block_ids| {
-        let mut transactions = vec![];
-        let indices = account_block_ids
+    let mut transactions = vec![];
+    let indices = with_account_block_ids(|account_block_ids| {
+        account_block_ids
             .range(key..)
             // old txs of the requested account and skip the start index
             .filter(|(k, _)| k.0 == key.0 && k.1 .0 != start)
             .take(length)
-            .map(|(k, _)| k.1);
-        for id in indices {
-            let block = blocks.get(id.0).unwrap_or_else(|| {
+            .map(|(k, _)| k.1 .0)
+            .collect::<Vec<BlockIndex64>>()
+    });
+    for id in indices {
+        let block = with_blocks(|blocks| {
+            blocks.get(id).unwrap_or_else(|| {
                 trap(&format!(
                     "Block {} not found in the block log, account blocks map is corrupted!",
-                    id.0
+                    id
                 ))
-            });
-            let transaction = encoded_block_bytes_to_flat_transaction(id.0, block);
-            let transaction_with_idx = TransactionWithId {
-                id: id.0.into(),
-                transaction,
-            };
-            transactions.push(transaction_with_idx);
-        }
-        transactions
-    });
+            })
+        });
+        let transaction = encoded_block_bytes_to_flat_transaction(id, block);
+        let transaction_with_idx = TransactionWithId {
+            id: id.into(),
+            transaction,
+        };
+        transactions.push(transaction_with_idx);
+    }
     let oldest_tx_id = get_oldest_tx_id(arg.account).map(|tx_id| tx_id.into());
+    let balance = get_balance(arg.account).into();
     Ok(GetAccountTransactionsResponse {
+        balance,
         transactions,
         oldest_tx_id,
     })
 }
 
 fn encoded_block_bytes_to_flat_transaction(
-    block_index: LedgerBlockIndex,
+    block_index: BlockIndex64,
     block: Vec<u8>,
 ) -> Transaction {
     let block = Block::decode(EncodedBlock::from(block)).unwrap_or_else(|e| {
@@ -449,7 +581,7 @@ fn encoded_block_bytes_to_flat_transaction(
     }
 }
 
-fn get_oldest_tx_id(account: Account) -> Option<LedgerBlockIndex> {
+fn get_oldest_tx_id(account: Account) -> Option<BlockIndex64> {
     // TODO: there is no easy way to get the oldest_tx_id so we traverse
     //       all the transaction of the account for now. This will be
     //       fixed in future by storying the oldest_tx_id somewhere and
@@ -462,6 +594,12 @@ fn get_oldest_tx_id(account: Account) -> Option<LedgerBlockIndex> {
             .last()
             .map(|(k, _)| k.1 .0)
     })
+}
+
+#[query]
+#[candid_method(query)]
+fn icrc1_balance_of(account: Account) -> Nat {
+    get_balance(account).into()
 }
 
 fn main() {}

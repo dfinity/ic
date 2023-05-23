@@ -43,6 +43,7 @@ pub struct TransactionWithId {
 
 #[derive(CandidType, Debug, Deserialize, PartialEq, Eq)]
 pub struct GetAccountTransactionsResponse {
+    pub balance: Nat,
     pub transactions: Vec<TransactionWithId>,
     // The txid of the oldest transaction the account has
     pub oldest_tx_id: Option<BlockIndex>,
