@@ -113,7 +113,8 @@ fn get_html(env: &TestEnv, farm_url: &str, canister_id: Principal, dapp_anchor: 
 }
 
 pub fn test(env: TestEnv) {
-    let (ii_canister_id, nns_dapp_canister_id) = install_ii_and_nns_dapp(&env, BOUNDARY_NODE_NAME);
+    let (ii_canister_id, nns_dapp_canister_id) =
+        install_ii_and_nns_dapp(&env, BOUNDARY_NODE_NAME, None);
     let boundary_node = env
         .get_deployed_boundary_node(BOUNDARY_NODE_NAME)
         .unwrap()

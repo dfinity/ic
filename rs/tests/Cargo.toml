@@ -560,5 +560,9 @@ name = "ic-systest-small-nns"
 path = "testing_verification/testnets/small_nns.rs"
 
 [[bin]]
+name = "ic-systest-sns-testing"
+path = "testing_verification/testnets/sns_testing.rs"
+
+[[bin]]
 name = "ic-systest-medium"
 path = "testing_verification/testnets/medium.rs"

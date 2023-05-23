@@ -584,18 +584,17 @@ http_file(
 http_file(
     name = "nns_dapp_canister",
     downloaded_file_path = "nns_dapp_canister.wasm",
-    sha256 = "8bcf768429631db5f6db372d090c58eedc9308ef623d98e0381121f598215de6",
-    url = "https://github.com/dfinity/nns-dapp/releases/download/proposal-119296/nns-dapp.wasm",
+    sha256 = "6af3470ef980b01eb427bdecde7d7c2c440a8c444f6c1fd6e7a39b251eceaf7a",
+    url = "https://github.com/dfinity/nns-dapp/releases/download/proposal-122512/nns-dapp.wasm",
 )
 
-# SNS aggregator canister (https://github.com/dfinity/nns-dapp/releases/tag/tip)
+# SNS aggregator canister
 
 http_file(
     name = "sns_aggregator",
-    downloaded_file_path = "sns_aggregator.wasm",
-    sha256 = "428b21acccfa442101096d95f74ab8368724d0e87e14d08f21d9a3bed77b69f3",
-    # Keep this dependency while the aggregator release process is WIP (IDX-2661)
-    url = "https://github.com/dfinity/nns-dapp/releases/download/ci-pin/sns_aggregator2.wasm",
+    downloaded_file_path = "sns_aggregator_dev.wasm",
+    sha256 = "fb50fbd91ca28373a1dd9207dee7cab22b5d73fde66fe1cc8a9dac63b9549da1",
+    url = "https://github.com/dfinity/nns-dapp/releases/download/proposal-122512/sns_aggregator_dev.wasm",
 )
 
 # Import Python rules

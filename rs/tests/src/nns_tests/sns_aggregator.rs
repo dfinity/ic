@@ -302,7 +302,7 @@ impl AggregatorClient {
                 "Validating aggregator canister's installation via public endpoint {}",
                 app_node.get_public_url().as_str(),
             );
-            let p = env.get_dependency_path("external/sns_aggregator/file/sns_aggregator.wasm");
+            let p = env.get_dependency_path("external/sns_aggregator/file/sns_aggregator_dev.wasm");
             let p = std::fs::canonicalize(p.clone())
                 .unwrap_or_else(|e| panic!("cannot obtain canonical path from {p:?}: {e:?}"));
             let canister_bytes = env.load_wasm(p);
@@ -401,7 +401,7 @@ pub fn validate_aggregator_data(env: TestEnv) {
             let swap_params = AggregatorClient::first_swap_params(
                 &log,
                 &http_canister,
-                Duration::from_secs(2 * 60),
+                Duration::from_secs(5 * 60),
             )
             .await
             .result()

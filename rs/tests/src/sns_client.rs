@@ -233,7 +233,7 @@ pub fn oc_sns_init_payload() -> SnsInitPayload {
 }
 
 /// Send and execute 6 proposals to add all SNS canister WASMs to the SNS WASM canister
-fn add_all_wasms_to_sns_wasm(env: &TestEnv, canister_wasm_strategy: NnsCanisterWasmStrategy) {
+pub fn add_all_wasms_to_sns_wasm(env: &TestEnv, canister_wasm_strategy: NnsCanisterWasmStrategy) {
     let logger = env.logger();
     let nns_node = env.get_first_healthy_nns_node_snapshot();
     let runtime = runtime_from_url(nns_node.get_public_url(), nns_node.effective_canister_id());
@@ -322,7 +322,7 @@ async fn add_principal_to_sns_deploy_whitelist(nns_api: &'_ Runtime, principal_i
 }
 
 /// Send and execute a proposal to add the given subnet ID to the SNS subnet list
-async fn add_subnet_to_sns_deploy_whitelist(nns_api: &'_ Runtime, subnet_id: SubnetId) {
+pub async fn add_subnet_to_sns_deploy_whitelist(nns_api: &'_ Runtime, subnet_id: SubnetId) {
     let governance_canister = get_governance_canister(nns_api);
     let proposal_payload = UpdateSnsSubnetListRequest {
         sns_subnet_ids_to_add: vec![subnet_id.get()],
