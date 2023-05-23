@@ -8,10 +8,12 @@ use ic_nervous_system_common_test_keys::{
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance::pb::v1::{GovernanceError, Neuron, NeuronInfo};
-use ic_nns_gtc::der_encode;
-use ic_nns_gtc::pb::v1::AccountState;
-use ic_nns_gtc::test_constants::{
-    TestIdentity, TEST_IDENTITY_1, TEST_IDENTITY_2, TEST_IDENTITY_3, TEST_IDENTITY_4,
+use ic_nns_gtc::{
+    der_encode,
+    pb::v1::AccountState,
+    test_constants::{
+        TestIdentity, TEST_IDENTITY_1, TEST_IDENTITY_2, TEST_IDENTITY_3, TEST_IDENTITY_4,
+    },
 };
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
@@ -21,10 +23,7 @@ use icp_ledger::{
     tokens_from_proto, AccountBalanceArgs, AccountIdentifier, Subaccount, Tokens,
     DEFAULT_TRANSFER_FEE,
 };
-use std::collections::HashSet;
-use std::convert::TryFrom;
-use std::sync::Arc;
-use std::time::SystemTime;
+use std::{collections::HashSet, convert::TryFrom, sync::Arc, time::SystemTime};
 
 /// Seed Round (SR) neurons are released over 48 months in the following tests
 pub const SR_MONTHS_TO_RELEASE: u8 = 48;

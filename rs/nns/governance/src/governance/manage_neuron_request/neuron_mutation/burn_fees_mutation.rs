@@ -1,14 +1,17 @@
-use crate::governance::manage_neuron_request::neuron_mutation::{
-    GovernanceMutationProxy, GovernanceNeuronMutation, NeuronDeltas,
+use crate::{
+    governance::{
+        governance_minting_account,
+        manage_neuron_request::neuron_mutation::{
+            GovernanceMutationProxy, GovernanceNeuronMutation, NeuronDeltas,
+        },
+        subaccount_from_slice,
+    },
+    pb::v1::{governance_error::ErrorType, GovernanceError},
 };
-use crate::governance::{governance_minting_account, subaccount_from_slice};
-use crate::pb::v1::governance_error::ErrorType;
-use crate::pb::v1::GovernanceError;
 use async_trait::async_trait;
 use ic_nns_common::pb::v1::NeuronId;
 use maplit::btreemap;
-use std::collections::BTreeMap;
-use std::ops::Neg;
+use std::{collections::BTreeMap, ops::Neg};
 
 pub struct BurnFeesMutation {
     neuron_id: NeuronId,

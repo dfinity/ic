@@ -1,5 +1,3 @@
-use std::{cell::RefCell, thread::LocalKey};
-
 use crate::{
     environment::Environment, mutate_state, read_state, set_icp_xdr_conversion_rate, State,
     ONE_MINUTE_SECONDS,
@@ -15,6 +13,7 @@ use ic_xrc_types::{
     GetExchangeRateResult,
 };
 use serde::{Deserialize, Serialize};
+use std::{cell::RefCell, thread::LocalKey};
 
 const ICP_SYMBOL: &str = "ICP";
 /// CXDR is an asset whose rate is derived from more sources than the XDR rate.

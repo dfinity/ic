@@ -1,19 +1,21 @@
-use crate::ids::TEST_NEURON_1_ID;
-use crate::state_test_helpers::{
-    query, try_call_with_cycles_via_universal_canister, update, update_with_sender,
+use crate::{
+    ids::TEST_NEURON_1_ID,
+    state_test_helpers::{
+        query, try_call_with_cycles_via_universal_canister, update, update_with_sender,
+    },
 };
 use candid::{Decode, Encode};
 use canister_test::{Project, Wasm};
 use dfn_candid::candid_one;
 use ic_base_types::CanisterId;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_PRINCIPAL;
-use ic_nns_common::pb::v1::NeuronId;
-use ic_nns_common::types::ProposalId;
+use ic_nns_common::{pb::v1::NeuronId, types::ProposalId};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
-use ic_nns_governance::pb::v1::manage_neuron::{Command, NeuronIdOrSubaccount};
 use ic_nns_governance::pb::v1::{
-    manage_neuron_response::Command as CommandResponse, proposal, ExecuteNnsFunction, ManageNeuron,
-    ManageNeuronResponse, NnsFunction, Proposal, ProposalInfo, ProposalStatus,
+    manage_neuron::{Command, NeuronIdOrSubaccount},
+    manage_neuron_response::Command as CommandResponse,
+    proposal, ExecuteNnsFunction, ManageNeuron, ManageNeuronResponse, NnsFunction, Proposal,
+    ProposalInfo, ProposalStatus,
 };
 use ic_sns_init::pb::v1::SnsInitPayload;
 use ic_sns_wasm::pb::v1::{
@@ -25,9 +27,8 @@ use ic_sns_wasm::pb::v1::{
 };
 use ic_state_machine_tests::StateMachine;
 use maplit::{btreemap, hashmap};
-use std::collections::BTreeMap;
 use std::{
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     time::{Duration, Instant},
 };
 use walrus::{Module, RawCustomSection};

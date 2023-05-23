@@ -1,8 +1,10 @@
 use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::NeuronId;
-use ic_nns_governance::governance::Governance;
-use ic_nns_governance::pb::v1::{
-    manage_neuron, manage_neuron::NeuronIdOrSubaccount, ManageNeuron, ManageNeuronResponse,
+use ic_nns_governance::{
+    governance::Governance,
+    pb::v1::{
+        manage_neuron, manage_neuron::NeuronIdOrSubaccount, ManageNeuron, ManageNeuronResponse,
+    },
 };
 
 pub async fn increase_dissolve_delay_raw(

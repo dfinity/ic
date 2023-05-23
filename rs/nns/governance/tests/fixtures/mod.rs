@@ -15,8 +15,10 @@ use ic_nervous_system_common::{cmc::CMC, ledger::IcpLedger, NervousSystemError};
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
 };
-use ic_nns_common::pb::v1::{NeuronId, ProposalId};
-use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
+use ic_nns_common::{
+    pb::v1::{NeuronId, ProposalId},
+    types::UpdateIcpXdrConversionRatePayload,
+};
 use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance::{
     governance::{
@@ -28,31 +30,22 @@ use ic_nns_governance::{
     init::GovernanceCanisterInitPayloadBuilder,
     pb::v1::{
         add_or_remove_node_provider::Change,
-        governance_error::ErrorType,
-        governance_error::ErrorType::InsufficientFunds,
-        governance_error::ErrorType::NotAuthorized,
-        governance_error::ErrorType::PreconditionFailed,
+        governance_error::{
+            ErrorType,
+            ErrorType::{InsufficientFunds, NotAuthorized, PreconditionFailed},
+        },
         manage_neuron,
-        manage_neuron::claim_or_refresh::{By, MemoAndController},
-        manage_neuron::configure::Operation,
-        manage_neuron::disburse::Amount,
-        manage_neuron::ClaimOrRefresh,
-        manage_neuron::Command,
-        manage_neuron::Configure,
-        manage_neuron::Disburse,
-        manage_neuron::DisburseToNeuron,
-        manage_neuron::IncreaseDissolveDelay,
-        manage_neuron::Merge,
-        manage_neuron::NeuronIdOrSubaccount,
-        manage_neuron::SetDissolveTimestamp,
-        manage_neuron::Spawn,
-        manage_neuron::Split,
-        manage_neuron::StartDissolving,
+        manage_neuron::{
+            claim_or_refresh::{By, MemoAndController},
+            configure::Operation,
+            disburse::Amount,
+            ClaimOrRefresh, Command, Configure, Disburse, DisburseToNeuron, IncreaseDissolveDelay,
+            Merge, NeuronIdOrSubaccount, SetDissolveTimestamp, Spawn, Split, StartDissolving,
+        },
         manage_neuron_response,
         manage_neuron_response::Command as CommandResponse,
         neuron,
-        neuron::DissolveState,
-        neuron::Followees,
+        neuron::{DissolveState, Followees},
         proposal,
         reward_node_provider::{RewardMode, RewardToAccount, RewardToNeuron},
         AddOrRemoveNodeProvider, Ballot, BallotInfo, Empty, ExecuteNnsFunction,
@@ -62,35 +55,37 @@ use ic_nns_governance::{
         RewardEvent, RewardNodeProvider, SetDefaultFollowees, Tally, Topic, Vote,
     },
 };
+use ic_nns_governance::{
+    governance::{
+        HeapGrowthPotential, MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS,
+        MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS, ONE_YEAR_SECONDS,
+    },
+    pb::v1::{
+        governance::GovernanceCachedMetrics,
+        governance_error::ErrorType::{NotFound, ResourceExhausted},
+        manage_neuron::MergeMaturity,
+        manage_neuron_response::MergeMaturityResponse,
+        proposal::Action,
+        ManageNeuronResponse, ProposalRewardStatus,
+        ProposalRewardStatus::{AcceptVotes, ReadyToSettle},
+        ProposalStatus::Rejected,
+        RewardNodeProviders,
+    },
+};
+use icp_ledger::Subaccount;
 use icp_ledger::{AccountIdentifier, Memo, Tokens};
 use maplit::hashmap;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
-use std::collections::hash_map::Entry;
-use std::collections::BTreeMap;
-use std::collections::{HashMap, HashSet};
-use std::convert::TryFrom;
-use std::convert::TryInto;
-use std::iter;
-use std::iter::once;
-use std::path::PathBuf;
-use std::sync::Arc;
-use std::sync::Mutex;
-
-use ic_nns_governance::governance::{
-    HeapGrowthPotential, MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS,
-    MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS, ONE_YEAR_SECONDS,
+use std::{
+    collections::{hash_map::Entry, BTreeMap, HashMap, HashSet},
+    convert::{TryFrom, TryInto},
+    iter,
+    iter::once,
+    path::PathBuf,
+    sync::{Arc, Mutex},
 };
-use ic_nns_governance::pb::v1::governance::GovernanceCachedMetrics;
-use ic_nns_governance::pb::v1::governance_error::ErrorType::{NotFound, ResourceExhausted};
-use ic_nns_governance::pb::v1::manage_neuron::MergeMaturity;
-use ic_nns_governance::pb::v1::manage_neuron_response::MergeMaturityResponse;
-use ic_nns_governance::pb::v1::proposal::Action;
-use ic_nns_governance::pb::v1::ProposalRewardStatus::{AcceptVotes, ReadyToSettle};
-use ic_nns_governance::pb::v1::ProposalStatus::Rejected;
-use ic_nns_governance::pb::v1::{ManageNeuronResponse, ProposalRewardStatus, RewardNodeProviders};
-use icp_ledger::Subaccount;
 
 const DEFAULT_TEST_START_TIMESTAMP_SECONDS: u64 = 999_111_000_u64;
 

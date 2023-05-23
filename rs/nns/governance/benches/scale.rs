@@ -16,20 +16,18 @@
 use async_trait::async_trait;
 use criterion::{criterion_group, criterion_main, Criterion};
 use futures::future::FutureExt;
-use std::convert::TryFrom;
-
 use ic_base_types::{CanisterId, PrincipalId};
-use ic_nervous_system_common::cmc::FakeCmc;
-use ic_nervous_system_common::{ledger::IcpLedger, NervousSystemError};
+use ic_nervous_system_common::{cmc::FakeCmc, ledger::IcpLedger, NervousSystemError};
 use ic_nns_common::pb::v1::NeuronId;
-use ic_nns_governance::governance::{Environment, Governance, HeapGrowthPotential};
-use ic_nns_governance::pb::v1::neuron;
-use ic_nns_governance::pb::v1::proposal;
-use ic_nns_governance::pb::v1::{
-    ExecuteNnsFunction, Governance as GovernanceProto, GovernanceError, Motion, NetworkEconomics,
-    Neuron, Proposal, Topic,
+use ic_nns_governance::{
+    governance::{Environment, Governance, HeapGrowthPotential},
+    pb::v1::{
+        neuron, proposal, ExecuteNnsFunction, Governance as GovernanceProto, GovernanceError,
+        Motion, NetworkEconomics, Neuron, Proposal, Topic,
+    },
 };
 use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
+use std::convert::TryFrom;
 
 criterion_group! {
     name = benches;

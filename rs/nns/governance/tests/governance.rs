@@ -3,23 +3,48 @@
 //! complex/weird configurations of neurons and proposals against which several
 //! tests are run.
 
+use crate::fake::{
+    DAPP_CANISTER_ID, DEVELOPER_PRINCIPAL_ID, SNS_GOVERNANCE_CANISTER_ID,
+    SNS_LEDGER_ARCHIVE_CANISTER_ID, SNS_LEDGER_CANISTER_ID, SNS_LEDGER_INDEX_CANISTER_ID,
+    SNS_ROOT_CANISTER_ID, TARGET_SWAP_CANISTER_ID,
+};
 use assert_matches::assert_matches;
 use async_trait::async_trait;
 use candid::{Decode, Encode};
+use common::increase_dissolve_delay_raw;
+#[cfg(feature = "test")]
+use comparable::{Changed, I32Change, MapChange, OptionChange, StringChange, U64Change, VecChange};
 use dfn_protobuf::ToProto;
+use fixtures::{principal, NNSBuilder, NeuronBuilder};
+#[cfg(feature = "test")]
+use fixtures::{LedgerBuilder, NNSStateChange, ProposalNeuronBehavior, NNS};
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_crypto_sha::Sha256;
+use ic_nervous_system_common::ledger::IcpLedger;
 use ic_nervous_system_common::{NervousSystemError, E8, SECONDS_PER_DAY};
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
 };
+use ic_nervous_system_common_test_utils::{LedgerReply, SpyLedger};
 use ic_nns_common::{
     pb::v1::{NeuronId, ProposalId},
     types::UpdateIcpXdrConversionRatePayload,
 };
 use ic_nns_constants::{
     GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID as ICP_LEDGER_CANISTER_ID, SNS_WASM_CANISTER_ID,
+};
+use ic_nns_governance::pb::v1::{
+    manage_neuron_response::MergeResponse, settle_community_fund_participation::Committed,
+};
+#[cfg(feature = "test")]
+use ic_nns_governance::{
+    governance::governance_minting_account,
+    pb::v1::{
+        governance::GovernanceCachedMetricsChange, neuron::DissolveStateChange,
+        proposal::ActionDesc, BallotChange, BallotInfoChange, GovernanceChange, NeuronChange,
+        ProposalChange, ProposalDataChange, TallyChange, WaitForQuietStateDesc,
+    },
 };
 use ic_nns_governance::{
     governance::{
@@ -77,29 +102,13 @@ use pretty_assertions::{assert_eq, assert_ne};
 use proptest::prelude::{prop_assert, prop_assert_eq, proptest, TestCaseError};
 use rand::{prelude::IteratorRandom, rngs::StdRng, Rng, SeedableRng};
 use registry_canister::mutations::do_add_node_operator::AddNodeOperatorPayload;
-use std::cmp::Ordering;
-use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
-use std::convert::{TryFrom, TryInto};
-use std::iter::{self, once};
-use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
-
-use crate::fake::{
-    DAPP_CANISTER_ID, DEVELOPER_PRINCIPAL_ID, SNS_GOVERNANCE_CANISTER_ID,
-    SNS_LEDGER_ARCHIVE_CANISTER_ID, SNS_LEDGER_CANISTER_ID, SNS_LEDGER_INDEX_CANISTER_ID,
-    SNS_ROOT_CANISTER_ID, TARGET_SWAP_CANISTER_ID,
-};
-
-#[cfg(feature = "test")]
-use comparable::{Changed, I32Change, MapChange, OptionChange, StringChange, U64Change, VecChange};
-#[cfg(feature = "test")]
-use ic_nns_governance::{
-    governance::governance_minting_account,
-    pb::v1::{
-        governance::GovernanceCachedMetricsChange, neuron::DissolveStateChange,
-        proposal::ActionDesc, BallotChange, BallotInfoChange, GovernanceChange, NeuronChange,
-        ProposalChange, ProposalDataChange, TallyChange, WaitForQuietStateDesc,
-    },
+use std::{
+    cmp::Ordering,
+    collections::{BTreeMap, HashMap, HashSet, VecDeque},
+    convert::{TryFrom, TryInto},
+    iter::{self, once},
+    path::PathBuf,
+    sync::{Arc, Mutex},
 };
 
 /// The 'fake' module is the old scheme for providing NNS test fixtures, aka
@@ -111,19 +120,9 @@ mod fake;
 // https://github.com/rust-lang/rust/issues/46379
 pub mod fixtures;
 
-use fixtures::{principal, NNSBuilder, NeuronBuilder};
-#[cfg(feature = "test")]
-use fixtures::{LedgerBuilder, NNSStateChange, ProposalNeuronBehavior, NNS};
-
 // Using a `pub mod` works around spurious dead code warnings; see
 // https://github.com/rust-lang/rust/issues/46379
 pub mod common;
-
-use common::increase_dissolve_delay_raw;
-use ic_nervous_system_common::ledger::IcpLedger;
-use ic_nervous_system_common_test_utils::{LedgerReply, SpyLedger};
-use ic_nns_governance::pb::v1::manage_neuron_response::MergeResponse;
-use ic_nns_governance::pb::v1::settle_community_fund_participation::Committed;
 
 const DEFAULT_TEST_START_TIMESTAMP_SECONDS: u64 = 999_111_000_u64;
 

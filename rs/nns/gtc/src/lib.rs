@@ -1,20 +1,23 @@
-pub mod init;
-pub mod pb;
-
 use crate::pb::v1::{AccountState, Gtc, TransferredNeuron};
 use dfn_candid::candid;
-use dfn_core::api::{call, now};
-use dfn_core::println;
+use dfn_core::{
+    api::{call, now},
+    println,
+};
 use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::NeuronId;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_nns_governance::pb::v1::GovernanceError;
 use libsecp256k1::{PublicKey, PublicKeyFormat};
 use sha3::{Digest, Keccak256};
-use simple_asn1::ASN1Block::{BitString, ObjectIdentifier, Sequence};
-use simple_asn1::{oid, to_der};
-use std::collections::HashSet;
-use std::time::SystemTime;
+use simple_asn1::{
+    oid, to_der,
+    ASN1Block::{BitString, ObjectIdentifier, Sequence},
+};
+use std::{collections::HashSet, time::SystemTime};
+
+pub mod init;
+pub mod pb;
 
 pub const LOG_PREFIX: &str = "[GTC] ";
 
@@ -331,8 +334,7 @@ pub mod test_constants {
     use super::{decode_hex_public_key, public_key_to_gtc_address, public_key_to_principal};
     use ic_base_types::PrincipalId;
     use ic_crypto_sha::Sha256;
-    use libsecp256k1::{sign, Message};
-    use libsecp256k1::{PublicKey, PublicKeyFormat, SecretKey};
+    use libsecp256k1::{sign, Message, PublicKey, PublicKeyFormat, SecretKey};
     use std::str::FromStr;
 
     /// An identity used to make calls to the GTC canister in tests

@@ -1,7 +1,3 @@
-use std::{collections::HashMap, path::PathBuf, sync::Arc};
-
-use prost::Message;
-
 use candid::Encode;
 use canister_test::{Canister, Project, Wasm};
 use dfn_candid::candid_one;
@@ -11,7 +7,8 @@ use ic_nervous_system_common_test_keys::{
     TEST_NEURON_2_OWNER_KEYPAIR, TEST_NEURON_2_OWNER_PRINCIPAL,
 };
 use ic_nns_common::{
-    pb::v1::MethodAuthzInfo, types::NeuronId, types::UpdateIcpXdrConversionRatePayload,
+    pb::v1::MethodAuthzInfo,
+    types::{NeuronId, UpdateIcpXdrConversionRatePayload},
 };
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LIFELINE_CANISTER_ID};
 use ic_nns_governance::pb::v1::{Governance as GovernanceProto, NnsFunction};
@@ -32,6 +29,8 @@ use ic_nns_test_utils::{
 };
 use icp_ledger::{LedgerCanisterInitPayload, LedgerCanisterPayload, Tokens};
 use lifeline::LIFELINE_CANISTER_WASM;
+use prost::Message;
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 /// Seed Round (SR) neurons are released over 48 months in the following tests
 const SR_MONTHS_TO_RELEASE: u8 = 48;

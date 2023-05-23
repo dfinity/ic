@@ -1,21 +1,22 @@
+use crate::{
+    governance::{
+        manage_neuron_request::{
+            neuron_mutation::{
+                burn_fees_mutation::BurnFeesMutation, merge_neuron_mutation::MergeNeuronMutation,
+                GovernanceMutationProxy, GovernanceNeuronMutation,
+            },
+            ManageNeuronRequest, ManageNeuronRequestHandler,
+        },
+        Governance, LOG_PREFIX,
+    },
+    pb::v1::{
+        governance_error::ErrorType, manage_neuron, manage_neuron::NeuronIdOrSubaccount,
+        manage_neuron_response::MergeResponse, Governance as GovernanceProto, GovernanceError,
+        ManageNeuronResponse, NeuronState, ProposalStatus,
+    },
+};
 use async_trait::async_trait;
-
 use ic_nns_common::pb::v1::NeuronId;
-
-use crate::governance::manage_neuron_request::neuron_mutation::burn_fees_mutation::BurnFeesMutation;
-use crate::governance::manage_neuron_request::neuron_mutation::merge_neuron_mutation::MergeNeuronMutation;
-use crate::governance::manage_neuron_request::neuron_mutation::{
-    GovernanceMutationProxy, GovernanceNeuronMutation,
-};
-use crate::governance::manage_neuron_request::{ManageNeuronRequest, ManageNeuronRequestHandler};
-use crate::governance::{Governance, LOG_PREFIX};
-use crate::pb::v1::governance_error::ErrorType;
-use crate::pb::v1::manage_neuron::NeuronIdOrSubaccount;
-use crate::pb::v1::manage_neuron_response::MergeResponse;
-use crate::pb::v1::{
-    manage_neuron, Governance as GovernanceProto, GovernanceError, ManageNeuronResponse,
-    NeuronState, ProposalStatus,
-};
 
 impl ManageNeuronRequest<manage_neuron::Merge> {
     fn source_neuron_id(&self) -> Result<NeuronId, GovernanceError> {

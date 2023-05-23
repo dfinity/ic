@@ -3,8 +3,10 @@ use candid::{Decode, Encode};
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_common::{cmc::CMC, ledger::IcpLedger, NervousSystemError};
-use ic_nns_common::pb::v1::{NeuronId, ProposalId};
-use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
+use ic_nns_common::{
+    pb::v1::{NeuronId, ProposalId},
+    types::UpdateIcpXdrConversionRatePayload,
+};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, LEDGER_CANISTER_ID, SNS_WASM_CANISTER_ID};
 use ic_nns_governance::{
     governance::{Environment, Governance, HeapGrowthPotential},
@@ -21,14 +23,11 @@ use icp_ledger::{AccountIdentifier, Subaccount, Tokens};
 use lazy_static::lazy_static;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
-use std::collections::hash_map::Entry;
-use std::collections::BTreeMap;
-use std::collections::HashMap;
-use std::collections::VecDeque;
-use std::convert::TryFrom;
-use std::convert::TryInto;
-use std::sync::Arc;
-use std::sync::Mutex;
+use std::{
+    collections::{hash_map::Entry, BTreeMap, HashMap, VecDeque},
+    convert::{TryFrom, TryInto},
+    sync::{Arc, Mutex},
+};
 
 const DEFAULT_TEST_START_TIMESTAMP_SECONDS: u64 = 999_111_000_u64;
 

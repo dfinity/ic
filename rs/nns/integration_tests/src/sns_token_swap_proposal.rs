@@ -4,8 +4,7 @@ use ic_nervous_system_common::E8;
 use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
 };
-use ic_nns_common::pb::v1 as nns_common_pb;
-use ic_nns_common::pb::v1::ProposalId;
+use ic_nns_common::pb::{v1 as nns_common_pb, v1::ProposalId};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID};
 use ic_nns_governance::pb::v1::{
     manage_neuron::{self, RegisterVote},

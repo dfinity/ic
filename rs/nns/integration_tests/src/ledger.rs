@@ -1,7 +1,3 @@
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::time::Duration;
-
 use assert_matches::assert_matches;
 use canister_test::{Canister, Project};
 use dfn_candid::candid_one;
@@ -15,14 +11,14 @@ use ic_nns_common::pb::v1::NeuronId as NeuronIdProto;
 use ic_nns_constants::{
     ALL_NNS_CANISTER_IDS, GENESIS_TOKEN_CANISTER_ID, GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID,
 };
-use ic_nns_governance::pb::v1::governance_error::ErrorType;
-use ic_nns_governance::pb::v1::manage_neuron::claim_or_refresh::{By, MemoAndController};
-use ic_nns_governance::pb::v1::manage_neuron::Disburse;
-use ic_nns_governance::pb::v1::manage_neuron::NeuronIdOrSubaccount;
-use ic_nns_governance::pb::v1::manage_neuron::{ClaimOrRefresh, Command};
-use ic_nns_governance::pb::v1::manage_neuron_response::Command as CommandResponse;
 use ic_nns_governance::pb::v1::{
     claim_or_refresh_neuron_from_account_response::Result as ClaimOrRefreshResult,
+    governance_error::ErrorType,
+    manage_neuron::{
+        claim_or_refresh::{By, MemoAndController},
+        ClaimOrRefresh, Command, Disburse, NeuronIdOrSubaccount,
+    },
+    manage_neuron_response::Command as CommandResponse,
     ClaimOrRefreshNeuronFromAccount, ClaimOrRefreshNeuronFromAccountResponse, GovernanceError,
     ManageNeuron, ManageNeuronResponse, Neuron,
 };
@@ -38,6 +34,7 @@ use icp_ledger::{
     ArchiveOptions, Block, BlockIndex, LedgerCanisterInitPayload, Memo, SendArgs, TipOfChainRes,
     Tokens, Transaction, DEFAULT_TRANSFER_FEE,
 };
+use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::time::{timeout_at, Instant};
 
 fn example_block() -> Block {

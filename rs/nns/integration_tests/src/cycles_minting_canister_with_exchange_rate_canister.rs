@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use candid::Encode;
 use canister_test::Wasm;
 use ic_base_types::CanisterId;
@@ -23,6 +21,7 @@ use ic_nns_test_utils::{
 use ic_state_machine_tests::StateMachine;
 use ic_types::time::GENESIS;
 use ic_xrc_types::{Asset, AssetClass, ExchangeRateError, ExchangeRateMetadata};
+use std::time::Duration;
 use xrc_mock::{ExchangeRate, Response, XrcMockInitPayload};
 
 const ONE_MINUTE_SECONDS: u64 = 60;

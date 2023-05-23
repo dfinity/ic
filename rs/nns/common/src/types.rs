@@ -1,17 +1,16 @@
+use crate::pb::v1::{
+    CanisterId as CanisterIdProto, NeuronId as NeuronIdProto, ProposalId as ProposalIdProto,
+};
 use candid::{CandidType, Deserialize};
 use dfn_core::api::CanisterId;
 use serde::Serialize;
-
-use std::cmp::Eq;
-use std::cmp::PartialEq;
-use std::convert::TryFrom;
-use std::fmt::{self, Debug, Display, Formatter};
-use std::hash::Hash;
-use std::num::ParseIntError;
-use std::str::FromStr;
-
-use crate::pb::v1::{
-    CanisterId as CanisterIdProto, NeuronId as NeuronIdProto, ProposalId as ProposalIdProto,
+use std::{
+    cmp::{Eq, PartialEq},
+    convert::TryFrom,
+    fmt::{self, Debug, Display, Formatter},
+    hash::Hash,
+    num::ParseIntError,
+    str::FromStr,
 };
 
 impl From<CanisterId> for CanisterIdProto {

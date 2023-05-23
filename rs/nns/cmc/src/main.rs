@@ -1,10 +1,3 @@
-use std::cell::RefCell;
-use std::cmp::{max, min};
-use std::collections::{btree_map::Entry, BTreeMap, BTreeSet};
-use std::convert::TryInto;
-use std::thread::LocalKey;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
-
 use candid::{candid_method, CandidType, Encode};
 use cycles_minting_canister::*;
 use dfn_candid::{candid_one, CandidOne};
@@ -14,6 +7,9 @@ use dfn_core::{
 };
 use dfn_protobuf::protobuf;
 use environment::Environment;
+use exchange_rate_canister::{
+    RealExchangeRateCanisterClient, UpdateExchangeRateError, UpdateExchangeRateState,
+};
 use ic_crypto_tree_hash::{
     flatmap, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree, WitnessGenerator,
     WitnessGeneratorImpl,
@@ -22,6 +18,7 @@ use ic_ic00_types::{
     CanisterIdRecord, CanisterSettingsArgsBuilder, CreateCanisterArgs, Method, IC_00,
 };
 use ic_ledger_core::block::BlockType;
+use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, REGISTRY_CANISTER_ID};
 use ic_types::{CanisterId, Cycles, PrincipalId, SubnetId};
 use icp_ledger::{
@@ -29,13 +26,16 @@ use icp_ledger::{
     Subaccount, Tokens, TransactionNotification, DEFAULT_TRANSFER_FEE,
 };
 use on_wire::{FromWire, IntoWire, NewType};
-
-use exchange_rate_canister::{
-    RealExchangeRateCanisterClient, UpdateExchangeRateError, UpdateExchangeRateState,
-};
-use ic_nns_common::types::UpdateIcpXdrConversionRatePayload;
 use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
 use serde::{Deserialize, Serialize};
+use std::{
+    cell::RefCell,
+    cmp::{max, min},
+    collections::{btree_map::Entry, BTreeMap, BTreeSet},
+    convert::TryInto,
+    thread::LocalKey,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
 mod environment;
 mod exchange_rate_canister;

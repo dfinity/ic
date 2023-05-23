@@ -1,13 +1,15 @@
+use crate::{
+    governance::{
+        manage_neuron_request::neuron_mutation::{
+            GovernanceMutationProxy, GovernanceNeuronMutation,
+        },
+        Governance,
+    },
+    pb::v1::{GovernanceError, ManageNeuronResponse},
+};
 use async_trait::async_trait;
-
 use ic_base_types::PrincipalId;
 use ic_nns_common::pb::v1::NeuronId;
-
-use crate::governance::manage_neuron_request::neuron_mutation::{
-    GovernanceMutationProxy, GovernanceNeuronMutation,
-};
-use crate::governance::Governance;
-use crate::pb::v1::{GovernanceError, ManageNeuronResponse};
 
 mod merge_neuron;
 mod neuron_mutation;

@@ -10,12 +10,13 @@ use ic_nns_governance::pb::v1::{Governance as GovernanceProto, Neuron};
 use ic_nns_gtc::pb::v1::Gtc as GtcProto;
 use icp_ledger::{AccountIdentifier, Subaccount};
 use prost::Message;
-use std::convert::TryInto;
-use std::fs::File;
-use std::io::{Read, Write};
-use std::path::Path;
-use std::path::PathBuf;
-use std::string::ToString;
+use std::{
+    convert::TryInto,
+    fs::File,
+    io::{Read, Write},
+    path::{Path, PathBuf},
+    string::ToString,
+};
 
 /// Command line argument to the utility.
 #[derive(Debug, Parser)]

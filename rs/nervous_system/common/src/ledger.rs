@@ -1,7 +1,6 @@
 use crate::NervousSystemError;
 use async_trait::async_trait;
-use dfn_core::api::PrincipalId;
-use dfn_core::{call, CanisterId};
+use dfn_core::{api::PrincipalId, call, CanisterId};
 use dfn_protobuf::protobuf;
 use ic_crypto_sha::Sha256;
 use ic_ledger_core::block::BlockIndex;
