@@ -135,6 +135,7 @@ use super::config::NODES_INFO;
 use super::driver_setup::SSH_AUTHORIZED_PRIV_KEYS_DIR;
 use super::farm::{DnsRecord, PlaynetCertificate};
 use super::test_setup::GroupSetup;
+use crate::driver::boundary_node::BoundaryNodeVm;
 use crate::driver::constants::{self, kibana_link, SSH_USERNAME};
 use crate::driver::farm::{Farm, GroupSpec};
 use crate::driver::test_env::{HasIcPrepDir, SshKeyGen, TestEnv, TestEnvAttribute};
@@ -1978,4 +1979,15 @@ impl TestEnvAttribute for FarmBaseUrl {
     fn attribute_name() -> String {
         "farm_url".to_string()
     }
+}
+
+pub fn await_boundary_node_healthy(env: &TestEnv, boundary_node_name: &str) {
+    let boundary_node = env
+        .get_deployed_boundary_node(boundary_node_name)
+        .unwrap()
+        .get_snapshot()
+        .unwrap();
+    boundary_node
+        .await_status_is_healthy()
+        .expect("BN did not come up!");
 }
