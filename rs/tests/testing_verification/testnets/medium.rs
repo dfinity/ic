@@ -41,7 +41,10 @@ use ic_tests::driver::{
     ic::{InternetComputer, Subnet},
     prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
-    test_env_api::{HasTopologySnapshot, NnsCanisterWasmStrategy, NnsCustomizations},
+    test_env_api::{
+        await_boundary_node_healthy, HasTopologySnapshot, NnsCanisterWasmStrategy,
+        NnsCustomizations,
+    },
 };
 use ic_tests::orchestrator::utils::rw_message::install_nns_with_customizations_and_check_progress;
 
@@ -77,4 +80,5 @@ pub fn setup(env: TestEnv) {
         .start(&env)
         .expect("failed to setup BoundaryNode VM");
     env.sync_prometheus_config_with_topology();
+    await_boundary_node_healthy(&env, BOUNDARY_NODE_NAME);
 }

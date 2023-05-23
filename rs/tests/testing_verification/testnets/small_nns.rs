@@ -51,7 +51,7 @@ use ic_tests::driver::{
     ic::{InternetComputer, Subnet},
     prometheus_vm::{HasPrometheus, PrometheusVm},
     test_env::TestEnv,
-    test_env_api::{HasTopologySnapshot, NnsCanisterWasmStrategy},
+    test_env_api::{await_boundary_node_healthy, HasTopologySnapshot, NnsCanisterWasmStrategy},
 };
 use ic_tests::nns_dapp::{
     install_ii_and_nns_dapp, nns_dapp_customizations, set_authorized_subnets,
@@ -92,4 +92,5 @@ pub fn setup(env: TestEnv) {
     install_ii_and_nns_dapp(&env, BOUNDARY_NODE_NAME);
     set_authorized_subnets(&env);
     env.sync_prometheus_config_with_topology();
+    await_boundary_node_healthy(&env, BOUNDARY_NODE_NAME);
 }
