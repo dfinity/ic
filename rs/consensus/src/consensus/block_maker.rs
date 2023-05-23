@@ -2,6 +2,7 @@
 use crate::{
     consensus::{
         metrics::{BlockMakerMetrics, EcdsaPayloadMetrics},
+        status::{self, Status},
         ConsensusCrypto,
     },
     dkg::create_payload as create_dkg_payload,
@@ -9,7 +10,7 @@ use crate::{
 };
 use ic_consensus_utils::{
     find_lowest_ranked_proposals, get_block_hash_string, get_subnet_record, is_time_to_make_block,
-    is_upgrade_finalized, is_upgrade_pending, membership::Membership, pool_reader::PoolReader,
+    membership::Membership, pool_reader::PoolReader,
 };
 use ic_interfaces::{
     consensus::PayloadBuilder, dkg::DkgPool, ecdsa::EcdsaPool, time_source::TimeSource,
@@ -313,54 +314,55 @@ impl BlockMaker {
                     (summary, ecdsa_summary).into()
                 }
                 dkg::Payload::Dealings(dealings) => {
-                    let batch_payload = match self.build_batch_payload(
+                    let batch_payload = self.build_batch_payload(
                         pool,
                         height,
                         certified_height,
                         &context,
                         &parent,
                         subnet_records,
-                    ) {
-                        None => return None,
-                        Some(payload) => payload,
-                    };
-                    if is_upgrade_pending(
+                    )?;
+
+                    match status::get_status(
                         height,
                         self.registry_client.as_ref(),
-                        &self.replica_config,
-                        &self.log,
+                        self.replica_config.subnet_id,
                         pool,
+                        &self.log,
                     )? {
-                        // Use empty DKG dealings if a replica upgrade is pending.
-                        let new_dealings = dkg::Dealings::new_empty(dealings.start_height);
-                        self.metrics.report_byte_estimate_metrics(
-                            batch_payload.xnet.size_bytes(),
-                            batch_payload.ingress.count_bytes(),
-                        );
-                        (batch_payload, new_dealings, None).into()
-                    } else {
-                        let ecdsa_data = ecdsa::create_data_payload(
-                            self.replica_config.subnet_id,
-                            &*self.registry_client,
-                            &*self.crypto,
-                            pool,
-                            self.ecdsa_pool.clone(),
-                            &*self.state_manager,
-                            &context,
-                            &parent,
-                            &self.ecdsa_payload_metrics,
-                            self.log.clone(),
-                        )
-                        .map_err(|err| {
-                            warn!(self.log, "Payload construction has failed: {:?}", err)
-                        })
-                        .ok()
-                        .flatten();
-                        self.metrics.report_byte_estimate_metrics(
-                            batch_payload.xnet.size_bytes(),
-                            batch_payload.ingress.count_bytes(),
-                        );
-                        (batch_payload, dealings, ecdsa_data).into()
+                        // Use empty DKG dealings if a replica is halted.
+                        Status::Halting | Status::Halted => {
+                            let new_dealings = dkg::Dealings::new_empty(dealings.start_height);
+                            self.metrics.report_byte_estimate_metrics(
+                                batch_payload.xnet.size_bytes(),
+                                batch_payload.ingress.count_bytes(),
+                            );
+                            (batch_payload, new_dealings, None).into()
+                        }
+                        Status::Running => {
+                            let ecdsa_data = ecdsa::create_data_payload(
+                                self.replica_config.subnet_id,
+                                &*self.registry_client,
+                                &*self.crypto,
+                                pool,
+                                self.ecdsa_pool.clone(),
+                                &*self.state_manager,
+                                &context,
+                                &parent,
+                                &self.ecdsa_payload_metrics,
+                                self.log.clone(),
+                            )
+                            .map_err(|err| {
+                                warn!(self.log, "Payload construction has failed: {:?}", err)
+                            })
+                            .ok()
+                            .flatten();
+                            self.metrics.report_byte_estimate_metrics(
+                                batch_payload.xnet.size_bytes(),
+                                batch_payload.ingress.count_bytes(),
+                            );
+                            (batch_payload, dealings, ecdsa_data).into()
+                        }
                     }
                 }
             },
@@ -392,45 +394,34 @@ impl BlockMaker {
         parent: &Block,
         subnet_records: &SubnetRecords,
     ) -> Option<BatchPayload> {
-        // Use empty payload if the (agreed) replica_version is not supported.
-        let upgrade_pending = is_upgrade_pending(
+        match status::get_status(
             parent.height.increment(),
             self.registry_client.as_ref(),
-            &self.replica_config,
-            &self.log,
+            self.replica_config.subnet_id,
             pool,
-        );
-        if upgrade_pending.is_none() {
-            warn!(self.log, "Failed to check if upgrade is pending!");
-        }
-        if upgrade_pending? {
-            let upgrade_finalized = is_upgrade_finalized(
-                self.registry_client.as_ref(),
-                &self.replica_config,
-                &self.log,
-                pool,
-            );
-            if upgrade_finalized.is_none() {
-                warn!(self.log, "Failed to check if upgrade is finalized!");
-            }
-            if upgrade_finalized.unwrap_or(false) {
-                None
-            } else {
-                Some(BatchPayload::default())
-            }
-        } else {
-            let past_payloads =
-                pool.get_payloads_from_height(certified_height.increment(), parent.clone());
-            let payload =
-                self.payload_builder
-                    .get_payload(height, &past_payloads, context, subnet_records);
+            &self.log,
+        )? {
+            // Don't propose any block when the subnet is halted.
+            Status::Halted => None,
+            // Use empty payload if the subnet is halting.
+            Status::Halting => Some(BatchPayload::default()),
+            Status::Running => {
+                let past_payloads =
+                    pool.get_payloads_from_height(certified_height.increment(), parent.clone());
+                let payload = self.payload_builder.get_payload(
+                    height,
+                    &past_payloads,
+                    context,
+                    subnet_records,
+                );
 
-            self.metrics
-                .get_payload_calls
-                .with_label_values(&["success"])
-                .inc();
+                self.metrics
+                    .get_payload_calls
+                    .with_label_values(&["success"])
+                    .inc();
 
-            Some(payload)
+                Some(payload)
+            }
         }
     }
 
@@ -462,7 +453,7 @@ impl BlockMaker {
 
     // Returns the registry version received from the NNS some specified amount of
     // time ago. If the parent's context references higher version which is already
-    // available localy, we use that version.
+    // available locally, we use that version.
     fn get_stable_registry_version(&self, parent: &Block) -> Option<RegistryVersion> {
         let parents_version = parent.context.registry_version;
         let latest_version = self.registry_client.get_latest_version();
@@ -653,10 +644,11 @@ mod tests {
     use ic_metrics::MetricsRegistry;
     use ic_test_utilities::types::ids::{node_test_id, subnet_test_id};
     use ic_test_utilities_registry::{add_subnet_record, SubnetRecordBuilder};
-    use ic_types::consensus::dkg;
-    use ic_types::consensus::{HasHeight, HasVersion};
-    use ic_types::crypto::CryptoHash;
-    use ic_types::*;
+    use ic_types::{
+        consensus::{dkg, HasHeight, HasVersion},
+        crypto::CryptoHash,
+        *,
+    };
     use std::sync::{Arc, RwLock};
 
     #[test]
