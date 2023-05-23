@@ -13,17 +13,22 @@ Success:: Upgrades work into both directions for all subnet types.
 end::catalog[] */
 
 use super::utils::rw_message::install_nns_and_check_progress;
-use crate::driver::ic::{InternetComputer, Subnet};
-use crate::driver::{test_env::TestEnv, test_env_api::*};
-use crate::orchestrator::utils::rw_message::{can_read_msg, store_message};
-use crate::orchestrator::utils::subnet_recovery::{
-    enable_ecdsa_signing_on_subnet, run_ecdsa_signature_test,
+use crate::{
+    driver::{
+        ic::{InternetComputer, Subnet},
+        test_env::TestEnv,
+        test_env_api::*,
+    },
+    orchestrator::utils::{
+        rw_message::{can_read_msg, can_read_msg_with_retries, store_message},
+        subnet_recovery::{enable_ecdsa_signing_on_subnet, run_ecdsa_signature_test},
+        upgrade::*,
+    },
+    tecdsa::tecdsa_signature_test::{
+        add_ecdsa_key_with_timeout_and_rotation_period, make_key, KEY_ID1,
+    },
+    util::{block_on, runtime_from_url, MessageCanister},
 };
-use crate::orchestrator::utils::upgrade::*;
-use crate::tecdsa::tecdsa_signature_test::{
-    add_ecdsa_key_with_timeout_and_rotation_period, make_key, KEY_ID1,
-};
-use crate::util::{block_on, runtime_from_url, MessageCanister};
 use canister_test::Canister;
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_registry_subnet_type::SubnetType;
@@ -284,8 +289,14 @@ fn downgrade_upgrade_roundtrip(
     start_node(&logger, &faulty_node);
     assert_assigned_replica_version(&faulty_node, branch_version, env.logger());
 
-    for (c, m) in &[(can_id, msg), (can_id_2, msg_2), (can_id_3, msg_3)] {
-        assert!(can_read_msg(&logger, &faulty_node.get_public_url(), *c, m));
+    for (can_id, msg) in &[(can_id, msg), (can_id_2, msg_2), (can_id_3, msg_3)] {
+        assert!(can_read_msg_with_retries(
+            &logger,
+            &faulty_node.get_public_url(),
+            *can_id,
+            msg,
+            /*retries=*/ 3
+        ));
     }
 
     info!(logger, "Could read all previously stored messages!");
