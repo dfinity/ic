@@ -1,3 +1,5 @@
+type Tokens = nat;
+
 type InitArg = record {
     ledger_id: principal;
 };
@@ -77,6 +79,7 @@ type TransactionWithId = record {
 };
 
 type GetTransactions = record {
+  balance : Tokens;
   transactions : vec TransactionWithId;
   // The txid of the oldest transaction the account has
   oldest_tx_id : opt BlockIndex;
@@ -94,5 +97,6 @@ type GetTransactionsResult = variant {
 service : (index_arg: IndexArg) -> {
     get_account_transactions : (GetAccountTransactionsArgs) -> (GetTransactionsResult);
     get_blocks : (GetBlocksRequest) -> (GetBlocksResponse) query;
+    icrc1_balance_of : (Account) -> (Tokens) query;
     ledger_id : () -> (principal) query;
 }

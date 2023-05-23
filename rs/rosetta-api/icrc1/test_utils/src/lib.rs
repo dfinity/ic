@@ -3,8 +3,11 @@ use ic_icrc1::{Block, Operation, Tokens, Transaction};
 use ic_ledger_core::block::BlockType;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg};
+use num_traits::cast::ToPrimitive;
 use proptest::prelude::*;
+use proptest::sample::select;
 use serde_bytes::ByteBuf;
+use std::collections::HashMap;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 pub const E8: u64 = 100_000_000;
@@ -49,7 +52,7 @@ fn operation_strategy() -> impl Strategy<Value = Operation> {
     ]
 }
 
-fn transaction_strategy() -> impl Strategy<Value = Transaction> {
+pub fn transaction_strategy() -> impl Strategy<Value = Transaction> {
     let operation_strategy = operation_strategy();
     let memo_strategy =
         prop::option::of(prop::collection::vec(0..=255u8, 32).prop_map(|x| Memo(ByteBuf::from(x))));
@@ -177,4 +180,184 @@ pub fn transfer_args_with_sender(
             })
             .collect()
     })
+}
+
+/// icrc1 TransferArg plus the caller
+#[derive(Clone, Debug)]
+pub struct CallerTransferArg {
+    pub caller: Principal,
+    pub transfer_arg: TransferArg,
+}
+
+impl CallerTransferArg {
+    pub fn from(&self) -> Account {
+        Account {
+            owner: self.caller,
+            subaccount: self.transfer_arg.from_subaccount,
+        }
+    }
+
+    pub fn accounts(&self) -> Vec<Account> {
+        vec![self.from(), self.transfer_arg.to]
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+struct TransactionsAndBalances {
+    transactions: Vec<CallerTransferArg>,
+    balances: HashMap<Account, u64>,
+}
+
+impl TransactionsAndBalances {
+    pub fn apply(&mut self, minter: Account, default_fee: u64, tx: CallerTransferArg) {
+        if tx.transfer_arg.to != minter {
+            self.credit(
+                tx.transfer_arg.to,
+                tx.transfer_arg.amount.0.to_u64().unwrap(),
+            );
+        }
+        let from = tx.from();
+        if from != minter {
+            let amount =
+                tx.transfer_arg.amount + tx.transfer_arg.fee.unwrap_or_else(|| default_fee.into());
+            self.debit(from, amount.0.to_u64().unwrap());
+        }
+    }
+
+    fn credit(&mut self, account: Account, amount: u64) {
+        *self.balances.entry(account).or_insert(0) += amount;
+    }
+
+    fn debit(&mut self, account: Account, amount: u64) {
+        use std::collections::hash_map::Entry;
+
+        match self.balances.entry(account) {
+            Entry::Occupied(e) if e.get() <= &amount => {
+                e.remove();
+            }
+            Entry::Occupied(mut e) => {
+                *e.get_mut() -= amount;
+            }
+            _ => {}
+        }
+    }
+
+    pub fn non_dust_balances(&self, threshold: u64) -> Vec<(Account, u64)> {
+        self.balances
+            .iter()
+            .filter(|(_, balance)| balance > &&(threshold + 1))
+            .map(|(account, balance)| (*account, *balance))
+            .collect()
+    }
+}
+
+/// Generates a list of valid transaction args with the caller, i.e.
+/// transaction args that the Ledger will accept and that have the
+/// Principal that should send them.
+///
+/// TODO: generate the missing arguments created_at_time, fee and memo
+/// TODO: replace amount generation with something that makes sense,
+///       e.g. exponential distribution
+/// TODO: allow to pass the account distribution
+pub fn valid_transactions_strategy(
+    minter: Account,
+    default_fee: u64,
+    length: usize,
+) -> impl Strategy<Value = Vec<CallerTransferArg>> {
+    fn mint_strategy(minter: Account) -> impl Strategy<Value = CallerTransferArg> {
+        (account_strategy(), any::<u64>()).prop_map(move |(to, amount)| CallerTransferArg {
+            caller: minter.owner,
+            transfer_arg: TransferArg {
+                from_subaccount: minter.subaccount,
+                to,
+                amount: amount.into(),
+                created_at_time: None,
+                fee: None,
+                memo: None,
+            },
+        })
+    }
+
+    fn burn_or_transfer_strategy(
+        balances: Vec<(Account, u64)>,
+        minter: Account,
+        default_fee: u64,
+    ) -> impl Strategy<Value = CallerTransferArg> {
+        select(balances).prop_flat_map(move |(from, balance)| {
+            (0..=(balance - default_fee + 1)).prop_flat_map(move |amount| {
+                let arb_burn = Just(CallerTransferArg {
+                    caller: from.owner,
+                    transfer_arg: TransferArg {
+                        from_subaccount: from.subaccount,
+                        to: minter,
+                        amount: amount.into(),
+                        created_at_time: None,
+                        fee: Some(default_fee.into()),
+                        memo: None,
+                    },
+                });
+                let arb_transfer = account_strategy().prop_map(move |to| CallerTransferArg {
+                    caller: from.owner,
+                    transfer_arg: TransferArg {
+                        from_subaccount: from.subaccount,
+                        to,
+                        amount: amount.into(),
+                        created_at_time: None,
+                        fee: Some(default_fee.into()),
+                        memo: None,
+                    },
+                });
+                proptest::strategy::Union::new_weighted(vec![
+                    (1, arb_burn.boxed()),
+                    (1000, arb_transfer.boxed()),
+                ])
+            })
+        })
+    }
+
+    fn generate_strategy(
+        state: TransactionsAndBalances,
+        minter: Account,
+        default_fee: u64,
+        additional_length: usize,
+    ) -> BoxedStrategy<TransactionsAndBalances> {
+        if additional_length == 0 {
+            return Just(TransactionsAndBalances::default()).boxed();
+        }
+
+        // The next transaction is based on the non-dust balances in the state.
+        // If there are no balances bigger than default_fees then the only next
+        // transaction possible is minting, otherwise we can also burn or transfer.
+
+        let balances = state.non_dust_balances(default_fee);
+
+        let arb_tx = if balances.is_empty() {
+            mint_strategy(minter).boxed()
+        } else {
+            // there are many more transfers than burns and mints
+            proptest::strategy::Union::new_weighted(vec![
+                (1, mint_strategy(minter).boxed()),
+                (
+                    1000,
+                    burn_or_transfer_strategy(balances, minter, default_fee).boxed(),
+                ),
+            ])
+            .boxed()
+        };
+
+        (Just(state), arb_tx)
+            .prop_flat_map(move |(mut state, tx)| {
+                state.apply(minter, default_fee, tx);
+                generate_strategy(state, minter, default_fee, additional_length - 1)
+            })
+            .boxed()
+    }
+
+    generate_strategy(
+        TransactionsAndBalances::default(),
+        minter,
+        default_fee,
+        length,
+    )
+    .prop_map(|res| res.transactions)
 }
