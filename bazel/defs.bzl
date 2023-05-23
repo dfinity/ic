@@ -77,7 +77,7 @@ sha256sum2url = rule(
     implementation = _sha256sum2url_impl,
     attrs = {
         "src": attr.label(allow_single_file = True),
-        "base_url": attr.string(default = "https://artifacts.idx.dfinity.network"),
+        "base_url": attr.string(default = "http://artifacts.idx.proxy-global.dfinity.network:8080"),
     },
 )
 
