@@ -14,15 +14,13 @@ use serde::Serialize;
 
 use ic_base_types::{NodeId, PrincipalId, RegistryVersion, SubnetId};
 use ic_ic00_types::{EcdsaKeyId, SetupInitialDKGArgs, SetupInitialDKGResponse};
-use ic_protobuf::registry::subnet::v1::EcdsaConfig;
 use ic_protobuf::registry::{
     node::v1::NodeRecord,
-    subnet::v1::{CatchUpPackageContents, GossipConfig, SubnetRecord},
+    subnet::v1::{CatchUpPackageContents, EcdsaConfig, GossipConfig, SubnetRecord},
 };
-use ic_registry_keys::make_node_record_key;
 use ic_registry_keys::{
     make_catch_up_package_contents_key, make_crypto_threshold_signing_pubkey_key,
-    make_subnet_list_record_key, make_subnet_record_key,
+    make_node_record_key, make_subnet_list_record_key, make_subnet_record_key,
 };
 use ic_registry_subnet_features::{SubnetFeatures, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
@@ -331,6 +329,7 @@ impl From<CreateSubnetPayload> for SubnetRecord {
             subnet_type: val.subnet_type.into(),
 
             is_halted: val.is_halted,
+            halt_at_cup_height: false,
 
             max_instructions_per_message: val.max_instructions_per_message,
             max_instructions_per_round: val.max_instructions_per_round,

@@ -78,21 +78,19 @@ use ic_protobuf::registry::node_rewards::v2::{
 };
 use ic_protobuf::registry::{
     crypto::v1::{PublicKey, X509PublicKeyCert},
+    dc::v1::{AddOrRemoveDataCentersProposalPayload, DataCenterRecord},
     node::v1::NodeRecord,
-    node_operator::v1::NodeOperatorRecord,
+    node_operator::v1::{NodeOperatorRecord, RemoveNodeOperatorsPayload},
     provisional_whitelist::v1::ProvisionalWhitelist as ProvisionalWhitelistProto,
     replica_version::v1::{BlessedReplicaVersions, ReplicaVersionRecord},
     routing_table::v1::{CanisterMigrations, RoutingTable},
     subnet::v1::{SubnetListRecord, SubnetRecord as SubnetRecordProto},
     unassigned_nodes_config::v1::UnassignedNodesConfigRecord,
 };
-use ic_protobuf::registry::{
-    dc::v1::{AddOrRemoveDataCentersProposalPayload, DataCenterRecord},
-    node_operator::v1::RemoveNodeOperatorsPayload,
-};
 use ic_registry_client::client::RegistryClientImpl;
-use ic_registry_client_helpers::ecdsa_keys::EcdsaKeysRegistry;
-use ic_registry_client_helpers::{crypto::CryptoRegistry, subnet::SubnetRegistry};
+use ic_registry_client_helpers::{
+    crypto::CryptoRegistry, ecdsa_keys::EcdsaKeysRegistry, subnet::SubnetRegistry,
+};
 use ic_registry_keys::{
     get_node_record_node_id, is_node_record_key, make_blessed_replica_versions_key,
     make_canister_migrations_record_key, make_crypto_node_key,
@@ -1833,10 +1831,16 @@ struct ProposeToUpdateSubnetCmd {
     /// field to the value set. See `ProposeToCreateSubnetCmd` for the semantic
     /// of this field.
     pub start_as_nns: Option<bool>,
+
     /// If set, the subnet will be halted: it will no longer create or execute
     /// blocks
     #[clap(long)]
     pub is_halted: Option<bool>,
+
+    /// If set, the subnet will be halted at the next CUP height: it will no longer create or execute
+    /// blocks
+    #[clap(long)]
+    pub halt_at_cup_height: Option<bool>,
 
     #[clap(long)]
     /// If set, this updates the instruction limit per message.
@@ -2069,6 +2073,7 @@ impl ProposalPayload<UpdateSubnetPayload> for ProposeToUpdateSubnetCmd {
             subnet_type: None,
 
             is_halted: self.is_halted,
+            halt_at_cup_height: self.halt_at_cup_height,
             max_instructions_per_message: self.max_instructions_per_message,
             max_instructions_per_round: self.max_instructions_per_round,
             max_instructions_per_install_code: self.max_instructions_per_install_code,
