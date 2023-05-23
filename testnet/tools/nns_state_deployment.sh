@@ -169,7 +169,7 @@ step 7 "Test the recovery." || (
     else
         # set +e
         log "Creating a test proposal..."
-        $IC_ADMIN --nns-url "http://[$UPLOAD_IP]:8080" -s $PEM propose-to-update-elected-replica-versions --replica-version-to-elect "TEST" --release-package-urls "https://host.com/file.tar.gz" --release-package-sha256-hex "deadbeef" --proposer $NEURON_ID --summary "Blessing test replica"
+        $IC_ADMIN --nns-url "http://[$UPLOAD_IP]:8080" -s $PEM propose-to-update-elected-replica-versions --replica-version-to-elect "TEST" --release-package-urls "http://release_package.tar.gz" --release-package-sha256-hex "C0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEEC0FFEED00D" --proposer $NEURON_ID --summary "Blessing test replica"
         if ssh $SSH_ARGS "admin@${UPLOAD_IP}" 'journalctl | grep -i proposal' | grep -q succeeded; then
             print_green "SUCCESS! NNS is up and running, the neuron $NEURON_ID can successfully create proposals."
         else
