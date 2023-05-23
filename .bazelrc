@@ -123,6 +123,7 @@ build:fuzzing --build_tag_filters=fuzz_test
 build:fuzzing --//bazel:enable_fuzzing_code=True
 
 # Suppress all additional output to make it more convenient in scripts
+query --ui_event_filters=-info,-debug --noshow_progress
 cquery --ui_event_filters=-info,-debug --noshow_progress
 
 try-import %workspace%/user.bazelrc
