@@ -13,7 +13,9 @@ use anyhow::Result;
 
 use ic_tests::driver::constants::SSH_USERNAME;
 use ic_tests::driver::driver_setup::{SSH_AUTHORIZED_PRIV_KEYS_DIR, SSH_AUTHORIZED_PUB_KEYS_DIR};
+use ic_tests::driver::farm::HostFeature;
 use ic_tests::driver::group::SystemTestGroup;
+use ic_tests::driver::ic::VmResources;
 use ic_tests::driver::test_env::{TestEnv, TestEnvAttribute};
 use ic_tests::driver::test_env_api::{retry, FarmBaseUrl, HasDependencies, SshSession};
 use ic_tests::driver::test_setup::GroupSetup;
@@ -58,7 +60,20 @@ fn setup(env: TestEnv) {
         "Preparing Universal VM {UVM_NAME} which is going to run {colocated_test}..."
     );
 
+    let host_features: Vec<HostFeature> =
+        env::var("COLOCATED_TEST_DRIVER_VM_REQUIRED_HOST_FEATURES")
+            .map_err(|e| e.to_string())
+            .and_then(|s| serde_json::from_str(&s).map_err(|e| e.to_string()))
+            .unwrap_or_default();
+
+    let vm_resources: VmResources = env::var("COLOCATED_TEST_DRIVER_VM_RESOURCES")
+        .map_err(|e| e.to_string())
+        .and_then(|s| serde_json::from_str(&s).map_err(|e| e.to_string()))
+        .unwrap_or_default();
+
     UniversalVm::new(UVM_NAME.to_string())
+        .with_required_host_features(host_features)
+        .with_vm_resources(vm_resources)
         .with_config_img(env.get_dependency_path("rs/tests/colocate_uvm_config_image.zst"))
         .start(&env)
         .unwrap_or_else(|e| panic!("Failed to setup Universal VM {UVM_NAME} because: {e}"));
