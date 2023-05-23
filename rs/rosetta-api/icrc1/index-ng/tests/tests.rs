@@ -524,40 +524,60 @@ fn test_get_account_transactions_pagination() {
     let index_id = install_index(env, ledger_id);
 
     trigger_heartbeat(env);
-    let mut start = None;
-    while start.unwrap_or(0) < 10_000 {
+
+    // The index get_account_transactions endpoint returns batches of transactions
+    // in descending order of index, i.e. the first index returned in the result
+    // is the biggest id in the result while the last index is the lowest.
+    // The start parameter of the function is the last seen index and the result
+    // will contain the next batch of indexes after that one.
+
+    let mut start = None; // the start id of the next batch request
+
+    // if start == Some(0) then we can stop as there is no index that is smaller
+    // than 0.
+    while start != Some(0) {
         let res = get_account_transactions(env, index_id, account(1, 0), start, u64::MAX);
+
+        // if the batch is empty then get_account_transactions
+        // didn't return the expected batch for the given start
         if res.transactions.is_empty() {
             panic!(
-                "No more transactions found! Expected: 10_000, Found: {}",
-                start.unwrap_or(0)
+                "get_account_transactions({:?}, u64::MAX) returned an empty batch!",
+                start
             );
         }
 
         let mut last_seen_txid = start;
         for TransactionWithId { id, transaction } in &res.transactions {
-            // transaction must be unique and in reverse order
             let id = id.0.to_u64().unwrap();
+
+            // transactions ids must be unique and in descending order
             if let Some(last_seen_txid) = last_seen_txid {
                 assert!(id < last_seen_txid);
             }
             last_seen_txid = Some(id);
 
+            // check the transaction itself
             assert_tx_eq(
-                transaction,
-                &Transaction::mint(
-                    Mint {
+                &Transaction {
+                    kind: "mint".into(),
+                    burn: None,
+                    mint: Some(Mint {
                         to: account(1, 0),
                         amount: (id * 10_000).into(),
                         created_at_time: None,
                         memo: None,
-                    },
-                    0,
-                ),
+                    }),
+                    transfer: None,
+                    timestamp: 0,
+                },
+                transaction,
             );
         }
 
-        start = Some(start.unwrap_or(0) + res.transactions.len() as u64);
+        // !res.transactions.is_empty() and the check on descending
+        // order guarantee that last_seen_txid < start
+        start = last_seen_txid;
     }
 }
 
