@@ -5,6 +5,8 @@
 //! checkpoint manifests, import state trees).
 
 use clap::Parser;
+use ic_registry_routing_table::CanisterIdRange;
+use ic_types::PrincipalId;
 use std::path::PathBuf;
 
 mod commands;
@@ -99,7 +101,7 @@ enum Opt {
         /// their path.
         ///
         /// To make sure that accidentally passing something that matches
-        /// unwanted file paths, the list of processed files is explititly
+        /// unwanted file paths, the list of processed files is explicitly
         /// printed.
         #[clap(long = "canister")]
         canister: String,
@@ -142,6 +144,28 @@ enum Opt {
         #[clap(long = "bytes")]
         bytes: String,
     },
+
+    /// Prunes a replicated state, as part of a subnet split.
+    #[clap(name = "split")]
+    #[clap(group(
+        clap::ArgGroup::new("ranges")
+            .required(true)
+            .args(&["retain", "drop"]),
+    ))]
+    Split {
+        /// Path to the state layout.
+        #[clap(long, required = true)]
+        root: PathBuf,
+        /// The ID of the subnet being split off.
+        #[clap(long, required = true)]
+        subnet_id: PrincipalId,
+        /// Canister ID ranges to retain (assigned to the subnet in the routing table).
+        #[clap(long, multiple_values(true))]
+        retain: Vec<CanisterIdRange>,
+        /// Canister ID ranges to drop (assigned to other subnet in the routing table).
+        #[clap(long, multiple_values(true))]
+        drop: Vec<CanisterIdRange>,
+    },
 }
 
 fn main() {
@@ -175,6 +199,12 @@ fn main() {
         Opt::PrincipalFromBytes { bytes } => {
             commands::convert_ids::do_principal_from_byte_string(bytes)
         }
+        Opt::Split {
+            root,
+            subnet_id,
+            retain,
+            drop,
+        } => commands::split::do_split(root, subnet_id, retain, drop),
     };
 
     if let Err(e) = result {
