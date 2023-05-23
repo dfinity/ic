@@ -2245,6 +2245,11 @@ pub mod create_service_nervous_system {
         #[prost(message, optional, tag = "6")]
         pub neuron_basket_construction_parameters:
             ::core::option::Option<swap_parameters::NeuronBasketConstructionParameters>,
+        #[prost(string, optional, tag = "7")]
+        pub confirmation_text: ::core::option::Option<::prost::alloc::string::String>,
+        #[prost(message, optional, tag = "8")]
+        pub restricted_countries:
+            ::core::option::Option<::ic_nervous_system_proto::pb::v1::Countries>,
     }
     /// Nested message and enum types in `SwapParameters`.
     pub mod swap_parameters {

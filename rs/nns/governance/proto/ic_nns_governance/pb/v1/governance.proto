@@ -1634,6 +1634,10 @@ message CreateServiceNervousSystem {
     }
 
     NeuronBasketConstructionParameters neuron_basket_construction_parameters = 6;
+
+    optional string confirmation_text = 7;
+
+    optional ic_nervous_system.pb.v1.Countries restricted_countries = 8;
   }
 
   SwapParameters swap_parameters = 8;

@@ -97,6 +97,7 @@ type Command_2 = variant {
 };
 type Committed = record { sns_governance_canister_id : opt principal };
 type Configure = record { operation : opt Operation };
+type Countries = record { iso_codes : vec text };
 type CreateServiceNervousSystem = record {
   url : opt text;
   governance_parameters : opt GovernanceParameters;
@@ -474,10 +475,12 @@ type SwapDistribution = record { total : opt Tokens };
 type SwapParameters = record {
   minimum_participants : opt nat64;
   neuron_basket_construction_parameters : opt NeuronBasketConstructionParameters;
+  confirmation_text : opt text;
   maximum_participant_icp : opt Tokens;
   minimum_icp : opt Tokens;
   minimum_participant_icp : opt Tokens;
   maximum_icp : opt Tokens;
+  restricted_countries : opt Countries;
 };
 type Tally = record {
   no : nat64;

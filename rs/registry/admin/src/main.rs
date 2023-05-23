@@ -3806,10 +3806,10 @@ struct ProposeToCreateServiceNervousSystemCmd {
     // Canister Control
     // ----------------
     #[clap(long)]
-    fallback_controller_principal_ids: Vec<PrincipalId>,
+    fallback_controller_principal_id: Vec<PrincipalId>,
 
     #[clap(long)]
-    dapp_canisters: Vec<PrincipalId>,
+    dapp_canister: Vec<PrincipalId>,
 
     // Initial SNS Tokens and Neurons
     // ------------------------------
@@ -3850,6 +3850,12 @@ struct ProposeToCreateServiceNervousSystemCmd {
 
     #[clap(long, value_parser=parse_tokens)]
     swap_maximum_participant_icp: nervous_system_pb::Tokens,
+
+    #[clap(long)]
+    confirmation_text: Option<String>,
+
+    #[clap(long)]
+    restrict_swap_in_country: Option<Vec<String>>,
 
     #[clap(long)]
     swap_neuron_count: u64,
@@ -3922,9 +3928,10 @@ impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSys
             description,
             url,
             logo,
-
-            fallback_controller_principal_ids,
-            dapp_canisters,
+            // Deconstruct to a more indicative name
+            fallback_controller_principal_id: fallback_controller_principal_ids,
+            // Deconstruct to a more indicative name
+            dapp_canister: dapp_canisters,
 
             developer_neuron_controller,
             developer_neuron_dissolve_delay,
@@ -3942,6 +3949,9 @@ impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSys
             swap_maximum_participant_icp,
             swap_neuron_count,
             swap_neuron_dissolve_delay,
+            confirmation_text,
+            // Deconstruct to a more indicative name
+            restrict_swap_in_country: restricted_countries,
 
             transaction_fee,
             token_name,
@@ -4067,13 +4077,17 @@ impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSys
                 })
             };
 
+            let restricted_countries =
+                restricted_countries.map(|iso_codes| nervous_system_pb::Countries { iso_codes });
+
             Some(SwapParameters {
                 minimum_participants,
                 minimum_icp,
                 maximum_icp,
                 minimum_participant_icp,
                 maximum_participant_icp,
-
+                confirmation_text,
+                restricted_countries,
                 neuron_basket_construction_parameters,
             })
         };

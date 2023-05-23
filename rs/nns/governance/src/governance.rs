@@ -8400,7 +8400,7 @@ impl TryFrom<CreateServiceNervousSystem> for SnsInitPayload {
 
             initial_token_distribution,
 
-            swap_parameters: _, // Not used.
+            swap_parameters,
             ledger_parameters,
             governance_parameters,
         } = src;
@@ -8409,6 +8409,7 @@ impl TryFrom<CreateServiceNervousSystem> for SnsInitPayload {
 
         let ledger_parameters = ledger_parameters.unwrap_or_default();
         let governance_parameters = governance_parameters.unwrap_or_default();
+        let swap_parameters = swap_parameters.unwrap_or_default();
 
         let create_service_nervous_system::LedgerParameters {
             transaction_fee,
@@ -8515,6 +8516,10 @@ impl TryFrom<CreateServiceNervousSystem> for SnsInitPayload {
             canisters: dapp_canisters,
         });
 
+        let confirmation_text = swap_parameters.confirmation_text;
+
+        let restricted_countries = swap_parameters.restricted_countries;
+
         if !defects.is_empty() {
             return Err(format!(
                 "Failed to convert proposal to SnsInitPayload:\n{}",
@@ -8545,8 +8550,8 @@ impl TryFrom<CreateServiceNervousSystem> for SnsInitPayload {
             initial_voting_period_seconds,
             wait_for_quiet_deadline_increase_seconds,
             dapp_canisters,
-            confirmation_text: None,    // TODO[NNS1-2232]
-            restricted_countries: None, // TODO[NNS1-2232]
+            confirmation_text,
+            restricted_countries,
         };
 
         result.validate().map_err(|err| err.to_string())?;
