@@ -3,6 +3,7 @@
 pub mod checkpoint;
 pub mod labeled_tree_visitor;
 pub mod manifest;
+pub mod split;
 pub mod state_sync;
 pub mod stream_encoding;
 pub mod tip;
