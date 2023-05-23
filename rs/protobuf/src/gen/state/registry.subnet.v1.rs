@@ -76,6 +76,10 @@ pub struct SubnetRecord {
     /// If a removed key is not held by another subnet, it will be lost.
     #[prost(message, optional, tag = "27")]
     pub ecdsa_config: ::core::option::Option<EcdsaConfig>,
+    /// If `true`, the subnet will be halted after reaching the next cup height: it will no longer
+    /// create or execute blocks.
+    #[prost(bool, tag = "28")]
+    pub halt_at_cup_height: bool,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

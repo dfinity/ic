@@ -1,5 +1,5 @@
 use ic_interfaces::time_source::TimeSource;
-use ic_interfaces_registry::{LocalStoreCertifiedTimeReader, RegistryClient};
+use ic_interfaces_registry::LocalStoreCertifiedTimeReader;
 use ic_protobuf::registry::subnet::v1::{
     CatchUpPackageContents, InitialNiDkgTranscriptRecord, SubnetFeatures, SubnetListRecord,
     SubnetRecord,
@@ -15,13 +15,13 @@ use ic_types::{
     crypto::threshold_sig::ni_dkg::{NiDkgTag, NiDkgTranscript},
     NodeId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId, Time,
 };
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 
 fn empty_ni_dkg_transcripts_with_committee(
     committee: Vec<NodeId>,
     registry_version: u64,
-) -> std::collections::BTreeMap<NiDkgTag, NiDkgTranscript> {
-    vec![
+) -> BTreeMap<NiDkgTag, NiDkgTranscript> {
+    BTreeMap::from([
         (
             NiDkgTag::LowThreshold,
             NiDkgTranscript::dummy_transcript_for_tests_with_params(
@@ -40,16 +40,14 @@ fn empty_ni_dkg_transcripts_with_committee(
                 registry_version,
             ),
         ),
-    ]
-    .into_iter()
-    .collect()
+    ])
 }
 
 /// Returns the registry with provided subnet records.
 pub fn setup_registry(
     subnet_id: SubnetId,
     versions: Vec<(u64, SubnetRecord)>,
-) -> Arc<dyn RegistryClient> {
+) -> Arc<FakeRegistryClient> {
     let registry = setup_registry_non_final(subnet_id, versions).1;
     registry.update_to_latest_version();
     registry
@@ -62,18 +60,18 @@ pub fn setup_registry(
 /// version.
 pub fn setup_registry_non_final(
     subnet_id: SubnetId,
-    mut versions: Vec<(u64, SubnetRecord)>,
+    versions: Vec<(u64, SubnetRecord)>,
 ) -> (Arc<ProtoRegistryDataProvider>, Arc<FakeRegistryClient>) {
     let registry_data_provider = Arc::new(ProtoRegistryDataProvider::new());
     assert!(
         !versions.is_empty(),
         "Cannot setup a registry without records."
     );
-    let (version, record) = &mut versions[0];
+    let (version, record) = &versions[0];
 
     insert_initial_dkg_transcript(*version, subnet_id, record, &registry_data_provider);
 
-    for (version, record) in versions.iter().cloned() {
+    for (version, record) in versions {
         add_subnet_record(&registry_data_provider, version, subnet_id, record);
     }
     let registry = Arc::new(FakeRegistryClient::new(
@@ -164,6 +162,7 @@ pub fn test_subnet_record() -> SubnetRecord {
         start_as_nns: false,
         subnet_type: SubnetType::Application.into(),
         is_halted: false,
+        halt_at_cup_height: false,
         max_instructions_per_message: 5_000_000_000,
         max_instructions_per_round: 7_000_000_000,
         max_instructions_per_install_code: 200_000_000_000,
@@ -218,6 +217,11 @@ impl SubnetRecordBuilder {
 
     pub fn with_is_halted(mut self, is_halted: bool) -> Self {
         self.record.is_halted = is_halted;
+        self
+    }
+
+    pub fn with_halt_at_cup_height(mut self, halt_at_cup_height: bool) -> Self {
+        self.record.halt_at_cup_height = halt_at_cup_height;
         self
     }
 

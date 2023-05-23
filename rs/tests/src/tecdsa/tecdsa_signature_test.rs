@@ -19,15 +19,11 @@ use std::time::Duration;
 
 use crate::driver::ic::{InternetComputer, Subnet};
 use crate::driver::test_env::TestEnv;
-use crate::driver::test_env_api::HasPublicApiUrl;
-use crate::driver::test_env_api::HasTopologySnapshot;
-use crate::driver::test_env_api::IcNodeContainer;
+use crate::driver::test_env_api::{HasPublicApiUrl, HasTopologySnapshot, IcNodeContainer};
 use crate::nns::{get_subnet_list_from_registry, vote_and_execute_proposal};
 use crate::util::*;
-use candid::Encode;
-use candid::Principal;
-use canister_test::Canister;
-use canister_test::Cycles;
+use candid::{Encode, Principal};
+use canister_test::{Canister, Cycles};
 use ic_agent::AgentError;
 use ic_base_types::{NodeId, SubnetId};
 use ic_canister_client::Sender;
@@ -45,8 +41,7 @@ use ic_nns_test_utils::{governance::submit_external_update_proposal, ids::TEST_N
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_subnet_features::{EcdsaConfig, SubnetFeatures, DEFAULT_ECDSA_MAX_QUEUE_SIZE};
 use ic_registry_subnet_type::SubnetType;
-use ic_types::p2p::{self};
-use ic_types::{Height, ReplicaVersion};
+use ic_types::{p2p, Height, ReplicaVersion};
 use ic_types_test_utils::ids::subnet_test_id;
 use itertools::Itertools;
 use k256::ecdsa::{signature::hazmat::PrehashVerifier, Signature, VerifyingKey};
@@ -101,6 +96,7 @@ pub(crate) fn empty_subnet_update() -> UpdateSubnetPayload {
         start_as_nns: None,
         subnet_type: None,
         is_halted: None,
+        halt_at_cup_height: None,
         max_instructions_per_message: None,
         max_instructions_per_round: None,
         max_instructions_per_install_code: None,

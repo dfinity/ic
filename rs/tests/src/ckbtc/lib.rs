@@ -202,6 +202,7 @@ fn empty_subnet_update() -> UpdateSubnetPayload {
         start_as_nns: None,
         subnet_type: None,
         is_halted: None,
+        halt_at_cup_height: None,
         max_instructions_per_message: None,
         max_instructions_per_round: None,
         max_instructions_per_install_code: None,

@@ -9,6 +9,6 @@ pub struct SubnetRecords {
     /// but is very likely available to all nodes on the subnet.
     ///
     /// This is the [`SubnetRecord`] that corresponds to the
-    /// [`ValidationContext`].
+    /// [`ic_types::batch::ValidationContext`].
     pub context_version: SubnetRecord,
 }
