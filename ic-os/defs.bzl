@@ -363,14 +363,18 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
         zstd_compress(
             name = "update-img-test.tar.zst",
             srcs = [":update-img-test.tar"],
-            # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
-            # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
-            tags = ["no-remote-cache"],
         )
 
         sha256sum(
             name = "update-img-test.tar.zst.sha256",
             srcs = [":update-img-test.tar.zst"],
+            visibility = visibility,
+        )
+
+        sha256sum2url(
+            name = "update-img-test.tar.zst.cas-url",
+            src = ":update-img-test.tar.zst.sha256",
+            visibility = visibility,
         )
 
         gzip_compress(
@@ -671,14 +675,18 @@ def boundary_node_icos_build(name, image_deps, mode = None, sev = False, visibil
     zstd_compress(
         name = "disk-img.tar.zst",
         srcs = ["disk-img.tar"],
-        # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
-        # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
-        tags = ["no-remote-cache"],
     )
 
     sha256sum(
         name = "disk-img.tar.zst.sha256",
         srcs = [":disk-img.tar.zst"],
+        visibility = visibility,
+    )
+
+    sha256sum2url(
+        name = "disk-img.tar.zst.cas-url",
+        src = ":disk-img.tar.zst.sha256",
+        visibility = visibility,
     )
 
     gzip_compress(
@@ -710,7 +718,7 @@ def boundary_node_icos_build(name, image_deps, mode = None, sev = False, visibil
             ":upload_disk-img",
             ":disk-img.tar.zst.sha256",
         ],
-        visibility = ["//visibility:public"],
+        visibility = visibility,
         tags = ["manual"],
     )
 
@@ -908,14 +916,18 @@ def boundary_api_guestos_build(name, image_deps, mode = None, visibility = None)
     zstd_compress(
         name = "disk-img.tar.zst",
         srcs = ["disk-img.tar"],
-        # The image is pretty big, therefore it is usually much faster to just rebuild it instead of fetching from the cache.
-        # TODO(IDX-2221): remove this when CI jobs and bazel infrastructure will run in the same clusters.
-        tags = ["no-remote-cache"],
     )
 
     sha256sum(
         name = "disk-img.tar.zst.sha256",
         srcs = [":disk-img.tar.zst"],
+        visibility = visibility,
+    )
+
+    sha256sum2url(
+        name = "disk-img.tar.zst.cas-url",
+        src = ":disk-img.tar.zst.sha256",
+        visibility = visibility,
     )
 
     gzip_compress(
