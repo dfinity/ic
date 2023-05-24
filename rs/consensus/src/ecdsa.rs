@@ -520,7 +520,9 @@ fn compute_priority(
         | EcdsaMessageAttribute::EcdsaOpening(transcript_id) => {
             let height = transcript_id.source_height();
             if height <= args.finalized_height {
-                if args.active_transcripts.contains(transcript_id) {
+                if args.active_transcripts.contains(transcript_id)
+                    || args.requested_transcripts.contains(transcript_id)
+                {
                     Priority::Fetch
                 } else {
                     metrics
@@ -695,15 +697,18 @@ mod tests {
         let transcript_id_drop = IDkgTranscriptId::new(subnet_id, 2, Height::from(70));
         let transcript_id_fetch_2 = IDkgTranscriptId::new(subnet_id, 3, Height::from(102));
         let transcript_id_stash = IDkgTranscriptId::new(subnet_id, 4, Height::from(200));
+        let transcript_id_fetch_3 = IDkgTranscriptId::new(subnet_id, 5, Height::from(80));
 
         let metrics_registry = MetricsRegistry::new();
         let metrics = EcdsaGossipMetrics::new(metrics_registry);
 
         let mut active_transcripts = BTreeSet::new();
         active_transcripts.insert(transcript_id_fetch_1);
+        let mut requested_transcripts = BTreeSet::new();
+        requested_transcripts.insert(transcript_id_fetch_3);
         let args = EcdsaPriorityFnArgs {
             finalized_height: Height::from(100),
-            requested_transcripts: BTreeSet::new(),
+            requested_transcripts,
             requested_signatures: BTreeSet::new(),
             active_transcripts,
         };
@@ -726,6 +731,10 @@ mod tests {
                 EcdsaMessageAttribute::EcdsaComplaint(transcript_id_stash),
                 Priority::Stash,
             ),
+            (
+                EcdsaMessageAttribute::EcdsaComplaint(transcript_id_fetch_3),
+                Priority::Fetch,
+            ),
             // Openings
             (
                 EcdsaMessageAttribute::EcdsaOpening(transcript_id_fetch_1),
@@ -742,6 +751,10 @@ mod tests {
             (
                 EcdsaMessageAttribute::EcdsaOpening(transcript_id_stash),
                 Priority::Stash,
+            ),
+            (
+                EcdsaMessageAttribute::EcdsaOpening(transcript_id_fetch_3),
+                Priority::Fetch,
             ),
         ];
 
