@@ -68,7 +68,7 @@ pub fn sign_message(message: &[u8], secret_key: &SecretKey) -> IndividualSignatu
 }
 
 pub fn create_pop(public_key: &PublicKey, secret_key: &SecretKey) -> Pop {
-    let public_key_bytes = PublicKeyBytes::from(public_key.clone());
+    let public_key_bytes = PublicKeyBytes::from(public_key);
     let mut domain_separated_public_key: Vec<u8> = vec![];
     domain_separated_public_key
         .extend(DomainSeparationContext::new(DOMAIN_MULTI_SIG_BLS12_381_POP).as_bytes());
@@ -98,7 +98,7 @@ pub fn verify_individual_message_signature(
     verify_point(&hash, signature, public_key)
 }
 pub fn verify_pop(pop: &Pop, public_key: &PublicKey) -> bool {
-    let public_key_bytes = PublicKeyBytes::from(public_key.clone());
+    let public_key_bytes = PublicKeyBytes::from(public_key);
     let mut domain_separated_public_key: Vec<u8> = vec![];
     domain_separated_public_key
         .extend(DomainSeparationContext::new(DOMAIN_MULTI_SIG_BLS12_381_POP).as_bytes());

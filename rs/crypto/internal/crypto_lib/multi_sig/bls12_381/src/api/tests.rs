@@ -36,11 +36,11 @@ fn test_happy_path(
 ) {
     let pops: CryptoResult<Vec<PopBytes>> = keys
         .iter()
-        .map(|(secret_key, public_key)| multi_sig::create_pop(*public_key, secret_key.clone()))
+        .map(|(secret_key, public_key)| multi_sig::create_pop(public_key, secret_key))
         .collect();
     let signatures: Vec<IndividualSignatureBytes> = keys
         .iter()
-        .map(|(secret_key, _)| multi_sig::sign(message, secret_key.clone()))
+        .map(|(secret_key, _)| multi_sig::sign(message, secret_key))
         .collect();
     let pops = pops.expect("PoP generation failed");
     let signature = multi_sig::combine(&signatures);
@@ -53,12 +53,12 @@ fn test_happy_path(
     let pop_verification: CryptoResult<()> = public_keys
         .iter()
         .zip(pops)
-        .try_for_each(|(public_key, pop)| multi_sig::verify_pop(pop, *public_key));
+        .try_for_each(|(public_key, pop)| multi_sig::verify_pop(&pop, public_key));
     let individual_verification: CryptoResult<()> = public_keys
         .iter()
         .zip(signatures.clone())
         .try_for_each(|(public_key, signature)| {
-            multi_sig::verify_individual(message, signature, *public_key)
+            multi_sig::verify_individual(message, &signature, public_key)
         });
     assert!(pop_verification.is_ok(), "PoP verification failed");
     assert!(
@@ -66,7 +66,7 @@ fn test_happy_path(
         "Individual signature verification failed"
     );
     assert!(
-        multi_sig::verify_combined(message, signature, &public_keys).is_ok(),
+        multi_sig::verify_combined(message, &signature, &public_keys).is_ok(),
         "Signature verification failed"
     );
     (signatures, signature, public_keys)
@@ -94,9 +94,9 @@ proptest! {
       evil_signature in arbitrary::individual_signature_bytes()
     ) {
         let (secret_key, public_key) = keys;
-        let signature = multi_sig::sign(&message, secret_key);
+        let signature = multi_sig::sign(&message, &secret_key);
         prop_assume!(evil_signature != signature);
-        assert!(multi_sig::verify_individual(&message, evil_signature, public_key).is_err())
+        assert!(multi_sig::verify_individual(&message, &evil_signature, &public_key).is_err())
     }
 
     #[test]
@@ -105,9 +105,9 @@ proptest! {
       evil_pop in arbitrary::pop_bytes()
     ) {
         let (secret_key, public_key) = keys;
-        let pop = multi_sig::create_pop(public_key, secret_key).expect("Failed to create PoP");
+        let pop = multi_sig::create_pop(&public_key, &secret_key).expect("Failed to create PoP");
         prop_assume!(evil_pop != pop);
-        assert!(multi_sig::verify_pop(evil_pop, public_key).is_err())
+        assert!(multi_sig::verify_pop(&evil_pop, &public_key).is_err())
     }
 
     #[test]
@@ -118,6 +118,6 @@ proptest! {
     ) {
         let (_signatures, signature, public_keys) = test_happy_path(&keys, &message);
         prop_assume!(evil_signature != signature);
-        assert!(multi_sig::verify_combined(&message, evil_signature, &public_keys).is_err())
+        assert!(multi_sig::verify_combined(&message, &evil_signature, &public_keys).is_err())
     }
 }

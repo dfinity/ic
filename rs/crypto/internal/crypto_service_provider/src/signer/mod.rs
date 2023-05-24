@@ -112,7 +112,7 @@ impl CspSigner for Csp {
                 AlgorithmId::MultiBls12_381,
                 CspSignature::MultiBls12_381(MultiBls12_381_Signature::Individual(signature)),
                 CspPublicKey::MultiBls12_381(public_key),
-            ) => multi_sig::verify_individual(msg, *signature, public_key),
+            ) => multi_sig::verify_individual(msg, signature, &public_key),
             (.., signer) => Err(CryptoError::SignatureVerification {
                 algorithm: algorithm_id,
                 public_key_bytes: signer.as_ref().to_vec(),
@@ -133,7 +133,7 @@ impl CspSigner for Csp {
                 AlgorithmId::MultiBls12_381,
                 CspPop::MultiBls12_381(pop),
                 CspPublicKey::MultiBls12_381(public_key_bytes),
-            ) => multi_sig::verify_pop(pop, public_key_bytes),
+            ) => multi_sig::verify_pop(&pop, &public_key_bytes),
             (.., pop, public_key) => Err(CryptoError::PopVerification {
                 algorithm: algorithm_id,
                 public_key_bytes: public_key.as_ref().to_vec(),
@@ -198,7 +198,7 @@ impl CspSigner for Csp {
                         }),
                     })
                     .collect();
-                multi_sig::verify_combined(msg, signature, &signers?[..])
+                multi_sig::verify_combined(msg, &signature, &signers?[..])
             }
             _ => Err(CryptoError::AlgorithmNotSupported {
                 algorithm: algorithm_id,

@@ -1,13 +1,12 @@
 //! External API for the multisignature library
 use super::crypto;
 use super::types::{
-    CombinedSignatureBytes, IndividualSignature, IndividualSignatureBytes, Pop, PopBytes,
-    PublicKey, PublicKeyBytes, SecretKeyBytes,
+    CombinedSignature, CombinedSignatureBytes, IndividualSignature, IndividualSignatureBytes, Pop,
+    PopBytes, PublicKey, PublicKeyBytes, SecretKey, SecretKeyBytes,
 };
 use ic_types::crypto::{AlgorithmId, CryptoError};
 use rand::{CryptoRng, Rng};
 use std::convert::TryFrom;
-use std::convert::TryInto;
 
 #[cfg(test)]
 mod tests;
@@ -15,7 +14,10 @@ mod tests;
 /// Generates a keypair using the given `rng`.
 pub fn keypair_from_rng<R: Rng + CryptoRng>(rng: &mut R) -> (SecretKeyBytes, PublicKeyBytes) {
     let (secret_key, public_key) = crypto::keypair_from_rng(rng);
-    (secret_key.into(), public_key.into())
+    (
+        SecretKeyBytes::from(&secret_key),
+        PublicKeyBytes::from(&public_key),
+    )
 }
 
 /// Generates a multisignature on the given `message` using the given
@@ -23,8 +25,9 @@ pub fn keypair_from_rng<R: Rng + CryptoRng>(rng: &mut R) -> (SecretKeyBytes, Pub
 ///
 /// Note: This hashes the message to be signed.  If we pre-hash, the hashing
 /// can be skipped. https://docs.rs/threshold_crypto/0.3.2/threshold_crypto/struct.SecretKey.html#method.sign
-pub fn sign(message: &[u8], secret_key: SecretKeyBytes) -> IndividualSignatureBytes {
-    crypto::sign_message(message, &secret_key.into()).into()
+pub fn sign(message: &[u8], secret_key: &SecretKeyBytes) -> IndividualSignatureBytes {
+    let signature = crypto::sign_message(message, &SecretKey::from(secret_key));
+    IndividualSignatureBytes::from(&signature)
 }
 
 /// Creates a proof of possession (PoP) of `secret_key_bytes`.
@@ -35,11 +38,12 @@ pub fn sign(message: &[u8], secret_key: SecretKeyBytes) -> IndividualSignatureBy
 /// * `CryptoError::MalformedPublicKey` if `public_key_bytes` cannot be parsed
 ///   as a valid G2 point.
 pub fn create_pop(
-    public_key_bytes: PublicKeyBytes,
-    secret_key_bytes: SecretKeyBytes,
+    public_key_bytes: &PublicKeyBytes,
+    secret_key_bytes: &SecretKeyBytes,
 ) -> Result<PopBytes, CryptoError> {
-    let public_key = public_key_bytes.try_into()?;
-    Ok(crypto::create_pop(&public_key, &secret_key_bytes.into()).into())
+    let public_key = PublicKey::try_from(public_key_bytes)?;
+    let pop = crypto::create_pop(&public_key, &SecretKey::from(secret_key_bytes));
+    Ok(PopBytes::from(&pop))
 }
 
 /// Verifies a public key's proof of possession (PoP).
@@ -54,8 +58,8 @@ pub fn create_pop(
 ///   as a valid G2 point.
 /// * `CryptoError::PopVerification` if the given PoP fails to verify.
 pub fn verify_pop(
-    pop_bytes: PopBytes,
-    public_key_bytes: PublicKeyBytes,
+    pop_bytes: &PopBytes,
+    public_key_bytes: &PublicKeyBytes,
 ) -> Result<(), CryptoError> {
     let pop = Pop::try_from(pop_bytes)?;
     let public_key = PublicKey::try_from(public_key_bytes)?;
@@ -81,11 +85,10 @@ pub fn combine(
 ) -> Result<CombinedSignatureBytes, CryptoError> {
     let signatures: Result<Vec<IndividualSignature>, CryptoError> = signatures
         .iter()
-        .cloned()
-        .map(|signature_bytes| signature_bytes.try_into())
+        .map(|signature_bytes| IndividualSignature::try_from(signature_bytes))
         .collect();
     let signature = crypto::combine_signatures(&signatures?);
-    Ok(signature.into())
+    Ok(CombinedSignatureBytes::from(&signature))
 }
 
 /// Verifies an individual signature over the given `message` using the given
@@ -100,11 +103,11 @@ pub fn combine(
 ///   fails.
 pub fn verify_individual(
     message: &[u8],
-    signature_bytes: IndividualSignatureBytes,
-    public_key_bytes: PublicKeyBytes,
+    signature_bytes: &IndividualSignatureBytes,
+    public_key_bytes: &PublicKeyBytes,
 ) -> Result<(), CryptoError> {
-    let signature = signature_bytes.try_into()?;
-    let public_key = public_key_bytes.try_into()?;
+    let signature = IndividualSignature::try_from(signature_bytes)?;
+    let public_key = PublicKey::try_from(public_key_bytes)?;
     if crypto::verify_individual_message_signature(message, &signature, &public_key) {
         Ok(())
     } else {
@@ -130,13 +133,16 @@ pub fn verify_individual(
 ///   fails.
 pub fn verify_combined(
     message: &[u8],
-    signature: CombinedSignatureBytes,
+    signature: &CombinedSignatureBytes,
     public_keys: &[PublicKeyBytes],
 ) -> Result<(), CryptoError> {
     let public_keys: Result<Vec<PublicKey>, CryptoError> =
-        public_keys.iter().cloned().map(|x| x.try_into()).collect();
-    if crypto::verify_combined_message_signature(message, &signature.try_into()?, &public_keys?[..])
-    {
+        public_keys.iter().map(|x| PublicKey::try_from(x)).collect();
+    if crypto::verify_combined_message_signature(
+        message,
+        &CombinedSignature::try_from(signature)?,
+        &public_keys?[..],
+    ) {
         Ok(())
     } else {
         Err(CryptoError::SignatureVerification {
