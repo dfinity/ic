@@ -7,7 +7,7 @@ use ic_icrc1::blocks::{encoded_block_to_generic_block, generic_block_to_encoded_
 use ic_icrc1::{Block, Operation};
 use ic_icrc1_index_ng::{
     GetAccountTransactionsArgs, GetAccountTransactionsResponse, GetAccountTransactionsResult,
-    IndexArg, ListSubaccountsArgs, TransactionWithId, DEFAULT_MAX_BLOCKS_PER_RESPONSE,
+    IndexArg, ListSubaccountsArgs, Status, TransactionWithId, DEFAULT_MAX_BLOCKS_PER_RESPONSE,
 };
 use ic_ledger_core::block::{BlockIndex as BlockIndex64, BlockType, EncodedBlock};
 use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
@@ -598,6 +598,13 @@ fn get_oldest_tx_id(account: Account) -> Option<BlockIndex64> {
 #[candid_method(query)]
 fn icrc1_balance_of(account: Account) -> Nat {
     get_balance(account).into()
+}
+
+#[query]
+#[candid_method(query)]
+fn status() -> Status {
+    let num_blocks_synced = with_blocks(|blocks| blocks.len().into());
+    Status { num_blocks_synced }
 }
 
 #[query]

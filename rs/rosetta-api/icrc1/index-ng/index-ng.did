@@ -99,10 +99,15 @@ type ListSubaccountsArgs = record {
     start: opt SubAccount;
 };
 
+type Status = record {
+    num_blocks_synced : BlockIndex;
+};
+
 service : (index_arg: IndexArg) -> {
     get_account_transactions : (GetAccountTransactionsArgs) -> (GetTransactionsResult);
     get_blocks : (GetBlocksRequest) -> (GetBlocksResponse) query;
     icrc1_balance_of : (Account) -> (Tokens) query;
     ledger_id : () -> (principal) query;
     list_subaccounts : (ListSubaccountsArgs) -> (vec SubAccount) query;
+    status : () -> (Status) query;
 }

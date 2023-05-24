@@ -2,8 +2,8 @@ use candid::{Decode, Encode, Nat};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_index_ng::{
     GetAccountTransactionsArgs, GetAccountTransactionsResponse, GetAccountTransactionsResult,
-    GetBlocksResponse, IndexArg, InitArg as IndexInitArg, ListSubaccountsArgs, TransactionWithId,
-    DEFAULT_MAX_BLOCKS_PER_RESPONSE,
+    GetBlocksResponse, IndexArg, InitArg as IndexInitArg, ListSubaccountsArgs, Status,
+    TransactionWithId, DEFAULT_MAX_BLOCKS_PER_RESPONSE,
 };
 use ic_icrc1_ledger::{InitArgs as LedgerInitArgs, LedgerArgument};
 use ic_icrc1_test_utils::{valid_transactions_strategy, CallerTransferArg};
@@ -12,7 +12,7 @@ use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
 use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc1::transfer::{BlockIndex, TransferArg, TransferError};
-use icrc_ledger_types::icrc3::blocks::{BlockRange, GenericBlock, GetBlocksRequest};
+use icrc_ledger_types::icrc3::blocks::{BlockRange, GetBlocksRequest};
 use icrc_ledger_types::icrc3::transactions::{Mint, Transaction, Transfer};
 use num_traits::cast::ToPrimitive;
 use proptest::test_runner::{Config as TestRunnerConfig, TestRunner};
@@ -115,6 +115,34 @@ fn account(owner: u64, subaccount: u128) -> Account {
     }
 }
 
+fn status(env: &StateMachine, index_id: CanisterId) -> Status {
+    let res = env
+        .query(index_id, "status", Encode!(&()).unwrap())
+        .expect("Failed to send status")
+        .bytes();
+    Decode!(&res, Status).expect("Failed to decode status response")
+}
+
+// Helper function that calls tick on env until either
+// the index canister has synced all the blocks up to the
+// last one in the ledger or enough attempts passed and therefore
+// it fails
+fn wait_until_sync_is_completed(env: &StateMachine, index_id: CanisterId, ledger_id: CanisterId) {
+    const MAX_ATTEMPTS: u8 = 100; // no reason for this number
+    let mut num_blocks_synced = u64::MAX;
+    let mut chain_length = u64::MAX;
+    for _i in 0..MAX_ATTEMPTS {
+        env.advance_time(Duration::from_secs(60));
+        env.tick();
+        num_blocks_synced = status(env, index_id).num_blocks_synced.0.to_u64().unwrap();
+        chain_length = icrc1_get_blocks(env, ledger_id, 0, 1).chain_length;
+        if num_blocks_synced == chain_length {
+            return;
+        }
+    }
+    panic!("The index canister was unable to sync all the blocks with the ledger. Number of blocks synced {} but the Ledger chain length is {}", num_blocks_synced, chain_length);
+}
+
 fn icrc1_balance_of(env: &StateMachine, canister_id: CanisterId, account: Account) -> u64 {
     let res = env
         .execute_ingress(canister_id, "icrc1_balance_of", Encode!(&account).unwrap())
@@ -127,10 +155,15 @@ fn icrc1_balance_of(env: &StateMachine, canister_id: CanisterId, account: Accoun
         .expect("Balance must be a u64!")
 }
 
-fn icrc1_get_blocks(env: &StateMachine, ledger_id: CanisterId) -> Vec<GenericBlock> {
+fn icrc1_get_blocks(
+    env: &StateMachine,
+    ledger_id: CanisterId,
+    start: u64,
+    length: u64,
+) -> icrc_ledger_types::icrc3::blocks::GetBlocksResponse {
     let req = GetBlocksRequest {
-        start: 0.into(),
-        length: u64::MAX.into(),
+        start: start.into(),
+        length: length.into(),
     };
     let req = Encode!(&req).expect("Failed to encode GetBlocksRequest");
     let res = env
@@ -140,15 +173,15 @@ fn icrc1_get_blocks(env: &StateMachine, ledger_id: CanisterId) -> Vec<GenericBlo
     let res = Decode!(&res, icrc_ledger_types::icrc3::blocks::GetBlocksResponse)
         .expect("Failed to decode GetBlocksResponse");
     let mut blocks = vec![];
-    for archived in res.archived_blocks {
+    for archived in &res.archived_blocks {
         let req = GetBlocksRequest {
-            start: archived.start,
-            length: archived.length,
+            start: archived.start.clone(),
+            length: archived.length.clone(),
         };
         let req = Encode!(&req).expect("Failed to encode GetBlocksRequest for archive node");
         let canister_id = archived.callback.canister_id.as_ref().try_into().unwrap();
         let res = env
-            .execute_ingress(canister_id, archived.callback.method, req)
+            .execute_ingress(canister_id, archived.callback.method.clone(), req)
             .expect("Failed to send get_blocks request to archive")
             .bytes();
         let res = Decode!(&res, BlockRange)
@@ -157,7 +190,7 @@ fn icrc1_get_blocks(env: &StateMachine, ledger_id: CanisterId) -> Vec<GenericBlo
         blocks.extend(res);
     }
     blocks.extend(res.blocks);
-    blocks
+    icrc_ledger_types::icrc3::blocks::GetBlocksResponse { blocks, ..res }
 }
 
 fn get_blocks(env: &StateMachine, index_id: CanisterId) -> GetBlocksResponse {
@@ -256,14 +289,9 @@ fn list_subaccounts(
 
 // Assert that the index canister contains the same blocks as the ledger
 fn assert_ledger_index_parity(env: &StateMachine, ledger_id: CanisterId, index_id: CanisterId) {
-    let ledger_blocks = icrc1_get_blocks(env, ledger_id);
+    let ledger_blocks = icrc1_get_blocks(env, ledger_id, 0, u64::MAX);
     let index_blocks = get_blocks(env, index_id);
-    assert_eq!(ledger_blocks, index_blocks.blocks);
-}
-
-fn trigger_heartbeat(env: &StateMachine) {
-    env.advance_time(Duration::from_secs(60));
-    env.tick();
+    assert_eq!(ledger_blocks.blocks, index_blocks.blocks);
 }
 
 #[test]
@@ -276,12 +304,12 @@ fn test_ledger_growing() {
     let index_id = install_index(env, ledger_id);
 
     // test initial mint block
-    trigger_heartbeat(env);
+    wait_until_sync_is_completed(env, index_id, ledger_id);
     assert_ledger_index_parity(env, ledger_id, index_id);
 
     // test first transfer block
     transfer(env, ledger_id, account(1, 0), account(2, 0), 1);
-    trigger_heartbeat(env);
+    wait_until_sync_is_completed(env, index_id, ledger_id);
     assert_ledger_index_parity(env, ledger_id, index_id);
 
     // test multiple blocks
@@ -292,14 +320,14 @@ fn test_ledger_growing() {
     ] {
         transfer(env, ledger_id, from, to, amount);
     }
-    trigger_heartbeat(env);
+    wait_until_sync_is_completed(env, index_id, ledger_id);
     assert_ledger_index_parity(env, ledger_id, index_id);
 
     // test archived blocks
     for _i in 0..(ARCHIVE_TRIGGER_THRESHOLD as usize + 1) {
         transfer(env, ledger_id, account(1, 0), account(1, 2), 1);
     }
-    trigger_heartbeat(env);
+    wait_until_sync_is_completed(env, index_id, ledger_id);
     assert_ledger_index_parity(env, ledger_id, index_id);
 }
 
@@ -316,7 +344,7 @@ fn test_archive_indexing() {
     let ledger_id = install_ledger(env, initial_balances, default_archive_options());
     let index_id = install_index(env, ledger_id);
 
-    trigger_heartbeat(env);
+    wait_until_sync_is_completed(env, index_id, ledger_id);
     assert_ledger_index_parity(env, ledger_id, index_id);
 }
 
@@ -431,7 +459,7 @@ fn test_get_account_transactions() {
 
     ////////////
     //// phase 1: only 1 mint to (1, 0)
-    trigger_heartbeat(env);
+    wait_until_sync_is_completed(env, index_id, ledger_id);
 
     // account (1, 0) has one mint
     let actual_txs =
@@ -446,7 +474,7 @@ fn test_get_account_transactions() {
     /////////////
     //// phase 2: transfer from (1, 0) to (2, 0)
     transfer(env, ledger_id, account(1, 0), account(2, 0), 1_000_000);
-    trigger_heartbeat(env);
+    wait_until_sync_is_completed(env, index_id, ledger_id);
 
     // account (1, 0) has one transfer and one mint
     let actual_txs =
@@ -470,7 +498,7 @@ fn test_get_account_transactions() {
     ////          transfer from (2, 0) to (1, 1)
     transfer(env, ledger_id, account(1, 0), account(2, 0), 2_000_000);
     transfer(env, ledger_id, account(2, 0), account(1, 1), 1_000_000);
-    trigger_heartbeat(env);
+    wait_until_sync_is_completed(env, index_id, ledger_id);
 
     // account (1, 0) has two transfers and one mint
     let actual_txs =
@@ -511,7 +539,7 @@ fn test_get_account_transactions_start_length() {
         })
         .collect();
 
-    trigger_heartbeat(env);
+    wait_until_sync_is_completed(env, index_id, ledger_id);
 
     // get the most n recent transaction with start set to none
     for n in 1..10 {
@@ -548,7 +576,7 @@ fn test_get_account_transactions_pagination() {
     let ledger_id = install_ledger(env, initial_balances, default_archive_options());
     let index_id = install_index(env, ledger_id);
 
-    trigger_heartbeat(env);
+    wait_until_sync_is_completed(env, index_id, ledger_id);
 
     // The index get_account_transactions endpoint returns batches of transactions
     // in descending order of index, i.e. the first index returned in the result
@@ -625,7 +653,7 @@ fn test_icrc1_balance_of() {
                 {
                     icrc1_transfer(env, ledger_id, PrincipalId(*caller), transfer_arg.clone());
                 }
-                trigger_heartbeat(env);
+                wait_until_sync_is_completed(env, index_id, ledger_id);
 
                 for account in transactions
                     .iter()
@@ -680,7 +708,7 @@ fn test_list_subaccounts() {
     let ledger_id = install_ledger(env, initial_balances, default_archive_options());
     let index_id = install_index(env, ledger_id);
 
-    trigger_heartbeat(env);
+    wait_until_sync_is_completed(env, index_id, ledger_id);
 
     // list account_1.owner subaccounts when no starting subaccount is specified
     assert_eq!(
