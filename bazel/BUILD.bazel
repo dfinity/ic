@@ -136,3 +136,9 @@ version_file_path(
     name = "version_file_path",
     visibility = ["//rs/tests:__subpackages__"],
 )
+
+sh_binary(
+    name = "sha256sum2url_sh",
+    srcs = ["sha256sum2url.sh"],
+    visibility = ["//visibility:public"],
+)
