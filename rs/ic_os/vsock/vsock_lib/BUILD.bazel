@@ -1,4 +1,4 @@
-load("@rules_rust//rust:defs.bzl", "rust_library")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -29,5 +29,13 @@ rust_library(
     target_compatible_with = [
         "@platforms//os:linux",
     ],
+    deps = DEPENDENCIES,
+)
+
+rust_test(
+    name = "test",
+    size = "small",
+    srcs = glob(["src/**"]),
+    crate = ":vsock_lib",
     deps = DEPENDENCIES,
 )

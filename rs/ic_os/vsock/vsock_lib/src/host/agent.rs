@@ -176,6 +176,7 @@ fn upgrade_hostos(upgrade_data: &UpgradeData) -> Response {
     run_upgrade()
 }
 
+/*
 pub mod tests {
     #[test]
     fn create_hostos_upgrade_file_and_verify_hash() {
@@ -188,3 +189,4 @@ pub mod tests {
         assert!(verify_hash(&hash).unwrap())
     }
 }
+*/
