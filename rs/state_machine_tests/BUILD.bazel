@@ -7,6 +7,7 @@ DEPENDENCIES = [
     "//rs/config",
     "//rs/constants",
     "//rs/crypto/ecdsa_secp256k1",
+    "//rs/crypto/extended_bip32",
     "//rs/crypto/internal/crypto_lib/seed",
     "//rs/crypto/internal/crypto_lib/threshold_sig/bls12_381",
     "//rs/crypto/internal/crypto_lib/types",
@@ -51,7 +52,10 @@ DEPENDENCIES = [
 
 rust_library(
     name = "state_machine_tests",
-    srcs = ["src/lib.rs"],
+    srcs = [
+        "src/lib.rs",
+        "src/tests.rs",
+    ],
     crate_name = "ic_state_machine_tests",
     version = "0.8.0",
     deps = DEPENDENCIES,
@@ -99,5 +103,13 @@ rust_test(
         "@crate_index//:ciborium",
         "@crate_index//:serde",
         "@crate_index//:serde_bytes",
+    ],
+)
+
+rust_test(
+    name = "state_machine_unit_test",
+    crate = ":state_machine_tests",
+    deps = [
+        "@crate_index//:proptest",
     ],
 )
