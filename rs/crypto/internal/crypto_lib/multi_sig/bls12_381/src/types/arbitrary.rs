@@ -37,22 +37,27 @@ pub fn combined_signature() -> impl Strategy<Value = CombinedSignature> {
 }
 
 pub fn secret_key_bytes() -> impl Strategy<Value = SecretKeyBytes> {
-    key_pair().prop_map(|(secret_key, _public_key)| secret_key.into())
+    key_pair().prop_map(|(secret_key, _public_key)| SecretKeyBytes::from(&secret_key))
 }
 pub fn public_key_bytes() -> impl Strategy<Value = PublicKeyBytes> {
-    public_key().prop_map(|public_key| public_key.into())
+    public_key().prop_map(|public_key| PublicKeyBytes::from(&public_key))
 }
 pub fn key_pair_bytes() -> impl Strategy<Value = (SecretKeyBytes, PublicKeyBytes)> {
-    key_pair().prop_map(|(secret_key, public_key)| (secret_key.into(), public_key.into()))
+    key_pair().prop_map(|(secret_key, public_key)| {
+        (
+            SecretKeyBytes::from(&secret_key),
+            PublicKeyBytes::from(&public_key),
+        )
+    })
 }
 pub fn individual_signature_bytes() -> impl Strategy<Value = IndividualSignatureBytes> {
-    individual_signature().prop_map(|signature| signature.into())
+    individual_signature().prop_map(|signature| IndividualSignatureBytes::from(&signature))
 }
 pub fn pop_bytes() -> impl Strategy<Value = PopBytes> {
-    pop().prop_map(|pop| pop.into())
+    pop().prop_map(|pop| PopBytes::from(&pop))
 }
 pub fn combined_signature_bytes() -> impl Strategy<Value = CombinedSignatureBytes> {
-    combined_signature().prop_map(|signature| signature.into())
+    combined_signature().prop_map(|signature| CombinedSignatureBytes::from(&signature))
 }
 
 //////////////////

@@ -132,7 +132,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         let result = match algorithm_id {
             AlgorithmId::MultiBls12_381 => match &secret_key {
                 CspSecretKey::MultiBls12_381(key) => {
-                    let sig = multi_bls12381::sign(message, key.clone());
+                    let sig = multi_bls12381::sign(message, key);
                     Ok(CspSignature::MultiBls12_381(
                         MultiBls12_381_Signature::Individual(sig),
                     ))
@@ -156,7 +156,7 @@ impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore
         let pk = CspPublicKey::MultiBls12_381(pk_bytes);
         let sk = CspSecretKey::MultiBls12_381(sk_bytes.clone());
 
-        let pop_bytes = multi_bls12381::create_pop(pk_bytes, sk_bytes).map_err(|e| match e {
+        let pop_bytes = multi_bls12381::create_pop(&pk_bytes, &sk_bytes).map_err(|e| match e {
             CryptoError::MalformedPublicKey {
                 algorithm,
                 key_bytes,

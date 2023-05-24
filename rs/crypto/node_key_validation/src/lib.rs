@@ -270,7 +270,7 @@ impl TryFrom<PublicKey> for ValidCommitteeSigningPublicKey {
 
         // Note that `verify_pop` also ensures that the public key is a point on the
         // curve and in the right subgroup.
-        ic_crypto_internal_multi_sig_bls12381::verify_pop(pop_bytes, pubkey_bytes)
+        ic_crypto_internal_multi_sig_bls12381::verify_pop(&pop_bytes, &pubkey_bytes)
             .map_err(|e| invalid_committee_signing_key_error(format!("{}", e)))?;
         Ok(Self { public_key: value })
     }
