@@ -11,4 +11,5 @@ icos_build(
     malicious = True,
     mode = "dev",
     upload_prefix = "guest-os",
+    visibility = ["//visibility:public"],
 )

@@ -35,7 +35,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::{Height, SubnetId};
 use k256::ecdsa::VerifyingKey;
 use slog::{info, Logger};
-use std::{env, time::Duration};
+use std::time::Duration;
 
 pub const MIN_HASH_LENGTH: usize = 8; // in bytes
 
@@ -82,12 +82,8 @@ pub fn upgrade_downgrade_app_subnet(env: TestEnv) {
 fn upgrade_downgrade(env: TestEnv, subnet_type: SubnetType) {
     let logger = env.logger();
 
-    // TODO: abandon the TARGET_VERSION approach once run-system-tests.py is deprecated [VER-1818]
-    let is_bazel = env::var("TARGET_VERSION").is_err();
-
-    // TODO: [VER-1818]
-    let mainnet_version = env::var("TARGET_VERSION")
-        .or_else(|_| env.read_dependency_to_string("testnet/mainnet_nns_revision.txt"))
+    let mainnet_version = env
+        .read_dependency_to_string("testnet/mainnet_nns_revision.txt")
         .unwrap();
 
     // we expect to get a hash value here, so checking that is a hash number of at least 64 bits size
@@ -144,27 +140,16 @@ fn upgrade_downgrade(env: TestEnv, subnet_type: SubnetType) {
         &logger,
     ));
 
-    if is_bazel {
-        let sha256 = env.get_ic_os_update_img_test_sha256().unwrap();
-        let upgrade_url = env.get_ic_os_update_img_test_url().unwrap();
-        block_on(bless_replica_version(
-            &nns_node,
-            &original_branch_version,
-            UpdateImageType::ImageTest,
-            &logger,
-            &sha256,
-            vec![upgrade_url.to_string()],
-        ));
-    } else {
-        // TODO: [VER-1818]
-        block_on(bless_public_replica_version(
-            &nns_node,
-            &original_branch_version,
-            UpdateImageType::ImageTest,
-            UpdateImageType::ImageTest,
-            &logger,
-        ));
-    }
+    let sha256 = env.get_ic_os_update_img_test_sha256().unwrap();
+    let upgrade_url = env.get_ic_os_update_img_test_url().unwrap();
+    block_on(bless_replica_version(
+        &nns_node,
+        &original_branch_version,
+        UpdateImageType::ImageTest,
+        &logger,
+        &sha256,
+        vec![upgrade_url.to_string()],
+    ));
     info!(&logger, "Blessed all versions");
 
     downgrade_upgrade_roundtrip(
@@ -217,6 +202,10 @@ fn downgrade_upgrade_roundtrip(
             }
             (subnet.subnet_id, subnet_node, faulty_node, redundant_nodes)
         };
+    info!(
+        logger,
+        "downgrade_upgrade_roundtrip: subnet_node = {:?}", subnet_node.node_id
+    );
     subnet_node.await_status_is_healthy().unwrap();
     faulty_node.await_status_is_healthy().unwrap();
 

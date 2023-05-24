@@ -6,4 +6,5 @@ boundary_node_icos_build(
     image_deps = image_deps,
     mode = "dev",
     sev = True,
+    visibility = ["//visibility:public"],
 )

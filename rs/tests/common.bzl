@@ -154,8 +154,10 @@ MACRO_DEPENDENCIES = [
 ]
 
 GUESTOS_RUNTIME_DEPS = [
-    "//ic-os/guestos/envs/dev:hash_and_upload_disk-img",
-    "//ic-os/guestos/envs/dev:hash_and_upload_update-img",
+    "//ic-os/guestos/envs/dev:disk-img.tar.zst.cas-url",
+    "//ic-os/guestos/envs/dev:disk-img.tar.zst.sha256",
+    "//ic-os/guestos/envs/dev:update-img.tar.zst.cas-url",
+    "//ic-os/guestos/envs/dev:update-img.tar.zst.sha256",
     "//ic-os:scripts/build-bootstrap-config-image.sh",
 ]
 
@@ -319,19 +321,23 @@ GRAFANA_RUNTIME_DEPS = UNIVERSAL_VM_RUNTIME_DEPS + [
 ]
 
 BOUNDARY_NODE_GUESTOS_RUNTIME_DEPS = [
-    "//ic-os/boundary-guestos/envs/dev:hash_and_upload_disk-img",
+    "//ic-os/boundary-guestos/envs/dev:disk-img.tar.zst.cas-url",
+    "//ic-os/boundary-guestos/envs/dev:disk-img.tar.zst.sha256",
     "//ic-os/boundary-guestos:scripts/build-bootstrap-config-image.sh",
 ]
 
 BOUNDARY_NODE_GUESTOS_SEV_RUNTIME_DEPS = [
-    "//ic-os/boundary-guestos/envs/dev-sev:hash_and_upload_disk-img",
+    "//ic-os/boundary-guestos/envs/dev-sev:disk-img.tar.zst.cas-url",
+    "//ic-os/boundary-guestos/envs/dev-sev:disk-img.tar.zst.sha256",
 ]
 
 COUNTER_CANISTER_RUNTIME_DEPS = ["//rs/tests:src/counter.wat"]
 
 GUESTOS_MALICIOUS_RUNTIME_DEPS = [
-    "//ic-os/guestos/envs/dev-malicious:hash_and_upload_disk-img",
-    "//ic-os/guestos/envs/dev-malicious:hash_and_upload_update-img",
+    "//ic-os/guestos/envs/dev-malicious:disk-img.tar.zst.cas-url",
+    "//ic-os/guestos/envs/dev-malicious:disk-img.tar.zst.sha256",
+    "//ic-os/guestos/envs/dev-malicious:update-img.tar.zst.cas-url",
+    "//ic-os/guestos/envs/dev-malicious:update-img.tar.zst.sha256",
     "//ic-os:scripts/build-bootstrap-config-image.sh",
 ]
 
