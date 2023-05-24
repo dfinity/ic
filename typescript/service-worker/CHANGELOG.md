@@ -2,6 +2,8 @@
 
 ## Unreleased 
 
+## 1.8.0
+
 - Allow redirects for canisters implementing response verification v2
 - Show error details when an exception occurs to make error reporting easier for end users
 
