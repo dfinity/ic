@@ -4,7 +4,8 @@ use ic_config::{
     subnet_config::{SubnetConfig, SubnetConfigs},
 };
 use ic_constants::{MAX_INGRESS_TTL, PERMITTED_DRIFT, SMALL_APP_SUBNET_MAX_SIZE};
-use ic_crypto_ecdsa_secp256k1::PrivateKey;
+use ic_crypto_ecdsa_secp256k1::{PrivateKey, PublicKey};
+use ic_crypto_extended_bip32::{DerivationIndex, DerivationPath};
 use ic_crypto_internal_seed::Seed;
 use ic_crypto_internal_threshold_sig_bls12381::api::{
     combine_signatures, combined_public_key, generate_threshold_key, sign_message,
@@ -108,6 +109,9 @@ use std::{collections::BTreeMap, convert::TryFrom};
 use std::{fmt, io};
 use tempfile::TempDir;
 use tokio::runtime::Runtime;
+
+#[cfg(test)]
+mod tests;
 
 struct FakeVerifier;
 
@@ -766,13 +770,19 @@ impl StateMachine {
             .sign_with_ecdsa_contexts
             .clone();
         for (id, ecdsa_context) in sign_with_ecdsa_contexts {
-            // TODO Here we use the same key to sign every message.
-            // Once https://dfinity.atlassian.net/browse/CRP-2029 is closed,
-            // we should use the derived private key to sign the message.
-            let signature = self
-                .ecdsa_secret_key
-                .sign_message(&ecdsa_context.message_hash);
+            // The chain code is an additional input used during the key derivation process
+            // to ensure deterministic generation of child keys from the master key.
+            // We are using an array with 32 zeros by default.
+
+            let signature = sign_message_with_derived_key(
+                &self.ecdsa_secret_key,
+                &ecdsa_context.message_hash,
+                &ecdsa_context.derivation_path,
+                &[0; 32],
+            );
+
             let reply = SignWithECDSAReply { signature };
+
             payload.consensus_responses.push(Response {
                 originator: CanisterId::ic_00(),
                 respondent: CanisterId::ic_00(),
@@ -1789,6 +1799,36 @@ impl StateMachine {
             .canister_http_request_contexts
             .clone()
     }
+}
+
+fn sign_message_with_derived_key(
+    ecdsa_secret_key: &PrivateKey,
+    message_hash: &[u8],
+    derivation_path: &[Vec<u8>],
+    chain_code: &[u8],
+) -> Vec<u8> {
+    let public_key = ecdsa_secret_key.public_key();
+    let derivation_path = DerivationPath::new(
+        derivation_path
+            .iter()
+            .cloned()
+            .map(DerivationIndex)
+            .collect(),
+    );
+    let derived_public_key_bytes = derivation_path
+        .public_key_derivation(&public_key.serialize_sec1(true), chain_code)
+        .expect("couldn't derive ecdsa public key");
+    let derived_private_key_bytes = derivation_path
+        .private_key_derivation(&ecdsa_secret_key.serialize_sec1(), chain_code)
+        .expect("couldn't derive ecdsa private key");
+    let derived_private_key =
+        PrivateKey::deserialize_sec1(&derived_private_key_bytes.derived_private_key)
+            .expect("couldn't deserialize to sec1 ecdsa private key");
+    let signature = derived_private_key.sign_message(message_hash);
+    let pk = PublicKey::deserialize_sec1(&derived_public_key_bytes.derived_public_key)
+        .expect("couldn't deserialize sec1");
+    assert!(pk.verify_signature(message_hash, &signature));
+    signature
 }
 
 #[derive(Clone)]

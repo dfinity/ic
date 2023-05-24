@@ -14,6 +14,7 @@ ic-config = { path = "../config" }
 ic-constants = { path = "../constants" }
 ic-crypto = { path = "../crypto" }
 ic-crypto-ecdsa-secp256k1 = { path = "../crypto/ecdsa_secp256k1" }
+ic-crypto-extended-bip32 = { path = "../crypto/extended_bip32" }
 ic-crypto-internal-seed = { path= "../crypto/internal/crypto_lib/seed" }
 ic-crypto-internal-threshold-sig-bls12381 = { path= "../crypto/internal/crypto_lib/threshold_sig/bls12_381" }
 ic-crypto-internal-types = { path= "../crypto/internal/crypto_lib/types" }
@@ -54,3 +55,6 @@ tempfile = "3.1.0"
 tokio = { version = "1.15.0", features = ["full"] }
 wat = "1.0.52"
 maplit = "1.0.2"
+
+[dev-dependencies]
+proptest = "1.0"
