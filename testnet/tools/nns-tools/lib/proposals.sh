@@ -284,6 +284,38 @@ EOF
     echo "$OUTPUT"
 }
 
+##: generate_forum_post_sns_wasm_publish
+## Usage: $1 <proposal_file> (<proposal_file>...)
+## Example: $1 directory_with_new_proposals/*
+## Example: $1 proposal_1.md proposal_2.md
+generate_forum_post_sns_wasm_publish() {
+    PROPOSAL_FILES=$(ls "$@")
+
+    THIS_FRIDAY=$(date -d "next Friday" +'%Y-%m-%d' 2>/dev/null || date -v+Fri +%Y-%m-%d)
+
+    OUTPUT=$(
+        cat <<EOF
+The NNS Team will be submitting the following proposals to publish new versions of SNS canisters to SNS-WASM this Friday, $THIS_FRIDAY.  DFINITY plans to vote on these proposals the following Monday.
+
+## Additional Notes / Breaking Changes
+
+TODO - delete if nothing relevant
+
+## Proposals to be Submitted
+
+$(for file in $PROPOSAL_FILES; do
+            echo "### $(sns_wasm_publish_proposal_canister_raw_name $file)"
+            echo '````'
+            cat $file
+            echo '````'
+            echo
+        done)
+EOF
+    )
+
+    echo "$OUTPUT"
+}
+
 #### Helper functions
 encode_candid_args_in_file() {
     ARGS=$1
@@ -346,6 +378,10 @@ nns_upgrade_proposal_canister_raw_name() {
     cat "$FILE" | grep "## Proposal to Upgrade the" | cut -d' ' -f6
 }
 
+sns_wasm_publish_proposal_canister_raw_name() {
+    local FILE=$1
+    cat "$FILE" | grep "## Proposal to Publish the SNS" | cut -d' ' -f7
+}
 #### Proposal text validators
 
 validate_no_todos() {
