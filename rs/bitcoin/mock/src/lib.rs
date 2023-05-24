@@ -1,4 +1,4 @@
-use ic_btc_interface::{Address, Utxo};
+pub use ic_btc_interface::{Address, OutPoint, Utxo};
 use serde::{Deserialize, Serialize};
 
 #[derive(candid::CandidType, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

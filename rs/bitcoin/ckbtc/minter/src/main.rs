@@ -80,6 +80,13 @@ async fn distribute_kyt_fee() {
     ic_ckbtc_minter::distribute_kyt_fees().await;
 }
 
+#[cfg(feature = "self_check")]
+#[candid_method(update)]
+#[update]
+async fn refresh_fee_percentiles() {
+    let _ = ic_ckbtc_minter::estimate_fee_per_vbyte().await;
+}
+
 fn check_postcondition<T>(t: T) -> T {
     #[cfg(feature = "self_check")]
     ok_or_die(check_invariants());
