@@ -61,6 +61,7 @@ pub struct DrunOptions {
     pub extra_batches: u64,
     pub log_file: Option<PathBuf>,
     pub instruction_limit: Option<u64>,
+    pub subnet_type: SubnetType,
 }
 
 /// Deliver a single message to the Message Routing layer
@@ -159,9 +160,9 @@ pub fn run_drun(uo: DrunOptions) -> Result<(), String> {
         extra_batches,
         log_file,
         instruction_limit,
+        subnet_type,
     } = uo;
     // Hardcoded magic values to create a ReplicaConfig that parses.
-    let subnet_type = SubnetType::System;
     let mut subnet_config = SubnetConfigs::default().own_subnet_config(subnet_type);
 
     // If an intruction limit was specified, update the config with the provided instruction limit.
