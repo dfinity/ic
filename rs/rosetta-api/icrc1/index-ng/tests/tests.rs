@@ -762,3 +762,24 @@ fn test_list_subaccounts() {
         .collect();
     assert_eq!(expected_batch_2, batch_2);
 }
+
+#[test]
+fn test_post_upgrade_start_timer() {
+    let env = &StateMachine::new();
+    let ledger_id = install_ledger(
+        env,
+        vec![(account(1, 0), 10_000_000)],
+        default_archive_options(),
+    );
+    let index_id = install_index(env, ledger_id);
+
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+
+    env.upgrade_canister(index_id, index_wasm(), vec![])
+        .unwrap();
+
+    // check that the index syncs the new block (wait_until_sync_is_completed fails
+    // if the new block is not synced).
+    transfer(env, ledger_id, account(1, 0), account(2, 0), 2_000_000);
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+}

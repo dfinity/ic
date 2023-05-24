@@ -1,6 +1,6 @@
 use candid::{candid_method, Nat, Principal};
 use ic_cdk::trap;
-use ic_cdk_macros::{init, query, update};
+use ic_cdk_macros::{init, post_upgrade, query, update};
 use ic_cdk_timers::TimerId;
 use ic_crypto_sha::Sha256;
 use ic_icrc1::blocks::{encoded_block_to_generic_block, generic_block_to_encoded_block};
@@ -39,8 +39,8 @@ const BLOCK_LOG_DATA_MEMORY_ID: MemoryId = MemoryId::new(2);
 const ACCOUNT_BLOCK_IDS_MEMORY_ID: MemoryId = MemoryId::new(3);
 const ACCOUNT_DATA_MEMORY_ID: MemoryId = MemoryId::new(4);
 
-const DEFAULT_MAX_WAIT_TIME: Duration = Duration::from_secs(60);
-const DEFAULT_RETRY_WAIT_TIME: Duration = Duration::from_secs(10);
+const DEFAULT_MAX_WAIT_TIME: Duration = Duration::from_secs(2);
+const DEFAULT_RETRY_WAIT_TIME: Duration = Duration::from_secs(1);
 
 type VM = VirtualMemory<DefaultMemoryImpl>;
 type StateCell = StableCell<State, VM>;
@@ -236,7 +236,13 @@ fn init(index_arg: Option<IndexArg>) {
     });
 
     // set the first build_index to be called after init
-    set_build_index_timer(Duration::from_secs(1));
+    set_build_index_timer(Duration::from_secs(0));
+}
+
+#[post_upgrade]
+fn post_upgrade() {
+    // set the first build_index to be called after init
+    set_build_index_timer(Duration::from_secs(0));
 }
 
 async fn get_blocks_from_ledger(start: u64) -> Result<GetBlocksResponse, String> {
@@ -667,9 +673,8 @@ fn compute_wait_time_test() {
         (max_blocks * n as f64 / 100f64) as usize
     }
 
-    fn wait_time(n: u64) -> Duration {
-        let max_wait_time = DEFAULT_MAX_WAIT_TIME.as_secs() as f64;
-        Duration::from_secs((max_wait_time * n as f64 / 100f64) as u64)
+    fn wait_time(n: u32) -> Duration {
+        DEFAULT_MAX_WAIT_TIME * n / 100
     }
 
     assert_eq!(wait_time(100), compute_wait_time(blocks(0)));
