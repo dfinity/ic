@@ -1,8 +1,8 @@
 use assert_matches::assert_matches;
 use candid::{Decode, Encode};
-use ic_base_types::NumSeconds;
+use ic_base_types::{NumSeconds, PrincipalId};
 use ic_error_types::{ErrorCode, RejectCode};
-use ic_ic00_types::CanisterHttpResponsePayload;
+use ic_ic00_types::{CanisterChange, CanisterHttpResponsePayload};
 use ic_interfaces::execution_environment::{HypervisorError, SubnetAvailableMemory};
 use ic_interfaces::messages::CanisterTask;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
@@ -32,6 +32,7 @@ use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use proptest::prelude::*;
 use proptest::test_runner::{TestRng, TestRunner};
 use std::collections::BTreeSet;
+use std::mem::size_of;
 use std::time::Duration;
 
 const MAX_NUM_INSTRUCTIONS: NumInstructions = NumInstructions::new(1_000_000_000);
@@ -2216,9 +2217,12 @@ fn subnet_available_memory_is_updated_by_canister_init() {
         test.subnet_available_memory().get_message_memory()
     );
     let memory_used = test.state().memory_taken().total().get() as i64;
+    let canister_history_memory = 2 * size_of::<CanisterChange>() + size_of::<PrincipalId>();
+    // canister history memory usage is not updated in SubnetAvailableMemory => we add it at RHS
     assert_eq!(
         test.subnet_available_memory().get_total_memory(),
         initial_subnet_available_memory.get_total_memory() - memory_used
+            + canister_history_memory as i64
     );
 }
 
@@ -2251,9 +2255,12 @@ fn subnet_available_memory_is_updated_by_canister_start() {
         test.subnet_available_memory().get_total_memory()
     );
     let memory_used = test.state().memory_taken().total().get() as i64;
+    let canister_history_memory = 3 * size_of::<CanisterChange>() + size_of::<PrincipalId>();
+    // canister history memory usage is not updated in SubnetAvailableMemory => we add it at RHS
     assert_eq!(
         test.subnet_available_memory().get_total_memory(),
         initial_subnet_available_memory.get_total_memory() - memory_used
+            + canister_history_memory as i64
     );
     assert_eq!(
         initial_subnet_available_memory.get_message_memory(),
@@ -2378,7 +2385,12 @@ fn subnet_available_memory_is_not_updated_when_allocation_reserved() {
     test.install_canister_with_allocation(canister_id, binary, None, Some(memory_allocation.get()))
         .unwrap();
     let initial_memory_used = test.state().memory_taken().total();
-    assert_eq!(initial_memory_used.get(), memory_allocation.get());
+    let canister_history_memory = 2 * size_of::<CanisterChange>() + size_of::<PrincipalId>();
+    // canister history memory usage is not updated in SubnetAvailableMemory => we add it at RHS
+    assert_eq!(
+        initial_memory_used.get(),
+        memory_allocation.get() + canister_history_memory as u64
+    );
     let initial_subnet_available_memory = test.subnet_available_memory();
     let result = test.ingress(canister_id, "test", vec![]);
     assert_empty_reply(result);

@@ -1,7 +1,12 @@
+use ic_base_types::PrincipalId;
 use ic_error_types::{ErrorCode, UserError};
-use ic_types::{CanisterId, Cycles, NumInstructions};
+use ic_types::{
+    CanisterId, ComputeAllocation, Cycles, MemoryAllocation, NumBytes, NumInstructions,
+};
 
-use ic_ic00_types::{CanisterInstallMode, EmptyBlob, InstallCodeArgs, Method, Payload};
+use ic_ic00_types::{
+    CanisterChange, CanisterInstallMode, EmptyBlob, InstallCodeArgs, Method, Payload,
+};
 use ic_replicated_state::canister_state::NextExecution;
 use ic_test_utilities_execution_environment::{
     check_ingress_status, ExecutionTest, ExecutionTestBuilder,
@@ -10,6 +15,7 @@ use ic_test_utilities_metrics::fetch_int_counter;
 use ic_types::messages::MessageId;
 use ic_types::{ingress::WasmResult, MAX_STABLE_MEMORY_IN_BYTES, MAX_WASM_MEMORY_IN_BYTES};
 use ic_types_test_utils::ids::user_test_id;
+use std::mem::size_of;
 
 const DTS_INSTALL_WAT: &str = r#"
     (module
@@ -755,7 +761,16 @@ fn reserve_cycles_for_execution_fails_when_not_enough_cycles() {
         .with_deterministic_time_slicing()
         .with_manual_execution()
         .build();
-    let canister_id = test.create_canister(Cycles::new(900_000));
+    // canister history memory usage at the beginning of attempted install
+    let canister_history_memory_usage = size_of::<CanisterChange>() + size_of::<PrincipalId>();
+    let freezing_threshold_cycles = test.cycles_account_manager().freeze_threshold_cycles(
+        ic_config::execution_environment::Config::default().default_freeze_threshold,
+        MemoryAllocation::BestEffort,
+        NumBytes::new(canister_history_memory_usage as u64),
+        ComputeAllocation::zero(),
+        test.subnet_size(),
+    );
+    let canister_id = test.create_canister(Cycles::new(900_000) + freezing_threshold_cycles);
     let payload = InstallCodeArgs {
         mode: CanisterInstallMode::Install,
         canister_id: canister_id.get(),
@@ -775,8 +790,8 @@ fn reserve_cycles_for_execution_fails_when_not_enough_cycles() {
         check_ingress_status(test.ingress_status(&message_id)),
         Err(UserError::new(
             ErrorCode::CanisterOutOfCycles,
-            format!("Canister installation failed with `Canister {} is out of cycles: requested {} cycles but the available balance is {} cycles and the freezing threshold 0 cycles`", canister_id, 
-            minimum_balance, original_balance)
+            format!("Canister installation failed with `Canister {} is out of cycles: requested {} cycles but the available balance is {} cycles and the freezing threshold {} cycles`", canister_id,
+            minimum_balance, original_balance, freezing_threshold_cycles)
         ))
     );
 }

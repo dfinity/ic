@@ -14,8 +14,8 @@ use ic_config::flag_status::FlagStatus;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_ic00_types::{
-    CanisterChangeOrigin, CanisterInstallMode, CanisterStatusResultV2, CanisterStatusType,
-    InstallCodeArgs, Method as Ic00Method,
+    CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallMode, CanisterStatusResultV2,
+    CanisterStatusType, InstallCodeArgs, Method as Ic00Method,
 };
 use ic_interfaces::execution_environment::{
     CanisterOutOfCyclesError, HypervisorError, IngressHistoryWriter, SubnetAvailableMemory,
@@ -260,6 +260,12 @@ impl TryFrom<(CanisterChangeOrigin, InstallCodeArgs)> for InstallCodeContext {
     }
 }
 
+/// Indicates whether `uninstall_canister` should push a canister change (with a given change origin) to canister history.
+pub enum AddCanisterChangeToHistory {
+    Yes(CanisterChangeOrigin),
+    No,
+}
+
 /// The entity responsible for managing canisters (creation, installing, etc.)
 pub(crate) struct CanisterManager {
     hypervisor: Arc<Hypervisor>,
@@ -469,7 +475,7 @@ impl CanisterManager {
     /// `canister_id`.
     pub(crate) fn update_settings(
         &self,
-        _timestamp_nanos: Time,
+        timestamp_nanos: Time,
         origin: CanisterChangeOrigin,
         settings: CanisterSettings,
         canister: &mut CanisterState,
@@ -494,6 +500,8 @@ impl CanisterManager {
 
         let validated_settings =
             ValidatedCanisterSettings::try_from((settings, self.config.max_controllers))?;
+        let is_controllers_change =
+            validated_settings.controller.is_some() || validated_settings.controllers.is_some();
 
         let old_usage = canister.memory_usage(self.config.own_subnet_type);
         let old_mem = canister
@@ -538,6 +546,14 @@ impl CanisterManager {
         }
 
         canister.system_state.canister_version += 1;
+        if is_controllers_change {
+            let new_controllers = canister.system_state.controllers.iter().copied().collect();
+            canister.system_state.add_canister_change(
+                timestamp_nanos,
+                origin,
+                CanisterChangeDetails::controllers_change(new_controllers),
+            );
+        }
 
         Ok(())
     }
@@ -806,7 +822,12 @@ impl CanisterManager {
             validate_controller(canister, &sender)?
         }
 
-        let rejects = uninstall_canister(&self.log, canister, time, Some(origin));
+        let rejects = uninstall_canister(
+            &self.log,
+            canister,
+            time,
+            AddCanisterChangeToHistory::Yes(origin),
+        );
         crate::util::process_responses(
             rejects,
             state,
@@ -1220,6 +1241,19 @@ impl CanisterManager {
         round_limits.compute_allocation_used = round_limits
             .compute_allocation_used
             .saturating_add(new_canister.scheduler_state.compute_allocation.as_percent());
+
+        let controllers = new_canister
+            .system_state
+            .controllers
+            .iter()
+            .copied()
+            .collect();
+        new_canister.system_state.add_canister_change(
+            state.time(),
+            origin,
+            CanisterChangeDetails::canister_creation(controllers),
+        );
+
         // Add new canister to the replicated state.
         state.put_canister_state(new_canister);
 
@@ -1541,7 +1575,7 @@ pub fn uninstall_canister(
     log: &ReplicaLogger,
     canister: &mut CanisterState,
     time: Time,
-    _origin: Option<CanisterChangeOrigin>,
+    add_canister_change: AddCanisterChangeToHistory,
 ) -> Vec<Response> {
     // Drop the canister's execution state.
     canister.execution_state = None;
@@ -1553,6 +1587,16 @@ pub fn uninstall_canister(
     canister.system_state.global_timer = CanisterTimer::Inactive;
     // Increment canister version.
     canister.system_state.canister_version += 1;
+    match add_canister_change {
+        AddCanisterChangeToHistory::Yes(origin) => {
+            canister.system_state.add_canister_change(
+                time,
+                origin,
+                CanisterChangeDetails::CanisterCodeUninstall,
+            );
+        }
+        AddCanisterChangeToHistory::No => {}
+    };
 
     let mut rejects = Vec::new();
     let canister_id = canister.canister_id();

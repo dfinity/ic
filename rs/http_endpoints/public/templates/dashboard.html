@@ -100,6 +100,7 @@
                     <table>
                         <tr><td>controllers</td><td>{{ c.system_state.collect_controllers_as_string() }}</td></tr>
                         <tr><td>certified_data length</td><td>{{ c.system_state.certified_data.len() }} bytes</td></tr>
+                        <tr><td>canister_history_memory_usage</td><td>{{ c.system_state.canister_history_memory_usage() }} bytes</td></tr>
                     </table>
                     <h3>Execution state</h3>
                     {% match c.execution_state.as_ref() %}

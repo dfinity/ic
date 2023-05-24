@@ -86,6 +86,7 @@ pub(crate) fn execute_install(
     let canister_id = helper.canister().canister_id();
     let layout = canister_layout(&original.canister_layout_path, &canister_id);
     let context_sender = context.sender();
+    let module_hash = context.wasm_module.module_hash();
     let (instructions_from_compilation, result) = round.hypervisor.create_execution_state(
         context.wasm_module,
         layout.raw_path(),
@@ -105,6 +106,7 @@ pub(crate) fn execute_install(
     helper.clear_certified_data();
     helper.deactivate_global_timer();
     helper.bump_canister_version();
+    helper.add_canister_change(round.time, context.origin, context.mode, module_hash.into());
 
     // Stage 2: invoke the `start()` method of the Wasm module (if present).
     let method = WasmMethod::System(SystemMethod::CanisterStart);
