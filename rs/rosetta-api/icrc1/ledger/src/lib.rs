@@ -9,8 +9,9 @@ use ic_base_types::PrincipalId;
 use ic_crypto_tree_hash::{Label, MixedHashTree};
 use ic_icrc1::blocks::encoded_block_to_generic_block;
 use ic_icrc1::{Block, LedgerBalances, Transaction};
+pub use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_canister_core::{
-    archive::{ArchiveCanisterWasm, ArchiveOptions},
+    archive::ArchiveCanisterWasm,
     blockchain::Blockchain,
     ledger::{apply_transaction, block_locations, LedgerContext, LedgerData, TransactionInfo},
     range_utils,

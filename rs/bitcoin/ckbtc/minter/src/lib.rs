@@ -124,7 +124,7 @@ async fn fetch_main_utxos(main_account: &Account, main_address: &BitcoinAddress)
 /// Returns an estimate for transaction fees in millisatoshi per vbyte.  Returns
 /// None if the bitcoin canister is unavailable or does not have enough data for
 /// an estimate yet.
-async fn estimate_fee_per_vbyte() -> Option<MillisatoshiPerByte> {
+pub async fn estimate_fee_per_vbyte() -> Option<MillisatoshiPerByte> {
     /// The default fee we use on regtest networks if there are not enough data
     /// to compute the median fee.
     const DEFAULT_FEE: MillisatoshiPerByte = 5_000;
