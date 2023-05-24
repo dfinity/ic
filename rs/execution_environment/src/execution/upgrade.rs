@@ -228,6 +228,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
 ) -> DtsInstallCodeResult {
     let canister_id = helper.canister().canister_id();
     let context_sender = context.sender();
+    let module_hash = context.wasm_module.module_hash();
     // Stage 2: create a new execution state based on the new Wasm code, deactivate global timer, and bump canister version.
     // Replace the execution state of the canister with a new execution state, but
     // persist the stable memory (if it exists).
@@ -252,6 +253,7 @@ fn upgrade_stage_2_and_3a_create_execution_state_and_call_start(
 
     helper.deactivate_global_timer();
     helper.bump_canister_version();
+    helper.add_canister_change(round.time, context.origin, context.mode, module_hash.into());
 
     // Stage 3: invoke the `start()` method (if present).
     let method = WasmMethod::System(SystemMethod::CanisterStart);

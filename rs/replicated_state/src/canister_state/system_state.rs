@@ -1258,6 +1258,12 @@ impl SystemState {
         }
     }
 
+    /// Clears all canister changes and their memory usage,
+    /// but keeps the total number of changes recorded.
+    pub fn clear_canister_history(&mut self) {
+        self.canister_history.clear();
+    }
+
     /// Adds a canister change to canister history.
     /// The canister version of the newly added canister change is
     /// taken directly from the `SystemState`.

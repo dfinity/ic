@@ -293,7 +293,10 @@ impl ExecutionTest {
     }
 
     pub fn idle_cycles_burned_per_day(&self, canister_id: CanisterId) -> Cycles {
-        let memory_usage = self.execution_state(canister_id).memory_usage();
+        let memory_usage = self.execution_state(canister_id).memory_usage()
+            + self
+                .canister_state(canister_id)
+                .canister_history_memory_usage();
         let memory_allocation = self
             .canister_state(canister_id)
             .system_state

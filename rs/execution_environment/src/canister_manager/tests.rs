@@ -1,8 +1,8 @@
 use crate::{
     as_num_instructions,
     canister_manager::{
-        uninstall_canister, CanisterManager, CanisterManagerError, CanisterMgrConfig,
-        InstallCodeContext, StopCanisterResult,
+        uninstall_canister, AddCanisterChangeToHistory, CanisterManager, CanisterManagerError,
+        CanisterMgrConfig, InstallCodeContext, StopCanisterResult,
     },
     canister_settings::{CanisterSettings, CanisterSettingsBuilder},
     execution_environment::as_round_instructions,
@@ -20,9 +20,9 @@ use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::{
-    CanisterChangeOrigin, CanisterIdRecord, CanisterInstallMode, CanisterSettingsArgsBuilder,
-    CanisterStatusType, CreateCanisterArgs, EmptyBlob, InstallCodeArgs, Method, Payload,
-    UpdateSettingsArgs,
+    CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterIdRecord,
+    CanisterInstallMode, CanisterSettingsArgsBuilder, CanisterStatusType, CreateCanisterArgs,
+    EmptyBlob, InstallCodeArgs, Method, Payload, UpdateSettingsArgs,
 };
 use ic_interfaces::{
     execution_environment::{
@@ -72,7 +72,7 @@ use ic_types::{
 use ic_wasm_types::{CanisterModule, WasmValidationError};
 use lazy_static::lazy_static;
 use maplit::{btreemap, btreeset};
-use std::{collections::BTreeSet, convert::TryFrom, sync::Arc};
+use std::{collections::BTreeSet, convert::TryFrom, mem::size_of, sync::Arc};
 
 use super::InstallCodeResult;
 use prometheus::IntCounter;
@@ -763,8 +763,16 @@ fn upgrading_canister_makes_subnet_oversubscribed() {
 fn install_canister_fails_if_memory_capacity_exceeded() {
     let initial_cycles = Cycles::new(1_000_000_000_000_000);
     let mb = 1 << 20;
+    // canister history memory usage for canister1 at the beginning of install_code
+    let canister_history_memory_usage = size_of::<CanisterChange>() + size_of::<PrincipalId>();
     let memory_capacity = 1000 * mb;
-    let memory_used = memory_capacity - 10 * mb;
+    // canister1 memory usage before code change: `canister_history_memory_usage`
+    // canister1 memory usage after code change: `memory_used`
+    // => SubnetAvailableMemory decreases by `memory_used - canister_history_memory_usage`
+    // after canister1 code change and then SubnetAvailableMemory is equal to
+    // `memory_capacity - (memory_used - canister_history_memory_usage)`;
+    // we want this quantity to be `10 * mb` and derive the value of `memory_used` from there.
+    let memory_used = memory_capacity - 10 * mb + (canister_history_memory_usage as u64);
 
     let wat = r#"
         (module
@@ -2599,8 +2607,12 @@ fn installing_a_canister_with_not_enough_memory_allocation_fails() {
             .0
             .unwrap();
 
-        // Give just 10 bytes of memory allocation which should result in an error.
-        let memory_allocation = MemoryAllocation::try_from(NumBytes::from(10)).unwrap();
+        // Give just 10 bytes of memory allocation on top of canister history memory usage
+        // at the beginning of install_code which should result in an error.
+        let canister_history_memory = size_of::<CanisterChange>() + size_of::<PrincipalId>();
+        let memory_allocation =
+            MemoryAllocation::try_from(NumBytes::from(canister_history_memory as u64 + 10))
+                .unwrap();
         let res = install_code(
             &canister_manager,
             InstallCodeContextBuilder::default()
@@ -2645,7 +2657,12 @@ fn installing_a_canister_with_not_enough_memory_allocation_fails() {
 
         // Attempt to re-install with low memory allocation should fail.
         let instructions_before_reinstall = as_num_instructions(round_limits.instructions);
-        let memory_allocation = MemoryAllocation::try_from(NumBytes::from(50)).unwrap();
+        // Give just 50 bytes of memory allocation on top of canister history memory usage
+        // at the beginning of install_code which should result in an error.
+        let canister_history_memory = 2 * size_of::<CanisterChange>() + size_of::<PrincipalId>();
+        let memory_allocation =
+            MemoryAllocation::try_from(NumBytes::from(canister_history_memory as u64 + 50))
+                .unwrap();
         let res = install_code(
             &canister_manager,
             InstallCodeContextBuilder::default()
@@ -2849,7 +2866,7 @@ fn uninstall_canister_doesnt_respond_to_responded_call_contexts() {
                 .with_call_context(CallContextBuilder::new().with_responded(true).build())
                 .build(),
             mock_time(),
-            None,
+            AddCanisterChangeToHistory::No,
         ),
         Vec::new()
     );
@@ -2873,7 +2890,7 @@ fn uninstall_canister_responds_to_unresponded_call_contexts() {
                 )
                 .build(),
             mock_time(),
-            None,
+            AddCanisterChangeToHistory::No,
         )[0],
         Response::Ingress(IngressResponse {
             message_id: message_test_id(456),
@@ -3357,6 +3374,7 @@ fn install_code_preserves_system_state_and_scheduler_state() {
         .sender(controller.into())
         .canister_id(canister_id)
         .build();
+    let module_hash = ctxt.wasm_module.module_hash();
     let (instructions_left, res, canister) =
         install_code(&canister_manager, ctxt, &mut state, &mut round_limits);
     state.put_canister_state(canister.unwrap());
@@ -3367,7 +3385,8 @@ fn install_code_preserves_system_state_and_scheduler_state() {
     // No heap delta.
     assert_eq!(res.unwrap().heap_delta, NumBytes::from(0));
 
-    // Verify the system state is preserved except for certified data, global timer, and canister version.
+    // Verify the system state is preserved except for certified data, global timer,
+    // canister version, and canister history.
     let new_state = state
         .canister_state(&canister_id)
         .unwrap()
@@ -3376,6 +3395,11 @@ fn install_code_preserves_system_state_and_scheduler_state() {
     original_canister.system_state.certified_data = Vec::new();
     original_canister.system_state.global_timer = CanisterTimer::Inactive;
     original_canister.system_state.canister_version += 1;
+    original_canister.system_state.add_canister_change(
+        state.time(),
+        canister_change_origin_from_canister(&controller),
+        CanisterChangeDetails::code_deployment(CanisterInstallMode::Install, module_hash),
+    );
     assert_eq!(new_state, original_canister.system_state);
 
     // Verify the scheduler state is preserved.
@@ -3392,6 +3416,7 @@ fn install_code_preserves_system_state_and_scheduler_state() {
         .sender(controller.into())
         .canister_id(canister_id)
         .build();
+    let module_hash = ctxt.wasm_module.module_hash();
     let (instructions_left, res, canister) =
         install_code(&canister_manager, ctxt, &mut state, &mut round_limits);
     state.put_canister_state(canister.unwrap());
@@ -3405,7 +3430,8 @@ fn install_code_preserves_system_state_and_scheduler_state() {
     // No heap delta.
     assert_eq!(res.unwrap().heap_delta, NumBytes::from(0));
 
-    // Verify the system state is preserved except for certified data, global timer, and canister version.
+    // Verify the system state is preserved except for certified data, global timer,
+    // canister version, and canister history.
     let new_state = state
         .canister_state(&canister_id)
         .unwrap()
@@ -3414,6 +3440,11 @@ fn install_code_preserves_system_state_and_scheduler_state() {
     original_canister.system_state.certified_data = Vec::new();
     original_canister.system_state.global_timer = CanisterTimer::Inactive;
     original_canister.system_state.canister_version += 1;
+    original_canister.system_state.add_canister_change(
+        state.time(),
+        canister_change_origin_from_canister(&controller),
+        CanisterChangeDetails::code_deployment(CanisterInstallMode::Reinstall, module_hash),
+    );
     assert_eq!(new_state, original_canister.system_state);
 
     // Verify the scheduler state is preserved.
@@ -3436,6 +3467,7 @@ fn install_code_preserves_system_state_and_scheduler_state() {
         .sender(controller.into())
         .canister_id(canister_id)
         .build();
+    let module_hash = ctxt.wasm_module.module_hash();
     let (instructions_left, res, canister) =
         install_code(&canister_manager, ctxt, &mut state, &mut round_limits);
     state.put_canister_state(canister.unwrap());
@@ -3449,7 +3481,8 @@ fn install_code_preserves_system_state_and_scheduler_state() {
     // No heap delta.
     assert_eq!(res.unwrap().heap_delta, NumBytes::from(0));
 
-    // Verify the system state is preserved except for global timer and canister version.
+    // Verify the system state is preserved except for global timer,
+    // canister version, and canister history.
     let new_state = state
         .canister_state(&canister_id)
         .unwrap()
@@ -3457,6 +3490,11 @@ fn install_code_preserves_system_state_and_scheduler_state() {
         .clone();
     original_canister.system_state.global_timer = CanisterTimer::Inactive;
     original_canister.system_state.canister_version += 1;
+    original_canister.system_state.add_canister_change(
+        state.time(),
+        canister_change_origin_from_canister(&controller),
+        CanisterChangeDetails::code_deployment(CanisterInstallMode::Upgrade, module_hash),
+    );
     assert_eq!(new_state, original_canister.system_state);
 
     // Verify the scheduler state is preserved.
@@ -3634,9 +3672,14 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
             compute_allocation_used: state.total_compute_allocation(),
         };
         let sender = canister_test_id(100).get();
+        // canister history memory usage at the beginning of attempted upgrade
+        let canister_history_memory = 2 * size_of::<CanisterChange>() + size_of::<PrincipalId>();
         let settings = CanisterSettingsBuilder::new()
             .with_memory_allocation(
-                MemoryAllocation::try_from(NumBytes::from(WASM_PAGE_SIZE_IN_BYTES + 100)).unwrap(),
+                MemoryAllocation::try_from(NumBytes::from(
+                    WASM_PAGE_SIZE_IN_BYTES + 100 + canister_history_memory as u64,
+                ))
+                .unwrap(),
             )
             .build();
         let wat = r#"
@@ -3705,12 +3748,16 @@ fn test_upgrade_when_updating_memory_allocation_via_canister_settings() {
         );
         state.put_canister_state(res.2.unwrap());
 
+        // canister history memory usage at the beginning of update_settings
+        let canister_history_memory = 2 * size_of::<CanisterChange>() + size_of::<PrincipalId>();
         // Update memory allocation to a big enough value via canister settings. The
         // upgrade should succeed.
         let settings = CanisterSettingsBuilder::new()
             .with_memory_allocation(
-                MemoryAllocation::try_from(NumBytes::from(WASM_PAGE_SIZE_IN_BYTES * 2 + 100))
-                    .unwrap(),
+                MemoryAllocation::try_from(NumBytes::from(
+                    WASM_PAGE_SIZE_IN_BYTES * 2 + 100 + canister_history_memory as u64,
+                ))
+                .unwrap(),
             )
             .build();
 

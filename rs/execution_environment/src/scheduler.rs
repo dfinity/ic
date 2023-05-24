@@ -1,5 +1,5 @@
 use crate::{
-    canister_manager::uninstall_canister,
+    canister_manager::{uninstall_canister, AddCanisterChangeToHistory},
     execution_environment::{
         as_num_instructions, as_round_instructions, execute_canister, ExecuteCanisterResult,
         ExecutionEnvironment, RoundInstructions, RoundLimits,
@@ -1004,9 +1004,15 @@ impl SchedulerImpl {
                     )
                     .is_err()
                 {
-                    all_rejects.push(uninstall_canister(&self.log, canister, state_time, None));
+                    all_rejects.push(uninstall_canister(
+                        &self.log,
+                        canister,
+                        state_time,
+                        AddCanisterChangeToHistory::No,
+                    ));
                     canister.scheduler_state.compute_allocation = ComputeAllocation::zero();
                     canister.system_state.memory_allocation = MemoryAllocation::BestEffort;
+                    canister.system_state.clear_canister_history();
                     // Burn the remaining balance of the canister.
                     canister
                         .system_state

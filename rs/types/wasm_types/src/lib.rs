@@ -131,6 +131,10 @@ impl std::hash::Hash for CanisterModule {
 pub struct WasmHash([u8; WASM_HASH_LENGTH]);
 
 impl WasmHash {
+    pub fn to_slice(&self) -> [u8; WASM_HASH_LENGTH] {
+        self.0
+    }
+
     pub fn to_vec(&self) -> Vec<u8> {
         self.0.to_vec()
     }

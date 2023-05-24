@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_config::flag_status::FlagStatus;
 use ic_embedders::wasm_executor::CanisterStateChanges;
-use ic_ic00_types::CanisterInstallMode;
+use ic_ic00_types::{CanisterChangeDetails, CanisterChangeOrigin, CanisterInstallMode};
 use ic_interfaces::{
     execution_environment::{
         HypervisorError, HypervisorResult, SubnetAvailableMemory, SubnetAvailableMemoryError,
@@ -23,6 +23,7 @@ use ic_types::{
     funds::Cycles, CanisterTimer, ComputeAllocation, Height, MemoryAllocation, NumInstructions,
     Time,
 };
+use ic_wasm_types::WasmHash;
 
 use crate::{
     canister_manager::{
@@ -119,6 +120,20 @@ impl InstallCodeHelper {
 
     pub fn bump_canister_version(&mut self) {
         self.canister.system_state.canister_version += 1;
+    }
+
+    pub fn add_canister_change(
+        &mut self,
+        timestamp_nanos: Time,
+        origin: CanisterChangeOrigin,
+        mode: CanisterInstallMode,
+        module_hash: WasmHash,
+    ) {
+        self.canister.system_state.add_canister_change(
+            timestamp_nanos,
+            origin,
+            CanisterChangeDetails::code_deployment(mode, module_hash.to_slice()),
+        );
     }
 
     pub fn execution_parameters(&self) -> &ExecutionParameters {
