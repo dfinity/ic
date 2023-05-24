@@ -69,3 +69,8 @@ pub struct ListSubaccountsArgs {
     // in natural order.
     pub start: Option<Subaccount>,
 }
+
+#[derive(CandidType, Debug, Deserialize, PartialEq, Eq)]
+pub struct Status {
+    pub num_blocks_synced: BlockIndex,
+}
