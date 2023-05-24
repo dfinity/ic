@@ -66,7 +66,10 @@ pub async fn main() {
     abort_on_panic();
 
     let flags = Flags::parse();
-    let config = flags.get_config().expect("Error getting config");
+    let config = match flags.get_config() {
+        Ok(config) => config,
+        Err(_) => return,
+    };
 
     let metrics_registry = MetricsRegistry::global();
     let (logger, _async_log_guard) = new_replica_logger_from_config(&config.logger);
