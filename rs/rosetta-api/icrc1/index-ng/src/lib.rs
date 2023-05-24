@@ -1,8 +1,11 @@
 use candid::{CandidType, Deserialize, Nat, Principal};
-use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc1::transfer::BlockIndex;
 use icrc_ledger_types::icrc3::blocks::GenericBlock;
 use icrc_ledger_types::icrc3::transactions::Transaction;
+
+/// The maximum number of blocks to return in a single [get_blocks] request.
+pub const DEFAULT_MAX_BLOCKS_PER_RESPONSE: u64 = 2000;
 
 #[derive(CandidType, Debug, Deserialize)]
 pub enum IndexArg {
@@ -56,3 +59,13 @@ pub struct GetAccountTransactionsError {
 
 pub type GetAccountTransactionsResult =
     Result<GetAccountTransactionsResponse, GetAccountTransactionsError>;
+
+#[derive(CandidType, Debug, Deserialize, PartialEq, Eq)]
+pub struct ListSubaccountsArgs {
+    pub owner: Principal,
+    // The last subaccount seen by the client for the given principal.
+    // This subaccount is excluded in the result.
+    // If None then the results will start from the first
+    // in natural order.
+    pub start: Option<Subaccount>,
+}

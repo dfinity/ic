@@ -2,14 +2,15 @@ use candid::{Decode, Encode, Nat};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_icrc1_index_ng::{
     GetAccountTransactionsArgs, GetAccountTransactionsResponse, GetAccountTransactionsResult,
-    GetBlocksResponse, IndexArg, InitArg as IndexInitArg, TransactionWithId,
+    GetBlocksResponse, IndexArg, InitArg as IndexInitArg, ListSubaccountsArgs, TransactionWithId,
+    DEFAULT_MAX_BLOCKS_PER_RESPONSE,
 };
 use ic_icrc1_ledger::{InitArgs as LedgerInitArgs, LedgerArgument};
 use ic_icrc1_test_utils::{valid_transactions_strategy, CallerTransferArg};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_state_machine_tests::StateMachine;
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
-use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc1::transfer::{BlockIndex, TransferArg, TransferError};
 use icrc_ledger_types::icrc3::blocks::{BlockRange, GenericBlock, GetBlocksRequest};
 use icrc_ledger_types::icrc3::transactions::{Mint, Transaction, Transfer};
@@ -227,6 +228,30 @@ fn get_account_transactions(
     Decode!(&res, GetAccountTransactionsResult)
         .expect("Failed to decode GetAccountTransactionsArgs")
         .expect("Failed to perform GetAccountTransactionsArgs")
+}
+
+fn list_subaccounts(
+    env: &StateMachine,
+    index: CanisterId,
+    principal: PrincipalId,
+    start: Option<Subaccount>,
+) -> Vec<Subaccount> {
+    Decode!(
+        &env.execute_ingress_as(
+            principal,
+            index,
+            "list_subaccounts",
+            Encode!(&ListSubaccountsArgs {
+                owner: principal.into(),
+                start,
+            })
+            .unwrap()
+        )
+        .expect("failed to list_subaccounts")
+        .bytes(),
+        Vec<Subaccount>
+    )
+    .expect("failed to decode list_subaccounts response")
 }
 
 // Assert that the index canister contains the same blocks as the ledger
@@ -616,4 +641,96 @@ fn test_icrc1_balance_of() {
             },
         )
         .unwrap();
+}
+
+#[test]
+fn test_list_subaccounts() {
+    // For this test, we add minting operations for some principals:
+    // - The principal 1 has one account with the last possible
+    // subaccount.
+    // - The principal 2 has a number of subaccounts equals to
+    // two times the DEFAULT_MAX_BLOCKS_PER_RESPONSE. Therefore fetching
+    // its subaccounts will trigger pagination.
+    // - The principal 3 has one account with the first possible
+    // subaccount.
+    // - The principal 4 has one account with the default subaccount,
+    // which should map to [0;32] in the index.
+
+    let account_1 = Account {
+        owner: PrincipalId::new_user_test_id(1).into(),
+        subaccount: Some([u8::MAX; 32]),
+    };
+    let accounts_2: Vec<_> = (0..(DEFAULT_MAX_BLOCKS_PER_RESPONSE * 2))
+        .map(|i| account(2, i as u128))
+        .collect();
+    let account_3 = account(3, 0);
+    let account_4 = Account {
+        owner: PrincipalId::new_user_test_id(4).into(),
+        subaccount: None,
+    };
+
+    let mut initial_balances: Vec<_> = vec![
+        (account_1, 10_000),
+        (account_3, 10_000),
+        (account_4, 40_000),
+    ];
+    initial_balances.extend(accounts_2.iter().map(|account| (*account, 10_000)));
+
+    let env = &StateMachine::new();
+    let ledger_id = install_ledger(env, initial_balances, default_archive_options());
+    let index_id = install_index(env, ledger_id);
+
+    trigger_heartbeat(env);
+
+    // list account_1.owner subaccounts when no starting subaccount is specified
+    assert_eq!(
+        vec![*account_1.effective_subaccount()],
+        list_subaccounts(env, index_id, PrincipalId(account_1.owner), None)
+    );
+
+    // list account_3.owner subaccounts when no starting subaccount is specified
+    assert_eq!(
+        vec![*account_3.effective_subaccount()],
+        list_subaccounts(env, index_id, PrincipalId(account_3.owner), None)
+    );
+
+    // list account_3.owner subaccounts when an existing starting subaccount is specified but no subaccount is in that range
+    assert!(list_subaccounts(
+        env,
+        index_id,
+        PrincipalId(account_3.owner),
+        Some(*account(3, 1).effective_subaccount())
+    )
+    .is_empty());
+
+    // list acccount_4.owner subaccounts should return the default subaccount
+    // mapped to [0;32]
+    assert_eq!(
+        vec![[0; 32]],
+        list_subaccounts(env, index_id, PrincipalId(account_4.owner), None)
+    );
+
+    // account_2.owner should have two batches of subaccounts
+    let principal_2 = accounts_2.get(0).unwrap().owner;
+    let batch_1 = list_subaccounts(env, index_id, PrincipalId(principal_2), None);
+    let expected_batch_1: Vec<_> = accounts_2
+        .iter()
+        .take(DEFAULT_MAX_BLOCKS_PER_RESPONSE as usize)
+        .map(|account| *account.effective_subaccount())
+        .collect();
+    assert_eq!(expected_batch_1, batch_1);
+
+    let batch_2 = list_subaccounts(
+        env,
+        index_id,
+        PrincipalId(principal_2),
+        Some(*batch_1.last().unwrap()),
+    );
+    let expected_batch_2: Vec<_> = accounts_2
+        .iter()
+        .skip(DEFAULT_MAX_BLOCKS_PER_RESPONSE as usize)
+        .take(DEFAULT_MAX_BLOCKS_PER_RESPONSE as usize)
+        .map(|account| *account.effective_subaccount())
+        .collect();
+    assert_eq!(expected_batch_2, batch_2);
 }

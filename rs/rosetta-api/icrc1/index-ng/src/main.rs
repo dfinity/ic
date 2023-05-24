@@ -7,7 +7,7 @@ use ic_icrc1::blocks::{encoded_block_to_generic_block, generic_block_to_encoded_
 use ic_icrc1::{Block, Operation};
 use ic_icrc1_index_ng::{
     GetAccountTransactionsArgs, GetAccountTransactionsResponse, GetAccountTransactionsResult,
-    IndexArg, TransactionWithId,
+    IndexArg, ListSubaccountsArgs, TransactionWithId, DEFAULT_MAX_BLOCKS_PER_RESPONSE,
 };
 use ic_ledger_core::block::{BlockIndex as BlockIndex64, BlockType, EncodedBlock};
 use ic_stable_structures::memory_manager::{MemoryId, VirtualMemory};
@@ -16,7 +16,7 @@ use ic_stable_structures::{
     memory_manager::MemoryManager, BoundedStorable, DefaultMemoryImpl, StableBTreeMap, StableCell,
     StableLog, Storable,
 };
-use icrc_ledger_types::icrc1::account::Account;
+use icrc_ledger_types::icrc1::account::{Account, Subaccount};
 use icrc_ledger_types::icrc3::archive::{ArchivedRange, QueryBlockArchiveFn};
 use icrc_ledger_types::icrc3::blocks::{
     BlockRange, GenericBlock, GetBlocksRequest, GetBlocksResponse,
@@ -30,10 +30,8 @@ use std::cell::RefCell;
 use std::cmp::Reverse;
 use std::convert::TryFrom;
 use std::hash::Hash;
+use std::ops::Bound::{Excluded, Included};
 use std::time::Duration;
-
-/// The maximum number of blocks to return in a single [get_blocks] request.
-const DEFAULT_MAX_BLOCKS_PER_RESPONSE: u64 = 2000;
 
 const STATE_MEMORY_ID: MemoryId = MemoryId::new(0);
 const BLOCK_LOG_INDEX_MEMORY_ID: MemoryId = MemoryId::new(1);
@@ -600,6 +598,33 @@ fn get_oldest_tx_id(account: Account) -> Option<BlockIndex64> {
 #[candid_method(query)]
 fn icrc1_balance_of(account: Account) -> Nat {
     get_balance(account).into()
+}
+
+#[query]
+#[candid_method(query)]
+fn list_subaccounts(args: ListSubaccountsArgs) -> Vec<Subaccount> {
+    let start_key = balance_key(Account {
+        owner: args.owner,
+        subaccount: args.start,
+    });
+    let end_key = balance_key(Account {
+        owner: args.owner,
+        subaccount: Some([u8::MAX; 32]),
+    });
+    let range = (
+        if args.start.is_none() {
+            Included(start_key)
+        } else {
+            Excluded(start_key)
+        },
+        Included(end_key),
+    );
+    with_account_data(|data| {
+        data.range(range)
+            .take(DEFAULT_MAX_BLOCKS_PER_RESPONSE as usize)
+            .map(|((_, (_, subaccount)), _)| subaccount)
+            .collect()
+    })
 }
 
 fn main() {}

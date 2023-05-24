@@ -94,9 +94,15 @@ type GetTransactionsResult = variant {
   Err : GetTransactionsErr;
 };
 
+type ListSubaccountsArgs = record {
+    owner: principal;
+    start: opt SubAccount;
+};
+
 service : (index_arg: IndexArg) -> {
     get_account_transactions : (GetAccountTransactionsArgs) -> (GetTransactionsResult);
     get_blocks : (GetBlocksRequest) -> (GetBlocksResponse) query;
     icrc1_balance_of : (Account) -> (Tokens) query;
     ledger_id : () -> (principal) query;
+    list_subaccounts : (ListSubaccountsArgs) -> (vec SubAccount) query;
 }
