@@ -76,9 +76,18 @@ impl<'a> ConsensusRunner<'a> {
         time_source: Arc<FastForwardTimeSource>,
     ) -> ConsensusRunner<'a> {
         let plain = slog_term::PlainSyncDecorator::new(std::io::stdout());
-        let no_stamp = |_: &mut dyn std::io::Write| Ok(());
+        let time_source_clone = time_source.clone();
+        let timestamp_fn = move |w: &mut dyn std::io::Write| {
+            write!(
+                w,
+                "{:016}",
+                time_source_clone
+                    .get_relative_time()
+                    .as_nanos_since_unix_epoch()
+            )
+        };
         let drain = slog_term::FullFormat::new(plain)
-            .use_custom_timestamp(no_stamp)
+            .use_custom_timestamp(timestamp_fn)
             .build()
             .fuse();
         let drain = slog_async::AsyncCore::custom(slog_envlogger::new(drain))
