@@ -2295,6 +2295,184 @@ async fn test_invalid_proposals_fail() {
     .unwrap();
 }
 
+fn get_current_voting_power(gov: &Governance, neuron_id: u64, now: u64) -> u64 {
+    gov.get_neuron(&NeuronId { id: neuron_id })
+        .unwrap()
+        .voting_power(now)
+}
+
+#[tokio::test]
+async fn test_compute_tally_while_open() {
+    // Prepare the test with 2 neurons
+    let fake_driver = fake::FakeDriver::default();
+    let mut gov = Governance::new(
+        GovernanceProto {
+            wait_for_quiet_threshold_seconds: 5,
+            ..fixture_two_neurons_second_is_bigger()
+        },
+        fake_driver.get_fake_env(),
+        fake_driver.get_fake_ledger(),
+        fake_driver.get_fake_cmc(),
+    );
+
+    // Make the proposal from the smaller neuron.
+    let pid = gov
+        .make_proposal(
+            &NeuronId { id: 1 },
+            &principal(1),
+            &Proposal {
+                title: Some("A Reasonable Title".to_string()),
+                summary: "proposal 1".to_string(),
+                action: Some(proposal::Action::Motion(Motion {
+                    motion_text: "".to_string(),
+                })),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+
+    // Tally should have the smaller neuron voting yes.
+    assert_eq!(
+        gov.get_proposal_data(pid).unwrap().latest_tally,
+        Some(Tally {
+            timestamp_seconds: fake_driver.now(),
+            no: 0,
+            yes: get_current_voting_power(&gov, 1, fake_driver.now()),
+            total: get_current_voting_power(&gov, 1, fake_driver.now())
+                + get_current_voting_power(&gov, 2, fake_driver.now())
+        })
+    );
+}
+
+#[tokio::test]
+async fn test_compute_tally_after_decided() {
+    // Prepare the test with 2 neurons
+    let fake_driver = fake::FakeDriver::default();
+    let mut gov = Governance::new(
+        GovernanceProto {
+            wait_for_quiet_threshold_seconds: 5,
+            ..fixture_two_neurons_second_is_bigger()
+        },
+        fake_driver.get_fake_env(),
+        fake_driver.get_fake_ledger(),
+        fake_driver.get_fake_cmc(),
+    );
+
+    // Make the proposal from the larger neuron.
+    let pid = gov
+        .make_proposal(
+            &NeuronId { id: 2 },
+            &principal(2),
+            &Proposal {
+                title: Some("A Reasonable Title".to_string()),
+                summary: "proposal 1".to_string(),
+                action: Some(proposal::Action::Motion(Motion {
+                    motion_text: "".to_string(),
+                })),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+
+    // Tally should have the larger neuron voting yes, and the proposal is decided.
+    assert_eq!(
+        gov.get_proposal_data(pid).unwrap().latest_tally,
+        Some(Tally {
+            timestamp_seconds: fake_driver.now(),
+            no: 0,
+            yes: get_current_voting_power(&gov, 2, fake_driver.now()),
+            total: get_current_voting_power(&gov, 1, fake_driver.now())
+                + get_current_voting_power(&gov, 2, fake_driver.now())
+        })
+    );
+
+    // Let the smaller neuron vote no.
+    fake::register_vote_assert_success(
+        &mut gov,
+        principal(1),
+        NeuronId { id: 1 },
+        ProposalId { id: 1 },
+        Vote::No,
+    );
+
+    // The tally should still be recomputed.
+    assert_eq!(
+        gov.get_proposal_data(pid).unwrap().latest_tally,
+        Some(Tally {
+            timestamp_seconds: fake_driver.now(),
+            no: get_current_voting_power(&gov, 1, fake_driver.now()),
+            yes: get_current_voting_power(&gov, 2, fake_driver.now()),
+            total: get_current_voting_power(&gov, 1, fake_driver.now())
+                + get_current_voting_power(&gov, 2, fake_driver.now())
+        })
+    );
+}
+
+#[tokio::test]
+async fn test_no_compute_tally_after_deadline() {
+    // Prepare the test with 2 neurons
+    let mut fake_driver = fake::FakeDriver::default();
+    let mut gov = Governance::new(
+        GovernanceProto {
+            wait_for_quiet_threshold_seconds: 5,
+            ..fixture_two_neurons_second_is_bigger()
+        },
+        fake_driver.get_fake_env(),
+        fake_driver.get_fake_ledger(),
+        fake_driver.get_fake_cmc(),
+    );
+
+    // Make the proposal from the larger neuron and let the smaller neuron vote no.
+    let pid = gov
+        .make_proposal(
+            &NeuronId { id: 2 },
+            &principal(2),
+            &Proposal {
+                title: Some("A Reasonable Title".to_string()),
+                summary: "proposal 1".to_string(),
+                action: Some(proposal::Action::Motion(Motion {
+                    motion_text: "".to_string(),
+                })),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+
+    // Advance time past the deadline.
+    let previous_time = fake_driver.now();
+    fake_driver.advance_time_by(6);
+
+    // Attempt to cast another vote after deadline which should fail.
+    assert_matches!(
+        fake::register_vote(
+            &mut gov,
+            principal(1),
+            NeuronId { id: 1 },
+            ProposalId { id: 1 },
+            Vote::No,
+        ).command,
+        Some(manage_neuron_response::Command::Error(err))
+            if err.error_type == ErrorType::PreconditionFailed as i32
+    );
+
+    // Simulate a heartbeat.
+    gov.run_periodic_tasks().now_or_never();
+
+    // The tally should not be recomputed after deadline because of heartbeat.
+    // This is important since computing the tally is expensive.
+    assert_eq!(
+        gov.get_proposal_data(pid)
+            .unwrap()
+            .latest_tally
+            .as_ref()
+            .unwrap()
+            .timestamp_seconds,
+        previous_time
+    );
+}
 /// In this scenario, the wait-for-quiet policy make that proposals last though
 /// several reward periods.
 ///
