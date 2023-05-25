@@ -4098,6 +4098,7 @@ dependencies = [
  "ic-interfaces-registry",
  "ic-nervous-system-common",
  "ic-nervous-system-common-test-keys",
+ "ic-nervous-system-humanize",
  "ic-nervous-system-proto",
  "ic-nervous-system-root",
  "ic-nns-common",
@@ -4124,12 +4125,10 @@ dependencies = [
  "ic-sns-wasm",
  "ic-types",
  "itertools",
- "lazy_static",
  "maplit",
  "on_wire",
  "pretty_assertions 0.6.1",
  "prost",
- "regex",
  "registry-canister",
  "reqwest",
  "serde",
@@ -7450,6 +7449,16 @@ dependencies = [
  "ic-nervous-system-common",
  "icp-ledger",
  "icrc-ledger-types",
+]
+
+[[package]]
+name = "ic-nervous-system-humanize"
+version = "0.0.1"
+dependencies = [
+ "humantime 2.1.0",
+ "ic-nervous-system-proto",
+ "lazy_static",
+ "regex",
 ]
 
 [[package]]

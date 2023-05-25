@@ -8,7 +8,6 @@ use anyhow::anyhow;
 use async_trait::async_trait;
 use candid::{CandidType, Decode, Encode};
 use clap::Parser;
-use core::fmt::Display;
 use cycles_minting_canister::{
     ChangeSubnetTypeAssignmentArgs, SetAuthorizedSubnetworkListArgs, SubnetListWithType,
     UpdateSubnetTypeArgs,
@@ -35,6 +34,7 @@ use ic_nervous_system_common_test_keys::{
     TEST_USER2_PRINCIPAL, TEST_USER3_KEYPAIR, TEST_USER3_PRINCIPAL, TEST_USER4_KEYPAIR,
     TEST_USER4_PRINCIPAL,
 };
+use ic_nervous_system_humanize::{parse_duration, parse_percentage, parse_tokens};
 use ic_nervous_system_proto::pb::v1 as nervous_system_pb;
 use ic_nervous_system_root::{
     canister_status::CanisterStatusResult,
@@ -124,10 +124,8 @@ use ic_types::{
     CanisterId, NodeId, PrincipalId, RegistryVersion, ReplicaVersion, SubnetId,
 };
 use itertools::izip;
-use lazy_static::lazy_static;
 use maplit::hashmap;
 use prost::Message;
-use regex::Regex;
 use registry_canister::mutations::common::decode_registry_value;
 use registry_canister::mutations::do_create_subnet::{EcdsaInitialConfig, EcdsaKeyRequest};
 use registry_canister::mutations::do_set_firewall_config::SetFirewallConfigPayload;
@@ -176,137 +174,6 @@ mod main_tests;
 
 const IC_ROOT_PUBLIC_KEY_BASE64: &str = r#"MIGCMB0GDSsGAQQBgtx8BQMBAgEGDCsGAQQBgtx8BQMCAQNhAIFMDm7HH6tYOwi9gTc8JVw8NxsuhIY8mKTx4It0I10U+12cDNVG2WhfkToMCyzFNBWDv0tDkuRn25bWW5u0y3FxEvhHLg1aTRRQX/10hLASkQkcX4e5iINGP5gJGguqrg=="#;
 const IC_DOMAIN: &str = "ic0.app";
-
-// TODO: Move the new handful of functions to rs/utils/humanize, or somewhere
-// like that.
-
-/// A wrapper around humantime::parse_duration that does some additional
-/// mechanical conversions.
-///
-/// To recapitulate the docs for humantime, "1w 2d 3h" gets parsed as
-///
-///     1 week + 2 days + 3 hours
-///         =
-///     (1 * (7 * 24 * 60 * 60) + 2 * 24 * 60 * 60 + 3 * (60 * 60)) seconds
-fn parse_duration(s: &str) -> Result<nervous_system_pb::Duration, String> {
-    humantime::parse_duration(s)
-        .map(|d| nervous_system_pb::Duration {
-            seconds: Some(d.as_secs()),
-        })
-        .map_err(|err| err.to_string())
-}
-
-/// Multiplies n by 10^count.
-fn shift_decimal_right<I>(n: u64, count: I) -> Result<u64, String>
-where
-    u32: TryFrom<I>,
-    <u32 as TryFrom<I>>::Error: Display,
-    I: Display + Copy,
-{
-    let count = u32::try_from(count)
-        .map_err(|err| format!("Unable to convert {} to u32. Reason: {}", count, err))?;
-
-    let boost = 10_u64
-        .checked_pow(count)
-        .ok_or_else(|| format!("Too large of an exponent: {}", count))?;
-
-    n.checked_mul(boost)
-        .ok_or_else(|| format!("Too large of a decimal shift: {} >> {}", n, count))
-}
-
-/// Parses strings like "123_456.789" into 123456789. Notice that in this
-/// example, the decimal point in the result has been shifted to the right by 3
-/// places. The amount of such shifting is specified using the decimal_places
-/// parameter.
-///
-/// Also, notice that "_" (underscore) can be sprinkled as you wish in the input
-/// for readability. No need to use groups of size 3, although it is
-/// recommended, since that's what people are used to.
-///
-/// s is considered invalid if it the number of digits after the decimal point >
-/// decimal_places.
-///
-/// The decimal point is optional, but if it is included, it must have at least
-/// one digit on each side (of course, the digit can be "0").
-///
-/// Prefixes (such as "0") do not change the base; base 10 is always
-/// used. Therefore, s = "0xDEAD_BEEF" is invalid, for example.
-fn parse_fixed_point_decimal(s: &str, decimal_places: usize) -> Result<u64, String> {
-    lazy_static! {
-        static ref REGEX: Regex = Regex::new(
-            r"(?x) # Verbose (ignore white space, and comments, like this).
-            ^  # begin
-            (?P<whole>[\d_]+)  # Digit or underscores (for grouping digits).
-            (  # The dot + fractional part...
-                [.]  # dot
-                (?P<fractional>[\d_]+)
-            )?  # ... is optional.
-            $  # end
-        "
-        )
-        .unwrap();
-    }
-
-    let found = REGEX
-        .captures(s)
-        .ok_or_else(|| format!("Not a number: {}", s))?;
-
-    let whole = u64::from_str(
-        &found
-            .name("whole")
-            .expect("Missing capture group?!")
-            .as_str()
-            .replace('_', ""),
-    )
-    .map_err(|err| err.to_string())?;
-
-    let fractional = format!(
-        // Pad so that fractional ends up being of length (at least) decimal_places.
-        "{:0<decimal_places$}",
-        found
-            .name("fractional")
-            .map(|m| m.as_str())
-            .unwrap_or("0")
-            .replace('_', ""),
-    );
-    if fractional.len() > decimal_places {
-        return Err(format!("Too many digits after the decimal place: {}", s));
-    }
-    let fractional = u64::from_str(&fractional).map_err(|err| err.to_string())?;
-
-    Ok(shift_decimal_right(whole, decimal_places)? + fractional)
-}
-
-/// Similar to parse_fixed_point_decimal(s, 2), except a trailing percent sign
-/// is REQUIRED (and not fed into parse_fixed_point_decimal).
-fn parse_percentage(s: &str) -> Result<nervous_system_pb::Percentage, String> {
-    let number = s
-        .strip_suffix('%')
-        .ok_or_else(|| format!("Input string must end with a percent sign: {}", s))?;
-
-    let basis_points = Some(parse_fixed_point_decimal(
-        number, /* decimal_places = */ 2,
-    )?);
-    Ok(nervous_system_pb::Percentage { basis_points })
-}
-
-/// Parses decimal strings ending in "T", or integer strings (again, base 10)
-/// ending in "e8s". In the case of "T" strings, the maximum number of digits
-/// after the (optional) decimal point is 8.
-///
-/// As with parse_fixed_point_decimal, "_" may be sprinkled throughout.
-fn parse_tokens(s: &str) -> Result<nervous_system_pb::Tokens, String> {
-    let e8s = if let Some(s) = s.strip_suffix('T') {
-        parse_fixed_point_decimal(s, /* decimal_places = */ 8)?
-    } else if let Some(s) = s.strip_suffix("e8s") {
-        u64::from_str(&s.replace('_', "")).map_err(|err| err.to_string())?
-    } else {
-        return Err(format!("Invalid tokens input string: {}", s));
-    };
-    let e8s = Some(e8s);
-
-    Ok(nervous_system_pb::Tokens { e8s })
-}
 
 /// Common command-line options for `ic-admin`.
 #[derive(Parser)]
