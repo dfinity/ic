@@ -41,6 +41,7 @@
     </p>
 
     <h2>Experiment 1: System baseline under load</h2>
+    <a name="system_baseline" />
 
     <p>
       Purpose: Measure system overhead using a canister that does
@@ -59,11 +60,14 @@
     </div>
 
     <h3>Query call maximum capacity</h3>
+    <a name="sys-baseline-queries" />
 
     <p>
       For query workloads we currently target 4000 queries/second per node in each subnetwork (red line in the plot).
     </p>
     
+    <h4>Query capacity</h4>
+
     <div id="plot-exp1-query" class="plot"></div>
     <script>
       const plot_exp1_links = new Map();
@@ -82,9 +86,58 @@
               window.open(link, "_self");
           });
       }, false);
+    </script>    
+
+    <p>
+      For query workloads the follwing plots show latency and failure rates. Each plot tracks the latency or failure rate over time. 
+      As we have changed the requests rates that we are running in weekly benchmarks, some plots end and other ones start. 
+      The goal is for all of them to never increase over time.     
+    </p>
+
+    <h4>Failure rate</h4>
+    <div id="plot_exp1_query_failure_rate" class="plot"></div>
+    <script>
+      const plot_exp1_links_failure_rate = new Map();
+      {{#each plot_exp1_query_failure_rate.data}}
+        plot_exp1_links_failure_rate.set(("{{this.xvalue}}", {{this.yvalue}}), "{{this.githash}}/{{this.timestamp}}/report.html");
+      {{/each}}
+      
+      window.addEventListener("load", function(event) {
+          plot = document.getElementById('plot_exp1_query_failure_rate');
+          Plotly.newPlot(plot, {{{plot_exp1_query_failure_rate.plot}}},  {{{plot_exp1_query_failure_rate.layout}}});
+          plot.on('plotly_click', function(data) {
+              var link = '';
+              for(var i=0; i < data.points.length; i++){
+                  link = plot_exp1_links_failure_rate.get((data.points[i].x, data.points[i].y));
+              }
+              window.open(link, "_self");
+          });
+      }, false);
     </script>
 
+    <h4>Latency</h4>
+    <div id="plot_exp1_query_latency" class="plot"></div>
+    <script>
+      const plot_exp1_links_latency = new Map();
+      {{#each plot_exp1_query_latency.data}}
+        plot_exp1_links_latency.set(("{{this.xvalue}}", {{this.yvalue}}), "{{this.githash}}/{{this.timestamp}}/report.html");
+      {{/each}}
+      
+      window.addEventListener("load", function(event) {
+          plot = document.getElementById('plot_exp1_query_latency');
+          Plotly.newPlot(plot, {{{plot_exp1_query_latency.plot}}},  {{{plot_exp1_query_latency.layout}}});
+          plot.on('plotly_click', function(data) {
+              var link = '';
+              for(var i=0; i < data.points.length; i++){
+                  link = plot_exp1_links_latency.get((data.points[i].x, data.points[i].y));
+              }
+              window.open(link, "_self");
+          });
+      }, false);
+    </script>    
+
     <h3>Update calls</h3>
+    <a name="sys-baseline-updates" />
 
     <p>
       We currently expect to see around 800 updates/second per subnetwork (red line in the plot)
@@ -110,6 +163,7 @@
     </script>
 
     <h2>Experiment 2: Memory under load</h2>
+    <a name="memory" />
 
     <p>
       Purpose: Measure memory performance for a canister that has a high memory demand.<br />
@@ -148,6 +202,7 @@
     </script>
     
     <h2>State Sync duration</h2>
+    <a name="state-sync" />
 
     <p>
       Purpose: Measure the duration of state sync after a machine has been down for a few checkpoints while
@@ -177,45 +232,6 @@
 
       }, false);
     </script>
-
-    <h2>Maximum Xnet capacity</h2>
-
-    <p>
-      Purpose: Measure the maximum capacity of all-to-all Xnet communication.<br />
-      The benchmark executes an all to all communiation tests and determines the maximum message throughput achieved
-      in the experiment.<br />
-      This is important since many canisters need to communicate with other canisters to complete user requests.
-      The total number of such calls is cruicial for scaling up the IC.
-    </p>
-
-    <div id="canister_code">
-      <span>Canister code:</span> <a href="https://gitlab.com/dfinity-lab/public/ic/-/tree/master/rs/rust_canisters/xnet_test">Xnet test canister</a>
-    </div>
-
-    <div style="background-color: orange;">
-      This benchmark is currently broken. We leave it here so that we do not forget about it and put some pressure to fix it.
-    </div>
-
-    <div id="plot-xnet" class="plot"></div>
-    <script>
-      const plot_xnet_links = new Map();
-      {{#each plot_xnet.data}}
-        plot_xnet_links.set(("{{this.xvalue}}", {{this.yvalue}}), "{{this.githash}}/{{this.timestamp}}/report.html");
-      {{/each}}
-      window.addEventListener("load", function(event) {
-          plot = document.getElementById('plot-xnet');
-          Plotly.newPlot( plot, {{{ plot_xnet.plot }}},  {{{plot_xnet.layout}}});
-          plot.on('plotly_click', function(data) {
-              var link = '';
-              for(var i=0; i < data.points.length; i++){
-                  link = plot_xnet_links.get((data.points[i].x, data.points[i].y));
-              }
-              window.open(link, "_self");
-          });
-
-      }, false);
-    </script>
-
 
     <h2>Motoko QR code performance</h2>
     <a name="motoko_qr" />
@@ -277,6 +293,7 @@
     </script>    
 
     <h2>Motoko sha256 performance</h2>
+    <a name="motoko-sha256" />
 
     <p>
       Purpose: Motoko's sha256 benchmark
@@ -333,6 +350,7 @@
     </script>    
 
     <h2>HTTP outcall feature benchmark</h2>
+    <a name="http-outcall" />
 
     <p>
       Stress HTTP outcall feature from multiple canister.
