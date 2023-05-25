@@ -121,6 +121,24 @@ async fn fetch_main_utxos(main_account: &Account, main_address: &BitcoinAddress)
     })
 }
 
+/// Returns the minimum withdrawal amount based on the current median fee rate (in millisatoshi per byte).
+/// The returned amount is in satoshi.
+fn compute_min_withdrawal_amount(median_fee_rate_e3s: MillisatoshiPerByte) -> u64 {
+    const PER_REQUEST_RBF_BOUND: u64 = 22_100;
+    const PER_REQUEST_VSIZE_BOUND: u64 = 221;
+    const PER_REQUEST_MINTER_FEE_BOUND: u64 = 305;
+    const PER_REQUEST_KYT_FEE: u64 = 2_000;
+
+    let median_fee_rate = median_fee_rate_e3s / 1_000;
+    ((PER_REQUEST_RBF_BOUND
+        + PER_REQUEST_VSIZE_BOUND * median_fee_rate
+        + PER_REQUEST_MINTER_FEE_BOUND
+        + PER_REQUEST_KYT_FEE)
+        / 50_000)
+        * 50_000
+        + 100_000
+}
+
 /// Returns an estimate for transaction fees in millisatoshi per vbyte.  Returns
 /// None if the bitcoin canister is unavailable or does not have enough data for
 /// an estimate yet.
@@ -136,7 +154,10 @@ pub async fn estimate_fee_per_vbyte() -> Option<MillisatoshiPerByte> {
                 return Some(DEFAULT_FEE);
             }
             if fees.len() >= 100 {
-                state::mutate_state(|s| s.last_fee_per_vbyte = fees.clone());
+                state::mutate_state(|s| {
+                    s.last_fee_per_vbyte = fees.clone();
+                    s.retrieve_btc_min_amount = compute_min_withdrawal_amount(fees[50]);
+                });
                 Some(fees[50])
             } else {
                 log!(
