@@ -898,9 +898,14 @@ impl IDkgTranscript {
         Ok(())
     }
 
-    /// Return the index of the signer with the givene ID< or `None` if there is no such index.
+    /// Return the index of the signer with the given ID, or `None` if there is no such index.
     pub fn index_for_signer_id(&self, signer_id: NodeId) -> Option<NodeIndex> {
         self.receivers.position(signer_id)
+    }
+
+    /// Checks if the specified `NodeId` is a receiver of the transcript.
+    pub fn has_receiver(&self, receiver_id: NodeId) -> bool {
+        self.receivers.position(receiver_id).is_some()
     }
 }
 

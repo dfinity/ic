@@ -1,43 +1,263 @@
 use crate::sign::canister_threshold_sig::idkg::retain_active_keys::oldest_public_key;
+use assert_matches::assert_matches;
+use ic_base_types::PrincipalId;
+use ic_base_types::SubnetId;
 use ic_base_types::{NodeId, RegistryVersion};
+use ic_crypto_internal_csp::keygen::utils::idkg_dealing_encryption_pk_to_proto;
 use ic_crypto_internal_threshold_sig_ecdsa::MEGaPublicKey;
+use ic_crypto_internal_threshold_sig_ecdsa::{EccCurveType, EccPoint, EccScalar};
 use ic_crypto_test_utils_csp::MockAllCryptoServiceProvider;
 use ic_interfaces_registry::RegistryClient;
+use ic_interfaces_registry_mocks::MockRegistryClient;
+use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
+use ic_protobuf::registry::crypto::v1::PublicKey;
+use ic_registry_client_fake::FakeRegistryClient;
+use ic_registry_keys::make_crypto_node_key;
+use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_types::crypto::canister_threshold_sig::error::IDkgRetainKeysError;
 use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscript;
+use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
+use ic_types::crypto::canister_threshold_sig::idkg::{
+    IDkgMaskedTranscriptOrigin, IDkgReceivers, IDkgTranscriptType,
+};
+use ic_types::crypto::AlgorithmId;
+use ic_types::crypto::KeyPurpose;
+use ic_types::registry::RegistryClientError;
+use ic_types::Height;
 use mockall::predicate;
+use rand::Rng;
+use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::collections::{BTreeSet, HashSet};
 use std::sync::Arc;
 
+mod retain_keys_for_transcripts {
+    use super::*;
+    use crate::sign::canister_threshold_sig::idkg::retain_active_keys::retain_keys_for_transcripts;
+    use crate::sign::canister_threshold_sig::idkg::retain_active_keys::IDkgTranscriptInternal;
+    use ic_crypto_internal_test_vectors::unhex::hex_to_byte_vec;
+    use ic_crypto_test_utils::set_of;
+
+    #[test]
+    fn should_succeed_when_key_in_registry_and_node_in_receivers() {
+        let data_provider = Arc::new(ProtoRegistryDataProvider::new());
+        let registry_client = FakeRegistryClient::new(data_provider.clone());
+        let registry_version = RegistryVersion::new(2);
+
+        let transcript = idkg_transcript_with_internal_transcript_and_registry_version(
+            node_id(),
+            registry_version,
+        );
+        let mut transcripts = HashSet::new();
+        transcripts.insert(
+            idkg_transcript_with_internal_transcript_and_registry_version(
+                another_node_id(),
+                RegistryVersion::new(1),
+            ),
+        );
+        transcripts.insert(
+            idkg_transcript_with_internal_transcript_and_registry_version(
+                node_id(),
+                RegistryVersion::new(3),
+            ),
+        );
+        transcripts.insert(transcript.clone());
+        transcripts.insert(
+            idkg_transcript_with_internal_transcript_and_registry_version(
+                node_id(),
+                RegistryVersion::new(4),
+            ),
+        );
+        let idkg_public_key = idkg_unique_public_key_per_registry_version(&registry_version);
+        register_idkg_public_key(
+            node_id(),
+            idkg_dealing_encryption_pk_to_proto(idkg_public_key.clone()),
+            registry_version,
+            data_provider,
+        );
+        registry_client.update_to_latest_version();
+        let expected_internal_transcripts =
+            set_of(&[IDkgTranscriptInternal::try_from(&transcript)
+                .expect("converting valid random transcript to internal script should succeed")]);
+        let mut mock_csp = MockAllCryptoServiceProvider::new();
+        mock_csp
+            .expect_idkg_observe_minimum_registry_version_in_active_idkg_transcripts()
+            .return_const(());
+        mock_csp
+            .expect_idkg_retain_active_keys()
+            .withf(move |internal_transcripts, oldest_public_key| {
+                *internal_transcripts == expected_internal_transcripts
+                    && *oldest_public_key == idkg_public_key
+            })
+            .times(1)
+            .return_const(Ok(()));
+
+        assert_eq!(
+            retain_keys_for_transcripts(&mock_csp, &node_id(), &registry_client, &transcripts),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn should_be_noop_when_node_not_in_receivers() {
+        let registry_client = MockRegistryClient::new();
+        let registry_version = RegistryVersion::new(1);
+        let mut transcripts = HashSet::new();
+        let transcript = idkg_transcript_with_internal_transcript_and_registry_version(
+            another_node_id(),
+            registry_version,
+        );
+        transcripts.insert(transcript);
+        let mock_csp = MockAllCryptoServiceProvider::new();
+
+        assert_eq!(
+            retain_keys_for_transcripts(&mock_csp, &node_id(), &registry_client, &transcripts),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn should_fail_with_public_key_not_found_when_node_in_receivers_but_key_not_in_registry() {
+        let data_provider = Arc::new(ProtoRegistryDataProvider::new());
+        let registry_client = FakeRegistryClient::new(data_provider.clone());
+        let registry_version = RegistryVersion::new(1);
+        let mut transcripts = HashSet::new();
+        let transcript = idkg_transcript_with_internal_transcript_and_registry_version(
+            node_id(),
+            registry_version,
+        );
+        transcripts.insert(transcript);
+        let idkg_public_key = idkg_unique_public_key_per_registry_version(&registry_version);
+        register_idkg_public_key(
+            another_node_id(),
+            idkg_dealing_encryption_pk_to_proto(idkg_public_key),
+            registry_version,
+            data_provider,
+        );
+        registry_client.update_to_latest_version();
+        let mock_csp = MockAllCryptoServiceProvider::new();
+
+        let result =
+            retain_keys_for_transcripts(&mock_csp, &node_id(), &registry_client, &transcripts);
+
+        assert_matches!(
+            result,
+            Err(IDkgRetainKeysError::InternalError { internal_error })
+            if internal_error.contains("Internal error while searching for iDKG public key: PublicKeyNotFound")
+        );
+    }
+
+    fn idkg_transcript_with_internal_transcript_and_registry_version(
+        receiver: NodeId,
+        version: RegistryVersion,
+    ) -> IDkgTranscript {
+        let mut receivers = BTreeSet::new();
+        receivers.insert(receiver);
+        IDkgTranscript {
+            transcript_id: random_transcript_id(),
+            receivers: IDkgReceivers::new(receivers).expect("error creating IDKG receivers"),
+            registry_version: version,
+            verified_dealings: BTreeMap::new(),
+            transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
+            algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
+            // from rs/crypto/internal/crypto_lib/threshold_sig/tecdsa/tests/data/transcript_random.hex:
+            internal_transcript_raw: hex_to_byte_vec("a173636f6d62696e65645f636f6d6d69746d656e74a16b427953756d6d6174696f6ea168506564657273656ea166706f696e747383582201024be7c27cb1efce8378bc1d8385c409bfc620ddc702aac1664e6c71680a1b0e2858220102ec466b3c1ae94746014ff54624efb1773689b1f615752164208e77dd13b8308158220102d4c87220329fe8165d678c5556d29f067e1694af40585cb70e1b565c0895a5ed"),
+        }
+    }
+}
+
 mod oldest_public_key {
     use super::*;
-    use assert_matches::assert_matches;
-    use ic_base_types::PrincipalId;
-    use ic_base_types::SubnetId;
-    use ic_crypto_internal_csp::keygen::utils::idkg_dealing_encryption_pk_to_proto;
-    use ic_crypto_internal_threshold_sig_ecdsa::{EccCurveType, EccPoint, EccScalar};
-    use ic_interfaces_registry_mocks::MockRegistryClient;
-    use ic_protobuf::registry::crypto::v1::AlgorithmId as AlgorithmIdProto;
-    use ic_protobuf::registry::crypto::v1::PublicKey;
-    use ic_registry_client_fake::FakeRegistryClient;
-    use ic_registry_keys::make_crypto_node_key;
-    use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
-    use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscriptId;
-    use ic_types::crypto::canister_threshold_sig::idkg::{
-        IDkgMaskedTranscriptOrigin, IDkgReceivers, IDkgTranscriptType,
-    };
-    use ic_types::crypto::{AlgorithmId, KeyPurpose};
-    use ic_types::registry::RegistryClientError;
-    use ic_types::Height;
-    use rand::Rng;
-    use std::collections::{BTreeMap, HashMap};
+
+    #[test]
+    fn should_return_public_key_not_found_when_node_a_receiver_but_no_key_in_registry() {
+        let data_provider = Arc::new(ProtoRegistryDataProvider::new());
+        let registry_client = FakeRegistryClient::new(data_provider.clone());
+        let mut transcripts = HashSet::new();
+        let registry_version = RegistryVersion::new(1);
+        transcripts.insert(idkg_transcript_with_registry_version(
+            node_id(),
+            registry_version,
+        ));
+        let idkg_public_key = idkg_unique_public_key_per_registry_version(&registry_version);
+        register_idkg_public_key(
+            another_node_id(),
+            idkg_dealing_encryption_pk_to_proto(idkg_public_key),
+            registry_version,
+            data_provider,
+        );
+        registry_client.update_to_latest_version();
+        let mock_csp = MockAllCryptoServiceProvider::new();
+
+        let result = oldest_public_key(&mock_csp, &node_id(), &registry_client, &transcripts);
+
+        assert_matches!(
+            result,
+            Some(Err(
+                IDkgRetainKeysError::InternalError { internal_error }
+            )) if internal_error.contains("Internal error while searching for iDKG public key: PublicKeyNotFound")
+        );
+    }
+
+    #[test]
+    fn should_return_none_when_node_not_receiver_in_any_transcript() {
+        let registry_client = registry_returning_transient_error();
+        let registry_versions = vec![1, 2, 3];
+        let mut transcripts = HashSet::new();
+        for registry_version in registry_versions {
+            transcripts.insert(idkg_transcript_with_registry_version(
+                another_node_id(),
+                RegistryVersion::new(registry_version),
+            ));
+        }
+        let mock_csp = MockAllCryptoServiceProvider::new();
+
+        let result = oldest_public_key(&mock_csp, &node_id(), &registry_client, &transcripts);
+
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn should_return_oldest_public_key_where_node_in_receivers() {
+        let data_provider = Arc::new(ProtoRegistryDataProvider::new());
+        let registry_client = FakeRegistryClient::new(data_provider.clone());
+        let mut transcripts = HashSet::new();
+        transcripts.insert(idkg_transcript_with_registry_version(
+            another_node_id(),
+            RegistryVersion::new(1),
+        ));
+        let old_registry_version = RegistryVersion::new(2);
+        let old_idkg_public_key = generate_and_register_idkg_public_key(
+            node_id(),
+            old_registry_version,
+            data_provider.clone(),
+            &mut transcripts,
+        );
+        let new_registry_version = RegistryVersion::new(3);
+        let _new_idkg_public_key = generate_and_register_idkg_public_key(
+            node_id(),
+            new_registry_version,
+            data_provider,
+            &mut transcripts,
+        );
+        registry_client.update_to_latest_version();
+        let mut mock_csp = MockAllCryptoServiceProvider::new();
+        mock_csp
+            .expect_idkg_observe_minimum_registry_version_in_active_idkg_transcripts()
+            .return_const(());
+
+        assert_matches!(
+            oldest_public_key(&mock_csp, &node_id(), &registry_client, &transcripts),
+            Some(Ok(idkg_public_key)) if idkg_public_key == old_idkg_public_key
+        );
+    }
 
     #[test]
     fn should_be_none_when_no_transcripts_and_should_not_query_registry() {
         let registry = registry_returning_transient_error();
         let mock_csp = MockAllCryptoServiceProvider::new();
         let result = oldest_public_key(&mock_csp, &node_id(), &registry, &HashSet::new());
-        assert!(result.is_none());
+        assert_eq!(result, None);
     }
 
     #[test]
@@ -109,7 +329,7 @@ mod oldest_public_key {
     }
 
     #[test]
-    fn should_return_oldest_public_key() {
+    fn should_return_oldest_public_key_with_transcript_versions_out_of_order() {
         let registry_versions = vec![2, 4, 1, 10];
         let oldest_registry_version =
             RegistryVersion::new(*registry_versions.iter().min().expect("empty versions"));
@@ -127,7 +347,6 @@ mod oldest_public_key {
             );
         }
         registry_client.update_to_latest_version();
-
         let mut mock_csp = MockAllCryptoServiceProvider::new();
         mock_csp
             .expect_idkg_observe_minimum_registry_version_in_active_idkg_transcripts()
@@ -176,114 +395,209 @@ mod oldest_public_key {
             .expect("missing result")
             .expect("missing IDKG public key");
     }
+}
 
-    fn registry_returning_transient_error() -> impl RegistryClient {
-        let mut registry = MockRegistryClient::new();
-        registry
-            .expect_get_value()
-            .return_const(Err(RegistryClientError::PollLockFailed {
-                error: "oh no!".to_string(),
-            }));
-        registry
-    }
+mod minimum_registry_version {
+    use super::*;
+    use crate::sign::canister_threshold_sig::idkg::retain_active_keys::minimum_registry_version_for_node;
 
-    fn registry_returning_reproducible_error() -> impl RegistryClient {
-        let mut registry = MockRegistryClient::new();
-        registry
-            .expect_get_value()
-            .return_const(Err(RegistryClientError::DecodeError {
-                error: "oh no!".to_string(),
-            }));
-        registry
-    }
+    #[test]
+    fn should_return_none_for_no_transcripts() {
+        let transcripts = HashSet::new();
 
-    fn idkg_transcript_with_registry_version(
-        receiver: NodeId,
-        version: RegistryVersion,
-    ) -> IDkgTranscript {
-        let mut receivers = BTreeSet::new();
-        receivers.insert(receiver);
-        IDkgTranscript {
-            transcript_id: random_transcript_id(),
-            receivers: IDkgReceivers::new(receivers).expect("error creating IDKG receivers"),
-            registry_version: version,
-            verified_dealings: BTreeMap::new(),
-            transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
-            algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
-            internal_transcript_raw: vec![],
-        }
-    }
-
-    fn random_transcript_id() -> IDkgTranscriptId {
-        let rng = &mut rand::thread_rng();
-
-        let id = rng.gen();
-        let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(rng.gen::<u64>()));
-        let height = Height::from(rng.gen::<u64>());
-
-        IDkgTranscriptId::new(subnet, id, height)
-    }
-
-    fn register_idkg_public_key(
-        node_id: NodeId,
-        idkg_public_key: PublicKey,
-        registry_version: RegistryVersion,
-        data_provider: Arc<ProtoRegistryDataProvider>,
-    ) {
-        data_provider
-            .add(
-                &make_crypto_node_key(node_id, KeyPurpose::IDkgMEGaEncryption),
-                registry_version,
-                Some(idkg_public_key),
-            )
-            .expect("Could not add public key to registry");
-    }
-
-    fn malformed_idkg_public_key() -> PublicKey {
-        PublicKey {
-            version: 0,
-            algorithm: AlgorithmIdProto::MegaSecp256k1 as i32,
-            key_value: Vec::new(),
-            proof_data: None,
-            timestamp: None,
-        }
-    }
-
-    fn generate_unique_idkg_public_keys(
-        registry_versions: &[u64],
-    ) -> HashMap<RegistryVersion, MEGaPublicKey> {
-        let mut public_keys_in_registry: HashMap<RegistryVersion, MEGaPublicKey> = HashMap::new();
-        for registry_version in registry_versions {
-            let version = RegistryVersion::new(*registry_version);
-            let idkg_public_key = idkg_unique_public_key_per_registry_version(&version);
-            public_keys_in_registry.insert(version, idkg_public_key);
-        }
         assert_eq!(
-            public_keys_in_registry
-                .values()
-                .map(|public_key| public_key.serialize()) //MEGaPublicKey does not implement Hash
-                .collect::<HashSet<_>>()
-                .len(),
-            registry_versions.len()
+            minimum_registry_version_for_node(&transcripts, node_id()),
+            None
         );
+    }
+
+    #[test]
+    fn should_return_minimum_registry_version_for_single_transcript() {
+        let registry_versions: Vec<u64> = vec![2];
+        let mut transcripts = HashSet::new();
+        for version in registry_versions {
+            transcripts.insert(idkg_transcript_with_registry_version(
+                node_id(),
+                RegistryVersion::new(version),
+            ));
+        }
+
+        assert_eq!(
+            minimum_registry_version_for_node(&transcripts, node_id()),
+            Some(RegistryVersion::new(2))
+        );
+    }
+
+    #[test]
+    fn should_return_minimum_registry_version_for_multiple_transcripts() {
+        let registry_versions: Vec<u64> = vec![2, 4, 1, 10];
+        let mut transcripts = HashSet::new();
+        for version in registry_versions {
+            transcripts.insert(idkg_transcript_with_registry_version(
+                node_id(),
+                RegistryVersion::new(version),
+            ));
+        }
+
+        assert_eq!(
+            minimum_registry_version_for_node(&transcripts, node_id()),
+            Some(RegistryVersion::new(1))
+        );
+    }
+
+    #[test]
+    fn should_return_minimum_registry_version_for_multiple_transcripts_and_different_receivers() {
+        let mut transcripts = HashSet::new();
+        transcripts.insert(idkg_transcript_with_registry_version(
+            another_node_id(),
+            RegistryVersion::new(1),
+        ));
+        transcripts.insert(idkg_transcript_with_registry_version(
+            node_id(),
+            RegistryVersion::new(2),
+        ));
+        transcripts.insert(idkg_transcript_with_registry_version(
+            node_id(),
+            RegistryVersion::new(3),
+        ));
+
+        assert_eq!(
+            minimum_registry_version_for_node(&transcripts, node_id()),
+            Some(RegistryVersion::new(2))
+        );
+    }
+}
+
+fn idkg_transcript_with_registry_version(
+    receiver: NodeId,
+    version: RegistryVersion,
+) -> IDkgTranscript {
+    let mut receivers = BTreeSet::new();
+    receivers.insert(receiver);
+    IDkgTranscript {
+        transcript_id: random_transcript_id(),
+        receivers: IDkgReceivers::new(receivers).expect("error creating IDKG receivers"),
+        registry_version: version,
+        verified_dealings: BTreeMap::new(),
+        transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
+        algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
+        internal_transcript_raw: vec![],
+    }
+}
+
+fn random_transcript_id() -> IDkgTranscriptId {
+    let rng = &mut rand::thread_rng();
+
+    let id = rng.gen();
+    let subnet = SubnetId::from(PrincipalId::new_subnet_test_id(rng.gen::<u64>()));
+    let height = Height::from(rng.gen::<u64>());
+
+    IDkgTranscriptId::new(subnet, id, height)
+}
+
+fn node_id() -> NodeId {
+    NodeId::from(PrincipalId::new_node_test_id(42))
+}
+
+fn another_node_id() -> NodeId {
+    NodeId::from(PrincipalId::new_node_test_id(187))
+}
+
+fn generate_and_register_idkg_public_key(
+    node_id: NodeId,
+    registry_version: RegistryVersion,
+    data_provider: Arc<ProtoRegistryDataProvider>,
+    transcripts: &mut HashSet<IDkgTranscript>,
+) -> MEGaPublicKey {
+    transcripts.insert(idkg_transcript_with_registry_version(
+        node_id,
+        registry_version,
+    ));
+    let idkg_public_key = idkg_unique_public_key_per_registry_version(&registry_version);
+    register_idkg_public_key(
+        node_id,
+        idkg_dealing_encryption_pk_to_proto(idkg_public_key.clone()),
+        registry_version,
+        data_provider,
+    );
+    idkg_public_key
+}
+
+fn registry_returning_transient_error() -> impl RegistryClient {
+    let mut registry = MockRegistryClient::new();
+    registry
+        .expect_get_value()
+        .return_const(Err(RegistryClientError::PollLockFailed {
+            error: "oh no!".to_string(),
+        }));
+    registry
+}
+
+fn registry_returning_reproducible_error() -> impl RegistryClient {
+    let mut registry = MockRegistryClient::new();
+    registry
+        .expect_get_value()
+        .return_const(Err(RegistryClientError::DecodeError {
+            error: "oh no!".to_string(),
+        }));
+    registry
+}
+
+fn register_idkg_public_key(
+    node_id: NodeId,
+    idkg_public_key: PublicKey,
+    registry_version: RegistryVersion,
+    data_provider: Arc<ProtoRegistryDataProvider>,
+) {
+    data_provider
+        .add(
+            &make_crypto_node_key(node_id, KeyPurpose::IDkgMEGaEncryption),
+            registry_version,
+            Some(idkg_public_key),
+        )
+        .expect("Could not add public key to registry");
+}
+
+fn malformed_idkg_public_key() -> PublicKey {
+    PublicKey {
+        version: 0,
+        algorithm: AlgorithmIdProto::MegaSecp256k1 as i32,
+        key_value: Vec::new(),
+        proof_data: None,
+        timestamp: None,
+    }
+}
+
+fn generate_unique_idkg_public_keys(
+    registry_versions: &[u64],
+) -> HashMap<RegistryVersion, MEGaPublicKey> {
+    let mut public_keys_in_registry: HashMap<RegistryVersion, MEGaPublicKey> = HashMap::new();
+    for registry_version in registry_versions {
+        let version = RegistryVersion::new(*registry_version);
+        let idkg_public_key = idkg_unique_public_key_per_registry_version(&version);
+        public_keys_in_registry.insert(version, idkg_public_key);
+    }
+    assert_eq!(
         public_keys_in_registry
-    }
+            .values()
+            .map(|public_key| public_key.serialize()) //MEGaPublicKey does not implement Hash
+            .collect::<HashSet<_>>()
+            .len(),
+        registry_versions.len()
+    );
+    public_keys_in_registry
+}
 
-    fn idkg_unique_public_key_per_registry_version(version: &RegistryVersion) -> MEGaPublicKey {
-        let unique_scalar_per_version = EccScalar::hash_to_scalar(
-            EccCurveType::K256,
-            "dummy input".as_bytes(),
-            &version.get().to_be_bytes(),
-        )
-        .expect("error hashing to scalar");
-        MEGaPublicKey::new(
-            EccPoint::generator_g(EccCurveType::K256)
-                .scalar_mul(&unique_scalar_per_version)
-                .expect("error with multiplication by scalar"),
-        )
-    }
-
-    fn node_id() -> NodeId {
-        NodeId::from(PrincipalId::new_node_test_id(42))
-    }
+fn idkg_unique_public_key_per_registry_version(version: &RegistryVersion) -> MEGaPublicKey {
+    let unique_scalar_per_version = EccScalar::hash_to_scalar(
+        EccCurveType::K256,
+        "dummy input".as_bytes(),
+        &version.get().to_be_bytes(),
+    )
+    .expect("error hashing to scalar");
+    MEGaPublicKey::new(
+        EccPoint::generator_g(EccCurveType::K256)
+            .scalar_mul(&unique_scalar_per_version)
+            .expect("error with multiplication by scalar"),
+    )
 }
