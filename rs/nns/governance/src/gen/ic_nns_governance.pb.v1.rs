@@ -1617,10 +1617,9 @@ pub struct ProposalData {
     /// respect to rewards.
     #[prost(map = "fixed64, message", tag = "6")]
     pub ballots: ::std::collections::HashMap<u64, Ballot>,
-    /// Latest tally. Recomputed for open proposals, when proposals are
-    /// processed. If the proposal is decided (not open), then the tally
-    /// will never change again. (But the ballots may still change as
-    /// neurons may vote after the proposal has been decided.)
+    /// Latest tally. Recomputed for every vote. Even after the proposal has been
+    /// decided, the latest_tally will still be updated based on the recent vote,
+    /// until the voting deadline.
     #[prost(message, optional, tag = "7")]
     pub latest_tally: ::core::option::Option<Tally>,
     /// If specified: the timestamp when this proposal was adopted or

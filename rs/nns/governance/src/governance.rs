@@ -4167,68 +4167,82 @@ impl Governance {
     ///
     /// If a proposal is adopted but not executed, this method
     /// attempts to execute it.
-    pub fn process_proposal(&mut self, pid: u64) {
+    pub fn process_proposal(&mut self, proposal_id: u64) {
         let now_seconds = self.env.now();
         // Due to Rust lifetime issues, we must extract a closure that
         // computes the voting period from a topic before we borrow
         // `self.proto` mutably.
         let voting_period_seconds_fn = self.voting_period_seconds();
-        if let Some(p) = self.proto.proposals.get_mut(&pid) {
-            if p.status() != ProposalStatus::Open {
-                return;
-            }
-            let topic = p.topic();
-            let voting_period_seconds = voting_period_seconds_fn(topic);
-            // Recompute the tally here. It is imperative that only
-            // 'open' proposals have their tally recomputed. Votes may
-            // arrive after a decision has been made: such votes count
-            // for voting rewards, but shall not make it into the
-            // tally.
-            p.recompute_tally(now_seconds, voting_period_seconds);
 
-            if !p.can_make_decision(now_seconds, voting_period_seconds) {
+        let proposal = match self.proto.proposals.get_mut(&proposal_id) {
+            Some(p) => p,
+            None => {
+                println!(
+                    "{}Cannot find proposal {} when trying to process it.",
+                    LOG_PREFIX, proposal_id
+                );
                 return;
             }
-            // This marks the proposal as no longer open.
-            p.decided_timestamp_seconds = now_seconds;
-            if !p.is_accepted() {
-                self.start_process_rejected_proposal(pid);
-                return;
-            }
-            // The proposal was adopted, return the rejection fee for non-ManageNeuron
-            // proposals.
-            if !p
-                .proposal
-                .as_ref()
-                .map(|x| x.is_manage_neuron())
-                .unwrap_or(false)
-            {
-                if let Some(nid) = &p.proposer {
-                    if let Some(neuron) = self.proto.neurons.get_mut(&nid.id) {
-                        if neuron.neuron_fees_e8s >= p.reject_cost_e8s {
-                            neuron.neuron_fees_e8s -= p.reject_cost_e8s;
-                        }
+        };
+        let topic = proposal.topic();
+        let voting_period_seconds = voting_period_seconds_fn(topic);
+
+        // Recompute the tally here. It should correctly reflect all votes,
+        // even the ones after the proposal has been decided. It's possible
+        // to have Open status while it does not accept votes anymore, since
+        // the status change happens below this point.
+        if proposal.status() == ProposalStatus::Open
+            || proposal.accepts_vote(now_seconds, voting_period_seconds)
+        {
+            proposal.recompute_tally(now_seconds, voting_period_seconds);
+        }
+
+        if proposal.status() != ProposalStatus::Open {
+            return;
+        }
+
+        if !proposal.can_make_decision(now_seconds, voting_period_seconds) {
+            return;
+        }
+        // This marks the proposal as no longer open.
+        proposal.decided_timestamp_seconds = now_seconds;
+        if !proposal.is_accepted() {
+            self.start_process_rejected_proposal(proposal_id);
+            return;
+        }
+        // The proposal was adopted, return the rejection fee for non-ManageNeuron
+        // proposals.
+        if !proposal
+            .proposal
+            .as_ref()
+            .map(|x| x.is_manage_neuron())
+            .unwrap_or(false)
+        {
+            if let Some(nid) = &proposal.proposer {
+                if let Some(neuron) = self.proto.neurons.get_mut(&nid.id) {
+                    if neuron.neuron_fees_e8s >= proposal.reject_cost_e8s {
+                        neuron.neuron_fees_e8s -= proposal.reject_cost_e8s;
                     }
                 }
             }
-            let original_total_community_fund_maturity_e8s_equivalent =
-                p.original_total_community_fund_maturity_e8s_equivalent;
-            if let Some(action) = p.proposal.as_ref().and_then(|x| x.action.clone()) {
-                // A yes decision as been made, execute the proposal!
-                self.start_proposal_execution(
-                    pid,
-                    &action,
-                    original_total_community_fund_maturity_e8s_equivalent,
-                );
-            } else {
-                self.set_proposal_execution_status(
-                    pid,
-                    Err(GovernanceError::new_with_message(
-                        ErrorType::PreconditionFailed,
-                        "Proposal is missing.",
-                    )),
-                );
-            }
+        }
+        let original_total_community_fund_maturity_e8s_equivalent =
+            proposal.original_total_community_fund_maturity_e8s_equivalent;
+        if let Some(action) = proposal.proposal.as_ref().and_then(|x| x.action.clone()) {
+            // A yes decision as been made, execute the proposal!
+            self.start_proposal_execution(
+                proposal_id,
+                &action,
+                original_total_community_fund_maturity_e8s_equivalent,
+            );
+        } else {
+            self.set_proposal_execution_status(
+                proposal_id,
+                Err(GovernanceError::new_with_message(
+                    ErrorType::PreconditionFailed,
+                    "Proposal is missing.",
+                )),
+            );
         }
     }
 

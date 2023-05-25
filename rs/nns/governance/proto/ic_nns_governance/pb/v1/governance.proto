@@ -1214,10 +1214,9 @@ message ProposalData {
   // respect to rewards.
   map<fixed64, Ballot> ballots = 6;
 
-  // Latest tally. Recomputed for open proposals, when proposals are
-  // processed. If the proposal is decided (not open), then the tally
-  // will never change again. (But the ballots may still change as
-  // neurons may vote after the proposal has been decided.)
+  // Latest tally. Recomputed for every vote. Even after the proposal has been
+  // decided, the latest_tally will still be updated based on the recent vote,
+  // until the voting deadline.
   Tally latest_tally = 7;
 
   // If specified: the timestamp when this proposal was adopted or
