@@ -11,7 +11,7 @@ use wasm_smith::ConfiguredModule;
 // The fuzz test is only compiled but not executed by CI.
 //
 // To execute the fuzzer run
-// bazel run --@rules_rust//rust/toolchain/channel=nightly --build_tag_filters=fuzz_test //rs/embedders/fuzz:execute_with_wasmtime -- corpus/
+// bazel run --config=fuzzing //rs/embedders/fuzz:execute_with_wasmtime -- corpus/
 
 fuzz_target!(|module: ConfiguredModule<ICWasmConfig>| -> Corpus {
     let wasm = module.module.to_bytes();

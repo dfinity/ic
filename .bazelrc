@@ -116,7 +116,7 @@ build:check --output_groups=build_metadata
 # Fuzzing configuration
 build:fuzzing --@rules_rust//rust/toolchain/channel=nightly
 build:fuzzing --build_tag_filters=fuzz_test
-# TODO(PSEC-1167) Move from define to transition in fuzz_testing.bzl
+# Ignoring transitions for now since it doesn't add any additional improvement to current setup.
 build:fuzzing --//bazel:enable_fuzzing_code=True
 
 # Suppress all additional output to make it more convenient in scripts
