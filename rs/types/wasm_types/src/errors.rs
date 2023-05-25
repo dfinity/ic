@@ -56,6 +56,8 @@ pub enum WasmValidationError {
         size: usize,
         allowed: usize,
     },
+    /// The code section is too large.
+    CodeSectionTooLarge { size: u32, allowed: u32 },
 }
 
 impl std::fmt::Display for WasmValidationError {
@@ -117,6 +119,11 @@ impl std::fmt::Display for WasmValidationError {
                 f,
                 "Wasm module contains a function at index {} of size {} that exceeds the maximum allowed size of {}",
                 index, size, allowed,
+            ),
+            Self::CodeSectionTooLarge{size, allowed} => write!(
+                f,
+                "Wasm model code section size of {} exceeds the maximum allowed size of {}",
+                size, allowed,
             ),
         }
     }
