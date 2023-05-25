@@ -12,6 +12,7 @@ use ic_ckbtc_minter::state::{Mode, RetrieveBtcStatus};
 use ic_ckbtc_minter::updates::get_btc_address::GetBtcAddressArgs;
 use ic_ckbtc_minter::updates::retrieve_btc::{RetrieveBtcArgs, RetrieveBtcError, RetrieveBtcOk};
 use ic_ckbtc_minter::updates::update_balance::{UpdateBalanceArgs, UpdateBalanceError, UtxoStatus};
+use ic_ckbtc_minter::MinterInfo;
 use ic_icrc1_ledger::{ArchiveOptions, InitArgs as LedgerInitArgs, LedgerArgument};
 use ic_state_machine_tests::{Cycles, StateMachine, StateMachineBuilder, WasmResult};
 use ic_test_utilities_load_wasm::load_wasm;
@@ -495,7 +496,7 @@ impl CkBtcSetup {
         env.execute_ingress(
             bitcoin_id,
             "set_fee_percentiles",
-            Encode!(&(1..=100).collect::<Vec<u64>>()).unwrap(),
+            Encode!(&(1..=100).map(|i| i * 100).collect::<Vec<u64>>()).unwrap(),
         )
         .expect("failed to set fee percentiles");
 
@@ -518,6 +519,16 @@ impl CkBtcSetup {
             minter_id,
             _kyt_id: kyt_id,
         }
+    }
+
+    pub fn set_fee_percentiles(&self, fees: &Vec<u64>) {
+        self.env
+            .execute_ingress(
+                self.bitcoin_id,
+                "set_fee_percentiles",
+                Encode!(fees).unwrap(),
+            )
+            .expect("failed to set fee percentiles");
     }
 
     pub fn push_utxo(&self, address: String, utxo: Utxo) {
@@ -554,7 +565,19 @@ impl CkBtcSetup {
         .unwrap()
     }
 
-    pub fn estimate_withdrawal_fee(&self, amount: Option<u64>) -> WithdrawalFee {
+    pub fn get_minter_info(&self) -> MinterInfo {
+        Decode!(
+            &assert_reply(
+                self.env
+                    .execute_ingress(self.minter_id, "get_minter_info", Encode!().unwrap(),)
+                    .expect("failed to get minter info")
+            ),
+            MinterInfo
+        )
+        .unwrap()
+    }
+
+    pub fn refresh_fee_percentiles(&self) {
         Decode!(
             &assert_reply(
                 self.env
@@ -569,7 +592,10 @@ impl CkBtcSetup {
             ()
         )
         .unwrap();
+    }
 
+    pub fn estimate_withdrawal_fee(&self, amount: Option<u64>) -> WithdrawalFee {
+        self.refresh_fee_percentiles();
         Decode!(
             &assert_reply(
                 self.env
@@ -842,4 +868,34 @@ fn test_transaction_finalization() {
     );
 
     assert_eq!(ckbtc.await_finalization(block_index, 10), txid);
+}
+
+#[test]
+fn test_min_retrieval_amount() {
+    let ckbtc = CkBtcSetup::new();
+
+    ckbtc.refresh_fee_percentiles();
+    let retrieve_btc_min_amount = ckbtc.get_minter_info().retrieve_btc_min_amount;
+    assert_eq!(retrieve_btc_min_amount, 100_000);
+
+    // The numbers used in this test have been re-computed using a python script using integers.
+    ckbtc.set_fee_percentiles(&vec![0; 100]);
+    ckbtc.refresh_fee_percentiles();
+    let retrieve_btc_min_amount = ckbtc.get_minter_info().retrieve_btc_min_amount;
+    assert_eq!(retrieve_btc_min_amount, 100_000);
+
+    ckbtc.set_fee_percentiles(&vec![116_000; 100]);
+    ckbtc.refresh_fee_percentiles();
+    let retrieve_btc_min_amount = ckbtc.get_minter_info().retrieve_btc_min_amount;
+    assert_eq!(retrieve_btc_min_amount, 150_000);
+
+    ckbtc.set_fee_percentiles(&vec![342_000; 100]);
+    ckbtc.refresh_fee_percentiles();
+    let retrieve_btc_min_amount = ckbtc.get_minter_info().retrieve_btc_min_amount;
+    assert_eq!(retrieve_btc_min_amount, 150_000);
+
+    ckbtc.set_fee_percentiles(&vec![343_000; 100]);
+    ckbtc.refresh_fee_percentiles();
+    let retrieve_btc_min_amount = ckbtc.get_minter_info().retrieve_btc_min_amount;
+    assert_eq!(retrieve_btc_min_amount, 200_000);
 }
