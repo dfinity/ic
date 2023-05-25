@@ -9,7 +9,7 @@ load("//bazel:defs.bzl", "gzip_compress", "sha256sum2url", "zstd_compress")
 load("//bazel:output_files.bzl", "output_files")
 load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 
-def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, upgrades = True, vuln_scan = True, visibility = None):
+def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, upgrades = True, vuln_scan = True, visibility = None, ic_version = "//bazel:version.txt"):
     """
     Generic ICOS build tooling.
 
@@ -22,6 +22,7 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
       upgrades: if True, build upgrade images as well
       vuln_scan: if True, create targets for vulnerability scanning
       visibility: See Bazel documentation
+      ic_version: the label pointing to the target that returns IC version
     """
 
     if mode == None:
@@ -40,7 +41,7 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
 
     copy_file(
         name = "copy_version_txt",
-        src = "//bazel:version.txt",
+        src = ic_version,
         out = "version.txt",
         allow_symlink = True,
         visibility = visibility,
