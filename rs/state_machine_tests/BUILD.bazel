@@ -64,6 +64,7 @@ rust_library(
 BIN_DEPENDENCIES = [
     "//rs/config",
     "//rs/crypto",
+    "//rs/registry/subnet_type",
     "//rs/types/types",
     "//rs/types/ic00_types",
     ":state_machine_tests",

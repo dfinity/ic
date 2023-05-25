@@ -1,5 +1,5 @@
 use crate::types::ids::subnet_test_id;
-use ic_config::subnet_config::{CyclesAccountManagerConfig, SubnetConfigs};
+use ic_config::subnet_config::{CyclesAccountManagerConfig, SubnetConfig};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{Cycles, NumInstructions, SubnetId};
@@ -25,9 +25,7 @@ impl CyclesAccountManagerBuilder {
 
     pub fn with_subnet_type(mut self, subnet_type: SubnetType) -> Self {
         self.subnet_type = subnet_type;
-        self.config = SubnetConfigs::default()
-            .own_subnet_config(subnet_type)
-            .cycles_account_manager_config;
+        self.config = SubnetConfig::new(subnet_type).cycles_account_manager_config;
         self
     }
 

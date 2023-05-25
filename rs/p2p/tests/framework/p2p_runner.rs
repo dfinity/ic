@@ -1,5 +1,5 @@
 use crate::framework::file_tree_artifact_mgr::ArtifactChunkingTestImpl;
-use ic_config::subnet_config::SubnetConfigs;
+use ic_config::subnet_config::SubnetConfig;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::IngressHistoryReaderImpl;
 use ic_icos_sev::Sev;
@@ -87,7 +87,7 @@ fn execute_test(
         let fake_local_store_certified_time_reader =
             Arc::new(FakeLocalStoreCertifiedTimeReader::new(time_source));
 
-        let subnet_config = SubnetConfigs::default().own_subnet_config(SubnetType::System);
+        let subnet_config = SubnetConfig::new(SubnetType::System);
         let cycles_account_manager = Arc::new(CyclesAccountManager::new(
             subnet_config.scheduler_config.max_instructions_per_message,
             SubnetType::System,
@@ -248,7 +248,7 @@ fn execute_test_chunking_pool(
         let state_sync_client = Box::new(ArtifactChunkingTestImpl::new(node_pool_dir, node_id));
         let state_sync_client =
             P2PStateSyncClient::TestChunkingPool(state_sync_client.clone(), state_sync_client);
-        let subnet_config = SubnetConfigs::default().own_subnet_config(SubnetType::System);
+        let subnet_config = SubnetConfig::new(SubnetType::System);
         let cycles_account_manager = Arc::new(CyclesAccountManager::new(
             subnet_config.scheduler_config.max_instructions_per_message,
             SubnetType::System,

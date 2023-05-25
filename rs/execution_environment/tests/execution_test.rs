@@ -1,6 +1,6 @@
 use ic_config::{
     execution_environment::Config as HypervisorConfig,
-    subnet_config::{CyclesAccountManagerConfig, SubnetConfigs},
+    subnet_config::{CyclesAccountManagerConfig, SubnetConfig},
 };
 use ic_ic00_types::CanisterSettingsArgsBuilder;
 use ic_registry_subnet_type::SubnetType;
@@ -323,7 +323,7 @@ fn test_canister_stable_memory_upgrade_restart() {
 #[test]
 fn test_canister_out_of_cycles() {
     // Start a node with a config where all computation/storage is free.
-    let mut subnet_config = SubnetConfigs::default().own_subnet_config(SubnetType::System);
+    let mut subnet_config = SubnetConfig::new(SubnetType::System);
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config.clone(),
         HypervisorConfig::default(),
@@ -381,7 +381,7 @@ fn test_canister_out_of_cycles() {
 
 #[test]
 fn canister_has_zero_balance_when_uninstalled_due_to_low_cycles() {
-    let subnet_config = SubnetConfigs::default().own_subnet_config(SubnetType::Application);
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
     let compute_percent_allocated_per_second_fee = subnet_config
         .cycles_account_manager_config
         .compute_percent_allocated_per_second_fee;
@@ -623,7 +623,7 @@ fn can_query_cycle_balance_and_top_up_canisters() {
 
 #[test]
 fn exceeding_memory_capacity_fails_when_memory_allocation_changes() {
-    let subnet_config = SubnetConfigs::default().own_subnet_config(SubnetType::Application);
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config,
         HypervisorConfig {
@@ -686,7 +686,7 @@ fn assert_replied(result: Result<WasmResult, UserError>, expected: i64) {
 
 #[test]
 fn exceeding_memory_capacity_fails_during_message_execution() {
-    let subnet_config = SubnetConfigs::default().own_subnet_config(SubnetType::Application);
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config,
         HypervisorConfig {
@@ -745,7 +745,7 @@ fn exceeding_memory_capacity_fails_during_message_execution() {
 
 #[test]
 fn max_canister_memory_respected_even_when_no_memory_allocation_is_set() {
-    let subnet_config = SubnetConfigs::default().own_subnet_config(SubnetType::Application);
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config,
         HypervisorConfig {

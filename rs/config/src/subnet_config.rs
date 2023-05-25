@@ -439,92 +439,46 @@ impl CyclesAccountManagerConfig {
     }
 }
 
-/// The per subnet type configuration for CoW Memory Manager
-#[derive(Clone)]
-pub struct CowMemoryManagerConfig {
-    /// Flag to enable or disable the feature
-    pub enabled: bool,
-}
-
-impl CowMemoryManagerConfig {
-    pub fn application_subnet() -> Self {
-        Self { enabled: false }
-    }
-
-    pub fn system_subnet() -> Self {
-        Self { enabled: false }
-    }
-
-    pub fn verified_application_subnet() -> Self {
-        Self { enabled: false }
-    }
-}
-
 /// If a component has at least one static configuration that is different for
 /// different subnet types, then it is included in this struct.
 #[derive(Clone)]
 pub struct SubnetConfig {
     pub scheduler_config: SchedulerConfig,
     pub cycles_account_manager_config: CyclesAccountManagerConfig,
-    pub cow_memory_manager_config: CowMemoryManagerConfig,
 }
 
 impl SubnetConfig {
+    pub fn new(own_subnet_type: SubnetType) -> Self {
+        match own_subnet_type {
+            SubnetType::Application => Self::default_application_subnet(),
+            SubnetType::System => Self::default_system_subnet(),
+            SubnetType::VerifiedApplication => Self::default_verified_application_subnet(),
+        }
+    }
+
     /// Returns the subnet configuration for the application subnet type.
-    pub fn default_application_subnet() -> Self {
+    fn default_application_subnet() -> Self {
         Self {
             scheduler_config: SchedulerConfig::application_subnet(),
             cycles_account_manager_config: CyclesAccountManagerConfig::application_subnet(),
-            cow_memory_manager_config: CowMemoryManagerConfig::application_subnet(),
         }
     }
 
     /// Returns the subnet configuration for the system subnet type.
-    pub fn default_system_subnet() -> Self {
+    fn default_system_subnet() -> Self {
         Self {
             scheduler_config: SchedulerConfig::system_subnet(),
             cycles_account_manager_config: CyclesAccountManagerConfig::system_subnet(),
-            cow_memory_manager_config: CowMemoryManagerConfig::system_subnet(),
         }
     }
 
     /// Returns the subnet configuration for the verified application subnet
     /// type.
-    pub fn default_verified_application_subnet() -> Self {
+    fn default_verified_application_subnet() -> Self {
         Self {
             scheduler_config: SchedulerConfig::verified_application_subnet(),
             cycles_account_manager_config: CyclesAccountManagerConfig::verified_application_subnet(
             ),
-            cow_memory_manager_config: CowMemoryManagerConfig::verified_application_subnet(),
-        }
-    }
-}
-
-/// A struct that holds the per subnet configuration for all the subnet types on
-/// the internet computer.
-pub struct SubnetConfigs {
-    system_subnet: SubnetConfig,
-    application_subnet: SubnetConfig,
-    verified_application_subnet: SubnetConfig,
-}
-
-impl Default for SubnetConfigs {
-    fn default() -> Self {
-        Self {
-            system_subnet: SubnetConfig::default_system_subnet(),
-            application_subnet: SubnetConfig::default_application_subnet(),
-            verified_application_subnet: SubnetConfig::default_verified_application_subnet(),
-        }
-    }
-}
-
-impl SubnetConfigs {
-    /// Returns the appropriate subnet configuration based on the subnet type.
-    pub fn own_subnet_config(&self, own_subnet_type: SubnetType) -> SubnetConfig {
-        match own_subnet_type {
-            SubnetType::Application => self.application_subnet.clone(),
-            SubnetType::System => self.system_subnet.clone(),
-            SubnetType::VerifiedApplication => self.verified_application_subnet.clone(),
         }
     }
 }

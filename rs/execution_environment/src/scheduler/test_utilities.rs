@@ -8,7 +8,7 @@ use std::{
 use ic_base_types::{CanisterId, NumBytes, SubnetId};
 use ic_config::{
     flag_status::FlagStatus,
-    subnet_config::{SchedulerConfig, SubnetConfigs},
+    subnet_config::{SchedulerConfig, SubnetConfig},
 };
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_embedders::{
@@ -606,9 +606,7 @@ pub(crate) struct SchedulerTestBuilder {
 impl Default for SchedulerTestBuilder {
     fn default() -> Self {
         let subnet_type = SubnetType::Application;
-        let scheduler_config = SubnetConfigs::default()
-            .own_subnet_config(subnet_type)
-            .scheduler_config;
+        let scheduler_config = SubnetConfig::new(subnet_type).scheduler_config;
         let config = ic_config::execution_environment::Config::default();
         let subnet_total_memory = config.subnet_memory_capacity.get();
         let max_canister_memory_size = config.max_canister_memory_size.get();
@@ -643,9 +641,7 @@ impl SchedulerTestBuilder {
     }
 
     pub fn with_subnet_type(self, subnet_type: SubnetType) -> Self {
-        let scheduler_config = SubnetConfigs::default()
-            .own_subnet_config(subnet_type)
-            .scheduler_config;
+        let scheduler_config = SubnetConfig::new(subnet_type).scheduler_config;
         Self {
             subnet_type,
             scheduler_config,
@@ -743,9 +739,7 @@ impl SchedulerTestBuilder {
         state.metadata.network_topology.nns_subnet_id = self.nns_subnet_id;
         state.metadata.batch_time = self.batch_time;
 
-        let config = SubnetConfigs::default()
-            .own_subnet_config(self.subnet_type)
-            .cycles_account_manager_config;
+        let config = SubnetConfig::new(self.subnet_type).cycles_account_manager_config;
         if let Some(ecdsa_key) = &self.ecdsa_key {
             state
                 .metadata

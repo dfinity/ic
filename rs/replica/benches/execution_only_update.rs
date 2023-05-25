@@ -1,7 +1,7 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use ic_config::{
     execution_environment::Config as ExecutionConfig, state_manager::Config as StateManagerConfig,
-    subnet_config::SubnetConfigs,
+    subnet_config::SubnetConfig,
 };
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::{ErrorCode, UserError};
@@ -176,14 +176,12 @@ fn criterion_calls(criterion: &mut Criterion) {
     let registry = Arc::new(MockRegistryClient::new());
 
     let subnet_type = SubnetType::Application;
-    let subnet_config = SubnetConfigs::default().own_subnet_config(subnet_type);
+    let subnet_config = SubnetConfig::new(subnet_type);
     let cycles_account_manager = Arc::new(CyclesAccountManager::new(
         subnet_config.scheduler_config.max_instructions_per_message,
         subnet_type,
         bench_replica.replica_config.subnet_id,
-        SubnetConfigs::default()
-            .own_subnet_config(subnet_type)
-            .cycles_account_manager_config,
+        SubnetConfig::new(subnet_type).cycles_account_manager_config,
     ));
     let tmpdir = tempfile::Builder::new()
         .prefix("ic_config")

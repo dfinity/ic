@@ -35,7 +35,6 @@ pub fn construct_ic_stack(
     rt_handle_http: tokio::runtime::Handle,
     rt_handle_xnet: tokio::runtime::Handle,
     config: Config,
-    subnet_config: SubnetConfig,
     node_id: NodeId,
     subnet_id: SubnetId,
     subnet_type: SubnetType,
@@ -118,6 +117,7 @@ pub fn construct_ic_stack(
         config.malicious_behaviour.malicious_flags.clone(),
     ));
     // ---------- EXECUTION DEPS FOLLOW ----------
+    let subnet_config = SubnetConfig::new(subnet_type);
     let cycles_account_manager = Arc::new(CyclesAccountManager::new(
         subnet_config.scheduler_config.max_instructions_per_message,
         subnet_type,

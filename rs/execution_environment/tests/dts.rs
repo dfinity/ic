@@ -5,7 +5,7 @@ use ic_config::{
     embedders::Config as EmbeddersConfig,
     execution_environment::Config as HypervisorConfig,
     flag_status::FlagStatus,
-    subnet_config::{SchedulerConfig, SubnetConfig, SubnetConfigs},
+    subnet_config::{SchedulerConfig, SubnetConfig},
 };
 use ic_ic00_types::{
     CanisterIdRecord, CanisterSettingsArgsBuilder, EmptyBlob, InstallCodeArgs, Method, Payload,
@@ -109,7 +109,7 @@ fn dts_subnet_config(
     message_instruction_limit: NumInstructions,
     slice_instruction_limit: NumInstructions,
 ) -> SubnetConfig {
-    let subnet_config = SubnetConfigs::default().own_subnet_config(SubnetType::Application);
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
     SubnetConfig {
         scheduler_config: SchedulerConfig {
             max_instructions_per_install_code: message_instruction_limit,
@@ -151,7 +151,7 @@ fn dts_install_code_env(
     message_instruction_limit: NumInstructions,
     slice_instruction_limit: NumInstructions,
 ) -> StateMachine {
-    let subnet_config = SubnetConfigs::default().own_subnet_config(SubnetType::Application);
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
     StateMachine::new_with_config(StateMachineConfig::new(
         SubnetConfig {
             scheduler_config: SchedulerConfig {

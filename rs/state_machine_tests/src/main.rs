@@ -2,6 +2,7 @@ use clap::Parser;
 use ic_config::execution_environment;
 use ic_config::subnet_config::SubnetConfig;
 use ic_crypto::threshold_sig_public_key_to_der;
+use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachineBuilder, StateMachineConfig};
 use ic_test_state_machine_client::{CanisterCall, RawCanisterId, Request, Request::*};
 use ic_types::{CanisterId, Cycles, PrincipalId};
@@ -61,7 +62,7 @@ fn main() {
         default_provisional_cycles_balance: Cycles::new(0),
         ..Default::default()
     };
-    let config = StateMachineConfig::new(SubnetConfig::default_system_subnet(), hypervisor_config);
+    let config = StateMachineConfig::new(SubnetConfig::new(SubnetType::System), hypervisor_config);
     let env = StateMachineBuilder::new().with_config(Some(config)).build();
     loop {
         debug_print!(&opts, "enter request loop");

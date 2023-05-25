@@ -1,4 +1,4 @@
-use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfigs};
+use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
 use ic_crypto_sha::Sha256;
 use ic_ic00_types::CanisterInstallMode::{Install, Reinstall, Upgrade};
 use ic_ic00_types::{
@@ -64,7 +64,7 @@ fn test_setup(
     let test_canister_sha256 = hasher.finish();
 
     // set up StateMachine
-    let subnet_config = SubnetConfigs::default().own_subnet_config(subnet_type);
+    let subnet_config = SubnetConfig::new(subnet_type);
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config,
         HypervisorConfig::default(),
@@ -589,7 +589,7 @@ fn canister_history_cleared_if_canister_out_of_cycles() {
     ));
 
     // drain cycle balance of test_canister to trigger code uninstall from system
-    let subnet_config = SubnetConfigs::default().own_subnet_config(subnet_type);
+    let subnet_config = SubnetConfig::new(subnet_type);
     let compute_percent_allocated_per_second_fee = subnet_config
         .cycles_account_manager_config
         .compute_percent_allocated_per_second_fee;
