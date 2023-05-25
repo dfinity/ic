@@ -158,7 +158,7 @@ maximum-capacity-large-memory-update:
       $SHELL_WRAPPER timeout 1h ./testnet/tools/icos_deploy.sh $TESTNET --git-revision "$GIT_REVISION" --no-boundary-nodes
       cd ./scalability
 
-      $SHELL_WRAPPER python3 experiments/run_large_memory_experiment.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --use_updates=True --initial_rps=10 --increment_rps=3 --target_rps=25 --max_rps=500
+      $SHELL_WRAPPER python3 experiments/run_large_memory_experiment.py --testnet $TESTNET --wg_subnet 2 --wg_testnet $TESTNET --use_updates=True --datapoints=20,35,50,55,100,150
 
       TIMESTAMP=$(find results/"$GIT_REVISION" -maxdepth 1 -mindepth 1 -type d -printf "%f\n" | sort -nr | head -1)
       $SHELL_WRAPPER python3 common/generate_report.py --base_dir="results/" --git_revision="$GIT_REVISION" --timestamp="$TIMESTAMP"
