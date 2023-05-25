@@ -901,7 +901,7 @@ fn last_dir_height(dir: &PathBuf, radix: u32) -> u64 {
     }
 }
 
-fn last_checkpoint(dir: &Path) -> u64 {
+pub fn last_checkpoint(dir: &Path) -> u64 {
     last_dir_height(&dir.join("checkpoints"), 16)
 }
 
