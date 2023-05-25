@@ -1,6 +1,7 @@
 mod batch_dealings;
 mod context_data;
 mod dealers;
+mod has_receiver;
 mod index;
 mod initial_dealings;
 mod params;

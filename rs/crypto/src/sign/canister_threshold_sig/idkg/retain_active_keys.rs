@@ -21,8 +21,11 @@ pub fn retain_keys_for_transcripts<C: CspIDkgProtocol>(
     if active_transcripts.is_empty() {
         return Ok(());
     }
-    let oldest_public_key = oldest_public_key(csp_client, node_id, registry, active_transcripts)
-        .expect("at least one public key since there is at least one transcript")?;
+    let oldest_public_key: MEGaPublicKey =
+        match oldest_public_key(csp_client, node_id, registry, active_transcripts) {
+            None => return Ok(()),
+            Some(oldest_public_key) => oldest_public_key?,
+        };
 
     let internal_transcripts: Result<BTreeSet<_>, _> = active_transcripts
         .iter()
@@ -43,7 +46,7 @@ fn oldest_public_key<C: CspIDkgProtocol>(
     registry: &dyn RegistryClient,
     transcripts: &HashSet<IDkgTranscript>,
 ) -> Option<Result<MEGaPublicKey, IDkgRetainKeysError>> {
-    minimum_registry_version(transcripts).map(|version| {
+    minimum_registry_version_for_node(transcripts, *node_id).map(|version| {
         match get_mega_pubkey(node_id, registry, version) {
             Ok(oldest_public_key) => {
                 csp_client
@@ -69,9 +72,12 @@ fn oldest_public_key<C: CspIDkgProtocol>(
     })
 }
 
-fn minimum_registry_version(transcripts: &HashSet<IDkgTranscript>) -> Option<RegistryVersion> {
+fn minimum_registry_version_for_node(
+    transcripts: &HashSet<IDkgTranscript>,
+    node_id: NodeId,
+) -> Option<RegistryVersion> {
     transcripts
         .iter()
-        .map(|transcript| transcript.registry_version)
+        .filter_map(|t| t.has_receiver(node_id).then_some(t.registry_version))
         .min()
 }
