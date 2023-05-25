@@ -17,7 +17,7 @@ use wasm_smith::MaybeInvalidModule;
 // The fuzz test is only compiled but not executed by CI.
 //
 // To execute the fuzzer run
-// bazel run --@rules_rust//rust/toolchain/channel=nightly --build_tag_filters=fuzz_test //rs/embedders/fuzz:embedders_fuzzer -- corpus/
+// bazel run --config=fuzzing //rs/embedders/fuzz:compile_wasm_using_embedder -- corpus/
 
 fuzz_target!(|module: MaybeInvalidModule| {
     let config = EmbeddersConfig::default();
