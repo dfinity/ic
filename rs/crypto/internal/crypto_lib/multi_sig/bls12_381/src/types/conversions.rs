@@ -90,35 +90,3 @@ impl From<&CombinedSignature> for CombinedSignatureBytes {
         CombinedSignatureBytes(signature.serialize())
     }
 }
-impl From<SecretKeyBytes> for String {
-    fn from(val: SecretKeyBytes) -> Self {
-        base64::encode(&val.0.expose_secret())
-    }
-}
-impl TryFrom<&str> for SecretKeyBytes {
-    type Error = CryptoError;
-
-    fn try_from(key: &str) -> Result<Self, CryptoError> {
-        let key = base64::decode(key).map_err(|e| CryptoError::MalformedSecretKey {
-            algorithm: AlgorithmId::MultiBls12_381,
-            internal_error: format!("Key is not a valid base64 encoded string: {}", e),
-        })?;
-        if key.len() != SecretKeyBytes::SIZE {
-            return Err(CryptoError::MalformedSecretKey {
-                algorithm: AlgorithmId::MultiBls12_381,
-                internal_error: "Key length is incorrect".to_string(),
-            });
-        }
-        let mut buffer = [0u8; SecretKeyBytes::SIZE];
-        buffer.copy_from_slice(&key);
-        Ok(SecretKeyBytes(
-            ic_crypto_secrets_containers::SecretArray::new_and_zeroize_argument(&mut buffer),
-        ))
-    }
-}
-impl TryFrom<&String> for SecretKeyBytes {
-    type Error = CryptoError;
-    fn try_from(signature: &String) -> Result<Self, CryptoError> {
-        Self::try_from(signature as &str)
-    }
-}

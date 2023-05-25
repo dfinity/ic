@@ -53,15 +53,6 @@ proptest! {
         assert_eq!(signature_bytes, serialised, "Parsing followed by serailizing produced a value different from the starting value.");
     }
 
-    /// Verifies that stringifying SecretKeyBytes and paring them again yields the original.
-    #[test]
-    #[allow(clippy::unnecessary_operation)] // Clippy believes that these tests are unnecessary.
-    fn proptest_secret_key_stringifying_and_parsing_should_be_inverse(secret_key: SecretKeyBytes) {
-        let string = String::from(secret_key.clone());
-        let parsed = SecretKeyBytes::try_from(&string).expect("Failed to parse stringified secret key");
-        assert_eq!(secret_key, parsed, "Stringifying followed by parsing produced a value different from the starting value.");
-    }
-
     /// Verifies that stringifying PublicKeyBytes and paring them again yields the original.
     #[test]
     #[allow(clippy::unnecessary_operation)] // Clippy believes that these tests are unnecessary.
@@ -155,24 +146,6 @@ fn test_invalid_combined_signature_fails_to_parse() {
     match CombinedSignature::try_from(&invalid_combined_signature) {
         Err(CryptoError::MalformedSignature { .. }) => (),
         other => panic!("Expected a MalformedSignature error.  Got: {:?}", other),
-    }
-}
-
-/// Verifies that parsing invalid base64 SecretKeyBytes fails
-#[test]
-fn test_snowman_is_not_valid_secret_key() {
-    match SecretKeyBytes::try_from(SNOWMAN) {
-        Err(CryptoError::MalformedSecretKey { .. }) => (),
-        other => panic!("Expected a MalformedSecretKey error.  Got: {:?}", other),
-    }
-}
-
-/// Verifies that parsing invalid base64 SecretKeyBytes fails
-#[test]
-fn test_base64_snowman_is_not_valid_secret_key() {
-    match SecretKeyBytes::try_from(SNOWCODE) {
-        Err(CryptoError::MalformedSecretKey { .. }) => (),
-        other => panic!("Expected a MalformedSecretKey error.  Got: {:?}", other),
     }
 }
 
