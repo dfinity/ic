@@ -19,6 +19,13 @@ const WASM_HASH_LENGTH: usize = 32;
 #[derive(Clone)]
 pub struct BinaryEncodedWasm(Arc<Vec<u8>>);
 
+impl std::fmt::Debug for BinaryEncodedWasm {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Ignore the actual binary contents when debug formatting.
+        f.debug_tuple("BinaryEncodedWasm").finish()
+    }
+}
+
 impl BinaryEncodedWasm {
     pub fn new(wasm: Vec<u8>) -> Self {
         Self::new_shared(Arc::new(wasm))

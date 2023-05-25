@@ -175,6 +175,7 @@ impl SystemApiFunc {
     }
 }
 
+#[derive(Debug)]
 pub struct InstrumentationOutput {
     /// All exported methods that are relevant to the IC.
     /// Methods relevant to the IC are:
