@@ -4,105 +4,6 @@ use ic_nervous_system_common::{E8, SECONDS_PER_DAY};
 use pretty_assertions::assert_eq;
 
 #[test]
-fn test_parse_percentage() {
-    assert_eq!(
-        parse_percentage("0%"),
-        Ok(nervous_system_pb::Percentage {
-            basis_points: Some(0)
-        }),
-    );
-    assert_eq!(
-        parse_percentage("1%"),
-        Ok(nervous_system_pb::Percentage {
-            basis_points: Some(100)
-        }),
-    );
-    assert_eq!(
-        parse_percentage("1.0%"),
-        Ok(nervous_system_pb::Percentage {
-            basis_points: Some(100)
-        }),
-    );
-    assert_eq!(
-        parse_percentage("1.00%"),
-        Ok(nervous_system_pb::Percentage {
-            basis_points: Some(100)
-        }),
-    );
-    assert_eq!(
-        parse_percentage("1.2%"),
-        Ok(nervous_system_pb::Percentage {
-            basis_points: Some(120)
-        }),
-    );
-    assert_eq!(
-        parse_percentage("1.23%"),
-        Ok(nervous_system_pb::Percentage {
-            basis_points: Some(123)
-        }),
-    );
-    assert_eq!(
-        parse_percentage("0.1%"),
-        Ok(nervous_system_pb::Percentage {
-            basis_points: Some(10)
-        }),
-    );
-    assert_eq!(
-        parse_percentage("0.12%"),
-        Ok(nervous_system_pb::Percentage {
-            basis_points: Some(12)
-        }),
-    );
-    assert_eq!(
-        parse_percentage("0.07%"),
-        Ok(nervous_system_pb::Percentage {
-            basis_points: Some(7)
-        }),
-    );
-
-    // Dot must be surrounded.
-    let result = parse_percentage("0.%");
-    assert!(result.is_err(), "{:?}", result);
-
-    let result = parse_percentage(".1%");
-    assert!(result.is_err(), "{:?}", result);
-
-    // Too many decimal places.
-    let result = parse_percentage("0.009%");
-    assert!(result.is_err(), "{:?}", result);
-
-    // Percent sign required.
-    let result = parse_percentage("1.0");
-    assert!(result.is_err(), "{:?}", result);
-}
-
-#[test]
-fn test_parse_tokens() {
-    assert_eq!(
-        parse_tokens("1e8s"),
-        Ok(nervous_system_pb::Tokens { e8s: Some(1) }),
-    );
-    assert_eq!(
-        parse_tokens("1T"),
-        Ok(nervous_system_pb::Tokens {
-            e8s: Some(100_000_000)
-        }),
-    );
-    assert_eq!(
-        parse_tokens("1_.23_4_T"),
-        Ok(nervous_system_pb::Tokens {
-            e8s: Some(123_400_000)
-        }),
-    );
-    assert_eq!(
-        parse_tokens("_123_456_789_e8s"),
-        Ok(nervous_system_pb::Tokens {
-            e8s: Some(123456789)
-        }),
-    );
-}
-
-#[test]
 fn convert_from_flags_to_create_service_nervous_system() {
     let logo = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAD0lEQVQIHQEEAPv/AAD/DwIRAQ8HgT3GAAAAAElFTkSuQmCC";
     let token_logo = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAAD0lEQVQIHQEEAPv/AAAAAAAEAAEvUrSNAAAAAElFTkSuQmCC";
@@ -135,7 +36,7 @@ fn convert_from_flags_to_create_service_nervous_system() {
             "--developer-neuron-memo",
             "0",
             "--developer-neuron-stake",
-            "100_T",
+            "100_tokens",
             "--developer-neuron-vesting-period",
             "104w",
             // Developer 2
@@ -146,23 +47,23 @@ fn convert_from_flags_to_create_service_nervous_system() {
             "--developer-neuron-memo",
             "1",
             "--developer-neuron-stake",
-            "101_T",
+            "101_tokens",
             "--developer-neuron-vesting-period",
             "52w",
             "--treasury-amount",
-            "1_000_T",
+            "1_000_tokens",
             "--swap-amount",
-            "1_234_T",
+            "1_234_tokens",
             "--swap-minimum-participants",
             "42",
             "--swap-minimum-icp",
-            "250_T",
+            "250_tokens",
             "--swap-maximum-icp",
-            "1000_T",
+            "1000_tokens",
             "--swap-minimum-participant-icp",
-            "2_T",
+            "2_tokens",
             "--swap-maximum-participant-icp",
-            "100_T",
+            "100_tokens",
             "--confirmation-text",
             "I confirm that I am a human",
             "--restrict-swap-in-country",
@@ -182,13 +83,13 @@ fn convert_from_flags_to_create_service_nervous_system() {
             "--token-logo-url",
             token_logo,
             "--proposal-rejection-fee",
-            "0.1_T",
+            "0.1_tokens",
             "--proposal-initial-voting-period",
             "1d",
             "--proposal-wait-for-quiet-deadline-increase",
             "1h",
             "--neuron-minimum-stake",
-            "1_T",
+            "1_tokens",
             "--neuron-minimum-dissolve-delay-to-vote",
             "4w",
             "--neuron-maximum-dissolve-delay",
