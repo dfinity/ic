@@ -9,7 +9,7 @@ use ic_btc_service::{
 use ic_btc_types_internal::{GetSuccessorsResponseComplete, GetSuccessorsResponsePartial};
 use ic_config::{
     execution_environment::{BitcoinConfig, Config as HypervisorConfig},
-    subnet_config::SubnetConfigs,
+    subnet_config::SubnetConfig,
 };
 use ic_error_types::RejectCode;
 use ic_ic00_types::{
@@ -415,7 +415,7 @@ fn testnet_requests_are_routed_to_testnet_canister() {
         CanisterId::from_str("rwlgt-iiaaa-aaaaa-aaaaa-cai").unwrap();
 
     let env = StateMachine::new_with_config(StateMachineConfig::new(
-        SubnetConfigs::default().own_subnet_config(SubnetType::System),
+        SubnetConfig::new(SubnetType::System),
         HypervisorConfig {
             bitcoin: BitcoinConfig {
                 testnet_canister_id: Some(bitcoin_canister_id),
@@ -443,7 +443,7 @@ fn regtest_requests_are_routed_to_testnet_canister() {
         CanisterId::from_str("rwlgt-iiaaa-aaaaa-aaaaa-cai").unwrap();
 
     let env = StateMachine::new_with_config(StateMachineConfig::new(
-        SubnetConfigs::default().own_subnet_config(SubnetType::System),
+        SubnetConfig::new(SubnetType::System),
         HypervisorConfig {
             bitcoin: BitcoinConfig {
                 testnet_canister_id: Some(bitcoin_canister_id),
@@ -471,7 +471,7 @@ fn mainnet_requests_are_routed_to_mainnet_canister() {
         CanisterId::from_str("rwlgt-iiaaa-aaaaa-aaaaa-cai").unwrap();
 
     let env = StateMachine::new_with_config(StateMachineConfig::new(
-        SubnetConfigs::default().own_subnet_config(SubnetType::System),
+        SubnetConfig::new(SubnetType::System),
         HypervisorConfig {
             bitcoin: BitcoinConfig {
                 mainnet_canister_id: Some(bitcoin_canister_id),
@@ -496,7 +496,7 @@ fn mainnet_requests_are_routed_to_mainnet_canister() {
 #[test]
 fn requests_are_rejected_if_no_bitcoin_canisters_are_set() {
     let env = StateMachine::new_with_config(StateMachineConfig::new(
-        SubnetConfigs::default().own_subnet_config(SubnetType::System),
+        SubnetConfig::new(SubnetType::System),
         HypervisorConfig {
             // No bitcoin canisters set.
             bitcoin: BitcoinConfig::default(),

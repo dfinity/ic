@@ -1,7 +1,4 @@
-use ic_config::{
-    subnet_config::{SubnetConfig, SubnetConfigs},
-    Config,
-};
+use ic_config::{subnet_config::SubnetConfig, Config};
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_execution_environment::ExecutionServices;
 use ic_interfaces::execution_environment::IngressHistoryReader;
@@ -100,7 +97,7 @@ pub(crate) fn setup() -> (
     let subnet_id = subnet_test_id(1);
     let root_subnet_id = subnet_test_id(2);
     let (config, _) = Config::temp_config();
-    let subnet_config = SubnetConfigs::default().own_subnet_config(subnet_type);
+    let subnet_config = SubnetConfig::new(subnet_type);
     let replica_config = ReplicaConfig {
         node_id: NodeId::from(PrincipalId::new_node_test_id(27)),
         subnet_id,

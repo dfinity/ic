@@ -19,7 +19,7 @@ use dfn_candid::{candid_one, CandidOne};
 use futures::future::join_all;
 use ic_base_types::CanisterId;
 use ic_canister_client_sender::Sender;
-use ic_config::{subnet_config::SubnetConfig, Config};
+use ic_config::Config;
 use ic_ic00_types::CanisterInstallMode;
 use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nervous_system_root::{
@@ -661,7 +661,7 @@ where
     F: FnOnce(Runtime) -> Fut + 'static,
 {
     let (config, _tmpdir) = Config::temp_config();
-    local_test_with_config_e(config, SubnetConfig::default_system_subnet(), run)
+    local_test_with_config_e(config, run)
 }
 
 /// Runs a local test on the nns subnetwork, so that the canister will be

@@ -4,7 +4,7 @@
 use criterion::{BatchSize, Criterion};
 use ic_config::execution_environment::Config;
 use ic_config::flag_status::FlagStatus;
-use ic_config::subnet_config::{SchedulerConfig, SubnetConfigs};
+use ic_config::subnet_config::{SchedulerConfig, SubnetConfig};
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_cycles_account_manager::CyclesAccountManager;
 use ic_error_types::RejectCode;
@@ -225,7 +225,7 @@ where
     let log = no_op_logger();
     let own_subnet_id = subnet_test_id(1);
     let own_subnet_type = SubnetType::Application;
-    let subnet_configs = SubnetConfigs::default().own_subnet_config(own_subnet_type);
+    let subnet_configs = SubnetConfig::new(own_subnet_type);
     let cycles_account_manager = Arc::new(CyclesAccountManager::new(
         subnet_configs.scheduler_config.max_instructions_per_message,
         own_subnet_type,

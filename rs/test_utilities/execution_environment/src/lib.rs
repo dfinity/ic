@@ -10,7 +10,7 @@ use ic_config::{
     execution_environment::{BitcoinConfig, Config},
     flag_status::FlagStatus,
     subnet_config::SchedulerConfig,
-    subnet_config::SubnetConfigs,
+    subnet_config::SubnetConfig,
 };
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_cycles_account_manager::CyclesAccountManager;
@@ -1441,9 +1441,7 @@ pub struct ExecutionTestBuilder {
 impl Default for ExecutionTestBuilder {
     fn default() -> Self {
         let subnet_type = SubnetType::Application;
-        let scheduler_config = SubnetConfigs::default()
-            .own_subnet_config(subnet_type)
-            .scheduler_config;
+        let scheduler_config = SubnetConfig::new(subnet_type).scheduler_config;
         let subnet_total_memory = ic_config::execution_environment::Config::default()
             .subnet_memory_capacity
             .get() as i64;
@@ -1787,9 +1785,7 @@ impl ExecutionTestBuilder {
 
         let metrics_registry = MetricsRegistry::new();
 
-        let mut config = SubnetConfigs::default()
-            .own_subnet_config(self.subnet_type)
-            .cycles_account_manager_config;
+        let mut config = SubnetConfig::new(self.subnet_type).cycles_account_manager_config;
         if let Some(ecdsa_signature_fee) = self.ecdsa_signature_fee {
             config.ecdsa_signature_fee = ecdsa_signature_fee;
         }

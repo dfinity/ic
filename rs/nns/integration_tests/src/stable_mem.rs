@@ -2,24 +2,12 @@
 
 use canister_test::{local_test_with_config_e, Canister};
 use dfn_candid::candid;
-use ic_config::subnet_config::SubnetConfig;
 use ic_nns_test_utils::itest_helpers::install_rust_canister;
-use phantom_newtype::AmountOf;
 
 #[test]
 fn chunked_stable_mem_ser_deser_roundtrip() {
     let (config, _tmpdir) = ic_config::Config::temp_config();
-    let mut subnet_config = SubnetConfig::default_system_subnet();
-    // Work around exeuction u64-to-i64 overflow bug
-    let max_cycles = i64::MAX as u64;
-    // Allocating 200,000 neurons takes some cycles so we have to bump the
-    // limits
-    subnet_config.scheduler_config.max_instructions_per_message = AmountOf::new(max_cycles);
-    // Not sure why I need to bump this, but without this the test starts to
-    // hang, without any error messages
-    subnet_config.scheduler_config.max_instructions_per_round = AmountOf::new(max_cycles);
-
-    local_test_with_config_e(config, subnet_config, |runtime| async move {
+    local_test_with_config_e(config, |runtime| async move {
         println!("Installing mem utils test canister...");
 
         let mut canister = runtime

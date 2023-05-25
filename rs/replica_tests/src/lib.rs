@@ -188,12 +188,7 @@ where
     F: FnOnce(LocalTestRuntime) -> Fut + 'static,
 {
     let (config, _tmpdir) = Config::temp_config();
-    canister_test_with_config_async(
-        config,
-        ic_config::subnet_config::SubnetConfig::default_system_subnet(),
-        get_ic_config(),
-        test,
-    )
+    canister_test_with_config_async(config, get_ic_config(), test)
 }
 
 pub fn canister_test_with_config<F, Out>(config: Config, f: F) -> Out
@@ -208,12 +203,7 @@ pub fn canister_test_with_ic_config<F, Out>(config: Config, ic_config: IcConfig,
 where
     F: FnOnce(LocalTestRuntime) -> Out + 'static,
 {
-    canister_test_with_config_async(
-        config,
-        ic_config::subnet_config::SubnetConfig::default_system_subnet(),
-        ic_config,
-        |runtime| async { f(runtime) },
-    )
+    canister_test_with_config_async(config, ic_config, |runtime| async { f(runtime) })
 }
 
 pub fn get_ic_config() -> IcConfig {
@@ -326,7 +316,6 @@ fn get_subnet_type(
 
 pub fn canister_test_with_config_async<Fut, F, Out>(
     mut config: Config,
-    subnet_config: ic_config::subnet_config::SubnetConfig,
     ic_config: IcConfig,
     test: F,
 ) -> Out
@@ -401,7 +390,6 @@ where
                 tokio::runtime::Handle::current(),
                 tokio::runtime::Handle::current(),
                 config.clone(),
-                subnet_config,
                 temp_node,
                 subnet_id,
                 subnet_type,

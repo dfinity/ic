@@ -11,7 +11,7 @@ use ic00::{
 use ic_base_types::PrincipalId;
 use ic_config::{
     execution_environment::Config as HypervisorConfig,
-    subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetConfig, SubnetConfigs},
+    subnet_config::{CyclesAccountManagerConfig, SchedulerConfig, SubnetConfig},
 };
 use ic_embedders::wasmtime_embedder::system_api_complexity::{cpu, overhead};
 use ic_error_types::RejectCode;
@@ -78,7 +78,7 @@ fn complexity_env(
         system_calls_per_message,
     }: SystemCallLimits,
 ) -> StateMachine {
-    let subnet_config = SubnetConfigs::default().own_subnet_config(subnet_type);
+    let subnet_config = SubnetConfig::new(subnet_type);
     let performance_counter_complexity = cpu::PERFORMANCE_COUNTER.get() as u64;
     StateMachineBuilder::new()
         .with_subnet_type(subnet_type)
@@ -4342,7 +4342,7 @@ fn scheduler_resets_accumulated_priorities() {
         // There must twice more canisters than the scheduler cores
         let num_canisters = scheduler_cores * 2;
 
-        let subnet_config = SubnetConfigs::default().own_subnet_config(SubnetType::Application);
+        let subnet_config = SubnetConfig::new(SubnetType::Application);
         let mut test = SchedulerTestBuilder::new()
             .with_scheduler_config(SchedulerConfig {
                 scheduler_cores,

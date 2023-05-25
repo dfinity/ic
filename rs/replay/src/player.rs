@@ -8,7 +8,7 @@ use ic_artifact_pool::{
     certification_pool::CertificationPoolImpl,
     consensus_pool::{ConsensusPoolImpl, UncachedConsensusPoolImpl},
 };
-use ic_config::{artifact_pool::ArtifactPoolConfig, subnet_config::SubnetConfigs, Config};
+use ic_config::{artifact_pool::ArtifactPoolConfig, subnet_config::SubnetConfig, Config};
 use ic_consensus::{certification::VerifierImpl, consensus::batch_delivery::deliver_batches};
 use ic_consensus_utils::pool_reader::PoolReader;
 use ic_consensus_utils::{crypto_hashable_to_seed, lookup_replica_version};
@@ -255,7 +255,7 @@ impl Player {
             &log,
         );
         let metrics_registry = MetricsRegistry::new();
-        let subnet_config = SubnetConfigs::default().own_subnet_config(subnet_type);
+        let subnet_config = SubnetConfig::new(subnet_type);
 
         let cycles_account_manager = Arc::new(CyclesAccountManager::new(
             subnet_config.scheduler_config.max_instructions_per_message,

@@ -4,7 +4,6 @@ use candid::Principal;
 use canister_test::{local_test_with_config_e, Canister, CanisterIdRecord, Project, Runtime, Wasm};
 use dfn_candid::{candid_one, CandidOne};
 use ic_canister_client_sender::Sender;
-use ic_config::subnet_config::SubnetConfig;
 use ic_config::Config;
 use ic_crypto_sha::Sha256;
 use ic_icrc1_index::InitArgs as IndexInitArgs;
@@ -1315,7 +1314,7 @@ where
     F: FnOnce(Runtime) -> Fut + 'static,
 {
     let (config, _tmpdir) = Config::temp_config();
-    local_test_with_config_e(config, SubnetConfig::default_system_subnet(), run)
+    local_test_with_config_e(config, run)
 }
 
 /// Compiles the governance canister, builds it's initial payload and installs

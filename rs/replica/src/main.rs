@@ -1,7 +1,7 @@
 //! Replica -- Internet Computer
 
 use ic_async_utils::{abort_on_panic, shutdown_signal};
-use ic_config::{subnet_config::SubnetConfigs, Config};
+use ic_config::Config;
 use ic_crypto_sha::Sha256;
 use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
@@ -205,8 +205,6 @@ fn main() -> io::Result<()> {
         &logger,
     );
 
-    let subnet_config = SubnetConfigs::default().own_subnet_config(subnet_type);
-
     // Read the root subnet id from registry
     let root_subnet_id = registry
         .get_root_subnet_id(
@@ -260,7 +258,6 @@ fn main() -> io::Result<()> {
             rt_http.handle().clone(),
             rt_xnet.handle().clone(),
             config.clone(),
-            subnet_config,
             node_id,
             subnet_id,
             subnet_type,

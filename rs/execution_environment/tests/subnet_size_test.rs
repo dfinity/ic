@@ -261,11 +261,7 @@ fn apply_filter(
 /// Create a `SubnetConfig` with a redacted `CyclesAccountManagerConfig` to have only the fees
 /// for specific operation.
 fn filtered_subnet_config(subnet_type: SubnetType, filter: KeepFeesFilter) -> SubnetConfig {
-    let mut subnet_config = match subnet_type {
-        SubnetType::Application => SubnetConfig::default_application_subnet(),
-        SubnetType::System => SubnetConfig::default_system_subnet(),
-        SubnetType::VerifiedApplication => SubnetConfig::default_verified_application_subnet(),
-    };
+    let mut subnet_config = SubnetConfig::new(subnet_type);
     subnet_config.cycles_account_manager_config =
         apply_filter(subnet_config.cycles_account_manager_config, filter);
 

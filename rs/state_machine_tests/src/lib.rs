@@ -1,8 +1,5 @@
 use ic_config::flag_status::FlagStatus;
-use ic_config::{
-    execution_environment::Config as HypervisorConfig,
-    subnet_config::{SubnetConfig, SubnetConfigs},
-};
+use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
 use ic_constants::{MAX_INGRESS_TTL, PERMITTED_DRIFT, SMALL_APP_SUBNET_MAX_SIZE};
 use ic_crypto_ecdsa_secp256k1::{PrivateKey, PublicKey};
 use ic_crypto_extended_bip32::{DerivationIndex, DerivationPath};
@@ -522,10 +519,7 @@ impl StateMachine {
 
         let (subnet_config, mut hypervisor_config) = match config {
             Some(config) => (config.subnet_config, config.hypervisor_config),
-            None => (
-                SubnetConfigs::default().own_subnet_config(subnet_type),
-                HypervisorConfig::default(),
-            ),
+            None => (SubnetConfig::new(subnet_type), HypervisorConfig::default()),
         };
 
         let (registry_data_provider, registry_client) = make_nodes_registry(
