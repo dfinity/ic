@@ -19,6 +19,8 @@ use rand::prelude::IteratorRandom;
 use rand::thread_rng;
 use std::collections::{BTreeMap, HashSet};
 use std::fmt::{Display, Formatter};
+use strum::IntoEnumIterator;
+use strum_macros::EnumIter;
 
 criterion_main!(benches);
 criterion_group!(benches, crypto_idkg_benchmarks);
@@ -45,22 +47,29 @@ fn crypto_idkg_benchmarks(criterion: &mut Criterion) {
             .sample_size(test_case.sample_size)
             .sampling_mode(test_case.sampling_mode);
 
-        bench_create_dealing(group, &test_case);
-        bench_verify_dealing_public(group, &test_case);
-        bench_verify_dealing_private(group, &test_case);
+        IDkgMode::iter().for_each(|mode| bench_create_dealing(group, &test_case, &mode));
+        IDkgMode::iter().for_each(|mode| bench_verify_dealing_public(group, &test_case, &mode));
+        IDkgMode::iter().for_each(|mode| bench_verify_dealing_private(group, &test_case, &mode));
+
         bench_verify_initial_dealings(group, &test_case);
-        bench_create_transcript(group, &test_case);
-        bench_verify_transcript(group, &test_case);
-        bench_load_transcript(group, &test_case);
+
+        IDkgMode::iter().for_each(|mode| bench_create_transcript(group, &test_case, &mode));
+        IDkgMode::iter().for_each(|mode| bench_verify_transcript(group, &test_case, &mode));
+        IDkgMode::iter().for_each(|mode| bench_load_transcript(group, &test_case, &mode));
+
         bench_retain_active_transcripts(group, &test_case, 1);
     }
 }
 
-fn bench_create_dealing<M: Measurement>(group: &mut BenchmarkGroup<'_, M>, test_case: &TestCase) {
+fn bench_create_dealing<M: Measurement>(
+    group: &mut BenchmarkGroup<'_, M>,
+    test_case: &TestCase,
+    mode: &IDkgMode,
+) {
     let env = test_case.new_test_environment();
-    let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
+    let params = mode.setup_params(&env);
 
-    group.bench_function("create_dealing", |bench| {
+    group.bench_function(format!("create_dealing_{mode}"), |bench| {
         bench.iter_batched(
             || crypto_for(random_dealer_id(&params), &env.crypto_components),
             |dealer| create_dealing(dealer, &params),
@@ -72,11 +81,12 @@ fn bench_create_dealing<M: Measurement>(group: &mut BenchmarkGroup<'_, M>, test_
 fn bench_verify_dealing_public<M: Measurement>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
+    mode: &IDkgMode,
 ) {
     let env = test_case.new_test_environment();
-    let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
+    let params = mode.setup_params(&env);
 
-    group.bench_function("verify_dealing_public", |bench| {
+    group.bench_function(format!("verify_dealing_public_{mode}"), |bench| {
         bench.iter_batched(
             || {
                 let receiver = crypto_for(random_receiver_id(&params), &env.crypto_components);
@@ -93,11 +103,12 @@ fn bench_verify_dealing_public<M: Measurement>(
 fn bench_verify_dealing_private<M: Measurement>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
+    mode: &IDkgMode,
 ) {
     let env = test_case.new_test_environment();
-    let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
+    let params = mode.setup_params(&env);
 
-    group.bench_function("verify_dealing_private", |bench| {
+    group.bench_function(format!("verify_dealing_private_{mode}"), |bench| {
         bench.iter_batched(
             || {
                 let receiver = crypto_for(random_receiver_id(&params), &env.crypto_components);
@@ -164,11 +175,12 @@ fn bench_verify_initial_dealings<M: Measurement>(
 fn bench_create_transcript<M: Measurement>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
+    mode: &IDkgMode,
 ) {
     let env = test_case.new_test_environment();
-    let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
+    let params = mode.setup_params(&env);
 
-    group.bench_function("create_transcript", |bench| {
+    group.bench_function(format!("create_transcript_{mode}"), |bench| {
         bench.iter_batched(
             || {
                 let receiver = crypto_for(random_receiver_id(&params), &env.crypto_components);
@@ -186,11 +198,12 @@ fn bench_create_transcript<M: Measurement>(
 fn bench_verify_transcript<M: Measurement>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
+    mode: &IDkgMode,
 ) {
     let env = test_case.new_test_environment();
-    let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
+    let params = mode.setup_params(&env);
 
-    group.bench_function("verify_transcript", |bench| {
+    group.bench_function(format!("verify_transcript_{mode}"), |bench| {
         bench.iter_batched(
             || {
                 let dealings = create_dealings(&params, &env.crypto_components);
@@ -211,11 +224,15 @@ fn bench_verify_transcript<M: Measurement>(
     });
 }
 
-fn bench_load_transcript<M: Measurement>(group: &mut BenchmarkGroup<'_, M>, test_case: &TestCase) {
+fn bench_load_transcript<M: Measurement>(
+    group: &mut BenchmarkGroup<'_, M>,
+    test_case: &TestCase,
+    mode: &IDkgMode,
+) {
     let env = test_case.new_test_environment();
-    let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
+    let params = mode.setup_params(&env);
 
-    group.bench_function("load_transcript", |bench| {
+    group.bench_function(format!("load_transcript_{mode}"), |bench| {
         bench.iter_batched(
             || {
                 let dealings = create_dealings(&params, &env.crypto_components);
@@ -239,7 +256,7 @@ fn bench_load_transcript<M: Measurement>(group: &mut BenchmarkGroup<'_, M>, test
 fn bench_retain_active_transcripts<M: Measurement>(
     group: &mut BenchmarkGroup<'_, M>,
     test_case: &TestCase,
-    num_pre_sig_quadruples: usize,
+    num_pre_sig_quadruples: i32,
 ) {
     let env = test_case.new_test_environment();
     let key_transcript = generate_key_transcript(&env);
@@ -545,11 +562,64 @@ fn generate_pre_sig_quadruple(
     .unwrap_or_else(|error| panic!("failed to create pre-signature quadruple: {:?}", error))
 }
 
+fn setup_reshare_of_masked_params(
+    env: &CanisterThresholdSigTestEnvironment,
+) -> IDkgTranscriptParams {
+    let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
+    let masked_transcript = run_idkg_without_complaint(&params, &env.crypto_components);
+    let reshare_params = build_params_from_previous(
+        params,
+        IDkgTranscriptOperation::ReshareOfMasked(masked_transcript),
+    );
+    load_previous_transcripts_for_all_dealers(&reshare_params, &env.crypto_components);
+    reshare_params
+}
+
+fn setup_reshare_of_unmasked_params(
+    env: &CanisterThresholdSigTestEnvironment,
+) -> IDkgTranscriptParams {
+    let params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
+    let masked_transcript = run_idkg_without_complaint(&params, &env.crypto_components);
+    let unmasked_params = build_params_from_previous(
+        params,
+        IDkgTranscriptOperation::ReshareOfMasked(masked_transcript),
+    );
+    load_previous_transcripts_for_all_dealers(&unmasked_params, &env.crypto_components);
+    let unmasked_transcript = run_idkg_without_complaint(&unmasked_params, &env.crypto_components);
+    let unmasked_reshare_params = build_params_from_previous(
+        unmasked_params,
+        IDkgTranscriptOperation::ReshareOfUnmasked(unmasked_transcript),
+    );
+    load_previous_transcripts_for_all_dealers(&unmasked_reshare_params, &env.crypto_components);
+    unmasked_reshare_params
+}
+
+fn setup_unmasked_times_masked_params(
+    env: &CanisterThresholdSigTestEnvironment,
+) -> IDkgTranscriptParams {
+    let masked_params = env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1);
+    let masked_random_transcript =
+        run_idkg_without_complaint(&masked_params, &env.crypto_components);
+
+    let unmasked_params = build_params_from_previous(
+        masked_params,
+        IDkgTranscriptOperation::ReshareOfMasked(masked_random_transcript.clone()),
+    );
+    load_previous_transcripts_for_all_dealers(&unmasked_params, &env.crypto_components);
+    let unmasked_transcript = run_idkg_without_complaint(&unmasked_params, &env.crypto_components);
+
+    let product_params = build_params_from_previous(
+        unmasked_params,
+        IDkgTranscriptOperation::UnmaskedTimesMasked(unmasked_transcript, masked_random_transcript),
+    );
+    load_previous_transcripts_for_all_dealers(&product_params, &env.crypto_components);
+    product_params
+}
+
 struct TestCase {
     sample_size: usize,
     sampling_mode: SamplingMode,
     num_of_nodes: usize,
-    operation_type: IDkgMode,
 }
 
 impl Default for TestCase {
@@ -558,7 +628,6 @@ impl Default for TestCase {
             sample_size: 100,
             sampling_mode: SamplingMode::Auto,
             num_of_nodes: 0,
-            operation_type: IDkgMode::Random,
         }
     }
 }
@@ -570,8 +639,7 @@ impl TestCase {
 
     fn name(&self) -> String {
         format!(
-            "crypto_idkg_{}_{}_nodes_{}_dealers_{}_receivers",
-            self.operation_type,
+            "crypto_idkg_{}_nodes_{}_dealers_{}_receivers",
             self.num_of_nodes,
             self.num_of_dealers(),
             self.num_of_receivers()
@@ -587,12 +655,23 @@ impl TestCase {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, EnumIter)]
 enum IDkgMode {
     Random,
-    // TODO CRP-1471: add benchmarks for resharing and product
-    // ReshareOfMasked,
-    // UnmaskedTimesMasked,
+    ReshareOfMasked,
+    ReshareOfUnmasked,
+    UnmaskedTimesMasked,
+}
+
+impl IDkgMode {
+    fn setup_params(&self, env: &CanisterThresholdSigTestEnvironment) -> IDkgTranscriptParams {
+        match self {
+            IDkgMode::Random => env.params_for_random_sharing(AlgorithmId::ThresholdEcdsaSecp256k1),
+            IDkgMode::ReshareOfMasked => setup_reshare_of_masked_params(env),
+            IDkgMode::ReshareOfUnmasked => setup_reshare_of_unmasked_params(env),
+            IDkgMode::UnmaskedTimesMasked => setup_unmasked_times_masked_params(env),
+        }
+    }
 }
 
 impl Display for IDkgMode {
@@ -602,9 +681,9 @@ impl Display for IDkgMode {
             "{}",
             match self {
                 IDkgMode::Random => "random",
-                // TODO CRP-1471: add benchmarks for resharing and product
-                // IDkgMode::ReshareOfMasked => "reshare",
-                // IDkgMode::UnmaskedTimesMasked => "product",
+                IDkgMode::ReshareOfMasked => "reshare_of_masked",
+                IDkgMode::ReshareOfUnmasked => "reshare_of_unmasked",
+                IDkgMode::UnmaskedTimesMasked => "product",
             }
         )
     }
