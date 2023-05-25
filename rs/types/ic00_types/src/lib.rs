@@ -68,8 +68,8 @@ pub enum Method {
     BitcoinSendTransactionInternal, // API for sending transactions to the network.
     BitcoinGetSuccessors,           // API for fetching blocks from the network.
 
-    // These methods are added for the Mercury I release.
-    // They should be removed afterwards.
+    // These methods are only available on test IC instances where there is a
+    // need to fabricate cycles without burning ICP first.
     ProvisionalCreateCanisterWithCycles,
     ProvisionalTopUpCanister,
 }
