@@ -3,7 +3,7 @@
 // All nodes use the following resources: 4 vCPUs, 24GiB of RAM and 50 GiB disk.
 //
 // In addition to these subnets, this testnet additionally installs the NNS canisters,
-// the NNS and II frontend canisters (on the NNS subnet),
+// the II and NNS frontend dapp canisters (on the NNS subnet),
 // and SNS aggregator canister (on the SNS subnet).
 //
 // You can setup this testnet by executing the following commands:
@@ -34,12 +34,37 @@
 //   Apr 11 15:33:58.903 INFO[rs/tests/src/driver/prometheus_vm.rs:170:0]
 //     IC Progress Clock at http://grafana.sns_testing--1681227226065.testnet.farm.dfinity.systems/d/ic-progress-clock/ic-progress-clock?refresh=10s&from=now-5m&to=now
 //
-// To access the NNS or II dapps look for the following log lines:
+// To access the II and NNS frontend dapp canisters look for the following log lines:
 //
 //   2023-05-03 11:06:27.948 INFO[setup:rs/tests/src/nns_dapp.rs:99:0]
 //     Internet Identity: https://qhbym-qaaaa-aaaaa-aaafq-cai.ic0.farm.dfinity.systems
 //   2023-05-03 11:06:27.948 INFO[setup:rs/tests/src/nns_dapp.rs:103:0]
 //     NNS frontend dapp: https://qsgjb-riaaa-aaaaa-aaaga-cai.ic0.farm.dfinity.systems
+//
+// To interactively deploy an SNS and perform testing, we recommend to take the following steps:
+//
+// 1. Clone the sns-testing repo at https://github.com/dfinity/sns-testing
+//
+// 2. Setup this testnet by using `ict` (explained above).
+//
+//    Make sure to await until you see the following lines before proceeding with the next steps.
+//
+//    ============================= Summary =============================
+//    Task setup              PASSED               -- Exited with code 0.
+//    Task debugKeepAliveTask PASSED
+//    ===================================================================
+//
+// 3. Set the testnet's hostname as `TESTNET` in the file `settings.sh` in the sns-testing repo.
+//    You can determine the hostname from the II and NNS frontend dapp URLs available
+//    in the logs printed by `ict` into your console. For the above example, you'd set
+//
+//    export TESTNET="ic0.farm.dfinity.systems"
+//
+//    on the last line in the file `settings.sh` in the sns-testing repo.
+//
+// 4. Execute scripts from the sns-testing repo, e.g., `run_basic_scenario.sh`.
+//
+//    Note. DO NOT run either `setup_locally.sh` or `setup.sh` when testing with this testnet!
 //
 // Happy testing!
 
