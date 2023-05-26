@@ -106,6 +106,16 @@ where
         self.check_invariants();
     }
 
+    /// Returns the number of key-value pairs that are currently in the the cache.
+    pub fn len(&self) -> usize {
+        self.cache.len()
+    }
+
+    /// Returns a bool indicating whether the cache is empty or not.
+    pub fn is_empty(&self) -> bool {
+        self.cache.is_empty()
+    }
+
     /// Evicts as many items as needed to restore the capacity guarantee.
     /// Returns the vector of evicted key-value pairs.
     fn evict(&mut self) -> Vec<(K, V)> {
@@ -363,15 +373,26 @@ mod tests {
     }
 
     #[test]
-    fn lru_cache_count_bytes() {
+    fn lru_cache_count_bytes_and_len() {
         let mut lru = LruCache::<Key, ValueSize>::new(NumBytes::new(10));
+        assert_eq!(0, lru.count_bytes());
+        assert_eq!(0, lru.len());
+        assert!(lru.is_empty());
         lru.push(Key(0), ValueSize(0, 4));
         assert_eq!(4, lru.count_bytes());
+        assert_eq!(1, lru.len());
+        assert!(!lru.is_empty());
         lru.push(Key(1), ValueSize(1, 6));
         assert_eq!(10, lru.count_bytes());
+        assert_eq!(2, lru.len());
+        assert!(!lru.is_empty());
         lru.pop(&Key(0));
         assert_eq!(6, lru.count_bytes());
+        assert_eq!(1, lru.len());
+        assert!(!lru.is_empty());
         lru.pop(&Key(1));
         assert_eq!(0, lru.count_bytes());
+        assert_eq!(0, lru.len());
+        assert!(lru.is_empty());
     }
 }

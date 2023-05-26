@@ -24,7 +24,6 @@ use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::ReplicatedState;
-use ic_types::CountBytes;
 use ic_types::{
     ingress::WasmResult,
     messages::{
@@ -129,7 +128,7 @@ impl InternalHttpQueryHandler {
             metrics: QueryHandlerMetrics::new(metrics_registry),
             max_instructions_per_query,
             cycles_account_manager,
-            query_cache: query_cache::QueryCache::new(query_cache_capacity),
+            query_cache: query_cache::QueryCache::new(metrics_registry, query_cache_capacity),
         }
     }
 }
@@ -153,20 +152,8 @@ impl QueryHandler for InternalHttpQueryHandler {
             let key = query_cache::EntryKey::from(&query);
             let env = query_cache::EntryEnv::try_from((&key, state.as_ref()))?;
 
-            let mut cache = self.query_cache.lock().unwrap();
-            if let Some(value) = cache.get(&key) {
-                if value.is_valid(&env) {
-                    let res = value.result();
-                    // The cache entry is valid, return it.
-                    self.metrics.query_cache_hits.inc();
-                    let count_bytes = cache.count_bytes() as f64;
-                    self.metrics.query_cache_count_bytes.observe(count_bytes);
-                    return res;
-                } else {
-                    // The cache entry is no longer valid, remove it.
-                    cache.pop(&key);
-                    self.metrics.query_cache_invalidated_entries.inc();
-                }
+            if let Some(result) = self.query_cache.get_valid_result(&key, &env) {
+                return result;
             }
             (Some(key), Some(env))
         } else {
@@ -205,17 +192,8 @@ impl QueryHandler for InternalHttpQueryHandler {
         // Add the query execution result to the query cache  (if the query caching is enabled).
         if self.config.query_caching == FlagStatus::Enabled {
             if let (Some(key), Some(env)) = (cache_entry_key, cache_entry_env) {
-                let mut cache = self.query_cache.lock().unwrap();
-                let evicted_entries =
-                    cache.push(key, query_cache::EntryValue::new(env, result.clone()));
-                if !evicted_entries.is_empty() {
-                    self.metrics
-                        .query_cache_evicted_entries
-                        .inc_by(evicted_entries.len() as u64);
-                }
-                self.metrics.query_cache_misses.inc();
-                let count_bytes = cache.count_bytes() as f64;
-                self.metrics.query_cache_count_bytes.observe(count_bytes);
+                self.query_cache
+                    .push(key, query_cache::EntryValue::new(env, result.clone()));
             }
         }
         result
