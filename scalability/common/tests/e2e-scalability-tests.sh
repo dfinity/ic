@@ -15,7 +15,8 @@ if [ -f "${STATUSFILE}" ]; then
     done <"$STATUSFILE"
 fi
 
-exec $1 --ic_os_version $(cat $2) \
+exec "${E2E_TEST_BIN}" \
+    --ic_os_version "$(cat "${IC_OS_VERSION_FILE}")" \
     --artifacts_path "scalability/artifacts/release/" \
     --nns_canisters "scalability/artifacts/canisters/" \
     --install_nns_bin "scalability/artifacts/release/ic-nns-init" \
