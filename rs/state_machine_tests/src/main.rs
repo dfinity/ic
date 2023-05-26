@@ -2,6 +2,9 @@ use clap::Parser;
 use ic_config::execution_environment;
 use ic_config::subnet_config::SubnetConfig;
 use ic_crypto::threshold_sig_public_key_to_der;
+use ic_crypto_iccsa::types::SignatureBytes;
+use ic_crypto_iccsa::{public_key_bytes_from_der, verify};
+use ic_crypto_utils_threshold_sig_der::parse_threshold_sig_key_from_der;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{StateMachineBuilder, StateMachineConfig};
 use ic_test_state_machine_client::{CanisterCall, RawCanisterId, Request, Request::*};
@@ -130,6 +133,45 @@ fn main() {
             RunUntilCompletion(arg) => {
                 env.run_until_completion(arg.max_ticks as usize);
                 send_response((), &opts);
+            }
+            VerifyCanisterSig(arg) => {
+                type VerificationResult = Result<(), String>;
+                let pubkey = match public_key_bytes_from_der(&arg.pubkey) {
+                    Ok(pubkey) => pubkey,
+                    Err(err) => {
+                        send_response(
+                            VerificationResult::Err(format!(
+                                "failed to parse DER encoded public key: {:?}",
+                                err
+                            )),
+                            &opts,
+                        );
+                        continue;
+                    }
+                };
+                let root_pubkey = match parse_threshold_sig_key_from_der(&arg.root_pubkey) {
+                    Ok(root_pubkey) => root_pubkey,
+                    Err(err) => {
+                        send_response(
+                            VerificationResult::Err(format!(
+                                "failed to parse DER encoded root public key: {:?}",
+                                err
+                            )),
+                            &opts,
+                        );
+                        continue;
+                    }
+                };
+                match verify(&arg.msg, SignatureBytes(arg.sig), pubkey, &root_pubkey) {
+                    Ok(()) => send_response(VerificationResult::Ok(()), &opts),
+                    Err(err) => send_response(
+                        VerificationResult::Err(format!(
+                            "canister signature verification failed: {:?}",
+                            err
+                        )),
+                        &opts,
+                    ),
+                };
             }
         }
     }

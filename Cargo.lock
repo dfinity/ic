@@ -9483,10 +9483,12 @@ dependencies = [
  "ic-crypto",
  "ic-crypto-ecdsa-secp256k1",
  "ic-crypto-extended-bip32",
+ "ic-crypto-iccsa",
  "ic-crypto-internal-seed",
  "ic-crypto-internal-threshold-sig-bls12381",
  "ic-crypto-internal-types",
  "ic-crypto-tree-hash",
+ "ic-crypto-utils-threshold-sig-der",
  "ic-cycles-account-manager",
  "ic-error-types",
  "ic-execution-environment",
@@ -9691,9 +9693,9 @@ dependencies = [
 
 [[package]]
 name = "ic-test-state-machine-client"
-version = "2.1.0"
+version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "be83b09145df43603a6255b2dee2b08055ed37642fe1ee26d2036f2ada81730b"
+checksum = "c942bd6ed0f179338f0fbe51999de9ba6f4d339e896a28f3f69bd4ccfe23b142"
 dependencies = [
  "candid",
  "ciborium",
