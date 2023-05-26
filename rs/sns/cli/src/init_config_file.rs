@@ -586,6 +586,8 @@ pub fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String
 # An optional text that swap participants should confirm before they may
 # participate in the swap. If the field is set, its value should be plain text
 # with at least 1 and at most 1,000 characters.
+#
+# Example: "Please confirm that 2+2=4"
 #"##
             .to_string(),
         ),
@@ -595,6 +597,8 @@ pub fn get_config_file_contents(sns_cli_init_config: SnsCliInitConfig) -> String
 #
 # An optional set of countries that should not participate in the swap. If the
 # field is set, it must contain (upper case) ISO 3166-1 alpha-2 country codes.
+#
+# Example: ["CH", "FR"]
 #"##
             .to_string(),
         ),
