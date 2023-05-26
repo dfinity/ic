@@ -46,7 +46,7 @@ submit_nns_publish_sns_wasm_proposal_mainnet() {
     validate_sns_version_wasm_sha "$CANISTER_TYPE" "$VERSION" "$PROPOSAL_SHA"
     validate_no_todos "$PROPOSAL_FILE"
 
-    WASM_GZ=$(get_sns_canister_wasm_gz_for_type "$CANISTER_TYPE" "$VERSION")
+    WASM_GZ=$(download_sns_canister_wasm_gz_for_type "$CANISTER_TYPE" "$VERSION")
     WASM_SHA=$(sha_256 $WASM_GZ)
 
     echo
