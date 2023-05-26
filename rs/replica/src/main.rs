@@ -5,18 +5,16 @@ use ic_config::Config;
 use ic_crypto_sha::Sha256;
 use ic_crypto_tls_interfaces::TlsHandshake;
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
-use ic_interfaces_registry::{LocalStoreCertifiedTimeReader, RegistryClient};
 use ic_logger::{info, new_replica_logger_from_config};
 use ic_metrics::MetricsRegistry;
 use ic_onchain_observability_server::spawn_onchain_observability_grpc_server_and_register_metrics;
-use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_replica::setup;
 use ic_sys::PAGE_SIZE;
 use ic_types::consensus::CatchUpPackage;
 use ic_types::{replica_version::REPLICA_BINARY_HASH, PrincipalId, ReplicaVersion, SubnetId};
 use nix::unistd::{setpgid, Pid};
 use static_assertions::assert_eq_size;
-use std::{env, io, path::PathBuf, str::FromStr, sync::Arc, time::Duration};
+use std::{env, fs, io, path::PathBuf, str::FromStr, sync::Arc, time::Duration};
 use tokio::signal::unix::{signal, SignalKind};
 
 #[cfg(target_os = "linux")]
@@ -30,7 +28,6 @@ use jemallocator::Jemalloc;
 #[cfg(target_os = "linux")]
 static ALLOC: Jemalloc = Jemalloc;
 
-use ic_registry_local_store::LocalStoreImpl;
 #[cfg(feature = "profiler")]
 use pprof::{protos::Message, ProfilerGuard};
 #[cfg(feature = "profiler")]
@@ -43,15 +40,15 @@ use std::io::Write;
 /// Determine sha256 hash of the current replica binary
 ///
 /// Returns tuple (path of the replica binary, hex encoded sha256 of binary)
-fn get_replica_binary_hash() -> std::result::Result<(PathBuf, String), String> {
+fn get_replica_binary_hash() -> Result<(PathBuf, String), String> {
     let mut hasher = Sha256::new();
     let replica_binary_path = env::current_exe()
         .map_err(|e| format!("Failed to determine replica binary path: {:?}", e))?;
 
-    let mut binary_file = std::fs::File::open(&replica_binary_path)
+    let mut binary_file = fs::File::open(&replica_binary_path)
         .map_err(|e| format!("Failed to open replica binary to calculate hash: {:?}", e))?;
 
-    std::io::copy(&mut binary_file, &mut hasher)
+    io::copy(&mut binary_file, &mut hasher)
         .map_err(|e| format!("Failed to calculate hash for replica binary: {:?}", e))?;
 
     Ok((replica_binary_path, hex::encode(hasher.finish())))
@@ -60,10 +57,8 @@ fn get_replica_binary_hash() -> std::result::Result<(PathBuf, String), String> {
 fn main() -> io::Result<()> {
     // We do not support 32 bits architectures and probably never will.
     assert_eq_size!(usize, u64);
-
     // Ensure that the hardcoded constant matches the OS page size.
     assert_eq!(ic_sys::sysconf_page_size(), PAGE_SIZE);
-
     // At this point we need to setup a new process group. This is
     // done to ensure all our children processes belong to the same
     // process group (as policy wise in production we restrict setpgid
@@ -75,7 +70,7 @@ fn main() -> io::Result<()> {
         eprintln!("Failed to setup a new process group for replica.");
         // This is a generic exit error. At this point sandboxing is
         // not turned on so we can do a simple exit with cleanup.
-        return Err(std::io::Error::new(std::io::ErrorKind::Other, err));
+        return Err(io::Error::new(io::ErrorKind::Other, err));
     }
 
     #[cfg(feature = "profiler")]
@@ -139,6 +134,11 @@ fn main() -> io::Result<()> {
         e.print().expect("Failed to print CLI argument error.");
     }
 
+    // We abort the whole program with a core dump if a single thread panics.
+    // This way we can capture all the context if a critical error
+    // happens.
+    abort_on_panic();
+
     let config_source = setup::get_config_source(&replica_args);
     // Setup temp directory for the configuration.
     let tmpdir = tempfile::Builder::new()
@@ -148,11 +148,13 @@ fn main() -> io::Result<()> {
     let config = Config::load_with_tmpdir(config_source, tmpdir.path().to_path_buf());
 
     let (logger, async_log_guard) = new_replica_logger_from_config(&config.logger);
-
     let metrics_registry = MetricsRegistry::global();
-
     #[cfg(target_os = "linux")]
     metrics_registry.register(jemalloc_metrics::JemallocMetrics::new());
+
+    let cup = setup::get_catch_up_package(&replica_args, &logger)
+        .as_ref()
+        .map(|c| CatchUpPackage::try_from(c).expect("deserializing CUP failed"));
 
     // Set the replica verison and report as metric
     setup::set_replica_version(&replica_args, &logger);
@@ -172,17 +174,13 @@ fn main() -> io::Result<()> {
     }
 
     let (registry, crypto) = setup::setup_crypto_registry(
-        config.clone(),
+        &config,
         rt_main.handle().clone(),
-        Some(&metrics_registry),
+        &metrics_registry,
         logger.clone(),
     );
 
     let node_id = crypto.get_node_id();
-    let cup_proto = setup::get_catch_up_package(&replica_args, &logger);
-    let cup = cup_proto
-        .as_ref()
-        .map(|c| CatchUpPackage::try_from(c).expect("deserializing CUP failed"));
 
     let subnet_id = match &replica_args {
         Ok(args) => {
@@ -198,23 +196,6 @@ fn main() -> io::Result<()> {
         Err(_) => setup::get_subnet_id(node_id, registry.as_ref(), cup.as_ref(), &logger),
     };
 
-    let subnet_type = setup::get_subnet_type(
-        registry.as_ref(),
-        subnet_id,
-        registry.get_latest_version(),
-        &logger,
-    );
-
-    // Read the root subnet id from registry
-    let root_subnet_id = registry
-        .get_root_subnet_id(
-            cup.as_ref()
-                .map(|c| c.content.registry_version())
-                .unwrap_or_else(|| registry.get_latest_version()),
-        )
-        .expect("cannot read from registry")
-        .expect("cannot find root subnet id");
-
     // Set node_id and subnet_id in the logging context
     let mut context = logger.get_context();
     context.node_id = format!("{}", node_id.get());
@@ -228,13 +209,6 @@ fn main() -> io::Result<()> {
         let _ = REPLICA_BINARY_HASH.set(hash);
     }
 
-    // We abort the whole program with a core dump if a single thread panics.
-    // This way we can capture all the context if a critical error
-    // happens.
-    abort_on_panic();
-
-    setup::create_consensus_pool_dir(&config);
-
     let crypto = Arc::new(crypto);
     let _metrics_endpoint = MetricsHttpEndpoint::new(
         rt_http.handle().clone(),
@@ -243,10 +217,6 @@ fn main() -> io::Result<()> {
         registry.clone(),
         Arc::clone(&crypto) as Arc<dyn TlsHandshake + Send + Sync>,
         &logger.inner_logger.root,
-    );
-
-    let registry_certified_time_reader: Arc<dyn LocalStoreCertifiedTimeReader> = Arc::new(
-        LocalStoreImpl::new(config.registry_client.local_store.clone()),
     );
 
     info!(logger, "Constructing IC stack");
@@ -260,12 +230,9 @@ fn main() -> io::Result<()> {
             config.clone(),
             node_id,
             subnet_id,
-            subnet_type,
-            root_subnet_id,
             registry,
             crypto,
             cup,
-            registry_certified_time_reader,
         )?;
 
     info!(logger, "Constructed IC stack");

@@ -1,3 +1,4 @@
+use crate::setup::get_subnet_type;
 use ic_btc_adapter_client::{setup_bitcoin_adapter_clients, BitcoinAdapterClients};
 use ic_btc_consensus::BitcoinPayloadBuilder;
 use ic_config::{artifact_pool::ArtifactPoolConfig, subnet_config::SubnetConfig, Config};
@@ -16,7 +17,8 @@ use ic_logger::{info, ReplicaLogger};
 use ic_messaging::MessageRoutingImpl;
 use ic_metrics::MetricsRegistry;
 use ic_pprof::Pprof;
-use ic_registry_subnet_type::SubnetType;
+use ic_registry_client_helpers::subnet::SubnetRegistry;
+use ic_registry_local_store::LocalStoreImpl;
 use ic_replica_setup_ic_network::{
     create_networking_stack, init_artifact_pools, P2PStateSyncClient,
 };
@@ -26,6 +28,17 @@ use ic_types::{consensus::CatchUpPackage, NodeId, SubnetId};
 use ic_xnet_endpoint::{XNetEndpoint, XNetEndpointConfig};
 use ic_xnet_payload_builder::XNetPayloadBuilderImpl;
 use std::sync::Arc;
+
+/// Create the consensus pool directory (if none exists)
+fn create_consensus_pool_dir(config: &Config) {
+    std::fs::create_dir_all(&config.artifact_pool.consensus_pool_path).unwrap_or_else(|err| {
+        panic!(
+            "Failed to create consensus pool directory {}: {}",
+            config.artifact_pool.consensus_pool_path.display(),
+            err
+        )
+    });
+}
 
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
 pub fn construct_ic_stack(
@@ -37,12 +50,9 @@ pub fn construct_ic_stack(
     config: Config,
     node_id: NodeId,
     subnet_id: SubnetId,
-    subnet_type: SubnetType,
-    root_subnet_id: SubnetId,
     registry: Arc<dyn RegistryClient + Send + Sync>,
     crypto: Arc<CryptoComponent>,
     catch_up_package: Option<CatchUpPackage>,
-    local_store_time_reader: Arc<dyn LocalStoreCertifiedTimeReader>,
 ) -> std::io::Result<(
     // TODO: remove this return value since it is used only in tests
     Arc<StateManagerImpl>,
@@ -54,13 +64,10 @@ pub fn construct_ic_stack(
     XNetEndpoint,
 )> {
     // ---------- ARTIFACT POOLS DEPS FOLLOW ----------
+    create_consensus_pool_dir(&config);
     // Determine the correct catch-up package.
     let catch_up_package = {
         use ic_types::consensus::HasHeight;
-        let make_registry_cup = || {
-            ic_consensus::dkg::make_registry_cup(&*registry, subnet_id, None)
-                .expect("Couldn't create a registry CUP")
-        };
         match catch_up_package {
             // The replica was started on a CUP persisted by the orchestrator.
             Some(cup_from_orc) => {
@@ -79,6 +86,10 @@ pub fn construct_ic_stack(
             // This case is only possible if the replica is started without an orchestrator which
             // is currently only possible in the local development mode with `dfx`.
             None => {
+                let make_registry_cup = || {
+                    ic_consensus::dkg::make_registry_cup(&*registry, subnet_id, None)
+                        .expect("Couldn't create a registry CUP")
+                };
                 let registry_cup = CatchUpPackage::try_from(&make_registry_cup())
                     .expect("deserializing CUP failed");
                 info!(
@@ -90,6 +101,11 @@ pub fn construct_ic_stack(
             }
         }
     };
+    let root_subnet_id = registry
+        .get_root_subnet_id(catch_up_package.content.registry_version())
+        .expect("cannot read from registry")
+        .expect("cannot find root subnet id");
+
     let artifact_pool_config = ArtifactPoolConfig::from(config.artifact_pool.clone());
     let artifact_pools = init_artifact_pools(
         node_id,
@@ -99,8 +115,14 @@ pub fn construct_ic_stack(
         log.clone(),
         catch_up_package,
     );
-
     // ---------- REPLICATED STATE DEPS FOLLOW ----------
+    let subnet_type = get_subnet_type(
+        log,
+        subnet_id,
+        registry.get_latest_version(),
+        registry.as_ref(),
+    );
+
     let consensus_pool_cache = artifact_pools.consensus_pool.read().unwrap().get_cache();
     let verifier = Arc::new(VerifierImpl::new(crypto.clone()));
     let state_manager = Arc::new(StateManagerImpl::new(
@@ -219,6 +241,9 @@ pub fn construct_ic_stack(
     // ---------- CONSENSUS AND P2P DEPS FOLLOW ----------
     let state_sync = StateSync::new(state_manager.clone(), log.clone());
     let sev_handshake = Arc::new(Sev::new(node_id, registry.clone()));
+    let local_store_cert_time_reader: Arc<dyn LocalStoreCertifiedTimeReader> = Arc::new(
+        LocalStoreImpl::new(config.registry_client.local_store.clone()),
+    );
     let (ingress_ingestion_service, p2p_runner) = create_networking_stack(
         metrics_registry,
         log.clone(),
@@ -245,7 +270,7 @@ pub fn construct_ic_stack(
         execution_services.ingress_history_reader,
         artifact_pools,
         cycles_account_manager,
-        local_store_time_reader,
+        local_store_cert_time_reader,
         canister_http_adapter_client,
         config.nns_registry_replicator.poll_delay_duration_ms,
     );

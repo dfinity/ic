@@ -11,10 +11,9 @@ use ic_registry_client_helpers::subnet::{SubnetListRegistry, SubnetRegistry};
 use ic_registry_local_store::LocalStoreImpl;
 use ic_registry_subnet_type::SubnetType;
 use ic_types::{
-    consensus::catchup::CatchUpPackage,
-    {NodeId, RegistryVersion, ReplicaVersion, SubnetId},
+    consensus::catchup::CatchUpPackage, NodeId, RegistryVersion, ReplicaVersion, SubnetId,
 };
-use std::{convert::TryFrom, env, path::PathBuf, sync::Arc};
+use std::{env, path::PathBuf, sync::Arc};
 
 /// Parse command-line args into `ReplicaArgs`
 pub fn parse_args() -> Result<ReplicaArgs, clap::Error> {
@@ -129,10 +128,10 @@ pub fn get_subnet_id(
 
 /// Return the subnet type of the given subnet.
 pub fn get_subnet_type(
-    registry: &dyn RegistryClient,
+    logger: &ReplicaLogger,
     subnet_id: SubnetId,
     registry_version: RegistryVersion,
-    logger: &ReplicaLogger,
+    registry: &dyn RegistryClient,
 ) -> SubnetType {
     loop {
         match registry.get_subnet_record(subnet_id, registry_version) {
@@ -181,26 +180,20 @@ pub fn get_config_source(replica_args: &Result<ReplicaArgs, clap::Error>) -> Con
     }
 }
 
-/// Create the consensus pool directory (if none exists)
-pub fn create_consensus_pool_dir(config: &Config) {
-    std::fs::create_dir_all(&config.artifact_pool.consensus_pool_path).unwrap_or_else(|err| {
-        panic!(
-            "Failed to create consensus pool directory {}: {}",
-            config.artifact_pool.consensus_pool_path.display(),
-            err
-        )
-    });
-}
-
 pub fn setup_crypto_registry(
-    config: Config,
+    config: &Config,
     tokio_runtime_handle: tokio::runtime::Handle,
-    metrics_registry: Option<&MetricsRegistry>,
+    metrics_registry: &MetricsRegistry,
     logger: ReplicaLogger,
 ) -> (std::sync::Arc<RegistryClientImpl>, CryptoComponent) {
-    let data_provider = Arc::new(LocalStoreImpl::new(config.registry_client.local_store));
+    let data_provider = Arc::new(LocalStoreImpl::new(
+        config.registry_client.local_store.clone(),
+    ));
 
-    let registry = Arc::new(RegistryClientImpl::new(data_provider, metrics_registry));
+    let registry = Arc::new(RegistryClientImpl::new(
+        data_provider,
+        Some(metrics_registry),
+    ));
 
     // The registry must be initialized before setting up the crypto component
     if let Err(e) = registry.fetch_and_start_polling() {
@@ -282,7 +275,7 @@ pub fn setup_crypto_provider(
     tokio_runtime_handle: tokio::runtime::Handle,
     registry: Arc<dyn RegistryClient>,
     replica_logger: ReplicaLogger,
-    metrics_registry: Option<&MetricsRegistry>,
+    metrics_registry: &MetricsRegistry,
 ) -> CryptoComponent {
     CryptoConfig::check_dir_has_required_permissions(&config.crypto_root).unwrap();
     CryptoComponent::new(
@@ -290,6 +283,6 @@ pub fn setup_crypto_provider(
         Some(tokio_runtime_handle),
         registry,
         replica_logger,
-        metrics_registry,
+        Some(metrics_registry),
     )
 }
