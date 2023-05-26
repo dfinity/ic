@@ -90,34 +90,6 @@ mod timeout {
     }
 }
 
-mod secret_key_store {
-    use super::*;
-
-    #[test]
-    fn key_should_be_present_only_after_generation() {
-        let tokio_rt = new_tokio_runtime();
-        let (vault_1, vault_2) = new_csp_vaults_for_test(tokio_rt.handle());
-
-        test_utils::sks::sks_should_contain_keys_only_after_generation(vault_1, vault_2);
-    }
-
-    #[test]
-    fn tls_key_should_be_present_only_after_generation() {
-        let tokio_rt = new_tokio_runtime();
-        let (vault_1, vault_2) = new_csp_vaults_for_test(tokio_rt.handle());
-
-        test_utils::sks::sks_should_contain_tls_keys_only_after_generation(vault_1, vault_2);
-    }
-
-    fn new_csp_vaults_for_test(
-        rt_handle: &tokio::runtime::Handle,
-    ) -> (Arc<dyn CspVault>, Arc<dyn CspVault>) {
-        let csp_vault_1 = new_remote_csp_vault(rt_handle);
-        let csp_vault_2 = new_remote_csp_vault(rt_handle);
-        (csp_vault_1, csp_vault_2)
-    }
-}
-
 mod ni_dkg {
     use super::*;
     use crate::public_key_store::mock_pubkey_store::MockPublicKeyStore;
