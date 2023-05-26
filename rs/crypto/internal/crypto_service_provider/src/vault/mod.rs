@@ -40,11 +40,8 @@ impl From<CspBasicSignatureError> for CryptoError {
                     internal_error: "Malformed secret key".to_string(),
                 }
             }
-            // TODO(CRP-1262): using InvalidArgument here is not ideal.
-            CspBasicSignatureError::InternalError { internal_error } => {
-                CryptoError::InvalidArgument {
-                    message: format!("Internal error: {}", internal_error),
-                }
+            CspBasicSignatureError::TransientInternalError { internal_error } => {
+                CryptoError::TransientInternalError { internal_error }
             }
         }
     }
@@ -73,10 +70,8 @@ impl From<CspMultiSignatureError> for CryptoError {
                     "Wrong secret key type: expected {algorithm:?} but found {secret_key_variant}"
                 ),
             },
-            CspMultiSignatureError::InternalError { internal_error } => {
-                CryptoError::InvalidArgument {
-                    message: internal_error,
-                }
+            CspMultiSignatureError::TransientInternalError { internal_error } => {
+                CryptoError::TransientInternalError { internal_error }
             }
         }
     }
@@ -85,8 +80,8 @@ impl From<CspMultiSignatureError> for CryptoError {
 impl From<CspSecretKeyStoreContainsError> for CryptoError {
     fn from(e: CspSecretKeyStoreContainsError) -> Self {
         match e {
-            CspSecretKeyStoreContainsError::InternalError { internal_error } => {
-                CryptoError::InternalError { internal_error }
+            CspSecretKeyStoreContainsError::TransientInternalError { internal_error } => {
+                CryptoError::TransientInternalError { internal_error }
             }
         }
     }
