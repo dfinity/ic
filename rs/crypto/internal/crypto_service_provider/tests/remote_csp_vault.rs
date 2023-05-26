@@ -24,7 +24,7 @@ mod rpc_connection {
     use ic_config::logger::Config as LoggerConfig;
     use ic_crypto_internal_csp::api::CspCreateMEGaKeyError;
     use ic_crypto_internal_csp::types::CspSignature;
-    use ic_crypto_internal_csp::vault::api::CspBasicSignatureError::InternalError;
+    use ic_crypto_internal_csp::vault::api::CspBasicSignatureError::TransientInternalError;
     use ic_crypto_internal_csp::vault::api::{
         BasicSignatureCspVault, CspBasicSignatureError, CspPublicKeyStoreError,
         IDkgProtocolCspVault, PublicKeyStoreCspVault,
@@ -60,7 +60,7 @@ mod rpc_connection {
         assert_matches!(signature, Ok(_));
 
         let signature = sign_message(TooLarge, key_id, &client_cannot_send_large_request);
-        assert_matches!(signature, Err(InternalError {internal_error}) if internal_error.contains("the client failed to send the request"));
+        assert_matches!(signature, Err(TransientInternalError {internal_error}) if internal_error.contains("the client failed to send the request"));
 
         let signature = sign_message(Small, key_id, &client_cannot_send_large_request);
         assert_matches!(signature, Ok(_));
@@ -87,7 +87,7 @@ mod rpc_connection {
         assert_matches!(signature_before_error, Ok(_));
 
         let signature = sign_message(TooLarge, key_id, &client);
-        assert_matches!(signature, Err(InternalError {internal_error}) if internal_error.contains("the request exceeded its deadline"));
+        assert_matches!(signature, Err(TransientInternalError {internal_error}) if internal_error.contains("the request exceeded its deadline"));
 
         let signature_after_error = sign_message(Small, key_id, &client);
         assert_eq!(signature_before_error, signature_after_error);

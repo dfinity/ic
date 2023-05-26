@@ -34,14 +34,14 @@ macro_rules! should_have_a_strategy_for_each_variant {
 use ic_crypto_internal_csp::vault::api::CspBasicSignatureError;
 should_have_a_strategy_for_each_variant!(
     CspBasicSignatureError,
-    CspBasicSignatureError::InternalError {
+    CspBasicSignatureError::TransientInternalError {
         internal_error: "dummy error to match upon".to_string(),
     },
     SecretKeyNotFound { .. },
     UnsupportedAlgorithm { .. },
     WrongSecretKeyType { .. },
     MalformedSecretKey { .. },
-    InternalError { .. }
+    TransientInternalError { .. }
 );
 
 use ic_crypto_internal_csp::types::CspSignature;
@@ -109,13 +109,13 @@ should_have_a_strategy_for_each_variant!(
 use ic_crypto_internal_csp::vault::api::CspMultiSignatureError;
 should_have_a_strategy_for_each_variant!(
     CspMultiSignatureError,
-    CspMultiSignatureError::InternalError {
+    CspMultiSignatureError::TransientInternalError {
         internal_error: "dummy error to match upon".to_string(),
     },
     SecretKeyNotFound { .. },
     UnsupportedAlgorithm { .. },
     WrongSecretKeyType { .. },
-    InternalError { .. }
+    TransientInternalError { .. }
 );
 
 use ic_crypto_internal_csp::vault::api::CspMultiSignatureKeygenError;
@@ -133,21 +133,21 @@ should_have_a_strategy_for_each_variant!(
 use ic_crypto_internal_csp::api::CspThresholdSignError;
 should_have_a_strategy_for_each_variant!(
     CspThresholdSignError,
-    CspThresholdSignError::InternalError {
+    CspThresholdSignError::TransientInternalError {
         internal_error: "dummy error to match upon".to_string(),
     },
     SecretKeyNotFound { .. },
     UnsupportedAlgorithm { .. },
     WrongSecretKeyType { .. },
     MalformedSecretKey { .. },
-    InternalError { .. }
+    TransientInternalError { .. }
 );
 
 use ic_crypto_internal_csp::vault::api::CspSecretKeyStoreContainsError;
 should_have_a_strategy_for_each_variant!(
     CspSecretKeyStoreContainsError,
-    CspSecretKeyStoreContainsError::InternalError {
+    CspSecretKeyStoreContainsError::TransientInternalError {
         internal_error: "dummy error to match upon".to_string(),
     },
-    InternalError { .. }
+    TransientInternalError { .. }
 );

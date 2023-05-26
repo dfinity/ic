@@ -96,11 +96,15 @@ fn map_threshold_sign_error_or_panic(
                 key_id: key_id.to_string(),
             }
         }
+        CspThresholdSignError::TransientInternalError { internal_error } => {
+            ThresholdSignError::TransientInternalError { internal_error }
+        }
         // Panic, since these would be implementation errors:
         CspThresholdSignError::UnsupportedAlgorithm { .. }
         | CspThresholdSignError::MalformedSecretKey { .. }
-        | CspThresholdSignError::WrongSecretKeyType { .. }
-        | CspThresholdSignError::InternalError { .. } => panic!("Illegal state: {}", error),
+        | CspThresholdSignError::WrongSecretKeyType { .. } => {
+            panic!("Illegal state: {}", error)
+        }
     }
 }
 

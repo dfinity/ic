@@ -267,8 +267,8 @@ impl ErrorReproducibility for IDkgVerifyDealingPrivateError {
             IDkgVerifyDealingPrivateError::RegistryError(registry_client_error) => {
                 registry_client_error.is_reproducible()
             }
-            // false, as an RPC error may be transient
-            IDkgVerifyDealingPrivateError::CspVaultRpcError(_) => false,
+            // false, as a transient error is not reproducible by definition
+            IDkgVerifyDealingPrivateError::TransientInternalError { .. } => false,
             // true, as the dealing does not become valid through retrying
             IDkgVerifyDealingPrivateError::InvalidDealing(_) => true,
             // true, as validity checks of arguments are stable across replicas

@@ -47,7 +47,7 @@ pub enum CspBasicSignatureError {
     MalformedSecretKey {
         algorithm: AlgorithmId,
     },
-    InternalError {
+    TransientInternalError {
         internal_error: String,
     },
 }
@@ -72,7 +72,7 @@ pub enum CspMultiSignatureError {
         algorithm: AlgorithmId,
         secret_key_variant: String,
     },
-    InternalError {
+    TransientInternalError {
         internal_error: String,
     },
 }
@@ -104,7 +104,7 @@ pub enum CspThresholdSignatureKeygenError {
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum CspSecretKeyStoreContainsError {
-    InternalError { internal_error: String },
+    TransientInternalError { internal_error: String },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -157,7 +157,7 @@ pub enum CspTlsSignError {
     SigningFailed {
         error: String,
     },
-    InternalError {
+    TransientInternalError {
         internal_error: String,
     },
 }

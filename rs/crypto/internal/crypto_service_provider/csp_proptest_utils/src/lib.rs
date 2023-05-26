@@ -135,7 +135,7 @@ mod csp_basic_signature_error {
         UnsupportedAlgorithm => {algorithm in arb_algorithm_id()},
         WrongSecretKeyType => {algorithm in arb_algorithm_id(), secret_key_variant in ".*"},
         MalformedSecretKey => {algorithm in arb_algorithm_id()},
-        InternalError => {internal_error in ".*"}
+        TransientInternalError => {internal_error in ".*"}
     );
 }
 
@@ -245,7 +245,7 @@ mod csp_multi_signature_error {
         SecretKeyNotFound => {algorithm in arb_algorithm_id(), key_id in arb_key_id()},
         UnsupportedAlgorithm => {algorithm in arb_algorithm_id()},
         WrongSecretKeyType => {algorithm in arb_algorithm_id(), secret_key_variant in ".*"},
-        InternalError => {internal_error in ".*"}
+        TransientInternalError => {internal_error in ".*"}
     );
 }
 
@@ -270,7 +270,7 @@ mod csp_threshold_sign_error {
         UnsupportedAlgorithm => {algorithm in arb_algorithm_id()},
         WrongSecretKeyType => {},
         MalformedSecretKey => {algorithm in arb_algorithm_id()},
-        InternalError => {internal_error in ".*"}
+        TransientInternalError => {internal_error in ".*"}
     );
 }
 
@@ -279,6 +279,6 @@ mod csp_secret_key_store_contains_error {
     use ic_crypto_internal_csp::vault::api::CspSecretKeyStoreContainsError;
 
     proptest_strategy_for_enum!(CspSecretKeyStoreContainsError;
-        InternalError => {internal_error in ".*"}
+        TransientInternalError => {internal_error in ".*"}
     );
 }
