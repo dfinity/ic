@@ -15,11 +15,6 @@ pub(crate) struct QueryHandlerMetrics {
     pub query_initial_call: ScopedMetrics,
     pub query_retry_call: ScopedMetrics,
     pub query_spawned_calls: ScopedMetrics,
-    pub query_cache_hits: IntCounter,
-    pub query_cache_misses: IntCounter,
-    pub query_cache_evicted_entries: IntCounter,
-    pub query_cache_invalidated_entries: IntCounter,
-    pub query_cache_count_bytes: Histogram,
     pub query_critical_error: IntCounter,
 }
 
@@ -124,27 +119,6 @@ impl QueryHandlerMetrics {
                     metrics_registry,
                 ),
             },
-            query_cache_hits: metrics_registry.int_counter(
-                "execution_query_cache_hits",
-                "The number of replica side query cache hits",
-            ),
-            query_cache_misses: metrics_registry.int_counter(
-                "execution_query_cache_misses",
-                "The number of replica side query cache misses",
-            ),
-            query_cache_evicted_entries: metrics_registry.int_counter(
-                "execution_query_cache_evicted_entries",
-                "The number of evicted entries in the replica side query cache",
-            ),
-            query_cache_invalidated_entries: metrics_registry.int_counter(
-                "execution_query_cache_invalidated_entries",
-                "The number of invalidated entries in the replica side query cache",
-            ),
-            query_cache_count_bytes: memory_histogram(
-                "execution_query_cache_count_bytes",
-                "The replica side query cache size in bytes",
-                metrics_registry,
-            ),
             query_critical_error: metrics_registry.error_counter(QUERY_HANDLER_CRITICAL_ERROR),
         }
     }

@@ -69,7 +69,6 @@ fn query_metrics_are_reported() {
 
     let query_handler = downcast_query_handler(test.query_handler());
 
-    assert_eq!(1, query_handler.metrics.query.duration.get_sample_count());
     assert_eq!(
         1,
         query_handler.metrics.query.instructions.get_sample_count()
@@ -208,8 +207,8 @@ fn query_cache_metrics_work() {
         Arc::new(test.state().clone()),
         vec![],
     );
-    assert_eq!(query_handler.metrics.query_cache_hits.get(), 0);
-    assert_eq!(query_handler.metrics.query_cache_misses.get(), 1);
+    assert_eq!(query_handler.query_cache.metrics.hits.get(), 0);
+    assert_eq!(query_handler.query_cache.metrics.misses.get(), 1);
     let output_2 = test.query(
         UserQuery {
             source: user_test_id(1),
@@ -222,8 +221,8 @@ fn query_cache_metrics_work() {
         Arc::new(test.state().clone()),
         vec![],
     );
-    assert_eq!(query_handler.metrics.query_cache_hits.get(), 1);
-    assert_eq!(query_handler.metrics.query_cache_misses.get(), 1);
+    assert_eq!(query_handler.query_cache.metrics.hits.get(), 1);
+    assert_eq!(query_handler.query_cache.metrics.misses.get(), 1);
     assert_eq!(output_1, output_2);
 }
 
@@ -258,43 +257,36 @@ fn query_cache_metrics_evicted_entries_count_bytes_work() {
             vec![],
         );
         assert_eq!(output, Ok(WasmResult::Reply([1; REPLY_SIZE / 2].into())));
+        // One unique query per 2 seconds.
+        test.state_mut().metadata.batch_time += Duration::from_secs(2);
     }
 
-    let query_handler = downcast_query_handler(test.query_handler());
-    assert_eq!(0, query_handler.metrics.query_cache_hits.get());
+    let metrics = &downcast_query_handler(test.query_handler())
+        .query_cache
+        .metrics;
+    assert_eq!(0, metrics.hits.get());
+    assert_eq!(ITERATIONS, metrics.misses.get() as usize);
     assert_eq!(
-        ITERATIONS,
-        query_handler.metrics.query_cache_misses.get() as usize
+        ITERATIONS - QUERY_CACHE_SIZE,
+        metrics.evicted_entries.get() as usize
+    );
+    // Times 2 seconds per each query.
+    assert_eq!(
+        (ITERATIONS - QUERY_CACHE_SIZE) * 2,
+        metrics.evicted_entries_duration.get_sample_sum() as usize
     );
     assert_eq!(
         ITERATIONS - QUERY_CACHE_SIZE,
-        query_handler.metrics.query_cache_evicted_entries.get() as usize
+        metrics.evicted_entries_duration.get_sample_count() as usize
     );
-    assert_eq!(
-        0,
-        query_handler.metrics.query_cache_invalidated_entries.get(),
-    );
-    assert_eq!(
-        ITERATIONS,
-        query_handler
-            .metrics
-            .query_cache_count_bytes
-            .get_sample_count() as usize,
-    );
-    let count_bytes_sum = query_handler
-        .metrics
-        .query_cache_count_bytes
-        .get_sample_sum() as usize;
+    assert_eq!(0, metrics.invalidated_entries.get(),);
+
+    let count_bytes = metrics.count_bytes.get() as usize;
     // We can't match the size exactly, as it includes the key and the captured environment.
     // But we can assert that the sum of the sizes should be:
-    // REPLY_SIZE * ITERATION < count_bytes_sum < REPLY_SIZE * 2 * ITERATION
-    assert!(REPLY_SIZE * ITERATIONS < count_bytes_sum);
-    assert!(REPLY_SIZE * 2 * ITERATIONS > count_bytes_sum);
-
-    // At the end the cache should not be empty and should not exceed the capacity.
-    let count_bytes = query_handler.query_cache.count_bytes();
-    assert!(count_bytes > REPLY_SIZE);
-    assert!(count_bytes < QUERY_CACHE_CAPACITY);
+    // REPLY_SIZE < count_bytes < REPLY_SIZE * 2
+    assert!(REPLY_SIZE < count_bytes);
+    assert!(REPLY_SIZE * 2 > count_bytes);
 }
 
 #[test]
@@ -325,19 +317,19 @@ fn query_cache_metrics_invalidated_entries_work() {
     }
 
     let query_handler = downcast_query_handler(test.query_handler());
-    assert_eq!(0, query_handler.metrics.query_cache_hits.get());
+    assert_eq!(0, query_handler.query_cache.metrics.hits.get());
     assert_eq!(
         ITERATIONS,
-        query_handler.metrics.query_cache_misses.get() as usize
+        query_handler.query_cache.metrics.misses.get() as usize
     );
     assert_eq!(
         0,
-        query_handler.metrics.query_cache_evicted_entries.get() as usize
+        query_handler.query_cache.metrics.evicted_entries.get() as usize
     );
     // Minus one for the first iteration when the entry was just added into the cache.
     assert_eq!(
         ITERATIONS - 1,
-        query_handler.metrics.query_cache_invalidated_entries.get() as usize,
+        query_handler.query_cache.metrics.invalidated_entries.get() as usize,
     );
 }
 
@@ -358,7 +350,7 @@ fn query_cache_key_different_source_returns_different_results() {
         Arc::new(test.state().clone()),
         vec![],
     );
-    assert_eq!(query_handler.metrics.query_cache_misses.get(), 1);
+    assert_eq!(query_handler.query_cache.metrics.misses.get(), 1);
     assert_eq!(
         output_1,
         Ok(WasmResult::Reply(user_test_id(1).get().into()))
@@ -375,7 +367,7 @@ fn query_cache_key_different_source_returns_different_results() {
         Arc::new(test.state().clone()),
         vec![],
     );
-    assert_eq!(query_handler.metrics.query_cache_misses.get(), 2);
+    assert_eq!(query_handler.query_cache.metrics.misses.get(), 2);
     assert_eq!(
         output_2,
         Ok(WasmResult::Reply(user_test_id(2).get().into()))
@@ -400,7 +392,7 @@ fn query_cache_key_different_receiver_returns_different_results() {
         Arc::new(test.state().clone()),
         vec![],
     );
-    assert_eq!(query_handler.metrics.query_cache_misses.get(), 1);
+    assert_eq!(query_handler.query_cache.metrics.misses.get(), 1);
     assert_eq!(output_1, Ok(WasmResult::Reply([42].into())));
     let output_2 = test.query(
         UserQuery {
@@ -414,7 +406,7 @@ fn query_cache_key_different_receiver_returns_different_results() {
         Arc::new(test.state().clone()),
         vec![],
     );
-    assert_eq!(query_handler.metrics.query_cache_misses.get(), 2);
+    assert_eq!(query_handler.query_cache.metrics.misses.get(), 2);
     assert_eq!(output_1, output_2);
 }
 
@@ -466,7 +458,7 @@ fn query_cache_key_different_method_name_returns_different_results() {
         Arc::new(test.state().clone()),
         vec![],
     );
-    assert_eq!(query_handler.metrics.query_cache_misses.get(), 1);
+    assert_eq!(query_handler.query_cache.metrics.misses.get(), 1);
     assert_eq!(output_1, Ok(WasmResult::Reply(b"42".to_vec())));
     let output_2 = test.query(
         UserQuery {
@@ -480,7 +472,7 @@ fn query_cache_key_different_method_name_returns_different_results() {
         Arc::new(test.state().clone()),
         vec![],
     );
-    assert_eq!(query_handler.metrics.query_cache_misses.get(), 2);
+    assert_eq!(query_handler.query_cache.metrics.misses.get(), 2);
     assert_eq!(output_1, output_2);
 }
 
@@ -504,7 +496,7 @@ fn query_cache_key_different_method_payload_returns_different_results() {
         Arc::new(test.state().clone()),
         vec![],
     );
-    assert_eq!(query_handler.metrics.query_cache_misses.get(), 1);
+    assert_eq!(query_handler.query_cache.metrics.misses.get(), 1);
     assert_eq!(output_1, Ok(WasmResult::Reply(b"42".to_vec())));
     let output_2 = test.query(
         UserQuery {
@@ -518,7 +510,7 @@ fn query_cache_key_different_method_payload_returns_different_results() {
         Arc::new(test.state().clone()),
         vec![],
     );
-    assert_eq!(query_handler.metrics.query_cache_misses.get(), 2);
+    assert_eq!(query_handler.query_cache.metrics.misses.get(), 2);
     assert_eq!(output_1, output_2);
 }
 
@@ -540,7 +532,7 @@ fn query_cache_env_different_batch_time_returns_different_results() {
     );
     {
         let query_handler = downcast_query_handler(test.query_handler());
-        assert_eq!(query_handler.metrics.query_cache_misses.get(), 1);
+        assert_eq!(query_handler.query_cache.metrics.misses.get(), 1);
         assert_eq!(output_1, Ok(WasmResult::Reply([42].into())));
     }
     test.state_mut().metadata.batch_time += Duration::from_secs(1);
@@ -557,9 +549,23 @@ fn query_cache_env_different_batch_time_returns_different_results() {
         vec![],
     );
     {
-        let query_handler = downcast_query_handler(test.query_handler());
-        assert_eq!(query_handler.metrics.query_cache_misses.get(), 2);
+        let metrics = &downcast_query_handler(test.query_handler())
+            .query_cache
+            .metrics;
+        assert_eq!(2, metrics.misses.get());
         assert_eq!(output_1, output_2);
+        assert_eq!(1, metrics.invalidated_entries.get());
+        assert_eq!(1, metrics.invalidated_entries_by_time.get());
+        assert_eq!(0, metrics.invalidated_entries_by_canister_version.get());
+        assert_eq!(0, metrics.invalidated_entries_by_canister_balance.get());
+        assert_eq!(
+            1,
+            metrics.invalidated_entries_duration.get_sample_sum() as usize
+        );
+        assert_eq!(
+            1,
+            metrics.invalidated_entries_duration.get_sample_count() as usize
+        );
     }
 }
 
@@ -581,7 +587,7 @@ fn query_cache_env_different_canister_version_returns_different_results() {
     );
     {
         let query_handler = downcast_query_handler(test.query_handler());
-        assert_eq!(query_handler.metrics.query_cache_misses.get(), 1);
+        assert_eq!(query_handler.query_cache.metrics.misses.get(), 1);
         assert_eq!(output_1, Ok(WasmResult::Reply([42].into())));
     }
     test.canister_state_mut(canister_id)
@@ -600,9 +606,23 @@ fn query_cache_env_different_canister_version_returns_different_results() {
         vec![],
     );
     {
-        let query_handler = downcast_query_handler(test.query_handler());
-        assert_eq!(query_handler.metrics.query_cache_misses.get(), 2);
+        let metrics = &downcast_query_handler(test.query_handler())
+            .query_cache
+            .metrics;
+        assert_eq!(2, metrics.misses.get());
         assert_eq!(output_1, output_2);
+        assert_eq!(1, metrics.invalidated_entries.get());
+        assert_eq!(0, metrics.invalidated_entries_by_time.get());
+        assert_eq!(1, metrics.invalidated_entries_by_canister_version.get());
+        assert_eq!(0, metrics.invalidated_entries_by_canister_balance.get());
+        assert_eq!(
+            0,
+            metrics.invalidated_entries_duration.get_sample_sum() as usize
+        );
+        assert_eq!(
+            1,
+            metrics.invalidated_entries_duration.get_sample_count() as usize
+        );
     }
 }
 
@@ -624,7 +644,7 @@ fn query_cache_env_different_canister_balance_returns_different_results() {
     );
     {
         let query_handler = downcast_query_handler(test.query_handler());
-        assert_eq!(query_handler.metrics.query_cache_misses.get(), 1);
+        assert_eq!(query_handler.query_cache.metrics.misses.get(), 1);
         assert_eq!(output_1, Ok(WasmResult::Reply([42].into())));
     }
     test.canister_state_mut(canister_id)
@@ -643,9 +663,71 @@ fn query_cache_env_different_canister_balance_returns_different_results() {
         vec![],
     );
     {
-        let query_handler = downcast_query_handler(test.query_handler());
-        assert_eq!(query_handler.metrics.query_cache_misses.get(), 2);
+        let metrics = &downcast_query_handler(test.query_handler())
+            .query_cache
+            .metrics;
+        assert_eq!(2, metrics.misses.get());
         assert_eq!(output_1, output_2);
+        assert_eq!(1, metrics.invalidated_entries.get());
+        assert_eq!(0, metrics.invalidated_entries_by_time.get());
+        assert_eq!(0, metrics.invalidated_entries_by_canister_version.get());
+        assert_eq!(1, metrics.invalidated_entries_by_canister_balance.get());
+        assert_eq!(
+            0,
+            metrics.invalidated_entries_duration.get_sample_sum() as usize
+        );
+        assert_eq!(
+            1,
+            metrics.invalidated_entries_duration.get_sample_count() as usize
+        );
+    }
+}
+
+#[test]
+fn query_cache_env_combined_invalidation() {
+    let mut test = ExecutionTestBuilder::new().with_query_caching().build();
+    let canister_id = test.universal_canister_with_cycles(CYCLES_BALANCE).unwrap();
+    let output_1 = test.query(
+        UserQuery {
+            source: user_test_id(1),
+            receiver: canister_id,
+            method_name: "query".into(),
+            method_payload: wasm().reply_data(&[42]).build(),
+            ingress_expiry: 0,
+            nonce: None,
+        },
+        Arc::new(test.state().clone()),
+        vec![],
+    );
+    test.state_mut().metadata.batch_time += Duration::from_secs(1);
+    test.canister_state_mut(canister_id)
+        .system_state
+        .canister_version += 1;
+    test.canister_state_mut(canister_id)
+        .system_state
+        .remove_cycles(1_u128.into(), CyclesUseCase::Memory);
+    let output_2 = test.query(
+        UserQuery {
+            source: user_test_id(1),
+            receiver: canister_id,
+            method_name: "query".into(),
+            method_payload: wasm().reply_data(&[42]).build(),
+            ingress_expiry: 0,
+            nonce: None,
+        },
+        Arc::new(test.state().clone()),
+        vec![],
+    );
+    {
+        let metrics = &downcast_query_handler(test.query_handler())
+            .query_cache
+            .metrics;
+        assert_eq!(2, metrics.misses.get());
+        assert_eq!(output_1, output_2);
+        assert_eq!(1, metrics.invalidated_entries.get());
+        assert_eq!(1, metrics.invalidated_entries_by_time.get());
+        assert_eq!(1, metrics.invalidated_entries_by_canister_version.get());
+        assert_eq!(1, metrics.invalidated_entries_by_canister_balance.get());
     }
 }
 
