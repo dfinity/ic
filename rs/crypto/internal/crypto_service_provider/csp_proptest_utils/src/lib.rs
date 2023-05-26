@@ -17,6 +17,7 @@ pub use csp_multi_signature_error::arb_csp_multi_signature_error;
 pub use csp_multi_signature_keygen_error::arb_csp_multi_signature_keygen_error;
 pub use csp_pop::arb_csp_pop;
 pub use csp_public_key::arb_csp_public_key;
+pub use csp_secret_key_store_contains_error::arb_csp_secret_key_store_contains_error;
 pub use csp_signature::arb_csp_signature;
 pub use csp_threshold_sign_error::arb_csp_threshold_sign_error;
 
@@ -269,6 +270,15 @@ mod csp_threshold_sign_error {
         UnsupportedAlgorithm => {algorithm in arb_algorithm_id()},
         WrongSecretKeyType => {},
         MalformedSecretKey => {algorithm in arb_algorithm_id()},
+        InternalError => {internal_error in ".*"}
+    );
+}
+
+mod csp_secret_key_store_contains_error {
+    use super::*;
+    use ic_crypto_internal_csp::vault::api::CspSecretKeyStoreContainsError;
+
+    proptest_strategy_for_enum!(CspSecretKeyStoreContainsError;
         InternalError => {internal_error in ".*"}
     );
 }

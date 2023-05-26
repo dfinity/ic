@@ -142,3 +142,12 @@ should_have_a_strategy_for_each_variant!(
     MalformedSecretKey { .. },
     InternalError { .. }
 );
+
+use ic_crypto_internal_csp::vault::api::CspSecretKeyStoreContainsError;
+should_have_a_strategy_for_each_variant!(
+    CspSecretKeyStoreContainsError,
+    CspSecretKeyStoreContainsError::InternalError {
+        internal_error: "dummy error to match upon".to_string(),
+    },
+    InternalError { .. }
+);
