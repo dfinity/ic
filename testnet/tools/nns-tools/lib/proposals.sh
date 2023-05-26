@@ -8,7 +8,7 @@ generate_sale_canister_upgrade_proposal_text() {
     local CANISTER_ID=$3
     local OUTPUT_FILE=${4:-}
 
-    WASM_GZ=$(get_sns_canister_wasm_gz_for_type "swap" "$NEXT_COMMIT")
+    WASM_GZ=$(download_sns_canister_wasm_gz_for_type "swap" "$NEXT_COMMIT")
     WASM_SHA=$(sha_256 "$WASM_GZ")
     CAPITALIZED_CANISTER_NAME="Swap"
     LAST_WASM_HASH=$(canister_hash ic $CANISTER_ID)
@@ -135,7 +135,7 @@ generate_sns_bless_wasm_proposal_text() {
     local CANISTER_TYPE=$3
     local OUTPUT_FILE=${4:-}
 
-    WASM_GZ=$(get_sns_canister_wasm_gz_for_type "$CANISTER_TYPE" "$NEXT_COMMIT")
+    WASM_GZ=$(download_sns_canister_wasm_gz_for_type "$CANISTER_TYPE" "$NEXT_COMMIT")
     WASM_SHA=$(sha_256 "$WASM_GZ")
     CAPITALIZED_CANISTER_TYPE="$(tr '[:lower:]' '[:upper:]' <<<${CANISTER_TYPE:0:1})${CANISTER_TYPE:1}"
 
@@ -421,7 +421,7 @@ validate_sns_version_wasm_sha() {
     local EXPECTED_SHA=$3
 
     _base_validate_version_wasm_sha \
-        $(get_sns_canister_wasm_gz_for_type "$CANISTER_TYPE" "$VERSION") \
+        $(download_sns_canister_wasm_gz_for_type "$CANISTER_TYPE" "$VERSION") \
         "$EXPECTED_SHA"
 }
 

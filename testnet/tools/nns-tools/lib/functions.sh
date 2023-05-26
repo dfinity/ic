@@ -21,7 +21,7 @@ propose_upgrade_canister_to_version_pem() {
 
     WASM_FILE=$(get_nns_canister_wasm_gz_for_type "$CANISTER_NAME" "$VERSION")
 
-    propose_upgrade_canister_wasm_file_pem "$NNS_URL" "$NEURON_ID" "$PEM" "$CANISTER_NAME" "$WASM_FILE" "$ENCODED_ARGS_FILE"
+    propose_upgrade_nns_canister_wasm_file_pem "$NNS_URL" "$NEURON_ID" "$PEM" "$CANISTER_NAME" "$WASM_FILE" "$ENCODED_ARGS_FILE"
 }
 
 build_canister_and_propose_upgrade_pem() {
@@ -36,7 +36,7 @@ build_canister_and_propose_upgrade_pem() {
 
     WASM_FILE="$(repo_root)/$(canister_bazel_artifact_path "${CANISTER_NAME}")"
 
-    propose_upgrade_canister_wasm_file_pem "$NNS_URL" "$NEURON_ID" "$PEM" "$CANISTER_NAME" "$WASM_FILE" "$ENCODED_ARGS_FILE"
+    propose_upgrade_nns_canister_wasm_file_pem "$NNS_URL" "$NEURON_ID" "$PEM" "$CANISTER_NAME" "$WASM_FILE" "$ENCODED_ARGS_FILE"
 }
 
 canister_bazel_label() {
@@ -74,7 +74,7 @@ canister_bazel_artifact_path() {
     bazel cquery --output=files $(canister_bazel_label "$CANISTER_NAME") 2>/dev/null
 }
 
-propose_upgrade_canister_wasm_file_pem() {
+propose_upgrade_nns_canister_wasm_file_pem() {
     ensure_variable_set IC_ADMIN
 
     local NNS_URL=$1
@@ -85,6 +85,19 @@ propose_upgrade_canister_wasm_file_pem() {
     local ENCODED_ARGS_FILE=${6:-}
 
     CANISTER_ID=$(nns_canister_id "$CANISTER_NAME")
+
+    propose_upgrade_canister_wasm_file_pem "$NNS_URL" "$NEURON_ID" "$PEM" "$CANISTER_ID" "$WASM_FILE" "$ENCODED_ARGS_FILE"
+}
+
+propose_upgrade_canister_wasm_file_pem() {
+    ensure_variable_set IC_ADMIN
+
+    local NNS_URL=$1
+    local NEURON_ID=$2
+    local PEM=$3
+    local CANISTER_ID=$4
+    local WASM_FILE=$5
+    local ENCODED_ARGS_FILE=${6:-}
 
     # See note at variable declaration
     PROPOSAL="$MY_DOWNLOAD_DIR"/testnet_upgrade_proposal.txt

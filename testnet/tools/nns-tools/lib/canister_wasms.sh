@@ -1,6 +1,6 @@
 #!/bin/bash
 
-get_sns_canister_wasm_gz_for_type() {
+download_sns_canister_wasm_gz_for_type() {
     local CANISTER_TYPE=$1
     local VERSION=$2
 

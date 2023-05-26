@@ -32,6 +32,7 @@ CANISTERS="${@}"
 
 ensure_variable_set IDL2JSON
 ensure_variable_set SNS_QUILL
+ensure_variable_set IC_ADMIN
 
 ensure_variable_set NNS_URL
 ensure_variable_set SUBNET_URL
@@ -53,6 +54,39 @@ sns_canister_id_for_sns_canister_type() {
     cat $PWD/sns_canister_ids.json | jq -r ".${SNS_CANISTER_TYPE}_canister_id"
 }
 
+upgrade_swap() {
+    NNS_URL=$1
+    NEURON_ID=$2
+    PEM=$3
+    CANISTER_ID=$4
+    VERSION=$5
+
+    WASM_FILE=$(download_sns_canister_wasm_gz_for_type swap "$VERSION")
+
+    propose_upgrade_canister_wasm_file_pem "$NNS_URL" "$NEURON_ID" "$PEM" "$CANISTER_ID" "$WASM_FILE"
+}
+
+upgrade_sns() {
+    NNS_URL=$1
+    SUBNET_URL=$2
+    NEURON_ID=$3
+    PEM=$4
+    CANISTER_NAME=$5
+    VERSION=$6
+    LOG_FILE=$7
+    SWAP_CANISTER_ID=$8
+    GOV_CANISTER_ID=$9
+
+    # SNS upgrade proposal
+    if [[ $CANISTER_NAME = "swap" ]]; then
+        echo "Submitting upgrade proposal to NNS Governance for Swap" | tee -a "$LOG_FILE"
+        upgrade_swap "$NNS_URL" "$NEURON_ID" "$PEM" "$SWAP_CANISTER_ID" "$VERSION"
+    else
+        echo "Submitting upgrade proposal to $GOV_CANISTER_ID" | tee -a "$LOG_FILE"
+        sns_upgrade_to_next_version "$SUBNET_URL" "$PEM" "$GOV_CANISTER_ID" 0
+    fi
+}
+
 echo "$PERMUTATIONS" \
     | while read -r ORDERING; do
 
@@ -67,7 +101,8 @@ echo "$PERMUTATIONS" \
         echo "Deployed SNS" | tee -a $LOG_FILE
         cat $PWD/sns_canister_ids.json | tee -a $LOG_FILE
 
-        GOV_CANISTER=$(sns_canister_id_for_sns_canister_type governance)
+        GOV_CANISTER_ID=$(sns_canister_id_for_sns_canister_type governance)
+        SWAP_CANISTER_ID=$(sns_canister_id_for_sns_canister_type swap)
 
         # Assert that all canisters have the mainnet hashes so our test is legitimate
         canister_has_hash_installed $SUBNET_URL \
@@ -89,9 +124,8 @@ echo "$PERMUTATIONS" \
             upload_canister_git_version_to_sns_wasm "$NNS_URL" "$NEURON_ID" \
                 "$PEM" "$CANISTER" "$VERSION"
 
-            # SNS upgrade proposal
-            echo "Submitting upgrade proposal to $GOV_CANISTER" | tee -a $LOG_FILE
-            sns_upgrade_to_next_version "$SUBNET_URL" "$PEM" "$GOV_CANISTER" 0
+            upgrade_sns "$NNS_URL" "$SUBNET_URL" "$NEURON_ID" "$PEM" \
+                "$CANISTER" "$VERSION" "$LOG_FILE" "$SWAP_CANISTER_ID" "$GOV_CANISTER_ID"
 
             echo "Waiting for upgrade..." | tee -a $LOG_FILE
             if ! wait_for_sns_canister_has_version "$SUBNET_URL" \
@@ -100,7 +134,7 @@ echo "$PERMUTATIONS" \
                 break
             fi
 
-            WASM_GZ_FILE=$(get_sns_canister_wasm_gz_for_type "$CANISTER" "$VERSION")
+            WASM_GZ_FILE=$(download_sns_canister_wasm_gz_for_type "$CANISTER" "$VERSION")
 
             ORIGINAL_HASH=$(sha_256 $WASM_GZ_FILE)
             UNZIPPED=$(ungzip $WASM_GZ_FILE)
@@ -111,9 +145,9 @@ echo "$PERMUTATIONS" \
             fi
             upload_wasm_to_sns_wasm "$NNS_URL" "$NEURON_ID" \
                 "$PEM" "$CANISTER" "$UNZIPPED"
-            # SNS upgrade proposal
-            echo "Submitting unzipped proposal to $GOV_CANISTER" | tee -a $LOG_FILE
-            sns_upgrade_to_next_version "$SUBNET_URL" "$PEM" "$GOV_CANISTER" 0
+
+            upgrade_sns "$NNS_URL" "$SUBNET_URL" "$NEURON_ID" "$PEM" \
+                "$CANISTER" "$VERSION" "$LOG_FILE" "$SWAP_CANISTER_ID" "$GOV_CANISTER_ID"
 
             if ! wait_for_canister_has_file_contents "$SUBNET_URL" \
                 $(sns_canister_id_for_sns_canister_type $CANISTER) "$UNZIPPED"; then

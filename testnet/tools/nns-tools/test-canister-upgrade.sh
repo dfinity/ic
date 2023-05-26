@@ -61,7 +61,7 @@ if [ "$CANISTER_NAME" == "cycles-minting" ]; then
     # Get ungzipped version to make it easy to detect upgrade status
     CURRENT_VERSION_UNZIPPED=$(get_nns_canister_wasm_gz_for_type "$CANISTER_NAME" "$CURRENT_VERSION")
 
-    SKIP_STOPPING=yes propose_upgrade_canister_wasm_file_pem "$NNS_URL" \
+    SKIP_STOPPING=yes propose_upgrade_nns_canister_wasm_file_pem "$NNS_URL" \
         "$NEURON_ID" "$PEM" "$CANISTER_NAME" \
         "$CURRENT_VERSION_UNZIPPED" "$(encode_candid_args_in_file \
             "(record {
@@ -97,7 +97,7 @@ if [ "$NEW_HASH" == "$ORIGINAL_HASH" ]; then
 fi
 
 # We upgrade to same version but with a different hash so that we can verify that second upgrade worked.
-propose_upgrade_canister_wasm_file_pem "$NNS_URL" "$NEURON_ID" "$PEM" "$CANISTER_NAME" "$UNZIPPED" "$ENCODED_ARGS_FILE"
+propose_upgrade_nns_canister_wasm_file_pem "$NNS_URL" "$NEURON_ID" "$PEM" "$CANISTER_NAME" "$UNZIPPED" "$ENCODED_ARGS_FILE"
 
 if wait_for_nns_canister_has_file_contents "$NNS_URL" "$CANISTER_NAME" "$UNZIPPED"; then
     echo "Second upgrade successful..."

@@ -69,7 +69,7 @@ upload_canister_git_version_to_sns_wasm() {
     local CANISTER_TYPE=$4
     local VERSION=$5
 
-    WASM_GZ=$(get_sns_canister_wasm_gz_for_type "$CANISTER_TYPE" "$VERSION")
+    WASM_GZ=$(download_sns_canister_wasm_gz_for_type "$CANISTER_TYPE" "$VERSION")
 
     upload_wasm_to_sns_wasm "$NNS_URL" "$NEURON_ID" \
         "$PEM" "$CANISTER_TYPE" "$WASM_GZ"
@@ -167,7 +167,7 @@ wait_for_sns_canister_has_version() {
     local SNS_CANISTER_TYPE=$3
     local VERSION=$4
 
-    WASM=$(get_sns_canister_wasm_gz_for_type $SNS_CANISTER_TYPE $VERSION)
+    WASM=$(download_sns_canister_wasm_gz_for_type $SNS_CANISTER_TYPE $VERSION)
     wait_for_canister_has_file_contents "$NETWORK" "$CANISTER_ID" "$WASM"
 }
 
