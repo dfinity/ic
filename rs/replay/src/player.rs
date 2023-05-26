@@ -249,10 +249,10 @@ impl Player {
         }
 
         let subnet_type = get_subnet_type(
-            registry.as_ref(),
+            &log,
             subnet_id,
             registry.get_latest_version(),
-            &log,
+            registry.as_ref(),
         );
         let metrics_registry = MetricsRegistry::new();
         let subnet_config = SubnetConfig::new(subnet_type);

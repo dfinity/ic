@@ -19,7 +19,6 @@ use ic_prep_lib::internet_computer::{IcConfig, TopologyConfig};
 use ic_prep_lib::node::{NodeConfiguration, NodeIndex, NodeSecretKeyStore};
 use ic_prep_lib::subnet_configuration::SubnetConfig;
 use ic_registry_client_fake::FakeRegistryClient;
-use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_keys::make_subnet_list_record_key;
 use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
 use ic_registry_provisional_whitelist::ProvisionalWhitelist;
@@ -29,16 +28,15 @@ use ic_replicated_state::{CanisterState, ReplicatedState};
 use ic_state_machine_tests::StateMachine;
 use ic_test_utilities::{
     types::ids::user_anonymous_id, types::messages::SignedIngressBuilder,
-    universal_canister::UNIVERSAL_CANISTER_WASM, FastForwardTimeSource,
+    universal_canister::UNIVERSAL_CANISTER_WASM,
 };
 use ic_test_utilities_logger::with_test_replica_logger;
-use ic_test_utilities_registry::FakeLocalStoreCertifiedTimeReader;
 use ic_types::{
     ingress::{IngressState, IngressStatus, WasmResult},
     messages::{SignedIngress, UserQuery},
     replica_config::NODE_INDEX_DEFAULT,
     time::expiry_time_from_now,
-    CanisterId, Height, NodeId, RegistryVersion, Time,
+    CanisterId, Height, NodeId, Time,
 };
 use prost::Message;
 use slog_scope::info;
@@ -283,37 +281,6 @@ pub fn get_ic_config() -> IcConfig {
     )
 }
 
-fn get_subnet_type(
-    registry: &dyn RegistryClient,
-    subnet_id: SubnetId,
-    registry_version: RegistryVersion,
-) -> SubnetType {
-    loop {
-        match registry.get_subnet_record(subnet_id, registry_version) {
-            Ok(subnet_record) => {
-                break match subnet_record {
-                    Some(record) => match SubnetType::try_from(record.subnet_type) {
-                        Ok(subnet_type) => subnet_type,
-                        Err(e) => panic!("Could not parse SubnetType: {}", e),
-                    },
-                    // This can only happen if the registry is corrupted, so better to crash.
-                    None => panic!(
-                        "Failed to find a subnet record for subnet: {} in the registry.",
-                        subnet_id
-                    ),
-                };
-            }
-            Err(err) => {
-                info!(
-                    "Unable to read the subnet record: {}\nTrying again...",
-                    err.to_string(),
-                );
-                sleep(std::time::Duration::from_millis(10));
-            }
-        }
-    }
-}
-
 pub fn canister_test_with_config_async<Fut, F, Out>(
     mut config: Config,
     ic_config: IcConfig,
@@ -341,9 +308,6 @@ where
             ProtoRegistryDataProvider::load_from_file(init_ic.registry_path().as_path());
         let data_provider = Arc::new(data_provider);
         let fake_registry_client = Arc::new(FakeRegistryClient::new(data_provider.clone()));
-        let registry_time_source = FastForwardTimeSource::new();
-        let fake_local_store_certified_time_reader =
-            Arc::new(FakeLocalStoreCertifiedTimeReader::new(registry_time_source));
         fake_registry_client.update_to_latest_version();
         let registry = fake_registry_client.clone() as Arc<dyn RegistryClient + Send + Sync>;
         let crypto = setup_crypto_provider(
@@ -351,7 +315,7 @@ where
             rt.handle().clone(),
             registry.clone(),
             logger.clone(),
-            Some(&metrics_registry),
+            &metrics_registry,
         );
         let node_id = crypto.get_node_id();
         let crypto = Arc::new(crypto);
@@ -372,9 +336,6 @@ where
             .collect();
         assert_eq!(subnet_ids.len(), 1);
         let subnet_id = subnet_ids[0];
-
-        let subnet_type = get_subnet_type(&*registry, subnet_id, registry.get_latest_version());
-
         config.transport = TransportConfig {
             node_ip: "0.0.0.0".to_string(),
             listening_port: 1234,
@@ -392,12 +353,9 @@ where
                 config.clone(),
                 temp_node,
                 subnet_id,
-                subnet_type,
-                subnet_id,
                 registry.clone(),
                 crypto,
                 None,
-                fake_local_store_certified_time_reader,
             )
             .expect("Failed to setup p2p");
 
