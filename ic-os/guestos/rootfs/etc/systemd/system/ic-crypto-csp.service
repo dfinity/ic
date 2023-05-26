@@ -8,7 +8,8 @@ Wants=bootstrap-ic-node.service
 After=setup-permissions.service
 Wants=setup-permissions.service
 Requires=ic-crypto-csp.socket
-StartLimitIntervalSec=0
+StartLimitBurst=5
+StartLimitIntervalSec=5
 
 [Service]
 UMask=066
@@ -23,7 +24,6 @@ ExecStartPre=+/opt/ic/bin/generate-replica-config.sh -i /opt/ic/share/ic.json5.t
 ExecStart=/opt/ic/bin/ic-crypto-csp --replica-config-file /run/ic-node/config/ic-crypto-csp.json5
 NotifyAccess=main
 Restart=always
-RestartSec=10
 
 [Install]
 WantedBy=ic-replica.service
