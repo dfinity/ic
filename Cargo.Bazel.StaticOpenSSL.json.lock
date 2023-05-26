@@ -1,5 +1,5 @@
 {
-  "checksum": "87a5af9327ba381852c335988c62c22781e11ca3f694a38d9056d943286614e3",
+  "checksum": "f563bcea718f20e1716e04d38f5d24942a2d1f2eb1622e26755e18311177f5cb",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -13016,7 +13016,7 @@
               "target": "ic_stable_structures"
             },
             {
-              "id": "ic-test-state-machine-client 2.1.0",
+              "id": "ic-test-state-machine-client 2.2.0",
               "target": "ic_test_state_machine_client"
             },
             {
@@ -20576,13 +20576,13 @@
       },
       "license": "Apache-2.0"
     },
-    "ic-test-state-machine-client 2.1.0": {
+    "ic-test-state-machine-client 2.2.0": {
       "name": "ic-test-state-machine-client",
-      "version": "2.1.0",
+      "version": "2.2.0",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/ic-test-state-machine-client/2.1.0/download",
-          "sha256": "be83b09145df43603a6255b2dee2b08055ed37642fe1ee26d2036f2ada81730b"
+          "url": "https://crates.io/api/v1/crates/ic-test-state-machine-client/2.2.0/download",
+          "sha256": "c942bd6ed0f179338f0fbe51999de9ba6f4d339e896a28f3f69bd4ccfe23b142"
         }
       },
       "targets": [
@@ -20630,7 +20630,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "2.1.0"
+        "version": "2.2.0"
       },
       "license": "Apache-2.0"
     },
@@ -50151,6 +50151,18 @@
         },
         {
           "Binary": {
+            "crate_name": "exit",
+            "crate_root": "src/bin/exit.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        },
+        {
+          "Binary": {
             "crate_name": "sleep",
             "crate_root": "src/bin/sleep.rs",
             "srcs": {
@@ -50165,18 +50177,6 @@
           "Binary": {
             "crate_name": "reader",
             "crate_root": "src/bin/reader.rs",
-            "srcs": {
-              "include": [
-                "**/*.rs"
-              ],
-              "exclude": []
-            }
-          }
-        },
-        {
-          "Binary": {
-            "crate_name": "exit",
-            "crate_root": "src/bin/exit.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
