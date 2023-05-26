@@ -30,5 +30,5 @@ impl Config {
 }
 
 fn file_backed_memory_allocator_default() -> FlagStatus {
-    FlagStatus::Disabled
+    FlagStatus::Enabled
 }
