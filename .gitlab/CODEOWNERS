@@ -209,6 +209,7 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/rust_canisters/proxy_canister/      @dfinity-lab/teams/networking-team
 /rs/rust_canisters/response_payload_test/       @dfinity-lab/teams/runtime-owners
 /rs/rust_canisters/stable_structures/	@dfinity-lab/teams/runtime-owners
+/rs/rust_canisters/stable_memory_integrity	@dfinity-lab/teams/runtime-owners
 /rs/rust_canisters/xnet_test/           @dfinity-lab/teams/message-routing-owners
 /rs/scenario_tests/                     @dfinity-lab/teams/ic-testing-verification
 /rs/sns/                                @dfinity-lab/teams/nns-team
