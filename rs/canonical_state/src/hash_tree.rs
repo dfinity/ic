@@ -574,6 +574,11 @@ impl HashTree {
                         );
                     }
                 }
+
+                // Empty subtree.
+                LabeledTree::SubTree(children) if children.is_empty() => B::make_empty(),
+
+                // Non-empty subtree.
                 LabeledTree::SubTree(children) => children
                     .iter()
                     .map(|(l, t)| child_witness::<B>(ht, parent, pos, l, t))
