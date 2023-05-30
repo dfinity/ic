@@ -10,7 +10,10 @@ use ic_replicated_state::{
     testing::ReplicatedStateTesting,
     CallContextManager, CanisterStatus, ExecutionState, ExportedFunctions, NumWasmPages, PageIndex,
 };
-use ic_state_layout::StateLayout;
+use ic_state_layout::{
+    StateLayout, CANISTER_FILE, CANISTER_STATES_DIR, CHECKPOINTS_DIR, INGRESS_HISTORY_FILE,
+    QUEUES_FILE, SUBNET_QUEUES_FILE, SYSTEM_METADATA_FILE,
+};
 use ic_sys::PAGE_SIZE;
 use ic_test_utilities::{
     state::{canister_ids, new_canister_state},
@@ -126,17 +129,17 @@ fn can_make_a_checkpoint() {
             .is_ok());
 
         // Ensure the expected paths actually exist.
-        let checkpoint_path = root.join("checkpoints").join("000000000000002a");
+        let checkpoint_path = root.join(CHECKPOINTS_DIR).join("000000000000002a");
         let canister_path = checkpoint_path
-            .join("canister_states")
+            .join(CANISTER_STATES_DIR)
             .join("000000000000000a0101");
 
         let expected_paths = vec![
-            checkpoint_path.join("ingress_history.pbuf"),
-            checkpoint_path.join("subnet_queues.pbuf"),
-            checkpoint_path.join("system_metadata.pbuf"),
-            canister_path.join("queues.pbuf"),
-            canister_path.join("canister.pbuf"),
+            checkpoint_path.join(INGRESS_HISTORY_FILE),
+            checkpoint_path.join(SUBNET_QUEUES_FILE),
+            checkpoint_path.join(SYSTEM_METADATA_FILE),
+            canister_path.join(QUEUES_FILE),
+            canister_path.join(CANISTER_FILE),
         ];
 
         for path in expected_paths {
@@ -155,7 +158,7 @@ fn scratchpad_dir_is_deleted_if_checkpointing_failed() {
     with_test_replica_logger(|log| {
         let tmp = tmpdir("checkpoint");
         let root = tmp.path().to_path_buf();
-        let checkpoints_dir = root.join("checkpoints");
+        let checkpoints_dir = root.join(CHECKPOINTS_DIR);
         let layout =
             StateLayout::try_new(log.clone(), root.clone(), &MetricsRegistry::new()).unwrap();
         let tip_handler = layout.capture_tip_handler();

@@ -12,7 +12,7 @@ use ic_replicated_state::{
     page_map::PageIndex, testing::ReplicatedStateTesting, Memory, NumWasmPages, PageMap,
     ReplicatedState, Stream,
 };
-use ic_state_layout::{CheckpointLayout, ReadOnly};
+use ic_state_layout::{CheckpointLayout, ReadOnly, SYSTEM_METADATA_FILE};
 use ic_state_machine_tests::{StateMachine, StateMachineBuilder};
 use ic_state_manager::manifest::{build_meta_manifest, manifest_from_path, validate_manifest};
 use ic_state_manager::{DirtyPageMap, FileType, PageMapType, StateManagerImpl};
@@ -2017,7 +2017,7 @@ fn can_state_sync_from_cache() {
                 msg.manifest.chunk_table[chunk_table_idx_to_omit].file_index as usize;
             let file_path = &msg.manifest.file_table[file_table_idx_to_omit].relative_path;
             // Make sure the chunk to omit is from file `system_metadata.pbuf`.
-            assert!(file_path.ends_with("system_metadata.pbuf"));
+            assert!(file_path.ends_with(SYSTEM_METADATA_FILE));
 
             let omit: HashSet<ChunkId> =
                 maplit::hashset! {chunk_id_to_omit, ChunkId::new(FILE_GROUP_CHUNK_ID_OFFSET)};

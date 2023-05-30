@@ -7,7 +7,10 @@ use ic_protobuf::state::{
 use ic_replicated_state::{
     canister_state::CanisterQueues, metadata_state::IngressHistoryState, SystemMetadata,
 };
-use ic_state_layout::{CanisterStateBits, ProtoFileWith, ReadOnly};
+use ic_state_layout::{
+    CanisterStateBits, ProtoFileWith, ReadOnly, CANISTER_FILE, INGRESS_HISTORY_FILE, QUEUES_FILE,
+    SUBNET_QUEUES_FILE, SYSTEM_METADATA_FILE,
+};
 use std::convert::TryFrom;
 use std::path::PathBuf;
 
@@ -19,17 +22,16 @@ pub fn do_decode(path: PathBuf) -> Result<(), String> {
         .to_str()
         .ok_or_else(|| format!("failed to convert path {} to UTF-8 string", path.display()))?;
     match fname {
-        "system_metadata.pbuf" => {
+        SYSTEM_METADATA_FILE => {
             display_proto::<pb_metadata::SystemMetadata, SystemMetadata>(path.clone())
         }
-        "ingress_history.pbuf" => {
+        INGRESS_HISTORY_FILE => {
             display_proto::<pb_ingress::IngressHistoryState, IngressHistoryState>(path.clone())
         }
-        "queues.pbuf" => display_proto::<pb_queues::CanisterQueues, CanisterQueues>(path.clone()),
-        "subnet_queues.pbuf" => {
+        QUEUES_FILE | SUBNET_QUEUES_FILE => {
             display_proto::<pb_queues::CanisterQueues, CanisterQueues>(path.clone())
         }
-        "canister.pbuf" => {
+        CANISTER_FILE => {
             display_proto::<pb_canister::CanisterStateBits, CanisterStateBits>(path.clone())
         }
         _ => Err(format!("don't know how to decode {}", fname)),
