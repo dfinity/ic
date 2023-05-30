@@ -12,12 +12,14 @@ path = "src/main.rs"
 [dependencies]
 candid = "0.8.1"
 ciborium = "0.2"
+ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
 ic-cdk = { version = "0.6.0" }
 ic-cdk-macros = { version = "0.6.0" }
 ic-cdk-timers = "0.1.2"
 ic-crypto-sha = { path = "../../../crypto/sha" }
 ic-icrc1 = { path = "../" }
 ic-ledger-core = { path = "../../ledger_core" }
+ic-metrics-encoder = "1.1"
 ic-stable-structures = "0.5.3"
 icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
 num-traits = "0.2.14"
