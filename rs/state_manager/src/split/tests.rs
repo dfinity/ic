@@ -27,7 +27,7 @@ use ic_types::{
     ingress::{IngressState, IngressStatus},
     malicious_flags::MaliciousFlags,
     messages::MessageId,
-    state_sync::{FileInfo, Manifest, StateSyncVersion},
+    state_sync::{FileInfo, Manifest, CURRENT_STATE_SYNC_VERSION},
     Cycles, Height,
 };
 use std::{path::Path, sync::Arc};
@@ -125,7 +125,7 @@ fn read_write_roundtrip() {
         // Compute the manifest of the original checkpoint.
         let metrics = StateManagerMetrics::new(&metrics_registry);
         let manifest_metrics = &metrics.manifest_metrics;
-        let (manifest_before, height_before) = compute_manifest_v3(&layout, manifest_metrics, &log);
+        let (manifest_before, height_before) = compute_manifest(&layout, manifest_metrics, &log);
 
         // Read the latest checkpoint into a state.
         let fd_factory = Arc::new(TestPageAllocatorFileDescriptorImpl::new());
@@ -150,7 +150,7 @@ fn read_write_roundtrip() {
         assert_eq!(2, layout.checkpoint_heights().unwrap().len());
 
         // Compute the manifest of the newly written checkpoint.
-        let (manifest_after, height_after) = compute_manifest_v3(&layout, manifest_metrics, &log);
+        let (manifest_after, height_after) = compute_manifest(&layout, manifest_metrics, &log);
 
         // The two checkpoints' manifests should be identical.
         assert_eq!(manifest_before, manifest_after);
@@ -168,7 +168,7 @@ fn split_subnet_a_prime() {
         let tmp = new_state_layout(log.clone());
         let root = tmp.path().to_path_buf();
 
-        let (manifest_a, height_a) = compute_manifest_v3_for_root(&root, &log);
+        let (manifest_a, height_a) = compute_manifest_for_root(&root, &log);
         assert_eq!(SUBNET_A_FILES, manifest_files(&manifest_a).as_slice());
 
         split(
@@ -180,7 +180,7 @@ fn split_subnet_a_prime() {
         )
         .unwrap();
 
-        let (manifest_a_prime, height_a_prime) = compute_manifest_v3_for_root(&root, &log);
+        let (manifest_a_prime, height_a_prime) = compute_manifest_for_root(&root, &log);
         assert_eq!(
             SUBNET_A_PRIME_FILES,
             manifest_files(&manifest_a_prime).as_slice()
@@ -213,7 +213,7 @@ fn split_subnet_b() {
         let tmp = new_state_layout(log.clone());
         let root = tmp.path().to_path_buf();
 
-        let (manifest_a, height_a) = compute_manifest_v3_for_root(&root, &log);
+        let (manifest_a, height_a) = compute_manifest_for_root(&root, &log);
         assert_eq!(SUBNET_A_FILES, manifest_files(&manifest_a).as_slice());
 
         split(
@@ -225,7 +225,7 @@ fn split_subnet_b() {
         )
         .unwrap();
 
-        let (manifest_b, height_b) = compute_manifest_v3_for_root(&root, &log);
+        let (manifest_b, height_b) = compute_manifest_for_root(&root, &log);
         assert_eq!(SUBNET_B_FILES, manifest_files(&manifest_b).as_slice());
 
         // Checkpoint heights should differ by 1.
@@ -353,8 +353,8 @@ fn new_state_layout(log: ReplicaLogger) -> TempDir {
     tmp
 }
 
-/// Computes the `V3` manifest of the last checkpoint under `state_layout`.
-fn compute_manifest_v3(
+/// Computes the manifest of the last checkpoint under `state_layout`.
+fn compute_manifest(
     state_layout: &StateLayout,
     manifest_metrics: &ManifestMetrics,
     log: &ReplicaLogger,
@@ -365,7 +365,7 @@ fn compute_manifest_v3(
         &mut thread_pool(),
         manifest_metrics,
         log,
-        StateSyncVersion::V3,
+        CURRENT_STATE_SYNC_VERSION,
         &last_checkpoint_layout,
         1024,
         None,
@@ -405,16 +405,16 @@ fn file_info<'a>(file: &str, manifest: &'a Manifest) -> &'a FileInfo {
     panic!("file '{}' not found in manifest: {:?}", file, manifest)
 }
 
-/// Computes the V3 manifest of the latest checkpoint under the state layout at
+/// Computes the manifest of the latest checkpoint under the state layout at
 /// `root`.
-fn compute_manifest_v3_for_root(root: &Path, log: &ReplicaLogger) -> (Manifest, Height) {
+fn compute_manifest_for_root(root: &Path, log: &ReplicaLogger) -> (Manifest, Height) {
     let metrics_registry = MetricsRegistry::new();
     let layout = StateLayout::try_new(log.clone(), root.to_path_buf(), &metrics_registry).unwrap();
 
     // Compute the manifest of the original checkpoint.
     let metrics = StateManagerMetrics::new(&metrics_registry);
     let manifest_metrics = &metrics.manifest_metrics;
-    compute_manifest_v3(&layout, manifest_metrics, log)
+    compute_manifest(&layout, manifest_metrics, log)
 }
 
 fn deserialize_split_from(root: &Path, height: Height) -> SubnetId {
