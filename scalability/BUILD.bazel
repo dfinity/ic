@@ -236,8 +236,6 @@ py_binary(
     srcs = ["common/tests/e2e-scalability-tests.py"],
     data = [
         ":artifacts",
-        "//ic-os/guestos/envs/dev:hash_and_upload_update-img",
-        "//ic-os/guestos/envs/dev:hash_and_upload_disk-img",
         "//ic-os:scripts/build-bootstrap-config-image.sh",
         "//rs/tests:create-universal-vm-config-image.sh",
         "common/flamegraph.gz",
@@ -275,11 +273,15 @@ sh_test(
     data = [
         ":e2e-scalability-tests",
         "//ic-os:scripts/build-bootstrap-config-image.sh",
+        "//ic-os/guestos/envs/dev:disk-img.tar.zst.cas-url",
+        "//ic-os/guestos/envs/dev:disk-img.tar.zst.sha256",
         "//ic-os/guestos/envs/dev:version.txt",
     ],
     env = {
         "E2E_TEST_BIN": "$(rootpath :e2e-scalability-tests)",
         "IC_OS_VERSION_FILE": "$(rootpath //ic-os/guestos/envs/dev:version.txt)",
+        "IC_OS_IMAGE_URL": "$(rootpath //ic-os/guestos/envs/dev:disk-img.tar.zst.cas-url)",
+        "IC_OS_IMAGE_SHA256SUM": "$(rootpath //ic-os/guestos/envs/dev:disk-img.tar.zst.sha256)",
     },
     env_inherit = [
         "CI_PROJECT_DIR",
