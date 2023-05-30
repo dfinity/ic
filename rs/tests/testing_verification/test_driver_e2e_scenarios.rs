@@ -167,6 +167,14 @@ fn get_all_e2e_test_scenarios() -> HashMap<String, SystemTestGroup> {
                 .add_test(systest!(test_to_succeed))
                 .without_farm(),
         ),
+        (
+            "test_child_process".to_string(),
+            SystemTestGroup::new()
+                .with_timeout_per_test(Duration::from_secs(5))
+                .with_setup(setup_to_succeed)
+                .add_test(systest!(spawning_process))
+                .without_farm(),
+        ),
     ])
 }
 
@@ -227,4 +235,14 @@ fn never_ending_task(env: TestEnv) {
         info!(env.logger(), "Ping from `never_ending_task`");
         std::thread::sleep(Duration::from_secs(1));
     }
+}
+
+// Simulate a scenario where a test that starts a subprocess gets stopped by a timeout in the test
+// driver.
+fn spawning_process(_env: TestEnv) {
+    let _ = std::process::Command::new("sh")
+        .arg("-c")
+        .arg("for i in `seq 100`; do echo magicchild$i; sleep 1; done")
+        .spawn();
+    std::thread::sleep(std::time::Duration::from_secs(100));
 }
