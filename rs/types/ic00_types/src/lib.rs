@@ -146,10 +146,10 @@ pub struct CanisterChangeFromCanisterRecord {
 /// `CandidType` for `CanisterChangeOrigin`
 /// ```text
 /// variant {
-///   canister_change_from_user : record {
+///   from_user : record {
 ///     user_id : principal;
 ///   };
-///   canister_change_from_canister : record {
+///   from_canister : record {
 ///     canister_id : principal;
 ///     canister_version : opt nat64;
 ///   };
@@ -157,9 +157,9 @@ pub struct CanisterChangeFromCanisterRecord {
 /// ```
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub enum CanisterChangeOrigin {
-    #[serde(rename = "canister_change_from_user")]
+    #[serde(rename = "from_user")]
     CanisterChangeFromUser(CanisterChangeFromUserRecord),
-    #[serde(rename = "canister_change_from_canister")]
+    #[serde(rename = "from_canister")]
     CanisterChangeFromCanister(CanisterChangeFromCanisterRecord),
 }
 
@@ -241,28 +241,28 @@ impl CanisterControllersChangeRecord {
 /// `CandidType` for `CanisterChangeDetails`
 /// ```text
 /// variant {
-///   canister_creation : record {
+///   creation : record {
 ///     controllers : vec principal;
 ///   };
-///   canister_code_uninstall;
-///   canister_code_deployment : record {
+///   code_uninstall;
+///   code_deployment : record {
 ///     mode : variant {install; reinstall; upgrade};
 ///     module_hash : blob;
 ///   };
-///   canister_controllers_change : record {
+///   controllers_change : record {
 ///     controllers : vec principal;
 ///   };
 /// }
 /// ```
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub enum CanisterChangeDetails {
-    #[serde(rename = "canister_creation")]
+    #[serde(rename = "creation")]
     CanisterCreation(CanisterCreationRecord),
-    #[serde(rename = "canister_code_uninstall")]
+    #[serde(rename = "code_uninstall")]
     CanisterCodeUninstall,
-    #[serde(rename = "canister_code_deployment")]
+    #[serde(rename = "code_deployment")]
     CanisterCodeDeployment(CanisterCodeDeploymentRecord),
-    #[serde(rename = "canister_controllers_change")]
+    #[serde(rename = "controllers_change")]
     CanisterControllersChange(CanisterControllersChangeRecord),
 }
 
@@ -309,30 +309,30 @@ impl CanisterChangeDetails {
 /// record {
 ///   timestamp_nanos : nat64;
 ///   canister_version : nat64;
-///   change_origin : canister_change_origin;
-///   change_details : canister_change_details;
+///   origin : change_origin;
+///   details : change_details;
 /// }
 /// ```
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct CanisterChange {
     timestamp_nanos: u64,
     canister_version: u64,
-    change_origin: CanisterChangeOrigin,
-    change_details: CanisterChangeDetails,
+    origin: CanisterChangeOrigin,
+    details: CanisterChangeDetails,
 }
 
 impl CanisterChange {
     pub fn new(
         timestamp_nanos: u64,
         canister_version: u64,
-        change_origin: CanisterChangeOrigin,
-        change_details: CanisterChangeDetails,
+        origin: CanisterChangeOrigin,
+        details: CanisterChangeDetails,
     ) -> CanisterChange {
         CanisterChange {
             timestamp_nanos,
             canister_version,
-            change_origin,
-            change_details,
+            origin,
+            details,
         }
     }
 
@@ -341,7 +341,7 @@ impl CanisterChange {
     /// is counted separately because the controllers are stored on heap
     /// and thus not accounted for in `size_of::<CanisterChange>()`.
     pub fn count_bytes(&self) -> NumBytes {
-        let controllers_memory_size = match &self.change_details {
+        let controllers_memory_size = match &self.details {
             CanisterChangeDetails::CanisterCreation(canister_creation) => {
                 canister_creation.controllers().len() * size_of::<PrincipalId>()
             }
@@ -490,8 +490,8 @@ impl From<&CanisterChange> for pb_canister_state_bits::CanisterChange {
         Self {
             timestamp_nanos: item.timestamp_nanos,
             canister_version: item.canister_version,
-            change_origin: Some((&item.change_origin).into()),
-            change_details: Some((&item.change_details).into()),
+            change_origin: Some((&item.origin).into()),
+            change_details: Some((&item.details).into()),
         }
     }
 }
@@ -500,13 +500,13 @@ impl TryFrom<pb_canister_state_bits::CanisterChange> for CanisterChange {
     type Error = ProxyDecodeError;
 
     fn try_from(value: pb_canister_state_bits::CanisterChange) -> Result<Self, Self::Error> {
-        let change_origin = try_from_option_field(value.change_origin, "change_origin")?;
-        let change_details = try_from_option_field(value.change_details, "change_details")?;
+        let origin = try_from_option_field(value.change_origin, "origin")?;
+        let details = try_from_option_field(value.change_details, "details")?;
         Ok(Self {
             timestamp_nanos: value.timestamp_nanos,
             canister_version: value.canister_version,
-            change_origin,
-            change_details,
+            origin,
+            details,
         })
     }
 }
