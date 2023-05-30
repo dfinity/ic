@@ -1164,8 +1164,8 @@ fn test_file_index_independent_file_hash() {
 
     let (file1_hash_v2_before, file3_hash_v2_before) =
         compute_file1_and_file3_hashes(StateSyncVersion::V2);
-    let (file1_hash_v3_before, file3_hash_v3_before) =
-        compute_file1_and_file3_hashes(StateSyncVersion::V3);
+    let (file1_hash_before, file3_hash_before) =
+        compute_file1_and_file3_hashes(CURRENT_STATE_SYNC_VERSION);
 
     // Directory now contains `file1`, `file2` and `file3`.
     fs::write(root.join(&file2), vec![2u8; 1000])
@@ -1173,8 +1173,8 @@ fn test_file_index_independent_file_hash() {
 
     let (file1_hash_v2_after, file3_hash_v2_after) =
         compute_file1_and_file3_hashes(StateSyncVersion::V2);
-    let (file1_hash_v3_after, file3_hash_v3_after) =
-        compute_file1_and_file3_hashes(StateSyncVersion::V3);
+    let (file1_hash_after, file3_hash_after) =
+        compute_file1_and_file3_hashes(CURRENT_STATE_SYNC_VERSION);
 
     // The `file1` `V2` hashes should be equal (same contents, same file index).
     assert_eq!(file1_hash_v2_before, file1_hash_v2_after);
@@ -1182,6 +1182,6 @@ fn test_file_index_independent_file_hash() {
     assert_ne!(file3_hash_v2_before, file3_hash_v2_after);
 
     // And the `V3` hashes should be the same, regardless of file index.
-    assert_eq!(file1_hash_v3_before, file1_hash_v3_after);
-    assert_eq!(file3_hash_v3_before, file3_hash_v3_after);
+    assert_eq!(file1_hash_before, file1_hash_after);
+    assert_eq!(file3_hash_before, file3_hash_after);
 }
