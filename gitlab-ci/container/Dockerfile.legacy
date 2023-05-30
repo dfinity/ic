@@ -72,7 +72,7 @@ RUN curl --fail https://sh.rustup.rs -sSf \
 # to switch between them for comptability.
 ARG nvm_version=v0.39.1
 ARG dependency_mgmt_agent_js_node_version=16
-ARG node_version=17
+ARG sw_node_version=18
 ARG dependency_mgmt_nns_dapp_node_version=18
 ARG dependency_mgmt_default_node_version=19
 ENV NVM_DIR=/opt/nvm
@@ -96,7 +96,7 @@ RUN curl --fail \
 
 RUN . /opt/nvm/nvm.sh && \
     nvm install ${dependency_mgmt_agent_js_node_version} && \
-    nvm install ${node_version} && \
+    nvm install ${sw_node_version} && \
     nvm install ${dependency_mgmt_nns_dapp_node_version} && \
     nvm install ${dependency_mgmt_default_node_version} && \
     npm install -g @vscode/dev-container-cli

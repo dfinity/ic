@@ -9,7 +9,7 @@ boundary-node-service-worker:
       set -eExuo pipefail
       # shellcheck disable=SC1090
       source "$NVM_DIR/nvm.sh"
-      nvm use 17
+      nvm use 18
       node --version
       npm --version
 

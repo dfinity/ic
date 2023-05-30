@@ -160,6 +160,12 @@ export type Token = { type: <T>() => IDL.Type<T> };
       /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --user-data-dir=/tmp/no-ssl --ignore-certificate-errors
       ```
 
+## e2e Tests
+
+```shell
+docker build -f ./e2e/Dockerfile -t sw-e2e . && docker run --rm sw-e2e
+```
+
 ## Release
 
 1. Make an MR to bump the service worker version
