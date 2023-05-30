@@ -192,7 +192,7 @@ symlink_dir(
         "//rs/nns/governance:governance-canister-test": "governance-canister_test.wasm",
         "//rs/nns/identity:identity-canister": "identity-canister.wasm",
         "//rs/rosetta-api/icp_ledger/ledger:ledger-canister-wasm-notify-method": "ledger-canister_notify-method.wasm",
-        "//rs/nns/handlers/root:root-canister": "root-canister.wasm",
+        "//rs/nns/handlers/root/impl:root-canister": "root-canister.wasm",
         "//rs/nns/cmc:cycles-minting-canister": "cycles-minting-canister.wasm",
         "//rs/nns/handlers/lifeline:lifeline_canister": "lifeline_canister.wasm",
         "//rs/nns/gtc:genesis-token-canister": "genesis-token-canister.wasm",

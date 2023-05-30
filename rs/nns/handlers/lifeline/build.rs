@@ -97,7 +97,7 @@ fn remove_governance_service_args(did: &mut String) {
 }
 
 const GOVERNANCE_DID: &str = "../../governance/canister/governance.did";
-const ROOT_DID: &str = "../root/canister/root.did";
+const ROOT_DID: &str = "../root/impl/canister/root.did";
 
 fn compile_lifeline(out: &Path) -> Result<PathBuf, BuildError> {
     // Add symlinks to the .did files for foreign canisters
@@ -138,7 +138,8 @@ fn main() {
     println!("cargo:rerun-if-changed={}", GOVERNANCE_DID);
 
     let out_dir = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR environment variable not set"));
-    let out_did = out_dir.join("rrkah-fqaaa-aaaaa-aaaaq-cai.did");
+    let governance_out_did = out_dir.join("rrkah-fqaaa-aaaaa-aaaaq-cai.did");
+    let root_out_did = out_dir.join("r7inp-6aaaa-aaaaa-aaabq-cai.did");
 
     let lifeline_wasm = compile_lifeline(&out_dir).unwrap_or_else(|e| {
         eprintln!("Could not build the Wasm for the lifeline canister. Error:");
@@ -150,7 +151,8 @@ fn main() {
             IN_NIX_SHELL={:?}.\n\
             NIX_BUILD_TOP={:?}.\n\
             lifeline.mo exists? {:?}.\n\
-            $OUT_DIR/rrkah-fqaaa-aaaaa-aaaaq-cai.did exists? {:?}.\n\
+            {:?} exists? {:?}.\n\
+            {:?} exists? {:?}.\n\
             PATH={:?}.\n\
             `ls` output: {:?}.",
             env::current_dir().map(|pb| pb.as_path().display().to_string()),
@@ -158,9 +160,12 @@ fn main() {
             env::var("IN_NIX_SHELL"),
             env::var("NIX_BUILD_TOP"),
             PathBuf::from_str("lifeline.mo").map(|pb| pb.as_path().is_file()),
-            out_did.is_file(),
+            governance_out_did,
+            governance_out_did.is_file(),
+            root_out_did,
+            root_out_did.is_file(),
             env::var("PATH"),
-            Command::new("ls").output()
+            Command::new("ls").output(),
         );
 
         panic!()

@@ -12,8 +12,8 @@ fn check_generated_files() {
     );
     let out = tempfile::TempDir::new().expect("failed to create a temporary directory");
     let root_proto = manifest_dir.join("proto");
-    let nns_common_proto = manifest_dir.join("../../common/proto");
-    let base_types_proto = manifest_dir.join("../../../types/base_types/proto");
+    let nns_common_proto = manifest_dir.join("../../../common/proto");
+    let base_types_proto = manifest_dir.join("../../../../types/base_types/proto");
     generate_prost_files(
         ProtoPaths {
             root: &root_proto,

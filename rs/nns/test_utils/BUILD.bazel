@@ -19,7 +19,7 @@ DEPENDENCIES = [
     "//rs/nns/gtc",
     "//rs/nns/gtc_accounts",
     "//rs/nns/handlers/lifeline",
-    "//rs/nns/handlers/root",
+    "//rs/nns/handlers/root/impl:root",
     "//rs/nns/sns-wasm",
     "//rs/protobuf",
     "//rs/registry/canister",

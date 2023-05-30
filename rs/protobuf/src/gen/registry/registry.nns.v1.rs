@@ -1,7 +1,7 @@
 /// Information about an NNS canister.
 ///
 /// Corresponding mutations are handled by the `root` handler:
-/// See /rs/nns/handlers/root
+/// See /rs/nns/handlers/root/impl
 #[derive(serde::Serialize, serde::Deserialize)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]

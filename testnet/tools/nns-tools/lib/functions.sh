@@ -52,7 +52,7 @@ canister_bazel_label() {
             echo "//rs/nns/governance:governance-canister"
             ;;
         "root")
-            echo "//rs/nns/handlers/root:root-canister"
+            echo "//rs/nns/handlers/root/impl:root-canister"
             ;;
         "sns-wasm")
             echo "//rs/nns/sns-wasm:sns-wasm-canister"
@@ -127,7 +127,7 @@ get_nns_canister_code_location() {
     code_location__registry="$RUST_DIR/registry/canister"
     code_location__governance="$RUST_DIR/nns/governance"
     code_location__ledger="$RUST_DIR/rosetta-api/ledger_canister $RUST_DIR/rosetta-api/icp_ledger"
-    code_location__root="$RUST_DIR/nns/handlers/root"
+    code_location__root="$RUST_DIR/nns/handlers/root/impl"
     code_location__cycles_minting="$RUST_DIR/nns/cmc"
     code_location__lifeline="$RUST_DIR/nns/handlers/lifeline"
     code_location__genesis_token="$RUST_DIR/nns/gtc"

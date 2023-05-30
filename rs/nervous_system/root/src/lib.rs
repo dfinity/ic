@@ -3,7 +3,6 @@ use dfn_core::api::CanisterId;
 
 pub mod canister_status;
 pub mod change_canister;
-pub mod change_canister_controllers;
 pub mod management_canister_client;
 pub mod update_settings;
 

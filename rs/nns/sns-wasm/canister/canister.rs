@@ -10,10 +10,7 @@ use ic_ic00_types::{
     CanisterIdRecord, CanisterInstallMode::Install, CanisterSettingsArgsBuilder,
     CreateCanisterArgs, InstallCodeArgs, Method, UpdateSettingsArgs,
 };
-use ic_nervous_system_root::{
-    canister_status::{CanisterStatusResultV2, CanisterStatusType},
-    change_canister_controllers::NnsRootCanisterClientImpl,
-};
+use ic_nervous_system_root::canister_status::{CanisterStatusResultV2, CanisterStatusType};
 use ic_nns_constants::GOVERNANCE_CANISTER_ID;
 use ic_sns_wasm::{
     canister_api::CanisterApi,
@@ -35,6 +32,7 @@ use std::{cell::RefCell, collections::HashMap, convert::TryInto};
 
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
+use ic_nns_handler_root_interface::client::NnsRootCanisterClientImpl;
 
 pub const LOG_PREFIX: &str = "[SNS-WASM] ";
 

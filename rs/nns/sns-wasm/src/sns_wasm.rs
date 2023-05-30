@@ -22,10 +22,11 @@ use ic_base_types::{CanisterId, PrincipalId};
 use ic_cdk::api::stable::StableMemory;
 use ic_nervous_system_common::{ONE_TRILLION, SNS_CREATION_FEE};
 use ic_nervous_system_proto::pb::v1::Canister;
-use ic_nervous_system_root::change_canister_controllers::{
-    ChangeCanisterControllersRequest, ChangeCanisterControllersResult, NnsRootCanisterClient,
-};
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
+use ic_nns_handler_root_interface::{
+    client::NnsRootCanisterClient, ChangeCanisterControllersRequest,
+    ChangeCanisterControllersResult,
+};
 use ic_sns_governance::pb::v1::governance::Version;
 use ic_sns_init::{pb::v1::SnsInitPayload, SnsCanisterInitPayloads};
 use ic_types::{Cycles, SubnetId};
@@ -1664,10 +1665,10 @@ mod test {
     use ic_base_types::PrincipalId;
     use ic_crypto_sha::Sha256;
     use ic_icrc1_ledger::LedgerArgument;
-    use ic_nervous_system_root::change_canister_controllers::{
+    use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
+    use ic_nns_handler_root_interface::client::{
         SpyNnsRootCanisterClient, SpyNnsRootCanisterClientCall, SpyNnsRootCanisterClientReply,
     };
-    use ic_nns_constants::{GOVERNANCE_CANISTER_ID, ROOT_CANISTER_ID};
     use ic_sns_init::pb::v1::{DappCanisters, SnsInitPayload};
     use ic_test_utilities::types::ids::{canister_test_id, subnet_test_id};
     use maplit::hashset;
