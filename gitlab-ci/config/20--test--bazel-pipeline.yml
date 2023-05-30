@@ -156,6 +156,7 @@ bazel-test-all-rebuild:
   variables:
     BAZEL_COMMAND: "build"
     BAZEL_EXTRA_ARGS: "--repository_cache= --disk_cache= --noremote_accept_cached --remote_instance_name=${CI_COMMIT_SHA} --@rules_rust//rust/settings:pipelined_compilation=True"
+  timeout: 80 minutes
 
 bazel-build-macos:
   extends:
