@@ -110,3 +110,14 @@ fn test_shift_decimal_right() {
 
     assert_eq!(shift_decimal_right(23, 2).unwrap(), 2300,);
 }
+
+#[test]
+fn test_group_digits() {
+    assert_eq!(group_digits(0), "0".to_string());
+    assert_eq!(group_digits(1), "1".to_string());
+    assert_eq!(group_digits(99), "99".to_string());
+    assert_eq!(group_digits(999), "999".to_string());
+    assert_eq!(group_digits(1_000), "1_000".to_string());
+    assert_eq!(group_digits(123_456), "123_456".to_string());
+    assert_eq!(group_digits(1_234_567), "1_234_567".to_string());
+}

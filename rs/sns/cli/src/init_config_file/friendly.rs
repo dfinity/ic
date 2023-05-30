@@ -1,5 +1,11 @@
+use ic_nervous_system_proto::pb::v1 as nervous_system_pb;
 use std::path::PathBuf;
 
+// Implements the format used by example_sns_init_v2.yaml in the root of this
+// package. Studying that is a much more ergonomic way of becoming familiar with
+// the format that we are trying to implement here.
+//
+// (Thanks to the magic of serde, all the code here is declarative.)
 #[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 struct SnsConfigurationFile {
@@ -11,7 +17,7 @@ struct SnsConfigurationFile {
     #[serde(rename = "Principals")]
     principals: Vec<PrincipalAlias>,
 
-    fallback_controller_principals: Vec<String>,
+    fallback_controller_principals: Vec<String>, // Principal (alias)
 
     #[serde(rename = "Token")]
     token: Token,
@@ -32,7 +38,7 @@ struct SnsConfigurationFile {
 #[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 struct PrincipalAlias {
-    id: String,
+    id: String, // PrincipalId
     name: Option<String>,
     email: Option<String>,
 }
@@ -42,27 +48,35 @@ struct PrincipalAlias {
 struct Token {
     name: String,
     symbol: String,
-    transaction_fee: String, // Tokens
+    #[serde(with = "ic_nervous_system_humanize::serde::tokens")]
+    transaction_fee: nervous_system_pb::Tokens,
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 struct Proposals {
-    rejection_fee: String,                             // Tokens
-    initial_voting_period: String,                     // Duration
-    maximum_wait_for_quiet_deadline_extension: String, // Duration
+    #[serde(with = "ic_nervous_system_humanize::serde::tokens")]
+    rejection_fee: nervous_system_pb::Tokens,
+
+    #[serde(with = "ic_nervous_system_humanize::serde::duration")]
+    initial_voting_period: nervous_system_pb::Duration,
+
+    #[serde(with = "ic_nervous_system_humanize::serde::duration")]
+    maximum_wait_for_quiet_deadline_extension: nervous_system_pb::Duration,
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 struct Neurons {
-    minimum_creation_stake: String, // Tokens
+    #[serde(with = "ic_nervous_system_humanize::serde::tokens")]
+    minimum_creation_stake: nervous_system_pb::Tokens,
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 struct Voting {
-    minimum_dissolve_delay: String, // Duration
+    #[serde(with = "ic_nervous_system_humanize::serde::duration")]
+    minimum_dissolve_delay: nervous_system_pb::Duration,
 
     #[serde(rename = "MaximumVotingPowerBonuses")]
     maximum_voting_power_bonuses: MaximumVotingPowerBonuses,
@@ -84,16 +98,24 @@ struct MaximumVotingPowerBonuses {
 #[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 struct Bonus {
-    duration: String, // Duration
-    boost: String,    // Percentage
+    #[serde(with = "ic_nervous_system_humanize::serde::duration")]
+    duration: nervous_system_pb::Duration,
+
+    #[serde(with = "ic_nervous_system_humanize::serde::percentage")]
+    bonus: nervous_system_pb::Percentage,
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 struct RewardRate {
-    initial: String,             // Percentage
-    r#final: String,             // Percentage
-    transition_duration: String, // Duration
+    #[serde(with = "ic_nervous_system_humanize::serde::percentage")]
+    initial: nervous_system_pb::Percentage,
+
+    #[serde(with = "ic_nervous_system_humanize::serde::percentage")]
+    r#final: nervous_system_pb::Percentage,
+
+    #[serde(with = "ic_nervous_system_humanize::serde::duration")]
+    transition_duration: nervous_system_pb::Duration,
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Eq)]
@@ -102,10 +124,11 @@ struct Distribution {
     #[serde(rename = "Neurons")]
     neurons: Vec<Neuron>,
 
-    #[serde(rename = "Balances")]
-    balances: Balances,
+    #[serde(rename = "InitialBalances")]
+    initial_balances: InitialBalances,
 
-    total: String, // Tokens
+    #[serde(with = "ic_nervous_system_humanize::serde::tokens")]
+    total: nervous_system_pb::Tokens,
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Eq)]
@@ -113,19 +136,24 @@ struct Distribution {
 struct Neuron {
     principal: String, // Principal (alias)
 
-    stake: String, // Tokens
+    #[serde(with = "ic_nervous_system_humanize::serde::tokens")]
+    stake: nervous_system_pb::Tokens,
 
     #[serde(default)]
     memo: u64,
 
-    dissolve_delay: String, // Duration
+    #[serde(with = "ic_nervous_system_humanize::serde::duration")]
+    dissolve_delay: nervous_system_pb::Duration,
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
-struct Balances {
-    governance: String, // Tokens
-    swap: String,       // Tokens
+struct InitialBalances {
+    #[serde(with = "ic_nervous_system_humanize::serde::tokens")]
+    governance: nervous_system_pb::Tokens,
+
+    #[serde(with = "ic_nervous_system_humanize::serde::tokens")]
+    swap: nervous_system_pb::Tokens,
 }
 
 #[cfg(test)]

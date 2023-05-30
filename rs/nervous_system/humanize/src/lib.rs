@@ -2,10 +2,22 @@ use core::fmt::Display;
 use ic_nervous_system_proto::pb::v1 as nervous_system_pb;
 use lazy_static::lazy_static;
 use regex::Regex;
-use std::str::FromStr;
+use std::{collections::VecDeque, str::FromStr};
+
+pub mod serde;
 
 #[cfg(test)]
 mod tests;
+
+// Normally, we would import this from ic_nervous_system_common, but we'd be
+// dragging in lots of stuff along with it. The main problem with that is that
+// any random change that requires ic_nervous_system_common to be rebuilt will
+// also trigger a rebuild here. This gives us a "fire wall" to prevent fires
+// from spreading.
+//
+// TODO(NNS1-2284): Move E8, and other such things to their own tiny library to
+// avoid triggering mass rebuilds.
+const E8: u64 = 100_000_000;
 
 /// Parses decimal strings ending in "tokens" (plural), decimal strings end in
 /// "token" (singular) , or integer strings (again, base 10) ending in "e8s". In
@@ -16,6 +28,8 @@ mod tests;
 ///
 /// Whitespace around number is insignificant. E.g. " 42 tokens" is equivalent
 /// to "42tokens".
+///
+/// Inverse of [`format_tokens`].
 pub fn parse_tokens(s: &str) -> Result<nervous_system_pb::Tokens, String> {
     let e8s = if let Some(s) = s.strip_suffix("tokens").map(|s| s.trim()) {
         parse_fixed_point_decimal(s, /* decimal_places = */ 8)?
@@ -39,6 +53,8 @@ pub fn parse_tokens(s: &str) -> Result<nervous_system_pb::Tokens, String> {
 ///   1 week + 2 days + 3 hours
 ///       =
 ///   (1 * (7 * 24 * 60 * 60) + 2 * 24 * 60 * 60 + 3 * (60 * 60)) seconds
+///
+/// Inverse of [`format_duration`].
 pub fn parse_duration(s: &str) -> Result<nervous_system_pb::Duration, String> {
     humantime::parse_duration(s)
         .map(|d| nervous_system_pb::Duration {
@@ -49,6 +65,8 @@ pub fn parse_duration(s: &str) -> Result<nervous_system_pb::Duration, String> {
 
 /// Similar to parse_fixed_point_decimal(s, 2), except a trailing percent sign
 /// is REQUIRED (and not fed into parse_fixed_point_decimal).
+///
+/// Inverse of [`format_percentage`].
 pub fn parse_percentage(s: &str) -> Result<nervous_system_pb::Percentage, String> {
     let number = s
         .strip_suffix('%')
@@ -139,4 +157,92 @@ where
 
     n.checked_mul(boost)
         .ok_or_else(|| format!("Too large of a decimal shift: {} >> {}", n, count))
+}
+
+/// The inverse of [`parse_tokens`].
+///
+/// One wrinkle: if e8s is None, then this is equivalent to e8s = Some(0). This
+/// follows the same logic as Protocol Buffers. If the caller wants None to be
+/// treated differently, they must do it themselves.
+pub fn format_tokens(tokens: &nervous_system_pb::Tokens) -> String {
+    let nervous_system_pb::Tokens { e8s } = tokens;
+    let e8s = e8s.unwrap_or(0);
+
+    if 0 < e8s && e8s < 1_000_000 {
+        return format!("{} e8s", group_digits(e8s));
+    }
+
+    // TODO: format_fixed_point_decimal. parse_fixed_point_decimal seems
+    // lonesome. But seriously, it can also be used in format_percentage.
+
+    let whole = e8s / E8;
+    let fractional = e8s % E8;
+
+    let fractional = if fractional == 0 {
+        "".to_string()
+    } else {
+        // TODO: Group.
+        format!(".{:08}", fractional).trim_matches('0').to_string()
+    };
+
+    let units = if e8s == E8 { "token" } else { "tokens" };
+
+    format!("{}{} {}", group_digits(whole), fractional, units)
+}
+
+/// The inverse of [`parse_duration`].
+///
+/// One wrinkle: if seconds is None, then this is equivalent to seconds =
+/// Some(0). This follows the same logic as Protocol Buffers. If the caller
+/// wants None to be treated differently, they must do it themselves.
+pub fn format_duration(duration: &nervous_system_pb::Duration) -> String {
+    let nervous_system_pb::Duration { seconds } = duration;
+    let seconds = seconds.unwrap_or(0);
+
+    humantime::format_duration(std::time::Duration::from_secs(seconds)).to_string()
+}
+
+/// The inverse of [`parse_percentage`].
+///
+/// One wrinkle: if basis_points is None, then this is equivalent to
+/// basis_points = Some(0). This follows the same logic as Protocol Buffers. If
+/// the caller wants None to be treated differently, they must do it themselves.
+pub fn format_percentage(percentage: &nervous_system_pb::Percentage) -> String {
+    let nervous_system_pb::Percentage { basis_points } = percentage;
+    let basis_points = basis_points.unwrap_or(0);
+
+    let whole = basis_points / 100;
+    let fractional = basis_points % 100;
+
+    let fractional = if fractional == 0 {
+        "".to_string()
+    } else {
+        format!(".{:02}", fractional).trim_matches('0').to_string()
+    };
+
+    format!("{}{}%", group_digits(whole), fractional)
+}
+
+pub(crate) fn group_digits(n: u64) -> String {
+    let mut left_todo = n;
+    let mut groups = VecDeque::new();
+
+    while left_todo > 0 {
+        let group = left_todo % 1000;
+        left_todo /= 1000;
+
+        let group = if left_todo == 0 {
+            format!("{}", group)
+        } else {
+            format!("{:03}", group)
+        };
+
+        groups.push_front(group);
+    }
+
+    if groups.is_empty() {
+        return "0".to_string();
+    }
+
+    Vec::from(groups).join("_")
 }

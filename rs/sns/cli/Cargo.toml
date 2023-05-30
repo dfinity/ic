@@ -23,6 +23,7 @@ hex = "0.4.3"
 ic-base-types = { path = "../../types/base_types" }
 ic-crypto-sha = { path = "../../crypto/sha" }
 ic-nervous-system-common = {path = "../../nervous_system/common"}
+ic-nervous-system-humanize = {path = "../../nervous_system/humanize"}
 ic-nervous-system-proto = {path = "../../nervous_system/proto"}
 ic-nns-constants = { path = "../../nns/constants" }
 ic-protobuf = { path = "../../protobuf" }

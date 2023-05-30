@@ -7461,6 +7461,8 @@ dependencies = [
  "ic-nervous-system-proto",
  "lazy_static",
  "regex",
+ "serde",
+ "serde_yaml",
 ]
 
 [[package]]
@@ -8986,6 +8988,7 @@ dependencies = [
  "ic-base-types",
  "ic-crypto-sha",
  "ic-nervous-system-common",
+ "ic-nervous-system-humanize",
  "ic-nervous-system-proto",
  "ic-nns-constants",
  "ic-protobuf",
