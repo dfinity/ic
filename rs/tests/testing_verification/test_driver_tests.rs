@@ -497,6 +497,32 @@ fn test_overall_group_timeout_in_setup() {
 }
 
 #[test]
+fn test_test_spawning_proc_gets_stopped() {
+    let result = execute_test_scenario_with_default_cmd("test_child_process");
+    assert!(
+        !result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+
+    let err_str = String::from_utf8_lossy(&result.stderr);
+    // The process started by the test print a string magicchild1 at second 1, magicchild2 at
+    // second 2, etc. The per test timeout is 5 seconds, so, 'magicchild1' should be visible, but
+    // not 'magicchild10'.
+    // Further, we test that the test returns even though the child process of the test keeps
+    // stdout/err open.
+    assert!(err_str.contains("magicchild1"));
+    assert!(!err_str.contains("magicchild10"));
+    let summary = extract_report(result.stderr).expect("Failed to extract report from logs.");
+    assert_test_summary_size(&summary, 1, 1, 0);
+    assert_name_and_message_eq(
+        &summary.failure[0],
+        "spawning_process",
+        Some("Timeout after 5s"),
+    );
+}
+
+#[test]
 fn test_setup_failure_file_written() {
     let working_dir = create_unique_working_dir();
     let scenario_name = "test_without_errors";
