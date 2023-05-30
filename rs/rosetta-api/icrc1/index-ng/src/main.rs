@@ -1,4 +1,5 @@
 use candid::{candid_method, Nat, Principal};
+use ic_canisters_http_types::{HttpRequest, HttpResponse, HttpResponseBuilder};
 use ic_cdk::trap;
 use ic_cdk_macros::{init, post_upgrade, query, update};
 use ic_cdk_timers::TimerId;
@@ -93,6 +94,9 @@ struct State {
 
     /// The maximum number of transactions returned by [get_blocks].
     max_blocks_per_response: u64,
+
+    // Last wait time in nanoseconds.
+    pub last_wait_time: Duration,
 }
 
 // NOTE: the default configuration is dysfunctional, but it's convenient to have
@@ -103,6 +107,7 @@ impl Default for State {
             is_build_index_running: false,
             ledger_id: Principal::management_canister(),
             max_blocks_per_response: DEFAULT_MAX_BLOCKS_PER_RESPONSE,
+            last_wait_time: Duration::from_secs(0),
         }
     }
 }
@@ -312,6 +317,7 @@ pub async fn build_index() -> Result<(), String> {
     append_blocks(res.blocks);
     let wait_time = compute_wait_time(tx_indexed_count);
     ic_cdk::eprintln!("Indexed: {} waiting : {:?}", tx_indexed_count, wait_time);
+    change_state(|mut state| state.last_wait_time = wait_time);
     ScopeGuard::into_inner(failure_guard);
     set_build_index_timer(wait_time);
     Ok(())
@@ -638,6 +644,64 @@ fn list_subaccounts(args: ListSubaccountsArgs) -> Vec<Subaccount> {
             .map(|((_, (_, subaccount)), _)| subaccount)
             .collect()
     })
+}
+
+#[candid_method(query)]
+#[query]
+fn http_request(req: HttpRequest) -> HttpResponse {
+    if req.path() == "/metrics" {
+        let mut writer =
+            ic_metrics_encoder::MetricsEncoder::new(vec![], ic_cdk::api::time() as i64 / 1_000_000);
+
+        match encode_metrics(&mut writer) {
+            Ok(()) => HttpResponseBuilder::ok()
+                .header("Content-Type", "text/plain; version=0.0.4")
+                .with_body_and_content_length(writer.into_inner())
+                .build(),
+            Err(err) => {
+                HttpResponseBuilder::server_error(format!("Failed to encode metrics: {}", err))
+                    .build()
+            }
+        }
+    } else {
+        HttpResponseBuilder::not_found().build()
+    }
+}
+
+pub fn encode_metrics(w: &mut ic_metrics_encoder::MetricsEncoder<Vec<u8>>) -> std::io::Result<()> {
+    w.encode_gauge(
+        "index_stable_memory_pages",
+        ic_cdk::api::stable::stable_size() as f64,
+        "Size of the stable memory allocated by this canister measured in 64K Wasm pages.",
+    )?;
+    w.encode_gauge(
+        "index_stable_memory_bytes",
+        (ic_cdk::api::stable::stable_size() * 64 * 1024) as f64,
+        "Size of the stable memory allocated by this canister.",
+    )?;
+
+    let cycle_balance = ic_cdk::api::canister_balance128() as f64;
+    w.encode_gauge(
+        "index_cycle_balance",
+        cycle_balance,
+        "Cycle balance on this canister.",
+    )?;
+    w.gauge_vec("cycle_balance", "Cycle balance on this canister.")?
+        .value(&[("canister", "icrc1-index")], cycle_balance)?;
+
+    w.encode_gauge(
+        "index_number_of_blocks",
+        with_blocks(|blocks| blocks.len()) as f64,
+        "Total number of blocks stored in the stable memory.",
+    )?;
+    w.encode_gauge(
+        "index_last_wait_time",
+        with_state(|state| state.last_wait_time)
+            .as_nanos()
+            .min(f64::MAX as u128) as f64,
+        "Last amount of time waited between two transactions fetch.",
+    )?;
+    Ok(())
 }
 
 fn main() {}
