@@ -1,7 +1,7 @@
 use std::{fs::File, io::stderr, path::PathBuf};
 
 use axum::Router;
-use clap::{crate_version, ArgAction::Count, Args, ValueEnum};
+use clap::{ArgAction::Count, Args, ValueEnum};
 use tower_http::trace::TraceLayer;
 use tracing::{
     info, info_span, level_filters::LevelFilter, span::EnteredSpan, subscriber::set_global_default,
@@ -139,7 +139,7 @@ pub fn setup(opts: LoggingOpts) -> EnteredSpan {
     }
     .expect("Failed to setup tracing.");
 
-    let span = info_span!(target: "icx_proxy", "icx-proxy", version = crate_version!()).entered();
+    let span = info_span!(target: "icx_proxy", "icx-proxy").entered();
     info!(target: "icx_proxy", "Log Level: {filter}");
     span
 }

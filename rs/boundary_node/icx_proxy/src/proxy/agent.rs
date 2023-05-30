@@ -1,5 +1,6 @@
 use std::{
     borrow::Borrow,
+    error::Error,
     net::{IpAddr, SocketAddr},
     sync::{
         atomic::{AtomicUsize, Ordering},
@@ -20,14 +21,15 @@ use ic_utils::{
     call::{AsyncCall, SyncCall},
     interfaces::http_request::HttpRequestCanister,
 };
-use tracing::{enabled, info, instrument, trace, Level};
+use tracing::{enabled, error, info, instrument, trace, Level};
 
 use crate::error::ErrorFactory;
+use crate::http;
 use crate::http::request::HttpRequest;
 use crate::http::response::{AgentResponseAny, HttpResponse};
 use crate::{
     canister_id,
-    proxy::{AppState, HandleError, HyperService},
+    proxy::{AppState, HandleError, HyperService, REQUEST_BODY_SIZE_LIMIT},
     validate::Validate,
 };
 
@@ -125,9 +127,24 @@ fn remove_hop_headers(headers: &HeaderMap<HeaderValue>) -> HeaderMap<HeaderValue
         .collect()
 }
 
+// Dive into the error chain and figure out if the underlying error was caused by an HTTP2 GOAWAY frame
+fn is_h2_goaway(e: &anyhow::Error) -> bool {
+    if let Some(AgentError::TransportError(e)) = e.downcast_ref::<AgentError>() {
+        if let Some(e) = e.downcast_ref::<hyper::Error>() {
+            let def_err = h2::Error::from(h2::Reason::INTERNAL_ERROR);
+
+            if let Some(e) = e.source().unwrap_or(&def_err).downcast_ref::<h2::Error>() {
+                return e.is_go_away();
+            }
+        }
+    }
+
+    false
+}
+
 #[instrument(level = "info", skip_all, fields(addr = display(addr), replica = display(&*args.replica_uri)))]
 pub async fn handler<V: Validate, C: HyperService<Body>>(
-    State(args): State<Args<V, C>>,
+    State(mut args): State<Args<V, C>>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     uri_canister_id: Option<canister_id::UriHost>,
     host_canister_id: Option<canister_id::HostHeader>,
@@ -137,28 +154,65 @@ pub async fn handler<V: Validate, C: HyperService<Body>>(
     let uri_canister_id = uri_canister_id.map(|v| v.0);
     let host_canister_id = host_canister_id.map(|v| v.0);
     let query_param_canister_id = query_param_canister_id.map(|v| v.0);
-    process_request_inner(
-        request,
-        addr,
-        args.agent,
-        &args.replica_uri,
-        args.validator,
-        args.client,
-        uri_canister_id
-            .or(host_canister_id)
-            .or(query_param_canister_id),
-    )
-    .await
-    .handle_error(args.debug)
+
+    // Read the request body into a Vec
+    let (parts, body) = request.into_parts();
+    let body = match http::body::read_streaming_body(body, REQUEST_BODY_SIZE_LIMIT).await {
+        Err(e) => {
+            error!("Unable to read body: {}", e);
+            return Response::builder()
+                .status(500)
+                .body("Error reading body".into())
+                .unwrap();
+        }
+        Ok(b) => b,
+    };
+
+    let mut retries = 3;
+    loop {
+        // Create a new request based on the incoming one
+        let mut request_new = Request::new(Body::from(body.clone()));
+        *request_new.headers_mut() = parts.headers.clone();
+        *request_new.method_mut() = parts.method.clone();
+        *request_new.uri_mut() = parts.uri.clone();
+
+        let res = process_request_inner(
+            request_new,
+            addr,
+            &args.agent,
+            &args.replica_uri,
+            &args.validator,
+            &mut args.client,
+            uri_canister_id
+                .or(host_canister_id)
+                .or(query_param_canister_id),
+        )
+        .await;
+
+        // If we have retries left - check if the underlying reason is a GOAWAY and retry if that's the case.
+        // GOAWAY is issued when the server is gracefully shutting down and it will not execute the request.
+        // So we can safely retry the request even if it's not idempotent since it was never worked on in case of GOAWAY.
+        if retries > 0 {
+            if let Err(e) = &res {
+                if is_h2_goaway(e) {
+                    retries -= 1;
+                    info!("HTTP GOAWAY received, retrying request");
+                    continue;
+                }
+            }
+        }
+
+        return res.handle_error(args.debug);
+    }
 }
 
 async fn process_request_inner(
     request: Request<Body>,
     addr: SocketAddr,
-    agent: Agent,
+    agent: &Agent,
     replica_uri: &Uri,
-    validator: impl Validate,
-    mut client: impl HyperService<Body>,
+    validator: &impl Validate,
+    client: &mut impl HyperService<Body>,
     canister_id: Option<Principal>,
 ) -> Result<Response<Body>, anyhow::Error> {
     let canister_id = match canister_id {
@@ -217,11 +271,12 @@ async fn process_request_inner(
         );
     }
 
-    let canister = HttpRequestCanister::create(&agent, canister_id);
+    let canister = HttpRequestCanister::create(agent, canister_id);
     let header_fields = http_request
         .headers
         .iter()
         .map(|(name, value)| HeaderField(name.into(), value.into()));
+
     let query_result = canister
         .http_request_custom(
             &http_request.method,
@@ -258,7 +313,7 @@ async fn process_request_inner(
         agent_response
     };
 
-    let http_response = HttpResponse::from((&agent, agent_response));
+    let http_response = HttpResponse::from((agent, agent_response));
     let mut response_builder =
         Response::builder().status(StatusCode::from_u16(http_response.status_code)?);
     for (name, value) in &http_response.headers {
@@ -270,7 +325,7 @@ async fn process_request_inner(
     // and this could cause memory issues and possibly create DOS attack vectors.
     let should_validate = !http_response.has_streaming_body && !is_update_call;
     if should_validate {
-        let validation = validator.validate(&agent, &canister_id, &http_request, &http_response);
+        let validation = validator.validate(agent, &canister_id, &http_request, &http_response);
 
         if validation.is_err() {
             return Ok(Response::builder()

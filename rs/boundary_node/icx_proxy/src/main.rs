@@ -5,7 +5,7 @@
 use std::{net::SocketAddr, path::PathBuf};
 
 use anyhow::Context;
-use clap::{builder::ValueParser, crate_authors, crate_version, Parser};
+use clap::{builder::ValueParser, Parser};
 use futures::try_join;
 use tracing::{error, Instrument};
 
@@ -46,11 +46,6 @@ impl<R, E> InspectErr for Result<R, E> {
 }
 
 #[derive(Parser)]
-#[clap(
-    version = crate_version!(),
-    author = crate_authors!(),
-    propagate_version = true,
-)]
 struct Opts {
     /// The address to bind to.
     #[clap(long, default_value = "127.0.0.1:3000")]

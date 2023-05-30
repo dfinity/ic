@@ -26,12 +26,13 @@ clap = { version = "4", features = ["cargo", "derive"] }
 flate2 = "1"
 form_urlencoded = "1"
 futures = "0.3"
+h2 = "0.3.19"
 hex = "0.4"
 http-body = "0.4"
-hyper = { version = "0.14.11", features = ["client", "http2", "http1"] }
+hyper = { version = "0.14.26", features = ["client", "http2", "http1"] }
 hyper-rustls = { version = "0.24.0", features = [ "http2" ] }
 itertools = "0.10"
-ic-agent = { workspace = true, default-features = false, features = ["hyper"] }
+ic-agent = { workspace = true, default-features = false, features = ["hyper", "reqwest"] }
 ic-utils = { workspace = true, features = ["raw"] }
 lazy-regex = "2"
 opentelemetry = "0.17"
