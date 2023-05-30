@@ -20,6 +20,11 @@ pub fn generate_prost_files(proto_paths: ProtoPaths<'_>, out_dir: &Path) {
     config.protoc_arg("--experimental_allow_proto3_optional");
     config.extern_path(".ic_base_types.pb.v1", "::ic-base-types");
 
+    // Frankly, I'm kind of surprised that Prost doesn't blanket everything with
+    // Eq. OTOH, I suppose in PB, it's not very clear whether None and Some(0)
+    // should be considered "equal".
+    config.type_attribute(".", "#[derive(Eq)]");
+
     // Candid-ify generated Rust types.
     config.type_attribute(".", "#[derive(candid::CandidType, candid::Deserialize)]");
     // Because users of the types we supply put these on their types, we must
@@ -28,15 +33,14 @@ pub fn generate_prost_files(proto_paths: ProtoPaths<'_>, out_dir: &Path) {
 
     config.type_attribute(
         "ic_nervous_system.pb.v1.Canister",
-        "#[derive(Ord, PartialOrd, Eq)]",
+        "#[derive(Ord, PartialOrd)]",
     );
-    config.type_attribute("ic_nervous_system.pb.v1.Countries", "#[derive(Eq)]");
 
     let src_file = proto_paths
         .nervous_system
         .join("ic_nervous_system/pb/v1/nervous_system.proto");
 
-    // Make most types copy (currently, only Image is not Copy).
+    // Most types should be Copy (currently, only Image is not Copy).
     for type_name in copy_type_names {
         config.type_attribute(
             format!("ic_nervous_system.pb.v1.{}", type_name),

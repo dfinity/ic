@@ -7,9 +7,11 @@ DEPENDENCIES = [
     "@crate_index//:humantime",
     "@crate_index//:lazy_static",
     "@crate_index//:regex",
+    "@crate_index//:serde",
 ]
 
 DEV_DEPENDENCIES = DEPENDENCIES + [
+    "@crate_index//:serde_yaml",
 ]
 
 rust_library(

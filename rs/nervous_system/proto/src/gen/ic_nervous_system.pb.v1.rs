@@ -1,4 +1,5 @@
 #[derive(
+    Eq,
     candid::CandidType,
     candid::Deserialize,
     comparable::Comparable,
@@ -13,6 +14,7 @@ pub struct Duration {
     pub seconds: ::core::option::Option<u64>,
 }
 #[derive(
+    Eq,
     candid::CandidType,
     candid::Deserialize,
     comparable::Comparable,
@@ -27,6 +29,7 @@ pub struct Tokens {
     pub e8s: ::core::option::Option<u64>,
 }
 #[derive(
+    Eq,
     candid::CandidType,
     candid::Deserialize,
     comparable::Comparable,
@@ -43,6 +46,7 @@ pub struct Image {
     pub base64_encoding: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[derive(
+    Eq,
     candid::CandidType,
     candid::Deserialize,
     comparable::Comparable,
@@ -58,13 +62,13 @@ pub struct Percentage {
 }
 /// A Canister that will be transferred to an SNS.
 #[derive(
+    Eq,
     candid::CandidType,
     candid::Deserialize,
     comparable::Comparable,
     serde::Serialize,
     Ord,
     PartialOrd,
-    Eq,
     Copy,
     Clone,
     PartialEq,
@@ -78,11 +82,11 @@ pub struct Canister {
 /// Represents a set of countries. To be used in country-specific configurations,
 /// e.g., to restrict the geography of an SNS swap.
 #[derive(
+    Eq,
     candid::CandidType,
     candid::Deserialize,
     comparable::Comparable,
     serde::Serialize,
-    Eq,
     Clone,
     PartialEq,
     ::prost::Message,

@@ -1,4 +1,5 @@
 use super::*;
+use ic_nervous_system_humanize::{parse_duration, parse_percentage, parse_tokens};
 use pretty_assertions::assert_eq;
 
 #[test]
@@ -30,38 +31,38 @@ fn test_parse() {
         token: Token {
             name: "Batman".to_string(),
             symbol: "BTM".to_string(),
-            transaction_fee: "10_000 e8s".to_string(),
+            transaction_fee: parse_tokens("10_000 e8s").unwrap(),
         },
 
         proposals: Proposals {
-            rejection_fee: "1 token".to_string(),
-            initial_voting_period: "4d".to_string(),
-            maximum_wait_for_quiet_deadline_extension: "1 day".to_string(),
+            rejection_fee: parse_tokens("1 token").unwrap(),
+            initial_voting_period: parse_duration("4d").unwrap(),
+            maximum_wait_for_quiet_deadline_extension: parse_duration("1 day").unwrap(),
         },
 
         neurons: Neurons {
-            minimum_creation_stake: "10 tokens".to_string(),
+            minimum_creation_stake: parse_tokens("10 tokens").unwrap(),
         },
 
         voting: Voting {
-            minimum_dissolve_delay: "26 weeks".to_string(),
+            minimum_dissolve_delay: parse_duration("26 weeks").unwrap(),
 
             maximum_voting_power_bonuses: MaximumVotingPowerBonuses {
                 dissolve_delay: Bonus {
-                    duration: "8 years".to_string(),
-                    boost: "100%".to_string(),
+                    duration: parse_duration("8 years").unwrap(),
+                    bonus: parse_percentage("100%").unwrap(),
                 },
 
                 age: Bonus {
-                    duration: "4 years".to_string(),
-                    boost: "25%".to_string(),
+                    duration: parse_duration("4 years").unwrap(),
+                    bonus: parse_percentage("25%").unwrap(),
                 },
             },
 
             reward_rate: RewardRate {
-                initial: "10%".to_string(),
-                r#final: "2.25%".to_string(),
-                transition_duration: "12 years".to_string(),
+                initial: parse_percentage("10%").unwrap(),
+                r#final: parse_percentage("2.25%").unwrap(),
+                transition_duration: parse_duration("12 years").unwrap(),
             },
         },
 
@@ -69,24 +70,24 @@ fn test_parse() {
             neurons: vec![
                 Neuron {
                     principal: "Bruce Wayne".to_string(),
-                    stake: "15 tokens".to_string(),
+                    stake: parse_tokens("15 tokens").unwrap(),
                     memo: 42,
-                    dissolve_delay: "0.5 years".to_string(),
+                    dissolve_delay: parse_duration("1 years").unwrap(),
                 },
                 Neuron {
                     principal: "Bruce Wayne".to_string(),
-                    stake: "15 tokens".to_string(),
+                    stake: parse_tokens("15 tokens").unwrap(),
                     memo: 0, // Not explicitly supplied -> 0 is taken as default.
-                    dissolve_delay: "0.5 years".to_string(),
+                    dissolve_delay: parse_duration("1 years").unwrap(),
                 },
             ],
 
-            balances: Balances {
-                governance: "50 tokens".to_string(),
-                swap: "30 tokens".to_string(),
+            initial_balances: InitialBalances {
+                governance: parse_tokens("50 tokens").unwrap(),
+                swap: parse_tokens("30 tokens").unwrap(),
             },
 
-            total: "95 tokens".to_string(),
+            total: parse_tokens("95 tokens").unwrap(),
         },
     };
 

@@ -35,11 +35,11 @@ Voting:
     MaximumVotingPowerBonuses:
         DissolveDelay:
             duration: 8 years
-            boost: 100%
+            bonus: 100%
 
         Age:
             duration: 4 years
-            boost: 25%
+            bonus: 25%
 
     RewardRate:
         initial: 10%
@@ -53,13 +53,14 @@ Distribution:
         - principal: Bruce Wayne
           stake: 15 tokens
           memo: 42
-          dissolve_delay: 0.5 years
+          # TODO: Add support for non-integer numbers in duration strings?
+          dissolve_delay: 1 years
 
         - principal: Bruce Wayne
           stake: 15 tokens
-          dissolve_delay: 0.5 years
+          dissolve_delay: 1 years
 
-    Balances:
+    InitialBalances:
         governance: 50 tokens
         swap: 30 tokens
 
