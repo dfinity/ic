@@ -8,6 +8,7 @@ use crate::manifest::{
     manifest_hash, tests::computation::dummy_file_table_and_chunk_table, DEFAULT_CHUNK_SIZE,
 };
 use ic_protobuf::state::sync::v1 as pb;
+use ic_state_layout::{SUBNET_QUEUES_FILE, SYSTEM_METADATA_FILE};
 use ic_test_utilities::types::arbitrary;
 use ic_types::state_sync::{
     encode_manifest, ChunkInfo, FileInfo, Manifest, StateSyncVersion,
@@ -459,12 +460,12 @@ fn testcase_file_table_and_chunk_table() -> (Vec<FileInfo>, Vec<ChunkInfo>) {
         hash: hex_to_hash("981305d7c0b2ace0f53fe822f4075278fa28511e8c34e70f37fd8425af659b36"),
     };
     let file_info_9 = FileInfo {
-        relative_path: "subnet_queues.pbuf".into(),
+        relative_path: SUBNET_QUEUES_FILE.into(),
         size_bytes: 0,
         hash: hex_to_hash("981305d7c0b2ace0f53fe822f4075278fa28511e8c34e70f37fd8425af659b36"),
     };
     let file_info_10 = FileInfo {
-        relative_path: "system_metadata.pbuf".into(),
+        relative_path: SYSTEM_METADATA_FILE.into(),
         size_bytes: 887,
         hash: hex_to_hash("1c134cd6a9d691d3ec74a81eec5462d5af8653be53beb61e26b884958ebd2d05"),
     };

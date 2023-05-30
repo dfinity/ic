@@ -10,7 +10,7 @@ use crate::manifest::{
 use ic_crypto_sha::Sha256;
 use ic_logger::replica_logger::no_op_logger;
 use ic_metrics::MetricsRegistry;
-use ic_state_layout::CheckpointLayout;
+use ic_state_layout::{CheckpointLayout, CANISTER_FILE};
 use ic_types::state_sync::{MetaManifest, CURRENT_STATE_SYNC_VERSION};
 use ic_types::{
     crypto::CryptoHash,
@@ -1019,7 +1019,7 @@ fn test_build_file_group_chunks() {
     let dummy_chunk_hash = [0u8; 32];
     let file_group_file_info = |id: u32| -> FileInfo {
         FileInfo {
-            relative_path: std::path::PathBuf::from(id.to_string()).join("canister.pbuf"),
+            relative_path: std::path::PathBuf::from(id.to_string()).join(CANISTER_FILE),
             size_bytes: 500,
             hash: dummy_file_hash,
         }
@@ -1084,7 +1084,7 @@ fn test_build_file_group_chunks() {
 
     // A "canister.pbuf" file larger than `MAX_FILE_SIZE_TO_GROUP` bytes will not be grouped.
     file_table.push(FileInfo {
-        relative_path: std::path::PathBuf::from(10_000.to_string()).join("canister.pbuf"),
+        relative_path: std::path::PathBuf::from(10_000.to_string()).join(CANISTER_FILE),
         size_bytes: MAX_FILE_SIZE_TO_GROUP as u64 + 1,
         hash: dummy_file_hash,
     });

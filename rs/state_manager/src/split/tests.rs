@@ -12,7 +12,10 @@ use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     page_map::TestPageAllocatorFileDescriptorImpl, ReplicatedState, SystemMetadata,
 };
-use ic_state_layout::{ProtoFileWith, StateLayout};
+use ic_state_layout::{
+    ProtoFileWith, StateLayout, CANISTER_FILE, CANISTER_STATES_DIR, CHECKPOINTS_DIR,
+    INGRESS_HISTORY_FILE, QUEUES_FILE, SPLIT_MARKER_FILE, SUBNET_QUEUES_FILE, SYSTEM_METADATA_FILE,
+};
 use ic_test_utilities::{
     mock_time,
     state::new_canister_state,
@@ -77,9 +80,9 @@ const SUBNET_A_FILES: &[&str] = &[
     "canister_states/00000000000000020101/queues.pbuf",
     "canister_states/00000000000000030101/canister.pbuf",
     "canister_states/00000000000000030101/queues.pbuf",
-    "ingress_history.pbuf",
-    "subnet_queues.pbuf",
-    "system_metadata.pbuf",
+    INGRESS_HISTORY_FILE,
+    SUBNET_QUEUES_FILE,
+    SYSTEM_METADATA_FILE,
 ];
 
 /// Full list of files expected to be listed in the manifest of subnet A'.
@@ -88,20 +91,20 @@ const SUBNET_A_PRIME_FILES: &[&str] = &[
     "canister_states/00000000000000010101/queues.pbuf",
     "canister_states/00000000000000030101/canister.pbuf",
     "canister_states/00000000000000030101/queues.pbuf",
-    "ingress_history.pbuf",
-    "split_from.pbuf",
-    "subnet_queues.pbuf",
-    "system_metadata.pbuf",
+    INGRESS_HISTORY_FILE,
+    SPLIT_MARKER_FILE,
+    SUBNET_QUEUES_FILE,
+    SYSTEM_METADATA_FILE,
 ];
 
 /// Full list of files expected to be listed in the manifest of subnet B.
 const SUBNET_B_FILES: &[&str] = &[
     "canister_states/00000000000000020101/canister.pbuf",
     "canister_states/00000000000000020101/queues.pbuf",
-    "ingress_history.pbuf",
-    "split_from.pbuf",
-    "subnet_queues.pbuf",
-    "system_metadata.pbuf",
+    INGRESS_HISTORY_FILE,
+    SPLIT_MARKER_FILE,
+    SUBNET_QUEUES_FILE,
+    SYSTEM_METADATA_FILE,
 ];
 
 const HEIGHT: Height = Height::new(42);
@@ -188,7 +191,7 @@ fn split_subnet_a_prime() {
 
         // Compare the 2 manifests.
         for &file in SUBNET_A_PRIME_FILES {
-            if file == "split_from.pbuf" {
+            if file == SPLIT_MARKER_FILE {
                 assert_eq!(SUBNET_A, deserialize_split_from(&root, height_a_prime));
             } else {
                 // All other files should be unmodified.
@@ -239,9 +242,9 @@ fn split_subnet_b() {
         // Hence, for files that we expect to be different after the split it is
         // safe to compare the resulding Rust structs for equality.
         for &file in SUBNET_B_FILES {
-            if file == "split_from.pbuf" {
+            if file == SPLIT_MARKER_FILE {
                 assert_eq!(SUBNET_A, deserialize_split_from(&root, height_b));
-            } else if file == "system_metadata.pbuf" {
+            } else if file == SYSTEM_METADATA_FILE {
                 let expected = SystemMetadata::new(SUBNET_B, SubnetType::Application);
                 assert_eq!(expected, deserialize_system_metadata(&root, height_b))
             } else {
@@ -323,19 +326,19 @@ fn new_state_layout(log: ReplicaLogger) -> TempDir {
         vec![CANISTER_1, CANISTER_2, CANISTER_3]
     );
 
-    let checkpoint_path = root.join("checkpoints").join("000000000000002a");
+    let checkpoint_path = root.join(CHECKPOINTS_DIR).join("000000000000002a");
 
     let mut expected_paths = vec![
-        checkpoint_path.join("ingress_history.pbuf"),
-        checkpoint_path.join("subnet_queues.pbuf"),
-        checkpoint_path.join("system_metadata.pbuf"),
+        checkpoint_path.join(INGRESS_HISTORY_FILE),
+        checkpoint_path.join(SUBNET_QUEUES_FILE),
+        checkpoint_path.join(SYSTEM_METADATA_FILE),
     ];
     for canister in &[CANISTER_1, CANISTER_2] {
         let canister_path = checkpoint_path
-            .join("canister_states")
+            .join(CANISTER_STATES_DIR)
             .join(hex::encode(canister.get_ref().as_slice()));
-        expected_paths.push(canister_path.join("queues.pbuf"));
-        expected_paths.push(canister_path.join("canister.pbuf"));
+        expected_paths.push(canister_path.join(QUEUES_FILE));
+        expected_paths.push(canister_path.join(CANISTER_FILE));
     }
 
     for path in expected_paths {
@@ -416,9 +419,9 @@ fn compute_manifest_v3_for_root(root: &Path, log: &ReplicaLogger) -> (Manifest, 
 
 fn deserialize_split_from(root: &Path, height: Height) -> SubnetId {
     let split_from: ProtoFileWith<ic_protobuf::state::system_metadata::v1::SplitFrom, ReadOnly> =
-        root.join("checkpoints")
+        root.join(CHECKPOINTS_DIR)
             .join(StateLayout::checkpoint_name(height))
-            .join("split_from.pbuf")
+            .join(SPLIT_MARKER_FILE)
             .into();
     subnet_id_try_from_protobuf(split_from.deserialize().unwrap().subnet_id.unwrap()).unwrap()
 }
@@ -428,9 +431,9 @@ fn deserialize_system_metadata(root: &Path, height: Height) -> SystemMetadata {
         ic_protobuf::state::system_metadata::v1::SystemMetadata,
         ReadOnly,
     > = root
-        .join("checkpoints")
+        .join(CHECKPOINTS_DIR)
         .join(StateLayout::checkpoint_name(height))
-        .join("system_metadata.pbuf")
+        .join(SYSTEM_METADATA_FILE)
         .into();
     system_metadata.deserialize().unwrap().try_into().unwrap()
 }

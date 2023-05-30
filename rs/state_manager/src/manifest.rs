@@ -20,7 +20,7 @@ use ic_crypto_sha::Sha256;
 use ic_logger::{error, fatal, replica_logger::no_op_logger, ReplicaLogger};
 use ic_metrics::MetricsRegistry;
 use ic_replicated_state::PageIndex;
-use ic_state_layout::{CheckpointLayout, ReadOnly};
+use ic_state_layout::{CheckpointLayout, ReadOnly, CANISTER_FILE};
 use ic_sys::{mmap::ScopedMmap, PAGE_SIZE};
 use ic_types::{
     crypto::CryptoHash,
@@ -52,7 +52,7 @@ const REHASH_EVERY_NTH_CHUNK: u64 = 10;
 /// We make the decision to group `canister.pbuf` files for two main reasons:
 ///     1. They are small in general, usually less than 1 KiB.
 ///     2. They change between checkpoints, so we always have to fetch them.
-const FILE_TO_GROUP: &str = "canister.pbuf";
+const FILE_TO_GROUP: &str = CANISTER_FILE;
 
 /// The size of files to group should be less or equal to the `FILE_GROUP_SIZE_LIMIT`
 /// to guarantee the efficiency of grouping.
