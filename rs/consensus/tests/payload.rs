@@ -3,7 +3,7 @@ mod framework;
 use crate::framework::ConsensusDriver;
 use ic_artifact_pool::{consensus_pool, dkg_pool, ecdsa_pool};
 use ic_consensus::consensus::dkg_key_manager::DkgKeyManager;
-use ic_consensus::{certification::CertifierImpl, consensus::ConsensusImpl, dkg};
+use ic_consensus::{certification::CertifierImpl, dkg};
 use ic_consensus_utils::{membership::Membership, pool_reader::PoolReader};
 use ic_interfaces_state_manager::Labeled;
 use ic_interfaces_state_manager_mocks::MockStateManager;
@@ -128,7 +128,7 @@ fn consensus_produces_expected_batches() {
         let fake_local_store_certified_time_reader =
             Arc::new(FakeLocalStoreCertifiedTimeReader::new(time.clone()));
 
-        let consensus = ConsensusImpl::new(
+        let (consensus, consensus_gossip) = ic_consensus::consensus::setup(
             replica_config.clone(),
             Default::default(),
             Arc::clone(&registry_client) as Arc<_>,
@@ -144,11 +144,11 @@ fn consensus_produces_expected_batches() {
             Arc::clone(&router) as Arc<_>,
             Arc::clone(&state_manager) as Arc<_>,
             Arc::clone(&time) as Arc<_>,
-            Duration::from_secs(0),
             MaliciousFlags::default(),
             metrics_registry.clone(),
             no_op_logger(),
             fake_local_store_certified_time_reader,
+            0,
         );
         let dkg = dkg::DkgImpl::new(
             replica_config.node_id,
@@ -172,6 +172,7 @@ fn consensus_produces_expected_batches() {
             replica_config.node_id,
             pool_config,
             consensus,
+            consensus_gossip,
             dkg,
             Box::new(certifier),
             consensus_pool,

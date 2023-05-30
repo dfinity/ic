@@ -5,13 +5,14 @@ use ic_interfaces::{
 };
 use ic_logger::{trace, ReplicaLogger};
 use ic_test_utilities::types::ids::node_test_id;
-use ic_types::time::Time;
+use ic_types::{artifact::Priority, time::Time};
 use rand::seq::SliceRandom;
 use std::time::Duration;
 
 fn execute_instance<'a, 'b>(
     instance: &'b ConsensusInstance<'a>,
     time_source: &dyn TimeSource,
+    use_priority_fn: bool,
     logger: &ReplicaLogger,
 ) -> Option<Time> {
     let mut in_queue = instance.in_queue.borrow_mut();
@@ -33,6 +34,24 @@ fn execute_instance<'a, 'b>(
         match inp {
             Input::Message(x) => match x.message {
                 InputMessage::Consensus(msg) => {
+                    if use_priority_fn {
+                        match instance
+                            .driver
+                            .consensus_priority
+                            .borrow()
+                            .get_priority(&msg)
+                        {
+                            Priority::Drop => return Some(timestamp),
+                            Priority::Stash | Priority::Later => {
+                                instance
+                                    .buffered
+                                    .borrow_mut()
+                                    .push(InputMessage::Consensus(msg));
+                                return Some(timestamp);
+                            }
+                            Priority::Fetch | Priority::FetchNow => (),
+                        };
+                    }
                     let mut pool = instance.driver.consensus_pool.write().unwrap();
                     pool.insert(UnvalidatedArtifact {
                         message: msg,
@@ -58,9 +77,25 @@ fn execute_instance<'a, 'b>(
                 }
             },
             // Repeat the polling
-            Input::TimerExpired(x) => in_queue.push(Input::TimerExpired(
-                x + Duration::from_millis(POLLING_INTERVAL),
-            )),
+            Input::TimerExpired(x) => {
+                if use_priority_fn {
+                    let mut priority = instance.driver.consensus_priority.borrow_mut();
+                    if priority.last_updated + PRIORITY_FN_REFRESH_INTERVAL < timestamp {
+                        priority.refresh(
+                            &instance.driver.consensus_gossip,
+                            &*instance.driver.consensus_pool.read().unwrap(),
+                            timestamp,
+                        );
+                    }
+                    let mut buffered = instance.buffered.borrow_mut();
+                    for message in buffered.drain(..) {
+                        in_queue.push(Input::Message(Message { message, timestamp }));
+                    }
+                }
+                in_queue.push(Input::TimerExpired(
+                    x + Duration::from_millis(POLLING_INTERVAL),
+                ));
+            }
         }
         // Move new messages into out_queue.
         for message in instance.driver.step(time_source) {
@@ -76,11 +111,13 @@ fn execute_instance<'a, 'b>(
 /// timestamp(min(i)) value globally. This ensures that all input messages are
 /// always executed in order, for all nodes.
 #[derive(Debug)]
-pub struct GlobalMessage;
+pub struct GlobalMessage {
+    use_priority_fn: bool,
+}
 
 impl GlobalMessage {
-    pub fn new() -> Box<GlobalMessage> {
-        Box::new(GlobalMessage)
+    pub fn new(use_priority_fn: bool) -> Box<GlobalMessage> {
+        Box::new(GlobalMessage { use_priority_fn })
     }
 }
 
@@ -95,16 +132,20 @@ impl ExecutionStrategy for GlobalMessage {
                 let t_j = j.in_queue.borrow().peek().map(|x| x.timestamp());
                 compare_timestamp(t_i, t_j)
             })
-            .and_then(|instance| execute_instance(instance, runner.time_source(), logger))
+            .and_then(|instance| {
+                execute_instance(instance, runner.time_source(), self.use_priority_fn, logger)
+            })
     }
 }
 
 #[derive(Debug)]
-pub struct RandomExecute;
+pub struct RandomExecute {
+    use_priority_fn: bool,
+}
 
 impl RandomExecute {
-    pub fn new() -> Box<RandomExecute> {
-        Box::new(RandomExecute)
+    pub fn new(use_priority_fn: bool) -> Box<RandomExecute> {
+        Box::new(RandomExecute { use_priority_fn })
     }
 }
 
@@ -115,7 +156,8 @@ impl ExecutionStrategy for RandomExecute {
         let mut rng = runner.rng();
         instances.shuffle(&mut *rng);
         while let Some(instance) = instances.pop() {
-            let result = execute_instance(instance, runner.time_source(), logger);
+            let result =
+                execute_instance(instance, runner.time_source(), self.use_priority_fn, logger);
             if result.is_some() {
                 return result;
             }
@@ -125,11 +167,13 @@ impl ExecutionStrategy for RandomExecute {
 }
 
 #[derive(Debug)]
-pub struct GlobalClock;
+pub struct GlobalClock {
+    use_priority_fn: bool,
+}
 
 impl GlobalClock {
-    pub fn new() -> Box<GlobalClock> {
-        Box::new(GlobalClock)
+    pub fn new(use_priority_fn: bool) -> Box<GlobalClock> {
+        Box::new(GlobalClock { use_priority_fn })
     }
 }
 
@@ -144,6 +188,8 @@ impl ExecutionStrategy for GlobalClock {
                 let t_j = j.in_queue.borrow().peek().map(|_| *j.clock.borrow());
                 compare_timestamp(t_i, t_j)
             })
-            .and_then(|instance| execute_instance(instance, runner.time_source(), logger))
+            .and_then(|instance| {
+                execute_instance(instance, runner.time_source(), self.use_priority_fn, logger)
+            })
     }
 }
