@@ -38,6 +38,7 @@ ripemd = "0.1.1"
 scopeguard = "1.1.0"
 serde = "1.0.136"
 serde_bytes = "0.11"
+serde_json = "1.0.96"
 
 [dev-dependencies]
 bitcoin = "0.28.1"

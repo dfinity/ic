@@ -19,7 +19,7 @@ use ic_ckbtc_minter::updates::{
 use ic_ckbtc_minter::MinterInfo;
 use ic_ckbtc_minter::{
     state::eventlog::{Event, GetEventsArg},
-    storage,
+    storage, {Log, LogEntry, Priority},
 };
 use icrc_ledger_types::icrc1::account::Account;
 
@@ -209,32 +209,29 @@ fn http_request(req: HttpRequest) -> HttpResponse {
             .with_body_and_content_length(dashboard)
             .build()
     } else if req.path() == "/logs" {
-        use std::io::Write;
-        let mut buf = vec![];
-
-        writeln!(&mut buf, "P0 logs:").unwrap();
+        use serde_json;
+        let mut entries: Log = Default::default();
         for entry in export_logs(&ic_ckbtc_minter::logs::P0) {
-            writeln!(
-                &mut buf,
-                "{} {}:{} {}",
-                entry.timestamp, entry.file, entry.line, entry.message
-            )
-            .unwrap();
+            entries.entries.push(LogEntry {
+                timestamp: entry.timestamp,
+                priority: Priority::P0,
+                file: entry.file.to_string(),
+                line: entry.line,
+                message: entry.message,
+            });
         }
-
-        writeln!(&mut buf, "P1 logs:").unwrap();
         for entry in export_logs(&ic_ckbtc_minter::logs::P1) {
-            writeln!(
-                &mut buf,
-                "{} {}:{} {}",
-                entry.timestamp, entry.file, entry.line, entry.message
-            )
-            .unwrap();
+            entries.entries.push(LogEntry {
+                timestamp: entry.timestamp,
+                priority: Priority::P1,
+                file: entry.file.to_string(),
+                line: entry.line,
+                message: entry.message,
+            });
         }
-
         HttpResponseBuilder::ok()
-            .header("Content-Type", "text/plain; charset=utf-8")
-            .with_body_and_content_length(buf)
+            .header("Content-Type", "application/json; charset=utf-8")
+            .with_body_and_content_length(serde_json::to_string(&entries).unwrap_or_default())
             .build()
     } else {
         HttpResponseBuilder::not_found().build()
