@@ -3,7 +3,7 @@ use ic_artifact_pool::{
     certification_pool::CertificationPoolImpl, consensus_pool::ConsensusPoolImpl, dkg_pool,
 };
 use ic_config::artifact_pool::ArtifactPoolConfig;
-use ic_consensus::consensus::ConsensusImpl;
+use ic_consensus::consensus::{ConsensusGossipImpl, ConsensusImpl};
 use ic_interfaces::{
     artifact_pool::{ChangeSetProducer, MutablePool},
     certification,
@@ -27,6 +27,7 @@ impl<'a> ConsensusDriver<'a> {
         node_id: NodeId,
         pool_config: ArtifactPoolConfig,
         consensus: ConsensusImpl,
+        consensus_gossip: ConsensusGossipImpl,
         dkg: ic_consensus::dkg::DkgImpl,
         certifier: Box<
             dyn ChangeSetProducer<CertificationPoolImpl, ChangeSet = certification::ChangeSet> + 'a,
@@ -42,8 +43,11 @@ impl<'a> ConsensusDriver<'a> {
             logger.clone(),
             metrics_registry,
         )));
+        let consensus_priority =
+            PriorityFnState::new(&consensus_gossip, &*consensus_pool.read().unwrap());
         ConsensusDriver {
             consensus,
+            consensus_gossip,
             dkg,
             certifier,
             logger,
@@ -51,6 +55,7 @@ impl<'a> ConsensusDriver<'a> {
             certification_pool,
             ingress_pool,
             dkg_pool,
+            consensus_priority,
         }
     }
 

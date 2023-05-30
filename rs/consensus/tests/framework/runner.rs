@@ -5,7 +5,6 @@ use ic_config::artifact_pool::ArtifactPoolConfig;
 use ic_consensus::consensus::dkg_key_manager::DkgKeyManager;
 use ic_consensus::{
     certification::{CertificationCrypto, CertifierImpl},
-    consensus::ConsensusImpl,
     dkg,
 };
 use ic_consensus_utils::crypto::ConsensusCrypto;
@@ -150,7 +149,7 @@ impl<'a> ConsensusRunner<'a> {
         let fake_local_store_certified_time_reader =
             Arc::new(FakeLocalStoreCertifiedTimeReader::new(self.time.clone()));
 
-        let consensus = ConsensusImpl::new(
+        let (consensus, consensus_gossip) = ic_consensus::consensus::setup(
             deps.replica_config.clone(),
             Default::default(),
             Arc::clone(&deps.registry_client),
@@ -166,11 +165,11 @@ impl<'a> ConsensusRunner<'a> {
             deps.message_routing.clone(),
             deps.state_manager.clone(),
             Arc::clone(&self.time) as Arc<_>,
-            Duration::from_secs(0),
             MaliciousFlags::default(),
             deps.metrics_registry.clone(),
             replica_logger.clone(),
             fake_local_store_certified_time_reader,
+            0,
         );
         let dkg = dkg::DkgImpl::new(
             deps.replica_config.node_id,
@@ -197,12 +196,14 @@ impl<'a> ConsensusRunner<'a> {
             node_id,
             deps,
             in_queue,
+            buffered: Default::default(),
             out_queue: Default::default(),
 
             driver: ConsensusDriver::new(
                 node_id,
                 pool_config,
                 consensus,
+                consensus_gossip,
                 dkg,
                 Box::new(certifier),
                 deps.consensus_pool.clone(),
@@ -280,7 +281,8 @@ impl Default for ConsensusRunnerConfig {
             num_nodes: 10,
             num_rounds: 20,
             degree: 9,
-            execution: GlobalMessage::new(),
+            use_priority_fn: false,
+            execution: GlobalMessage::new(false),
             delivery: Sequential::new(),
         }
     }
@@ -334,6 +336,7 @@ impl ConsensusRunnerConfig {
         config.num_rounds = rng.gen_range(10..101);
         config.degree = rng
             .gen_range(std::cmp::min(5, config.num_nodes / 2)..std::cmp::min(config.num_nodes, 20));
+        config.use_priority_fn = rng.gen_bool(0.5);
         config.reset_strategies();
         config
     }
@@ -349,9 +352,9 @@ impl ConsensusRunnerConfig {
     fn strategies<R: Rng>(&self, rng: &mut R) -> Strategies {
         (
             vec![
-                GlobalMessage::new(),
-                GlobalClock::new(),
-                RandomExecute::new(),
+                GlobalMessage::new(self.use_priority_fn),
+                GlobalClock::new(self.use_priority_fn),
+                RandomExecute::new(self.use_priority_fn),
             ],
             vec![
                 Sequential::new(),
@@ -362,8 +365,8 @@ impl ConsensusRunnerConfig {
     }
 
     /// Parse and update configuration from environment: NUM_NODES,
-    /// NUM_ROUNDS, MAX_DELTA, DEGREE, EXECUTION and DELIVERY (except
-    /// RANDOM_SEED, which should be used when first creating the config).
+    /// NUM_ROUNDS, MAX_DELTA, DEGREE, USE_PRIORITY_FN, EXECUTION and DELIVERY
+    /// (except RANDOM_SEED, which should be used when first creating the config).
     /// Return the updated config if parsing is successful, or an error message
     /// in string otherwise.
     pub fn parse_extra_config(mut self) -> Result<Self, String> {
@@ -384,6 +387,11 @@ impl ConsensusRunnerConfig {
                     self.degree = value
                         .parse()
                         .map_err(|_| "DEGREE must be an unsigned integer")?
+                }
+                "use_priority_fn" => {
+                    self.use_priority_fn = value
+                        .parse()
+                        .map_err(|_| "USE_PRIORITY_FN must be either true or false")?
                 }
                 _ => (),
             }
