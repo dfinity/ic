@@ -1,5 +1,5 @@
 {
-  "image": "dfinity/ic-build:160b0e7b843d65c6ee18dae445d92cfcf7cf408d95cec4d81b9e8df40f2c5fa2",
+  "image": "dfinity/ic-build:f8af654ccaf573181b973dde5ac11d15dedbbe24911bc3d2ee4a79b8a40ae888",
   "remoteUser": "ubuntu",
   "runArgs": [
     "--hostname",
