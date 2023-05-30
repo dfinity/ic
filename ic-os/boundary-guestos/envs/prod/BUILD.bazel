@@ -9,4 +9,5 @@ boundary_node_icos_build(
     name = "prod",
     image_deps = image_deps,
     sev = False,
+    visibility = ["//testnet/tools:__pkg__"],
 )
