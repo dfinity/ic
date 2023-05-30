@@ -1,7 +1,7 @@
 server {
     listen 80;
     listen [::]:80;
-    server_name localhost *.ic0.local;
+    server_name localhost *.ic0.local *.ic.local;
 
     return 301 https://$host$request_uri;
 }
