@@ -212,7 +212,7 @@ pub async fn http_request(arg: CanisterHttpRequestArgument) -> CallResult<(HttpR
 /// If the canister is on a 34-node Application Subnets, you may have to compute the cost by yourself and call [`http_request_with_cycles_with`] instead.
 ///
 /// Check [this page](https://internetcomputer.org/docs/current/developer-docs/production/computation-and-storage-costs) for more details.
-#[cfg(any(docsrs, feature = "transform-closure"))]
+#[cfg(feature = "transform-closure")]
 #[cfg_attr(docsrs, doc(cfg(feature = "transform-closure")))]
 pub async fn http_request_with(
     arg: CanisterHttpRequestArgument,
@@ -253,7 +253,7 @@ pub async fn http_request_with_cycles(
 /// Check [this page](https://internetcomputer.org/docs/current/developer-docs/production/computation-and-storage-costs) for more details.
 ///
 /// If the canister is on a 13-node Application Subnet, you can call [`http_request_with`] instead which handles cycles cost calculation under the hood.
-#[cfg(any(docsrs, feature = "transform-closure"))]
+#[cfg(feature = "transform-closure")]
 #[cfg_attr(docsrs, doc(cfg(feature = "transform-closure")))]
 pub async fn http_request_with_cycles_with(
     arg: CanisterHttpRequestArgument,
