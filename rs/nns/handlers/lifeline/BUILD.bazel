@@ -27,7 +27,7 @@ external_actor(
 
 external_actor(
     name = "root",
-    idl = "//rs/nns/handlers/root:canister/root.did",
+    idl = "//rs/nns/handlers/root/impl:canister/root.did",
     principal = "r7inp-6aaaa-aaaaa-aaabq-cai",
     visibility = ["//visibility:private"],
 )

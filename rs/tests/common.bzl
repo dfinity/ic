@@ -35,7 +35,7 @@ DEPENDENCIES = [
     "//rs/nns/governance",
     "//rs/nns/gtc",
     "//rs/nns/handlers/lifeline",
-    "//rs/nns/handlers/root",
+    "//rs/nns/handlers/root/impl:root",
     "//rs/nns/init",
     "//rs/nns/sns-wasm",
     "//rs/nns/test_utils",
@@ -175,7 +175,7 @@ NNS_CANISTER_WASM_PROVIDERS = {
         "mainnet": "@mainnet_icp_ledger_canister//file",
     },
     "root-canister": {
-        "tip-of-branch": "//rs/nns/handlers/root:root-canister",
+        "tip-of-branch": "//rs/nns/handlers/root/impl:root-canister",
         "mainnet": "@mainnet_nns_root-canister//file",
     },
     "cycles-minting-canister": {

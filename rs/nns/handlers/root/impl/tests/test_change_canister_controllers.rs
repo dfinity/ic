@@ -2,10 +2,6 @@ use dfn_candid::candid_one;
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_root::{
     canister_status::CanisterStatusResult,
-    change_canister_controllers::{
-        ChangeCanisterControllersRequest, ChangeCanisterControllersResponse,
-        ChangeCanisterControllersResult,
-    },
     management_canister_client::{
         MockManagementCanisterClient, MockManagementCanisterClientCall,
         MockManagementCanisterClientReply,
@@ -15,6 +11,10 @@ use ic_nervous_system_root::{
 };
 use ic_nns_constants::{ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID};
 use ic_nns_handler_root::canister_management::change_canister_controllers;
+use ic_nns_handler_root_interface::{
+    ChangeCanisterControllersRequest, ChangeCanisterControllersResponse,
+    ChangeCanisterControllersResult,
+};
 use ic_nns_test_utils::{
     common::NnsInitPayloadsBuilder,
     state_test_helpers::{

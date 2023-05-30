@@ -21,7 +21,7 @@
     },
     "root": {
       "type": "custom",
-      "candid": "handlers/root/canister/root.did",
+      "candid": "handlers/root/canister/canister/root.did",
       "wasm": "../target/wasm32-unknown-unknown/release/root-canister.wasm",
       "build": "cargo build --target wasm32-unknown-unknown --release -p ic-nns-handler-root"
     },

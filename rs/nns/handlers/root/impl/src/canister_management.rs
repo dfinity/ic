@@ -6,9 +6,6 @@ use ic_nervous_system_root::{
         start_canister, stop_canister, AddCanisterProposal, CanisterAction,
         StopOrStartCanisterProposal,
     },
-    change_canister_controllers::{
-        ChangeCanisterControllersRequest, ChangeCanisterControllersResponse,
-    },
     management_canister_client::ManagementCanisterClient,
     update_settings::{CanisterSettings, UpdateSettings},
     CanisterIdRecord,
@@ -18,6 +15,9 @@ use ic_nns_common::{
     types::CallCanisterProposal,
 };
 use ic_nns_constants::SNS_WASM_CANISTER_ID;
+use ic_nns_handler_root_interface::{
+    ChangeCanisterControllersRequest, ChangeCanisterControllersResponse,
+};
 use ic_protobuf::{
     registry::nns::v1::{NnsCanisterRecord, NnsCanisterRecords},
     types::v1 as pb,

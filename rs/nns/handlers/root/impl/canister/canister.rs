@@ -13,9 +13,6 @@ use ic_nervous_system_root::{
     change_canister::{
         change_canister, AddCanisterProposal, ChangeCanisterProposal, StopOrStartCanisterProposal,
     },
-    change_canister_controllers::{
-        ChangeCanisterControllersRequest, ChangeCanisterControllersResponse,
-    },
     management_canister_client::ProdManagementCanisterClient,
     CanisterIdRecord, LOG_PREFIX,
 };
@@ -25,11 +22,14 @@ use ic_nns_handler_root::{
     canister_management, encode_metrics,
     root_proposals::{GovernanceUpgradeRootProposal, RootProposalBallot},
 };
-
-fn main() {}
+use ic_nns_handler_root_interface::{
+    ChangeCanisterControllersRequest, ChangeCanisterControllersResponse,
+};
 
 #[cfg(target_arch = "wasm32")]
 use dfn_core::println;
+
+fn main() {}
 
 // canister_init and canister_post_upgrade are needed here
 // to ensure that printer hook is set up, otherwise error

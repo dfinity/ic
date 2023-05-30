@@ -7682,6 +7682,7 @@ dependencies = [
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance",
+ "ic-nns-handler-root-interface",
  "ic-nns-handler-root-protobuf-generator",
  "ic-nns-test-utils",
  "ic-protobuf",
@@ -7701,6 +7702,19 @@ dependencies = [
  "serde_bytes",
  "tempfile",
  "tokio",
+]
+
+[[package]]
+name = "ic-nns-handler-root-interface"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "candid",
+ "dfn_candid",
+ "dfn_core",
+ "ic-base-types",
+ "ic-nns-constants",
+ "serde",
 ]
 
 [[package]]
@@ -9368,6 +9382,7 @@ dependencies = [
  "ic-nervous-system-proto",
  "ic-nervous-system-root",
  "ic-nns-constants",
+ "ic-nns-handler-root-interface",
  "ic-nns-test-utils",
  "ic-protobuf",
  "ic-registry-client-helpers",

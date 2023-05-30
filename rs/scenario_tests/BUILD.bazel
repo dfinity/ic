@@ -16,7 +16,7 @@ DEPENDENCIES = [
     "//rs/nns/common",
     "//rs/nns/constants",
     "//rs/nns/governance",
-    "//rs/nns/handlers/root",
+    "//rs/nns/handlers/root/impl:root",
     "//rs/nns/test_utils",
     "//rs/prep",
     "//rs/protobuf",
