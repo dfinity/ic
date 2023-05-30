@@ -13,6 +13,7 @@ use std::ops::DerefMut;
 pub mod flat_map;
 pub mod hasher;
 pub mod proto;
+pub mod test_utils;
 pub(crate) mod tree_hash;
 
 #[cfg(test)]

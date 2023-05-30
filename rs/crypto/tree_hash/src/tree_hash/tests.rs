@@ -1,8 +1,10 @@
 #![allow(clippy::unwrap_used)]
 use super::*;
 use crate::hasher::Hasher;
-use crate::*;
+use crate::tree_hash::test_utils;
+use crate::{lookup_path, tree_hash, LookupStatus, MixedHashTreeConversionError};
 use assert_matches::assert_matches;
+use ic_crypto_sha::Sha256;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
 use rand::{CryptoRng, RngCore};
 use std::collections::BTreeMap;
@@ -2804,8 +2806,8 @@ fn witness_for_a_labeled_tree_does_not_contain_private_data_impl<R: RngCore + Cr
     let builder = test_utils::hash_tree_builder_from_labeled_tree(labeled_tree);
 
     // split the tree into paths with exactly one leaf or empty subtree at the end
-    let leaf_partial_trees: Vec<_> =
-        test_utils::LeafAndEmptySubtreeTraverser::new(labeled_tree).collect();
+    let leaf_partial_trees =
+        crate::test_utils::partial_trees_to_leaves_and_empty_subtrees(labeled_tree);
     assert!(!leaf_partial_trees.is_empty());
     let full_tree_witness = builder
         .witness_generator()
@@ -2889,7 +2891,7 @@ fn witness_for_a_labeled_tree_does_not_contain_private_data_multileaf<R: RngCore
     // aggregate paths to leaves/empty subtrees indexed by `leaf_indexes` to a tree
     let mut aggregated_partial_tree = leaf_partial_trees[leaf_indexes[0]].clone();
     for i in leaf_indexes[1..].iter() {
-        test_utils::merge_path_into_labeled_tree(
+        crate::test_utils::merge_path_into_labeled_tree(
             &mut aggregated_partial_tree,
             &leaf_partial_trees[*i],
         );
@@ -2918,7 +2920,9 @@ fn witness_for_a_labeled_tree_does_not_contain_private_data_multileaf<R: RngCore
         if test_utils::labeled_tree_contains_prefix(&aggregated_partial_tree, &offending_path[..])
     );
 
-    for single_path in test_utils::LeafAndEmptySubtreeTraverser::new(&aggregated_partial_tree) {
+    for single_path in
+        crate::test_utils::partial_trees_to_leaves_and_empty_subtrees(&aggregated_partial_tree)
+    {
         assert_matches!(
             prune_witness(&pruned_witness, &single_path),
             Err(TreeHashError::InconsistentPartialTree { offending_path })

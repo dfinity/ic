@@ -1,118 +1,6 @@
 use crate::*;
 use assert_matches::assert_matches;
 use ic_crypto_test_utils_reproducible_rng::reproducible_rng;
-use std::collections::VecDeque;
-
-type TraverserIterator<'a> = VecDeque<(Option<&'a Label>, &'a LabeledTree<Vec<u8>>)>;
-
-/// Implements [`Iterator`] for traversing leaves and empty subtrees of a [`LabeledTree`]
-pub struct LeafAndEmptySubtreeTraverser<'a> {
-    curr_partial_tree: Vec<Vec<u8>>,
-    curr_path_iters: Vec<TraverserIterator<'a>>,
-}
-
-impl<'a> LeafAndEmptySubtreeTraverser<'a> {
-    pub fn new(tree: &'a LabeledTree<Vec<u8>>) -> LeafAndEmptySubtreeTraverser<'a> {
-        // store the iterator of the root `LabeledTree::Subtree` in `curr_path_iters`
-        let curr_path_iters = match tree {
-            LabeledTree::<Vec<u8>>::SubTree(subtree) if !subtree.is_empty() => {
-                vec![subtree
-                    .iter()
-                    .map(|(label, subtree)| (Some(label), subtree).to_owned())
-                    .collect()]
-            }
-            LabeledTree::<Vec<u8>>::Leaf(_) | LabeledTree::<Vec<u8>>::SubTree(_) /* if subtree.is_empty() */ => {
-                vec![[(None, tree)].iter().cloned().collect()]
-            }
-        };
-        Self {
-            curr_partial_tree: vec![],
-            curr_path_iters,
-        }
-    }
-
-    /// Builds a single-path [`LabeledTree`] from raw labels and a leaf.
-    /// The latter can be either a [`LabeledTree::Leaf`] or an empty [`LabeledTree::Subtree`].
-    ///
-    /// `path` has format [[label_1], [label_2], ..., [label_n]] and must be non-empty.
-    fn new_labeled_tree(path: &[Vec<u8>], leaf: LabeledTree<Vec<u8>>) -> LabeledTree<Vec<u8>> {
-        let mut result = leaf;
-        for label in path.iter().rev() {
-            result = LabeledTree::<Vec<u8>>::SubTree(flatmap!(Label::from(label) => result));
-        }
-        result
-    }
-}
-
-impl<'a> Iterator for LeafAndEmptySubtreeTraverser<'a> {
-    type Item = LabeledTree<Vec<u8>>;
-
-    /// Returns next leaf or empty subtree along its path as [`LabeledTree`]
-    fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            // get a ref to the deepest iterator
-            match self.curr_path_iters.last_mut() {
-                // if it contains data, proceed with that data or otherwise return `None`, indicating that that
-                // was the last leaf
-                Some(branches) => {
-                    match branches.pop_front() {
-                        // If the deepest-level iterator contains data, proceed with that data or otherwise pop,
-                        // effectively going one tree level higher
-                        Some((Some(label), subtree)) => {
-                            match subtree {
-                                // if the branch contains a leaf, build a `LabeledTree` for it, including its path from
-                                // the root, and return it
-                                LabeledTree::<Vec<u8>>::Leaf(_) => {
-                                    self.curr_partial_tree.push(label.to_vec());
-                                    let partial_tree = Some(Self::new_labeled_tree(
-                                        &self.curr_partial_tree[..],
-                                        subtree.to_owned(),
-                                    ));
-                                    self.curr_partial_tree.pop();
-                                    // the label is popped at the beginning of the next call to `next()`
-                                    return partial_tree;
-                                }
-                                // an empty subtree is also treated in the same
-                                // way as leaf
-                                LabeledTree::<Vec<u8>>::SubTree(subtree_branches)
-                                    if subtree_branches.is_empty() =>
-                                {
-                                    self.curr_partial_tree.push(label.to_vec());
-                                    let partial_tree = Some(Self::new_labeled_tree(
-                                        &self.curr_partial_tree[..],
-                                        subtree.to_owned(),
-                                    ));
-                                    self.curr_partial_tree.pop();
-                                    // the label is popped at the beginning of the next call to `next()`
-                                    return partial_tree;
-                                }
-                                // if the branch contains another subtree, add it as a next deepest level of iterators
-                                LabeledTree::<Vec<u8>>::SubTree(subtree_branches) => {
-                                    self.curr_partial_tree.push(label.to_vec());
-                                    self.curr_path_iters.push(
-                                        subtree_branches
-                                            .iter()
-                                            .map(|(label, subtree)| (Some(label), subtree))
-                                            .collect(),
-                                    );
-                                }
-                            }
-                        }
-                        // Leaf or empty subtree in the root
-                        Some((None, tree)) => {
-                            return Some(tree.clone());
-                        }
-                        None => {
-                            self.curr_partial_tree.pop();
-                            self.curr_path_iters.pop();
-                        }
-                    }
-                }
-                None => return None,
-            }
-        }
-    }
-}
 
 /// Returns the number of leaves and empty subtrees in an arbitrary [`LabeledTree`].
 pub(crate) fn get_num_leaves_and_empty_subtrees<T>(labeled_tree: &LabeledTree<T>) -> usize {
@@ -123,37 +11,6 @@ pub(crate) fn get_num_leaves_and_empty_subtrees<T>(labeled_tree: &LabeledTree<T>
             .map(|(_label, subtree)| get_num_leaves_and_empty_subtrees(subtree))
             .sum(),
         LabeledTree::Leaf(_) => 1,
-    }
-}
-
-/// Merges a path (i.e., a one node wide [`LabeledTree`]  containing exactly one [`LabeledTree::Leaf`]) into the `agg`
-pub(crate) fn merge_path_into_labeled_tree<T: core::fmt::Debug + std::cmp::PartialEq + Clone>(
-    agg: &mut LabeledTree<T>,
-    path: &LabeledTree<T>,
-) {
-    match (agg, path) {
-        (LabeledTree::SubTree(subtree_left), LabeledTree::SubTree(subtree_right)) => {
-            assert_eq!(
-                subtree_right.len(),
-                1,
-                "`path` should always contain only exactly one label/tree pair in each subtree"
-            );
-            let path_label = &subtree_right.keys()[0];
-            let subpath = &subtree_right.values()[0];
-            // if the left subtree contains the label from the right subtree, go one level deeper,
-            // otherwise append the right subtree to the left subtree
-            if let Some(subagg) = subtree_left.get_mut(path_label) {
-                merge_path_into_labeled_tree(subagg, subpath);
-            } else {
-                assert_eq!(
-                    subtree_left.try_append(path_label.clone(), subpath.clone()),
-                    Ok(())
-                );
-            }
-        }
-        _ => {
-            panic!("Found a leaf as the root of a LabeledTree. This should never happen.");
-        }
     }
 }
 
@@ -473,13 +330,13 @@ fn labeled_tree_without_leaf_or_empty_subtree_impl(
 fn leaf_and_empty_subtree_traverser_works_correctly() {
     let tree = LabeledTree::Leaf(vec![]);
     assert_eq!(
-        LeafAndEmptySubtreeTraverser::new(&tree).collect::<Vec<_>>(),
+        test_utils::partial_trees_to_leaves_and_empty_subtrees(&tree),
         [tree]
     );
 
     let tree = LabeledTree::<Vec<u8>>::SubTree(FlatMap::new());
     assert_eq!(
-        LeafAndEmptySubtreeTraverser::new(&tree).collect::<Vec<_>>(),
+        test_utils::partial_trees_to_leaves_and_empty_subtrees(&tree),
         [tree]
     );
 
@@ -528,23 +385,23 @@ fn leaf_and_empty_subtree_traverser_works_correctly() {
         ),
     ]));
 
-    let mut traverser = LeafAndEmptySubtreeTraverser::new(&tree);
+    let mut iter = test_utils::partial_trees_to_leaves_and_empty_subtrees(&tree).into_iter();
     assert_eq!(
-        traverser.next().expect("available path"),
+        iter.next().expect("available path"),
         LabeledTree::SubTree(FlatMap::from_key_values(vec![(
             "1".into(),
             LabeledTree::Leaf(vec![])
         )]))
     );
     assert_eq!(
-        traverser.next().expect("available path"),
+        iter.next().expect("available path"),
         LabeledTree::SubTree(FlatMap::from_key_values(vec![(
             "2".into(),
             LabeledTree::Leaf(vec![])
         )]))
     );
     assert_eq!(
-        traverser.next().expect("available path"),
+        iter.next().expect("available path"),
         LabeledTree::SubTree(FlatMap::from_key_values(vec![(
             "3".into(),
             LabeledTree::SubTree(FlatMap::new())
@@ -552,7 +409,7 @@ fn leaf_and_empty_subtree_traverser_works_correctly() {
     );
 
     assert_eq!(
-        traverser.next().expect("available path"),
+        iter.next().expect("available path"),
         LabeledTree::SubTree(FlatMap::from_key_values(vec![(
             "4".into(),
             LabeledTree::SubTree(FlatMap::from_key_values(vec![(
@@ -563,7 +420,7 @@ fn leaf_and_empty_subtree_traverser_works_correctly() {
     );
 
     assert_eq!(
-        traverser.next().expect("available path"),
+        iter.next().expect("available path"),
         LabeledTree::SubTree(FlatMap::from_key_values(vec![(
             "4".into(),
             LabeledTree::SubTree(FlatMap::from_key_values(vec![(
@@ -574,7 +431,7 @@ fn leaf_and_empty_subtree_traverser_works_correctly() {
     );
 
     assert_eq!(
-        traverser.next().expect("available path"),
+        iter.next().expect("available path"),
         LabeledTree::SubTree(FlatMap::from_key_values(vec![(
             "4".into(),
             LabeledTree::SubTree(FlatMap::from_key_values(vec![(
@@ -588,7 +445,7 @@ fn leaf_and_empty_subtree_traverser_works_correctly() {
     );
 
     assert_eq!(
-        traverser.next().expect("available path"),
+        iter.next().expect("available path"),
         LabeledTree::SubTree(FlatMap::from_key_values(vec![(
             "4".into(),
             LabeledTree::SubTree(FlatMap::from_key_values(vec![(
@@ -602,7 +459,7 @@ fn leaf_and_empty_subtree_traverser_works_correctly() {
     );
 
     assert_eq!(
-        traverser.next().expect("available path"),
+        iter.next().expect("available path"),
         LabeledTree::SubTree(FlatMap::from_key_values(vec![(
             "4".into(),
             LabeledTree::SubTree(FlatMap::from_key_values(vec![(
@@ -615,12 +472,10 @@ fn leaf_and_empty_subtree_traverser_works_correctly() {
         )]))
     );
 
-    for _ in 0..10 {
-        assert_eq!(traverser.next(), None);
-    }
+    assert_eq!(iter.next(), None);
 }
 
-pub fn witness_contains_only_nodes_and_known(witness: &Witness) -> bool {
+pub(crate) fn witness_contains_only_nodes_and_known(witness: &Witness) -> bool {
     match witness {
         Witness::Fork {
             left_tree: _,
@@ -680,7 +535,8 @@ fn labeled_tree_without_leaf_or_empty_subtree_works_correctly() {
         RANDOM_TREE_MIN_LEAVES,
     );
 
-    let mut leaves_and_empty_subtrees: Vec<_> = LeafAndEmptySubtreeTraverser::new(&tree).collect();
+    let mut leaves_and_empty_subtrees =
+        test_utils::partial_trees_to_leaves_and_empty_subtrees(&tree);
     let initial_num_leaves_and_empty_subtrees = leaves_and_empty_subtrees.len();
     let mut counter: usize = 0;
     while leaves_and_empty_subtrees != vec![LabeledTree::SubTree(FlatMap::new())] {
@@ -688,8 +544,8 @@ fn labeled_tree_without_leaf_or_empty_subtree_works_correctly() {
         let path_to_remove = &leaves_and_empty_subtrees[index_to_remove];
         let tree_with_removed_path =
             labeled_tree_without_leaf_or_empty_subtree(&tree, path_to_remove);
-        let leaves_and_empty_subtrees_with_removed_path: Vec<_> =
-            LeafAndEmptySubtreeTraverser::new(&tree_with_removed_path).collect();
+        let leaves_and_empty_subtrees_with_removed_path =
+            test_utils::partial_trees_to_leaves_and_empty_subtrees(&tree_with_removed_path);
         for not_removed_path in leaves_and_empty_subtrees
             .iter()
             .filter(|&path| path != path_to_remove)

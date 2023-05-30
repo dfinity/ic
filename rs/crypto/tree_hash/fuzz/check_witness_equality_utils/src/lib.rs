@@ -1,11 +1,14 @@
 use ic_canonical_state::hash_tree::{crypto_hash_lazy_tree, hash_lazy_tree, HashTree};
 use ic_canonical_state::lazy_tree::{LazyFork, LazyTree};
-use ic_crypto_test_utils_reproducible_rng::ReproducibleRng;
+use ic_crypto_test_utils_reproducible_rng::{ReproducibleRng, SEED_LEN};
+use ic_crypto_tree_hash::test_utils::{
+    merge_path_into_labeled_tree, partial_trees_to_leaves_and_empty_subtrees,
+};
 use ic_crypto_tree_hash::{
     flatmap, FlatMap, HashTreeBuilder, HashTreeBuilderImpl, Label, LabeledTree, Witness,
     WitnessGenerator, WitnessGeneratorImpl,
 };
-use rand::{Rng, SeedableRng};
+use rand::{CryptoRng, Rng, SeedableRng};
 use std::sync::Arc;
 
 #[cfg(test)]
@@ -13,16 +16,37 @@ mod tests;
 
 /// Check that for each leaf, the witness looks the same for both implementations
 /// Also check that the new and old way of computing hash trees are equivalent
-pub fn test_tree(t: &LabeledTree<Vec<u8>>) {
-    let hash_tree = hash_lazy_tree(&as_lazy(t));
-    let witness_gen = build_witness_gen(t);
-    // TODO(CRP-2001): add multi-leaf witnesses
-    enumerate_leaves(t, |subtree| {
-        assert_same_witness(&hash_tree, &witness_gen, &subtree);
-    });
+pub fn test_tree<R: Rng + CryptoRng>(full_tree: &LabeledTree<Vec<u8>>, rng: &mut R) {
+    let hash_tree = hash_lazy_tree(&as_lazy(full_tree));
+    let witness_gen = build_witness_gen(full_tree);
 
-    let crypto_tree = crypto_hash_lazy_tree(&as_lazy(t));
+    let paths = partial_trees_to_leaves_and_empty_subtrees(full_tree);
 
+    // prune each path (1 node in each level) from `full_tree`
+    for path in paths.iter() {
+        assert_same_witness(&hash_tree, &witness_gen, path);
+    }
+
+    // prune randomly combined paths
+    const MAX_COMBINED_PATHS: usize = 10;
+    for num_leaves_and_empty_subtrees in 2..MAX_COMBINED_PATHS.min(paths.len()) {
+        let mut indices =
+            rand::seq::index::sample(rng, paths.len(), num_leaves_and_empty_subtrees).into_vec();
+        indices.sort_unstable();
+
+        let mut partial_tree = paths[indices[0]].clone();
+
+        for index in indices[1..].iter() {
+            merge_path_into_labeled_tree(&mut partial_tree, &paths[*index]);
+        }
+        assert_same_witness(&hash_tree, &witness_gen, &partial_tree);
+    }
+
+    // prune the full tree
+    assert_same_witness(&hash_tree, &witness_gen, full_tree);
+
+    // create a hash tree for the full tree
+    let crypto_tree = crypto_hash_lazy_tree(&as_lazy(full_tree));
     assert_eq!(hash_tree, crypto_tree);
 }
 
@@ -32,38 +56,8 @@ fn assert_same_witness(ht: &HashTree, wg: &WitnessGeneratorImpl, data: &LabeledT
 
     assert_eq!(
         wg_witness, ht_witness,
-        "labeled tree: {data:?}, hash_tree: {ht:?}",
-    )
-}
-
-fn enumerate_leaves(t: &LabeledTree<Vec<u8>>, mut f: impl FnMut(LabeledTree<Vec<u8>>)) {
-    fn go<'a>(
-        t: &'a LabeledTree<Vec<u8>>,
-        path: &mut Vec<&'a Label>,
-        f: &mut impl FnMut(LabeledTree<Vec<u8>>),
-    ) {
-        match t {
-            LabeledTree::Leaf(_) => {
-                let mut subtree = t.clone();
-                #[allow(clippy::unnecessary_to_owned)]
-                for label in path.iter().rev().cloned() {
-                    subtree = LabeledTree::SubTree(flatmap! {
-                        label.clone() => subtree,
-                    });
-                }
-                f(subtree)
-            }
-            LabeledTree::SubTree(children) => {
-                for (k, v) in children.iter() {
-                    path.push(k);
-                    go(v, path, f);
-                    path.pop();
-                }
-            }
-        }
-    }
-    let mut path = vec![];
-    go(t, &mut path, &mut f)
+        "labeled tree: {data:?}, hash_tree: {ht:?}, wg: {wg:?}",
+    );
 }
 
 fn as_lazy(t: &LabeledTree<Vec<u8>>) -> LazyTree<'_> {
@@ -117,7 +111,6 @@ fn build_witness_gen(t: &LabeledTree<Vec<u8>>) -> WitnessGeneratorImpl {
 }
 
 pub fn rng_from_u32(seed: u32) -> ReproducibleRng {
-    const SEED_LEN: usize = std::mem::size_of::<<ReproducibleRng as rand::SeedableRng>::Seed>();
     let seed_bytes: Vec<u8> = seed
         .to_le_bytes()
         .into_iter()
