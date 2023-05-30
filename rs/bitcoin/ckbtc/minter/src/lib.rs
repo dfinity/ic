@@ -47,6 +47,26 @@ pub const MINTER_FEE_PER_INPUT: u64 = 246;
 pub const MINTER_FEE_PER_OUTPUT: u64 = 7;
 pub const MINTER_FEE_CONSTANT: u64 = 52;
 
+#[derive(Clone, serde::Serialize, Deserialize, Debug)]
+pub enum Priority {
+    P0,
+    P1,
+}
+
+#[derive(Clone, serde::Serialize, Deserialize, Debug)]
+pub struct LogEntry {
+    pub timestamp: u64,
+    pub priority: Priority,
+    pub file: String,
+    pub line: u32,
+    pub message: String,
+}
+
+#[derive(Clone, Default, serde::Serialize, Deserialize, Debug)]
+pub struct Log {
+    pub entries: Vec<LogEntry>,
+}
+
 #[derive(CandidType, Debug, Deserialize, Serialize)]
 pub struct MinterInfo {
     pub min_confirmations: u32,

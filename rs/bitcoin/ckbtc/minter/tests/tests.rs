@@ -4,6 +4,7 @@ use candid::{Decode, Encode, Nat, Principal};
 use ic_base_types::{CanisterId, PrincipalId};
 use ic_bitcoin_canister_mock::{OutPoint, PushUtxoToAddress, Utxo};
 use ic_btc_interface::Network;
+use ic_canisters_http_types::{HttpRequest, HttpResponse};
 use ic_ckbtc_kyt::{InitArg as KytInitArg, KytMode, LifecycleArg, SetApiKeyArg};
 use ic_ckbtc_minter::lifecycle::init::{InitArgs as CkbtcMinterInitArgs, MinterArg};
 use ic_ckbtc_minter::lifecycle::upgrade::UpgradeArgs;
@@ -577,6 +578,24 @@ impl CkBtcSetup {
         .unwrap()
     }
 
+    pub fn get_logs(&self) -> HttpResponse {
+        let request = HttpRequest {
+            method: "".to_string(),
+            url: "/logs".to_string(),
+            headers: vec![],
+            body: serde_bytes::ByteBuf::new(),
+        };
+        Decode!(
+            &assert_reply(
+                self.env
+                    .execute_ingress(self.minter_id, "http_request", Encode!(&request).unwrap(),)
+                    .expect("failed to get minter info")
+            ),
+            HttpResponse
+        )
+        .unwrap()
+    }
+
     pub fn refresh_fee_percentiles(&self) {
         Decode!(
             &assert_reply(
@@ -898,4 +917,26 @@ fn test_min_retrieval_amount() {
     ckbtc.refresh_fee_percentiles();
     let retrieve_btc_min_amount = ckbtc.get_minter_info().retrieve_btc_min_amount;
     assert_eq!(retrieve_btc_min_amount, 200_000);
+}
+
+#[test]
+fn test_get_logs() {
+    use ic_ckbtc_minter::Log;
+    let ckbtc = CkBtcSetup::new();
+
+    let ans = ckbtc.get_logs();
+    let binding = ans.body.into_vec();
+    let logs = std::str::from_utf8(&binding).unwrap();
+    let logs_json: serde_json::Value = serde_json::from_str(logs).unwrap();
+    let decoded_logs: Log = serde_json::from_value(logs_json).unwrap();
+    assert_eq!(decoded_logs.entries.len(), 0);
+
+    let _main_address = ckbtc.get_btc_address(Principal::from(ckbtc.minter_id));
+
+    let ans = ckbtc.get_logs();
+    let binding = ans.body.into_vec();
+    let logs = std::str::from_utf8(&binding).unwrap();
+    let logs_json: serde_json::Value = serde_json::from_str(logs).unwrap();
+    let decoded_logs: Log = serde_json::from_value(logs_json).unwrap();
+    assert_eq!(decoded_logs.entries.len(), 2);
 }

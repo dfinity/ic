@@ -78,6 +78,7 @@ alias(
             "@crate_index//:candid",
             "@crate_index//:ic-cdk",
             "@crate_index//:ic-metrics-encoder",
+            "@crate_index//:serde_json",
         ],
     )
     for (name, features) in [
@@ -143,11 +144,14 @@ rust_test(
         "//rs/rosetta-api/icrc1",
         "//rs/rosetta-api/icrc1/ledger",
         "//rs/rust_canisters/canister_test",
+        "//rs/rust_canisters/http_types",
         "//rs/state_machine_tests",
         "//rs/test_utilities/load_wasm",
         "//rs/types/base_types",
         "@crate_index//:bitcoin",
         "@crate_index//:candid",
         "@crate_index//:ic-btc-interface",
+        "@crate_index//:serde_bytes",
+        "@crate_index//:serde_json",
     ],
 )
