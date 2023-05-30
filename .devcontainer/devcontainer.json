@@ -39,7 +39,8 @@
     "TERM": "xterm-256color"
   },
   "remoteEnv": {
-    "PATH": "${containerEnv:PATH}:/ic/bin"
+    "PATH": "${containerEnv:PATH}:/ic/bin",
+    "PYTHONPATH": "${containerEnv:PYTHONPATH}:/ic/gitlab-ci/src:/ic/gitlab-ci/src/dependencies"
   },
   "customizations": {
     "vscode": {
