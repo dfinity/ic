@@ -72,14 +72,14 @@ rust_binary(
     aliases = ALIASES,
     proc_macro_deps = MACRO_DEPENDENCIES,
     version = "1.0.0",
-    deps = DEPENDENCIES,
+    deps = DEPENDENCIES + [":cli"],
 )
 
 rust_test(
     name = "sns_test",
     srcs = glob(["src/**"]),
     aliases = ALIASES,
-    crate_root = "src/main.rs",
+    crate_root = "src/lib.rs",
     data = [
         "example_sns_init_v2.yaml",
         "test.png",
