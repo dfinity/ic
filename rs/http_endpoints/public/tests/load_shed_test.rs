@@ -196,7 +196,7 @@ fn test_load_shedding_read_state() {
         .unwrap();
     let load_shedded_agent = ok_agent.clone();
 
-    let paths: Vec<Vec<Label>> = vec![vec!["time".into()]];
+    let paths: Vec<Vec<Label<Vec<u8>>>> = vec![vec!["time".into()]];
     let paths_clone = paths.clone();
 
     // This agent's request wil be load shedded

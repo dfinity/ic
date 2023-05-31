@@ -205,7 +205,7 @@ impl<T: Export> Export for WithVerify<T> {
     ) -> Result<(Vec<Package>, IcCertificate), ExportError> {
         let (pkgs, iccert) = self.0.export(key.clone(), limit).await?;
 
-        let (cert, tree): (Certificate, HashTree) = (
+        let (cert, tree): (Certificate, HashTree<Vec<u8>>) = (
             serde_cbor::from_slice(&iccert.cert).context("failed to cbor-decode ic certificate")?,
             serde_cbor::from_slice(&iccert.tree).context("failed to cbor-decode tree")?,
         );

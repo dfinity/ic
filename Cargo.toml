@@ -361,6 +361,17 @@ ciborium = { git = "https://github.com/enarx/ciborium", rev = "e719537c99b564c36
 pprof = { git = "https://github.com/tikv/pprof-rs", rev = "059d3c80395c74e9f82ca1f9cbb3c013acfffb75" }
 
 [workspace.dependencies]
-ic-agent = "0.23"
+ic-agent = "0.24.1"
 ic-btc-interface = { git = "https://github.com/dfinity/bitcoin-canister", rev = "e4e89f2caedffbe0cfdec6f9d4a77f66dcb9119e" }
-ic-utils = "0.23"
+ic-utils = "0.24.1"
+k256 = { version = "0.13", default_features = false, features = [
+  "arithmetic",
+  "ecdsa",
+  "pkcs8",
+] }
+p256 = { version = "0.13", default_features = false, features = [
+  "arithmetic",
+  "ecdsa",
+  "pem",
+  "pkcs8",
+] }

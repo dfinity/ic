@@ -575,7 +575,7 @@ impl<T: Verify> Verify for WithMetrics<T> {
         limit: u64,
         pkgs: &[Package],
         cert: &Certificate,
-        tree: &HashTree,
+        tree: &HashTree<Vec<u8>>,
     ) -> Result<(), VerifyError> {
         let start_time = Instant::now();
 

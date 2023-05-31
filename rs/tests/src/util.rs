@@ -12,7 +12,8 @@ use futures::FutureExt;
 use ic_agent::export::Principal;
 use ic_agent::identity::BasicIdentity;
 use ic_agent::{
-    agent::http_transport::ReqwestHttpReplicaV2Transport, Agent, AgentError, Identity, RequestId,
+    agent::{http_transport::ReqwestHttpReplicaV2Transport, RejectCode, RejectResponse},
+    Agent, AgentError, Identity, RequestId,
 };
 use ic_canister_client::{Agent as DeprecatedAgent, Sender};
 use ic_canister_client_sender::{ed25519_public_key_to_der, Ed25519KeyPair};
@@ -798,13 +799,14 @@ pub(crate) fn assert_reject<T: std::fmt::Debug>(res: Result<T, AgentError>, code
     match res {
         Ok(val) => panic!("Expected call to fail but it succeeded with {:?}", val),
         Err(agent_error) => match agent_error {
-            AgentError::ReplicaError {
+            AgentError::ReplicaError(RejectResponse {
                 reject_code,
                 reject_message,
-            } => assert_eq!(
-                code as u64, reject_code,
-                "Expect code {} did not match {}. Reject message: {}",
-                code as u64, reject_code, reject_message
+                ..
+            }) => assert_eq!(
+                code, reject_code,
+                "Expect code {:?} did not match {:?}. Reject message: {}",
+                code, reject_code, reject_message
             ),
             others => panic!(
                 "Expected call to fail with a replica error but got {:?} instead",

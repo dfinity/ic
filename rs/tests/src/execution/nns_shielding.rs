@@ -6,7 +6,10 @@ use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
 use crate::{types::*, util::CYCLES_LIMIT_PER_CANISTER, util::*};
 use candid::{Decode, Encode, Principal};
-use ic_agent::AgentError;
+use ic_agent::{
+    agent::{RejectCode, RejectResponse},
+    AgentError,
+};
 use ic_base_types::RegistryVersion;
 use ic_ic00_types::SetupInitialDKGArgs;
 use ic_nns_constants::CYCLES_MINTING_CANISTER_ID;
@@ -74,7 +77,14 @@ pub fn mint_cycles_not_supported_on_system_subnet(env: TestEnv) {
 
         assert_eq!(
             res,
-            AgentError::ReplicaError { reject_code: 5, reject_message: format!("Canister {} violated contract: ic0.mint_cycles cannot be executed on non Cycles Minting Canister: {} != {}", nns_canister_id, nns_canister_id, CYCLES_MINTING_CANISTER_ID) }
+            AgentError::ReplicaError(
+                RejectResponse {
+                    reject_code: RejectCode::CanisterError,
+                    reject_message: format!(
+                        "Canister {} violated contract: ic0.mint_cycles cannot be executed on non Cycles Minting Canister: {} != {}",
+                        nns_canister_id, nns_canister_id,
+                        CYCLES_MINTING_CANISTER_ID),
+                    error_code: None})
         );
 
         let after_balance = get_balance(&nns_canister_id, &nns_agent).await;

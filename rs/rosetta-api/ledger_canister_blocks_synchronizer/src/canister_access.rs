@@ -59,7 +59,7 @@ impl CanisterAccess {
             .unwrap();
 
         match root_key {
-            Some(root_key) => agent.set_root_key(root_key)?,
+            Some(root_key) => agent.set_root_key(root_key),
             None => {
                 warn!("Fetching the root key from the replica because it was not set");
                 agent.fetch_root_key().await?

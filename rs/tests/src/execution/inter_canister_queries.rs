@@ -3,10 +3,8 @@ end::catalog[] */
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::{GetFirstHealthyNodeSnapshot, HasPublicApiUrl};
 use crate::util::block_on;
-use crate::{
-    types::RejectCode,
-    util::{assert_reject, create_and_install, escape_for_wat, UniversalCanister},
-};
+use crate::util::{assert_reject, create_and_install, escape_for_wat, UniversalCanister};
+use ic_agent::agent::RejectCode;
 use ic_types::CanisterId;
 use ic_universal_canister::{call_args, wasm};
 

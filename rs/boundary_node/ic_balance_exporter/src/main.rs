@@ -105,9 +105,7 @@ async fn main() -> Result<(), Error> {
         .context("failed to build agent")?;
 
     if let Some(root_key) = &root_key {
-        agent
-            .set_root_key(root_key.clone())
-            .context("failed to set root key")?;
+        agent.set_root_key(root_key.clone());
     }
 
     let loader = ContextLoader::new(cli.wallets_path);

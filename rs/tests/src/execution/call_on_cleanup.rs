@@ -1,10 +1,12 @@
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::GetFirstHealthyNodeSnapshot;
 use crate::driver::test_env_api::HasPublicApiUrl;
-use crate::types::*;
 use crate::util::*;
 use assert_matches::assert_matches;
-use ic_agent::AgentError;
+use ic_agent::{
+    agent::{RejectCode, RejectResponse},
+    AgentError,
+};
 use ic_universal_canister::{call_args, wasm};
 
 pub fn is_called_if_reply_traps(env: TestEnv) {
@@ -29,10 +31,11 @@ pub fn is_called_if_reply_traps(env: TestEnv) {
                         ),
                     )
                     .await,
-                Err(AgentError::ReplicaError {
+                Err(AgentError::ReplicaError(RejectResponse{
                     reject_code,
                     reject_message,
-                }) if reject_code == RejectCode::CanisterError as u64
+                    ..
+                })) if reject_code == RejectCode::CanisterError
                     // Verify that the error message being returned is the original.
                     && reject_message.contains("trapped explicitly")
             );
@@ -112,10 +115,11 @@ pub fn changes_are_discarded_if_trapped(env: TestEnv) {
                             )
                     )
                     .await,
-                Err(AgentError::ReplicaError {
+                Err(AgentError::ReplicaError(RejectResponse {
                     reject_code,
                     reject_message,
-                }) if reject_code == RejectCode::CanisterError as u64
+                    ..
+                })) if reject_code == RejectCode::CanisterError
                     // Verify that the original error message as well as the on_cleanup error is
                     // returned.
                     && reject_message.contains("trapped explicitly: in on_reply")

@@ -1,10 +1,11 @@
 use p256::elliptic_curve::{
     group::{ff::PrimeField, GroupEncoding},
     ops::{LinearCombination, Reduce},
+    scalar::IsHigh,
     sec1::{FromEncodedPoint, ToEncodedPoint},
-    Field, Group, IsHigh,
+    Field, Group,
 };
-use std::ops::Neg;
+use std::ops::{Mul, Neg};
 use subtle::{Choice, ConditionallySelectable};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -65,8 +66,8 @@ impl Scalar {
         let fb0 = p256::FieldBytes::from_slice(&extended[..Self::BYTES]);
         let fb1 = p256::FieldBytes::from_slice(&extended[Self::BYTES..]);
 
-        let mut s0 = <p256::Scalar as Reduce<p256::U256>>::from_be_bytes_reduced(*fb0);
-        let s1 = <p256::Scalar as Reduce<p256::U256>>::from_be_bytes_reduced(*fb1);
+        let mut s0 = <p256::Scalar as Reduce<p256::U256>>::reduce_bytes(fb0);
+        let s1 = <p256::Scalar as Reduce<p256::U256>>::reduce_bytes(fb1);
 
         for _bit in 1..=Self::BYTES * 8 {
             s0 = s0.double();
@@ -78,12 +79,12 @@ impl Scalar {
 
     /// Return constant zero
     pub fn zero() -> Self {
-        Self::new(p256::Scalar::zero())
+        Self::new(p256::Scalar::ZERO)
     }
 
     /// Return constant one
     pub fn one() -> Self {
-        Self::new(p256::Scalar::one())
+        Self::new(p256::Scalar::ONE)
     }
 
     /// Create a scalar from a small integer

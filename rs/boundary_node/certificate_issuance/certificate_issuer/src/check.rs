@@ -197,13 +197,7 @@ impl Check for Checker {
             .duration_since(UNIX_EPOCH)
             .expect("Time went backwards")
             .as_nanos();
-        let ic_public_key =
-            &self
-                .agent
-                .read_root_key()
-                .map_err(|_| CheckError::KnownDomainsUnavailable {
-                    id: canister_id.to_string(),
-                })?;
+        let ic_public_key = &self.agent.read_root_key();
         verify_request_response_pair(
             request,
             response_for_verification,

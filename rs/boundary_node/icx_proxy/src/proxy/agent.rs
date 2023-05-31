@@ -14,7 +14,12 @@ use hyper::{
     http::header::{HeaderMap, HeaderName, HeaderValue, CONTENT_TYPE},
     Body, Request, Response, StatusCode, Uri,
 };
-use ic_agent::{agent_error::HttpErrorPayload, export::Principal, Agent, AgentError};
+use ic_agent::{
+    agent::{RejectCode, RejectResponse},
+    agent_error::HttpErrorPayload,
+    export::Principal,
+    Agent, AgentError,
+};
 use ic_response_verification::MAX_VERIFICATION_VERSION;
 use ic_utils::interfaces::http_request::HeaderField;
 use ic_utils::{
@@ -36,11 +41,6 @@ use crate::{
 // The maximum length of a body we should log as tracing.
 const MAX_LOG_BODY_SIZE: usize = 100;
 
-/// https://internetcomputer.org/docs/current/references/ic-interface-spec#reject-codes
-struct ReplicaErrorCodes;
-impl ReplicaErrorCodes {
-    const DESTINATION_INVALID: u64 = 3;
-}
 pub struct Args<V, C> {
     agent: Agent,
     replica_uri: Arc<Uri>,
@@ -283,7 +283,7 @@ async fn process_request_inner(
             http_request.uri.to_string().as_str(),
             header_fields.clone(),
             &http_request.body,
-            Some(&u128::from(MAX_VERIFICATION_VERSION)),
+            Some(&u16::from(MAX_VERIFICATION_VERSION)),
         )
         .call()
         .await;
@@ -301,7 +301,6 @@ async fn process_request_inner(
                 http_request.uri.to_string().as_str(),
                 header_fields.clone(),
                 &http_request.body,
-                Some(&u128::from(MAX_VERIFICATION_VERSION)),
             )
             .call_and_wait()
             .await;
@@ -384,20 +383,18 @@ fn handle_result(
     match result {
         Ok((http_response,)) => Ok(http_response),
 
-        Err(AgentError::ReplicaError {
-            reject_code: ReplicaErrorCodes::DESTINATION_INVALID,
+        Err(AgentError::ReplicaError(RejectResponse {
+            reject_code: RejectCode::DestinationInvalid,
             reject_message,
-        }) => Err(Ok(Response::builder()
+            ..
+        })) => Err(Ok(Response::builder()
             .status(StatusCode::NOT_FOUND)
             .body(reject_message.into())
             .unwrap())),
 
-        Err(AgentError::ReplicaError {
-            reject_code,
-            reject_message,
-        }) => Err(Ok(Response::builder()
+        Err(AgentError::ReplicaError(response)) => Err(Ok(Response::builder()
             .status(StatusCode::BAD_GATEWAY)
-            .body(format!(r#"Replica Error ({}): "{}""#, reject_code, reject_message).into())
+            .body(response.to_string().into())
             .unwrap())),
 
         Err(AgentError::HttpError(HttpErrorPayload {
@@ -415,7 +412,6 @@ fn handle_result(
             .status(StatusCode::INSUFFICIENT_STORAGE)
             .body("Response size exceeds limit".into())
             .unwrap())),
-
         Err(e) => Err(Err(e.into())),
     }
 }

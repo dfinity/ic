@@ -28,7 +28,7 @@ pub trait Verify: Sync + Send {
         limit: u64,
         pkgs: &[Package],
         cert: &Certificate,
-        tree: &HashTree,
+        tree: &HashTree<Vec<u8>>,
     ) -> Result<(), VerifyError>;
 }
 
@@ -51,10 +51,10 @@ impl Verify for CertificateVerifier {
         limit: u64,
         pkgs: &[Package],
         cert: &Certificate,
-        tree: &HashTree,
+        tree: &HashTree<Vec<u8>>,
     ) -> Result<(), VerifyError> {
         // Check certificate time
-        let mut encoded_certificate_time = match cert.tree.lookup_path(&["time".into()]) {
+        let mut encoded_certificate_time = match cert.tree.lookup_path(["time".as_bytes()]) {
             LookupResult::Found(encoded_certificate_time) => Ok(encoded_certificate_time),
             _ => Err(anyhow!("failed to lookup time path in certificate")),
         }?;
@@ -173,7 +173,7 @@ impl Verify for CertificateVerifier {
 // Check the IC signature and the shared part of verification
 fn validate_shared(
     cert: &Certificate,
-    tree: &HashTree,
+    tree: &HashTree<Vec<u8>>,
     agent: &Agent,
     canister_id: Principal,
 ) -> Result<(), Error> {
@@ -186,9 +186,9 @@ fn validate_shared(
     let witness = lookup_value(
         cert,
         vec![
-            "canister".into(),
-            canister_id.into(),
-            "certified_data".into(),
+            "canister".as_bytes(),
+            canister_id.as_slice(),
+            "certified_data".as_bytes(),
         ],
     )
     .context("failed to lookup witness")?;
@@ -202,8 +202,8 @@ fn validate_shared(
 }
 
 // Given the ic_certified_map hash tree, chceck that it certifies key->hash(val)
-fn validate_package(tree: &HashTree, key: &str, val: &[u8]) -> Result<(), Error> {
-    let tree_sha = match tree.lookup_path(&[LABEL_DOMAINS.into(), key.into()]) {
+fn validate_package(tree: &HashTree<Vec<u8>>, key: &str, val: &[u8]) -> Result<(), Error> {
+    let tree_sha = match tree.lookup_path(&[LABEL_DOMAINS, key.as_bytes()]) {
         LookupResult::Found(v) => Ok(v),
         _ => Err(anyhow!("failed to lookup path in tree")),
     }?;
@@ -216,7 +216,7 @@ fn validate_package(tree: &HashTree, key: &str, val: &[u8]) -> Result<(), Error>
 }
 
 // Vector indicating the sequence of pruned nodes and leaves in the provided hash tree
-fn indicator_vector(node: &HashTreeNode) -> Vec<bool> {
+fn indicator_vector(node: &HashTreeNode<Vec<u8>>) -> Vec<bool> {
     match node {
         // Simple
         HashTreeNode::Empty() => vec![],
