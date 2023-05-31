@@ -1,8 +1,7 @@
 //! Utilities for non-interactive Distributed Key Generation (NI-DKG), and
 //! for testing distributed key generation and threshold signing.
-use ic_crypto_internal_csp::CryptoServiceProvider;
 use ic_crypto_internal_types::NodeIndex;
-use ic_crypto_temp_crypto::{TempCryptoComponent, TempCryptoComponentGeneric};
+use ic_crypto_temp_crypto::TempCryptoComponent;
 use ic_interfaces::crypto::NiDkgAlgorithm;
 use ic_protobuf::registry::crypto::v1::PublicKey as PublicKeyProto;
 use ic_registry_client_fake::FakeRegistryClient;
@@ -168,9 +167,9 @@ fn map_with(dealer: NodeId, dealing: NiDkgDealing) -> BTreeMap<NodeId, NiDkgDeal
     map
 }
 
-fn transcript_with_single_dealing<C: CryptoServiceProvider>(
+fn transcript_with_single_dealing(
     dkg_config: &NiDkgConfig,
-    dealer_crypto: TempCryptoComponentGeneric<C>,
+    dealer_crypto: TempCryptoComponent,
     dealer_id: NodeId,
 ) -> NiDkgTranscript {
     let dealing = dealer_crypto
