@@ -1,15 +1,12 @@
 //! The module contains implementations of the 'ArtifactClient' trait for all
 //! P2P clients that require consensus over their artifacts.
 
-use ic_constants::{MAX_INGRESS_TTL, PERMITTED_DRIFT_AT_ARTIFACT_MANAGER};
 use ic_interfaces::{
     artifact_manager::ArtifactClient,
     artifact_pool::{
         ArtifactPoolError, PriorityFnAndFilterProducer, ReplicaVersionMismatch, ValidatedPoolReader,
     },
-    time_source::TimeSource,
 };
-use ic_logger::{debug, ReplicaLogger};
 use ic_types::{
     artifact::*,
     artifact_kind::*,
@@ -123,17 +120,10 @@ impl<
 
 /// The ingress `ArtifactClient` to be managed by the `ArtifactManager`.
 pub struct IngressClient<Pool, T> {
-    /// The time source.
-    time_source: Arc<dyn TimeSource>,
     /// The ingress pool, protected by a read-write lock and automatic reference
     /// counting.
     pool: Arc<RwLock<Pool>>,
-
-    /// The logger.
-    log: ReplicaLogger,
-
     priority_fn_and_filter: T,
-
     #[allow(dead_code)]
     malicious_flags: MaliciousFlags,
 }
@@ -141,17 +131,13 @@ pub struct IngressClient<Pool, T> {
 impl<Pool, T> IngressClient<Pool, T> {
     /// The constructor creates an `IngressClient` instance.
     pub fn new(
-        time_source: Arc<dyn TimeSource>,
         pool: Arc<RwLock<Pool>>,
         priority_fn_and_filter: T,
-        log: ReplicaLogger,
         malicious_flags: MaliciousFlags,
     ) -> Self {
         Self {
-            time_source,
             pool,
             priority_fn_and_filter,
-            log,
             malicious_flags,
         }
     }
@@ -162,46 +148,6 @@ impl<
         T: PriorityFnAndFilterProducer<IngressArtifact, Pool> + 'static,
     > ArtifactClient<IngressArtifact> for IngressClient<Pool, T>
 {
-    /// The method checks whether the given signed ingress bytes constitutes a
-    /// valid singed ingress message.
-    ///
-    /// To this end, the method converts the signed bytes into a `SignedIngress`
-    /// message (if possible) and verifies that the message expiry time is
-    /// neither in the past nor too far in the future.
-    fn check_artifact_acceptance(&self, msg: &SignedIngress) -> Result<(), ArtifactPoolError> {
-        #[cfg(feature = "malicious_code")]
-        {
-            if self.malicious_flags.maliciously_disable_ingress_validation {
-                return Ok(());
-            }
-        }
-
-        let time_now = self.time_source.get_relative_time();
-        // We account for a bit of drift here and accept messages with a bit longer
-        // than `MAX_INGRESS_TTL` time-to-live into the ingress pool.
-        // The purpose is to be a bit more permissive than the HTTP handler when the
-        // ingress was first accepted because here the ingress may have come
-        // from the network.
-        let time_plus_ttl = time_now + MAX_INGRESS_TTL + PERMITTED_DRIFT_AT_ARTIFACT_MANAGER;
-        let msg_expiry_time = msg.expiry_time();
-        if msg_expiry_time < time_now {
-            Err(ArtifactPoolError::MessageExpired)
-        } else if msg_expiry_time > time_plus_ttl {
-            debug!(
-                self.log,
-                "check_artifact_acceptance";
-                ingress_message.message_id => format!("{}", msg.id()),
-                ingress_message.reason => "message_expiry_too_far_in_future",
-                ingress_message.expiry_time => Some(msg_expiry_time.as_nanos_since_unix_epoch()),
-                ingress_message.batch_time => Some(time_now.as_nanos_since_unix_epoch()),
-                ingress_message.batch_time_plus_ttl => Some(time_plus_ttl.as_nanos_since_unix_epoch())
-            );
-            Err(ArtifactPoolError::MessageExpiryTooLong)
-        } else {
-            Ok(())
-        }
-    }
-
     /// The method checks if the ingress pool contains an ingress message with
     /// the given ID.
     fn has_artifact(&self, msg_id: &IngressMessageId) -> bool {

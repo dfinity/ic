@@ -399,7 +399,6 @@ fn setup_artifact_manager(
             Arc::clone(&artifact_pools.ingress_pool),
             ingress_prioritizer,
             ingress_manager,
-            replica_logger.clone(),
             metrics_registry.clone(),
             malicious_flags.clone(),
         );

@@ -20,20 +20,6 @@ pub const PERMITTED_DRIFT: Duration = Duration::from_secs(60);
 /// of rejecting them right away.
 pub const PERMITTED_DRIFT_AT_VALIDATOR: Duration = Duration::from_secs(30);
 
-/// Duration added to `MAX_INGRESS_TTL` when checking the max allowed expiry
-/// at the artifact manager when it receives ingress from http_handler or p2p.
-/// The purpose is to account for time drift between subnet nodes.
-///
-/// Together with `PERMITTED_DRIFT_AT_VALIDATOR` we give some leeway to
-/// accommodate possible time drift both between the user client and a subnet
-/// node, and between subnet nodes.
-///
-/// Note that when a blockmaker creates a payload, it will only choose from
-/// its ingress pool based on MAX_INGRESS_TTL. So time drift considerations
-/// may lead to more messages being admitted to the ingress pool, but
-/// shouldn't impact other parts of the system.
-pub const PERMITTED_DRIFT_AT_ARTIFACT_MANAGER: Duration = Duration::from_secs(60);
-
 /// The maximum number of messages that can be present in the ingress history
 /// at any one time.
 ///
