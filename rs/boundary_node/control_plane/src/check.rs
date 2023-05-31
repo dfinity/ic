@@ -133,22 +133,36 @@ impl<R: Retrieve + Send + Sync, C: Check, P: Persist> CheckPersistRunner<R, C, P
             .await
             .context("failed to check node");
 
-        // Update the `checks` entry
-        let mut entry = checks
-            .entry((subnet_id.to_string(), node.node_id.clone()))
-            .or_default();
-        entry.last_updated = current_run_id;
-        entry.ok_count = if check_result.is_err() {
-            0
-        } else {
-            min_ok_count.min(entry.ok_count + 1)
+        let k = (
+            subnet_id.to_string(), // subnet
+            node.node_id.clone(),  // node
+        );
+
+        let ok_count = match (checks.get(&k), &check_result) {
+            // If check failed, reset OK count to 0
+            (_, Err(_)) => 0,
+
+            // If check succeeded, but is also the first check, set OK count to max-value
+            (None, Ok(_)) => min_ok_count,
+
+            // Otherwise, increment OK count
+            (Some(entry), Ok(_)) => min_ok_count.min(entry.ok_count + 1),
         };
+
+        // Update the `checks` entry
+        checks.insert(
+            k,
+            CheckState {
+                ok_count,
+                last_updated: current_run_id,
+            },
+        );
 
         // Return the node
         check_result.map(|check_result| NodeCheck {
             node,
             height: check_result.height,
-            ok_count: entry.ok_count,
+            ok_count,
         })
     }
 
