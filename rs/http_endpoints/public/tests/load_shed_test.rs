@@ -359,3 +359,96 @@ fn test_load_shedding_pprof() {
         assert_eq!(StatusCode::OK, ok_request.await.unwrap())
     });
 }
+
+/// Test concurrency limiter for `/call` endpoint and that when the load shedder kicks in
+/// we return 429.
+/// Test scenario:
+/// 1. Set the concurrency limiter for the call service, `max_call_concurrent_requests`, to 1.
+/// 2. Use [`Agent`]  to make an update calls where we wait with responding for the update call
+/// inside the ingress filter service handle.
+/// 3. Concurrently make another update call, and assert it hits the load shedder.
+#[test]
+fn test_load_shedding_update_call() {
+    let rt = Runtime::new().unwrap();
+    let addr = get_free_localhost_socket_addr();
+
+    let config = Config {
+        listen_addr: addr,
+        max_call_concurrent_requests: 1,
+        ..Default::default()
+    };
+
+    let mock_state_manager = basic_state_manager_mock();
+    let mock_consensus_cache = basic_consensus_pool_cache();
+    let mock_registry_client = basic_registry_client();
+
+    let canister = Principal::from_text("223xb-saaaa-aaaaf-arlqa-cai").unwrap();
+
+    let (mut ingress_filter, mut ingress_sender, _) = start_http_endpoint(
+        rt.handle().clone(),
+        config,
+        Arc::new(mock_state_manager),
+        Arc::new(mock_consensus_cache),
+        Arc::new(mock_registry_client),
+        Arc::new(Pprof::default()),
+    );
+
+    let ingress_filter_running = Arc::new(Notify::new());
+    let load_shedder_returned = Arc::new(Notify::new());
+
+    let ok_agent = Agent::builder()
+        .with_transport(ReqwestHttpReplicaV2Transport::create(format!("http://{}", addr)).unwrap())
+        .build()
+        .unwrap();
+
+    let load_shedded_agent = ok_agent.clone();
+
+    let ingress_filter_running_clone = ingress_filter_running.clone();
+    let load_shedder_returned_clone = load_shedder_returned.clone();
+
+    let load_shedded_agent_handle = rt.spawn(async move {
+        ingress_filter_running_clone.notified().await;
+        let resp = load_shedded_agent
+            .update(&canister, "some method")
+            .call()
+            .await;
+        load_shedder_returned_clone.notify_one();
+        resp
+    });
+
+    // Ingress sender mock that returns empty Ok(()) response.
+    rt.spawn(async move {
+        loop {
+            let (_, resp) = ingress_sender.next_request().await.unwrap();
+            resp.send_response(Ok(()))
+        }
+    });
+
+    // Mock ingress filter
+    rt.spawn(async move {
+        let (_, resp) = ingress_filter.next_request().await.unwrap();
+        ingress_filter_running.notify_one();
+        load_shedder_returned.notified().await;
+        resp.send_response(Ok(()))
+    });
+
+    rt.block_on(async {
+        wait_for_status_healthy(&ok_agent).await.unwrap();
+        let resp = ok_agent.update(&canister, "some method").call().await;
+
+        assert!(resp.is_ok(), "Received unexpeceted response: {:?}", resp);
+
+        let resp = load_shedded_agent_handle.await.unwrap();
+        let expected_resp = StatusCode::TOO_MANY_REQUESTS;
+
+        match resp {
+            Err(AgentError::HttpError(HttpErrorPayload { status, .. })) => {
+                assert_eq!(expected_resp, status)
+            }
+            _ => panic!(
+                "Load shedder did not kick in. Received unexpeceted response: {:?}",
+                resp
+            ),
+        }
+    });
+}

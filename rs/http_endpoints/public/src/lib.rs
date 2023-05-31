@@ -226,8 +226,6 @@ pub fn start_server(
     metrics_registry: &MetricsRegistry,
     config: Config,
     ingress_filter: IngressFilterService,
-    // ingress_sender and query_execution_service are external services with a concurrency limiter.
-    // It is safe to clone them and pass them to a single-threaded context.
     ingress_sender: IngressIngestionService,
     query_execution_service: QueryExecutionService,
     state_reader: Arc<dyn StateReader<State = ReplicatedState>>,
