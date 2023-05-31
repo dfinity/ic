@@ -180,9 +180,7 @@ async fn main() -> Result<(), Error> {
             .context("failed to open root key")?;
 
         if let Some(root_key) = &root_key {
-            agent
-                .set_root_key(root_key.clone())
-                .context("failed to set root key")?;
+            agent.set_root_key(root_key.clone());
         }
 
         Arc::new(agent)

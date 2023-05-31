@@ -4,9 +4,9 @@ end::catalog[] */
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::GetFirstHealthyNodeSnapshot;
 use crate::driver::test_env_api::HasPublicApiUrl;
-use crate::types::*;
 use crate::util::*;
 use canister_test::PrincipalId;
+use ic_agent::agent::RejectCode;
 use ic_ic00_types::{self as ic00, EmptyBlob, Method, Payload};
 use ic_universal_canister::{call_args, wasm};
 

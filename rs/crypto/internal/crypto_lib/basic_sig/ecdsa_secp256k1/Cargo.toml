@@ -11,7 +11,7 @@ ic-crypto-secrets-containers = { path = "../../../../secrets_containers" }
 ic-crypto-internal-basic-sig-der-utils = { path = "../der_utils" }
 ic-types = { path = "../../../../../types/types" }
 openssl = "0.10.29"
-serde = { version = "1.0.99", features = [ "derive" ] }
+serde = { version = "1.0.99", features = ["derive"] }
 serde_bytes = "0.11"
 zeroize = { version = "1.4.3", features = ["zeroize_derive"] }
 simple_asn1 = "0.6.1"
@@ -20,7 +20,7 @@ simple_asn1 = "0.6.1"
 assert_matches = "1.5.0"
 ic-crypto-internal-test-vectors = { path = "../../../test_vectors" }
 ic-crypto-test-utils-reproducible-rng = { path = "../../../../test_utils/reproducible_rng" }
-k256 = { version = "0.12", default-features = false, features = ["arithmetic", "ecdsa"] }
+k256 = { workspace = true }
 proptest = "1.0"
 proptest-derive = "0.3.0"
 rand = "0.8"

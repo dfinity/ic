@@ -448,7 +448,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "0.18.9",
             ),
             "ic-agent": crate.spec(
-                version = "^0.23.0",
+                version = "^0.24.1",
                 features = [
                     "hyper",
                 ],
@@ -490,7 +490,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^2.2.0",
             ),
             "ic-utils": crate.spec(
-                version = "^0.23.0",
+                version = "^0.24.1",
                 features = [
                     "raw",
                 ],
@@ -549,7 +549,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^0.4.1",
             ),
             "k256": crate.spec(
-                version = "^0.12.0",
+                version = "^0.13.1",
                 features = [
                     "arithmetic",
                     "ecdsa",
@@ -691,7 +691,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^0.11.0",
             ),
             "p256": crate.spec(
-                version = "^0.12.0",
+                version = "^0.13.2",
                 features = [
                     "arithmetic",
                     "ecdsa",
@@ -936,7 +936,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^0.8.0",
             ),
             "sev": crate.spec(
-                version = "^1.1.0",
+                version = "=1.1.0",  # Pinned to 1.1.0. The crate broke semantic verisioning with breaking changes in 1.2.0 (https://github.com/virtee/sev/issues/81).
                 features = [
                     "openssl",
                 ],

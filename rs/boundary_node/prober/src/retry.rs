@@ -1,5 +1,9 @@
-use ic_agent::{export::Principal, Agent, AgentError, AgentError::*};
-use ic_error_types::RejectCode;
+use ic_agent::{
+    agent::{RejectCode, RejectResponse},
+    export::Principal,
+    Agent, AgentError,
+    AgentError::*,
+};
 
 use anyhow::Error;
 use async_trait::async_trait;
@@ -46,8 +50,8 @@ impl<C: Create> Create for WithRetry<C> {
             };
             match err {
                 Some(InvalidCborData(..) | CandidError(..) | RequestStatusDoneNoReply(..)) => false,
-                Some(ReplicaError { reject_code, .. }) => {
-                    *reject_code != RejectCode::CanisterError as u64
+                Some(ReplicaError(RejectResponse { reject_code, .. })) => {
+                    *reject_code != RejectCode::CanisterError
                 }
                 _ => true,
             }
@@ -73,8 +77,8 @@ impl<T: Install> Install for WithRetry<T> {
             };
             match err {
                 Some(RequestStatusDoneNoReply(..)) => false,
-                Some(ReplicaError { reject_code, .. }) => {
-                    *reject_code != RejectCode::CanisterError as u64
+                Some(ReplicaError(RejectResponse { reject_code, .. })) => {
+                    *reject_code != RejectCode::CanisterError
                 }
                 _ => true,
             }
@@ -100,8 +104,8 @@ impl<T: Stop> Stop for WithRetry<T> {
             };
             match err {
                 Some(RequestStatusDoneNoReply(..)) => false,
-                Some(ReplicaError { reject_code, .. }) => {
-                    *reject_code != RejectCode::CanisterError as u64
+                Some(ReplicaError(RejectResponse { reject_code, .. })) => {
+                    *reject_code != RejectCode::CanisterError
                 }
                 _ => true,
             }
@@ -127,8 +131,8 @@ impl<T: Delete> Delete for WithRetry<T> {
             };
             match err {
                 Some(RequestStatusDoneNoReply(..)) => false,
-                Some(ReplicaError { reject_code, .. }) => {
-                    *reject_code != RejectCode::CanisterError as u64
+                Some(ReplicaError(RejectResponse { reject_code, .. })) => {
+                    *reject_code != RejectCode::CanisterError
                 }
                 _ => true,
             }

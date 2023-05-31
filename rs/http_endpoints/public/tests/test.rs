@@ -174,9 +174,9 @@ fn test_unathorized_controller() {
 
     let canister1 = Principal::from_text("223xb-saaaa-aaaaf-arlqa-cai").unwrap();
     let canister2 = Principal::from_text("224lq-3aaaa-aaaaf-ase7a-cai").unwrap();
-    let paths: Vec<Vec<Label>> = vec![vec![
+    let paths: Vec<Vec<Label<Vec<u8>>>> = vec![vec![
         "canister".into(),
-        canister2.into(),
+        canister2.as_slice().into(),
         "metadata".into(),
         "time".into(),
     ]];

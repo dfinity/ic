@@ -24,7 +24,10 @@ use crate::nns::{get_subnet_list_from_registry, vote_and_execute_proposal};
 use crate::util::*;
 use candid::{Encode, Principal};
 use canister_test::{Canister, Cycles};
-use ic_agent::AgentError;
+use ic_agent::{
+    agent::{RejectCode, RejectResponse},
+    AgentError,
+};
 use ic_base_types::{NodeId, SubnetId};
 use ic_canister_client::Sender;
 use ic_config::subnet_config::ECDSA_SIGNATURE_FEE;
@@ -581,14 +584,15 @@ pub fn test_threshold_ecdsa_signature_fails_without_cycles(env: TestEnv) {
         .unwrap_err();
         assert_eq!(
             error,
-            AgentError::ReplicaError {
-                reject_code: 4,
+            AgentError::ReplicaError(RejectResponse {
+                reject_code: RejectCode::CanisterReject,
                 reject_message: format!(
                     "sign_with_ecdsa request sent with {} cycles, but {} cycles are required.",
                     scale_cycles(ECDSA_SIGNATURE_FEE) - Cycles::from(1u64),
                     scale_cycles(ECDSA_SIGNATURE_FEE),
-                )
-            }
+                ),
+                error_code: None
+            })
         )
     });
 }
@@ -649,10 +653,11 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
             get_public_key_with_logger(make_key(KEY_ID2), &msg_can, log)
                 .await
                 .unwrap_err(),
-            AgentError::ReplicaError {
-                reject_code: 4,
-                reject_message: "Unable to route management canister request ecdsa_public_key: EcdsaKeyError(\"Requested ECDSA key: Secp256k1:some_other_key, existing keys: []\")".to_string()
-            }
+            AgentError::ReplicaError(RejectResponse {
+                reject_code: RejectCode::CanisterReject,
+                reject_message: "Unable to route management canister request ecdsa_public_key: EcdsaKeyError(\"Requested ECDSA key: Secp256k1:some_other_key, existing keys: []\")".to_string(),
+                error_code: None,
+            })
         );
         assert_eq!(
             get_signature_with_logger(
@@ -664,10 +669,11 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
             )
             .await
             .unwrap_err(),
-            AgentError::ReplicaError {
-                reject_code: 4,
-                reject_message: "Unable to route management canister request sign_with_ecdsa: EcdsaKeyError(\"Requested ECDSA key: Secp256k1:some_other_key, existing keys with signing enabled: []\")".to_string()
-            }
+            AgentError::ReplicaError(RejectResponse {
+                reject_code: RejectCode::CanisterReject,
+                reject_message: "Unable to route management canister request sign_with_ecdsa: EcdsaKeyError(\"Requested ECDSA key: Secp256k1:some_other_key, existing keys with signing enabled: []\")".to_string(),
+                error_code: None,
+            })
         );
 
         info!(log, "2. Enabling signing and verifying that it works.");
@@ -765,10 +771,11 @@ pub fn test_threshold_ecdsa_life_cycle(env: TestEnv) {
             )
             .await
             .unwrap_err(),
-            AgentError::ReplicaError {
-                reject_code: 4,
-                reject_message: "Unable to route management canister request sign_with_ecdsa: EcdsaKeyError(\"Requested ECDSA key: Secp256k1:some_other_key, existing keys with signing enabled: []\")".to_string()
-            }
+            AgentError::ReplicaError(RejectResponse {
+                reject_code: RejectCode::CanisterReject,
+                reject_message: "Unable to route management canister request sign_with_ecdsa: EcdsaKeyError(\"Requested ECDSA key: Secp256k1:some_other_key, existing keys with signing enabled: []\")".to_string(),
+                error_code: None
+            })
         );
 
         info!(log, "4. Enabling signing on new subnet then verifying that signing works and public key is unchanged.");
@@ -849,10 +856,11 @@ pub fn test_threshold_ecdsa_signature_timeout(env: TestEnv) {
         .unwrap_err();
         assert_eq!(
             error,
-            AgentError::ReplicaError {
-                reject_code: 4,
-                reject_message: "Signature request expired".to_string()
-            }
+            AgentError::ReplicaError(RejectResponse {
+                reject_code: RejectCode::CanisterReject,
+                reject_message: "Signature request expired".to_string(),
+                error_code: None
+            })
         )
     });
 }

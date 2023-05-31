@@ -372,9 +372,7 @@ fn create_agent_fn(identity: Arc<BasicIdentity>, root_key: Option<Vec<u8>>) -> i
             .context("failed to build agent")?;
 
         if let Some(root_key) = &root_key {
-            agent
-                .set_root_key(root_key.clone())
-                .context("failed to set root key")?;
+            agent.set_root_key(root_key.clone());
         }
 
         Ok((node_id, socket_addr, agent))

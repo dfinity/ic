@@ -48,7 +48,7 @@ impl Validate for Validator {
             // This should change in the future, grandfathering in current implementations
             (false, false) => return Ok(()),
             (_, _) => {
-                let ic_public_key = agent.read_root_key().map_err(|e| e.to_string())?;
+                let ic_public_key = agent.read_root_key();
                 verify_request_response_pair(
                     request.into(),
                     response.into(),

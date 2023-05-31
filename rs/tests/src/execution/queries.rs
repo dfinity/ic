@@ -4,8 +4,8 @@ end::catalog[] */
 use crate::driver::test_env::TestEnv;
 use crate::driver::test_env_api::GetFirstHealthyNodeSnapshot;
 use crate::driver::test_env_api::HasPublicApiUrl;
-use crate::types::*;
 use crate::util::*;
+use ic_agent::agent::RejectCode;
 use ic_utils::interfaces::ManagementCanister;
 
 /// Tests that query replies can be larger than update replies.
