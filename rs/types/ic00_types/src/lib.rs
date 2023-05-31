@@ -42,6 +42,7 @@ const MAXIMUM_DERIVATION_PATH_LENGTH: usize = 255;
 #[strum(serialize_all = "snake_case")]
 pub enum Method {
     CanisterStatus,
+    CanisterInfo,
     CreateCanister,
     DeleteCanister,
     DepositCycles,
@@ -354,6 +355,90 @@ impl CanisterChange {
         NumBytes::from((size_of::<CanisterChange>() + controllers_memory_size) as u64)
     }
 }
+
+/// `CandidType` for `CanisterInfoRequest`
+/// ```text
+/// record {
+///   canister_id : principal;
+///   num_requested_changes : opt nat64;
+/// }
+/// ```
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct CanisterInfoRequest {
+    canister_id: PrincipalId,
+    num_requested_changes: Option<u64>,
+}
+
+impl CanisterInfoRequest {
+    pub fn new(canister_id: CanisterId, num_requested_changes: Option<u64>) -> CanisterInfoRequest {
+        CanisterInfoRequest {
+            canister_id: canister_id.into(),
+            num_requested_changes,
+        }
+    }
+
+    pub fn canister_id(&self) -> CanisterId {
+        // Safe as this was converted from CanisterId when Self was constructed.
+        CanisterId::new(self.canister_id).unwrap()
+    }
+
+    pub fn num_requested_changes(&self) -> Option<u64> {
+        self.num_requested_changes
+    }
+}
+
+impl Payload<'_> for CanisterInfoRequest {}
+
+/// `CandidType` for `CanisterInfoRequest`
+/// ```text
+/// record {
+///   total_num_changes : nat64;
+///   recent_changes : vec change;
+///   module_hash : opt blob;
+///   controllers : vec principal;
+/// }
+/// ```
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct CanisterInfoResponse {
+    total_num_changes: u64,
+    recent_changes: Vec<CanisterChange>,
+    module_hash: Option<Vec<u8>>,
+    controllers: Vec<PrincipalId>,
+}
+
+impl CanisterInfoResponse {
+    pub fn new(
+        total_num_changes: u64,
+        recent_changes: Vec<CanisterChange>,
+        module_hash: Option<Vec<u8>>,
+        controllers: Vec<PrincipalId>,
+    ) -> Self {
+        Self {
+            total_num_changes,
+            recent_changes,
+            module_hash,
+            controllers,
+        }
+    }
+
+    pub fn total_num_changes(&self) -> u64 {
+        self.total_num_changes
+    }
+
+    pub fn changes(&self) -> Vec<CanisterChange> {
+        self.recent_changes.clone()
+    }
+
+    pub fn module_hash(&self) -> Option<Vec<u8>> {
+        self.module_hash.clone()
+    }
+
+    pub fn controllers(&self) -> Vec<PrincipalId> {
+        self.controllers.clone()
+    }
+}
+
+impl Payload<'_> for CanisterInfoResponse {}
 
 impl From<&CanisterChangeOrigin> for pb_canister_state_bits::canister_change::ChangeOrigin {
     fn from(item: &CanisterChangeOrigin) -> Self {

@@ -213,6 +213,7 @@ impl SystemStateChanges {
             }
             Ok(Ic00Method::SignWithECDSA)
             | Ok(Ic00Method::CanisterStatus)
+            | Ok(Ic00Method::CanisterInfo)
             | Ok(Ic00Method::StartCanister)
             | Ok(Ic00Method::StopCanister)
             | Ok(Ic00Method::DeleteCanister)

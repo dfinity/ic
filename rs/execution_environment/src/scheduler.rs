@@ -2124,6 +2124,7 @@ fn get_instructions_limits_for_subnet_message(
     match Ic00Method::from_str(method_name) {
         Ok(method) => match method {
             CanisterStatus
+            | CanisterInfo
             | CreateCanister
             | DeleteCanister
             | DepositCycles

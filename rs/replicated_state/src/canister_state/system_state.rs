@@ -218,18 +218,16 @@ impl CanisterHistory {
         );
     }
 
-    /// Returns an iterator over the most recent canister changes: if `num_requested_changes` is None,
-    /// then all canister changes are returned; otherwise, the requested number of canister changes
-    /// or, if more changes are requested than available in the history, all canister changes are returned.
+    /// Returns an iterator over the requested number of most recent canister changes
+    /// or, if more changes are requested than available in the history,
+    /// an iterator over all canister changes.
     /// The changes are iterated in chronological order, i.e., from the oldest to the most recent.
     pub fn get_changes(
         &self,
-        num_requested_changes: Option<usize>,
+        num_requested_changes: usize,
     ) -> impl Iterator<Item = &Arc<CanisterChange>> {
         let num_all_changes = self.changes.len();
-        let num_changes = num_requested_changes
-            .unwrap_or(num_all_changes)
-            .min(num_all_changes);
+        let num_changes = num_requested_changes.min(num_all_changes);
         self.changes.range((num_all_changes - num_changes)..)
     }
 

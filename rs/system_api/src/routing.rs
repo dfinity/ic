@@ -6,10 +6,10 @@ use ic_btc_interface::NetworkInRequest as BitcoinNetwork;
 use ic_error_types::UserError;
 use ic_ic00_types::{
     BitcoinGetBalanceArgs, BitcoinGetCurrentFeePercentilesArgs, BitcoinGetUtxosArgs,
-    BitcoinSendTransactionArgs, CanisterIdRecord, ComputeInitialEcdsaDealingsArgs,
-    ECDSAPublicKeyArgs, EcdsaKeyId, InstallCodeArgs, Method as Ic00Method, Payload,
-    ProvisionalTopUpCanisterArgs, SetControllerArgs, SignWithECDSAArgs, UninstallCodeArgs,
-    UpdateSettingsArgs,
+    BitcoinSendTransactionArgs, CanisterIdRecord, CanisterInfoRequest,
+    ComputeInitialEcdsaDealingsArgs, ECDSAPublicKeyArgs, EcdsaKeyId, InstallCodeArgs,
+    Method as Ic00Method, Payload, ProvisionalTopUpCanisterArgs, SetControllerArgs,
+    SignWithECDSAArgs, UninstallCodeArgs, UpdateSettingsArgs,
 };
 use ic_replicated_state::NetworkTopology;
 
@@ -95,6 +95,17 @@ pub(super) fn resolve_destination(
         | Ok(Ic00Method::DepositCycles) => {
             let args = CanisterIdRecord::decode(payload)?;
             let canister_id = args.get_canister_id();
+            network_topology
+                .routing_table
+                .route(canister_id.get())
+                .map(|subnet_id| subnet_id.get())
+                .ok_or_else(|| {
+                    ResolveDestinationError::SubnetNotFound(canister_id, method.unwrap())
+                })
+        }
+        Ok(Ic00Method::CanisterInfo) => {
+            let args = CanisterInfoRequest::decode(payload)?;
+            let canister_id = args.canister_id();
             network_topology
                 .routing_table
                 .route(canister_id.get())

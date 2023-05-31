@@ -1,8 +1,8 @@
 use crate::{ingress::WasmResult, CanisterId, CountBytes, Cycles, Funds, NumBytes};
 use ic_error_types::{RejectCode, TryFromError, UserError};
 use ic_ic00_types::{
-    CanisterIdRecord, InstallCodeArgs, Method, Payload as _, ProvisionalTopUpCanisterArgs,
-    SetControllerArgs, UpdateSettingsArgs,
+    CanisterIdRecord, CanisterInfoRequest, InstallCodeArgs, Method, Payload as _,
+    ProvisionalTopUpCanisterArgs, SetControllerArgs, UpdateSettingsArgs,
 };
 use ic_protobuf::{
     proxy::{try_from_option_field, ProxyDecodeError},
@@ -80,6 +80,10 @@ impl Request {
             | Ok(Method::DepositCycles)
             | Ok(Method::StopCanister) => match CanisterIdRecord::decode(&self.method_payload) {
                 Ok(record) => Some(record.get_canister_id()),
+                Err(_) => None,
+            },
+            Ok(Method::CanisterInfo) => match CanisterInfoRequest::decode(&self.method_payload) {
+                Ok(record) => Some(record.canister_id()),
                 Err(_) => None,
             },
             Ok(Method::UpdateSettings) => match UpdateSettingsArgs::decode(&self.method_payload) {

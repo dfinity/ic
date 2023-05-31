@@ -311,6 +311,7 @@ impl CanisterManager {
             // are not allowed to send.
             Err(_)
             | Ok(Ic00Method::CreateCanister)
+            | Ok(Ic00Method::CanisterInfo)
             | Ok(Ic00Method::ECDSAPublicKey)
             | Ok(Ic00Method::SetupInitialDKG)
             | Ok(Ic00Method::SignWithECDSA)
