@@ -113,7 +113,6 @@ use ic_interfaces::{
     ingress_pool::ChangeSet as IngressChangeSet,
     time_source::{SysTimeSource, TimeSource},
 };
-use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_types::{artifact::*, artifact_kind::*, malicious_flags::MaliciousFlags};
 use prometheus::{histogram_opts, labels, Histogram};
@@ -319,7 +318,6 @@ pub fn create_ingress_handlers<
     ingress_handler: Arc<
         dyn ChangeSetProducer<PoolIngress, ChangeSet = IngressChangeSet> + Send + Sync,
     >,
-    log: ReplicaLogger,
     metrics_registry: MetricsRegistry,
     malicious_flags: MaliciousFlags,
 ) -> (ArtifactClientHandle<IngressArtifact>, Box<dyn JoinGuard>) {
@@ -335,10 +333,8 @@ pub fn create_ingress_handlers<
         ArtifactClientHandle::<IngressArtifact> {
             sender,
             pool_reader: Box::new(pool_readers::IngressClient::new(
-                time_source.clone(),
                 ingress_pool,
                 priority_fn_and_filter_producer,
-                log,
                 malicious_flags,
             )),
             time_source,
