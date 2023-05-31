@@ -32,13 +32,6 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
 
     # -------------------- Version management --------------------
 
-    # TODO(IDX-2538): re-enable this (or any other similar) solution when everything will be ready to have ic version that is not git revision.
-    #summary_sha256sum(
-    #    name = "version.txt",
-    #    inputs = image_deps,
-    #    suffix = "-dev" if mode == "dev" else "",
-    #)
-
     copy_file(
         name = "copy_version_txt",
         src = ic_version,
