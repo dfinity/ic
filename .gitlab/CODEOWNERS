@@ -227,6 +227,7 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/test_utilities/execution_environment/         @dfinity-lab/teams/execution-owners @dfinity-lab/teams/runtime-owners
 /rs/test_utilities/src/wasmtime_instance.rs         @dfinity-lab/teams/runtime-owners
 /rs/tests/                              @dfinity-lab/teams/ic-testing-verification
+/rs/tests/api_boundary_nodes        @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/boundarynode-team
 /rs/tests/boundary_nodes        @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/boundarynode-team
 /rs/tests/consensus        @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/consensus-owners
 /rs/tests/crypto        @dfinity-lab/teams/ic-testing-verification @dfinity-lab/teams/crypto-owners
