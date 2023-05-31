@@ -1,9 +1,11 @@
 use ic_config::{execution_environment::Config as HypervisorConfig, subnet_config::SubnetConfig};
 use ic_crypto_sha::Sha256;
+use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::CanisterInstallMode::{Install, Reinstall, Upgrade};
 use ic_ic00_types::{
     self as ic00, CanisterChange, CanisterChangeDetails, CanisterChangeOrigin, CanisterIdRecord,
-    CreateCanisterArgs, InstallCodeArgs, Method, Payload, UpdateSettingsArgs,
+    CanisterInfoRequest, CanisterInfoResponse, CreateCanisterArgs, InstallCodeArgs, Method,
+    Payload, UpdateSettingsArgs,
 };
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::canister_state::system_state::{
@@ -50,6 +52,28 @@ fn get_canister_history(env: &StateMachine, canister_id: CanisterId) -> Canister
         .system_state
         .get_canister_history()
         .clone()
+}
+
+fn get_canister_info(
+    env: &StateMachine,
+    ucan: CanisterId,
+    canister_id: CanisterId,
+    num_requested_changes: Option<u64>,
+) -> Result<CanisterInfoResponse, String> {
+    let info_request_payload = universal_canister_payload(
+        &PrincipalId::default(),
+        &Method::CanisterInfo.to_string(),
+        CanisterInfoRequest::new(canister_id, num_requested_changes).encode(),
+        Cycles::new(0),
+    );
+    let wasm_result = env
+        .execute_ingress(ucan, "update", info_request_payload)
+        .unwrap();
+    match wasm_result {
+        WasmResult::Reply(bytes) => Ok(CanisterInfoResponse::decode(&bytes[..])
+            .expect("failed to decode canister_info response")),
+        WasmResult::Reject(reason) => Err(reason),
+    }
 }
 
 /// returns a StateMachine, the test canister WASM, and its module hash
@@ -125,7 +149,7 @@ fn canister_history_tracks_create_install_reinstall() {
     );
     assert_eq!(
         history
-            .get_changes(None)
+            .get_changes(history.get_total_num_changes() as usize)
             .map(|c| (**c).clone())
             .collect::<Vec<CanisterChange>>(),
         reference_change_entries
@@ -165,7 +189,7 @@ fn canister_history_tracks_create_install_reinstall() {
     );
     assert_eq!(
         history
-            .get_changes(None)
+            .get_changes(history.get_total_num_changes() as usize)
             .map(|c| (**c).clone())
             .collect::<Vec<CanisterChange>>(),
         reference_change_entries
@@ -205,7 +229,7 @@ fn canister_history_tracks_create_install_reinstall() {
     );
     assert_eq!(
         history
-            .get_changes(None)
+            .get_changes(history.get_total_num_changes() as usize)
             .map(|c| (**c).clone())
             .collect::<Vec<CanisterChange>>(),
         reference_change_entries
@@ -317,7 +341,7 @@ fn canister_history_tracks_upgrade() {
     );
     assert_eq!(
         history
-            .get_changes(None)
+            .get_changes(history.get_total_num_changes() as usize)
             .map(|c| (**c).clone())
             .collect::<Vec<CanisterChange>>(),
         reference_change_entries
@@ -421,7 +445,7 @@ fn canister_history_tracks_uninstall() {
     );
     assert_eq!(
         history
-            .get_changes(None)
+            .get_changes(history.get_total_num_changes() as usize)
             .map(|c| (**c).clone())
             .collect::<Vec<CanisterChange>>(),
         reference_change_entries
@@ -508,7 +532,7 @@ fn canister_history_tracks_controllers_change() {
         }
         assert_eq!(
             history
-                .get_changes(None)
+                .get_changes(history.get_total_num_changes() as usize)
                 .map(|c| (**c).clone())
                 .collect::<Vec<CanisterChange>>(),
             reference_change_entries
@@ -608,7 +632,7 @@ fn canister_history_cleared_if_canister_out_of_cycles() {
     );
     assert_eq!(
         history
-            .get_changes(None)
+            .get_changes(history.get_total_num_changes() as usize)
             .map(|c| (**c).clone())
             .collect::<Vec<CanisterChange>>(),
         reference_change_entries
@@ -680,7 +704,7 @@ fn canister_history_tracks_changes_from_canister() {
     );
     assert_eq!(
         history
-            .get_changes(None)
+            .get_changes(history.get_total_num_changes() as usize)
             .map(|c| (**c).clone())
             .collect::<Vec<CanisterChange>>(),
         reference_change_entries
@@ -720,7 +744,7 @@ fn canister_history_tracks_changes_from_canister() {
     );
     assert_eq!(
         history
-            .get_changes(None)
+            .get_changes(history.get_total_num_changes() as usize)
             .map(|c| (**c).clone())
             .collect::<Vec<CanisterChange>>(),
         reference_change_entries
@@ -820,9 +844,223 @@ fn canister_history_fails_with_incorrect_sender_version() {
     );
     assert_eq!(
         history
-            .get_changes(None)
+            .get_changes(history.get_total_num_changes() as usize)
             .map(|c| (**c).clone())
             .collect::<Vec<CanisterChange>>(),
         reference_change_entries
     );
+}
+
+#[test]
+fn canister_info_retrieval() {
+    let mut now = std::time::SystemTime::now();
+    let (env, test_canister, test_canister_sha256) = test_setup(SubnetType::Application, now);
+
+    // declare user IDs
+    let anonymous_user = PrincipalId::new_anonymous();
+    let user_id1 = user_test_id(7).get();
+    let user_id2 = user_test_id(8).get();
+
+    // create canister via ingress from user_id1
+    let wasm_result = env
+        .execute_ingress_as(
+            user_id1,
+            ic00::IC_00,
+            ic00::Method::ProvisionalCreateCanisterWithCycles,
+            ic00::ProvisionalCreateCanisterWithCyclesArgs {
+                amount: Some(candid::Nat::from(INITIAL_CYCLES_BALANCE.get())),
+                settings: Some(CanisterSettingsArgs::new(
+                    Some(vec![user_id1, user_id2]),
+                    None,
+                    None,
+                    None,
+                )),
+                specified_id: None,
+                sender_canister_version: None,
+            }
+            .encode(),
+        )
+        .expect("failed to create canister");
+    let canister_id = match wasm_result {
+        WasmResult::Reply(bytes) => CanisterIdRecord::decode(&bytes[..])
+            .expect("failed to decode canister ID record")
+            .get_canister_id(),
+        WasmResult::Reject(reason) => panic!("create_canister call rejected: {}", reason),
+    };
+    // update reference canister history
+    let mut reference_change_entries: Vec<CanisterChange> = vec![CanisterChange::new(
+        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
+        0,
+        CanisterChangeOrigin::from_user(user_id1),
+        CanisterChangeDetails::canister_creation(vec![user_id1, user_id2]),
+    )];
+
+    // install test_canister via ingress from user_id2
+    now += Duration::from_secs(5);
+    env.set_time(now);
+    env.tick();
+    env.execute_ingress_as(
+        user_id2,
+        ic00::IC_00,
+        Method::InstallCode,
+        InstallCodeArgs::new(
+            Install,
+            canister_id,
+            test_canister,
+            vec![],
+            None,
+            None,
+            None,
+        )
+        .encode(),
+    )
+    .unwrap();
+    // update reference canister history
+    reference_change_entries.push(CanisterChange::new(
+        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
+        1,
+        CanisterChangeOrigin::from_user(user_id2),
+        CanisterChangeDetails::code_deployment(Install, test_canister_sha256),
+    ));
+
+    // upgrade to universal_canister via ingress from user_id1
+    now += Duration::from_secs(5);
+    env.set_time(now);
+    env.tick();
+    env.execute_ingress_as(
+        user_id1,
+        ic00::IC_00,
+        Method::InstallCode,
+        InstallCodeArgs::new(
+            Upgrade,
+            canister_id,
+            UNIVERSAL_CANISTER_WASM.to_vec(),
+            vec![],
+            None,
+            None,
+            None,
+        )
+        .encode(),
+    )
+    .unwrap();
+    // update reference canister history
+    reference_change_entries.push(CanisterChange::new(
+        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
+        2,
+        CanisterChangeOrigin::from_user(user_id1),
+        CanisterChangeDetails::code_deployment(Upgrade, UNIVERSAL_CANISTER_WASM_SHA256),
+    ));
+
+    // create and install universal_canister
+    let ucan = env
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_WASM.into(),
+            vec![],
+            Some(CanisterSettingsArgs::new(
+                Some(vec![anonymous_user, user_id1, user_id2]),
+                None,
+                None,
+                None,
+            )),
+            INITIAL_CYCLES_BALANCE,
+        )
+        .unwrap();
+
+    // users cannot retrieve canister information directly via ingress messages
+    let res = env.execute_ingress(
+        ic00::IC_00,
+        Method::CanisterInfo,
+        CanisterInfoRequest::new(canister_id, None).encode(),
+    );
+    assert_eq!(
+        res,
+        Err(UserError::new(
+            ErrorCode::CanisterContractViolation,
+            format!("{} cannot be called by a user.", Method::CanisterInfo)
+        ))
+    );
+
+    // do not specify the number of requested changes
+    let canister_info = get_canister_info(&env, ucan, canister_id, None).unwrap();
+    assert_eq!(
+        canister_info.total_num_changes(),
+        reference_change_entries.len() as u64
+    );
+    assert_eq!(canister_info.changes(), vec![]);
+    assert_eq!(
+        canister_info.module_hash(),
+        Some(UNIVERSAL_CANISTER_WASM_SHA256.to_vec())
+    );
+    assert_eq!(canister_info.controllers(), vec![user_id1, user_id2]);
+
+    // retrieve the entire canister history
+    let canister_info = get_canister_info(&env, ucan, canister_id, Some(3)).unwrap();
+    assert_eq!(
+        canister_info.total_num_changes(),
+        reference_change_entries.len() as u64
+    );
+    assert_eq!(canister_info.changes(), reference_change_entries);
+    assert_eq!(
+        canister_info.module_hash(),
+        Some(UNIVERSAL_CANISTER_WASM_SHA256.to_vec())
+    );
+    assert_eq!(canister_info.controllers(), vec![user_id1, user_id2]);
+
+    // retrieve a proper suffix of canister history
+    let canister_info = get_canister_info(&env, ucan, canister_id, Some(2)).unwrap();
+    assert_eq!(
+        canister_info.total_num_changes(),
+        reference_change_entries.len() as u64
+    );
+    let history_suffix: Vec<CanisterChange> =
+        reference_change_entries.as_slice()[(reference_change_entries.len() - 2)..].to_vec();
+    assert_eq!(canister_info.changes(), history_suffix);
+    assert_eq!(
+        canister_info.module_hash(),
+        Some(UNIVERSAL_CANISTER_WASM_SHA256.to_vec())
+    );
+    assert_eq!(canister_info.controllers(), vec![user_id1, user_id2]);
+
+    // ask for more entries than present in canister history
+    let canister_info = get_canister_info(&env, ucan, canister_id, Some(666)).unwrap();
+    assert_eq!(
+        canister_info.total_num_changes(),
+        reference_change_entries.len() as u64
+    );
+    assert_eq!(canister_info.changes(), reference_change_entries);
+    assert_eq!(
+        canister_info.module_hash(),
+        Some(UNIVERSAL_CANISTER_WASM_SHA256.to_vec())
+    );
+    assert_eq!(canister_info.controllers(), vec![user_id1, user_id2]);
+
+    // uninstall code via ingress from user_id2
+    now += Duration::from_secs(5);
+    env.set_time(now);
+    env.tick();
+    let canister_id_record: CanisterIdRecord = canister_id.into();
+    env.execute_ingress_as(
+        user_id2,
+        ic00::IC_00,
+        Method::UninstallCode,
+        canister_id_record.encode(),
+    )
+    .unwrap();
+    // update reference canister history
+    reference_change_entries.push(CanisterChange::new(
+        now.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64,
+        20,
+        CanisterChangeOrigin::from_user(user_id2),
+        CanisterChangeDetails::CanisterCodeUninstall,
+    ));
+
+    // retrieve the entire canister history and check module_hash of uninstalled canister
+    let canister_info = get_canister_info(&env, ucan, canister_id, Some(4)).unwrap();
+    assert_eq!(
+        canister_info.total_num_changes(),
+        reference_change_entries.len() as u64
+    );
+    assert_eq!(canister_info.changes(), reference_change_entries);
+    assert_eq!(canister_info.module_hash(), None);
+    assert_eq!(canister_info.controllers(), vec![user_id1, user_id2]);
 }

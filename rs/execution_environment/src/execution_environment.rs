@@ -24,12 +24,12 @@ use ic_crypto_tecdsa::derive_tecdsa_public_key;
 use ic_cycles_account_manager::{CyclesAccountManager, IngressInductionCost};
 use ic_error_types::{ErrorCode, RejectCode, UserError};
 use ic_ic00_types::{
-    CanisterChangeOrigin, CanisterHttpRequestArgs, CanisterIdRecord, CanisterSettingsArgs,
-    ComputeInitialEcdsaDealingsArgs, CreateCanisterArgs, ECDSAPublicKeyArgs,
-    ECDSAPublicKeyResponse, EcdsaKeyId, EmptyBlob, InstallCodeArgs, Method as Ic00Method,
-    Payload as Ic00Payload, ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs,
-    SetControllerArgs, SetupInitialDKGArgs, SignWithECDSAArgs, UninstallCodeArgs,
-    UpdateSettingsArgs, IC_00,
+    CanisterChangeOrigin, CanisterHttpRequestArgs, CanisterIdRecord, CanisterInfoRequest,
+    CanisterInfoResponse, CanisterSettingsArgs, ComputeInitialEcdsaDealingsArgs,
+    CreateCanisterArgs, ECDSAPublicKeyArgs, ECDSAPublicKeyResponse, EcdsaKeyId, EmptyBlob,
+    InstallCodeArgs, Method as Ic00Method, Payload as Ic00Payload,
+    ProvisionalCreateCanisterWithCyclesArgs, ProvisionalTopUpCanisterArgs, SetControllerArgs,
+    SetupInitialDKGArgs, SignWithECDSAArgs, UninstallCodeArgs, UpdateSettingsArgs, IC_00,
 };
 use ic_interfaces::{
     execution_environment::{
@@ -656,6 +656,23 @@ impl ExecutionEnvironment {
                 };
                 Some((res, msg.take_cycles()))
             }
+
+            Ok(Ic00Method::CanisterInfo) => match &msg {
+                CanisterCall::Request(_) => {
+                    let res = match CanisterInfoRequest::decode(payload) {
+                        Err(err) => Err(err),
+                        Ok(record) => self.get_canister_info(
+                            record.canister_id(),
+                            record.num_requested_changes(),
+                            &state,
+                        ),
+                    };
+                    Some((res, msg.take_cycles()))
+                }
+                CanisterCall::Ingress(_) => {
+                    self.reject_unexpected_ingress(Ic00Method::CanisterInfo)
+                }
+            },
 
             Ok(Ic00Method::StartCanister) => {
                 let res = match CanisterIdRecord::decode(payload) {
@@ -1352,6 +1369,32 @@ impl ExecutionEnvironment {
             .get_canister_status(sender, canister, subnet_size)
             .map(|status| status.encode())
             .map_err(|err| err.into())
+    }
+
+    fn get_canister_info(
+        &self,
+        canister_id: CanisterId,
+        num_requested_changes: Option<u64>,
+        state: &ReplicatedState,
+    ) -> Result<Vec<u8>, UserError> {
+        let canister = get_canister(canister_id, state)?;
+        let canister_history = canister.system_state.get_canister_history();
+        let total_num_changes = canister_history.get_total_num_changes();
+        let changes = canister_history
+            .get_changes(num_requested_changes.unwrap_or(0) as usize)
+            .map(|e| (*e.clone()).clone())
+            .collect();
+        let module_hash = canister
+            .execution_state
+            .as_ref()
+            .map(|es| es.wasm_binary.binary.module_hash().to_vec());
+        let controllers = canister
+            .controllers()
+            .iter()
+            .copied()
+            .collect::<Vec<PrincipalId>>();
+        let res = CanisterInfoResponse::new(total_num_changes, changes, module_hash, controllers);
+        Ok(res.encode())
     }
 
     fn stop_canister(
@@ -2333,6 +2376,19 @@ pub(crate) fn subnet_memory_capacity(config: &ExecutionConfig) -> SubnetAvailabl
         config.subnet_message_memory_capacity.get() as i64,
         config.subnet_wasm_custom_sections_memory_capacity.get() as i64,
     )
+}
+
+fn get_canister(
+    canister_id: CanisterId,
+    state: &ReplicatedState,
+) -> Result<&CanisterState, UserError> {
+    match state.canister_state(&canister_id) {
+        Some(canister) => Ok(canister),
+        None => Err(UserError::new(
+            ErrorCode::CanisterNotFound,
+            format!("Canister {} not found.", &canister_id),
+        )),
+    }
 }
 
 fn get_canister_mut(
