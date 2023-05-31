@@ -1,32 +1,29 @@
 //! Contains the logic for deploying SNS canisters
 
-use candid::parser::value::IDLValue;
-use candid::Decode;
-use candid::Encode;
-use ic_base_types::{CanisterId, PrincipalId};
-use ic_nns_constants::ROOT_CANISTER_ID as NNS_ROOT_CANISTER_ID;
-use ic_nns_constants::SNS_WASM_CANISTER_ID;
-use ic_sns_governance::pb::v1::ListNeuronsResponse;
-use ic_sns_init::pb::v1::SnsInitPayload;
-use ic_sns_init::{SnsCanisterIds, SnsCanisterInitPayloads};
-use ic_sns_root::pb::v1::ListSnsCanistersResponse;
-use ic_sns_wasm::pb::v1::DeployNewSnsRequest;
-use ic_sns_wasm::pb::v1::DeployNewSnsResponse;
-use ic_sns_wasm::pb::v1::SnsCanisterIds as SnsWSnsCanisterIds;
-use serde_json::json;
-use serde_json::Value as JsonValue;
-use std::fs::{create_dir_all, OpenOptions};
-use std::io::{BufWriter, Read, Seek, SeekFrom, Write};
-use std::path::{Path, PathBuf};
-use std::str::FromStr;
-use tempfile::NamedTempFile;
-
-use anyhow::anyhow;
 #[cfg(test)]
 use std::io::BufReader;
+use std::{
+    fs::{create_dir_all, OpenOptions},
+    io::{BufWriter, Read, Seek, SeekFrom, Write},
+    path::{Path, PathBuf},
+    str::FromStr,
+};
+
+use anyhow::anyhow;
+use candid::{parser::value::IDLValue, Decode, Encode};
+use serde_json::{json, Value as JsonValue};
+use tempfile::NamedTempFile;
 
 use crate::{
     call_dfx, call_dfx_or_panic, get_identity, hex_encode_candid, DeployArgs, DeployTestflightArgs,
+};
+use ic_base_types::{CanisterId, PrincipalId};
+use ic_nns_constants::{ROOT_CANISTER_ID as NNS_ROOT_CANISTER_ID, SNS_WASM_CANISTER_ID};
+use ic_sns_governance::pb::v1::ListNeuronsResponse;
+use ic_sns_init::{pb::v1::SnsInitPayload, SnsCanisterIds, SnsCanisterInitPayloads};
+use ic_sns_root::pb::v1::ListSnsCanistersResponse;
+use ic_sns_wasm::pb::v1::{
+    DeployNewSnsRequest, DeployNewSnsResponse, SnsCanisterIds as SnsWSnsCanisterIds,
 };
 
 /// If SNS canisters have already been created, return their canister IDs, else create the
