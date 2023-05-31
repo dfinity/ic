@@ -3,8 +3,7 @@
 use crate::{
     body::BodyReceiverLayer,
     common::{
-        get_cors_headers, make_plaintext_response, make_response, map_box_error_to_response,
-        remove_effective_canister_id,
+        get_cors_headers, make_plaintext_response, make_response, remove_effective_canister_id,
     },
     metrics::LABEL_UNKNOWN,
     types::ApiReqType,
@@ -33,8 +32,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 use tower::{
-    limit::GlobalConcurrencyLimitLayer, load_shed::LoadShed, util::BoxCloneService, Service,
-    ServiceBuilder, ServiceExt,
+    limit::GlobalConcurrencyLimitLayer, util::BoxCloneService, Service, ServiceBuilder, ServiceExt,
 };
 
 #[derive(Clone)]
@@ -45,7 +43,7 @@ pub(crate) struct CallService {
     registry_client: Arc<dyn RegistryClient>,
     validator_executor: ValidatorExecutor,
     ingress_sender: IngressIngestionService,
-    ingress_filter: LoadShed<IngressFilterService>,
+    ingress_filter: IngressFilterService,
     malicious_flags: MaliciousFlags,
 }
 
@@ -74,7 +72,7 @@ impl CallService {
                     registry_client,
                     validator_executor,
                     ingress_sender,
-                    ingress_filter: ServiceBuilder::new().load_shed().service(ingress_filter),
+                    ingress_filter,
                     malicious_flags,
                 }),
         );
@@ -262,9 +260,7 @@ impl Service<Request<Vec<u8>>> for CallService {
                 .call((provisional_whitelist, msg.content().clone()))
                 .await
             {
-                Err(err) => {
-                    return Ok(map_box_error_to_response(err));
-                }
+                Err(_) => panic!("Can't panic on Infallible"),
                 Ok(Err(err)) => {
                     return Ok(make_response(err));
                 }
