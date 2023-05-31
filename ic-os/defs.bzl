@@ -399,57 +399,60 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
     if malicious:
         upload_suffix += "-malicious"
 
-    upload_artifacts(
-        name = "upload_disk-img",
-        inputs = [
-            ":disk-img.tar.zst",
-            ":disk-img.tar.gz",
-        ],
-        remote_subdir = upload_prefix + "/disk-img" + upload_suffix,
-    )
-
-    output_files(
-        name = "disk-img-url",
-        target = ":upload_disk-img",
-        basenames = ["upload_disk-img_disk-img.tar.zst.url"],
-        visibility = ["//visibility:public"],
-        tags = ["manual"],
-    )
-
-    if upgrades:
+    if upload_prefix != None:
         upload_artifacts(
-            name = "upload_update-img",
+            name = "upload_disk-img",
             inputs = [
-                ":update-img.tar.zst",
-                ":update-img.tar.gz",
-                ":update-img-test.tar.zst",
-                ":update-img-test.tar.gz",
+                ":disk-img.tar.zst",
+                ":disk-img.tar.gz",
             ],
-            remote_subdir = upload_prefix + "/update-img" + upload_suffix,
+            remote_subdir = upload_prefix + "/disk-img" + upload_suffix,
         )
 
-    # -------------------- Bazel ergonomics --------------------
+        output_files(
+            name = "disk-img-url",
+            target = ":upload_disk-img",
+            basenames = ["upload_disk-img_disk-img.tar.zst.url"],
+            visibility = ["//visibility:public"],
+            tags = ["manual"],
+        )
 
-    native.filegroup(
-        name = "hash_and_upload_disk-img",
-        srcs = [
-            ":upload_disk-img",
-            ":disk-img.tar.zst.sha256",
-        ],
-        visibility = ["//visibility:public"],
-        tags = ["manual"],
-    )
+        if upgrades:
+            upload_artifacts(
+                name = "upload_update-img",
+                inputs = [
+                    ":update-img.tar.zst",
+                    ":update-img.tar.gz",
+                    ":update-img-test.tar.zst",
+                    ":update-img-test.tar.gz",
+                ],
+                remote_subdir = upload_prefix + "/update-img" + upload_suffix,
+            )
 
-    if upgrades:
+        # -------------------- Bazel ergonomics --------------------
+
         native.filegroup(
-            name = "hash_and_upload_update-img",
+            name = "hash_and_upload_disk-img",
             srcs = [
-                ":upload_update-img",
-                ":update-img.tar.zst.sha256",
+                ":upload_disk-img",
+                ":disk-img.tar.zst.sha256",
             ],
             visibility = ["//visibility:public"],
             tags = ["manual"],
         )
+
+        if upgrades:
+            native.filegroup(
+                name = "hash_and_upload_update-img",
+                srcs = [
+                    ":upload_update-img",
+                    ":update-img.tar.zst.sha256",
+                ],
+                visibility = ["//visibility:public"],
+                tags = ["manual"],
+            )
+
+    # end if upload_prefix != None
 
     if upgrades:
         upgrade_outputs = [
