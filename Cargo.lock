@@ -5881,6 +5881,7 @@ dependencies = [
 name = "ic-crypto-temp-crypto"
 version = "0.1.0"
 dependencies = [
+ "assert_matches",
  "async-trait",
  "ic-base-types",
  "ic-config",
@@ -5890,6 +5891,7 @@ dependencies = [
  "ic-crypto-node-key-generation",
  "ic-crypto-temp-crypto-vault",
  "ic-crypto-test-utils",
+ "ic-crypto-test-utils-reproducible-rng",
  "ic-crypto-tls-interfaces",
  "ic-crypto-utils-basic-sig",
  "ic-crypto-utils-time",
@@ -5900,8 +5902,10 @@ dependencies = [
  "ic-registry-client-fake",
  "ic-registry-keys",
  "ic-registry-proto-data-provider",
+ "ic-test-utilities",
  "ic-types",
  "ic-types-test-utils",
+ "rand 0.8.5",
  "tempfile",
  "tokio",
 ]
