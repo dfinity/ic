@@ -19,8 +19,8 @@ RUN export DEBIAN_FRONTEND=noninteractive && ln -snf /usr/share/zoneinfo/$TZ /et
     # IC-OS \
     python3 python-is-python3 python3-pip fakeroot android-sdk-ext4-utils cryptsetup-bin zstd lsb-release grub-efi-amd64-bin libsystemd-dev faketime dosfstools libselinux-dev mtools lvm2
 
-ARG motoko_version=0.6.2
-RUN curl -fsSL https://download.dfinity.systems/motoko/${motoko_version}/x86_64-linux/motoko-${motoko_version}.tar.gz | tar -xz -C /usr/local/bin && chmod +x /usr/local/bin/moc
+ARG motoko_version=0.6.3
+RUN curl -fsSL https://github.com/dfinity/motoko/releases/download/${motoko_version}/motoko-linux64-${motoko_version}.tar.gz | tar -xz -C /usr/local/bin && chmod +x /usr/local/bin/moc
 
 ARG buildevents_version=0.6.0
 RUN curl -fsSL https://github.com/honeycombio/buildevents/releases/download/v${buildevents_version}/buildevents-linux-amd64 -o /usr/bin/buildevents && \
