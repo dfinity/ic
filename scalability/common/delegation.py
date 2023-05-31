@@ -9,6 +9,7 @@ from ic.agent import Agent
 from ic.canister import Canister
 from ic.client import Client
 from ic.identity import DelegateIdentity, Identity
+from retry.api import retry_call
 
 logging.basicConfig(level=logging.INFO)
 
@@ -100,7 +101,7 @@ def get_delegation(host_url, ii_canister_id):
 
     identityCanister = Canister(agent=agent, canister_id=ii_canister_id, candid=identity_canister_did)
     logging.info(f"II: Creating challenge .. on {host_url} using canister {ii_canister_id}")
-    challenge = identityCanister.create_challenge()
+    challenge = retry_call(identityCanister.create_challenge)
 
     # Call still failed after reinstalling
     if challenge is None:

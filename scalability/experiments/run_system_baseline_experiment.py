@@ -183,7 +183,7 @@ class BaselineExperiment(workload_experiment.WorkloadExperiment):
 
             # Write summary file in each iteration including experiment specific data.
             self.write_summary_file(
-                "run_system_baseline_experiment",
+                "run_system_baseline_experiment" if FLAGS.use_random_payload else "run_system_baseline_experiment_cached",
                 {
                     "is_update": FLAGS.use_updates,
                     "total_requests": total_requests,
