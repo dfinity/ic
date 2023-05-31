@@ -35,7 +35,7 @@ TEMPLATE_PATH = TEMPLATE_BASEDIR + "/cd-overview.html.hb"
 # Guidance: https://plotly.com/javascript/hover-text-and-formatting/
 HOVERTEMPLATE = """
 <b>Click for full report</b><br><br>
-%{yaxis.title.text}: %{y:,.0f}<br>
+%{yaxis.title.text}: %{y:,.2f}<br>
 %{xaxis.title.text}: %{x}<br>
 <br>
 %{text}
