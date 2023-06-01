@@ -13,8 +13,9 @@ mod tests;
 pub struct InsufficientAllowance(pub Tokens);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ExpiredApproval {
-    pub now: TimeStamp,
+pub enum ApproveError {
+    AllowanceChanged { current_allowance: Tokens },
+    ExpiredApproval { now: TimeStamp },
 }
 
 pub trait Approvals {
@@ -37,19 +38,8 @@ pub trait Approvals {
         amount: Tokens,
         expires_at: Option<TimeStamp>,
         now: TimeStamp,
-    ) -> Result<Tokens, ExpiredApproval>;
-
-    /// Decreases the spender's allowance for the account by the specified amount.
-    ///
-    /// If the total allowance goes negative, the table resets it to zero.
-    fn decrease_allowance(
-        &mut self,
-        account: &Self::AccountId,
-        spender: &Self::SpenderId,
-        by: Tokens,
-        new_expiration: Option<TimeStamp>,
-        now: TimeStamp,
-    ) -> Result<Tokens, ExpiredApproval>;
+        expected_allowance: Option<Tokens>,
+    ) -> Result<Tokens, ApproveError>;
 
     /// Consumes amount from the spender's allowance for the account.
     ///
@@ -132,15 +122,23 @@ where
         amount: Tokens,
         expires_at: Option<TimeStamp>,
         now: TimeStamp,
-    ) -> Result<Tokens, ExpiredApproval> {
+        expected_allowance: Option<Tokens>,
+    ) -> Result<Tokens, ApproveError> {
         if expires_at.unwrap_or_else(remote_future) <= now {
-            return Err(ExpiredApproval { now });
+            return Err(ApproveError::ExpiredApproval { now });
         }
 
         let key = K::from((account, spender));
 
         match self.allowances.entry(key.clone()) {
             Entry::Vacant(e) => {
+                if let Some(expected_allowance) = expected_allowance {
+                    if expected_allowance != Tokens::ZERO {
+                        return Err(ApproveError::AllowanceChanged {
+                            current_allowance: Tokens::ZERO,
+                        });
+                    }
+                }
                 if let Some(expires_at) = expires_at {
                     self.expiration_queue.push(Reverse((expires_at, key)));
                 }
@@ -148,65 +146,22 @@ where
                 Ok(amount)
             }
             Entry::Occupied(mut e) => {
-                let old_expiration = if e.get().expires_at.unwrap_or_else(remote_future) <= now {
-                    // Overwrite the allowance if the previous approval expired.
-                    let allowance = e.get_mut();
-                    allowance.amount = amount;
-                    std::mem::replace(&mut allowance.expires_at, expires_at)
-                } else {
-                    let allowance = e.get_mut();
-                    allowance.amount = allowance.amount.saturating_add(amount);
-                    std::mem::replace(&mut allowance.expires_at, expires_at)
-                };
+                let allowance = e.get_mut();
+                if let Some(expected_allowance) = expected_allowance {
+                    if expected_allowance != allowance.amount {
+                        return Err(ApproveError::AllowanceChanged {
+                            current_allowance: allowance.amount,
+                        });
+                    }
+                }
+                allowance.amount = amount;
+                let old_expiration = std::mem::replace(&mut allowance.expires_at, expires_at);
 
                 if expires_at != old_expiration {
                     if let Some(expires_at) = expires_at {
                         self.expiration_queue.push(Reverse((expires_at, key)));
                     }
                 }
-                Ok(e.get().amount)
-            }
-        }
-    }
-
-    fn decrease_allowance(
-        &mut self,
-        account: &AccountId,
-        spender: &SpenderId,
-        amount: Tokens,
-        expires_at: Option<TimeStamp>,
-        now: TimeStamp,
-    ) -> Result<Tokens, ExpiredApproval> {
-        if expires_at.unwrap_or_else(remote_future) <= now {
-            return Err(ExpiredApproval { now });
-        }
-
-        let key = K::from((account, spender));
-
-        match self.allowances.entry(key.clone()) {
-            Entry::Vacant(_) => Ok(Tokens::ZERO),
-            Entry::Occupied(mut e) => {
-                if e.get().expires_at.unwrap_or_else(remote_future) <= now {
-                    // The approval expired, removing it.
-                    e.remove();
-                    return Ok(Tokens::ZERO);
-                } else {
-                    let allowance = e.get_mut();
-                    allowance.amount = allowance.amount.saturating_sub(amount);
-                    let old_expiration = std::mem::replace(&mut allowance.expires_at, expires_at);
-
-                    if allowance.amount == Tokens::ZERO {
-                        e.remove();
-                        return Ok(Tokens::ZERO);
-                    }
-
-                    if expires_at != old_expiration {
-                        if let Some(expires_at) = expires_at {
-                            self.expiration_queue.push(Reverse((expires_at, key)));
-                        }
-                    }
-                };
-
                 Ok(e.get().amount)
             }
         }

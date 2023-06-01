@@ -296,6 +296,7 @@ impl Ledger {
                     )
                     .to_string(),
                 ),
+                CTE::AllowanceChanged { .. } => todo!(),
             }
         })
     }

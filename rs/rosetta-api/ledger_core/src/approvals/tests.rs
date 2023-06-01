@@ -34,7 +34,7 @@ fn allowance_table_default() {
 }
 
 #[test]
-fn allowance_table_cumulative() {
+fn allowance_table_not_cumulative() {
     let mut table = TestAllowanceTable::default();
 
     assert_eq!(
@@ -43,7 +43,7 @@ fn allowance_table_cumulative() {
     );
 
     table
-        .approve(&Account(1), &Spender(1), tokens(5), None, ts(1))
+        .approve(&Account(1), &Spender(1), tokens(5), None, ts(1), None)
         .unwrap();
 
     assert_eq!(
@@ -55,25 +55,32 @@ fn allowance_table_cumulative() {
     );
 
     table
-        .approve(&Account(1), &Spender(1), tokens(15), None, ts(1))
+        .approve(&Account(1), &Spender(1), tokens(15), None, ts(1), None)
         .unwrap();
 
     assert_eq!(
         table.allowance(&Account(1), &Spender(1), ts(1)),
         Allowance {
-            amount: tokens(20),
+            amount: tokens(15),
             expires_at: None
         }
     );
 
     table
-        .approve(&Account(1), &Spender(1), tokens(10), Some(ts(5)), ts(1))
+        .approve(
+            &Account(1),
+            &Spender(1),
+            tokens(10),
+            Some(ts(5)),
+            ts(1),
+            None,
+        )
         .unwrap();
 
     assert_eq!(
         table.allowance(&Account(1), &Spender(1), ts(1)),
         Allowance {
-            amount: tokens(30),
+            amount: tokens(10),
             expires_at: Some(ts(5))
         }
     );
@@ -89,7 +96,7 @@ fn allowance_use_approval() {
     let mut table = TestAllowanceTable::default();
 
     table
-        .approve(&Account(1), &Spender(1), tokens(100), None, ts(1))
+        .approve(&Account(1), &Spender(1), tokens(100), None, ts(1), None)
         .unwrap();
 
     assert_eq!(
@@ -124,66 +131,22 @@ fn allowance_use_approval() {
 }
 
 #[test]
-fn decrease_allowance() {
-    let mut table = TestAllowanceTable::default();
-
-    table
-        .approve(&Account(1), &Spender(1), tokens(100), None, ts(1))
-        .unwrap();
-
-    assert_eq!(
-        table
-            .decrease_allowance(&Account(1), &Spender(1), tokens(40), Some(ts(100)), ts(1))
-            .unwrap(),
-        tokens(60)
-    );
-
-    assert_eq!(
-        table.allowance(&Account(1), &Spender(1), ts(5)),
-        Allowance {
-            amount: tokens(60),
-            expires_at: Some(ts(100)),
-        }
-    );
-
-    assert_eq!(
-        table
-            .decrease_allowance(&Account(1), &Spender(1), tokens(40), None, ts(1))
-            .unwrap(),
-        tokens(20)
-    );
-
-    assert_eq!(
-        table.allowance(&Account(1), &Spender(1), ts(5)),
-        Allowance {
-            amount: tokens(20),
-            expires_at: None,
-        }
-    );
-
-    assert_eq!(
-        table
-            .decrease_allowance(&Account(1), &Spender(1), tokens(40), None, ts(1))
-            .unwrap(),
-        tokens(0)
-    );
-
-    assert_eq!(
-        table.allowance(&Account(1), &Spender(1), ts(5)),
-        Allowance::default()
-    );
-}
-
-#[test]
 fn allowance_table_pruning() {
     let mut table = TestAllowanceTable::default();
 
     table
-        .approve(&Account(1), &Spender(1), tokens(100), None, ts(1))
+        .approve(&Account(1), &Spender(1), tokens(100), None, ts(1), None)
         .unwrap();
 
     table
-        .approve(&Account(1), &Spender(2), tokens(100), Some(ts(100)), ts(1))
+        .approve(
+            &Account(1),
+            &Spender(2),
+            tokens(100),
+            Some(ts(100)),
+            ts(1),
+            None,
+        )
         .unwrap();
 
     assert_eq!(table.len(), 2);
@@ -199,11 +162,25 @@ fn allowance_table_pruning_obsolete_expirations() {
     let mut table = TestAllowanceTable::default();
 
     table
-        .approve(&Account(1), &Spender(1), tokens(100), Some(ts(100)), ts(1))
+        .approve(
+            &Account(1),
+            &Spender(1),
+            tokens(100),
+            Some(ts(100)),
+            ts(1),
+            None,
+        )
         .unwrap();
 
     table
-        .approve(&Account(1), &Spender(1), tokens(100), Some(ts(300)), ts(1))
+        .approve(
+            &Account(1),
+            &Spender(1),
+            tokens(150),
+            Some(ts(300)),
+            ts(1),
+            None,
+        )
         .unwrap();
 
     assert_eq!(table.len(), 1);
@@ -215,8 +192,108 @@ fn allowance_table_pruning_obsolete_expirations() {
     assert_eq!(
         table.allowance(&Account(1), &Spender(1), ts(200)),
         Allowance {
-            amount: tokens(200),
+            amount: tokens(150),
             expires_at: Some(ts(300))
+        }
+    );
+}
+
+#[test]
+fn expected_allowance_checked() {
+    let mut table = TestAllowanceTable::default();
+
+    assert_eq!(
+        table
+            .approve(
+                &Account(1),
+                &Spender(1),
+                tokens(100),
+                None,
+                ts(1),
+                Some(tokens(100))
+            )
+            .unwrap_err(),
+        ApproveError::AllowanceChanged {
+            current_allowance: tokens(0)
+        }
+    );
+
+    table
+        .approve(&Account(1), &Spender(1), tokens(100), None, ts(1), None)
+        .unwrap();
+
+    assert_eq!(
+        table.allowance(&Account(1), &Spender(1), ts(5)),
+        Allowance {
+            amount: tokens(100),
+            expires_at: None
+        }
+    );
+
+    table
+        .approve(&Account(1), &Spender(1), tokens(200), None, ts(1), None)
+        .unwrap();
+
+    assert_eq!(
+        table.allowance(&Account(1), &Spender(1), ts(5)),
+        Allowance {
+            amount: tokens(200),
+            expires_at: None
+        }
+    );
+
+    assert_eq!(
+        table
+            .approve(
+                &Account(1),
+                &Spender(1),
+                tokens(300),
+                None,
+                ts(1),
+                Some(tokens(100))
+            )
+            .unwrap_err(),
+        ApproveError::AllowanceChanged {
+            current_allowance: tokens(200)
+        }
+    );
+
+    table
+        .approve(
+            &Account(1),
+            &Spender(1),
+            tokens(300),
+            None,
+            ts(1),
+            Some(tokens(200)),
+        )
+        .unwrap();
+
+    assert_eq!(
+        table.allowance(&Account(1), &Spender(1), ts(5)),
+        Allowance {
+            amount: tokens(300),
+            expires_at: None
+        }
+    );
+
+    // Approve new spender while expecting 0 tokens allowance.
+    table
+        .approve(
+            &Account(1),
+            &Spender(2),
+            tokens(100),
+            None,
+            ts(1),
+            Some(tokens(0)),
+        )
+        .unwrap();
+
+    assert_eq!(
+        table.allowance(&Account(1), &Spender(2), ts(5)),
+        Allowance {
+            amount: tokens(100),
+            expires_at: None
         }
     );
 }

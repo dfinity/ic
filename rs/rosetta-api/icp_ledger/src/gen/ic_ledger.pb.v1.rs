@@ -260,21 +260,6 @@ pub struct Tokens {
     pub e8s: u64,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct SignedTokens {
-    #[prost(oneof = "signed_tokens::Tokens", tags = "1, 2")]
-    pub tokens: ::core::option::Option<signed_tokens::Tokens>,
-}
-/// Nested message and enum types in `SignedTokens`.
-pub mod signed_tokens {
-    #[derive(Clone, PartialEq, ::prost::Oneof)]
-    pub enum Tokens {
-        #[prost(uint64, tag = "1")]
-        PlusE8s(u64),
-        #[prost(uint64, tag = "2")]
-        MinusE8s(u64),
-    }
-}
-#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Payment {
     #[prost(message, optional, tag = "1")]
     pub receiver_gets: ::core::option::Option<Tokens>,
@@ -377,7 +362,7 @@ pub struct TransferFrom {
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Approve {
     #[prost(message, optional, tag = "1")]
-    pub allowance: ::core::option::Option<SignedTokens>,
+    pub allowance: ::core::option::Option<Tokens>,
     #[prost(message, optional, tag = "2")]
     pub expires_at: ::core::option::Option<TimeStamp>,
 }

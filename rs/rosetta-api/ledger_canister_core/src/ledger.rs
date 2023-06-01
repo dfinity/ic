@@ -1,7 +1,7 @@
 use crate::{archive::ArchiveCanisterWasm, blockchain::Blockchain, range_utils, runtime::Runtime};
 use ic_base_types::CanisterId;
 use ic_canister_log::{log, Sink};
-use ic_ledger_core::approvals::{Approvals, ExpiredApproval, InsufficientAllowance};
+use ic_ledger_core::approvals::{Approvals, ApproveError, InsufficientAllowance};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, VecDeque};
 use std::ops::Range;
@@ -26,6 +26,7 @@ pub enum TxApplyError {
     InsufficientFunds { balance: Tokens },
     InsufficientAllowance { allowance: Tokens },
     ExpiredApproval { now: TimeStamp },
+    AllowanceChanged { current_allowance: Tokens },
 }
 
 impl From<BalanceError> for TxApplyError {
@@ -42,9 +43,14 @@ impl From<InsufficientAllowance> for TxApplyError {
     }
 }
 
-impl From<ExpiredApproval> for TxApplyError {
-    fn from(e: ExpiredApproval) -> Self {
-        Self::ExpiredApproval { now: e.now }
+impl From<ApproveError> for TxApplyError {
+    fn from(ae: ApproveError) -> Self {
+        match ae {
+            ApproveError::ExpiredApproval { now } => Self::ExpiredApproval { now },
+            ApproveError::AllowanceChanged { current_allowance } => {
+                Self::AllowanceChanged { current_allowance }
+            }
+        }
     }
 }
 
@@ -173,6 +179,7 @@ pub enum TransferError {
     TxCreatedInFuture { ledger_time: TimeStamp },
     TxThrottled,
     TxDuplicate { duplicate_of: BlockIndex },
+    AllowanceChanged { current_allowance: Tokens },
 }
 
 /// Adds a new block with the specified transaction to the ledger.
@@ -228,6 +235,9 @@ where
             }
             TxApplyError::ExpiredApproval { now } => {
                 TransferError::ExpiredApproval { ledger_time: now }
+            }
+            TxApplyError::AllowanceChanged { current_allowance } => {
+                TransferError::AllowanceChanged { current_allowance }
             }
         })?;
 
