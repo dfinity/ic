@@ -22,6 +22,7 @@ class NotificationConfig:
 
     notify_on_finding_risk_assessment_needed: bool = False
     notify_on_finding_patch_version_available: bool = False
+    notify_on_finding_deleted: bool = False
 
     merge_request_base_url: str = "https://gitlab.com/dfinity-lab/public/ic/-/merge_requests/"
     ci_pipeline_base_url: str = "https://gitlab.com/dfinity-lab/public/ic/-/pipelines/"
@@ -35,6 +36,7 @@ class NotificationConfig:
             self.notify_on_release_build_blocked,
             self.notify_on_finding_risk_assessment_needed,
             self.notify_on_finding_patch_version_available,
+            self.notify_on_finding_deleted,
         ]:
             assert boolean_field is not None
             assert boolean_field is True or boolean_field is False

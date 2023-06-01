@@ -49,12 +49,15 @@ if __name__ == "__main__":
         notify_on_scan_job_succeeded[job_type] = job_type == scanner_job
         notify_on_scan_job_failed[job_type] = job_type == scanner_job
 
-    notify_on_finding_risk_assessment_needed: bool = True
-    notify_on_finding_patch_version_available: bool = True
+    # temporary disable finding notifications TODO: restore after finding ownership was transferred to node teams
+    notify_on_finding_risk_assessment_needed: bool = False
+    notify_on_finding_patch_version_available: bool = False
+    notify_on_finding_deleted: bool = False
 
     config = NotificationConfig(
         notify_on_finding_risk_assessment_needed=notify_on_finding_risk_assessment_needed,
         notify_on_finding_patch_version_available=notify_on_finding_patch_version_available,
+        notify_on_finding_deleted=notify_on_finding_deleted,
         notify_on_scan_job_succeeded=notify_on_scan_job_succeeded,
         notify_on_scan_job_failed=notify_on_scan_job_failed,
     )
