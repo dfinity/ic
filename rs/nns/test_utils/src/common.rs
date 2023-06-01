@@ -28,6 +28,7 @@ use icp_ledger::{
 use lifeline::LIFELINE_CANISTER_WASM;
 use registry_canister::init::{RegistryCanisterInitPayload, RegistryCanisterInitPayloadBuilder};
 use std::{convert::TryInto, path::Path};
+use walrus::{Module, RawCustomSection};
 
 /// Payloads for all the canisters that exist at genesis.
 #[derive(Clone, Debug)]
@@ -257,6 +258,18 @@ impl NnsInitPayloadsBuilder {
             sns_wasms: self.sns_wasms.build(),
         }
     }
+}
+
+pub fn modify_wasm_bytes(wasm_bytes: &[u8], modify_with: &str) -> Vec<u8> {
+    let mut wasm_module = Module::from_buffer(wasm_bytes).unwrap();
+    let custom_section = RawCustomSection {
+        name: modify_with.into(),
+        data: vec![1u8, 2u8, 3u8],
+    };
+    wasm_module.customs.add(custom_section);
+
+    // We get our new WASM, which is functionally the same.
+    wasm_module.emit_wasm()
 }
 
 /// Build Wasm for NNS Governance canister
