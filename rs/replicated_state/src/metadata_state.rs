@@ -31,7 +31,7 @@ use ic_registry_subnet_type::SubnetType;
 use ic_types::{
     crypto::CryptoHash,
     ingress::{IngressState, IngressStatus},
-    messages::{MessageId, RequestOrResponse},
+    messages::{is_subnet_id, MessageId, RequestOrResponse},
     node_id_into_protobuf, node_id_try_from_option,
     nominal_cycles::NominalCycles,
     state_sync::{StateSyncVersion, CURRENT_STATE_SYNC_VERSION},
@@ -810,7 +810,7 @@ impl SystemMetadata {
     /// with canisters split among the two subnets according to the routing table.
     /// Because subnet A' retains the subnet ID of subnet A, it is identified by
     /// having `self.split_from == Some(self.own_subnet_id)`. Conversely, subnet B
-    /// has `self.split_from == Some(self.own_subnet_id)`.
+    /// has `self.split_from != Some(self.own_subnet_id)`.
     ///
     /// In the first phase (see [`Self::split()`]), the ingress history was left
     /// untouched on both subnets, in order to make it trivial to verify that no
@@ -866,13 +866,18 @@ impl SystemMetadata {
             bitcoin_get_successors_follow_up_responses,
         } = self;
 
-        split_from.expect("Not a state resulting from a subnet split");
+        let split_from = split_from.expect("Not a state resulting from a subnet split");
 
         assert_eq!(0, heap_delta_estimate.get());
         assert!(expected_compiled_wasms.is_empty());
 
         // Prune the ingress history.
-        ingress_history = ingress_history.prune_after_split(is_local_canister);
+        ingress_history = ingress_history.prune_after_split(|canister_id: &CanisterId| {
+            // An actual local canister.
+            is_local_canister(canister_id)
+                // Or this is subnet A' and message is addressed to the management canister.
+                || split_from == own_subnet_id && is_subnet_id(*canister_id, own_subnet_id)
+        });
 
         SystemMetadata {
             ingress_history,
@@ -1643,9 +1648,9 @@ impl IngressHistoryState {
     /// Prunes the ingress history (as part of subnet splitting phase 2), retaining:
     ///
     ///  * all terminal states (since they are immutable and will get pruned); and
-    ///  * all non-terminal states for ingress messages addressed to local canisters
-    ///    (as determined by the provided predicate).
-    fn prune_after_split<F>(self, is_local_canister: F) -> Self
+    ///  * all non-terminal states for ingress messages addressed to local receivers
+    ///    (canisters or subnet; as determined by the provided predicate).
+    fn prune_after_split<F>(self, is_local_receiver: F) -> Self
     where
         F: Fn(&CanisterId) -> bool,
     {
@@ -1662,7 +1667,7 @@ impl IngressHistoryState {
         let should_retain = |status: &IngressStatus| match status {
             IngressStatus::Known {
                 receiver, state, ..
-            } => state.is_terminal() || is_local_canister(&CanisterId::new(*receiver).unwrap()),
+            } => state.is_terminal() || is_local_receiver(&CanisterId::new(*receiver).unwrap()),
             IngressStatus::Unknown => false,
         };
 
