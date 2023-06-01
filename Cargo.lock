@@ -312,6 +312,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "anes"
+version = "0.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4b46cbb362ab8752921c97e041f5e366ee6297bd428a31275b9fcf1e380f7299"
+
+[[package]]
 name = "ansi_term"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2150,7 +2156,7 @@ dependencies = [
  "atty",
  "cast",
  "clap 2.34.0",
- "criterion-plot",
+ "criterion-plot 0.4.5",
  "csv",
  "futures",
  "itertools",
@@ -2170,6 +2176,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "criterion"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f2b12d017a929603d80db1831cd3a24082f8137ce19c69e6447f54f5fc8d692f"
+dependencies = [
+ "anes",
+ "cast",
+ "ciborium",
+ "clap 4.1.8",
+ "criterion-plot 0.5.0",
+ "is-terminal",
+ "itertools",
+ "num-traits",
+ "once_cell",
+ "oorandom",
+ "plotters",
+ "rayon",
+ "regex",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "tinytemplate",
+ "walkdir",
+]
+
+[[package]]
 name = "criterion-plot"
 version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2180,10 +2212,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "criterion-plot"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6b50826342786a51a89e2da3a28f1c32b06e387201bc2d19791f622c673706b1"
+dependencies = [
+ "cast",
+ "itertools",
+]
+
+[[package]]
 name = "criterion-time"
 version = "0.8.0"
 dependencies = [
- "criterion",
+ "criterion 0.3.6",
  "libc",
 ]
 
@@ -3044,7 +3086,7 @@ version = "0.8.0"
 dependencies = [
  "candid",
  "canister-test",
- "criterion",
+ "criterion 0.3.6",
  "ic-test-utilities",
  "ic-test-utilities-execution-environment",
  "ic-types",
@@ -3144,6 +3186,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "errno"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4bcfec3a70f97c962c307b2d2c56e358cf1d00b558d74262b5f929ee8cc7e73a"
+dependencies = [
+ "errno-dragonfly",
+ "libc",
+ "windows-sys 0.48.0",
+]
+
+[[package]]
 name = "errno-dragonfly"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3181,8 +3234,34 @@ version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "886b70328cba8871bfc025858e1de4be16b1d5088f2ba50b57816f4210672615"
 dependencies = [
- "errno",
+ "errno 0.2.8",
  "libc",
+]
+
+[[package]]
+name = "execution-environment-bench"
+version = "0.8.0"
+dependencies = [
+ "criterion 0.5.1",
+ "ic-config",
+ "ic-constants",
+ "ic-cycles-account-manager",
+ "ic-error-types",
+ "ic-execution-environment",
+ "ic-interfaces",
+ "ic-logger",
+ "ic-metrics",
+ "ic-nns-constants",
+ "ic-registry-subnet-type",
+ "ic-replicated-state",
+ "ic-system-api",
+ "ic-test-utilities",
+ "ic-test-utilities-execution-environment",
+ "ic-types",
+ "ic-wasm-types",
+ "lazy_static",
+ "tempfile",
+ "wat",
 ]
 
 [[package]]
@@ -4310,7 +4389,7 @@ dependencies = [
  "bincode",
  "byteorder",
  "clap 3.2.23",
- "criterion",
+ "criterion 0.3.6",
  "ic-config",
  "ic-constants",
  "ic-crypto-test-utils-canister-threshold-sigs",
@@ -4914,7 +4993,7 @@ name = "ic-certification"
 version = "0.8.0"
 dependencies = [
  "assert_matches",
- "criterion",
+ "criterion 0.3.6",
  "hex",
  "ic-base-types",
  "ic-certification-test-utils",
@@ -5115,7 +5194,7 @@ name = "ic-consensus"
 version = "0.8.0"
 dependencies = [
  "assert_matches",
- "criterion",
+ "criterion 0.3.6",
  "ic-artifact-pool",
  "ic-btc-types-internal",
  "ic-config",
@@ -5238,7 +5317,7 @@ dependencies = [
  "base64 0.11.0",
  "bincode",
  "clap 3.2.23",
- "criterion",
+ "criterion 0.3.6",
  "ed25519-consensus",
  "hex",
  "ic-base-types",
@@ -5565,7 +5644,7 @@ dependencies = [
 name = "ic-crypto-internal-bls12-381-type"
 version = "0.1.0"
 dependencies = [
- "criterion",
+ "criterion 0.3.6",
  "hex",
  "ic-crypto-getrandom-for-wasm",
  "ic-crypto-test-utils-reproducible-rng",
@@ -5784,7 +5863,7 @@ version = "0.8.0"
 dependencies = [
  "base64 0.11.0",
  "cached",
- "criterion",
+ "criterion 0.3.6",
  "hex",
  "ic-crypto-internal-bls12-381-type",
  "ic-crypto-internal-seed",
@@ -5821,7 +5900,7 @@ version = "0.1.0"
 dependencies = [
  "assert_matches",
  "bip32",
- "criterion",
+ "criterion 0.3.6",
  "fe-derive",
  "hex",
  "hex-literal 0.3.4",
@@ -6427,7 +6506,7 @@ dependencies = [
  "assert_matches",
  "candid",
  "canister-test",
- "criterion",
+ "criterion 0.3.6",
  "embedders_bench",
  "ic-config",
  "ic-cycles-account-manager",
@@ -6486,8 +6565,10 @@ version = "0.8.0"
 dependencies = [
  "assert_matches",
  "candid",
- "criterion",
+ "canister-test",
+ "criterion 0.5.1",
  "escargot",
+ "execution-environment-bench",
  "hex",
  "iai",
  "ic-base-types",
@@ -7156,7 +7237,7 @@ version = "0.8.0"
 dependencies = [
  "assert_matches",
  "bincode",
- "criterion",
+ "criterion 0.3.6",
  "ic-artifact-pool",
  "ic-config",
  "ic-constants",
@@ -7668,7 +7749,7 @@ dependencies = [
  "build-info-build",
  "candid",
  "comparable",
- "criterion",
+ "criterion 0.3.6",
  "csv",
  "cycles-minting-canister",
  "dfn_candid",
@@ -8721,7 +8802,7 @@ dependencies = [
  "base64 0.11.0",
  "canister-test",
  "clap 3.2.23",
- "criterion",
+ "criterion 0.3.6",
  "hex",
  "ic-async-utils",
  "ic-btc-adapter-client",
@@ -8891,7 +8972,7 @@ name = "ic-replicated-state"
 version = "0.8.0"
 dependencies = [
  "assert_matches",
- "criterion",
+ "criterion 0.3.6",
  "criterion-time",
  "cvt",
  "ic-base-types",
@@ -9148,7 +9229,7 @@ dependencies = [
  "candid",
  "clap 3.2.23",
  "comparable",
- "criterion",
+ "criterion 0.3.6",
  "csv",
  "dfn_candid",
  "dfn_core",
@@ -9370,7 +9451,7 @@ dependencies = [
  "bytes",
  "candid",
  "comparable",
- "criterion",
+ "criterion 0.3.6",
  "dfn_candid",
  "dfn_core",
  "dfn_http_metrics",
@@ -9663,7 +9744,7 @@ version = "0.8.0"
 dependencies = [
  "assert_matches",
  "bit-vec 0.6.3",
- "criterion",
+ "criterion 0.3.6",
  "criterion-time",
  "crossbeam-channel",
  "hex",
@@ -10032,7 +10113,7 @@ version = "0.8.0"
 dependencies = [
  "async-trait",
  "bytes",
- "criterion",
+ "criterion 0.3.6",
  "futures",
  "h2",
  "http",
@@ -10894,14 +10975,14 @@ checksum = "30e22bd8629359895450b59ea7a776c850561b96a3b1d31321c1949d9e6c9146"
 
 [[package]]
 name = "is-terminal"
-version = "0.4.4"
+version = "0.4.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "21b6b32576413a8e69b90e952e4a026476040d81017b80445deda5f2d3921857"
+checksum = "adcf93614601c8129ddf72e2d5633df827ba6551541c6d8c59520a371475be1f"
 dependencies = [
  "hermit-abi 0.3.1",
  "io-lifetimes",
- "rustix",
- "windows-sys 0.45.0",
+ "rustix 0.37.7",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
@@ -11536,6 +11617,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f051f77a7c8e6957c0696eac88f26b0117e54f52d3fc682ab19397a8812846a4"
 
 [[package]]
+name = "linux-raw-sys"
+version = "0.3.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ef53942eb7bf7ff43a617b3e2c1c4a5ecf5944a7c1bc12d7ee39bbb15e5c1519"
+
+[[package]]
 name = "lmdb-rkv"
 version = "0.14.99"
 source = "git+https://github.com/dfinity-lab/lmdb-rs?rev=1cf86b5cc09947e94a787065cadd163a42ef7f18#1cf86b5cc09947e94a787065cadd163a42ef7f18"
@@ -11763,7 +11850,7 @@ version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b20a59d985586e4a5aef64564ac77299f8586d8be6cf9106a5a40207e8908efb"
 dependencies = [
- "rustix",
+ "rustix 0.36.9",
 ]
 
 [[package]]
@@ -11822,7 +11909,7 @@ name = "memory_tracker"
 version = "0.8.0"
 dependencies = [
  "bit-vec 0.5.1",
- "criterion",
+ "criterion 0.3.6",
  "ic-config",
  "ic-logger",
  "ic-replicated-state",
@@ -14241,7 +14328,7 @@ dependencies = [
  "assert_matches",
  "candid",
  "canister-test",
- "criterion",
+ "criterion 0.3.6",
  "dfn_candid",
  "dfn_core",
  "dfn_json",
@@ -14333,10 +14420,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fd5c6ff11fecd55b40746d1995a02f2eb375bf8c00d192d521ee09f42bef37bc"
 dependencies = [
  "bitflags",
- "errno",
+ "errno 0.2.8",
  "io-lifetimes",
  "libc",
- "linux-raw-sys",
+ "linux-raw-sys 0.1.4",
+ "windows-sys 0.45.0",
+]
+
+[[package]]
+name = "rustix"
+version = "0.37.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2aae838e49b3d63e9274e1c01833cc8139d3fec468c3b84688c628f44b1ae11d"
+dependencies = [
+ "bitflags",
+ "errno 0.3.1",
+ "io-lifetimes",
+ "libc",
+ "linux-raw-sys 0.3.8",
  "windows-sys 0.45.0",
 ]
 
@@ -15718,7 +15819,7 @@ dependencies = [
  "cfg-if 1.0.0",
  "fastrand",
  "redox_syscall",
- "rustix",
+ "rustix 0.36.9",
  "windows-sys 0.42.0",
 ]
 
@@ -17348,7 +17449,7 @@ dependencies = [
  "memoffset 0.8.0",
  "paste 1.0.12",
  "rand 0.8.5",
- "rustix",
+ "rustix 0.36.9",
  "wasmtime-asm-macros",
  "wasmtime-environ",
  "wasmtime-jit-debug",

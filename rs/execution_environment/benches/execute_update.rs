@@ -2,8 +2,7 @@
 /// Benchmark System API performance in `execute_update()`.
 ///
 use criterion::{criterion_group, criterion_main, Criterion};
-use execution_environment_bench::common;
-use execution_environment_bench::common_wat::*;
+use execution_environment_bench::{common, wat::*};
 use ic_constants::SMALL_APP_SUBNET_MAX_SIZE;
 use ic_error_types::ErrorCode;
 use ic_execution_environment::{
@@ -12,11 +11,10 @@ use ic_execution_environment::{
 };
 use ic_interfaces::{execution_environment::ExecutionComplexity, messages::CanisterMessageOrTask};
 use ic_types::ingress::{IngressState, IngressStatus};
-use lazy_static::lazy_static;
 
-lazy_static! {
-    /// List of benchmarks: benchmark id (name), WAT, expected instructions.
-    pub static ref BENCHMARKS: Vec<common::Benchmark> = vec![
+pub fn execute_update_bench(c: &mut Criterion) {
+    // List of benchmarks: benchmark id (name), WAT, expected instructions.
+    let benchmarks: Vec<common::Benchmark> = vec![
         common::Benchmark(
             "baseline/empty test*",
             Module::Test.from_sections(("", "(drop (i32.const 0))")),
@@ -308,13 +306,10 @@ lazy_static! {
             905_000_004,
         ),
     ];
-}
-
-pub fn bench_execute_update(c: &mut Criterion) {
     common::run_benchmarks(
         c,
         "update",
-        &BENCHMARKS,
+        &benchmarks,
         |exec_env: &ExecutionEnvironment,
          expected_instructions,
          common::BenchmarkArgs {
@@ -350,7 +345,7 @@ pub fn bench_execute_update(c: &mut Criterion) {
                 as_num_instructions(instructions_before - round_limits.instructions);
             let response = match res {
                 ExecuteMessageResult::Finished { response, .. } => response,
-                ExecuteMessageResult::Paused { .. } => panic!("Unexpected paused exectuion"),
+                ExecuteMessageResult::Paused { .. } => panic!("Unexpected paused execution"),
             };
             match response {
                 ExecutionResponse::Ingress((_, status)) => match status {
@@ -372,5 +367,5 @@ pub fn bench_execute_update(c: &mut Criterion) {
     );
 }
 
-criterion_group!(benchmarks, bench_execute_update);
+criterion_group!(benchmarks, execute_update_bench);
 criterion_main!(benchmarks);
