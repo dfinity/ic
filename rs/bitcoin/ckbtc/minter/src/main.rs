@@ -77,6 +77,10 @@ fn check_invariants() -> Result<(), String> {
 #[candid_method(update)]
 #[update]
 async fn distribute_kyt_fee() {
+    let _guard = match ic_ckbtc_minter::guard::DistributeKytFeeGuard::new() {
+        Some(guard) => guard,
+        None => return,
+    };
     ic_ckbtc_minter::distribute_kyt_fees().await;
 }
 
