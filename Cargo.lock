@@ -614,6 +614,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "axum-server"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "447f28c85900215cc1bea282f32d4a2f22d55c5a300afdfbc661c8d6a632e063"
+dependencies = [
+ "arc-swap",
+ "bytes",
+ "futures-util",
+ "http",
+ "http-body",
+ "hyper",
+ "pin-project-lite",
+ "rustls 0.21.0",
+ "rustls-pemfile 1.0.2",
+ "tokio",
+ "tokio-rustls 0.24.0",
+ "tower-service",
+]
+
+[[package]]
 name = "backoff"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4466,8 +4486,10 @@ dependencies = [
  "async-scoped",
  "async-trait",
  "axum",
+ "axum-server",
  "clap 4.1.8",
  "futures",
+ "futures-util",
  "ic-config",
  "ic-crypto-utils-threshold-sig-der",
  "ic-logger",
@@ -4477,7 +4499,9 @@ dependencies = [
  "lazy_static",
  "prometheus 0.13.3",
  "slog",
+ "thiserror",
  "tokio",
+ "tokio-rustls 0.24.0",
  "tracing",
  "tracing-subscriber",
  "url",

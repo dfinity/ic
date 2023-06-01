@@ -145,6 +145,12 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             "axum": crate.spec(
                 version = "^0.6.1",
             ),
+            "axum-server": crate.spec(
+                version = "^0.5.1",
+                features = [
+                    "tls-rustls",
+                ],
+            ),
             "backoff": crate.spec(
                 version = "^0.3.0",
             ),
