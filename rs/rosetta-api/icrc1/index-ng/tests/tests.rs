@@ -783,3 +783,68 @@ fn test_post_upgrade_start_timer() {
     transfer(env, ledger_id, account(1, 0), account(2, 0), 2_000_000);
     wait_until_sync_is_completed(env, index_id, ledger_id);
 }
+
+#[test]
+fn test_oldest_tx_id() {
+    let env = &StateMachine::new();
+    let ledger_id = install_ledger(
+        env,
+        vec![(account(1, 0), 10_000_000)],
+        default_archive_options(),
+    );
+    let index_id = install_index(env, ledger_id);
+
+    // account(2, 0) and account(3, 0) have no transactions so oldest_tx_id should be None
+    for account in [account(2, 0), account(3, 0)] {
+        let oldest_tx_id =
+            get_account_transactions(env, index_id, account, None, u64::MAX).oldest_tx_id;
+        assert_eq!(None, oldest_tx_id);
+    }
+
+    // account(1, 0) oldest_tx_id is 0, i.e. the mint at ledger init
+    let oldest_tx_id =
+        get_account_transactions(env, index_id, account(1, 0), None, u64::MAX).oldest_tx_id;
+    assert_eq!(Some(0.into()), oldest_tx_id);
+
+    ////
+    // add one block for account(1, 0) and account(2, 0)
+    transfer(env, ledger_id, account(1, 0), account(2, 0), 1_000_000);
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+
+    // account(1, 0) oldest_tx_id is still 0
+    let oldest_tx_id =
+        get_account_transactions(env, index_id, account(1, 0), None, u64::MAX).oldest_tx_id;
+    assert_eq!(Some(0.into()), oldest_tx_id);
+
+    // account(2, 0) oldest_tx_id is 1, i.e. the new transfer
+    let oldest_tx_id =
+        get_account_transactions(env, index_id, account(2, 0), None, u64::MAX).oldest_tx_id;
+    assert_eq!(Some(1.into()), oldest_tx_id);
+
+    // account(3, 0) oldest_tx_id is still None
+    let oldest_tx_id =
+        get_account_transactions(env, index_id, account(3, 0), None, u64::MAX).oldest_tx_id;
+    assert_eq!(None, oldest_tx_id);
+
+    ////
+    // add one block for account(1, 0) and account(2, 0)
+    // add the first block for account(3, 0)
+    transfer(env, ledger_id, account(1, 0), account(2, 0), 2_000_000);
+    transfer(env, ledger_id, account(1, 0), account(3, 0), 3_000_000);
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+
+    // account(1, 0) oldest_tx_id is still 0
+    let oldest_tx_id =
+        get_account_transactions(env, index_id, account(1, 0), None, u64::MAX).oldest_tx_id;
+    assert_eq!(Some(0.into()), oldest_tx_id);
+
+    // account(2, 0) oldest_tx_id is still 1
+    let oldest_tx_id =
+        get_account_transactions(env, index_id, account(2, 0), None, u64::MAX).oldest_tx_id;
+    assert_eq!(Some(1.into()), oldest_tx_id);
+
+    // account(3, 0) oldest_tx_id is 3, i.e. the last block index
+    let oldest_tx_id =
+        get_account_transactions(env, index_id, account(3, 0), None, u64::MAX).oldest_tx_id;
+    assert_eq!(Some(3.into()), oldest_tx_id);
+}
