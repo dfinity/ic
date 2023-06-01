@@ -65,8 +65,7 @@ BINARIES = {
     binary = BINARIES[name],
     visibility = [
         "//ic-os/guestos/envs:__subpackages__",
-        "//ic-os/hostos/envs/dev:__pkg__",
-        "//ic-os/hostos/envs/prod:__pkg__",
+        "//ic-os/hostos/envs:__subpackages__",
     ],
 ) for name in BINARIES if name in NO_STRIP]
 
@@ -81,9 +80,7 @@ BINARIES = {
         "//ic-os/boundary-guestos/envs/prod:__pkg__",
         "//ic-os/boundary-guestos/envs/prod-sev:__pkg__",
         "//ic-os/guestos/envs:__subpackages__",
-        "//ic-os/guestos/envs/prod:__pkg__",
-        "//ic-os/hostos/envs/dev:__pkg__",
-        "//ic-os/hostos/envs/prod:__pkg__",
+        "//ic-os/hostos/envs:__subpackages__",
     ],
 ) for name in BINARIES if name not in NO_STRIP]
 

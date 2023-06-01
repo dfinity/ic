@@ -12,7 +12,7 @@ def image_deps(mode, malicious = False):
     Define all GuestOS inputs.
 
     Args:
-      mode: Variant to be built, dev or prod.
+      mode: Variant to be built, dev, dev-sev or prod.
       malicious: if True, bundle the `malicious_replica`
     Returns:
       A dict containing inputs to build this image.
@@ -71,6 +71,7 @@ def image_deps(mode, malicious = False):
     # Add extra files depending on image variant
     extra_rootfs_deps = {
         "dev": {"//ic-os/guestos:rootfs/allow_console_root": "/etc/allow_console_root:0644"},
+        "dev-sev": {"//ic-os/guestos:rootfs/allow_console_root": "/etc/allow_console_root:0644"},
         "dev-malicious": {},
         "prod": {},
     }

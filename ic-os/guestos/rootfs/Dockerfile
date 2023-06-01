@@ -236,6 +236,9 @@ COPY dev-certs/canister_http_test_ca.cert /usr/local/share/ca-certificates/dev-r
 RUN chmod 0644 /usr/local/share/ca-certificates/dev-root-ca.crt
 RUN update-ca-certificates
 
+# The above steps are also used for dev-sev image
+FROM output_dev as output_dev-sev
+
 FROM output_${BUILD_TYPE}
 
 USER root:root

@@ -5,6 +5,8 @@
 # - `docker push/pull dfinity/setupos-base:<tag>`
 # - `docker build -t dfinity/setupos-base-dev:<tag> --build-arg PACKAGE_FILES="packages.common packages.dev" -f Dockerfile.base .`
 # - `docker push/pull dfinity/setupos-base-dev:<tag>`
+# - `docker build -t dfinity/setupos-base-dev-sev:<tag> --build-arg PACKAGE_FILES="packages.common packages.dev" -f Dockerfile.base .`
+# - `docker push/pull dfinity/setupos-base-dev-sev:<tag>`
 #
 # First build stage:
 # - Download and cache minimal Ubuntu Server 20.04 LTS Docker image

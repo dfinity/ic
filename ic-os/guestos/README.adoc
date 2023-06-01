@@ -47,9 +47,9 @@ To upgrade the GuestOS, first, the new GuestOS is written to the passive partiti
 
 The same Bazel command used to build a GuestOS image will also produce a GuestOS upgrade image:
 
-    bazel build //ic-os/guestos/{prod,dev,dev-malicious}/...
+    bazel build //ic-os/guestos/{prod,dev,dev-sev,dev-malicious}/...
 
-This command will output update-img.tar{.gz,.zst} in /ic/bazel-bin/ic-os/guestos/{prod,dev,dev-malicious}, which is the tarred GuestOS update image.
+This command will output update-img.tar{.gz,.zst} in /ic/bazel-bin/ic-os/guestos/{prod,dev,dev-sev,dev-malicious}, which is the tarred GuestOS update image.
 
 === Installing GuestOS upgrade image
 

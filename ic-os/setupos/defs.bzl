@@ -48,12 +48,15 @@ def image_deps(mode, _malicious = False):
 
     return deps
 
-# Inject a step building a data partition that contains either dev or prod
+# Inject a step building a data partition that contains either dev, dev-sev or prod
 # child images, depending on this build variant.
 def _custom_partitions(mode):
     if mode == "dev":
         guest_image = Label("//ic-os/guestos/envs/dev:disk-img.tar.gz")
         host_image = Label("//ic-os/hostos/envs/dev:disk-img.tar.gz")
+    if mode == "dev-sev":
+        guest_image = Label("//ic-os/guestos/envs/dev-sev:disk-img.tar.gz")
+        host_image = Label("//ic-os/hostos/envs/dev-sev:disk-img.tar.gz")
     else:
         guest_image = Label("//ic-os/guestos/envs/prod:disk-img.tar.gz")
         host_image = Label("//ic-os/hostos/envs/prod:disk-img.tar.gz")

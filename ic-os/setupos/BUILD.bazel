@@ -6,6 +6,7 @@ exports_files([
     "rootfs/docker-base.dev",
     "rootfs/extra_boot_args",
     "rootfs/docker-base.prod",
+    "rootfs/docker-base.sev",
     "config/config.ini",
     "config/ssh_authorized_keys",
     "config/node_operator_private_key.pem",
@@ -31,5 +32,6 @@ genrule(
 #
 # bazel run   //ic-os/setupos/envs/prod:upload_disk-img           [--s3_endpoint=<internal endpoint address>]
 # bazel build //ic-os/setupos/envs/dev/...
+# bazel build //ic-os/setupos/envs/dev-sev/...
 #
 # check //ic-os/defs.bzl for the full list of targets.

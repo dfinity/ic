@@ -60,6 +60,9 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
     if mode == "dev":
         build_args.extend(["ROOT_PASSWORD=root"])
 
+    if mode == "dev-sev":
+        build_args.extend(["ROOT_PASSWORD=root"])
+
     file_build_args = {image_deps["base_image"]: "BASE_IMAGE"}
 
     docker_tar(
@@ -389,6 +392,8 @@ def icos_build(name, upload_prefix, image_deps, mode = None, malicious = False, 
     upload_suffix = ""
     if mode == "dev":
         upload_suffix = "-dev"
+    if mode == "dev-sev":
+        upload_suffix = "-dev-sev"
     if malicious:
         upload_suffix += "-malicious"
 
