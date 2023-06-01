@@ -12,7 +12,7 @@ use crate::{
 use ic_error_types::{ErrorCode, UserError};
 use ic_ic00_types::{
     CanisterIdRecord, CanisterInfoRequest, InstallCodeArgs, Method, Payload, SetControllerArgs,
-    UpdateSettingsArgs,
+    UpdateSettingsArgs, IC_00,
 };
 use ic_protobuf::{
     log::ingress_message_log_entry::v1::IngressMessageLogEntry,
@@ -554,6 +554,7 @@ mod test {
     }
 }
 
-fn is_subnet_id(canister_id: CanisterId, own_subnet_id: SubnetId) -> bool {
-    canister_id == CanisterId::ic_00() || canister_id.get_ref() == own_subnet_id.get_ref()
+/// Checks whether the given canister ID refers to the subnet (directly or as `IC_00`).
+pub fn is_subnet_id(canister_id: CanisterId, own_subnet_id: SubnetId) -> bool {
+    canister_id == IC_00 || canister_id.get_ref() == own_subnet_id.get_ref()
 }
