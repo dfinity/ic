@@ -16,6 +16,7 @@ use ic_interfaces::{consensus_pool::ConsensusBlockChain, ecdsa::EcdsaPool};
 use ic_interfaces_registry::RegistryClient;
 use ic_interfaces_state_manager::{StateManager, StateManagerError};
 use ic_logger::{debug, error, info, warn, ReplicaLogger};
+use ic_registry_client_helpers::ecdsa_keys::EcdsaKeysRegistry;
 use ic_registry_client_helpers::subnet::SubnetRegistry;
 use ic_registry_subnet_features::EcdsaConfig;
 use ic_replicated_state::{metadata_state::subnet_call_context_manager::*, ReplicatedState};
@@ -207,7 +208,7 @@ pub fn make_bootstrap_summary(
     Ok(Some(summary_payload))
 }
 
-/// Return EcdsaConfig if it is enabled for the given subnet.
+/// Return [EcdsaConfig] if it is enabled for the given subnet.
 pub(crate) fn get_ecdsa_config_if_enabled(
     subnet_id: SubnetId,
     registry_version: RegistryVersion,
@@ -234,6 +235,28 @@ pub(crate) fn get_ecdsa_config_if_enabled(
         }
     }
     Ok(None)
+}
+
+/// Return ids of ECDSA keys of the given [EcdsaConfig] for which
+/// signing is enabled on the given subnet.
+pub(crate) fn get_enabled_signing_keys(
+    subnet_id: SubnetId,
+    registry_version: RegistryVersion,
+    registry_client: &dyn RegistryClient,
+    ecdsa_config: &EcdsaConfig,
+) -> Result<BTreeSet<EcdsaKeyId>, RegistryClientError> {
+    let signing_subnets = registry_client
+        .get_ecdsa_signing_subnets(registry_version)?
+        .unwrap_or_default();
+    Ok(ecdsa_config
+        .key_ids
+        .iter()
+        .cloned()
+        .filter(|key_id| match signing_subnets.get(key_id) {
+            Some(subnets) => subnets.contains(&subnet_id),
+            None => false,
+        })
+        .collect())
 }
 
 /// Creates a threshold ECDSA summary payload.
@@ -644,16 +667,21 @@ pub(crate) fn create_data_payload_helper(
     // For next interval: context.registry_version from the new summary block
     let next_interval_registry_version = summary_block.context.registry_version;
 
-    let ecdsa_config = get_ecdsa_config_if_enabled(
+    let Some(ecdsa_config) = get_ecdsa_config_if_enabled(
         subnet_id,
         curr_interval_registry_version,
         registry_client,
         &log,
-    )?;
-    if ecdsa_config.is_none() {
+    )? else {
         return Ok(None);
-    }
-    let ecdsa_config = ecdsa_config.unwrap();
+    };
+    let enabled_signing_keys = get_enabled_signing_keys(
+        subnet_id,
+        curr_interval_registry_version,
+        registry_client,
+        &ecdsa_config,
+    )?;
+
     let mut ecdsa_payload = if let Some(prev_payload) = parent_block.payload.as_ref().as_ecdsa() {
         prev_payload.clone()
     } else {
@@ -678,6 +706,7 @@ pub(crate) fn create_data_payload_helper(
         height,
         context.time,
         &ecdsa_config,
+        &enabled_signing_keys,
         next_interval_registry_version,
         &receivers,
         all_signing_requests,
@@ -696,6 +725,7 @@ pub(crate) fn create_data_payload_helper_2(
     height: Height,
     context_time: Time,
     ecdsa_config: &EcdsaConfig,
+    enabled_signing_keys: &BTreeSet<EcdsaKeyId>,
     next_interval_registry_version: RegistryVersion,
     receivers: &[NodeId],
     all_signing_requests: &BTreeMap<CallbackId, SignWithEcdsaContext>,
@@ -721,7 +751,6 @@ pub(crate) fn create_data_payload_helper_2(
     ecdsa_payload.uid_generator.update_height(height)?;
     let current_key_transcript = ecdsa_payload.key_transcript.current.as_ref().cloned();
 
-    let valid_keys: BTreeSet<_> = ecdsa_config.key_ids.iter().cloned().collect();
     let request_expiry_time = ecdsa_config.signature_request_timeout_ns.and_then(|t| {
         let timeout = Duration::from_nanos(t);
         if context_time.as_nanos_since_unix_epoch() >= t {
@@ -736,7 +765,7 @@ pub(crate) fn create_data_payload_helper_2(
         request_expiry_time,
         ecdsa_payload,
         all_signing_requests,
-        &valid_keys,
+        enabled_signing_keys,
         ecdsa_payload_metrics,
     );
     update_ongoing_signatures(
@@ -981,7 +1010,10 @@ pub(crate) fn get_signing_requests<'a>(
                 refund: context.request.payment,
                 response_payload: ic_types::messages::Payload::Reject(RejectContext {
                     code: RejectCode::CanisterReject,
-                    message: format!("Invalid key_id in signature request: {:?}", context.key_id),
+                    message: format!(
+                        "Invalid or disabled key_id in signature request: {:?}",
+                        context.key_id
+                    ),
                 }),
             };
             ecdsa_payload.signature_agreements.insert(
@@ -1752,7 +1784,11 @@ mod tests {
     };
     use ic_interfaces_registry::RegistryValue;
     use ic_logger::replica_logger::no_op_logger;
+    use ic_protobuf::registry::crypto::v1::EcdsaSigningSubnetList;
     use ic_protobuf::types::v1 as pb;
+    use ic_registry_client_fake::FakeRegistryClient;
+    use ic_registry_keys::make_ecdsa_signing_subnet_list_key;
+    use ic_registry_proto_data_provider::ProtoRegistryDataProvider;
     use ic_registry_subnet_features::DEFAULT_ECDSA_MAX_QUEUE_SIZE;
     use ic_test_artifact_pool::consensus_pool::TestConsensusPool;
     use ic_test_utilities::consensus::fake::{Fake, FakeContentSigner};
@@ -1775,6 +1811,7 @@ mod tests {
         idkg::IDkgTranscriptId, ThresholdEcdsaCombinedSignature,
     };
     use ic_types::crypto::{CryptoHash, CryptoHashOf};
+    use ic_types::subnet_id_into_protobuf;
     use ic_types::{messages::CallbackId, Height, RegistryVersion};
     use std::collections::BTreeSet;
     use std::convert::TryInto;
@@ -1888,6 +1925,59 @@ mod tests {
         block_proposal.content = HashedBlock::new(ic_types::crypto::crypto_hash, block.clone());
         pool.advance_round_with_block(&block_proposal);
         block_proposal.content.as_ref().clone()
+    }
+
+    #[test]
+    fn test_get_enabled_signing_keys() {
+        let key_id1 = EcdsaKeyId::from_str("Secp256k1:some_key1").unwrap();
+        let key_id2 = EcdsaKeyId::from_str("Secp256k1:some_key2").unwrap();
+        let key_id3 = EcdsaKeyId::from_str("Secp256k1:some_key3").unwrap();
+        let ecdsa_config = EcdsaConfig {
+            key_ids: vec![key_id1.clone(), key_id2.clone()],
+            ..EcdsaConfig::default()
+        };
+        let registry_data = Arc::new(ProtoRegistryDataProvider::new());
+        let registry = Arc::new(FakeRegistryClient::new(Arc::clone(&registry_data) as Arc<_>));
+        let subnet_id = subnet_test_id(1);
+
+        let add_key = |version, key_id, subnets| {
+            registry_data
+                .add(
+                    &make_ecdsa_signing_subnet_list_key(key_id),
+                    RegistryVersion::from(version),
+                    Some(EcdsaSigningSubnetList { subnets }),
+                )
+                .expect("failed to add subnets to registry");
+        };
+
+        add_key(1, &key_id1, vec![subnet_id_into_protobuf(subnet_id)]);
+        add_key(2, &key_id2, vec![subnet_id_into_protobuf(subnet_id)]);
+        add_key(2, &key_id3, vec![subnet_id_into_protobuf(subnet_id)]);
+        add_key(3, &key_id1, vec![]);
+        registry.update_to_latest_version();
+
+        let test_cases = vec![
+            (0, Ok(BTreeSet::new())),
+            (1, Ok(BTreeSet::from_iter(vec![key_id1.clone()]))),
+            (2, Ok(BTreeSet::from_iter(vec![key_id1, key_id2.clone()]))),
+            (3, Ok(BTreeSet::from_iter(vec![key_id2]))),
+            (
+                4,
+                Err(RegistryClientError::VersionNotAvailable {
+                    version: RegistryVersion::from(4),
+                }),
+            ),
+        ];
+
+        for (version, expected) in test_cases {
+            let result = get_enabled_signing_keys(
+                subnet_id,
+                RegistryVersion::from(version),
+                registry.as_ref(),
+                &ecdsa_config,
+            );
+            assert_eq!(result, expected);
+        }
     }
 
     #[test]
@@ -2869,6 +2959,7 @@ mod tests {
             Height::from(5),
             mock_time(),
             &EcdsaConfig::default(),
+            &valid_keys,
             RegistryVersion::from(9),
             &[node_test_id(0)],
             &sign_with_ecdsa_contexts,
@@ -2891,6 +2982,7 @@ mod tests {
             Height::from(5),
             mock_time(),
             &EcdsaConfig::default(),
+            &valid_keys,
             RegistryVersion::from(9),
             &[node_test_id(0)],
             &sign_with_ecdsa_contexts,
@@ -3865,8 +3957,9 @@ mod tests {
             add_subnet_record(&registry_data_provider, 11, subnet_id, subnet_record);
             registry.update_to_latest_version();
             let registry_version = registry.get_latest_version();
-
+            let mut valid_keys = BTreeSet::new();
             let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
+            valid_keys.insert(key_id.clone());
             let block_reader = TestEcdsaBlockReader::new();
             let transcript_builder = TestEcdsaTranscriptBuilder::new();
             let signature_builder = TestEcdsaSignatureBuilder::new();
@@ -3909,6 +4002,7 @@ mod tests {
                 Height::from(2),
                 mock_time(),
                 &ecdsa_config,
+                &valid_keys,
                 registry_version,
                 &node_ids,
                 &BTreeMap::default(),
@@ -3999,8 +4093,9 @@ mod tests {
             add_subnet_record(&registry_data_provider, 511, subnet_id, subnet_record);
             registry.update_to_latest_version();
             let registry_version = registry.get_latest_version();
-
+            let mut valid_keys = BTreeSet::new();
             let key_id = EcdsaKeyId::from_str("Secp256k1:some_key").unwrap();
+            valid_keys.insert(key_id.clone());
             let mut block_reader = TestEcdsaBlockReader::new();
             let transcript_builder = TestEcdsaTranscriptBuilder::new();
             let signature_builder = TestEcdsaSignatureBuilder::new();
@@ -4062,6 +4157,7 @@ mod tests {
                 Height::from(2),
                 mock_time(),
                 &ecdsa_config,
+                &valid_keys,
                 registry_version,
                 &node_ids,
                 &BTreeMap::default(),
@@ -4089,6 +4185,7 @@ mod tests {
                 Height::from(3),
                 mock_time(),
                 &ecdsa_config,
+                &valid_keys,
                 registry_version,
                 &node_ids,
                 &BTreeMap::default(),
@@ -4114,6 +4211,7 @@ mod tests {
                 Height::from(3),
                 mock_time(),
                 &ecdsa_config,
+                &valid_keys,
                 registry_version,
                 &node_ids,
                 &BTreeMap::default(),
