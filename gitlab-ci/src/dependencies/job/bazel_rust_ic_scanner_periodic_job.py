@@ -14,6 +14,7 @@ REPOS_TO_SCAN = [
     Repository("nns-dapp", "https://github.com/dfinity/nns-dapp", [Project(name="nns-dapp", path="nns-dapp", owner=Team.NNS_TEAM)]),
     Repository("internet-identity", "https://github.com/dfinity/internet-identity", [Project(name="internet-identity", path="internet-identity", owner=Team.GIX_TEAM)]),
     Repository("response-verification", "https://github.com/dfinity/response-verification", [Project(name="response-verification", path="response-verification", owner=Team.TRUST_TEAM)]),
+    Repository("agent-rs", "https://github.com/dfinity/agent-rs", [Project(name="agent-rs", path="agent-rs", owner=Team.SDK_TEAM)]),
 ]
 
 if __name__ == "__main__":
