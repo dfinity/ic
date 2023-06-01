@@ -4,12 +4,12 @@ use super::{
     Buffer, FileDescriptor, PageAllocator, PageAllocatorRegistry, PageDelta, PageIndex, PageMap,
     PageMapSerialization,
 };
-use crate::page_map::TestPageAllocatorFileDescriptorImpl;
+use crate::page_map::{MemoryRegion, TestPageAllocatorFileDescriptorImpl};
 use ic_sys::PAGE_SIZE;
 use ic_types::{Height, MAX_STABLE_MEMORY_IN_BYTES};
 use nix::unistd::dup;
-use std::fs::OpenOptions;
 use std::sync::Arc;
+use std::{fs::OpenOptions, ops::Range};
 
 fn assert_equal_page_maps(page_map1: &PageMap, page_map2: &PageMap) {
     assert_eq!(page_map1.num_host_pages(), page_map2.num_host_pages());
@@ -404,4 +404,91 @@ fn calc_dirty_pages_matches_actual_change() {
             },
         )
         .unwrap()
+}
+
+#[test]
+fn zeros_region_after_delta() {
+    let mut page_map = PageMap::new_for_testing();
+    let tmp = tempfile::Builder::new()
+        .prefix("checkpoints")
+        .tempdir()
+        .unwrap();
+    let heap_file = tmp.path().join("heap");
+    let pages = &[(PageIndex::new(1), &[1u8; PAGE_SIZE])];
+    page_map.update(pages);
+
+    page_map.persist_delta(&heap_file).unwrap();
+
+    let mut page_map = PageMap::open(
+        &heap_file,
+        Height::new(0),
+        Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
+    )
+    .unwrap();
+
+    let zero_range = page_map.get_memory_region(PageIndex::new(5));
+    assert_eq!(
+        MemoryRegion::Zeros(Range {
+            start: PageIndex::new(2),
+            end: PageIndex::new(u64::MAX)
+        }),
+        zero_range
+    );
+
+    let pages = &[(PageIndex::new(3), &[1u8; PAGE_SIZE])];
+    page_map.update(pages);
+
+    let zero_range = page_map.get_memory_region(PageIndex::new(5));
+    assert_eq!(
+        MemoryRegion::Zeros(Range {
+            start: PageIndex::new(4),
+            end: PageIndex::new(u64::MAX)
+        }),
+        zero_range
+    );
+}
+
+#[test]
+fn zeros_region_within_delta() {
+    let mut page_map = PageMap::new_for_testing();
+    let tmp = tempfile::Builder::new()
+        .prefix("checkpoints")
+        .tempdir()
+        .unwrap();
+    let heap_file = tmp.path().join("heap");
+    let pages = &[(PageIndex::new(1), &[1u8; PAGE_SIZE])];
+    page_map.update(pages);
+
+    page_map.persist_delta(&heap_file).unwrap();
+
+    let mut page_map = PageMap::open(
+        &heap_file,
+        Height::new(0),
+        Arc::new(TestPageAllocatorFileDescriptorImpl::new()),
+    )
+    .unwrap();
+
+    let zero_range = page_map.get_memory_region(PageIndex::new(5));
+    assert_eq!(
+        MemoryRegion::Zeros(Range {
+            start: PageIndex::new(2),
+            end: PageIndex::new(u64::MAX)
+        }),
+        zero_range
+    );
+
+    let pages = &[
+        (PageIndex::new(3), &[1u8; PAGE_SIZE]),
+        (PageIndex::new(10), &[1u8; PAGE_SIZE]),
+    ];
+    page_map.update(pages);
+
+    let zero_range = page_map.get_memory_region(PageIndex::new(5));
+    assert_eq!(
+        MemoryRegion::Zeros(Range {
+            start: PageIndex::new(4),
+            end: PageIndex::new(10)
+        }),
+        zero_range
+    );
 }
