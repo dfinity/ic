@@ -499,6 +499,10 @@ fn system_metadata_split() {
     assert_eq!(expected, metadata_a_phase_1);
 
     // Split off subnet A', phase 2.
+    //
+    // Technically some parts of the `SystemMetadata` (such as `prev_state_hash` and
+    // `own_subnet_type`) would be replaced during loading. However, we only care
+    // that `after_split()` does not touch them.
     let is_canister_on_subnet_a = |canister_id: &CanisterId| *canister_id == canister_test_id(0);
     let metadata_a_phase_2 = metadata_a_phase_1.after_split(is_canister_on_subnet_a);
 
@@ -507,7 +511,6 @@ fn system_metadata_split() {
     expected.ingress_history = expected
         .ingress_history
         .prune_after_split(is_canister_on_subnet_a);
-    expected.prev_state_hash = None;
     expected.split_from = None;
     assert_eq!(expected, metadata_a_phase_2);
 
@@ -521,6 +524,10 @@ fn system_metadata_split() {
     assert_eq!(expected, metadata_b_phase_1);
 
     // Split off subnet B, phase 2.
+    //
+    // Technically some parts of the `SystemMetadata` (such as `prev_state_hash` and
+    // `own_subnet_type`) would be replaced during loading. However, we only care
+    // that `after_split()` does not touch them.
     let is_canister_on_subnet_b = |canister_id: &CanisterId| !is_canister_on_subnet_a(canister_id);
     let metadata_b_phase_2 = metadata_b_phase_1.after_split(is_canister_on_subnet_b);
 
@@ -529,7 +536,6 @@ fn system_metadata_split() {
     expected.ingress_history = expected
         .ingress_history
         .prune_after_split(is_canister_on_subnet_b);
-    expected.prev_state_hash = None;
     assert_eq!(expected, metadata_b_phase_2);
 }
 
