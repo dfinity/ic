@@ -83,7 +83,8 @@ class NotificationCreator(ScannerSubscriber, FindingDataSourceSubscriber, AppOwn
 
     def on_finding_deleted(self, finding: Finding):
         logging.debug(f"on_finding_deleted({finding}")
-        self.__handle(FindingNotificationEvent(finding, False, False, True))
+        if self.config.notify_on_finding_deleted:
+            self.__handle(FindingNotificationEvent(finding, False, False, True))
 
     def send_notification_to_app_owners(self, message: str):
         logging.debug(f"send_notification_to_owners({message}")

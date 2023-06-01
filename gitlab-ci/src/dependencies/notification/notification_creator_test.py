@@ -367,7 +367,7 @@ def test_on_finding_created_or_updated_notify_if_risk_not_set_and_patch_set_if_e
 
 def test_on_finding_deleted():
     handler = MockNotificationHandler()
-    notifier = NotificationCreator(NotificationConfig(notification_handlers=[handler]))
+    notifier = NotificationCreator(NotificationConfig(notify_on_finding_deleted=True, notification_handlers=[handler]))
 
     notifier.on_finding_deleted(FINDING_WITH_RISK_NO_PATCH_YES)
 
@@ -379,6 +379,13 @@ def test_on_finding_deleted():
     assert not event.finding_has_patch_version
     assert event.finding_was_resolved
 
+def test_on_finding_deleted_dont_notify_if_disabled():
+    handler = MockNotificationHandler()
+    notifier = NotificationCreator(NotificationConfig(notify_on_finding_deleted=False, notification_handlers=[handler]))
+
+    notifier.on_finding_deleted(FINDING_WITH_RISK_NO_PATCH_YES)
+
+    assert len(handler.events) == 0
 
 def test_send_notification_to_app_owners():
     handler = MockNotificationHandler()

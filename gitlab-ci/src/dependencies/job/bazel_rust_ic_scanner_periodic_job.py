@@ -26,10 +26,12 @@ if __name__ == "__main__":
 
     notify_on_finding_risk_assessment_needed: bool = True
     notify_on_finding_patch_version_available: bool = True
+    notify_on_finding_deleted: bool = True
 
     config = NotificationConfig(
         notify_on_finding_risk_assessment_needed=notify_on_finding_risk_assessment_needed,
         notify_on_finding_patch_version_available=notify_on_finding_patch_version_available,
+        notify_on_finding_deleted=notify_on_finding_deleted,
         notify_on_scan_job_succeeded=notify_on_scan_job_succeeded,
         notify_on_scan_job_failed=notify_on_scan_job_failed,
     )
