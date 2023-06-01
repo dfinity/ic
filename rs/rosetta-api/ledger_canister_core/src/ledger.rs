@@ -56,8 +56,7 @@ impl From<ApproveError> for TxApplyError {
 
 pub trait LedgerContext {
     type AccountId: std::hash::Hash + Ord + Eq + Clone;
-    type SpenderId;
-    type Approvals: Approvals<AccountId = Self::AccountId, SpenderId = Self::SpenderId>;
+    type Approvals: Approvals<AccountId = Self::AccountId>;
     type BalancesStore: BalancesStore<AccountId = Self::AccountId> + Default;
 
     fn balances(&self) -> &Balances<Self::BalancesStore>;
@@ -71,7 +70,6 @@ pub trait LedgerContext {
 
 pub trait LedgerTransaction: Sized {
     type AccountId: Clone;
-    type SpenderId;
 
     /// Constructs a new "burn" transaction that removes the specified `amount` of tokens from the
     /// `from` account.
@@ -96,7 +94,7 @@ pub trait LedgerTransaction: Sized {
         effective_fee: Tokens,
     ) -> Result<(), TxApplyError>
     where
-        C: LedgerContext<AccountId = Self::AccountId, SpenderId = Self::SpenderId>;
+        C: LedgerContext<AccountId = Self::AccountId>;
 }
 
 pub trait LedgerAccess {
@@ -121,9 +119,7 @@ pub trait LedgerData: LedgerContext {
     type ArchiveWasm: ArchiveCanisterWasm;
     type Runtime: Runtime;
     type Block: BlockType<Transaction = Self::Transaction, AccountId = Self::AccountId>;
-    type Transaction: LedgerTransaction<AccountId = Self::AccountId, SpenderId = Self::SpenderId>
-        + Ord
-        + Clone;
+    type Transaction: LedgerTransaction<AccountId = Self::AccountId> + Ord + Clone;
 
     // Purge configuration
 

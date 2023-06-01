@@ -112,7 +112,7 @@ pub fn apply_operation<C>(
     now: TimeStamp,
 ) -> Result<(), TxApplyError>
 where
-    C: LedgerContext<AccountId = AccountIdentifier, SpenderId = AccountIdentifier>,
+    C: LedgerContext<AccountId = AccountIdentifier>,
 {
     match operation {
         Operation::Transfer {
@@ -205,7 +205,6 @@ pub struct Transaction {
 
 impl LedgerTransaction for Transaction {
     type AccountId = AccountIdentifier;
-    type SpenderId = AccountIdentifier;
 
     fn burn(
         from: Self::AccountId,
@@ -238,7 +237,7 @@ impl LedgerTransaction for Transaction {
         _effective_fee: Tokens,
     ) -> Result<(), TxApplyError>
     where
-        C: LedgerContext<AccountId = Self::AccountId, SpenderId = Self::SpenderId>,
+        C: LedgerContext<AccountId = Self::AccountId>,
     {
         apply_operation(context, &self.operation, now)
     }

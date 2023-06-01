@@ -4,7 +4,6 @@ pub mod endpoints;
 pub mod hash;
 
 use ciborium::tag::Required;
-use ic_base_types::PrincipalId;
 use ic_ledger_canister_core::ledger::{LedgerContext, LedgerTransaction, TxApplyError};
 pub use ic_ledger_core::tokens::Tokens;
 use ic_ledger_core::{
@@ -66,7 +65,6 @@ pub struct Transaction {
 
 impl LedgerTransaction for Transaction {
     type AccountId = Account;
-    type SpenderId = PrincipalId;
 
     fn burn(
         from: Account,

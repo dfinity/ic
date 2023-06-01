@@ -18,7 +18,7 @@ pub(crate) fn sqlite_on_disk_store(path: &Path) -> Blocks {
     Blocks::new_persistent(path).unwrap()
 }
 
-type Approvals = AllowanceTable<ApprovalKey, AccountIdentifier, AccountIdentifier>;
+type Approvals = AllowanceTable<ApprovalKey, AccountIdentifier>;
 
 #[derive(Default)]
 struct TestContext {
@@ -28,7 +28,6 @@ struct TestContext {
 
 impl LedgerContext for TestContext {
     type AccountId = AccountIdentifier;
-    type SpenderId = AccountIdentifier;
     type Approvals = Approvals;
     type BalancesStore = ClientBalancesStore;
 

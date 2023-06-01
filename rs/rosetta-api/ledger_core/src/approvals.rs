@@ -20,13 +20,12 @@ pub enum ApproveError {
 
 pub trait Approvals {
     type AccountId;
-    type SpenderId;
 
     /// Returns the current spender's allowance for the account.
     fn allowance(
         &self,
         account: &Self::AccountId,
-        spender: &Self::SpenderId,
+        spender: &Self::AccountId,
         now: TimeStamp,
     ) -> Allowance;
 
@@ -34,7 +33,7 @@ pub trait Approvals {
     fn approve(
         &mut self,
         account: &Self::AccountId,
-        spender: &Self::SpenderId,
+        spender: &Self::AccountId,
         amount: Tokens,
         expires_at: Option<TimeStamp>,
         now: TimeStamp,
@@ -48,7 +47,7 @@ pub trait Approvals {
     fn use_allowance(
         &mut self,
         account: &Self::AccountId,
-        spender: &Self::SpenderId,
+        spender: &Self::AccountId,
         amount: Tokens,
         now: TimeStamp,
     ) -> Result<Tokens, InsufficientAllowance>;
@@ -68,7 +67,7 @@ pub struct Allowance {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct AllowanceTable<K, AccountId, SpenderId>
+pub struct AllowanceTable<K, AccountId>
 where
     K: Ord,
 {
@@ -76,16 +75,16 @@ where
     expiration_queue: BinaryHeap<Reverse<(TimeStamp, K)>>,
     #[serde(skip)]
     #[serde(default)]
-    _marker: PhantomData<fn(&AccountId, &SpenderId) -> K>,
+    _marker: PhantomData<fn(&AccountId, &AccountId) -> K>,
 }
 
-impl<K: Ord, AccountId, SpenderId> Default for AllowanceTable<K, AccountId, SpenderId> {
+impl<K: Ord, AccountId> Default for AllowanceTable<K, AccountId> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<K, AccountId, SpenderId> AllowanceTable<K, AccountId, SpenderId>
+impl<K, AccountId> AllowanceTable<K, AccountId>
 where
     K: Ord,
 {
@@ -98,14 +97,13 @@ where
     }
 }
 
-impl<K, AccountId, SpenderId> Approvals for AllowanceTable<K, AccountId, SpenderId>
+impl<K, AccountId> Approvals for AllowanceTable<K, AccountId>
 where
-    K: Ord + for<'a> From<(&'a AccountId, &'a SpenderId)> + Clone,
+    K: Ord + for<'a> From<(&'a AccountId, &'a AccountId)> + Clone,
 {
     type AccountId = AccountId;
-    type SpenderId = SpenderId;
 
-    fn allowance(&self, account: &AccountId, spender: &SpenderId, now: TimeStamp) -> Allowance {
+    fn allowance(&self, account: &AccountId, spender: &AccountId, now: TimeStamp) -> Allowance {
         let key = K::from((account, spender));
         match self.allowances.get(&key) {
             Some(allowance) if allowance.expires_at.unwrap_or_else(remote_future) > now => {
@@ -118,7 +116,7 @@ where
     fn approve(
         &mut self,
         account: &AccountId,
-        spender: &SpenderId,
+        spender: &AccountId,
         amount: Tokens,
         expires_at: Option<TimeStamp>,
         now: TimeStamp,
@@ -170,7 +168,7 @@ where
     fn use_allowance(
         &mut self,
         account: &AccountId,
-        spender: &SpenderId,
+        spender: &AccountId,
         amount: Tokens,
         now: TimeStamp,
     ) -> Result<Tokens, InsufficientAllowance> {
@@ -198,7 +196,7 @@ where
     }
 }
 
-impl<K, AccountId, SpenderId> PrunableApprovals for AllowanceTable<K, AccountId, SpenderId>
+impl<K, AccountId> PrunableApprovals for AllowanceTable<K, AccountId>
 where
     K: Ord,
 {
