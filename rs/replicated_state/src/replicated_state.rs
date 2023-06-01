@@ -926,9 +926,6 @@ impl ReplicatedState {
             .split_from
             .expect("Not a state resulting from a subnet split");
 
-        // Consensus queue is always empty at the end of the round.
-        assert!(consensus_queue.is_empty());
-
         // Adjust `CanisterQueues::(local|remote)_subnet_input_schedule` based on which
         // canisters are present in `canister_states`.
         let local_canister_ids = canister_states.keys().cloned().collect::<Vec<_>>();
