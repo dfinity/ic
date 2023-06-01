@@ -66,7 +66,7 @@ fn unknown_token() -> String {
 pub struct Ledger {
     pub balances: LedgerBalances,
     #[serde(default)]
-    pub approvals: AllowanceTable<ApprovalKey, AccountIdentifier, AccountIdentifier>,
+    pub approvals: AllowanceTable<ApprovalKey, AccountIdentifier>,
     pub blockchain: Blockchain<dfn_runtime::DfnRuntime, IcpLedgerArchiveWasm>,
     // A cap on the maximum number of accounts
     pub maximum_number_of_accounts: usize,
@@ -108,8 +108,7 @@ pub struct Ledger {
 
 impl LedgerContext for Ledger {
     type AccountId = AccountIdentifier;
-    type SpenderId = AccountIdentifier;
-    type Approvals = AllowanceTable<ApprovalKey, Self::AccountId, Self::SpenderId>;
+    type Approvals = AllowanceTable<ApprovalKey, Self::AccountId>;
     type BalancesStore = HashMap<AccountIdentifier, Tokens>;
 
     fn balances(&self) -> &Balances<Self::BalancesStore> {

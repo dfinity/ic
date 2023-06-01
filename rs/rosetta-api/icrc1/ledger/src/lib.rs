@@ -5,7 +5,6 @@ use candid::{
     types::number::{Int, Nat},
     CandidType, Principal,
 };
-use ic_base_types::PrincipalId;
 use ic_crypto_tree_hash::{Label, MixedHashTree};
 use ic_icrc1::blocks::encoded_block_to_generic_block;
 use ic_icrc1::{Block, LedgerBalances, Transaction};
@@ -223,18 +222,17 @@ impl Ledger {
 }
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
-pub struct ApprovalKey(Account, PrincipalId);
+pub struct ApprovalKey(Account, Account);
 
-impl From<(&Account, &PrincipalId)> for ApprovalKey {
-    fn from((account, principal): (&Account, &PrincipalId)) -> Self {
-        Self(*account, *principal)
+impl From<(&Account, &Account)> for ApprovalKey {
+    fn from((account, spender): (&Account, &Account)) -> Self {
+        Self(*account, *spender)
     }
 }
 
 impl LedgerContext for Ledger {
     type AccountId = Account;
-    type SpenderId = PrincipalId;
-    type Approvals = AllowanceTable<ApprovalKey, Account, PrincipalId>;
+    type Approvals = AllowanceTable<ApprovalKey, Account>;
     type BalancesStore = HashMap<Self::AccountId, Tokens>;
 
     fn balances(&self) -> &Balances<Self::BalancesStore> {
