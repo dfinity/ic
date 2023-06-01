@@ -1,5 +1,5 @@
 {
-  "checksum": "9e9b1ede247300264fb7266d56eb5c5e3677cf97c66f9abbae68b3977d0d4049",
+  "checksum": "5efe1f639b7df4ca260a27af1492a7a837ce48b575fe74c1d3bb607bb117ac84",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -3388,6 +3388,101 @@
           ],
           "selects": {}
         }
+      },
+      "license": "MIT"
+    },
+    "axum-server 0.5.1": {
+      "name": "axum-server",
+      "version": "0.5.1",
+      "repository": {
+        "Http": {
+          "url": "https://crates.io/api/v1/crates/axum-server/0.5.1/download",
+          "sha256": "447f28c85900215cc1bea282f32d4a2f22d55c5a300afdfbc661c8d6a632e063"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "axum_server",
+            "crate_root": "src/lib.rs",
+            "srcs": {
+              "include": [
+                "**/*.rs"
+              ],
+              "exclude": []
+            }
+          }
+        }
+      ],
+      "library_target_name": "axum_server",
+      "common_attrs": {
+        "compile_data_glob": [
+          "**"
+        ],
+        "crate_features": [
+          "arc-swap",
+          "default",
+          "pin-project-lite",
+          "rustls",
+          "rustls-pemfile",
+          "tls-rustls",
+          "tokio-rustls"
+        ],
+        "deps": {
+          "common": [
+            {
+              "id": "arc-swap 1.6.0",
+              "target": "arc_swap"
+            },
+            {
+              "id": "bytes 1.4.0",
+              "target": "bytes"
+            },
+            {
+              "id": "futures-util 0.3.28",
+              "target": "futures_util"
+            },
+            {
+              "id": "http 0.2.9",
+              "target": "http"
+            },
+            {
+              "id": "http-body 0.4.5",
+              "target": "http_body"
+            },
+            {
+              "id": "hyper 0.14.26",
+              "target": "hyper"
+            },
+            {
+              "id": "pin-project-lite 0.2.9",
+              "target": "pin_project_lite"
+            },
+            {
+              "id": "rustls 0.21.1",
+              "target": "rustls"
+            },
+            {
+              "id": "rustls-pemfile 1.0.2",
+              "target": "rustls_pemfile"
+            },
+            {
+              "id": "tokio 1.28.2",
+              "target": "tokio"
+            },
+            {
+              "id": "tokio-rustls 0.24.0",
+              "target": "tokio_rustls"
+            },
+            {
+              "id": "tower-service 0.3.2",
+              "target": "tower_service"
+            }
+          ],
+          "selects": {}
+        },
+        "edition": "2018",
+        "version": "0.5.1"
       },
       "license": "MIT"
     },
@@ -10199,7 +10294,7 @@
               "target": "criterion_plot"
             },
             {
-              "id": "csv 1.2.1",
+              "id": "csv 1.2.2",
               "target": "csv"
             },
             {
@@ -11179,13 +11274,13 @@
       },
       "license": "MIT OR Apache-2.0"
     },
-    "csv 1.2.1": {
+    "csv 1.2.2": {
       "name": "csv",
-      "version": "1.2.1",
+      "version": "1.2.2",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/csv/1.2.1/download",
-          "sha256": "0b015497079b9a9d69c02ad25de6c0a6edef051ea6360a327d0bd05802ef64ad"
+          "url": "https://crates.io/api/v1/crates/csv/1.2.2/download",
+          "sha256": "626ae34994d3d8d668f4269922248239db4ae42d538b14c398b74a52208e8086"
         }
       },
       "targets": [
@@ -11229,7 +11324,7 @@
           "selects": {}
         },
         "edition": "2021",
-        "version": "1.2.1"
+        "version": "1.2.2"
       },
       "license": "Unlicense/MIT"
     },
@@ -12806,6 +12901,10 @@
               "target": "axum"
             },
             {
+              "id": "axum-server 0.5.1",
+              "target": "axum_server"
+            },
+            {
               "id": "backoff 0.3.0",
               "target": "backoff"
             },
@@ -12963,7 +13062,7 @@
               "target": "crossbeam_utils"
             },
             {
-              "id": "csv 1.2.1",
+              "id": "csv 1.2.2",
               "target": "csv"
             },
             {
@@ -50662,8 +50761,8 @@
         },
         {
           "Binary": {
-            "crate_name": "exit",
-            "crate_root": "src/bin/exit.rs",
+            "crate_name": "sleep",
+            "crate_root": "src/bin/sleep.rs",
             "srcs": {
               "include": [
                 "**/*.rs"
@@ -50686,8 +50785,8 @@
         },
         {
           "Binary": {
-            "crate_name": "sleep",
-            "crate_root": "src/bin/sleep.rs",
+            "crate_name": "exit",
+            "crate_root": "src/bin/exit.rs",
             "srcs": {
               "include": [
                 "**/*.rs"

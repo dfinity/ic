@@ -13,8 +13,10 @@ arc-swap = "1"
 async-scoped = { version = "0.7", features = ["use-tokio"] }
 async-trait = "0.1.56"
 axum = "0.6.1"
+axum-server = { version = "0.5.1", features = ["tls-rustls"] }
 clap = { version = "4", features = ["derive"] }
 futures = "0.3.21"
+futures-util = "0.3.28"
 ic-config = { path = "../../config" }
 ic-crypto-utils-threshold-sig-der = { path = "../../crypto/utils/threshold_sig_der" }
 ic-logger = { path = "../../monitoring/logger" }
@@ -24,7 +26,9 @@ ic-registry-replicator = { path = "../../orchestrator/registry_replicator" }
 lazy_static = "1.4.0"
 prometheus = "0.13"
 slog = "2.5.2"
+thiserror = "1.0.40"
 tokio = { version = "1.19.2", features = ["full"] }
+tokio-rustls = "0.24.0"
 tracing = "0.1.35"
 tracing-subscriber = { version = "0.3.11", features = ["json"] }
 url = "2.1.1"

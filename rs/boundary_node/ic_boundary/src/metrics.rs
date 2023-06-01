@@ -22,3 +22,17 @@ pub async fn handler(registry: &Registry) -> Response<Body> {
         .body(metrics_text.into())
         .unwrap()
 }
+
+pub struct WithMetrics<T>(pub T, pub MetricParams);
+
+pub struct MetricParams {
+    pub action: String,
+}
+
+impl MetricParams {
+    pub fn new(namespace: &str, action: &str) -> Self {
+        Self {
+            action: action.to_string(),
+        }
+    }
+}
