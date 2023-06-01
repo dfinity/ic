@@ -23,7 +23,7 @@ use strum_macros::IntoStaticStr;
 pub use ic_ledger_core::{
     block::BlockIndex,
     timestamp::TimeStamp,
-    tokens::{SignedTokens, Tokens, TOKEN_SUBDIVIDABLE_BY},
+    tokens::{Tokens, TOKEN_SUBDIVIDABLE_BY},
 };
 
 pub mod account_identifier;
@@ -93,7 +93,7 @@ pub enum Operation {
     Approve {
         from: AccountIdentifier,
         spender: AccountIdentifier,
-        allowance: SignedTokens,
+        allowance: Tokens,
         expires_at: Option<TimeStamp>,
         fee: Tokens,
     },
@@ -138,16 +138,10 @@ where
 
             context.balances_mut().burn(from, *fee)?;
 
-            let result = match allowance {
-                SignedTokens::Plus(amount) => context
-                    .approvals_mut()
-                    .approve(from, spender, *amount, *expires_at, now)
-                    .map_err(TxApplyError::from),
-                SignedTokens::Minus(amount) => context
-                    .approvals_mut()
-                    .decrease_allowance(from, spender, *amount, *expires_at, now)
-                    .map_err(TxApplyError::from),
-            };
+            let result = context
+                .approvals_mut()
+                .approve(from, spender, *allowance, *expires_at, now, None)
+                .map_err(TxApplyError::from);
             if let Err(e) = result {
                 context
                     .balances_mut()
@@ -766,7 +760,7 @@ pub enum CandidOperation {
     Approve {
         from: AccountIdBlob,
         spender: AccountIdBlob,
-        allowance_e8s: i128,
+        allowance_e8s: u64,
         fee: Tokens,
         expires_at: Option<TimeStamp>,
     },
@@ -810,7 +804,7 @@ impl From<Operation> for CandidOperation {
             } => Self::Approve {
                 from: from.to_address(),
                 spender: spender.to_address(),
-                allowance_e8s: allowance.to_i128(),
+                allowance_e8s: allowance.get_e8s(),
                 fee,
                 expires_at,
             },

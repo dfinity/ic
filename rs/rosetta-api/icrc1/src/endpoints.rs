@@ -27,6 +27,7 @@ pub fn convert_transfer_error(err: CoreTransferError) -> TransferError {
         },
         LTE::InsufficientAllowance { .. } => todo!(),
         LTE::ExpiredApproval { .. } => todo!(),
+        LTE::AllowanceChanged { .. } => todo!(),
     }
 }
 

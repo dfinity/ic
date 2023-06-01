@@ -1,13 +1,10 @@
-use crate::protobuf::{
-    send::Extension as PExt, signed_tokens::Tokens as PSignedTokens,
-    transaction::Transfer as PTransfer,
-};
+use crate::protobuf::{send::Extension as PExt, transaction::Transfer as PTransfer};
 use crate::{protobuf, TransferFee, TransferFeeArgs};
 use crate::{
     AccountBalanceArgs, AccountIdentifier, Block, BlockArg, BlockRes, CyclesResponse, EncodedBlock,
     GetBlocksArgs, GetBlocksRes, HashOf, IterBlocksArgs, IterBlocksRes, Memo, NotifyCanisterArgs,
-    Operation, SendArgs, SignedTokens, Subaccount, TimeStamp, TipOfChainRes, Tokens,
-    TotalSupplyArgs, Transaction, TransactionNotification, DEFAULT_TRANSFER_FEE,
+    Operation, SendArgs, Subaccount, TimeStamp, TipOfChainRes, Tokens, TotalSupplyArgs,
+    Transaction, TransactionNotification, DEFAULT_TRANSFER_FEE,
 };
 use dfn_protobuf::ToProto;
 use ic_base_types::{CanisterId, CanisterIdError};
@@ -37,23 +34,6 @@ pub fn tokens_from_proto(pb: protobuf::Tokens) -> Tokens {
 pub fn tokens_into_proto(tokens: Tokens) -> protobuf::Tokens {
     protobuf::Tokens {
         e8s: tokens.get_e8s(),
-    }
-}
-
-pub fn try_signed_tokens_from_proto(pb: protobuf::SignedTokens) -> Result<SignedTokens, String> {
-    match pb.tokens {
-        Some(PSignedTokens::PlusE8s(n)) => Ok(SignedTokens::Plus(Tokens::from_e8s(n))),
-        Some(PSignedTokens::MinusE8s(n)) => Ok(SignedTokens::Minus(Tokens::from_e8s(n))),
-        None => Err("SignedToken object is missing required `tokens`".to_string()),
-    }
-}
-
-pub fn signed_tokens_into_proto(tokens: SignedTokens) -> protobuf::SignedTokens {
-    protobuf::SignedTokens {
-        tokens: Some(match tokens {
-            SignedTokens::Plus(tokens) => PSignedTokens::PlusE8s(tokens.get_e8s()),
-            SignedTokens::Minus(tokens) => PSignedTokens::MinusE8s(tokens.get_e8s()),
-        }),
     }
 }
 
@@ -651,7 +631,7 @@ impl ToProto for Transaction {
                     Operation::Approve {
                         from: AccountIdentifier::from_proto(from)?,
                         spender: AccountIdentifier::from_proto(to)?,
-                        allowance: try_signed_tokens_from_proto(allowance)?,
+                        allowance: tokens_from_proto(allowance),
                         expires_at: expires_at.map(timestamp_from_proto),
                         fee: match max_fee {
                             Some(fee) => tokens_from_proto(fee),
@@ -728,7 +708,7 @@ impl ToProto for Transaction {
                 amount: Some(tokens_into_proto(Tokens::ZERO)),
                 max_fee: Some(tokens_into_proto(fee)),
                 extension: Some(PExt::Approve(protobuf::Approve {
-                    allowance: Some(signed_tokens_into_proto(allowance)),
+                    allowance: Some(tokens_into_proto(allowance)),
                     expires_at: expires_at.map(timestamp_into_proto),
                 })),
             }),
