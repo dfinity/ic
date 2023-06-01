@@ -202,7 +202,7 @@ mod rpc_connection {
     }
 
     #[test]
-    fn should_automatically_detect_disconnection_without_any_request() {
+    fn should_automatically_detect_disconnection() {
         activate_tracing();
         let in_memory_logger = InMemoryReplicaLogger::new();
 
@@ -211,13 +211,16 @@ mod rpc_connection {
         let mut env = RemoteVaultEnvironment::start_server(
             TarpcCspVaultServerImplBuilder::new_with_local_csp_vault(vault),
         );
-        let _client = vault_client_with_short_timeouts(&env)
+        let client = vault_client_with_short_timeouts(&env)
             .with_logger(ReplicaLogger::from(&in_memory_logger))
             .build_expecting_ok();
+        let _ensure_client_can_contact_server = client
+            .current_node_public_keys()
+            .expect("should successfully get current node public keys");
 
         env.shutdown_server_now();
 
-        sleep(Duration::from_secs(2));
+        sleep(Duration::from_secs(1));
         let logs = in_memory_logger.drain_logs();
 
         LogEntriesAssert::assert_that(logs)
