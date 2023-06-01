@@ -191,7 +191,9 @@ mod tests {
         TargetGroup,
     };
 
-    use crate::{Job, JobParameters};
+    use service_discovery::jobs::Job;
+
+    use crate::JobParameters;
 
     use super::{VectorConfigBuilderImpl, VectorPrometheusScrapeSource};
 
@@ -253,22 +255,22 @@ mod tests {
             Job {
                 _type: JobType::NodeExporter(NodeOS::Guest),
                 port: 9100,
-                endpoint: "/metrics".into(),
+                endpoint: "/metrics",
             },
             Job {
                 _type: JobType::NodeExporter(NodeOS::Host),
                 port: 9100,
-                endpoint: "/metrics".into(),
+                endpoint: "/metrics",
             },
             Job {
                 _type: JobType::Orchestrator,
                 port: 9091,
-                endpoint: "/".into(),
+                endpoint: "/",
             },
             Job {
                 _type: JobType::Replica,
                 port: 9090,
-                endpoint: "/".into(),
+                endpoint: "/",
             },
         ]
     }
@@ -281,7 +283,7 @@ mod tests {
                     job._type,
                     JobParameters {
                         port: job.port,
-                        endpoint: job.endpoint.clone(),
+                        endpoint: job.endpoint.to_string(),
                     },
                 )
             })
