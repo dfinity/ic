@@ -592,17 +592,19 @@ fn encoded_block_bytes_to_flat_transaction(
 }
 
 fn get_oldest_tx_id(account: Account) -> Option<BlockIndex64> {
-    // TODO: there is no easy way to get the oldest_tx_id so we traverse
-    //       all the transaction of the account for now. This will be
-    //       fixed in future by storying the oldest_tx_id somewhere and
-    //       replace the body of this function.
-    let first_key = account_block_ids_key(account, u64::MAX);
+    // There is no easy way to get the oldest index for an account
+    // in one step. Instead, we do it in two steps:
+    // 1. check if index 0 is owned by the account
+    // 2. if not then return the oldest index of the account that
+    //    is not 0 via iter_upper_bound
     let last_key = account_block_ids_key(account, 0);
     with_account_block_ids(|account_block_ids| {
-        account_block_ids
-            .range(first_key..=last_key)
-            .last()
-            .map(|(k, _)| k.1 .0)
+        account_block_ids.get(&last_key).map(|_| 0).or_else(|| {
+            account_block_ids
+                .iter_upper_bound(&last_key)
+                .find(|((account_bytes, _), _)| account_bytes == &last_key.0)
+                .map(|(key, _)| key.1 .0)
+        })
     })
 }
 
