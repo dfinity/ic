@@ -5,6 +5,8 @@
 # - `docker push/pull dfinity/hostos-base:<tag>`
 # - `docker build -t dfinity/hostos-base-dev:<tag> --build-arg PACKAGE_FILES="packages.common packages.dev" -f Dockerfile.base .`
 # - `docker push/pull dfinity/hostos-base-dev:<tag>`
+# - `docker build -t dfinity/hostos-base-dev-sev:<tag> --build-arg PACKAGE_FILES="packages.common packages.dev" --build-arg CPU_SUPPORT="sev" -f Dockerfile.base .`
+# - `docker push/pull dfinity/hostos-base-dev-sev:<tag>`
 #
 # NOTE:
 # If you edit this file, you will need to perform the following operations

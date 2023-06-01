@@ -1,0 +1,14 @@
+load("//ic-os:defs.bzl", "icos_build")
+load("//ic-os/setupos:defs.bzl", "image_deps")
+
+# The macro contains several targets.
+# Check
+#       //ic-os/setupos/BUILD.bazel for examples
+#    or //ic-os/defs.bzl for the full list of targets.
+icos_build(
+    name = "dev-sev",
+    image_deps = image_deps,
+    upgrades = False,
+    upload_prefix = "setup-os",
+    vuln_scan = False,
+)
