@@ -13,12 +13,10 @@ use ic_config::metrics::{Config as MetricsConfig, Exporter};
 use ic_http_endpoints_metrics::MetricsHttpEndpoint;
 use ic_metrics::MetricsRegistry;
 use regex::Regex;
+use service_discovery::job_types::{map_jobs, JobAndPort};
 use service_discovery::registry_sync::sync_local_registry;
 use service_discovery::{
-    job_types::{JobType, NodeOS},
-    metrics::Metrics,
-    poll_loop::make_poll_loop,
-    IcServiceDiscoveryImpl,
+    job_types::JobType, metrics::Metrics, poll_loop::make_poll_loop, IcServiceDiscoveryImpl,
 };
 use slog::{info, o, Drain, Logger};
 use url::Url;
@@ -35,51 +33,18 @@ pub struct JobParameters {
     pub endpoint: String,
 }
 
-#[derive(Clone)]
-struct Job {
-    _type: JobType,
-    port: u16,
-    endpoint: String,
-}
-
-fn jobs() -> Vec<Job> {
-    vec![
-        Job {
-            _type: JobType::NodeExporter(NodeOS::Guest),
-            port: 9100,
-            endpoint: "/metrics".into(),
-        },
-        Job {
-            _type: JobType::NodeExporter(NodeOS::Host),
-            port: 9100,
-            endpoint: "/metrics".into(),
-        },
-        Job {
-            _type: JobType::Orchestrator,
-            port: 9091,
-            endpoint: "/".into(),
-        },
-        Job {
-            _type: JobType::Replica,
-            port: 9090,
-            endpoint: "/".into(),
-        },
-    ]
-}
-
-fn get_jobs() -> HashMap<JobType, u16> {
-    jobs().iter().map(|job| (job._type, job.port)).collect()
-}
-
-fn get_jobs_parameters() -> HashMap<JobType, JobParameters> {
-    jobs()
+fn get_jobs_parameters(jobs_and_ports: &[JobAndPort]) -> HashMap<JobType, JobParameters> {
+    jobs_and_ports
         .iter()
-        .map(|job| {
+        .map(|job_and_port| {
             (
-                job._type,
+                job_and_port.job_type,
                 JobParameters {
-                    port: job.port,
-                    endpoint: job.endpoint.clone(),
+                    port: job_and_port.port,
+                    endpoint: match job_and_port.job_type {
+                        JobType::NodeExporter(_) => "/metrics".into(),
+                        JobType::Orchestrator | JobType::Replica => "/".into(),
+                    },
                 },
             )
         })
@@ -95,6 +60,7 @@ fn main() -> Result<()> {
     let mut handles = vec![];
 
     info!(log, "Starting vector-config-generator");
+    info!(log, "Started jobs: {:?}", cli_args.jobs_and_ports);
     let mercury_dir = cli_args.targets_dir.join("mercury");
     rt.block_on(sync_local_registry(
         log.clone(),
@@ -103,7 +69,7 @@ fn main() -> Result<()> {
         cli_args.skip_sync,
     ));
 
-    let jobs = get_jobs();
+    let jobs = map_jobs(&cli_args.jobs_and_ports);
 
     info!(log, "Starting IcServiceDiscovery ...");
     let ic_discovery = Arc::new(IcServiceDiscoveryImpl::new(
@@ -169,7 +135,7 @@ fn main() -> Result<()> {
         VectorConfigBuilderImpl::new(
             cli_args.proxy_url,
             cli_args.scrape_interval,
-            get_jobs_parameters(),
+            get_jobs_parameters(&cli_args.jobs_and_ports),
         ),
         metrics,
     );
@@ -212,7 +178,7 @@ initialized with a hardcoded initial registry.
     #[clap(
     long = "poll-interval",
     default_value = "10s",
-    parse(try_from_str = parse_duration),
+    value_parser = parse_duration,
     help = r#"
 The interval at which ICs are polled for updates.
 
@@ -223,7 +189,7 @@ The interval at which ICs are polled for updates.
     #[clap(
     long = "query-request-timeout",
     default_value = "5s",
-    parse(try_from_str = parse_duration),
+    value_parser = parse_duration,
     help = r#"
 The HTTP-request timeout used when quering for registry updates.
 
@@ -297,6 +263,16 @@ The listen address on which metrics for this service should be exposed.
 "#
     )]
     metrics_listen_addr: SocketAddr,
+
+    #[clap(
+        long = "jobs-and-ports",
+        value_delimiter = ',',
+        help = r#"
+Pass the jobs through cli using comma separated values of tuples of (<name>,<port>)
+--jobs-and-ports host_node_exporter,9100 --jobs-and-ports node_exporter,9100
+"#
+    )]
+    jobs_and_ports: Vec<JobAndPort>,
 }
 impl CliArgs {
     fn validate(self) -> Result<Self> {
@@ -310,6 +286,10 @@ impl CliArgs {
 
         if !self.generation_dir.is_dir() {
             bail!("Not a directory: {:?}", self.generation_dir)
+        }
+
+        if self.jobs_and_ports.is_empty() {
+            bail!("No jobs provided...");
         }
 
         Ok(self)
