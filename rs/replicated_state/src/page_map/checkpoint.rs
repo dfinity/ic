@@ -130,7 +130,7 @@ impl Mapping {
         let num_pages = (self.mmap.len() / PAGE_SIZE) as u64;
         if page_index.get() >= num_pages {
             MemoryRegion::Zeros(Range {
-                start: PageIndex::new(num_pages),
+                start: PageIndex::new(std::cmp::max(num_pages, page_range.start.get())),
                 end: page_range.end,
             })
         } else {
