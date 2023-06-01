@@ -2,19 +2,17 @@
 /// Benchmark System API performance in `execute_inspect_message()`
 ///
 use criterion::{criterion_group, criterion_main, Criterion};
-use execution_environment_bench::common;
-use execution_environment_bench::common_wat::*;
+use execution_environment_bench::{common, wat::*};
 use ic_execution_environment::execution::inspect_message;
 
 use ic_execution_environment::ExecutionEnvironment;
 use ic_logger::replica_logger::no_op_logger;
 use ic_test_utilities::types::ids::user_test_id;
 use ic_test_utilities::types::messages::SignedIngressBuilder;
-use lazy_static::lazy_static;
 
-lazy_static! {
-    /// List of benchmarks: benchmark id (name), WAT, expected instructions.
-    pub static ref BENCHMARKS: Vec<common::Benchmark> = vec![
+pub fn execute_inspect_message_bench(c: &mut Criterion) {
+    // List of benchmarks: benchmark id (name), WAT, expected instructions.
+    let benchmarks: Vec<common::Benchmark> = vec![
         common::Benchmark(
             "ic0_msg_method_name_size()",
             Module::InspectMessage.from_ic0("msg_method_name_size", NoParams, Result::I32),
@@ -36,13 +34,10 @@ lazy_static! {
             1,
         ),
     ];
-}
-
-pub fn bench_execute_inspect_message(c: &mut Criterion) {
     common::run_benchmarks(
         c,
         "inspect",
-        &BENCHMARKS,
+        &benchmarks,
         |exec_env: &ExecutionEnvironment,
          expected_instructions,
          common::BenchmarkArgs {
@@ -82,5 +77,5 @@ pub fn bench_execute_inspect_message(c: &mut Criterion) {
     );
 }
 
-criterion_group!(benchmarks, bench_execute_inspect_message);
+criterion_group!(benchmarks, execute_inspect_message_bench);
 criterion_main!(benchmarks);

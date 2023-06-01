@@ -2,8 +2,7 @@
 /// Benchmark System API performance in `execute_query()`
 ///
 use criterion::{criterion_group, criterion_main, Criterion};
-use execution_environment_bench::common;
-use execution_environment_bench::common_wat::*;
+use execution_environment_bench::{common, wat::*};
 use ic_execution_environment::{
     as_num_instructions, as_round_instructions,
     execution::nonreplicated_query::execute_non_replicated_query, ExecutionEnvironment,
@@ -13,11 +12,9 @@ use ic_interfaces::execution_environment::{ExecutionComplexity, ExecutionMode};
 use ic_types::methods::WasmMethod;
 use ic_types::PrincipalId;
 
-use lazy_static::lazy_static;
-
-lazy_static! {
-    /// List of benchmarks: benchmark id (name), WAT, expected instructions.
-    pub static ref BENCHMARKS: Vec<common::Benchmark> = vec![
+pub fn execute_query_bench(c: &mut Criterion) {
+    // List of benchmarks: benchmark id (name), WAT, expected instructions.
+    let benchmarks: Vec<common::Benchmark> = vec![
         common::Benchmark(
             "ic0_data_certificate_size()",
             Module::QueryTest.from_ic0("data_certificate_size", NoParams, Result::I32),
@@ -34,14 +31,11 @@ lazy_static! {
             13_000_004,
         ),
     ];
-}
-
-pub fn bench_execute_query(c: &mut Criterion) {
     let sender = PrincipalId::new_node_test_id(common::REMOTE_CANISTER_ID);
     common::run_benchmarks(
         c,
         "query",
-        &BENCHMARKS,
+        &benchmarks,
         |exec_env: &ExecutionEnvironment,
          expected_instructions,
          common::BenchmarkArgs {
@@ -86,5 +80,5 @@ pub fn bench_execute_query(c: &mut Criterion) {
     );
 }
 
-criterion_group!(benchmarks, bench_execute_query);
+criterion_group!(benchmarks, execute_query_bench);
 criterion_main!(benchmarks);
