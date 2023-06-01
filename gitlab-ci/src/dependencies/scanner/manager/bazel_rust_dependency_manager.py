@@ -28,7 +28,7 @@ class BazelCargoExecutor:
 
     def get_bazel_query_output(self, bazel_query: str, path: pathlib.Path) -> str:
         bazel_query_command = "bazel query"
-        bazel_extra_arguments = "--output package --notool_deps --noimplicit_deps --nohost_deps"
+        bazel_extra_arguments = "--output package --notool_deps --noimplicit_deps --nohost_deps --ui_event_filters=-WARNING,-ERROR,-INFO"
 
         command = f"{bazel_query_command} {bazel_query} {bazel_extra_arguments}"
         environment = {}

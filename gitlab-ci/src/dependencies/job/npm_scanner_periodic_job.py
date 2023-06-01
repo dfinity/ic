@@ -22,7 +22,7 @@ REPOS_TO_SCAN = [
                 owner=Team.TRUST_TEAM,
             )
         ],
-        17,
+        18,
     ),
     Repository(
         "nns-dapp",
