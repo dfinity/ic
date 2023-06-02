@@ -323,11 +323,6 @@ pub struct MemoryTaken {
     wasm_custom_sections: NumBytes,
     /// Memory taken by canister history.
     canister_history: NumBytes,
-    /// Total memory taken. This is the sum of `execution`, `messages`,
-    /// and `canister_history` on application subnets; and excludes
-    /// canister message memory (i.e. sum of `execution` and
-    /// `canister_history`) on system subnets.
-    total: NumBytes,
 }
 
 impl MemoryTaken {
@@ -349,11 +344,6 @@ impl MemoryTaken {
     /// Returns the amount of memory taken by canister history.
     pub fn canister_history(&self) -> NumBytes {
         self.canister_history
-    }
-
-    /// Returns the total amount of memory taken.
-    pub fn total(&self) -> NumBytes {
-        self.total
     }
 }
 
@@ -586,21 +576,11 @@ impl ReplicatedState {
 
         message_memory_taken += (self.subnet_queues.memory_usage() as u64).into();
 
-        // Raw memory taken includes `wasm_custom_sections_memory_taken` so we
-        // don't have to add it to the total memory taken separately.
-        let mut total_memory_taken = raw_memory_taken + canister_history_memory_taken;
-
-        // Add message memory taken to total for non-system subnets only.
-        if self.metadata.own_subnet_type != SubnetType::System {
-            total_memory_taken += message_memory_taken;
-        }
-
         MemoryTaken {
-            execution: raw_memory_taken,
+            execution: raw_memory_taken + canister_history_memory_taken,
             messages: message_memory_taken,
             wasm_custom_sections: wasm_custom_sections_memory_taken,
             canister_history: canister_history_memory_taken,
-            total: total_memory_taken,
         }
     }
 
@@ -631,7 +611,7 @@ impl ReplicatedState {
     /// input queue).
     ///
     /// The messages from the same subnet get pushed into the local subnet
-    /// queue, while the messages form the other subnets get pushed to the inter
+    /// queue, while the messages from the other subnets get pushed to the inter
     /// subnet queues.
     ///
     /// On failure (queue full, canister not found, out of memory), returns the
@@ -641,7 +621,6 @@ impl ReplicatedState {
     pub fn push_input(
         &mut self,
         msg: RequestOrResponse,
-        max_canister_memory_size: NumBytes,
         subnet_available_memory: &mut i64,
     ) -> Result<(), (StateError, RequestOrResponse)> {
         let own_subnet_type = self.metadata.own_subnet_type;
@@ -655,7 +634,6 @@ impl ReplicatedState {
         match self.canister_state_mut(&msg.receiver()) {
             Some(receiver_canister) => receiver_canister.push_input(
                 msg,
-                max_canister_memory_size,
                 subnet_available_memory,
                 own_subnet_type,
                 input_queue_type,
@@ -666,8 +644,6 @@ impl ReplicatedState {
                     push_input(
                         &mut self.subnet_queues,
                         msg,
-                        // No canister limit, so pass the subnet limit twice.
-                        *subnet_available_memory,
                         subnet_available_memory,
                         own_subnet_type,
                         input_queue_type,

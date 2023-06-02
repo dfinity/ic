@@ -595,7 +595,7 @@ fn dts_works_in_cleanup_callback() {
 #[test]
 fn dts_out_of_subnet_memory_in_response_callback() {
     let mut test = ExecutionTestBuilder::new()
-        .with_subnet_total_memory(100 * 1024 * 1024)
+        .with_subnet_execution_memory(100 * 1024 * 1024)
         .with_instruction_limit(100_000_000)
         .with_slice_instruction_limit(1_000_000)
         .with_deterministic_time_slicing()
@@ -662,7 +662,7 @@ fn dts_out_of_subnet_memory_in_response_callback() {
     )
     .unwrap();
     let available_memory_before_finishing_callback =
-        test.subnet_available_memory().get_total_memory();
+        test.subnet_available_memory().get_execution_memory();
 
     // Keep executing until callback finishes.
     while test.canister_state(a_id).next_execution() == NextExecution::ContinueLong {
@@ -681,7 +681,7 @@ fn dts_out_of_subnet_memory_in_response_callback() {
         // memory changes not reflected in global state
         assert_eq!(
             available_memory_before_finishing_callback,
-            test.subnet_available_memory().get_total_memory()
+            test.subnet_available_memory().get_execution_memory()
         );
         test.execute_slice(a_id);
     }
@@ -692,14 +692,14 @@ fn dts_out_of_subnet_memory_in_response_callback() {
     // verify that cleanup was in fact unable to allocate over subnet memory limit
     assert_eq!(
         available_memory_before_finishing_callback,
-        test.subnet_available_memory().get_total_memory()
+        test.subnet_available_memory().get_execution_memory()
     );
 }
 
 #[test]
 fn dts_out_of_subnet_memory_in_cleanup_callback() {
     let mut test = ExecutionTestBuilder::new()
-        .with_subnet_total_memory(100 * 1024 * 1024)
+        .with_subnet_execution_memory(100 * 1024 * 1024)
         .with_instruction_limit(100_000_000)
         .with_slice_instruction_limit(1_000_000)
         .with_deterministic_time_slicing()
@@ -765,7 +765,7 @@ fn dts_out_of_subnet_memory_in_cleanup_callback() {
     .unwrap();
 
     let available_memory_before_finishing_callback =
-        test.subnet_available_memory().get_total_memory();
+        test.subnet_available_memory().get_execution_memory();
 
     // Keep executing until callback finishes.
     while test.canister_state(a_id).next_execution() == NextExecution::ContinueLong {
@@ -784,7 +784,7 @@ fn dts_out_of_subnet_memory_in_cleanup_callback() {
         // memory changes not reflected in global state
         assert_eq!(
             available_memory_before_finishing_callback,
-            test.subnet_available_memory().get_total_memory()
+            test.subnet_available_memory().get_execution_memory()
         );
         test.execute_slice(a_id);
     }
@@ -795,7 +795,7 @@ fn dts_out_of_subnet_memory_in_cleanup_callback() {
     // verify that cleanup was in fact unable to allocate over subnet memory limit
     assert_eq!(
         available_memory_before_finishing_callback,
-        test.subnet_available_memory().get_total_memory()
+        test.subnet_available_memory().get_execution_memory()
     )
 }
 

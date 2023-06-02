@@ -253,7 +253,7 @@ fn install_code_validate_input_compute_allocation() {
 fn install_code_validate_input_memory_allocation() {
     let mib: u64 = 1024 * 1024;
     let mut test = ExecutionTestBuilder::new()
-        .with_subnet_total_memory(500 * mib as i64)
+        .with_subnet_execution_memory(500 * mib as i64)
         .with_install_code_instruction_limit(1_000_000)
         .with_install_code_slice_instruction_limit(1_000)
         .with_deterministic_time_slicing()
@@ -469,7 +469,7 @@ fn install_code_respects_wasm_custom_sections_available_memory() {
         .with_manual_execution()
         .build();
 
-    let subnet_available_memory_before = test.subnet_available_memory().get_total_memory();
+    let subnet_available_memory_before = test.subnet_available_memory().get_execution_memory();
     let mut iterations = 0;
     loop {
         let canister_id = test
@@ -518,7 +518,7 @@ fn install_code_respects_wasm_custom_sections_available_memory() {
 
     assert!(result.is_err());
     assert_eq!(
-        test.subnet_available_memory().get_total_memory(),
+        test.subnet_available_memory().get_execution_memory(),
         subnet_available_memory_before - iterations * total_memory_taken_per_canister_in_bytes
     );
 }

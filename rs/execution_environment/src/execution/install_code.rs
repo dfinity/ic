@@ -149,8 +149,7 @@ impl InstallCodeHelper {
     }
 
     pub fn canister_memory_usage(&self) -> NumBytes {
-        self.canister
-            .memory_usage(self.execution_parameters.subnet_type)
+        self.canister.memory_usage()
     }
 
     /// Returns a struct with all the necessary information to replay the
@@ -222,10 +221,10 @@ impl InstallCodeHelper {
         ) {
             match err {
                 SubnetAvailableMemoryError::InsufficientMemory {
-                    requested_total,
+                    execution_requested,
                     message_requested: _,
                     wasm_custom_sections_requested,
-                    available_total,
+                    available_execution,
                     available_messages: _,
                     available_wasm_custom_sections,
                 } => {
@@ -235,9 +234,9 @@ impl InstallCodeHelper {
                         original,
                         round,
                         CanisterManagerError::SubnetMemoryCapacityOverSubscribed {
-                            requested_total,
+                            requested_execution: execution_requested,
                             requested_wasm_custom_sections: wasm_custom_sections_requested,
-                            available_total: NumBytes::new(available_total.max(0) as u64),
+                            available_execution: NumBytes::new(available_execution.max(0) as u64),
                             available_wasm_custom_sections: NumBytes::new(
                                 available_wasm_custom_sections.max(0) as u64,
                             ),
@@ -335,7 +334,6 @@ impl InstallCodeHelper {
             &round_limits.subnet_available_memory,
             &self.canister,
             original.requested_memory_allocation,
-            config,
         )?;
 
         validate_controller(&self.canister, &original.sender)?;
@@ -382,8 +380,7 @@ impl InstallCodeHelper {
             .instruction_limits
             .reduce_by(instructions_from_compilation);
 
-        let subnet_type = self.execution_parameters.subnet_type;
-        let old_memory_usage = self.canister.memory_usage(subnet_type);
+        let old_memory_usage = self.canister.memory_usage();
         let old_memory_allocation = self.canister.system_state.memory_allocation;
         let old_compute_allocation = self.canister.scheduler_state.compute_allocation;
         let old_wasm_custom_sections_memory_used = self
@@ -433,7 +430,7 @@ impl InstallCodeHelper {
         self.execution_parameters.canister_memory_limit =
             self.canister.memory_limit(best_effort_limit);
 
-        let new_memory_usage = self.canister.memory_usage(subnet_type);
+        let new_memory_usage = self.canister.memory_usage();
         if new_memory_usage > self.execution_parameters.canister_memory_limit {
             return Err(CanisterManagerError::NotEnoughMemoryAllocationGiven {
                 canister_id: self.canister.canister_id(),
@@ -666,30 +663,31 @@ pub(crate) fn validate_memory_allocation(
     available_memory: &SubnetAvailableMemory,
     canister: &CanisterState,
     memory_allocation: Option<MemoryAllocation>,
-    config: &CanisterMgrConfig,
 ) -> Result<(), CanisterManagerError> {
     if let Some(memory_allocation) = memory_allocation {
         if let MemoryAllocation::Reserved(requested_allocation) = memory_allocation {
-            if requested_allocation < canister.memory_usage(config.own_subnet_type) {
+            if requested_allocation < canister.memory_usage() {
                 return Err(CanisterManagerError::NotEnoughMemoryAllocationGiven {
                     canister_id: canister.canister_id(),
                     memory_allocation_given: memory_allocation,
-                    memory_usage_needed: canister.memory_usage(config.own_subnet_type),
+                    memory_usage_needed: canister.memory_usage(),
                 });
             }
         }
         let canister_current_allocation = match canister.memory_allocation() {
             MemoryAllocation::Reserved(bytes) => bytes,
-            MemoryAllocation::BestEffort => canister.memory_usage(config.own_subnet_type),
+            MemoryAllocation::BestEffort => canister.memory_usage(),
         };
         if memory_allocation.bytes().get() as i128
-            > available_memory.get_total_memory() as i128
+            > available_memory.get_execution_memory() as i128
                 + canister_current_allocation.get() as i128
         {
             return Err(CanisterManagerError::SubnetMemoryCapacityOverSubscribed {
-                requested_total: memory_allocation.bytes(),
+                requested_execution: memory_allocation.bytes(),
                 requested_wasm_custom_sections: NumBytes::from(0),
-                available_total: NumBytes::from((available_memory.get_total_memory()).max(0) as u64),
+                available_execution: NumBytes::from(
+                    (available_memory.get_execution_memory()).max(0) as u64,
+                ),
                 available_wasm_custom_sections: NumBytes::from(
                     (available_memory.get_wasm_custom_sections_memory()).max(0) as u64,
                 ),

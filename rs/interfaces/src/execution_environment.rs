@@ -51,10 +51,10 @@ pub struct InstanceStats {
 #[derive(Debug)]
 pub enum SubnetAvailableMemoryError {
     InsufficientMemory {
-        requested_total: NumBytes,
+        execution_requested: NumBytes,
         message_requested: NumBytes,
         wasm_custom_sections_requested: NumBytes,
-        available_total: i64,
+        available_execution: i64,
         available_messages: i64,
         available_wasm_custom_sections: i64,
     },
@@ -155,92 +155,88 @@ impl fmt::Display for ExecutionComplexity {
 }
 
 /// Tracks the available memory on a subnet. The main idea is to separately track
-/// the total available memory, the message available memory and the wasm custom
-/// sections available memory. When trying to allocate message memory or wasm
-/// custom sections memory one can do this as long as there is sufficient total
-/// memory as well as message or wasm custom sections memory available
-/// respectively. When trying to allocate non-message or wasm custom sections
-/// memory only the total memory needs to suffice.
+/// the execution available memory, the message available memory and the wasm custom
+/// sections available memory. The different flavors of memory are independent of each
+/// other; they are collected in one struct because one often needs to allocate multiple
+/// types of memory at the same time.
 ///
-/// Note that there are situations where total available memory is smaller than
-/// the available message or wasm custom sections memory, i.e., when the memory
-/// is consumed by something other than messages or wasm custom sections.
+/// Note that there are situations where execution available memory is smaller than
+/// the wasm custom sections memory, i.e. when the memory is consumed by something
+/// other than wasm custom sections.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, Default)]
 pub struct SubnetAvailableMemory {
-    /// The total memory available on the subnet
-    total_memory: i64,
-    /// The memory available for messages
+    /// The execution memory available on the subnet, i.e. the canister memory
+    /// (Wasm binary, Wasm memory, stable memory) without message memory.
+    execution_memory: i64,
+    /// The memory available for messages.
     message_memory: i64,
-    /// The memory available for Wasm custom sections
+    /// The memory available for Wasm custom sections.
     wasm_custom_sections_memory: i64,
 }
 
 impl SubnetAvailableMemory {
-    pub fn new(total_memory: i64, message_memory: i64, wasm_custom_sections_memory: i64) -> Self {
+    pub fn new(
+        execution_memory: i64,
+        message_memory: i64,
+        wasm_custom_sections_memory: i64,
+    ) -> Self {
         SubnetAvailableMemory {
-            total_memory,
+            execution_memory,
             message_memory,
             wasm_custom_sections_memory,
         }
     }
 
-    /// Returns the total available memory.
-    pub fn get_total_memory(&self) -> i64 {
-        self.total_memory
+    /// Returns the execution available memory.
+    pub fn get_execution_memory(&self) -> i64 {
+        self.execution_memory
     }
 
-    /// Returns the memory available for messages, ignoring the totally available memory.
+    /// Returns the memory available for messages.
     pub fn get_message_memory(&self) -> i64 {
         self.message_memory
     }
 
     /// Returns the memory available for Wasm custom sections, ignoring the
-    /// totally available memory.
+    /// execution available memory.
     pub fn get_wasm_custom_sections_memory(&self) -> i64 {
         self.wasm_custom_sections_memory
     }
 
-    /// Returns the maximal amount of memory that is available for messages.
-    ///
-    /// This amount is computed as the minimum of total available memory and available
-    /// message memory. This is useful to decide whether it is still possible to allocate
-    /// memory for messages.
-    pub fn max_available_message_memory(&self) -> i64 {
-        self.total_memory.min(self.message_memory)
-    }
-
     /// Try to use some memory capacity and fail if not enough is available
+    ///
+    /// `self.execution_memory`, `self.message_memory` and `self.wasm_custom_sections_memory`
+    /// are independent of each other. However, this function will not allocate anything if
+    /// there is not enough of either one of them (and return an error instead).
     pub fn try_decrement(
         &mut self,
-        requested: NumBytes,
+        execution_requested: NumBytes,
         message_requested: NumBytes,
         wasm_custom_sections_requested: NumBytes,
     ) -> Result<(), SubnetAvailableMemoryError> {
-        debug_assert!(requested >= message_requested);
-
         let is_available =
             |requested: NumBytes, available: i64| match i64::try_from(requested.get()) {
                 Ok(x) => x <= available || x == 0,
                 Err(_) => false,
             };
 
-        if is_available(requested, self.total_memory)
+        if is_available(execution_requested, self.execution_memory)
             && is_available(message_requested, self.message_memory)
             && is_available(
                 wasm_custom_sections_requested,
                 self.wasm_custom_sections_memory,
             )
         {
-            self.total_memory -= requested.get() as i64;
+            self.execution_memory -= execution_requested.get() as i64;
             self.message_memory -= message_requested.get() as i64;
             self.wasm_custom_sections_memory -= wasm_custom_sections_requested.get() as i64;
             Ok(())
         } else {
             Err(SubnetAvailableMemoryError::InsufficientMemory {
-                requested_total: requested,
+                execution_requested,
                 message_requested,
                 wasm_custom_sections_requested,
-                available_total: self.total_memory,
+                available_execution: self.execution_memory,
                 available_messages: self.message_memory,
                 available_wasm_custom_sections: self.wasm_custom_sections_memory,
             })
@@ -249,13 +245,11 @@ impl SubnetAvailableMemory {
 
     pub fn increment(
         &mut self,
-        total_amount: NumBytes,
+        execution_amount: NumBytes,
         message_amount: NumBytes,
         wasm_custom_sections_amount: NumBytes,
     ) {
-        debug_assert!(total_amount >= message_amount);
-
-        self.total_memory += total_amount.get() as i64;
+        self.execution_memory += execution_amount.get() as i64;
         self.message_memory += message_amount.get() as i64;
         self.wasm_custom_sections_memory += wasm_custom_sections_amount.get() as i64;
     }
@@ -266,7 +260,7 @@ impl ops::Div<i64> for SubnetAvailableMemory {
 
     fn div(self, rhs: i64) -> Self::Output {
         Self {
-            total_memory: self.total_memory / rhs,
+            execution_memory: self.execution_memory / rhs,
             message_memory: self.message_memory / rhs,
             wasm_custom_sections_memory: self.wasm_custom_sections_memory / rhs,
         }
@@ -1043,22 +1037,14 @@ mod tests {
     #[test]
     fn test_available_memory() {
         let available = SubnetAvailableMemory::new(20, 10, 4);
-        assert_eq!(available.get_total_memory(), 20);
+        assert_eq!(available.get_execution_memory(), 20);
         assert_eq!(available.get_message_memory(), 10);
         assert_eq!(available.get_wasm_custom_sections_memory(), 4);
-        assert_eq!(available.max_available_message_memory(), 10);
 
         let available = available / 2;
-        assert_eq!(available.get_total_memory(), 10);
+        assert_eq!(available.get_execution_memory(), 10);
         assert_eq!(available.get_message_memory(), 5);
         assert_eq!(available.get_wasm_custom_sections_memory(), 2);
-        assert_eq!(available.max_available_message_memory(), 5);
-
-        let available = SubnetAvailableMemory::new(3, 2, 2);
-        assert_eq!(available.get_total_memory(), 3);
-        assert_eq!(available.get_message_memory(), 2);
-        assert_eq!(available.get_wasm_custom_sections_memory(), 2);
-        assert_eq!(available.max_available_message_memory(), 2);
     }
 
     #[test]
@@ -1148,21 +1134,13 @@ mod tests {
             )
             .is_err());
 
-        let mut available: SubnetAvailableMemory = SubnetAvailableMemory::new(42, 43, 10);
-        assert_eq!(available.get_total_memory(), 42);
-        assert_eq!(available.get_message_memory(), 43);
-        assert_eq!(available.get_wasm_custom_sections_memory(), 10);
-        available = SubnetAvailableMemory::new(44, 45, 30);
-        assert_eq!(available.get_total_memory(), 44);
+        let mut available = SubnetAvailableMemory::new(44, 45, 30);
+        assert_eq!(available.get_execution_memory(), 44);
         assert_eq!(available.get_message_memory(), 45);
         assert_eq!(available.get_wasm_custom_sections_memory(), 30);
-        available.increment(NumBytes::from(1), NumBytes::from(0), NumBytes::from(0));
-        assert_eq!(available.get_total_memory(), 45);
-        assert_eq!(available.get_message_memory(), 45);
-        assert_eq!(available.get_wasm_custom_sections_memory(), 30);
-        available.increment(NumBytes::from(1), NumBytes::from(1), NumBytes::from(1));
-        assert_eq!(available.get_total_memory(), 46);
-        assert_eq!(available.get_message_memory(), 46);
-        assert_eq!(available.get_wasm_custom_sections_memory(), 31);
+        available.increment(NumBytes::from(1), NumBytes::from(2), NumBytes::from(3));
+        assert_eq!(available.get_execution_memory(), 45);
+        assert_eq!(available.get_message_memory(), 47);
+        assert_eq!(available.get_wasm_custom_sections_memory(), 33);
     }
 }

@@ -35,8 +35,7 @@ pub fn execute_replicated_query(
     assert_eq!(instruction_limits.message(), instruction_limits.slice());
     let instruction_limit = instruction_limits.message();
     // Withdraw execution cycles.
-    let subnet_type = round.hypervisor.subnet_type();
-    let memory_usage = canister.memory_usage(subnet_type);
+    let memory_usage = canister.memory_usage();
     let compute_allocation = canister.scheduler_state.compute_allocation;
 
     let prepaid_execution_cycles = match round.cycles_account_manager.prepay_execution_cycles(
@@ -108,7 +107,7 @@ pub fn execute_replicated_query(
 
     let call_origin = CallOrigin::from(&req);
 
-    let memory_usage = canister.memory_usage(round.hypervisor.subnet_type());
+    let memory_usage = canister.memory_usage();
 
     let api_type =
         ApiType::replicated_query(time, req.method_payload().to_vec(), *req.sender(), None);

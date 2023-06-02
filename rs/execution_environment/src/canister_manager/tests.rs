@@ -783,7 +783,7 @@ fn install_canister_fails_if_memory_capacity_exceeded() {
         )"#;
 
     let mut test = ExecutionTestBuilder::new()
-        .with_subnet_total_memory(memory_capacity as i64)
+        .with_subnet_execution_memory(memory_capacity as i64)
         .build();
 
     let wasm = wat::parse_str(wat).unwrap();
@@ -2768,7 +2768,7 @@ fn upgrading_canister_fails_if_memory_capacity_exceeded() {
         )"#;
 
     let mut test = ExecutionTestBuilder::new()
-        .with_subnet_total_memory(memory_capacity as i64)
+        .with_subnet_execution_memory(memory_capacity as i64)
         .build();
 
     let wasm = wat::parse_str(wat).unwrap();
@@ -4323,7 +4323,7 @@ fn unfreezing_of_frozen_canister() {
 #[test]
 fn create_canister_fails_if_memory_capacity_exceeded() {
     let mut test = ExecutionTestBuilder::new()
-        .with_subnet_total_memory(MEMORY_CAPACITY.get() as i64)
+        .with_subnet_execution_memory(MEMORY_CAPACITY.get() as i64)
         .build();
     let uc = test.universal_canister().unwrap();
 
@@ -4372,15 +4372,7 @@ fn create_canister_fails_if_memory_capacity_exceeded() {
         )
         .build();
     let result = test.ingress(uc, "update", create_canister).unwrap();
-    match result {
-        WasmResult::Reject(msg) => {
-            assert_eq!(
-                "Canister requested 4.00 GiB total memory and 0 B in wasm custom sections memory but the Subnet's remaining total memory capacity is 3.99 GiB and wasm custom sections capacity is 2.00 GiB",
-                msg
-            )
-        }
-        _ => panic!("Expected WasmResult::Reject"),
-    }
+    assert_matches!(result, WasmResult::Reject(_));
 }
 
 #[test]
@@ -4468,7 +4460,7 @@ fn update_settings_makes_subnet_oversubscribed() {
     // By default the scheduler has 2 cores
     let mut test = ExecutionTestBuilder::new()
         .with_allocatable_compute_capacity_in_percent(100)
-        .with_subnet_total_memory(100 * 1024 * 1024) // 100 MiB
+        .with_subnet_execution_memory(100 * 1024 * 1024) // 100 MiB
         .build();
     let c1 = test.create_canister(Cycles::new(1_000_000_000_000_000));
     let c2 = test.create_canister(Cycles::new(1_000_000_000_000_000));

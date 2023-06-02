@@ -42,7 +42,7 @@ pub fn execute_non_replicated_query(
         );
     }
 
-    let memory_usage = canister.memory_usage(hypervisor.subnet_type());
+    let memory_usage = canister.memory_usage();
 
     // Validate that the Wasm module is present and exports the method
     if let Err(err) = validate_method(&method, &canister) {

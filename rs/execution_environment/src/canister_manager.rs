@@ -391,12 +391,12 @@ impl CanisterManager {
     ) -> Result<ValidatedCanisterSettings, CanisterManagerError> {
         if let Some(memory_allocation) = settings.memory_allocation() {
             let requested_allocation: NumBytes = memory_allocation.bytes();
-            if requested_allocation.get() as i64 > available_memory.get_total_memory() {
+            if requested_allocation.get() as i64 > available_memory.get_execution_memory() {
                 return Err(CanisterManagerError::SubnetMemoryCapacityOverSubscribed {
-                    requested_total: requested_allocation,
+                    requested_execution: requested_allocation,
                     requested_wasm_custom_sections: NumBytes::from(0),
-                    available_total: NumBytes::from(
-                        available_memory.get_total_memory().max(0) as u64
+                    available_execution: NumBytes::from(
+                        available_memory.get_execution_memory().max(0) as u64,
                     ),
                     available_wasm_custom_sections: NumBytes::from(
                         available_memory.get_wasm_custom_sections_memory().max(0) as u64,
@@ -456,12 +456,12 @@ impl CanisterManager {
             //
             // However, log an error in case it happens for visibility.
             if let MemoryAllocation::Reserved(bytes) = memory_allocation {
-                if bytes < canister.memory_usage(self.config.own_subnet_type) {
+                if bytes < canister.memory_usage() {
                     error!(
                         self.log,
                         "Requested memory allocation of {} which is smaller than current canister memory usage {}",
                         bytes,
-                        canister.memory_usage(self.config.own_subnet_type),
+                        canister.memory_usage(),
                     );
                 }
             }
@@ -496,7 +496,6 @@ impl CanisterManager {
             &round_limits.subnet_available_memory,
             canister,
             settings.memory_allocation(),
-            &self.config,
         )?;
 
         let validated_settings =
@@ -504,7 +503,7 @@ impl CanisterManager {
         let is_controllers_change =
             validated_settings.controller.is_some() || validated_settings.controllers.is_some();
 
-        let old_usage = canister.memory_usage(self.config.own_subnet_type);
+        let old_usage = canister.memory_usage();
         let old_mem = canister
             .system_state
             .memory_allocation
@@ -744,7 +743,7 @@ impl CanisterManager {
         let prepaid_execution_cycles = match prepaid_execution_cycles {
             Some(prepaid_execution_cycles) => prepaid_execution_cycles,
             None => {
-                let memory_usage = canister.memory_usage(execution_parameters.subnet_type);
+                let memory_usage = canister.memory_usage();
                 match self.cycles_account_manager.prepay_execution_cycles(
                     &mut canister.system_state,
                     memory_usage,
@@ -969,7 +968,7 @@ impl CanisterManager {
             .copied()
             .collect::<Vec<PrincipalId>>();
 
-        let canister_memory_usage = canister.memory_usage(self.config.own_subnet_type);
+        let canister_memory_usage = canister.memory_usage();
         let compute_allocation = canister.scheduler_state.compute_allocation;
         let memory_allocation = canister.memory_allocation();
         let freeze_threshold = canister.system_state.freeze_threshold;
@@ -1226,7 +1225,7 @@ impl CanisterManager {
         let mut new_canister = CanisterState::new(system_state, None, scheduler_state);
 
         self.do_update_settings(settings, &mut new_canister);
-        let new_usage = new_canister.memory_usage(self.config.own_subnet_type);
+        let new_usage = new_canister.memory_usage();
         let new_mem = new_canister
             .system_state
             .memory_allocation
@@ -1358,9 +1357,9 @@ pub(crate) enum CanisterManagerError {
         available: u64,
     },
     SubnetMemoryCapacityOverSubscribed {
-        requested_total: NumBytes,
+        requested_execution: NumBytes,
         requested_wasm_custom_sections: NumBytes,
-        available_total: NumBytes,
+        available_execution: NumBytes,
         available_wasm_custom_sections: NumBytes,
     },
     Hypervisor(CanisterId, HypervisorError),
@@ -1419,14 +1418,14 @@ impl From<CanisterManagerError> for UserError {
                 )
             }
             Hypervisor(canister_id, err) => err.into_user_error(&canister_id),
-            SubnetMemoryCapacityOverSubscribed {requested_total, requested_wasm_custom_sections, available_total, available_wasm_custom_sections } => {
+            SubnetMemoryCapacityOverSubscribed {requested_execution, requested_wasm_custom_sections, available_execution, available_wasm_custom_sections } => {
                 Self::new(
                     ErrorCode::SubnetOversubscribed,
                     format!(
                         "Canister requested {} total memory and {} in wasm custom sections memory but the Subnet's remaining total memory capacity is {} and wasm custom sections capacity is {}",
-                        requested_total.display(),
+                        requested_execution.display(),
                         requested_wasm_custom_sections.display(),
-                        available_total.display(),
+                        available_execution.display(),
                         available_wasm_custom_sections.display(),
                     )
                 )

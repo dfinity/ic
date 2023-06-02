@@ -57,7 +57,7 @@ fn test_can_charge_application_subnets() {
                     let duration = Duration::from_secs(1);
 
                     let memory = match memory_allocation {
-                        MemoryAllocation::BestEffort => canister.memory_usage(*subnet_type),
+                        MemoryAllocation::BestEffort => canister.memory_usage(),
                         MemoryAllocation::Reserved(bytes) => *bytes,
                     };
                     let expected_fee =

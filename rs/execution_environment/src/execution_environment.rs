@@ -331,7 +331,7 @@ impl ExecutionEnvironment {
     pub fn subnet_available_memory(&self, state: &ReplicatedState) -> SubnetAvailableMemory {
         let memory_taken = state.memory_taken();
         SubnetAvailableMemory::new(
-            self.config.subnet_memory_capacity.get() as i64 - memory_taken.total().get() as i64,
+            self.config.subnet_memory_capacity.get() as i64 - memory_taken.execution().get() as i64,
             self.config.subnet_message_memory_capacity.get() as i64
                 - memory_taken.messages().get() as i64,
             self.config
@@ -598,7 +598,7 @@ impl ExecutionEnvironment {
                                         NumBytes::from(bytes_to_charge as u64),
                                         registry_settings.subnet_size,
                                     );
-                                let memory_usage = canister.memory_usage(self.own_subnet_type);
+                                let memory_usage = canister.memory_usage();
                                 // This call may fail with `CanisterOutOfCyclesError`,
                                 // which is not actionable at this point.
                                 let _ignore_error = self.cycles_account_manager.consume_cycles(
@@ -1513,7 +1513,7 @@ impl ExecutionEnvironment {
                 if let Err(err) = self.cycles_account_manager.can_withdraw_cycles(
                     &paying_canister.system_state,
                     cost,
-                    paying_canister.memory_usage(self.own_subnet_type),
+                    paying_canister.memory_usage(),
                     paying_canister.scheduler_state.compute_allocation,
                     subnet_size,
                 ) {
@@ -1554,7 +1554,6 @@ impl ExecutionEnvironment {
             state.time(),
             canister_state.clone(),
             ingress,
-            self.own_subnet_type,
             execution_parameters,
             subnet_available_memory,
             &self.hypervisor,

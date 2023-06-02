@@ -406,7 +406,9 @@ impl BatchProcessorImpl {
         let mut wasm_custom_sections_memory_usage = NumBytes::from(0);
         let mut canister_history_memory_usage = NumBytes::from(0);
         for canister in state.canister_states.values() {
-            total_memory_usage += canister.memory_usage(state.metadata.own_subnet_type);
+            // Export the total canister memory usage; execution and wasm custom section
+            // memory are included in `memory_usage()`; message memory is added separately.
+            total_memory_usage += canister.memory_usage() + canister.message_memory_usage();
             wasm_custom_sections_memory_usage += canister
                 .execution_state
                 .as_ref()
