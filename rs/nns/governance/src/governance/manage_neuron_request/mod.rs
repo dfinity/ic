@@ -70,7 +70,7 @@ pub trait ManageNeuronRequestHandler<T> {
 /// An object representing a valid request about an existing neuron.
 pub struct ManageNeuronRequest<T> {
     manage_neuron_command_data: T,
-    target_neuron_id: NeuronId,
+    neuron_id: NeuronId,
     caller: PrincipalId,
 }
 
@@ -78,7 +78,7 @@ impl<T> ManageNeuronRequest<T> {
     pub fn new(command_data: T, id: NeuronId, caller: PrincipalId) -> Self {
         Self {
             manage_neuron_command_data: command_data,
-            target_neuron_id: id,
+            neuron_id: id,
             caller,
         }
     }
