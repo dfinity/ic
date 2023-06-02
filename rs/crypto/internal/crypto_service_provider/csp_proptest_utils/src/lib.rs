@@ -11,6 +11,7 @@ mod tests;
 
 pub use common::arb_algorithm_id;
 pub use common::arb_key_id;
+pub use crypto_error::arb_crypto_error;
 pub use csp_basic_signature_error::arb_csp_basic_signature_error;
 pub use csp_basic_signature_keygen_error::arb_csp_basic_signature_keygen_error;
 pub use csp_multi_signature_error::arb_csp_multi_signature_error;
@@ -89,13 +90,42 @@ macro_rules! proptest_strategy_for_enum {
 
 mod common {
     use super::*;
+    use ic_types::crypto::KeyPurpose;
+    use ic_types::NodeId;
+    use ic_types::PrincipalId;
+    use ic_types::RegistryVersion;
+    use ic_types::SubnetId;
     use proptest::array::uniform24;
+    use proptest::prelude::{prop, Strategy};
+    use strum::IntoEnumIterator;
 
     pub(crate) const MAX_ALGORITHM_ID_INDEX: i32 = 16;
 
     prop_compose! {
         pub fn arb_key_id()(id in uniform32(any::<u8>())) -> KeyId {
             KeyId::from(id)
+        }
+    }
+
+    pub fn arb_key_purpose() -> impl Strategy<Value = KeyPurpose> {
+        prop::sample::select(KeyPurpose::iter().collect::<Vec<_>>())
+    }
+
+    prop_compose! {
+        pub fn arb_node_id()(id in any::<u64>()) -> NodeId {
+            NodeId::from(PrincipalId::new_node_test_id(id))
+        }
+    }
+
+    prop_compose! {
+        pub fn arb_subnet_id()(id in any::<u64>()) -> SubnetId {
+            SubnetId::from(PrincipalId::new_subnet_test_id(id))
+        }
+    }
+
+    prop_compose! {
+        pub fn arb_registry_version()(version in any::<u64>()) -> RegistryVersion {
+            RegistryVersion::from(version)
         }
     }
 
@@ -281,4 +311,105 @@ mod csp_secret_key_store_contains_error {
     proptest_strategy_for_enum!(CspSecretKeyStoreContainsError;
         TransientInternalError => {internal_error in ".*"}
     );
+}
+
+mod registry_client_error {
+    use super::*;
+    use crate::common::arb_registry_version;
+    use ic_types::registry::{RegistryClientError, RegistryDataProviderError};
+    use proptest::prelude::Just;
+    use proptest::prelude::{BoxedStrategy, Strategy};
+    use proptest::prop_oneof;
+
+    proptest_strategy_for_enum!(RegistryClientError;
+        VersionNotAvailable => {version in arb_registry_version()},
+        DataProviderQueryFailed => {source in  arb_registry_data_provider_error()},
+        PollLockFailed => {error in ".*"},
+        PollingLatestVersionFailed => {retries in any::<usize>()},
+        DecodeError => {error in ".*"},
+    );
+
+    fn arb_registry_data_provider_error() -> BoxedStrategy<RegistryDataProviderError> {
+        prop_oneof![
+            Just(RegistryDataProviderError::Timeout),
+            ".*".prop_map(|source| RegistryDataProviderError::Transfer { source })
+        ]
+        .boxed()
+    }
+}
+
+mod crypto_error {
+    use super::*;
+    use crate::common::{arb_key_purpose, arb_node_id, arb_registry_version, arb_subnet_id};
+    use crate::registry_client_error::arb_registry_client_error;
+    use ic_types::crypto::threshold_sig::ni_dkg::{
+        DkgId, NiDkgId, NiDkgTag, NiDkgTargetId, NiDkgTargetSubnet,
+    };
+    use ic_types::crypto::CryptoError;
+    use ic_types::{Height, IDkgId};
+    use proptest::collection::btree_set;
+    use proptest::prelude::{BoxedStrategy, Just, Strategy};
+    use proptest::prop_oneof;
+
+    proptest_strategy_for_enum!(CryptoError;
+        InvalidArgument => {message in ".*"},
+        PublicKeyNotFound => {node_id in arb_node_id(), key_purpose in arb_key_purpose(), registry_version in arb_registry_version()},
+        TlsCertNotFound => {node_id in arb_node_id(), registry_version in arb_registry_version()},
+        SecretKeyNotFound => {algorithm in arb_algorithm_id(), key_id in ".*"},
+        TlsSecretKeyNotFound => {certificate_der in vec(any::<u8>(), 0..100)},
+        MalformedSecretKey => {algorithm in arb_algorithm_id(), internal_error in ".*"},
+        MalformedPublicKey => {algorithm in arb_algorithm_id(), key_bytes in proptest::option::of(vec(any::<u8>(), 0..100)), internal_error in ".*"},
+        MalformedSignature => {algorithm in arb_algorithm_id(), sig_bytes in vec(any::<u8>(), 0..100), internal_error in ".*"},
+        MalformedPop => {algorithm in arb_algorithm_id(), pop_bytes in vec(any::<u8>(), 0..100), internal_error in ".*"},
+        SignatureVerification => {algorithm in arb_algorithm_id(), public_key_bytes in vec(any::<u8>(), 0..100), sig_bytes in vec(any::<u8>(), 0..100), internal_error in ".*"},
+        PopVerification => {algorithm in arb_algorithm_id(), public_key_bytes in vec(any::<u8>(), 0..100), pop_bytes in vec(any::<u8>(), 0..100), internal_error in ".*"},
+        InconsistentAlgorithms => {algorithms in btree_set(arb_algorithm_id(), 0..10), key_purpose in arb_key_purpose(), registry_version in arb_registry_version()},
+        AlgorithmNotSupported => {algorithm in arb_algorithm_id(), reason in ".*"},
+        RegistryClient => (error in arb_registry_client_error()),
+        ThresholdSigDataNotFound => {dkg_id in arb_dkg_id()},
+        DkgTranscriptNotFound => {subnet_id in arb_subnet_id(), registry_version in arb_registry_version()},
+        RootSubnetPublicKeyNotFound => {registry_version in arb_registry_version()},
+        InternalError => {internal_error in ".*"},
+        TransientInternalError => {internal_error in ".*"},
+    );
+
+    fn arb_dkg_id() -> BoxedStrategy<DkgId> {
+        prop_oneof![
+            arb_idkg_id().prop_map(DkgId::IDkgId),
+            arb_nidkg_id().prop_map(DkgId::NiDkgId)
+        ]
+        .boxed()
+    }
+
+    prop_compose! {
+        fn arb_idkg_id()(height in any::<u64>(), subnet_id in arb_subnet_id()) -> IDkgId {
+            IDkgId {
+                instance_id: Height::new(height),
+                subnet_id
+            }
+        }
+    }
+
+    prop_compose! {
+        fn arb_nidkg_id()(height in any::<u64>(), dealer_subnet in arb_subnet_id(), dkg_tag in arb_nidkg_tag(), target_subnet in arb_nidkg_target_subnet()) -> NiDkgId {
+            NiDkgId {
+                start_block_height: Height::new(height),
+                dealer_subnet,
+                dkg_tag,
+                target_subnet
+            }
+        }
+    }
+
+    fn arb_nidkg_tag() -> BoxedStrategy<NiDkgTag> {
+        prop_oneof![Just(NiDkgTag::LowThreshold), Just(NiDkgTag::HighThreshold)].boxed()
+    }
+
+    fn arb_nidkg_target_subnet() -> BoxedStrategy<NiDkgTargetSubnet> {
+        prop_oneof![
+            Just(NiDkgTargetSubnet::Local),
+            uniform32(any::<u8>()).prop_map(|id| NiDkgTargetSubnet::Remote(NiDkgTargetId::new(id)))
+        ]
+        .boxed()
+    }
 }
