@@ -153,11 +153,6 @@ after_script:
     - .build-env-base
     - .ic-build-image
 
-.ubuntu-docker:
-  extends:
-    - .build-env-base
-    - .ic-build-image-on-docker
-
 .bazel-build-k8s:
   extends:
     - .ubuntu-k8s
