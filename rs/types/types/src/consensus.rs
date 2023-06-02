@@ -1406,7 +1406,8 @@ impl TryFrom<pb::Block> for Block {
             canister_http: block
                 .canister_http_payload
                 .map(crate::batch::CanisterHttpPayload::try_from)
-                .transpose()?
+                .transpose()
+                .map_err(|e| e.to_string())?
                 .unwrap_or_default(),
         };
         let payload = match dkg_payload {

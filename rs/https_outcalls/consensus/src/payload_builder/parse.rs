@@ -14,7 +14,7 @@ pub(crate) fn bytes_to_payload(
     })?;
     pb_payload
         .try_into()
-        .map_err(|e| CanisterHttpPermanentValidationError::DecodeError(ProxyDecodeError::Other(e)))
+        .map_err(CanisterHttpPermanentValidationError::DecodeError)
 }
 
 pub(crate) fn payload_to_bytes(payload: &CanisterHttpPayload) -> Vec<u8> {
