@@ -151,3 +151,43 @@ should_have_a_strategy_for_each_variant!(
     },
     TransientInternalError { .. }
 );
+
+use ic_types::registry::RegistryClientError;
+should_have_a_strategy_for_each_variant!(
+    RegistryClientError,
+    RegistryClientError::DecodeError {
+        error: "dummy error to match upon".to_string(),
+    },
+    VersionNotAvailable { .. },
+    DataProviderQueryFailed { .. },
+    PollLockFailed { .. },
+    PollingLatestVersionFailed { .. },
+    DecodeError { .. }
+);
+
+use ic_types::crypto::CryptoError;
+should_have_a_strategy_for_each_variant!(
+    CryptoError,
+    CryptoError::TransientInternalError {
+        internal_error: "dummy error to match upon".to_string(),
+    },
+    InvalidArgument { .. },
+    PublicKeyNotFound { .. },
+    TlsCertNotFound { .. },
+    SecretKeyNotFound { .. },
+    TlsSecretKeyNotFound { .. },
+    MalformedSecretKey { .. },
+    MalformedPublicKey { .. },
+    MalformedSignature { .. },
+    MalformedPop { .. },
+    SignatureVerification { .. },
+    PopVerification { .. },
+    InconsistentAlgorithms { .. },
+    AlgorithmNotSupported { .. },
+    RegistryClient(_),
+    ThresholdSigDataNotFound { .. },
+    DkgTranscriptNotFound { .. },
+    RootSubnetPublicKeyNotFound { .. },
+    InternalError { .. },
+    TransientInternalError { .. }
+);

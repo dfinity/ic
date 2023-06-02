@@ -5753,6 +5753,7 @@ dependencies = [
  "ic-types",
  "paste 1.0.12",
  "proptest",
+ "strum 0.23.0",
 ]
 
 [[package]]
