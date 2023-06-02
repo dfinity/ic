@@ -31,6 +31,7 @@ impl ManageNeuronRequest<manage_neuron::Merge> {
             })
             .cloned()
     }
+
     fn target_neuron_id(&self) -> NeuronId {
         self.neuron_id.clone()
     }
@@ -47,18 +48,18 @@ impl ManageNeuronRequestHandler<manage_neuron::Merge>
         let target_id = self.target_neuron_id();
 
         let target_neuron = gov.get_neuron(&target_id)?;
-        if !target_neuron.is_controlled_by(&caller) {
+        if !target_neuron.is_authorized_to_simulate_manage_neuron(&caller) {
             return Err(GovernanceError::new_with_message(
                 ErrorType::NotAuthorized,
-                "Target neuron must be owned by the caller",
+                "Caller must be hotkey or controller of the target neuron",
             ));
         }
 
         let source_neuron = gov.get_neuron(&source_id)?;
-        if !source_neuron.is_controlled_by(&caller) {
+        if !source_neuron.is_authorized_to_simulate_manage_neuron(&caller) {
             return Err(GovernanceError::new_with_message(
                 ErrorType::NotAuthorized,
-                "Source neuron must be owned by the caller",
+                "Caller must be hotkey or controller of the source neuron",
             ));
         }
         // Other validations
@@ -137,8 +138,25 @@ impl ManageNeuronRequestHandler<manage_neuron::Merge>
             })
         }
 
+        let caller = self.caller;
         let source_id = self.source_neuron_id()?;
         let target_id = self.target_neuron_id();
+
+        let target_neuron = gov.get_neuron(&target_id)?;
+        if !target_neuron.is_controlled_by(&caller) {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::NotAuthorized,
+                "Target neuron must be owned by the caller",
+            ));
+        }
+
+        let source_neuron = gov.get_neuron(&source_id)?;
+        if !source_neuron.is_controlled_by(&caller) {
+            return Err(GovernanceError::new_with_message(
+                ErrorType::NotAuthorized,
+                "Source neuron must be owned by the caller",
+            ));
+        }
 
         if involved_with_proposal(&gov.proto, &target_id)
             || involved_with_proposal(&gov.proto, &source_id)

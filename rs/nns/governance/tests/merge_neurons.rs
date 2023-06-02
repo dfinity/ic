@@ -31,7 +31,7 @@ use ic_nns_governance::{
         manage_neuron_response::{Command as CommandResponse, MergeResponse},
         neuron::Followees,
         proposal::{self},
-        Empty, GovernanceError, ManageNeuron, NetworkEconomics, Topic,
+        Empty, GovernanceError, ManageNeuron, ManageNeuronResponse, NetworkEconomics, Topic,
     },
 };
 use proptest::prelude::{proptest, TestCaseError};
@@ -41,6 +41,11 @@ use proptest::prelude::{proptest, TestCaseError};
 pub mod fixtures;
 
 const DEFAULT_TEST_START_TIMESTAMP_SECONDS: u64 = 999_111_000_u64;
+
+/// Converts a number of ICP to e8s.
+fn icp_to_e8s(amount: u64) -> u64 {
+    amount * 100_000_000
+}
 
 /// Checks that merge_neurons fails if the preconditions are not met. In
 /// particular, an attempt to merge a neuron fails if:
@@ -52,51 +57,49 @@ const DEFAULT_TEST_START_TIMESTAMP_SECONDS: u64 = 999_111_000_u64;
 /// * the list of accounts is unchanged
 #[test]
 fn test_merge_neurons_fails() {
-    fn icp(amount: u64) -> u64 {
-        amount * 100_000_000
-    }
-
     let mut nns = NNSBuilder::new()
         .set_economics(NetworkEconomics::with_default_values())
-        .add_account_for(principal(1), icp(1))
-        .add_account_for(principal(11), icp(100)) // in order to propose
+        .add_account_for(principal(1), icp_to_e8s(1))
+        .add_account_for(principal(11), icp_to_e8s(100)) // in order to propose
         .add_neuron(
-            NeuronBuilder::new(1, icp(1), principal(1))
+            NeuronBuilder::new(1, icp_to_e8s(1), principal(1))
                 .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS)
-                .set_maturity(icp(123))
+                .set_maturity(icp_to_e8s(123))
                 .set_aging_since_timestamp(0)
                 .set_creation_timestamp(10)
                 .set_kyc_verified(true)
                 .set_not_for_profit(true),
         )
         .add_neuron(
-            NeuronBuilder::new(2, icp(1), principal(1))
+            NeuronBuilder::new(2, icp_to_e8s(1), principal(1))
                 .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS * 4)
-                .set_maturity(icp(456))
+                .set_maturity(icp_to_e8s(456))
                 .set_aging_since_timestamp(10)
                 .set_creation_timestamp(20)
                 .set_kyc_verified(false)
                 .set_not_for_profit(false),
         )
         .add_neuron(
-            NeuronBuilder::new(3, icp(4_560), principal(2))
+            NeuronBuilder::new(3, icp_to_e8s(4_560), principal(2))
                 .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS * 4)
-                .set_maturity(icp(456))
+                .set_hotkeys(vec![principal(1)])
+                .set_maturity(icp_to_e8s(456))
+                .set_not_for_profit(true)
                 .set_aging_since_timestamp(10),
         )
         .add_neuron(
-            NeuronBuilder::new(4, icp(1), principal(1))
+            NeuronBuilder::new(4, icp_to_e8s(1), principal(1))
                 .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS * 4)
-                .set_maturity(icp(456))
+                .set_maturity(icp_to_e8s(456))
                 .set_aging_since_timestamp(10)
                 .set_creation_timestamp(20)
                 .set_kyc_verified(true)
                 .set_not_for_profit(false),
         )
         .add_neuron(
-            NeuronBuilder::new(5, icp(1), principal(1))
+            NeuronBuilder::new(5, icp_to_e8s(1), principal(1))
                 .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS * 4)
-                .set_maturity(icp(456))
+                .set_maturity(icp_to_e8s(456))
                 .set_aging_since_timestamp(10)
                 .set_creation_timestamp(20)
                 .set_kyc_verified(true)
@@ -104,9 +107,9 @@ fn test_merge_neurons_fails() {
                 .set_joined_community_fund(10),
         )
         .add_neuron(
-            NeuronBuilder::new(6, icp(1), principal(1))
+            NeuronBuilder::new(6, icp_to_e8s(1), principal(1))
                 .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS)
-                .set_maturity(icp(123))
+                .set_maturity(icp_to_e8s(123))
                 .set_aging_since_timestamp(0)
                 .set_creation_timestamp(10)
                 .do_not_create_subaccount()
@@ -114,9 +117,9 @@ fn test_merge_neurons_fails() {
                 .set_not_for_profit(true),
         )
         .add_neuron(
-            NeuronBuilder::new(7, icp(1), principal(1))
+            NeuronBuilder::new(7, icp_to_e8s(1), principal(1))
                 .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS * 4)
-                .set_maturity(icp(456))
+                .set_maturity(icp_to_e8s(456))
                 .set_aging_since_timestamp(10)
                 .set_creation_timestamp(20)
                 .do_not_create_subaccount()
@@ -124,9 +127,9 @@ fn test_merge_neurons_fails() {
                 .set_not_for_profit(true),
         )
         .add_neuron(
-            NeuronBuilder::new(8, icp(1), principal(1))
+            NeuronBuilder::new(8, icp_to_e8s(1), principal(1))
                 .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS * 4)
-                .set_maturity(icp(456))
+                .set_maturity(icp_to_e8s(456))
                 .set_aging_since_timestamp(10)
                 .set_creation_timestamp(20)
                 .set_kyc_verified(true)
@@ -135,65 +138,83 @@ fn test_merge_neurons_fails() {
         .add_neuron(
             NeuronBuilder::new(9, 1, principal(1))
                 .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS * 4)
-                .set_maturity(icp(456))
+                .set_maturity(icp_to_e8s(456))
                 .set_aging_since_timestamp(10)
                 .set_creation_timestamp(20)
                 .set_kyc_verified(true)
                 .set_not_for_profit(true),
         )
         .add_neuron(
-            NeuronBuilder::new(10, icp(4_560), principal(11))
+            NeuronBuilder::new(10, icp_to_e8s(4_560), principal(11))
                 .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS * 4)
-                .set_maturity(icp(456))
+                .set_maturity(icp_to_e8s(456))
                 .set_aging_since_timestamp(10),
         )
         .add_neuron(
-            NeuronBuilder::new(11, icp(4_560), principal(11))
+            NeuronBuilder::new(11, icp_to_e8s(4_560), principal(11))
                 .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS * 4)
-                .set_maturity(icp(456))
+                .set_maturity(icp_to_e8s(456))
                 .set_aging_since_timestamp(50),
         )
         .add_neuron(
-            NeuronBuilder::new(12, icp(4_560), principal(11))
+            NeuronBuilder::new(12, icp_to_e8s(4_560), principal(11))
                 .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS * 4)
-                .set_maturity(icp(456))
+                .set_maturity(icp_to_e8s(456))
                 .set_aging_since_timestamp(10),
         )
         .add_neuron(
-            NeuronBuilder::new(13, icp(4_560), principal(11))
+            NeuronBuilder::new(13, icp_to_e8s(4_560), principal(11))
                 .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS * 4)
-                .set_maturity(icp(456))
+                .set_maturity(icp_to_e8s(456))
                 .set_aging_since_timestamp(10),
         )
         .add_neuron(
-            NeuronBuilder::new(14, icp(3_456), principal(123))
+            NeuronBuilder::new(14, icp_to_e8s(3_456), principal(123))
                 .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS * 4),
         )
         .add_neuron(
-            NeuronBuilder::new(15, icp(3_456), principal(123))
+            NeuronBuilder::new(15, icp_to_e8s(3_456), principal(123))
                 .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS * 4),
         )
         .add_neuron(
-            NeuronBuilder::new(16, icp(1_234), principal(123))
+            NeuronBuilder::new(16, icp_to_e8s(1_234), principal(123))
                 .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS * 4)
                 .set_managers(Followees {
                     followees: vec![NeuronId { id: 14 }],
                 }),
         )
         .add_neuron(
-            NeuronBuilder::new(17, icp(2_345), principal(123))
+            NeuronBuilder::new(17, icp_to_e8s(2_345), principal(123))
                 .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS * 4)
                 .set_managers(Followees {
                     followees: vec![NeuronId { id: 15 }],
                 }),
         )
         .add_neuron(
-            NeuronBuilder::new(18, icp(3_456), principal(123))
+            NeuronBuilder::new(18, icp_to_e8s(3_456), principal(123))
                 .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS * 4),
         )
         .add_neuron(
-            NeuronBuilder::new(19, icp(1_234), principal(1))
+            NeuronBuilder::new(19, icp_to_e8s(1_234), principal(1))
                 .set_spawn_at_timestamp_seconds(Some(100)),
+        )
+        .add_neuron(
+            NeuronBuilder::new(20, icp_to_e8s(1_234), principal(1))
+                .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS)
+                .set_maturity(icp_to_e8s(123))
+                .set_aging_since_timestamp(0)
+                .set_creation_timestamp(10)
+                .set_kyc_verified(true)
+                .set_not_for_profit(true),
+        )
+        .add_neuron(
+            NeuronBuilder::new(21, icp_to_e8s(1_234), principal(2))
+                .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS)
+                .set_maturity(icp_to_e8s(123))
+                .set_aging_since_timestamp(0)
+                .set_creation_timestamp(10)
+                .set_kyc_verified(true)
+                .set_not_for_profit(true),
         )
         .create();
 
@@ -236,7 +257,29 @@ fn test_merge_neurons_fails() {
         if code == NotAuthorized as i32 &&
            msg == "Source neuron must be owned by the caller");
 
-    // 4. Source neuron cannot be spawning
+    // 4. Source neuron must be hotkey controlled if different controllers
+    assert_matches!(
+        nns.merge_neurons(
+            &NeuronId { id: 21 },
+            &principal(1),
+            &NeuronId { id: 20 },
+        ),
+        Err(GovernanceError{error_type: code, error_message: msg})
+        if code == NotAuthorized as i32 &&
+           msg == "Caller must be hotkey or controller of the target neuron");
+
+    // 5. Target neuron must be hotkey controlled if different controllers
+    assert_matches!(
+        nns.merge_neurons(
+            &NeuronId { id: 20 },
+            &principal(1),
+            &NeuronId { id: 21 },
+        ),
+        Err(GovernanceError{error_type: code, error_message: msg})
+        if code == NotAuthorized as i32 &&
+           msg == "Caller must be hotkey or controller of the source neuron");
+
+    // 6. Source neuron cannot be spawning
     assert_matches!(
         nns.merge_neurons(
             &NeuronId { id: 1 },
@@ -247,7 +290,7 @@ fn test_merge_neurons_fails() {
         if code == PreconditionFailed as i32 &&
            msg == "Can't perform operation on neuron: Source neuron is spawning.");
 
-    // 5. Target neuron cannot be spawning
+    // 7. Target neuron cannot be spawning
     assert_matches!(
         nns.merge_neurons(
             &NeuronId { id: 19 },
@@ -258,7 +301,7 @@ fn test_merge_neurons_fails() {
         if code == PreconditionFailed as i32 &&
            msg == "Can't perform operation on neuron: Target neuron is spawning.");
 
-    // 4. Source neuron's kyc_verified field must match target
+    // 8. Source neuron's kyc_verified field must match target
     assert_matches!(
         nns.merge_neurons(
             &NeuronId { id: 1 },
@@ -269,7 +312,7 @@ fn test_merge_neurons_fails() {
         if code == PreconditionFailed as i32 &&
            msg == "Source neuron's kyc_verified field does not match target");
 
-    // 5. Source neuron's not_for_profit field must match target
+    // 9. Source neuron's not_for_profit field must match target
     assert_matches!(
         nns.merge_neurons(
             &NeuronId { id: 1 },
@@ -280,7 +323,7 @@ fn test_merge_neurons_fails() {
         if code == PreconditionFailed as i32 &&
            msg == "Source neuron's not_for_profit field does not match target");
 
-    // 6. Cannot merge neurons that have been dedicated to the community fund
+    // 10. Cannot merge neurons that have been dedicated to the community fund
     assert_matches!(
         nns.merge_neurons(
             &NeuronId { id: 1 },
@@ -291,7 +334,7 @@ fn test_merge_neurons_fails() {
         if code == PreconditionFailed as i32 &&
            msg == "Cannot merge neurons that have been dedicated to the community fund");
 
-    // 6b. Switch source and destination to ensure condition still holds
+    // 10b. Switch source and destination to ensure condition still holds
     assert_matches!(
         nns.merge_neurons(
             &NeuronId { id: 5 },
@@ -302,7 +345,7 @@ fn test_merge_neurons_fails() {
         if code == PreconditionFailed as i32 &&
            msg == "Cannot merge neurons that have been dedicated to the community fund");
 
-    // 7. Subaccount of source neuron to be merged must be present
+    // 11. Subaccount of source neuron to be merged must be present
     assert_matches!(
         nns.merge_neurons(
             &NeuronId { id: 1 },
@@ -313,7 +356,7 @@ fn test_merge_neurons_fails() {
         if code == InvalidCommand as i32 &&
            msg == "Subaccount of source neuron is not valid");
 
-    // 8. Subaccount of target neuron to be merged must be present
+    // 12. Subaccount of target neuron to be merged must be present
     assert_matches!(
         nns.merge_neurons(
             &NeuronId { id: 6 },
@@ -324,7 +367,7 @@ fn test_merge_neurons_fails() {
         if code == InvalidCommand as i32 &&
            msg == "Subaccount of target neuron is not valid");
 
-    // 9. Neither neuron can be the proposer of an open proposal
+    // 13. Neither neuron can be the proposer of an open proposal
     let _pid = nns.propose_and_vote("-----------P", "the unique proposal".to_string());
     assert_matches!(
         nns.merge_neurons(
@@ -336,7 +379,7 @@ fn test_merge_neurons_fails() {
         if code == PreconditionFailed as i32 &&
            msg == "Cannot merge neurons that are involved in open proposals");
 
-    // 10. Neither neuron can be the subject of a MergeNeuron proposal
+    // 14. Neither neuron can be the subject of a MergeNeuron proposal
     nns.governance
         .manage_neuron(
             &principal(11),
@@ -388,7 +431,7 @@ fn test_merge_neurons_fails() {
         if code == PreconditionFailed as i32 &&
            msg == "Cannot merge neurons that are involved in open proposals");
 
-    // 11. Source neuron must exist
+    // 15. Source neuron must exist
     assert_matches!(
         nns.merge_neurons(
             &NeuronId { id: 6 },
@@ -399,7 +442,7 @@ fn test_merge_neurons_fails() {
         if code == NotFound as i32 &&
            msg == "Neuron not found: NeuronId { id: 100 }");
 
-    // 12. Target neuron must exist
+    // 16. Target neuron must exist
     assert_matches!(
         nns.merge_neurons(
             &NeuronId { id: 100 },
@@ -410,7 +453,7 @@ fn test_merge_neurons_fails() {
         if code == NotFound as i32 &&
            msg == "Neuron not found: NeuronId { id: 100 }");
 
-    // 13. Neurons with different ManageNeuron lists cannot be merged
+    // 17. Neurons with different ManageNeuron lists cannot be merged
     assert_matches!(
         nns.merge_neurons(
             &NeuronId { id: 16 },
@@ -421,7 +464,7 @@ fn test_merge_neurons_fails() {
         if code == PreconditionFailed as i32 &&
            msg == "ManageNeuron following of source and target does not match");
 
-    // 14. Neurons with resp. without ManageNeuron cannot be merged
+    // 18. Neurons with resp. without ManageNeuron cannot be merged
     assert_matches!(
         nns.merge_neurons(
             &NeuronId { id: 16 },
@@ -431,6 +474,84 @@ fn test_merge_neurons_fails() {
         Err(GovernanceError{error_type: code, error_message: msg})
         if code == PreconditionFailed as i32 &&
            msg == "ManageNeuron following of source and target does not match");
+}
+
+#[test]
+fn test_simulate_merge_neuron_allowed_for_hotkey_controlled_neurons() {
+    let mut nns = NNSBuilder::new()
+        .set_economics(NetworkEconomics::with_default_values())
+        .add_account_for(principal(1), icp_to_e8s(1))
+        .add_account_for(principal(11), icp_to_e8s(100)) // in order to propose
+        .add_neuron(
+            NeuronBuilder::new(1, icp_to_e8s(1), principal(1))
+                .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS)
+                .set_maturity(crate::icp_to_e8s(123))
+                .set_aging_since_timestamp(0)
+                .set_creation_timestamp(10)
+                .set_kyc_verified(true)
+                .set_not_for_profit(true),
+        )
+        .add_neuron(
+            NeuronBuilder::new(2, crate::icp_to_e8s(1), principal(2))
+                .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS * 4)
+                .set_maturity(crate::icp_to_e8s(456))
+                .set_aging_since_timestamp(10)
+                .set_creation_timestamp(20)
+                .set_kyc_verified(true)
+                .set_not_for_profit(false),
+        )
+        .add_neuron(
+            NeuronBuilder::new(3, crate::icp_to_e8s(1), principal(2))
+                .set_dissolve_delay(MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS * 4)
+                .set_maturity(crate::icp_to_e8s(456))
+                .set_hotkeys(vec![principal(1)])
+                .set_aging_since_timestamp(10)
+                .set_creation_timestamp(20)
+                .set_kyc_verified(true)
+                .set_not_for_profit(true),
+        )
+        .create();
+
+    // Error for Source
+    assert_matches!(
+        nns.simulate_merge_neurons(&NeuronId { id: 1 }, &principal(1), &NeuronId { id: 2 },),
+        ManageNeuronResponse {
+            command: Some(CommandResponse::Error(GovernanceError {
+                error_type: code,
+                error_message: msg,
+            }))
+        }
+        if code == NotAuthorized as i32 &&
+           msg == "Caller must be hotkey or controller of the source neuron"
+    );
+
+    // Error for target
+    assert_matches!(
+        nns.simulate_merge_neurons(&NeuronId { id: 2 }, &principal(1), &NeuronId { id: 1 },),
+        ManageNeuronResponse {
+            command: Some(CommandResponse::Error(GovernanceError {
+                error_type: code,
+                error_message: msg,
+            }))
+        }
+        if code == NotAuthorized as i32 &&
+           msg == "Caller must be hotkey or controller of the target neuron"
+    );
+
+    // Successful responses
+    assert_matches!(
+        nns.simulate_merge_neurons(&NeuronId { id: 1 }, &principal(1), &NeuronId { id: 3 },),
+        ManageNeuronResponse {
+            command: Some(CommandResponse::Merge(_))
+        }
+    );
+
+    assert_matches!(
+        nns.simulate_merge_neurons(&NeuronId { id: 3 }, &principal(1), &NeuronId { id: 1 },),
+        ManageNeuronResponse {
+            command: Some(CommandResponse::Merge(_))
+        }
+    );
 }
 
 #[allow(clippy::too_many_arguments)]

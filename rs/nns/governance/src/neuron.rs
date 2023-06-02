@@ -53,6 +53,17 @@ impl Neuron {
     /// on behalf of this neuron, i.e., if `principal` is either the
     /// controller or one of the authorized hot keys.
     pub(crate) fn is_authorized_to_vote(&self, principal: &PrincipalId) -> bool {
+        self.is_hotkey_or_controller(principal)
+    }
+
+    /// Returns true if and only if `principal` is authorized to
+    /// call simulate_manage_neuron requests on this neuron
+    pub(crate) fn is_authorized_to_simulate_manage_neuron(&self, principal: &PrincipalId) -> bool {
+        self.is_hotkey_or_controller(principal)
+    }
+
+    /// Returns true if and only if `principal` is either the controller or a hotkey
+    fn is_hotkey_or_controller(&self, principal: &PrincipalId) -> bool {
         self.is_controlled_by(principal) || self.hot_keys.contains(principal)
     }
 
