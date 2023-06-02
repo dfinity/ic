@@ -31,6 +31,9 @@ impl ManageNeuronRequest<manage_neuron::Merge> {
             })
             .cloned()
     }
+    fn target_neuron_id(&self) -> NeuronId {
+        self.neuron_id.clone()
+    }
 }
 
 #[async_trait]
@@ -41,8 +44,9 @@ impl ManageNeuronRequestHandler<manage_neuron::Merge>
         // Auth check
         let caller = self.caller;
         let source_id = self.source_neuron_id()?;
+        let target_id = self.target_neuron_id();
 
-        let target_neuron = gov.get_neuron(&self.target_neuron_id)?;
+        let target_neuron = gov.get_neuron(&target_id)?;
         if !target_neuron.is_controlled_by(&caller) {
             return Err(GovernanceError::new_with_message(
                 ErrorType::NotAuthorized,
@@ -60,7 +64,7 @@ impl ManageNeuronRequestHandler<manage_neuron::Merge>
         // Other validations
 
         // Assert neurons not same neuron
-        if self.target_neuron_id.id == source_id.id {
+        if target_id.id == source_id.id {
             return Err(GovernanceError::new_with_message(
                 ErrorType::InvalidCommand,
                 "Cannot merge a neuron into itself",
@@ -132,14 +136,12 @@ impl ManageNeuronRequestHandler<manage_neuron::Merge>
                             })))
             })
         }
-        if involved_with_proposal(&gov.proto, &self.target_neuron_id)
-            || involved_with_proposal(
-                &gov.proto,
-                self.manage_neuron_command_data
-                    .source_neuron_id
-                    .as_ref()
-                    .unwrap(),
-            )
+
+        let source_id = self.source_neuron_id()?;
+        let target_id = self.target_neuron_id();
+
+        if involved_with_proposal(&gov.proto, &target_id)
+            || involved_with_proposal(&gov.proto, &source_id)
         {
             return Err(GovernanceError::new_with_message(
                 ErrorType::PreconditionFailed,
@@ -152,18 +154,10 @@ impl ManageNeuronRequestHandler<manage_neuron::Merge>
 
     fn get_mutations(&self) -> Vec<Box<dyn GovernanceNeuronMutation>> {
         vec![
-            Box::new(BurnFeesMutation::new(
-                self.manage_neuron_command_data
-                    .source_neuron_id
-                    .clone()
-                    .unwrap(),
-            )),
+            Box::new(BurnFeesMutation::new(self.source_neuron_id().unwrap())),
             Box::new(MergeNeuronMutation::new(
-                self.manage_neuron_command_data
-                    .source_neuron_id
-                    .clone()
-                    .unwrap(),
-                self.target_neuron_id.clone(),
+                self.source_neuron_id().unwrap(),
+                self.target_neuron_id(),
             )),
         ]
     }
@@ -172,17 +166,16 @@ impl ManageNeuronRequestHandler<manage_neuron::Merge>
         &self,
         gov_proxy: &GovernanceMutationProxy,
     ) -> Result<ManageNeuronResponse, GovernanceError> {
+        let source_neuron_id = self.source_neuron_id()?;
+        let target_neuron_id = self.target_neuron_id();
+
         match gov_proxy {
             GovernanceMutationProxy::Committing(_) => {
                 println!(
                     "{}Merged neuron {} into {} at {:?}",
                     LOG_PREFIX,
-                    self.manage_neuron_command_data
-                        .source_neuron_id
-                        .as_ref()
-                        .unwrap()
-                        .id,
-                    self.target_neuron_id.id,
+                    source_neuron_id.id,
+                    target_neuron_id.id,
                     gov_proxy.now()
                 );
             }
@@ -190,26 +183,15 @@ impl ManageNeuronRequestHandler<manage_neuron::Merge>
                 println!(
                     "{}Simulated merging neuron {} into {} at {:?}",
                     LOG_PREFIX,
-                    self.manage_neuron_command_data
-                        .source_neuron_id
-                        .as_ref()
-                        .unwrap()
-                        .id,
-                    self.target_neuron_id.id,
+                    source_neuron_id.id,
+                    target_neuron_id.id,
                     gov_proxy.now()
                 );
             }
         };
 
-        let source_neuron = gov_proxy
-            .get_neuron(
-                self.manage_neuron_command_data
-                    .source_neuron_id
-                    .as_ref()
-                    .unwrap(),
-            )?
-            .clone();
-        let target_neuron = gov_proxy.get_neuron(&self.target_neuron_id)?.clone();
+        let source_neuron = gov_proxy.get_neuron(&source_neuron_id)?.clone();
+        let target_neuron = gov_proxy.get_neuron(&target_neuron_id)?.clone();
 
         let now = gov_proxy.now();
         let source_neuron_info = source_neuron.get_neuron_info(now);
