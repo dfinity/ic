@@ -225,7 +225,7 @@ def didc_check(didc, server_did_file_path, client_did_file_path):
         raise SuspiciousDidcCheckOutput(returncode=0, stdout=stdout, stderr=stderr)
 
 
-def inspect_all_files(candid_file_paths, *, also_reverse, diff_base):
+def inspect_all_files(candid_file_paths, *, also_reverse, diff_base, default_candid_file):
     """
     Return true if no defects are found.
 
@@ -242,9 +242,9 @@ def inspect_all_files(candid_file_paths, *, also_reverse, diff_base):
     with originals(candid_file_paths, diff_base=diff_base) as paths_to_original_contents:
         # Compare .did files as they were before (at commit) vs. after changes.
         for before, after in zip(paths_to_original_contents, candid_file_paths):
-            # Skip when there is no previous version to comapre to (the staged file is new).
             if before is None:
-                continue
+                # we point before to a candid file that contains the empty service
+                before = default_candid_file
 
             try:
                 didc_check(didc, after, before)
@@ -318,6 +318,10 @@ def main(argv):
 
     args = ARGUMENT_PARSER.parse_args()
 
+    candid_default = tempfile.NamedTemporaryFile(suffix=".did")
+    with open(candid_default.name, 'w') as f:
+        f.write("service : {}")
+
     print("Files to be inspected:")
     for f in args.candid_file_paths:
         print(f"  - {f}")
@@ -330,7 +334,7 @@ def main(argv):
     also_reverse = args.also_reverse and not override_also_reverse
 
     try:
-        any_defective_files = inspect_all_files(args.candid_file_paths, also_reverse=also_reverse, diff_base=diff_base)
+        any_defective_files = inspect_all_files(args.candid_file_paths, also_reverse=also_reverse, diff_base=diff_base, default_candid_file=candid_default.name)
     except subprocess.CalledProcessError as e:
         traceback.print_exc()
         print()
