@@ -202,6 +202,17 @@ fn with_account_data<R>(f: impl FnOnce(&mut AccountDataMap) -> R) -> R {
     ACCOUNT_DATA.with(|cell| f(&mut cell.borrow_mut()))
 }
 
+/// A helper function that returns a decoded block stored in the
+/// block log at the given index or None if there is no block at that index.
+/// This function can trap if the index at the given block cannot be decoded
+/// because all blocks stored in the transaction log should be decodable
+/// (see [append_blocks]). If not then something is wrong with the log.
+fn get_decoded_block(block_index: BlockIndex64) -> Option<Block> {
+    with_blocks(|blocks| blocks.get(block_index))
+        .map(EncodedBlock::from)
+        .map(|block| decode_encoded_block_or_trap(block_index, block))
+}
+
 /// A helper function to access the balance of an account.
 fn get_balance(account: Account) -> u64 {
     with_account_data(|account_data| account_data.get(&balance_key(account)).unwrap_or(0))
@@ -361,7 +372,7 @@ fn append_blocks(new_blocks: Vec<GenericBlock>) {
 
         // add the block idx to the indices
         with_account_block_ids(|account_block_ids| {
-            for account in get_accounts(&decoded_block) {
+            for account in get_accounts(block_index, &decoded_block) {
                 account_block_ids.insert(account_block_ids_key(account, block_index), ());
             }
         });
@@ -391,6 +402,9 @@ fn process_balance_changes(block_index: BlockIndex64, block: &Block) {
             });
             debit(block_index, from, amount + fee);
             credit(block_index, to, amount);
+            if let Some(fee_collector) = get_fee_collector(block_index, block) {
+                credit(block_index, fee_collector, fee);
+            }
         }
     }
 }
@@ -436,11 +450,34 @@ fn decode_encoded_block_or_trap(block_index: BlockIndex64, block: EncodedBlock) 
     })
 }
 
-fn get_accounts(block: &Block) -> Vec<Account> {
+fn get_accounts(block_index: BlockIndex64, block: &Block) -> Vec<Account> {
     match block.transaction.operation {
         Operation::Burn { from, .. } => vec![from],
         Operation::Mint { to, .. } => vec![to],
-        Operation::Transfer { from, to, .. } => vec![from, to],
+        Operation::Transfer { from, to, .. } => {
+            let mut accounts = vec![from, to];
+            if let Some(fee_collector) = get_fee_collector(block_index, block) {
+                accounts.push(fee_collector);
+            }
+            accounts
+        }
+    }
+}
+
+fn get_fee_collector(block_index: BlockIndex64, block: &Block) -> Option<Account> {
+    if block.fee_collector.is_some() {
+        block.fee_collector
+    } else if let Some(fee_collector_block_index) = block.fee_collector_block_index {
+        let block = get_decoded_block(fee_collector_block_index)
+            .unwrap_or_else(||
+                ic_cdk::trap(&format!("Block at index {} has fee_collector_block_index {} but there is no block at that index", block_index, fee_collector_block_index)));
+        if block.fee_collector.is_none() {
+            ic_cdk::trap(&format!("Block at index {} has fee_collector_block_index {} but that block has no fee_collector set", block_index, fee_collector_block_index))
+        } else {
+            block.fee_collector
+        }
+    } else {
+        None
     }
 }
 

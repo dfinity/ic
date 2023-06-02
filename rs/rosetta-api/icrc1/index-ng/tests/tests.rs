@@ -77,6 +77,7 @@ fn install_ledger(
     env: &StateMachine,
     initial_balances: Vec<(Account, u64)>,
     archive_options: ArchiveOptions,
+    fee_collector_account: Option<Account>,
 ) -> CanisterId {
     let args = LedgerArgument::Init(LedgerInitArgs {
         minting_account: MINTER,
@@ -91,7 +92,7 @@ fn install_ledger(
             Value::entry(BLOB_META_KEY, BLOB_META_VALUE),
         ],
         archive_options,
-        fee_collector_account: None,
+        fee_collector_account,
         max_memo_length: None,
     });
     env.install_canister(ledger_wasm(), Encode!(&args).unwrap(), None)
@@ -300,7 +301,7 @@ fn test_ledger_growing() {
 
     let initial_balances: Vec<_> = vec![(account(1, 0), 1_000_000_000_000)];
     let env = &StateMachine::new();
-    let ledger_id = install_ledger(env, initial_balances, default_archive_options());
+    let ledger_id = install_ledger(env, initial_balances, default_archive_options(), None);
     let index_id = install_index(env, ledger_id);
 
     // test initial mint block
@@ -341,7 +342,7 @@ fn test_archive_indexing() {
         .map(|i| (account(i, 0), 1_000_000_000_000))
         .collect();
     let env = &StateMachine::new();
-    let ledger_id = install_ledger(env, initial_balances, default_archive_options());
+    let ledger_id = install_ledger(env, initial_balances, default_archive_options(), None);
     let index_id = install_index(env, ledger_id);
 
     wait_until_sync_is_completed(env, index_id, ledger_id);
@@ -397,7 +398,7 @@ fn assert_txs_with_id_eq(txs1: Vec<TransactionWithId>, txs2: Vec<TransactionWith
 fn test_get_account_transactions() {
     let initial_balances: Vec<_> = vec![(account(1, 0), 1_000_000_000_000)];
     let env = &StateMachine::new();
-    let ledger_id = install_ledger(env, initial_balances, default_archive_options());
+    let ledger_id = install_ledger(env, initial_balances, default_archive_options(), None);
     let index_id = install_index(env, ledger_id);
 
     // List of the transactions that the test is going to add. This exists to make
@@ -522,7 +523,7 @@ fn test_get_account_transactions_start_length() {
     // 10 mint transactions to index for the same account
     let initial_balances: Vec<_> = (0..10).map(|i| (account(1, 0), i * 10_000)).collect();
     let env = &StateMachine::new();
-    let ledger_id = install_ledger(env, initial_balances, default_archive_options());
+    let ledger_id = install_ledger(env, initial_balances, default_archive_options(), None);
     let index_id = install_index(env, ledger_id);
     let expected_txs: Vec<_> = (0..10)
         .map(|i| TransactionWithId {
@@ -573,7 +574,7 @@ fn test_get_account_transactions_pagination() {
     // 10_000 mint transactions to index for the same account
     let initial_balances: Vec<_> = (0..10_000).map(|i| (account(1, 0), i * 10_000)).collect();
     let env = &StateMachine::new();
-    let ledger_id = install_ledger(env, initial_balances, default_archive_options());
+    let ledger_id = install_ledger(env, initial_balances, default_archive_options(), None);
     let index_id = install_index(env, ledger_id);
 
     wait_until_sync_is_completed(env, index_id, ledger_id);
@@ -643,7 +644,7 @@ fn test_icrc1_balance_of() {
             &(valid_transactions_strategy(MINTER, FEE, 100),),
             |(transactions,)| {
                 let env = &StateMachine::new();
-                let ledger_id = install_ledger(env, vec![], default_archive_options());
+                let ledger_id = install_ledger(env, vec![], default_archive_options(), None);
                 let index_id = install_index(env, ledger_id);
 
                 for CallerTransferArg {
@@ -705,7 +706,7 @@ fn test_list_subaccounts() {
     initial_balances.extend(accounts_2.iter().map(|account| (*account, 10_000)));
 
     let env = &StateMachine::new();
-    let ledger_id = install_ledger(env, initial_balances, default_archive_options());
+    let ledger_id = install_ledger(env, initial_balances, default_archive_options(), None);
     let index_id = install_index(env, ledger_id);
 
     wait_until_sync_is_completed(env, index_id, ledger_id);
@@ -770,6 +771,7 @@ fn test_post_upgrade_start_timer() {
         env,
         vec![(account(1, 0), 10_000_000)],
         default_archive_options(),
+        None,
     );
     let index_id = install_index(env, ledger_id);
 
@@ -791,6 +793,7 @@ fn test_oldest_tx_id() {
         env,
         vec![(account(1, 0), 10_000_000)],
         default_archive_options(),
+        None,
     );
     let index_id = install_index(env, ledger_id);
 
@@ -847,4 +850,81 @@ fn test_oldest_tx_id() {
     let oldest_tx_id =
         get_account_transactions(env, index_id, account(3, 0), None, u64::MAX).oldest_tx_id;
     assert_eq!(Some(3.into()), oldest_tx_id);
+}
+
+#[test]
+fn test_fee_collector() {
+    let env = &StateMachine::new();
+    let fee_collector = account(42, 0);
+    let ledger_id = install_ledger(
+        env,
+        vec![(account(1, 0), 10_000_000)],
+        default_archive_options(),
+        Some(fee_collector),
+    );
+    let index_id = install_index(env, ledger_id);
+
+    assert_eq!(
+        icrc1_balance_of(env, ledger_id, fee_collector),
+        icrc1_balance_of(env, index_id, fee_collector)
+    );
+
+    transfer(env, ledger_id, account(1, 0), account(2, 0), 100_000);
+    transfer(env, ledger_id, account(1, 0), account(3, 0), 200_000);
+    transfer(env, ledger_id, account(1, 0), account(2, 0), 300_000);
+
+    wait_until_sync_is_completed(env, index_id, ledger_id);
+
+    assert_eq!(
+        icrc1_balance_of(env, ledger_id, fee_collector),
+        icrc1_balance_of(env, index_id, fee_collector)
+    );
+
+    let expected_txs = vec![
+        TransactionWithId {
+            id: 3.into(),
+            transaction: Transaction::transfer(
+                Transfer {
+                    from: account(1, 0),
+                    to: account(2, 0),
+                    amount: 300_000.into(),
+                    fee: None,
+                    created_at_time: None,
+                    memo: None,
+                },
+                0,
+            ),
+        },
+        TransactionWithId {
+            id: 2.into(),
+            transaction: Transaction::transfer(
+                Transfer {
+                    from: account(1, 0),
+                    to: account(3, 0),
+                    amount: 200_000.into(),
+                    fee: None,
+                    created_at_time: None,
+                    memo: None,
+                },
+                0,
+            ),
+        },
+        TransactionWithId {
+            id: 1.into(),
+            transaction: Transaction::transfer(
+                Transfer {
+                    from: account(1, 0),
+                    to: account(2, 0),
+                    amount: 100_000.into(),
+                    fee: None,
+                    created_at_time: None,
+                    memo: None,
+                },
+                0,
+            ),
+        },
+    ];
+    let actual_txs =
+        get_account_transactions(env, index_id, fee_collector, None, u64::MAX).transactions;
+    assert_txs_with_id_eq(expected_txs, actual_txs);
 }
