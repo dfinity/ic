@@ -47,6 +47,13 @@ pub const MINTER_FEE_PER_INPUT: u64 = 246;
 pub const MINTER_FEE_PER_OUTPUT: u64 = 7;
 pub const MINTER_FEE_CONSTANT: u64 = 52;
 
+/// The minimum fee increment for transaction resubmission.
+/// See https://en.bitcoin.it/wiki/Miner_fees#Relaying for more detail.
+pub const MIN_RELAY_FEE_PER_VBYTE: MillisatoshiPerByte = 1_000;
+
+/// The minimum time the minter should wait before replacing a stuck transaction.
+pub const MIN_RESUBMISSION_DELAY: Duration = Duration::from_secs(24 * 60 * 60);
+
 #[derive(Clone, serde::Serialize, Deserialize, Debug)]
 pub enum Priority {
     P0,
@@ -383,6 +390,7 @@ async fn submit_pending_requests() {
                                     used_utxos,
                                     change_output: Some(req.change_output),
                                     submitted_at: ic_cdk::api::time(),
+                                    fee_per_vbyte: Some(fee_millisatoshi_per_vbyte),
                                 },
                             );
                         });
@@ -418,6 +426,25 @@ fn finalization_time_estimate(min_confirmations: u32, network: Network) -> Durat
     )
 }
 
+/// Returns identifiers of finalized transactions from the list of `candidates` according to the
+/// list of newly received UTXOs for the main minter account.
+fn finalized_txids(
+    candidates: &[state::SubmittedBtcTransaction],
+    new_utxos: &[Utxo],
+) -> Vec<[u8; 32]> {
+    candidates
+        .iter()
+        .filter_map(|tx| {
+            tx.change_output.as_ref().and_then(|out| {
+                new_utxos
+                    .iter()
+                    .any(|utxo| utxo.outpoint.vout == out.vout && utxo.outpoint.txid == tx.txid)
+                    .then_some(tx.txid)
+            })
+        })
+        .collect()
+}
+
 async fn finalize_requests() {
     if state::read_state(|s| s.submitted_transactions.is_empty()) {
         return;
@@ -427,14 +454,20 @@ async fn finalize_requests() {
 
     let now = ic_cdk::api::time();
 
-    let has_requests_to_finalize = state::read_state(|s| {
-        let wait_time = finalization_time_estimate(s.min_confirmations, s.btc_network);
-        s.submitted_transactions
-            .iter()
-            .any(|req| req.submitted_at + (wait_time.as_nanos() as u64) < now)
-    });
+    // The list of transactions that are likely to be finalized, indexed by the transaction id.
+    let mut maybe_finalized_transactions: BTreeMap<[u8; 32], state::SubmittedBtcTransaction> =
+        state::read_state(|s| {
+            let wait_time = finalization_time_estimate(s.min_confirmations, s.btc_network);
+            s.submitted_transactions
+                .iter()
+                .filter_map(|req| {
+                    (req.submitted_at + (wait_time.as_nanos() as u64) < now)
+                        .then(|| (req.txid, req.clone()))
+                })
+                .collect()
+        });
 
-    if !has_requests_to_finalize {
+    if maybe_finalized_transactions.is_empty() {
         return;
     }
 
@@ -460,26 +493,230 @@ async fn finalize_requests() {
     // Transactions whose change outpoint is present in the newly fetched UTXOs
     // can be finalized.  Note that all new minter transactions must have a
     // change output because minter always charges a fee for converting tokens.
-    let confirmed_transactions: Vec<_> = state::read_state(|s| {
-        s.submitted_transactions
-            .iter()
-            .filter_map(|tx| {
-                tx.change_output.as_ref().and_then(|out| {
-                    new_utxos
-                        .iter()
-                        .any(|utxo| utxo.outpoint.vout == out.vout && utxo.outpoint.txid == tx.txid)
-                        .then_some(tx.txid)
-                })
-            })
-            .collect()
-    });
+    let confirmed_transactions: Vec<_> =
+        state::read_state(|s| finalized_txids(&s.submitted_transactions, &new_utxos));
+
+    // It's possible that some transactions we considered lost or rejected became finalized in the
+    // meantime. If that happens, we should stop waiting for replacement transactions to finalize.
+    let unstuck_transactions: Vec<_> =
+        state::read_state(|s| finalized_txids(&s.stuck_transactions, &new_utxos));
 
     state::mutate_state(|s| {
+        if !new_utxos.is_empty() {
+            state::audit::add_utxos(s, None, main_account, new_utxos);
+        }
         for txid in &confirmed_transactions {
             state::audit::confirm_transaction(s, txid);
+            maybe_finalized_transactions.remove(txid);
         }
-        state::audit::add_utxos(s, None, main_account, new_utxos);
     });
+
+    for txid in &unstuck_transactions {
+        state::read_state(|s| {
+            if let Some(replacement_txid) = s.find_last_replacement_tx(txid) {
+                maybe_finalized_transactions.remove(replacement_txid);
+            }
+        });
+    }
+
+    state::mutate_state(|s| {
+        for txid in unstuck_transactions {
+            log!(
+                P0,
+                "[finalize_requests]: finalized transaction {} assumed to be stuck",
+                tx::DisplayTxid(&txid)
+            );
+            state::audit::confirm_transaction(s, &txid);
+        }
+    });
+
+    // Do not replace transactions if less than MIN_RESUBMISSION_DELAY passed since their
+    // submission. This strategy works around short-term fee spikes.
+    maybe_finalized_transactions
+        .retain(|_txid, tx| tx.submitted_at + MIN_RESUBMISSION_DELAY.as_nanos() as u64 <= now);
+
+    if maybe_finalized_transactions.is_empty() {
+        // There are no transactions eligible for replacement.
+        return;
+    }
+
+    let btc_network = state::read_state(|s| s.btc_network);
+
+    // There are transactions that should have been finalized by now. Let's check whether the
+    // Bitcoin network knows about them or they got lost in the meantime. Note that the Bitcoin
+    // canister doesn't have access to the mempool, we can detect only transactions with at least
+    // one confirmation.
+    let main_utxos_zero_confirmations = match management::get_utxos(
+        btc_network,
+        &main_address.display(btc_network),
+        /*min_confirmations=*/ 0,
+        management::CallSource::Minter,
+    )
+    .await
+    {
+        Ok(response) => response.utxos,
+        Err(e) => {
+            log!(
+                P0,
+                "[finalize_requests]: failed to fetch UTXOs for the main address {}: {}",
+                main_address.display(btc_network),
+                e
+            );
+            return;
+        }
+    };
+
+    for utxo in main_utxos_zero_confirmations {
+        let txid: [u8; 32] = utxo
+            .outpoint
+            .txid
+            .try_into()
+            .expect("BUG: invalid UTXO TXID");
+        // This transaction got at least one confirmation, we don't need to replace it.
+        maybe_finalized_transactions.remove(&txid);
+    }
+
+    if maybe_finalized_transactions.is_empty() {
+        // All transactions we assumed to be stuck have at least one confirmation.
+        // We shall finalize these transaction later.
+        return;
+    }
+
+    // Found transactions that appear to be stuck: they might be sitting in the mempool, got
+    // evicted from the mempool, or never reached it due to a temporary issue in the Bitcoin
+    // integration.
+    //
+    // Let's resubmit these transactions.
+    log!(
+        P0,
+        "[finalize_requests]: found {} stuck transactions: {}",
+        maybe_finalized_transactions.len(),
+        maybe_finalized_transactions
+            .keys()
+            .map(|txid| tx::DisplayTxid(txid).to_string())
+            .collect::<Vec<_>>()
+            .join(","),
+    );
+
+    // We shall use the latest fee estimate for replacement transactions.
+    let fee_per_vbyte = match estimate_fee_per_vbyte().await {
+        Some(fee) => fee,
+        None => return,
+    };
+
+    let key_name = state::read_state(|s| s.ecdsa_key_name.clone());
+
+    for (old_txid, submitted_tx) in maybe_finalized_transactions {
+        let mut utxos: BTreeSet<_> = submitted_tx.used_utxos.iter().cloned().collect();
+
+        let tx_fee_per_vbyte = match submitted_tx.fee_per_vbyte {
+            Some(prev_fee) => {
+                // Ensure that the fee is at least min relay fee higher than the previous
+                // transaction fee to comply with BIP-125 (https://en.bitcoin.it/wiki/BIP_0125).
+                fee_per_vbyte.max(prev_fee + MIN_RELAY_FEE_PER_VBYTE)
+            }
+            None => fee_per_vbyte,
+        };
+
+        let outputs = submitted_tx
+            .requests
+            .iter()
+            .map(|req| (req.address.clone(), req.amount))
+            .collect();
+
+        let (unsigned_tx, change_output, used_utxos) = match build_unsigned_transaction(
+            &mut utxos,
+            outputs,
+            main_address.clone(),
+            tx_fee_per_vbyte,
+        ) {
+            Ok(tx) => tx,
+            // If it's impossible to build a new transaction, the fees probably became too high.
+            // Let's ignore this transaction and wait for fees to go down.
+            Err(err) => {
+                log!(
+                    P1,
+                    "[finalize_requests]: failed to rebuild stuck transaction {}: {:?}",
+                    tx::DisplayTxid(&submitted_tx.txid),
+                    err
+                );
+                continue;
+            }
+        };
+
+        let outpoint_account = state::read_state(|s| filter_output_accounts(s, &unsigned_tx));
+
+        assert!(
+            utxos.is_empty(),
+            "build_unsigned_transaction didn't use all inputs"
+        );
+        assert_eq!(used_utxos.len(), submitted_tx.used_utxos.len());
+
+        let new_txid = unsigned_tx.txid();
+
+        let maybe_signed_tx = sign_transaction(
+            key_name.clone(),
+            &ecdsa_public_key,
+            &outpoint_account,
+            unsigned_tx,
+        )
+        .await;
+
+        let signed_tx = match maybe_signed_tx {
+            Ok(tx) => tx,
+            Err(err) => {
+                log!(
+                    P0,
+                    "[finalize_requests]: failed to sign a BTC transaction: {}",
+                    err
+                );
+                continue;
+            }
+        };
+
+        match management::send_transaction(&signed_tx, btc_network).await {
+            Ok(()) => {
+                if old_txid == new_txid {
+                    // DEFENSIVE: We should never take this branch because we increase fees for
+                    // replacement transactions with each resubmission. However, since replacing a
+                    // transaction with itself is not allowed, we still handle the transaction
+                    // equality in case the fee computation rules change in the future.
+                    log!(P0,
+                        "[finalize_requests]: resent transaction {} with a new signature. TX bytes: {}",
+                        tx::DisplayTxid(&new_txid),
+                        hex::encode(tx::encode_into(&signed_tx, Vec::new()))
+                    );
+                    continue;
+                }
+                log!(P0,
+                    "[finalize_requests]: sent transaction {} to replace stuck transaction {}. TX bytes: {}",
+                    tx::DisplayTxid(&new_txid),
+                    tx::DisplayTxid(&old_txid),
+                    hex::encode(tx::encode_into(&signed_tx, Vec::new()))
+                );
+                let new_tx = state::SubmittedBtcTransaction {
+                    requests: submitted_tx.requests,
+                    used_utxos,
+                    txid: new_txid,
+                    submitted_at: ic_cdk::api::time(),
+                    change_output: Some(change_output),
+                    fee_per_vbyte: Some(tx_fee_per_vbyte),
+                };
+
+                state::mutate_state(|s| {
+                    state::audit::replace_transaction(s, old_txid, new_tx);
+                });
+            }
+            Err(err) => {
+                log!(P0, "[finalize_requests]: failed to send transaction bytes {} to replace stuck transaction {}: {}",
+                    hex::encode(tx::encode_into(&signed_tx, Vec::new())),
+                    tx::DisplayTxid(&old_txid),
+                    err,
+                );
+                continue;
+            }
+        }
+    }
 }
 
 /// Builds the minimal OutPoint -> Account map required to sign a transaction.

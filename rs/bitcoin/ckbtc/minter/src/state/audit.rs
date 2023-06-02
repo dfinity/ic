@@ -50,6 +50,7 @@ pub fn sent_transaction(state: &mut CkBtcMinterState, tx: SubmittedBtcTransactio
         utxos: tx.used_utxos.clone(),
         change_output: tx.change_output.clone(),
         submitted_at: tx.submitted_at,
+        fee_per_vbyte: tx.fee_per_vbyte,
     });
 
     state.push_submitted_transaction(tx);
@@ -79,6 +80,26 @@ pub fn mark_utxo_checked(
 pub fn ignore_utxo(state: &mut CkBtcMinterState, utxo: Utxo) {
     record_event(&Event::IgnoredUtxo { utxo: utxo.clone() });
     state.ignore_utxo(utxo);
+}
+
+pub fn replace_transaction(
+    state: &mut CkBtcMinterState,
+    old_txid: [u8; 32],
+    new_tx: SubmittedBtcTransaction,
+) {
+    record_event(&Event::ReplacedBtcTransaction {
+        old_txid,
+        new_txid: new_tx.txid,
+        change_output: new_tx
+            .change_output
+            .clone()
+            .expect("bug: all replacement transactions must have the change output"),
+        submitted_at: new_tx.submitted_at,
+        fee_per_vbyte: new_tx
+            .fee_per_vbyte
+            .expect("bug: all replacement transactions must have the fee"),
+    });
+    state.replace_transaction(&old_txid, new_tx);
 }
 
 pub fn distributed_kyt_fee(

@@ -66,6 +66,26 @@ pub fn encode_metrics(
             }) as f64,
         )?;
 
+    metrics
+        .gauge_vec(
+            "ckbtc_minter_btc_transaction_count",
+            "Total count of non-finalized btc transaction, by status.",
+        )?
+        .value(
+            &[("status", "submitted")],
+            state::read_state(|s| s.submitted_transactions.len() as f64),
+        )?
+        .value(
+            &[("status", "stuck")],
+            state::read_state(|s| s.stuck_transactions.len() as f64),
+        )?;
+
+    metrics.encode_gauge(
+        "ckbtc_minter_longest_resubmission_chain_size",
+        state::read_state(|s| s.longest_resubmission_chain_size() as f64),
+        "The length of the longest active transaction resubmission chain.",
+    )?;
+
     metrics.encode_gauge(
         "ckbtc_minter_stored_finalized_requests",
         state::read_state(|s| s.finalized_requests.len()) as f64,
