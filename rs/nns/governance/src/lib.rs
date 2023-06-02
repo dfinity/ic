@@ -131,6 +131,7 @@
 /// subnetworks that participate in the Internet Computer (IC).
 pub mod governance;
 pub mod init;
+mod neuron;
 pub mod pb;
 pub mod proposal_submission;
 mod reward;
