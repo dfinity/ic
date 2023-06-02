@@ -8,6 +8,7 @@ DEPENDENCIES = [
     "//rs/nervous_system/humanize",
     "//rs/nervous_system/proto",
     "//rs/nns/constants",
+    "//rs/nns/governance",
     "//rs/nns/sns-wasm",
     "//rs/protobuf",
     "//rs/rosetta-api/icp_ledger",
@@ -79,6 +80,14 @@ rust_test(
     name = "sns_test",
     srcs = glob(["src/**"]),
     aliases = ALIASES,
+    args = [
+        # This is needed because one of the tests changes directory (namely,
+        # test_convert_to_create_service_nervous_system), while other tests
+        # assume that the current working directory remains unchanged. This does
+        # not have a significant negative impact on test execution time, because
+        # this test is very fast.
+        "--test-threads=1",
+    ],
     crate_root = "src/lib.rs",
     data = [
         "example_sns_init_v2.yaml",

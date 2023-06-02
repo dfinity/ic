@@ -9261,6 +9261,7 @@ dependencies = [
  "ic-nervous-system-humanize",
  "ic-nervous-system-proto",
  "ic-nns-constants",
+ "ic-nns-governance",
  "ic-protobuf",
  "ic-sns-governance",
  "ic-sns-init",

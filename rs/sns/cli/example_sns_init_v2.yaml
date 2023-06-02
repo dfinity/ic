@@ -5,16 +5,26 @@ name: Daniel
 description: >
     The best software engineer you ever did saw.
 
-logo: batman.png
+logo: test.png
 url: https://www.example.com
 
 Principals:
-    - id: hello-world-big-opaque-blob-here-to-ruin-your-eyes
+    - id: 5zxxw-63ouu-faaaa-aaaap-4ai
       name: Bruce Wayne
       email: batman@superherosinc.com
+    - id: uqf5l-jukmu-fqaaa-aaaap-4ai
+      name: Alfred Pennyworth
+    - id: c2n4r-wni5m-dqaaa-aaaap-4ai
+      name: employees (canister)
+    - id: ucm27-3lxwy-faaaa-aaaap-4ai
+      name: departments (canister)
 
 fallback_controller_principals:
-    - Bruce Wayne
+    - 5zxxw-63ouu-faaaa-aaaap-4ai # TODO: Bruce Wayne
+
+dapp_canisters:
+    - c2n4r-wni5m-dqaaa-aaaap-4ai # TODO: employees (canister)
+    - ucm27-3lxwy-faaaa-aaaap-4ai # TODO: departments (canister)
 
 Token:
     name: Batman
@@ -50,20 +60,22 @@ Distribution:
 
     Neurons:
 
-        - principal: Bruce Wayne
+        - principal: 5zxxw-63ouu-faaaa-aaaap-4ai # TODO: Bruce Wayne
           stake: 15 tokens
           memo: 42
           # TODO: Add support for non-integer numbers in duration strings?
           dissolve_delay: 1 years
+          vesting_period: 1 year 1 second
 
-        - principal: Bruce Wayne
-          stake: 15 tokens
-          dissolve_delay: 1 years
+        - principal: uqf5l-jukmu-fqaaa-aaaap-4ai # TODO: Alfred Pennyworth
+          stake: 14.9 tokens
+          dissolve_delay: 52 weeks
+          vesting_period: 53 weeks
 
     InitialBalances:
-        governance: 50 tokens
-        swap: 30 tokens
+        governance: 60 tokens
+        swap: 40 tokens
 
     # Optional, but highly recommended. This is a literal
     # checksum.
-    total: 95 tokens
+    total: 129.9 tokens # 60 + 40 + 15 + 14.9
