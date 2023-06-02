@@ -23,8 +23,6 @@ done
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 DOCKER_IMG_TAG=$("$REPO_ROOT"/gitlab-ci/container/get-image-tag.sh)
-USE_BAZEL_VERSION="$(tail -1 $REPO_ROOT/.bazelversion)"
-echo "Bazel version: $USE_BAZEL_VERSION"
 
 pushd "$REPO_ROOT"
 
@@ -36,7 +34,6 @@ DOCKER_BUILDKIT=1 docker build "${build_args[@]}" \
     -t docker.io/dfinity/ic-build:"$DOCKER_IMG_TAG" \
     -t docker.io/dfinity/ic-build:latest \
     -t registry.gitlab.com/dfinity-lab/core/docker/ic-build:"$DOCKER_IMG_TAG" \
-    --build-arg USE_BAZEL_VERSION="${USE_BAZEL_VERSION}" \
     -f gitlab-ci/container/Dockerfile .
 
 if [ "${ONLY_BAZEL:-false}" == "true" ]; then
@@ -59,7 +56,6 @@ DOCKER_BUILDKIT=1 docker build "${build_args[@]}" \
     -t docker.io/dfinity/ic-build-legacy:latest \
     -t registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:"$DOCKER_IMG_TAG" \
     --build-arg SRC_IMG_PATH="dfinity/ic-build-src:$DOCKER_IMG_TAG" \
-    --build-arg USE_BAZEL_VERSION="${USE_BAZEL_VERSION}" \
     -f gitlab-ci/container/Dockerfile.legacy .
 
 popd
