@@ -836,10 +836,23 @@ mod tests {
         })
     }
 
-    // We expect block maker to correctly detect version change and start
+    // We expect block maker to correctly detect version change and start making only empty blocks.
+    #[test]
+    fn test_halting_due_to_protocol_upgrade() {
+        test_halting(
+            ReplicaVersion::try_from("0xBEEF").unwrap(),
+            /*halt_at_cup_height=*/ false,
+        )
+    }
+
+    // We expect block maker to correctly detect that the registry instructs it to halt and start
     // making only empty blocks.
     #[test]
-    fn test_protocol_upgrade() {
+    fn test_halting_due_to_registry_instruction() {
+        test_halting(ReplicaVersion::default(), /*halt_at_cup_height=*/ true)
+    }
+
+    fn test_halting(replica_version: ReplicaVersion, halt_at_cup_height: bool) {
         ic_test_utilities::artifact_pool_config::with_test_pool_config(|pool_config| {
             let dkg_interval_length = 3;
             let node_ids = [node_test_id(0)];
@@ -865,7 +878,8 @@ mod tests {
                         10,
                         SubnetRecordBuilder::from(&node_ids)
                             .with_dkg_interval_length(dkg_interval_length)
-                            .with_replica_version("0xBEEF")
+                            .with_replica_version(replica_version.as_ref())
+                            .with_halt_at_cup_height(halt_at_cup_height)
                             .build(),
                     ),
                 ],
@@ -944,10 +958,7 @@ mod tests {
 
             // We do not anticipate payload builder to be called since we will be making
             // empty blocks (including the next CUP block).
-            let mut payload_builder = MockPayloadBuilder::new();
-            payload_builder
-                .expect_get_payload()
-                .return_const(BatchPayload::default());
+            let payload_builder = MockPayloadBuilder::new();
 
             let block_maker = BlockMaker::new(
                 Arc::clone(&time_source) as Arc<_>,
