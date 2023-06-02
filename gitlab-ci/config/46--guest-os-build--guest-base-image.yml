@@ -1,7 +1,7 @@
 .rules-build-base-images:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "build-push-base-images"'
-    - if: '$CI_COMMIT_BRANCH == "master"'
+    - if: '$CI_COMMIT_BRANCH == "master" && $CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
       when: manual
       allow_failure: true
     - if: '$CI_PARENT_PIPELINE_SOURCE == "merge_request_event"'
