@@ -907,6 +907,21 @@ pub(crate) async fn create_canister_with_cycles(
         .0
 }
 
+pub(crate) async fn create_canister_with_cycles_and_specified_id(
+    agent: &Agent,
+    specified_id: PrincipalId,
+    amount: Cycles,
+) -> Principal {
+    let mgr = ManagementCanister::create(agent);
+    mgr.create_canister()
+        .as_provisional_create_with_amount(Some(amount.into()))
+        .as_provisional_create_with_specified_id(specified_id.into())
+        .call_and_wait()
+        .await
+        .unwrap_or_else(|err| panic!("Couldn't create canister with provisional API: {}", err))
+        .0
+}
+
 pub async fn install_canister(
     agent: &Agent,
     canister_id: Principal,
@@ -928,6 +943,18 @@ pub(crate) async fn create_and_install_with_cycles(
     amount: Cycles,
 ) -> Principal {
     let canister_id = create_canister_with_cycles(agent, effective_canister_id, amount).await;
+    install_canister(agent, canister_id, canister_wasm, vec![]).await;
+    canister_id
+}
+
+pub(crate) async fn create_and_install_with_cycles_and_specified_id(
+    agent: &Agent,
+    specified_id: PrincipalId,
+    canister_wasm: &[u8],
+    amount: Cycles,
+) -> Principal {
+    let canister_id =
+        create_canister_with_cycles_and_specified_id(agent, specified_id, amount).await;
     install_canister(agent, canister_id, canister_wasm, vec![]).await;
     canister_id
 }

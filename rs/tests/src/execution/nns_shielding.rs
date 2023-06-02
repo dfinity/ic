@@ -49,14 +49,17 @@ const MINT_CYCLES: &str = r#"(module
                   (export "memory" (memory $memory))
               )"#;
 
-pub fn mint_cycles_not_supported_on_system_subnet(env: TestEnv) {
+pub fn mint_cycles_supported_only_on_cycles_minting_canister(env: TestEnv) {
     let nns_node = env.get_first_healthy_nns_node_snapshot();
+    let specified_id = nns_node.get_last_canister_id_in_allocation_ranges();
+    // Check that 'specified_id' is not 'CYCLES_MINTING_CANISTER_ID'.
+    assert_ne!(specified_id, CYCLES_MINTING_CANISTER_ID.into());
     let nns_agent = nns_node.build_default_agent();
     block_on(async move {
         let wasm = wat::parse_str(MINT_CYCLES).unwrap();
-        let nns_canister_id: Principal = create_and_install_with_cycles(
+        let nns_canister_id: Principal = create_and_install_with_cycles_and_specified_id(
             &nns_agent,
-            nns_node.effective_canister_id(),
+            specified_id,
             wasm.as_slice(),
             *INITIAL_CYCLES,
         )
