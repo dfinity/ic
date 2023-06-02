@@ -2,7 +2,6 @@
 # focal-20230301
 FROM ubuntu@sha256:3626dff0d616e8ee7065a9ac8c7117e904a4178725385910eeecd7f1872fc12d
 
-ARG USE_BAZEL_VERSION=invalid
 ENV TZ=UTC
 
 COPY --chown=0700 ./gitlab-ci/container/files/known_hosts /etc/ssh/ssh_known_hosts
@@ -51,15 +50,16 @@ RUN groupadd -g 1000 ubuntu && useradd -ms /bin/bash -u 1000 -g 1000 ubuntu
 RUN echo "ALL ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
 COPY ./gitlab-ci/container/files/generate-bazel-completion.sh /tmp/
-RUN /tmp/generate-bazel-completion.sh
+COPY .bazelversion /tmp/bazel/
+RUN cd /tmp/bazel && touch WORKSPACE && /tmp/generate-bazel-completion.sh
 RUN echo "source /etc/bash_completion.d/bazel" >>/etc/bash.bashrc
 
 # Pre-populate the Bazel installation for root
-RUN bazel version
+RUN cd /tmp/bazel && bazel version
 USER ubuntu
 
 # Pre-populate the Bazel installation for ubuntu
-RUN bazel version
+RUN cd /tmp/bazel && bazel version
 
 # Add Rust/Cargo support
 ENV PATH=/home/ubuntu/.cargo/bin:$PATH

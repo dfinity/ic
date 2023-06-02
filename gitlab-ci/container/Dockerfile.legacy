@@ -37,7 +37,6 @@ COPY --from=docker/buildx-bin:latest /buildx /usr/libexec/docker/cli-plugins/doc
 # Add the `${USER}` user, and the required folders
 ARG USER=ubuntu
 ARG UID=1000
-ARG USE_BAZEL_VERSION=invalid
 RUN useradd -ms /bin/bash -u ${UID} ${USER} && \
     mkdir -p /home/${USER} && \
     chown -R ${UID}.${UID} /home/${USER} && \
@@ -101,6 +100,10 @@ RUN . /opt/nvm/nvm.sh && \
     nvm install ${dependency_mgmt_default_node_version} && \
     npm install -g @vscode/dev-container-cli
 
+# Fake workspace to be used to pre-populate bazel binaries.
+COPY .bazelversion /tmp/bazel/
+RUN touch /tmp/bazel/WORKSPACE
+
 USER ${UID}
 
 ENV ROCKSDB_INCLUDE_DIR=/usr/include ROCKSDB_LIB_DIR=/usr/lib ROCKSDB_STATIC=1 \
@@ -111,7 +114,7 @@ ENV ROCKSDB_INCLUDE_DIR=/usr/include ROCKSDB_LIB_DIR=/usr/lib ROCKSDB_STATIC=1 \
     BZ2_INCLUDE_DIR=/usr/include BZ2_LIB_DIR=/usr/lib/x86_64-linux-gnu BZ2_STATIC=1
 
 # Pre-populate the Bazel installation.
-RUN bazel version
+RUN cd /tmp/bazel && bazel version
 
 RUN mkdir --mode=0700 /home/${USER}/.ssh
 COPY ./gitlab-ci/container/files/known_hosts /home/${USER}/.ssh/known_hosts
