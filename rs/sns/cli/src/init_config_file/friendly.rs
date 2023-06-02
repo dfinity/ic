@@ -8,7 +8,9 @@ use ic_nns_governance::pb::v1::CreateServiceNervousSystem;
 use ic_sns_init::pb::v1::SnsInitPayload;
 use std::{fmt::Debug, path::PathBuf, str::FromStr};
 
-// Alias CreateServiceNervousSystem (Protocol Buffers) types.
+// Alias CreateServiceNervousSystem-related types, but since we have many
+// related types in this module, put these aliases in their own module to avoid
+// getting mixed up.
 mod nns_governance_pb {
     pub use ic_nns_governance::pb::v1::create_service_nervous_system::{
         governance_parameters::VotingRewardParameters,
@@ -16,6 +18,7 @@ mod nns_governance_pb {
             developer_distribution::NeuronDistribution, DeveloperDistribution, SwapDistribution,
             TreasuryDistribution,
         },
+        swap_parameters::NeuronBasketConstructionParameters,
         GovernanceParameters, InitialTokenDistribution, LedgerParameters, SwapParameters,
     };
 }
@@ -53,6 +56,9 @@ struct SnsConfigurationFile {
 
     #[serde(rename = "Distribution")]
     distribution: Distribution,
+
+    #[serde(rename = "Swap")]
+    swap: Swap,
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Eq)]
@@ -136,6 +142,37 @@ struct RewardRate {
 
     #[serde(with = "ic_nervous_system_humanize::serde::duration")]
     transition_duration: nervous_system_pb::Duration,
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+struct Swap {
+    minimum_participants: u64,
+
+    #[serde(with = "ic_nervous_system_humanize::serde::tokens")]
+    minimum_icp: nervous_system_pb::Tokens,
+    #[serde(with = "ic_nervous_system_humanize::serde::tokens")]
+    maximum_icp: nervous_system_pb::Tokens,
+
+    #[serde(with = "ic_nervous_system_humanize::serde::tokens")]
+    minimum_participant_icp: nervous_system_pb::Tokens,
+    #[serde(with = "ic_nervous_system_humanize::serde::tokens")]
+    maximum_participant_icp: nervous_system_pb::Tokens,
+
+    confirmation_text: Option<String>,
+    restricted_countries: Vec<String>,
+
+    #[serde(rename = "VestingSchedule")]
+    vesting_schedule: VestingSchedule,
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+struct VestingSchedule {
+    events: u64,
+
+    #[serde(with = "ic_nervous_system_humanize::serde::duration")]
+    interval: nervous_system_pb::Duration,
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Eq)]
@@ -247,6 +284,7 @@ impl SnsConfigurationFile {
             neurons,
             voting,
             distribution,
+            swap,
         } = self;
 
         // Step 2: Convert components.
@@ -309,7 +347,7 @@ impl SnsConfigurationFile {
                 .map_err(|inner_defects| defects.extend(inner_defects))
                 .unwrap_or_default(),
         );
-        let swap_parameters = None; // TODO: nns_governance_pb::SwapParameters::from(swap_parameters);
+        let swap_parameters = Some(swap.convert_to_swap_parameters());
         let ledger_parameters = Some(token.convert_to_ledger_parameters());
         let governance_parameters =
             Some(convert_to_governance_parameters(proposals, neurons, voting));
@@ -587,6 +625,72 @@ impl RewardRate {
             initial_reward_rate,
             final_reward_rate,
             reward_rate_transition_duration,
+        }
+    }
+}
+
+impl Swap {
+    fn convert_to_swap_parameters(&self) -> nns_governance_pb::SwapParameters {
+        let Swap {
+            minimum_participants,
+
+            minimum_icp,
+            maximum_icp,
+
+            maximum_participant_icp,
+            minimum_participant_icp,
+
+            confirmation_text,
+            restricted_countries,
+
+            vesting_schedule,
+        } = self;
+
+        let minimum_participants = Some(*minimum_participants);
+
+        let minimum_icp = Some(*minimum_icp);
+        let maximum_icp = Some(*maximum_icp);
+
+        let maximum_participant_icp = Some(*maximum_participant_icp);
+        let minimum_participant_icp = Some(*minimum_participant_icp);
+
+        let confirmation_text = confirmation_text.clone();
+        let restricted_countries = Some(nervous_system_pb::Countries {
+            iso_codes: restricted_countries.clone(),
+        });
+
+        let neuron_basket_construction_parameters =
+            Some(vesting_schedule.convert_to_neuron_basket_construction_parameters());
+
+        nns_governance_pb::SwapParameters {
+            minimum_participants,
+
+            minimum_icp,
+            maximum_icp,
+
+            maximum_participant_icp,
+            minimum_participant_icp,
+
+            neuron_basket_construction_parameters,
+
+            confirmation_text,
+            restricted_countries,
+        }
+    }
+}
+
+impl VestingSchedule {
+    fn convert_to_neuron_basket_construction_parameters(
+        &self,
+    ) -> nns_governance_pb::NeuronBasketConstructionParameters {
+        let VestingSchedule { events, interval } = self;
+
+        let count = Some(*events);
+        let dissolve_delay_interval = Some(*interval);
+
+        nns_governance_pb::NeuronBasketConstructionParameters {
+            count,
+            dissolve_delay_interval,
         }
     }
 }

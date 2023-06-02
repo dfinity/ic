@@ -79,3 +79,22 @@ Distribution:
     # Optional, but highly recommended. This is a literal
     # checksum.
     total: 129.9 tokens # 60 + 40 + 15 + 14.9
+
+Swap:
+    minimum_participants: 57
+
+    minimum_icp: 232_714 tokens
+    maximum_icp: 557_054 tokens
+
+    minimum_participant_icp: 5 tokens
+    maximum_participant_icp: 100 tokens
+
+    confirmation_text: Hello, world?
+
+    restricted_countries:
+        - US
+        - CH
+
+    VestingSchedule:
+        events: 83
+        interval: 17 days

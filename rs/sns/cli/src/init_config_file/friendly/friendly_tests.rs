@@ -169,6 +169,25 @@ fn test_parse() {
                 e8s: Some(129 * E8 + 9 * E8 / 10), // 129.9 tokens
             },
         },
+
+        swap: Swap {
+            minimum_participants: 57,
+
+            minimum_icp: parse_tokens("232_714 tokens").unwrap(),
+            maximum_icp: parse_tokens("557_054 tokens").unwrap(),
+
+            minimum_participant_icp: parse_tokens("5 tokens").unwrap(),
+            maximum_participant_icp: parse_tokens("100 tokens").unwrap(),
+
+            confirmation_text: Some("Hello, world?".to_string()),
+
+            restricted_countries: vec!["US".to_string(), "CH".to_string()],
+
+            vesting_schedule: VestingSchedule {
+                events: 83,
+                interval: parse_duration("17 days").unwrap(),
+            },
+        },
     };
 
     assert_eq!(
@@ -296,8 +315,6 @@ fn test_convert_to_create_service_nervous_system() {
         },
     );
 
-    // TODO: swap_parameters
-
     assert_eq!(
         observed_create_service_nervous_system
             .ledger_parameters
@@ -340,5 +357,33 @@ fn test_convert_to_create_service_nervous_system() {
                 reward_rate_transition_duration: Some(parse_duration("12 years").unwrap()),
             }),
         },
+    );
+
+    assert_eq!(
+        observed_create_service_nervous_system
+            .swap_parameters
+            .unwrap(),
+        nns_governance_pb::SwapParameters {
+            minimum_participants: Some(57),
+
+            minimum_icp: Some(parse_tokens("232_714 tokens").unwrap()),
+            maximum_icp: Some(parse_tokens("557_054 tokens").unwrap()),
+
+            minimum_participant_icp: Some(parse_tokens("5 tokens").unwrap()),
+            maximum_participant_icp: Some(parse_tokens("100 tokens").unwrap()),
+
+            confirmation_text: Some("Hello, world?".to_string()),
+
+            restricted_countries: Some(nervous_system_pb::Countries {
+                iso_codes: vec!["US".to_string(), "CH".to_string(),],
+            }),
+
+            neuron_basket_construction_parameters: Some(
+                nns_governance_pb::NeuronBasketConstructionParameters {
+                    count: Some(83),
+                    dissolve_delay_interval: Some(parse_duration("17 days").unwrap()),
+                }
+            ),
+        }
     );
 }
