@@ -25,6 +25,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
+#[cfg(test)]
+mod tests;
+
 pub fn create_transcript<C: CspIDkgProtocol + CspSigner>(
     csp_client: &C,
     registry: &dyn RegistryClient,
