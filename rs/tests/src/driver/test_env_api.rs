@@ -622,6 +622,23 @@ impl IcNodeSnapshot {
         }
     }
 
+    pub fn get_last_canister_id_in_allocation_ranges(&self) -> PrincipalId {
+        match self.subnet_id() {
+            Some(subnet_id) => {
+                let canister_ranges = self
+                    .local_registry
+                    .get_subnet_canister_ranges(self.registry_version, subnet_id)
+                    .expect("Could not deserialize optional routing table from local registry.")
+                    .expect("Optional routing table is None in local registry.");
+                match canister_ranges.last() {
+                    Some(range) => range.end.get(),
+                    None => PrincipalId::default(),
+                }
+            }
+            None => PrincipalId::default(),
+        }
+    }
+
     /// Load wasm binary from the artifacts directory (see [HasArtifacts]) and
     /// install it on the target node.
     ///
