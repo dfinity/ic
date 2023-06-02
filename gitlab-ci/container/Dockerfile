@@ -49,13 +49,14 @@ RUN groupadd -g 1000 ubuntu && useradd -ms /bin/bash -u 1000 -g 1000 ubuntu
 # CI before script requires sudo
 RUN echo "ALL ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 
-COPY ./gitlab-ci/container/files/generate-bazel-completion.sh /tmp/
+# Pre-populate the Bazel installation for root
 COPY .bazelversion /tmp/bazel/
-RUN cd /tmp/bazel && touch WORKSPACE && /tmp/generate-bazel-completion.sh
+RUN cd /tmp/bazel && touch WORKSPACE  && bazel version
+
+COPY ./gitlab-ci/container/files/generate-bazel-completion.sh /tmp/
+RUN USE_BAZEL_VERSION=$(tail -1 /tmp/bazel/.bazelversion) /tmp/generate-bazel-completion.sh
 RUN echo "source /etc/bash_completion.d/bazel" >>/etc/bash.bashrc
 
-# Pre-populate the Bazel installation for root
-RUN cd /tmp/bazel && bazel version
 USER ubuntu
 
 # Pre-populate the Bazel installation for ubuntu
