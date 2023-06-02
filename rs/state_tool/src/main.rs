@@ -58,9 +58,6 @@ enum Opt {
         /// Path to a manifest.
         #[clap(long = "file")]
         file: PathBuf,
-        /// Manifest version; defaults to `CURRENT_STATE_SYNC_VERSION`
-        #[clap(long = "version", default_value_t=ic_types::state_sync::CURRENT_STATE_SYNC_VERSION as u32)]
-        version: u32,
     },
 
     /// Computes a hash of a canister that is independent
@@ -179,12 +176,7 @@ fn main() {
             height,
         } => commands::import_state::do_import(state, config, height),
         Opt::Manifest { path } => commands::manifest::do_compute_manifest(path),
-        Opt::VerifyManifest { file, version } => commands::verify_manifest::do_verify_manifest(
-            &file,
-            version
-                .try_into()
-                .unwrap_or_else(|v| panic!("Unsupported state sync version: {}", v)),
-        ),
+        Opt::VerifyManifest { file } => commands::verify_manifest::do_verify_manifest(&file),
         Opt::CanisterHash { file, canister } => {
             commands::verify_manifest::do_canister_hash(&file, &canister)
         }
