@@ -76,6 +76,31 @@ pub enum Event {
         /// The IC time at which the minter submitted the transaction.
         #[serde(rename = "submitted_at")]
         submitted_at: u64,
+        /// The fee per vbyte (in millisatoshi) that we used for the transaction.
+        #[serde(rename = "fee")]
+        #[serde(skip_serializing_if = "Option::is_none")]
+        fee_per_vbyte: Option<u64>,
+    },
+
+    /// Indicates that the minter sent out a new transaction to replace an older transaction
+    /// because the old transaction did not appear on the Bitcoin blockchain.
+    #[serde(rename = "replaced_transaction")]
+    ReplacedBtcTransaction {
+        /// The Txid of the old Bitcoin transaction.
+        #[serde(rename = "old_txid")]
+        old_txid: [u8; 32],
+        /// The Txid of the new Bitcoin transaction.
+        #[serde(rename = "new_txid")]
+        new_txid: [u8; 32],
+        /// The output with the minter's change.
+        #[serde(rename = "change_output")]
+        change_output: ChangeOutput,
+        /// The IC time at which the minter submitted the transaction.
+        #[serde(rename = "submitted_at")]
+        submitted_at: u64,
+        /// The fee per vbyte (in millisatoshi) that we used for the transaction.
+        #[serde(rename = "fee")]
+        fee_per_vbyte: u64,
     },
 
     /// Indicates that the minter received enough confirmations for a bitcoin
@@ -174,6 +199,7 @@ pub fn replay(mut events: impl Iterator<Item = Event>) -> Result<CkBtcMinterStat
                 request_block_indices,
                 txid,
                 utxos,
+                fee_per_vbyte,
                 change_output,
                 submitted_at,
             } => {
@@ -194,9 +220,43 @@ pub fn replay(mut events: impl Iterator<Item = Event>) -> Result<CkBtcMinterStat
                     requests: retrieve_btc_requests,
                     txid,
                     used_utxos: utxos,
+                    fee_per_vbyte,
                     change_output,
                     submitted_at,
                 });
+            }
+            Event::ReplacedBtcTransaction {
+                old_txid,
+                new_txid,
+                change_output,
+                submitted_at,
+                fee_per_vbyte,
+            } => {
+                let (requests, used_utxos) = match state
+                    .submitted_transactions
+                    .iter()
+                    .find(|tx| tx.txid == old_txid)
+                {
+                    Some(tx) => (tx.requests.clone(), tx.used_utxos.clone()),
+                    None => {
+                        return Err(ReplayLogError::InconsistentLog(format!(
+                            "Cannot replace a non-existent transaction {}",
+                            crate::tx::DisplayTxid(&old_txid)
+                        )))
+                    }
+                };
+
+                state.replace_transaction(
+                    &old_txid,
+                    SubmittedBtcTransaction {
+                        txid: new_txid,
+                        requests,
+                        used_utxos,
+                        change_output: Some(change_output),
+                        submitted_at,
+                        fee_per_vbyte: Some(fee_per_vbyte),
+                    },
+                );
             }
             Event::ConfirmedBtcTransaction { txid } => {
                 state.finalize_transaction(&txid);

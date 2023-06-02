@@ -88,6 +88,9 @@ pub struct SubmittedBtcTransaction {
     /// The tx output from the submitted transaction that the minter owns.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub change_output: Option<ChangeOutput>,
+    /// Fee per vbyte in millisatoshi.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fee_per_vbyte: Option<u64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -241,6 +244,14 @@ pub struct CkBtcMinterState {
 
     /// BTC transactions waiting for finalization.
     pub submitted_transactions: Vec<SubmittedBtcTransaction>,
+
+    /// Transactions that likely didn't make it into the mempool.
+    pub stuck_transactions: Vec<SubmittedBtcTransaction>,
+
+    /// Maps ID of a stuck transaction to the ID of the corresponding replacement transaction.
+    pub replacement_txid: BTreeMap<[u8; 32], [u8; 32]>,
+    /// Maps ID of a replacement transaction to the ID of the corresponding stuck transaction.
+    pub rev_replacement_txid: BTreeMap<[u8; 32], [u8; 32]>,
 
     /// Finalized retrieve_btc requests for which we received enough confirmations.
     pub finalized_requests: VecDeque<FinalizedBtcRetrieval>,
@@ -417,6 +428,48 @@ impl CkBtcMinterState {
             );
         }
 
+        for tx in &self.stuck_transactions {
+            ensure!(
+                self.replacement_txid.contains_key(&tx.txid),
+                "stuck transaction {} does not have a replacement id",
+                crate::tx::DisplayTxid(&tx.txid),
+            );
+        }
+
+        for (old_txid, new_txid) in &self.replacement_txid {
+            ensure!(
+                self.stuck_transactions
+                    .iter()
+                    .any(|tx| &tx.txid == old_txid),
+                "not found stuck transaction {}",
+                crate::tx::DisplayTxid(old_txid),
+            );
+
+            ensure!(
+                self.submitted_transactions
+                    .iter()
+                    .chain(self.stuck_transactions.iter())
+                    .any(|tx| &tx.txid == new_txid),
+                "not found replacement transaction {}",
+                crate::tx::DisplayTxid(new_txid),
+            );
+        }
+
+        ensure_eq!(
+            self.replacement_txid.len(),
+            self.rev_replacement_txid.len(),
+            "direct and reverse TX replacement links don't match"
+        );
+        for (old_txid, new_txid) in &self.replacement_txid {
+            ensure_eq!(
+                self.rev_replacement_txid.get(new_txid),
+                Some(old_txid),
+                "no back link for {} -> {} TX replacement",
+                crate::tx::DisplayTxid(old_txid),
+                crate::tx::DisplayTxid(new_txid),
+            );
+        }
+
         Ok(())
     }
 
@@ -555,29 +608,131 @@ impl CkBtcMinterState {
         }
     }
 
-    fn finalize_transaction(&mut self, txid: &[u8; 32]) {
-        if let Some(pos) = self
+    pub(crate) fn finalize_transaction(&mut self, txid: &[u8; 32]) {
+        let finalized_tx = if let Some(pos) = self
             .submitted_transactions
             .iter()
-            .position(|req| &req.txid == txid)
+            .position(|tx| &tx.txid == txid)
         {
-            let submitted_tx = self.submitted_transactions.swap_remove(pos);
-            for utxo in submitted_tx.used_utxos.iter() {
-                self.forget_utxo(utxo);
-            }
-            self.finalized_requests_count += submitted_tx.requests.len() as u64;
-            for request in submitted_tx.requests {
-                self.push_finalized_request(FinalizedBtcRetrieval {
-                    request,
-                    state: FinalizedStatus::Confirmed { txid: *txid },
-                });
-            }
+            self.submitted_transactions.swap_remove(pos)
+        } else if let Some(pos) = self
+            .stuck_transactions
+            .iter()
+            .position(|tx| &tx.txid == txid)
+        {
+            self.stuck_transactions.swap_remove(pos)
         } else {
             ic_cdk::trap(&format!(
                 "Attempted to finalized a non-existent transaction {}",
                 crate::tx::DisplayTxid(txid)
             ));
+        };
+
+        for utxo in finalized_tx.used_utxos.iter() {
+            self.forget_utxo(utxo);
         }
+        self.finalized_requests_count += finalized_tx.requests.len() as u64;
+        for request in finalized_tx.requests {
+            self.push_finalized_request(FinalizedBtcRetrieval {
+                request,
+                state: FinalizedStatus::Confirmed { txid: *txid },
+            });
+        }
+
+        self.cleanup_tx_replacement_chain(txid);
+    }
+
+    fn cleanup_tx_replacement_chain(&mut self, confirmed_txid: &[u8; 32]) {
+        let mut txids_to_remove = BTreeSet::new();
+
+        // Collect transactions preceding the confirmed transaction.
+        let mut to_edge = *confirmed_txid;
+        while let Some(from_edge) = self.replacement_txid.remove(&to_edge) {
+            debug_assert_eq!(self.rev_replacement_txid.get(&from_edge), Some(&to_edge));
+            self.rev_replacement_txid.remove(&from_edge);
+            txids_to_remove.insert(from_edge);
+            to_edge = from_edge;
+        }
+
+        // Collect transactions replacing the confirmed transaction.
+        let mut from_edge = *confirmed_txid;
+        while let Some(to_edge) = self.rev_replacement_txid.remove(&from_edge) {
+            debug_assert_eq!(self.replacement_txid.get(&to_edge), Some(&from_edge));
+            txids_to_remove.insert(to_edge);
+            from_edge = to_edge;
+        }
+
+        for txid in &txids_to_remove {
+            self.replacement_txid.remove(txid);
+            self.rev_replacement_txid.remove(txid);
+        }
+
+        if txids_to_remove.is_empty() {
+            return;
+        }
+
+        self.submitted_transactions
+            .retain(|tx| !txids_to_remove.contains(&tx.txid));
+        self.stuck_transactions
+            .retain(|tx| !txids_to_remove.contains(&tx.txid));
+    }
+
+    pub(crate) fn longest_resubmission_chain_size(&self) -> usize {
+        self.submitted_transactions
+            .iter()
+            .map(|tx| {
+                let mut txid = &tx.txid;
+                let mut len = 0;
+                while let Some(older_txid) = self.rev_replacement_txid.get(txid) {
+                    len += 1;
+                    txid = older_txid;
+                }
+                len
+            })
+            .max()
+            .unwrap_or_default()
+    }
+
+    /// Replaces a stuck transaction with a newly sent transaction.
+    pub(crate) fn replace_transaction(
+        &mut self,
+        old_txid: &[u8; 32],
+        mut tx: SubmittedBtcTransaction,
+    ) {
+        assert_ne!(old_txid, &tx.txid);
+        assert_eq!(
+            self.replacement_txid.get(old_txid),
+            None,
+            "replacing the same transaction twice is not allowed"
+        );
+        for req in tx.requests.iter() {
+            assert!(!self.has_pending_request(req.block_index));
+        }
+
+        let new_txid = tx.txid;
+        let pos = self
+            .submitted_transactions
+            .iter()
+            .position(|tx| &tx.txid == old_txid)
+            .expect("BUG: attempted to replace an unknown transaction");
+
+        std::mem::swap(&mut self.submitted_transactions[pos], &mut tx);
+        // tx points to the old transaction now.
+        debug_assert_eq!(&tx.txid, old_txid);
+
+        self.stuck_transactions.push(tx);
+        self.replacement_txid.insert(*old_txid, new_txid);
+        self.rev_replacement_txid.insert(new_txid, *old_txid);
+    }
+
+    /// Returns the identifier of the most recent replacement transaction for the given stuck
+    /// transaction id.
+    pub fn find_last_replacement_tx(&self, txid: &[u8; 32]) -> Option<&[u8; 32]> {
+        let mut last = self.replacement_txid.get(txid)?;
+        while let Some(newer_txid) = self.replacement_txid.get(last) {
+            last = newer_txid;
+        }
+        Some(last)
     }
 
     /// Removes a pending retrive_btc request with the specified block index.
@@ -828,6 +983,12 @@ impl CkBtcMinterState {
         let other_txs = as_sorted_vec(other.submitted_transactions.iter().cloned(), |tx| tx.txid);
         ensure_eq!(my_txs, other_txs, "submitted_transactions do not match");
 
+        ensure_eq!(
+            self.stuck_transactions,
+            other.stuck_transactions,
+            "stuck_transactions do not match"
+        );
+
         let my_requests = as_sorted_vec(self.pending_retrieve_btc_requests.iter().cloned(), |r| {
             r.block_index
         });
@@ -839,6 +1000,18 @@ impl CkBtcMinterState {
             my_requests,
             other_requests,
             "pending_retrieve_btc_requests do not match"
+        );
+
+        ensure_eq!(
+            self.replacement_txid,
+            other.replacement_txid,
+            "replacement_txid maps do not match"
+        );
+
+        ensure_eq!(
+            self.rev_replacement_txid,
+            other.rev_replacement_txid,
+            "rev_replacement_txid maps do not match"
         );
 
         Ok(())
@@ -867,6 +1040,9 @@ impl From<InitArgs> for CkBtcMinterState {
             pending_retrieve_btc_requests: Default::default(),
             requests_in_flight: Default::default(),
             submitted_transactions: Default::default(),
+            replacement_txid: Default::default(),
+            rev_replacement_txid: Default::default(),
+            stuck_transactions: Default::default(),
             finalized_requests: VecDeque::with_capacity(MAX_FINALIZED_REQUESTS),
             finalized_requests_count: 0,
             tokens_minted: 0,
