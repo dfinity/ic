@@ -1,8 +1,10 @@
 use ic_crypto_sha::Sha256;
-use ic_state_manager::manifest::{hash::file_hasher, manifest_hash};
+use ic_state_manager::manifest::validate_manifest;
+use ic_types::crypto::CryptoHash;
 use ic_types::state_sync::{
     ChunkInfo, FileInfo, Manifest, StateSyncVersion, MAX_SUPPORTED_STATE_SYNC_VERSION,
 };
+use ic_types::CryptoHashOfState;
 use std::{
     collections::BTreeMap,
     convert::TryInto,
@@ -11,57 +13,11 @@ use std::{
     path::{Path, PathBuf},
     str::FromStr,
 };
-fn write_chunk_hash(chunk: &ChunkInfo, hasher: &mut Sha256) {
-    hasher.write(&chunk.file_index.to_be_bytes());
-    hasher.write(&chunk.size_bytes.to_be_bytes());
-    hasher.write(&chunk.offset.to_be_bytes());
-    hasher.write(&chunk.hash)
-}
-
-trait FileHasher {
-    fn compute_file_hash(&self, chunk_entries: Vec<&ChunkInfo>) -> [u8; 32];
-}
-
-impl FileHasher for FileInfo {
-    fn compute_file_hash(&self, chunk_entries: Vec<&ChunkInfo>) -> [u8; 32] {
-        let mut hasher = file_hasher();
-        hasher.write(&(chunk_entries.len() as u32).to_be_bytes());
-
-        for entry in chunk_entries {
-            write_chunk_hash(entry, &mut hasher);
-        }
-        hasher.finish()
-    }
-}
 
 fn parse_hash(hash: &str) -> [u8; 32] {
     let hash = hex::decode(hash).unwrap();
     assert_eq!(hash.len(), 32);
     hash.try_into().unwrap()
-}
-
-fn compute_root_hash(
-    file_table: Vec<FileInfo>,
-    chunk_table: Vec<ChunkInfo>,
-    state_sync_version: StateSyncVersion,
-) -> [u8; 32] {
-    // verify the file hash in file info
-    for (idx, f) in file_table.iter().enumerate() {
-        let hash_recomputed = f.compute_file_hash(
-            chunk_table
-                .iter()
-                .filter(|chunk| chunk.file_index == idx as u32)
-                .collect(),
-        );
-        assert_eq!(
-            hash_recomputed, f.hash,
-            "File hash mismatch in file with index {}",
-            idx
-        );
-    }
-
-    let manifest = Manifest::new(state_sync_version, file_table, chunk_table);
-    manifest_hash(&manifest)
 }
 
 /// A canister hash enables comparing canisters across states.
@@ -276,12 +232,13 @@ fn verify_manifest(file: File) -> Result<(), String> {
         );
     }
 
-    let root_hash_recomputed = compute_root_hash(file_table, chunk_table, version);
-    assert_eq!(root_hash, root_hash_recomputed);
-    println!(
-        "Recomputed root hash: {}",
-        hex::encode(root_hash_recomputed)
-    );
+    let manifest = Manifest::new(version, file_table, chunk_table);
+    validate_manifest(
+        &manifest,
+        &CryptoHashOfState::from(CryptoHash(root_hash.to_vec())),
+    )
+    .unwrap();
+    println!("Root hash: {}", hex::encode(root_hash));
 
     Ok(())
 }
@@ -322,6 +279,7 @@ mod tests {
     use super::{canister_hash, verify_manifest};
 
     fn test_manifest_entry(
+        version: StateSyncVersion,
         file_index: u32,
         relative_path: &str,
         data: u8,
@@ -332,7 +290,9 @@ mod tests {
 
         hasher = file_hasher();
         hasher.write(&1_u32.to_be_bytes());
-        hasher.write(&file_index.to_be_bytes());
+        if version < StateSyncVersion::V3 {
+            hasher.write(&file_index.to_be_bytes());
+        }
         hasher.write(&1024_u32.to_be_bytes());
         hasher.write(&0_u64.to_be_bytes());
         hasher.write(&chunk_0_hash[..]);
@@ -367,20 +327,22 @@ mod tests {
     }
 
     fn test_manifest_current_version() -> (Manifest, String) {
+        let version = CURRENT_STATE_SYNC_VERSION;
         test_manifest(
-            CURRENT_STATE_SYNC_VERSION,
+            version,
             &[
-                test_manifest_entry(0, "root.bin", 0),
-                test_manifest_entry(1, "canister_states/canister_0/test.bin", 1),
-                test_manifest_entry(2, "canister_states/canister_1/test.bin", 2),
+                test_manifest_entry(version, 0, "root.bin", 0),
+                test_manifest_entry(version, 1, "canister_states/canister_0/test.bin", 1),
             ],
         )
     }
 
-    fn test_manifest_current_version_2() -> (Manifest, String) {
+    fn test_manifest_2_current_version() -> (Manifest, String) {
+        let version = CURRENT_STATE_SYNC_VERSION;
         test_manifest(
-            CURRENT_STATE_SYNC_VERSION,
+            version,
             &[test_manifest_entry(
+                version,
                 0,
                 "canister_states/canister_0/test.bin",
                 1,
@@ -389,12 +351,13 @@ mod tests {
     }
 
     fn test_manifest_v2() -> (Manifest, String) {
+        let version = StateSyncVersion::V2;
         test_manifest(
-            StateSyncVersion::V2,
+            version,
             &[
-                test_manifest_entry(0, "root.bin", 0),
-                test_manifest_entry(1, "canister_states/canister_0/test.bin", 1),
-                test_manifest_entry(2, "canister_states/canister_1/test.bin", 2),
+                test_manifest_entry(version, 0, "root.bin", 0),
+                test_manifest_entry(version, 1, "canister_states/canister_0/test.bin", 1),
+                test_manifest_entry(version, 2, "canister_states/canister_1/test.bin", 2),
             ],
         )
     }
@@ -434,7 +397,7 @@ mod tests {
         let (manifest_0, root_hash_0) = test_manifest_current_version();
         let canister_hash_0 = compute_canister_hash(manifest_0, "canister_0");
 
-        let (manifest_1, root_hash_1) = test_manifest_current_version_2();
+        let (manifest_1, root_hash_1) = test_manifest_2_current_version();
         let canister_hash_1 = compute_canister_hash(manifest_1, "canister_0");
 
         assert_eq!(canister_hash_0, canister_hash_1);
