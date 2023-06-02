@@ -27,10 +27,3 @@ include:
     - .ubuntu-k8s
     - .rules-parent-pipeline
   stage: cargo-build
-
-.cargo-build-macos:
-  needs: []  # don't wait on other jobs by default
-  extends:
-    - .macos-cargo-native
-    - .rules-parent-pipeline-protected-branch-only
-  stage: cargo-build
