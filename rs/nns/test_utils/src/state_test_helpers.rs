@@ -313,7 +313,7 @@ pub fn try_call_with_cycles_via_universal_canister(
     update(machine, sender, "update", universal_canister_payload)
 }
 /// Converts a canisterID to a u64 by relying on an implementation detail.
-pub fn canister_id_to_u64(canister_id: CanisterId) -> u64 {
+fn canister_id_to_u64(canister_id: CanisterId) -> u64 {
     let bytes: [u8; 8] = canister_id.get().to_vec()[0..8]
         .try_into()
         .expect("Could not convert vector to [u8; 8]");
@@ -323,10 +323,14 @@ pub fn canister_id_to_u64(canister_id: CanisterId) -> u64 {
 
 /// Create a canister at 0-indexed position (assuming canisters are created sequentially)
 /// This also creates all intermediate canisters
-pub fn create_canister_id_at_position(machine: &StateMachine, position: u64) -> CanisterId {
-    let mut canister_id = machine.create_canister(/* settings = */ None);
+pub fn create_canister_id_at_position(
+    machine: &StateMachine,
+    position: u64,
+    canister_settings: Option<CanisterSettingsArgs>,
+) -> CanisterId {
+    let mut canister_id = machine.create_canister(canister_settings.clone());
     while canister_id_to_u64(canister_id) < position {
-        canister_id = machine.create_canister(None);
+        canister_id = machine.create_canister(canister_settings.clone());
     }
 
     // In case we tried using this when we are already past the sequence
@@ -339,8 +343,15 @@ pub fn setup_nns_governance_with_correct_canister_id(
     machine: &StateMachine,
     init_payload: Governance,
 ) {
-    let canister_id =
-        create_canister_id_at_position(machine, GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET);
+    let canister_id = create_canister_id_at_position(
+        machine,
+        GOVERNANCE_CANISTER_INDEX_IN_NNS_SUBNET,
+        Some(
+            CanisterSettingsArgsBuilder::new()
+                .with_controllers(vec![ROOT_CANISTER_ID.get()])
+                .build(),
+        ),
+    );
 
     assert_eq!(canister_id, GOVERNANCE_CANISTER_ID);
 
@@ -360,8 +371,15 @@ pub fn setup_nns_sns_wasms_with_correct_canister_id(
     machine: &StateMachine,
     init_payload: SnsWasmCanisterInitPayload,
 ) {
-    let canister_id =
-        create_canister_id_at_position(machine, SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET);
+    let canister_id = create_canister_id_at_position(
+        machine,
+        SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET,
+        Some(
+            CanisterSettingsArgsBuilder::new()
+                .with_controllers(vec![ROOT_CANISTER_ID.get()])
+                .build(),
+        ),
+    );
 
     assert_eq!(canister_id, SNS_WASM_CANISTER_ID);
 
@@ -384,6 +402,7 @@ pub fn setup_nns_canisters(machine: &StateMachine, init_payloads: NnsInitPayload
         Some(
             CanisterSettingsArgsBuilder::new()
                 .with_memory_allocation(memory_allocation_of(REGISTRY_CANISTER_ID))
+                .with_controllers(vec![ROOT_CANISTER_ID.get()])
                 .build(),
         ),
     );
@@ -398,6 +417,7 @@ pub fn setup_nns_canisters(machine: &StateMachine, init_payloads: NnsInitPayload
         Some(
             CanisterSettingsArgsBuilder::new()
                 .with_memory_allocation(memory_allocation_of(LEDGER_CANISTER_ID))
+                .with_controllers(vec![ROOT_CANISTER_ID.get()])
                 .build(),
         ),
     );
@@ -410,6 +430,7 @@ pub fn setup_nns_canisters(machine: &StateMachine, init_payloads: NnsInitPayload
         Some(
             CanisterSettingsArgsBuilder::new()
                 .with_memory_allocation(memory_allocation_of(ROOT_CANISTER_ID))
+                .with_controllers(vec![LIFELINE_CANISTER_ID.get()])
                 .build(),
         ),
     );
@@ -422,6 +443,7 @@ pub fn setup_nns_canisters(machine: &StateMachine, init_payloads: NnsInitPayload
         Some(
             CanisterSettingsArgsBuilder::new()
                 .with_memory_allocation(memory_allocation_of(CYCLES_MINTING_CANISTER_ID))
+                .with_controllers(vec![ROOT_CANISTER_ID.get()])
                 .build(),
         ),
     );
@@ -434,6 +456,7 @@ pub fn setup_nns_canisters(machine: &StateMachine, init_payloads: NnsInitPayload
         Some(
             CanisterSettingsArgsBuilder::new()
                 .with_memory_allocation(memory_allocation_of(LIFELINE_CANISTER_ID))
+                .with_controllers(vec![ROOT_CANISTER_ID.get()])
                 .build(),
         ),
     );
@@ -446,6 +469,7 @@ pub fn setup_nns_canisters(machine: &StateMachine, init_payloads: NnsInitPayload
         Some(
             CanisterSettingsArgsBuilder::new()
                 .with_memory_allocation(memory_allocation_of(GENESIS_TOKEN_CANISTER_ID))
+                .with_controllers(vec![ROOT_CANISTER_ID.get()])
                 .build(),
         ),
     );
