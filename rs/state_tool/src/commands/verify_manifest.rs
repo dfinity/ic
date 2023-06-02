@@ -41,16 +41,16 @@ fn parse_hash(hash: &str) -> [u8; 32] {
 }
 
 fn compute_root_hash(
-    file_table: BTreeMap<u32, FileInfo>,
+    file_table: Vec<FileInfo>,
     chunk_table: Vec<ChunkInfo>,
     state_sync_version: StateSyncVersion,
 ) -> [u8; 32] {
     // verify the file hash in file info
-    for (idx, f) in &file_table {
+    for (idx, f) in file_table.iter().enumerate() {
         let hash_recomputed = f.compute_file_hash(
             chunk_table
                 .iter()
-                .filter(|chunk| chunk.file_index == *idx)
+                .filter(|chunk| chunk.file_index == idx as u32)
                 .collect(),
         );
         assert_eq!(
@@ -60,11 +60,7 @@ fn compute_root_hash(
         );
     }
 
-    let manifest = Manifest::new(
-        state_sync_version,
-        file_table.values().cloned().collect(),
-        chunk_table,
-    );
+    let manifest = Manifest::new(state_sync_version, file_table, chunk_table);
     manifest_hash(&manifest)
 }
 
@@ -102,11 +98,7 @@ fn compute_root_hash(
 ///                    · offset as u64
 ///                    · chunk_hash
 /// ```
-fn canister_hash(
-    file_table: BTreeMap<u32, FileInfo>,
-    chunk_table: Vec<ChunkInfo>,
-    canister: &str,
-) -> String {
+fn canister_hash(file_table: Vec<FileInfo>, chunk_table: Vec<ChunkInfo>, canister: &str) -> String {
     fn canister_hasher() -> Sha256 {
         let mut h = Sha256::new();
         let sep = "ic-canister-hash";
@@ -124,6 +116,7 @@ fn canister_hash(
 
     let file_table = file_table
         .into_iter()
+        .enumerate()
         .filter(|(_, f)| path(f).contains(&format!("canister_states/{}/", canister)))
         .collect::<BTreeMap<_, _>>();
 
@@ -151,7 +144,7 @@ fn canister_hash(
 
         let chunks = chunk_table
             .iter()
-            .filter(|chunk| chunk.file_index == *idx)
+            .filter(|chunk| chunk.file_index == *idx as u32)
             .collect::<Vec<_>>();
         assert_eq!(
             expected_chunks,
@@ -193,7 +186,7 @@ fn extract_manifest_version(lines: &[String]) -> StateSyncVersion {
     StateSyncVersion::try_from(version).unwrap()
 }
 
-fn extract_file_table(lines: &[String]) -> BTreeMap<u32, FileInfo> {
+fn extract_file_table(lines: &[String]) -> Vec<FileInfo> {
     lines
         .iter()
         // Skip until the beginning of the file table is reached.
@@ -202,18 +195,22 @@ fn extract_file_table(lines: &[String]) -> BTreeMap<u32, FileInfo> {
         .take_while(|line| !line.starts_with("CHUNK TABLE"))
         // Skip the 3 header lines of the file table.
         .skip(3)
-        .map(|line| {
+        .enumerate()
+        .map(|(i, line)| {
             let mut columns = line.split('|').into_iter().map(|column| column.trim());
-            (
-                columns.next().unwrap().parse().unwrap(),
-                FileInfo {
-                    size_bytes: columns.next().unwrap().parse().unwrap(),
-                    hash: parse_hash(columns.next().unwrap()),
-                    relative_path: PathBuf::from_str(columns.next().unwrap()).unwrap(),
-                },
-            )
+            assert_eq!(
+                i,
+                columns.next().unwrap().parse::<usize>().unwrap(),
+                "Missing file index {}",
+                i
+            );
+            FileInfo {
+                size_bytes: columns.next().unwrap().parse().unwrap(),
+                hash: parse_hash(columns.next().unwrap()),
+                relative_path: PathBuf::from_str(columns.next().unwrap()).unwrap(),
+            }
         })
-        .collect::<BTreeMap<_, _>>()
+        .collect()
 }
 
 fn extract_chunk_table(lines: &[String]) -> Vec<ChunkInfo> {
@@ -253,14 +250,7 @@ fn extract_root_hash(lines: &[String]) -> [u8; 32] {
     .unwrap()
 }
 
-fn parse_manifest(
-    file: File,
-) -> (
-    StateSyncVersion,
-    BTreeMap<u32, FileInfo>,
-    Vec<ChunkInfo>,
-    [u8; 32],
-) {
+fn parse_manifest(file: File) -> (StateSyncVersion, Vec<FileInfo>, Vec<ChunkInfo>, [u8; 32]) {
     let manifest_lines: Vec<String> = BufReader::new(file)
         .lines()
         .into_iter()
@@ -319,10 +309,7 @@ pub fn do_verify_manifest(file: &Path) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        collections::BTreeMap,
-        io::{Seek, Write},
-    };
+    use std::io::{Seek, Write};
 
     use ic_state_manager::manifest::{
         hash::{chunk_hasher, file_hasher},
@@ -438,12 +425,7 @@ mod tests {
     fn canister_hashes_in_different_states_match() {
         fn compute_canister_hash(manifest: Manifest, canister: &str) -> String {
             canister_hash(
-                manifest
-                    .file_table
-                    .iter()
-                    .enumerate()
-                    .map(|(i, f)| (i as u32, f.clone()))
-                    .collect::<BTreeMap<_, _>>(),
+                manifest.file_table.clone(),
                 manifest.chunk_table.clone(),
                 canister,
             )
