@@ -46,7 +46,7 @@ pub fn execute_update(
             Some(prepaid_execution_cycles) => (clean_canister, prepaid_execution_cycles, true),
             None => {
                 let mut canister = clean_canister;
-                let memory_usage = canister.memory_usage(execution_parameters.subnet_type);
+                let memory_usage = canister.memory_usage();
                 let prepaid_execution_cycles =
                     match round.cycles_account_manager.prepay_execution_cycles(
                         &mut canister.system_state,
@@ -75,7 +75,7 @@ pub fn execute_update(
     let freezing_threshold = round.cycles_account_manager.freeze_threshold_cycles(
         clean_canister.system_state.freeze_threshold,
         clean_canister.system_state.memory_allocation,
-        clean_canister.memory_usage(execution_parameters.subnet_type),
+        clean_canister.memory_usage(),
         clean_canister.compute_allocation(),
         subnet_size,
     );
@@ -125,9 +125,7 @@ pub fn execute_update(
         ),
     };
 
-    let memory_usage = helper
-        .canister()
-        .memory_usage(original.execution_parameters.subnet_type);
+    let memory_usage = helper.canister().memory_usage();
     let result = round.hypervisor.execute_dts(
         api_type,
         helper.canister().execution_state.as_ref().unwrap(),

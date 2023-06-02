@@ -161,56 +161,21 @@ impl CanisterState {
 
     /// See `SystemState::push_input` for documentation.
     ///
-    /// `max_canister_memory_size` is the replica's configured maximum canister
-    /// memory usage. The specific canister may have an explicit memory
-    /// allocation, which would override this maximum. Based on the canister's
-    /// specific memory limit we compute the canister's available memory and
-    /// pass that to `SystemState::push_input()` (which doesn't have all the
-    /// data necessary to compute it itself).
-    ///
     /// The function is public as we push directly to the Canister state in
     /// `SchedulerImpl::induct_messages_on_same_subnet()`
     pub fn push_input(
         &mut self,
         msg: RequestOrResponse,
-        max_canister_memory_size: NumBytes,
         subnet_available_memory: &mut i64,
         own_subnet_type: SubnetType,
         input_queue_type: InputQueueType,
     ) -> Result<(), (StateError, RequestOrResponse)> {
         self.system_state.push_input(
             msg,
-            self.available_message_memory(max_canister_memory_size, own_subnet_type),
             subnet_available_memory,
             own_subnet_type,
             input_queue_type,
         )
-    }
-
-    /// Returns the memory available for canister messages based on
-    ///  * the maximum canister memory size;
-    ///  * the canister's memory allocation (overriding the former) if any; and
-    ///  * the subnet type (accounting for execution, canister history, and
-    ///    message memory usage on application subnets; but only for messages
-    ///    and disregarding any memory allocation on system subnets).
-    fn available_message_memory(
-        &self,
-        max_canister_memory_size: NumBytes,
-        own_subnet_type: SubnetType,
-    ) -> i64 {
-        if own_subnet_type == SubnetType::System {
-            // For system subnets we ignore the canister allocation, if any;
-            // and the execution and canister history memory usage;
-            // and always allow up to `max_canister_memory_size` worth of messages.
-            max_canister_memory_size.get() as i64
-                - self.system_state.message_memory_usage().get() as i64
-        } else {
-            // For application subnets allow execution, canister history,
-            // and messages to use up to the canister's memory allocation,
-            // if any; or else `max_canister_memory_size`.
-            self.memory_limit(max_canister_memory_size).get() as i64
-                - self.memory_usage(own_subnet_type).get() as i64
-        }
     }
 
     /// See `SystemState::pop_input` for documentation.
@@ -332,8 +297,7 @@ impl CanisterState {
     }
 
     /// Inducts messages from the output queue to `self` into the input queue
-    /// from `self` while respecting queue capacity; the canister's computed
-    /// available memory; and subnet available memory.
+    /// from `self` while respecting queue capacity and subnet available memory.
     ///
     /// `max_canister_memory_size` is the replica's configured maximum canister
     /// memory usage. The specific canister may have an explicit memory
@@ -346,15 +310,11 @@ impl CanisterState {
     /// usage due to inducting the messages.
     pub fn induct_messages_to_self(
         &mut self,
-        max_canister_memory_size: NumBytes,
         subnet_available_memory: &mut i64,
         own_subnet_type: SubnetType,
     ) {
-        self.system_state.induct_messages_to_self(
-            self.available_message_memory(max_canister_memory_size, own_subnet_type),
-            subnet_available_memory,
-            own_subnet_type,
-        )
+        self.system_state
+            .induct_messages_to_self(subnet_available_memory, own_subnet_type)
     }
 
     pub fn into_parts(self) -> (Option<ExecutionState>, SystemState, SchedulerState) {
@@ -379,12 +339,8 @@ impl CanisterState {
 
     /// Checks the constraints that a canister should always respect.
     /// These invariants will be verified at the end of each execution round.
-    pub fn check_invariants(
-        &self,
-        own_subnet_type: SubnetType,
-        default_limit: NumBytes,
-    ) -> Result<(), StateError> {
-        let memory_used = self.memory_usage(own_subnet_type);
+    pub fn check_invariants(&self, default_limit: NumBytes) -> Result<(), StateError> {
+        let memory_used = self.memory_usage();
         let memory_limit = self.memory_limit(default_limit);
 
         if memory_used > memory_limit {
@@ -428,15 +384,9 @@ impl CanisterState {
     /// The amount of memory currently being used by the canister.
     ///
     /// This only includes execution memory (heap, stable, globals, Wasm)
-    /// and canister history memory for system subnets; and execution memory
-    /// plus system state memory (canister messages and canister history)
-    /// for application subnets.
-    pub fn memory_usage(&self, own_subnet_type: SubnetType) -> NumBytes {
-        let mut result = self.raw_memory_usage() + self.canister_history_memory_usage();
-        if own_subnet_type != SubnetType::System {
-            result += self.message_memory_usage();
-        }
-        result
+    /// and canister history memory.
+    pub fn memory_usage(&self) -> NumBytes {
+        self.raw_memory_usage() + self.canister_history_memory_usage()
     }
 
     /// Returns the amount of raw memory currently used by the canister in bytes.
@@ -449,7 +399,7 @@ impl CanisterState {
     }
 
     /// Returns the amount of canister message memory used by the canister in bytes.
-    pub(crate) fn message_memory_usage(&self) -> NumBytes {
+    pub fn message_memory_usage(&self) -> NumBytes {
         self.system_state.message_memory_usage()
     }
 
@@ -464,11 +414,6 @@ impl CanisterState {
     /// Returns the amount of memory used by canister history in bytes.
     pub fn canister_history_memory_usage(&self) -> NumBytes {
         self.system_state.canister_history_memory_usage()
-    }
-
-    /// Hack to get the dashboard templating working.
-    pub fn memory_usage_ref(&self, own_subnet_type: &SubnetType) -> NumBytes {
-        self.memory_usage(*own_subnet_type)
     }
 
     /// Sets the (transient) size in bytes of responses from this canister
@@ -604,7 +549,6 @@ pub mod testing {
         ) -> Result<(), (StateError, RequestOrResponse)> {
             (self as &mut CanisterState).push_input(
                 msg,
-                (i64::MAX as u64 / 2).into(),
                 &mut (i64::MAX / 2),
                 SubnetType::Application,
                 InputQueueType::RemoteSubnet,

@@ -174,8 +174,6 @@ pub(crate) trait StreamHandler: Send {
 pub(crate) struct StreamHandlerImpl {
     subnet_id: SubnetId,
 
-    max_canister_memory_size: NumBytes,
-    subnet_memory_capacity: NumBytes,
     subnet_message_memory_capacity: NumBytes,
 
     metrics: StreamHandlerMetrics,
@@ -202,8 +200,6 @@ impl StreamHandlerImpl {
     ) -> Self {
         Self {
             subnet_id,
-            max_canister_memory_size: hypervisor_config.max_canister_memory_size,
-            subnet_memory_capacity: hypervisor_config.subnet_memory_capacity,
             subnet_message_memory_capacity: hypervisor_config.subnet_message_memory_capacity,
             metrics: StreamHandlerMetrics::new(metrics_registry),
             time_in_stream_metrics,
@@ -525,15 +521,9 @@ impl StreamHandlerImpl {
         stream_slices: BTreeMap<SubnetId, StreamSlice>,
     ) -> ReplicatedState {
         let memory_taken = state.memory_taken();
-        let execution_memory_taken = memory_taken.execution();
         let message_memory_taken = memory_taken.messages();
-        let subnet_available_memory = self.subnet_memory_capacity.get() as i64
-            - execution_memory_taken.get() as i64
-            - message_memory_taken.get() as i64;
-        let subnet_available_message_memory =
-            self.subnet_message_memory_capacity.get() as i64 - message_memory_taken.get() as i64;
         let mut subnet_available_memory =
-            subnet_available_memory.min(subnet_available_message_memory);
+            self.subnet_message_memory_capacity.get() as i64 - message_memory_taken.get() as i64;
         let mut streams = state.take_streams();
 
         for (remote_subnet_id, mut stream_slice) in stream_slices {
@@ -606,11 +596,9 @@ impl StreamHandlerImpl {
             let payload_size = msg.payload_size_bytes().get();
             match receiver_host_subnet {
                 // Matching receiver subnet, try inducting message.
-                Some(host_subnet) if host_subnet == self.subnet_id => match state.push_input(
-                    msg,
-                    self.max_canister_memory_size,
-                    subnet_available_memory,
-                ) {
+                Some(host_subnet) if host_subnet == self.subnet_id => match state
+                    .push_input(msg, subnet_available_memory)
+                {
                     // Message successfully inducted, all done.
                     Ok(()) => {
                         self.observe_inducted_message_status(msg_type, LABEL_VALUE_SUCCESS);

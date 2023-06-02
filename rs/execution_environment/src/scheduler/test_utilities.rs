@@ -589,11 +589,8 @@ pub(crate) struct SchedulerTestBuilder {
     batch_time: Time,
     scheduler_config: SchedulerConfig,
     initial_canister_cycles: Cycles,
-    subnet_total_memory: u64,
     subnet_message_memory: u64,
-    subnet_wasm_custom_sections_memory: u64,
     registry_settings: RegistryExecutionSettings,
-    max_canister_memory_size: u64,
     allocatable_compute_capacity_in_percent: usize,
     rate_limiting_of_instructions: bool,
     rate_limiting_of_heap_delta: bool,
@@ -608,8 +605,6 @@ impl Default for SchedulerTestBuilder {
         let subnet_type = SubnetType::Application;
         let scheduler_config = SubnetConfig::new(subnet_type).scheduler_config;
         let config = ic_config::execution_environment::Config::default();
-        let subnet_total_memory = config.subnet_memory_capacity.get();
-        let max_canister_memory_size = config.max_canister_memory_size.get();
         Self {
             own_subnet_id: subnet_test_id(1),
             nns_subnet_id: subnet_test_id(2),
@@ -617,13 +612,8 @@ impl Default for SchedulerTestBuilder {
             batch_time: UNIX_EPOCH,
             scheduler_config,
             initial_canister_cycles: Cycles::new(1_000_000_000_000_000_000),
-            subnet_total_memory,
             subnet_message_memory: config.subnet_message_memory_capacity.get(),
-            subnet_wasm_custom_sections_memory: config
-                .subnet_wasm_custom_sections_memory_capacity
-                .get(),
             registry_settings: test_registry_settings(),
-            max_canister_memory_size,
             allocatable_compute_capacity_in_percent: 100,
             rate_limiting_of_instructions: false,
             rate_limiting_of_heap_delta: false,
@@ -649,33 +639,9 @@ impl SchedulerTestBuilder {
         }
     }
 
-    pub fn with_subnet_total_memory(self, subnet_total_memory: u64) -> Self {
-        Self {
-            subnet_total_memory,
-            ..self
-        }
-    }
-
     pub fn with_subnet_message_memory(self, subnet_message_memory: u64) -> Self {
         Self {
             subnet_message_memory,
-            ..self
-        }
-    }
-
-    pub fn with_subnet_wasm_custom_sections_memory(
-        self,
-        subnet_wasm_custom_sections_memory: u64,
-    ) -> Self {
-        Self {
-            subnet_wasm_custom_sections_memory,
-            ..self
-        }
-    }
-
-    pub fn with_max_canister_memory_size(self, max_canister_memory_size: u64) -> Self {
-        Self {
-            max_canister_memory_size,
             ..self
         }
     }
@@ -793,12 +759,7 @@ impl SchedulerTestBuilder {
         };
         let config = ic_config::execution_environment::Config {
             allocatable_compute_capacity_in_percent: self.allocatable_compute_capacity_in_percent,
-            subnet_memory_capacity: NumBytes::from(self.subnet_total_memory),
             subnet_message_memory_capacity: NumBytes::from(self.subnet_message_memory),
-            subnet_wasm_custom_sections_memory_capacity: NumBytes::from(
-                self.subnet_wasm_custom_sections_memory,
-            ),
-            max_canister_memory_size: NumBytes::from(self.max_canister_memory_size),
             rate_limiting_of_instructions,
             rate_limiting_of_heap_delta,
             deterministic_time_slicing,

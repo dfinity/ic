@@ -1052,9 +1052,7 @@ impl SchedulerImpl {
         let mut subnet_available_memory = self
             .exec_env
             .subnet_available_memory(state)
-            .max_available_message_memory();
-
-        let max_canister_memory_size = self.exec_env.max_canister_memory_size();
+            .get_message_memory();
 
         let mut canisters = state.take_canister_states();
 
@@ -1086,7 +1084,6 @@ impl SchedulerImpl {
                 .queues()
                 .output_queues_message_count();
             source_canister.induct_messages_to_self(
-                max_canister_memory_size,
                 &mut subnet_available_memory,
                 state.metadata.own_subnet_type,
             );
@@ -1107,7 +1104,6 @@ impl SchedulerImpl {
                     Some(dest_canister) => dest_canister
                         .push_input(
                             (*msg).clone(),
-                            max_canister_memory_size,
                             &mut subnet_available_memory,
                             state.metadata.own_subnet_type,
                             InputQueueType::LocalSubnet,
@@ -1151,10 +1147,7 @@ impl SchedulerImpl {
     ) -> bool {
         for canister_id in canister_ids {
             let canister = state.canister_states.get(canister_id).unwrap();
-            if let Err(err) = canister.check_invariants(
-                state.metadata.own_subnet_type,
-                self.exec_env.max_canister_memory_size(),
-            ) {
+            if let Err(err) = canister.check_invariants(self.exec_env.max_canister_memory_size()) {
                 // Crash in debug mode if any invariant fails.
                 debug_assert!(false,
                     "{}: At Round {} @ time {}, canister {} has invalid state after execution. Invariants check failed with err: {}",
@@ -1533,7 +1526,6 @@ impl Scheduler for SchedulerImpl {
             let mut total_canister_history_memory_usage = NumBytes::new(0);
             let mut total_canister_memory_usage = NumBytes::new(0);
             let _timer = self.metrics.round_finalization_duration.start_timer();
-            let own_subnet_type = state.metadata.own_subnet_type;
             for canister in state.canisters_iter_mut() {
                 let heap_delta_debit = canister.scheduler_state.heap_delta_debit.get();
                 self.metrics
@@ -1559,7 +1551,7 @@ impl Scheduler for SchedulerImpl {
                         FlagStatus::Disabled => NumInstructions::from(0),
                     };
                 total_canister_history_memory_usage += canister.canister_history_memory_usage();
-                total_canister_memory_usage += canister.memory_usage(own_subnet_type);
+                total_canister_memory_usage += canister.memory_usage();
                 total_canister_balance += canister.system_state.balance();
                 cycles_out_sum += canister.system_state.queues().output_queue_cycles();
             }

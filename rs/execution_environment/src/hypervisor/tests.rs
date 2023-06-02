@@ -2080,7 +2080,7 @@ fn instruction_limit_is_respected() {
 #[test]
 fn subnet_available_memory_is_respected_by_memory_grow() {
     let mut test = ExecutionTestBuilder::new()
-        .with_subnet_total_memory(9 * WASM_PAGE_SIZE as i64)
+        .with_subnet_execution_memory(9 * WASM_PAGE_SIZE as i64)
         .build();
     let wat = r#"
         (module
@@ -2109,8 +2109,8 @@ fn subnet_available_memory_is_updated() {
     let result = test.ingress(canister_id, "test", vec![]);
     assert_empty_reply(result);
     assert_eq!(
-        initial_subnet_available_memory.get_total_memory() - 10 * WASM_PAGE_SIZE as i64,
-        test.subnet_available_memory().get_total_memory()
+        initial_subnet_available_memory.get_execution_memory() - 10 * WASM_PAGE_SIZE as i64,
+        test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
         initial_subnet_available_memory.get_message_memory(),
@@ -2136,8 +2136,8 @@ fn subnet_available_memory_is_updated_in_heartbeat() {
         NumWasmPages::new(11)
     );
     assert_eq!(
-        initial_subnet_available_memory.get_total_memory() - 10 * WASM_PAGE_SIZE as i64,
-        test.subnet_available_memory().get_total_memory()
+        initial_subnet_available_memory.get_execution_memory() - 10 * WASM_PAGE_SIZE as i64,
+        test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
         initial_subnet_available_memory.get_message_memory(),
@@ -2163,8 +2163,8 @@ fn subnet_available_memory_is_updated_in_global_timer() {
         NumWasmPages::new(11)
     );
     assert_eq!(
-        initial_subnet_available_memory.get_total_memory() - 10 * WASM_PAGE_SIZE as i64,
-        test.subnet_available_memory().get_total_memory()
+        initial_subnet_available_memory.get_execution_memory() - 10 * WASM_PAGE_SIZE as i64,
+        test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
         initial_subnet_available_memory.get_message_memory(),
@@ -2187,8 +2187,8 @@ fn subnet_available_memory_is_not_updated_in_query() {
     let result = test.ingress(canister_id, "test", vec![]);
     assert_empty_reply(result);
     assert_eq!(
-        initial_subnet_available_memory.get_total_memory(),
-        test.subnet_available_memory().get_total_memory()
+        initial_subnet_available_memory.get_execution_memory(),
+        test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
         initial_subnet_available_memory.get_message_memory(),
@@ -2209,19 +2209,19 @@ fn subnet_available_memory_is_updated_by_canister_init() {
     let initial_subnet_available_memory = test.subnet_available_memory();
     test.canister_from_wat(wat).unwrap();
     assert!(
-        initial_subnet_available_memory.get_total_memory() - 10 * WASM_PAGE_SIZE as i64
-            > test.subnet_available_memory().get_total_memory()
+        initial_subnet_available_memory.get_execution_memory() - 10 * WASM_PAGE_SIZE as i64
+            > test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
         initial_subnet_available_memory.get_message_memory(),
         test.subnet_available_memory().get_message_memory()
     );
-    let memory_used = test.state().memory_taken().total().get() as i64;
+    let memory_used = test.state().memory_taken().execution().get() as i64;
     let canister_history_memory = 2 * size_of::<CanisterChange>() + size_of::<PrincipalId>();
     // canister history memory usage is not updated in SubnetAvailableMemory => we add it at RHS
     assert_eq!(
-        test.subnet_available_memory().get_total_memory(),
-        initial_subnet_available_memory.get_total_memory() - memory_used
+        test.subnet_available_memory().get_execution_memory(),
+        initial_subnet_available_memory.get_execution_memory() - memory_used
             + canister_history_memory as i64
     );
 }
@@ -2240,26 +2240,26 @@ fn subnet_available_memory_is_updated_by_canister_start() {
     let initial_subnet_available_memory = test.subnet_available_memory();
     let canister_id = test.canister_from_wat(wat).unwrap();
     assert!(
-        initial_subnet_available_memory.get_total_memory() - 10 * WASM_PAGE_SIZE as i64
-            > test.subnet_available_memory().get_total_memory()
+        initial_subnet_available_memory.get_execution_memory() - 10 * WASM_PAGE_SIZE as i64
+            > test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
         initial_subnet_available_memory.get_message_memory(),
         test.subnet_available_memory().get_message_memory()
     );
-    let mem_before_upgrade = test.subnet_available_memory().get_total_memory();
+    let mem_before_upgrade = test.subnet_available_memory().get_execution_memory();
     let result = test.upgrade_canister(canister_id, wat::parse_str(wat).unwrap());
     assert_eq!(Ok(()), result);
     assert_eq!(
         mem_before_upgrade,
-        test.subnet_available_memory().get_total_memory()
+        test.subnet_available_memory().get_execution_memory()
     );
-    let memory_used = test.state().memory_taken().total().get() as i64;
+    let memory_used = test.state().memory_taken().execution().get() as i64;
     let canister_history_memory = 3 * size_of::<CanisterChange>() + size_of::<PrincipalId>();
     // canister history memory usage is not updated in SubnetAvailableMemory => we add it at RHS
     assert_eq!(
-        test.subnet_available_memory().get_total_memory(),
-        initial_subnet_available_memory.get_total_memory() - memory_used
+        test.subnet_available_memory().get_execution_memory(),
+        initial_subnet_available_memory.get_execution_memory() - memory_used
             + canister_history_memory as i64
     );
     assert_eq!(
@@ -2286,8 +2286,8 @@ fn subnet_available_memory_is_updated_by_canister_pre_upgrade() {
     let result = test.upgrade_canister(canister_id, wat::parse_str(wat).unwrap());
     assert_eq!(Ok(()), result);
     assert_eq!(
-        initial_subnet_available_memory.get_total_memory() - 10 * WASM_PAGE_SIZE as i64,
-        test.subnet_available_memory().get_total_memory()
+        initial_subnet_available_memory.get_execution_memory() - 10 * WASM_PAGE_SIZE as i64,
+        test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
         initial_subnet_available_memory.get_message_memory(),
@@ -2310,8 +2310,8 @@ fn subnet_available_memory_is_not_updated_by_canister_pre_upgrade_wasm_memory() 
     let result = test.upgrade_canister(canister_id, wat::parse_str(wat).unwrap());
     assert_eq!(Ok(()), result);
     assert_eq!(
-        initial_subnet_available_memory.get_total_memory(),
-        test.subnet_available_memory().get_total_memory()
+        initial_subnet_available_memory.get_execution_memory(),
+        test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
         initial_subnet_available_memory.get_message_memory(),
@@ -2334,8 +2334,8 @@ fn subnet_available_memory_is_updated_by_canister_post_upgrade() {
     let result = test.upgrade_canister(canister_id, wat::parse_str(wat).unwrap());
     assert_eq!(Ok(()), result);
     assert_eq!(
-        initial_subnet_available_memory.get_total_memory() - 10 * WASM_PAGE_SIZE as i64,
-        test.subnet_available_memory().get_total_memory()
+        initial_subnet_available_memory.get_execution_memory() - 10 * WASM_PAGE_SIZE as i64,
+        test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
         initial_subnet_available_memory.get_message_memory(),
@@ -2359,8 +2359,8 @@ fn subnet_available_memory_does_not_change_after_failed_execution() {
     let err = test.ingress(canister_id, "test", vec![]).unwrap_err();
     assert_eq!(ErrorCode::CanisterTrapped, err.code());
     assert_eq!(
-        initial_subnet_available_memory.get_total_memory(),
-        test.subnet_available_memory().get_total_memory()
+        initial_subnet_available_memory.get_execution_memory(),
+        test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
         initial_subnet_available_memory.get_message_memory(),
@@ -2384,7 +2384,7 @@ fn subnet_available_memory_is_not_updated_when_allocation_reserved() {
 
     test.install_canister_with_allocation(canister_id, binary, None, Some(memory_allocation.get()))
         .unwrap();
-    let initial_memory_used = test.state().memory_taken().total();
+    let initial_memory_used = test.state().memory_taken().execution();
     let canister_history_memory = 2 * size_of::<CanisterChange>() + size_of::<PrincipalId>();
     // canister history memory usage is not updated in SubnetAvailableMemory => we add it at RHS
     assert_eq!(
@@ -2396,14 +2396,14 @@ fn subnet_available_memory_is_not_updated_when_allocation_reserved() {
     assert_empty_reply(result);
     // memory taken should not change
     assert_eq!(
-        initial_subnet_available_memory.get_total_memory(),
-        test.subnet_available_memory().get_total_memory()
+        initial_subnet_available_memory.get_execution_memory(),
+        test.subnet_available_memory().get_execution_memory()
     );
     assert_eq!(
         initial_subnet_available_memory.get_message_memory(),
         test.subnet_available_memory().get_message_memory()
     );
-    assert_eq!(initial_memory_used, test.state().memory_taken().total());
+    assert_eq!(initial_memory_used, test.state().memory_taken().execution());
 }
 
 #[test]

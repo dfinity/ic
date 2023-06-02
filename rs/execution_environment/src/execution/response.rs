@@ -756,7 +756,7 @@ pub fn execute_response(
     let freezing_threshold = round.cycles_account_manager.freeze_threshold_cycles(
         clean_canister.system_state.freeze_threshold,
         clean_canister.system_state.memory_allocation,
-        clean_canister.memory_usage(execution_parameters.subnet_type),
+        clean_canister.memory_usage(),
         clean_canister.compute_allocation(),
         subnet_size,
     );
@@ -822,9 +822,7 @@ pub fn execute_response(
         api_type,
         helper.canister().execution_state.as_ref().unwrap(),
         &helper.canister().system_state,
-        helper
-            .canister()
-            .memory_usage(round.hypervisor.subnet_type()),
+        helper.canister().memory_usage(),
         execution_parameters.clone(),
         func_ref,
         round_limits,
@@ -881,14 +879,13 @@ fn execute_response_cleanup(
             FuncRef::QueryClosure(cleanup_closure)
         }
     };
-    let own_subnet_type = round.hypervisor.subnet_type();
     let result = round.hypervisor.execute_dts(
         ApiType::Cleanup {
             time: original.time,
         },
         helper.canister().execution_state.as_ref().unwrap(),
         &helper.canister().system_state,
-        helper.canister().memory_usage(own_subnet_type),
+        helper.canister().memory_usage(),
         execution_parameters.clone(),
         func_ref,
         round_limits,

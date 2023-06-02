@@ -946,8 +946,8 @@ impl SystemState {
     ///    full when pushing a `Request`; or when pushing a `Response` when none
     ///    is expected.
     ///  * `CanisterOutOfCycles` if the canister does not have enough cycles.
-    ///  * `OutOfMemory` if the necessary memory reservation is larger than the
-    ///    canister or subnet available memory.
+    ///  * `OutOfMemory` if the necessary memory reservation is larger than subnet
+    ///     available memory.
     ///  * `CanisterStopping` if the canister is stopping and inducting a
     ///    `Request` was attempted.
     ///  * `CanisterStopped` if the canister is stopped.
@@ -956,7 +956,6 @@ impl SystemState {
     pub(crate) fn push_input(
         &mut self,
         msg: RequestOrResponse,
-        canister_available_memory: i64,
         subnet_available_memory: &mut i64,
         own_subnet_type: SubnetType,
         input_queue_type: InputQueueType,
@@ -1002,7 +1001,6 @@ impl SystemState {
                 push_input(
                     &mut self.queues,
                     msg,
-                    canister_available_memory,
                     subnet_available_memory,
                     own_subnet_type,
                     input_queue_type,
@@ -1107,8 +1105,8 @@ impl SystemState {
     }
 
     /// Inducts messages from the output queue to `self` into the input queue
-    /// from `self` while respecting queue capacity and the provided canister
-    /// and subnet available memory.
+    /// from `self` while respecting queue capacity and the provided subnet
+    /// available memory.
     ///
     /// `subnet_available_memory` is updated to reflect the change in
     /// `self.queues` memory usage.
@@ -1117,7 +1115,6 @@ impl SystemState {
     /// don't want to DoS system canisters due to lots of incoming requests.
     pub fn induct_messages_to_self(
         &mut self,
-        canister_available_memory: i64,
         subnet_available_memory: &mut i64,
         own_subnet_type: SubnetType,
     ) {
@@ -1127,12 +1124,13 @@ impl SystemState {
             CanisterStatus::Stopped | CanisterStatus::Stopping { .. } => return,
         }
 
-        let mut available_memory = canister_available_memory.min(*subnet_available_memory);
         let mut memory_usage = self.queues.memory_usage() as i64;
 
         while let Some(msg) = self.queues.peek_output(&self.canister_id) {
             // Ensure that enough memory is available for inducting `msg`.
-            if own_subnet_type != SubnetType::System && can_push(msg, available_memory).is_err() {
+            if own_subnet_type != SubnetType::System
+                && can_push(msg, *subnet_available_memory).is_err()
+            {
                 // Bail out if not enough memory available for message.
                 return;
             }
@@ -1146,13 +1144,10 @@ impl SystemState {
                 return;
             }
 
-            // Adjust both `available_memory` and `subnet_available_memory` by
-            // `memory_usage_before - memory_usage_after`. Defer the accounting
-            // to `CanisterQueues`, to avoid duplication or divergence.
-            available_memory += memory_usage;
+            // Adjust `subnet_available_memory` by `memory_usage_before - memory_usage_after`.
+            // Defer the accounting to `CanisterQueues`, to avoid duplication or divergence.
             *subnet_available_memory += memory_usage;
             memory_usage = self.queues.memory_usage() as i64;
-            available_memory -= memory_usage;
             *subnet_available_memory -= memory_usage;
         }
     }
@@ -1289,7 +1284,7 @@ impl SystemState {
 /// message into the induction pool of `queues`.
 ///
 /// Returns `StateError::OutOfMemory` if pushing the message would require more
-/// memory than `queues_available_memory.min(subnet_available_memory)`.
+/// memory than `subnet_available_memory`.
 ///
 /// `subnet_available_memory` is updated to reflect the change in memory usage
 /// after a successful push; and left unmodified if the push failed.
@@ -1298,19 +1293,17 @@ impl SystemState {
 pub(crate) fn push_input(
     queues: &mut CanisterQueues,
     msg: RequestOrResponse,
-    queues_available_memory: i64,
     subnet_available_memory: &mut i64,
     own_subnet_type: SubnetType,
     input_queue_type: InputQueueType,
 ) -> Result<(), (StateError, RequestOrResponse)> {
     // Do not enforce limits for local messages on system subnets.
     if own_subnet_type != SubnetType::System || input_queue_type != InputQueueType::LocalSubnet {
-        let available_memory = queues_available_memory.min(*subnet_available_memory);
-        if let Err(required_memory) = can_push(&msg, available_memory) {
+        if let Err(required_memory) = can_push(&msg, *subnet_available_memory) {
             return Err((
                 StateError::OutOfMemory {
                     requested: NumBytes::new(required_memory as u64),
-                    available: available_memory,
+                    available: *subnet_available_memory,
                 },
                 msg,
             ));

@@ -732,7 +732,7 @@ fn stable_grow_updates_subnet_available_memory() {
     // The universal canister needs one wasm page for it's stack in addition to
     // the page we allocated with `stable_grow`.
     assert_eq!(
-        initial_subnet_memory - test.subnet_available_memory().get_total_memory(),
+        initial_subnet_memory - test.subnet_available_memory().get_execution_memory(),
         2 * WASM_PAGE_SIZE_IN_BYTES as i64
     );
 
@@ -747,7 +747,7 @@ fn stable_grow_updates_subnet_available_memory() {
     assert_matches!(result, WasmResult::Reply(_));
     assert_eq!(i64::from_le_bytes(result.bytes().try_into().unwrap()), -1);
     assert_eq!(
-        initial_subnet_memory - test.subnet_available_memory().get_total_memory(),
+        initial_subnet_memory - test.subnet_available_memory().get_execution_memory(),
         2 * WASM_PAGE_SIZE_IN_BYTES as i64
     );
 }
@@ -772,10 +772,8 @@ fn stable_grow_returns_allocated_memory_on_error() {
     assert_matches!(result, WasmResult::Reply(_));
     assert_eq!(i64::from_le_bytes(result.bytes().try_into().unwrap()), 0);
 
-    let initial_subnet_memory = test.subnet_available_memory().get_total_memory();
-    let initial_canister_memory = test
-        .canister_state(canister_id)
-        .memory_usage(SubnetType::Application);
+    let initial_subnet_memory = test.subnet_available_memory().get_execution_memory();
+    let initial_canister_memory = test.canister_state(canister_id).memory_usage();
 
     // Calling 32-bit stable grow should trap.
     let payload = wasm().stable_grow(1).reply().build();
@@ -793,12 +791,11 @@ fn stable_grow_returns_allocated_memory_on_error() {
 
     // Subnet and canister memory should remain unchanged
     assert_eq!(
-        test.subnet_available_memory().get_total_memory(),
+        test.subnet_available_memory().get_execution_memory(),
         initial_subnet_memory
     );
     assert_eq!(
-        test.canister_state(canister_id)
-            .memory_usage(SubnetType::Application),
+        test.canister_state(canister_id).memory_usage(),
         initial_canister_memory
     );
 }

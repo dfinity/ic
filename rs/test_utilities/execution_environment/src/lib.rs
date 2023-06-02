@@ -315,7 +315,7 @@ impl ExecutionTest {
 
     pub fn freezing_threshold(&self, canister_id: CanisterId) -> Cycles {
         let canister = self.canister_state(canister_id);
-        let memory_usage = canister.memory_usage(self.state().metadata.own_subnet_type);
+        let memory_usage = canister.memory_usage();
         let memory_allocation = canister.system_state.memory_allocation;
         let compute_allocation = canister.scheduler_state.compute_allocation;
         let freeze_threshold = canister.system_state.freeze_threshold;
@@ -1236,8 +1236,7 @@ impl ExecutionTest {
     /// `self.xnet_messages`.
     pub fn induct_messages(&mut self) {
         let mut state = self.state.take().unwrap();
-        let mut subnet_available_memory = self.subnet_available_memory.get_total_memory();
-        let max_canister_memory_size = self.exec_env.max_canister_memory_size();
+        let mut subnet_available_memory = self.subnet_available_memory.get_message_memory();
         let output_messages = get_output_messages(&mut state);
         let mut canisters = state.take_canister_states();
         for (canister_id, message) in output_messages {
@@ -1245,7 +1244,6 @@ impl ExecutionTest {
                 Some(dest_canister) => {
                     let result = dest_canister.push_input(
                         message.clone(),
-                        max_canister_memory_size,
                         &mut subnet_available_memory,
                         state.metadata.own_subnet_type,
                         InputQueueType::LocalSubnet,
@@ -1418,7 +1416,7 @@ pub struct ExecutionTestBuilder {
     install_code_slice_instruction_limit: NumInstructions,
     instruction_limit_without_dts: NumInstructions,
     initial_canister_cycles: Cycles,
-    subnet_total_memory: i64,
+    subnet_execution_memory: i64,
     subnet_message_memory: i64,
     subnet_wasm_custom_sections_memory: i64,
     registry_settings: RegistryExecutionSettings,
@@ -1442,7 +1440,7 @@ impl Default for ExecutionTestBuilder {
     fn default() -> Self {
         let subnet_type = SubnetType::Application;
         let scheduler_config = SubnetConfig::new(subnet_type).scheduler_config;
-        let subnet_total_memory = ic_config::execution_environment::Config::default()
+        let subnet_execution_memory = ic_config::execution_environment::Config::default()
             .subnet_memory_capacity
             .get() as i64;
         let subnet_message_memory = ic_config::execution_environment::Config::default()
@@ -1470,7 +1468,7 @@ impl Default for ExecutionTestBuilder {
             instruction_limit_without_dts: scheduler_config
                 .max_instructions_per_message_without_dts,
             initial_canister_cycles: INITIAL_CANISTER_CYCLES,
-            subnet_total_memory,
+            subnet_execution_memory,
             subnet_message_memory,
             subnet_wasm_custom_sections_memory,
             registry_settings: test_registry_settings(),
@@ -1601,9 +1599,9 @@ impl ExecutionTestBuilder {
         }
     }
 
-    pub fn with_subnet_total_memory(self, subnet_total_memory: i64) -> Self {
+    pub fn with_subnet_execution_memory(self, subnet_execution_memory: i64) -> Self {
         Self {
-            subnet_total_memory,
+            subnet_execution_memory,
             ..self
         }
     }
@@ -1856,7 +1854,7 @@ impl ExecutionTestBuilder {
             query_caching,
             query_cache_capacity: self.query_cache_capacity.into(),
             allocatable_compute_capacity_in_percent: self.allocatable_compute_capacity_in_percent,
-            subnet_memory_capacity: NumBytes::from(self.subnet_total_memory as u64),
+            subnet_memory_capacity: NumBytes::from(self.subnet_execution_memory as u64),
             subnet_message_memory_capacity: NumBytes::from(self.subnet_message_memory as u64),
             bitcoin: BitcoinConfig {
                 privileged_access: self.bitcoin_privileged_access,
@@ -1921,7 +1919,7 @@ impl ExecutionTestBuilder {
             xnet_messages: vec![],
             lost_messages: vec![],
             subnet_available_memory: SubnetAvailableMemory::new(
-                self.subnet_total_memory,
+                self.subnet_execution_memory,
                 self.subnet_message_memory,
                 self.subnet_wasm_custom_sections_memory,
             ),

@@ -171,7 +171,7 @@ impl<'a> QueryContext<'a> {
         if cycles_account_manager.freeze_threshold_cycles(
             old_canister.system_state.freeze_threshold,
             old_canister.system_state.memory_allocation,
-            old_canister.memory_usage(self.own_subnet_type),
+            old_canister.memory_usage(),
             old_canister.scheduler_state.compute_allocation,
             subnet_size,
         ) > old_canister.system_state.balance()
@@ -488,7 +488,7 @@ impl<'a> QueryContext<'a> {
             api_type,
             time,
             canister.system_state.clone(),
-            canister.memory_usage(self.own_subnet_type),
+            canister.memory_usage(),
             execution_parameters.clone(),
             func_ref,
             canister.execution_state.take().unwrap(),
@@ -496,7 +496,7 @@ impl<'a> QueryContext<'a> {
             &mut self.round_limits,
         );
 
-        let canister_current_memory_usage = canister.memory_usage(self.own_subnet_type);
+        let canister_current_memory_usage = canister.memory_usage();
         canister.execution_state = Some(output_execution_state);
         execution_parameters
             .instruction_limits

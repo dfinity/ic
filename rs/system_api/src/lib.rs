@@ -569,14 +569,12 @@ struct MemoryUsage {
     // expansions in the canister's memory need to be deducted from here.
     subnet_available_memory: SubnetAvailableMemory,
 
-    /// Total memory allocated during this message execution. Note that
-    /// `total_allocated_memory` should always be `>= allocated_message_memory`.
-    total_allocated_memory: NumBytes,
+    /// Execution memory allocated during this message execution, i.e. the canister
+    /// memory (Wasm binary, Wasm memory, stable memory) without message memory.
+    allocated_execution_memory: NumBytes,
 
     /// Message memory allocated during this message execution.
     allocated_message_memory: NumBytes,
-
-    log: ReplicaLogger,
 }
 
 impl MemoryUsage {
@@ -604,9 +602,8 @@ impl MemoryUsage {
             limit,
             current_usage,
             subnet_available_memory,
-            total_allocated_memory: NumBytes::from(0),
+            allocated_execution_memory: NumBytes::from(0),
             allocated_message_memory: NumBytes::from(0),
-            log,
         }
     }
 
@@ -632,74 +629,53 @@ impl MemoryUsage {
         self.deallocate_memory(bytes, NumBytes::from(0))
     }
 
-    /// Validates that `total_bytes >= message_bytes` holds. In debug build it
-    /// will panic in case this condition does not hold. In release builds an
-    /// error will be logged. This is because panicking due to this inconsistency
-    /// has the potential to put the entire subnet in a crash loop.
-    fn validate_requested_memory(&self, total_bytes: NumBytes, message_bytes: NumBytes) {
-        debug_assert!(total_bytes >= message_bytes);
-        if total_bytes < message_bytes {
-            error!(
-                self.log,
-                "[EXC-BUG] Called `allocate_memory`: with total_bytes {} < message_bytes {}",
-                total_bytes,
-                message_bytes
-            );
-        }
-    }
-
-    /// Tries to allocate the requested amount of memory (in bytes). `total_bytes`
-    /// refers to the total number of requested bytes and `message_bytes` refers to
-    /// the required bytes for messages, meaning that this method needs to be called
-    /// with `total_bytes >= message_bytes`.
+    /// Tries to allocate the requested amount of memory (in bytes). `execution_bytes`
+    /// refers to the number of requested bytes for Wasm/stable memory; and
+    /// `message_bytes` refers to the bytes requested for messages.
     ///
     /// Returns `Err(HypervisorError::OutOfMemory)` and leaves `self` unchanged
     /// if either the canister memory limit, the subnet memory limit, or the
     /// message memory limit would be exceeded.
     fn allocate_memory(
         &mut self,
-        total_bytes: NumBytes,
+        execution_bytes: NumBytes,
         message_bytes: NumBytes,
     ) -> HypervisorResult<()> {
-        self.validate_requested_memory(total_bytes, message_bytes);
-
-        let (new_usage, overflow) = self.current_usage.get().overflowing_add(total_bytes.get());
+        let (new_usage, overflow) = self
+            .current_usage
+            .get()
+            .overflowing_add(execution_bytes.get());
         if overflow || new_usage > self.limit.get() {
             return Err(HypervisorError::OutOfMemory);
         }
         match self.subnet_available_memory.try_decrement(
-            total_bytes,
+            execution_bytes,
             message_bytes,
             NumBytes::from(0),
         ) {
             Ok(()) => {
                 self.current_usage = NumBytes::from(new_usage);
-                self.total_allocated_memory += total_bytes;
+                self.allocated_execution_memory += execution_bytes;
                 self.allocated_message_memory += message_bytes;
-                debug_assert!(self.total_allocated_memory >= self.allocated_message_memory);
                 Ok(())
             }
             Err(_err) => Err(HypervisorError::OutOfMemory),
         }
     }
 
-    /// Unconditionally deallocates the given number of bytes and message bytes. Should
-    /// only be called immediately after `allocate_memory()`, with the same number of bytes,
-    /// in case growing the heap failed or upon clean up.
-    fn deallocate_memory(&mut self, total_bytes: NumBytes, message_bytes: NumBytes) {
-        self.validate_requested_memory(total_bytes, message_bytes);
-
+    /// Unconditionally deallocates the given number of execution bytes and message bytes.
+    /// Should only be called immediately after `allocate_memory()`, with the same number
+    /// of bytes, in case growing the heap failed or upon clean up.
+    fn deallocate_memory(&mut self, execution_bytes: NumBytes, message_bytes: NumBytes) {
         self.subnet_available_memory
-            .increment(total_bytes, message_bytes, NumBytes::from(0));
+            .increment(execution_bytes, message_bytes, NumBytes::from(0));
 
-        debug_assert!(self.current_usage >= total_bytes);
-        debug_assert!(self.total_allocated_memory >= total_bytes);
+        debug_assert!(self.current_usage >= execution_bytes);
+        debug_assert!(self.allocated_execution_memory >= execution_bytes);
         debug_assert!(self.allocated_message_memory >= message_bytes);
-        self.current_usage -= total_bytes;
-        self.total_allocated_memory -= total_bytes;
+        self.current_usage -= execution_bytes;
+        self.allocated_execution_memory -= execution_bytes;
         self.allocated_message_memory -= message_bytes;
-
-        debug_assert!(self.total_allocated_memory >= self.allocated_message_memory);
     }
 }
 
@@ -829,7 +805,7 @@ impl SystemApiImpl {
         {
             // Return allocated memory in case of failed message execution.
             self.memory_usage.deallocate_memory(
-                self.memory_usage.total_allocated_memory,
+                self.memory_usage.allocated_execution_memory,
                 self.memory_usage.allocated_message_memory,
             );
             return Err(err);
@@ -876,9 +852,9 @@ impl SystemApiImpl {
         self.memory_usage.current_usage
     }
 
-    /// Bytes allocated in the Wasm/stable memory and messages.
+    /// Bytes allocated in the Wasm/stable memory.
     pub fn get_allocated_bytes(&self) -> NumBytes {
-        self.memory_usage.total_allocated_memory
+        self.memory_usage.allocated_execution_memory
     }
 
     /// Bytes allocated in messages.
@@ -1196,7 +1172,7 @@ impl SystemApiImpl {
         };
         if self
             .memory_usage
-            .allocate_memory(reservation_bytes, reservation_bytes)
+            .allocate_memory(NumBytes::from(0), reservation_bytes)
             .is_err()
         {
             return abort(req, &mut self.sandbox_safe_system_state);
@@ -1212,7 +1188,7 @@ impl SystemApiImpl {
             Ok(()) => Ok(0),
             Err(request) => {
                 self.memory_usage
-                    .deallocate_memory(reservation_bytes, reservation_bytes);
+                    .deallocate_memory(NumBytes::from(0), reservation_bytes);
                 abort(request, &mut self.sandbox_safe_system_state)
             }
         }

@@ -35,7 +35,6 @@ fn mock_freeze_threshold_cycles(
 
 const CANISTER_ID: CanisterId = CanisterId::from_u64(0);
 const OTHER_CANISTER_ID: CanisterId = CanisterId::from_u64(1);
-const CANISTER_AVAILABLE_MEMORY: i64 = 4 << 30;
 const SUBNET_AVAILABLE_MEMORY: i64 = 300 << 30;
 
 fn default_input_request() -> RequestOrResponse {
@@ -142,7 +141,6 @@ impl SystemStateFixture {
 
     fn induct_messages_to_self(&mut self) {
         self.system_state.induct_messages_to_self(
-            CANISTER_AVAILABLE_MEMORY,
             &mut SUBNET_AVAILABLE_MEMORY.clone(),
             SubnetType::Application,
         );
@@ -221,23 +219,10 @@ fn induct_messages_to_self_in_stopping_status_does_not_work() {
 }
 
 #[test]
-fn induct_messages_to_self_respects_canister_memory_limit() {
-    let mut subnet_available_memory = SUBNET_AVAILABLE_MEMORY;
-    induct_messages_to_self_memory_limit_test_impl(
-        0,
-        &mut subnet_available_memory,
-        SubnetType::Application,
-        true,
-    );
-    assert_eq!(SUBNET_AVAILABLE_MEMORY, subnet_available_memory);
-}
-
-#[test]
 fn induct_messages_to_self_respects_subnet_memory_limit() {
     let mut subnet_available_memory = 0;
 
     induct_messages_to_self_memory_limit_test_impl(
-        CANISTER_AVAILABLE_MEMORY,
         &mut subnet_available_memory,
         SubnetType::Application,
         true,
@@ -247,28 +232,11 @@ fn induct_messages_to_self_respects_subnet_memory_limit() {
 }
 
 #[test]
-fn system_subnet_induct_messages_to_self_ignores_canister_memory_limit() {
-    let mut subnet_available_memory = SUBNET_AVAILABLE_MEMORY;
-    let mut expected_subnet_available_memory = subnet_available_memory;
-
-    induct_messages_to_self_memory_limit_test_impl(
-        0,
-        &mut subnet_available_memory,
-        SubnetType::System,
-        false,
-    );
-    expected_subnet_available_memory -= MAX_RESPONSE_COUNT_BYTES as i64;
-
-    assert_eq!(expected_subnet_available_memory, subnet_available_memory);
-}
-
-#[test]
 fn system_subnet_induct_messages_to_self_ignores_subnet_memory_limit() {
     let mut subnet_available_memory = 0;
     let mut expected_subnet_available_memory = subnet_available_memory;
 
     induct_messages_to_self_memory_limit_test_impl(
-        CANISTER_AVAILABLE_MEMORY,
         &mut subnet_available_memory,
         SubnetType::System,
         false,
@@ -279,7 +247,6 @@ fn system_subnet_induct_messages_to_self_ignores_subnet_memory_limit() {
 }
 
 fn induct_messages_to_self_memory_limit_test_impl(
-    canister_available_memory: i64,
     subnet_available_memory: &mut i64,
     own_subnet_type: SubnetType,
     should_enforce_limit: bool,
@@ -312,11 +279,9 @@ fn induct_messages_to_self_memory_limit_test_impl(
     // But not for this one.
     fixture.push_output_request(request.clone()).unwrap();
 
-    fixture.system_state.induct_messages_to_self(
-        canister_available_memory,
-        subnet_available_memory,
-        own_subnet_type,
-    );
+    fixture
+        .system_state
+        .induct_messages_to_self(subnet_available_memory, own_subnet_type);
 
     // Expect the response and first request to have been inducted.
     assert_eq!(

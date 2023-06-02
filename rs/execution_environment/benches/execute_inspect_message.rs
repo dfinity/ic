@@ -60,7 +60,6 @@ pub fn execute_inspect_message_bench(c: &mut Criterion) {
                 time,
                 canister_state,
                 &ingress,
-                hypervisor.subnet_type(),
                 execution_parameters,
                 subnet_available_memory,
                 hypervisor,

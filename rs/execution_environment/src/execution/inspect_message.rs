@@ -3,7 +3,6 @@ use crate::Hypervisor;
 use ic_error_types::{ErrorCode, UserError};
 use ic_interfaces::execution_environment::{ExecutionComplexity, SubnetAvailableMemory};
 use ic_logger::{fatal, ReplicaLogger};
-use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{CanisterState, NetworkTopology};
 use ic_system_api::{ApiType, ExecutionParameters};
 use ic_types::messages::SignedIngressContent;
@@ -19,7 +18,6 @@ pub fn execute_inspect_message(
     time: Time,
     canister: CanisterState,
     ingress: &SignedIngressContent,
-    own_subnet_type: SubnetType,
     execution_parameters: ExecutionParameters,
     subnet_available_memory: SubnetAvailableMemory,
     hypervisor: &Hypervisor,
@@ -27,7 +25,7 @@ pub fn execute_inspect_message(
     logger: &ReplicaLogger,
 ) -> (NumInstructions, Result<(), UserError>) {
     let canister_id = canister.canister_id();
-    let memory_usage = canister.memory_usage(own_subnet_type);
+    let memory_usage = canister.memory_usage();
     let method = WasmMethod::System(SystemMethod::CanisterInspectMessage);
     let (execution_state, system_state, _) = canister.into_parts();
     let message_instruction_limit = execution_parameters.instruction_limits.message();

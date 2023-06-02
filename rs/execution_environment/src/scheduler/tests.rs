@@ -783,11 +783,10 @@ fn induct_messages_to_self_works() {
 
 /// Creates state with two canisters. Source canister has two requests for
 /// itself and two requests for destination canister in its output queues.
-/// Source canister only has enough memory for one request, subnet only has
-/// enough memory for 2 requests.
+/// Subnet only has enough message memory for two requests.
 ///
-/// Ensures that `induct_messages_on_same_subnet()` moves one message from each
-/// output queue into the corresponding input queue.
+/// Ensures that `induct_messages_on_same_subnet()` respects memory limits
+/// on application subnets and ignores them on system subnets.
 #[test]
 fn induct_messages_on_same_subnet_respects_memory_limits() {
     // Runs a test with the given `available_memory` (expected to be limited to 2
@@ -805,14 +804,7 @@ fn induct_messages_on_same_subnet_respects_memory_limits() {
                 instruction_overhead_per_canister: NumInstructions::from(0),
                 ..SchedulerConfig::application_subnet()
             })
-            .with_subnet_total_memory(subnet_available_memory.get_total_memory() as u64)
             .with_subnet_message_memory(subnet_available_memory.get_message_memory() as u64)
-            .with_subnet_wasm_custom_sections_memory(
-                subnet_available_memory.get_wasm_custom_sections_memory() as u64,
-            )
-            // Canisters can have up to 5 outstanding requests (plus epsilon). I.e. for
-            // source canister, 4 outgoing + 1 incoming request plus small responses.
-            .with_max_canister_memory_size(MAX_RESPONSE_COUNT_BYTES as u64 * 55 / 10)
             .with_subnet_type(subnet_type)
             .build();
 
@@ -847,12 +839,10 @@ fn induct_messages_on_same_subnet_respects_memory_limits() {
         let source_canister_queues = source_canister.system_state.queues();
         let dest_canister_queues = dest_canister.system_state.queues();
         if subnet_type == SubnetType::Application {
-            // Only one message should have been inducted from each queue: we first induct
-            // messages to self and hit the canister memory limit (1 more reserved slot);
-            // then induct messages for `dest_canister` and hit the subnet memory limit (2
-            // more reserved slots, minus the 1 before).
-            assert_eq!(2, source_canister_queues.output_message_count());
-            assert_eq!(1, source_canister_queues.input_queues_message_count());
+            // Only two messages should have been inducted. After two self-inductions on the
+            // source canister, the subnet message memory is exhausted.
+            assert_eq!(1, source_canister_queues.output_message_count());
+            assert_eq!(2, source_canister_queues.input_queues_message_count());
             assert_eq!(1, dest_canister_queues.input_queues_message_count());
         } else {
             // On a system subnet, with no message memory limits, all messages should have
@@ -866,13 +856,7 @@ fn induct_messages_on_same_subnet_respects_memory_limits() {
     // Subnet has memory for 4 initial requests and 2 additional requests (plus
     // epsilon, for small responses).
     run_test(
-        SubnetAvailableMemory::new(MAX_RESPONSE_COUNT_BYTES as i64 * 65 / 10, 1 << 30, 0),
-        SubnetType::Application,
-    );
-    // Subnet has memory for 4 initial requests and 2 additional requests (plus
-    // epsilon, for small responses).
-    run_test(
-        SubnetAvailableMemory::new(1 << 30, MAX_RESPONSE_COUNT_BYTES as i64 * 65 / 10, 0),
+        SubnetAvailableMemory::new(0, MAX_RESPONSE_COUNT_BYTES as i64 * 75 / 10, 0),
         SubnetType::Application,
     );
 
