@@ -220,6 +220,7 @@ members = [
   "rs/rosetta-api/icp_ledger/archive",
   "rs/rosetta-api/icp_ledger/ledger",
   "rs/rosetta-api/icp_ledger/protobuf_generator",
+  "rs/rosetta-api/icp_ledger/index",
   "rs/rosetta-api/ledger_core",
   "rs/rosetta-api/ledger_canister_core",
   "rs/rosetta-api/ledger_canister_blocks_synchronizer",

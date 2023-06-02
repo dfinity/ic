@@ -1,0 +1,35 @@
+load("@rules_rust//rust:defs.bzl", "rust_library")
+load("//bazel:canisters.bzl", "rust_canister")
+
+package(default_visibility = ["//visibility:public"])
+
+DEPENDENCIES = [
+]
+
+MACRO_DEPENDENCIES = [
+]
+
+rust_library(
+    name = "ic-icp-index",
+    srcs = ["src/lib.rs"],
+    crate_name = "ic_icp_index",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    deps = DEPENDENCIES,
+)
+
+rust_canister(
+    name = "ic-icp-index-canister",
+    srcs = ["src/main.rs"],
+    compile_data = [":index.did"],
+    crate_name = "ic_icp_index_canister",
+    edition = "2018",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    rustc_env = {
+        "INDEX_DID_PATH": "$(location :index.did)",
+    },
+    service_file = ":index.did",
+    deps = [
+        ":ic-icp-index",
+    ] + DEPENDENCIES,
+)

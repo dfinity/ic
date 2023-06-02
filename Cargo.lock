@@ -6951,6 +6951,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "ic-icp-index"
+version = "0.8.0"
+
+[[package]]
 name = "ic-icrc-rosetta"
 version = "0.1.0"
 dependencies = [

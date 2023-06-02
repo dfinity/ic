@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
-use wasmtime::{Config, Engine, HostRef, Instance, Module, Store, MemoryType, Limits};
+use wasmtime::{Config, Engine, HostRef, Instance, Limits, MemoryType, Module, Store};
 use wasmtime_interface_types::ModuleData;
 
 use memory_area::Area;
@@ -175,8 +175,9 @@ fn invoke_export(
     // Invoke the function and then afterwards print all the results that came
     // out, if there are any.
     let results = data
-        .invoke_export(&instance, func_name, &func_args).expect(&format!("failed to invoke `{}`", func_name));
-        // .with_context(|_| format!("failed to invoke `{}`", func_name))?;
+        .invoke_export(&instance, func_name, &func_args)
+        .expect(&format!("failed to invoke `{}`", func_name));
+    // .with_context(|_| format!("failed to invoke `{}`", func_name))?;
 
     Ok(results)
 }
