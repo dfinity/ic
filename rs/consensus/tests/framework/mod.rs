@@ -2,11 +2,15 @@
 mod delivery;
 mod driver;
 mod execution;
+pub mod malicious;
 mod runner;
 mod types;
 
 pub use runner::ConsensusRunner;
-pub use types::{ConsensusDependencies, ConsensusDriver, ConsensusInstance, ConsensusRunnerConfig};
+pub use types::{
+    ConsensusDependencies, ConsensusDriver, ConsensusInstance, ConsensusModifier,
+    ConsensusRunnerConfig,
+};
 
 use ic_crypto_temp_crypto::{NodeKeysToGenerate, TempCryptoComponent};
 use ic_crypto_test_utils_ni_dkg::{initial_dkg_transcript, InitialNiDkgConfig};

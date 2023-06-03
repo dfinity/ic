@@ -129,6 +129,7 @@ impl<'a> ConsensusRunner<'a> {
         membership: Arc<Membership>,
         consensus_crypto: Arc<dyn ConsensusCrypto>,
         certification_crypto: Arc<dyn CertificationCrypto>,
+        modifier: Option<ConsensusModifier<'_>>,
         deps: &'a ConsensusDependencies,
         pool_config: ArtifactPoolConfig,
         pool_reader: &PoolReader<'_>,
@@ -202,7 +203,7 @@ impl<'a> ConsensusRunner<'a> {
             driver: ConsensusDriver::new(
                 node_id,
                 pool_config,
-                consensus,
+                modifier.unwrap_or(&|x| Box::new(x))(consensus),
                 consensus_gossip,
                 dkg,
                 Box::new(certifier),
@@ -316,7 +317,7 @@ impl ConsensusRunnerConfig {
         for (key, value) in std::env::vars() {
             if key.eq_ignore_ascii_case("num_nodes") {
                 if value.eq_ignore_ascii_case("random") {
-                    num_nodes = rng.gen_range(1..20);
+                    num_nodes = rng.gen_range(1..7) * 3 + 1;
                 } else {
                     num_nodes = value
                         .parse()

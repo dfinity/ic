@@ -3,11 +3,11 @@ use ic_artifact_pool::{
     certification_pool::CertificationPoolImpl, consensus_pool::ConsensusPoolImpl, dkg_pool,
 };
 use ic_config::artifact_pool::ArtifactPoolConfig;
-use ic_consensus::consensus::{ConsensusGossipImpl, ConsensusImpl};
+use ic_consensus::consensus::ConsensusGossipImpl;
 use ic_interfaces::{
     artifact_pool::{ChangeSetProducer, MutablePool},
     certification,
-    consensus_pool::ChangeAction,
+    consensus_pool::{ChangeAction, ChangeSet as ConsensusChangeSet},
     dkg::ChangeAction as DkgChangeAction,
     time_source::{SysTimeSource, TimeSource},
 };
@@ -26,7 +26,7 @@ impl<'a> ConsensusDriver<'a> {
     pub fn new(
         node_id: NodeId,
         pool_config: ArtifactPoolConfig,
-        consensus: ConsensusImpl,
+        consensus: Box<dyn ChangeSetProducer<ConsensusPoolImpl, ChangeSet = ConsensusChangeSet>>,
         consensus_gossip: ConsensusGossipImpl,
         dkg: ic_consensus::dkg::DkgImpl,
         certifier: Box<

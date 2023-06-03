@@ -171,7 +171,7 @@ fn consensus_produces_expected_batches() {
         let driver = ConsensusDriver::new(
             replica_config.node_id,
             pool_config,
-            consensus,
+            Box::new(consensus),
             consensus_gossip,
             dkg,
             Box::new(certifier),
