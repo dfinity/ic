@@ -1,6 +1,7 @@
 mod framework;
 use crate::framework::{
-    setup_subnet, ConsensusDependencies, ConsensusInstance, ConsensusRunner, ConsensusRunnerConfig,
+    malicious, setup_subnet, ConsensusDependencies, ConsensusInstance, ConsensusModifier,
+    ConsensusRunner, ConsensusRunnerConfig,
 };
 use ic_consensus_utils::{membership::Membership, pool_reader::PoolReader};
 use ic_interfaces::consensus_pool::ConsensusPool;
@@ -10,6 +11,8 @@ use ic_test_utilities::{
     FastForwardTimeSource,
 };
 use ic_types::{crypto::CryptoHash, replica_config::ReplicaConfig, Height};
+use rand::Rng;
+use rand_chacha::{rand_core::SeedableRng, ChaChaRng};
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -20,7 +23,7 @@ fn multiple_nodes_are_live() -> Result<(), String> {
     ConsensusRunnerConfig::new_from_env(4, 0)
         .and_then(|config| config.parse_extra_config())
         .map(|config| {
-            run_n_rounds_and_collect_hashes(config);
+            run_n_rounds_and_collect_hashes(config, Vec::new(), true);
         })
 }
 
@@ -31,7 +34,7 @@ fn single_node_is_live() {
         num_rounds: 126,
         ..Default::default()
     };
-    run_n_rounds_and_collect_hashes(config);
+    run_n_rounds_and_collect_hashes(config, Vec::new(), true);
 }
 
 #[ignore]
@@ -43,12 +46,46 @@ fn multiple_nodes_are_deterministic() {
             num_rounds: 10,
             ..Default::default()
         };
-        run_n_rounds_and_collect_hashes(config)
+        run_n_rounds_and_collect_hashes(config, Vec::new(), true)
     };
     assert_eq!(run(), run());
 }
 
-fn run_n_rounds_and_collect_hashes(config: ConsensusRunnerConfig) -> Rc<RefCell<Vec<CryptoHash>>> {
+#[test]
+fn minority_invalid_notary_share_signature_would_pass() -> Result<(), String> {
+    ConsensusRunnerConfig::new_from_env(4, 0)
+        .and_then(|config| config.parse_extra_config())
+        .map(|config| {
+            let mut rng = ChaChaRng::seed_from_u64(config.random_seed);
+            let f = (config.num_nodes - 1) / 3;
+            assert!(f > 0, "This test requires NUM_NODES >= 4");
+            let mut malicious: Vec<ConsensusModifier> = Vec::new();
+            for _ in 0..rng.gen_range(1..=f) {
+                malicious.push(&malicious::InvalidNotaryShareSignature::new);
+            }
+            let malicious = vec![&malicious::InvalidNotaryShareSignature::new as _];
+            run_n_rounds_and_collect_hashes(config, malicious, true);
+        })
+}
+
+#[test]
+fn majority_invalid_notary_share_signature_would_stuck() -> Result<(), String> {
+    ConsensusRunnerConfig::new_from_env(4, 0)
+        .and_then(|config| config.parse_extra_config())
+        .map(|config| {
+            let mut malicious: Vec<ConsensusModifier> = Vec::new();
+            for _ in 0..(config.num_nodes / 3 + 1) {
+                malicious.push(&malicious::InvalidNotaryShareSignature::new);
+            }
+            run_n_rounds_and_collect_hashes(config, malicious, false);
+        })
+}
+
+fn run_n_rounds_and_collect_hashes(
+    config: ConsensusRunnerConfig,
+    mut modifiers: Vec<ConsensusModifier<'_>>,
+    finish: bool,
+) -> Vec<CryptoHash> {
     let nodes = config.num_nodes;
     ic_test_utilities::artifact_pool_config::with_test_pool_configs(nodes, |pool_configs| {
         let rounds = config.num_rounds;
@@ -93,7 +130,7 @@ fn run_n_rounds_and_collect_hashes(config: ConsensusRunnerConfig) -> Rc<RefCell<
             })
             .collect();
 
-        let mut framework = ConsensusRunner::new_with_config(config, time_source);
+        let mut runner = ConsensusRunner::new_with_config(config, time_source);
 
         for ((pool_config, deps), crypto) in pool_configs
             .iter()
@@ -106,16 +143,18 @@ fn run_n_rounds_and_collect_hashes(config: ConsensusRunnerConfig) -> Rc<RefCell<
                 subnet_id,
             );
             let membership = Arc::new(membership);
-            framework.add_instance(
+            let modifier = modifiers.pop();
+            runner.add_instance(
                 membership.clone(),
                 crypto.clone(),
                 crypto.clone(),
+                modifier,
                 deps,
                 pool_config.clone(),
                 &PoolReader::new(&*deps.consensus_pool.read().unwrap()),
             );
         }
-        assert!(framework.run_until(&reach_n_rounds));
-        hashes
+        assert_eq!(runner.run_until(&reach_n_rounds), finish);
+        hashes.as_ref().take()
     })
 }

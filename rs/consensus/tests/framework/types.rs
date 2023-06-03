@@ -12,6 +12,7 @@ use ic_interfaces::{
     artifact_pool::{ChangeSetProducer, PriorityFnAndFilterProducer},
     canister_http::CanisterHttpPayloadBuilder,
     certification::ChangeSet,
+    consensus_pool::ChangeSet as ConsensusChangeSet,
     ingress_manager::IngressSelector,
     messaging::{MessageRouting, XNetPayloadBuilder},
     self_validating_payload::SelfValidatingPayloadBuilder,
@@ -271,10 +272,18 @@ impl<Artifact: ArtifactKind> PriorityFnState<Artifact> {
     }
 }
 
+/// Consensus modifier that can potentially change its behavior.
+pub type ConsensusModifier<'a> = &'a dyn Fn(
+    ConsensusImpl,
+) -> Box<
+    dyn ChangeSetProducer<ConsensusPoolImpl, ChangeSet = ConsensusChangeSet>,
+>;
+
 /// A ConsensusDriver mainly consists of the consensus component, and the
 /// consensus artifact pool and timer.
 pub struct ConsensusDriver<'a> {
-    pub(crate) consensus: ConsensusImpl,
+    pub(crate) consensus:
+        Box<dyn ChangeSetProducer<ConsensusPoolImpl, ChangeSet = ConsensusChangeSet>>,
     pub(crate) consensus_gossip: ConsensusGossipImpl,
     pub(crate) dkg: dkg::DkgImpl,
     pub(crate) certifier:
