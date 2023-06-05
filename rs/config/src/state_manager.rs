@@ -14,7 +14,7 @@ impl Config {
     pub fn new(state_root: PathBuf) -> Self {
         Self {
             state_root,
-            file_backed_memory_allocator: FlagStatus::Disabled,
+            file_backed_memory_allocator: file_backed_memory_allocator_default(),
         }
     }
 
@@ -30,5 +30,5 @@ impl Config {
 }
 
 fn file_backed_memory_allocator_default() -> FlagStatus {
-    FlagStatus::Disabled
+    FlagStatus::Enabled
 }
