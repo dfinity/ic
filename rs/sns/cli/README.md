@@ -83,7 +83,13 @@ This creates a new template file, by default with the name *sns_init.yaml*, that
 To see if the values you've provided are valid, use the following command to run local validation. The same validation will be applied within the SNS-W canister when deploying the SNS.
 
 ```shell
-sns init-config-file validate sns_init.yaml
+sns init-config-file validate
+```
+
+If you renamed your configuration file, use the `--init-config-file-path` option.
+
+```shell
+sns init-config-file --init-config-file-path <path_to_config_file> validate
 ```
 
 ### Deploying An SNS
