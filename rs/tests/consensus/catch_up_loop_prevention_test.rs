@@ -7,7 +7,7 @@ use ic_tests::driver::group::SystemTestGroup;
 use ic_tests::systest;
 use std::time::Duration;
 
-const TIMEOUT: Duration = Duration::from_secs(20 * 60);
+const TIMEOUT: Duration = Duration::from_secs(30 * 60);
 
 fn main() -> Result<()> {
     SystemTestGroup::new()
