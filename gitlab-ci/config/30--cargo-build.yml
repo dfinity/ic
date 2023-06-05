@@ -1,5 +1,11 @@
 cargo-clippy-linux:
-  extends: .cargo-build-docker
+  needs: []  # don't wait on other jobs
+  extends:
+    - .bazel-build-k8s
+    - .bazel-rules-pipeline
+  tags:
+    - dfinity-ic # overwritting so we do not inherit the zh tag
+  stage: test
   variables:
     CARGO_BUILD_TARGET: "x86_64-unknown-linux-gnu"
   script:
@@ -11,15 +17,26 @@ cargo-clippy-linux:
 # Cargo is deprecated and will be replaced with Bazel.
 # Until the migration is complete, run a simple check for build failures.
 legacy-cargo-check:
-  extends: .cargo-build-docker
+  needs: []  # don't wait on other jobs
+  extends:
+    - .bazel-build-k8s
+    - .bazel-rules-pipeline
+  tags:
+    - dfinity-ic # overwritting so we do not inherit the zh tag
+  stage: test
   script:
     - |
       set -eExuo pipefail
       buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" build-command -- cargo check --tests --benches
 
 cargo-build-release-linux:
+  needs: []  # don't wait on other jobs
   extends:
-  - .cargo-build-docker
+    - .bazel-build-k8s
+    - .bazel-rules-pipeline
+  tags:
+    - dfinity-ic # overwritting so we do not inherit the zh tag
+  stage: test
   script:
     - |
       set -eExuo pipefail
