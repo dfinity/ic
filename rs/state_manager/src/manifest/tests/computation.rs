@@ -546,11 +546,8 @@ fn orphan_chunk_detected() {
         );
         let root_hash = CryptoHashOfState::from(CryptoHash(manifest_hash.to_vec()));
         match validate_manifest(&manifest, &root_hash) {
-            Err(ManifestValidationError::InvalidRootHash { .. }) => (),
-            other => panic!(
-                "Expected an orphan chunk to change the root hash, got: {:?}",
-                other
-            ),
+            Err(ManifestValidationError::InconsistentManifest { .. }) => (),
+            other => panic!("Expected an orphan chunk to be detected, got: {:?}", other),
         }
     }
 }
