@@ -23,6 +23,7 @@ use ic_types::{
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::PathBuf;
+use strum::IntoEnumIterator;
 
 const NUM_THREADS: u32 = 3;
 
@@ -36,49 +37,45 @@ macro_rules! hash_concat {
     }
 }
 
-fn simple_file_table_and_chunk_table() -> (Vec<FileInfo>, Vec<ChunkInfo>) {
-    let chunk_0_hash = hash_concat!(14u8, b"ic-state-chunk", vec![0u8; 1000].as_slice());
-    let chunk_1_hash = hash_concat!(14u8, b"ic-state-chunk", vec![1u8; 1024].as_slice());
-    let chunk_2_hash = hash_concat!(14u8, b"ic-state-chunk", vec![1u8; 1024].as_slice());
-    let chunk_3_hash = hash_concat!(14u8, b"ic-state-chunk", vec![2u8; 1024].as_slice());
-    let chunk_4_hash = hash_concat!(14u8, b"ic-state-chunk", vec![2u8; 26].as_slice());
+fn file_hash(file_index: u32, chunks: &[&[u8]], version: StateSyncVersion) -> [u8; 32] {
+    let mut h = Sha256::new();
+    13u8.update_hash(&mut h);
+    b"ic-state-file".update_hash(&mut h);
+    (chunks.len() as u32).update_hash(&mut h);
 
-    let file_0_hash = hash_concat!(
-        13u8,
-        b"ic-state-file",
-        1u32,
-        0u32,
-        1000u32,
-        0u64,
-        &chunk_0_hash[..]
-    );
-    let file_1_hash = hash_concat!(
-        13u8,
-        b"ic-state-file",
-        2u32,
-        1u32,
-        1024u32,
-        0u64,
-        &chunk_1_hash[..],
-        1u32,
-        1024u32,
-        1024u64,
-        &chunk_2_hash[..]
-    );
-    let file_2_hash = hash_concat!(
-        13u8,
-        b"ic-state-file",
-        2u32,
-        2u32,
-        1024u32,
-        0u64,
-        &chunk_3_hash[..],
-        2u32,
-        26u32,
-        1024u64,
-        &chunk_4_hash[..]
-    );
-    let file_3_hash = hash_concat!(13u8, b"ic-state-file", 0u32);
+    let mut offset = 0u64;
+    for &chunk in chunks {
+        if version < StateSyncVersion::V3 {
+            // In versions before V3, the file hash includes the file index.
+            file_index.update_hash(&mut h);
+        }
+        (chunk.len() as u32).update_hash(&mut h);
+        offset.update_hash(&mut h);
+        let chunk_hash = hash_concat!(14u8, b"ic-state-chunk", chunk);
+        chunk_hash.update_hash(&mut h);
+        offset += chunk.len() as u64;
+    }
+    h.finish()
+}
+
+fn simple_file_table_and_chunk_table(version: StateSyncVersion) -> (Vec<FileInfo>, Vec<ChunkInfo>) {
+    assert!(version >= StateSyncVersion::V1);
+
+    let chunk_0 = &[0u8; 1000];
+    let chunk_1 = &[1u8; 1024];
+    let chunk_2 = &[1u8; 1024];
+    let chunk_3 = &[2u8; 1024];
+    let chunk_4 = &[2u8; 26];
+    let chunk_0_hash = hash_concat!(14u8, b"ic-state-chunk", chunk_0);
+    let chunk_1_hash = hash_concat!(14u8, b"ic-state-chunk", chunk_1);
+    let chunk_2_hash = hash_concat!(14u8, b"ic-state-chunk", chunk_2);
+    let chunk_3_hash = hash_concat!(14u8, b"ic-state-chunk", chunk_3);
+    let chunk_4_hash = hash_concat!(14u8, b"ic-state-chunk", chunk_4);
+
+    let file_0_hash = file_hash(0, &[chunk_0], version);
+    let file_1_hash = file_hash(1, &[chunk_1, chunk_2], version);
+    let file_2_hash = file_hash(2, &[chunk_3, chunk_4], version);
+    let file_3_hash = file_hash(3, &[], version);
 
     let file_table = vec![
         FileInfo {
@@ -167,8 +164,8 @@ pub(crate) fn dummy_file_table_and_chunk_table() -> (Vec<FileInfo>, Vec<ChunkInf
     (vec![file_info; 1_000_000], vec![chunk_info; 3_000_000])
 }
 
-fn simple_manifest() -> ([u8; 32], Manifest) {
-    let (file_table, chunk_table) = simple_file_table_and_chunk_table();
+fn simple_manifest_v1() -> ([u8; 32], Manifest) {
+    let (file_table, chunk_table) = simple_file_table_and_chunk_table(StateSyncVersion::V1);
     let manifest = Manifest::new(
         StateSyncVersion::V1,
         file_table.clone(),
@@ -224,9 +221,12 @@ fn simple_manifest() -> ([u8; 32], Manifest) {
     (expected_hash, manifest)
 }
 
-fn simple_manifest_v2() -> ([u8; 32], Manifest) {
-    let (file_table, chunk_table) = simple_file_table_and_chunk_table();
-    let manifest = Manifest::new(StateSyncVersion::V2, file_table, chunk_table);
+/// Generates a valid manifest with version V2 or higher.
+fn simple_manifest(version: StateSyncVersion) -> ([u8; 32], Manifest) {
+    assert!(version >= StateSyncVersion::V2);
+
+    let (file_table, chunk_table) = simple_file_table_and_chunk_table(version);
+    let manifest = Manifest::new(version, file_table, chunk_table);
     let encoded_manifest = encode_manifest(&manifest);
     // The encoded bytes of the simple manifest is no greater than 1 MiB.
     // If it is not the case due to future changes, the `sub_manifest_hash` below should also be updated.
@@ -236,17 +236,36 @@ fn simple_manifest_v2() -> ([u8; 32], Manifest) {
     let expected_hash = hash_concat!(
         22u8,
         b"ic-state-meta-manifest",
-        StateSyncVersion::V2,
+        version,
         1u32,
         &sub_manifest_hash[..]
     );
     (expected_hash, manifest)
 }
 
-// A list of manifests with hashes of all supported versions
-// that will be used in tests related to the manifest hash.
+/// Returns an iterator over versions between `start_inclusive` and
+/// `CURRENT_STATE_SYNC_VERSION` (both inclusive).
+fn versions_from(start_inclusive: StateSyncVersion) -> impl Iterator<Item = StateSyncVersion> {
+    StateSyncVersion::iter()
+        .skip_while(move |v| *v < start_inclusive)
+        .take_while(move |v| *v <= CURRENT_STATE_SYNC_VERSION)
+}
+
+/// A list of manifests with hashes of all supported versions
+/// that will be used in tests related to the manifest hash.
 fn simple_manifest_all_supported_versions() -> Vec<([u8; 32], Manifest)> {
-    vec![simple_manifest(), simple_manifest_v2()]
+    let manifests = vec![
+        simple_manifest_v1(),
+        simple_manifest(StateSyncVersion::V2),
+        simple_manifest(StateSyncVersion::V3),
+    ];
+    // Sanity check: ensure that we have one manifest for every supported version.
+    assert_eq!(
+        manifests.iter().map(|(_, m)| m.version).collect::<Vec<_>>(),
+        versions_from(StateSyncVersion::V1).collect::<Vec<_>>(),
+        "One manifest must be provided for every supported version."
+    );
+    manifests
 }
 
 #[test]
@@ -277,26 +296,28 @@ fn test_simple_manifest_computation() {
         )
         .expect("failed to compute manifest");
 
-        let (expected_hash, expected_manifest) = simple_manifest();
+        let (expected_hash, expected_manifest) = simple_manifest_v1();
         assert_eq!(manifest_v1, expected_manifest);
         assert_eq!(expected_hash, manifest_hash_v1(&manifest_v1));
         assert_eq!(expected_hash, manifest_hash(&manifest_v1));
 
-        let manifest_v2 = compute_manifest(
-            &mut thread_pool,
-            &manifest_metrics,
-            &no_op_logger(),
-            StateSyncVersion::V2,
-            &CheckpointLayout::new_untracked(root.to_path_buf(), Height::new(0)).unwrap(),
-            1024,
-            None,
-        )
-        .expect("failed to compute manifest");
+        for version in versions_from(StateSyncVersion::V2) {
+            let manifest = compute_manifest(
+                &mut thread_pool,
+                &manifest_metrics,
+                &no_op_logger(),
+                version,
+                &CheckpointLayout::new_untracked(root.to_path_buf(), Height::new(0)).unwrap(),
+                1024,
+                None,
+            )
+            .expect("failed to compute manifest");
 
-        let (expected_hash, expected_manifest) = simple_manifest_v2();
-        assert_eq!(manifest_v2, expected_manifest);
-        assert_eq!(expected_hash, manifest_hash_v2(&manifest_v2));
-        assert_eq!(expected_hash, manifest_hash(&manifest_v2));
+            let (expected_hash, expected_manifest) = simple_manifest(version);
+            assert_eq!(manifest, expected_manifest);
+            assert_eq!(expected_hash, manifest_hash_v2(&manifest));
+            assert_eq!(expected_hash, manifest_hash(&manifest));
+        }
     };
 
     for num_threads in 1..32u32 {
@@ -306,25 +327,27 @@ fn test_simple_manifest_computation() {
 
 #[test]
 fn test_meta_manifest_computation() {
-    let (file_table, chunk_table) = simple_file_table_and_chunk_table();
-    let manifest = Manifest::new(StateSyncVersion::V2, file_table, chunk_table);
-    let meta_manifest = build_meta_manifest(&manifest);
-    let encoded_manifest = encode_manifest(&manifest);
-    assert!(encoded_manifest.len() <= DEFAULT_CHUNK_SIZE as usize);
+    for version in versions_from(StateSyncVersion::V2) {
+        let (file_table, chunk_table) = simple_file_table_and_chunk_table(version);
+        let manifest = Manifest::new(version, file_table, chunk_table);
+        let meta_manifest = build_meta_manifest(&manifest);
+        let encoded_manifest = encode_manifest(&manifest);
+        assert!(encoded_manifest.len() <= DEFAULT_CHUNK_SIZE as usize);
 
-    let sub_manifest_hash = hash_concat!(21u8, b"ic-state-sub-manifest", &encoded_manifest[..]);
-    let expected_meta_manifest = MetaManifest {
-        version: StateSyncVersion::V2,
-        sub_manifest_hashes: vec![sub_manifest_hash],
-    };
+        let sub_manifest_hash = hash_concat!(21u8, b"ic-state-sub-manifest", &encoded_manifest[..]);
+        let expected_meta_manifest = MetaManifest {
+            version,
+            sub_manifest_hashes: vec![sub_manifest_hash],
+        };
 
-    assert_eq!(expected_meta_manifest, meta_manifest)
+        assert_eq!(expected_meta_manifest, meta_manifest)
+    }
 }
 
 #[test]
 fn test_validate_sub_manifest() {
     let (file_table, chunk_table) = dummy_file_table_and_chunk_table();
-    let manifest = Manifest::new(StateSyncVersion::V2, file_table, chunk_table);
+    let manifest = Manifest::new(CURRENT_STATE_SYNC_VERSION, file_table, chunk_table);
     let meta_manifest = build_meta_manifest(&manifest);
 
     let encoded_manifest = encode_manifest(&manifest);
@@ -384,7 +407,7 @@ fn test_validate_sub_manifest() {
 #[test]
 fn test_get_sub_manifest_based_on_index() {
     let (file_table, chunk_table) = dummy_file_table_and_chunk_table();
-    let manifest = Manifest::new(StateSyncVersion::V2, file_table, chunk_table);
+    let manifest = Manifest::new(CURRENT_STATE_SYNC_VERSION, file_table, chunk_table);
     let meta_manifest = build_meta_manifest(&manifest);
     let encoded_manifest = encode_manifest(&manifest);
 
@@ -425,31 +448,35 @@ fn simple_manifest_passes_validation() {
 
 #[test]
 fn meta_manifest_passes_validation() {
-    let (file_table, chunk_table) = simple_file_table_and_chunk_table();
-    let manifest = Manifest::new(StateSyncVersion::V2, file_table, chunk_table);
-    let meta_manifest = build_meta_manifest(&manifest);
-    assert_eq!(
-        Ok(()),
-        validate_meta_manifest(
-            &meta_manifest,
-            &CryptoHashOfState::from(CryptoHash(meta_manifest_hash(&meta_manifest).to_vec()))
-        )
-    );
+    for version in versions_from(StateSyncVersion::V2) {
+        let (file_table, chunk_table) = simple_file_table_and_chunk_table(version);
+        let manifest = Manifest::new(version, file_table, chunk_table);
+        let meta_manifest = build_meta_manifest(&manifest);
+        assert_eq!(
+            Ok(()),
+            validate_meta_manifest(
+                &meta_manifest,
+                &CryptoHashOfState::from(CryptoHash(meta_manifest_hash(&meta_manifest).to_vec()))
+            )
+        );
+    }
 }
 
 #[test]
 fn bad_root_hash_detected_for_meta_manifest() {
-    let bogus_hash = CryptoHashOfState::from(CryptoHash(vec![1u8; 32]));
-    let (file_table, chunk_table) = simple_file_table_and_chunk_table();
-    let manifest = Manifest::new(StateSyncVersion::V2, file_table, chunk_table);
-    let meta_manifest = build_meta_manifest(&manifest);
-    assert_eq!(
-        validate_meta_manifest(&meta_manifest, &bogus_hash),
-        Err(ManifestValidationError::InvalidRootHash {
-            expected_hash: bogus_hash.get_ref().0.clone(),
-            actual_hash: meta_manifest_hash(&meta_manifest).to_vec(),
-        })
-    );
+    for version in versions_from(StateSyncVersion::V2) {
+        let bogus_hash = CryptoHashOfState::from(CryptoHash(vec![1u8; 32]));
+        let (file_table, chunk_table) = simple_file_table_and_chunk_table(version);
+        let manifest = Manifest::new(version, file_table, chunk_table);
+        let meta_manifest = build_meta_manifest(&manifest);
+        assert_eq!(
+            validate_meta_manifest(&meta_manifest, &bogus_hash),
+            Err(ManifestValidationError::InvalidRootHash {
+                expected_hash: bogus_hash.get_ref().0.clone(),
+                actual_hash: meta_manifest_hash(&meta_manifest).to_vec(),
+            })
+        );
+    }
 }
 
 #[test]
@@ -553,8 +580,8 @@ fn orphan_chunk_detected() {
 }
 
 #[test]
-fn test_diff_simple_manifest() {
-    let (_, manifest_old) = simple_manifest();
+fn test_diff_manifest_v1() {
+    let (_, manifest_old) = simple_manifest_v1();
     let manifest_new = manifest_old.clone();
     let len = manifest_new.file_table.len();
     let indices = (0..len).collect::<Vec<usize>>();
@@ -735,7 +762,7 @@ fn test_filter_all_zero_chunks() {
 
 #[test]
 fn test_missing_simple_manifest() {
-    let (_, manifest_old) = simple_manifest();
+    let (_, manifest_old) = simple_manifest(CURRENT_STATE_SYNC_VERSION);
     let manifest_new = manifest_old.clone();
     let len = manifest_new.file_table.len();
     let indices = (0..len).collect::<Vec<usize>>();
@@ -796,11 +823,19 @@ fn test_missing_simple_manifest() {
 
 #[test]
 fn test_simple_manifest_encoding_roundtrip() {
-    let (_hash, manifest) = simple_manifest();
+    let (_hash, manifest) = simple_manifest_v1();
     assert_eq!(
         decode_manifest(&encode_manifest(&manifest)[..]),
         Ok(manifest)
     );
+
+    for version in versions_from(StateSyncVersion::V2) {
+        let (_hash, manifest) = simple_manifest(version);
+        assert_eq!(
+            decode_manifest(&encode_manifest(&manifest)[..]),
+            Ok(manifest)
+        );
+    }
 }
 
 #[test]
@@ -996,7 +1031,7 @@ fn test_hash_plan() {
 
 #[test]
 fn test_file_chunk_range() {
-    let manifest = simple_manifest().1;
+    let manifest = simple_manifest(CURRENT_STATE_SYNC_VERSION).1;
     for file_index in 0..manifest.file_table.len() {
         let range = file_chunk_range(&manifest.chunk_table, file_index);
 
