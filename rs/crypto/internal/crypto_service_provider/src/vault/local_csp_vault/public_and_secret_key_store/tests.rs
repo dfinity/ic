@@ -9,7 +9,7 @@ mod key_id_computations {
         compute_idkg_dealing_encryption_key_id, compute_node_signing_key_id,
         compute_tls_certificate_key_id, ExternalPublicKeyError,
     };
-    use crate::vault::test_utils::public_key_store::{
+    use crate::vault::test_utils::pks_and_sks::{
         generate_idkg_dealing_encryption_key_pair, NODE_1,
     };
     use crate::CspVault;
@@ -193,8 +193,9 @@ mod public_key_comparisons {
     use crate::vault::local_csp_vault::public_and_secret_key_store::{
         compare_public_keys, LocalNodePublicKeyResults, LocalNodePublicKeys,
     };
-    use crate::vault::test_utils::pks_and_sks::convert_to_external_public_keys;
-    use crate::vault::test_utils::public_key_store::generate_all_keys;
+    use crate::vault::test_utils::pks_and_sks::{
+        convert_to_external_public_keys, generate_all_keys,
+    };
     use crate::CspVault;
     use assert_matches::assert_matches;
     use ic_types::crypto::CurrentNodePublicKeys;

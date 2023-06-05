@@ -2,14 +2,14 @@ use crate::vault::api::{
     CspVault, ExternalPublicKeyError, LocalPublicKeyError, NodeKeysError, NodeKeysErrors,
     PksAndSksContainsErrors, SecretKeyError,
 };
-use crate::vault::test_utils::public_key_store::{
-    generate_all_keys, generate_idkg_dealing_encryption_key_pair, NODE_1, NOT_AFTER,
-};
 use crate::ExternalPublicKeys;
 use assert_matches::assert_matches;
+use ic_crypto_internal_threshold_sig_ecdsa::MEGaPublicKey;
 use ic_types::crypto::CurrentNodePublicKeys;
 use ic_types_test_utils::ids::node_test_id;
 use std::sync::Arc;
+
+pub const NODE_1: u64 = 4241;
 
 pub fn should_return_success_for_pks_and_sks_contains_if_all_keys_match_with_one_idkg_key(
     csp_vault: Arc<dyn CspVault>,
@@ -208,6 +208,7 @@ pub fn should_return_error_for_pks_and_sks_contains_if_tls_certificate_does_not_
     csp_vault: Arc<dyn CspVault>,
     shadow_csp_vault: Arc<dyn CspVault>,
 ) {
+    const NOT_AFTER: &str = "99991231235959Z";
     let mut current_node_public_keys = generate_all_keys(&csp_vault);
     current_node_public_keys.tls_certificate = {
         let _ = shadow_csp_vault
@@ -434,4 +435,33 @@ pub(crate) fn convert_to_external_public_keys(
             .idkg_dealing_encryption_public_key
             .expect("idkg dealing encryption public key missing"),
     }
+}
+
+pub(crate) fn generate_idkg_dealing_encryption_key_pair(
+    csp_vault: &Arc<dyn CspVault>,
+) -> MEGaPublicKey {
+    csp_vault
+        .idkg_gen_dealing_encryption_key_pair()
+        .expect("Failed to generate IDkg dealing encryption keys")
+}
+
+pub(crate) fn generate_all_keys(csp_vault: &Arc<dyn CspVault>) -> CurrentNodePublicKeys {
+    const NOT_AFTER: &str = "99991231235959Z";
+
+    let _node_signing_pk = csp_vault
+        .gen_node_signing_key_pair()
+        .expect("Failed to generate node signing key pair");
+    let _committee_signing_pk = csp_vault
+        .gen_committee_signing_key_pair()
+        .expect("Failed to generate committee signing key pair");
+    let _dkg_dealing_encryption_pk = csp_vault
+        .gen_dealing_encryption_key_pair(node_test_id(NODE_1))
+        .expect("Failed to generate NI-DKG dealing encryption key pair");
+    let _tls_certificate = csp_vault
+        .gen_tls_key_pair(node_test_id(NODE_1), NOT_AFTER)
+        .expect("Failed to generate TLS certificate");
+    let _idkg_dealing_encryption_key = generate_idkg_dealing_encryption_key_pair(csp_vault);
+    csp_vault
+        .current_node_public_keys()
+        .expect("Failed to get current node public keys")
 }
