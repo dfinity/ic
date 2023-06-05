@@ -14,8 +14,6 @@ pre-commit:
     - |
       set -eEuo pipefail
 
-      pip3 install pre-commit
-
       rustup default stable
 
       # Make sure CI can pull from the private repo.
@@ -33,7 +31,5 @@ pre-commit:
         echo "pre-commit run --from-ref=\$(git merge-base HEAD master) --to-ref=HEAD"
         echo
         echo "And then commit the changes."
-        echo
-        echo "For more information check out https://www.notion.so/GitLab-CI-Developer-How-To-068401fe38ae410d9d608b7a945788bb"
         exit 1
       fi
