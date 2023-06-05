@@ -2,7 +2,7 @@
 use crate::{
     checkpoint::{load_checkpoint, make_checkpoint},
     tip::spawn_tip_thread,
-    PageAllocatorFileDescriptorImpl, StateManagerMetrics, NUMBER_OF_CHECKPOINT_THREADS,
+    StateManagerMetrics, NUMBER_OF_CHECKPOINT_THREADS,
 };
 
 use ic_config::state_manager::Config;
@@ -10,7 +10,10 @@ use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
 use ic_registry_routing_table::{CanisterIdRanges, RoutingTable};
 use ic_registry_subnet_type::SubnetType;
-use ic_replicated_state::{page_map::PageAllocatorFileDescriptor, ReplicatedState};
+use ic_replicated_state::{
+    page_map::PageAllocatorFileDescriptor, page_map::TestPageAllocatorFileDescriptorImpl,
+    ReplicatedState,
+};
 use ic_state_layout::{CheckpointLayout, ReadOnly, StateLayout};
 use ic_types::{malicious_flags::MaliciousFlags, PrincipalId, SubnetId};
 use scoped_threadpool::Pool;
@@ -38,10 +41,8 @@ pub fn split(
     let mut thread_pool = Pool::new(NUMBER_OF_CHECKPOINT_THREADS);
 
     // Create the file descriptor factory that is used to create files for PageMaps.
-    let page_delta_path = state_layout.page_deltas();
-    let fd_factory: Arc<dyn PageAllocatorFileDescriptor> = Arc::new(
-        PageAllocatorFileDescriptorImpl::new(page_delta_path, config.file_backed_memory_allocator),
-    );
+    let fd_factory: Arc<dyn PageAllocatorFileDescriptor> =
+        Arc::new(TestPageAllocatorFileDescriptorImpl::new());
 
     let metrics = StateManagerMetrics::new(metrics_registry);
     let (cp, state) = read_checkpoint(
