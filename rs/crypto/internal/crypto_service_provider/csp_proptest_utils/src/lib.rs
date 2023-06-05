@@ -18,9 +18,11 @@ pub use csp_multi_signature_error::arb_csp_multi_signature_error;
 pub use csp_multi_signature_keygen_error::arb_csp_multi_signature_keygen_error;
 pub use csp_pop::arb_csp_pop;
 pub use csp_public_key::arb_csp_public_key;
+pub use csp_public_key_store_error::arb_csp_public_key_store_error;
 pub use csp_secret_key_store_contains_error::arb_csp_secret_key_store_contains_error;
 pub use csp_signature::arb_csp_signature;
 pub use csp_threshold_sign_error::arb_csp_threshold_sign_error;
+pub use current_node_public_keys::arb_current_node_public_keys;
 
 /// Creates a proptest strategy for a given enum variant.
 macro_rules! proptest_strategy_for_enum_variant {
@@ -411,5 +413,65 @@ mod crypto_error {
             uniform32(any::<u8>()).prop_map(|id| NiDkgTargetSubnet::Remote(NiDkgTargetId::new(id)))
         ]
         .boxed()
+    }
+}
+
+mod csp_public_key_store_error {
+    use super::*;
+    use ic_crypto_internal_csp::vault::api::CspPublicKeyStoreError;
+
+    proptest_strategy_for_enum!(CspPublicKeyStoreError;
+        TransientInternalError => (error in ".*")
+    );
+}
+
+mod current_node_public_keys {
+    use super::*;
+    use ic_protobuf::registry::crypto::v1::{
+        PublicKey as PublicKeyProto, X509PublicKeyCert as X509PublicKeyCertProto,
+    };
+    use ic_types::crypto::CurrentNodePublicKeys;
+
+    prop_compose! {
+        fn arb_public_key_proto()(
+            version in any::<u32>(),
+            algorithm in any::<i32>(),
+            key_value in vec(any::<u8>(), 0..100),
+            proof_data in proptest::option::of(vec(any::<u8>(), 0..100)),
+            timestamp in proptest::option::of(any::<u64>())
+        ) -> PublicKeyProto {
+            PublicKeyProto {
+                version,
+                algorithm,
+                key_value,
+                proof_data,
+                timestamp
+            }
+        }
+    }
+    prop_compose! {
+        fn arb_x509_public_key_cert_proto()(certificate_der in vec(any::<u8>(), 0..100)) -> X509PublicKeyCertProto {
+            X509PublicKeyCertProto {
+                certificate_der
+            }
+        }
+    }
+
+    prop_compose! {
+        pub fn arb_current_node_public_keys()(
+            node_signing_public_key in proptest::option::of(arb_public_key_proto()),
+            committee_signing_public_key in proptest::option::of(arb_public_key_proto()),
+            tls_certificate in proptest::option::of(arb_x509_public_key_cert_proto()),
+            dkg_dealing_encryption_public_key in proptest::option::of(arb_public_key_proto()),
+            idkg_dealing_encryption_public_key in proptest::option::of(arb_public_key_proto())
+        ) -> CurrentNodePublicKeys {
+            CurrentNodePublicKeys {
+                node_signing_public_key,
+                committee_signing_public_key,
+                tls_certificate,
+                dkg_dealing_encryption_public_key,
+                idkg_dealing_encryption_public_key
+            }
+        }
     }
 }

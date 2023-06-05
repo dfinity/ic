@@ -5811,6 +5811,7 @@ dependencies = [
  "ic-crypto-internal-csp",
  "ic-crypto-internal-multi-sig-bls12381",
  "ic-crypto-internal-threshold-sig-bls12381",
+ "ic-protobuf",
  "ic-types",
  "paste 1.0.12",
  "proptest",
