@@ -1,10 +1,10 @@
 build-determinism-binaries:
   extends:
-    - .ubuntu-k8s
-    - .rules-parent-pipeline
+    - .bazel-build-k8s
+    - .bazel-rules-pipeline
   stage: build-determinism-test
   needs:
-    - job: wait-for-bazel-test-all
+    - job: bazel-test-all
       artifacts: false
     - job: build-ic
       artifacts: false
@@ -18,11 +18,11 @@ build-determinism-binaries:
 
 build-determinism-canisters:
   extends:
-    - .ubuntu-k8s
-    - .rules-parent-pipeline
+    - .bazel-build-k8s
+    - .bazel-rules-pipeline
   stage: build-determinism-test
   needs:
-    - job: wait-for-bazel-test-all
+    - job: bazel-test-all
       artifacts: false
     - job: build-ic
       artifacts: false
@@ -36,11 +36,11 @@ build-determinism-canisters:
 
 build-determinism-guest-update-img:
   extends:
-    - .ubuntu-k8s
-    - .rules-parent-pipeline
+    - .bazel-build-k8s
+    - .bazel-rules-pipeline
   stage: build-determinism-test
   needs:
-    - job: wait-for-bazel-test-all
+    - job: bazel-test-all
       artifacts: false
     - job: build-ic
       artifacts: false
@@ -57,11 +57,11 @@ build-determinism-guest-update-img:
 
 build-determinism-host-update-img:
   extends:
-    - .ubuntu-k8s
-    - .rules-parent-pipeline
+    - .bazel-build-k8s
+    - .bazel-rules-pipeline
   stage: build-determinism-test
   needs:
-    - job: wait-for-bazel-test-all
+    - job: bazel-test-all
       artifacts: false
     - job: build-ic
       artifacts: false
@@ -78,11 +78,11 @@ build-determinism-host-update-img:
 
 build-determinism-setupos-img:
   extends:
-    - .ubuntu-k8s
-    - .rules-parent-pipeline
+    - .bazel-build-k8s
+    - .bazel-rules-pipeline
   stage: build-determinism-test
   needs:
-    - job: wait-for-bazel-test-all
+    - job: bazel-test-all
       artifacts: false
     - job: build-ic
       artifacts: false

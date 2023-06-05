@@ -64,7 +64,7 @@
 build-ic:
   extends:
     - .build-ic
-    - .rules-parent-pipeline
+    - .bazel-rules-pipeline
 
 # Scheduled Pipeline
 build-ic-release:

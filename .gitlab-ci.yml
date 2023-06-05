@@ -11,6 +11,7 @@ include:
   - local: /gitlab-ci/config/20--test--build-ic.yml
   - local: /gitlab-ci/config/20--test--cargo-pipeline.yml
   - local: /gitlab-ci/config/20--test--bazel-pipeline.yml
+  - local: /gitlab-ci/config/20--test--build-ic.yml
   - local: /gitlab-ci/config/20--test--pre-commit.yml
   - local: /gitlab-ci/config/20--test--cargo-generate.yml
   - local: /gitlab-ci/config/20--test--gitlab-runners.yml
@@ -23,6 +24,7 @@ include:
   - local: /gitlab-ci/config/40--rust-test--benchmarks.yml
   - local: /gitlab-ci/config/46--guest-os-build--guest-base-image.yml
   - local: /gitlab-ci/config/46--rosetta-release.yml
+  - local: /gitlab-ci/config/55--determinism-test.yml
   - local: /gitlab-ci/config/55--determinism-test-release.yml
   - local: /gitlab-ci/config/60--prod-test--spawn-test-pipeline.yml
   - local: /gitlab-ci/config/60--benchmark-test--spawn-benchmark-pipeline.yml
