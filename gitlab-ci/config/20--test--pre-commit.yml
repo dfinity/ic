@@ -3,8 +3,12 @@ pre-commit:
     # Set the pre-commit home to this directory so we can cache it
     # more easily.
     PRE_COMMIT_HOME: /cache/pre-commit/$CI_CONCURRENT_ID
-  extends: .ubuntu-cargo-k8s
+  extends:
+    - .bazel-build-k8s
+    - .bazel-rules-pipeline
   needs: []  # don't wait on other jobs
+  tags:
+    - dfinity-ic # overwritting so we do not inherit the zh tag
   stage: test
   script:
     - |
@@ -20,7 +24,7 @@ pre-commit:
         echo "install pre-commit by following https://pre-commit.com/#installation:"
         echo "(brew|pip) install pre-commit"
         echo "pre-commit install"
-        echo 
+        echo
         echo "Then, to fix the checks in this branch, run:"
         echo "pre-commit run --from-ref=\$(git merge-base HEAD master) --to-ref=HEAD"
         echo
