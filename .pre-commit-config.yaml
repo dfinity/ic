@@ -52,17 +52,15 @@ repos:
     always_run: true
     verbose: true
 
-# The following repo is maintained by us at
-# https://gitlab.com/dfinity-lab/open/pre-commit-tools.
-- repo: https://gitlab.com/dfinity-lab/open/pre-commit-tools.git
-  rev: 17101bf5cebeda988b13764909a6140badc5ef03
-  hooks:
-  - id: nixpkgs-fmt
-    exclude: |
-        (?x)^(
-            .*/Cargo\.nix|
-            experimental/.*
-        )$
+-   repo: https://github.com/nix-community/nixpkgs-fmt
+    rev: 18010762f814946d4d53c5ee2cb40ab060c24165
+    hooks:
+    -   id: nixpkgs-fmt
+        exclude: |
+            (?x)^(
+                .*/Cargo\.nix|
+                experimental/.*
+            )$
 
 - repo: https://github.com/willthames/ansible-lint.git
   rev: v4.2.0
