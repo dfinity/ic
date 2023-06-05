@@ -71,6 +71,7 @@ RUN curl --fail https://sh.rustup.rs -sSf \
     rustup target add wasm32-unknown-unknown
 
 # Install all python requirements
+ENV PATH=$PATH:/home/ubuntu/.local/bin
 COPY ./requirements.txt /tmp/requirements.txt
 RUN pip3 install --ignore-installed -r /tmp/requirements.txt
 RUN pip3 install pre-commit
