@@ -16,6 +16,7 @@ pub struct InsufficientAllowance(pub Tokens);
 pub enum ApproveError {
     AllowanceChanged { current_allowance: Tokens },
     ExpiredApproval { now: TimeStamp },
+    SelfApproval,
 }
 
 pub trait Approvals {
@@ -100,6 +101,7 @@ where
 impl<K, AccountId> Approvals for AllowanceTable<K, AccountId>
 where
     K: Ord + for<'a> From<(&'a AccountId, &'a AccountId)> + Clone,
+    AccountId: std::cmp::PartialEq,
 {
     type AccountId = AccountId;
 
@@ -122,6 +124,10 @@ where
         now: TimeStamp,
         expected_allowance: Option<Tokens>,
     ) -> Result<Tokens, ApproveError> {
+        if account == spender {
+            return Err(ApproveError::SelfApproval);
+        }
+
         if expires_at.unwrap_or_else(remote_future) <= now {
             return Err(ApproveError::ExpiredApproval { now });
         }

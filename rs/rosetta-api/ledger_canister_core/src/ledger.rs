@@ -27,6 +27,7 @@ pub enum TxApplyError {
     InsufficientAllowance { allowance: Tokens },
     ExpiredApproval { now: TimeStamp },
     AllowanceChanged { current_allowance: Tokens },
+    SelfApproval,
 }
 
 impl From<BalanceError> for TxApplyError {
@@ -50,6 +51,7 @@ impl From<ApproveError> for TxApplyError {
             ApproveError::AllowanceChanged { current_allowance } => {
                 Self::AllowanceChanged { current_allowance }
             }
+            ApproveError::SelfApproval => Self::SelfApproval,
         }
     }
 }
@@ -176,6 +178,7 @@ pub enum TransferError {
     TxThrottled,
     TxDuplicate { duplicate_of: BlockIndex },
     AllowanceChanged { current_allowance: Tokens },
+    SelfApproval,
 }
 
 /// Adds a new block with the specified transaction to the ledger.
@@ -235,6 +238,7 @@ where
             TxApplyError::AllowanceChanged { current_allowance } => {
                 TransferError::AllowanceChanged { current_allowance }
             }
+            TxApplyError::SelfApproval => TransferError::SelfApproval,
         })?;
 
     let fee_collector = ledger.fee_collector().cloned();
