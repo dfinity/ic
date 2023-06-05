@@ -1,7 +1,7 @@
 { naersk, sources, cmake, runCommand }:
 
 naersk.buildPackage {
-  src = runCommand "ic-cdk-optimizer-src" {} ''
+  src = runCommand "ic-cdk-optimizer-src" { } ''
     mkdir -p $out
     cd $out
     tar xzvf ${sources.ic-cdk-optimizer} --strip-components=1

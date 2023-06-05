@@ -53,7 +53,7 @@ repos:
     verbose: true
 
 -   repo: https://github.com/nix-community/nixpkgs-fmt
-    rev: 18010762f814946d4d53c5ee2cb40ab060c24165
+    rev: 6740ea881d3ac5942d4fbf124f5956b896666c76
     hooks:
     -   id: nixpkgs-fmt
         exclude: |

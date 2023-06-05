@@ -9,7 +9,8 @@ let
   # TODO: use the above after embedding the replica version in its name
   version = "0.8.0";
 in
-pkgs.runCommandNoCC "ic-release-package-${version}" {
+pkgs.runCommandNoCC "ic-release-package-${version}"
+{
   nativeBuildInputs = [
     ic-release
     pkgs.jo

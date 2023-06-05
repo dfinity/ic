@@ -62,21 +62,22 @@ let
       # Creates an attribute set from scenario name to derivation.
       # XXX: the scenario names must _not_ contain numbers or dots (.), otherwise
       # Nix silently doesn't build the derivation.
-      scenarios = lib.mapAttrs' (
-        k: _:
-          rec {
-            name = lib.removeSuffix ".json" k;
-            value = runScenario name where "scenarios/${k}";
-          }
-      )
+      scenarios = lib.mapAttrs'
+        (
+          k: _:
+            rec {
+              name = lib.removeSuffix ".json" k;
+              value = runScenario name where "scenarios/${k}";
+            }
+        )
         scenariosPaths;
       checkRunner = checkTestRunners name where;
     in
-      self.recurseIntoAttrs (
-        scenarios // {
-          inherit checkRunner;
-        }
-      );
+    self.recurseIntoAttrs (
+      scenarios // {
+        inherit checkRunner;
+      }
+    );
 in
 
 { ic-testlib = { inherit mkIntegrationScenarios; }; }

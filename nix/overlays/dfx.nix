@@ -4,7 +4,8 @@ let
   src = sources."dfx-${stdenv.system}";
 in
 
-runCommandNoCC "dfx-${src.version}" {
+runCommandNoCC "dfx-${src.version}"
+{
   inherit src;
 } ''
   tar xf $src
