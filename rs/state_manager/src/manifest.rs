@@ -78,6 +78,9 @@ pub enum ManifestValidationError {
         manifest_version: StateSyncVersion,
         max_supported_version: StateSyncVersion,
     },
+    InconsistentManifest {
+        reason: String,
+    },
 }
 
 impl fmt::Display for ManifestValidationError {
@@ -111,6 +114,7 @@ impl fmt::Display for ManifestValidationError {
                 "manifest version {} not supported, maximum supported version {}",
                 manifest_version, max_supported_version,
             ),
+            Self::InconsistentManifest { reason } => write!(f, "inconsistent manifest: {}", reason),
         }
     }
 }
@@ -912,6 +916,16 @@ pub fn compute_manifest(
         );
         metrics.chunk_id_usage_nearing_limits_critical.inc();
     }
+
+    // Sanity check: ensure that we have produced a valid manifest.
+    debug_assert_eq!(
+        Ok(()),
+        validate_manifest(
+            &manifest,
+            &CryptoHash(manifest_hash(&manifest).to_vec()).into()
+        )
+    );
+
     Ok(manifest)
 }
 
@@ -931,6 +945,12 @@ pub fn validate_manifest(
     let mut chunk_start: usize = 0;
 
     for (file_index, f) in manifest.file_table.iter().enumerate() {
+        if f.relative_path.is_absolute() {
+            return Err(ManifestValidationError::InconsistentManifest {
+                reason: format!("absolute file path: {},", f.relative_path.display(),),
+            });
+        }
+
         let mut hasher = file_hasher();
 
         let chunk_count: usize = manifest.chunk_table[chunk_start..]
@@ -940,9 +960,33 @@ pub fn validate_manifest(
 
         (chunk_count as u32).update_hash(&mut hasher);
 
-        for chunk_info in manifest.chunk_table[chunk_start..chunk_start + chunk_count].iter() {
+        let mut file_offset = 0;
+        for i in chunk_start..chunk_start + chunk_count {
+            let chunk_info = manifest.chunk_table.get(i).unwrap();
             assert_eq!(chunk_info.file_index, file_index as u32);
+            if chunk_info.offset != file_offset {
+                return Err(ManifestValidationError::InconsistentManifest {
+                    reason: format!(
+                        "unexpected offset for chunk {} of file {}: was {}, expected {}",
+                        i,
+                        f.relative_path.display(),
+                        chunk_info.offset,
+                        file_offset
+                    ),
+                });
+            }
+            file_offset += chunk_info.size_bytes as u64;
             write_chunk_hash(&mut hasher, chunk_info, manifest.version);
+        }
+        if f.size_bytes != file_offset {
+            return Err(ManifestValidationError::InconsistentManifest {
+                reason: format!(
+                    "mismatching file size and total chunk size for {}: {} vs {}",
+                    f.relative_path.display(),
+                    f.size_bytes,
+                    file_offset
+                ),
+            });
         }
 
         chunk_start += chunk_count;
@@ -956,6 +1000,15 @@ pub fn validate_manifest(
                 actual_hash: hash.to_vec(),
             });
         }
+    }
+    if manifest.chunk_table.len() != chunk_start {
+        return Err(ManifestValidationError::InconsistentManifest {
+            reason: format!(
+                "extra chunks in manifest: actual {}, expected {}",
+                manifest.chunk_table.len(),
+                chunk_start
+            ),
+        });
     }
 
     let hash = manifest_hash(manifest);
