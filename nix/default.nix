@@ -2,10 +2,10 @@
 # packages.
 { system ? builtins.currentSystem
 , crossSystem ? null
-, config ? {}
-, overlays ? []
+, config ? { }
+, overlays ? [ ]
 , isMaster ? true
-, labels ? {}
+, labels ? { }
 }:
 assert (
   if builtins.getEnv "COMMON" != "" then
