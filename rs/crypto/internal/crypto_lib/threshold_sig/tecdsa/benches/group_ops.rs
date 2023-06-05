@@ -261,12 +261,71 @@ fn point_mul(c: &mut Criterion) {
     for curve_type in EccCurveType::all() {
         let mut group = c.benchmark_group(format!("crypto_point_multiplication_{}", curve_type));
 
-        group.bench_function(BenchmarkId::new("multiply", 0), move |b| {
-            b.iter_with_setup(
+        group.bench_function("multiply", move |b| {
+            b.iter_batched_ref(
                 || (random_point(curve_type), random_scalar(curve_type)),
-                |(p, s)| p.scalar_mul(&s),
+                |(p, s)| p.scalar_mul(s),
+                BatchSize::SmallInput,
             )
         });
+
+        group.bench_function("multiply_vartime_online", move |b| {
+            b.iter_batched_ref(
+                || {
+                    let (mut p, s) = (random_point(curve_type), random_scalar(curve_type));
+                    p.precompute(NafLut::DEFAULT_WINDOW_SIZE)
+                        .expect("failed to precopmute point");
+                    (p, s)
+                },
+                |(p, s)| p.scalar_mul_vartime(s),
+                BatchSize::SmallInput,
+            )
+        });
+
+        group.bench_function("multiply_vartime_total", move |b| {
+            b.iter_batched_ref(
+                || (random_point(curve_type), random_scalar(curve_type)),
+                |(p, s)| {
+                    p.precompute(NafLut::DEFAULT_WINDOW_SIZE)
+                        .expect("failed to precopmute point");
+                    p.scalar_mul_vartime(s)
+                },
+                BatchSize::SmallInput,
+            )
+        });
+
+        for window_size in NafLut::MIN_WINDOW_SIZE..=NafLut::MAX_WINDOW_SIZE {
+            group.bench_function(
+                BenchmarkId::new("multiply_vartime_online", window_size),
+                move |b| {
+                    b.iter_batched_ref(
+                        || {
+                            let (mut p, s) = (random_point(curve_type), random_scalar(curve_type));
+                            p.precompute(window_size)
+                                .expect("failed to precopmute point");
+                            (p, s)
+                        },
+                        |(p, s)| p.scalar_mul_vartime(s),
+                        BatchSize::SmallInput,
+                    )
+                },
+            );
+
+            group.bench_function(
+                BenchmarkId::new("multiply_vartime_total", window_size),
+                move |b| {
+                    b.iter_batched_ref(
+                        || (random_point(curve_type), random_scalar(curve_type)),
+                        |(p, s)| {
+                            p.precompute(window_size)
+                                .expect("failed to precopmute point");
+                            p.scalar_mul_vartime(s)
+                        },
+                        BatchSize::SmallInput,
+                    )
+                },
+            );
+        }
 
         group.finish();
     }
