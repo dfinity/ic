@@ -100,8 +100,8 @@ impl Registry {
                         }
                     };
 
-                    let dc_reward = match node_type.as_str() {
-                        "type3" => {
+                    let dc_reward = match &node_type {
+                        t if t.starts_with("type3") => {
                             // For type3 nodes, the rewards are progressively reduced for each additional node owned by a NP.
                             // This helps to improve network decentralization. The first node gets the full reward.
                             // After the first node, the rewards are progressively reduced by multiplying them with reward_coefficient_percent.
