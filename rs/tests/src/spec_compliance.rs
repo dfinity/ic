@@ -37,6 +37,10 @@ const EXCLUDED: &[&str] = &[
     // the replica does not implement proofs of path non-existence
     "$0 ~ /non-existence proofs for non-existing request id/",
     "$0 ~ /module_hash of empty canister/",
+    // In the replica, contexts marked as “deleted” (due to `canister_uninstall` or
+    // running out of cycles) currently still block the transition from stopping to
+    // stopped.
+    "$0 ~ /deleted call contexts do not prevent stopping/",
     "$0 ~ /metadata.absent/",
     // Recursive calls from queries are now allowed.
     // When composite queries are enabled, we should clean up and re-enable this test
