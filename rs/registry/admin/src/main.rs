@@ -3135,7 +3135,6 @@ impl ProposalPayload<UpdateNodeRewardsTableProposalPayload> for ProposeToUpdateN
 /// Sub-command to fetch a `NodeOperatorRecord` from the registry.
 #[derive(Parser)]
 struct GetNodeOperatorCmd {
-    #[clap(long, required = true)]
     /// The principal id of the node operator
     pub node_operator_principal_id: PrincipalId,
 }
