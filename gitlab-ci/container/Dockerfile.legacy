@@ -14,7 +14,7 @@ ENV TZ=UTC
 
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone && \
     apt -yq update && \
-    apt -yqq install --no-install-recommends git openssh-client curl xz-utils time parallel net-tools zip \
+    apt -yqq install --no-install-recommends git openssh-client curl xz-utils time parallel net-tools \
         apt-transport-https ca-certificates curl gnupg lsb-release && \
     curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg && \
     curl -L "https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/xUbuntu_20.04/Release.key" |  apt-key add - && \
@@ -25,7 +25,7 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone &
         android-sdk-ext4-utils \
         build-essential pkg-config libssl-dev llvm-10-dev llvm-dev liblmdb-dev clang clang-10 cmake libbz2-dev gcc-multilib zlib1g-dev \
         lldb libc-bin libclang-10-dev liblz4-dev librocksdb-dev libsnappy-dev libusb-1.0-0-dev libzstd-dev zstd vim emacs nano jq \
-        zip unzip rsync bc csmith gcc lld lld-10 libc++-10-dev libcsmith-dev sqlite3 libsqlite3-dev libselinux-dev libunwind-dev libsystemd-dev uuid-dev \
+        zip unzip rclone rsync bc csmith gcc lld lld-10 libc++-10-dev libcsmith-dev sqlite3 libsqlite3-dev libselinux-dev libunwind-dev libsystemd-dev uuid-dev \
         qemu-system-x86 ovmf iproute2 dosfstools mtools fakeroot faketime android-sdk-ext4-utils \
         policycoreutils python-is-python3 python3 python3-pip python3-cbor shellcheck \
         sudo docker-ce-cli ripgrep patchelf cpio nodejs npm gosu pigz zsh hub less \
@@ -33,11 +33,6 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone &
         grub-efi-amd64-bin podman buildah lvm2 fuse-overlayfs
 
 COPY --from=docker/buildx-bin:latest /buildx /usr/libexec/docker/cli-plugins/docker-buildx
-
-# Install rclone
-ARG rclone_version=v1.62.2
-RUN curl -fsSL https://downloads.rclone.org/v1.62.2/rclone-${rclone_version}-linux-amd64.zip -o rclone.zip && \
-    unzip rclone.zip && cp rclone-${rclone_version}-linux-amd64/rclone /usr/local/bin && chmod +x /usr/local/bin/rclone
 
 # Add the `${USER}` user, and the required folders
 ARG USER=ubuntu
