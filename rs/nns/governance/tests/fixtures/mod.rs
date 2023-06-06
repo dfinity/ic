@@ -23,16 +23,20 @@ use ic_nns_constants::LEDGER_CANISTER_ID;
 use ic_nns_governance::{
     governance::{
         governance_minting_account, neuron_subaccount, subaccount_from_slice, Environment,
-        Governance, EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX,
-        MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS, PROPOSAL_MOTION_TEXT_BYTES_MAX,
-        REWARD_DISTRIBUTION_PERIOD_SECONDS,
+        Governance, HeapGrowthPotential, EXECUTE_NNS_FUNCTION_PAYLOAD_LISTING_BYTES_MAX,
+        MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS,
+        MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
+        ONE_YEAR_SECONDS, PROPOSAL_MOTION_TEXT_BYTES_MAX, REWARD_DISTRIBUTION_PERIOD_SECONDS,
     },
     init::GovernanceCanisterInitPayloadBuilder,
     pb::v1::{
         add_or_remove_node_provider::Change,
+        governance::GovernanceCachedMetrics,
         governance_error::{
             ErrorType,
-            ErrorType::{InsufficientFunds, NotAuthorized, PreconditionFailed},
+            ErrorType::{
+                InsufficientFunds, NotAuthorized, NotFound, PreconditionFailed, ResourceExhausted,
+            },
         },
         manage_neuron,
         manage_neuron::{
@@ -40,40 +44,29 @@ use ic_nns_governance::{
             configure::Operation,
             disburse::Amount,
             ClaimOrRefresh, Command, Configure, Disburse, DisburseToNeuron, IncreaseDissolveDelay,
-            Merge, NeuronIdOrSubaccount, SetDissolveTimestamp, Spawn, Split, StartDissolving,
+            Merge, MergeMaturity, NeuronIdOrSubaccount, SetDissolveTimestamp, Spawn, Split,
+            StartDissolving,
         },
         manage_neuron_response,
-        manage_neuron_response::Command as CommandResponse,
+        manage_neuron_response::{Command as CommandResponse, MergeMaturityResponse},
         neuron,
         neuron::{DissolveState, Followees},
         proposal,
+        proposal::Action,
         reward_node_provider::{RewardMode, RewardToAccount, RewardToNeuron},
         AddOrRemoveNodeProvider, Ballot, BallotInfo, Empty, ExecuteNnsFunction,
         Governance as GovernanceProto, GovernanceError, ListNeurons, ListNeuronsResponse,
-        ListProposalInfo, ManageNeuron, Motion, NetworkEconomics, Neuron, NeuronStakeTransfer,
-        NeuronState, NnsFunction, NodeProvider, Proposal, ProposalData, ProposalStatus,
-        RewardEvent, RewardNodeProvider, SetDefaultFollowees, Tally, Topic, Vote,
-    },
-};
-use ic_nns_governance::{
-    governance::{
-        HeapGrowthPotential, MAX_DISSOLVE_DELAY_SECONDS, MAX_NEURON_AGE_FOR_AGE_BONUS,
-        MAX_NUMBER_OF_PROPOSALS_WITH_BALLOTS, ONE_YEAR_SECONDS,
-    },
-    pb::v1::{
-        governance::GovernanceCachedMetrics,
-        governance_error::ErrorType::{NotFound, ResourceExhausted},
-        manage_neuron::MergeMaturity,
-        manage_neuron_response::MergeMaturityResponse,
-        proposal::Action,
-        ManageNeuronResponse, ProposalRewardStatus,
+        ListProposalInfo, ManageNeuron, ManageNeuronResponse, Motion, NetworkEconomics, Neuron,
+        NeuronStakeTransfer, NeuronState, NnsFunction, NodeProvider, Proposal, ProposalData,
+        ProposalRewardStatus,
         ProposalRewardStatus::{AcceptVotes, ReadyToSettle},
+        ProposalStatus,
         ProposalStatus::Rejected,
-        RewardNodeProviders,
+        RewardEvent, RewardNodeProvider, RewardNodeProviders, SetDefaultFollowees, Tally, Topic,
+        Vote,
     },
 };
-use icp_ledger::Subaccount;
-use icp_ledger::{AccountIdentifier, Memo, Tokens};
+use icp_ledger::{AccountIdentifier, Memo, Subaccount, Tokens};
 use maplit::hashmap;
 use rand::{RngCore, SeedableRng};
 use rand_chacha::ChaCha20Rng;
@@ -279,6 +272,11 @@ impl NeuronBuilder {
 
     pub fn set_owner(mut self, owner: PrincipalId) -> Self {
         self.owner = Some(owner);
+        self
+    }
+
+    pub fn set_hotkeys(mut self, hotkeys: Vec<PrincipalId>) -> Self {
+        self.hot_keys = hotkeys;
         self
     }
 
@@ -846,6 +844,27 @@ impl NNS {
             .now_or_never()
             .unwrap()?;
         Ok(())
+    }
+
+    pub fn simulate_merge_neurons(
+        &mut self,
+        target: &NeuronId,
+        controller: &PrincipalId,
+        source: &NeuronId,
+    ) -> ManageNeuronResponse {
+        self.governance
+            .simulate_manage_neuron(
+                controller,
+                ManageNeuron {
+                    id: Some(target.clone()),
+                    neuron_id_or_subaccount: None,
+                    command: Some(Command::Merge(Merge {
+                        source_neuron_id: Some(source.clone()),
+                    })),
+                },
+            )
+            .now_or_never()
+            .unwrap()
     }
 
     pub fn get_neuron(&self, ident: &NeuronId) -> &Neuron {
