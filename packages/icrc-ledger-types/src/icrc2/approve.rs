@@ -12,7 +12,7 @@ pub struct ApproveArgs {
     #[serde(default)]
     pub expected_allowance: Option<Nat>,
     #[serde(default)]
-    pub expired_at: Option<u64>,
+    pub expires_at: Option<u64>,
     #[serde(default)]
     pub fee: Option<Nat>,
     #[serde(default)]
