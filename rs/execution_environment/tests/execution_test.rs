@@ -6,7 +6,7 @@ use ic_ic00_types::CanisterSettingsArgsBuilder;
 use ic_registry_subnet_type::SubnetType;
 use ic_state_machine_tests::{ErrorCode, StateMachine, StateMachineConfig, UserError};
 use ic_types::{ingress::WasmResult, Cycles, NumBytes};
-use ic_universal_canister::{wasm, UNIVERSAL_CANISTER_WASM};
+use ic_universal_canister::{call_args, wasm, UNIVERSAL_CANISTER_WASM};
 use std::{convert::TryInto, time::Duration};
 
 const INITIAL_CYCLES_BALANCE: Cycles = Cycles::new(100_000_000_000_000);
@@ -627,7 +627,8 @@ fn exceeding_memory_capacity_fails_when_memory_allocation_changes() {
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config,
         HypervisorConfig {
-            subnet_memory_capacity: NumBytes::from(20 * 1024 * 1024), // 20 MiB,
+            subnet_memory_capacity: NumBytes::from(21 * 1024 * 1024), // 21 MiB,
+            subnet_memory_reservation: NumBytes::from(1024 * 1024),   // 1 MiB
             ..Default::default()
         },
     ));
@@ -690,7 +691,8 @@ fn exceeding_memory_capacity_fails_during_message_execution() {
     let env = StateMachine::new_with_config(StateMachineConfig::new(
         subnet_config,
         HypervisorConfig {
-            subnet_memory_capacity: NumBytes::from(20 * 1024 * 1024), // 20 MiB,
+            subnet_memory_capacity: NumBytes::from(21 * 1024 * 1024), // 21 MiB,
+            subnet_memory_reservation: NumBytes::from(1024 * 1024),   // 1 MiB
             ..Default::default()
         },
     ));
@@ -784,4 +786,69 @@ fn max_canister_memory_respected_even_when_no_memory_allocation_is_set() {
         wasm().stable64_grow(50).reply_int64().build(),
     );
     assert_replied(res, 0);
+}
+
+#[test]
+fn subnet_memory_reservation_works() {
+    let subnet_config = SubnetConfig::new(SubnetType::Application);
+    let env = StateMachine::new_with_config(StateMachineConfig::new(
+        subnet_config,
+        HypervisorConfig {
+            subnet_memory_capacity: NumBytes::from(120 * 1024 * 1024),
+            subnet_memory_reservation: NumBytes::from(50 * 1024 * 1024),
+            ..Default::default()
+        },
+    ));
+
+    let a_id = env
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_WASM.into(),
+            vec![],
+            Some(CanisterSettingsArgsBuilder::new().build()),
+            INITIAL_CYCLES_BALANCE,
+        )
+        .unwrap();
+
+    let b_id = env
+        .install_canister_with_cycles(
+            UNIVERSAL_CANISTER_WASM.into(),
+            vec![],
+            Some(CanisterSettingsArgsBuilder::new().build()),
+            INITIAL_CYCLES_BALANCE,
+        )
+        .unwrap();
+
+    let b = wasm()
+        .accept_cycles(Cycles::from(1_000u128))
+        .message_payload()
+        .append_and_reply()
+        .build();
+
+    // The update call grow and the response callback both grow memory by
+    // roughly 50MB.
+    let a = wasm()
+        .stable_grow(800)
+        .call_with_cycles(
+            b_id.get(),
+            "update",
+            call_args()
+                .other_side(b)
+                .on_reject(wasm().reject_code().reject_message().reject())
+                .on_reply(
+                    wasm()
+                        .stable_grow(800)
+                        .stable64_fill(0, 0, 1000)
+                        .instruction_counter_is_at_least(1_000_000)
+                        .message_payload()
+                        .append_and_reply(),
+                ),
+            Cycles::from(2000u128),
+        )
+        .build();
+
+    let res = env.execute_ingress(a_id, "update", a).unwrap();
+    match res {
+        WasmResult::Reply(_) => {}
+        WasmResult::Reject(err) => unreachable!("Unexpected reject: {}", err),
+    }
 }

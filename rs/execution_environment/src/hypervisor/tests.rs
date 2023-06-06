@@ -2081,6 +2081,7 @@ fn instruction_limit_is_respected() {
 fn subnet_available_memory_is_respected_by_memory_grow() {
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_execution_memory(9 * WASM_PAGE_SIZE as i64)
+        .with_subnet_memory_reservation(0)
         .build();
     let wat = r#"
         (module

@@ -1419,6 +1419,7 @@ pub struct ExecutionTestBuilder {
     subnet_execution_memory: i64,
     subnet_message_memory: i64,
     subnet_wasm_custom_sections_memory: i64,
+    subnet_memory_reservation: i64,
     registry_settings: RegistryExecutionSettings,
     manual_execution: bool,
     rate_limiting_of_instructions: bool,
@@ -1449,6 +1450,9 @@ impl Default for ExecutionTestBuilder {
         let subnet_wasm_custom_sections_memory = ic_config::execution_environment::Config::default()
             .subnet_wasm_custom_sections_memory_capacity
             .get() as i64;
+        let subnet_memory_reservation = ic_config::execution_environment::Config::default()
+            .subnet_memory_reservation
+            .get() as i64;
         let max_instructions_per_composite_query_call =
             ic_config::execution_environment::Config::default().max_query_call_graph_instructions;
         Self {
@@ -1471,6 +1475,7 @@ impl Default for ExecutionTestBuilder {
             subnet_execution_memory,
             subnet_message_memory,
             subnet_wasm_custom_sections_memory,
+            subnet_memory_reservation,
             registry_settings: test_registry_settings(),
             manual_execution: false,
             rate_limiting_of_instructions: false,
@@ -1602,6 +1607,13 @@ impl ExecutionTestBuilder {
     pub fn with_subnet_execution_memory(self, subnet_execution_memory: i64) -> Self {
         Self {
             subnet_execution_memory,
+            ..self
+        }
+    }
+
+    pub fn with_subnet_memory_reservation(self, subnet_memory_reservation: i64) -> Self {
+        Self {
+            subnet_memory_reservation,
             ..self
         }
     }
@@ -1856,6 +1868,7 @@ impl ExecutionTestBuilder {
             allocatable_compute_capacity_in_percent: self.allocatable_compute_capacity_in_percent,
             subnet_memory_capacity: NumBytes::from(self.subnet_execution_memory as u64),
             subnet_message_memory_capacity: NumBytes::from(self.subnet_message_memory as u64),
+            subnet_memory_reservation: NumBytes::from(self.subnet_memory_reservation as u64),
             bitcoin: BitcoinConfig {
                 privileged_access: self.bitcoin_privileged_access,
                 ..Default::default()
@@ -1919,7 +1932,7 @@ impl ExecutionTestBuilder {
             xnet_messages: vec![],
             lost_messages: vec![],
             subnet_available_memory: SubnetAvailableMemory::new(
-                self.subnet_execution_memory,
+                self.subnet_execution_memory - self.subnet_memory_reservation,
                 self.subnet_message_memory,
                 self.subnet_wasm_custom_sections_memory,
             ),

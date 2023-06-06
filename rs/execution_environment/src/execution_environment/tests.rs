@@ -218,6 +218,7 @@ fn output_requests_on_system_subnet_ignore_memory_limits() {
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_type(SubnetType::System)
         .with_subnet_execution_memory(canister_memory)
+        .with_subnet_memory_reservation(0)
         .with_subnet_message_memory(13)
         .with_manual_execution()
         .build();
@@ -247,6 +248,7 @@ fn output_requests_on_system_subnet_ignore_memory_limits() {
 fn output_requests_on_application_subnets_respect_subnet_message_memory() {
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_execution_memory(ONE_GIB)
+        .with_subnet_memory_reservation(0)
         .with_subnet_message_memory(13)
         .with_manual_execution()
         .build();
@@ -274,6 +276,7 @@ fn output_requests_on_application_subnets_respect_subnet_message_memory() {
 fn output_requests_on_application_subnets_update_subnet_available_memory() {
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_execution_memory(ONE_GIB)
+        .with_subnet_memory_reservation(0)
         .with_subnet_message_memory(ONE_GIB)
         .with_manual_execution()
         .build();
@@ -1365,6 +1368,7 @@ const MEMORY_ALLOCATION_WAT: &str = r#"(module
 fn subnet_available_memory_reclaimed_when_execution_fails() {
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_execution_memory(ONE_GIB)
+        .with_subnet_memory_reservation(0)
         .with_subnet_message_memory(ONE_GIB)
         .build();
     let id = test.canister_from_wat(MEMORY_ALLOCATION_WAT).unwrap();
@@ -1390,6 +1394,7 @@ fn subnet_available_memory_reclaimed_when_execution_fails() {
 fn test_allocating_memory_reduces_subnet_available_memory() {
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_execution_memory(ONE_GIB)
+        .with_subnet_memory_reservation(0)
         .with_subnet_message_memory(ONE_GIB)
         .build();
     let id = test.canister_from_wat(MEMORY_ALLOCATION_WAT).unwrap();

@@ -254,6 +254,7 @@ fn install_code_validate_input_memory_allocation() {
     let mib: u64 = 1024 * 1024;
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_execution_memory(500 * mib as i64)
+        .with_subnet_memory_reservation(0)
         .with_install_code_instruction_limit(1_000_000)
         .with_install_code_slice_instruction_limit(1_000)
         .with_deterministic_time_slicing()
