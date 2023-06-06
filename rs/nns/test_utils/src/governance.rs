@@ -345,6 +345,12 @@ pub struct UpgradeRootProposal {
     pub stop_upgrade_start: bool,
 }
 
+#[derive(CandidType)]
+pub struct HardResetNnsRootToVersionPayload {
+    pub wasm_module: Vec<u8>,
+    pub init_arg: Vec<u8>,
+}
+
 /// Submits a proposal to upgrade the root canister.
 pub async fn upgrade_root_canister_by_proposal(
     governance: &Canister<'_>,

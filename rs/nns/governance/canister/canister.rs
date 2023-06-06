@@ -879,6 +879,7 @@ fn get_effective_payload(mt: NnsFunction, payload: &[u8]) -> Cow<[u8]> {
         | NnsFunction::NnsCanisterInstall
         | NnsFunction::NnsCanisterUpgrade
         | NnsFunction::NnsRootUpgrade
+        | NnsFunction::HardResetNnsRootToVersion
         | NnsFunction::RecoverSubnet
         | NnsFunction::BlessReplicaVersion
         | NnsFunction::RetireReplicaVersion

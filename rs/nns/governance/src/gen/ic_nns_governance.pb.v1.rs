@@ -3265,6 +3265,11 @@ pub enum NnsFunction {
     /// The proposal changes the HostOS version that is used on the specified
     /// nodes. The version must be contained in the list of HostOS versions.
     UpdateNodesHostOsVersion = 41,
+    /// Uninstall and Install Root with the WASM provided in the function.  If InitArgs are provided
+    /// They will be passed to the canister_init function of the WASM provided.
+    /// This function is meant as a Break Glass mechanism for when an open call context in
+    /// the Root canister is preventing root or another canister from upgrading (in the case of proxied calls).
+    HardResetNnsRootToVersion = 42,
 }
 impl NnsFunction {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -3321,6 +3326,7 @@ impl NnsFunction {
             NnsFunction::BitcoinSetConfig => "NNS_FUNCTION_BITCOIN_SET_CONFIG",
             NnsFunction::AddHostOsVersion => "NNS_FUNCTION_ADD_HOST_OS_VERSION",
             NnsFunction::UpdateNodesHostOsVersion => "NNS_FUNCTION_UPDATE_NODES_HOST_OS_VERSION",
+            NnsFunction::HardResetNnsRootToVersion => "NNS_FUNCTION_HARD_RESET_NNS_ROOT_TO_VERSION",
         }
     }
 }

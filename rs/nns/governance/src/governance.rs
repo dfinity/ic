@@ -474,6 +474,9 @@ impl NnsFunction {
             NnsFunction::NnsCanisterInstall => (ROOT_CANISTER_ID, "add_nns_canister"),
             NnsFunction::NnsCanisterUpgrade => (ROOT_CANISTER_ID, "change_nns_canister"),
             NnsFunction::NnsRootUpgrade => (LIFELINE_CANISTER_ID, "upgrade_root"),
+            NnsFunction::HardResetNnsRootToVersion => {
+                (LIFELINE_CANISTER_ID, "hard_reset_root_to_version")
+            }
             NnsFunction::RecoverSubnet => (REGISTRY_CANISTER_ID, "recover_subnet"),
             NnsFunction::BlessReplicaVersion => (REGISTRY_CANISTER_ID, "bless_replica_version"),
             NnsFunction::RetireReplicaVersion => (REGISTRY_CANISTER_ID, "retire_replica_version"),
@@ -631,6 +634,7 @@ impl Proposal {
                             NnsFunction::NnsCanisterInstall
                             | NnsFunction::NnsCanisterUpgrade
                             | NnsFunction::NnsRootUpgrade
+                            | NnsFunction::HardResetNnsRootToVersion
                             | NnsFunction::StopOrStartNnsCanister
                             | NnsFunction::AddSnsWasm
                             | NnsFunction::BitcoinSetConfig
@@ -4803,6 +4807,7 @@ impl Governance {
             if update.nns_function != NnsFunction::NnsCanisterUpgrade as i32
                 && update.nns_function != NnsFunction::NnsCanisterInstall as i32
                 && update.nns_function != NnsFunction::NnsRootUpgrade as i32
+                && update.nns_function != NnsFunction::HardResetNnsRootToVersion as i32
                 && update.nns_function != NnsFunction::AddSnsWasm as i32
                 && update.payload.len() > PROPOSAL_EXECUTE_NNS_FUNCTION_PAYLOAD_BYTES_MAX
             {
