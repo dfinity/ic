@@ -115,6 +115,7 @@ struct ResponseHelper {
     refund_for_response_transmission: Cycles,
     initial_cycles_balance: Cycles,
     response_sender: CanisterId,
+    applied_subnet_memory_reservation: NumBytes,
 }
 
 impl ResponseHelper {
@@ -126,6 +127,7 @@ impl ResponseHelper {
         error_counter: &IntCounter,
         original: &OriginalContext,
         round: &RoundContext,
+        round_limits: &mut RoundLimits,
     ) -> Self {
         // Canister A sends a request to canister B with some cycles.
         // Canister B can accept some of the cycles in the request.
@@ -174,13 +176,16 @@ impl ResponseHelper {
         let canister = clean_canister.clone();
         let initial_cycles_balance = canister.system_state.balance();
         let response_sender = response.respondent;
-        Self {
+        let mut helper = Self {
             canister,
             refund_for_sent_cycles,
             refund_for_response_transmission,
             initial_cycles_balance,
             response_sender,
-        }
+            applied_subnet_memory_reservation: NumBytes::new(0),
+        };
+        helper.apply_subnet_memory_reservation(original, round_limits);
+        helper
     }
 
     /// Refunds the canister for the cycles that were not accepted by the callee
@@ -211,6 +216,7 @@ impl ResponseHelper {
         call_context: &CallContext,
         original: &OriginalContext,
         round: &RoundContext,
+        round_limits: &mut RoundLimits,
     ) -> Result<ResponseHelper, ExecuteMessageResult> {
         // If the call context was deleted (e.g. in uninstall), then do not execute anything.
         if call_context.is_deleted() {
@@ -222,6 +228,9 @@ impl ResponseHelper {
                     "[EXC-BUG] Canister {} has a deleted context that has not responded",
                     self.canister.system_state.canister_id,
                 );
+                // Since this branch doesn't call `early_finish()`, it needs to manually
+                // revert the subnet memory reservation.
+                self.revert_subnet_memory_reservation(original, round_limits);
                 return Err(ExecuteMessageResult::Finished {
                     canister: self.canister,
                     heap_delta: NumBytes::from(0),
@@ -232,7 +241,7 @@ impl ResponseHelper {
             // Since the call context has responded, passing `Ok(None)` will produce
             // an empty response and take care of all other bookkeeping.
             let result: Result<Option<WasmResult>, HypervisorError> = Ok(None);
-            return Err(self.early_finish(result, original, round));
+            return Err(self.early_finish(result, original, round, round_limits));
         }
 
         // Validate that the canister has an `ExecutionState`.
@@ -243,14 +252,19 @@ impl ResponseHelper {
                 self.canister.system_state.canister_id,
             );
             let result = Err(HypervisorError::WasmModuleNotFound);
-            return Err(self.early_finish(result, original, round));
+            return Err(self.early_finish(result, original, round, round_limits));
         }
         Ok(self)
     }
 
     /// Returns a struct with all the necessary information to replay the
     /// initial steps in subsequent rounds.
-    fn pause(self) -> PausedResponseHelper {
+    fn pause(
+        &self,
+        original: &OriginalContext,
+        round_limits: &mut RoundLimits,
+    ) -> PausedResponseHelper {
+        self.revert_subnet_memory_reservation(original, round_limits);
         PausedResponseHelper {
             refund_for_sent_cycles: self.refund_for_sent_cycles,
             refund_for_response_transmission: self.refund_for_response_transmission,
@@ -273,6 +287,7 @@ impl ResponseHelper {
         clean_canister: &CanisterState,
         original: &OriginalContext,
         round: &RoundContext,
+        round_limits: &mut RoundLimits,
     ) -> Result<ResponseHelper, (ResponseHelper, HypervisorError)> {
         // We expect the function call to succeed because the call context and
         // the callback have been checked in `execute_response()`.
@@ -288,7 +303,11 @@ impl ResponseHelper {
             refund_for_response_transmission: paused.refund_for_response_transmission,
             initial_cycles_balance: clean_canister.system_state.balance(),
             response_sender: paused.response_sender,
+            applied_subnet_memory_reservation: NumBytes::new(0),
         };
+
+        helper.apply_subnet_memory_reservation(original, round_limits);
+
         helper.apply_initial_refunds();
 
         // This validation succeeded in `execute_response()` and we expect it to
@@ -296,7 +315,7 @@ impl ResponseHelper {
         // Note that we cannot return an error here because the cleanup callback
         // cannot be invoked without a valid call context and a callback.
         helper = helper
-            .validate(&call_context, original, round)
+            .validate(&call_context, original, round, round_limits)
             .expect("Failed to resume DTS response: validation");
 
         // The cycles balance of the clean canister must not change during the
@@ -373,6 +392,7 @@ impl ResponseHelper {
                 NumBytes::from((output.instance_stats.dirty_pages * PAGE_SIZE) as u64),
                 original,
                 round,
+                round_limits,
             )),
             Err(err) => Err((self, err, instructions_available)),
         }
@@ -421,6 +441,7 @@ impl ResponseHelper {
                     NumBytes::from((output.instance_stats.dirty_pages * PAGE_SIZE) as u64),
                     original,
                     round,
+                    round_limits,
                 )
             }
             Err(cleanup_err) => {
@@ -434,6 +455,7 @@ impl ResponseHelper {
                     NumBytes::from(0),
                     original,
                     round,
+                    round_limits,
                 )
             }
         }
@@ -450,7 +472,10 @@ impl ResponseHelper {
         heap_delta: NumBytes,
         original: &OriginalContext,
         round: &RoundContext,
+        round_limits: &mut RoundLimits,
     ) -> ExecuteMessageResult {
+        self.revert_subnet_memory_reservation(original, round_limits);
+
         let action = self
             .canister
             .system_state
@@ -514,6 +539,7 @@ impl ResponseHelper {
         result: Result<Option<WasmResult>, HypervisorError>,
         original: &OriginalContext,
         round: &RoundContext,
+        round_limits: &mut RoundLimits,
     ) -> ExecuteMessageResult {
         self.finish(
             result,
@@ -521,6 +547,7 @@ impl ResponseHelper {
             NumBytes::from(0),
             original,
             round,
+            round_limits,
         )
     }
 
@@ -530,6 +557,37 @@ impl ResponseHelper {
 
     fn refund_for_sent_cycles(&self) -> Cycles {
         self.refund_for_sent_cycles
+    }
+
+    fn apply_subnet_memory_reservation(
+        &mut self,
+        original: &OriginalContext,
+        round_limits: &mut RoundLimits,
+    ) {
+        let reservation = original.subnet_memory_reservation;
+        round_limits.subnet_available_memory.apply_reservation(
+            reservation,
+            NumBytes::new(0),
+            NumBytes::new(0),
+        );
+        debug_assert_eq!(self.applied_subnet_memory_reservation, NumBytes::new(0));
+        self.applied_subnet_memory_reservation = reservation;
+    }
+
+    fn revert_subnet_memory_reservation(
+        &self,
+        original: &OriginalContext,
+        round_limits: &mut RoundLimits,
+    ) {
+        debug_assert_eq!(
+            self.applied_subnet_memory_reservation,
+            original.subnet_memory_reservation
+        );
+        round_limits.subnet_available_memory.revert_reservation(
+            self.applied_subnet_memory_reservation,
+            NumBytes::new(0),
+            NumBytes::new(0),
+        );
     }
 }
 
@@ -547,6 +605,7 @@ struct OriginalContext {
     subnet_size: usize,
     freezing_threshold: Cycles,
     canister_id: CanisterId,
+    subnet_memory_reservation: NumBytes,
 }
 
 /// Struct used to hold necessary information for the
@@ -586,29 +645,34 @@ impl PausedExecution for PausedResponseExecution {
         // The height of the `clean_canister` state increases with every call of
         // `resume()`. We re-create the helper based on `clean_canister` so that
         // the Wasm state changes are applied to the up-to-date state.
-        let (helper, result) =
-            match ResponseHelper::resume(self.helper, &clean_canister, &self.original, &round) {
-                Ok(helper) => {
-                    let execution_state = helper.canister().execution_state.as_ref().unwrap();
-                    let result = self.paused_wasm_execution.resume(execution_state);
-                    (helper, result)
-                }
-                Err((helper, err)) => {
-                    info!(
+        let (helper, result) = match ResponseHelper::resume(
+            self.helper,
+            &clean_canister,
+            &self.original,
+            &round,
+            round_limits,
+        ) {
+            Ok(helper) => {
+                let execution_state = helper.canister().execution_state.as_ref().unwrap();
+                let result = self.paused_wasm_execution.resume(execution_state);
+                (helper, result)
+            }
+            Err((helper, err)) => {
+                info!(
                     round.log,
                     "[DTS] Failed to resume paused response callback {:?} of canister {}: {:?}.",
                     self.original.callback_id,
                     clean_canister.canister_id(),
                     err,
                 );
-                    self.paused_wasm_execution.abort();
-                    let result = wasm_execution_error(
-                        err,
-                        self.execution_parameters.instruction_limits.message(),
-                    );
-                    (helper, result)
-                }
-            };
+                self.paused_wasm_execution.abort();
+                let result = wasm_execution_error(
+                    err,
+                    self.execution_parameters.instruction_limits.message(),
+                );
+                (helper, result)
+            }
+        };
         process_response_result(
             result,
             clean_canister,
@@ -673,29 +737,34 @@ impl PausedExecution for PausedCleanupExecution {
         //
         // Note that we don't apply changes from the response callback execution
         // because the cleanup callback runs only if the response callback fails.
-        let (helper, result) =
-            match ResponseHelper::resume(self.helper, &clean_canister, &self.original, &round) {
-                Ok(helper) => {
-                    let execution_state = helper.canister().execution_state.as_ref().unwrap();
-                    let result = self.paused_wasm_execution.resume(execution_state);
-                    (helper, result)
-                }
-                Err((helper, err)) => {
-                    info!(
-                        round.log,
-                        "[DTS] Failed to resume paused cleanup callback {:?} of canister {}: {:?}.",
-                        self.original.callback_id,
-                        clean_canister.canister_id(),
-                        err,
-                    );
-                    self.paused_wasm_execution.abort();
-                    let result = wasm_execution_error(
-                        err,
-                        self.execution_parameters.instruction_limits.message(),
-                    );
-                    (helper, result)
-                }
-            };
+        let (helper, result) = match ResponseHelper::resume(
+            self.helper,
+            &clean_canister,
+            &self.original,
+            &round,
+            round_limits,
+        ) {
+            Ok(helper) => {
+                let execution_state = helper.canister().execution_state.as_ref().unwrap();
+                let result = self.paused_wasm_execution.resume(execution_state);
+                (helper, result)
+            }
+            Err((helper, err)) => {
+                info!(
+                    round.log,
+                    "[DTS] Failed to resume paused cleanup callback {:?} of canister {}: {:?}.",
+                    self.original.callback_id,
+                    clean_canister.canister_id(),
+                    err,
+                );
+                self.paused_wasm_execution.abort();
+                let result = wasm_execution_error(
+                    err,
+                    self.execution_parameters.instruction_limits.message(),
+                );
+                (helper, result)
+            }
+        };
         process_cleanup_result(
             result,
             clean_canister,
@@ -737,6 +806,7 @@ pub fn execute_response(
     round: RoundContext,
     round_limits: &mut RoundLimits,
     subnet_size: usize,
+    subnet_memory_reservation: NumBytes,
 ) -> ExecuteMessageResult {
     let (callback, callback_id, call_context, call_context_id) =
         match common::get_call_context_and_callback(&clean_canister, &response, round.log) {
@@ -772,12 +842,19 @@ pub fn execute_response(
         subnet_size,
         freezing_threshold,
         canister_id: clean_canister.canister_id(),
+        subnet_memory_reservation,
     };
 
-    let mut helper =
-        ResponseHelper::new(&clean_canister, &response, error_counter, &original, &round);
+    let mut helper = ResponseHelper::new(
+        &clean_canister,
+        &response,
+        error_counter,
+        &original,
+        &round,
+        round_limits,
+    );
     helper.apply_initial_refunds();
-    let helper = match helper.validate(&call_context, &original, &round) {
+    let helper = match helper.validate(&call_context, &original, &round, round_limits) {
         Ok(helper) => helper,
         Err(result) => {
             return result;
@@ -928,7 +1005,7 @@ fn process_response_result(
             update_round_limits(round_limits, &slice);
             let paused_execution = Box::new(PausedResponseExecution {
                 paused_wasm_execution,
-                helper: helper.pause(),
+                helper: helper.pause(&original, round_limits),
                 execution_parameters,
                 reserved_cleanup_instructions,
                 original,
@@ -987,6 +1064,7 @@ fn process_response_result(
                                 NumBytes::from(0),
                                 &original,
                                 &round,
+                                round_limits,
                             )
                         }
                     }
@@ -1019,7 +1097,7 @@ fn process_cleanup_result(
             update_round_limits(round_limits, &slice);
             let paused_execution = Box::new(PausedCleanupExecution {
                 paused_wasm_execution,
-                helper: helper.pause(),
+                helper: helper.pause(&original, round_limits),
                 execution_parameters,
                 callback_err,
                 original,

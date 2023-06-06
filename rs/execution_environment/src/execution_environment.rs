@@ -331,7 +331,9 @@ impl ExecutionEnvironment {
     pub fn subnet_available_memory(&self, state: &ReplicatedState) -> SubnetAvailableMemory {
         let memory_taken = state.memory_taken();
         SubnetAvailableMemory::new(
-            self.config.subnet_memory_capacity.get() as i64 - memory_taken.execution().get() as i64,
+            self.config.subnet_memory_capacity.get() as i64
+                - self.config.subnet_memory_reservation.get() as i64
+                - memory_taken.execution().get() as i64,
             self.config.subnet_message_memory_capacity.get() as i64
                 - memory_taken.messages().get() as i64,
             self.config
@@ -1468,6 +1470,7 @@ impl ExecutionEnvironment {
             round,
             round_limits,
             subnet_size,
+            self.config.subnet_memory_reservation,
         )
     }
 

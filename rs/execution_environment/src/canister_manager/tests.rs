@@ -784,6 +784,7 @@ fn install_canister_fails_if_memory_capacity_exceeded() {
 
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_execution_memory(memory_capacity as i64)
+        .with_subnet_memory_reservation(0)
         .build();
 
     let wasm = wat::parse_str(wat).unwrap();
@@ -2769,6 +2770,7 @@ fn upgrading_canister_fails_if_memory_capacity_exceeded() {
 
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_execution_memory(memory_capacity as i64)
+        .with_subnet_memory_reservation(0)
         .build();
 
     let wasm = wat::parse_str(wat).unwrap();
@@ -4324,6 +4326,7 @@ fn unfreezing_of_frozen_canister() {
 fn create_canister_fails_if_memory_capacity_exceeded() {
     let mut test = ExecutionTestBuilder::new()
         .with_subnet_execution_memory(MEMORY_CAPACITY.get() as i64)
+        .with_subnet_memory_reservation(0)
         .build();
     let uc = test.universal_canister().unwrap();
 
@@ -4461,6 +4464,7 @@ fn update_settings_makes_subnet_oversubscribed() {
     let mut test = ExecutionTestBuilder::new()
         .with_allocatable_compute_capacity_in_percent(100)
         .with_subnet_execution_memory(100 * 1024 * 1024) // 100 MiB
+        .with_subnet_memory_reservation(0)
         .build();
     let c1 = test.create_canister(Cycles::new(1_000_000_000_000_000));
     let c2 = test.create_canister(Cycles::new(1_000_000_000_000_000));

@@ -253,6 +253,32 @@ impl SubnetAvailableMemory {
         self.message_memory += message_amount.get() as i64;
         self.wasm_custom_sections_memory += wasm_custom_sections_amount.get() as i64;
     }
+
+    /// Increments the available memory by the given number of bytes.
+    pub fn apply_reservation(
+        &mut self,
+        execution_amount: NumBytes,
+        message_amount: NumBytes,
+        wasm_custom_sections_amount: NumBytes,
+    ) {
+        self.execution_memory += execution_amount.get() as i64;
+        self.message_memory += message_amount.get() as i64;
+        self.wasm_custom_sections_memory += wasm_custom_sections_amount.get() as i64;
+    }
+
+    /// Decrements the available memory by the given number of bytes.
+    /// It undoes the changes done by `apply_reservation()`.
+    /// Note that the available memory can become negative after this change.
+    pub fn revert_reservation(
+        &mut self,
+        execution_amount: NumBytes,
+        message_amount: NumBytes,
+        wasm_custom_sections_amount: NumBytes,
+    ) {
+        self.execution_memory -= execution_amount.get() as i64;
+        self.message_memory -= message_amount.get() as i64;
+        self.wasm_custom_sections_memory -= wasm_custom_sections_amount.get() as i64;
+    }
 }
 
 impl ops::Div<i64> for SubnetAvailableMemory {
