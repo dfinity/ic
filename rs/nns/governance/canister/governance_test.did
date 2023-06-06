@@ -222,6 +222,7 @@ type ListProposalInfo = record {
   before_proposal : opt NeuronId;
   limit : nat32;
   exclude_topic : vec int32;
+  include_all_manage_neuron_proposals : opt bool;
   include_status : vec int32;
 };
 type ListProposalInfoResponse = record { proposal_info : vec ProposalInfo };

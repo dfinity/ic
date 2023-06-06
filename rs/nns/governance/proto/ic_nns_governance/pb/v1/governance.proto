@@ -1860,6 +1860,10 @@ message ListProposalInfo {
   // [ProposalStatus] for more information). If this list is empty, no
   // restriction is applied.
   repeated ProposalStatus include_status = 5;
+  // Include all ManageNeuron proposals regardless of the visibility of the
+  // proposal to the caller principal. Note that exclude_topic is still
+  // respected even when this option is set to true.
+  optional bool include_all_manage_neuron_proposals = 6;
 }
 
 message ListProposalInfoResponse {

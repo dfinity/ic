@@ -2614,6 +2614,11 @@ pub struct ListProposalInfo {
     /// restriction is applied.
     #[prost(enumeration = "ProposalStatus", repeated, tag = "5")]
     pub include_status: ::prost::alloc::vec::Vec<i32>,
+    /// Include all ManageNeuron proposals regardless of the visibility of the
+    /// proposal to the caller principal. Note that exclude_topic is still
+    /// respected even when this option is set to true.
+    #[prost(bool, optional, tag = "6")]
+    pub include_all_manage_neuron_proposals: ::core::option::Option<bool>,
 }
 #[derive(
     candid::CandidType,
