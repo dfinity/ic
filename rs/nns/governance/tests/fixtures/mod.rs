@@ -90,6 +90,19 @@ pub fn principal(i: u64) -> PrincipalId {
     PrincipalId::try_from(format!("SID{}", i).as_bytes().to_vec()).unwrap()
 }
 
+// Constructs a simple motion proposal for tests where the content does not
+// matter.
+pub fn new_motion_proposal() -> Proposal {
+    Proposal {
+        title: Some("A Reasonable Title".to_string()),
+        summary: "Summary".to_string(),
+        action: Some(proposal::Action::Motion(Motion {
+            motion_text: "Some proposal".to_string(),
+        })),
+        ..Default::default()
+    }
+}
+
 pub fn prorated_neuron_age(
     aging_since: u64,
     old_stake_e8s: u64,

@@ -3510,8 +3510,12 @@ impl Governance {
             if !(include_status.is_empty() || include_status.contains(&(data.status() as i32))) {
                 return false;
             }
-            // Filter out proposals by their restricted status.
-            self.proposal_is_visible_to_neurons(data, caller_neurons)
+            // Filter out proposals by the visibility of the caller principal
+            // when include_all_manage_neuron_proposals is false. When
+            // include_all_manage_neuron_proposals is true the proposal is
+            // always included.
+            req.include_all_manage_neuron_proposals.unwrap_or(false)
+                || self.proposal_is_visible_to_neurons(data, caller_neurons)
         };
         let limit = if req.limit == 0 || req.limit > MAX_LIST_PROPOSAL_RESULTS {
             MAX_LIST_PROPOSAL_RESULTS
