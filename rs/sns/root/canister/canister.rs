@@ -89,6 +89,10 @@ impl ManagementCanisterClient for RealManagementCanisterClient {
             .await
             .map_err(CanisterCallError::from)
     }
+
+    fn canister_version(&self) -> Option<u64> {
+        Some(dfn_core::api::canister_version())
+    }
 }
 
 /// An implementation of the LedgerCanisterClient trait that is suitable for

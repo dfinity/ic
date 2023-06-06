@@ -23,6 +23,8 @@ pub trait ManagementCanisterClient {
 
     /// A call to the `update_settings` management canister endpoint.
     async fn update_settings(&self, settings: UpdateSettings) -> Result<(), (Option<i32>, String)>;
+
+    fn canister_version(&self) -> Option<u64>;
 }
 
 /// An example implementation of the ManagementCanisterClient trait.
@@ -48,6 +50,10 @@ impl ManagementCanisterClient for ProdManagementCanisterClient {
 
     async fn update_settings(&self, settings: UpdateSettings) -> Result<(), (Option<i32>, String)> {
         update_settings(settings).await
+    }
+
+    fn canister_version(&self) -> Option<u64> {
+        Some(ic_cdk::api::canister_version())
     }
 }
 
@@ -134,5 +140,9 @@ impl ManagementCanisterClient for MockManagementCanisterClient {
                 err
             ),
         }
+    }
+
+    fn canister_version(&self) -> Option<u64> {
+        None
     }
 }

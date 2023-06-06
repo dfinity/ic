@@ -215,6 +215,7 @@ pub async fn change_canister_controllers(
             memory_allocation: None,
             freezing_threshold: None,
         },
+        sender_canister_version: management_canister_client.canister_version(),
     };
 
     match management_canister_client

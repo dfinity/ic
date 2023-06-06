@@ -10,6 +10,7 @@ use serde::Deserialize;
 pub struct UpdateSettings {
     pub canister_id: PrincipalId,
     pub settings: CanisterSettings,
+    pub sender_canister_version: Option<u64>,
 }
 
 /// The CanisterSettings struct as defined in the ic-interface-spec

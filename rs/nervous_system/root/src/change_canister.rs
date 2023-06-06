@@ -250,7 +250,7 @@ pub async fn install_code(proposal: ChangeCanisterProposal) -> ic_cdk::api::call
         compute_allocation: proposal.compute_allocation,
         memory_allocation: proposal.memory_allocation,
         query_allocation: proposal.query_allocation,
-        sender_canister_version: None,
+        sender_canister_version: Some(ic_cdk::api::canister_version()),
     };
     // Warning: despite dfn_core::call returning a Result, it actually traps when
     // the callee traps! Use the public cdk instead, which does not have this

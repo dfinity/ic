@@ -76,6 +76,7 @@ pub struct EmptyBlob;
 pub struct UpdateSettingsArgs {
     pub canister_id: PrincipalId,
     pub settings: CanisterSettingsArgs,
+    pub sender_canister_version: Option<u64>,
 }
 
 #[derive(PartialEq, Eq, Default, Clone, CandidType, Deserialize, Debug)]
@@ -124,6 +125,8 @@ pub trait ManagementCanisterClient {
         &self,
         settings: &UpdateSettingsArgs,
     ) -> Result<EmptyBlob, CanisterCallError>;
+
+    fn canister_version(&self) -> Option<u64>;
 }
 
 // TODO NNS1-1593: Use a common icrc1 trait
@@ -512,6 +515,7 @@ impl SnsRootCanister {
                 .update_settings(&UpdateSettingsArgs {
                     canister_id: canister_to_register.into(),
                     settings: CanisterSettingsArgs::controller(root_canister_id.into()),
+                    sender_canister_version: management_canister_client.canister_version(),
                 })
                 .await
                 .map_err(|err| format!("Controller change failed: {err:?}"))?;
@@ -635,6 +639,7 @@ impl SnsRootCanister {
                 settings: CanisterSettingsArgs::controllers(
                     request.controller_principal_ids.clone(),
                 ),
+                sender_canister_version: management_canister_client.canister_version(),
             };
 
             // Perform the call.
@@ -997,6 +1002,10 @@ mod tests {
             );
 
             result
+        }
+
+        fn canister_version(&self) -> Option<u64> {
+            None
         }
     }
 
@@ -1502,6 +1511,7 @@ mod tests {
                 update_settings_args: UpdateSettingsArgs {
                     canister_id: dapp_canister_id_3,
                     settings: CanisterSettingsArgs::controller(sns_root_canister_id),
+                    sender_canister_version: None,
                 },
                 result: Ok(EmptyBlob {}),
             },
@@ -1625,6 +1635,7 @@ mod tests {
                 update_settings_args: UpdateSettingsArgs {
                     canister_id: dapp_canister_id_1,
                     settings: CanisterSettingsArgs::controller(sns_root_canister_id),
+                    sender_canister_version: None,
                 },
                 result: Ok(EmptyBlob {}),
             },
@@ -1645,6 +1656,7 @@ mod tests {
                 update_settings_args: UpdateSettingsArgs {
                     canister_id: dapp_canister_id_2,
                     settings: CanisterSettingsArgs::controller(sns_root_canister_id),
+                    sender_canister_version: None,
                 },
                 result: Ok(EmptyBlob {}),
             },
@@ -1666,6 +1678,7 @@ mod tests {
                 update_settings_args: UpdateSettingsArgs {
                     canister_id: dapp_canister_id_3,
                     settings: CanisterSettingsArgs::controller(sns_root_canister_id),
+                    sender_canister_version: None,
                 },
                 result: Ok(EmptyBlob {}),
             },
@@ -1777,6 +1790,7 @@ mod tests {
                 update_settings_args: UpdateSettingsArgs {
                     canister_id: DAPP_CANISTER_ID.with(|i| *i),
                     settings: CanisterSettingsArgs::controller(sns_root_canister_id),
+                    sender_canister_version: None,
                 },
                 result: Ok(EmptyBlob {}),
             },
@@ -1849,6 +1863,7 @@ mod tests {
                         update_settings_args: UpdateSettingsArgs {
                             canister_id: *id,
                             settings: CanisterSettingsArgs::controller(sns_root_canister_id),
+                            sender_canister_version: None,
                         },
                         result: Ok(EmptyBlob {}),
                     },
@@ -1931,6 +1946,7 @@ mod tests {
                 update_settings_args: UpdateSettingsArgs {
                     canister_id: PrincipalId::new_user_test_id(3),
                     settings: CanisterSettingsArgs::controller(new_controller_principal_id),
+                    sender_canister_version: None,
                 },
                 result: Ok(EmptyBlob {}),
             },
@@ -1992,6 +2008,7 @@ mod tests {
                 update_settings_args: UpdateSettingsArgs {
                     canister_id: PrincipalId::new_user_test_id(3),
                     settings: CanisterSettingsArgs::controller(new_controller_principal_id),
+                    sender_canister_version: None,
                 },
                 result: Ok(EmptyBlob {}),
             },
@@ -2045,6 +2062,7 @@ mod tests {
                 update_settings_args: UpdateSettingsArgs {
                     canister_id: PrincipalId::new_user_test_id(3),
                     settings: CanisterSettingsArgs::controller(new_controller_principal_id),
+                    sender_canister_version: None,
                 },
                 result: Ok(EmptyBlob {}),
             },
@@ -2110,6 +2128,7 @@ mod tests {
                 update_settings_args: UpdateSettingsArgs {
                     canister_id: PrincipalId::new_user_test_id(4),
                     settings: CanisterSettingsArgs::controller(new_controller_principal_id),
+                    sender_canister_version: None,
                 },
                 result: Ok(EmptyBlob {}),
             },
@@ -2117,6 +2136,7 @@ mod tests {
                 update_settings_args: UpdateSettingsArgs {
                     canister_id: PrincipalId::new_user_test_id(5),
                     settings: CanisterSettingsArgs::controller(new_controller_principal_id),
+                    sender_canister_version: None,
                 },
                 result: Ok(EmptyBlob {}),
             },
@@ -2124,6 +2144,7 @@ mod tests {
                 update_settings_args: UpdateSettingsArgs {
                     canister_id: PrincipalId::new_user_test_id(6),
                     settings: CanisterSettingsArgs::controller(new_controller_principal_id),
+                    sender_canister_version: None,
                 },
                 result: Ok(EmptyBlob {}),
             },
@@ -2240,6 +2261,7 @@ mod tests {
                         new_controller_principal_id,
                         sns_root_canister_id.into(),
                     ]),
+                    sender_canister_version: None,
                 },
                 result: Ok(EmptyBlob {}),
             },
