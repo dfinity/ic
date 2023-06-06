@@ -7,10 +7,11 @@ package(default_visibility = ["//visibility:public"])
 exports_files(["rclone"])
 """
 
-VERSION = "v1.62.2"
+# TODO: switch to the latest release when https://github.com/rclone/rclone/pull/5731 will be merged.
+VERSION = "v1.50.2"
 SHA256 = {
-    "osx-amd64": "afef35513c7ce89e9ed9962e2c44c604587de1faa317d9fd3bf6590dc3be8658",
-    "linux-amd64": "6c8676dc56e3d2e26358b5bae616ab3ec95e26181cd9b8692e101dcc0fc966a1",
+    "osx-amd64": "d69c96b58f96603e525c6e62541afd494f817ade5aed660ab3907d3afc1ca972",
+    "linux-amd64": "2112883164f1f341b246a275936e7c3019d68135002098d84637839dec9526c8",
 }
 URL = "https://github.com/rclone/rclone/releases/download/{version}/rclone-{version}-{platform}.zip"
 
