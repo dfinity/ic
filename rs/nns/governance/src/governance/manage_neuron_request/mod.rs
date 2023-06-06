@@ -23,7 +23,7 @@ pub async fn execute_manage_neuron<T>(
     manage_neuron_action.pre_commit_validate(gov)?;
 
     let mut gov_proxy = GovernanceMutationProxy::new_committing(gov);
-    for t in manage_neuron_action.get_mutations() {
+    for t in manage_neuron_action.get_mutations()? {
         t.apply_all_mutations(&mut gov_proxy).await?;
     }
 
@@ -37,7 +37,7 @@ pub async fn simulate_manage_neuron<T>(
     manage_neuron_action.validate_request(gov)?;
 
     let mut gov_proxy = GovernanceMutationProxy::new_simulating(gov);
-    for t in manage_neuron_action.get_mutations() {
+    for t in manage_neuron_action.get_mutations()? {
         t.apply_internal_mutations(&mut gov_proxy)?;
     }
 
@@ -58,7 +58,7 @@ pub trait ManageNeuronRequestHandler<T> {
     }
 
     /// Return the list of mutations to apply when executing or simulating the manage_neuron request
-    fn get_mutations(&self) -> Vec<Box<dyn GovernanceNeuronMutation>>;
+    fn get_mutations(&self) -> Result<Vec<Box<dyn GovernanceNeuronMutation>>, GovernanceError>;
 
     /// Build a response for the request with the updated data
     fn build_response(

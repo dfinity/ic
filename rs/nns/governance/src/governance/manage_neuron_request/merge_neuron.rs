@@ -170,14 +170,13 @@ impl ManageNeuronRequestHandler<manage_neuron::Merge>
         Ok(())
     }
 
-    fn get_mutations(&self) -> Vec<Box<dyn GovernanceNeuronMutation>> {
-        vec![
-            Box::new(BurnFeesMutation::new(self.source_neuron_id().unwrap())),
-            Box::new(MergeNeuronMutation::new(
-                self.source_neuron_id().unwrap(),
-                self.target_neuron_id(),
-            )),
-        ]
+    fn get_mutations(&self) -> Result<Vec<Box<dyn GovernanceNeuronMutation>>, GovernanceError> {
+        let source_neuron_id = self.source_neuron_id()?;
+        let target_neuron_id = self.target_neuron_id();
+        Ok(vec![
+            Box::new(BurnFeesMutation::new(source_neuron_id.clone())),
+            Box::new(MergeNeuronMutation::new(source_neuron_id, target_neuron_id)),
+        ])
     }
 
     fn build_response(
