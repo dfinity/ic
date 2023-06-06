@@ -97,7 +97,12 @@ fn test_add_nns_canister() {
             "{:?}",
             status
         );
-        assert_eq!(status.controller, root.canister_id().get(), "{:?}", status);
+        assert_eq!(
+            status.settings.controllers,
+            vec![root.canister_id().get()],
+            "{:?}",
+            status
+        );
 
         Ok(())
     });
