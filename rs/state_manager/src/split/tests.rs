@@ -353,6 +353,50 @@ fn new_state_layout(log: ReplicaLogger) -> TempDir {
     tmp
 }
 
+#[test]
+fn test_resolve_retain() {
+    let retain = make_range(3, 4);
+    assert_eq!(
+        CanisterIdRanges::try_from(vec![retain]),
+        resolve(vec![retain], vec![])
+    );
+}
+
+#[test]
+fn test_resolve_drop() {
+    let drop = make_range(3, 4);
+    assert_eq!(
+        CanisterIdRanges::try_from(vec![make_range(0, 2), make_range(5, u64::MAX)]),
+        resolve(vec![], vec![drop])
+    );
+}
+
+#[test]
+fn test_resolve_not_well_formed() {
+    let retain = make_range(4, 3);
+    resolve(vec![retain], vec![]).unwrap_err();
+}
+
+#[test]
+#[should_panic]
+fn test_resolve_both_non_empty() {
+    let range = make_range(3, 4);
+    resolve(vec![range], vec![range]).ok();
+}
+
+#[test]
+#[should_panic]
+fn test_resolve_both_empty() {
+    resolve(vec![], vec![]).ok();
+}
+
+fn make_range(start: u64, end: u64) -> CanisterIdRange {
+    CanisterIdRange {
+        start: CanisterId::from_u64(start),
+        end: CanisterId::from_u64(end),
+    }
+}
+
 /// Computes the manifest of the last checkpoint under `state_layout`.
 fn compute_manifest(
     state_layout: &StateLayout,

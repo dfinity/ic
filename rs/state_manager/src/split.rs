@@ -5,10 +5,13 @@ use crate::{
     StateManagerMetrics, NUMBER_OF_CHECKPOINT_THREADS,
 };
 
+use ic_base_types::CanisterId;
 use ic_config::state_manager::Config;
 use ic_logger::ReplicaLogger;
 use ic_metrics::MetricsRegistry;
-use ic_registry_routing_table::{CanisterIdRanges, RoutingTable};
+use ic_registry_routing_table::{
+    difference, CanisterIdRange, CanisterIdRanges, RoutingTable, WellFormedError,
+};
 use ic_registry_subnet_type::SubnetType;
 use ic_replicated_state::{
     page_map::PageAllocatorFileDescriptor, page_map::TestPageAllocatorFileDescriptorImpl,
@@ -17,10 +20,27 @@ use ic_replicated_state::{
 use ic_state_layout::{CheckpointLayout, ReadOnly, StateLayout};
 use ic_types::{malicious_flags::MaliciousFlags, PrincipalId, SubnetId};
 use scoped_threadpool::Pool;
-use std::{path::PathBuf, sync::Arc};
+use std::{iter::once, path::PathBuf, sync::Arc};
 
 #[cfg(test)]
 mod tests;
+
+/// Loads the latest checkpoint under the given root; splits off the state of
+/// `subnet_id`, retaining or dropping the provided canister ID ranges (exactly
+/// one of which must be non-empty); and writes back the split state as a new
+/// checkpoint, under the same root.
+pub fn resolve_ranges_and_split(
+    root: PathBuf,
+    subnet_id: PrincipalId,
+    retain: Vec<CanisterIdRange>,
+    drop: Vec<CanisterIdRange>,
+    metrics_registry: &MetricsRegistry,
+    log: ReplicaLogger,
+) -> Result<(), String> {
+    let canister_id_ranges = resolve(retain, drop).map_err(|e| format!("{:?}", e))?;
+
+    split(root, subnet_id, canister_id_ranges, metrics_registry, log)
+}
 
 /// Loads the latest checkpoint under the given root; splits off the state of
 /// `subnet_id`, hosting the provided canister ID ranges; and writes back the
@@ -72,6 +92,34 @@ pub fn split(
         &metrics,
         log,
     )
+}
+
+/// Converts a pair of `retain` and `drop` range vectors (exactly one of which
+/// is expected to be non-empty) into a well-formed [CanisterIdRanges] covering
+/// all canisters to be retained. Returns an error if the provided inputs are
+/// not well formed.
+///
+/// Panics if none or both of the inputs are empty.
+fn resolve(
+    retain: Vec<CanisterIdRange>,
+    drop: Vec<CanisterIdRange>,
+) -> Result<CanisterIdRanges, WellFormedError> {
+    if !retain.is_empty() && drop.is_empty() {
+        // Validate and return `retain`.
+        CanisterIdRanges::try_from(retain)
+    } else if retain.is_empty() && !drop.is_empty() {
+        // Validate `drop` and return the diff between all possible canisters and it.
+        let all_canister_ids = CanisterIdRange {
+            start: CanisterId::from_u64(0),
+            end: CanisterId::from_u64(u64::MAX),
+        };
+        difference(
+            once(&all_canister_ids),
+            CanisterIdRanges::try_from(drop)?.iter(),
+        )
+    } else {
+        panic!("Expecting exactly one of `retain` and `drop` to be non-empty");
+    }
 }
 
 /// Reads the `ReplicatedState` from the latest checkpoint under `state_layout`.
