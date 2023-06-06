@@ -4524,7 +4524,7 @@ async fn main() {
             let registry_client = RegistryClientImpl::new(
                 Arc::new(NnsDataProvider::new(
                     tokio::runtime::Handle::current(),
-                    registry_canister,
+                    vec![opts.nns_url.clone()],
                 )),
                 None,
             );
@@ -4914,7 +4914,7 @@ async fn main() {
             let registry_client = RegistryClientImpl::new(
                 Arc::new(NnsDataProvider::new(
                     tokio::runtime::Handle::current(),
-                    registry_canister,
+                    vec![opts.nns_url.clone()],
                 )),
                 None,
             );
@@ -5422,7 +5422,7 @@ async fn main() {
             let registry_client = RegistryClientImpl::new(
                 Arc::new(NnsDataProvider::new(
                     tokio::runtime::Handle::current(),
-                    registry_canister,
+                    vec![opts.nns_url.clone()],
                 )),
                 None,
             );
@@ -5788,7 +5788,7 @@ async fn get_firewall_rules_for_node(
     let registry_client = RegistryClientImpl::new(
         Arc::new(NnsDataProvider::new(
             tokio::runtime::Handle::current(),
-            RegistryCanister::new(vec![nns_url]),
+            vec![nns_url],
         )),
         None,
     );
