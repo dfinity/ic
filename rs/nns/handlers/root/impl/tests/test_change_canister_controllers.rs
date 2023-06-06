@@ -92,6 +92,7 @@ async fn test_change_canister_controllers_authentication() {
                 memory_allocation: None,
                 freezing_threshold: None,
             },
+            sender_canister_version: None,
         })
     )
 }
@@ -145,6 +146,7 @@ async fn test_change_canister_controllers_handles_replica_errors() {
                 memory_allocation: None,
                 freezing_threshold: None,
             },
+            sender_canister_version: None,
         })
     )
 }
