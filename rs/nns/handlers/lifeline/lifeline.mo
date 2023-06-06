@@ -9,6 +9,7 @@ actor {
     private let root : Principal = Prim.principalOfActor Root;
 
     type UpgradeRootProposalPayload = { wasm_module : Blob; module_arg : Blob; stop_upgrade_start : Bool };
+    type HardResetRootToVersionPayload = { wasm_module : Blob; init_arg : Blob; };
 
     // IC00 is the management canister. We rely on it for the four
     // fundamental methods as listed below.
@@ -18,13 +19,11 @@ actor {
         canister_id : Principal;
         wasm_module : Blob;
         arg : Blob;
-        compute_allocation : ?Nat;
-        memory_allocation : ?Nat;
-        query_allocation : ?Nat;
       } -> async ();
       canister_status : CanisterIdRecord -> async CanisterStatusResult;
       start_canister : CanisterIdRecord -> async ();
-      stop_canister : CanisterIdRecord -> async ()
+      stop_canister : CanisterIdRecord -> async ();
+      uninstall_code : CanisterIdRecord -> async ()
     };
 
     public shared ({caller}) func upgrade_root(pl : UpgradeRootProposalPayload) : async () {
@@ -41,9 +40,6 @@ actor {
         canister_id = root;
         wasm_module = pl.wasm_module;
         arg = pl.module_arg;
-        compute_allocation = null;
-        memory_allocation = ?1073741824; // Root canister is given 1 GiB of memory.
-        query_allocation = null
       });
 
       if (pl.stop_upgrade_start) {
@@ -52,6 +48,23 @@ actor {
       };
 
       debug { Prim.debugPrint "upgrade_root: upgraded the root canister" };
+    };
+
+    public shared ({caller}) func hard_reset_root_to_version(pl : HardResetRootToVersionPayload) : async () {
+      assert caller == governanceCanister;
+
+      debug { Prim.debugPrint ("hard_reset_root: uninstalling the root canister " # debug_show root) };
+      await ic00.uninstall_code({canister_id = root});
+
+      debug { Prim.debugPrint ("hard_reset_root: about to install a new root WASM") };
+      await ic00.install_code({
+        mode = #install;
+        canister_id = root;
+        wasm_module = pl.wasm_module;
+        arg = pl.init_arg;
+      });
+
+      debug { Prim.debugPrint "hard_reset_root: finished installing" };
     };
 
     type CanisterIdRecord = { canister_id : Principal };
