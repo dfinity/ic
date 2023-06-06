@@ -14,14 +14,9 @@ pub fn create_nns_data_provider(
     urls: Vec<Url>,
     optional_nns_public_key: Option<ThresholdSigPublicKey>,
 ) -> Arc<dyn RegistryDataProvider> {
-    let registry_canister = RegistryCanister::new(urls);
     match optional_nns_public_key {
-        Some(nns_pk) => Arc::new(CertifiedNnsDataProvider::new(
-            rt_handle,
-            registry_canister,
-            nns_pk,
-        )),
-        None => Arc::new(NnsDataProvider::new(rt_handle, registry_canister)),
+        Some(nns_pk) => Arc::new(CertifiedNnsDataProvider::new(rt_handle, urls, nns_pk)),
+        None => Arc::new(NnsDataProvider::new(rt_handle, urls)),
     }
 }
 
@@ -30,20 +25,17 @@ pub struct NnsDataProvider {
     rt_handle: tokio::runtime::Handle,
 }
 
-pub(crate) struct CertifiedNnsDataProvider {
+pub struct CertifiedNnsDataProvider {
     registry_canister: Arc<RegistryCanister>,
     nns_public_key: Arc<ThresholdSigPublicKey>,
     rt_handle: tokio::runtime::Handle,
 }
 
 impl NnsDataProvider {
-    pub fn new(
-        rt_handle: tokio::runtime::Handle,
-        registry_canister: RegistryCanister,
-    ) -> NnsDataProvider {
+    pub fn new(rt_handle: tokio::runtime::Handle, urls: Vec<Url>) -> NnsDataProvider {
         NnsDataProvider {
             rt_handle,
-            registry_canister: Arc::new(registry_canister),
+            registry_canister: Arc::new(RegistryCanister::new(urls)),
         }
     }
 }
@@ -71,14 +63,14 @@ impl RegistryDataProvider for NnsDataProvider {
 }
 
 impl CertifiedNnsDataProvider {
-    pub(crate) fn new(
+    pub fn new(
         rt_handle: tokio::runtime::Handle,
-        registry_canister: RegistryCanister,
+        urls: Vec<Url>,
         nns_public_key: ThresholdSigPublicKey,
     ) -> Self {
         Self {
             rt_handle,
-            registry_canister: Arc::new(registry_canister),
+            registry_canister: Arc::new(RegistryCanister::new(urls)),
             nns_public_key: Arc::new(nns_public_key),
         }
     }

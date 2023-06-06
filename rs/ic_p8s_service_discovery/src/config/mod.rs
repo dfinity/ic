@@ -51,6 +51,9 @@ pub(crate) enum ConfigError {
     #[error("no --service_discovery_file provided")]
     MissingServiceDiscoveryFile,
 
+    #[error("no --nns_public_key_path provided")]
+    MissingNnsPublicKeyPath,
+
     #[error("could not parse duration {duration}: {source}")]
     InvalidDuration {
         duration: String,
@@ -155,9 +158,11 @@ impl Config {
             config.service_discovery_file = SERVICE_DISCOVERY_FILE.flag.to_string();
         }
 
-        if NNS_PUBLIC_KEY_PATH.is_present() {
-            config.nns_public_key_path = NNS_PUBLIC_KEY_PATH.flag.to_string();
+        if !NNS_PUBLIC_KEY_PATH.is_present() {
+            return Err(ConfigError::MissingNnsPublicKeyPath);
         }
+
+        config.nns_public_key_path = NNS_PUBLIC_KEY_PATH.flag.to_string();
 
         if config.service_discovery_file.is_empty() {
             return Err(ConfigError::MissingServiceDiscoveryFile);
