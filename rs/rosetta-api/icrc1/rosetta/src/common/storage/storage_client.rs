@@ -113,19 +113,6 @@ impl StorageClient {
             "#,
             [],
         )?;
-        open_connection.execute(
-            r#"
-            CREATE TABLE IF NOT EXISTS account_balance_history (
-                principal BLOB NOT NULL,
-                subaccount BLOB NOT NULL,
-                block_idx  NOT NULL,
-                tokens INTEGER NOT NULL,
-                PRIMARY KEY(principal,subaccount,block_idx)
-                FOREIGN KEY(block_idx) REFERENCES blocks(idx)
-            )
-            "#,
-            [],
-        )?;
         Ok(())
     }
 
