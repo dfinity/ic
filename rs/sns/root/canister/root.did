@@ -1,7 +1,6 @@
 type CanisterCallError = record { code : opt int32; description : text };
 type CanisterIdRecord = record { canister_id : principal };
 type CanisterStatusResult = record {
-  controller : principal;
   status : CanisterStatusType;
   memory_size : nat;
   settings : DefiniteCanisterSettings;

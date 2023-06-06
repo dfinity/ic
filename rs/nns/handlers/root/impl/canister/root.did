@@ -5,7 +5,6 @@ type definite_canister_settings = record {
 };
 
 type CanisterStatusResult = record {
-  controller : principal;
   status : variant { stopped; stopping; running };
   memory_size : nat;
   module_hash : opt vec nat8;

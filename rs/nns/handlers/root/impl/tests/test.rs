@@ -40,7 +40,6 @@ fn test_get_status() {
             )
             .await
             .unwrap();
-        assert_eq!(status.controller(), root.canister_id().get());
         assert_eq!(status.settings.controllers, vec![root.canister_id().get()]);
 
         Ok(())
