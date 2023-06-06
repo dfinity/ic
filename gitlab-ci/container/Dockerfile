@@ -8,15 +8,20 @@ COPY --chown=0700 ./gitlab-ci/container/files/known_hosts /etc/ssh/ssh_known_hos
 
 RUN export DEBIAN_FRONTEND=noninteractive && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone && \
     apt -yq update && apt -yqq install  \
-    curl build-essential git gnupg node-json5 uuid-dev zsh clang \
+    curl build-essential git gnupg node-json5 uuid-dev zsh clang zip \
     # GitLab CI \
-    sudo gosu jq rclone time \
+    sudo gosu jq time \
     # Test \
     rsync \
     # RUST \
     gcc lld pkg-config libssl-dev libunwind-dev libusb-1.0-0-dev libsqlite3-dev zlib1g-dev libclang-10-dev protobuf-compiler llvm liblmdb-dev\
     # IC-OS \
     python3 python-is-python3 python3-pip fakeroot android-sdk-ext4-utils cryptsetup-bin zstd lsb-release grub-efi-amd64-bin libsystemd-dev faketime dosfstools libselinux-dev mtools lvm2
+
+# Install rclone
+ARG rclone_version=v1.62.2
+RUN curl -fsSL https://downloads.rclone.org/v1.62.2/rclone-${rclone_version}-linux-amd64.zip -o rclone.zip && \
+    unzip rclone.zip && cp rclone-${rclone_version}-linux-amd64/rclone /usr/local/bin && chmod +x /usr/local/bin/rclone
 
 ARG motoko_version=0.9.1
 RUN curl -fsSL https://github.com/dfinity/motoko/releases/download/${motoko_version}/motoko-linux64-${motoko_version}.tar.gz | tar -xz -C /usr/local/bin && chmod +x /usr/local/bin/moc
