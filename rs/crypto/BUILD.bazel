@@ -72,6 +72,7 @@ DEV_DEPENDENCIES = [
     "//rs/crypto/internal/crypto_lib/basic_sig/ecdsa_secp256r1",
     "//rs/crypto/internal/crypto_lib/basic_sig/rsa_pkcs1",
     "//rs/crypto/internal/crypto_lib/tls",
+    "//rs/crypto/internal/crypto_service_provider/csp_proptest_utils",
     "//rs/crypto/internal/csp_test_utils",
     "//rs/crypto/node_key_generation",
     "//rs/crypto/node_key_validation",
