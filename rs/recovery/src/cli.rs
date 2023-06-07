@@ -1,24 +1,28 @@
 //! Calls the recovery library.
-use crate::app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs};
-use crate::get_node_heights_from_metrics;
-use crate::nns_recovery_failover_nodes::{NNSRecoveryFailoverNodes, NNSRecoveryFailoverNodesArgs};
-use crate::nns_recovery_same_nodes::{NNSRecoverySameNodes, NNSRecoverySameNodesArgs};
-use crate::recovery_iterator::RecoveryIterator;
-use crate::recovery_state::HasRecoveryState;
-use crate::steps::Step;
-use crate::util;
-use crate::util::subnet_id_from_str;
-use crate::{NeuronArgs, RecoveryArgs};
+use crate::{
+    app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs},
+    get_node_heights_from_metrics,
+    nns_recovery_failover_nodes::{NNSRecoveryFailoverNodes, NNSRecoveryFailoverNodesArgs},
+    nns_recovery_same_nodes::{NNSRecoverySameNodes, NNSRecoverySameNodesArgs},
+    recovery_iterator::RecoveryIterator,
+    recovery_state::HasRecoveryState,
+    steps::Step,
+    util,
+    util::subnet_id_from_str,
+    NeuronArgs, RecoveryArgs,
+};
 use core::fmt::Debug;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_types::{NodeId, ReplicaVersion, SubnetId};
 use slog::{info, warn, Logger};
-use std::convert::TryFrom;
-use std::io::{stdin, stdout, Write};
-use std::net::IpAddr;
-use std::sync::Arc;
+use std::{
+    convert::TryFrom,
+    fmt::Display,
+    io::{stdin, stdout, Write},
+    str::FromStr,
+    sync::Arc,
+};
 use strum::EnumMessage;
-use url::Url;
 
 const SUMMARY: &str = "The recovery process of an application subnet is only necessary,
 if a subnet stopped finalizing new blocks and cannot recover from
@@ -236,7 +240,7 @@ pub fn read_input(logger: &Logger, prompt: &str) -> String {
 
 /// Request and read input from the user with the given prompt. Convert empty
 /// input to `None`.
-pub fn read_optional(logger: &Logger, prompt: &str) -> Option<String> {
+fn read_optional_input(logger: &Logger, prompt: &str) -> Option<String> {
     let input = read_input(logger, &format!("(Optional) {}", prompt));
     if input.is_empty() {
         None
@@ -254,41 +258,33 @@ pub fn read_optional_node_ids(logger: &Logger, prompt: &str) -> Option<Vec<NodeI
     })
 }
 
-pub fn read_optional_ip(logger: &Logger, prompt: &str) -> Option<IpAddr> {
-    read_optional_type(logger, prompt, |input| {
-        input.parse::<IpAddr>().map_err(|err| err.to_string())
-    })
+pub fn read_optional<T: FromStr>(logger: &Logger, prompt: &str) -> Option<T>
+where
+    <T as FromStr>::Err: std::fmt::Display,
+{
+    read_optional_type(logger, prompt, FromStr::from_str)
 }
 
 pub fn read_optional_version(logger: &Logger, prompt: &str) -> Option<ReplicaVersion> {
-    read_optional_type(logger, prompt, |input| {
-        ReplicaVersion::try_from(input).map_err(|err| err.to_string())
-    })
-}
-
-pub fn read_optional_url(logger: &Logger, prompt: &str) -> Option<Url> {
-    read_optional_type(logger, prompt, |input| {
-        Url::parse(&input).map_err(|e| e.to_string())
-    })
+    read_optional_type(logger, prompt, |s| ReplicaVersion::try_from(s))
 }
 
 pub fn read_optional_subnet_id(logger: &Logger, prompt: &str) -> Option<SubnetId> {
-    read_optional_type(logger, prompt, |input| subnet_id_from_str(&input))
+    read_optional_type(logger, prompt, subnet_id_from_str)
 }
 
 /// Optionally read an input of the generic type by applying the given deserialization function.
-pub fn read_optional_type<T>(
+pub fn read_optional_type<T, E: Display>(
     logger: &Logger,
     prompt: &str,
-    mapper: impl Fn(String) -> Result<T, String> + Copy,
+    mapper: impl Fn(&str) -> Result<T, E>,
 ) -> Option<T> {
     loop {
-        match read_optional(logger, prompt).map(mapper) {
-            Some(Err(e)) => {
+        match mapper(&read_optional_input(logger, prompt)?) {
+            Err(e) => {
                 warn!(logger, "Could not parse input: {}", e);
             }
-            Some(Ok(v)) => return Some(v),
-            None => return None,
+            Ok(v) => return Some(v),
         }
     }
 }

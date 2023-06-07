@@ -1,16 +1,13 @@
-use crate::admin_helper::IcAdmin;
-use crate::command_helper::exec_cmd;
-use crate::error::{RecoveryError, RecoveryResult};
-use crate::file_sync_helper::{create_dir, read_dir, remove_dir, rsync, rsync_with_retries};
-use crate::ssh_helper::SshHelper;
-use crate::util::{block_on, parse_hex_str};
 use crate::{
-    get_member_ips, get_node_heights_from_metrics, replay_helper, ADMIN, CHECKPOINTS,
-    IC_CERTIFICATIONS_PATH, IC_STATE, NEW_IC_STATE, READONLY,
-};
-use crate::{
-    Recovery, IC_CHECKPOINTS_PATH, IC_DATA_PATH, IC_JSON5_PATH, IC_REGISTRY_LOCAL_STORE,
-    IC_STATE_EXCLUDES,
+    admin_helper::IcAdmin,
+    command_helper::exec_cmd,
+    error::{RecoveryError, RecoveryResult},
+    file_sync_helper::{create_dir, read_dir, remove_dir, rsync, rsync_with_retries},
+    get_member_ips, get_node_heights_from_metrics, replay_helper,
+    ssh_helper::SshHelper,
+    util::{block_on, parse_hex_str},
+    Recovery, ADMIN, CHECKPOINTS, IC_CERTIFICATIONS_PATH, IC_CHECKPOINTS_PATH, IC_DATA_PATH,
+    IC_JSON5_PATH, IC_REGISTRY_LOCAL_STORE, IC_STATE, IC_STATE_EXCLUDES, NEW_IC_STATE, READONLY,
 };
 use ic_artifact_pool::certification_pool::CertificationPoolImpl;
 use ic_base_types::CanisterId;
@@ -19,15 +16,11 @@ use ic_interfaces::certification::CertificationPool;
 use ic_metrics::MetricsRegistry;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_replay::cmd::{GetRecoveryCupCmd, SubCommand};
-use ic_types::artifact::CertificationMessage;
-use ic_types::{Height, SubnetId};
+use ic_types::{artifact::CertificationMessage, Height, SubnetId};
 use slog::{debug, info, warn, Logger};
-use std::collections::HashMap;
-use std::net::IpAddr;
-use std::path::PathBuf;
-use std::process::Command;
-use std::sync::Arc;
-use std::{thread, time};
+use std::{
+    collections::HashMap, net::IpAddr, path::PathBuf, process::Command, sync::Arc, thread, time,
+};
 
 /// Subnet recovery is composed of several steps. Each recovery step comprises a
 /// certain input state of which both its execution, and its description is
@@ -108,7 +101,7 @@ impl Step for DownloadCertificationsStep {
 
         if !downloaded_at_least_once {
             Err(RecoveryError::invalid_output_error(
-                "Failed to download certifications from any node.".into(),
+                "Failed to download certifications from any node.",
             ))
         } else {
             Ok(())
@@ -301,9 +294,7 @@ impl Step for DownloadIcStateStep {
         if ssh_helper.wait_for_access().is_err() {
             ssh_helper.account = ADMIN.to_string();
             if !ssh_helper.can_connect() {
-                return Err(RecoveryError::invalid_output_error(
-                    "SSH access denied".to_string(),
-                ));
+                return Err(RecoveryError::invalid_output_error("SSH access denied"));
             }
         }
 
@@ -450,7 +441,7 @@ impl Step for ReplayStep {
 
             if latest_height < height {
                 return Err(RecoveryError::invalid_output_error(
-                    "Replay height and checkpoint height diverged.".to_string(),
+                    "Replay height and checkpoint height diverged.",
                 ));
             }
 
@@ -463,7 +454,7 @@ impl Step for ReplayStep {
         }
 
         Err(RecoveryError::invalid_output_error(
-            "Did not find any checkpoints".to_string(),
+            "Did not find any checkpoints",
         ))
     }
 }
@@ -494,17 +485,13 @@ impl Step for ValidateReplayStep {
             .iter()
             .max_by_key(|v| v.certification_height)
             .map(|v| v.certification_height)
-            .ok_or_else(|| {
-                RecoveryError::OutputError("No certification heights found".to_string())
-            })?;
+            .ok_or_else(|| RecoveryError::invalid_output_error("No certification heights found"))?;
 
         let finalization_height = &heights
             .iter()
             .max_by_key(|v| v.finalization_height)
             .map(|v| v.finalization_height)
-            .ok_or_else(|| {
-                RecoveryError::invalid_output_error("No finalization heights found".to_string())
-            })?;
+            .ok_or_else(|| RecoveryError::invalid_output_error("No finalization heights found"))?;
 
         info!(self.logger, "Certification height: {}", cert_height);
         info!(
@@ -518,14 +505,13 @@ impl Step for ValidateReplayStep {
         }
         if latest_height.get() - self.extra_batches < cert_height.get() {
             return Err(RecoveryError::invalid_output_error(
-                "Replay height smaller than certification height.".to_string(),
+                "Replay height smaller than certification height.",
             ));
         }
 
         if latest_height.get() - self.extra_batches < finalization_height.get() {
             return Err(RecoveryError::invalid_output_error(
-                "There exists a node with finalization height greater than the replay height."
-                    .to_string(),
+                "There exists a node with finalization height greater than the replay height.",
             ));
         }
 
@@ -546,7 +532,12 @@ pub struct UploadAndRestartStep {
 
 impl Step for UploadAndRestartStep {
     fn descr(&self) -> String {
-        format!("Stopping replica {}, uploading and replacing state from {}, set access rights, restart replica.", self.node_ip, self.data_src.display())
+        format!(
+            "Stopping replica {}, uploading and replacing state from {}, set access rights, \
+            restart replica.",
+            self.node_ip,
+            self.data_src.display()
+        )
     }
 
     fn exec(&self) -> RecoveryResult<()> {
@@ -724,7 +715,9 @@ pub struct UpdateLocalStoreStep {
 
 impl Step for UpdateLocalStoreStep {
     fn descr(&self) -> String {
-        format!("Update registry local store by executing:\nic-replay {:?} --subnet-id {:?} update-registry-local-store", self.work_dir.join("ic.json5"), self.subnet_id)
+        format!("Update registry local store by executing:\nic-replay {:?} --subnet-id {:?} update-registry-local-store",
+            self.work_dir.join("ic.json5"),
+            self.subnet_id)
     }
 
     fn exec(&self) -> RecoveryResult<()> {
@@ -751,7 +744,14 @@ pub struct GetRecoveryCUPStep {
 
 impl Step for GetRecoveryCUPStep {
     fn descr(&self) -> String {
-        format!("Set recovery CUP by executing:\nic-replay {:?} --subnet-id {:?} get-recovery-cup {:?} {:?} cup.proto", self.config, self.subnet_id, self.state_hash, self.recovery_height)
+        format!(
+            "Set recovery CUP by executing:\n\
+            ic-replay {} --subnet-id {} get-recovery-cup {} {} cup.proto",
+            self.config.display(),
+            self.subnet_id,
+            self.state_hash,
+            self.recovery_height
+        )
     }
 
     fn exec(&self) -> RecoveryResult<()> {

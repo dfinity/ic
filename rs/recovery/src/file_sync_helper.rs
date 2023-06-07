@@ -1,16 +1,20 @@
-use crate::cli::wait_for_confirmation;
-use crate::command_helper::exec_cmd;
-use crate::error::{RecoveryError, RecoveryResult};
-use crate::ssh_helper;
+use crate::{
+    cli::wait_for_confirmation,
+    command_helper::exec_cmd,
+    error::{RecoveryError, RecoveryResult},
+    ssh_helper,
+};
 use core::time;
 use ic_http_utils::file_downloader::FileDownloader;
 use ic_types::ReplicaVersion;
 use slog::{info, warn, Logger};
-use std::fs::{self, File, ReadDir};
-use std::io::Write;
-use std::path::{Path, PathBuf};
-use std::process::Command;
-use std::thread;
+use std::{
+    fs::{self, File, ReadDir},
+    io::Write,
+    path::{Path, PathBuf},
+    process::Command,
+    thread,
+};
 
 /// Given the name and replica version of a binary, download the artifact to the
 /// target directory, unzip it, and add executable permissions.
