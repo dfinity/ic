@@ -37,10 +37,6 @@
   rules:
     - if: '$CI_MERGE_REQUEST_EVENT_TYPE == "merge_train"'
 
-.rules-after-script-test:
-  rules:
-    - if: '$CI_COMMIT_REF_NAME == "master" || $GITLAB_CI_CONFIG_CHANGED == "true"'
-
 .rules-master-schedule-push-branch:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
@@ -122,7 +118,7 @@
 #    then allow manual execution of prod hourly and nightly tests.
 # 2. Otherwise, if on the RC branch then perform automatic execution of prod hourly and nightly
 #    tests.
-# 3. Otherwise, if on any other branch and triggered by a merge request allow for manual 
+# 3. Otherwise, if on any other branch and triggered by a merge request allow for manual
 #    execution of prod hourly and nightly tests.
 .rules-rollout-pipeline-auto:
   rules:

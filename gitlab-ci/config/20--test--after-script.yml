@@ -1,7 +1,8 @@
 .after-script-test:
   extends:
     - .ubuntu-cargo-k8s
-    - .rules-after-script-test
+  rules:
+    - if: '$CI_COMMIT_REF_NAME == "master" || $GITLAB_CI_CONFIG_CHANGED == "true"'
   needs: []  # don't wait on other jobs
   stage: test
   script:
