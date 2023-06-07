@@ -315,7 +315,7 @@ mod csp_secret_key_store_contains_error {
     );
 }
 
-mod registry_client_error {
+pub mod registry_client_error {
     use super::*;
     use crate::common::arb_registry_version;
     use ic_types::registry::{RegistryClientError, RegistryDataProviderError};

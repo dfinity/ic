@@ -43,7 +43,7 @@ mod multi_sig;
 mod threshold_sig;
 
 pub use canister_threshold_sig::{
-    fetch_idkg_dealing_encryption_public_key_from_registry, get_mega_pubkey,
+    fetch_idkg_dealing_encryption_public_key_from_registry, retrieve_mega_public_key_from_registry,
     MegaKeyFromRegistryError,
 };
 

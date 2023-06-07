@@ -9,7 +9,7 @@ use crate::consensus::metrics::{EcdsaPayloadMetrics, CRITICAL_ERROR_ECDSA_KEY_TR
 use ic_artifact_pool::consensus_pool::build_consensus_block_chain;
 use ic_consensus_utils::crypto::ConsensusCrypto;
 use ic_consensus_utils::pool_reader::PoolReader;
-use ic_crypto::{get_mega_pubkey, MegaKeyFromRegistryError};
+use ic_crypto::{retrieve_mega_public_key_from_registry, MegaKeyFromRegistryError};
 use ic_error_types::RejectCode;
 use ic_ic00_types::{EcdsaKeyId, Payload, SignWithECDSAReply};
 use ic_interfaces::{consensus_pool::ConsensusBlockChain, ecdsa::EcdsaPool};
@@ -526,10 +526,12 @@ pub(crate) fn is_time_to_reshare_key_transcript(
     }
     // Check if node's key has changed, which should also trigger key transcript resharing.
     for node in current_nodes {
-        let curr_key = get_mega_pubkey(&node, registry_client, curr_registry_version)
-            .map_err(MembershipError::MegaKeyFromRegistryError)?;
-        let next_key = get_mega_pubkey(&node, registry_client, next_registry_version)
-            .map_err(MembershipError::MegaKeyFromRegistryError)?;
+        let curr_key =
+            retrieve_mega_public_key_from_registry(&node, registry_client, curr_registry_version)
+                .map_err(MembershipError::MegaKeyFromRegistryError)?;
+        let next_key =
+            retrieve_mega_public_key_from_registry(&node, registry_client, next_registry_version)
+                .map_err(MembershipError::MegaKeyFromRegistryError)?;
         if curr_key != next_key {
             return Ok(true);
         }

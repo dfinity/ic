@@ -1,4 +1,4 @@
-use crate::sign::get_mega_pubkey;
+use crate::sign::retrieve_mega_public_key_from_registry;
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_crypto_internal_csp::api::CspIDkgProtocol;
 use ic_crypto_internal_threshold_sig_ecdsa::{IDkgTranscriptInternal, MEGaPublicKey};
@@ -47,7 +47,7 @@ fn oldest_public_key<C: CspIDkgProtocol>(
     transcripts: &HashSet<IDkgTranscript>,
 ) -> Option<Result<MEGaPublicKey, IDkgRetainKeysError>> {
     minimum_registry_version_for_node(transcripts, *node_id).map(|version| {
-        match get_mega_pubkey(node_id, registry, version) {
+        match retrieve_mega_public_key_from_registry(node_id, registry, version) {
             Ok(oldest_public_key) => {
                 csp_client
                     .idkg_observe_minimum_registry_version_in_active_idkg_transcripts(version);

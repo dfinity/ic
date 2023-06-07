@@ -1,6 +1,6 @@
 use super::*;
 use crate::sign::canister_threshold_sig::idkg::utils::{
-    get_mega_pubkey, index_and_dealing_of_dealer, MegaKeyFromRegistryError,
+    index_and_dealing_of_dealer, retrieve_mega_public_key_from_registry, MegaKeyFromRegistryError,
 };
 use ic_crypto_internal_csp::api::CspIDkgProtocol;
 use ic_crypto_internal_threshold_sig_ecdsa::IDkgComplaintInternal;
@@ -21,8 +21,11 @@ pub fn verify_complaint<C: CspIDkgProtocol>(
     if transcript.transcript_id != complaint.transcript_id {
         return Err(IDkgVerifyComplaintError::InvalidArgumentMismatchingTranscriptIDs);
     }
-    let complainer_mega_pubkey =
-        get_mega_pubkey(&complainer_id, registry, transcript.registry_version)?;
+    let complainer_mega_pubkey = retrieve_mega_public_key_from_registry(
+        &complainer_id,
+        registry,
+        transcript.registry_version,
+    )?;
     let complainer_index = index_of_complainer(complainer_id, transcript)?;
     let internal_complaint = IDkgComplaintInternal::try_from(complaint).map_err(|e| {
         IDkgVerifyComplaintError::SerializationError {
