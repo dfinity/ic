@@ -192,6 +192,8 @@ pub const SSH_RETRY_TIMEOUT: Duration = Duration::from_secs(500);
 pub const RETRY_BACKOFF: Duration = Duration::from_secs(5);
 const REGISTRY_QUERY_TIMEOUT: Duration = Duration::from_secs(5);
 const READY_RESPONSE_TIMEOUT: Duration = Duration::from_secs(6);
+// It usually takes below 60 secs to install nns canisters.
+const NNS_CANISTER_INSTALL_TIMEOUT: Duration = std::time::Duration::from_secs(160);
 
 pub type NodesInfo = HashMap<NodeId, Option<MaliciousBehaviour>>;
 
@@ -1370,7 +1372,7 @@ pub enum NnsCanisterWasmStrategy {
 
 impl<T> NnsInstallationExt for T
 where
-    T: HasIcName + HasPublicApiUrl,
+    T: HasIcName + HasPublicApiUrl + Clone + 'static,
 {
     fn install_nns_canisters_with_customizations(
         &self,
@@ -1422,10 +1424,24 @@ where
     }
 
     fn install_nns_canisters(&self) -> Result<()> {
-        self.install_nns_canisters_with_customizations(
-            NnsCanisterWasmStrategy::TakeBuiltFromSources,
-            NnsCustomizations::default(),
-        )
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let t_cloned = Clone::clone(self);
+        // To intoduce a timeout mechanism for a sync function, we launch it in a separate thread
+        // and use channels to communicate timeout from the sync context.
+        let handle = std::thread::spawn(move || {
+            if let Ok(()) = sender.send(t_cloned.install_nns_canisters_with_customizations(
+                NnsCanisterWasmStrategy::TakeBuiltFromSources,
+                NnsCustomizations::default(),
+            )) {}
+        });
+        if receiver.recv_timeout(NNS_CANISTER_INSTALL_TIMEOUT).is_err() {
+            panic!(
+                "nns canisters were not installed within timeout of {} sec",
+                NNS_CANISTER_INSTALL_TIMEOUT.as_secs()
+            );
+        }
+        handle.join().expect("Failed to join the thread handle");
+        Ok(())
     }
 
     fn install_mainnet_nns_canisters(&self) -> Result<()> {
