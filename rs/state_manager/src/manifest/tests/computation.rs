@@ -1,3 +1,4 @@
+use crate::manifest::validate_manifest_internal_consistency;
 use crate::manifest::{
     build_file_group_chunks, build_meta_manifest, compute_manifest, diff_manifest,
     file_chunk_range, filter_out_zero_chunks, hash::ManifestHash, manifest_hash, manifest_hash_v1,
@@ -436,6 +437,7 @@ fn test_get_sub_manifest_based_on_index() {
 #[test]
 fn simple_manifest_passes_validation() {
     for (expected_hash, manifest) in simple_manifest_all_supported_versions() {
+        assert_eq!(Ok(()), validate_manifest_internal_consistency(&manifest));
         assert_eq!(
             Ok(()),
             validate_manifest(
@@ -483,6 +485,9 @@ fn bad_root_hash_detected_for_meta_manifest() {
 fn bad_root_hash_detected() {
     let bogus_hash = CryptoHashOfState::from(CryptoHash(vec![1u8; 32]));
     for (manifest_hash, manifest) in simple_manifest_all_supported_versions() {
+        // Manifest is internally consistent
+        assert_eq!(Ok(()), validate_manifest_internal_consistency(&manifest));
+        // But the hash does not match `bogus_hash`.
         assert_eq!(
             validate_manifest(&manifest, &bogus_hash),
             Err(ManifestValidationError::InvalidRootHash {
@@ -505,6 +510,15 @@ fn bad_file_hash_detected() {
             manifest.chunk_table.to_owned(),
         );
         let root_hash = CryptoHashOfState::from(CryptoHash(manifest_hash.to_vec()));
+
+        assert_eq!(
+            validate_manifest_internal_consistency(&manifest),
+            Err(ManifestValidationError::InvalidFileHash {
+                relative_path: manifest.file_table[0].relative_path.clone(),
+                expected_hash: vec![1u8; 32],
+                actual_hash: actual_hash.clone(),
+            })
+        );
         assert_eq!(
             validate_manifest(&manifest, &root_hash),
             Err(ManifestValidationError::InvalidFileHash {
@@ -572,6 +586,11 @@ fn orphan_chunk_detected() {
             chunk_table,
         );
         let root_hash = CryptoHashOfState::from(CryptoHash(manifest_hash.to_vec()));
+
+        match validate_manifest_internal_consistency(&manifest) {
+            Err(ManifestValidationError::InconsistentManifest { .. }) => (),
+            other => panic!("Expected an orphan chunk to be detected, got: {:?}", other),
+        }
         match validate_manifest(&manifest, &root_hash) {
             Err(ManifestValidationError::InconsistentManifest { .. }) => (),
             other => panic!("Expected an orphan chunk to be detected, got: {:?}", other),

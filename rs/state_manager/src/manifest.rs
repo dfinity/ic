@@ -1,4 +1,5 @@
 pub mod hash;
+pub mod split;
 
 #[cfg(test)]
 mod tests {
@@ -918,22 +919,14 @@ pub fn compute_manifest(
     }
 
     // Sanity check: ensure that we have produced a valid manifest.
-    debug_assert_eq!(
-        Ok(()),
-        validate_manifest(
-            &manifest,
-            &CryptoHash(manifest_hash(&manifest).to_vec()).into()
-        )
-    );
+    debug_assert_eq!(Ok(()), validate_manifest_internal_consistency(&manifest));
 
     Ok(manifest)
 }
 
-/// Validates manifest contents and checks that the hash of the manifest matches
-/// the expected root hash.
-pub fn validate_manifest(
+/// Validates the internal consistency of the manifest.
+pub fn validate_manifest_internal_consistency(
     manifest: &Manifest,
-    root_hash: &CryptoHashOfState,
 ) -> Result<(), ManifestValidationError> {
     if manifest.version > MAX_SUPPORTED_STATE_SYNC_VERSION {
         return Err(ManifestValidationError::UnsupportedManifestVersion {
@@ -943,12 +936,23 @@ pub fn validate_manifest(
     }
 
     let mut chunk_start: usize = 0;
-
+    let mut last_path: Option<&Path> = None;
     for (file_index, f) in manifest.file_table.iter().enumerate() {
         if f.relative_path.is_absolute() {
             return Err(ManifestValidationError::InconsistentManifest {
                 reason: format!("absolute file path: {},", f.relative_path.display(),),
             });
+        }
+        if let Some(last_path) = last_path {
+            if f.relative_path <= last_path {
+                return Err(ManifestValidationError::InconsistentManifest {
+                    reason: format!(
+                        "file paths are not sorted: {}, {}",
+                        last_path.display(),
+                        f.relative_path.display()
+                    ),
+                });
+            }
         }
 
         let mut hasher = file_hasher();
@@ -989,10 +993,7 @@ pub fn validate_manifest(
             });
         }
 
-        chunk_start += chunk_count;
-
         let hash = hasher.finish();
-
         if hash != f.hash {
             return Err(ManifestValidationError::InvalidFileHash {
                 relative_path: f.relative_path.clone(),
@@ -1000,7 +1001,11 @@ pub fn validate_manifest(
                 actual_hash: hash.to_vec(),
             });
         }
+
+        chunk_start += chunk_count;
+        last_path = Some(&f.relative_path);
     }
+
     if manifest.chunk_table.len() != chunk_start {
         return Err(ManifestValidationError::InconsistentManifest {
             reason: format!(
@@ -1010,6 +1015,17 @@ pub fn validate_manifest(
             ),
         });
     }
+
+    Ok(())
+}
+
+/// Validates manifest contents and checks that the hash of the manifest matches
+/// the expected root hash.
+pub fn validate_manifest(
+    manifest: &Manifest,
+    root_hash: &CryptoHashOfState,
+) -> Result<(), ManifestValidationError> {
+    validate_manifest_internal_consistency(manifest)?;
 
     let hash = manifest_hash(manifest);
 

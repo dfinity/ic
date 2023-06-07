@@ -331,8 +331,8 @@ mod tests {
         test_manifest(
             version,
             &[
-                test_manifest_entry(version, 0, "root.bin", 0),
-                test_manifest_entry(version, 1, "canister_states/canister_0/test.bin", 1),
+                test_manifest_entry(version, 0, "canister_states/canister_0/test.bin", 0),
+                test_manifest_entry(version, 1, "root.bin", 1),
             ],
         )
     }
@@ -345,7 +345,7 @@ mod tests {
                 version,
                 0,
                 "canister_states/canister_0/test.bin",
-                1,
+                0,
             )],
         )
     }
@@ -355,9 +355,9 @@ mod tests {
         test_manifest(
             version,
             &[
-                test_manifest_entry(version, 0, "root.bin", 0),
-                test_manifest_entry(version, 1, "canister_states/canister_0/test.bin", 1),
-                test_manifest_entry(version, 2, "canister_states/canister_1/test.bin", 2),
+                test_manifest_entry(version, 0, "canister_states/canister_0/test.bin", 0),
+                test_manifest_entry(version, 1, "canister_states/canister_1/test.bin", 1),
+                test_manifest_entry(version, 2, "root.bin", 2),
             ],
         )
     }
