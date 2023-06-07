@@ -1,19 +1,25 @@
-.host-e2e-test-base:
+host-os-upgrade-test:
   extends:
     - .ubuntu-k8s-protected
     - .rules-parent-pipeline-autorun-on-trigger
-    - .rules-hostos
   stage: host-os-test
+  rules:
+    - if: '$CI_PARENT_PIPELINE_SOURCE == "merge_request_event"'
+      changes:
+        - 'ic-os/**/*'
+        - 'toolchains/sysimage/**/*'
+        - 'testnet/**/*'
+    - if: '$CI_PARENT_PIPELINE_SOURCE == "merge_request_event"'
+      when: manual
+      allow_failure: true
+    - if: '$SCHEDULE_NAME == "run-all-master"'
+    - if: '$CI_COMMIT_BRANCH =~ /^rc--/'
   variables:
     HOST_OS_TEST_TIMEOUT: 2400
     # This var is needed as some shell scripts depend on it.
     E2E_TEST_TIMEOUT: 480
-
-host-os-upgrade-test:
   # This test runs VMs on the CI runner, which can be unreliable and slow. This
   # test is soon to be replaced with Farm tests: NODE-565
-  extends:
-    - .host-e2e-test-base
   needs:
     - job: wait-for-bazel-test-all
       artifacts: false
