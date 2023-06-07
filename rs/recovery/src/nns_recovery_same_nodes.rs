@@ -1,16 +1,16 @@
-use crate::cli::{print_height_info, read_optional_ip, read_optional_version};
-use crate::file_sync_helper::create_dir;
-use crate::recovery_iterator::RecoveryIterator;
-use crate::RecoveryResult;
-use crate::{error::RecoveryError, RecoveryArgs};
+use crate::{
+    cli::{print_height_info, read_optional, read_optional_version},
+    error::RecoveryError,
+    file_sync_helper::create_dir,
+    recovery_iterator::RecoveryIterator,
+    RecoveryArgs, RecoveryResult,
+};
 use clap::Parser;
 use ic_base_types::SubnetId;
 use ic_types::ReplicaVersion;
 use serde::{Deserialize, Serialize};
 use slog::Logger;
-use std::iter::Peekable;
-use std::net::IpAddr;
-use std::path::PathBuf;
+use std::{iter::Peekable, net::IpAddr, path::PathBuf};
 use strum::IntoEnumIterator;
 use strum_macros::{EnumIter, EnumMessage, EnumString};
 
@@ -129,8 +129,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
                 );
 
                 if self.params.download_node.is_none() {
-                    self.params.download_node =
-                        read_optional_ip(&self.logger, "Enter download IP:");
+                    self.params.download_node = read_optional(&self.logger, "Enter download IP:");
                 }
             }
 
@@ -143,7 +142,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
 
             StepType::WaitForCUP => {
                 if self.params.upload_node.is_none() {
-                    self.params.upload_node = read_optional_ip(&self.logger, "Enter upload IP:");
+                    self.params.upload_node = read_optional(&self.logger, "Enter upload IP:");
                 }
             }
 

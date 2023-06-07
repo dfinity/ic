@@ -1,12 +1,12 @@
+use crate::NeuronArgs;
 use ic_base_types::{NodeId, RegistryVersion};
 use ic_ic00_types::EcdsaKeyId;
-use ic_types::Height;
-use ic_types::{ReplicaVersion, SubnetId};
-
-use crate::NeuronArgs;
-use std::path::PathBuf;
-use std::process::Command;
-use std::time::{SystemTime, UNIX_EPOCH};
+use ic_types::{Height, ReplicaVersion, SubnetId};
+use std::{
+    path::PathBuf,
+    process::Command,
+    time::{SystemTime, UNIX_EPOCH},
+};
 use url::Url;
 
 pub type IcAdmin = Vec<String>;
@@ -17,7 +17,7 @@ pub struct RegistryParams {
     pub registry_version: RegistryVersion,
 }
 
-/// Struct simplyfiying the creation of `ic-admin` commands for a given NNS Url.
+/// Struct simplyfiying the creation of `ic-admin` commands for a given NNS [Url].
 #[derive(Debug, Clone)]
 pub struct AdminHelper {
     pub binary: PathBuf,
@@ -26,7 +26,7 @@ pub struct AdminHelper {
 }
 
 impl AdminHelper {
-    /// Create a new command builder for a given binary path, NNS url and
+    /// Create a new command builder for a given binary path, NNS [Url] and
     /// [NeuronArgs].
     pub fn new(binary: PathBuf, nns_url: Url, neuron_args: Option<NeuronArgs>) -> Self {
         Self {
@@ -43,7 +43,7 @@ impl AdminHelper {
         ic_admin.push("--nns-url".to_string());
         ic_admin.push(format!("\"{}\"", self.nns_url));
 
-        // Existance of [NeuronArgs] implies no testing mode. Add hsm parameters to
+        // Existence of [NeuronArgs] implies no testing mode. Add hsm parameters to
         // base.
         if let Some(args) = neuron_args {
             ic_admin.push("--use-hsm".to_string());
@@ -66,7 +66,7 @@ impl AdminHelper {
         AdminHelper::add_proposer_args(ic_admin, neuron_args);
     }
 
-    // Existance of [NeuronArgs] implies no testing mode. Add proposer neuron id,
+    // Existence of [NeuronArgs] implies no testing mode. Add proposer neuron id,
     // else add test neuron proposer.
     fn add_proposer_args(ic_admin: &mut IcAdmin, neuron_args: &Option<NeuronArgs>) {
         if let Some(args) = neuron_args {

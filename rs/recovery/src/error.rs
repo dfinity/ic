@@ -1,10 +1,11 @@
-use std::error::Error;
-use std::fmt;
-use std::io;
-use std::path::Path;
-
 use ic_http_utils::file_downloader::FileDownloadError;
-use std::process::Command;
+use std::{
+    error::Error,
+    fmt::{self, Display},
+    io,
+    path::Path,
+    process::Command,
+};
 
 pub type RecoveryResult<T> = Result<T, RecoveryError>;
 
@@ -26,10 +27,10 @@ impl RecoveryError {
     pub(crate) fn dir_error(dir: &Path, e: io::Error) -> Self {
         RecoveryError::IoError(format!("Directory error: {:?}", dir), e)
     }
-    pub(crate) fn file_error(file: &Path, e: io::Error) -> Self {
+    pub fn file_error(file: &Path, e: io::Error) -> Self {
         RecoveryError::IoError(format!("File error: {:?}", file), e)
     }
-    pub(crate) fn cmd_error(cmd: &Command, exit_code: Option<i32>, output: String) -> Self {
+    pub(crate) fn cmd_error(cmd: &Command, exit_code: Option<i32>, output: impl Display) -> Self {
         RecoveryError::CommandError(
             exit_code,
             format!(
@@ -38,7 +39,7 @@ impl RecoveryError {
             ),
         )
     }
-    pub(crate) fn invalid_output_error(output: String) -> Self {
+    pub(crate) fn invalid_output_error(output: impl Display) -> Self {
         RecoveryError::OutputError(format!("Invalid output: {}", output))
     }
     pub(crate) fn parsing_error(e: serde_json::Error) -> Self {
@@ -47,7 +48,7 @@ impl RecoveryError {
     pub(crate) fn serialization_error(e: serde_json::Error) -> Self {
         RecoveryError::SerializationError(e)
     }
-    pub(crate) fn download_error(url: String, target: &Path, e: FileDownloadError) -> Self {
+    pub(crate) fn download_error(url: impl Display, target: &Path, e: FileDownloadError) -> Self {
         RecoveryError::DownloadError(
             format!("Failed to download from {} to {:?}", url, target),
             e,

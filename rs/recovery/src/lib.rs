@@ -3,8 +3,9 @@
 //! state replay, restart of nodes, etc. The library is designed to be usable by
 //! command line interfaces. Therefore, input arguments are first captured and
 //! returned in form of a recovery [Step], holding the human-readable (and
-//! reproducable) description of the step, as well as its potential automatic
+//! reproducible) description of the step, as well as its potential automatic
 //! execution.
+use crate::{cli::wait_for_confirmation, file_sync_helper::read_file};
 use admin_helper::{AdminHelper, IcAdmin, RegistryParams};
 use command_helper::exec_cmd;
 use error::{RecoveryError, RecoveryResult};
@@ -14,8 +15,7 @@ use ic_base_types::{CanisterId, NodeId, PrincipalId};
 use ic_crypto_utils_threshold_sig_der::{parse_threshold_sig_key, public_key_to_der};
 use ic_cup_explorer::get_catchup_content;
 use ic_logger::ReplicaLogger;
-use ic_protobuf::registry::crypto::v1::PublicKey;
-use ic_protobuf::registry::subnet::v1::SubnetListRecord;
+use ic_protobuf::registry::{crypto::v1::PublicKey, subnet::v1::SubnetListRecord};
 use ic_registry_client::client::{RegistryClient, RegistryClientImpl, ThresholdSigPublicKey};
 use ic_registry_client_helpers::{node::NodeRegistry, subnet::SubnetRegistry};
 use ic_registry_keys::{make_crypto_threshold_signing_pubkey_key, make_subnet_list_record_key};
@@ -23,27 +23,27 @@ use ic_registry_local_store::LocalStoreImpl;
 use ic_registry_nns_data_provider::registry::RegistryCanister;
 use ic_registry_replicator::RegistryReplicator;
 use ic_registry_subnet_features::EcdsaConfig;
-use ic_replay::cmd::{AddAndBlessReplicaVersionCmd, AddRegistryContentCmd, SubCommand};
-use ic_replay::player::StateParams;
-use ic_types::messages::HttpStatusResponse;
-use ic_types::{Height, ReplicaVersion, SubnetId};
+use ic_replay::{
+    cmd::{AddAndBlessReplicaVersionCmd, AddRegistryContentCmd, SubCommand},
+    player::StateParams,
+};
+use ic_types::{messages::HttpStatusResponse, Height, ReplicaVersion, SubnetId};
 use prost::Message;
 use serde::{Deserialize, Serialize};
 use slog::{info, warn, Logger};
 use ssh_helper::SshHelper;
-use std::net::IpAddr;
-use std::path::{Path, PathBuf};
-use std::process::Command;
-use std::str::FromStr;
-use std::sync::Arc;
-use std::time::Duration;
-use std::{thread, time};
+use std::{
+    net::IpAddr,
+    path::{Path, PathBuf},
+    process::Command,
+    str::FromStr,
+    sync::Arc,
+    thread, time,
+    time::Duration,
+};
 use steps::*;
 use url::Url;
 use util::block_on;
-
-use crate::cli::wait_for_confirmation;
-use crate::file_sync_helper::read_file;
 
 pub mod admin_helper;
 pub mod app_subnet_recovery;
@@ -775,7 +775,7 @@ impl Recovery {
         match version {
             Some(ver) => Ok(ver),
             None => Err(RecoveryError::invalid_output_error(
-                "No version found in status".to_string(),
+                "No version found in status",
             )),
         }
     }

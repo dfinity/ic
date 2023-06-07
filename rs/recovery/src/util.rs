@@ -1,8 +1,7 @@
 use crate::error::{RecoveryError, RecoveryResult};
 use ic_base_types::{NodeId, PrincipalId, SubnetId};
 use slog::{o, Drain, Logger};
-use std::future::Future;
-use std::str::FromStr;
+use std::{future::Future, str::FromStr};
 use tokio::runtime::Runtime;
 
 pub fn block_on<F: Future>(f: F) -> F::Output {
@@ -13,8 +12,8 @@ pub fn block_on<F: Future>(f: F) -> F::Output {
 pub fn parse_hex_str(string: &str) -> RecoveryResult<u64> {
     u64::from_str_radix(string, 16).map_err(|e| {
         RecoveryError::invalid_output_error(format!(
-            "Could not read checkpoint height from dir name: {}",
-            e
+            "Could not read checkpoint height from dir name '{}': {}",
+            string, e
         ))
     })
 }
