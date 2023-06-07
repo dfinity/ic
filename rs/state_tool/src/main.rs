@@ -6,6 +6,7 @@
 
 use clap::Parser;
 use ic_registry_routing_table::CanisterIdRange;
+use ic_registry_subnet_type::SubnetType;
 use ic_types::PrincipalId;
 use std::path::PathBuf;
 
@@ -163,6 +164,26 @@ enum Opt {
         #[clap(long, multiple_values(true))]
         drop: Vec<CanisterIdRange>,
     },
+
+    /// Splits a manifest, to verify the manifests resulting from a subnet split.
+    #[clap(name = "split_manifest")]
+    SplitManifest {
+        /// Path to the manifest dump.
+        #[clap(long, required = true)]
+        path: PathBuf,
+        /// ID of the subnet being split.
+        #[clap(long, required = true)]
+        from_subnet: PrincipalId,
+        /// ID of the new subnet resulting from the split.
+        #[clap(long, required = true)]
+        to_subnet: PrincipalId,
+        /// Type of the original subnet (to also be applied to `to_subnet`).
+        #[clap(long, required = true)]
+        subnet_type: SubnetType,
+        /// Canister ID ranges migrated to the new subnet.
+        #[clap(long, required = true, multiple_values(true))]
+        migrated_ranges: Vec<CanisterIdRange>,
+    },
 }
 
 fn main() {
@@ -197,6 +218,19 @@ fn main() {
             retain,
             drop,
         } => commands::split::do_split(root, subnet_id, retain, drop),
+        Opt::SplitManifest {
+            path,
+            from_subnet,
+            to_subnet,
+            subnet_type,
+            migrated_ranges,
+        } => commands::split_manifest::do_split_manifest(
+            path,
+            from_subnet.into(),
+            to_subnet.into(),
+            subnet_type,
+            migrated_ranges,
+        ),
     };
 
     if let Err(e) = result {

@@ -206,7 +206,9 @@ fn extract_root_hash(lines: &[String]) -> [u8; 32] {
     .unwrap()
 }
 
-fn parse_manifest(file: File) -> (StateSyncVersion, Vec<FileInfo>, Vec<ChunkInfo>, [u8; 32]) {
+pub(crate) fn parse_manifest(
+    file: File,
+) -> (StateSyncVersion, Vec<FileInfo>, Vec<ChunkInfo>, [u8; 32]) {
     let manifest_lines: Vec<String> = BufReader::new(file)
         .lines()
         .into_iter()
