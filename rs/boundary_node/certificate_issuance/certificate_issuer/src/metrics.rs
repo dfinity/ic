@@ -64,6 +64,7 @@ impl<T: Create> Create for WithMetrics<T> {
             Ok(_) => "ok",
             Err(err) => match err {
                 CreateError::Duplicate(_) => "duplicate",
+                CreateError::RateLimited(_) => "rate-limited",
                 CreateError::UnexpectedError(_) => "fail",
             },
         };
