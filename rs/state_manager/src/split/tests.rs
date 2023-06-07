@@ -14,12 +14,15 @@ use ic_replicated_state::{
 };
 use ic_state_layout::{
     ProtoFileWith, StateLayout, CANISTER_FILE, CANISTER_STATES_DIR, CHECKPOINTS_DIR,
-    INGRESS_HISTORY_FILE, QUEUES_FILE, SPLIT_MARKER_FILE, SUBNET_QUEUES_FILE, SYSTEM_METADATA_FILE,
+    INGRESS_HISTORY_FILE, SPLIT_MARKER_FILE, SUBNET_QUEUES_FILE, SYSTEM_METADATA_FILE,
 };
 use ic_test_utilities::{
     mock_time,
     state::new_canister_state,
-    types::ids::{user_test_id, SUBNET_1, SUBNET_2},
+    types::{
+        ids::{user_test_id, SUBNET_1, SUBNET_2},
+        messages::RequestBuilder,
+    },
 };
 use ic_test_utilities_logger::with_test_replica_logger;
 use ic_test_utilities_tmpdir::tmpdir;
@@ -73,13 +76,11 @@ const SUBNET_B_RANGES: &[CanisterIdRange] = &[
 ];
 
 /// Full list of files expected to be listed in the manifest of subnet A.
+/// Note that any queue files are missing as they would be empty.
 const SUBNET_A_FILES: &[&str] = &[
     "canister_states/00000000000000010101/canister.pbuf",
-    "canister_states/00000000000000010101/queues.pbuf",
     "canister_states/00000000000000020101/canister.pbuf",
-    "canister_states/00000000000000020101/queues.pbuf",
     "canister_states/00000000000000030101/canister.pbuf",
-    "canister_states/00000000000000030101/queues.pbuf",
     INGRESS_HISTORY_FILE,
     SUBNET_QUEUES_FILE,
     SYSTEM_METADATA_FILE,
@@ -88,9 +89,7 @@ const SUBNET_A_FILES: &[&str] = &[
 /// Full list of files expected to be listed in the manifest of subnet A'.
 const SUBNET_A_PRIME_FILES: &[&str] = &[
     "canister_states/00000000000000010101/canister.pbuf",
-    "canister_states/00000000000000010101/queues.pbuf",
     "canister_states/00000000000000030101/canister.pbuf",
-    "canister_states/00000000000000030101/queues.pbuf",
     INGRESS_HISTORY_FILE,
     SPLIT_MARKER_FILE,
     SUBNET_QUEUES_FILE,
@@ -100,10 +99,8 @@ const SUBNET_A_PRIME_FILES: &[&str] = &[
 /// Full list of files expected to be listed in the manifest of subnet B.
 const SUBNET_B_FILES: &[&str] = &[
     "canister_states/00000000000000020101/canister.pbuf",
-    "canister_states/00000000000000020101/queues.pbuf",
     INGRESS_HISTORY_FILE,
     SPLIT_MARKER_FILE,
-    SUBNET_QUEUES_FILE,
     SYSTEM_METADATA_FILE,
 ];
 
@@ -307,6 +304,17 @@ fn new_state_layout(log: ReplicaLogger) -> TempDir {
         (1u64 << 30).into(),
     );
 
+    // Make subnet_queues non-empty
+    state
+        .push_input(
+            RequestBuilder::default()
+                .receiver(state.metadata.own_subnet_id.into())
+                .build()
+                .into(),
+            &mut (10 << 30),
+        )
+        .unwrap();
+
     let _state = make_checkpoint(
         &state,
         HEIGHT,
@@ -337,7 +345,6 @@ fn new_state_layout(log: ReplicaLogger) -> TempDir {
         let canister_path = checkpoint_path
             .join(CANISTER_STATES_DIR)
             .join(hex::encode(canister.get_ref().as_slice()));
-        expected_paths.push(canister_path.join(QUEUES_FILE));
         expected_paths.push(canister_path.join(CANISTER_FILE));
     }
 

@@ -1404,6 +1404,11 @@ where
     pub fn serialize(&self, value: T) -> Result<(), LayoutError> {
         let serialized = value.encode_to_vec();
 
+        if serialized.is_empty() {
+            self.try_remove_file()?;
+            return Ok(());
+        }
+
         let file = open_for_write(&self.path)?;
         let mut writer = std::io::BufWriter::new(file);
         writer
