@@ -8,7 +8,7 @@ COPY --chown=0700 ./gitlab-ci/container/files/known_hosts /etc/ssh/ssh_known_hos
 
 RUN export DEBIAN_FRONTEND=noninteractive && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone && \
     apt -yq update && apt -yqq install  \
-    curl build-essential git gnupg node-json5 uuid-dev zsh clang \
+    curl build-essential git gnupg node-json5 uuid-dev zsh clang iproute2 \
     # GitLab CI \
     sudo gosu jq rclone time \
     # Test \
