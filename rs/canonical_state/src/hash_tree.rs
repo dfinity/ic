@@ -362,25 +362,6 @@ impl HashTree {
             .all(|vec| vec.iter().all(|range| range.indexes_into(self))));
     }
 
-    /// Returns the estimate of the size occupied by this data structure in
-    /// bytes.
-    pub fn size_estimate(&self) -> usize {
-        fn slice_size<T>(s: &[Vec<T>]) -> usize {
-            s.iter()
-                .map(|vec| std::mem::size_of_val(vec) + vec.len() * std::mem::size_of::<T>())
-                .sum()
-        }
-        std::mem::size_of_val(self)
-            + slice_size(&self.leaf_digests)
-            + slice_size(&self.fork_digests)
-            + slice_size(&self.fork_left_children)
-            + slice_size(&self.fork_right_children)
-            + slice_size(&self.node_digests)
-            + slice_size(&self.node_labels)
-            + slice_size(&self.node_children)
-            + slice_size(&self.node_children_labels_ranges)
-    }
-
     /// Returns a structured representation-independent view of the node with
     /// the specified ID.
     pub fn view(&self, node_id: NodeId) -> HashTreeView<'_> {
