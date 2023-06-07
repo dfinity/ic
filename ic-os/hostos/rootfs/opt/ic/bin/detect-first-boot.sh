@@ -70,7 +70,7 @@ function detect_first_boot() {
     if [ ${FIRST_BOOT_STATE} -eq 1 ]; then
         write_log "First boot detected."
         write_first_boot_state
-        write_metric "hostos_guestos_first_boot_state state" \
+        write_metric "hostos_guestos_first_boot_state" \
             "1" \
             "GuestOS virtual machine first boot" \
             "gauge"
