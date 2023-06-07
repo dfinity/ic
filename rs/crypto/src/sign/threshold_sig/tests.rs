@@ -1494,6 +1494,55 @@ mod verify_combined_threshold_sig_by_public_key {
     }
 }
 
+mod error_conversion {
+    use crate::sign::threshold_sig::map_csp_combine_sigs_error;
+    use crate::sign::threshold_sig::map_verify_combined_error;
+    use ic_crypto_internal_csp_proptest_utils::arb_crypto_error;
+    use ic_interfaces::crypto::ErrorReproducibility;
+    use proptest::prop_assert_eq;
+    use proptest::proptest;
+
+    proptest! {
+        #[test]
+        fn should_preserve_error_reproducibility_with_map_verify_combined_error(initial_error in arb_crypto_error()) {
+            let initial_error_reproducibility = initial_error.is_reproducible();
+
+            let mapped_error = map_verify_combined_error(initial_error.clone());
+            let mapped_error_reproducibility = mapped_error.is_reproducible();
+
+            prop_assert_eq!(
+                initial_error_reproducibility,
+                mapped_error_reproducibility,
+                "Unexpected different reproducibility: initial error '{:?}' with reproducibility '{}' was mapped to '{:?}' with reproducibility '{}'",
+                initial_error,
+                initial_error_reproducibility,
+                mapped_error,
+                mapped_error_reproducibility
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn should_preserve_error_reproducibility_with_map_csp_combine_sigs_error(initial_error in arb_crypto_error()) {
+            let initial_error_reproducibility = initial_error.is_reproducible();
+
+            let mapped_error = map_csp_combine_sigs_error(initial_error.clone());
+            let mapped_error_reproducibility = mapped_error.is_reproducible();
+
+            prop_assert_eq!(
+                initial_error_reproducibility,
+                mapped_error_reproducibility,
+                "Unexpected different reproducibility: initial error '{:?}' with reproducibility '{}' was mapped to '{:?}' with reproducibility '{}'",
+                initial_error,
+                initial_error_reproducibility,
+                mapped_error,
+                mapped_error_reproducibility
+            );
+        }
+    }
+}
+
 fn signable_mock() -> SignableMock {
     SignableMock::new(b"message".to_vec())
 }

@@ -59,8 +59,8 @@ impl ErrorReproducibility for CryptoError {
             CryptoError::DkgTranscriptNotFound { .. } => true,
             // true, as the registry is guaranteed to be consistent across replicas
             CryptoError::RootSubnetPublicKeyNotFound { .. } => true,
-            // false, as the internal error can happen due to a local failure
-            CryptoError::InternalError { .. } => false,
+            // true, as non-reproducible internal errors use the other variant TransientInternalError
+            CryptoError::InternalError { .. } => true,
             // false, as by definition the transient internal error is non-reproducible
             // (catch-all for lower-level transient errors)
             CryptoError::TransientInternalError { .. } => false,

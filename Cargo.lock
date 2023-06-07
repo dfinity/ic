@@ -5392,6 +5392,7 @@ dependencies = [
  "ic-crypto-internal-basic-sig-iccsa",
  "ic-crypto-internal-basic-sig-rsa-pkcs1",
  "ic-crypto-internal-csp",
+ "ic-crypto-internal-csp-proptest-utils",
  "ic-crypto-internal-csp-test-utils",
  "ic-crypto-internal-logmon",
  "ic-crypto-internal-multi-sig-bls12381",
