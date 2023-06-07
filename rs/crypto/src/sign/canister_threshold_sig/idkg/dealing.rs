@@ -2,7 +2,7 @@
 
 use crate::sign::basic_sig::{BasicSigVerifierInternal, BasicSignerInternal};
 use crate::sign::canister_threshold_sig::idkg::utils::{
-    get_mega_pubkey, idkg_encryption_keys_from_registry, MegaKeyFromRegistryError,
+    retrieve_mega_public_key_from_registry, MegaKeyFromRegistryError,
 };
 use ic_base_types::RegistryVersion;
 use ic_crypto_internal_csp::api::{CspIDkgProtocol, CspSigner};
@@ -34,12 +34,13 @@ pub fn create_dealing<C: CspIDkgProtocol + CspSigner>(
                 node_id: *self_node_id,
             })?;
 
-    let receiver_keys = idkg_encryption_keys_from_registry(
-        params.receivers(),
-        registry,
-        params.registry_version(),
-    )?;
-    let receiver_keys_vec = receiver_keys.values().cloned().collect::<Vec<_>>();
+    let receiver_keys = params
+        .receivers()
+        .iter()
+        .map(|(_index, receiver)| {
+            retrieve_mega_public_key_from_registry(&receiver, registry, params.registry_version())
+        })
+        .collect::<Result<Vec<_>, MegaKeyFromRegistryError>>()?;
 
     let csp_operation_type = IDkgTranscriptOperationInternal::try_from(params.operation_type())
         .map_err(|e| IDkgCreateDealingError::SerializationError {
@@ -51,7 +52,7 @@ pub fn create_dealing<C: CspIDkgProtocol + CspSigner>(
         &params.context_data(),
         self_index,
         params.reconstruction_threshold(),
-        &receiver_keys_vec,
+        &receiver_keys,
         &csp_operation_type,
     )?;
 
@@ -126,7 +127,8 @@ pub fn verify_dealing_private<C: CspIDkgProtocol>(
     let self_receiver_index = params
         .receiver_index(*self_node_id)
         .ok_or(IDkgVerifyDealingPrivateError::NotAReceiver)?;
-    let self_mega_pubkey = get_mega_pubkey(self_node_id, registry, params.registry_version())?;
+    let self_mega_pubkey =
+        retrieve_mega_public_key_from_registry(self_node_id, registry, params.registry_version())?;
 
     csp_client.idkg_verify_dealing_private(
         params.algorithm_id(),

@@ -13,31 +13,16 @@ use ic_registry_client_helpers::crypto::CryptoRegistry;
 use ic_types::crypto::canister_threshold_sig::error::{
     IDkgOpenTranscriptError, IDkgVerifyComplaintError, IDkgVerifyOpeningError,
 };
-use ic_types::crypto::canister_threshold_sig::idkg::{IDkgReceivers, IDkgTranscript};
+use ic_types::crypto::canister_threshold_sig::idkg::IDkgTranscript;
 use ic_types::crypto::KeyPurpose;
 use ic_types::{NodeId, NodeIndex, RegistryVersion};
-use std::collections::BTreeMap;
 use std::convert::TryFrom;
 
-/// Query the registry for the MEGa public keys of all receivers.
-///
-/// The returned map is keyed by the index of the receiver.
-pub fn idkg_encryption_keys_from_registry(
-    receivers: &IDkgReceivers,
-    registry: &dyn RegistryClient,
-    registry_version: RegistryVersion,
-) -> Result<BTreeMap<NodeIndex, MEGaPublicKey>, MegaKeyFromRegistryError> {
-    receivers
-        .iter()
-        .map(|(index, receiver)| {
-            let enc_pubkey = get_mega_pubkey(&receiver, registry, registry_version)?;
-            Ok((index, enc_pubkey))
-        })
-        .collect()
-}
+#[cfg(test)]
+mod tests;
 
 /// Query the registry for the MEGa public key of `node_id` receiver.
-pub fn get_mega_pubkey(
+pub fn retrieve_mega_public_key_from_registry(
     node_id: &NodeId,
     registry: &dyn RegistryClient,
     registry_version: RegistryVersion,

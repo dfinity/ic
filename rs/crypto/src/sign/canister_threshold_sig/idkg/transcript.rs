@@ -2,7 +2,7 @@
 use crate::sign::basic_sig::BasicSigVerifierInternal;
 use crate::sign::canister_threshold_sig::idkg::complaint::verify_complaint;
 use crate::sign::canister_threshold_sig::idkg::utils::{
-    get_mega_pubkey, index_and_dealing_of_dealer,
+    index_and_dealing_of_dealer, retrieve_mega_public_key_from_registry,
 };
 use ic_crypto_internal_csp::api::CspIDkgProtocol;
 use ic_crypto_internal_csp::api::CspSigner;
@@ -153,7 +153,11 @@ pub fn load_transcript<C: CspIDkgProtocol>(
         }
     };
 
-    let self_mega_pubkey = get_mega_pubkey(self_node_id, registry, transcript.registry_version)?;
+    let self_mega_pubkey = retrieve_mega_public_key_from_registry(
+        self_node_id,
+        registry,
+        transcript.registry_version,
+    )?;
 
     let internal_dealings = internal_dealings_from_verified_dealings(&transcript.verified_dealings)
         .map_err(|e| IDkgLoadTranscriptError::SerializationError {
@@ -192,7 +196,11 @@ pub fn load_transcript_with_openings<C: CspIDkgProtocol>(
     ensure_sufficient_openings(openings, transcript)?;
     ensure_matching_transcript_ids_and_dealer_ids(openings, transcript)?;
 
-    let self_mega_pubkey = get_mega_pubkey(self_node_id, registry, transcript.registry_version)?;
+    let self_mega_pubkey = retrieve_mega_public_key_from_registry(
+        self_node_id,
+        registry,
+        transcript.registry_version,
+    )?;
 
     let internal_dealings = internal_dealings_from_verified_dealings(&transcript.verified_dealings)
         .map_err(|e| IDkgLoadTranscriptError::SerializationError {
@@ -265,7 +273,11 @@ pub fn open_transcript<C: CspIDkgProtocol>(
     })?;
 
     // Get the MEGa-encryption public key.
-    let opener_public_key = get_mega_pubkey(self_node_id, registry, transcript.registry_version)?;
+    let opener_public_key = retrieve_mega_public_key_from_registry(
+        self_node_id,
+        registry,
+        transcript.registry_version,
+    )?;
 
     // Extract the accused dealing from the transcript.
     let (dealer_index, internal_dealing) =

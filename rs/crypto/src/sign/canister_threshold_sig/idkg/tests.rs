@@ -1,4 +1,4 @@
-use crate::sign::get_mega_pubkey;
+use crate::sign::retrieve_mega_public_key_from_registry;
 use ic_base_types::RegistryVersion;
 use ic_config::crypto::CryptoConfig;
 use ic_crypto_node_key_generation::generate_node_keys_once;
@@ -30,5 +30,10 @@ fn should_retrieve_mega_keys_from_the_registry() {
 
     registry_client.update_to_latest_version();
 
-    assert!(get_mega_pubkey(&node_id, registry_client.as_ref(), registry_version).is_ok());
+    assert!(retrieve_mega_public_key_from_registry(
+        &node_id,
+        registry_client.as_ref(),
+        registry_version
+    )
+    .is_ok());
 }

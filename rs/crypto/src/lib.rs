@@ -22,7 +22,9 @@ pub use sign::utils::{
     threshold_sig_public_key_from_der, threshold_sig_public_key_to_der, user_public_key_from_bytes,
     verify_combined_threshold_sig, KeyBytesContentType,
 };
-pub use sign::{get_mega_pubkey, get_tecdsa_master_public_key, MegaKeyFromRegistryError};
+pub use sign::{
+    get_tecdsa_master_public_key, retrieve_mega_public_key_from_registry, MegaKeyFromRegistryError,
+};
 
 use crate::sign::ThresholdSigDataStoreImpl;
 use ic_config::crypto::CryptoConfig;
