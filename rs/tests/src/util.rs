@@ -1207,15 +1207,17 @@ pub(crate) fn escape_for_wat(id: &Principal) -> String {
 }
 
 pub fn get_config() -> ConfigOptional {
-    let cfg = String::from_utf8_lossy(CFG_TEMPLATE_BYTES).to_string();
     // Make the string parsable by filling the template placeholders with dummy values
-    let cfg = cfg.replace("{{ node_index }}", "0");
-    let cfg = cfg.replace("{{ ipv6_address }}", "::");
-    let cfg = cfg.replace("{{ backup_retention_time_secs }}", "0");
-    let cfg = cfg.replace("{{ backup_purging_interval_secs }}", "0");
-    let cfg = cfg.replace("{{ replica_log_debug_overrides }}", "[]");
-    let cfg = cfg.replace("{{ nns_url }}", "http://www.fakeurl.com/");
-    let cfg = cfg.replace("{{ malicious_behavior }}", "null");
+    let cfg = String::from_utf8_lossy(CFG_TEMPLATE_BYTES)
+        .to_string()
+        .replace("{{ node_index }}", "0")
+        .replace("{{ ipv6_address }}", "::")
+        .replace("{{ backup_retention_time_secs }}", "0")
+        .replace("{{ backup_purging_interval_secs }}", "0")
+        .replace("{{ replica_log_debug_overrides }}", "[]")
+        .replace("{{ nns_url }}", "http://www.fakeurl.com/")
+        .replace("{{ malicious_behavior }}", "null");
+
     json5::from_str::<ConfigOptional>(&cfg).expect("Could not parse json5")
 }
 

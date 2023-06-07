@@ -98,6 +98,17 @@ system_test(
 )
 
 system_test(
+    name = "firewall_max_connections_test",
+    proc_macro_deps = MACRO_DEPENDENCIES,
+    tags = [
+        "system_test_nightly",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],
+    runtime_deps = GUESTOS_RUNTIME_DEPS + UNIVERSAL_VM_RUNTIME_DEPS + NNS_CANISTER_RUNTIME_DEPS,
+    deps = DEPENDENCIES + ["//rs/tests"],
+)
+
+system_test(
     name = "firewall_priority_test",
     proc_macro_deps = MACRO_DEPENDENCIES,
     tags = [

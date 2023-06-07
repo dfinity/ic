@@ -1,5 +1,5 @@
 /* tag::catalog[]
-Title:: Firewall
+Title:: Firewall Priority
 
 Goal:: Checks the precedence levels of the firewall configurations
 

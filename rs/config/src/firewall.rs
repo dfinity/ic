@@ -32,6 +32,9 @@ pub struct Config {
     pub default_rules: Vec<FirewallRule>,
     pub ports_for_node_whitelist: Vec<u32>,
     pub ports_for_http_adapter_blacklist: Vec<u32>,
+    /// We allow a maximum of `max_simultaneous_connections_per_ip_address` persistent connections to any ip address.
+    /// Any ip address with `max_simultaneous_connections_per_ip_address` connections will be dropped if a new connection is attempted.
+    pub max_simultaneous_connections_per_ip_address: u32,
 }
 
 impl Default for Config {
@@ -46,6 +49,7 @@ impl Default for Config {
             default_rules: vec![],
             ports_for_node_whitelist: vec![],
             ports_for_http_adapter_blacklist: vec![],
+            max_simultaneous_connections_per_ip_address: 0,
         }
     }
 }

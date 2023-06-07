@@ -335,6 +335,7 @@ pub const SAMPLE_CONFIG: &str = r#"
         default_rules: [],
         ports_for_node_whitelist: [],
         ports_for_http_adapter_blacklist: [],
+        max_simultaneous_connections_per_ip_address: 0,
     },
 
     // =================================
