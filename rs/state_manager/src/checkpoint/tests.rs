@@ -11,8 +11,7 @@ use ic_replicated_state::{
     CallContextManager, CanisterStatus, ExecutionState, ExportedFunctions, NumWasmPages, PageIndex,
 };
 use ic_state_layout::{
-    StateLayout, CANISTER_FILE, CANISTER_STATES_DIR, CHECKPOINTS_DIR, INGRESS_HISTORY_FILE,
-    QUEUES_FILE, SUBNET_QUEUES_FILE, SYSTEM_METADATA_FILE,
+    StateLayout, CANISTER_FILE, CANISTER_STATES_DIR, CHECKPOINTS_DIR, SYSTEM_METADATA_FILE,
 };
 use ic_sys::PAGE_SIZE;
 use ic_test_utilities::{
@@ -29,7 +28,7 @@ use ic_types::{
     ExecutionRound, Height,
 };
 use ic_wasm_types::CanisterModule;
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, fs::OpenOptions};
 
 const INITIAL_CYCLES: Cycles = Cycles::new(1 << 36);
 
@@ -135,10 +134,7 @@ fn can_make_a_checkpoint() {
             .join("000000000000000a0101");
 
         let expected_paths = vec![
-            checkpoint_path.join(INGRESS_HISTORY_FILE),
-            checkpoint_path.join(SUBNET_QUEUES_FILE),
             checkpoint_path.join(SYSTEM_METADATA_FILE),
-            canister_path.join(QUEUES_FILE),
             canister_path.join(CANISTER_FILE),
         ];
 
@@ -612,7 +608,7 @@ fn can_recover_subnet_queues() {
 }
 
 #[test]
-fn missing_protobufs_are_loaded_correctly() {
+fn empty_protobufs_are_loaded_correctly() {
     with_test_replica_logger(|log| {
         let tmp = tmpdir("checkpoint");
         let root = tmp.path().to_path_buf();
@@ -662,9 +658,14 @@ fn missing_protobufs_are_loaded_correctly() {
         ];
 
         for path in empty_protobufs {
+            assert!(!path.exists());
+            OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .open(&path)
+                .unwrap();
             assert!(path.exists());
-            assert_eq!(std::fs::metadata(&path).unwrap().len(), 0);
-            std::fs::remove_file(&path).unwrap();
         }
 
         let recovered_state_altered = load_checkpoint(

@@ -1713,12 +1713,9 @@ fn state_sync_message_contains_manifest() {
             .get_validated_by_identifier(&id)
             .expect("failed to get state sync messages");
 
-        // Expecting 3 files, as we don't have canisters in the default state.
-        //
-        // 1. "ingress_history.pbuf"
-        // 2. "subnet_queues.pbuf"
-        // 3. "system_metadata.pbuf"
-        assert_eq!(3, msg.manifest.file_table.len());
+        // Expecting 1 file (system_metadata.pbuf), as we don't have canisters in the default state.
+        // Two files, subnet_queues.pbuf and ingress_history.pbuf, are empty and therefore omitted.
+        assert_eq!(1, msg.manifest.file_table.len());
 
         // Check that all the files are accessible
         for file_info in msg.manifest.file_table.iter() {
@@ -2140,7 +2137,7 @@ fn can_state_sync_after_aborting_in_prep_phase() {
         let (_height, mut state) = src_state_manager.take_tip();
 
         // Insert large number of canisters so that the encoded manifest is larger than 1 MiB.
-        let num_canisters = 2000;
+        let num_canisters = 5000;
         for id in 100..(100 + num_canisters) {
             insert_dummy_canister(&mut state, canister_test_id(id));
         }
@@ -4187,12 +4184,13 @@ fn tip_is_initialized_correctly() {
 
         // All files are in the checkpoint
         assert!(checkpoint_layout.system_metadata().raw_path().exists());
-        assert!(checkpoint_layout.subnet_queues().raw_path().exists());
+        assert!(!checkpoint_layout.subnet_queues().raw_path().exists()); // empty
         assert_eq!(checkpoint_layout.canister_ids().unwrap().len(), 1);
         let canister_layout = checkpoint_layout
             .canister(&checkpoint_layout.canister_ids().unwrap()[0])
             .unwrap();
-        assert!(canister_layout.queues().raw_path().exists());
+        assert!(!canister_layout.queues().raw_path().exists()); // empty
+        assert!(canister_layout.canister().raw_path().exists());
         assert!(canister_layout.wasm().raw_path().exists());
         assert!(canister_layout.vmemory_0().exists());
         assert!(canister_layout.stable_memory_blob().exists());
