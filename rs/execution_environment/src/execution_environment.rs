@@ -2035,21 +2035,23 @@ impl ExecutionEnvironment {
                         }
                         info!(
                             self.log,
-                            "Finished executing install_code message on canister {:?} after {:?}, old wasm hash {:?}, new wasm hash {:?}",
+                            "Finished executing install_code message on canister {:?} after {:?}, old wasm hash {:?}, new wasm hash {:?}, instructions consumed: {}",
                             canister_id,
                             execution_duration,
                             result.old_wasm_hash,
-                            result.new_wasm_hash);
+                            result.new_wasm_hash,
+                            instructions_used);
 
                         Ok(EmptyBlob.encode())
                     }
                     Err(err) => {
                         info!(
                             self.log,
-                            "Finished executing install_code message on canister {:?} after {:?} with error: {:?}",
+                            "Finished executing install_code message on canister {:?} after {:?} with error: {:?}, instructions consumed {}",
                             canister_id,
                             execution_duration,
-                            err);
+                            err,
+                            instructions_used);
                         Err(err.into())
                     }
                 };
