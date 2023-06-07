@@ -89,7 +89,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 ],
             ),
             "arbitrary": crate.spec(
-                version = "=1.1.3",
+                version = "=1.3.0",
             ),
             "arc-swap": crate.spec(
                 version = "^1",
@@ -1213,7 +1213,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "^0.2.50",
             ),
             "wasmtime": crate.spec(
-                version = "^8.0.1",
+                version = "^9.0.3",
                 default_features = False,
                 features = [
                     "cranelift",
@@ -1222,10 +1222,10 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 ],
             ),
             "wasmtime-environ": crate.spec(
-                version = "^8.0.1",
+                version = "^9.0.3",
             ),
             "wasmtime-runtime": crate.spec(
-                version = "^8.0.1",
+                version = "^9.0.3",
             ),
             "wast": crate.spec(
                 version = "^53.0.0",
