@@ -43,7 +43,7 @@ fn test_parse() {
         name: "Daniel".to_string(),
         description: "The best software engineer you ever did saw.\n".to_string(),
         logo: PathBuf::from("test.png"),
-        url: "https://www.example.com".to_string(),
+        url: "https://forum.dfinity.org/thread-where-this-sns-is-discussed".to_string(),
 
         principals: vec![
             PrincipalAlias {
@@ -227,7 +227,7 @@ fn test_convert_to_create_service_nervous_system() {
         CreateServiceNervousSystem {
             name: Some("Daniel".to_string()),
             description: Some("The best software engineer you ever did saw.\n".to_string()),
-            url: Some("https://www.example.com".to_string()),
+            url: Some("https://forum.dfinity.org/thread-where-this-sns-is-discussed".to_string()),
 
             fallback_controller_principal_ids: vec![PrincipalId::from_str(
                 "5zxxw-63ouu-faaaa-aaaap-4ai"

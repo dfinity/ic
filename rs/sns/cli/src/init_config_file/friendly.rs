@@ -30,7 +30,7 @@ mod nns_governance_pb {
 // (Thanks to the magic of serde, all the code here is declarative.)
 #[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
-struct SnsConfigurationFile {
+pub(crate) struct SnsConfigurationFile {
     name: String,
     description: String,
     logo: PathBuf,
@@ -63,7 +63,7 @@ struct SnsConfigurationFile {
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
-struct PrincipalAlias {
+pub(crate) struct PrincipalAlias {
     id: String, // PrincipalId
     name: Option<String>,
     email: Option<String>,
@@ -71,7 +71,7 @@ struct PrincipalAlias {
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
-struct Token {
+pub(crate) struct Token {
     name: String,
     symbol: String,
     #[serde(with = "ic_nervous_system_humanize::serde::tokens")]
@@ -80,7 +80,7 @@ struct Token {
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
-struct Proposals {
+pub(crate) struct Proposals {
     #[serde(with = "ic_nervous_system_humanize::serde::tokens")]
     rejection_fee: nervous_system_pb::Tokens,
 
@@ -93,14 +93,14 @@ struct Proposals {
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
-struct Neurons {
+pub(crate) struct Neurons {
     #[serde(with = "ic_nervous_system_humanize::serde::tokens")]
     minimum_creation_stake: nervous_system_pb::Tokens,
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
-struct Voting {
+pub(crate) struct Voting {
     #[serde(with = "ic_nervous_system_humanize::serde::duration")]
     minimum_dissolve_delay: nervous_system_pb::Duration,
 
@@ -113,7 +113,7 @@ struct Voting {
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
-struct MaximumVotingPowerBonuses {
+pub(crate) struct MaximumVotingPowerBonuses {
     #[serde(rename = "DissolveDelay")]
     dissolve_delay: Bonus,
 
@@ -123,7 +123,7 @@ struct MaximumVotingPowerBonuses {
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
-struct Bonus {
+pub(crate) struct Bonus {
     #[serde(with = "ic_nervous_system_humanize::serde::duration")]
     duration: nervous_system_pb::Duration,
 
@@ -133,7 +133,7 @@ struct Bonus {
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
-struct RewardRate {
+pub(crate) struct RewardRate {
     #[serde(with = "ic_nervous_system_humanize::serde::percentage")]
     initial: nervous_system_pb::Percentage,
 
@@ -146,7 +146,7 @@ struct RewardRate {
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
-struct Swap {
+pub(crate) struct Swap {
     minimum_participants: u64,
 
     #[serde(with = "ic_nervous_system_humanize::serde::tokens")]
@@ -168,7 +168,7 @@ struct Swap {
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
-struct VestingSchedule {
+pub(crate) struct VestingSchedule {
     events: u64,
 
     #[serde(with = "ic_nervous_system_humanize::serde::duration")]
@@ -177,7 +177,7 @@ struct VestingSchedule {
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
-struct Distribution {
+pub(crate) struct Distribution {
     #[serde(rename = "Neurons")]
     neurons: Vec<Neuron>,
 
@@ -190,7 +190,7 @@ struct Distribution {
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
-struct Neuron {
+pub(crate) struct Neuron {
     principal: String, // Principal (alias)
 
     #[serde(with = "ic_nervous_system_humanize::serde::tokens")]
@@ -208,7 +208,7 @@ struct Neuron {
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
-struct InitialBalances {
+pub(crate) struct InitialBalances {
     #[serde(with = "ic_nervous_system_humanize::serde::tokens")]
     governance: nervous_system_pb::Tokens,
 
@@ -267,7 +267,7 @@ impl<'a> AliasToPrincipalId<'a> {
 }
 
 impl SnsConfigurationFile {
-    fn try_convert_to_create_service_nervous_system(
+    pub fn try_convert_to_create_service_nervous_system(
         &self,
     ) -> Result<CreateServiceNervousSystem, String> {
         // Step 1: Unpack.

@@ -4266,6 +4266,7 @@ async fn main() {
             SubCommand::ProposeToInsertSnsWasmUpgradePathEntries(_) => (),
             SubCommand::ProposeToAddHostOsVersion(_) => (),
             SubCommand::ProposeToManageHostOsVersion(_) => (),
+            SubCommand::ProposeToCreateServiceNervousSystem(_) => (),
             _ => panic!(
                 "Specifying a secret key or HSM is only supported for \
                      methods that interact with NNS handlers."

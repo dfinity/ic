@@ -9264,6 +9264,7 @@ dependencies = [
  "ic-nervous-system-common",
  "ic-nervous-system-humanize",
  "ic-nervous-system-proto",
+ "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance",
  "ic-protobuf",

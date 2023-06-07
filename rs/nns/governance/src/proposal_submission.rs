@@ -1,6 +1,7 @@
 use crate::pb::v1::{
     manage_neuron::Command, manage_neuron_response::Command as CommandResponse, proposal,
-    ExecuteNnsFunction, ManageNeuron, ManageNeuronResponse, NnsFunction, Proposal,
+    CreateServiceNervousSystem, ExecuteNnsFunction, ManageNeuron, ManageNeuronResponse,
+    NnsFunction, Proposal,
 };
 use candid::{CandidType, Decode, Encode};
 use ic_nns_common::types::{NeuronId, ProposalId};
@@ -68,5 +69,57 @@ pub fn decode_make_proposal_response(response: Vec<u8>) -> Result<ProposalId, St
         }
         Some(CommandResponse::Error(e)) => Err(e.to_string()),
         _ => Err("Unexpectd ManageNeuronResponse".to_string()),
+    }
+}
+
+impl CreateServiceNervousSystem {
+    pub fn upgrade_to_proposal(self) -> Proposal {
+        let Self {
+            name,
+            url,
+            description,
+            ..
+        } = &self;
+
+        let name = name.clone().unwrap_or_else(|| "A Profound".to_string());
+        let title = Some(format!("Create {} Service Nervous System", name));
+
+        let description = description.clone().unwrap_or_else(|| {
+            "Ladies and gentlemen,
+             it is with great pleasure that present to you, \
+             a fabulous new SNS for the good of all humankind. \
+             You will surely be in awe of its grandeur, \
+             once your eyes have beheld is glorious majesty."
+                .to_string()
+        });
+
+        let url = url.clone().unwrap_or_default();
+
+        let summary = {
+            let url_line = if url.is_empty() {
+                "".to_string()
+            } else {
+                format!("URL: {}\n", url)
+            };
+
+            format!(
+                "Name: {}\n\
+                 {}\
+                 \n\
+                 ## Description\n\
+                 \n\
+                 {}",
+                name, url_line, description,
+            )
+        };
+
+        let action = Some(proposal::Action::CreateServiceNervousSystem(self));
+
+        Proposal {
+            title,
+            summary,
+            url,
+            action,
+        }
     }
 }

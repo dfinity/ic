@@ -2,13 +2,19 @@ use crate::{
     deploy::{DirectSnsDeployerForTests, SnsWasmSnsDeployer},
     init_config_file::{InitConfigFileArgs, SnsCliInitConfig, SnsInitialTokenDistributionConfig},
     prepare_canisters::PrepareCanistersArgs,
+    propose::ProposeArgs,
 };
 use anyhow::anyhow;
-use candid::{CandidType, Encode, IDLArgs};
+use candid::{CandidType, Decode, Encode, IDLArgs};
 use clap::Parser;
 use ic_base_types::PrincipalId;
 use ic_crypto_sha::Sha256;
-use ic_nns_constants::SNS_WASM_CANISTER_ID;
+use ic_nns_constants::{GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID};
+use ic_nns_governance::pb::v1::{
+    manage_neuron::{self, NeuronIdOrSubaccount},
+    manage_neuron_response::{self, MakeProposalResponse},
+    ManageNeuron, ManageNeuronResponse, Proposal,
+};
 use ic_sns_init::pb::v1::{
     sns_init_payload::InitialTokenDistribution, AirdropDistribution, DeveloperDistribution,
     FractionalDeveloperVotingPower, NeuronDistribution, SnsInitPayload, SwapDistribution,
@@ -17,6 +23,7 @@ use ic_sns_init::pb::v1::{
 use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsCanisterType, SnsWasm};
 use icp_ledger::{AccountIdentifier, BinaryAccountBalanceArgs};
 use std::{
+    fmt::Debug,
     fs::File,
     io::{Read, Write},
     path::PathBuf,
@@ -28,6 +35,7 @@ use tempfile::NamedTempFile;
 pub mod deploy;
 pub mod init_config_file;
 pub mod prepare_canisters;
+pub mod propose;
 pub mod unit_helpers;
 
 #[derive(Debug, Parser)]
@@ -61,6 +69,8 @@ pub enum SubCommand {
     InitConfigFile(InitConfigFileArgs),
     /// Make changes to canisters you own to prepare for SNS Decentralization
     PrepareCanisters(PrepareCanistersArgs),
+    /// Submit an NNS proposal to create new SNS.
+    Propose(ProposeArgs),
 }
 
 /// The arguments used to configure a SNS deployment
@@ -327,7 +337,7 @@ pub fn deploy_skipping_sns_wasms_for_tests(args: DeployArgs) {
     let sns_init_payload = args.generate_sns_init_payload().unwrap_or_else(|err| {
         eprintln!(
             "Error encountered when generating the SnsInitPayload: {}",
-            err
+            err,
         );
         exit(1);
     });
@@ -444,6 +454,197 @@ pub fn get_identity(identity: &str, network: &str) -> PrincipalId {
             identity
         )
     })
+}
+
+/// Declaratively associates a couple of data with a request type:
+///   1. response type
+///   2. method name
+///
+/// Once you implement this (on a foreign request type), you do not need to
+/// redundantly specify the name of the associated method, nor do you need to
+/// specify how to decode the response.
+///
+/// Used by Canister::call.
+///
+/// Look at `impl Request for ManageNeuron` as an example. This is quite simple
+/// to implement, really.
+trait Request {
+    type Response;
+    const METHOD_NAME: &'static str;
+    // Perhaps, we can also require fn name() and fn response_name() ?
+}
+
+/// A nice way to make canister calls (via dfx).
+///
+/// How to use this:
+///
+///   1. Prepare: `impl Request for YourRequestType`. See `trait Request`.
+///   2. Construct Canister by calling `Canister::new`.
+///   3. Call the `call` method on the Canister object (from the previous step).
+///      This uses the information that you provided in step 1 to make canister
+///      method calls nice.
+///
+/// Example: see NnsGovernanceCanister::make_proposal.
+#[derive(Clone, Debug)]
+struct Canister {
+    network: String,
+    name: String,
+}
+
+#[derive(Debug)]
+enum CanisterCallError {
+    UnableToPrepareDfxCall(String),
+    UnableToCallDfx(std::io::Error),
+    DfxBadExit(std::process::Output),
+    ResponseDecodeFail(String),
+}
+
+impl Canister {
+    /// Arguments are like those that are passed to `dfx canister`.
+    pub fn new(network: &str, name: &str) -> Self {
+        // TODO: Validate arguments.
+
+        let network = network.to_string();
+        let name = name.to_string();
+
+        Self { network, name }
+    }
+
+    pub fn call<Req>(&self, request: &Req) -> Result<Req::Response, CanisterCallError>
+    where
+        Req: Request + CandidType,
+        <Req as Request>::Response: CandidType + for<'a> candid::Deserialize<'a>,
+    {
+        // Step 1: Write request to temporary argument file, which we'll later
+        // pass to `dfx canister call --argument-file`.
+        let request = Encode!(&request).map_err(|err| {
+            CanisterCallError::UnableToPrepareDfxCall(format!(
+                "Unable to serialize request: {}",
+                err,
+            ))
+        })?;
+        let request = IDLArgs::from_bytes(&request).map_err(|err| {
+            CanisterCallError::UnableToPrepareDfxCall(format!("Unable to format request: {}", err,))
+        })?;
+        let request = format!("{}", request);
+        let mut argument_file = NamedTempFile::new().map_err(|err| {
+            CanisterCallError::UnableToPrepareDfxCall(format!(
+                "Could not create temporary argument file: {}",
+                err,
+            ))
+        })?;
+        argument_file.write_all(request.as_bytes()).map_err(|err| {
+            CanisterCallError::UnableToPrepareDfxCall(format!(
+                "Unable to write request to local file: {}",
+                err,
+            ))
+        })?;
+        let argument_file = argument_file.path().as_os_str().to_str().ok_or_else(|| {
+            CanisterCallError::UnableToPrepareDfxCall(
+                "Unable to determine the path of the argument file.".to_string(),
+            )
+        })?;
+
+        // Step 2: The real work of making the call takes place here.
+        let result = Command::new("dfx")
+            .args([
+                "canister",
+                "--network",
+                &self.network,
+                "call",
+                &self.name,
+                Req::METHOD_NAME,
+                "--argument-file",
+                argument_file,
+                "--output=raw",
+            ])
+            .output();
+
+        // Step 3: Handle errors.
+        let output = match result {
+            Ok(output) => output,
+            Err(err) => return Err(CanisterCallError::UnableToCallDfx(err)),
+        };
+        if !output.status.success() {
+            return Err(CanisterCallError::DfxBadExit(output));
+        }
+
+        // Step 4: Decode and return response (finally!).
+        let mut response = output.stdout;
+        // Strip newline(s) from the end.
+        while let Some(last) = response.last() {
+            if ![b'\n', b'\r'].contains(last) {
+                break;
+            }
+            response.pop();
+        }
+        let response = hex::decode(&response).map_err(|err| {
+            CanisterCallError::ResponseDecodeFail(format!(
+                "Unable to hex decode the response. reason: {}. response:\n{:?}",
+                err, response,
+            ))
+        })?;
+        Decode!(&response, Req::Response).map_err(|err| {
+            CanisterCallError::ResponseDecodeFail(format!(
+                "Candid deserialization of response failed. reason: {}. response:\n{:?}",
+                err, response,
+            ))
+        })
+    }
+}
+
+struct NnsGovernanceCanister {
+    canister: Canister,
+}
+
+#[allow(clippy::large_enum_variant)]
+#[derive(Debug)]
+enum MakeProposalError {
+    CanisterCallError(CanisterCallError),
+    InvalidResponse(ManageNeuronResponse),
+}
+
+impl NnsGovernanceCanister {
+    pub fn new(network: &str) -> Self {
+        let canister = Canister::new(network, &GOVERNANCE_CANISTER_ID.to_string());
+
+        Self { canister }
+    }
+
+    /// Neuron used is the one whose subaccount is associated with the current dfx principal with nonce = 0.
+    #[allow(clippy::result_large_err)]
+    pub fn make_proposal(
+        &self,
+        proposer: &NeuronIdOrSubaccount,
+        proposal: &Proposal,
+    ) -> Result<MakeProposalResponse, MakeProposalError> {
+        impl Request for ManageNeuron {
+            type Response = ManageNeuronResponse;
+            const METHOD_NAME: &'static str = "manage_neuron";
+        }
+
+        // Step 1: Construct request.
+        let neuron_id_or_subaccount = Some(proposer.clone());
+        let manage_neuron_request = ManageNeuron {
+            id: None,
+            neuron_id_or_subaccount,
+            command: Some(manage_neuron::Command::MakeProposal(Box::new(
+                proposal.clone(),
+            ))),
+        };
+
+        // Step 2: Make the actual call.
+        let manage_neuron_response = self
+            .canister
+            .call(&manage_neuron_request)
+            .map_err(MakeProposalError::CanisterCallError)?;
+
+        // Step 3: Unwrap the response.
+        match manage_neuron_response.command {
+            Some(manage_neuron_response::Command::MakeProposal(response)) => Ok(response),
+            _ => Err(MakeProposalError::InvalidResponse(manage_neuron_response)),
+        }
+    }
 }
 
 /// Calls `dfx` with the given args
