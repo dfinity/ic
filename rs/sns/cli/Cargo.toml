@@ -25,8 +25,9 @@ ic-crypto-sha = { path = "../../crypto/sha" }
 ic-nervous-system-common = {path = "../../nervous_system/common"}
 ic-nervous-system-humanize = {path = "../../nervous_system/humanize"}
 ic-nervous-system-proto = {path = "../../nervous_system/proto"}
-ic-nns-governance = { path = "../../nns/governance" }
+ic-nns-common = { path = "../../nns/common" }
 ic-nns-constants = { path = "../../nns/constants" }
+ic-nns-governance = { path = "../../nns/governance" }
 ic-protobuf = { path = "../../protobuf" }
 ic-sns-governance = { path = "../governance" }
 ic-sns-init = { path = "../init" }

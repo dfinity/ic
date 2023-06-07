@@ -4,7 +4,7 @@ use clap::Parser;
 
 use ic_sns_cli::{
     add_sns_wasm_for_tests, deploy, deploy_skipping_sns_wasms_for_tests, deploy_testflight,
-    init_config_file, prepare_canisters, print_account_balance, CliArgs, SubCommand,
+    init_config_file, prepare_canisters, print_account_balance, propose, CliArgs, SubCommand,
 };
 
 fn main() {
@@ -26,5 +26,6 @@ fn main() {
         SubCommand::AccountBalance(args) => print_account_balance(args),
         SubCommand::InitConfigFile(args) => init_config_file::exec(args),
         SubCommand::PrepareCanisters(args) => prepare_canisters::exec(args),
+        SubCommand::Propose(args) => propose::exec(args),
     }
 }
