@@ -6,6 +6,7 @@ pub(crate) mod block_maker;
 mod catchup_package_maker;
 pub mod dkg_key_manager;
 mod finalizer;
+#[cfg(feature = "malicious_code")]
 mod malicious_consensus;
 pub(crate) mod metrics;
 mod notary;

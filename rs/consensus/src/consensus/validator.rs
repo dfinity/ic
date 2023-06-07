@@ -1584,41 +1584,6 @@ impl Validator {
     }
 }
 
-/// Return a `ChangeSet` that moves all block proposals in the range to the
-/// validated pool.
-#[cfg(feature = "malicious_code")]
-pub(crate) fn maliciously_validate_all_blocks(
-    pool_reader: &PoolReader,
-    logger: &ReplicaLogger,
-) -> ChangeSet {
-    trace!(logger, "maliciously_validate_all_blocks");
-    let mut change_set = Vec::new();
-
-    let finalized_height = pool_reader.get_finalized_height();
-    let beacon_height = pool_reader.get_random_beacon_height();
-    let max_height = beacon_height.increment();
-    let range = HeightRange::new(finalized_height.increment(), max_height);
-
-    for proposal in pool_reader
-        .pool()
-        .unvalidated()
-        .block_proposal()
-        .get_by_height_range(range)
-    {
-        change_set.push(ChangeAction::MoveToValidated(proposal.into_message()))
-    }
-
-    if !change_set.is_empty() {
-        ic_logger::debug!(
-            logger,
-            "[MALICIOUS] maliciously validating all {} proposals",
-            change_set.len()
-        );
-    }
-
-    change_set
-}
-
 #[cfg(test)]
 pub mod test {
     use super::*;

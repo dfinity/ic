@@ -51,7 +51,7 @@ pub struct Notary {
     membership: Arc<Membership>,
     crypto: Arc<dyn ConsensusCrypto>,
     state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
-    log: ReplicaLogger,
+    pub(crate) log: ReplicaLogger,
     metrics: NotaryMetrics,
 }
 
@@ -156,7 +156,7 @@ impl Notary {
     }
 
     /// Notarize and return a `NotarizationShare` for the given block
-    fn notarize_block<'a>(
+    pub(crate) fn notarize_block<'a>(
         &self,
         pool: &PoolReader<'_>,
         block: &'a Block,
@@ -177,7 +177,7 @@ impl Notary {
 
     /// Return true if this node has already published a notarization share
     /// for the given block proposal. Return false otherwise.
-    fn is_proposal_already_notarized_by_me<'a>(
+    pub(crate) fn is_proposal_already_notarized_by_me<'a>(
         &self,
         pool: &PoolReader<'_>,
         proposal: &'a BlockProposal,
@@ -187,47 +187,6 @@ impl Notary {
         pool.get_notarization_shares(height)
             .filter(|s| s.signature.signer == self.replica_config.node_id)
             .any(|s| s.block_hash() == proposal.block_hash())
-    }
-
-    /// Maliciously notarize all unnotarized proposals for the current height.
-    #[cfg(feature = "malicious_code")]
-    pub(crate) fn maliciously_notarize_all(&self, pool: &PoolReader<'_>) -> Vec<NotarizationShare> {
-        use ic_interfaces::consensus_pool::HeightRange;
-        use ic_protobuf::log::malicious_behaviour_log_entry::v1::{
-            MaliciousBehaviour, MaliciousBehaviourLogEntry,
-        };
-        trace!(self.log, "maliciously_notarize");
-        let mut notarization_shares = Vec::<NotarizationShare>::new();
-
-        let range = HeightRange::new(
-            pool.get_notarized_height().increment(),
-            pool.get_random_beacon_height().increment(),
-        );
-
-        let proposals = pool
-            .pool()
-            .validated()
-            .block_proposal()
-            .get_by_height_range(range);
-        for proposal in proposals {
-            if !self.is_proposal_already_notarized_by_me(pool, &proposal) {
-                let block = proposal.as_ref();
-                if let Some(share) = self.notarize_block(pool, block) {
-                    notarization_shares.push(share);
-                }
-            }
-        }
-
-        if !notarization_shares.is_empty() {
-            ic_logger::info!(
-                self.log,
-                "[MALICIOUS] maliciously notarizing all {} proposals",
-                notarization_shares.len();
-                malicious_behaviour => MaliciousBehaviourLogEntry { malicious_behaviour: MaliciousBehaviour::NotarizeAll as i32}
-            );
-        }
-
-        notarization_shares
     }
 }
 
