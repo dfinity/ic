@@ -153,12 +153,11 @@ MACRO_DEPENDENCIES = [
     "@crate_index//:async-trait",
 ]
 
+GUESTOS_DEV_VERSION = "//ic-os/guestos/envs/dev:version.txt"
+
+# TODO(IDX-2538): Delete completely when all tests will properly work with synthetic stable ic version.
 GUESTOS_RUNTIME_DEPS = [
-    "//ic-os/guestos/envs/dev:disk-img.tar.zst.cas-url",
-    "//ic-os/guestos/envs/dev:disk-img.tar.zst.sha256",
-    "//ic-os/guestos/envs/dev:update-img.tar.zst.cas-url",
-    "//ic-os/guestos/envs/dev:update-img.tar.zst.sha256",
-    "//ic-os:scripts/build-bootstrap-config-image.sh",
+    GUESTOS_DEV_VERSION,
 ]
 
 NNS_CANISTER_WASM_PROVIDERS = {

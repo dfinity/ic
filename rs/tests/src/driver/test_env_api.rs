@@ -843,8 +843,7 @@ impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
     }
 
     fn get_initial_replica_version(&self) -> Result<ReplicaVersion> {
-        let dep_rel_path = std::env::var("IC_VERSION_FILE")?;
-        let replica_ver = self.read_dependency_to_string(dep_rel_path)?;
+        let replica_ver = self.read_dependency_from_env_to_string("IC_VERSION_FILE")?;
         Ok(ReplicaVersion::try_from(replica_ver)?)
     }
 
@@ -855,14 +854,12 @@ impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
     }
 
     fn get_ic_os_img_url(&self) -> Result<Url> {
-        let dep_rel_path = "ic-os/guestos/envs/dev/disk-img.tar.zst.cas-url";
-        let url = self.read_dependency_to_string(dep_rel_path)?;
+        let url = self.read_dependency_from_env_to_string("DEV_DISK_IMG_TAR_ZST_CAS_URL")?;
         Ok(Url::parse(&url)?)
     }
 
     fn get_ic_os_img_sha256(&self) -> Result<String> {
-        let dep_rel_path = "ic-os/guestos/envs/dev/disk-img.tar.zst.sha256";
-        let sha256 = self.read_dependency_to_string(dep_rel_path)?;
+        let sha256 = self.read_dependency_from_env_to_string("DEV_DISK_IMG_TAR_ZST_SHA256")?;
         bail_if_sha256_invalid(&sha256, "ic_os_img_sha256")?;
         Ok(sha256)
     }
@@ -881,14 +878,12 @@ impl<T: HasDependencies + HasTestEnv> HasIcDependencies for T {
     }
 
     fn get_ic_os_update_img_url(&self) -> Result<Url> {
-        let dep_rel_path = "ic-os/guestos/envs/dev/update-img.tar.zst.cas-url";
-        let url = self.read_dependency_to_string(dep_rel_path)?;
+        let url = self.read_dependency_from_env_to_string("DEV_UPDATE_IMG_TAR_ZST_CAS_URL")?;
         Ok(Url::parse(&url)?)
     }
 
     fn get_ic_os_update_img_sha256(&self) -> Result<String> {
-        let dep_rel_path = "ic-os/guestos/envs/dev/update-img.tar.zst.sha256";
-        let sha256 = self.read_dependency_to_string(dep_rel_path)?;
+        let sha256 = self.read_dependency_from_env_to_string("DEV_UPDATE_IMG_TAR_ZST_SHA256")?;
         bail_if_sha256_invalid(&sha256, "ic_os_update_img_sha256")?;
         Ok(sha256)
     }
@@ -1080,6 +1075,12 @@ pub trait HasDependencies {
         } else {
             Err(anyhow!("Couldn't find dependency {dep_path:?}"))
         }
+    }
+
+    fn read_dependency_from_env_to_string(&self, v: &str) -> Result<String> {
+        let path_from_env =
+            std::env::var(v).unwrap_or_else(|_| panic!("Environment variable {} not set", v));
+        self.read_dependency_to_string(path_from_env)
     }
 }
 
