@@ -29,6 +29,7 @@ use ic_wasm_types::{CanisterModule, WasmHash};
 use prometheus::{Histogram, IntCounterVec};
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::{identity, From, TryFrom, TryInto};
+use std::ffi::OsStr;
 use std::fs::OpenOptions;
 use std::io::{Error, Write};
 use std::marker::PhantomData;
@@ -319,7 +320,7 @@ impl TipHandler {
             &tip,
             FilePermissions::ReadWrite,
             FSync::No,
-            |path| path.extension() != Some(std::ffi::OsStr::new("pbuf")),
+            |path| path.extension() != Some(OsStr::new("pbuf")),
             thread_pool,
         ) {
             Ok(()) => Ok(()),
@@ -1158,6 +1159,20 @@ fn parse_canister_id(hex: &str) -> Result<CanisterId, String> {
             .map_err(|err| format!("failed to parse principal ID: {}", err))?,
     )
     .map_err(|err| format!("failed to create canister ID: {}", err))
+}
+
+/// Parses the canister ID from a relative path, if it is the path of a canister
+/// state file (e.g. `canister_states/00000000000000010101/queues.pbuf`).
+/// Returns `None` if the path is not under `canister_states`; or if parsing
+/// fails.
+pub fn canister_id_from_path(path: &Path) -> Option<CanisterId> {
+    let mut path = path.iter();
+    if path.next() == Some(OsStr::new(CANISTER_STATES_DIR)) {
+        if let Some(hex) = path.next() {
+            return parse_canister_id(hex.to_str()?).ok();
+        }
+    }
+    None
 }
 
 fn parse_and_sort_checkpoint_heights(names: &[String]) -> Result<Vec<Height>, LayoutError> {

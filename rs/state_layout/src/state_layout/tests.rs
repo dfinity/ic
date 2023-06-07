@@ -314,3 +314,31 @@ fn test_last_removal_panics_in_debug() {
         std::mem::drop(cp1);
     });
 }
+
+#[test]
+fn test_canister_id_from_path() {
+    assert_eq!(
+        Some(CanisterId::from_u64(1)),
+        canister_id_from_path(Path::new(
+            "canister_states/00000000000000010101/canister.pbuf"
+        ))
+    );
+    assert_eq!(
+        Some(CanisterId::from_u64(2)),
+        canister_id_from_path(Path::new(
+            "canister_states/00000000000000020101/queues.pbuf"
+        ))
+    );
+    assert_eq!(
+        None,
+        canister_id_from_path(Path::new(
+            "foo/canister_states/00000000000000030101/queues.pbuf"
+        ))
+    );
+    assert_eq!(None, canister_id_from_path(Path::new(SUBNET_QUEUES_FILE)));
+    assert_eq!(None, canister_id_from_path(Path::new("canister_states")));
+    assert_eq!(
+        None,
+        canister_id_from_path(Path::new("canister_states/not-a-canister-ID/queues.pbuf"))
+    );
+}
