@@ -1722,16 +1722,19 @@ fn witness_for_a_triple_fork_in_a_big_tree() {
 
 #[test]
 fn sparse_labeled_tree_empty() {
-    assert_eq!(sparse_labeled_tree_from_paths(&[]), LabeledTree::Leaf(()));
+    assert_eq!(
+        sparse_labeled_tree_from_paths(&[]),
+        Ok(LabeledTree::Leaf(()))
+    );
 }
 
 #[test]
 fn sparse_labeled_tree_shallow_path() {
     assert_eq!(
         sparse_labeled_tree_from_paths(&[Path::from(Label::from("0"))]),
-        LabeledTree::SubTree(flatmap! {
+        Ok(LabeledTree::SubTree(flatmap! {
             Label::from("0") => LabeledTree::Leaf(())
-        })
+        }))
     );
 }
 
@@ -1748,7 +1751,7 @@ fn sparse_labeled_tree_deep_path() {
         })
     });
 
-    assert_eq!(labeled_tree, sparse_labeled_tree_from_paths(&[path]));
+    assert_eq!(Ok(labeled_tree), sparse_labeled_tree_from_paths(&[path]));
 }
 
 #[test]
@@ -1768,7 +1771,7 @@ fn sparse_labeled_tree_duplicate_paths() {
         })
     });
 
-    assert_eq!(labeled_tree, sparse_labeled_tree_from_paths(&paths));
+    assert_eq!(Ok(labeled_tree), sparse_labeled_tree_from_paths(&paths));
 }
 
 #[test]
@@ -1780,13 +1783,13 @@ fn sparse_labeled_tree_path_prefixes_another_path() {
         Label::from("3"),
     );
 
-    let labeled_tree = LabeledTree::SubTree(flatmap! {
+    let labeled_tree = Ok(LabeledTree::SubTree(flatmap! {
         segment1.clone() => LabeledTree::SubTree(flatmap!{
             segment2.clone() => LabeledTree::SubTree(flatmap!{
                 segment3.clone() => LabeledTree::Leaf(())
             })
         })
-    });
+    }));
 
     let paths = vec![
         Path::from_iter(vec![&segment1, &segment2, &segment3]),
@@ -1836,7 +1839,7 @@ fn sparse_labeled_tree_multiple_paths_with_prefixes() {
         Path::from_iter(vec![&segment5, &segment7]),
     ];
 
-    assert_eq!(labeled_tree, sparse_labeled_tree_from_paths(&paths));
+    assert_eq!(Ok(labeled_tree), sparse_labeled_tree_from_paths(&paths));
 }
 
 /// Recursive implementation of `prune_labeled_tree()`.
@@ -1998,7 +2001,8 @@ impl LabeledTreeFixture {
 
     fn partial_tree(&self, paths: &[&Path]) -> LabeledTree<Vec<u8>> {
         let paths: Vec<_> = paths.iter().map(|p| p.to_owned().to_owned()).collect();
-        let selection = sparse_labeled_tree_from_paths(&paths);
+        let selection = sparse_labeled_tree_from_paths(&paths)
+            .expect("Failed to convert paths to a labeled tree");
         prune_labeled_tree(self.labeled_tree.clone(), &selection).unwrap()
     }
 

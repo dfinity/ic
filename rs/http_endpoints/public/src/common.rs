@@ -2,8 +2,7 @@ use crate::state_reader_executor::StateReaderExecutor;
 use crate::HttpError;
 use http::request::Parts;
 use hyper::{Body, HeaderMap, Response, StatusCode};
-use ic_crypto_tree_hash::Path;
-use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label};
+use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path, TooLongPathError};
 use ic_error_types::UserError;
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{info, warn, ReplicaLogger};
@@ -236,7 +235,10 @@ pub(crate) async fn get_latest_certified_state(
     state_reader_executor: &StateReaderExecutor,
 ) -> Option<Arc<ReplicatedState>> {
     let paths = &mut [Path::from(Label::from("time"))];
-    let labeled_tree = sparse_labeled_tree_from_paths(paths);
+    let labeled_tree = match sparse_labeled_tree_from_paths(paths) {
+        Ok(labeled_tree) => labeled_tree,
+        Err(TooLongPathError {}) => panic!("bug: failed to convert path to LabeledTree"),
+    };
     state_reader_executor
         .read_certified_state(&labeled_tree)
         .await

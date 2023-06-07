@@ -930,6 +930,9 @@ fn labeled_tree_from_hashtree(
     }
 }
 
+#[derive(Debug, PartialEq)]
+pub struct TooLongPathError;
+
 /// Converts a list of `Path`s into a sparse `LabeledTree`.
 ///
 /// The produced `LabeledTree` is considered "sparse" because, if one path is a
@@ -962,7 +965,16 @@ fn labeled_tree_from_hashtree(
 ///              /
 ///             b
 /// ```
-pub fn sparse_labeled_tree_from_paths(paths: &[Path]) -> LabeledTree<()> {
+///
+/// # Errors
+/// If the length of any path in `paths` exceeds `MAX_HASH_TREE_DEPTH` - 1
+/// (currently 127).
+pub fn sparse_labeled_tree_from_paths(paths: &[Path]) -> Result<LabeledTree<()>, TooLongPathError> {
+    for path in paths {
+        if path.len() >= MAX_HASH_TREE_DEPTH {
+            return Err(TooLongPathError {});
+        }
+    }
     // Sort all the paths. That way, if one path is a prefix of another, the prefix
     // is always first.
     let sorted_paths = {
@@ -1010,7 +1022,7 @@ pub fn sparse_labeled_tree_from_paths(paths: &[Path]) -> LabeledTree<()> {
         root = LabeledTree::Leaf(())
     }
 
-    root
+    Ok(root)
 }
 
 impl TryFrom<HashTree> for WitnessGeneratorImpl {

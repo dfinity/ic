@@ -13,7 +13,7 @@ use crossbeam::atomic::AtomicCell;
 use http::Request;
 use hyper::{Body, Response, StatusCode};
 use ic_config::http_handler::Config;
-use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path};
+use ic_crypto_tree_hash::{sparse_labeled_tree_from_paths, Label, Path, TooLongPathError};
 use ic_interfaces_registry::RegistryClient;
 use ic_logger::{error, ReplicaLogger};
 use ic_replicated_state::{canister_state::execution_state::CustomSectionType, ReplicatedState};
@@ -162,7 +162,16 @@ impl Service<Request<Vec<u8>>> for ReadStateService {
         // Always add "time" to the paths even if not explicitly requested.
         paths.push(Path::from(Label::from("time")));
 
-        let labeled_tree = sparse_labeled_tree_from_paths(&paths);
+        let labeled_tree = match sparse_labeled_tree_from_paths(&paths) {
+            Ok(tree) => tree,
+            Err(TooLongPathError {}) => {
+                let res = make_plaintext_response(
+                    StatusCode::BAD_REQUEST,
+                    "Failed to parse requested paths: path is too long.".to_string(),
+                );
+                return Box::pin(async move { Ok(res) });
+            }
+        };
         let registry_client = self.registry_client.get_latest_version();
         let malicious_flags = self.malicious_flags.clone();
         let state_reader_executor = self.state_reader_executor.clone();
