@@ -97,6 +97,8 @@ impl From<UpdateType> for ifc::UpdateType {
 pub enum CreateError {
     #[error("Registration '{0}' already exists")]
     Duplicate(Id),
+    #[error("Rate limit exceeded for apex domain '{0}'")]
+    RateLimited(String),
     #[error(transparent)]
     UnexpectedError(#[from] anyhow::Error),
 }
@@ -202,6 +204,7 @@ impl Create for CanisterCreator {
             Response::Err(err) => Err(match err {
                 Error::Duplicate(id) => CreateError::Duplicate(id),
                 Error::NameError(err) => CreateError::UnexpectedError(anyhow!(err)),
+                Error::RateLimited(domain) => CreateError::RateLimited(domain),
                 Error::Unauthorized => CreateError::UnexpectedError(anyhow!("unauthorized")),
                 Error::UnexpectedError(err) => CreateError::UnexpectedError(anyhow!(err)),
             }),

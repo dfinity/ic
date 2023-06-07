@@ -1,4 +1,4 @@
-use std::{cell::RefCell, cmp::Reverse, thread::LocalKey, time::Duration};
+use std::{cell::RefCell, cmp::Reverse, collections::BTreeMap, thread::LocalKey, time::Duration};
 
 use certificate_orchestrator_interface::{
     BoundedString, CreateRegistrationError, CreateRegistrationResponse, DispenseTaskError,
@@ -29,6 +29,7 @@ use crate::{
     },
     ic_certification::{add_cert, init_cert_tree, set_root_hash},
     id::{Generate, Generator},
+    rate_limiter::WithRateLimit,
     registration::{
         Create, CreateError, Creator, Expire, Expirer, Get, GetError, Getter, Remove, RemoveError,
         Remover, Update, UpdateError, Updater,
@@ -41,6 +42,7 @@ mod certificate;
 mod ic_certification;
 mod id;
 mod persistence;
+mod rate_limiter;
 mod registration;
 mod work;
 
@@ -58,8 +60,11 @@ type StableValue<T> = StableMap<(), T>;
 type StorablePrincipal = BoundedString<63>;
 type StorableId = BoundedString<64>;
 
-const REGISTRATION_EXPIRATION_TTL: Duration = Duration::from_secs(60 * 60); // 1 Hour
-const IN_PROGRESS_TTL: Duration = Duration::from_secs(10 * 60); // 10 Minutes
+const REGISTRATION_EXPIRATION_TTL: Duration = Duration::from_secs(60 * 60); // 1 hour
+const IN_PROGRESS_TTL: Duration = Duration::from_secs(10 * 60); // 10 minutes
+
+const REGISTRATION_RATE_LIMIT_RATE: u32 = 5; // 5 subdomain registrations per hour
+const REGISTRATION_RATE_LIMIT_PERIOD: Duration = Duration::from_secs(60 * 60); // 1 hour
 
 // Memory
 thread_local! {
@@ -297,8 +302,12 @@ thread_local! {
 
     static RETRIES: RefCell<PriorityQueue<Id, Reverse<u64>>> = RefCell::new(PriorityQueue::new());
 
+    // Rate limiting for CREATOR
+    static AVAILABLE_TOKENS: RefCell<BTreeMap<String, u32>> = RefCell::new(BTreeMap::new());
+
     static CREATOR: RefCell<Box<dyn Create>> = RefCell::new({
         let c = Creator::new(&ID_GENERATOR, &REGISTRATIONS, &NAMES, &EXPIRATIONS);
+        let c = WithRateLimit::new(c, REGISTRATION_RATE_LIMIT_RATE, &AVAILABLE_TOKENS);
         let c = WithAuthorize(c, &MAIN_AUTHORIZER);
         let c = WithMetrics(c, &COUNTER_CREATE_REGISTRATION_TOTAL);
         Box::new(c)
@@ -404,6 +413,24 @@ fn init_timers_fn() {
             if let Err(err) = RETRIER.with(|r| r.borrow().retry(time())) {
                 trap(&format!("failed to run retry: {err}"));
             }
+        },
+    );
+
+    // update the available tokens for rate limiting
+    set_timer_interval(
+        REGISTRATION_RATE_LIMIT_PERIOD / REGISTRATION_RATE_LIMIT_RATE,
+        || {
+            AVAILABLE_TOKENS.with(|at| {
+                let mut at = at.borrow_mut();
+
+                // clean the items with no tokens used
+                at.retain(|_, tokens| *tokens < REGISTRATION_RATE_LIMIT_RATE);
+
+                // add a token to all items left
+                for (_, tokens) in at.iter_mut() {
+                    *tokens += 1;
+                }
+            });
         },
     );
 }
@@ -519,6 +546,7 @@ fn create_registration(name: String, canister: Principal) -> CreateRegistrationR
         Err(err) => CreateRegistrationResponse::Err(match err {
             CreateError::Duplicate(id) => CreateRegistrationError::Duplicate(id),
             CreateError::NameError(err) => CreateRegistrationError::NameError(err.to_string()),
+            CreateError::RateLimited(domain) => CreateRegistrationError::RateLimited(domain),
             CreateError::Unauthorized => CreateRegistrationError::Unauthorized,
             CreateError::UnexpectedError(err) => {
                 CreateRegistrationError::UnexpectedError(err.to_string())

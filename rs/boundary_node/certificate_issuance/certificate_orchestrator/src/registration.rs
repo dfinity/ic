@@ -32,6 +32,8 @@ pub enum CreateError {
     NameError(#[from] NameError),
     #[error("Registration '{0}' already exists")]
     Duplicate(Id),
+    #[error("Rate limit exceeded for domain '{0}'")]
+    RateLimited(String),
     #[error("Unauthorized")]
     Unauthorized,
     #[error(transparent)]
@@ -134,6 +136,7 @@ impl<T: Create> Create for WithMetrics<T> {
                         Err(err) => match err {
                             CreateError::NameError(_) => "name-error",
                             CreateError::Duplicate(_) => "duplicate",
+                            CreateError::RateLimited(_) => "rate-limited",
                             CreateError::Unauthorized => "unauthorized",
                             CreateError::UnexpectedError(_) => "fail",
                         },

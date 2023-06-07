@@ -247,6 +247,7 @@ pub struct ExportPackage {
 pub enum CreateRegistrationError {
     Duplicate(Id),
     NameError(String),
+    RateLimited(String),
     Unauthorized,
     UnexpectedError(String),
 }
