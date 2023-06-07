@@ -56,4 +56,10 @@ impl RosettaBlock {
             block_idx,
         )
     }
+
+    pub fn get_transaction(&self) -> anyhow::Result<Transaction> {
+        Ok(Block::decode(self.encoded_block.clone())
+            .map_err(anyhow::Error::msg)?
+            .transaction)
+    }
 }
