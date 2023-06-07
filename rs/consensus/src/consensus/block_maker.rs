@@ -43,7 +43,7 @@ use std::{
 // the block validation path can skip the expensive crypto validation.
 const VALIDATED_DEALING_AGE_THRESHOLD_MSECS: u64 = 10;
 
-fn subnet_records_for_registry_version(
+pub(crate) fn subnet_records_for_registry_version(
     block_maker: &BlockMaker,
     membership_record: RegistryVersion,
     context_record: RegistryVersion,
@@ -69,17 +69,17 @@ fn subnet_records_for_registry_version(
 /// A consensus subcomponent that is responsible for creating block proposals.
 pub struct BlockMaker {
     time_source: Arc<dyn TimeSource>,
-    replica_config: ReplicaConfig,
+    pub(crate) replica_config: ReplicaConfig,
     registry_client: Arc<dyn RegistryClient>,
-    membership: Arc<Membership>,
-    crypto: Arc<dyn ConsensusCrypto>,
+    pub(crate) membership: Arc<Membership>,
+    pub(crate) crypto: Arc<dyn ConsensusCrypto>,
     payload_builder: Arc<dyn PayloadBuilder>,
     dkg_pool: Arc<RwLock<dyn DkgPool>>,
     ecdsa_pool: Arc<RwLock<dyn EcdsaPool>>,
-    state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
+    pub(crate) state_manager: Arc<dyn StateManager<State = ReplicatedState>>,
     metrics: BlockMakerMetrics,
     ecdsa_payload_metrics: EcdsaPayloadMetrics,
-    log: ReplicaLogger,
+    pub(crate) log: ReplicaLogger,
     // The minimal age of the registry version we want to use for the validation context of a new
     // block. The older is the version, the higher is the probability, that it's universally
     // available across the subnet.
@@ -187,7 +187,7 @@ impl BlockMaker {
     }
 
     /// Construct a block proposal
-    fn propose_block(
+    pub(crate) fn propose_block(
         &self,
         pool: &PoolReader<'_>,
         rank: Rank,
@@ -262,7 +262,7 @@ impl BlockMaker {
     /// block, rank, and batch payload. This function completes the block by
     /// adding a DKG payload and signs the block to obtain a block proposal.
     #[allow(clippy::too_many_arguments)]
-    fn construct_block_proposal(
+    pub(crate) fn construct_block_proposal(
         &self,
         pool: &PoolReader<'_>,
         context: ValidationContext,
@@ -454,7 +454,7 @@ impl BlockMaker {
     // Returns the registry version received from the NNS some specified amount of
     // time ago. If the parent's context references higher version which is already
     // available locally, we use that version.
-    fn get_stable_registry_version(&self, parent: &Block) -> Option<RegistryVersion> {
+    pub(crate) fn get_stable_registry_version(&self, parent: &Block) -> Option<RegistryVersion> {
         let parents_version = parent.context.registry_version;
         let latest_version = self.registry_client.get_latest_version();
         // Check if there is a stable version that we can bump up to.
@@ -471,152 +471,12 @@ impl BlockMaker {
         }
         None
     }
-
-    /// Maliciously propose blocks irrespective of the rank, based on the flags
-    /// received. If maliciously_propose_empty_blocks is set, propose only empty
-    /// blocks. If maliciously_equivocation_blockmaker is set, propose
-    /// multiple blocks at once.
-    #[cfg(feature = "malicious_code")]
-    pub(crate) fn maliciously_propose_blocks(
-        &self,
-        pool: &PoolReader<'_>,
-        maliciously_propose_empty_blocks: bool,
-        maliciously_equivocation_blockmaker: bool,
-    ) -> Vec<BlockProposal> {
-        use ic_protobuf::log::malicious_behaviour_log_entry::v1::{
-            MaliciousBehaviour, MaliciousBehaviourLogEntry,
-        };
-        trace!(self.log, "maliciously_propose_blocks");
-        let number_of_proposals = 5;
-
-        let my_node_id = self.replica_config.node_id;
-        let (beacon, parent) = match get_dependencies(pool) {
-            Some((b, p)) => (b, p),
-            None => {
-                return Vec::new();
-            }
-        };
-        let height = beacon.content.height.increment();
-        let registry_version = match pool.registry_version(height) {
-            Some(v) => v,
-            None => {
-                return Vec::new();
-            }
-        };
-
-        // If this node is a blockmaker, use its rank. If not, use rank 0.
-        // If the rank is not yet available, wait further.
-        let maybe_rank = match self
-            .membership
-            .get_block_maker_rank(height, &beacon, my_node_id)
-        {
-            Ok(Some(rank)) => Some(rank),
-            Ok(None) => Some(Rank(0)),
-            Err(_) => None,
-        };
-
-        if let Some(rank) = maybe_rank {
-            if !already_proposed(pool, height, my_node_id) {
-                // If maliciously_propose_empty_blocks is set, propose only empty blocks.
-                let maybe_proposal = match maliciously_propose_empty_blocks {
-                    true => self.maliciously_propose_empty_block(pool, rank, parent),
-                    false => self.propose_block(pool, rank, parent),
-                };
-
-                if let Some(proposal) = maybe_proposal {
-                    let mut proposals = vec![];
-
-                    match maliciously_equivocation_blockmaker {
-                        false => {}
-                        true => {
-                            let original_block = Block::from(proposal.clone());
-                            // Generate more valid proposals based on this proposal, by slightly
-                            // increasing the time in the context of
-                            // this block.
-                            for i in 1..(number_of_proposals - 1) {
-                                let mut new_block = original_block.clone();
-                                new_block.context.time += Duration::from_nanos(i);
-                                let hashed_block =
-                                    hashed::Hashed::new(ic_types::crypto::crypto_hash, new_block);
-                                if let Ok(signature) = self.crypto.sign(
-                                    &hashed_block,
-                                    self.replica_config.node_id,
-                                    registry_version,
-                                ) {
-                                    proposals.push(BlockProposal {
-                                        signature,
-                                        content: hashed_block,
-                                    });
-                                }
-                            }
-                        }
-                    };
-                    proposals.push(proposal);
-
-                    if maliciously_propose_empty_blocks {
-                        ic_logger::info!(
-                            self.log,
-                            "[MALICIOUS] proposing empty blocks";
-                            malicious_behaviour => MaliciousBehaviourLogEntry { malicious_behaviour: MaliciousBehaviour::ProposeEmptyBlocks as i32}
-                        );
-                    }
-                    if maliciously_equivocation_blockmaker {
-                        ic_logger::info!(
-                            self.log,
-                            "[MALICIOUS] proposing {} equivocation blocks",
-                            proposals.len();
-                            malicious_behaviour => MaliciousBehaviourLogEntry { malicious_behaviour: MaliciousBehaviour::ProposeEquivocatingBlocks as i32}
-                        );
-                    }
-
-                    return proposals;
-                }
-            }
-        }
-        Vec::new()
-    }
-
-    /// Maliciously construct a block proposal with valid DKG, but with empty
-    /// batch payload.
-    #[cfg(feature = "malicious_code")]
-    fn maliciously_propose_empty_block(
-        &self,
-        pool: &PoolReader<'_>,
-        rank: Rank,
-        parent: Block,
-    ) -> Option<BlockProposal> {
-        let parent_hash = ic_types::crypto::crypto_hash(&parent);
-        let height = parent.height.increment();
-        let certified_height = self.state_manager.latest_certified_height();
-        let context = parent.context.clone();
-
-        // Note that we will skip blockmaking if registry versions or replica_versions
-        // are missing or temporarily not retrievable.
-        let registry_version = pool.registry_version(height)?;
-
-        // Get the subnet records that are relevant to making a block
-        let stable_registry_version = self.get_stable_registry_version(&parent)?;
-        let subnet_records =
-            subnet_records_for_registry_version(self, registry_version, stable_registry_version)?;
-
-        self.construct_block_proposal(
-            pool,
-            context,
-            parent,
-            parent_hash,
-            height,
-            certified_height,
-            rank,
-            registry_version,
-            &subnet_records,
-        )
-    }
 }
 
 /// Return the parent random beacon and block of the latest round for which
 /// this node might propose a block.
 /// Return None otherwise.
-fn get_dependencies(pool: &PoolReader<'_>) -> Option<(RandomBeacon, Block)> {
+pub(crate) fn get_dependencies(pool: &PoolReader<'_>) -> Option<(RandomBeacon, Block)> {
     let notarized_height = pool.get_notarized_height();
     let beacon = pool.get_random_beacon(notarized_height)?;
     let parent = pool
@@ -626,7 +486,7 @@ fn get_dependencies(pool: &PoolReader<'_>) -> Option<(RandomBeacon, Block)> {
 }
 
 /// Return true if this node has already made a proposal at the given height.
-fn already_proposed(pool: &PoolReader<'_>, h: Height, this_node: NodeId) -> bool {
+pub(crate) fn already_proposed(pool: &PoolReader<'_>, h: Height, this_node: NodeId) -> bool {
     pool.pool()
         .validated()
         .block_proposal()
