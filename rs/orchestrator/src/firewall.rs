@@ -297,6 +297,12 @@ impl Firewall {
                     vec![FirewallRuleDirection::Outbound],
                 ),
             )
+            .replace(
+                "<<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>>",
+                &config
+                    .max_simultaneous_connections_per_ip_address
+                    .to_string(),
+            )
     }
 
     /// Converts a protobuf action for nftables-specific syntax action
@@ -404,6 +410,7 @@ impl Firewall {
 
 #[test]
 fn test_firewall_rule_compilation() {
+    let max_simultaneous_connections_per_ip_address: u32 = 5;
     let ipv4_rule_template = format!(
         "{} {} {} {}",
         "<<IPv4_PREFIXES>>", "<<PORTS>>", "<<ACTION>>", "<<COMMENT>>"
@@ -412,7 +419,10 @@ fn test_firewall_rule_compilation() {
         "{} {} {} {}",
         "<<IPv6_PREFIXES>>", "<<PORTS>>", "<<ACTION>>", "<<COMMENT>>"
     );
-    let file_template = format!("{} {}", "<<IPv4_RULES>>", "<<IPv6_RULES>>");
+    let file_template = format!(
+        "{} {} {}",
+        "<<MAX_SIMULTANEOUS_CONNECTIONS_PER_IP_ADDRESS>>", "<<IPv4_RULES>>", "<<IPv6_RULES>>"
+    );
 
     let rules = vec![
         FirewallRule {
@@ -462,7 +472,8 @@ fn test_firewall_rule_compilation() {
         format!("{} {} {} {}", "test_ipv6_3", "7,8,9", "drop", "comment3"),
     ];
     let expected_file_content = format!(
-        "{} {}",
+        "{} {} {}",
+        max_simultaneous_connections_per_ip_address,
         expected_rules_compiled_v4.join("\n"),
         expected_rules_compiled_v6.join("\n")
     );
@@ -477,6 +488,7 @@ fn test_firewall_rule_compilation() {
         default_rules: vec![],
         ports_for_node_whitelist: vec![],
         ports_for_http_adapter_blacklist: vec![],
+        max_simultaneous_connections_per_ip_address,
     };
 
     assert_eq!(
