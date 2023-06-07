@@ -16,6 +16,9 @@ use ic_types::Randomness;
 use rand::{CryptoRng, Rng};
 use std::convert::TryFrom;
 
+#[cfg(test)]
+mod tests;
+
 impl<R: Rng + CryptoRng, S: SecretKeyStore, C: SecretKeyStore, P: PublicKeyStore>
     ThresholdEcdsaSignerCspVault for LocalCspVault<R, S, C, P>
 {
