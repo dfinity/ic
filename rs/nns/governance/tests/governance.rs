@@ -1088,81 +1088,48 @@ fn fixture_for_following() -> GovernanceProto {
     GovernanceProto {
         economics: Some(NetworkEconomics::with_default_values()),
         wait_for_quiet_threshold_seconds: 1,
-        neurons: [
-            (
-                1,
-                Neuron {
-                    // Needs controller to vote.
-                    controller: Some(principal(1)),
-                    ..neuron(1)
+        neurons: hashmap! {
+            1 =>  Neuron {
+                // Needs controller to vote.
+                controller: Some(principal(1)),
+                ..neuron(1)
+            },
+            2 =>  Neuron {
+                followees: hashmap! {
+                    Topic::NetworkEconomics as i32 => neuron::Followees {
+                        followees: [NeuronId { id: 1 }, NeuronId { id: 3 }, NeuronId { id: 4 }].to_vec(),
+                    },
                 },
-            ),
-            (
-                2,
-                Neuron {
-                    followees: [(
-                        Topic::NetworkEconomics as i32,
-                        neuron::Followees {
-                            followees: [NeuronId { id: 1 }, NeuronId { id: 3 }, NeuronId { id: 4 }]
-                                .to_vec(),
-                        },
-                    )]
-                    .iter()
-                    .cloned()
-                    .collect(),
-                    ..neuron(2)
+                ..neuron(2)
+            },
+            3 =>  Neuron {
+                followees: hashmap! {
+                    Topic::Unspecified as i32 => neuron::Followees {
+                        followees: [NeuronId { id: 5 }, NeuronId { id: 6 }, NeuronId { id: 7 }].to_vec(),
+                    },
                 },
-            ),
-            (
-                3,
-                Neuron {
-                    followees: [(
-                        Topic::Unspecified as i32,
-                        neuron::Followees {
-                            followees: [NeuronId { id: 5 }, NeuronId { id: 6 }, NeuronId { id: 7 }]
-                                .to_vec(),
-                        },
-                    )]
-                    .iter()
-                    .cloned()
-                    .collect(),
-                    ..neuron(3)
-                },
-            ),
-            (4, neuron(4)),
-            (
-                5,
-                Neuron {
-                    controller: Some(principal(5)),
-                    ..neuron(5)
-                },
-            ),
-            (
-                6,
-                Neuron {
-                    controller: Some(principal(6)),
-                    ..neuron(6)
-                },
-            ),
-            (
-                7,
-                Neuron {
-                    controller: Some(principal(7)),
-                    ..neuron(7)
-                },
-            ),
-            (
-                8,
-                Neuron {
-                    controller: Some(principal(8)),
-                    ..neuron(8)
-                },
-            ),
-            (9, neuron(9)),
-        ]
-        .iter()
-        .cloned()
-        .collect(),
+                ..neuron(3)
+            },
+            4 => neuron(4),
+            5 =>  Neuron {
+                controller: Some(principal(5)),
+                ..neuron(5)
+            },
+            6 => Neuron {
+                controller: Some(principal(6)),
+                ..neuron(6)
+            },
+            7 =>  Neuron {
+                controller: Some(principal(7)),
+                ..neuron(7)
+            },
+            8 =>
+            Neuron {
+                controller: Some(principal(8)),
+                ..neuron(8)
+            },
+            9 => neuron(9),
+        },
         ..Default::default()
     }
 }
@@ -1800,56 +1767,38 @@ fn fixture_for_manage_neuron() -> GovernanceProto {
     GovernanceProto {
         economics: Some(NetworkEconomics::with_default_values()),
         short_voting_period_seconds: 1,
-        neurons: [
-            (
-                1,
-                Neuron {
-                    created_timestamp_seconds: 1066,
-                    controller: Some(principal(1)),
-                    hot_keys: vec![PrincipalId::try_from(b"HOT_SID1".to_vec()).unwrap()],
-                    followees: hashmap! {
-                        Topic::NeuronManagement as i32 => neuron::Followees {
-                            followees: [NeuronId { id: 2 }, NeuronId { id: 3 }, NeuronId { id: 4 }]
-                                .to_vec(),
-                        },
+        neurons: hashmap! {
+            1 => Neuron {
+                created_timestamp_seconds: 1066,
+                controller: Some(principal(1)),
+                hot_keys: vec![PrincipalId::try_from(b"HOT_SID1".to_vec()).unwrap()],
+                followees: hashmap! {
+                    Topic::NeuronManagement as i32 => neuron::Followees {
+                        followees: [NeuronId { id: 2 }, NeuronId { id: 3 }, NeuronId { id: 4 }]
+                            .to_vec(),
                     },
-                    ..neuron(1)
                 },
-            ),
-            (
-                2,
-                Neuron {
-                    controller: Some(principal(2)),
-                    hot_keys: vec![PrincipalId::try_from(b"HOT_SID2".to_vec()).unwrap()],
-                    ..neuron(2)
-                },
-            ),
-            (
-                3,
-                Neuron {
-                    controller: Some(principal(3)),
-                    ..neuron(3)
-                },
-            ),
-            (
-                4,
-                Neuron {
-                    controller: Some(principal(4)),
-                    ..neuron(4)
-                },
-            ),
-            (
-                5,
-                Neuron {
-                    controller: Some(principal(5)),
-                    ..neuron(5)
-                },
-            ),
-            (6, neuron(6)),
-        ]
-        .iter()
-        .cloned()
-        .collect(),
+                ..neuron(1)
+            },
+            2 => Neuron {
+                controller: Some(principal(2)),
+                hot_keys: vec![PrincipalId::try_from(b"HOT_SID2".to_vec()).unwrap()],
+                ..neuron(2)
+            },
+            3 => Neuron {
+                controller: Some(principal(3)),
+                ..neuron(3)
+            },
+            4 => Neuron {
+                controller: Some(principal(4)),
+                ..neuron(4)
+            },
+            5 => Neuron {
+                controller: Some(principal(5)),
+                ..neuron(5)
+            },
+            6 => neuron(6),
+        },
         ..Default::default()
     }
 }
@@ -3623,55 +3572,40 @@ fn fixture_for_approve_kyc() -> GovernanceProto {
     let principal3 = PrincipalId::new_self_authenticating(b"SID3");
     GovernanceProto {
         economics: Some(NetworkEconomics::with_default_values()),
-        neurons: [
-            (
-                1,
-                Neuron {
-                    id: Some(NeuronId { id: 1 }),
-                    controller: Some(principal1),
-                    cached_neuron_stake_e8s: 10 * E8,
-                    account: driver.random_byte_array().to_vec(),
-                    kyc_verified: false,
-                    ..Default::default()
-                },
-            ),
-            (
-                2,
-                Neuron {
-                    id: Some(NeuronId { id: 2 }),
-                    controller: Some(principal2),
-                    cached_neuron_stake_e8s: 10 * E8,
-                    account: driver.random_byte_array().to_vec(),
-                    kyc_verified: false,
-                    ..Default::default()
-                },
-            ),
-            (
-                3,
-                Neuron {
-                    id: Some(NeuronId { id: 3 }),
-                    controller: Some(principal2),
-                    cached_neuron_stake_e8s: 10 * E8,
-                    account: driver.random_byte_array().to_vec(),
-                    kyc_verified: false,
-                    ..Default::default()
-                },
-            ),
-            (
-                4,
-                Neuron {
-                    id: Some(NeuronId { id: 4 }),
-                    controller: Some(principal3),
-                    cached_neuron_stake_e8s: 10 * E8,
-                    account: driver.random_byte_array().to_vec(),
-                    kyc_verified: false,
-                    ..Default::default()
-                },
-            ),
-        ]
-        .iter()
-        .cloned()
-        .collect(),
+        neurons: hashmap! {
+            1 => Neuron {
+                id: Some(NeuronId { id: 1 }),
+                controller: Some(principal1),
+                cached_neuron_stake_e8s: 10 * E8,
+                account: driver.random_byte_array().to_vec(),
+                kyc_verified: false,
+                ..Default::default()
+            },
+            2 => Neuron {
+                id: Some(NeuronId { id: 2 }),
+                controller: Some(principal2),
+                cached_neuron_stake_e8s: 10 * E8,
+                account: driver.random_byte_array().to_vec(),
+                kyc_verified: false,
+                ..Default::default()
+            },
+            3 => Neuron {
+                id: Some(NeuronId { id: 3 }),
+                controller: Some(principal2),
+                cached_neuron_stake_e8s: 10 * E8,
+                account: driver.random_byte_array().to_vec(),
+                kyc_verified: false,
+                ..Default::default()
+            },
+            4 => Neuron {
+                id: Some(NeuronId { id: 4 }),
+                controller: Some(principal3),
+                cached_neuron_stake_e8s: 10 * E8,
+                account: driver.random_byte_array().to_vec(),
+                kyc_verified: false,
+                ..Default::default()
+            },
+        },
         ..Default::default()
     }
 }
@@ -7071,16 +7005,13 @@ fn test_recompute_tally() {
         }
     };
     let mut pinfo = ProposalData {
-        ballots: [
-            (1, ballot(Vote::Yes)),
-            (2, ballot(Vote::Yes)),
-            (3, ballot(Vote::Yes)),
-            (4, ballot(Vote::No)),
-            (5, ballot(Vote::Unspecified)),
-        ]
-        .iter()
-        .cloned()
-        .collect(),
+        ballots: hashmap! {
+            1 => ballot(Vote::Yes),
+            2 => ballot(Vote::Yes),
+            3 => ballot(Vote::Yes),
+            4 => ballot(Vote::No),
+            5 => ballot(Vote::Unspecified),
+        },
         ..Default::default()
     };
     pinfo.recompute_tally(10, ONE_DAY_SECONDS);
@@ -8699,158 +8630,93 @@ fn test_update_stake() {
 #[test]
 fn test_compute_cached_metrics() {
     let now = 100;
-    let mut neurons = HashMap::<u64, Neuron>::new();
-
-    // Not Dissolving neurons
-    neurons.insert(
-        1,
-        Neuron {
+    let neurons = hashmap! {
+        1 => Neuron {
             cached_neuron_stake_e8s: 100_000_000,
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(1)),
             ..Default::default()
         },
-    );
-
-    neurons.insert(
-        2,
-        Neuron {
+        2 => Neuron {
             cached_neuron_stake_e8s: 234_000_000,
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(ONE_YEAR_SECONDS)),
             joined_community_fund_timestamp_seconds: Some(1),
             maturity_e8s_equivalent: 450_988_012,
             ..Default::default()
         },
-    );
-
-    neurons.insert(
-        3,
-        Neuron {
+        3 => Neuron {
             cached_neuron_stake_e8s: 568_000_000,
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(ONE_YEAR_SECONDS * 4)),
             ..Default::default()
         },
-    );
-
-    neurons.insert(
-        4,
-        Neuron {
+        4 => Neuron {
             cached_neuron_stake_e8s: 1_123_000_000,
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(ONE_YEAR_SECONDS * 4)),
             ..Default::default()
         },
-    );
-
-    neurons.insert(
-        5,
-        Neuron {
+        5 => Neuron {
             cached_neuron_stake_e8s: 6_087_000_000,
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(ONE_YEAR_SECONDS * 8)),
             ..Default::default()
         },
-    );
-
-    // Zero stake
-    neurons.insert(
-        6,
-        Neuron {
+        6 => Neuron {
             cached_neuron_stake_e8s: 0,
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(5)),
             ..Default::default()
         },
-    );
-
-    // Less than minimum stake
-    neurons.insert(
-        7,
-        Neuron {
+        7 => Neuron {
             cached_neuron_stake_e8s: 100,
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(5)),
             ..Default::default()
         },
-    );
-
-    // Dissolving neurons
-    neurons.insert(
-        8,
-        Neuron {
+        8 => Neuron {
             cached_neuron_stake_e8s: 234_000_000,
             dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
                 now + ONE_YEAR_SECONDS,
             )),
             ..Default::default()
         },
-    );
-
-    neurons.insert(
-        9,
-        Neuron {
+        9 => Neuron {
             cached_neuron_stake_e8s: 568_000_000,
             dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
                 now + ONE_YEAR_SECONDS * 3,
             )),
             ..Default::default()
         },
-    );
-
-    neurons.insert(
-        10,
-        Neuron {
+        10 => Neuron {
             cached_neuron_stake_e8s: 1_123_000_000,
             dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
                 now + ONE_YEAR_SECONDS * 5,
             )),
             ..Default::default()
         },
-    );
-
-    neurons.insert(
-        11,
-        Neuron {
+        11 => Neuron {
             cached_neuron_stake_e8s: 6_087_000_000,
             dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
                 now + ONE_YEAR_SECONDS * 5,
             )),
             ..Default::default()
         },
-    );
-
-    neurons.insert(
-        12,
-        Neuron {
+        12 => Neuron {
             cached_neuron_stake_e8s: 18_000_000_000,
             dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
                 now + ONE_YEAR_SECONDS * 7,
             )),
             ..Default::default()
         },
-    );
-
-    // Dissolved neurons
-    neurons.insert(
-        13,
-        Neuron {
+        13 => Neuron {
             cached_neuron_stake_e8s: 4_450_000_000,
             ..Default::default()
         },
-    );
-
-    neurons.insert(
-        14,
-        Neuron {
+        14 => Neuron {
             cached_neuron_stake_e8s: 1_220_000_000,
             ..Default::default()
         },
-    );
-
-    neurons.insert(
-        15,
-        Neuron {
+        15 => Neuron {
             cached_neuron_stake_e8s: 100_000_000,
             dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(1)),
             ..Default::default()
         },
-    );
-
+    };
     let economics = NetworkEconomics {
         neuron_minimum_stake_e8s: 100_000_000,
         ..Default::default()
@@ -8915,19 +8781,15 @@ fn test_compute_cached_metrics() {
 fn fixture_for_dissolving_neuron_tests(id: u64, dissolve_state: DissolveState) -> GovernanceProto {
     GovernanceProto {
         economics: Some(NetworkEconomics::default()),
-        neurons: [(
-            1,
-            Neuron {
+        neurons: hashmap! {
+            1 => Neuron {
                 id: Some(NeuronId { id }),
                 controller: Some(principal(id)),
                 dissolve_state: Some(dissolve_state),
                 aging_since_timestamp_seconds: DEFAULT_TEST_START_TIMESTAMP_SECONDS,
                 ..Neuron::default()
-            },
-        )]
-        .iter()
-        .cloned()
-        .collect(),
+            }
+        },
         ..Default::default()
     }
 }
@@ -9230,45 +9092,33 @@ fn test_increase_dissolve_delay() {
     let fake_driver = fake::FakeDriver::default();
     let fixture: GovernanceProto = GovernanceProto {
         economics: Some(NetworkEconomics::default()),
-        neurons: [
-            (
-                1,
-                Neuron {
-                    id: Some(NeuronId { id: 1 }),
-                    controller: Some(principal(principal_id)),
-                    dissolve_state: Some(DissolveState::DissolveDelaySeconds(
-                        MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
-                    )),
-                    ..Neuron::default()
-                },
-            ),
-            (
-                2,
-                Neuron {
-                    id: Some(NeuronId { id: 2 }),
-                    controller: Some(principal(principal_id)),
-                    dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
-                        DEFAULT_TEST_START_TIMESTAMP_SECONDS
-                            + MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
-                    )),
-                    ..Neuron::default()
-                },
-            ),
-            (
-                3,
-                Neuron {
-                    id: Some(NeuronId { id: 3 }),
-                    controller: Some(principal(principal_id)),
-                    dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
-                        DEFAULT_TEST_START_TIMESTAMP_SECONDS - 1,
-                    )),
-                    ..Neuron::default()
-                },
-            ),
-        ]
-        .iter()
-        .cloned()
-        .collect(),
+        neurons: hashmap! {
+            1 => Neuron {
+                id: Some(NeuronId { id: 1 }),
+                controller: Some(principal(principal_id)),
+                dissolve_state: Some(DissolveState::DissolveDelaySeconds(
+                    MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
+                )),
+                ..Neuron::default()
+            },
+            2 => Neuron {
+                id: Some(NeuronId { id: 2 }),
+                controller: Some(principal(principal_id)),
+                dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
+                    DEFAULT_TEST_START_TIMESTAMP_SECONDS
+                        + MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
+                )),
+                ..Neuron::default()
+            },
+            3 => Neuron {
+                id: Some(NeuronId { id: 3 }),
+                controller: Some(principal(principal_id)),
+                dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
+                    DEFAULT_TEST_START_TIMESTAMP_SECONDS - 1,
+                )),
+                ..Neuron::default()
+            }
+        },
         ..Default::default()
     };
     let mut gov = Governance::new(
@@ -9371,38 +9221,26 @@ fn test_join_community_fund() {
     let principal_b = 128;
     let fixture: GovernanceProto = GovernanceProto {
         economics: Some(NetworkEconomics::default()),
-        neurons: [
-            (
-                1,
-                Neuron {
-                    id: Some(NeuronId { id: 1 }),
-                    cached_neuron_stake_e8s: 10 * E8,
-                    controller: Some(principal(principal_a)),
-                    ..Neuron::default()
-                },
-            ),
-            (
-                2,
-                Neuron {
-                    id: Some(NeuronId { id: 2 }),
-                    cached_neuron_stake_e8s: 20 * 100_000_000,
-                    controller: Some(principal(principal_b)),
-                    ..Neuron::default()
-                },
-            ),
-            (
-                3,
-                Neuron {
-                    id: Some(NeuronId { id: 3 }),
-                    cached_neuron_stake_e8s: 100 * 100_000_000,
-                    controller: Some(principal(principal_b)),
-                    ..Neuron::default()
-                },
-            ),
-        ]
-        .iter()
-        .cloned()
-        .collect(),
+        neurons: hashmap! {
+            1 => Neuron {
+                id: Some(NeuronId { id: 1 }),
+                cached_neuron_stake_e8s: 10 * E8,
+                controller: Some(principal(principal_a)),
+                ..Neuron::default()
+            },
+            2 => Neuron {
+                id: Some(NeuronId { id: 2 }),
+                cached_neuron_stake_e8s: 20 * 100_000_000,
+                controller: Some(principal(principal_b)),
+                ..Neuron::default()
+            },
+            3 => Neuron {
+                id: Some(NeuronId { id: 3 }),
+                cached_neuron_stake_e8s: 100 * 100_000_000,
+                controller: Some(principal(principal_b)),
+                ..Neuron::default()
+            }
+        },
         ..Default::default()
     };
     let total_icp_suppply = Tokens::new(200, 0).unwrap();
@@ -10536,47 +10374,29 @@ fn test_wfq_constant_flipping() {
 #[tokio::test]
 async fn test_known_neurons() {
     let driver = fake::FakeDriver::default();
-    let neurons = [
-        (
-            1,
-            Neuron {
-                id: Some(NeuronId { id: 1 }),
-                controller: Some(principal(1)),
-                cached_neuron_stake_e8s: 100_000_000,
-                dissolve_state: Some(DissolveState::DissolveDelaySeconds(
-                    MAX_DISSOLVE_DELAY_SECONDS,
-                )),
-                ..Default::default()
-            },
-        ),
-        (
-            2,
-            Neuron {
-                id: Some(NeuronId { id: 2 }),
-                controller: Some(principal(2)),
-                cached_neuron_stake_e8s: 100_000_000,
-                dissolve_state: Some(DissolveState::DissolveDelaySeconds(
-                    MAX_DISSOLVE_DELAY_SECONDS,
-                )),
-                ..Default::default()
-            },
-        ),
-        (
-            3,
-            Neuron {
-                id: Some(NeuronId { id: 3 }),
-                controller: Some(principal(3)),
-                cached_neuron_stake_e8s: 100_000_000_000,
-                dissolve_state: Some(DissolveState::DissolveDelaySeconds(
-                    MAX_DISSOLVE_DELAY_SECONDS,
-                )),
-                ..Default::default()
-            },
-        ),
-    ]
-    .iter()
-    .cloned()
-    .collect();
+    let neurons = hashmap! {
+        1 => Neuron {
+            id: Some(NeuronId { id: 1 }),
+            controller: Some(principal(1)),
+            cached_neuron_stake_e8s: 100_000_000,
+            dissolve_state: Some(DissolveState::DissolveDelaySeconds(MAX_DISSOLVE_DELAY_SECONDS)),
+            ..Default::default()
+        },
+        2 => Neuron {
+            id: Some(NeuronId { id: 2 }),
+            controller: Some(principal(2)),
+            cached_neuron_stake_e8s: 100_000_000,
+            dissolve_state: Some(DissolveState::DissolveDelaySeconds(MAX_DISSOLVE_DELAY_SECONDS)),
+            ..Default::default()
+        },
+        3 => Neuron {
+            id: Some(NeuronId { id: 3 }),
+            controller: Some(principal(3)),
+            cached_neuron_stake_e8s: 100_000_000_000,
+            dissolve_state: Some(DissolveState::DissolveDelaySeconds(MAX_DISSOLVE_DELAY_SECONDS)),
+            ..Default::default()
+        }
+    };
     let governance_proto = GovernanceProto {
         economics: Some(NetworkEconomics::with_default_values()),
         neurons,
@@ -11923,47 +11743,32 @@ fn test_ready_to_be_settled_proposals_ids() {
 #[tokio::test]
 async fn test_metrics() {
     let now = 100;
-    let mut neurons = HashMap::<u64, Neuron>::new();
-
-    // Not Dissolving neurons: 100m + 200m.
-    neurons.insert(
-        1,
-        Neuron {
+    let neurons: HashMap<u64, Neuron> = hashmap! {
+        // Not Dissolving neurons: 100m + 200m.
+        1 => Neuron {
             cached_neuron_stake_e8s: 100_000_000,
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(1)),
             ..Default::default()
         },
-    );
-
-    neurons.insert(
-        2,
-        Neuron {
+        2 => Neuron {
             cached_neuron_stake_e8s: 200_000_000,
             dissolve_state: Some(DissolveState::DissolveDelaySeconds(ONE_YEAR_SECONDS)),
             ..Default::default()
         },
-    );
-
-    // Dissolving neurons: 300m.
-    neurons.insert(
-        3,
-        Neuron {
+        // Dissolving neurons: 300m.
+        3 => Neuron {
             cached_neuron_stake_e8s: 300_000_000,
             dissolve_state: Some(DissolveState::WhenDissolvedTimestampSeconds(
                 now + ONE_YEAR_SECONDS * 3,
             )),
             ..Default::default()
         },
-    );
-
-    // Dissolved neurons: 400m.
-    neurons.insert(
-        4,
-        Neuron {
+        // Dissolved neurons: 400m.
+        4 => Neuron {
             cached_neuron_stake_e8s: 400_000_000,
             ..Default::default()
-        },
-    );
+        }
+    };
 
     let economics = NetworkEconomics {
         neuron_minimum_stake_e8s: 100_000_000,
