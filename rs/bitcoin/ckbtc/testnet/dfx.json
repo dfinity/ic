@@ -32,10 +32,10 @@
     "index": {
       "type": "custom",
       "build": [
-        "bazel build //rs/rosetta-api/icrc1/index:index_canister"
+        "bazel build //rs/rosetta-api/icrc1/index-ng:index_ng_canister"
       ],
-      "wasm": "../../../../bazel-bin/rs/rosetta-api/icrc1/index/index_canister.wasm",
-      "candid": "../../../rosetta-api/icrc1/index/index.did",
+      "wasm": "../../../../bazel-bin/rs/rosetta-api/icrc1/index-ng/index_ng_canister.wasm",
+      "candid": "../../../rosetta-api/icrc1/index-ng/index-ng.did",
       "shrink": false
     },
     "kyt": {

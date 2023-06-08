@@ -5,7 +5,7 @@ type InitArg = record {
 };
 
 type IndexArg = variant {
-    init_arg: InitArg;
+    Init: InitArg;
 };
 
 type GetBlocksRequest = record {
@@ -103,7 +103,7 @@ type Status = record {
     num_blocks_synced : BlockIndex;
 };
 
-service : (index_arg: IndexArg) -> {
+service : (index_arg: opt IndexArg) -> {
     get_account_transactions : (GetAccountTransactionsArgs) -> (GetTransactionsResult);
     get_blocks : (GetBlocksRequest) -> (GetBlocksResponse) query;
     icrc1_balance_of : (Account) -> (Tokens) query;

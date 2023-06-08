@@ -242,7 +242,7 @@ fn balance_key(account: Account) -> (AccountDataType, (Blob<29>, [u8; 32])) {
 #[candid_method(init)]
 fn init(index_arg: Option<IndexArg>) {
     let init_arg = match index_arg {
-        Some(IndexArg::InitArg(arg)) => arg,
+        Some(IndexArg::Init(arg)) => arg,
         _ => trap("Index initialization must take in input an InitArg argument"),
     };
 
