@@ -9,7 +9,7 @@ pub const DEFAULT_MAX_BLOCKS_PER_RESPONSE: u64 = 2000;
 
 #[derive(CandidType, Debug, Deserialize)]
 pub enum IndexArg {
-    InitArg(InitArg),
+    Init(InitArg),
 }
 
 #[derive(CandidType, Debug, Deserialize)]

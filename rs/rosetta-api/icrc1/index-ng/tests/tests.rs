@@ -100,7 +100,7 @@ fn install_ledger(
 }
 
 fn install_index(env: &StateMachine, ledger_id: CanisterId) -> CanisterId {
-    let args = IndexArg::InitArg(IndexInitArg {
+    let args = IndexArg::Init(IndexInitArg {
         ledger_id: ledger_id.into(),
     });
     env.install_canister(index_wasm(), Encode!(&args).unwrap(), None)
