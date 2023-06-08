@@ -283,6 +283,7 @@ pub enum MetricsDomain {
     ThresholdSignature,
     NiDkgAlgorithm,
     TlsHandshake,
+    TlsConfig,
     IdkgProtocol,
     ThresholdEcdsa,
     PublicSeed,

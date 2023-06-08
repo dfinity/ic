@@ -5461,6 +5461,7 @@ dependencies = [
  "ic-crypto-tree-hash",
  "ic-crypto-utils-basic-sig",
  "ic-crypto-utils-time",
+ "ic-crypto-utils-tls",
  "ic-interfaces",
  "ic-interfaces-registry",
  "ic-interfaces-registry-mocks",
@@ -6487,6 +6488,16 @@ dependencies = [
  "ic-logger",
  "ic-types",
  "slog",
+]
+
+[[package]]
+name = "ic-crypto-utils-tls"
+version = "0.8.0"
+dependencies = [
+ "ic-base-types",
+ "ic-crypto-tls-interfaces",
+ "openssl",
+ "tokio-rustls 0.24.0",
 ]
 
 [[package]]
