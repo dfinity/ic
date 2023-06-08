@@ -65,19 +65,19 @@ pub mod util;
 pub const RECOVERY_DIRECTORY_NAME: &str = "recovery";
 pub const IC_DATA_PATH: &str = "/var/lib/ic/data";
 pub const IC_STATE_DIR: &str = "data/ic_state";
+pub const CUPS_DIR: &str = "cups";
 pub const IC_CHECKPOINTS_PATH: &str = "ic_state/checkpoints";
 pub const IC_CERTIFICATIONS_PATH: &str = "ic_consensus_pool/certification";
 pub const IC_JSON5_PATH: &str = "/run/ic-node/config/ic.json5";
-// The page_deltas/ directory should not be copied over on rsync as well,
-// it is a new directory used for storing the files backing up the
-// page deltas. We do not need to copy page deltas when nodes are re-assigned.
 pub const IC_STATE_EXCLUDES: &[&str] = &[
     "images",
     "tip",
     "backups",
     "fs_tmp",
-    "cups",
     "recovery",
+    // The page_deltas/ directory should not be copied over on rsync as well,
+    // it is a new directory used for storing the files backing up the
+    // page deltas. We do not need to copy page deltas when nodes are re-assigned.
     "page_deltas",
     IC_REGISTRY_LOCAL_STORE,
 ];
@@ -426,6 +426,7 @@ impl Recovery {
         node_ip: IpAddr,
         try_readonly: bool,
         keep_downloaded_state: bool,
+        additional_excludes: Vec<&str>,
     ) -> impl Step {
         DownloadIcStateStep {
             logger: self.logger.clone(),
@@ -436,6 +437,10 @@ impl Recovery {
             working_dir: self.work_dir.display().to_string(),
             require_confirmation: self.ssh_confirmation,
             key_file: self.key_file.clone(),
+            additional_excludes: additional_excludes
+                .iter()
+                .map(std::string::ToString::to_string)
+                .collect(),
         }
     }
 

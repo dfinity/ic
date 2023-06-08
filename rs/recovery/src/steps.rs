@@ -258,6 +258,7 @@ pub struct DownloadIcStateStep {
     pub keep_downloaded_state: bool,
     pub require_confirmation: bool,
     pub key_file: Option<PathBuf>,
+    pub additional_excludes: Vec<String>,
 }
 
 impl Step for DownloadIcStateStep {
@@ -309,7 +310,12 @@ impl Step for DownloadIcStateStep {
             ssh_helper.account, self.node_ip, IC_JSON5_PATH
         );
 
-        let mut excludes = IC_STATE_EXCLUDES.to_vec();
+        let mut excludes: Vec<&str> = IC_STATE_EXCLUDES
+            .iter()
+            .copied()
+            .chain(self.additional_excludes.iter().map(|x| x.as_str()))
+            .collect();
+
         let res = ssh_helper
             .ssh(format!(
                 r"echo $(ls {}/{} | sort | awk 'n>=1 {{ print a[n%1] }} {{ a[n++%1]=$0 }}');",
@@ -347,7 +353,7 @@ impl Step for DownloadIcStateStep {
 
         rsync(
             &self.logger,
-            vec![],
+            Vec::<String>::default(),
             &config_src,
             target,
             self.require_confirmation,
@@ -801,13 +807,16 @@ pub struct CopyIcStateStep {
 
 impl Step for CopyIcStateStep {
     fn descr(&self) -> String {
-        format!("Copying ic_state for upload to: {:?}", self.new_state_dir,)
+        format!(
+            "Copying ic_state for upload to: {}",
+            self.new_state_dir.display()
+        )
     }
 
     fn exec(&self) -> RecoveryResult<()> {
         rsync(
             &self.logger,
-            vec![],
+            Vec::<String>::default(),
             &format!("{}/", self.work_dir.display()),
             &format!("{}/", self.new_state_dir.display()),
             false,
@@ -892,7 +901,7 @@ impl Step for UploadCUPAndTar {
 
                 rsync(
                     &self.logger,
-                    vec![],
+                    Vec::<String>::default(),
                     &format!("{}/cup.proto", self.work_dir.display()),
                     &target,
                     self.require_confirmation,
@@ -901,7 +910,7 @@ impl Step for UploadCUPAndTar {
 
                 rsync(
                     &self.logger,
-                    vec![],
+                    Vec::<String>::default(),
                     &format!("{}/ic_registry_local_store.tar.gz", self.work_dir.display()),
                     &target,
                     self.require_confirmation,
@@ -978,7 +987,7 @@ impl Step for DownloadRegistryStoreStep {
 
         rsync(
             &self.logger,
-            vec![],
+            Vec::<String>::default(),
             &data_src,
             &format!("{}/", self.work_dir.display()),
             self.require_confirmation,
@@ -1026,7 +1035,7 @@ impl Step for UploadAndHostTarStep {
         let src = format!("{}", self.tar.display());
         rsync(
             &self.logger,
-            vec![],
+            Vec::<String>::default(),
             &src,
             &target,
             self.require_confirmation,

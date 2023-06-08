@@ -3,7 +3,7 @@ use crate::{
     error::RecoveryError,
     file_sync_helper::create_dir,
     recovery_iterator::RecoveryIterator,
-    RecoveryArgs, RecoveryResult,
+    RecoveryArgs, RecoveryResult, CUPS_DIR,
 };
 use clap::Parser;
 use ic_base_types::SubnetId;
@@ -171,9 +171,12 @@ impl RecoveryIterator<StepType, StepTypeIter> for NNSRecoverySameNodes {
 
             StepType::DownloadState => {
                 if let Some(node_ip) = self.params.download_node {
-                    Ok(Box::new(
-                        self.recovery.get_download_state_step(node_ip, false, false),
-                    ))
+                    Ok(Box::new(self.recovery.get_download_state_step(
+                        node_ip,
+                        /*try_readonly=*/ false,
+                        /*keep_downloaded_state=*/ false,
+                        /*additional_excludes=*/ vec![CUPS_DIR],
+                    )))
                 } else {
                     Err(RecoveryError::StepSkipped)
                 }
