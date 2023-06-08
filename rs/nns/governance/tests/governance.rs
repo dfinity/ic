@@ -2027,6 +2027,16 @@ async fn test_manage_neuron() {
             .unwrap()
             .status()
     );
+    assert_eq!(
+        gov.get_neuron_info(&NeuronId { id: 2 })
+            .unwrap()
+            .recent_ballots,
+        vec![BallotInfo {
+            proposal_id: Some(ProposalId { id: 1 },),
+            vote: Vote::Yes as i32,
+        }]
+    );
+
     // Check that neuron 5 cannot vote...
     let result = fake::register_vote(
         &mut gov,
@@ -2054,6 +2064,15 @@ async fn test_manage_neuron() {
         gov.get_proposal_data(ProposalId { id: 1 })
             .unwrap()
             .status()
+    );
+    assert_eq!(
+        gov.get_neuron_info(&NeuronId { id: 3 })
+            .unwrap()
+            .recent_ballots,
+        vec![BallotInfo {
+            proposal_id: Some(ProposalId { id: 1 },),
+            vote: Vote::Yes as i32,
+        }]
     );
     // Make sure that the neuron has been changed the fee for manage
     // neuron proposals.
