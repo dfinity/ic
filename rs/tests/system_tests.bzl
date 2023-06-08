@@ -4,7 +4,7 @@ Rules for system-tests.
 
 load("@rules_rust//rust:defs.bzl", "rust_binary")
 load("@bazel_tools//tools/build_defs/pkg:pkg.bzl", "pkg_tar")
-load("//rs/tests:common.bzl", "GUESTOS_DEV_VERSION", "UNIVERSAL_VM_RUNTIME_DEPS")
+load("//rs/tests:common.bzl", "UNIVERSAL_VM_RUNTIME_DEPS")
 
 def _run_system_test(ctx):
     run_test_script_file = ctx.actions.declare_file(ctx.label.name + "/run-test.sh")
@@ -28,21 +28,11 @@ def _run_system_test(ctx):
         ),
     )
 
-    env = dict(ctx.attr.env.items() + [
-        ("VERSION_FILE_PATH", ctx.file.version_file_path.short_path),
-    ])
-    if ctx.executable.colocated_test_bin != None:
-        env["COLOCATED_TEST_BIN"] = ctx.executable.colocated_test_bin.short_path
-
     # version_file_path contains the "direct" path to the volatile status file.
     # The wrapper script copies this file instead of receiving ing as bazel dependency to not invalidate the cache.
-    runtime_deps = [depset([ctx.file.version_file_path])]
+    runtime_deps = [depset([ctx.file.version_file_path, ctx.file.ic_version_file])]
     for target in ctx.attr.runtime_deps:
         runtime_deps.append(target.files)
-
-    for t, e in ctx.attr.env_deps.items():
-        runtime_deps.append(t.files)
-        env[e] = t.files.to_list()[0].short_path
 
     return [
         DefaultInfo(
@@ -58,7 +48,17 @@ def _run_system_test(ctx):
                 ),
             ),
         ),
-        RunEnvironmentInfo(environment = env),
+        RunEnvironmentInfo(
+            environment =
+                dict(
+                    ctx.attr.env.items() +
+                    [
+                        ("VERSION_FILE_PATH", ctx.file.version_file_path.short_path),
+                        ("IC_VERSION_FILE", ctx.file.ic_version_file.short_path),
+                    ] +
+                    ([("COLOCATED_TEST_BIN", ctx.executable.colocated_test_bin.short_path)] if ctx.executable.colocated_test_bin != None else []),
+                ),
+        ),
     ]
 
 run_system_test = rule(
@@ -69,7 +69,7 @@ run_system_test = rule(
         "colocated_test_bin": attr.label(executable = True, cfg = "exec", default = None),
         "env": attr.string_dict(allow_empty = True),
         "runtime_deps": attr.label_list(allow_files = True),
-        "env_deps": attr.label_keyed_string_dict(allow_files = True),
+        "ic_version_file": attr.label(allow_single_file = True, default = "//ic-os/guestos/envs/dev:version.txt"),
         "version_file_path": attr.label(allow_single_file = True, default = "//bazel:version_file_path"),
     },
 )
@@ -88,8 +88,6 @@ def system_test(
         flaky = True,
         colocated_test_driver_vm_resources = default_vm_resources,
         colocated_test_driver_vm_required_host_features = [],
-        uses_guestos_dev = False,
-        ic_os_fixed_version = False,
         **kwargs):
     """Declares a system-test.
 
@@ -110,8 +108,6 @@ def system_test(
       colocated_test_driver_vm_required_host_features: a list of strings
       specifying the required host features of the colocated test-driver VM.
       For example: [ "performance" ]
-      uses_guestos_dev: the test uses ic-os/guestos/envs/dev (will be also automatically added as dependency).
-      ic_os_fixed_version: the test can work with ic-os that contains synthetic stable ic version.
       **kwargs: additional arguments to pass to the rust_binary rule.
     """
 
@@ -127,32 +123,10 @@ def system_test(
         **kwargs
     )
 
-    # Automatically detect system tests that use guestos dev for back compatibility.
-    for _d in runtime_deps:
-        if _d == GUESTOS_DEV_VERSION:
-            uses_guestos_dev = True
-            break
-
-    _env_deps = {}
-
-    _guestos = "//ic-os/guestos/envs/dev-fixed-version:" if ic_os_fixed_version else "//ic-os/guestos/envs/dev:"
-
-    # Always add version.txt for now as all test use it even that they don't declary they use dev image.
-    _env_deps[_guestos + "version.txt"] = "IC_VERSION_FILE"
-
-    if uses_guestos_dev:
-        _env_deps[_guestos + "disk-img.tar.zst.cas-url"] = "DEV_DISK_IMG_TAR_ZST_CAS_URL"
-        _env_deps[_guestos + "disk-img.tar.zst.sha256"] = "DEV_DISK_IMG_TAR_ZST_SHA256"
-        _env_deps[_guestos + "update-img.tar.zst.cas-url"] = "DEV_UPDATE_IMG_TAR_ZST_CAS_URL"
-        _env_deps[_guestos + "update-img.tar.zst.sha256"] = "DEV_UPDATE_IMG_TAR_ZST_SHA256"
-
-        _env_deps["//ic-os:scripts/build-bootstrap-config-image.sh"] = "BUILD_BOOTSTRAP_CONFIG_IMAGE"
-
     run_system_test(
         name = name,
         src = bin_name,
         runtime_deps = runtime_deps,
-        env_deps = _env_deps,
         tags = tags + ["requires-network", "system_test"],
         timeout = test_timeout,
         # TODO: set flaky = False by default when PFOPS-3148 is resolved
@@ -172,7 +146,6 @@ def system_test(
             "//rs/tests:colocate_uvm_config_image",
             bin_name,
         ],
-        env_deps = _env_deps,
         env = {
             "COLOCATED_TEST": name,
             "COLOCATED_TEST_DRIVER_VM_REQUIRED_HOST_FEATURES": json.encode(colocated_test_driver_vm_required_host_features),
