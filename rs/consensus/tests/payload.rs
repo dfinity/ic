@@ -130,7 +130,6 @@ fn consensus_produces_expected_batches() {
 
         let (consensus, consensus_gossip) = ic_consensus::consensus::setup(
             replica_config.clone(),
-            Default::default(),
             Arc::clone(&registry_client) as Arc<_>,
             Arc::clone(&membership) as Arc<_>,
             Arc::clone(&fake_crypto) as Arc<_>,

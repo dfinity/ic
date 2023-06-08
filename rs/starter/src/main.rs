@@ -24,7 +24,6 @@ use clap::Parser;
 use ic_config::{
     adapters::AdaptersConfig,
     artifact_pool::ArtifactPoolTomlConfig,
-    consensus::ConsensusConfig,
     crypto::CryptoConfig,
     execution_environment::Config as HypervisorConfig,
     flag_status::FlagStatus,
@@ -666,8 +665,6 @@ impl ValidatedConfig {
 
         let hypervisor = Some(hypervisor_config);
 
-        let consensus = Some(ConsensusConfig::default());
-
         let adapters_config = Some(AdaptersConfig {
             bitcoin_testnet_uds_path: self.bitcoin_testnet_uds_path.clone(),
             https_outcalls_uds_path: self.https_outcalls_uds_path.clone(),
@@ -682,7 +679,6 @@ impl ValidatedConfig {
             http_handler,
             metrics,
             artifact_pool,
-            consensus,
             crypto,
             logger,
             adapters_config,

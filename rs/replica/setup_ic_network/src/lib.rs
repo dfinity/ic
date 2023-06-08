@@ -15,9 +15,7 @@ use ic_artifact_pool::{
     ensure_persistent_pool_replica_version_compatibility,
     ingress_pool::{IngressPoolImpl, IngressPrioritizer},
 };
-use ic_config::{
-    artifact_pool::ArtifactPoolConfig, consensus::ConsensusConfig, transport::TransportConfig,
-};
+use ic_config::{artifact_pool::ArtifactPoolConfig, transport::TransportConfig};
 use ic_consensus::{
     certification::{setup as certification_setup, CertificationCrypto},
     consensus::{dkg_key_manager::DkgKeyManager, setup as consensus_setup},
@@ -117,7 +115,6 @@ pub fn create_networking_stack(
     log: ReplicaLogger,
     rt_handle: tokio::runtime::Handle,
     transport_config: TransportConfig,
-    consensus_config: ConsensusConfig,
     malicious_flags: MaliciousFlags,
     node_id: NodeId,
     subnet_id: SubnetId,
@@ -159,7 +156,6 @@ pub fn create_networking_stack(
         Arc::clone(&certifier_crypto) as Arc<_>,
         Arc::clone(&ingress_sig_crypto) as Arc<_>,
         subnet_id,
-        consensus_config,
         log.clone(),
         metrics_registry.clone(),
         Arc::clone(&registry_client),
@@ -233,7 +229,6 @@ fn setup_artifact_manager(
     certifier_crypto: Arc<dyn CertificationCrypto>,
     ingress_sig_crypto: Arc<dyn IngressSigVerifier + Send + Sync>,
     subnet_id: SubnetId,
-    consensus_config: ConsensusConfig,
     replica_logger: ReplicaLogger,
     metrics_registry: MetricsRegistry,
     registry_client: Arc<dyn RegistryClient>,
@@ -361,7 +356,6 @@ fn setup_artifact_manager(
             move |req| advert_broadcaster.process_delta(req.into()),
             consensus_setup(
                 replica_config.clone(),
-                consensus_config,
                 Arc::clone(&registry_client),
                 Arc::clone(&membership) as Arc<_>,
                 Arc::clone(&consensus_crypto),

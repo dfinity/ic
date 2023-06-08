@@ -113,11 +113,6 @@ pub const SAMPLE_CONFIG: &str = r#"
         }
     },
     // ============================================
-    // Consensus related config.
-    // ============================================
-    consensus: {
-    },
-    // ============================================
     // Configuration of the node state persistence.
     // ============================================
     crypto: {
