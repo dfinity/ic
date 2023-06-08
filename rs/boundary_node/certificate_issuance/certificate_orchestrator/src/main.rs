@@ -11,7 +11,12 @@ use certificate_orchestrator_interface::{
     UpdateRegistrationError, UpdateRegistrationResponse, UpdateType, UploadCertificateError,
     UploadCertificateResponse,
 };
-use ic_cdk::{api::time, caller, export::Principal, post_upgrade, pre_upgrade, trap};
+use ic_cdk::{
+    api::{id, time},
+    caller,
+    export::Principal,
+    post_upgrade, pre_upgrade, trap,
+};
 use ic_cdk_macros::{init, query, update};
 use ic_cdk_timers::set_timer_interval;
 use ic_stable_structures::{
@@ -456,6 +461,9 @@ fn init_fn(
         s.insert((), id_seed);
     });
 
+    // authorize the canister ID so that timer functions are authorized
+    ALLOWED_PRINCIPALS.with(|m| m.borrow_mut().insert(id().to_text().into(), ()));
+
     init_timers_fn();
     init_cert_tree();
 }
@@ -512,6 +520,10 @@ fn post_upgrade_fn() {
             };
         });
     });
+
+    // authorize the canister ID so that timer functions are authorized
+    // this can be removed after we upgraded the canisters that didn't do it in init_fn()
+    ALLOWED_PRINCIPALS.with(|m| m.borrow_mut().insert(id().to_text().into(), ()));
 
     init_timers_fn();
 
