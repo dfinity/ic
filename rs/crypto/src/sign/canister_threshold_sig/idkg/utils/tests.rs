@@ -1,3 +1,127 @@
+mod index_and_dealing_of_dealer {
+    use crate::sign::canister_threshold_sig::idkg::utils::{
+        index_and_dealing_of_dealer, IDkgDealingExtractionError,
+    };
+    use crate::sign::canister_threshold_sig::test_utils::{
+        batch_signed_dealing_with, valid_internal_dealing_raw,
+    };
+    use crate::sign::tests::REG_V1;
+    use assert_matches::assert_matches;
+    use ic_base_types::{PrincipalId, SubnetId};
+    use ic_crypto_internal_threshold_sig_ecdsa::IDkgDealingInternal;
+    use ic_crypto_internal_types::NodeIndex;
+    use ic_crypto_test_utils::set_of;
+    use ic_types::crypto::canister_threshold_sig::idkg::{
+        BatchSignedIDkgDealing, IDkgMaskedTranscriptOrigin, IDkgReceivers, IDkgTranscript,
+        IDkgTranscriptId, IDkgTranscriptType,
+    };
+    use ic_types::crypto::AlgorithmId;
+    use ic_types::Height;
+    use ic_types_test_utils::ids::{NODE_1, NODE_2, NODE_3, NODE_4};
+    use maplit::btreemap;
+    use std::collections::BTreeMap;
+
+    #[test]
+    fn should_return_error_for_transcript_without_dealings() {
+        let transcript = dummy_transcript_with_verified_dealings(BTreeMap::new());
+        let dealer_id = NODE_1;
+
+        assert_matches!(
+            index_and_dealing_of_dealer(dealer_id, &transcript),
+            Err(IDkgDealingExtractionError::MissingDealingInTranscript {
+                dealer_id
+            }) if dealer_id == NODE_1
+        );
+    }
+
+    #[test]
+    fn should_return_error_for_transcript_when_dealings_do_not_contain_dealer() {
+        let transcript = dummy_transcript_with_verified_dealings(btreemap! {
+            0 => batch_signed_dealing_with(vec![], NODE_2),
+            1 => batch_signed_dealing_with(vec![], NODE_3),
+            2 => batch_signed_dealing_with(vec![], NODE_4)
+        });
+        let dealer_id = NODE_1;
+
+        assert_matches!(
+            index_and_dealing_of_dealer(dealer_id, &transcript),
+            Err(IDkgDealingExtractionError::MissingDealingInTranscript {
+                dealer_id
+            }) if dealer_id == NODE_1
+        );
+    }
+
+    #[test]
+    fn should_fail_if_internal_dealing_cannot_be_deserialized() {
+        let transcript = dummy_transcript_with_verified_dealings(btreemap! {
+            0 => batch_signed_dealing_with(vec![32; 1usize], NODE_1),
+            1 => batch_signed_dealing_with(vec![32; 2usize], NODE_1),
+            2 => batch_signed_dealing_with(vec![32; 3usize], NODE_1)
+        });
+        let dealer_id = NODE_1;
+
+        assert_matches!(
+            index_and_dealing_of_dealer(dealer_id, &transcript),
+            Err(IDkgDealingExtractionError::SerializationError { internal_error })
+            if internal_error.contains("Error deserializing a signed dealing: SerializationError")
+        );
+    }
+
+    #[test]
+    fn should_return_first_index_if_dealer_appears_multiple_times_in_dealings() {
+        let valid_internal_dealing = valid_internal_dealing_raw();
+        let transcript = dummy_transcript_with_verified_dealings(btreemap! {
+            0 => batch_signed_dealing_with(valid_internal_dealing.clone(), NODE_1),
+            1 => batch_signed_dealing_with(vec![32; 2usize], NODE_1),
+            2 => batch_signed_dealing_with(vec![32; 3usize], NODE_1)
+        });
+        let dealer_id = NODE_1;
+        let expected_dealing = IDkgDealingInternal::deserialize(&valid_internal_dealing)
+            .expect("deserializing a raw internal dealing should succeed");
+
+        assert_matches!(
+            index_and_dealing_of_dealer(dealer_id, &transcript),
+            Ok((node_index, dealing_internal)) if node_index == 0 && dealing_internal == expected_dealing
+        );
+    }
+
+    #[test]
+    fn should_return_correct_index_if_dealer_in_dealings() {
+        let valid_internal_dealing = valid_internal_dealing_raw();
+        let transcript = dummy_transcript_with_verified_dealings(btreemap! {
+            0 => batch_signed_dealing_with(vec![32; 2usize], NODE_2),
+            1 => batch_signed_dealing_with(valid_internal_dealing.clone(), NODE_1),
+            2 => batch_signed_dealing_with(vec![32; 3usize], NODE_3)
+        });
+        let dealer_id = NODE_1;
+        let expected_dealing = IDkgDealingInternal::deserialize(&valid_internal_dealing)
+            .expect("deserializing a raw internal dealing should succeed");
+
+        assert_matches!(
+            index_and_dealing_of_dealer(dealer_id, &transcript),
+            Ok((node_index, dealing_internal)) if node_index == 1 && dealing_internal == expected_dealing
+        );
+    }
+
+    fn dummy_transcript_with_verified_dealings(
+        verified_dealings: BTreeMap<NodeIndex, BatchSignedIDkgDealing>,
+    ) -> IDkgTranscript {
+        IDkgTranscript {
+            verified_dealings,
+            transcript_id: IDkgTranscriptId::new(
+                SubnetId::from(PrincipalId::new_subnet_test_id(42)),
+                0,
+                Height::new(0),
+            ),
+            receivers: IDkgReceivers::new(set_of(&[NODE_1])).expect("failed to create receivers"),
+            registry_version: REG_V1,
+            transcript_type: IDkgTranscriptType::Masked(IDkgMaskedTranscriptOrigin::Random),
+            algorithm_id: AlgorithmId::ThresholdEcdsaSecp256k1,
+            internal_transcript_raw: vec![],
+        }
+    }
+}
+
 mod retrieve_mega_public_key_from_registry {
     use crate::sign::canister_threshold_sig::idkg::utils::mega_public_key_from_proto;
     use crate::sign::tests::REG_V1;
