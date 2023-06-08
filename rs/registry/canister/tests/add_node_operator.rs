@@ -80,7 +80,7 @@ fn test_a_canister_other_than_the_governance_canister_cannot_add_a_node_operator
         };
 
         // The attacker canister tries to add a node operator, pretending to be the
-        // proposals canister. This should have no effect.
+        // governance canister. This should have no effect.
         assert!(
             !forward_call_via_universal_canister(
                 &attacker_canister,
@@ -113,12 +113,12 @@ fn test_accepted_proposal_mutates_the_registry() {
         )
         .await;
 
-        // Install the universal canister in place of the proposals canister
-        let fake_proposal_canister = set_up_universal_canister(&runtime).await;
-        // Since it takes the id reserved for the proposal canister, it can impersonate
+        // Install the universal canister in place of the governance canister
+        let fake_governance_canister = set_up_universal_canister(&runtime).await;
+        // Since it takes the id reserved for the governance canister, it can impersonate
         // it
         assert_eq!(
-            fake_proposal_canister.canister_id(),
+            fake_governance_canister.canister_id(),
             ic_nns_constants::GOVERNANCE_CANISTER_ID
         );
 
@@ -133,7 +133,7 @@ fn test_accepted_proposal_mutates_the_registry() {
 
         assert!(
             forward_call_via_universal_canister(
-                &fake_proposal_canister,
+                &fake_governance_canister,
                 &registry,
                 "add_node_operator",
                 Encode!(&payload).unwrap()
@@ -171,7 +171,7 @@ fn test_accepted_proposal_mutates_the_registry() {
 
         assert!(
             forward_call_via_universal_canister(
-                &fake_proposal_canister,
+                &fake_governance_canister,
                 &registry,
                 "add_node_operator",
                 Encode!(&payload2).unwrap()
@@ -207,7 +207,7 @@ fn test_accepted_proposal_mutates_the_registry() {
 
         assert!(
             !forward_call_via_universal_canister(
-                &fake_proposal_canister,
+                &fake_governance_canister,
                 &registry,
                 "add_node_operator",
                 Encode!(&payload3).unwrap()

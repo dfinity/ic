@@ -98,7 +98,7 @@ fn test_the_anonymous_user_cannot_create_a_subnet() {
 }
 
 #[test]
-fn test_a_canister_other_than_the_proposals_canister_cannot_create_a_subnet() {
+fn test_a_canister_other_than_the_governance_canister_cannot_create_a_subnet() {
     local_test_on_nns_subnet(|runtime| async move {
         // An attacker got a canister that is trying to pass for the governance
         // canister...

@@ -72,7 +72,7 @@ impl Registry {
     /// The given rules are added at the given positions. If multiple rules are added at the
     /// same position, the order is maintained.
     ///
-    /// This method is called by the proposals canister.
+    /// This method is called by the governance canister.
     pub fn do_add_firewall_rules(&mut self, payload: AddFirewallRulesPayload) {
         println!("{}do_add_firewall_rules: scope: {:?}, rules: {:?}, positions: {:?}, expected_hash: {:?}", LOG_PREFIX, payload.scope, payload.rules, payload.positions, payload.expected_hash);
 
@@ -85,7 +85,7 @@ impl Registry {
     /// Remove firewall rules for a given scope.
     /// Removes the rules at the given positions.
     ///
-    /// This method is called by the proposals canister.
+    /// This method is called by the governance canister.
     pub fn do_remove_firewall_rules(&mut self, payload: RemoveFirewallRulesPayload) {
         println!(
             "{}do_remove_firewall_rules: scope: {:?}, positions: {:?}, expected_hash: {:?}",
@@ -101,7 +101,7 @@ impl Registry {
     /// Update firewall rules for a given scope.
     /// Replaces the existing rules at the given positions with the given rules.
     ///
-    /// This method is called by the proposals canister.
+    /// This method is called by the governance canister.
     pub fn do_update_firewall_rules(&mut self, payload: UpdateFirewallRulesPayload) {
         println!("{}do_update_firewall_rules: scope: {:?}, rules: {:?}, positions: {:?}, expected_hash: {:?}", LOG_PREFIX, payload.scope, payload.rules, payload.positions, payload.expected_hash);
 

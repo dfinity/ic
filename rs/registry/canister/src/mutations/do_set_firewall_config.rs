@@ -15,7 +15,7 @@ use prost::Message;
 impl Registry {
     /// Sets the firewall config record in the registry.
     ///
-    /// This method is called by the proposals canister.
+    /// This method is called by the governance canister.
     pub fn do_set_firewall_config(&mut self, payload: SetFirewallConfigPayload) {
         println!("{}do_set_firewall_config: firewall_config: {:?}, ipv4_prefixes: {:?}, ipv6_prefixes: {:?}", LOG_PREFIX, payload.firewall_config, payload.ipv4_prefixes, payload.ipv6_prefixes);
 

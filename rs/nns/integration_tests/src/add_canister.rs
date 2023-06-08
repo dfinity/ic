@@ -34,7 +34,7 @@ fn add_nns_canister_via_governance_proposal() {
         let name = "add_nns_canister_via_governance_proposal".to_string();
 
         // Test adding a new canister to the NNS, and changing the authz of the
-        // registry and proposals canisters to add the new canister, i.e. so that
+        // registry and governance canisters to add the new canister, i.e. so that
         // the new canister can submit proposals and write to the registry.
         let proposal = AddCanisterProposal {
             name: name.clone(),

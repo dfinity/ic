@@ -17,7 +17,7 @@ use ic_types::p2p::build_default_gossip_config;
 
 /// Updates the subnet's configuration in the registry.
 ///
-/// This method is called by the proposals canister, after a proposal
+/// This method is called by the governance canister, after a proposal
 /// for updating a new subnet has been accepted.
 impl Registry {
     pub fn do_update_subnet(&mut self, payload: UpdateSubnetPayload) {

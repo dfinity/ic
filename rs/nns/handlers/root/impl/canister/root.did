@@ -25,5 +25,5 @@ service : {
   );
 
   // "change_nns_canister" and "add_nns_canister" methods are explicitly not listed here, because they are
-  // not useful in the Web UI: only the proposals canister is allowed to call them.
+  // not useful in the Web UI: only the governance canister is allowed to call them.
 }
