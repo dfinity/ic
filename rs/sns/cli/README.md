@@ -83,12 +83,20 @@ This creates a new template file, by default with the name *sns_init.yaml*, that
 To see if the values you've provided are valid, use the following command to run local validation. The same validation will be applied within the SNS-W canister when deploying the SNS.
 
 ```shell
-sns init-config-file validate sns_init.yaml
+sns init-config-file validate
 ```
+
+If you renamed your configuration file, use the `--init-config-file-path` option.
+
+```shell
+sns init-config-file --init-config-file-path <path_to_config_file> validate
+```
+
+If you are interested in testing your SNS, follow the instructions for [local testing](https://internetcomputer.org/docs/current/developer-docs/integrations/sns/get-sns/local-testing) and using [SNS testflight](https://internetcomputer.org/docs/current/developer-docs/integrations/sns/get-sns/testflight).
 
 ### Deploying An SNS
 
-Once the configuration file has been filled out and validated, you are ready to deploy an SNS. To deploy either locally, or to mainnet, one must have a wallet that is whitelisted as an authorized principal in the SNS-W canister of the NNS. See the [SNS developer docs](https://internetcomputer.org/docs/current/developer-docs/integrations/sns/get-sns/preparation#understand-launch) for more details. 
+If you are interested in testing your SNS, make sure you follow the instructions for [local testing](https://internetcomputer.org/docs/current/developer-docs/integrations/sns/get-sns/local-testing). Once the configuration file has been filled out and validated, you are ready to deploy an SNS. To deploy either locally, or to mainnet, one must have a wallet that is whitelisted as an authorized principal in the SNS-W canister of the NNS. See the [SNS developer docs](https://internetcomputer.org/docs/current/developer-docs/integrations/sns/lifecycle-sns/sns-launch) for more details. 
 
 Additionally, deploying an SNS requires cycles, currently 180TC. The `sns` CLI will use the default wallet configured with your dfx identity to transfer the cycles and the wallet canister id must match the whitelisted principal of the above step. 
 
@@ -117,7 +125,7 @@ sns deploy --help
 
 ### Testflight An SNS
 
-Before launching an SNS on mainnet, you are encouraged to test your mainnet dapp's operation (e.g., upgrading the dapp's canisters) via SNS proposals.
+If you are interested in testing your SNS, make sure you follow the instructions for using [SNS testflight](https://internetcomputer.org/docs/current/developer-docs/integrations/sns/get-sns/testflight).Before launching an SNS on mainnet, you are encouraged to test your mainnet dapp's operation (e.g., upgrading the dapp's canisters) via SNS proposals.
 
 You can test SNS proposals by deploying a testflight SNS and submitting SNS proposals to it. The main differences to production SNS deployment are:
 - A testflight SNS is deployed by the developer instead of NNS; in particular, no NNS proposals are involved.
