@@ -37,7 +37,6 @@ use crate::consensus::{
     share_aggregator::ShareAggregator,
     validator::Validator,
 };
-use ic_config::consensus::ConsensusConfig;
 use ic_consensus_utils::{
     crypto::ConsensusCrypto, get_notarization_delay_settings, is_root_subnet,
     membership::Membership, pool_reader::PoolReader, RoundRobin,
@@ -118,7 +117,6 @@ pub struct ConsensusImpl {
     #[allow(dead_code)]
     malicious_flags: MaliciousFlags,
     log: ReplicaLogger,
-    config: ConsensusConfig,
     local_store_time_reader: Arc<dyn LocalStoreCertifiedTimeReader>,
 }
 
@@ -127,7 +125,6 @@ impl ConsensusImpl {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         replica_config: ReplicaConfig,
-        consensus_config: ConsensusConfig,
         registry_client: Arc<dyn RegistryClient>,
         membership: Arc<Membership>,
         crypto: Arc<dyn ConsensusCrypto>,
@@ -260,7 +257,6 @@ impl ConsensusImpl {
             replica_config,
             last_invoked: RefCell::new(last_invoked),
             schedule: RoundRobin::default(),
-            config: consensus_config,
             local_store_time_reader,
         }
     }
@@ -510,8 +506,8 @@ impl<T: ConsensusPool> ChangeSetProducer<T> for ConsensusImpl {
                     .with_label_values(&[component_name])
                     .set(time_since_last_invoked.as_secs_f64());
 
-                // Log starvation if configured
-                if self.config.detect_starvation && time_since_last_invoked > unit_delay {
+                // Log starvation
+                if time_since_last_invoked > unit_delay {
                     self.metrics
                         .starvation_counter
                         .with_label_values(&[component_name])
@@ -613,7 +609,6 @@ impl<Pool: ConsensusPool> PriorityFnAndFilterProducer<ConsensusArtifact, Pool>
 /// and ConsensusGossip interfaces respectively.
 pub fn setup(
     replica_config: ReplicaConfig,
-    consensus_config: ConsensusConfig,
     registry_client: Arc<dyn RegistryClient>,
     membership: Arc<Membership>,
     crypto: Arc<dyn ConsensusCrypto>,
@@ -647,7 +642,6 @@ pub fn setup(
     (
         ConsensusImpl::new(
             replica_config,
-            consensus_config,
             registry_client,
             membership,
             crypto,
@@ -735,7 +729,6 @@ mod tests {
 
         let consensus_impl = ConsensusImpl::new(
             replica_config,
-            ConsensusConfig::default(),
             registry,
             membership,
             crypto.clone(),

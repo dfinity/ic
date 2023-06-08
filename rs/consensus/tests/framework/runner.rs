@@ -152,7 +152,6 @@ impl<'a> ConsensusRunner<'a> {
 
         let (consensus, consensus_gossip) = ic_consensus::consensus::setup(
             deps.replica_config.clone(),
-            Default::default(),
             Arc::clone(&deps.registry_client),
             membership.clone(),
             consensus_crypto.clone(),

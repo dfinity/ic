@@ -249,7 +249,6 @@ pub fn construct_ic_stack(
         log.clone(),
         rt_handle,
         config.transport,
-        config.consensus,
         config.malicious_behaviour.malicious_flags.clone(),
         node_id,
         subnet_id,
