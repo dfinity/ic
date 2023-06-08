@@ -302,10 +302,7 @@ impl Process for Processor {
             Action::Ready => {
                 // Phase 7 - Ensure DNS TXT record has propagated
                 self.resolver
-                    .lookup(
-                        &format!("_acme-challenge.{}.{}", task.name, self.delegation_domain),
-                        RecordType::TXT,
-                    )
+                    .lookup(&format!("_acme-challenge.{}", task.name), RecordType::TXT)
                     .await
                     .map_err(|err| match err.kind() {
                         ResolveErrorKind::NoRecordsFound { .. } => {
@@ -457,7 +454,7 @@ mod tests {
             .expect_lookup()
             .times(1)
             .with(
-                predicate::eq("_acme-challenge.name.delegation"),
+                predicate::eq("_acme-challenge.name"),
                 predicate::eq(RecordType::TXT),
             )
             .returning(|_, _| {
