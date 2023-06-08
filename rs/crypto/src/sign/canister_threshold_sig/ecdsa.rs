@@ -20,6 +20,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::TryFrom;
 
+#[cfg(test)]
+mod tests;
+
 /// Extracts the master public key from the given `idkg_transcript`.
 fn get_tecdsa_master_public_key_from_internal_transcript(
     idkg_transcript_internal: &IDkgTranscriptInternal,
@@ -194,31 +197,25 @@ pub enum MasterPublicKeyExtractionError {
 }
 
 /// Extracts the master public key from the given `idkg_transcript`.
-#[allow(dead_code)]
 pub fn get_tecdsa_master_public_key(
     idkg_transcript: &IDkgTranscript,
 ) -> Result<MasterEcdsaPublicKey, MasterPublicKeyExtractionError> {
-    match idkg_transcript.transcript_type {
-        Unmasked(_) => {
-            let internal_transcript =
-                IDkgTranscriptInternal::try_from(idkg_transcript).map_err(|e| {
-                    MasterPublicKeyExtractionError::SerializationError(format!("{:?}", e))
-                })?;
-            let pub_key = internal_transcript.constant_term();
-            let algorithm_id = match idkg_transcript.algorithm_id {
-                AlgorithmId::ThresholdEcdsaSecp256k1 => AlgorithmId::EcdsaSecp256k1,
-                _ => {
-                    return Err(MasterPublicKeyExtractionError::UnsupportedAlgorithm(
-                        format!("{:?}", idkg_transcript.algorithm_id),
-                    ))
-                }
-            };
-            Ok(MasterEcdsaPublicKey {
-                algorithm_id,
-                public_key: pub_key.serialize(),
-            })
-        }
-        Masked(_) => Err(MasterPublicKeyExtractionError::CannotExtractFromMasked),
+    match idkg_transcript.algorithm_id {
+        AlgorithmId::ThresholdEcdsaSecp256k1 => match idkg_transcript.transcript_type {
+            Unmasked(_) => {
+                let internal_transcript = IDkgTranscriptInternal::try_from(idkg_transcript)
+                    .map_err(|e| {
+                        MasterPublicKeyExtractionError::SerializationError(format!("{:?}", e))
+                    })?;
+                Ok(get_tecdsa_master_public_key_from_internal_transcript(
+                    &internal_transcript,
+                ))
+            }
+            Masked(_) => Err(MasterPublicKeyExtractionError::CannotExtractFromMasked),
+        },
+        _ => Err(MasterPublicKeyExtractionError::UnsupportedAlgorithm(
+            format!("{:?}", idkg_transcript.algorithm_id),
+        )),
     }
 }
 
