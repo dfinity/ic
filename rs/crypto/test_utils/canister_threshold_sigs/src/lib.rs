@@ -754,13 +754,13 @@ pub fn generate_tecdsa_protocol_inputs(
     key_transcript: &IDkgTranscript,
     message_hash: &[u8],
     nonce: Randomness,
-    derivation_path: ExtendedDerivationPath,
+    derivation_path: &ExtendedDerivationPath,
     algorithm_id: AlgorithmId,
 ) -> ThresholdEcdsaSigInputs {
     let quadruple = generate_presig_quadruple(env, algorithm_id, key_transcript);
 
     ThresholdEcdsaSigInputs::new(
-        &derivation_path,
+        derivation_path,
         message_hash,
         nonce,
         quadruple,

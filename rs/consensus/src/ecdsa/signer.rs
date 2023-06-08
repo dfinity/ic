@@ -846,7 +846,7 @@ mod tests {
                     &key_transcript,
                     &[0; 32],
                     Randomness::from([0; 32]),
-                    derivation_path,
+                    &derivation_path,
                     AlgorithmId::ThresholdEcdsaSecp256k1,
                 );
                 let crypto = env.crypto_components.into_values().next().unwrap();
@@ -1211,7 +1211,7 @@ mod tests {
                     &key_transcript,
                     &[0; 32],
                     Randomness::from([0; 32]),
-                    derivation_path,
+                    &derivation_path,
                     AlgorithmId::ThresholdEcdsaSecp256k1,
                 );
 
