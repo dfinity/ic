@@ -736,7 +736,11 @@ pub fn hash_lazy_tree(t: &LazyTree<'_>) -> HashTree {
                 } = ht.preallocate_nodes(num_children, parent);
                 let mut nodes = Vec::with_capacity(num_children);
 
-                // We only use multithreading if the number of children is large
+                // We only use multithreading if the number of children is large. It is generally
+                // efficient to do so because the children of a given parent are of the same type
+                // (e.g. everything under `/canisters` is a canister state) and thus require
+                // similar amounts of work to materialize.
+                //
                 // We do not pass the thread pool down after use, so we are not spawning new threads
                 // in a nested way.
                 if num_children > 100 && par_strategy.is_concurrent() {
