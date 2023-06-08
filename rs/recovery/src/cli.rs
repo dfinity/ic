@@ -1,11 +1,12 @@
 //! Calls the recovery library.
 use crate::{
     app_subnet_recovery::{AppSubnetRecovery, AppSubnetRecoveryArgs},
+    args_merger::merge,
     get_node_heights_from_metrics,
     nns_recovery_failover_nodes::{NNSRecoveryFailoverNodes, NNSRecoveryFailoverNodesArgs},
     nns_recovery_same_nodes::{NNSRecoverySameNodes, NNSRecoverySameNodesArgs},
     recovery_iterator::RecoveryIterator,
-    recovery_state::HasRecoveryState,
+    recovery_state::{HasRecoveryState, RecoveryState},
     steps::Step,
     util,
     util::subnet_id_from_str,
@@ -14,6 +15,7 @@ use crate::{
 use core::fmt::Debug;
 use ic_registry_client::client::RegistryClientImpl;
 use ic_types::{NodeId, ReplicaVersion, SubnetId};
+use serde::{de::DeserializeOwned, Serialize};
 use slog::{info, warn, Logger};
 use std::{
     convert::TryFrom,
@@ -136,10 +138,11 @@ pub fn nns_recovery_failover_nodes(
     execute_steps(&logger, nns_recovery);
 }
 
-fn execute_steps<
+pub fn execute_steps<
     StepType: Copy + Debug + PartialEq + EnumMessage,
+    SubcommandArgsType: Serialize + DeserializeOwned,
     I: Iterator<Item = StepType>,
-    Steps: HasRecoveryState<StepType = StepType>
+    Steps: HasRecoveryState<StepType = StepType, SubcommandArgsType = SubcommandArgsType>
         + RecoveryIterator<StepType, I>
         + Iterator<Item = (StepType, Box<dyn Step>)>,
 >(
@@ -152,7 +155,7 @@ fn execute_steps<
 
     while let Some((_, step)) = steps.next() {
         execute_step_after_consent(logger, step);
-        if let Err(e) = steps.get_state().save() {
+        if let Err(e) = steps.get_state().and_then(|state| state.save()) {
             warn!(logger, "Failed to save the recovery state: {}", e);
         }
     }
@@ -295,5 +298,80 @@ pub fn read_neuron_args(logger: &Logger) -> NeuronArgs {
         slot: read_input(logger, "Enter slot number: "),
         neuron_id: read_input(logger, "Enter neuron ID: "),
         key_id: read_input(logger, "Enter key ID: "),
+    }
+}
+
+pub fn read_and_maybe_update_state<T: Serialize + DeserializeOwned + Clone + PartialEq>(
+    logger: &Logger,
+    recovery_args: RecoveryArgs,
+    subcommand_args: Option<T>,
+) -> RecoveryState<T> {
+    let state = RecoveryState::<T>::read(&recovery_args.dir)
+        .expect("Failed to read the recovery state file");
+
+    if let Some(state) = state {
+        info!(
+            &logger,
+            "Recovery state file found with parameters {}",
+            serde_json::to_string_pretty(&state).expect("Failed to stringify the recovery state"),
+        );
+
+        if consent_given(logger, "Resume previously started recovery?") {
+            let state = maybe_update_state(logger, state, &recovery_args, &subcommand_args);
+            // Immediately save the state with potentially new arguments
+            if let Err(e) = state.save() {
+                warn!(logger, "Failed to save the recovery state: {}", e);
+            }
+        }
+    }
+
+    // We are not resuming previously started recovery. Use the command-line arguments as is.
+    RecoveryState {
+        recovery_args,
+        subcommand_args: subcommand_args.expect("subcommand not provided"),
+        neuron_args: None,
+    }
+}
+
+/// Checks if there are any differences between the arguments passed to the tool in this run
+/// compared to the last run. If there are, asks user whether to use the new arguments.
+fn maybe_update_state<T: Serialize + DeserializeOwned + Clone + PartialEq>(
+    logger: &Logger,
+    recovery_state: RecoveryState<T>,
+    recovery_args: &RecoveryArgs,
+    subcommand_args: &Option<T>,
+) -> RecoveryState<T> {
+    let mut updated_recovery_state = recovery_state.clone();
+
+    updated_recovery_state.recovery_args = merge(
+        logger,
+        "Recovery Arguments",
+        &recovery_state.recovery_args,
+        recovery_args,
+    )
+    .unwrap();
+
+    if let Some(subcommand_args) = subcommand_args.as_ref() {
+        updated_recovery_state.subcommand_args = merge(
+            logger,
+            "Subcommand Arguments",
+            &recovery_state.subcommand_args,
+            subcommand_args,
+        )
+        .expect(
+            "Failed to merge subcommand arguments. \
+             Did you use a different subcommand than in the previous run?",
+        );
+    }
+
+    if updated_recovery_state != recovery_state
+        && consent_given(
+            logger,
+            "The arguments are different now than in the previous run. Use the new arguments?",
+        )
+    {
+        updated_recovery_state
+    } else {
+        recovery_state
     }
 }
