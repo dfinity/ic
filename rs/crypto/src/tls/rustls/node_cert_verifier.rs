@@ -1,6 +1,9 @@
-use crate::tls::{node_id_from_cert_subject_common_name, tls_cert_from_registry};
+use crate::tls::tls_cert_from_registry;
 use ic_crypto_tls_cert_validation::ValidTlsCertificate;
 use ic_crypto_tls_interfaces::{SomeOrAllNodes, TlsPublicKeyCert};
+use ic_crypto_utils_tls::{
+    node_id_from_cert_subject_common_name, tls_pubkey_cert_from_rustls_certs,
+};
 use ic_interfaces_registry::RegistryClient;
 use ic_protobuf::registry::crypto::v1::X509PublicKeyCert;
 use ic_types::{NodeId, RegistryVersion};
@@ -8,7 +11,7 @@ use std::{sync::Arc, time::SystemTime};
 use tokio_rustls::rustls::{
     client::{ServerCertVerified, ServerCertVerifier},
     server::{ClientCertVerified, ClientCertVerifier},
-    Certificate, CertificateError, DistinguishedName, Error as TLSError, ServerName,
+    Certificate, DistinguishedName, Error as TLSError, ServerName,
 };
 
 #[cfg(test)]
@@ -149,8 +152,13 @@ fn verify_node_cert(
     registry_version: RegistryVersion,
 ) -> Result<(), TLSError> {
     ensure_intermediate_certs_empty(intermediates)?;
-    let end_entity = cert_from_der(end_entity_der.0.clone())?;
-    let end_entity_node_id = node_id_from_subject_cn(&end_entity)?;
+    let end_entity = tls_pubkey_cert_from_rustls_certs(std::slice::from_ref(end_entity_der))?;
+    let end_entity_node_id = node_id_from_cert_subject_common_name(&end_entity).map_err(|e| {
+        TLSError::General(format!(
+            "The presented certificate subject CN could not be parsed as node ID: {:?}",
+            e
+        ))
+    })?;
     ensure_node_id_in_allowed_nodes(end_entity_node_id, allowed_nodes)?;
     let node_cert_from_registry =
         node_cert_from_registry(end_entity_node_id, registry_client, registry_version)?;
@@ -173,20 +181,6 @@ fn ensure_intermediate_certs_empty(intermediates: &[Certificate]) -> Result<(), 
         )));
     }
     Ok(())
-}
-
-fn cert_from_der(cert_der: Vec<u8>) -> Result<TlsPublicKeyCert, TLSError> {
-    TlsPublicKeyCert::new_from_der(cert_der)
-        .map_err(|_| TLSError::InvalidCertificate(CertificateError::BadEncoding))
-}
-
-fn node_id_from_subject_cn(cert: &TlsPublicKeyCert) -> Result<NodeId, TLSError> {
-    node_id_from_cert_subject_common_name(cert).map_err(|e| {
-        TLSError::General(format!(
-            "The presented certificate subject CN could not be parsed as node ID: {:?}",
-            e
-        ))
-    })
 }
 
 fn ensure_node_id_in_allowed_nodes(

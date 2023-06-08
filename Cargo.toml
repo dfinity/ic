@@ -96,6 +96,7 @@ members = [
   "rs/crypto/utils/basic_sig",
   "rs/crypto/utils/threshold_sig",
   "rs/crypto/utils/threshold_sig_der",
+  "rs/crypto/utils/tls",
   "rs/cup_explorer",
   "rs/depcheck",
   "rs/drun",
