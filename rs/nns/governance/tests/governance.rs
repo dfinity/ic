@@ -15,9 +15,11 @@ use common::increase_dissolve_delay_raw;
 #[cfg(feature = "test")]
 use comparable::{Changed, I32Change, MapChange, OptionChange, StringChange, U64Change, VecChange};
 use dfn_protobuf::ToProto;
-use fixtures::{new_motion_proposal, principal, NNSBuilder, NeuronBuilder};
+use fixtures::{new_motion_proposal, principal};
 #[cfg(feature = "test")]
-use fixtures::{LedgerBuilder, NNSStateChange, ProposalNeuronBehavior, NNS};
+use fixtures::{
+    LedgerBuilder, NNSBuilder, NNSStateChange, NeuronBuilder, ProposalNeuronBehavior, NNS,
+};
 use futures::future::FutureExt;
 use ic_base_types::{CanisterId, NumBytes, PrincipalId};
 use ic_crypto_sha::Sha256;
@@ -3521,7 +3523,7 @@ fn test_proposing_voting_yes_voting_no_are_equivalent_for_rewards() {
 /// participate actively (as proposer or voter) on 3/4 of the proposals. Since
 /// they are all behaving similarly, they all get an identical maturity.
 /// Total maturity is 100 and we have 4 neurons and 4 proposals. Hence every vote is worth
-/// 100/(4*4)=6.25  
+/// 100/(4*4)=6.25
 /// Thus a neuron that votes 3 times, receives 3*6.25 = 18.75 truncated to 18.
 #[test]
 fn test_neuron_sometimes_active_sometimes_passive_which_proposal_does_not_matter() {

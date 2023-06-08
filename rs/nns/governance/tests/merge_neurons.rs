@@ -13,12 +13,12 @@ use futures::future::FutureExt;
 use ic_nns_common::pb::v1::NeuronId;
 #[cfg(feature = "test")]
 use ic_nns_governance::{
-    governance::governance_minting_account,
+    governance::{governance_minting_account, Environment},
     pb::v1::{neuron::DissolveStateChange, GovernanceChange, NeuronChange},
 };
 use ic_nns_governance::{
     governance::{
-        Environment, MAX_DISSOLVE_DELAY_SECONDS, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
+        MAX_DISSOLVE_DELAY_SECONDS, MIN_DISSOLVE_DELAY_FOR_VOTE_ELIGIBILITY_SECONDS,
         ONE_YEAR_SECONDS,
     },
     pb::v1::{
