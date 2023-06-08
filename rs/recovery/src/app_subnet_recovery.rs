@@ -5,7 +5,7 @@ use crate::{
     },
     error::RecoveryError,
     recovery_iterator::RecoveryIterator,
-    NeuronArgs, Recovery, RecoveryArgs, RecoveryResult, Step,
+    NeuronArgs, Recovery, RecoveryArgs, RecoveryResult, Step, CUPS_DIR,
 };
 use clap::Parser;
 use ic_base_types::{NodeId, SubnetId};
@@ -254,6 +254,7 @@ impl RecoveryIterator<StepType, StepTypeIter> for AppSubnetRecovery {
                         node_ip,
                         self.params.pub_key.is_some(),
                         self.params.keep_downloaded_state == Some(true),
+                        /*additional_excludes=*/ vec![CUPS_DIR],
                     )))
                 } else {
                     Err(RecoveryError::StepSkipped)
