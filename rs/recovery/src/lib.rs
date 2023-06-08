@@ -5,7 +5,10 @@
 //! returned in form of a recovery [Step], holding the human-readable (and
 //! reproducible) description of the step, as well as its potential automatic
 //! execution.
-use crate::{cli::wait_for_confirmation, file_sync_helper::read_file};
+use crate::{
+    cli::wait_for_confirmation,
+    file_sync_helper::{read_file, remove_dir},
+};
 use admin_helper::{AdminHelper, IcAdmin, RegistryParams};
 use command_helper::exec_cmd;
 use error::{RecoveryError, RecoveryResult};
@@ -43,7 +46,7 @@ use std::{
 };
 use steps::*;
 use url::Url;
-use util::block_on;
+use util::{block_on, parse_hex_str};
 
 pub mod admin_helper;
 pub mod app_subnet_recovery;
@@ -348,6 +351,28 @@ impl Recovery {
         write_bytes(path, bytes)
     }
 
+    /// Removes all the checkpoints except the "highest" one.
+    ///
+    /// Returns an error when there are no checkpoints.
+    pub fn remove_all_but_highest_checkpoints(
+        checkpoint_path: &Path,
+        logger: &Logger,
+    ) -> RecoveryResult<Height> {
+        let checkpoints = Self::get_checkpoint_names(checkpoint_path)?;
+        let (max_name, max_height) = Self::get_latest_checkpoint_name_and_height(checkpoint_path)?;
+
+        for checkpoint in checkpoints {
+            if checkpoint == max_name {
+                continue;
+            }
+
+            info!(logger, "Deleting checkpoint {}", checkpoint);
+            remove_dir(&checkpoint_path.join(checkpoint))?;
+        }
+
+        Ok(max_height)
+    }
+
     /// Return a recovery [AdminStep] to halt or unhalt the given subnet
     pub fn halt_subnet(&self, subnet_id: SubnetId, is_halted: bool, keys: &[String]) -> impl Step {
         AdminStep {
@@ -534,6 +559,21 @@ impl Recovery {
             })
             .collect::<Vec<String>>();
         Ok(res)
+    }
+
+    /// Get the name and the height of the latest checkpoint currently on disk
+    ///
+    /// Returns an error when there are no checkpoints.
+    pub fn get_latest_checkpoint_name_and_height(
+        checkpoints_path: &Path,
+    ) -> RecoveryResult<(String, Height)> {
+        Self::get_checkpoint_names(checkpoints_path)?
+            .into_iter()
+            .map(|name| parse_hex_str(&name).map(|height| (name, Height::from(height))))
+            .collect::<RecoveryResult<Vec<_>>>()?
+            .into_iter()
+            .max_by_key(|(_name, height)| *height)
+            .ok_or_else(|| RecoveryError::invalid_output_error("No checkpoints"))
     }
 
     /// Parse and return the output of the replay step.
@@ -1091,4 +1131,89 @@ pub fn get_member_ips(
             })
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ic_test_utilities_tmpdir::tmpdir;
+
+    #[test]
+    fn get_latest_checkpoint_name_and_height_test() {
+        let checkpoints_dir = tmpdir("checkpoints");
+        create_fake_checkpoint_dirs(
+            checkpoints_dir.path(),
+            &[
+                /*height=64800*/ "000000000000fd20",
+                /*height=64900*/ "000000000000fd84",
+            ],
+        );
+
+        let (name, height) =
+            Recovery::get_latest_checkpoint_name_and_height(checkpoints_dir.path())
+                .expect("Failed getting the latest checkpoint name and height");
+
+        assert_eq!(name, "000000000000fd84");
+        assert_eq!(height, Height::from(64900));
+    }
+
+    #[test]
+    fn get_latest_checkpoint_name_and_height_returns_error_on_invalid_checkpoint_name() {
+        let checkpoints_dir = tmpdir("checkpoints");
+        create_fake_checkpoint_dirs(
+            checkpoints_dir.path(),
+            &[
+                /*height=64800*/ "000000000000fd20",
+                /*height=64900*/ "000000000000fd84",
+                /*height=???*/ "invalid_checkpoint_name",
+            ],
+        );
+
+        assert!(Recovery::get_latest_checkpoint_name_and_height(checkpoints_dir.path()).is_err());
+    }
+
+    #[test]
+    fn get_latest_checkpoint_name_and_height_returns_error_when_no_checkpoints() {
+        let checkpoints_dir = tmpdir("checkpoints");
+
+        assert!(Recovery::get_latest_checkpoint_name_and_height(checkpoints_dir.path()).is_err());
+    }
+
+    #[test]
+    fn remove_all_but_highest_checkpoints_test() {
+        let logger = util::make_logger();
+        let checkpoints_dir = tmpdir("checkpoints");
+        create_fake_checkpoint_dirs(
+            checkpoints_dir.path(),
+            &[
+                /*height=64800*/ "000000000000fd20",
+                /*height=64900*/ "000000000000fd84",
+            ],
+        );
+
+        let height = Recovery::remove_all_but_highest_checkpoints(checkpoints_dir.path(), &logger)
+            .expect("Failed to remove checkpoints");
+
+        assert_eq!(height, Height::from(64900));
+        assert_eq!(
+            Recovery::get_checkpoint_names(checkpoints_dir.path()).unwrap(),
+            vec![String::from("000000000000fd84")]
+        );
+    }
+
+    #[test]
+    fn remove_all_but_highest_checkpoints_returns_error_when_no_checkpoints() {
+        let logger = util::make_logger();
+        let checkpoints_dir = tmpdir("checkpoints");
+
+        assert!(
+            Recovery::remove_all_but_highest_checkpoints(checkpoints_dir.path(), &logger).is_err()
+        );
+    }
+
+    fn create_fake_checkpoint_dirs(root: &Path, checkpoint_names: &[&str]) {
+        for checkpoint_name in checkpoint_names {
+            create_dir(&root.join(checkpoint_name)).unwrap();
+        }
+    }
 }

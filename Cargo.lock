@@ -8532,6 +8532,7 @@ dependencies = [
  "ic-registry-subnet-features",
  "ic-replay",
  "ic-test-utilities",
+ "ic-test-utilities-tmpdir",
  "ic-types",
  "prost",
  "reqwest",

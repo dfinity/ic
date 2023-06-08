@@ -43,6 +43,7 @@ DEPENDENCIES = [
 
 DEV_DEPENDENCIES = [
     "//rs/test_utilities",
+    "//rs/test_utilities/tmpdir",
     "@crate_index//:tempfile",
 ]
 
