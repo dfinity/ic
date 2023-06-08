@@ -78,6 +78,41 @@ pub fn parse_percentage(s: &str) -> Result<nervous_system_pb::Percentage, String
     Ok(nervous_system_pb::Percentage { basis_points })
 }
 
+/// Inverse of [`format_time_of_day`].
+///
+/// Parses a string in the form "hh:mm UTC".
+///
+/// TODO(NNS1-2295): Support an optional "ss" suffix. E.g. "hh:mm:ss UTC".
+pub fn parse_time_of_day(s: &str) -> Result<nervous_system_pb::GlobalTimeOfDay, String> {
+    const FORMAT: &str = "hh:mm UTC";
+    let error = format!("Unable to parse time of day \"{s}\". Format should be \"{FORMAT}\"",);
+
+    // decompose "hh:mm UTC" into ["hh:mm", "UTC"]
+    let parts = s.split_whitespace().collect::<Vec<_>>();
+    let [hh_mm, "UTC"] = &parts[..] else {
+        return Err(error);
+    };
+
+    // decompose "hh:mm" into ["hh", "mm"]
+    let parts = hh_mm.split(':').collect::<Vec<_>>();
+    let [hh, mm] = &parts[..] else {
+        return Err(error);
+    };
+    if hh.len() != 2 || mm.len() != 2 {
+        return Err(error);
+    }
+
+    // convert ["hh", "mm"] into hh, mm
+    let Ok(hh) = u64::from_str(hh) else {
+        return Err(error);
+    };
+    let Ok(mm) = u64::from_str(mm) else {
+        return Err(error);
+    };
+
+    nervous_system_pb::GlobalTimeOfDay::from_hh_mm(hh, mm)
+}
+
 /// Parses strings like "123_456.789" into 123456789. Notice that in this
 /// example, the decimal point in the result has been shifted to the right by 3
 /// places. The amount of such shifting is specified using the decimal_places
@@ -221,6 +256,20 @@ pub fn format_percentage(percentage: &nervous_system_pb::Percentage) -> String {
     };
 
     format!("{}{}%", group_digits(whole), fractional)
+}
+
+/// The inverse of [`parse_time_of_day`].
+///
+/// Returns a string in the form "hh:mm UTC".
+///
+/// Will assume midnight if time_of_day.seconds_since_utc_midnight is None.
+///
+/// TODO(NNS1-2295): Additionally output ":ss" if the value doesn't slice evenly
+/// into hours and minutes. E.g. "hh:mm:ss UTC".
+pub fn format_time_of_day(time_of_day: &nervous_system_pb::GlobalTimeOfDay) -> String {
+    let (hours, minutes) = time_of_day.to_hh_mm().unwrap_or((0, 0));
+
+    format!("{hours:02}:{minutes:02} UTC")
 }
 
 pub(crate) fn group_digits(n: u64) -> String {

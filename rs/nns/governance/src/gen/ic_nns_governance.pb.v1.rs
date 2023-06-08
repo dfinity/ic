@@ -2249,6 +2249,13 @@ pub mod create_service_nervous_system {
         #[prost(message, optional, tag = "8")]
         pub restricted_countries:
             ::core::option::Option<::ic_nervous_system_proto::pb::v1::Countries>,
+        /// The swap occurs at a specific time of day, in UTC.
+        /// It will happen the first time start_time occurs that's at least 24h after
+        /// the proposal is adopted.
+        #[prost(message, optional, tag = "9")]
+        pub start_time: ::core::option::Option<::ic_nervous_system_proto::pb::v1::GlobalTimeOfDay>,
+        #[prost(message, optional, tag = "10")]
+        pub duration: ::core::option::Option<::ic_nervous_system_proto::pb::v1::Duration>,
     }
     /// Nested message and enum types in `SwapParameters`.
     pub mod swap_parameters {

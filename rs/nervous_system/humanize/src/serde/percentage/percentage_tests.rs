@@ -1,5 +1,4 @@
 use super::*;
-
 use serde::Serialize;
 
 #[test]

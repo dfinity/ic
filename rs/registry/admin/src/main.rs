@@ -34,7 +34,9 @@ use ic_nervous_system_common_test_keys::{
     TEST_USER2_PRINCIPAL, TEST_USER3_KEYPAIR, TEST_USER3_PRINCIPAL, TEST_USER4_KEYPAIR,
     TEST_USER4_PRINCIPAL,
 };
-use ic_nervous_system_humanize::{parse_duration, parse_percentage, parse_tokens};
+use ic_nervous_system_humanize::{
+    parse_duration, parse_percentage, parse_time_of_day, parse_tokens,
+};
 use ic_nervous_system_proto::pb::v1 as nervous_system_pb;
 use ic_nervous_system_root::{
     canister_status::CanisterStatusResult,
@@ -3729,6 +3731,12 @@ struct ProposeToCreateServiceNervousSystemCmd {
     #[clap(long, value_parser=parse_duration)]
     swap_neuron_dissolve_delay: nervous_system_pb::Duration,
 
+    #[clap(long, value_parser=parse_time_of_day)]
+    swap_start_time: nervous_system_pb::GlobalTimeOfDay,
+
+    #[clap(long, value_parser=parse_duration)]
+    swap_duration: nervous_system_pb::Duration,
+
     // Ledger
     // ------
     #[clap(long, value_parser=parse_tokens)]
@@ -3818,6 +3826,8 @@ impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSys
             confirmation_text,
             // Deconstruct to a more indicative name
             restrict_swap_in_country: restricted_countries,
+            swap_start_time,
+            swap_duration,
 
             transaction_fee,
             token_name,
@@ -3932,6 +3942,8 @@ impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSys
             let maximum_icp = Some(swap_maximum_icp);
             let minimum_participant_icp = Some(swap_minimum_participant_icp);
             let maximum_participant_icp = Some(swap_maximum_participant_icp);
+            let start_time = Some(swap_start_time);
+            let duration = Some(swap_duration);
 
             let neuron_basket_construction_parameters = {
                 let count = Some(swap_neuron_count);
@@ -3955,6 +3967,8 @@ impl TryFrom<ProposeToCreateServiceNervousSystemCmd> for CreateServiceNervousSys
                 confirmation_text,
                 restricted_countries,
                 neuron_basket_construction_parameters,
+                start_time,
+                duration,
             })
         };
 

@@ -127,6 +127,8 @@ lazy_static! {
             minimum_participant_icp: None,
             maximum_participant_icp: None,
             neuron_basket_construction_parameters: None,
+            start_time: None,
+            duration: None,
         })
     };
 }

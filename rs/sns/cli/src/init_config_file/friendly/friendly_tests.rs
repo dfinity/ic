@@ -187,6 +187,11 @@ fn test_parse() {
                 events: 83,
                 interval: parse_duration("17 days").unwrap(),
             },
+
+            start_time: nervous_system_pb::GlobalTimeOfDay::from_hh_mm(12, 0).unwrap(),
+            duration: nervous_system_pb::Duration {
+                seconds: Some(7 * 24 * 60 * 60),
+            },
         },
     };
 
@@ -384,6 +389,11 @@ fn test_convert_to_create_service_nervous_system() {
                     dissolve_delay_interval: Some(parse_duration("17 days").unwrap()),
                 }
             ),
+
+            start_time: nervous_system_pb::GlobalTimeOfDay::from_hh_mm(12, 0).ok(),
+            duration: Some(nervous_system_pb::Duration {
+                seconds: Some(7 * 24 * 60 * 60),
+            }),
         }
     );
 }

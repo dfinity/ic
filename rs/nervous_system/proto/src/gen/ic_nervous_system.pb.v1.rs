@@ -24,6 +24,21 @@ pub struct Duration {
     PartialEq,
     ::prost::Message,
 )]
+pub struct GlobalTimeOfDay {
+    #[prost(uint64, optional, tag = "1")]
+    pub seconds_after_utc_midnight: ::core::option::Option<u64>,
+}
+#[derive(
+    Eq,
+    candid::CandidType,
+    candid::Deserialize,
+    comparable::Comparable,
+    serde::Serialize,
+    Copy,
+    Clone,
+    PartialEq,
+    ::prost::Message,
+)]
 pub struct Tokens {
     #[prost(uint64, optional, tag = "1")]
     pub e8s: ::core::option::Option<u64>,
