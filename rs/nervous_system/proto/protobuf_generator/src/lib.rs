@@ -14,7 +14,13 @@ impl ProtoPaths<'_> {
 
 /// Build protos using prost_build.
 pub fn generate_prost_files(proto_paths: ProtoPaths<'_>, out_dir: &Path) {
-    let copy_type_names = vec!["Duration", "Tokens", "Percentage", "Canister"];
+    let copy_type_names = vec![
+        "Duration",
+        "Tokens",
+        "Percentage",
+        "Canister",
+        "GlobalTimeOfDay",
+    ];
 
     let mut config = prost_build::Config::new();
     config.protoc_arg("--experimental_allow_proto3_optional");

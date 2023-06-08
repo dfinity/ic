@@ -136,6 +136,7 @@ type Duration = record { seconds : opt nat64 };
 type ExecuteNnsFunction = record { nns_function : int32; payload : vec nat8 };
 type Follow = record { topic : int32; followees : vec NeuronId };
 type Followees = record { followees : vec NeuronId };
+type GlobalTimeOfDay = record { seconds_after_utc_midnight : opt nat64 };
 type Governance = record {
   default_followees : vec record { int32; Followees };
   most_recent_monthly_node_provider_rewards : opt MostRecentMonthlyNodeProviderRewards;
@@ -475,11 +476,13 @@ type SwapBackgroundInformation = record {
 type SwapDistribution = record { total : opt Tokens };
 type SwapParameters = record {
   minimum_participants : opt nat64;
+  duration : opt Duration;
   neuron_basket_construction_parameters : opt NeuronBasketConstructionParameters;
   confirmation_text : opt text;
   maximum_participant_icp : opt Tokens;
   minimum_icp : opt Tokens;
   minimum_participant_icp : opt Tokens;
+  start_time : opt GlobalTimeOfDay;
   maximum_icp : opt Tokens;
   restricted_countries : opt Countries;
 };

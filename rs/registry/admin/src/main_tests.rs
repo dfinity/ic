@@ -74,6 +74,10 @@ fn convert_from_flags_to_create_service_nervous_system() {
             "3",
             "--swap-neuron-dissolve-delay",
             "6w",
+            "--swap-start-time",
+            "10:01 UTC",
+            "--swap-duration",
+            "7 days",
             "--transaction-fee",
             "10_000_e8s",
             "--token-name",
@@ -160,6 +164,10 @@ fn convert_from_flags_to_create_service_nervous_system() {
                 confirmation_text: Some("I confirm that I am a human".to_string()),
                 restricted_countries: Some(nervous_system_pb::Countries {
                     iso_codes: vec!["CH".to_string(), "US".to_string()],
+                }),
+                start_time: nervous_system_pb::GlobalTimeOfDay::from_hh_mm(10, 1).ok(),
+                duration: Some(nervous_system_pb::Duration {
+                    seconds: Some(7 * SECONDS_PER_DAY),
                 }),
             }),
             ledger_parameters: Some(LedgerParameters {

@@ -628,8 +628,7 @@ impl Swap {
     ) -> Result<RefreshBuyerTokensResponse, String> {
         if self.lifecycle() != Lifecycle::Open {
             return Err(
-                "The token amount can only be refreshed when the canister is in the OPEN state"
-                    .to_string(),
+                format!("The token amount can only be refreshed when the canister is in the OPEN state. Current state is {:?}", self.lifecycle()),
             );
         }
         if self.icp_target_reached() {

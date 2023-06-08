@@ -98,3 +98,6 @@ Swap:
     VestingSchedule:
         events: 83
         interval: 17 days
+
+    start_time: 12:00 UTC
+    duration: 7 days

@@ -1643,6 +1643,12 @@ message CreateServiceNervousSystem {
     optional string confirmation_text = 7;
 
     optional ic_nervous_system.pb.v1.Countries restricted_countries = 8;
+
+    // The swap occurs at a specific time of day, in UTC.
+    // It will happen the first time start_time occurs that's at least 24h after
+    // the proposal is adopted.
+    ic_nervous_system.pb.v1.GlobalTimeOfDay start_time = 9;
+    ic_nervous_system.pb.v1.Duration duration = 10;
   }
 
   SwapParameters swap_parameters = 8;

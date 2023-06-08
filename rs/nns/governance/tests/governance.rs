@@ -28,6 +28,7 @@ use ic_nervous_system_common_test_keys::{
     TEST_NEURON_1_OWNER_PRINCIPAL, TEST_NEURON_2_OWNER_PRINCIPAL,
 };
 use ic_nervous_system_common_test_utils::{LedgerReply, SpyLedger};
+use ic_nervous_system_proto::pb::v1::{Duration, GlobalTimeOfDay};
 use ic_nns_common::{
     pb::v1::{NeuronId, ProposalId},
     types::UpdateIcpXdrConversionRatePayload,
@@ -74,11 +75,11 @@ use ic_nns_governance::{
         settle_community_fund_participation,
         settle_community_fund_participation::Committed,
         swap_background_information, AddOrRemoveNodeProvider, ApproveGenesisKyc, Ballot,
-        BallotInfo, DerivedProposalInformation, Empty, ExecuteNnsFunction,
-        Governance as GovernanceProto, GovernanceError, KnownNeuron, KnownNeuronData, ListNeurons,
-        ListNeuronsResponse, ListProposalInfo, ListProposalInfoResponse, ManageNeuron,
-        ManageNeuronResponse, Motion, NetworkEconomics, Neuron, NeuronState, NnsFunction,
-        NodeProvider, OpenSnsTokenSwap, Proposal, ProposalData,
+        BallotInfo, CreateServiceNervousSystem, DerivedProposalInformation, Empty,
+        ExecuteNnsFunction, Governance as GovernanceProto, GovernanceError, KnownNeuron,
+        KnownNeuronData, ListNeurons, ListNeuronsResponse, ListProposalInfo,
+        ListProposalInfoResponse, ManageNeuron, ManageNeuronResponse, Motion, NetworkEconomics,
+        Neuron, NeuronState, NnsFunction, NodeProvider, OpenSnsTokenSwap, Proposal, ProposalData,
         ProposalRewardStatus::{self, AcceptVotes, ReadyToSettle},
         ProposalStatus::{self, Rejected},
         RewardEvent, RewardNodeProvider, RewardNodeProviders, SetDefaultFollowees,
@@ -12047,4 +12048,86 @@ async fn test_metrics() {
         metrics.total_staked_e8s - metrics.dissolved_neurons_e8s,
         "Invalid locked verification"
     );
+}
+
+#[test]
+fn swap_start_and_due_timestamps_if_start_time_is_before_swap_approved() {
+    let swap_start_time_of_day = GlobalTimeOfDay::from_hh_mm(12, 0).unwrap();
+    let duration = Duration {
+        seconds: Some(60 * 60 * 24 * 30),
+    };
+
+    let day_offset = 10;
+    let swap_approved_timestamp_seconds = day_offset * SECONDS_PER_DAY
+        + swap_start_time_of_day.seconds_after_utc_midnight.unwrap()
+        - 1;
+    let (start, due) = CreateServiceNervousSystem::swap_start_and_due_timestamps(
+        swap_start_time_of_day,
+        duration,
+        swap_approved_timestamp_seconds,
+    )
+    .unwrap();
+
+    assert_eq!(
+        day_offset * SECONDS_PER_DAY
+            + swap_start_time_of_day.seconds_after_utc_midnight.unwrap()
+            + SECONDS_PER_DAY,
+        start
+    );
+    assert_eq!(start + duration.seconds.unwrap(), due)
+}
+
+#[test]
+fn swap_start_and_due_timestamps_if_start_time_is_after_swap_approved() {
+    let swap_start_time_of_day = GlobalTimeOfDay::from_hh_mm(12, 0).unwrap();
+    let duration = Duration {
+        seconds: Some(60 * 60 * 24 * 30),
+    };
+
+    let day_offset = 10;
+    let swap_approved_timestamp_seconds = day_offset * SECONDS_PER_DAY
+        + swap_start_time_of_day.seconds_after_utc_midnight.unwrap()
+        + 1;
+    let (start, due) = CreateServiceNervousSystem::swap_start_and_due_timestamps(
+        swap_start_time_of_day,
+        duration,
+        swap_approved_timestamp_seconds,
+    )
+    .unwrap();
+
+    assert_eq!(
+        day_offset * SECONDS_PER_DAY
+            + swap_start_time_of_day.seconds_after_utc_midnight.unwrap()
+            + SECONDS_PER_DAY
+            + SECONDS_PER_DAY,
+        start
+    );
+    assert_eq!(start + duration.seconds.unwrap(), due)
+}
+
+#[test]
+fn swap_start_and_due_timestamps_if_start_time_is_when_swap_approved() {
+    let swap_start_time_of_day = GlobalTimeOfDay::from_hh_mm(12, 0).unwrap();
+    let duration = Duration {
+        seconds: Some(60 * 60 * 24 * 30),
+    };
+
+    let day_offset = 10;
+    let swap_approved_timestamp_seconds =
+        day_offset * SECONDS_PER_DAY + swap_start_time_of_day.seconds_after_utc_midnight.unwrap();
+    let (start, due) = CreateServiceNervousSystem::swap_start_and_due_timestamps(
+        swap_start_time_of_day,
+        duration,
+        swap_approved_timestamp_seconds,
+    )
+    .unwrap();
+
+    assert_eq!(
+        day_offset * SECONDS_PER_DAY
+            + swap_start_time_of_day.seconds_after_utc_midnight.unwrap()
+            + SECONDS_PER_DAY
+            + SECONDS_PER_DAY,
+        start
+    );
+    assert_eq!(start + duration.seconds.unwrap(), due)
 }

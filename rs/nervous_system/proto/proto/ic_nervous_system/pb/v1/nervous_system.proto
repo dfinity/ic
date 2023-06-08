@@ -8,6 +8,10 @@ message Duration {
   optional uint64 seconds = 1;
 }
 
+message GlobalTimeOfDay {
+  optional uint64 seconds_after_utc_midnight = 1;
+}
+
 message Tokens {
   optional uint64 e8s = 1;
 }
