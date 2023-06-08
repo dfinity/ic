@@ -86,6 +86,8 @@ To see if the values you've provided are valid, use the following command to run
 sns init-config-file validate sns_init.yaml
 ```
 
+If you are interested in testing your SNS, follow the instructions for [local testing](https://internetcomputer.org/docs/current/developer-docs/integrations/sns/get-sns/local-testing) and using [SNS testflight on mainnet](https://internetcomputer.org/docs/current/developer-docs/integrations/sns/get-sns/testflight).
+
 ### Deploying An SNS
 
 Once the configuration file has been filled out and validated, you are ready to deploy an SNS. To deploy either locally, or to mainnet, one must have a wallet that is whitelisted as an authorized principal in the SNS-W canister of the NNS. See the [SNS developer docs](https://internetcomputer.org/docs/current/developer-docs/integrations/sns/get-sns/preparation#understand-launch) for more details. 
