@@ -26,10 +26,7 @@ mod utils;
 mod tests;
 
 use ic_crypto_internal_logmon::metrics::{MetricsDomain, MetricsResult, MetricsScope};
-pub use utils::{
-    fetch_idkg_dealing_encryption_public_key_from_registry, retrieve_mega_public_key_from_registry,
-    MegaKeyFromRegistryError,
-};
+pub use utils::{retrieve_mega_public_key_from_registry, MegaKeyFromRegistryError};
 
 /// Implementation of the [`IDkgProtocol`] for the crypto component.
 ///
