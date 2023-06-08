@@ -46,7 +46,7 @@ pub fn retrieve_mega_public_key_from_registry(
     Ok(mega_pubkey)
 }
 
-pub fn fetch_idkg_dealing_encryption_public_key_from_registry(
+fn fetch_idkg_dealing_encryption_public_key_from_registry(
     node_id: &NodeId,
     registry: &dyn RegistryClient,
     registry_version: RegistryVersion,
