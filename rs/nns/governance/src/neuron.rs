@@ -164,8 +164,7 @@ impl Neuron {
 
     /// Register that this neuron has cast a ballot for a
     /// proposal. Don't include votes on "real time" topics (such as
-    /// setting the ICP/SDR exchange rate) or "private" topics (such
-    /// as manage neuron).
+    /// setting the ICP/SDR exchange rate).
     pub(crate) fn register_recent_ballot(
         &mut self,
         topic: Topic,
@@ -174,7 +173,7 @@ impl Neuron {
     ) {
         // Ignore votes on topics for which no public voting history
         // is required.
-        if topic == Topic::ExchangeRate || topic == Topic::NeuronManagement {
+        if topic == Topic::ExchangeRate {
             return;
         }
         let ballot_info = BallotInfo {

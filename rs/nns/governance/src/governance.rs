@@ -4682,10 +4682,21 @@ impl Governance {
             ..Default::default()
         };
 
+        // The neuron should be found since the neuron id is found by looking
+        // through neurons in the first place, and the neuron has already been
+        // borrowed immutably at the top of this method.
+        let proposer = self.proto.neurons.get_mut(&proposer_id.id).ok_or_else(|| {
+            GovernanceError::new_with_message(
+                ErrorType::NotFound,
+                format!("Proposer neuron not found: {}", proposer_id.id),
+            )
+        })?;
+
         // Charge fee.
-        if let Some(proposer_mut) = self.proto.neurons.get_mut(&proposer_id.id) {
-            proposer_mut.neuron_fees_e8s += neuron_management_fee_per_proposal_e8s
-        }
+        proposer.neuron_fees_e8s += neuron_management_fee_per_proposal_e8s;
+
+        // Add to recent ballots.
+        proposer.register_recent_ballot(Topic::NeuronManagement, &proposal_id, Vote::Yes);
 
         // Add this proposal as an open proposal.
         self.insert_proposal(proposal_num, info);
@@ -5452,7 +5463,8 @@ impl Governance {
 
         if topic == Topic::NeuronManagement {
             // No following for manage neuron proposals.
-            neuron_ballot.vote = vote as i32
+            neuron_ballot.vote = vote as i32;
+            neuron.register_recent_ballot(topic, proposal_id, vote);
         } else {
             Governance::cast_vote_and_cascade_follow(
                 // Actually update the ballot, including following.
