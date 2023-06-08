@@ -2,32 +2,33 @@
   extends:
     - .bazel-build-k8s
   rules:
-    - if: '$CI_COMMIT_REF_NAME == "master" || $GITLAB_CI_CONFIG_CHANGED == "true"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      changes:
+        - gitlab-ci/src/after_script/**/*
+        - gitlab-ci/config/**/*
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE == "merge_train"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TITLE =~ /\bhotfix\b/i'
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_NAME == "run-all-master"'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH =~ /^rc--/'
   needs: []  # don't wait on other jobs
   stage: test
+  tags:
+    - dfinity-ic # we do not want the zh tag
   script:
     - |
       set -eExuo pipefail
-      export ROOT_PIPELINE_ID=${PARENT_PIPELINE_ID:-$CI_PIPELINE_ID}
 
-      if [[ $DO_SHELLCHECK == "true" ]]; then
-        # Shell check should run in the repo root otherwise it cannot follow shellcheck
-        # source directives
-        cd "${CI_PROJECT_DIR}"
-        shellcheck -x gitlab-ci/src/after_script/*.sh
-      fi
+      cd "${CI_PROJECT_DIR}"
 
-      buildevents cmd "$ROOT_PIPELINE_ID" "$CI_JOB_ID" "$CI_JOB_NAME" -- "${CI_PROJECT_DIR}"/gitlab-ci/src/after_script/after_script.sh
+      shellcheck -x gitlab-ci/src/after_script/*.sh
+
+      buildevents cmd "$CI_PIPELINE_ID" "$CI_JOB_ID" "$CI_JOB_NAME" -- "${CI_PROJECT_DIR}"/gitlab-ci/src/after_script/after_script.sh
 
 after-script-test-ic-build-legacy-image:
-  variables:
-    DO_SHELLCHECK: "true"
   extends:
     - .after-script-test
     - .ic-build-image
 
 after-script-test-ic-build-image:
-  variables:
-    DO_SHELLCHECK: "false"
   extends:
     - .after-script-test
