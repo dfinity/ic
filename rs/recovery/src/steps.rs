@@ -408,60 +408,36 @@ impl Step for ReplayStep {
     fn exec(&self) -> RecoveryResult<()> {
         let checkpoint_path = self.work_dir.join("data").join(IC_CHECKPOINTS_PATH);
 
-        let checkpoints = Recovery::get_checkpoint_names(&checkpoint_path)?;
+        let checkpoint_height =
+            Recovery::remove_all_but_highest_checkpoints(&checkpoint_path, &self.logger)?;
 
-        let checkpoint_heights = checkpoints
-            .iter()
-            .map(|c| parse_hex_str(c))
-            .collect::<RecoveryResult<Vec<u64>>>()?;
+        let state_params = block_on(replay_helper::replay(
+            self.subnet_id,
+            self.config.clone(),
+            self.canister_caller_id,
+            self.work_dir.join("data"),
+            self.subcmd.as_ref().map(|c| c.cmd.clone()),
+            self.result.clone(),
+        ))?;
 
-        let delete_checkpoints = |except: &u64| {
-            Recovery::get_checkpoint_names(&checkpoint_path)?
-                .iter()
-                .filter(|c| parse_hex_str(c).unwrap() != *except)
-                .map(|c| {
-                    info!(self.logger, "Deleting checkpoint {}", c);
-                    remove_dir(&checkpoint_path.join(c))
-                })
-                .collect::<RecoveryResult<Vec<_>>>()
-        };
+        let latest_height = state_params.height;
+        let state_hash = state_params.hash;
 
-        if let Some(max) = checkpoint_heights.iter().max() {
-            delete_checkpoints(max)?;
-            let height = Height::from(*max);
+        info!(self.logger, "Checkpoint height: {}", checkpoint_height);
+        info!(self.logger, "Height after replay: {}", latest_height);
 
-            let state_params = block_on(replay_helper::replay(
-                self.subnet_id,
-                self.config.clone(),
-                self.canister_caller_id,
-                self.work_dir.join("data"),
-                self.subcmd.as_ref().map(|c| c.cmd.clone()),
-                self.result.clone(),
-            ))?;
-
-            let latest_height = state_params.height;
-            let state_hash = state_params.hash;
-
-            info!(self.logger, "Checkpoint height: {}", height);
-            info!(self.logger, "Height after replay: {}", latest_height);
-
-            if latest_height < height {
-                return Err(RecoveryError::invalid_output_error(
-                    "Replay height and checkpoint height diverged.",
-                ));
-            }
-
-            info!(self.logger, "State hash: {}", state_hash);
-
-            info!(self.logger, "Deleting old checkpoints");
-            delete_checkpoints(&latest_height.get())?;
-
-            return Ok(());
+        if latest_height < checkpoint_height {
+            return Err(RecoveryError::invalid_output_error(
+                "Replay height and checkpoint height diverged.",
+            ));
         }
 
-        Err(RecoveryError::invalid_output_error(
-            "Did not find any checkpoints",
-        ))
+        info!(self.logger, "State hash: {}", state_hash);
+
+        info!(self.logger, "Deleting old checkpoints");
+        Recovery::remove_all_but_highest_checkpoints(&checkpoint_path, &self.logger)?;
+
+        Ok(())
     }
 }
 
@@ -559,19 +535,15 @@ impl Step for UploadAndRestartStep {
         let checkpoint_path = self.data_src.join(CHECKPOINTS);
         let checkpoints = Recovery::get_checkpoint_names(&checkpoint_path)?;
 
-        if checkpoints.len() != 1 {
+        let [max_checkpoint] = checkpoints.as_slice() else {
             return Err(RecoveryError::invalid_output_error(
-                "Found multiple checkpoints in upload directory".to_string(),
-            ));
-        }
+                "Found multiple checkpoints in upload directory"));
+        };
 
-        let max_checkpoint = checkpoints.into_iter().max().ok_or_else(|| {
-            RecoveryError::invalid_output_error("No checkpoints found".to_string())
-        })?;
         let replay_height =
             replay_helper::read_output(self.work_dir.join(replay_helper::OUTPUT_FILE_NAME))?.height;
 
-        if parse_hex_str(&max_checkpoint)? != replay_height.get() {
+        if parse_hex_str(max_checkpoint)? != replay_height.get() {
             return Err(RecoveryError::invalid_output_error(format!(
                 "Latest checkpoint height ({}) doesn't match replay output ({})",
                 max_checkpoint, replay_height
