@@ -5,6 +5,7 @@ export const apiGateways = [
   'boundary.dfinity.network',
   'boundary.ic0.app',
   'ic0.app',
+  'icp0.io',
   'icp-api.io',
 ];
 
@@ -44,11 +45,12 @@ export function isRawDomain(hostname: string, mainNet = isMainNet): boolean {
   // the match less permissive and prevents unwanted matches for domains that could include raw
   // but still serve as a normal dapp domain that should go through response verification.
   const isIcAppRaw = !!hostname.match(new RegExp(/\.raw\.ic[0-9]+\.app/));
-  const isIcDevRaw = !!hostname.match(new RegExp(/\.raw\.ic[0-9]+\.dev/));
+  const isIcDevRaw = !!hostname.match(new RegExp(/\.raw\.testic[0-9]+\.app/));
   const isIcpIoRaw = !!hostname.match(new RegExp(/\.raw\.icp[0-9]+\.io/));
   const isTestnetRaw =
     !mainNet &&
-    !!hostname.match(new RegExp(/\.raw\.[\w-]+\.testnet\.[\w-]+\.network/));
+    (!!hostname.match(new RegExp(/\.raw\.[\w-]+\.testnet\.[\w-]+\.network/)) ||
+      !!hostname.match(new RegExp(/\.raw\.ic[0-9]+\.dev/)));
   return isIcAppRaw || isIcDevRaw || isIcpIoRaw || isTestnetRaw;
 }
 
