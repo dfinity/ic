@@ -60,6 +60,7 @@ fn fetch_idkg_dealing_encryption_public_key_from_registry(
         })
 }
 
+#[derive(Debug)]
 pub enum IDkgDealingExtractionError {
     MissingDealingInTranscript { dealer_id: NodeId },
     SerializationError { internal_error: String },
@@ -106,7 +107,7 @@ impl From<IDkgDealingExtractionError> for IDkgVerifyOpeningError {
 
 /// Finds in `transcript` the dealing of the dealer `dealer_id`, and returns
 /// this dealing together with the index that corresponds to the dealer.
-pub fn index_and_dealing_of_dealer(
+pub(crate) fn index_and_dealing_of_dealer(
     dealer_id: NodeId,
     transcript: &IDkgTranscript,
 ) -> Result<(NodeIndex, IDkgDealingInternal), IDkgDealingExtractionError> {
