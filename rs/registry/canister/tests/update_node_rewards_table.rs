@@ -45,7 +45,7 @@ fn test_the_anonymous_user_cannot_update_the_node_rewards_table() {
         let payload = UpdateNodeRewardsTableProposalPayload { new_entries };
 
         // The anonymous end-user tries to update the node rewards table, bypassing
-        // the proposals canister. This should be rejected.
+        // the governance canister. This should be rejected.
         let response: Result<(), String> = registry
             .update_("update_node_rewards_table", candid_one, payload.clone())
             .await;

@@ -118,7 +118,7 @@ fn test_the_anonymous_user_cannot_change_an_nns_canister() {
 }
 
 #[test]
-fn test_a_canister_other_than_the_proposals_canister_cannot_change_an_nns_canister() {
+fn test_a_canister_other_than_the_governance_canister_cannot_change_an_nns_canister() {
     local_test_on_nns_subnet(|runtime| async move {
         let root =
             set_up_root_canister(&runtime, RootCanisterInitPayloadBuilder::new().build()).await;
@@ -130,7 +130,7 @@ fn test_a_canister_other_than_the_proposals_canister_cannot_change_an_nns_canist
             .await
             .unwrap();
 
-        // An attacker got a canister that is trying to pass for the proposals
+        // An attacker got a canister that is trying to pass for the governance
         // canister...
         let attacker_canister = set_up_universal_canister(&runtime).await;
         // ... but thankfully, it does not have the right ID

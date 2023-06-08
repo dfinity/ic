@@ -133,7 +133,7 @@ fn change_nns_canister() {
 
     // We want to reply first, so that in the case that we want to upgrade the
     // governance canister, the root canister no longer holds a pending callback
-    // to it -- and therefore does not prevent the proposals canister from being
+    // to it -- and therefore does not prevent the governance canister from being
     // stopped.
     //
     // To do so, we use `over` instead of the more common `over_async`.

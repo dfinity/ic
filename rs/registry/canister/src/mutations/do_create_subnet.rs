@@ -31,7 +31,7 @@ use on_wire::bytes;
 impl Registry {
     /// Adds the new subnet to the registry.
     ///
-    /// This method is called by the proposals canister, after a proposal
+    /// This method is called by the governance canister, after a proposal
     /// for creating a new subnet has been accepted.
     ///
     /// The method must get the registry version from the registry, and then

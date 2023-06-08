@@ -906,7 +906,7 @@ pub async fn reinstall_nns_canister_by_proposal(
 ///
 /// This goes through MANY rounds of consensus, so expect it to be slow!
 ///
-/// WARNING: this calls `execute_eligible_proposals` on the Proposals canister,
+/// WARNING: this calls `execute_eligible_proposals` on the governance canister,
 /// so it may have side effects!
 pub async fn maybe_upgrade_root_controlled_canister_to_self(
     // nns_canisters is NOT passed by reference because of the canister to upgrade,

@@ -20,8 +20,8 @@ use on_wire::bytes;
 /// A message to be store in stable memory
 const MSG: &[u8] = b"yeah NNS !";
 
-/// Tests that the root can upgrade the proposals canister. The reason it
-/// deserves a special test is because the proposals canister plays here
+/// Tests that the root can upgrade the governance canister. The reason it
+/// deserves a special test is because the governance canister plays here
 /// 2 roles simultaneously:
 /// - it calls the `change_nns_canister` method
 /// - it's the canister that must be upgraded by `change_nns_canister`
@@ -29,26 +29,26 @@ const MSG: &[u8] = b"yeah NNS !";
 /// Hence this test verifies that the process works even in the presence of
 /// this loop.
 #[test]
-fn test_upgrade_proposals_canister() {
+fn test_upgrade_governance_canister() {
     local_test_on_nns_subnet(|runtime| async move {
         let root =
             set_up_root_canister(&runtime, RootCanisterInitPayloadBuilder::new().build()).await;
 
-        // Install the universal canister in place of the proposals canister
-        let fake_proposal_canister = set_up_universal_canister(&runtime).await;
-        // Since it takes the id reserved for the proposal canister, it can impersonate
+        // Install the universal canister in place of the governance canister
+        let fake_governance_canister = set_up_universal_canister(&runtime).await;
+        // Since it takes the id reserved for the governance canister, it can impersonate
         // it
         assert_eq!(
-            fake_proposal_canister.canister_id(),
+            fake_governance_canister.canister_id(),
             ic_nns_constants::GOVERNANCE_CANISTER_ID
         );
-        fake_proposal_canister
+        fake_governance_canister
             .set_controller(root.canister_id().get())
             .await
             .unwrap();
 
         // Let's record something in stable memory
-        fake_proposal_canister
+        fake_governance_canister
             .update_(
                 "update",
                 bytes,
@@ -61,17 +61,17 @@ fn test_upgrade_proposals_canister() {
             .await
             .unwrap();
 
-        let proposal =
-            ChangeCanisterProposal::new(true, Upgrade, fake_proposal_canister.canister_id())
+        let governance =
+            ChangeCanisterProposal::new(true, Upgrade, fake_governance_canister.canister_id())
                 .with_wasm(STABLE_MEMORY_READER_WASM.clone());
 
         // The upgrade should work
         assert!(
             forward_call_via_universal_canister(
-                &fake_proposal_canister,
+                &fake_governance_canister,
                 &root,
                 "change_nns_canister",
-                Encode!(&proposal).unwrap(),
+                Encode!(&governance).unwrap(),
             )
             .await
         );
@@ -82,7 +82,9 @@ fn test_upgrade_proposals_canister() {
                 .update_(
                     "canister_status",
                     candid,
-                    (CanisterIdRecord::from(fake_proposal_canister.canister_id()),),
+                    (CanisterIdRecord::from(
+                        fake_governance_canister.canister_id(),
+                    ),),
                 )
                 .await
                 .unwrap();
@@ -95,7 +97,7 @@ fn test_upgrade_proposals_canister() {
 
         // The stable memory should have ben preserved
         assert_eq!(
-            fake_proposal_canister
+            fake_governance_canister
                 .query_("read_10_bytes_from_stable", bytes, Vec::new())
                 .await
                 .unwrap(),
