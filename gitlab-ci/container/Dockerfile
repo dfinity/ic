@@ -10,7 +10,7 @@ RUN export DEBIAN_FRONTEND=noninteractive && ln -snf /usr/share/zoneinfo/$TZ /et
     apt -yq update && apt -yqq install  \
     curl build-essential git gnupg node-json5 uuid-dev zsh clang iproute2 shellcheck \
     # GitLab CI \
-    sudo gosu jq rclone time \
+    sudo gosu jq rclone time qemu-system-x86 \
     # Test \
     rsync \
     # RUST \
