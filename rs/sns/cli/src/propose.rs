@@ -1,8 +1,12 @@
-use crate::{get_identity, MakeProposalResponse, NnsGovernanceCanister};
+use crate::{
+    get_identity, use_test_neuron_1_owner_identity, MakeProposalResponse, NnsGovernanceCanister,
+    SaveOriginalDfxIdentityAndRestoreOnExit,
+};
 use clap::Parser;
 use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount_bytes;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
 use ic_nns_governance::pb::v1::manage_neuron::NeuronIdOrSubaccount;
+use ic_nns_test_utils::ids::TEST_NEURON_1_ID;
 use std::{fmt::Debug, path::PathBuf};
 
 #[derive(Debug, Parser)]
@@ -29,6 +33,15 @@ pub struct ProposeArgs {
     /// canister) that holds the ICP that backs the proposing neuron.
     #[clap(long)]
     pub neuron_memo: Option<u64>,
+
+    /// This is a "secret menu" item. It is (yet) another alternative to
+    /// --neuron_id (and --neuron_memo). As the name implies, this is only
+    /// useful when running against a local instance of NNS (when deployed as
+    /// described in the sns-testing Github repo). In addition to specifying
+    /// which neuron to propose with, this also controls the principal that
+    /// sends the request.
+    #[clap(long)]
+    pub test_neuron_proposer: bool,
 }
 
 pub fn exec(args: ProposeArgs) {
@@ -37,11 +50,23 @@ pub fn exec(args: ProposeArgs) {
         init_config_file,
         neuron_id,
         neuron_memo,
+        test_neuron_proposer,
     } = args;
 
     // Step 0: Validate arguments.
-    if neuron_id.is_some() && neuron_memo.is_some() {
-        eprintln!("--neuron_id and --neuron_memo are mutually exclusive (yet both were used).");
+    let neuron_specifier_count = [
+        neuron_id.is_some(),
+        neuron_memo.is_some(),
+        test_neuron_proposer,
+    ]
+    .into_iter()
+    .filter(|count_this| *count_this)
+    .count();
+    if neuron_specifier_count > 1 {
+        eprintln!(
+            "--neuron-id, --neuron-memo, and --test-neuron-proposer are \
+             mutually exclusive (yet more than one of them was used)."
+        );
         std::process::exit(1);
     }
 
@@ -82,8 +107,22 @@ pub fn exec(args: ProposeArgs) {
         proposal.title.as_ref().unwrap_or(&"".to_string()),
         network,
     );
+    let checkpoint = SaveOriginalDfxIdentityAndRestoreOnExit::new_or_panic();
     let proposer = if let Some(id) = neuron_id {
         NeuronIdOrSubaccount::NeuronId(NeuronId { id })
+    } else if test_neuron_proposer {
+        if let Err(err) = use_test_neuron_1_owner_identity(&checkpoint) {
+            eprintln!(
+                "{}\n\
+                 \n\
+                 Failed to (import and) use test-neuron-1-owner dfx identity.",
+                err,
+            );
+            std::process::exit(1);
+        }
+        NeuronIdOrSubaccount::NeuronId(NeuronId {
+            id: TEST_NEURON_1_ID,
+        })
     } else {
         let subaccount = compute_neuron_staking_subaccount_bytes(
             get_identity("get-principal", &network),
@@ -99,8 +138,14 @@ pub fn exec(args: ProposeArgs) {
         Ok(MakeProposalResponse {
             proposal_id: Some(ProposalId { id }),
         }) => {
-            println!("🚀 Succes! View the proposal here:");
-            println!("https://dashboard.internetcomputer.org/proposal/{}", id);
+            println!("🚀 Succes!");
+            if network == "ic" {
+                println!("View the proposal here:");
+                println!("https://dashboard.internetcomputer.org/proposal/{}", id);
+            } else {
+                // TODO: Support other networks.
+                println!("Proposal ID: {}", id);
+            }
             println!("Godspeed!")
         }
         err => {
