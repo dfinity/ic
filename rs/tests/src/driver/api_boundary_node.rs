@@ -41,7 +41,7 @@ use crate::driver::{
     test_env_api::HasIcDependencies,
 };
 // The following default values are the same as for replica nodes
-const DEFAULT_VCPUS_PER_VM: NrOfVCPUs = NrOfVCPUs::new(4);
+const DEFAULT_VCPUS_PER_VM: NrOfVCPUs = NrOfVCPUs::new(6);
 const DEFAULT_MEMORY_KIB_PER_VM: AmountOfMemoryKiB = AmountOfMemoryKiB::new(25165824); // 24GiB
 
 const API_BOUNDARY_NODE_VMS_DIR: &str = "api_boundary_node_vms";
