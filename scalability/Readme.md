@@ -1,4 +1,31 @@
-# Benchmarking Suite for the IC
+# Run the benchmark (experiment)
+
+There is a collection of flags to instruct how to run an experiment. Common ones are:
+* use_updates
+* initial_rps
+* increment_rps
+* target_rps
+* max_rps
+* testnet
+* ...
+
+You can add more flags for your experiment as needed.
+
+For the common workload setting flags (e.g. `initial_rps`, `increment_rps`, `target_rps`, `max_rps`), as their definition are shared between query experiments and update experiments, the default values are also shared between the two. So it is expected from experiment developer, to set sensible workload targets for the environment they run the experiment on. A typical way of doing it correctly, takes a couple of tries of different values, to find a sensible compilation of numbers, to set to the recurring pipeline.
+
+Make sure you have *two* testnets reserved, then:
+
+- Run the python script corresponding to your benchmark. A good starting point is the following, which benchmarks system overhead by stressing with query and update calls. Default are queries, use `--use_updates=True` for update calls:
+
+  ```
+  $  gitlab-ci/tools/docker-run -f
+  $  python3 experiments/run_system_baseline_experiment.py --testnet $TESTNET --wg_testnet $WG_TESTNET
+  ```
+
+- You can observe the benchmark on the following dashboard: https://grafana.testnet.dfinity.network/d/u016YUeGz/workload-generator-metrics?orgId=1&refresh=5s - make sure to select the target subnetwork *as well as* the subnetwork with workload generators under "IC" and "IC workload generator" at the top respectively.
+- Create the report `python3 generate_report.py --base_dir {your_artifacts_root_dir} --git_revision {IC_revision_your_experiment_ran_on} --timestamp {the_timestamp_marker_of_your_experiment}`. This is normally called from the suite automatically, so in many cases you won't to manually run it.
+
+# Design philosophy behind the benchmark suite
 
 The benchmark suites goal is to provide an easy to use tool to stress test the IC. It should be easy to customize and allow interactive development, although the focus is on collecting a lot of data during non-interactive CD runs.
 
@@ -26,7 +53,7 @@ When running benchmarks, the tool collects all measurements and metrics, most of
 
 Report generation (`generate_report.py`) is decoupled from the benchmark runs. It can be invoked by supplying the `base_dir` directory which is the root of previous experiment run artifacts are generated into, the `git_revision` of IC the experiment was executed on, and the `timestamp` the experiment is marked with. `results`, `git_revision` and `timestamp` will be concatenated to form the full artifact directory of the previous experiment run. An example of generating report command will look like:
 ```
-common/generate_report.py --base_dir "results/" --git_revision 9f8390a49caaf43b1bd5a9d3e566ec4837b687eb --timestamp 1651766562
+python3 common/generate_report.py --base_dir "results/" --git_revision 9f8390a49caaf43b1bd5a9d3e566ec4837b687eb --timestamp 1651766562
 ```
 In this example, `generate_report.py` script will compile the report from artifacts in directory of `scalability/results/9f8390a49caaf43b1bd5a9d3e566ec4837b687eb/1651766562`.  Please note, always trigger your scripts from `scalability/` folder as the root.
 
@@ -92,17 +119,6 @@ Generally allows lower request rates (as performance is worse). Up to around 150
 
 Example: experiments/run_delegation_experiment.py
 
-# Install dependencies
-
-A clean way of managing dependencies for a python project, is via isolated virtual environment.
-`pipenv` tool is handy for this purpose.
-
-- Configure your local virtual environment and install the dependencies:
-  ```
-  $ pipenv --python 3
-  $ pipenv install -r requirements.txt
-  ```
-
 # Deploy IC on the testnet
 
 Experiments that don't require workload generators (directly inheriting from `experiment.py`) require *one* testnet:
@@ -135,31 +151,6 @@ Depending on your requirements, boot the testnets as usual.
   $ testnet/tools/icos_deploy.sh $WG_TESTNET --git-revision $(./gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh origin/master)
   ```
 
-# Run the benchmark (experiment)
-
-There is a collection of flags to instruct how to run an experiment. Common ones are:
-* use_updates
-* initial_rps
-* increment_rps
-* target_rps
-* max_rps
-* testnet
-* ...
-
-You can add more flags for your experiment as needed.
-
-For the common workload setting flags (e.g. `initial_rps`, `increment_rps`, `target_rps`, `max_rps`), as their definition are shared between query experiments and update experiments, the default values are also shared between the two. So it is expected from experiment developer, to set sensible workload targets for the environment they run the experiment on. A typical way of doing it correctly, takes a couple of tries of different values, to find a sensible compilation of numbers, to set to the recurring pipeline.
-
-Make sure you have *two* testnets reserved, then:
-
-- Run the python script corresponding to your benchmark. A good starting point is the following, which benchmarks system overhead by stressing with query and update calls. Default are queries, use `--use_updates=True` for update calls:
-
-  ```
-  $  pipenv run experiments/run_system_baseline_experiment.py --testnet $TESTNET --wg_testnet $WG_TESTNET
-  ```
-- You can observe the benchmark on the following dashboard: https://grafana.dfinity.systems/d/u016YUeGz/workload-generator-metrics?orgId=1&refresh=5s - make sure to select the target subnetwork *as well as* the subnetwork with workload generators under "IC" and "IC workload generator" at the top respectively.
-- Create the report `pipenv run generate_report.py --base_dir {your_artifacts_root_dir} --git_revision {IC_revision_your_experiment_ran_on} --timestamp {the_timestamp_marker_of_your_experiment}`. This is normally called from the suite automatically, so in many cases you won't to manually run it.
-
 # Run against mainnet
 
 Use `--testnet mercury`. Also need to specify `--mainnet_target_subnet_id` to determine machines to run against as well as `--canister`.
@@ -176,7 +167,7 @@ The suite will then not get a flamegraph and hardware information, but the bench
  4. Open a tmux session (just type `tmux` on e.g. spm34).
  5. `cd` into you `scalability` in your IC checkout
  5. Configure the desired rate of updates/second per subnetwork by setting variable `LOAD_MAX`.
- 5. Run `pipenv run run_mainnet.py`
+ 5. Run `python3 run_mainnet.py`
 
  Observe the dashboards
 
@@ -212,39 +203,12 @@ However, when running manually, it is sometimes desireable to skip some of those
  - Use `--wg_testnet localhost --workload_generator_machines localhost` to run the workload generator on the local machine. While this is easier to setup (no second testnet is neede), the quality of the results might be degraded due to load generation becoming the bottleneck
  - Use `--cache_path=/tmp/cache` to use caching for some of the lookups (e.g. the IC topology). The cache has to be manually deleted when the testnet is redeployed, as cached data in that case will be incorrect and the suite will fail with an incorrect cache.
 
-## Trouble shooting
-
-If something goes wrong with Python dependencies, one of the things to try is to delete the pipenv enviroment and recreate it.
-
-```
-pipenv --rm
-pipenv install -r requirements.txt
-```
-
-In case of errors such as:
-```
-pipenv.patched.piptools.exceptions.UnsupportedConstraint: pip-compile does not support URLs as packages, unless they are editable. Perhaps add -e option? (constraint was: file:///ic/ic-py%20%40%20https%3A/github.com/rocklabs-io/ic-py/archive/53c375a1d6c1d09e8d24588142dece550b801cef.zip)
-```
-
-Try deleting your user-installation of `pipenv`.
-```
-pip uninstall virtualenv
-pip uninstall pipenv
-```
-
-Alternatively, it's also possible to run without `pipenv`.
-
-```
-pip install -r requirements.txt
-python3 experiments/..
-```
-
 ## Debugging
 
 For debugging purposes, it is normally useful to instruct python to pop up a debugger on any exception.
 
 ```
-pipenv run python3 -m pdb -c continue ./run_XXX_experiment.py
+python3 -m pdb -c continue ./run_XXX_experiment.py
 ```
 
 This way, if an exception occurs, the debugger will be opened and the program state can be displayed at the point at
@@ -257,7 +221,7 @@ Run the following command:
 ```
 cd scalability
 rm -rf prometheus_vm
-pipenv run python3 common/tests/e2e-scalability-tests.py --ic_os_version $(../gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh origin/master)  --artifacts_path ../artifacts/release/ --nns_canisters ../artifacts/canisters/ --install_nns_bin ../artifacts/release/ic-nns-init
+python3 common/tests/e2e-scalability-tests.py --ic_os_version $(../gitlab-ci/src/artifacts/newest_sha_with_disk_image.sh origin/master)  --artifacts_path ../artifacts/release/ --nns_canisters ../artifacts/canisters/ --install_nns_bin ../artifacts/release/ic-nns-init
 ```
 
 For this to work, you need to have run the scalability suite at least once (so that `../artifacts`) is created.
