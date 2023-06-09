@@ -64,6 +64,8 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /gitlab-ci/src/gen_gitlab_cargo_pipeline/farm_rate_limit.py             @dfinity-lab/teams/idx @dfinity-lab/teams/ic-testing-verification
 /gitlab-ci/config/00--benchmark-test-child-pipeline.yml                 @dfinity-lab/teams/runtime-owners
 /gitlab-ci/config/60--benchmark-test--spawn-benchmark-pipeline.yml      @dfinity-lab/teams/runtime-owners
+/gitlab-ci/config/46--rosetta-api-docker-image.yml                      @dfinity-lab/teams/financial-integrations
+/gitlab-ci/config/47--guest-os-test--guest-os-e2e-test.yml              @dfinity-lab/teams/financial-integrations
 
 # [Typescript]
 /typescript/                 @dfinity-lab/teams/owners-owners
