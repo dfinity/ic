@@ -198,7 +198,7 @@ pub async fn change_canister_controllers(
     management_canister_client: &mut impl ManagementCanisterClient,
 ) -> ChangeCanisterControllersResponse {
     if caller != SNS_WASM_CANISTER_ID.get() {
-        return ChangeCanisterControllersResponse::new_with_error(
+        return ChangeCanisterControllersResponse::error(
             None,
             format!(
                 "change_canister_controllers is only callable by the SNS-W canister ({})",
@@ -222,9 +222,7 @@ pub async fn change_canister_controllers(
         .update_settings(update_settings_args)
         .await
     {
-        Ok(()) => ChangeCanisterControllersResponse::new_with_ok(),
-        Err((code, description)) => {
-            ChangeCanisterControllersResponse::new_with_error(code, description)
-        }
+        Ok(()) => ChangeCanisterControllersResponse::ok(),
+        Err((code, description)) => ChangeCanisterControllersResponse::error(code, description),
     }
 }

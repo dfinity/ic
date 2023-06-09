@@ -1,3 +1,5 @@
+use crate::pb::v1::Canister;
+use ic_base_types::PrincipalId;
 use pb::v1::GlobalTimeOfDay;
 
 pub mod pb;
@@ -17,5 +19,13 @@ impl GlobalTimeOfDay {
         let hh = self.seconds_after_utc_midnight? / 3600;
         let mm = (self.seconds_after_utc_midnight? % 3600) / 60;
         Some((hh, mm))
+    }
+}
+
+impl Canister {
+    pub fn new(principal_id: PrincipalId) -> Self {
+        Self {
+            id: Some(principal_id),
+        }
     }
 }

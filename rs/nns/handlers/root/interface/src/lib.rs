@@ -18,13 +18,6 @@ pub struct ChangeCanisterControllersRequest {
     pub new_controllers: Vec<PrincipalId>,
 }
 
-/// The response structure to the `change_canister_controllers` API.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize, CandidType)]
-pub struct ChangeCanisterControllersResponse {
-    /// The result of the request to the API.
-    pub change_canister_controllers_result: ChangeCanisterControllersResult,
-}
-
 /// The possible results from calling the `change_canister_controllers` API.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize, CandidType)]
 pub enum ChangeCanisterControllersResult {
@@ -44,4 +37,27 @@ pub struct ChangeCanisterControllersError {
 
     /// A description of the encountered error.
     pub description: String,
+}
+
+/// The response structure to the `change_canister_controllers` API.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize, CandidType)]
+pub struct ChangeCanisterControllersResponse {
+    /// The result of the request to the API.
+    pub change_canister_controllers_result: ChangeCanisterControllersResult,
+}
+
+impl ChangeCanisterControllersResponse {
+    pub fn error(code: Option<i32>, description: String) -> Self {
+        Self {
+            change_canister_controllers_result: ChangeCanisterControllersResult::Err(
+                ChangeCanisterControllersError { code, description },
+            ),
+        }
+    }
+
+    pub fn ok() -> Self {
+        Self {
+            change_canister_controllers_result: ChangeCanisterControllersResult::Ok(()),
+        }
+    }
 }

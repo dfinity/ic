@@ -218,6 +218,9 @@ pub struct DeployNewSnsResponse {
     /// Error when the request fails.
     #[prost(message, optional, tag = "3")]
     pub error: ::core::option::Option<SnsWasmError>,
+    /// The status of the dapp canisters being transferred to an SNS.
+    #[prost(message, optional, tag = "4")]
+    pub dapp_canisters_transfer_result: ::core::option::Option<DappCanistersTransferResult>,
 }
 /// The CanisterIds of the SNS canisters that are created.
 #[derive(
@@ -245,6 +248,30 @@ pub struct SnsCanisterIds {
     /// PrincipalId of the index canister.
     #[prost(message, optional, tag = "5")]
     pub index: ::core::option::Option<::ic_base_types::PrincipalId>,
+}
+/// The status of the dapp canisters that are being transferred to an SNS.
+#[derive(
+    candid::CandidType, candid::Deserialize, serde::Serialize, Clone, PartialEq, ::prost::Message,
+)]
+pub struct DappCanistersTransferResult {
+    /// Dapp canisters that were restored to their original controllers due to some error
+    /// encountered in the SNS deployment process.
+    #[prost(message, repeated, tag = "1")]
+    pub restored_dapp_canisters:
+        ::prost::alloc::vec::Vec<::ic_nervous_system_proto::pb::v1::Canister>,
+    /// Dapp canisters that were transferred to an SNS. This can either be as a result of
+    /// a completely successful SNS deployment where all dapps were transferred to the SNS,
+    /// or a result of a partially failed SNS deployment, where only some of the dapps
+    /// were fully transferred to the SNS, and can not be restored by the SNS-W canister.
+    #[prost(message, repeated, tag = "2")]
+    pub sns_controlled_dapp_canisters:
+        ::prost::alloc::vec::Vec<::ic_nervous_system_proto::pb::v1::Canister>,
+    /// Dapp canisters that are still under the control of the NNS. This is a result of an
+    /// error when restoring dapps to their original controller and requires additional work
+    /// to fully restore them.
+    #[prost(message, repeated, tag = "3")]
+    pub nns_controlled_dapp_canisters:
+        ::prost::alloc::vec::Vec<::ic_nervous_system_proto::pb::v1::Canister>,
 }
 /// Message to list deployed sns instances.
 #[derive(

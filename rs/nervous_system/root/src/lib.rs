@@ -11,7 +11,7 @@ pub const LOG_PREFIX: &str = "[Root Canister] ";
 /// Copied from ic-types::ic_00::CanisterIdRecord.
 #[derive(CandidType, Deserialize, Debug, Clone, Copy, Eq, PartialEq)]
 pub struct CanisterIdRecord {
-    canister_id: CanisterId,
+    pub canister_id: CanisterId,
 }
 
 impl CanisterIdRecord {

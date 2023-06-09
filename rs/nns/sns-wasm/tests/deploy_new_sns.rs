@@ -30,8 +30,8 @@ use ic_sns_init::pb::v1::{DappCanisters, SnsInitPayload};
 use ic_sns_root::{CanisterSummary, GetSnsCanistersSummaryRequest, GetSnsCanistersSummaryResponse};
 use ic_sns_swap::pb::v1::GetCanisterStatusRequest;
 use ic_sns_wasm::pb::v1::{
-    AddWasmRequest, DeployNewSnsRequest, DeployNewSnsResponse, SnsCanisterIds, SnsCanisterType,
-    SnsWasm, SnsWasmError,
+    AddWasmRequest, DappCanistersTransferResult, DeployNewSnsRequest, DeployNewSnsResponse,
+    SnsCanisterIds, SnsCanisterType, SnsWasm, SnsWasmError,
 };
 use ic_test_utilities::{
     types::ids::canister_test_id, universal_canister::UNIVERSAL_CANISTER_WASM,
@@ -185,7 +185,12 @@ fn test_canisters_are_created_and_installed() {
                     swap: Some(swap_canister_id.get()),
                     index: Some(index_canister_id.get()),
                 }),
-                error: None
+                error: None,
+                dapp_canisters_transfer_result: Some(DappCanistersTransferResult {
+                    restored_dapp_canisters: vec![],
+                    sns_controlled_dapp_canisters: vec![],
+                    nns_controlled_dapp_canisters: vec![],
+                }),
             }
         );
 
@@ -346,11 +351,24 @@ fn test_deploy_cleanup_on_wasm_install_failure() {
         EXPECTED_SNS_CREATION_FEE,
     );
 
+    // SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 1 is the ID of the wallet canister
+    let root = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 2);
+    let governance = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 3);
+    let ledger = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 4);
+    let swap = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 5);
+    let index = canister_test_id(SNS_WASM_CANISTER_INDEX_IN_NNS_SUBNET + 6);
+
     assert_eq!(
         response,
         DeployNewSnsResponse {
-            subnet_id: None,
-            canisters: None,
+            subnet_id: Some(machine.get_subnet_ids().first().unwrap().get()),
+            canisters: Some(SnsCanisterIds {
+                root: Some(root.get()),
+                ledger: Some(ledger.get()),
+                governance: Some(governance.get()),
+                swap: Some(swap.get()),
+                index: Some(index.get()),
+            }),
             // Because of the invalid WASM above (i.e. universal canister) which does not understand
             // the governance init payload, this fails.
             error: Some(SnsWasmError {
@@ -358,7 +376,12 @@ fn test_deploy_cleanup_on_wasm_install_failure() {
                 error code 5: Canister qvhpv-4qaaa-aaaaa-aaagq-cai trapped explicitly: \
                 did not find blob on stack"
                     .to_string()
-            })
+            }),
+            dapp_canisters_transfer_result: Some(DappCanistersTransferResult {
+                restored_dapp_canisters: vec![],
+                sns_controlled_dapp_canisters: vec![],
+                nns_controlled_dapp_canisters: vec![],
+            }),
         }
     );
 
@@ -420,7 +443,12 @@ fn test_deploy_adds_cycles_to_target_canisters() {
                 swap: Some(*swap.get_ref()),
                 index: Some(*index.get_ref()),
             }),
-            error: None
+            error: None,
+            dapp_canisters_transfer_result: Some(DappCanistersTransferResult {
+                restored_dapp_canisters: vec![],
+                sns_controlled_dapp_canisters: vec![],
+                nns_controlled_dapp_canisters: vec![],
+            }),
         }
     );
 
@@ -496,7 +524,14 @@ fn test_deploy_sns_and_transfer_dapps() {
                 swap: Some(swap_canister_id.get()),
                 index: Some(index_canister_id.get()),
             }),
-            error: None
+            error: None,
+            dapp_canisters_transfer_result: Some(DappCanistersTransferResult {
+                restored_dapp_canisters: vec![],
+                nns_controlled_dapp_canisters: vec![],
+                sns_controlled_dapp_canisters: vec![NervousSystemProtoCanister::new(
+                    dapp_canister.get()
+                )],
+            }),
         }
     );
 
