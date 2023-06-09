@@ -80,6 +80,9 @@ fn setup(env: TestEnv) {
     info!(log, "Universal VM {UVM_NAME} installed!");
 
     let ic_version_file = PathBuf::from(std::env::var("IC_VERSION_FILE").unwrap());
+    let dev_disk_img_tar_zst_sha256 = std::env::var("DEV_DISK_IMG_TAR_ZST_SHA256").unwrap();
+    let dev_disk_img_tar_zst_cas_url = std::env::var("DEV_DISK_IMG_TAR_ZST_CAS_URL").unwrap();
+    let dev_update_img_tar_zst_sha256 = std::env::var("DEV_UPDATE_IMG_TAR_ZST_SHA256").unwrap();
 
     let env_tar_path = env.get_path(ENV_TAR_ZST);
     info!(log, "Creating {env_tar_path:?} ...");
@@ -155,7 +158,12 @@ docker build --tag final .
 
 cat <<EOF > /home/admin/run
 #!/bin/sh
-docker run --name system_test --network host --env IC_VERSION_FILE={ic_version_file:?} final \
+docker run --name system_test --network host \
+  --env IC_VERSION_FILE={ic_version_file:?} \
+  --env DEV_DISK_IMG_TAR_ZST_SHA256={dev_disk_img_tar_zst_sha256:?} \
+  --env DEV_DISK_IMG_TAR_ZST_CAS_URL={dev_disk_img_tar_zst_cas_url:?} \
+  --env DEV_UPDATE_IMG_TAR_ZST_SHA256={dev_update_img_tar_zst_sha256:?} \
+  final \
   /home/root/root_env/dependencies/{colocated_test_bin} \
   --working-dir /home/root --no-delete-farm-group --no-farm-keepalive --group-base-name {colocated_test} run
 EOF
