@@ -1,7 +1,7 @@
 use std::{convert::TryFrom, str::FromStr};
 
 use ic_ledger_canister_core::ledger::LedgerTransaction;
-use ic_ledger_core::block::HashOf;
+use ic_ledger_hash_of::HashOf;
 use ic_types::{
     messages::{HttpCallContent, HttpRequestEnvelope},
     PrincipalId,

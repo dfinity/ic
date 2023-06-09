@@ -133,7 +133,7 @@ fn add_payment(
     memo: Memo,
     operation: Operation,
     created_at_time: Option<TimeStamp>,
-) -> (BlockIndex, ic_ledger_core::block::HashOf<EncodedBlock>) {
+) -> (BlockIndex, ic_ledger_hash_of::HashOf<EncodedBlock>) {
     let (height, hash) = ledger_canister::add_payment(memo, operation, created_at_time);
     set_certified_data(&hash.into_bytes());
     (height, hash)

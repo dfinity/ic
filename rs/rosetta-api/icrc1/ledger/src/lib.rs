@@ -18,10 +18,11 @@ use ic_ledger_canister_core::{
 use ic_ledger_core::{
     approvals::AllowanceTable,
     balances::Balances,
-    block::{BlockIndex, BlockType, EncodedBlock, FeeCollector, HashOf},
+    block::{BlockIndex, BlockType, EncodedBlock, FeeCollector},
     timestamp::TimeStamp,
     tokens::Tokens,
 };
+use ic_ledger_hash_of::HashOf;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc3::transactions::Transaction as Tx;
 use icrc_ledger_types::icrc3::{blocks::GetBlocksResponse, transactions::GetTransactionsResponse};

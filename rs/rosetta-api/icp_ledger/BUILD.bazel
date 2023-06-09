@@ -29,6 +29,7 @@ rust_library(
     ],
     version = "0.8.0",
     deps = [
+        "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/crypto/sha",
         "//rs/rosetta-api/icrc1",
@@ -105,6 +106,7 @@ rust_test(
     },
     deps = [
         ":icp_ledger",
+        "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/canister_client/sender",
         "//rs/rosetta-api/ledger_canister_core",
@@ -128,6 +130,7 @@ rust_test(
     srcs = ["test/protobuf_encoding.rs"],
     deps = [
         ":icp_ledger",
+        "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
         "//rs/rosetta-api/ledger_core",
         "//rs/rust_canisters/dfn_protobuf",
         "@crate_index//:proptest",

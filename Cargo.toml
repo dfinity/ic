@@ -3,6 +3,7 @@
 members = [
   "packages/icrc-ledger-agent",
   "packages/icrc-ledger-types",
+  "packages/ic-ledger-hash-of",
   "packages/ic-starter-tests",
   "rs/artifact_manager",
   "rs/artifact_pool",

@@ -6,12 +6,10 @@ use ic_ledger_canister_core::ledger::{
     self as core_ledger, LedgerContext, LedgerData, TransactionInfo,
 };
 use ic_ledger_core::{
-    approvals::AllowanceTable,
-    balances::Balances,
-    block::{EncodedBlock, HashOf},
-    timestamp::TimeStamp,
+    approvals::AllowanceTable, balances::Balances, block::EncodedBlock, timestamp::TimeStamp,
 };
 use ic_ledger_core::{block::BlockIndex, tokens::Tokens};
+use ic_ledger_hash_of::HashOf;
 use icp_ledger::{
     AccountIdentifier, ApprovalKey, Block, LedgerBalances, Memo, Operation, PaymentError,
     Transaction, TransferError, TransferFee, UpgradeArgs, DEFAULT_TRANSFER_FEE,

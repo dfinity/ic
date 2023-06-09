@@ -8,9 +8,10 @@ use ic_ledger_canister_core::ledger::{LedgerContext, LedgerTransaction, TxApplyE
 pub use ic_ledger_core::tokens::Tokens;
 use ic_ledger_core::{
     balances::Balances,
-    block::{BlockType, EncodedBlock, FeeCollector, HashOf},
+    block::{BlockType, EncodedBlock, FeeCollector},
     timestamp::TimeStamp,
 };
+use ic_ledger_hash_of::HashOf;
 use icrc_ledger_types::icrc1::account::Account;
 use icrc_ledger_types::icrc1::transfer::Memo;
 use num_traits::ToPrimitive;

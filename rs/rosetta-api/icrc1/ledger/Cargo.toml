@@ -18,6 +18,7 @@ ic-base-types = { path = "../../../types/base_types" }
 ic-canister-log = { path = "../../../rust_canisters/canister_log" }
 ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
 ic-crypto-tree-hash = { path = "../../../crypto/tree_hash" }
+ic-ledger-hash-of = { path = "../../../../packages/ic-ledger-hash-of" }
 ic-cdk = { version = "0.6.0" }
 ic-cdk-macros = { version = "0.6.0" }
 ic-icrc1 = { path = ".." }
