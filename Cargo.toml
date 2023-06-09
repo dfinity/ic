@@ -101,6 +101,7 @@ members = [
   "rs/depcheck",
   "rs/drun",
   "rs/recovery",
+  "rs/recovery/subnet_splitting",
   "rs/replay",
   "rs/elastic_common_schema",
   "rs/embedders",
