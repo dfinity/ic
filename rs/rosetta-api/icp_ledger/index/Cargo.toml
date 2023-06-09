@@ -8,3 +8,25 @@ edition = "2018"
 [[bin]]
 name = "ic-icp-index"
 path = "src/main.rs"
+
+[dependencies]
+candid = "0.8.1"
+ciborium = "0.2"
+ic-cdk = { version = "0.6.0" }
+ic-cdk-macros = { version = "0.6.0" }
+ic-cdk-timers = "0.1.2"
+ic-ledger-core = { path = "../../ledger_core" }
+ic-stable-structures = "0.5.0"
+icrc-ledger-types = { path = "../../../../packages/icrc-ledger-types" }
+icp-ledger = { path = "../" }
+num-traits = "0.2.14"
+scopeguard = "1.1.0"
+serde = "1.0"
+
+[dev-dependencies]
+ic-base-types = { path = "../../../types/base_types" }
+ic-ledger-canister-core = { path = "../../ledger_canister_core" }
+ic-state-machine-tests = { path = "../../../state_machine_tests" }
+ic-test-utilities-load-wasm = { path = "../../../test_utilities/load_wasm" }
+ic-icrc1 = { path = "../../icrc1" }
+ic-icp-index = { path = "./" }
