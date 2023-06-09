@@ -7,8 +7,10 @@ use ic_ledger_canister_core::ledger::{LedgerContext, LedgerTransaction, TxApplyE
 use ic_ledger_core::{
     approvals::Approvals,
     balances::Balances,
-    block::{BlockType, EncodedBlock, FeeCollector, HashOf, HASH_LENGTH},
+    block::{BlockType, EncodedBlock, FeeCollector},
 };
+use ic_ledger_hash_of::HashOf;
+use ic_ledger_hash_of::HASH_LENGTH;
 use icrc_ledger_types::icrc1::account::Account;
 use on_wire::{FromWire, IntoWire};
 use serde::{Deserialize, Serialize};

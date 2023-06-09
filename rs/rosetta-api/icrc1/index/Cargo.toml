@@ -12,6 +12,7 @@ ciborium = "0.2"
 ic-base-types = { path = "../../../types/base_types" }
 ic-canister-profiler = { path = "../../../rust_canisters/canister_profiler" }
 ic-canisters-http-types = { path = "../../../rust_canisters/http_types" }
+ic-ledger-hash-of = { path = "../../../../packages/ic-ledger-hash-of" }
 ic-cdk = "0.6.0"
 ic-cdk-timers = "0.1.2"
 ic-cdk-macros = "0.6.0"

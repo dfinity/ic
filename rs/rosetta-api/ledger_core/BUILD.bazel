@@ -8,6 +8,7 @@ rust_library(
     crate_name = "ic_ledger_core",
     version = "0.8.0",
     deps = [
+        "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/constants",
         "//rs/crypto/sha",

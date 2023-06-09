@@ -8,9 +8,10 @@ use std::ops::Range;
 use std::time::Duration;
 
 use ic_ledger_core::balances::{BalanceError, Balances, BalancesStore, InspectableBalancesStore};
-use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock, FeeCollector, HashOf};
+use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock, FeeCollector};
 use ic_ledger_core::timestamp::TimeStamp;
 use ic_ledger_core::tokens::Tokens;
+use ic_ledger_hash_of::HashOf;
 
 /// The memo to use for balances burned during trimming
 const TRIMMED_MEMO: u64 = u64::MAX;

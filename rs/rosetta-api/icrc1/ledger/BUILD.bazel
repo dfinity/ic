@@ -21,6 +21,7 @@ rust_library(
     },
     version = "0.8.0",
     deps = [
+        "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/crypto/tree_hash",
         "//rs/rosetta-api/icrc1",

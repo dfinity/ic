@@ -9,10 +9,11 @@ use ic_icrc1_index::{
 use ic_icrc1_ledger::{InitArgs as LedgerInitArgs, LedgerArgument};
 use ic_ledger_canister_core::archive::ArchiveOptions;
 use ic_ledger_core::{
-    block::{BlockIndex, BlockType, EncodedBlock, HashOf},
+    block::{BlockIndex, BlockType, EncodedBlock},
     timestamp::TimeStamp,
     tokens::Tokens,
 };
+use ic_ledger_hash_of::HashOf;
 use ic_state_machine_tests::{CanisterId, StateMachine};
 use icrc_ledger_types::icrc::generic_metadata_value::MetadataValue as Value;
 use icrc_ledger_types::icrc1::transfer::{Memo, TransferArg, TransferError};

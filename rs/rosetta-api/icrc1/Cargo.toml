@@ -14,6 +14,7 @@ ic-crypto-sha = { path = "../../crypto/sha" }
 ic-ledger-canister-core = { path = "../ledger_canister_core" }
 ic-ledger-core = { path = "../ledger_core" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
+ic-ledger-hash-of = { path = "../../../packages/ic-ledger-hash-of" }
 num-traits = "0.2.12"
 serde = "1.0"
 serde_bytes = "0.11"

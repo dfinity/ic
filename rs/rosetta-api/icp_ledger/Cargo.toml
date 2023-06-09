@@ -22,6 +22,7 @@ ic-icrc1 = { path = "../icrc1" }
 ic-ledger-canister-core = { path = "../ledger_canister_core" }
 ic-ledger-core = { path = "../ledger_core" }
 icrc-ledger-types = { path = "../../../packages/icrc-ledger-types" }
+ic-ledger-hash-of = { path = "../../../packages/ic-ledger-hash-of" }
 lazy_static = "1.4.0"
 on_wire = {path = "../../rust_canisters/on_wire"}
 prost = "0.11.0"

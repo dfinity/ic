@@ -8,7 +8,7 @@ use crate::{
 };
 use dfn_protobuf::ToProto;
 use ic_base_types::{CanisterId, CanisterIdError};
-use ic_ledger_core::block::HASH_LENGTH;
+use ic_ledger_hash_of::HASH_LENGTH;
 use protobuf::cycles_notification_response::Response;
 use serde_bytes::ByteBuf;
 use std::convert::{TryFrom, TryInto};

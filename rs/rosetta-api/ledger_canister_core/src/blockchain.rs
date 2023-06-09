@@ -7,8 +7,9 @@ use std::collections::VecDeque;
 use std::convert::TryFrom;
 use std::sync::{Arc, RwLock};
 
-use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock, HashOf};
+use ic_ledger_core::block::{BlockIndex, BlockType, EncodedBlock};
 use ic_ledger_core::timestamp::TimeStamp;
+use ic_ledger_hash_of::HashOf;
 
 /// Stores a chain of transactions with their metadata
 #[derive(Serialize, Deserialize, Debug)]

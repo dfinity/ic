@@ -22,6 +22,7 @@ rust_library(
     },
     version = "0.8.0",
     deps = [
+        "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
         "//packages/icrc-ledger-types:icrc_ledger_types",
         "//rs/constants",
         "//rs/crypto/sha",
@@ -57,6 +58,7 @@ rust_test(
 LEDGER_CANISTER_DEPS = [
     ":ledger",
     "//packages/icrc-ledger-types:icrc_ledger_types",
+    "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
     "//rs/rosetta-api/icp_ledger:icp_ledger",
     "//rs/rosetta-api/ledger_canister_core",
     "//rs/rosetta-api/ledger_core",

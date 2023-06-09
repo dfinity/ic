@@ -4,6 +4,7 @@ package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
     # Keep sorted.
+    "//packages/ic-ledger-hash-of:ic_ledger_hash_of",
     "//packages/icrc-ledger-types:icrc_ledger_types",
     "//rs/crypto/sha",
     "//rs/rosetta-api/ledger_canister_core",

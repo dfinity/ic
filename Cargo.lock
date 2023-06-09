@@ -7088,6 +7088,7 @@ dependencies = [
  "ic-icrc1-test-utils",
  "ic-ledger-canister-core",
  "ic-ledger-core",
+ "ic-ledger-hash-of",
  "icrc-ledger-types",
  "leb128",
  "num-traits",
@@ -7221,6 +7222,7 @@ dependencies = [
  "ic-icrc1-ledger",
  "ic-ledger-canister-core",
  "ic-ledger-core",
+ "ic-ledger-hash-of",
  "ic-metrics-encoder",
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
@@ -7280,6 +7282,7 @@ dependencies = [
  "ic-icrc1-ledger-sm-tests",
  "ic-ledger-canister-core",
  "ic-ledger-core",
+ "ic-ledger-hash-of",
  "ic-metrics-encoder",
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
@@ -7304,6 +7307,7 @@ dependencies = [
  "ic-icrc1-ledger",
  "ic-ledger-canister-core",
  "ic-ledger-core",
+ "ic-ledger-hash-of",
  "ic-state-machine-tests",
  "icrc-ledger-types",
  "num-traits",
@@ -7513,6 +7517,7 @@ dependencies = [
  "ic-ledger-canister-blocks-synchronizer-test-utils",
  "ic-ledger-canister-core",
  "ic-ledger-core",
+ "ic-ledger-hash-of",
  "ic-types",
  "icp-ledger",
  "log",
@@ -7556,6 +7561,7 @@ dependencies = [
  "ic-constants",
  "ic-ic00-types",
  "ic-ledger-core",
+ "ic-ledger-hash-of",
  "ic-utils 0.8.0",
  "serde",
 ]
@@ -7572,6 +7578,7 @@ dependencies = [
  "ic-constants",
  "ic-crypto-sha",
  "ic-ic00-types",
+ "ic-ledger-hash-of",
  "ic-utils 0.8.0",
  "icrc-ledger-types",
  "num-traits",
@@ -7579,6 +7586,16 @@ dependencies = [
  "rand 0.8.5",
  "serde",
  "serde_bytes",
+]
+
+[[package]]
+name = "ic-ledger-hash-of"
+version = "0.1.0"
+dependencies = [
+ "candid",
+ "ciborium",
+ "hex",
+ "serde",
 ]
 
 [[package]]
@@ -9184,6 +9201,7 @@ dependencies = [
  "ic-ledger-canister-blocks-synchronizer-test-utils",
  "ic-ledger-canister-core",
  "ic-ledger-core",
+ "ic-ledger-hash-of",
  "ic-nns-common",
  "ic-nns-constants",
  "ic-nns-governance",
@@ -10781,6 +10799,7 @@ dependencies = [
  "ic-icrc1",
  "ic-ledger-canister-core",
  "ic-ledger-core",
+ "ic-ledger-hash-of",
  "ic-test-utilities-compare-dirs",
  "icrc-ledger-types",
  "lazy_static",
@@ -11445,6 +11464,7 @@ dependencies = [
  "ic-icrc1-ledger-sm-tests",
  "ic-ledger-canister-core",
  "ic-ledger-core",
+ "ic-ledger-hash-of",
  "ic-metrics-encoder",
  "ic-state-machine-tests",
  "ic-test-utilities-load-wasm",
