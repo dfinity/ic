@@ -37,6 +37,7 @@ type InitArg = record {
 type CreateRegistrationError = variant {
     Duplicate: Id;
     NameError: text;
+    RateLimited: text;
     Unauthorized;
     UnexpectedError: text;
 };
