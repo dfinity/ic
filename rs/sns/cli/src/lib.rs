@@ -728,6 +728,54 @@ impl NnsGovernanceCanister {
     }
 }
 
+fn fetch_canister_controllers_or_exit(network: &str, canister_id: PrincipalId) -> Vec<PrincipalId> {
+    let command = [
+        "dfx",
+        "canister",
+        "--network",
+        network,
+        "info",
+        &canister_id.to_string(),
+    ];
+    let (stdout, _stderr) = run_command(&command).unwrap_or_else(|err| {
+        eprintln!("{}", err);
+        std::process::exit(1);
+    });
+
+    // Parse dfx output. More precisely, look for a line that begins with
+    // "Controllers:".
+    for line in stdout.lines() {
+        let tail = match line.strip_prefix("Controllers:") {
+            None => continue,
+            Some(tail) => tail,
+        };
+
+        return tail
+            .trim()
+            .split(' ')
+            .map(|controller_principal_id| {
+                PrincipalId::from_str(controller_principal_id.trim()).unwrap_or_else(|err| {
+                    eprintln!(
+                        "stdout:\n\
+                         {}\n\
+                         Unable to parse {:?} as a principal ID from the `Controllers:` \
+                         output line of dfx canister info. err = {:?}",
+                        stdout, controller_principal_id, err,
+                    );
+                    std::process::exit(1);
+                })
+            })
+            .collect();
+    }
+
+    // No lines in stdout matched -> fail :(
+    eprintln!(
+        "Unable to determine controllers of {} based on output of dfx:\n{}",
+        canister_id, stdout,
+    );
+    std::process::exit(1);
+}
+
 enum RunCommandError<'a> {
     UnableToRunCommand {
         command: &'a [&'a str],
