@@ -37,7 +37,8 @@ use crate::driver::test_env_api::{
 use crate::util::{assert_create_agent, block_on, MessageCanister};
 use anyhow::bail;
 use ic_registry_subnet_type::SubnetType;
-use slog::{debug, info, Logger};
+use slog::{debug, info, warn, Logger};
+use std::thread;
 
 pub fn setup_with_single_node(env: TestEnv) {
     InternetComputer::new()
@@ -176,8 +177,39 @@ fn ensure_replica_is_not_stuck(message_canister: &MessageCanister, msg: &str, lo
         message_canister.canister_id()
     );
 
-    block_on(message_canister.try_store_msg(msg))
-        .expect("update call to the canister should succeed");
+    match block_on(async {
+        tokio::time::timeout(
+            Duration::from_secs(30),
+            message_canister.try_store_msg(msg.to_string()),
+        )
+        .await
+    }) {
+        Ok(Ok(())) => {}
+        Ok(Err(err)) => panic!("update call to the canister should succeed: {err:?}"),
+        Err(err) => {
+            warn!(logger, "Timeout while waiting for replica to process update call '{msg}': {err:?}.
+            This could happen because the server was stopped after having received a request but before having sent a response.
+            In that case the client having made the request will wait until DEFAULT_RPC_TIMEOUT is reached, which is currently 5 minutes.
+            If the call was not made in a separate thread (like some multi-sign operation done by consensus) then the replica is stuck for the duration of DEFAULT_RPC_TIMEOUT.
+            For this reason, we will wait 4min 30s before retrying once more.");
+
+            debug!(
+                logger,
+                "Sleeping for 4min 30s before retrying update call to the canister '{}' for message '{msg}'",
+                message_canister.canister_id()
+            );
+            thread::sleep(Duration::from_secs(270));
+
+            debug!(
+                logger,
+                "Retrying update call to the canister '{}' for message '{msg}'",
+                message_canister.canister_id()
+            );
+            block_on(message_canister.try_store_msg(msg))
+                .expect("tentative 2nd update call to the canister should succeed");
+        }
+    };
+
     assert_eq!(
         block_on(message_canister.try_read_msg()),
         Ok(Some(msg.to_string()))
