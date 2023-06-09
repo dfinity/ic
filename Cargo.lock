@@ -7005,6 +7005,26 @@ dependencies = [
 [[package]]
 name = "ic-icp-index"
 version = "0.8.0"
+dependencies = [
+ "candid",
+ "ciborium",
+ "ic-base-types",
+ "ic-cdk 0.6.10",
+ "ic-cdk-macros",
+ "ic-cdk-timers",
+ "ic-icp-index",
+ "ic-icrc1",
+ "ic-ledger-canister-core",
+ "ic-ledger-core",
+ "ic-stable-structures",
+ "ic-state-machine-tests",
+ "ic-test-utilities-load-wasm",
+ "icp-ledger",
+ "icrc-ledger-types",
+ "num-traits",
+ "scopeguard",
+ "serde",
+]
 
 [[package]]
 name = "ic-icrc-rosetta"

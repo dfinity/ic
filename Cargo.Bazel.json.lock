@@ -1,5 +1,5 @@
 {
-  "checksum": "cdb69d4c97fcb279cc9794c3f463dc07097632a659e0876d059c952bce524af8",
+  "checksum": "c7a271515e16ea7ad834644a0221e71939c602890b965b7af51da5695e0f9a21",
   "crates": {
     "abnf 0.12.0": {
       "name": "abnf",
@@ -3471,7 +3471,7 @@
               "target": "tokio"
             },
             {
-              "id": "tokio-rustls 0.24.0",
+              "id": "tokio-rustls 0.24.1",
               "target": "tokio_rustls"
             },
             {
@@ -13943,7 +13943,7 @@
               "target": "tokio_openssl"
             },
             {
-              "id": "tokio-rustls 0.24.0",
+              "id": "tokio-rustls 0.24.1",
               "target": "tokio_rustls"
             },
             {
@@ -20165,7 +20165,7 @@
               "target": "tokio"
             },
             {
-              "id": "tokio-rustls 0.24.0",
+              "id": "tokio-rustls 0.24.1",
               "target": "tokio_rustls"
             }
           ],
@@ -38527,7 +38527,7 @@
                 "target": "tokio_native_tls"
               },
               {
-                "id": "tokio-rustls 0.24.0",
+                "id": "tokio-rustls 0.24.1",
                 "target": "tokio_rustls"
               },
               {
@@ -47705,13 +47705,13 @@
       },
       "license": "MIT/Apache-2.0"
     },
-    "tokio-rustls 0.24.0": {
+    "tokio-rustls 0.24.1": {
       "name": "tokio-rustls",
-      "version": "0.24.0",
+      "version": "0.24.1",
       "repository": {
         "Http": {
-          "url": "https://crates.io/api/v1/crates/tokio-rustls/0.24.0/download",
-          "sha256": "e0d409377ff5b1e3ca6437aa86c1eb7d40c134bfec254e44c830defa92669db5"
+          "url": "https://crates.io/api/v1/crates/tokio-rustls/0.24.1/download",
+          "sha256": "c28327cf380ac148141087fbfb9de9d7bd4e84ab5d2c28fbc911d753de8a7081"
         }
       },
       "targets": [
@@ -47753,7 +47753,7 @@
           "selects": {}
         },
         "edition": "2018",
-        "version": "0.24.0"
+        "version": "0.24.1"
       },
       "license": "MIT/Apache-2.0"
     },

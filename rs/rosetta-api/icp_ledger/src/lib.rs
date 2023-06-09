@@ -826,6 +826,63 @@ impl From<Operation> for CandidOperation {
     }
 }
 
+impl TryFrom<CandidOperation> for Operation {
+    type Error = String;
+
+    fn try_from(value: CandidOperation) -> Result<Self, Self::Error> {
+        let address_to_accountidentifier = |acc| -> Result<AccountIdentifier, Self::Error> {
+            AccountIdentifier::from_address(acc).map_err(|err| err.to_string())
+        };
+        Ok(match value {
+            CandidOperation::Burn { from, amount } => Operation::Burn {
+                from: address_to_accountidentifier(from)?,
+                amount,
+            },
+            CandidOperation::Mint { to, amount } => Operation::Mint {
+                to: address_to_accountidentifier(to)?,
+                amount,
+            },
+            CandidOperation::Transfer {
+                from,
+                to,
+                amount,
+                fee,
+            } => Operation::Transfer {
+                to: address_to_accountidentifier(to)?,
+                from: address_to_accountidentifier(from)?,
+                amount,
+                fee,
+            },
+            CandidOperation::Approve {
+                from,
+                spender,
+                allowance_e8s,
+                fee,
+                expires_at,
+            } => Operation::Approve {
+                spender: address_to_accountidentifier(spender)?,
+                from: address_to_accountidentifier(from)?,
+                allowance: Tokens::from_e8s(allowance_e8s),
+                fee,
+                expires_at,
+            },
+            CandidOperation::TransferFrom {
+                from,
+                to,
+                spender,
+                amount,
+                fee,
+            } => Operation::TransferFrom {
+                spender: address_to_accountidentifier(spender)?,
+                from: address_to_accountidentifier(from)?,
+                to: address_to_accountidentifier(to)?,
+                amount,
+                fee,
+            },
+        })
+    }
+}
+
 /// An operation with the metadata the client generated attached to it
 #[derive(
     Serialize, Deserialize, CandidType, Clone, Hash, Debug, PartialEq, Eq, PartialOrd, Ord,
@@ -835,6 +892,21 @@ pub struct CandidTransaction {
     pub memo: Memo,
     pub icrc1_memo: Option<ByteBuf>,
     pub created_at_time: TimeStamp,
+}
+
+impl TryFrom<CandidTransaction> for Transaction {
+    type Error = String;
+    fn try_from(value: CandidTransaction) -> Result<Self, Self::Error> {
+        Ok(Self {
+            operation: value.operation.map_or(
+                Err("Operation is None --> Cannot convert CandidOperation to icp_ledger Operation"),
+                |candid_block| Ok(Operation::try_from(candid_block)),
+            )??,
+            memo: value.memo,
+            created_at_time: Some(value.created_at_time),
+            icrc1_memo: value.icrc1_memo,
+        })
+    }
 }
 
 #[derive(CandidType, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -862,6 +934,17 @@ impl From<Block> for CandidBlock {
             },
             timestamp,
         }
+    }
+}
+
+impl TryFrom<CandidBlock> for Block {
+    type Error = String;
+    fn try_from(value: CandidBlock) -> Result<Self, Self::Error> {
+        Ok(Self {
+            parent_hash: value.parent_hash.map(HashOf::<EncodedBlock>::new),
+            transaction: Transaction::try_from(value.transaction)?,
+            timestamp: value.timestamp,
+        })
     }
 }
 
