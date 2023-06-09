@@ -15806,6 +15806,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "subnet-splitting-tool"
+version = "0.1.0"
+dependencies = [
+ "clap 3.2.23",
+ "hex",
+ "ic-base-types",
+ "ic-metrics",
+ "ic-protobuf",
+ "ic-recovery",
+ "ic-registry-routing-table",
+ "ic-replay",
+ "ic-state-manager",
+ "ic-test-utilities",
+ "ic-types",
+ "serde",
+ "slog",
+ "strum 0.24.1",
+ "strum_macros 0.24.3",
+ "url",
+]
+
+[[package]]
 name = "subtle"
 version = "2.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
