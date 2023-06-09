@@ -1,13 +1,19 @@
 use crate::{
-    get_identity, use_test_neuron_1_owner_identity, MakeProposalResponse, NnsGovernanceCanister,
-    SaveOriginalDfxIdentityAndRestoreOnExit,
+    fetch_canister_controllers_or_exit, get_identity, use_test_neuron_1_owner_identity,
+    MakeProposalResponse, NnsGovernanceCanister, SaveOriginalDfxIdentityAndRestoreOnExit,
 };
 use clap::Parser;
+use ic_base_types::{CanisterId, PrincipalId};
 use ic_nervous_system_common::ledger::compute_neuron_staking_subaccount_bytes;
 use ic_nns_common::pb::v1::{NeuronId, ProposalId};
-use ic_nns_governance::pb::v1::manage_neuron::NeuronIdOrSubaccount;
+use ic_nns_constants::ROOT_CANISTER_ID;
+use ic_nns_governance::pb::v1::{manage_neuron::NeuronIdOrSubaccount, CreateServiceNervousSystem};
 use ic_nns_test_utils::ids::TEST_NEURON_1_ID;
-use std::{fmt::Debug, path::PathBuf};
+use std::{
+    collections::HashSet,
+    fmt::{Debug, Display},
+    path::PathBuf,
+};
 
 #[derive(Debug, Parser)]
 pub struct ProposeArgs {
@@ -71,34 +77,8 @@ pub fn exec(args: ProposeArgs) {
     }
 
     // Step 1: Load configuration
-    let init_config_file = std::fs::read_to_string(&init_config_file).unwrap_or_else(|err| {
-        eprintln!(
-            "Unable to read the SNS configuration file ({:?}):\n{}",
-            init_config_file, err,
-        );
-        std::process::exit(1);
-    });
-    let init_config_file = serde_yaml::from_str::<
-        crate::init_config_file::friendly::SnsConfigurationFile,
-    >(&init_config_file)
-    .unwrap_or_else(|err| {
-        eprintln!(
-            "Unable to parse the SNS configuration file ({:?}):\n{}",
-            init_config_file, err,
-        );
-        std::process::exit(1);
-    });
-    let create_service_nervous_system = init_config_file
-        .try_convert_to_create_service_nervous_system()
-        .unwrap_or_else(|err| {
-            eprintln!(
-                "Unable to parse the SNS configuration file. err = {:?}.\n\
-                 init_config_file:\n{:#?}",
-                err, init_config_file,
-            );
-            std::process::exit(1);
-        });
-    let proposal = create_service_nervous_system.upgrade_to_proposal();
+    let proposal =
+        load_configuration_and_validate_or_exit(&network, &init_config_file).upgrade_to_proposal();
 
     // Step 2: Send the proposal.
     eprintln!("Loaded configuration.");
@@ -157,4 +137,143 @@ pub fn exec(args: ProposeArgs) {
             std::process::exit(1)
         }
     };
+}
+
+fn load_configuration_and_validate_or_exit(
+    network: &str,
+    configuration_file_path: &PathBuf,
+) -> CreateServiceNervousSystem {
+    // Read the file.
+    let init_config_file = std::fs::read_to_string(configuration_file_path).unwrap_or_else(|err| {
+        eprintln!(
+            "Unable to read the SNS configuration file ({:?}):\n{}",
+            configuration_file_path, err,
+        );
+        std::process::exit(1);
+    });
+
+    // Parse its contents.
+    let init_config_file = serde_yaml::from_str::<
+        crate::init_config_file::friendly::SnsConfigurationFile,
+    >(&init_config_file)
+    .unwrap_or_else(|err| {
+        eprintln!(
+            "Unable to parse the SNS configuration file ({:?}):\n{}",
+            init_config_file, err,
+        );
+        std::process::exit(1);
+    });
+    let create_service_nervous_system = init_config_file
+        .try_convert_to_create_service_nervous_system()
+        .unwrap_or_else(|err| {
+            eprintln!(
+                "Unable to parse the SNS configuration file. err = {:?}.\n\
+                 init_config_file:\n{:#?}",
+                err, init_config_file,
+            );
+            std::process::exit(1);
+        });
+
+    // Validate that NNS root is one of the controllers of all dapp canisters,
+    // as listed in the configuration file.
+    let canister_ids = &create_service_nervous_system
+        .dapp_canisters
+        .iter()
+        .map(|canister| {
+            let canister_id: PrincipalId = canister.id.unwrap_or_else(|| {
+                eprintln!(
+                    "Internal error: Canister.id was found to be None while \
+                     validating the CreateServiceNervousSystem.dapp_canisters \
+                     field.",
+                );
+                std::process::exit(1);
+            });
+
+            CanisterId::try_from(canister_id).unwrap_or_else(|err| {
+                eprintln!(
+                    "{}\n\
+                     \n\
+                     Internal error: Unable to Convert PrincipalId ({}) to CanisterId.",
+                    err, canister_id,
+                );
+                std::process::exit(1);
+            })
+        })
+        .collect::<Vec<_>>();
+    all_canisters_have_all_required_controllers(
+        network,
+        canister_ids,
+        &[PrincipalId::try_from(ROOT_CANISTER_ID)
+            .expect("Internal error: could not convert ROOT_CANISTER_ID to PrincipalId.")],
+    )
+    .unwrap_or_else(|err| {
+        eprintln!("{}", err);
+        std::process::exit(1);
+    });
+
+    // Return as the result.
+    create_service_nervous_system
+}
+
+struct CanistersWithMissingControllers {
+    inspected_canister_count: usize,
+    defective_canister_ids: Vec<CanisterId>,
+}
+
+impl Display for CanistersWithMissingControllers {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let CanistersWithMissingControllers {
+            inspected_canister_count,
+            defective_canister_ids,
+        } = self;
+
+        write!(
+            formatter,
+            "Not all dapp canisters are controlled by the NNS root canister.\n\
+             Use `sns prepare-canisters add-nns-root` to make the necessary changes.\n\
+             Defective canisters ({} out of {}):\n  \
+             - {}",
+            inspected_canister_count,
+            defective_canister_ids.len(),
+            defective_canister_ids
+                .iter()
+                .map(CanisterId::to_string)
+                .collect::<Vec<_>>()
+                .join("\n  - "),
+        )
+    }
+}
+
+fn all_canisters_have_all_required_controllers(
+    network: &str,
+    canister_ids: &[CanisterId],
+    required_controllers: &[PrincipalId],
+) -> Result<(), CanistersWithMissingControllers> {
+    let required_controllers = HashSet::<_, std::collections::hash_map::RandomState>::from_iter(
+        required_controllers.iter().cloned(),
+    );
+    // Identify canisters which are not controlled by the NNS root canister.
+    let defective_canister_ids = canister_ids
+        .iter()
+        .filter(|canister_id| {
+            let canister_id = PrincipalId::from(**canister_id);
+            let controllers = HashSet::from_iter(
+                fetch_canister_controllers_or_exit(network, canister_id).into_iter(),
+            );
+            let ok = controllers.is_superset(&required_controllers);
+            !ok
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+
+    let ok = defective_canister_ids.is_empty();
+    if ok {
+        return Ok(());
+    }
+
+    let inspected_canister_count = canister_ids.len();
+    Err(CanistersWithMissingControllers {
+        inspected_canister_count,
+        defective_canister_ids,
+    })
 }
