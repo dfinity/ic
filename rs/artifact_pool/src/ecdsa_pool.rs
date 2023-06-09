@@ -410,7 +410,8 @@ impl MutablePool<EcdsaArtifact, EcdsaChangeSet> for EcdsaPoolImpl {
                 }
                 EcdsaChangeAction::MoveToValidated(message) => {
                     match &message {
-                        EcdsaMessage::EcdsaDealingSupport(_) => (),
+                        EcdsaMessage::EcdsaDealingSupport(_)
+                        | EcdsaMessage::EcdsaSignedDealing(_) => (),
                         _ => adverts.push(EcdsaArtifact::message_to_advert(&message)),
                     }
                     unvalidated_ops.remove(ecdsa_msg_id(&message));
@@ -886,9 +887,8 @@ mod tests {
                     ],
                 );
                 assert!(result.purged.is_empty());
-                // No advert is created for moved dealing support
-                assert_eq!(result.adverts.len(), 1);
-                assert_eq!(result.adverts[0].id, msg_id_2);
+                // No adverts are created for moved dealings and dealing support
+                assert!(result.adverts.is_empty());
                 assert_eq!(result.changed, ProcessingResult::StateChanged);
                 check_state(&ecdsa_pool, &[], &[msg_id_1, msg_id_2]);
             })
