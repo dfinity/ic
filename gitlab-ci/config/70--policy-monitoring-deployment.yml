@@ -3,6 +3,8 @@ deploy-monpoly-docker:
     - .ubuntu-cargo-k8s
     - .rules-monpoly-deploy
   stage: prod-tests
+  # TODO: Remove toleration, once VER-2364 is resolved.
+  allow_failure: true
   script:
     - |
       set -euo pipefail
