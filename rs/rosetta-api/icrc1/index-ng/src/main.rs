@@ -171,7 +171,7 @@ fn with_state<R>(f: impl FnOnce(&State) -> R) -> R {
 }
 
 /// A helper function to change the scalar state.
-fn change_state(f: impl FnOnce(&mut State)) {
+fn mutate_state(f: impl FnOnce(&mut State)) {
     STATE
         .with(|cell| {
             let mut borrowed = cell.borrow_mut();
@@ -247,7 +247,7 @@ fn init(index_arg: Option<IndexArg>) {
     };
 
     // stable memory initialization
-    change_state(|state| {
+    mutate_state(|state| {
         state.ledger_id = init_arg.ledger_id;
     });
 
@@ -294,11 +294,11 @@ pub async fn build_index() -> Result<(), String> {
     if with_state(|state| state.is_build_index_running) {
         return Err("build_index already running".to_string());
     }
-    change_state(|state| {
+    mutate_state(|state| {
         state.is_build_index_running = true;
     });
     let _reset_is_build_index_running_flag_guard = guard((), |_| {
-        change_state(|state| {
+        mutate_state(|state| {
             state.is_build_index_running = false;
         });
     });
@@ -328,7 +328,7 @@ pub async fn build_index() -> Result<(), String> {
     append_blocks(res.blocks);
     let wait_time = compute_wait_time(tx_indexed_count);
     ic_cdk::eprintln!("Indexed: {} waiting : {:?}", tx_indexed_count, wait_time);
-    change_state(|mut state| state.last_wait_time = wait_time);
+    mutate_state(|mut state| state.last_wait_time = wait_time);
     ScopeGuard::into_inner(failure_guard);
     set_build_index_timer(wait_time);
     Ok(())
