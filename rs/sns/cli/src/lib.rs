@@ -9,6 +9,7 @@ use candid::{CandidType, Decode, Encode, IDLArgs};
 use clap::Parser;
 use ic_base_types::PrincipalId;
 use ic_crypto_sha::Sha256;
+use ic_nervous_system_common_test_keys::TEST_NEURON_1_OWNER_KEYPAIR;
 use ic_nns_constants::{GOVERNANCE_CANISTER_ID, SNS_WASM_CANISTER_ID};
 use ic_nns_governance::pb::v1::{
     manage_neuron::{self, NeuronIdOrSubaccount},
@@ -23,7 +24,7 @@ use ic_sns_init::pb::v1::{
 use ic_sns_wasm::pb::v1::{AddWasmRequest, SnsCanisterType, SnsWasm};
 use icp_ledger::{AccountIdentifier, BinaryAccountBalanceArgs};
 use std::{
-    fmt::Debug,
+    fmt::{Debug, Display},
     fs::File,
     io::{Read, Write},
     path::PathBuf,
@@ -37,6 +38,11 @@ pub mod init_config_file;
 pub mod prepare_canisters;
 pub mod propose;
 pub mod unit_helpers;
+
+/// We use a giant tail to avoid colliding with/stomping on identity that a user
+/// might have created for themselves.
+const TEST_NEURON_1_OWNER_DFX_IDENTITY_NAME: &str =
+    "test-neuron-1-owner__b2ucp-4x6ou-zvxwi-niymn-pvllt-rdxqr-wi4zj-jat5l-ijt2s-vv4f5-4ae";
 
 #[derive(Debug, Parser)]
 #[clap(
@@ -456,6 +462,86 @@ pub fn get_identity(identity: &str, network: &str) -> PrincipalId {
     })
 }
 
+#[must_use]
+struct SaveOriginalDfxIdentityAndRestoreOnExit {
+    original_identity: String,
+}
+
+impl SaveOriginalDfxIdentityAndRestoreOnExit {
+    fn new_or_panic() -> Self {
+        let original_identity = String::from_utf8(call_dfx(&["identity", "whoami"]).stdout)
+            .expect("Unable to determine which dfx identity is currently in use.")
+            .trim_end()
+            .to_string();
+
+        Self { original_identity }
+    }
+}
+
+impl Drop for SaveOriginalDfxIdentityAndRestoreOnExit {
+    fn drop(&mut self) {
+        // Restore the current identity to what it was originally (when self was
+        // created).
+        call_dfx_or_panic(&["identity", "use", &self.original_identity]);
+    }
+}
+
+/// The argument is not actually used. As the name implies, it is required just
+/// to make sure that the caller has saved and will restore the prior dfx
+/// identity.
+fn use_test_neuron_1_owner_identity(
+    _caller_must_checkpoint: &SaveOriginalDfxIdentityAndRestoreOnExit,
+) -> Result<(), String> {
+    import_test_neuron_1_owner()?;
+
+    let (_stdout, _stderr) = run_command(&[
+        "dfx",
+        "identity",
+        "use",
+        TEST_NEURON_1_OWNER_DFX_IDENTITY_NAME,
+    ])
+    .map_err(|err| err.new_report())?;
+
+    Ok(())
+}
+
+fn import_test_neuron_1_owner() -> Result<(), String> {
+    // Step 1: Save secret key belonging to TEST_NEURON_1_ONWER to a (temporary) pem file.
+    let contents: String = TEST_NEURON_1_OWNER_KEYPAIR.to_pem();
+    let mut pem_file = NamedTempFile::new().expect("Unable to create a temporary file.");
+    pem_file
+        .write_all(contents.as_bytes())
+        .map_err(|err| format!("{}\n\nUnable to write to (temporary) file.", err))?;
+    let pem_file_path = pem_file
+        .path()
+        .to_str()
+        .ok_or("Unable to convert path of TEST_NEURON_1_OWNER's pem file to a String?!")?;
+
+    // Step 2: Call dfx identity import.
+    let command = [
+        "dfx",
+        "identity",
+        "import",
+        "--force",
+        // Needed to avoid forcing the user to choose a password (with an
+        // invisible prompt).
+        "--storage-mode=plaintext",
+        TEST_NEURON_1_OWNER_DFX_IDENTITY_NAME,
+        pem_file_path,
+    ];
+    let result = run_command(&command);
+
+    // Step 3: Convert result.
+    result.map(|_ok| ()).map_err(|err| {
+        format!(
+            "{}\n\
+             \n\
+             Unable to import test-neuron-1-owner dfx identity from pem file.",
+            err,
+        )
+    })
+}
+
 /// Declaratively associates a couple of data with a request type:
 ///   1. response type
 ///   2. method name
@@ -546,39 +632,34 @@ impl Canister {
         })?;
 
         // Step 2: The real work of making the call takes place here.
-        let result = Command::new("dfx")
-            .args([
-                "canister",
-                "--network",
-                &self.network,
-                "call",
-                &self.name,
-                Req::METHOD_NAME,
-                "--argument-file",
-                argument_file,
-                "--output=raw",
-            ])
-            .output();
+        let command = [
+            "dfx",
+            "canister",
+            "--network",
+            &self.network,
+            "call",
+            &self.name,
+            Req::METHOD_NAME,
+            "--argument-file",
+            argument_file,
+            "--output=raw",
+        ];
+        let result = run_command(&command);
 
         // Step 3: Handle errors.
-        let output = match result {
-            Ok(output) => output,
-            Err(err) => return Err(CanisterCallError::UnableToCallDfx(err)),
-        };
-        if !output.status.success() {
-            return Err(CanisterCallError::DfxBadExit(output));
-        }
+        let (stdout, _stderr) = result.map_err(|err| match err {
+            RunCommandError::UnableToRunCommand { error, .. } => {
+                CanisterCallError::UnableToCallDfx(error)
+            }
+            RunCommandError::UnsuccessfulExit { output, .. } => {
+                CanisterCallError::DfxBadExit(output)
+            }
+        })?;
 
         // Step 4: Decode and return response (finally!).
-        let mut response = output.stdout;
-        // Strip newline(s) from the end.
-        while let Some(last) = response.last() {
-            if ![b'\n', b'\r'].contains(last) {
-                break;
-            }
-            response.pop();
-        }
-        let response = hex::decode(&response).map_err(|err| {
+
+        let response = stdout.trim_end();
+        let response = hex::decode(response).map_err(|err| {
             CanisterCallError::ResponseDecodeFail(format!(
                 "Unable to hex decode the response. reason: {}. response:\n{:?}",
                 err, response,
@@ -645,6 +726,101 @@ impl NnsGovernanceCanister {
             _ => Err(MakeProposalError::InvalidResponse(manage_neuron_response)),
         }
     }
+}
+
+enum RunCommandError<'a> {
+    UnableToRunCommand {
+        command: &'a [&'a str],
+        error: std::io::Error,
+    },
+
+    UnsuccessfulExit {
+        command: &'a [&'a str],
+        output: std::process::Output,
+    },
+}
+
+impl<'a> Display for RunCommandError<'a> {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(formatter, "{}", self.new_report())
+    }
+}
+
+impl<'a> RunCommandError<'a> {
+    fn new_report(&self) -> String {
+        match self {
+            RunCommandError::UnableToRunCommand { command, error } => {
+                RunCommandError::new_unable_to_run_command_report(command, error)
+            }
+            RunCommandError::UnsuccessfulExit { command, output } => {
+                RunCommandError::new_unsuccesful_exit_report(command, output)
+            }
+        }
+    }
+
+    fn new_unable_to_run_command_report(command: &[&str], error: &std::io::Error) -> String {
+        format!(
+            "command:\n\
+             {}\n\
+             \n\
+             error:\n\
+             {}\n\
+             \n\
+             `{}` command did not run at all.",
+            command.join(" \\n  "),
+            error,
+            command[0],
+        )
+    }
+
+    fn new_unsuccesful_exit_report(command: &[&str], output: &std::process::Output) -> String {
+        let std::process::Output {
+            status,
+            stdout,
+            stderr,
+        } = output;
+
+        let stdout = String::from_utf8_lossy(stdout);
+        let stderr = String::from_utf8_lossy(stderr);
+
+        format!(
+            "command:\n\
+             {}\n\
+             \n\
+             stdout:\n\
+             {}\n\
+             \n\
+             stderr:\n\
+             {}\n\
+             \n\
+             status: {}",
+            command.join(" \\n  "),
+            stdout,
+            stderr,
+            status,
+        )
+    }
+}
+
+fn run_command<'a>(command: &'a [&'a str]) -> Result<(String, String), RunCommandError<'a>> {
+    let output = std::process::Command::new(command[0])
+        .args(&command[1..command.len()])
+        .output()
+        .map_err(|error| RunCommandError::UnableToRunCommand { command, error })?;
+
+    let std::process::Output {
+        status,
+        stdout,
+        stderr,
+    } = &output;
+
+    if !status.success() {
+        return Err(RunCommandError::UnsuccessfulExit { command, output });
+    }
+
+    let stdout = String::from_utf8_lossy(stdout).to_string();
+    let stderr = String::from_utf8_lossy(stderr).to_string();
+    Ok((stdout, stderr))
 }
 
 /// Calls `dfx` with the given args
