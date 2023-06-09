@@ -3,6 +3,9 @@ test-testnet-deployment:
   extends:
     - .ubuntu-k8s
     - .rules-protected-branch
+  needs:
+    - job: bazel-test-all
+      artifacts: false
   stage: test
   resource_group: $TESTNET
   variables:
