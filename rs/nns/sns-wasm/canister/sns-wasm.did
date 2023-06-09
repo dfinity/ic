@@ -4,8 +4,14 @@ type AirdropDistribution = record { airdrop_neurons : vec NeuronDistribution };
 type Canister = record { id : opt principal };
 type Countries = record { iso_codes : vec text };
 type DappCanisters = record { canisters : vec Canister };
+type DappCanistersTransferResult = record {
+  restored_dapp_canisters : vec Canister;
+  nns_controlled_dapp_canisters : vec Canister;
+  sns_controlled_dapp_canisters : vec Canister;
+};
 type DeployNewSnsRequest = record { sns_init_payload : opt SnsInitPayload };
 type DeployNewSnsResponse = record {
+  dapp_canisters_transfer_result : opt DappCanistersTransferResult;
   subnet_id : opt principal;
   error : opt SnsWasmError;
   canisters : opt SnsCanisterIds;

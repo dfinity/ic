@@ -8063,6 +8063,7 @@ dependencies = [
  "dfn_candid",
  "dfn_core",
  "ic-base-types",
+ "ic-nervous-system-root",
  "ic-nns-constants",
  "serde",
 ]
