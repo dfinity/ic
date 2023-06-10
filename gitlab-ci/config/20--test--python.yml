@@ -2,11 +2,8 @@ gitlab-ci-config-validation:
   extends:
     - .ubuntu-k8s
     - .rules-pipeline-no-merge-train
-  needs:
-    job: gen-cargo-pipeline
-    artifacts: false
   stage: test
-  variables: 
+  variables:
     PYTHONPATH : "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
   artifacts:
     reports:
@@ -17,16 +14,15 @@ gitlab-ci-config-validation:
     - |
       set -xeuo pipefail
       cd gitlab-ci/src
-      python3 gitlab_config/main.py --job-list-validate
       python3 gitlab_config/main.py --cfg-validate
-      
+
 python-gitlab-ci-tests:
   extends:
     - .ubuntu-k8s
     - .rules-pipeline-no-merge-train
   needs: []
   stage: test
-  variables: 
+  variables:
     PYTHONPATH : "${CI_PROJECT_DIR}/gitlab-ci/src:${CI_PROJECT_DIR}/gitlab-ci/src/dependencies"
   artifacts:
     reports:

@@ -5,7 +5,6 @@
 
 include:
 - local: /gitlab-ci/config/00--common.yml
-- local: /gitlab-ci/config/20--wait-for-parent-pipeline-jobs.yml
 - local: /gitlab-ci/config/47--guest-os-test--guest-os-e2e-test.yml
 
 .cargo-build-docker-protected:
