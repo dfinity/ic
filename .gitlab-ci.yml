@@ -10,7 +10,6 @@ include:
   - local: /gitlab-ci/config/20--build-boundary-node-service-worker.yml
   - local: /gitlab-ci/config/20--test--after-script.yml
   - local: /gitlab-ci/config/20--test--build-ic.yml
-  - local: /gitlab-ci/config/20--test--cargo-pipeline.yml
   - local: /gitlab-ci/config/20--test--bazel-pipeline.yml
   - local: /gitlab-ci/config/20--test--build-ic.yml
   - local: /gitlab-ci/config/20--test--pre-commit.yml

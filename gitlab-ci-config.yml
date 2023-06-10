@@ -76,7 +76,6 @@ crates_config_override:
 ci_jobs_required:
   - no-interrupt
   - cargo-audit
-  - gen-cargo-pipeline
   - pre-commit
   - gitlab-ci-config-validation
   - python-gitlab-ci-tests
