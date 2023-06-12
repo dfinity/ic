@@ -2,6 +2,7 @@
 #![allow(unused)]
 
 use std::{
+    fs::File,
     net::{Ipv4Addr, Ipv6Addr, SocketAddr},
     path::PathBuf,
     str::FromStr,
@@ -14,8 +15,9 @@ use arc_swap::ArcSwapOption;
 use async_scoped::TokioScope;
 use async_trait::async_trait;
 use axum::{
+    handler::Handler,
     routing::{method_routing::get, post},
-    Router,
+    Extension, Router,
 };
 use axum_server::{accept::DefaultAcceptor, Server};
 use clap::Parser;
@@ -24,22 +26,25 @@ use futures::TryFutureExt;
 use ic_registry_client::client::{RegistryClient, RegistryClientImpl};
 use ic_registry_local_store::LocalStoreImpl;
 use ic_registry_replicator::RegistryReplicator;
+use instant_acme::{Account, AccountCredentials, LetsEncrypt, NewAccount};
 use lazy_static::lazy_static;
 use nns::Load;
 use prometheus::{labels, Registry as MetricsRegistry};
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 use tracing::{error, info};
 use url::Url;
 
 use crate::{
+    acme::Acme,
     check::Runner as CheckRunner,
     configuration::{Configurator, FirewallConfigurator, TlsConfigurator, WithDeduplication},
     metrics::{MetricParams, WithMetrics},
     nns::Loader,
     snapshot::Runner as SnapshotRunner,
-    tls::CustomAcceptor,
+    tls::{CustomAcceptor, Provisioner, TokenSetter, WithLoad, WithStore},
 };
 
+mod acme;
 mod check;
 mod configuration;
 mod firewall;
@@ -54,6 +59,7 @@ const SERVICE_NAME: &str = "ic-boundary";
 
 const SECOND: Duration = Duration::from_secs(1);
 const MINUTE: Duration = Duration::from_secs(60);
+const DAY: Duration = Duration::from_secs(24 * 3600);
 
 #[derive(Parser)]
 #[clap(name = SERVICE_NAME)]
@@ -89,12 +95,24 @@ struct Cli {
     max_height_lag: u64,
 
     /// The path to the nftables replica ruleset file to update
-    #[clap(long, default_value = "/tmp/system_replicas.ruleset")]
+    #[clap(long, default_value = "system_replicas.ruleset")]
     nftables_system_replicas_path: PathBuf,
 
     /// The name of the nftables variable to export
     #[clap(long, default_value = "system_replica_ips")]
     nftables_system_replicas_var: String,
+
+    /// The path to the ACME credentials file
+    #[clap(long, default_value = "acme.json")]
+    acme_credentials_path: PathBuf,
+
+    /// The path to the ingress TLS cert
+    #[clap(long, default_value = "cert.pem")]
+    tls_cert_path: PathBuf,
+
+    /// The path to the ingress TLS private-key
+    #[clap(long, default_value = "pkey.pem")]
+    tls_pkey_path: PathBuf,
 
     /// The socket used to export metrics.
     #[clap(long, default_value = "127.0.0.1:9090")]
@@ -132,6 +150,69 @@ async fn main() -> Result<(), Error> {
         metrics_addr = cli.metrics_addr.to_string().as_str(),
     );
 
+    // TLS Certificates (Ingress)
+    let tls_loader = tls::Loader {
+        cert_path: cli.tls_cert_path,
+        pkey_path: cli.tls_pkey_path,
+    };
+    let tls_loader = Arc::new(tls_loader);
+
+    // ACME
+    let acme_http_client = hyper::Client::builder().build(
+        hyper_rustls::HttpsConnectorBuilder::new()
+            .with_native_roots()
+            .https_only()
+            .enable_all_versions()
+            .build(),
+    );
+
+    let acme_account = load_or_create_acme_account(
+        &cli.acme_credentials_path,    // path
+        LetsEncrypt::Production.url(), // acme_provider_url
+        Box::new(acme_http_client),    // http_client
+    )
+    .await
+    .context("failed to load acme credentials")?;
+
+    let acme_client = Acme::new(acme_account);
+
+    let acme_order = acme_client.clone();
+    let acme_order = Box::new(acme_order);
+
+    let acme_ready = acme_client.clone();
+    let acme_ready = Box::new(acme_ready);
+
+    let acme_finalize = acme_client.clone();
+    let acme_finalize = WithThrottle(acme_finalize, ThrottleParams::new(Duration::from_secs(5)));
+    let acme_finalize = WithRetry(acme_finalize, Duration::from_secs(60));
+    let acme_finalize = Box::new(acme_finalize);
+
+    let acme_obtain = acme_client;
+    let acme_obtain = WithThrottle(acme_obtain, ThrottleParams::new(Duration::from_secs(5)));
+    let acme_obtain = WithRetry(acme_obtain, Duration::from_secs(60));
+    let acme_obtain = Box::new(acme_obtain);
+
+    // ACME Token
+    let token: Arc<RwLock<Option<String>>> = Arc::new(RwLock::new(None));
+
+    let token_setter = TokenSetter(token.clone());
+    let token_setter = Box::new(token_setter);
+
+    let tls_provisioner = Provisioner::new(
+        token_setter,
+        acme_order,
+        acme_ready,
+        acme_finalize,
+        acme_obtain,
+    );
+    let tls_provisioner = WithStore(tls_provisioner, tls_loader.clone());
+    let tls_provisioner = WithLoad(
+        tls_provisioner,
+        tls_loader.clone(),
+        30 * DAY, // Renew if expiration within
+    );
+    let tls_provisioner = Box::new(tls_provisioner);
+
     // Registry Client
     let local_store = Arc::new(LocalStoreImpl::new(&cli.local_store_path));
 
@@ -167,7 +248,7 @@ async fn main() -> Result<(), Error> {
     // TLS (Ingress) Configurator
     let tls_acceptor = Arc::new(ArcSwapOption::new(None));
 
-    let tls_configurator = TlsConfigurator::new(tls_acceptor.clone());
+    let tls_configurator = TlsConfigurator::new(tls_acceptor.clone(), tls_provisioner);
     let tls_configurator = WithDeduplication::wrap(tls_configurator);
     let tls_configurator = WithMetrics(
         tls_configurator,
@@ -203,8 +284,13 @@ async fn main() -> Result<(), Error> {
     let mut configuration_runner = configuration_runner;
 
     // Server / API
+    let acme_challenge = routes::acme_challenge;
+    let acme_challenge = acme_challenge.layer(Extension(token));
+
     let routers = (
-        Router::new().fallback(routes::redirect_to_https),
+        Router::new()
+            .route("/.well-known/acme-challenge/:token", get(acme_challenge))
+            .fallback(routes::redirect_to_https),
         Router::new()
             .route("/api/v2/status", get(routes::status))
             .route("/api/v2/canister/:id/query", post(routes::query))
@@ -216,7 +302,7 @@ async fn main() -> Result<(), Error> {
     let srvs_http = [Ipv4Addr::UNSPECIFIED.into(), Ipv6Addr::UNSPECIFIED.into()]
         .into_iter()
         .map(|ip| {
-            Server::bind(SocketAddr::new(ip, 8080))
+            Server::bind(SocketAddr::new(ip, 80))
                 .acceptor(DefaultAcceptor)
                 .serve(routers.0.clone().into_make_service())
         });
@@ -321,6 +407,11 @@ impl<T: Run> Run for WithMetrics<T> {
     }
 }
 
+struct WithRetry<T>(
+    pub T,
+    pub Duration, // timeout
+);
+
 struct ThrottleParams {
     throttle_duration: Duration,
     next_time: Option<Instant>,
@@ -385,11 +476,143 @@ impl<L: Load, C: Configure> Run for ConfigurationRunner<L, C> {
     }
 }
 
+async fn load_or_create_acme_account(
+    path: &PathBuf,
+    acme_provider_url: &str,
+    http_client: Box<dyn instant_acme::HttpClient>,
+) -> Result<Account, Error> {
+    let f = File::open(path).context("failed to open credentials file for reading");
+
+    // Credentials already exist
+    if let Ok(f) = f {
+        let creds: AccountCredentials =
+            serde_json::from_reader(f).context("failed to json parse existing acme credentials")?;
+
+        let account =
+            Account::from_credentials(creds).context("failed to load account from credentials")?;
+
+        return Ok(account);
+    }
+
+    // Create new account
+    let account = Account::create_with_http(
+        &NewAccount {
+            contact: &[],
+            terms_of_service_agreed: true,
+            only_return_existing: false,
+        },
+        acme_provider_url,
+        None,
+        http_client,
+    )
+    .await
+    .context("failed to create acme account")?;
+
+    // Store credentials
+    let f = File::create(path).context("failed to open credentials file for writing")?;
+
+    serde_json::to_writer_pretty(f, &account.credentials())
+        .context("failed to serialize acme credentials")?;
+
+    Ok(account)
+}
+
 #[cfg(test)]
 mod test {
-    /// Remove me when there are real tests
-    #[test]
-    fn noop_test() {
-        assert_eq!(1, 1);
+    use anyhow::Error;
+    use tempfile::NamedTempFile;
+    use wiremock::{
+        matchers::{method, path},
+        Mock, MockServer, ResponseTemplate,
+    };
+
+    use crate::load_or_create_acme_account;
+
+    struct AcmeProviderGuard(MockServer);
+
+    async fn create_acme_provider() -> Result<(AcmeProviderGuard, String), Error> {
+        let mock_server = MockServer::start().await;
+
+        // Directory
+        let mock_server_url = mock_server.uri();
+
+        Mock::given(method("GET"))
+            .and(path("/directory"))
+            .respond_with(ResponseTemplate::new(200).set_body_string(format!(
+                r#"{{
+                "newAccount": "{mock_server_url}/new-acct",
+                "newNonce": "{mock_server_url}/new-nonce",
+                "newOrder": "{mock_server_url}/new-order"
+            }}"#,
+            )))
+            .mount(&mock_server)
+            .await;
+
+        // Nonce
+        Mock::given(method("HEAD"))
+            .and(path("/new-nonce"))
+            .respond_with(ResponseTemplate::new(200).append_header(
+                "replay-nonce", // key
+                "nonce",        // value
+            ))
+            .mount(&mock_server)
+            .await;
+
+        // Account
+        Mock::given(method("POST"))
+            .and(path("/new-acct"))
+            .respond_with(ResponseTemplate::new(200).append_header(
+                "Location",   // key
+                "account-id", // value
+            ))
+            .mount(&mock_server)
+            .await;
+
+        let acme_provider_url = format!("{}/directory", mock_server_url);
+
+        Ok((
+            AcmeProviderGuard(mock_server), // guard
+            acme_provider_url,              // acme_provider_url
+        ))
+    }
+
+    #[tokio::test]
+    async fn load_or_create_acme_account_test() -> Result<(), Error> {
+        // Spin-up a mocked ACME provider
+        let (_guard, acme_provider_url) = create_acme_provider().await?;
+
+        // Get a temporary file path
+        let f = NamedTempFile::new()?;
+        let p = f.path().to_path_buf();
+        drop(f);
+
+        // Create an account
+        let account = load_or_create_acme_account(
+            &p,                             // path
+            &acme_provider_url,             // acme_provider_url
+            Box::new(hyper::Client::new()), // http_client
+        )
+        .await?;
+
+        // Serialize the credentials for later comparison
+        let creds = serde_json::to_string(&account.credentials())?;
+
+        // Reload the account
+        let account = load_or_create_acme_account(
+            &p,                             // path
+            &acme_provider_url,             // acme_provider_url
+            Box::new(hyper::Client::new()), // http_client
+        )
+        .await?;
+
+        assert_eq!(
+            creds,                                          // previous
+            serde_json::to_string(&account.credentials())?, // current
+        );
+
+        // Clean up
+        std::fs::remove_file(&p)?;
+
+        Ok(())
     }
 }

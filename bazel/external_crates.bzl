@@ -527,7 +527,7 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
                 version = "=1.8.0",
             ),
             "instant-acme": crate.spec(
-                version = "^0.2.1",
+                version = "^0.3.2",
             ),
             "intmap": crate.spec(
                 version = "^1.1.0",
@@ -1244,6 +1244,11 @@ def external_crates_repository(name, static_openssl, cargo_lockfile, lockfile):
             ),
             "wycheproof": crate.spec(
                 version = "^0.5",
+            ),
+            "wiremock": crate.spec(
+                # Pinning to 0.5.18 because we are pinned to Rust 1.66
+                # where pin_macro is unstable.
+                version = "=0.5.18",
             ),
             "x509-parser": crate.spec(
                 version = "^0.12.0",

@@ -8,7 +8,7 @@ use std::{
 use anyhow::{Context, Error};
 use arc_swap::{access::Access, ArcSwapOption};
 use async_trait::async_trait;
-use axum_server::tls_rustls::RustlsAcceptor;
+use axum_server::tls_rustls::{RustlsAcceptor, RustlsConfig};
 use ic_registry_client::client::RegistryClient;
 use tokio::sync::Mutex;
 use tracing::info;
@@ -16,6 +16,7 @@ use tracing::info;
 use crate::{
     firewall::Rule,
     metrics::{MetricParams, WithMetrics},
+    tls::{self, Provision},
     Run,
 };
 
@@ -27,6 +28,9 @@ pub enum ServiceConfiguration {
 
 #[derive(Debug, thiserror::Error)]
 pub enum ConfigureError {
+    #[error(transparent)]
+    ProvisionError(#[from] tls::ProvisionError),
+
     #[error(transparent)]
     UnexpectedError(#[from] anyhow::Error),
 }
@@ -92,11 +96,18 @@ impl Configure for Configurator {
 
 pub struct TlsConfigurator {
     acceptor: Arc<ArcSwapOption<RustlsAcceptor>>,
+    provisioner: Box<dyn Provision>,
 }
 
 impl TlsConfigurator {
-    pub fn new(acceptor: Arc<ArcSwapOption<RustlsAcceptor>>) -> Self {
-        Self { acceptor }
+    pub fn new(
+        acceptor: Arc<ArcSwapOption<RustlsAcceptor>>,
+        provisioner: Box<dyn Provision>,
+    ) -> Self {
+        Self {
+            acceptor,
+            provisioner,
+        }
     }
 }
 
@@ -104,13 +115,19 @@ impl TlsConfigurator {
 impl Configure for TlsConfigurator {
     async fn configure(&mut self, cfg: &ServiceConfiguration) -> Result<(), ConfigureError> {
         if let ServiceConfiguration::Tls(name) = cfg {
-            // TODO(or.ricon): Provision new certificate based on name
+            // Provision new certificate
+            let (cert, pkey) = self.provisioner.provision(name).await?;
 
             // Replace with new acceptor
-            self.acceptor.store(None);
+            let cfg = RustlsConfig::from_pem(cert.into_bytes(), pkey.into_bytes())
+                .await
+                .context("failed to create rustls config")?;
 
-            // let acceptor = Arc::new(RustlsAcceptor::new(tls_config));
-            // self.acceptor.store(Some(acceptor));
+            let acceptor = RustlsAcceptor::new(cfg);
+            let acceptor = Arc::new(acceptor);
+            let acceptor = Some(acceptor);
+
+            self.acceptor.store(acceptor);
         }
 
         Ok(())
