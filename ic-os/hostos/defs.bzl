@@ -31,7 +31,7 @@ def image_deps(mode, _malicious = False):
             ":rootfs-tree.tar": "/",
 
             # additional files to install
-            "//publish/binaries:vsock_host": "/opt/ic/bin/vsock-host:0755",
+            "//publish/binaries:vsock_host": "/opt/ic/bin/vsock_host:0755",
             "//ic-os:scripts/build-bootstrap-config-image.sh": "/opt/ic/bin/build-bootstrap-config-image.sh:0755",
         },
 

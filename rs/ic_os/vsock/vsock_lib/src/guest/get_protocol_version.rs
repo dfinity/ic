@@ -23,23 +23,25 @@ fn send_protocol_request_to_host(port: &u32) -> Result<String, String> {
 
 // the host vsock may be host_v0 or host_v1, so we attempt to parse the response using protocol V1, and if that returns error, we attempt to parse using protocol V0
 fn parse_protocol_response(response: &str) -> Result<VsockProtocol, String> {
-    fn parse_v1_response(payload: Payload) -> Result<VsockProtocol, String> {
+    let parse_v1_response = |payload: Payload| -> Result<VsockProtocol, String> {
         match payload {
             Payload::HostOSVsockVersion(hostos_vsock_version) => {
                 parse_v1_response_helper(hostos_vsock_version)
             }
-            Payload::HostOSVersion(_) => {
-                Err("Logical error. Received payload: HostOSVersion".to_string())
-            }
-            Payload::NoPayload => Err("Logical error. Received payload: NoPayload".to_string()),
+            _ => Err(format!(
+                "Logical error. Received invalid payload: {}",
+                payload
+            )),
         }
-    }
-    fn parse_v0_response(payload: Payload) -> Result<VsockProtocol, String> {
+    };
+
+    let parse_v0_response = |payload: Payload| -> Result<VsockProtocol, String> {
         match payload {
             Payload::NoPayload => Ok(VsockProtocol::V0),
             _ => Err("Could not parse response".to_string()),
         }
-    }
+    };
+
     match parse_response(response, &VsockProtocol::V1) {
         Ok(payload) => parse_v1_response(payload),
         Err(_) => match parse_response(response, &VsockProtocol::V0) {

@@ -27,7 +27,7 @@ pub fn parse_request(json_str: &str) -> Result<Request, String> {
             let guest_cid = request
                 .guest_cid
                 .parse::<u32>()
-                .map_err(|_| "could not convert cid to i32".to_string())?;
+                .map_err(|_| "could not convert cid to u32".to_string())?;
             return Ok(Request {
                 guest_cid,
                 command: Command::AttachHSM,
@@ -36,7 +36,7 @@ pub fn parse_request(json_str: &str) -> Result<Request, String> {
             let guest_cid = request
                 .guest_cid
                 .parse::<u32>()
-                .map_err(|_| "could not convert cid to i32".to_string())?;
+                .map_err(|_| "could not convert cid to u32".to_string())?;
             return Ok(Request {
                 guest_cid,
                 command: Command::DetachHSM,
@@ -52,7 +52,7 @@ pub fn parse_request(json_str: &str) -> Result<Request, String> {
             let guest_cid = request
                 .guest_cid
                 .parse::<u32>()
-                .map_err(|_| "could not convert cid to i32".to_string())?;
+                .map_err(|_| "could not convert cid to u32".to_string())?;
             return Ok(Request {
                 guest_cid,
                 command: Command::SetNodeId(NodeIdData {
@@ -71,7 +71,7 @@ pub fn parse_request(json_str: &str) -> Result<Request, String> {
             let guest_cid = request
                 .guest_cid
                 .parse::<u32>()
-                .map_err(|_| "could not convert cid to i32".to_string())?;
+                .map_err(|_| "could not convert cid to u32".to_string())?;
             return Ok(Request {
                 guest_cid,
                 command: Command::Notify(NotifyData {
@@ -92,7 +92,7 @@ pub fn parse_request(json_str: &str) -> Result<Request, String> {
             let guest_cid = request
                 .guest_cid
                 .parse::<u32>()
-                .map_err(|_| "could not convert cid to i32".to_string())?;
+                .map_err(|_| "could not convert cid to u32".to_string())?;
             return Ok(Request {
                 guest_cid,
                 command: Command::Upgrade(UpgradeData {
@@ -128,7 +128,7 @@ pub fn get_v0_request_vec(request: &Request) -> Result<Vec<u8>, String> {
     };
 
     let request = serde_json::json!({
-        "sender_cid": format!("{}", request.guest_cid),
+        "sender_cid": request.guest_cid.to_string(),
         "message": message
     });
 

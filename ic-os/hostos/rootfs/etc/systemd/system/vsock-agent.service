@@ -1,11 +1,11 @@
 [Unit]
-Description=HSM Agent
+Description=VSOCK agent daemon
 After=syslog.target
 
 [Service]
 User=root
 Group=root
-ExecStart=python3 /opt/ic/bin/hostos-vsock-agent/hostos_vsock_agent.py server --verbose
+ExecStart=/opt/ic/bin/vsock_host
 Restart=always
 RuntimeMaxSec=3600
 RestartSec=10

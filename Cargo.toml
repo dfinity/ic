@@ -105,7 +105,6 @@ members = [
   "rs/embedders",
   "rs/execution_environment",
   "rs/execution_environment/benches/lib",
-  "rs/guestos_vsock_agent",
   "rs/http_endpoints/public",
   "rs/http_endpoints/metrics",
   "rs/http_utils",
