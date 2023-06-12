@@ -7815,6 +7815,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7cb321e571828d64d62319deeaaec4c8e68cdf93144dd6fe248e7a51ab2d3b5d"
 
 [[package]]
+name = "ic-nervous-system-clients"
+version = "0.0.1"
+dependencies = [
+ "async-trait",
+ "candid",
+ "dfn_candid",
+ "dfn_core",
+ "ic-base-types",
+ "ic-ic00-types",
+ "num-traits",
+ "serde",
+ "serde_bytes",
+]
+
+[[package]]
 name = "ic-nervous-system-common"
 version = "0.8.0"
 dependencies = [

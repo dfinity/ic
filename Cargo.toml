@@ -143,6 +143,7 @@ members = [
   "rs/monitoring/onchain_observability/server",
   "rs/monitoring/onchain_observability/service",
   "rs/monitoring/pprof",
+  "rs/nervous_system/clients",
   "rs/nervous_system/common",
   "rs/nervous_system/common/build_metadata",
   "rs/nervous_system/common/test_canister",
