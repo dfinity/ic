@@ -4,17 +4,17 @@
   artifacts:
     expire_in: 3 days
   image:
-    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:bd769fcfcbe1e82a45a1d5dc3230c8225a4ac7f3c2f9ac7d4fb98ec7f6de50cb"
+    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:bd769fcfcbe1e82a45a1d5dc3230c8225a4ac7f3c2f9ac7d4fb98ec7f6de50cb"
   tags:
     - dfinity-ic
   variables:
     GIT_CLONE_PATH: $CI_BUILDS_DIR/$CI_CONCURRENT_ID/$CI_PROJECT_NAME
 
-.ic-build-bazel-image:
+.ic-build-legacy-image:
   artifacts:
     expire_in: 3 days
   image:
-    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build:bd769fcfcbe1e82a45a1d5dc3230c8225a4ac7f3c2f9ac7d4fb98ec7f6de50cb"
+    name: "registry.gitlab.com/dfinity-lab/core/docker/ic-build-legacy:bd769fcfcbe1e82a45a1d5dc3230c8225a4ac7f3c2f9ac7d4fb98ec7f6de50cb"
   tags:
     - dfinity-ic
   variables:

@@ -1,7 +1,7 @@
 rosetta-release:
   extends:
     - .bazel-build-k8s
-    - .ic-build-bazel-image
+    - .ic-build-image
     - .rules-scheduled-rosetta-release
   stage: guest-os-build
   script:

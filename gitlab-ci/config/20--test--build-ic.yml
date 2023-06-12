@@ -1,6 +1,6 @@
 .build-ic:
   extends:
-    - .ic-build-bazel-image
+    - .ic-build-image
   needs: []
   stage: test
   artifacts:
