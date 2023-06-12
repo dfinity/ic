@@ -160,6 +160,8 @@ pub struct CanisterStateBits {
 struct StateLayoutMetrics {
     state_layout_error_count: IntCounterVec,
     state_layout_remove_checkpoint_duration: Histogram,
+    #[cfg(target_os = "linux")]
+    state_layout_syncfs_duration: Histogram,
 }
 
 impl StateLayoutMetrics {
@@ -174,6 +176,12 @@ impl StateLayoutMetrics {
                 "state_layout_remove_checkpoint_duration",
                 "Time elapsed in removing checkpoint.",
                 decimal_buckets(-3, 1),
+            ),
+            #[cfg(target_os = "linux")]
+            state_layout_syncfs_duration: metric_registry.histogram(
+                "state_layout_syncfs_duration_seconds",
+                "Time elapsed in syncfs.",
+                decimal_buckets(-2, 2),
             ),
         }
     }
@@ -534,7 +542,7 @@ impl StateLayout {
         let scratchpad = layout.raw_path();
         let checkpoints_path = self.checkpoints();
         let cp_path = checkpoints_path.join(Self::checkpoint_name(height));
-        sync_and_mark_files_readonly(scratchpad, thread_pool).map_err(|err| {
+        sync_and_mark_files_readonly(scratchpad, &self.metrics, thread_pool).map_err(|err| {
             LayoutError::IoError {
                 path: scratchpad.to_path_buf(),
                 message: format!(
@@ -1806,7 +1814,7 @@ enum FilePermissions {
     ReadWrite,
 }
 
-fn sync_and_mark_readonly_if_file(path: &Path) -> std::io::Result<()> {
+fn mark_readonly_if_file(path: &Path) -> std::io::Result<()> {
     let metadata = path.metadata()?;
     if !metadata.is_dir() {
         let mut permissions = metadata.permissions();
@@ -1822,7 +1830,7 @@ fn sync_and_mark_readonly_if_file(path: &Path) -> std::io::Result<()> {
             )
         })?;
     }
-    sync_path(path)
+    Ok(())
 }
 
 fn dir_list_recursive(path: &Path) -> std::io::Result<Vec<PathBuf>> {
@@ -1847,18 +1855,40 @@ fn dir_list_recursive(path: &Path) -> std::io::Result<Vec<PathBuf>> {
 /// `path`.
 fn sync_and_mark_files_readonly(
     path: &Path,
+    #[allow(unused)] metrics: &StateLayoutMetrics,
     thread_pool: Option<&mut scoped_threadpool::Pool>,
 ) -> std::io::Result<()> {
     let paths = dir_list_recursive(path)?;
     if let Some(thread_pool) = thread_pool {
         let results = parallel_map(thread_pool, paths.iter(), |p| {
-            sync_and_mark_readonly_if_file(p)
+            mark_readonly_if_file(p)?;
+            #[cfg(not(target_os = "linux"))]
+            sync_path(p)?;
+            Ok::<(), std::io::Error>(())
         });
+
         results.into_iter().try_for_each(identity)?;
     } else {
         for p in paths {
-            sync_and_mark_readonly_if_file(&p)?;
+            mark_readonly_if_file(&p)?;
+            #[cfg(not(target_os = "linux"))]
+            sync_path(p)?;
         }
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let f = std::fs::File::open(path)?;
+        use std::os::fd::AsRawFd;
+        let start = Instant::now();
+        unsafe {
+            if libc::syncfs(f.as_raw_fd()) == -1 {
+                return Err(std::io::Error::last_os_error());
+            }
+        }
+        let elapsed = start.elapsed();
+        metrics
+            .state_layout_syncfs_duration
+            .observe(elapsed.as_secs_f64());
     }
     Ok(())
 }
