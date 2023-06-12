@@ -1,8 +1,19 @@
+use std::sync::Arc;
+
 use axum::{
+    body::Body,
     extract::{Host, OriginalUri},
-    http::{uri::PathAndQuery, Uri},
+    http::{uri::PathAndQuery, Response, Uri},
     response::{IntoResponse, Redirect},
+    Extension,
 };
+use tokio::sync::RwLock;
+
+pub async fn acme_challenge(
+    Extension(token): Extension<Arc<RwLock<Option<String>>>>,
+) -> impl IntoResponse {
+    token.read().await.clone().unwrap_or_default()
+}
 
 pub async fn redirect_to_https(
     Host(host): Host,
