@@ -138,7 +138,7 @@ pub struct Recovery {
     pub key_file: Option<PathBuf>,
     ssh_confirmation: bool,
 
-    logger: Logger,
+    pub logger: Logger,
 }
 
 impl Recovery {

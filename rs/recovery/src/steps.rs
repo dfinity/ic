@@ -34,6 +34,12 @@ pub trait Step {
     fn exec(&self) -> RecoveryResult<()>;
 }
 
+impl<T: Step + 'static> From<T> for Box<dyn Step> {
+    fn from(step: T) -> Self {
+        Box::new(step)
+    }
+}
+
 /// A step containing an ic-admin proposal or query to be executed.
 #[derive(Debug)]
 pub struct AdminStep {
