@@ -128,7 +128,6 @@ go_deps.bzl               @dfinity-lab/teams/idx
 /rs/embedders/                          @dfinity-lab/teams/runtime-owners
 /rs/execution_environment/              @dfinity-lab/teams/execution-owners @dfinity-lab/teams/runtime-owners
 /rs/gitlab-ci-config.yml                @dfinity-lab/teams/idx
-/rs/guestos_vsock_agent/                @dfinity-lab/teams/node-team
 /rs/ic_os/                              @dfinity-lab/teams/node-team
 /rs/http_endpoints/                     @dfinity-lab/teams/networking-team
 /rs/https_outcalls/                     @dfinity-lab/teams/networking-team

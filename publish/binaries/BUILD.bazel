@@ -4,7 +4,6 @@ load("//gitlab-ci/src/artifacts:upload.bzl", "upload_artifacts")
 
 LINUX_ONLY = [
     "sevctl",
-    "vsock_agent",
     "vsock_guest",
     "vsock_host",
 ]
@@ -55,7 +54,6 @@ BINARIES = {
     "sns": "//rs/sns/cli:sns",
     "state-tool": "//rs/state_tool:state-tool",
     "vector-config-generator": "//rs/observability/vector_config_generator:vector_config_generator",
-    "vsock_agent": "//rs/guestos_vsock_agent:vsock_agent",
     "vsock_guest": "//rs/ic_os/vsock/guest:vsock_guest",
     "vsock_host": "//rs/ic_os/vsock/host:vsock_host",
 }

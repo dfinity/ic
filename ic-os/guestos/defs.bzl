@@ -43,7 +43,6 @@ def image_deps(mode, malicious = False):
             "//publish/binaries:sevctl": "/opt/ic/bin/sevctl:0755",
             "@sevtool": "/opt/ic/bin/sevtool:0755",
             "//publish/binaries:state-tool": "/opt/ic/bin/state-tool:0755",
-            "//publish/binaries:vsock_agent": "/opt/ic/bin/vsock_agent:0755",
             "//publish/binaries:vsock_guest": "/opt/ic/bin/vsock_guest:0755",
             "//ic-os/utils:infogetty": "/opt/ic/bin/infogetty:0755",
             "//ic-os/utils:prestorecon": "/opt/ic/bin/prestorecon:0755",

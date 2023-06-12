@@ -50,13 +50,13 @@ fn hsm_helper(command: &str) -> Response {
 }
 
 fn create_hsm_xml_file() -> Result<NamedTempFile, String> {
-    let hsm_info: HSMInfo = get_hsm_info().map_err(|_| "Could not get hsm info".to_string())?;
+    let hsm_info = get_hsm_info().map_err(|err| format!("Could not get hsm info: {}", err))?;
 
     println!("HSM found: {}", hsm_info);
 
     let xml: String = get_hsm_xml_string(&hsm_info);
 
-    write_to_temp_file(&xml).map_err(|_| "Could not write to temp file".to_string())
+    write_to_temp_file(&xml).map_err(|err| format!("Could not write to temp file: {}", err))
 }
 
 fn get_hsm_info() -> Result<HSMInfo, Error> {
@@ -67,34 +67,35 @@ fn get_hsm_info() -> Result<HSMInfo, Error> {
         .map_err(|e| Error::new(ErrorKind::Other, e))?;
 
     fn is_hsm_device(device: &Device) -> bool {
-        println!(
-            "Bus {:03} Device {:03} ID {:04x}:{:04x}",
-            device.bus_number(),
-            device.address(),
-            device.device_descriptor().unwrap().vendor_id(),
-            device.device_descriptor().unwrap().product_id()
-        );
-
-        let device_descriptor = match device.device_descriptor() {
-            Ok(device_descriptor) => device_descriptor,
+        match device.device_descriptor() {
+            Ok(device_descriptor) => {
+                println!(
+                    "Bus {:03} Device {:03} ID {:04x}:{:04x}",
+                    device.bus_number(),
+                    device.address(),
+                    device_descriptor.vendor_id(),
+                    device_descriptor.product_id()
+                );
+                device_descriptor.vendor_id() == HSM_VENDOR
+                    && device_descriptor.product_id() == HSM_PRODUCT
+            }
             Err(_) => {
                 println!("Error: device.device_descriptor() returned error");
-                return false;
+                false
             }
-        };
-        device_descriptor.vendor_id() == HSM_VENDOR && device_descriptor.product_id() == HSM_PRODUCT
+        }
     }
 
     println!("Iterating over attached devices to find hsm");
     // return the first usb device that satisfies the is_hsm_device filter
-    let x = match usb_devices.iter().find(is_hsm_device) {
-        Some(hsm_device) => Ok(HSMInfo {
+    usb_devices
+        .iter()
+        .find(is_hsm_device)
+        .map(|hsm_device| HSMInfo {
             hsm_bus_num: hsm_device.bus_number(),
             hsm_address: hsm_device.address(),
-        }),
-        None => return Err(Error::new(ErrorKind::Other, "No HSM device found")),
-    };
-    x
+        })
+        .ok_or_else(|| Error::new(ErrorKind::Other, "No HSM device found"))
 }
 
 // HSM_VENDOR and HSM_PRODUCT must be converted to hexadecimal for the attach/detach hsm virsh commands
@@ -116,7 +117,7 @@ fn get_hsm_xml_string(hsm_info: &HSMInfo) -> String {
 
 fn write_to_temp_file(content: &str) -> Result<NamedTempFile, Error> {
     let mut file: NamedTempFile = NamedTempFile::new()?;
-    write!(file, "{content}")?;
+    file.write_all(content.as_bytes())?;
     Ok(file)
 }
 

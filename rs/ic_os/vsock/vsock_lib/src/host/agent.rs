@@ -4,7 +4,7 @@ use crate::protocol::{
     Command, HostOSVsockVersion, NodeIdData, NotifyData, Payload, Response, UpgradeData,
 };
 use sha2::Digest;
-use std::fs::OpenOptions;
+use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 
 pub fn dispatch(command: &Command) -> Response {
@@ -50,13 +50,13 @@ fn get_hostos_vsock_version() -> Response {
 }
 
 fn set_node_id(node_id: &NodeIdData) -> Response {
-    let mut node_id_file = match OpenOptions::new().write(true).open(NODE_ID_FILE_PATH) {
-        Ok(file) => file,
-        Err(err) => {
+    let mut node_id_file = OpenOptions::new()
+        .write(true)
+        .open(NODE_ID_FILE_PATH)
+        .map_err(|err| {
             println!("Error opening file: {}", err);
-            return Err(err.to_string());
-        }
-    };
+            err.to_string()
+        })?;
 
     match node_id_file.write_all(node_id.node_id.as_bytes()) {
         Ok(_) => println!("Node ID written to file"),
@@ -71,13 +71,14 @@ fn set_node_id(node_id: &NodeIdData) -> Response {
 }
 
 fn notify(notify_data: &NotifyData) -> Response {
-    let mut terminal_device_file = match OpenOptions::new().write(true).open("/dev/tty1") {
-        Ok(file) => file,
-        Err(err) => {
-            println!("Error opening file: {}", err);
-            return Err(err.to_string());
-        }
-    };
+    let mut terminal_device_file =
+        OpenOptions::new()
+            .write(true)
+            .open("/dev/tty1")
+            .map_err(|err| {
+                println!("Error opening file: {}", err);
+                err.to_string()
+            })?;
 
     let message_output_count = std::cmp::min(notify_data.count, 10);
     let message_clone = notify_data.message.clone();
@@ -100,40 +101,40 @@ fn notify(notify_data: &NotifyData) -> Response {
 }
 
 fn create_hostos_upgrade_file(upgrade_url: &str) -> Result<(), String> {
-    let response =
-        reqwest::blocking::get(upgrade_url).map_err(|_| "Could not download url".to_string())?;
+    let response = reqwest::blocking::get(upgrade_url)
+        .map_err(|err| format!("Could not download url: {}", err))?;
 
     let hostos_upgrade_contents = response
         .bytes()
-        .map_err(|_| "Could not read downloaded contents".to_string())?;
+        .map_err(|err| format!("Could not read downloaded contents: {}", err))?;
 
     let mut upgrade_file = OpenOptions::new()
         .write(true)
         .truncate(true)
         .create(true)
         .open(UPGRADE_FILE_PATH)
-        .map_err(|_| "Could not open upgrade file".to_string())?;
+        .map_err(|err| format!("Could not open upgrade file: {}", err))?;
     upgrade_file
         .write_all(&hostos_upgrade_contents)
-        .map_err(|_| "Could not write to upgrade file".to_string())?;
+        .map_err(|err| format!("Could not write to upgrade file: {}", err))?;
     upgrade_file
         .flush()
-        .map_err(|_| "Could not flush upgrade file".to_string())?;
+        .map_err(|err| format!("Could not flush upgrade file: {}", err))?;
 
     Ok(())
 }
 
 fn verify_hash(target_hash: &str) -> Result<bool, String> {
-    let mut upgrade_file = match std::fs::File::open(UPGRADE_FILE_PATH) {
-        Ok(upgrade_file) => upgrade_file,
-        Err(err) => return Err(err.to_string()),
-    };
+    let mut upgrade_file = File::open(UPGRADE_FILE_PATH)
+        .map_err(|err| format!("Error opening upgrade file: {}", err))?;
 
     let mut hasher = sha2::Sha256::new();
     let mut buffer = [0; 65536];
 
     loop {
-        let bytes_read = upgrade_file.read(&mut buffer).unwrap();
+        let bytes_read = upgrade_file
+            .read(&mut buffer)
+            .map_err(|err| format!("Error reading upgrade file: {}", err))?;
         if bytes_read == 0 {
             break;
         }

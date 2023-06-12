@@ -43,12 +43,9 @@ fn process_connection(stream: &mut VsockStream) -> Result<()> {
     println!("Received request: {}", request);
 
     println!("Verifying sender cid");
-    match verify_sender_cid(stream, request.guest_cid) {
-        Ok(_) => (),
-        Err(err) => {
-            send_response(stream, &Err(err.to_string()))?;
-            return Err(err);
-        }
+    if let Err(err) = verify_sender_cid(stream, request.guest_cid) {
+        send_response(stream, &Err(err.to_string()))?;
+        return Err(err);
     };
 
     println!("Dispatching command");

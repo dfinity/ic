@@ -48,10 +48,9 @@ pub fn send_request_to_host(
 fn read_response_from_host(stream: &mut VsockStream) -> Result<String, String> {
     let mut buffer = [0; 4096];
     let bytes_read = stream.read(&mut buffer).map_err(|e| e.to_string())?;
-    match std::str::from_utf8(&buffer[..bytes_read]) {
-        Ok(response_str) => Ok(response_str.to_string()),
-        Err(error) => Err(error.to_string()),
-    }
+    std::str::from_utf8(&buffer[..bytes_read])
+        .map_err(|e| e.to_string())
+        .map(|response| response.to_string())
 }
 
 fn create_stream(port: &u32) -> Result<VsockStream, std::io::Error> {
