@@ -27,7 +27,7 @@
 after-script-test-ic-build-legacy-image:
   extends:
     - .after-script-test
-    - .ic-build-image
+    - .ic-build-legacy-image
 
 after-script-test-ic-build-image:
   extends:
