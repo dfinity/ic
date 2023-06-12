@@ -12,6 +12,14 @@ The canister:
 * schedules certificate renewals;
 * stores all registered domains, alongside their certificate and private key.
 
+## Settings
+
+The canister relies on different constants that can be configured at build time:
+* `REGISTRATION_EXPIRATION_TTL`: Time until a registration request that did not successfully complete is expired. Default value: 1h;
+* `IN_PROGRESS_TTL`: Time until a task is retried if the assigned worker does not process the task (e.g., in case of worker failure). Default value: 10min;
+* `REGISTRATION_RATE_LIMIT_RATE`: Number of permitted registration requests per time (see next constant). Default value: 5;
+* `REGISTRATION_RATE_LIMIT_PERIOD`: Time period to which the rate-limit appliess. Default value: 1h;
+
 ## Deployment
 
 To deploy the canister, you need to have `dfx` installed with an identity and a wallet.

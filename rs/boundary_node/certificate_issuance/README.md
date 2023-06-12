@@ -49,7 +49,13 @@ If all the checks pass, the boundary node will submit the registration request
 to the `certificate-orchestrator`, which is a canister running on the Internet Computer.
 This canister keeps track of all the registration requests and their status, and
 coordinates the work among the `certificate-issuers` running on the boundary
-nodes.
+nodes. 
+
+The `certificate-orchestrator` also applies a rate-limit on new registrations to 
+prevent an attacker from exhausting the rate-limit with the ACME provider.
+The rate-limit is applied per apex domain (e.g., the apex domain of `example.com` and
+`www.example.com` is for both domains `example.com`). The rate-limit is currently
+set to 5 registration requests per hour and apex domain.
 
 The `certificate-issuers` periodically check if there are tasks available on the
 boundary nodes and process them in order to obtain the certificates. Each
