@@ -6,11 +6,13 @@ load("@bazel_tools//tools/build_defs/pkg:pkg.bzl", "pkg_tar")
 package(default_visibility = ["//visibility:public"])
 
 DEPENDENCIES = [
+    "@crate_index//:axum",
+    "@crate_index//:axum-server",
     "@crate_index//:clap",
-    "@crate_index//:httparse",
-    "@crate_index//:openssl",
-    "@crate_index//:serde",
+    "@crate_index//:rustls",
+    "@crate_index//:rustls-pemfile",
     "@crate_index//:serde_json",
+    "@crate_index//:tokio",
 ]
 
 rust_binary(

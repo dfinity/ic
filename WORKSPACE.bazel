@@ -437,8 +437,8 @@ http_archive(
 package(default_visibility = ["//visibility:public"])
 filegroup(name = "artifacts", srcs = glob(["build/*", "test-data/*"]), visibility = ["//visibility:public"])
       """,
-    sha256 = "9e612fd69ce20a165723a72ab65c4b6e5d30f33c7beb2121e98275584fa54705",
-    urls = ["https://download.dfinity.systems/ic-ref/ic-ref-test-0.0.1-d3812ffc-x86_64-linux.tar.gz"],
+    sha256 = "0855cc2c8990a5f3c1f1777d26ad96cdf8a364f0df06771ffeee31f60e757043",
+    urls = ["https://download.dfinity.systems/ic-ref/ic-ref-test-0.0.1-9152a0ff-x86_64-linux.tar.gz"],
 )
 
 # Deployed NNS canisters
